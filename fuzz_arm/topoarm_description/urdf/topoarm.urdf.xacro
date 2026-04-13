@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+
+<robot name="topoarm" xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:arg name="prefix" default="" />
+    <xacro:arg name="use_sim" default="false" />
+    <xacro:arg name="use_fake_hardware" default="false" />
+    <xacro:arg name="fake_sensor_commands" default="false" />
+    <xacro:arg name="torque" default="true" />
+
+    <xacro:include filename="topoarm_material.urdf.xacro" />
+    <xacro:include filename="_topoarm.urdf.xacro" />
+    <!-- <xacro:include filename="$(find topoarm_description)/ros2_control/topoarm.ros2_control.xacro" />
+    <xacro:include filename="$(find topoarm_description)/gazebo/topoarm.gazebo.xacro" /> -->
+
+    <xacro:topoarm_material/>
+
+    <link name="world"/>
+    
+    <joint name="fixed_base_joint" type="fixed">
+        <parent link="world"/>
+        <child link="base_footprint"/> <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="base_footprint"/>
+
+    <xacro:topoarm prefix="$(arg prefix)" parent="base_footprint" xyz="0.0 0 0" rpy="0 0 0"/>
+
+    <!-- <xacro:topoarm_gazebo prefix="$(arg prefix)"/>
+
+    <xacro:topoarm_system name="TopoArmSystem" prefix="$(arg prefix)" use_sim="$(arg use_sim)" torque="$(arg torque)" use_fake_hardware="$(arg use_fake_hardware)" fake_sensor_commands="$(arg fake_sensor_commands)"/> -->
+
+    <!-- <gazebo>
+        <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+        <parameters>$(find topoarm_bringup)/config/gazebo_controller_manager.yaml</parameters>
+        </plugin>
+    </gazebo> -->
+
+</robot>

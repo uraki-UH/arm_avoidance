@@ -1,0 +1,5 @@
+.vscode/
+**/.vscode/
+*.db
+*.VC.db
+*.vc.db
