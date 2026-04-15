@@ -1,0 +1,15 @@
+[0.000000] (-) TimerEvent: {}
+[0.000250] (-) JobUnselected: {'identifier': 'ais_gng'}
+[0.000275] (-) JobUnselected: {'identifier': 'ais_gng_msgs'}
+[0.000587] (-) JobUnselected: {'identifier': 'ais_gng_msgs'}
+[0.000622] (-) JobUnselected: {'identifier': 'fuzzy_classifier'}
+[0.000640] (-) JobUnselected: {'identifier': 'fuzzy_voxel_grid'}
+[0.000679] (-) JobUnselected: {'identifier': 'gng_classification'}
+[0.000710] (-) JobUnselected: {'identifier': 'gng_cpu'}
+[0.000722] (-) JobUnselected: {'identifier': 'gng_planner'}
+[0.000735] (-) JobUnselected: {'identifier': 'topo_fuzzy_viewer'}
+[0.000747] (-) JobUnselected: {'identifier': 'topo_fuzzy_viewer'}
+[0.000781] (gng_result_player) JobQueued: {'identifier': 'gng_result_player', 'dependencies': OrderedDict([('ais_gng_msgs', '/home/fuzzrobo/uraki_ws/install/ais_gng_msgs'), ('gng_cpu', '/home/fuzzrobo/uraki_ws/install/gng_cpu'), ('gng_classification', '/home/fuzzrobo/uraki_ws/install/gng_classification'), ('ais_gng', '/home/fuzzrobo/uraki_ws/install/ais_gng')])}
+[0.000805] (gng_result_player) JobStarted: {'identifier': 'gng_result_player'}
+[0.009286] (gng_result_player) JobEnded: {'identifier': 'gng_result_player', 'rc': 1}
+[0.020035] (-) EventReactorShutdown: {}
