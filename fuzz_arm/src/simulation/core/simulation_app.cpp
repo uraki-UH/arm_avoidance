@@ -1947,7 +1947,7 @@ void SimulationApp::draw() {
         if (g) {
           int g_class = dGeomGetClass(g);
           auto *gData = static_cast<::simulation::GeomData *>(dGeomGetData(g));
-          bool is_mesh_replacement = (gData && gData->visual_mesh_id);
+          bool is_mesh_replacement = (gData && gData->visual_mesh_entry);
 
           // Skip if we already drew a simplified visual for this mesh,
           // or if it's the original TriMesh class which we handle separately
@@ -2000,9 +2000,9 @@ void SimulationApp::drawGeom(dGeomID g, const dReal4 &color, bool use_texture) {
 
   // Check for visual override in GeomData
   auto *gData = static_cast<::simulation::GeomData *>(dGeomGetData(g));
-  if (gData && gData->visual_mesh_id && state_.mesh_cache_ptr) {
-    auto entry = state_.mesh_cache_ptr->getMeshEntry(gData->visual_mesh_id);
-    if (entry && !entry->flattened_vertices.empty()) {
+  if (gData && gData->visual_mesh_entry) {
+    const auto &entry = gData->visual_mesh_entry;
+    if (!entry->flattened_vertices.empty()) {
       const dReal *pos = dGeomGetPosition(g);
       const dReal *R = dGeomGetRotation(g);
 
@@ -2023,9 +2023,17 @@ void SimulationApp::drawGeom(dGeomID g, const dReal4 &color, bool use_texture) {
         dsSetTexture(DS_NONE);
 
       for (size_t i = 0; i < entry->flattened_vertices.size(); i += 9) {
-        const dReal *v0 = &entry->flattened_vertices[i];
-        const dReal *v1 = &entry->flattened_vertices[i + 3];
-        const dReal *v2 = &entry->flattened_vertices[i + 6];
+        dReal v0[3] = {static_cast<dReal>(entry->flattened_vertices[i]),
+                       static_cast<dReal>(entry->flattened_vertices[i + 1]),
+                       static_cast<dReal>(entry->flattened_vertices[i + 2])};
+        dReal v1[3] = {
+            static_cast<dReal>(entry->flattened_vertices[i + 3]),
+            static_cast<dReal>(entry->flattened_vertices[i + 4]),
+            static_cast<dReal>(entry->flattened_vertices[i + 5])};
+        dReal v2[3] = {
+            static_cast<dReal>(entry->flattened_vertices[i + 6]),
+            static_cast<dReal>(entry->flattened_vertices[i + 7]),
+            static_cast<dReal>(entry->flattened_vertices[i + 8])};
 #ifdef dDOUBLE
         dsDrawTriangleD(final_pos, R, v0, v1, v2, 1);
 #else
@@ -2064,22 +2072,7 @@ void SimulationApp::drawGeom(dGeomID g, const dReal4 &color, bool use_texture) {
     dGeomCapsuleGetParams(g, &radius, &length);
     dsDrawCapsule(pos, R, length, radius);
   } else if (type == dTriMeshClass) {
-    if (state_.mesh_cache_ptr) {
-      dTriMeshDataID data_id = dGeomTriMeshGetData(g);
-      auto entry = state_.mesh_cache_ptr->getMeshEntry(data_id);
-      if (entry && !entry->flattened_vertices.empty()) {
-        for (size_t i = 0; i < entry->flattened_vertices.size(); i += 9) {
-          const dReal *v0 = &entry->flattened_vertices[i];
-          const dReal *v1 = &entry->flattened_vertices[i + 3];
-          const dReal *v2 = &entry->flattened_vertices[i + 6];
-#ifdef dDOUBLE
-          dsDrawTriangleD(pos, R, v0, v1, v2, 1);
-#else
-          dsDrawTriangle(pos, R, v0, v1, v2, 1);
-#endif
-        }
-      }
-    }
+    return;
   }
 }
 
@@ -2360,11 +2353,10 @@ void SimulationApp::generateSimplifiedRobotVisuals() {
            state_.robot_model_ptr->getLinks())) {
     for (auto &visual : link_pair.second.visuals) {
       if (visual.geometry.type == GeometryType::MESH) {
-        dTriMeshDataID data_id = state_.mesh_cache_ptr->getMesh(
+        auto entry = state_.mesh_cache_ptr->getMesh(
             visual.geometry.mesh_filename, visual.geometry.size);
-        if (data_id) {
-          const auto &vertices =
-              state_.mesh_cache_ptr->getOriginalVertices(data_id);
+        if (entry) {
+          const auto &vertices = entry->original_vertices;
           if (!vertices.empty()) {
             robot_sim::simulation::MeshData temp_mesh;
             temp_mesh.vertices = vertices;

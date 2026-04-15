@@ -1,0 +1,14 @@
+[  9%] Built target common_lib
+[ 15%] Built target hardware_lib
+[ 21%] Built target kinematics_lib
+[ 28%] Built target gng_lib
+[ 34%] Built target spatial_lib
+[ 56%] Built target collision_lib
+[35m[1mConsolidate compiler generated dependencies of target simulation_lib[0m
+[ 71%] Built target control_lib
+[ 71%] Built target status_lib
+[ 75%] [32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o[0m
+[ 78%] [32m[1mLinking CXX static library libsimulation_lib.a[0m
+[ 93%] Built target simulation_lib
+[ 96%] [32mBuilding CXX object CMakeFiles/offline_urdf_trainer.dir/src/offline_urdf_trainer.cpp.o[0m
+[100%] [32m[1mLinking CXX executable offline_urdf_trainer[0m

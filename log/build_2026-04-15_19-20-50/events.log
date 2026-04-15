@@ -1,0 +1,319 @@
+[0.000000] (-) TimerEvent: {}
+[0.000496] (-) JobUnselected: {'identifier': 'ais_gng'}
+[0.000551] (-) JobUnselected: {'identifier': 'ais_gng_msgs'}
+[0.000628] (-) JobUnselected: {'identifier': 'ais_gng_msgs'}
+[0.000652] (-) JobUnselected: {'identifier': 'fuzzy_classifier'}
+[0.000684] (-) JobUnselected: {'identifier': 'fuzzy_voxel_grid'}
+[0.000711] (-) JobUnselected: {'identifier': 'gng_classification'}
+[0.000757] (-) JobUnselected: {'identifier': 'gng_cpu'}
+[0.000781] (-) JobUnselected: {'identifier': 'topo_fuzzy_viewer'}
+[0.000799] (-) JobUnselected: {'identifier': 'topo_fuzzy_viewer'}
+[0.000822] (gng_planner) JobQueued: {'identifier': 'gng_planner', 'dependencies': OrderedDict()}
+[0.000872] (gng_planner) JobStarted: {'identifier': 'gng_planner'}
+[0.006373] (gng_planner) JobProgress: {'identifier': 'gng_planner', 'progress': 'cmake'}
+[0.007092] (gng_planner) JobProgress: {'identifier': 'gng_planner', 'progress': 'build'}
+[0.007497] (gng_planner) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/fuzzrobo/uraki_ws/build/gng_planner', '--', '-j16', '-l16'], 'cwd': '/home/fuzzrobo/uraki_ws/build/gng_planner', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('PYTHON_BASIC_REPL', '1'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'fuzzrobo'), ('XDG_SESSION_TYPE', 'wayland'), ('GIT_ASKPASS', '/usr/share/code/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/fuzzrobo'), ('CHROME_DESKTOP', 'code.desktop'), ('TERM_PROGRAM_VERSION', '1.114.0'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/code.desktop'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/code/resources/app/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/code/code'), ('MANAGERPID', '1979'), ('PYDEVD_DISABLE_FILE_VALIDATION', '1'), ('SYSTEMD_EXEC_PID', '2159'), ('BUNDLED_DEBUGPY_PATH', '/home/fuzzrobo/.vscode/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/libs/debugpy'), ('IM_CONFIG_CHECK_ENV', '1'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '2747'), ('IM_CONFIG_PHASE', '1'), ('WAYLAND_DISPLAY', 'wayland-0'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'fuzzrobo'), ('JOURNAL_STREAM', '8:6960'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'fuzzrobo'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/fuzzrobo/.vscode/extensions/ms-python.debugpy-2025.18.0-linux-x64/bundled/scripts/noConfigScripts'), ('SESSION_MANAGER', 'local/fuzzrobo:@/tmp/.ICE-unix/2131,unix/fuzzrobo:/tmp/.ICE-unix/2131'), ('INVOCATION_ID', '1711b02e103c4e2dab6f056c610ceb71'), ('XDG_MENU_PREFIX', 'gnome-'), ('GNOME_SETUP_DISPLAY', ':1'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'wayland'), ('DISPLAY', ':0'), ('VSCODE_DEBUGPY_ADAPTER_ENDPOINTS', '/home/fuzzrobo/.vscode/extensions/ms-python.debugpy-2025.18.0-linux-x64/.noConfigDebugAdapterEndpoints/endpoint-1adb2e8cfd0d91a9.txt'), ('LANG', 'ja_JP.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('PYTHONSTARTUP', '/home/fuzzrobo/.config/Code/User/workspaceStorage/d7158457978415724b61132a478bcd2a/ms-python.python/pythonrc.py'), ('XMODIFIERS', '@im=ibus'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/.mutter-Xwaylandauth.STMHN3'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-ac1f89bab8.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/opt/ros/humble'), ('SHELL', '/bin/bash'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('QT_IM_MODULE', 'ibus'), ('PWD', '/home/fuzzrobo/uraki_ws/build/gng_planner'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/opt/ros/humble')]), 'shell': False}
+[0.059825] (gng_planner) StdoutLine: {'line': b'[  9%] Built target common_lib\n'}
+[0.079797] (gng_planner) StdoutLine: {'line': b'[ 15%] Built target hardware_lib\n'}
+[0.079981] (gng_planner) StdoutLine: {'line': b'[ 21%] Built target kinematics_lib\n'}
+[0.098307] (gng_planner) StdoutLine: {'line': b'[ 28%] Built target gng_lib\n'}
+[0.098505] (gng_planner) StdoutLine: {'line': b'[ 34%] Built target spatial_lib\n'}
+[0.099652] (-) TimerEvent: {}
+[0.102276] (gng_planner) StdoutLine: {'line': b'[ 56%] Built target collision_lib\n'}
+[0.113007] (gng_planner) StdoutLine: {'line': b'\x1b[35m\x1b[1mConsolidate compiler generated dependencies of target simulation_lib\x1b[0m\n'}
+[0.117343] (gng_planner) StdoutLine: {'line': b'[ 71%] Built target control_lib\n'}
+[0.117522] (gng_planner) StdoutLine: {'line': b'[ 71%] Built target status_lib\n'}
+[0.133521] (gng_planner) StdoutLine: {'line': b'[ 75%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o\x1b[0m\n'}
+[0.199770] (-) TimerEvent: {}
+[0.300070] (-) TimerEvent: {}
+[0.400423] (-) TimerEvent: {}
+[0.500750] (-) TimerEvent: {}
+[0.601107] (-) TimerEvent: {}
+[0.701455] (-) TimerEvent: {}
+[0.801808] (-) TimerEvent: {}
+[0.902160] (-) TimerEvent: {}
+[1.002499] (-) TimerEvent: {}
+[1.102858] (-) TimerEvent: {}
+[1.203202] (-) TimerEvent: {}
+[1.303521] (-) TimerEvent: {}
+[1.403836] (-) TimerEvent: {}
+[1.504122] (-) TimerEvent: {}
+[1.604398] (-) TimerEvent: {}
+[1.658850] (gng_planner) StdoutLine: {'line': b'[ 78%] \x1b[32m\x1b[1mLinking CXX static library libsimulation_lib.a\x1b[0m\n'}
+[1.690080] (gng_planner) StdoutLine: {'line': b'[ 93%] Built target simulation_lib\n'}
+[1.704512] (-) TimerEvent: {}
+[1.709425] (gng_planner) StdoutLine: {'line': b'[ 96%] \x1b[32mBuilding CXX object CMakeFiles/offline_urdf_trainer.dir/src/offline_urdf_trainer.cpp.o\x1b[0m\n'}
+[1.804614] (-) TimerEvent: {}
+[1.904897] (-) TimerEvent: {}
+[2.005160] (-) TimerEvent: {}
+[2.105442] (-) TimerEvent: {}
+[2.205821] (-) TimerEvent: {}
+[2.306224] (-) TimerEvent: {}
+[2.406607] (-) TimerEvent: {}
+[2.506977] (-) TimerEvent: {}
+[2.607365] (-) TimerEvent: {}
+[2.707722] (-) TimerEvent: {}
+[2.808062] (-) TimerEvent: {}
+[2.908439] (-) TimerEvent: {}
+[3.008789] (-) TimerEvent: {}
+[3.109089] (-) TimerEvent: {}
+[3.209369] (-) TimerEvent: {}
+[3.309689] (-) TimerEvent: {}
+[3.410001] (-) TimerEvent: {}
+[3.510273] (-) TimerEvent: {}
+[3.610601] (-) TimerEvent: {}
+[3.710932] (-) TimerEvent: {}
+[3.811239] (-) TimerEvent: {}
+[3.911540] (-) TimerEvent: {}
+[4.011879] (-) TimerEvent: {}
+[4.112182] (-) TimerEvent: {}
+[4.212564] (-) TimerEvent: {}
+[4.312901] (-) TimerEvent: {}
+[4.413215] (-) TimerEvent: {}
+[4.513531] (-) TimerEvent: {}
+[4.613857] (-) TimerEvent: {}
+[4.714230] (-) TimerEvent: {}
+[4.814559] (-) TimerEvent: {}
+[4.914901] (-) TimerEvent: {}
+[5.015218] (-) TimerEvent: {}
+[5.115486] (-) TimerEvent: {}
+[5.215832] (-) TimerEvent: {}
+[5.316137] (-) TimerEvent: {}
+[5.416456] (-) TimerEvent: {}
+[5.516792] (-) TimerEvent: {}
+[5.617132] (-) TimerEvent: {}
+[5.717481] (-) TimerEvent: {}
+[5.817830] (-) TimerEvent: {}
+[5.918167] (-) TimerEvent: {}
+[6.018452] (-) TimerEvent: {}
+[6.118793] (-) TimerEvent: {}
+[6.219211] (-) TimerEvent: {}
+[6.319591] (-) TimerEvent: {}
+[6.419919] (-) TimerEvent: {}
+[6.520260] (-) TimerEvent: {}
+[6.620542] (-) TimerEvent: {}
+[6.720922] (-) TimerEvent: {}
+[6.821280] (-) TimerEvent: {}
+[6.921724] (-) TimerEvent: {}
+[7.022110] (-) TimerEvent: {}
+[7.122490] (-) TimerEvent: {}
+[7.222802] (-) TimerEvent: {}
+[7.323101] (-) TimerEvent: {}
+[7.423434] (-) TimerEvent: {}
+[7.441898] (gng_planner) StdoutLine: {'line': b'[100%] \x1b[32m\x1b[1mLinking CXX executable offline_urdf_trainer\x1b[0m\n'}
+[7.510137] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): warning: relocation against `_ZTVN3fcl31DynamicAABBTreeCollisionManagerIdEE' in read-only section `.text._ZN3fcl31DynamicAABBTreeCollisionManagerIdED0Ev[_ZN3fcl31DynamicAABBTreeCollisionManagerIdED5Ev]'\n"}
+[7.515675] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: CMakeFiles/offline_urdf_trainer.dir/src/offline_urdf_trainer.cpp.o: in function `main':\n"}
+[7.515900] (gng_planner) StderrLine: {'line': b"offline_urdf_trainer.cpp:(.text.startup+0x1ec3): undefined reference to `fcl::CollisionObject<double>::collisionGeometry() const'\n"}
+[7.516003] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x1ed1): undefined reference to `fcl::CollisionObject<double>::collisionGeometry() const'\n"}
+[7.516086] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x1ee9): undefined reference to `typeinfo for fcl::CollisionGeometry<double>'\n"}
+[7.516165] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x23e1): undefined reference to `fcl::CollisionObject<double>::getTransform() const'\n"}
+[7.516347] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x3a9a): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.516422] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x3ac8): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.516460] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: offline_urdf_trainer.cpp:(.text.startup+0x3af5): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.516488] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: CMakeFiles/offline_urdf_trainer.dir/src/offline_urdf_trainer.cpp.o:(.data.rel.ro._ZTIN3fcl8BVHModelINS_6OBBRSSIdEEEE[_ZTIN3fcl8BVHModelINS_6OBBRSSIdEEEE]+0x10): undefined reference to `typeinfo for fcl::CollisionGeometry<double>'\n"}
+[7.516518] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(geometric_self_collision_checker.cpp.o): in function `simulation::GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(simulation::RobotModel const&, kinematics::KinematicChain const&)':\n"}
+[7.516549] (gng_planner) StderrLine: {'line': b"geometric_self_collision_checker.cpp:(.text+0x54b1): undefined reference to `simulation::StlLoader::loadBinaryStl(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)'\n"}
+[7.516596] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::recursiveBuildTree(int, int, int) [clone .isra.0]':\n"}
+[7.516660] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x28e): undefined reference to `fcl::OBB<double>::OBB()'\n"}
+[7.516695] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x296): undefined reference to `fcl::RSS<double>::RSS()'\n"}
+[7.516725] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x2b9): undefined reference to `void fcl::getCovariance<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.516757] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x2dd): undefined reference to `void fcl::eigen_old<double>(Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.516814] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x2ef): undefined reference to `void fcl::axisFromEigen<double>(Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.516863] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x373): undefined reference to `void fcl::getExtentAndCenter<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&)'\n"}
+[7.516900] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x3ab): undefined reference to `void fcl::getRadiusAndOriginAndRectangleSize<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, double*, double&)'\n"}
+[7.516930] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x585): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.516960] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x59e): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.517021] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x5bc): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.517050] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x702): undefined reference to `fcl::BVNodeBase::leftChild() const'\n"}
+[7.517079] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x72a): undefined reference to `fcl::BVNodeBase::rightChild() const'\n"}
+[7.517108] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::beginModel(int, int) [clone .isra.0]':\n"}
+[7.517139] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x96c): undefined reference to `fcl::Triangle::Triangle()'\n"}
+[7.517167] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::addSubModel(std::vector<Eigen::Matrix<double, 3, 1, 0, 3, 1>, std::allocator<Eigen::Matrix<double, 3, 1, 0, 3, 1> > > const&, std::vector<fcl::Triangle, std::allocator<fcl::Triangle> > const&) [clone .isra.0]':\n"}
+[7.517235] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0xc0c): undefined reference to `fcl::Triangle::Triangle()'\n"}
+[7.517294] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xcb9): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.517325] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xccf): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.517355] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xcdd): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.517384] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xcf1): undefined reference to `fcl::Triangle::set(unsigned long, unsigned long, unsigned long)'\n"}
+[7.517413] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::endModel() [clone .isra.0]':\n"}
+[7.517442] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0xe44): undefined reference to `fcl::Triangle::Triangle()'\n"}
+[7.517471] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xfa5): undefined reference to `fcl::OBB<double>::OBB()'\n"}
+[7.517500] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0xfad): undefined reference to `fcl::RSS<double>::RSS()'\n"}
+[7.517529] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::clearObstacles()':\n"}
+[7.517558] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x1334): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::clear()'\n"}
+[7.517587] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1341): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::clear()'\n"}
+[7.517625] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::updateRobotLinkPose(int, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&)':\n"}
+[7.517658] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x15c3): undefined reference to `fcl::CollisionObject<double>::setTransform(Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.517734] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x15d0): undefined reference to `fcl::CollisionObject<double>::computeAABB()'\n"}
+[7.517767] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x15e1): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::update(fcl::CollisionObject<double>*)'\n"}
+[7.517797] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::updateRobotLinkPose(int, Eigen::Transform<double, 3, 1, 0> const&)':\n"}
+[7.517826] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x16f8): undefined reference to `fcl::CollisionObject<double>::setTransform(Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.517858] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1705): undefined reference to `fcl::CollisionObject<double>::computeAABB()'\n"}
+[7.517887] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1716): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::update(fcl::CollisionObject<double>*)'\n"}
+[7.517916] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLSelfCollisionCallback(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)':\n"}
+[7.517944] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x179a): undefined reference to `fcl::CollisionObject<double>::getUserData() const'\n"}
+[7.518015] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x17a5): undefined reference to `fcl::CollisionObject<double>::getUserData() const'\n"}
+[7.518048] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x17b0): undefined reference to `fcl::CollisionObject<double>::getAABB() const'\n"}
+[7.518080] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x17bd): undefined reference to `fcl::CollisionObject<double>::getAABB() const'\n"}
+[7.518110] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x17ca): undefined reference to `fcl::AABB<double>::distance(fcl::AABB<double> const&) const'\n"}
+[7.518140] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1864): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.518181] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1873): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.518259] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1884): undefined reference to `unsigned long fcl::collide<double>(fcl::CollisionObject<double> const*, fcl::CollisionObject<double> const*, fcl::CollisionRequest<double> const&, fcl::CollisionResult<double>&)'\n"}
+[7.518302] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x188c): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.518331] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionCallback(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)':\n"}
+[7.518360] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x1956): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.518389] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x196f): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.518419] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1980): undefined reference to `unsigned long fcl::collide<double>(fcl::CollisionObject<double> const*, fcl::CollisionObject<double> const*, fcl::CollisionRequest<double> const&, fcl::CollisionResult<double>&)'\n"}
+[7.518449] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1988): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.518477] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::checkRobotCollision() const':\n"}
+[7.518506] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x1aa1): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.518535] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1ab1): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.518572] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1ad6): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::collide(fcl::BroadPhaseCollisionManager<double>*, void*, bool (*)(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)) const'\n"}
+[7.518602] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1ade): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.518676] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1b54): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::setup()'\n"}
+[7.518704] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1b73): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::setup()'\n"}
+[7.518733] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::checkSelfCollision(std::vector<std::pair<int, int>, std::allocator<std::pair<int, int> > > const&) const':\n"}
+[7.518783] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x1c17): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::collide(void*, bool (*)(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)) const'\n"}
+[7.518813] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1c44): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::setup()'\n"}
+[7.518843] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::createFCLCollisionObject(collision::Box const&) const':\n"}
+[7.518872] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x1cf6): undefined reference to `fcl::Box<double>::Box(double, double, double)'\n"}
+[7.518909] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x1e25): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.518942] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::createFCLCollisionObject(collision::Sphere const&) const':\n"}
+[7.518973] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x2010): undefined reference to `fcl::Sphere<double>::Sphere(double)'\n"}
+[7.519003] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x20bb): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.519033] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addObstacle(collision::Sphere const&)':\n"}
+[7.519062] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x22e8): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.519090] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addObstacle(collision::Box const&)':\n"}
+[7.519120] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x2428): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.519149] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLContactCallback(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)':\n"}
+[7.519178] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x254d): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.519312] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x2572): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.519382] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x2583): undefined reference to `unsigned long fcl::collide<double>(fcl::CollisionObject<double> const*, fcl::CollisionObject<double> const*, fcl::CollisionRequest<double> const&, fcl::CollisionResult<double>&)'\n"}
+[7.519415] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x258b): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.519446] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x25b2): undefined reference to `fcl::CollisionResult<double>::getContacts(std::vector<fcl::Contact<double>, std::allocator<fcl::Contact<double> > >&)'\n"}
+[7.519477] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::getAllContacts() const':\n"}
+[7.519533] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x28b7): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.519605] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x28dd): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.519657] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x28f5): undefined reference to `unsigned long fcl::collide<double>(fcl::CollisionObject<double> const*, fcl::CollisionObject<double> const*, fcl::CollisionRequest<double> const&, fcl::CollisionResult<double>&)'\n"}
+[7.519702] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x28fd): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.519749] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x29e1): undefined reference to `fcl::CollisionResult<double>::getContacts(std::vector<fcl::Contact<double>, std::allocator<fcl::Contact<double> > >&)'\n"}
+[7.519793] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::getOrLoadMesh(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)':\n"}
+[7.519838] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x31e6): undefined reference to `simulation::StlLoader::loadBinaryStl(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)'\n"}
+[7.519880] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x3268): undefined reference to `fcl::CollisionGeometry<double>::CollisionGeometry()'\n"}
+[7.519927] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x3644): undefined reference to `fcl::Triangle::Triangle(unsigned long, unsigned long, unsigned long)'\n"}
+[7.519971] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addMeshObstacle(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&)':\n"}
+[7.520025] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x3f00): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.520056] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x3f6e): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.520085] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addRobotMeshLink(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)':\n"}
+[7.520140] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x429a): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.520170] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x42e9): undefined reference to `fcl::CollisionObject<double>::setUserData(void*)'\n"}
+[7.520241] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x4324): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.520285] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::createFCLCollisionObject(collision::Mesh const&) const':\n"}
+[7.520315] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x45bd): undefined reference to `fcl::CollisionGeometry<double>::CollisionGeometry()'\n"}
+[7.520347] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x4bb7): undefined reference to `fcl::Triangle::Triangle(unsigned long, unsigned long, unsigned long)'\n"}
+[7.520398] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x4cb2): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.520425] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addObstacle(collision::Mesh const&)':\n"}
+[7.520451] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x52d8): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.520479] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::updateRobotLinkCapsule(int, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)':\n"}
+[7.520508] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x6641): undefined reference to `fcl::CollisionObject<double>::setTransform(Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.520537] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x664e): undefined reference to `fcl::CollisionObject<double>::computeAABB()'\n"}
+[7.520567] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x665f): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::update(fcl::CollisionObject<double>*)'\n"}
+[7.520616] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::createFCLCollisionObject(collision::Capsule const&) const':\n"}
+[7.520643] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x6876): undefined reference to `fcl::Capsule<double>::Capsule(double, double)'\n"}
+[7.520669] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x6d0c): undefined reference to `fcl::CollisionObject<double>::CollisionObject(std::shared_ptr<fcl::CollisionGeometry<double> > const&, Eigen::Transform<double, 3, 1, 0> const&)'\n"}
+[7.520695] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::addRobotLink(collision::Capsule const&)':\n"}
+[7.520723] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x7088): undefined reference to `fcl::CollisionObject<double>::setUserData(void*)'\n"}
+[7.520749] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x70d1): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObject(fcl::CollisionObject<double>*)'\n"}
+[7.520776] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::FCLCollisionDetector()':\n"}
+[7.520803] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x71e2): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::DynamicAABBTreeCollisionManager()'\n"}
+[7.520830] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x71ee): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::DynamicAABBTreeCollisionManager()'\n"}
+[7.520856] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::checkRobotCollision(std::vector<collision::Capsule, std::allocator<collision::Capsule> > const&) const':\n"}
+[7.520882] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x72cb): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::DynamicAABBTreeCollisionManager()'\n"}
+[7.520908] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x744b): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObjects(std::vector<fcl::CollisionObject<double>*, std::allocator<fcl::CollisionObject<double>*> > const&)'\n"}
+[7.520934] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7453): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::setup()'\n"}
+[7.520960] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7462): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::DynamicAABBTreeCollisionManager()'\n"}
+[7.520985] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7517): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::registerObjects(std::vector<fcl::CollisionObject<double>*, std::allocator<fcl::CollisionObject<double>*> > const&)'\n"}
+[7.521013] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x751f): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::setup()'\n"}
+[7.521039] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7551): undefined reference to `fcl::CollisionRequest<double>::CollisionRequest(unsigned long, bool, unsigned long, bool, bool, fcl::GJKSolverType, double)'\n"}
+[7.521065] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7568): undefined reference to `fcl::CollisionResult<double>::CollisionResult()'\n"}
+[7.521090] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x758c): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::collide(fcl::BroadPhaseCollisionManager<double>*, void*, bool (*)(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)) const'\n"}
+[7.521117] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7594): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.521142] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7603): undefined reference to `vtable for fcl::DynamicAABBTreeCollisionManager<double>'\n"}
+[7.521168] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x786e): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.521196] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7b8a): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.521230] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::~FCLCollisionDetector()':\n"}
+[7.521265] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text+0x7c84): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::clear()'\n"}
+[7.521291] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7c8c): undefined reference to `fcl::DynamicAABBTreeCollisionManager<double>::clear()'\n"}
+[7.521316] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x7ef0): undefined reference to `vtable for fcl::DynamicAABBTreeCollisionManager<double>'\n"}
+[7.521342] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x80cc): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.521368] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text+0x826b): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.521395] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::computeVolume() const':\n"}
+[7.521421] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv]+0x54): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521447] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv]+0x6d): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521473] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE13computeVolumeEv]+0xde): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521499] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::computeLocalAABB()':\n"}
+[7.521525] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv[_ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv]+0x2a): undefined reference to `fcl::AABB<double>::AABB()'\n"}
+[7.521551] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv[_ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv]+0x54): undefined reference to `fcl::AABB<double>::operator+=(Eigen::Matrix<double, 3, 1, 0, 3, 1> const&)'\n"}
+[7.521578] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv[_ZN3fcl8BVHModelINS_6OBBRSSIdEEE16computeLocalAABBEv]+0x67): undefined reference to `fcl::AABB<double>::center() const'\n"}
+[7.521604] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `std::_Sp_counted_ptr_inplace<fcl::CollisionObject<double>, std::allocator<fcl::CollisionObject<double> >, (__gnu_cxx::_Lock_policy)2>::_M_dispose()':\n"}
+[7.521632] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNSt23_Sp_counted_ptr_inplaceIN3fcl15CollisionObjectIdEESaIS2_ELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv[_ZNSt23_Sp_counted_ptr_inplaceIN3fcl15CollisionObjectIdEESaIS2_ELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv]+0x9): undefined reference to `fcl::CollisionObject<double>::~CollisionObject()'\n"}
+[7.521659] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `bool fcl::DefaultCollisionFunction<double>(fcl::CollisionObject<double>*, fcl::CollisionObject<double>*, void*)':\n"}
+[7.521686] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv[_ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv]+0x2b): undefined reference to `unsigned long fcl::collide<double>(fcl::CollisionObject<double> const*, fcl::CollisionObject<double> const*, fcl::CollisionRequest<double> const&, fcl::CollisionResult<double>&)'\n"}
+[7.521717] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv[_ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv]+0x4c): undefined reference to `fcl::CollisionResult<double>::isCollision() const'\n"}
+[7.521743] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv[_ZN3fcl24DefaultCollisionFunctionIdEEbPNS_15CollisionObjectIT_EES4_Pv]+0x5b): undefined reference to `fcl::CollisionResult<double>::numContacts() const'\n"}
+[7.521769] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::computeCOM() const':\n"}
+[7.521797] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0x69): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521823] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0x82): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521848] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0xef): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521876] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0x145): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521902] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0x15e): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.521928] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o):fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE10computeCOMEv]+0x174): more undefined references to `fcl::Triangle::operator[](int) const' follow\n"}
+[7.521954] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::detail::BVFitter<fcl::OBBRSS<double> >::fit(unsigned int*, int)':\n"}
+[7.521980] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x41): undefined reference to `fcl::OBB<double>::OBB()'\n"}
+[7.522006] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x49): undefined reference to `fcl::RSS<double>::RSS()'\n"}
+[7.522032] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x6a): undefined reference to `void fcl::getCovariance<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.522060] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x80): undefined reference to `void fcl::eigen_old<double>(Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.522089] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x8f): undefined reference to `void fcl::axisFromEigen<double>(Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&, Eigen::Matrix<double, 3, 3, 0, 3, 3>&)'\n"}
+[7.522121] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x102): undefined reference to `void fcl::getExtentAndCenter<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&)'\n"}
+[7.522148] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji[_ZN3fcl6detail8BVFitterINS_6OBBRSSIdEEE3fitEPji]+0x13a): undefined reference to `void fcl::getRadiusAndOriginAndRectangleSize<double>(Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, Eigen::Matrix<double, 3, 1, 0, 3, 1> const*, fcl::Triangle*, unsigned int*, int, Eigen::Matrix<double, 3, 3, 0, 3, 3> const&, Eigen::Matrix<double, 3, 1, 0, 3, 1>&, double*, double&)'\n"}
+[7.522175] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::computeMomentofInertia() const':\n"}
+[7.522209] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv]+0x8e): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522237] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv]+0xa7): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522263] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv[_ZNK3fcl8BVHModelINS_6OBBRSSIdEEE22computeMomentofInertiaEv]+0xc4): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522292] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::getOrLoadMesh(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Eigen::Matrix<double, 3, 1, 0, 3, 1> const&) [clone .cold]':\n"}
+[7.522318] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text.unlikely+0x2ba): undefined reference to `fcl::CollisionGeometry<double>::~CollisionGeometry()'\n"}
+[7.522344] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `collision::FCLCollisionDetector::createFCLCollisionObject(collision::Mesh const&) const [clone .cold]':\n"}
+[7.522370] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text.unlikely+0x5ff): undefined reference to `fcl::CollisionGeometry<double>::~CollisionGeometry()'\n"}
+[7.522395] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::detail::BVSplitter<fcl::OBBRSS<double> >::computeRule(fcl::OBBRSS<double> const&, unsigned int*, int)':\n"}
+[7.522421] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x138): undefined reference to `fcl::OBBRSS<double>::center() const'\n"}
+[7.522453] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x243): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522480] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x25d): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522505] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x277): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522530] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x49d): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522556] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x4b4): undefined reference to `fcl::Triangle::operator[](int) const'\n"}
+[7.522581] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o):fcl_collision_detector.cpp:(.text._ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji[_ZN3fcl6detail10BVSplitterINS_6OBBRSSIdEEE11computeRuleERKS3_Pji]+0x4cb): more undefined references to `fcl::Triangle::operator[](int) const' follow\n"}
+[7.522607] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::~BVHModel()':\n"}
+[7.522632] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl8BVHModelINS_6OBBRSSIdEEED0Ev[_ZN3fcl8BVHModelINS_6OBBRSSIdEEED5Ev]+0xc4): undefined reference to `fcl::CollisionGeometry<double>::~CollisionGeometry()'\n"}
+[7.522657] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::BVHModel<fcl::OBBRSS<double> >::~BVHModel()':\n"}
+[7.522682] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl8BVHModelINS_6OBBRSSIdEEED2Ev[_ZN3fcl8BVHModelINS_6OBBRSSIdEEED5Ev]+0xcb): undefined reference to `fcl::CollisionGeometry<double>::~CollisionGeometry()'\n"}
+[7.522709] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `std::_Sp_counted_ptr_inplace<fcl::BVHModel<fcl::OBBRSS<double> >, std::allocator<fcl::BVHModel<fcl::OBBRSS<double> > >, (__gnu_cxx::_Lock_policy)2>::_M_dispose()':\n"}
+[7.522734] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNSt23_Sp_counted_ptr_inplaceIN3fcl8BVHModelINS0_6OBBRSSIdEEEESaIS4_ELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv[_ZNSt23_Sp_counted_ptr_inplaceIN3fcl8BVHModelINS0_6OBBRSSIdEEEESaIS4_ELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv]+0xdc): undefined reference to `fcl::CollisionGeometry<double>::~CollisionGeometry()'\n"}
+[7.522760] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `void std::vector<fcl::Triangle, std::allocator<fcl::Triangle> >::_M_realloc_insert<unsigned int&, unsigned int&, unsigned int&>(__gnu_cxx::__normal_iterator<fcl::Triangle*, std::vector<fcl::Triangle, std::allocator<fcl::Triangle> > >, unsigned int&, unsigned int&, unsigned int&)':\n"}
+[7.522790] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNSt6vectorIN3fcl8TriangleESaIS1_EE17_M_realloc_insertIJRjS5_S5_EEEvN9__gnu_cxx17__normal_iteratorIPS1_S3_EEDpOT_[_ZNSt6vectorIN3fcl8TriangleESaIS1_EE17_M_realloc_insertIJRjS5_S5_EEEvN9__gnu_cxx17__normal_iteratorIPS1_S3_EEDpOT_]+0x8f): undefined reference to `fcl::Triangle::Triangle(unsigned long, unsigned long, unsigned long)'\n"}
+[7.522818] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `void std::vector<fcl::Triangle, std::allocator<fcl::Triangle> >::_M_realloc_insert<int&, int&, int&>(__gnu_cxx::__normal_iterator<fcl::Triangle*, std::vector<fcl::Triangle, std::allocator<fcl::Triangle> > >, int&, int&, int&)':\n"}
+[7.522844] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZNSt6vectorIN3fcl8TriangleESaIS1_EE17_M_realloc_insertIJRiS5_S5_EEEvN9__gnu_cxx17__normal_iteratorIPS1_S3_EEDpOT_[_ZNSt6vectorIN3fcl8TriangleESaIS1_EE17_M_realloc_insertIJRiS5_S5_EEEvN9__gnu_cxx17__normal_iteratorIPS1_S3_EEDpOT_]+0x8f): undefined reference to `fcl::Triangle::Triangle(unsigned long, unsigned long, unsigned long)'\n"}
+[7.522871] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::DynamicAABBTreeCollisionManager<double>::~DynamicAABBTreeCollisionManager()':\n"}
+[7.522897] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl31DynamicAABBTreeCollisionManagerIdED2Ev[_ZN3fcl31DynamicAABBTreeCollisionManagerIdED5Ev]+0x9): undefined reference to `vtable for fcl::DynamicAABBTreeCollisionManager<double>'\n"}
+[7.522922] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl31DynamicAABBTreeCollisionManagerIdED2Ev[_ZN3fcl31DynamicAABBTreeCollisionManagerIdED5Ev]+0x2eb): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.522947] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o): in function `fcl::DynamicAABBTreeCollisionManager<double>::~DynamicAABBTreeCollisionManager()':\n"}
+[7.522974] (gng_planner) StderrLine: {'line': b"fcl_collision_detector.cpp:(.text._ZN3fcl31DynamicAABBTreeCollisionManagerIdED0Ev[_ZN3fcl31DynamicAABBTreeCollisionManagerIdED5Ev]+0x9): undefined reference to `vtable for fcl::DynamicAABBTreeCollisionManager<double>'\n"}
+[7.522999] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: fcl_collision_detector.cpp:(.text._ZN3fcl31DynamicAABBTreeCollisionManagerIdED0Ev[_ZN3fcl31DynamicAABBTreeCollisionManagerIdED5Ev]+0x2b3): undefined reference to `fcl::BroadPhaseCollisionManager<double>::~BroadPhaseCollisionManager()'\n"}
+[7.523024] (gng_planner) StderrLine: {'line': b"/usr/bin/ld: src/collision/libcollision_lib.a(fcl_collision_detector.cpp.o):(.data.rel.ro._ZTVN3fcl8BVHModelINS_6OBBRSSIdEEEE[_ZTVN3fcl8BVHModelINS_6OBBRSSIdEEEE]+0x50): undefined reference to `fcl::CollisionGeometry<double>::computeMomentofInertiaRelatedToCOM() const'\n"}
+[7.523481] (-) TimerEvent: {}
+[7.527106] (gng_planner) StderrLine: {'line': b'/usr/bin/ld: warning: creating DT_TEXTREL in a PIE\n'}
+[7.529606] (gng_planner) StderrLine: {'line': b'collect2: error: ld returned 1 exit status\n'}
+[7.532916] (gng_planner) StderrLine: {'line': b'gmake[2]: *** [CMakeFiles/offline_urdf_trainer.dir/build.make:168: offline_urdf_trainer] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 1\n'}
+[7.533793] (gng_planner) StderrLine: {'line': b'gmake[1]: *** [CMakeFiles/Makefile2:355: CMakeFiles/offline_urdf_trainer.dir/all] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 2\n'}
+[7.534016] (gng_planner) StderrLine: {'line': b'gmake: *** [Makefile:146: all] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 2\n'}
+[7.535966] (gng_planner) CommandEnded: {'returncode': 2}
+[7.541390] (gng_planner) JobEnded: {'identifier': 'gng_planner', 'rc': 2}
+[7.552010] (-) EventReactorShutdown: {}

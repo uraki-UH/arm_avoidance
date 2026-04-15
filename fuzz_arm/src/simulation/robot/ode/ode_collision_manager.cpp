@@ -1,4 +1,5 @@
 #include "simulation/robot/ode/ode_collision_manager.hpp"
+#include <utility>
 
 namespace simulation {
 
@@ -12,7 +13,7 @@ CollisionManager::~CollisionManager() {
 void CollisionManager::registerGeom(dGeomID geom, const std::string &name,
                                     uint32_t categoryBits, uint32_t collideBits,
                                     double friction, double restitution,
-                                    dTriMeshDataID visual_mesh_id,
+                                    std::shared_ptr<MeshEntry> visual_mesh_entry,
                                     const Eigen::Vector3d &visual_mesh_center) {
   if (!geom)
     return;
@@ -23,7 +24,7 @@ void CollisionManager::registerGeom(dGeomID geom, const std::string &name,
   newData->collideBits = collideBits;
   newData->friction = friction;
   newData->restitution = restitution;
-  newData->visual_mesh_id = visual_mesh_id;
+  newData->visual_mesh_entry = std::move(visual_mesh_entry);
   newData->visual_mesh_center = visual_mesh_center;
 
   // Store the raw pointer for ODE, but keep ownership in the vector

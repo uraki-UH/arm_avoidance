@@ -43,8 +43,8 @@ add_subdirectory(src)
 add_executable(offline_urdf_trainer src/offline_urdf_trainer.cpp)
 
 target_link_libraries(offline_urdf_trainer
-    simulation_lib
     collision_lib
+    simulation_lib
     gng_lib
     spatial_lib
     status_lib
@@ -58,6 +58,9 @@ if(BUILD_WITH_ROS2)
         fcl
         Eigen3
         ament_index_cpp
+    )
+    target_link_libraries(offline_urdf_trainer
+        fcl
     )
     install(TARGETS offline_urdf_trainer DESTINATION lib/${PROJECT_NAME})
 else()

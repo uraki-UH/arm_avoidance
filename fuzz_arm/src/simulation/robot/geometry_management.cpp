@@ -6,6 +6,8 @@
 #include "simulation/robot/geometry_management.hpp"
 #include "common/resource_utils.hpp"
 #include "simulation/robot/stl_loader.hpp"
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -22,21 +24,18 @@ MeshCache::MeshCache() {}
 MeshCache::~MeshCache() { clear(); }
 
 void MeshCache::clear() {
-  for (auto &pair : cache_) {
-    dGeomTriMeshDataDestroy(pair.second->data_id);
-  }
   cache_.clear();
-  reverse_cache_.clear();
 }
 
-dTriMeshDataID MeshCache::getMesh(const std::string &filename,
-                                  const Eigen::Vector3d &scale) {
+std::shared_ptr<MeshEntry> MeshCache::getMesh(const std::string &filename,
+                                              const Eigen::Vector3d &scale) {
   std::string resolved_path = robot_sim::common::resolvePath(filename);
   std::string ext = "";
   if (resolved_path.length() > 4) {
     ext = resolved_path.substr(resolved_path.length() - 4);
-    for (auto &c : ext)
-      c = std::tolower(c);
+    for (auto &c : ext) {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
   }
 
   if (ext != ".stl") {
@@ -52,7 +51,7 @@ dTriMeshDataID MeshCache::getMesh(const std::string &filename,
 
   auto it = cache_.find(key);
   if (it != cache_.end()) {
-    return it->second->data_id;
+    return it->second;
   }
 
   // Load and create new entry using StlLoader
@@ -65,66 +64,25 @@ dTriMeshDataID MeshCache::getMesh(const std::string &filename,
 
   auto entry = std::make_shared<MeshEntry>();
   entry->original_vertices = mesh_data.vertices;
-
-  // Convert float to dReal
-  entry->vertices.reserve(mesh_data.vertices.size());
-  for (float v : mesh_data.vertices) {
-    entry->vertices.push_back(static_cast<dReal>(v));
-  }
-
-  // Copy indices
   entry->indices = mesh_data.indices;
-
-  // Create ODE TriMeshData
-  entry->data_id = dGeomTriMeshDataCreate();
-
-#ifdef dDOUBLE
-  dGeomTriMeshDataBuildDouble(
-      entry->data_id, entry->vertices.data(), sizeof(dReal) * 3,
-      (int)entry->vertices.size() / 3, entry->indices.data(),
-      (int)entry->indices.size(), sizeof(dTriIndex) * 3);
-#else
-  dGeomTriMeshDataBuildSingle(
-      entry->data_id, entry->vertices.data(), sizeof(dReal) * 3,
-      (int)entry->vertices.size() / 3, entry->indices.data(),
-      (int)entry->indices.size(), sizeof(dTriIndex) * 3);
-#endif
 
   // Generate flattened vertices for rendering
   entry->flattened_vertices.reserve(entry->indices.size() * 3);
-  for (size_t i = 0; i < entry->indices.size(); ++i) {
-    dTriIndex idx = entry->indices[i];
-    entry->flattened_vertices.push_back(entry->vertices[idx * 3]);
-    entry->flattened_vertices.push_back(entry->vertices[idx * 3 + 1]);
-    entry->flattened_vertices.push_back(entry->vertices[idx * 3 + 2]);
+  for (uint32_t idx : entry->indices) {
+    if (idx * 3 + 2 >= entry->original_vertices.size()) {
+      continue;
+    }
+    entry->flattened_vertices.push_back(entry->original_vertices[idx * 3]);
+    entry->flattened_vertices.push_back(entry->original_vertices[idx * 3 + 1]);
+    entry->flattened_vertices.push_back(entry->original_vertices[idx * 3 + 2]);
   }
 
   cache_[key] = entry;
-  reverse_cache_[entry->data_id] = entry;
 
   std::cout << "MeshCache: Cached new mesh: " << key
-            << " (DataID: " << entry->data_id << ")" << std::endl;
+            << " (triangles: " << entry->indices.size() / 3 << ")" << std::endl;
 
-  return entry->data_id;
-}
-
-std::shared_ptr<MeshEntry>
-MeshCache::getMeshEntry(dTriMeshDataID data_id) const {
-  auto it = reverse_cache_.find(data_id);
-  if (it != reverse_cache_.end()) {
-    return it->second;
-  }
-  return nullptr;
-}
-
-const std::vector<float> &
-MeshCache::getOriginalVertices(dTriMeshDataID data_id) const {
-  static const std::vector<float> empty;
-  auto it = reverse_cache_.find(data_id);
-  if (it != reverse_cache_.end()) {
-    return it->second->original_vertices;
-  }
-  return empty;
+  return entry;
 }
 
 // =========================================================

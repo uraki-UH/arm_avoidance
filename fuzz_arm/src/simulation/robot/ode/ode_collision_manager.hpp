@@ -11,6 +11,8 @@
 
 namespace simulation {
 
+struct MeshEntry;
+
 // Enum for collision categories, using powers of 2 for bitmasking
 enum CollisionCategory : uint32_t {
   NOTHING = 0,
@@ -30,7 +32,7 @@ struct GeomData {
   double friction = 1.0;
   double restitution = 0.1; // Bounciness
   // Add other dContact surface properties as needed (e.g., slip, soft_cfm)
-  dTriMeshDataID visual_mesh_id = nullptr; // Added for visual override
+  std::shared_ptr<MeshEntry> visual_mesh_entry; // Added for visual override
   Eigen::Vector3d visual_mesh_center = Eigen::Vector3d::Zero(); // Mesh center offset
 };
 
@@ -43,7 +45,7 @@ public:
   void registerGeom(dGeomID geom, const std::string &name,
                     uint32_t categoryBits, uint32_t collideBits,
                     double friction = 1.0, double restitution = 0.1,
-                    dTriMeshDataID visual_mesh_id = nullptr,
+                    std::shared_ptr<MeshEntry> visual_mesh_entry = nullptr,
                     const Eigen::Vector3d &visual_mesh_center =
                         Eigen::Vector3d::Zero());
 

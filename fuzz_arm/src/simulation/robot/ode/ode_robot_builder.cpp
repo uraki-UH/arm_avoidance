@@ -7,6 +7,7 @@
 #include <ode/ode.h>
 #include <stdexcept>
 #include <vector>
+#include <utility>
 
 namespace simulation {
 
@@ -19,6 +20,10 @@ OdeRobotBuilder::OdeRobotBuilder(dWorldID world, dSpaceID space,
     throw std::runtime_error(
         "OdeRobotBuilder: Invalid ODE world or space ID provided.");
   }
+}
+
+OdeRobotBuilder::~OdeRobotBuilder() {
+  tri_mesh_data_cache_.clear();
 }
 
 // ヘルパー関数: Eigen::Isometry3dをdVector3（位置）とdMatrix3（回転）に変換
@@ -65,6 +70,49 @@ void OdeRobotBuilder::setOdeInertia(dBodyID body, const Inertial &inertial,
   dBodySetMass(body, &m);
 }
 
+dTriMeshDataID OdeRobotBuilder::createTriMeshData(
+    robot_sim::simulation::MeshEntry &mesh_entry) {
+  auto it = tri_mesh_data_cache_.find(&mesh_entry);
+  if (it != tri_mesh_data_cache_.end()) {
+    return it->second;
+  }
+
+  auto cache_entry = std::make_shared<TriMeshCacheEntry>();
+  cache_entry->data_id = dGeomTriMeshDataCreate();
+  if (!cache_entry->data_id) {
+    return nullptr;
+  }
+
+  cache_entry->vertices.reserve(mesh_entry.original_vertices.size());
+  for (float v : mesh_entry.original_vertices) {
+    cache_entry->vertices.push_back(static_cast<dReal>(v));
+  }
+  cache_entry->indices.reserve(mesh_entry.indices.size());
+  for (uint32_t idx : mesh_entry.indices) {
+    cache_entry->indices.push_back(static_cast<dTriIndex>(idx));
+  }
+
+  const int vertex_count =
+      static_cast<int>(cache_entry->vertices.size() / 3);
+  const int index_count = static_cast<int>(cache_entry->indices.size());
+
+#ifdef dDOUBLE
+  dGeomTriMeshDataBuildDouble(cache_entry->data_id, cache_entry->vertices.data(),
+                              sizeof(dReal) * 3, vertex_count,
+                              cache_entry->indices.data(), index_count,
+                              sizeof(dTriIndex) * 3);
+#else
+  dGeomTriMeshDataBuildSingle(cache_entry->data_id, cache_entry->vertices.data(),
+                              sizeof(dReal) * 3, vertex_count,
+                              cache_entry->indices.data(), index_count,
+                              sizeof(dTriIndex) * 3);
+#endif
+
+  mesh_entry.backend_data = cache_entry;
+  tri_mesh_data_cache_[&mesh_entry] = cache_entry->data_id;
+  return cache_entry->data_id;
+}
+
 dGeomID OdeRobotBuilder::createOdeGeometry(const std::string &link_name,
                                            int geom_index, const Geometry &geom,
                                            dBodyID body,
@@ -76,7 +124,7 @@ dGeomID OdeRobotBuilder::createOdeGeometry(const std::string &link_name,
   dMatrix3 geom_R;
   eigenIsometryToOde(origin, geom_pos, geom_R);
 
-  dTriMeshDataID visual_mesh_override = nullptr;
+  std::shared_ptr<robot_sim::simulation::MeshEntry> visual_mesh_override;
   Eigen::Vector3d visual_center_override = Eigen::Vector3d::Zero();
 
   switch (geom.type) {
@@ -91,24 +139,24 @@ dGeomID OdeRobotBuilder::createOdeGeometry(const std::string &link_name,
     break;
   case GeometryType::MESH:
     if (mesh_cache_) {
-      dTriMeshDataID mesh_data_id =
-          mesh_cache_->getMesh(geom.mesh_filename, geom.size);
-      if (mesh_data_id) {
-        visual_mesh_override = mesh_data_id; // Store for visual fallback
+      auto mesh_entry = mesh_cache_->getMesh(geom.mesh_filename, geom.size);
+      if (mesh_entry) {
+        visual_mesh_override = mesh_entry; // Store for visual fallback
         if (use_mesh_) {
-          ode_geom =
-              dCreateTriMesh(space_, mesh_data_id, nullptr, nullptr, nullptr);
+          dTriMeshDataID mesh_data_id = createTriMeshData(*mesh_entry);
+          if (mesh_data_id) {
+            ode_geom =
+                dCreateTriMesh(space_, mesh_data_id, nullptr, nullptr, nullptr);
+          }
         } else {
           // Simplify to Box
-          auto entry = mesh_cache_->getMeshEntry(mesh_data_id);
-          if (entry) {
+          if (!mesh_entry->original_vertices.empty()) {
             ::simulation::MeshData mesh_data;
-            mesh_data.vertices = entry->original_vertices;
-            // Note indices are not strictly needed for AABB but good for completeness
-            mesh_data.indices = entry->indices;
-
+            mesh_data.vertices = mesh_entry->original_vertices;
+            mesh_data.indices = mesh_entry->indices;
             Eigen::Vector3d min_corner, max_corner;
-            robot_sim::simulation::GeometrySimplifier::calculateAABB(mesh_data, min_corner, max_corner);
+            robot_sim::simulation::GeometrySimplifier::calculateAABB(
+                mesh_data, min_corner, max_corner);
             Eigen::Vector3d size = robot_sim::simulation::GeometrySimplifier::getSize(min_corner, max_corner);
             Eigen::Vector3d center = robot_sim::simulation::GeometrySimplifier::getCenter(min_corner, max_corner);
             visual_center_override = center;

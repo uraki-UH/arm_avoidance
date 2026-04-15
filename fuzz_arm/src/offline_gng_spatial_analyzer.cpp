@@ -89,8 +89,7 @@ int main(int argc, char **argv) {
 
       for (const auto& coll : link.collisions) {
           if (coll.geometry.type == simulation::GeometryType::MESH) {
-              dTriMeshDataID mesh_data_id = mesh_cache.getMesh(coll.geometry.mesh_filename, coll.geometry.size);
-              auto entry = mesh_cache.getMeshEntry(mesh_data_id);
+              auto entry = mesh_cache.getMesh(coll.geometry.mesh_filename, coll.geometry.size);
               if (entry && !entry->original_vertices.empty()) {
                   Eigen::Vector3d min_corner = Eigen::Vector3d::Constant(std::numeric_limits<double>::max());
                   Eigen::Vector3d max_corner = Eigen::Vector3d::Constant(std::numeric_limits<double>::lowest());
