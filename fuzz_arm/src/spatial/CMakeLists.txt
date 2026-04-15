@@ -1,0 +1,10 @@
+add_library(spatial_lib STATIC
+    robot_model_analyzer.cpp
+)
+target_include_directories(spatial_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(spatial_lib  common_lib kinematics_lib)
+if(BUILD_WITH_ROS2)
+    ament_target_dependencies(spatial_lib Eigen3)
+else()
+    target_link_libraries(spatial_lib  Eigen3::Eigen)
+endif()

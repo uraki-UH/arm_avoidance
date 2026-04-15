@@ -1,0 +1,93 @@
+[35m[1mConsolidate compiler generated dependencies of target common_lib[0m
+[  9%] Built target common_lib
+[35m[1mConsolidate compiler generated dependencies of target kinematics_lib[0m
+[35m[1mConsolidate compiler generated dependencies of target hardware_lib[0m
+[ 15%] Built target kinematics_lib
+[ 21%] Built target hardware_lib
+[35m[1mConsolidate compiler generated dependencies of target spatial_lib[0m
+[35m[1mConsolidate compiler generated dependencies of target gng_lib[0m
+[35m[1mConsolidate compiler generated dependencies of target collision_lib[0m
+[ 34%] Built target spatial_lib
+[ 34%] Built target gng_lib
+[35m[1mConsolidate compiler generated dependencies of target control_lib[0m
+[35m[1mConsolidate compiler generated dependencies of target status_lib[0m
+[ 56%] Built target collision_lib
+[ 65%] Built target control_lib
+[ 71%] Built target status_lib
+[35m[1mConsolidate compiler generated dependencies of target simulation_lib[0m
+[ 75%] [32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o[0m
+In file included from [01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:6[m[K:
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:28:3:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ does not name a type
+   28 |   [01;31m[KdTriMeshDataID[m[K data_id;
+      |   [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:29:15:[m[K [01;31m[Kerror: [m[K‘[01m[KdReal[m[K’ was not declared in this scope
+   29 |   std::vector<[01;31m[KdReal[m[K> vertices;    // ODE expects dReal (float or double)
+      |               [01;31m[K^~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:29:20:[m[K [01;31m[Kerror: [m[Ktemplate argument 1 is invalid
+   29 |   std::vector<dReal[01;31m[K>[m[K vertices;    // ODE expects dReal (float or double)
+      |                    [01;31m[K^[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:29:20:[m[K [01;31m[Kerror: [m[Ktemplate argument 2 is invalid
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:30:15:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriIndex[m[K’ was not declared in this scope; did you mean ‘[01m[Krindex[m[K’?
+   30 |   std::vector<[01;31m[KdTriIndex[m[K> indices; // ODE index type
+      |               [01;31m[K^~~~~~~~~[m[K
+      |               [32m[Krindex[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:30:24:[m[K [01;31m[Kerror: [m[Ktemplate argument 1 is invalid
+   30 |   std::vector<dTriIndex[01;31m[K>[m[K indices; // ODE index type
+      |                        [01;31m[K^[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:30:24:[m[K [01;31m[Kerror: [m[Ktemplate argument 2 is invalid
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:31:15:[m[K [01;31m[Kerror: [m[K‘[01m[KdReal[m[K’ was not declared in this scope
+   31 |   std::vector<[01;31m[KdReal[m[K>
+      |               [01;31m[K^~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:31:20:[m[K [01;31m[Kerror: [m[Ktemplate argument 1 is invalid
+   31 |   std::vector<dReal[01;31m[K>[m[K
+      |                    [01;31m[K^[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:31:20:[m[K [01;31m[Kerror: [m[Ktemplate argument 2 is invalid
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:48:3:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ does not name a type
+   48 |   [01;31m[KdTriMeshDataID[m[K getMesh(const std::string &filename,
+      |   [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:59:43:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ has not been declared
+   59 |   std::shared_ptr<MeshEntry> getMeshEntry([01;31m[KdTriMeshDataID[m[K data_id) const;
+      |                                           [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:64:49:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ has not been declared
+   64 |   const std::vector<float> &getOriginalVertices([01;31m[KdTriMeshDataID[m[K data_id) const;
+      |                                                 [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:70:12:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ was not declared in this scope
+   70 |   std::map<[01;31m[KdTriMeshDataID[m[K, std::shared_ptr<MeshEntry>> reverse_cache_;
+      |            [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:70:53:[m[K [01;31m[Kerror: [m[Ktemplate argument 1 is invalid
+   70 |   std::map<dTriMeshDataID, std::shared_ptr<MeshEntry[01;31m[K>>[m[K reverse_cache_;
+      |                                                     [01;31m[K^~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:70:53:[m[K [01;31m[Kerror: [m[Ktemplate argument 3 is invalid
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:70:53:[m[K [01;31m[Kerror: [m[Ktemplate argument 4 is invalid
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:[m[K In member function ‘[01m[Kvoid robot_sim::simulation::MeshCache::clear()[m[K’:
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:26:42:[m[K [01;31m[Kerror: [m[K‘[01m[Kusing element_type = struct robot_sim::simulation::MeshEntry[m[K’ {aka ‘[01m[Kstruct robot_sim::simulation::MeshEntry[m[K’} has no member named ‘[01m[Kdata_id[m[K’
+   26 |     dGeomTriMeshDataDestroy(pair.second->[01;31m[Kdata_id[m[K);
+      |                                          [01;31m[K^~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:26:5:[m[K [01;31m[Kerror: [m[K‘[01m[KdGeomTriMeshDataDestroy[m[K’ was not declared in this scope
+   26 |     [01;31m[KdGeomTriMeshDataDestroy[m[K(pair.second->data_id);
+      |     [01;31m[K^~~~~~~~~~~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:29:18:[m[K [01;31m[Kerror: [m[Krequest for member ‘[01m[Kclear[m[K’ in ‘[01m[K((robot_sim::simulation::MeshCache*)this)->robot_sim::simulation::MeshCache::reverse_cache_[m[K’, which is of non-class type ‘[01m[Kint[m[K’
+   29 |   reverse_cache_.[01;31m[Kclear[m[K();
+      |                  [01;31m[K^~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:[m[K At global scope:
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:32:1:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ does not name a type
+   32 | [01;31m[KdTriMeshDataID[m[K MeshCache::getMesh(const std::string &filename,
+      | [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:112:1:[m[K [01;31m[Kerror: [m[K‘[01m[Kstd::shared_ptr<robot_sim::simulation::MeshEntry> robot_sim::simulation::MeshCache::getMeshEntry[m[K’ is not a static data member of ‘[01m[Kclass robot_sim::simulation::MeshCache[m[K’
+  112 | [01;31m[KMeshCache[m[K::getMeshEntry(dTriMeshDataID data_id) const {
+      | [01;31m[K^~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:112:25:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ was not declared in this scope
+  112 | MeshCache::getMeshEntry([01;31m[KdTriMeshDataID[m[K data_id) const {
+      |                         [01;31m[K^~~~~~~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:112:49:[m[K [01;31m[Kerror: [m[Kexpected ‘[01m[K,[m[K’ or ‘[01m[K;[m[K’ before ‘[01m[Kconst[m[K’
+  112 | MeshCache::getMeshEntry(dTriMeshDataID data_id) [01;31m[Kconst[m[K {
+      |                                                 [01;31m[K^~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:121:1:[m[K [01;31m[Kerror: [m[K‘[01m[Kconst std::vector<float>& robot_sim::simulation::MeshCache::getOriginalVertices[m[K’ is not a static data member of ‘[01m[Kclass robot_sim::simulation::MeshCache[m[K’
+  121 | [01;31m[KMeshCache[m[K::getOriginalVertices(dTriMeshDataID data_id) const {
+      | [01;31m[K^~~~~~~~~[m[K
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:121:32:[m[K [01;31m[Kerror: [m[K‘[01m[KdTriMeshDataID[m[K’ was not declared in this scope
+  121 | MeshCache::getOriginalVertices([01;31m[KdTriMeshDataID[m[K data_id) const {
+      |                                [01;31m[K^~~~~~~~~~~~~~[m[K
+gmake[2]: *** [src/simulation/CMakeFiles/simulation_lib.dir/build.make:76: src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o] エラー 1
+gmake[1]: *** [CMakeFiles/Makefile2:598: src/simulation/CMakeFiles/simulation_lib.dir/all] エラー 2
+gmake: *** [Makefile:146: all] エラー 2

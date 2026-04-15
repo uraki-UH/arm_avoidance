@@ -1,0 +1,349 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Release-a7e2860bd142a93ebe75.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						4,
+						7,
+						11
+					]
+				},
+				{
+					"build" : "src",
+					"childIndexes" : 
+					[
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"jsonFile" : "directory-src-Release-b6cf2213fc5053b67c22.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "src"
+				},
+				{
+					"build" : "src/common",
+					"jsonFile" : "directory-src.common-Release-26ca1aee19599f655637.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/common",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "src/kinematics",
+					"jsonFile" : "directory-src.kinematics-Release-c3425d88f49d7e753c35.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/kinematics",
+					"targetIndexes" : 
+					[
+						6
+					]
+				},
+				{
+					"build" : "src/description",
+					"jsonFile" : "directory-src.description-Release-fa97e11abab7abaae591.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/description"
+				},
+				{
+					"build" : "src/hardware",
+					"jsonFile" : "directory-src.hardware-Release-a1670266b7ddea1d7b64.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/hardware",
+					"targetIndexes" : 
+					[
+						5
+					]
+				},
+				{
+					"build" : "src/gng",
+					"jsonFile" : "directory-src.gng-Release-1a60e0412b744e5b8f5d.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/gng",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"build" : "src/collision",
+					"jsonFile" : "directory-src.collision-Release-93fd30f42876c9f5d4ab.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/collision",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "src/status",
+					"jsonFile" : "directory-src.status-Release-16ba24b70147954295cd.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/status",
+					"targetIndexes" : 
+					[
+						10
+					]
+				},
+				{
+					"build" : "src/spatial",
+					"jsonFile" : "directory-src.spatial-Release-18030576229617f84360.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/spatial",
+					"targetIndexes" : 
+					[
+						9
+					]
+				},
+				{
+					"build" : "src/planner",
+					"jsonFile" : "directory-src.planner-Release-5857e2817ff738edc5cc.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/planner"
+				},
+				{
+					"build" : "src/control",
+					"jsonFile" : "directory-src.control-Release-e23a250daf7dfc7fb5db.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/control",
+					"targetIndexes" : 
+					[
+						2
+					]
+				},
+				{
+					"build" : "src/simulation",
+					"jsonFile" : "directory-src.simulation-Release-57c93cf8c50614a5131f.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.12"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 0,
+					"source" : "src/simulation",
+					"targetIndexes" : 
+					[
+						8
+					]
+				}
+			],
+			"name" : "Release",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11,
+						12
+					],
+					"name" : "gng_planner",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4,
+						5,
+						6,
+						7,
+						8,
+						9,
+						10,
+						11
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 7,
+					"id" : "collision_lib::@b81557943134d521b1ad",
+					"jsonFile" : "target-collision_lib-Release-02d22d7d8564ed957a1d.json",
+					"name" : "collision_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "common_lib::@af79f3804eddddbfa7f1",
+					"jsonFile" : "target-common_lib-Release-ecf683c186777fd82be1.json",
+					"name" : "common_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 11,
+					"id" : "control_lib::@55c7869fca2c028a7ab9",
+					"jsonFile" : "target-control_lib-Release-88b124ef4edb245649f6.json",
+					"name" : "control_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 6,
+					"id" : "gng_lib::@7a8ee0213980c437dae2",
+					"jsonFile" : "target-gng_lib-Release-cf6de45371bad53ec8a8.json",
+					"name" : "gng_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "gng_planner_uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-gng_planner_uninstall-Release-ce59459e8a39df8b6a1d.json",
+					"name" : "gng_planner_uninstall",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 5,
+					"id" : "hardware_lib::@6e18b93f3ba6f3602792",
+					"jsonFile" : "target-hardware_lib-Release-89bdd4580bfa4fa1251d.json",
+					"name" : "hardware_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "kinematics_lib::@d85ac22b51194d55d092",
+					"jsonFile" : "target-kinematics_lib-Release-74fd23d2019cffe33270.json",
+					"name" : "kinematics_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "offline_urdf_trainer::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-offline_urdf_trainer-Release-d9a1293979af0ab7ea1c.json",
+					"name" : "offline_urdf_trainer",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 12,
+					"id" : "simulation_lib::@14db2e6ec23a8dd5a8be",
+					"jsonFile" : "target-simulation_lib-Release-05d18a807c332f7fe66f.json",
+					"name" : "simulation_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 9,
+					"id" : "spatial_lib::@558332e892276fce7224",
+					"jsonFile" : "target-spatial_lib-Release-c8342bfe57aba927e9ae.json",
+					"name" : "spatial_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 8,
+					"id" : "status_lib::@8be5e5f3ff2b43bfbae1",
+					"jsonFile" : "target-status_lib-Release-36539597d9d92237d0d2.json",
+					"name" : "status_lib",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "uninstall::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-uninstall-Release-b10eb4b8223b63e4d391.json",
+					"name" : "uninstall",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/fuzzrobo/uraki_ws/fuzz_arm/build/gng_planner",
+		"source" : "/home/fuzzrobo/uraki_ws/fuzz_arm"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 3
+	}
+}

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libspatial_lib.a CMakeFiles/spatial_lib.dir/robot_model_analyzer.cpp.o
+/usr/bin/ranlib libspatial_lib.a

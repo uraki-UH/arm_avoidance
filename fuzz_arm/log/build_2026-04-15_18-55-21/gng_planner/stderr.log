@@ -1,0 +1,10 @@
+In file included from [01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:6[m[K:
+[01m[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:13:10:[m[K [01;31m[Kfatal error: [m[Kode/ode.h: そのようなファイルやディレクトリはありません
+   13 | #include [01;31m[K<ode/ode.h>[m[K
+      |          [01;31m[K^~~~~~~~~~~[m[K
+compilation terminated.
+gmake[2]: *** [src/simulation/CMakeFiles/simulation_lib.dir/build.make:76: src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o] エラー 1
+gmake[2]: *** 未完了のジョブを待っています....
+gmake[1]: *** [CMakeFiles/Makefile2:598: src/simulation/CMakeFiles/simulation_lib.dir/all] エラー 2
+gmake[1]: *** 未完了のジョブを待っています....
+gmake: *** [Makefile:146: all] エラー 2

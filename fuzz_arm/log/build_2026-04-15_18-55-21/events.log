@@ -1,0 +1,322 @@
+[0.000000] (-) TimerEvent: {}
+[0.000434] (gng_planner) JobQueued: {'identifier': 'gng_planner', 'dependencies': OrderedDict()}
+[0.000491] (gng_planner) JobStarted: {'identifier': 'gng_planner'}
+[0.007933] (gng_planner) JobProgress: {'identifier': 'gng_planner', 'progress': 'cmake'}
+[0.008477] (gng_planner) JobProgress: {'identifier': 'gng_planner', 'progress': 'build'}
+[0.009047] (gng_planner) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/fuzzrobo/uraki_ws/fuzz_arm/build/gng_planner', '--', '-j16', '-l16'], 'cwd': '/home/fuzzrobo/uraki_ws/fuzz_arm/build/gng_planner', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('PYTHON_BASIC_REPL', '1'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('USER', 'fuzzrobo'), ('XDG_SESSION_TYPE', 'wayland'), ('GIT_ASKPASS', '/usr/share/code/resources/app/extensions/git/dist/askpass.sh'), ('SHLVL', '1'), ('LD_LIBRARY_PATH', '/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/fuzzrobo'), ('CHROME_DESKTOP', 'code.desktop'), ('OLDPWD', '/home/fuzzrobo/uraki_ws'), ('TERM_PROGRAM_VERSION', '1.114.0'), ('DESKTOP_SESSION', 'ubuntu'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/code.desktop'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('VSCODE_GIT_ASKPASS_MAIN', '/usr/share/code/resources/app/extensions/git/dist/askpass-main.js'), ('VSCODE_GIT_ASKPASS_NODE', '/usr/share/code/code'), ('MANAGERPID', '1983'), ('SYSTEMD_EXEC_PID', '2161'), ('IM_CONFIG_CHECK_ENV', '1'), ('VSCODE_PYTHON_AUTOACTIVATE_GUARD', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', 'truecolor'), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '4584'), ('IM_CONFIG_PHASE', '1'), ('WAYLAND_DISPLAY', 'wayland-0'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'fuzzrobo'), ('JOURNAL_STREAM', '8:9639'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('USERNAME', 'fuzzrobo'), ('TERM', 'xterm-256color'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin'), ('SESSION_MANAGER', 'local/fuzzrobo:@/tmp/.ICE-unix/2133,unix/fuzzrobo:/tmp/.ICE-unix/2133'), ('INVOCATION_ID', 'e2bc53d25adb419c977db5285e12a152'), ('XDG_MENU_PREFIX', 'gnome-'), ('GNOME_SETUP_DISPLAY', ':1'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'wayland'), ('DISPLAY', ':0'), ('LANG', 'ja_JP.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('PYTHONSTARTUP', '/home/fuzzrobo/.config/Code/User/workspaceStorage/d7158457978415724b61132a478bcd2a/ms-python.python/pythonrc.py'), ('XMODIFIERS', '@im=ibus'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/.mutter-Xwaylandauth.K5OQN3'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('VSCODE_GIT_IPC_HANDLE', '/run/user/1000/vscode-git-ac1f89bab8.sock'), ('TERM_PROGRAM', 'vscode'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/opt/ros/humble'), ('SHELL', '/bin/bash'), ('QT_ACCESSIBILITY', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('VSCODE_GIT_ASKPASS_EXTRA_ARGS', ''), ('QT_IM_MODULE', 'ibus'), ('PWD', '/home/fuzzrobo/uraki_ws/fuzz_arm/build/gng_planner'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/opt/ros/humble')]), 'shell': False}
+[0.099257] (-) TimerEvent: {}
+[0.153058] (gng_planner) StdoutLine: {'line': b'-- ROS 2 (Humble) environment detected.\n'}
+[0.153423] (gng_planner) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.171892] (gng_planner) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.173413] (gng_planner) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.177198] (gng_planner) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.182948] (gng_planner) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.190296] (gng_planner) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.199350] (-) TimerEvent: {}
+[0.211977] (gng_planner) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.212786] (gng_planner) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.297005] (gng_planner) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.299442] (-) TimerEvent: {}
+[0.331103] (gng_planner) StdoutLine: {'line': b'-- Found urdf: 2.6.1 (/opt/ros/humble/share/urdf/cmake)\n'}
+[0.399632] (-) TimerEvent: {}
+[0.414884] (gng_planner) StdoutLine: {'line': b'-- Configuring done\n'}
+[0.443686] (gng_planner) StdoutLine: {'line': b'-- Generating done\n'}
+[0.453051] (gng_planner) StdoutLine: {'line': b'-- Build files have been written to: /home/fuzzrobo/uraki_ws/fuzz_arm/build/gng_planner\n'}
+[0.499829] (-) TimerEvent: {}
+[0.518274] (gng_planner) StdoutLine: {'line': b'[  6%] \x1b[32mBuilding CXX object src/common/CMakeFiles/common_lib.dir/config_manager.cpp.o\x1b[0m\n'}
+[0.518583] (gng_planner) StdoutLine: {'line': b'[  6%] \x1b[32mBuilding CXX object src/common/CMakeFiles/common_lib.dir/geometry_utils.cpp.o\x1b[0m\n'}
+[0.600010] (-) TimerEvent: {}
+[0.700532] (-) TimerEvent: {}
+[0.801069] (-) TimerEvent: {}
+[0.901594] (-) TimerEvent: {}
+[1.002155] (-) TimerEvent: {}
+[1.102685] (-) TimerEvent: {}
+[1.203240] (-) TimerEvent: {}
+[1.303825] (-) TimerEvent: {}
+[1.404752] (-) TimerEvent: {}
+[1.505852] (-) TimerEvent: {}
+[1.606382] (-) TimerEvent: {}
+[1.706917] (-) TimerEvent: {}
+[1.807506] (-) TimerEvent: {}
+[1.908130] (-) TimerEvent: {}
+[2.008679] (-) TimerEvent: {}
+[2.109305] (-) TimerEvent: {}
+[2.209837] (-) TimerEvent: {}
+[2.310370] (-) TimerEvent: {}
+[2.410906] (-) TimerEvent: {}
+[2.511389] (-) TimerEvent: {}
+[2.611769] (-) TimerEvent: {}
+[2.712136] (-) TimerEvent: {}
+[2.812503] (-) TimerEvent: {}
+[2.912854] (-) TimerEvent: {}
+[2.954262] (gng_planner) StdoutLine: {'line': b'[  9%] \x1b[32m\x1b[1mLinking CXX static library libcommon_lib.a\x1b[0m\n'}
+[2.989107] (gng_planner) StdoutLine: {'line': b'[  9%] Built target common_lib\n'}
+[3.008837] (gng_planner) StdoutLine: {'line': b'[ 12%] \x1b[32mBuilding CXX object src/kinematics/CMakeFiles/kinematics_lib.dir/kinematic_chain.cpp.o\x1b[0m\n'}
+[3.009289] (gng_planner) StdoutLine: {'line': b'[ 15%] \x1b[32mBuilding CXX object src/hardware/CMakeFiles/hardware_lib.dir/twin_manager.cpp.o\x1b[0m\n'}
+[3.012984] (-) TimerEvent: {}
+[3.113341] (-) TimerEvent: {}
+[3.213728] (-) TimerEvent: {}
+[3.314079] (-) TimerEvent: {}
+[3.414425] (-) TimerEvent: {}
+[3.514798] (-) TimerEvent: {}
+[3.615167] (-) TimerEvent: {}
+[3.715487] (-) TimerEvent: {}
+[3.815875] (-) TimerEvent: {}
+[3.916223] (-) TimerEvent: {}
+[4.016546] (-) TimerEvent: {}
+[4.116942] (-) TimerEvent: {}
+[4.217311] (-) TimerEvent: {}
+[4.317685] (-) TimerEvent: {}
+[4.418077] (-) TimerEvent: {}
+[4.518458] (-) TimerEvent: {}
+[4.618832] (-) TimerEvent: {}
+[4.719204] (-) TimerEvent: {}
+[4.819583] (-) TimerEvent: {}
+[4.919957] (-) TimerEvent: {}
+[4.963693] (gng_planner) StdoutLine: {'line': b'[ 18%] \x1b[32m\x1b[1mLinking CXX static library libhardware_lib.a\x1b[0m\n'}
+[4.994660] (gng_planner) StdoutLine: {'line': b'[ 18%] Built target hardware_lib\n'}
+[5.020098] (-) TimerEvent: {}
+[5.120463] (-) TimerEvent: {}
+[5.220799] (-) TimerEvent: {}
+[5.321163] (-) TimerEvent: {}
+[5.421543] (-) TimerEvent: {}
+[5.521933] (-) TimerEvent: {}
+[5.622377] (-) TimerEvent: {}
+[5.722773] (-) TimerEvent: {}
+[5.823148] (-) TimerEvent: {}
+[5.923522] (-) TimerEvent: {}
+[6.023906] (-) TimerEvent: {}
+[6.124274] (-) TimerEvent: {}
+[6.224639] (-) TimerEvent: {}
+[6.325087] (-) TimerEvent: {}
+[6.425467] (-) TimerEvent: {}
+[6.525804] (-) TimerEvent: {}
+[6.626157] (-) TimerEvent: {}
+[6.726478] (-) TimerEvent: {}
+[6.826801] (-) TimerEvent: {}
+[6.927126] (-) TimerEvent: {}
+[7.027439] (-) TimerEvent: {}
+[7.127725] (-) TimerEvent: {}
+[7.228027] (-) TimerEvent: {}
+[7.328391] (-) TimerEvent: {}
+[7.428797] (-) TimerEvent: {}
+[7.529161] (-) TimerEvent: {}
+[7.629531] (-) TimerEvent: {}
+[7.729911] (-) TimerEvent: {}
+[7.830244] (-) TimerEvent: {}
+[7.930579] (-) TimerEvent: {}
+[8.030954] (-) TimerEvent: {}
+[8.131321] (-) TimerEvent: {}
+[8.231685] (-) TimerEvent: {}
+[8.332071] (-) TimerEvent: {}
+[8.432418] (-) TimerEvent: {}
+[8.532740] (-) TimerEvent: {}
+[8.633083] (-) TimerEvent: {}
+[8.733397] (-) TimerEvent: {}
+[8.833782] (-) TimerEvent: {}
+[8.934159] (-) TimerEvent: {}
+[9.034523] (-) TimerEvent: {}
+[9.134901] (-) TimerEvent: {}
+[9.235266] (-) TimerEvent: {}
+[9.335630] (-) TimerEvent: {}
+[9.436014] (-) TimerEvent: {}
+[9.536378] (-) TimerEvent: {}
+[9.636756] (-) TimerEvent: {}
+[9.737119] (-) TimerEvent: {}
+[9.837483] (-) TimerEvent: {}
+[9.937864] (-) TimerEvent: {}
+[10.038232] (-) TimerEvent: {}
+[10.138602] (-) TimerEvent: {}
+[10.238985] (-) TimerEvent: {}
+[10.339343] (-) TimerEvent: {}
+[10.439713] (-) TimerEvent: {}
+[10.540109] (-) TimerEvent: {}
+[10.640444] (-) TimerEvent: {}
+[10.740768] (-) TimerEvent: {}
+[10.841099] (-) TimerEvent: {}
+[10.941398] (-) TimerEvent: {}
+[11.041783] (-) TimerEvent: {}
+[11.142149] (-) TimerEvent: {}
+[11.242539] (-) TimerEvent: {}
+[11.342961] (-) TimerEvent: {}
+[11.443295] (-) TimerEvent: {}
+[11.543609] (-) TimerEvent: {}
+[11.643887] (-) TimerEvent: {}
+[11.744178] (-) TimerEvent: {}
+[11.844540] (-) TimerEvent: {}
+[11.944911] (-) TimerEvent: {}
+[12.045274] (-) TimerEvent: {}
+[12.145637] (-) TimerEvent: {}
+[12.183473] (gng_planner) StdoutLine: {'line': b'[ 21%] \x1b[32m\x1b[1mLinking CXX static library libkinematics_lib.a\x1b[0m\n'}
+[12.218915] (gng_planner) StdoutLine: {'line': b'[ 21%] Built target kinematics_lib\n'}
+[12.245804] (-) TimerEvent: {}
+[12.247368] (gng_planner) StdoutLine: {'line': b'[ 28%] \x1b[32mBuilding CXX object src/gng/CMakeFiles/gng_lib.dir/GrowingNeuralGas_offline.cpp.o\x1b[0m\n'}
+[12.247751] (gng_planner) StdoutLine: {'line': b'[ 28%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/collision_detector.cpp.o\x1b[0m\n'}
+[12.248099] (gng_planner) StdoutLine: {'line': b'[ 31%] \x1b[32mBuilding CXX object src/spatial/CMakeFiles/spatial_lib.dir/robot_model_analyzer.cpp.o\x1b[0m\n'}
+[12.248612] (gng_planner) StdoutLine: {'line': b'[ 34%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/environment_collision_checker.cpp.o\x1b[0m\n'}
+[12.248969] (gng_planner) StdoutLine: {'line': b'[ 37%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/geometric_self_collision_checker.cpp.o\x1b[0m\n'}
+[12.250021] (gng_planner) StdoutLine: {'line': b'[ 40%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/point_cloud_collision_checker.cpp.o\x1b[0m\n'}
+[12.251255] (gng_planner) StdoutLine: {'line': b'[ 43%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/self_collision_checker.cpp.o\x1b[0m\n'}
+[12.252323] (gng_planner) StdoutLine: {'line': b'[ 46%] \x1b[32mBuilding CXX object src/collision/CMakeFiles/collision_lib.dir/fcl/fcl_collision_detector.cpp.o\x1b[0m\n'}
+[12.345915] (-) TimerEvent: {}
+[12.446244] (-) TimerEvent: {}
+[12.546537] (-) TimerEvent: {}
+[12.646870] (-) TimerEvent: {}
+[12.747207] (-) TimerEvent: {}
+[12.847549] (-) TimerEvent: {}
+[12.947874] (-) TimerEvent: {}
+[13.048212] (-) TimerEvent: {}
+[13.148557] (-) TimerEvent: {}
+[13.248918] (-) TimerEvent: {}
+[13.349256] (-) TimerEvent: {}
+[13.449580] (-) TimerEvent: {}
+[13.549914] (-) TimerEvent: {}
+[13.650285] (-) TimerEvent: {}
+[13.750748] (-) TimerEvent: {}
+[13.851134] (-) TimerEvent: {}
+[13.951495] (-) TimerEvent: {}
+[14.051795] (-) TimerEvent: {}
+[14.152127] (-) TimerEvent: {}
+[14.252526] (-) TimerEvent: {}
+[14.352897] (-) TimerEvent: {}
+[14.453185] (-) TimerEvent: {}
+[14.553487] (-) TimerEvent: {}
+[14.653771] (-) TimerEvent: {}
+[14.671405] (gng_planner) StdoutLine: {'line': b'[ 50%] \x1b[32m\x1b[1mLinking CXX static library libspatial_lib.a\x1b[0m\n'}
+[14.707383] (gng_planner) StdoutLine: {'line': b'[ 50%] Built target spatial_lib\n'}
+[14.753888] (-) TimerEvent: {}
+[14.854243] (-) TimerEvent: {}
+[14.954633] (-) TimerEvent: {}
+[15.055079] (-) TimerEvent: {}
+[15.155479] (-) TimerEvent: {}
+[15.255886] (-) TimerEvent: {}
+[15.356260] (-) TimerEvent: {}
+[15.456642] (-) TimerEvent: {}
+[15.557035] (-) TimerEvent: {}
+[15.657443] (-) TimerEvent: {}
+[15.757821] (-) TimerEvent: {}
+[15.858202] (-) TimerEvent: {}
+[15.958575] (-) TimerEvent: {}
+[16.058988] (-) TimerEvent: {}
+[16.159389] (-) TimerEvent: {}
+[16.259799] (-) TimerEvent: {}
+[16.360168] (-) TimerEvent: {}
+[16.460529] (-) TimerEvent: {}
+[16.560916] (-) TimerEvent: {}
+[16.661281] (-) TimerEvent: {}
+[16.761651] (-) TimerEvent: {}
+[16.862017] (-) TimerEvent: {}
+[16.883335] (gng_planner) StdoutLine: {'line': b'[ 53%] \x1b[32m\x1b[1mLinking CXX static library libgng_lib.a\x1b[0m\n'}
+[16.919320] (gng_planner) StdoutLine: {'line': b'[ 53%] Built target gng_lib\n'}
+[16.939579] (gng_planner) StdoutLine: {'line': b'[ 56%] \x1b[32mBuilding CXX object src/control/CMakeFiles/control_lib.dir/trajectory_safety_manager.cpp.o\x1b[0m\n'}
+[16.939948] (gng_planner) StdoutLine: {'line': b'[ 62%] \x1b[32mBuilding CXX object src/status/CMakeFiles/status_lib.dir/dynamic_manipulability.cpp.o\x1b[0m\n'}
+[16.940049] (gng_planner) StdoutLine: {'line': b'[ 62%] \x1b[32mBuilding CXX object src/status/CMakeFiles/status_lib.dir/manipulability.cpp.o\x1b[0m\n'}
+[16.962191] (-) TimerEvent: {}
+[17.062726] (-) TimerEvent: {}
+[17.163104] (-) TimerEvent: {}
+[17.263496] (-) TimerEvent: {}
+[17.363903] (-) TimerEvent: {}
+[17.464286] (-) TimerEvent: {}
+[17.564663] (-) TimerEvent: {}
+[17.665054] (-) TimerEvent: {}
+[17.765438] (-) TimerEvent: {}
+[17.838261] (gng_planner) StdoutLine: {'line': b'[ 65%] \x1b[32m\x1b[1mLinking CXX static library libcontrol_lib.a\x1b[0m\n'}
+[17.865599] (-) TimerEvent: {}
+[17.871150] (gng_planner) StdoutLine: {'line': b'[ 65%] Built target control_lib\n'}
+[17.965762] (-) TimerEvent: {}
+[18.066111] (-) TimerEvent: {}
+[18.166435] (-) TimerEvent: {}
+[18.266820] (-) TimerEvent: {}
+[18.367199] (-) TimerEvent: {}
+[18.467600] (-) TimerEvent: {}
+[18.567993] (-) TimerEvent: {}
+[18.668382] (-) TimerEvent: {}
+[18.768778] (-) TimerEvent: {}
+[18.869177] (-) TimerEvent: {}
+[18.969552] (-) TimerEvent: {}
+[19.069912] (-) TimerEvent: {}
+[19.170313] (-) TimerEvent: {}
+[19.270693] (-) TimerEvent: {}
+[19.371078] (-) TimerEvent: {}
+[19.471460] (-) TimerEvent: {}
+[19.571843] (-) TimerEvent: {}
+[19.672212] (-) TimerEvent: {}
+[19.772584] (-) TimerEvent: {}
+[19.872993] (-) TimerEvent: {}
+[19.973406] (-) TimerEvent: {}
+[20.073791] (-) TimerEvent: {}
+[20.174181] (-) TimerEvent: {}
+[20.274578] (-) TimerEvent: {}
+[20.374985] (-) TimerEvent: {}
+[20.475364] (-) TimerEvent: {}
+[20.575788] (-) TimerEvent: {}
+[20.676144] (-) TimerEvent: {}
+[20.776479] (-) TimerEvent: {}
+[20.876827] (-) TimerEvent: {}
+[20.977176] (-) TimerEvent: {}
+[21.016161] (gng_planner) StdoutLine: {'line': b'[ 68%] \x1b[32m\x1b[1mLinking CXX static library libcollision_lib.a\x1b[0m\n'}
+[21.055817] (gng_planner) StdoutLine: {'line': b'[ 68%] Built target collision_lib\n'}
+[21.077331] (-) TimerEvent: {}
+[21.088028] (gng_planner) StdoutLine: {'line': b'[ 75%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o\x1b[0m\n'}
+[21.088530] (gng_planner) StdoutLine: {'line': b'[ 75%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/kinematic_adapter.cpp.o\x1b[0m\n'}
+[21.088864] (gng_planner) StdoutLine: {'line': b'[ 78%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/robot_collision_model.cpp.o\x1b[0m\n'}
+[21.089531] (gng_planner) StdoutLine: {'line': b'[ 81%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/urdf_loader.cpp.o\x1b[0m\n'}
+[21.090108] (gng_planner) StdoutLine: {'line': b'[ 84%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/robot/stl_loader.cpp.o\x1b[0m\n'}
+[21.091775] (gng_planner) StdoutLine: {'line': b'[ 87%] \x1b[32mBuilding CXX object src/simulation/CMakeFiles/simulation_lib.dir/sensing/robot_point_cloud_sampler.cpp.o\x1b[0m\n'}
+[21.177412] (-) TimerEvent: {}
+[21.255139] (gng_planner) StderrLine: {'line': b'In file included from \x1b[01m\x1b[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.cpp:6\x1b[m\x1b[K:\n'}
+[21.255349] (gng_planner) StderrLine: {'line': b'\x1b[01m\x1b[K/home/fuzzrobo/uraki_ws/fuzz_arm/src/simulation/robot/geometry_management.hpp:13:10:\x1b[m\x1b[K \x1b[01;31m\x1b[Kfatal error: \x1b[m\x1b[Kode/ode.h: \xe3\x81\x9d\xe3\x81\xae\xe3\x82\x88\xe3\x81\x86\xe3\x81\xaa\xe3\x83\x95\xe3\x82\xa1\xe3\x82\xa4\xe3\x83\xab\xe3\x82\x84\xe3\x83\x87\xe3\x82\xa3\xe3\x83\xac\xe3\x82\xaf\xe3\x83\x88\xe3\x83\xaa\xe3\x81\xaf\xe3\x81\x82\xe3\x82\x8a\xe3\x81\xbe\xe3\x81\x9b\xe3\x82\x93\n'}
+[21.255423] (gng_planner) StderrLine: {'line': b'   13 | #include \x1b[01;31m\x1b[K<ode/ode.h>\x1b[m\x1b[K\n'}
+[21.255481] (gng_planner) StderrLine: {'line': b'      |          \x1b[01;31m\x1b[K^~~~~~~~~~~\x1b[m\x1b[K\n'}
+[21.255533] (gng_planner) StderrLine: {'line': b'compilation terminated.\n'}
+[21.260480] (gng_planner) StderrLine: {'line': b'gmake[2]: *** [src/simulation/CMakeFiles/simulation_lib.dir/build.make:76: src/simulation/CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 1\n'}
+[21.260665] (gng_planner) StderrLine: {'line': b'gmake[2]: *** \xe6\x9c\xaa\xe5\xae\x8c\xe4\xba\x86\xe3\x81\xae\xe3\x82\xb8\xe3\x83\xa7\xe3\x83\x96\xe3\x82\x92\xe5\xbe\x85\xe3\x81\xa3\xe3\x81\xa6\xe3\x81\x84\xe3\x81\xbe\xe3\x81\x99....\n'}
+[21.277529] (-) TimerEvent: {}
+[21.377866] (-) TimerEvent: {}
+[21.478203] (-) TimerEvent: {}
+[21.578554] (-) TimerEvent: {}
+[21.678922] (-) TimerEvent: {}
+[21.779272] (-) TimerEvent: {}
+[21.879625] (-) TimerEvent: {}
+[21.979997] (-) TimerEvent: {}
+[22.080345] (-) TimerEvent: {}
+[22.180689] (-) TimerEvent: {}
+[22.281044] (-) TimerEvent: {}
+[22.381393] (-) TimerEvent: {}
+[22.481741] (-) TimerEvent: {}
+[22.582076] (-) TimerEvent: {}
+[22.682442] (-) TimerEvent: {}
+[22.782787] (-) TimerEvent: {}
+[22.883164] (-) TimerEvent: {}
+[22.983563] (-) TimerEvent: {}
+[23.083968] (-) TimerEvent: {}
+[23.184372] (-) TimerEvent: {}
+[23.284770] (-) TimerEvent: {}
+[23.385166] (-) TimerEvent: {}
+[23.485612] (-) TimerEvent: {}
+[23.586001] (-) TimerEvent: {}
+[23.686396] (-) TimerEvent: {}
+[23.786784] (-) TimerEvent: {}
+[23.802016] (gng_planner) StderrLine: {'line': b'gmake[1]: *** [CMakeFiles/Makefile2:598: src/simulation/CMakeFiles/simulation_lib.dir/all] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 2\n'}
+[23.802241] (gng_planner) StderrLine: {'line': b'gmake[1]: *** \xe6\x9c\xaa\xe5\xae\x8c\xe4\xba\x86\xe3\x81\xae\xe3\x82\xb8\xe3\x83\xa7\xe3\x83\x96\xe3\x82\x92\xe5\xbe\x85\xe3\x81\xa3\xe3\x81\xa6\xe3\x81\x84\xe3\x81\xbe\xe3\x81\x99....\n'}
+[23.886941] (-) TimerEvent: {}
+[23.987347] (-) TimerEvent: {}
+[24.087716] (-) TimerEvent: {}
+[24.188084] (-) TimerEvent: {}
+[24.288454] (-) TimerEvent: {}
+[24.388818] (-) TimerEvent: {}
+[24.489182] (-) TimerEvent: {}
+[24.589544] (-) TimerEvent: {}
+[24.690004] (-) TimerEvent: {}
+[24.790362] (-) TimerEvent: {}
+[24.890739] (-) TimerEvent: {}
+[24.991086] (-) TimerEvent: {}
+[25.091448] (-) TimerEvent: {}
+[25.191802] (-) TimerEvent: {}
+[25.281178] (gng_planner) StdoutLine: {'line': b'[ 90%] \x1b[32m\x1b[1mLinking CXX static library libstatus_lib.a\x1b[0m\n'}
+[25.291916] (-) TimerEvent: {}
+[25.320188] (gng_planner) StdoutLine: {'line': b'[ 90%] Built target status_lib\n'}
+[25.321366] (gng_planner) StderrLine: {'line': b'gmake: *** [Makefile:146: all] \xe3\x82\xa8\xe3\x83\xa9\xe3\x83\xbc 2\n'}
+[25.323414] (gng_planner) CommandEnded: {'returncode': 2}
+[25.329364] (gng_planner) JobEnded: {'identifier': 'gng_planner', 'rc': 2}
+[25.340152] (-) EventReactorShutdown: {}

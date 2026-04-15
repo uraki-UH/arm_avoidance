@@ -1,0 +1,2 @@
+/usr/bin/ar qc libhardware_lib.a CMakeFiles/hardware_lib.dir/twin_manager.cpp.o
+/usr/bin/ranlib libhardware_lib.a

@@ -1,0 +1,84 @@
+voxel_grid_node:
+  ros__parameters:
+    input_pointcloud_topic: /scan
+    input_topological_map_topic: /topological_map
+    marker_array_topic: /voxel_markers
+    voxel_centers_topic: /voxel_centers
+    marker_namespace_prefix: voxel_labels
+
+    publish_voxel_centers: false
+    print_processing_time: true
+    update_rate_hz: 10.0
+
+    voxel_size_x: 0.1
+    voxel_size_y: 0.1
+    voxel_size_z: 0.1
+
+    grid_origin_x: 0.0
+    grid_origin_y: 0.0
+    grid_origin_z: 0.0
+
+    # range_min_x: -20.0
+    # range_max_x: 20.0
+    # range_min_y: -20.0
+    # range_max_y: 20.0
+    # range_min_z: -1.0
+    # range_max_z: 20.0
+
+    # range_min_x: 10.
+    # range_max_x: 50.
+    # range_min_y: -120.
+    # range_max_y: 110.
+    # range_min_z: -20.
+    # range_max_z: 10.
+
+    range_min_y: -0.455 # -3.0
+    range_max_y: 0.355 # 3.
+    range_min_x: -1.8 # -3.
+    range_max_x: 0.8 # 3.
+    range_min_z: 0.0 # -3.0
+    range_max_z: 2.95 # 3.0
+
+    use_exclusion_box: true
+
+    exclude_min_x: -0.1
+    exclude_max_x: 0.1
+    exclude_min_y: -0.1
+    exclude_max_y: 0.1
+    exclude_min_z: -0.1
+    exclude_max_z: 0.1
+
+    normal_color:
+      r: 0.10
+      g: 1.00
+      b: 0.10
+      a: 0.5
+
+    add_candidate_color:
+      r: 1.00
+      g: 0.90
+      b: 0.10
+      a: 0.5
+
+    delete_candidate_color:
+      r: 1.00
+      g: 0.15
+      b: 0.15
+      a: 0.5
+
+    skip_candidate_color:
+      r: 0.20
+      g: 0.80
+      b: 1.00
+      a: 1.0
+
+
+    frozen_topological_map_topic: /frozen_topological_map
+    filtered_new_points_topic: /filtered_new_points
+
+    filter_distance_threshold: 0.15
+    filter_target_label: 3
+    # Normal = 0,
+    # AddCandidate = 1,
+    # DeleteCandidate = 2,
+    # SkipCandidate = 3
