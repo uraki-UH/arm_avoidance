@@ -1,0 +1,33 @@
+[0.009s] Invoking command in '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player -- -j16 -l16
+[0.061s] [ 83%] Built target udp_joint_state_player
+[0.061s] [ 50%] Building CXX object CMakeFiles/robot_description_player.dir/src/robot_description_player.cpp.o
+[0.061s] [ 83%] Built target gng_result_player
+[4.061s] [100%] Linking CXX executable robot_description_player
+[4.167s] [100%] Built target robot_description_player
+[4.177s] Invoked command in '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player -- -j16 -l16
+[4.187s] Invoking command in '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player
+[4.195s] -- Install configuration: ""
+[4.195s] -- Execute custom install script
+[4.195s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/gng_result_player
+[4.195s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/udp_joint_state_player
+[4.195s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/robot_description_player
+[4.196s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/launch/visualize_result.launch.py
+[4.196s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/launch/visualize_result_with_arm.launch.py
+[4.196s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/config/gng_result_player.rviz
+[4.196s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/config/gng_result_player_arm.rviz
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/package_run_dependencies/fuzz_gng_result_player
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/parent_prefix_path/fuzz_gng_result_player
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/ament_prefix_path.sh
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/ament_prefix_path.dsv
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/path.sh
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/path.dsv
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.bash
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.sh
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.zsh
+[4.197s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.dsv
+[4.197s] -- Symlinking: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/package.dsv
+[4.206s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/packages/fuzz_gng_result_player
+[4.206s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/cmake/fuzz_gng_result_playerConfig.cmake
+[4.206s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/cmake/fuzz_gng_result_playerConfig-version.cmake
+[4.206s] -- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/package.xml
+[4.208s] Invoked command in '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player

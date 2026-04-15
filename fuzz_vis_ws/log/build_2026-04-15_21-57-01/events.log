@@ -1,0 +1,359 @@
+[0.000000] (-) TimerEvent: {}
+[0.000314] (fuzz_gng_result_player) JobQueued: {'identifier': 'fuzz_gng_result_player', 'dependencies': OrderedDict()}
+[0.000333] (fuzz_gng_result_player) JobStarted: {'identifier': 'fuzz_gng_result_player'}
+[0.007179] (fuzz_gng_result_player) JobProgress: {'identifier': 'fuzz_gng_result_player', 'progress': 'cmake'}
+[0.007684] (fuzz_gng_result_player) JobProgress: {'identifier': 'fuzz_gng_result_player', 'progress': 'build'}
+[0.008100] (fuzz_gng_result_player) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player', '--', '-j16', '-l16'], 'cwd': '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('VSCODE_CWD', '/home/fuzzrobo'), ('VSCODE_ESM_ENTRYPOINT', 'vs/workbench/api/node/extensionHostProcess'), ('CODEX_CI', '1'), ('USER', 'fuzzrobo'), ('CODEX_INTERNAL_ORIGINATOR_OVERRIDE', 'codex_vscode'), ('VSCODE_NLS_CONFIG', '{"userLocale":"en-us","osLocale":"ja-jp","resolvedLanguage":"en","defaultMessagesFile":"/usr/share/code/resources/app/out/nls.messages.json","locale":"en-us","availableLanguages":{}}'), ('VSCODE_HANDLES_UNCAUGHT_ERRORS', 'true'), ('XDG_SESSION_TYPE', 'wayland'), ('DEBUG', 'release'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/fuzzrobo'), ('CHROME_DESKTOP', 'code.desktop'), ('OLDPWD', '/home/fuzzrobo/uraki_ws'), ('DESKTOP_SESSION', 'ubuntu'), ('VSCODE_IPC_HOOK', '/run/user/1000/vscode-fd99c7bc-1.11-main.sock'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/code.desktop'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', 'cat'), ('COPILOT_OTEL_FILE_EXPORTER_PATH', '/dev/null'), ('MANAGERPID', '1979'), ('LC_CTYPE', 'C.UTF-8'), ('SYSTEMD_EXEC_PID', '2159'), ('IM_CONFIG_CHECK_ENV', '1'), ('NO_COLOR', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', ''), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '2747'), ('VSCODE_CRASH_REPORTER_PROCESS_TYPE', 'extensionHost'), ('IM_CONFIG_PHASE', '1'), ('WAYLAND_DISPLAY', 'wayland-0'), ('VSCODE_L10N_BUNDLE_LOCATION', ''), ('COLCON_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install'), ('APPLICATION_INSIGHTS_NO_STATSBEAT', 'true'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'fuzzrobo'), ('OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT', 'true'), ('JOURNAL_STREAM', '8:6960'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('RUST_LOG', 'warn'), ('USERNAME', 'fuzzrobo'), ('TERM', 'dumb'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/fuzzrobo/.codex/tmp/arg0/codex-arg0tRaxCW:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/fuzzrobo/.vscode/extensions/openai.chatgpt-26.409.20454-linux-x64/bin/linux-x86_64'), ('SESSION_MANAGER', 'local/fuzzrobo:@/tmp/.ICE-unix/2131,unix/fuzzrobo:/tmp/.ICE-unix/2131'), ('INVOCATION_ID', '1711b02e103c4e2dab6f056c610ceb71'), ('XDG_MENU_PREFIX', 'gnome-'), ('GNOME_SETUP_DISPLAY', ':1'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'wayland'), ('DISPLAY', ':0'), ('CODEX_SANDBOX_NETWORK_DISABLED', '1'), ('LANG', 'ja_JP.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('XMODIFIERS', '@im=ibus'), ('GH_PAGER', 'cat'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/.mutter-Xwaylandauth.STMHN3'), ('COPILOT_OTEL_ENABLED', 'true'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/topo_fuzzy_viewer:/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('QT_ACCESSIBILITY', '1'), ('ELECTRON_RUN_AS_NODE', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('CODEX_THREAD_ID', '019d90a2-3fe0-7653-bcea-49a82ba68ab3'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('GIT_PAGER', 'cat'), ('QT_IM_MODULE', 'ibus'), ('PWD', '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player'), ('LC_ALL', 'C.UTF-8'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('VSCODE_CODE_CACHE_PATH', '/home/fuzzrobo/.config/Code/CachedData/e7fb5e96c0730b9deb70b33781f98e2f35975036'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/topo_fuzzy_viewer:/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs:/opt/ros/humble'), ('VSCODE_PID', '2747'), ('COPILOT_OTEL_EXPORTER_TYPE', 'file')]), 'shell': False}
+[0.028511] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.099679] (-) TimerEvent: {}
+[0.110018] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Override CMake install command with custom implementation using symlinks instead of copying resources\n'}
+[0.114439] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.131469] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.132782] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.136258] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.141831] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.149053] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.178433] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.179727] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.199770] (-) TimerEvent: {}
+[0.260020] (fuzz_gng_result_player) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[0.288281] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found ais_gng_msgs: 1.0.0 (/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs/share/ais_gng_msgs/cmake)\n'}
+[0.299870] (-) TimerEvent: {}
+[0.303985] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)\n'}
+[0.372173] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Configuring done\n'}
+[0.384788] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Generating done\n'}
+[0.389441] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Build files have been written to: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player\n'}
+[0.400009] (-) TimerEvent: {}
+[0.416487] (fuzz_gng_result_player) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target robot_description_player\n'}
+[0.416688] (fuzz_gng_result_player) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target udp_joint_state_player\n'}
+[0.417381] (fuzz_gng_result_player) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target gng_result_player\n'}
+[0.428271] (fuzz_gng_result_player) StdoutLine: {'line': b'[ 83%] Built target robot_description_player\n'}
+[0.428405] (fuzz_gng_result_player) StdoutLine: {'line': b'[ 66%] Building CXX object CMakeFiles/gng_result_player.dir/src/gng_result_player.cpp.o\n'}
+[0.428464] (fuzz_gng_result_player) StdoutLine: {'line': b'[ 83%] Built target udp_joint_state_player\n'}
+[0.500160] (-) TimerEvent: {}
+[0.600401] (-) TimerEvent: {}
+[0.700604] (-) TimerEvent: {}
+[0.800802] (-) TimerEvent: {}
+[0.900993] (-) TimerEvent: {}
+[1.001178] (-) TimerEvent: {}
+[1.101364] (-) TimerEvent: {}
+[1.201597] (-) TimerEvent: {}
+[1.301821] (-) TimerEvent: {}
+[1.402021] (-) TimerEvent: {}
+[1.502210] (-) TimerEvent: {}
+[1.602409] (-) TimerEvent: {}
+[1.702620] (-) TimerEvent: {}
+[1.802842] (-) TimerEvent: {}
+[1.903037] (-) TimerEvent: {}
+[2.003231] (-) TimerEvent: {}
+[2.103402] (-) TimerEvent: {}
+[2.203579] (-) TimerEvent: {}
+[2.303840] (-) TimerEvent: {}
+[2.404094] (-) TimerEvent: {}
+[2.504276] (-) TimerEvent: {}
+[2.604471] (-) TimerEvent: {}
+[2.704657] (-) TimerEvent: {}
+[2.804848] (-) TimerEvent: {}
+[2.905059] (-) TimerEvent: {}
+[3.005272] (-) TimerEvent: {}
+[3.105482] (-) TimerEvent: {}
+[3.205690] (-) TimerEvent: {}
+[3.305895] (-) TimerEvent: {}
+[3.406087] (-) TimerEvent: {}
+[3.506270] (-) TimerEvent: {}
+[3.606473] (-) TimerEvent: {}
+[3.706675] (-) TimerEvent: {}
+[3.806853] (-) TimerEvent: {}
+[3.907013] (-) TimerEvent: {}
+[4.007223] (-) TimerEvent: {}
+[4.107471] (-) TimerEvent: {}
+[4.207725] (-) TimerEvent: {}
+[4.307936] (-) TimerEvent: {}
+[4.408137] (-) TimerEvent: {}
+[4.508332] (-) TimerEvent: {}
+[4.608508] (-) TimerEvent: {}
+[4.708729] (-) TimerEvent: {}
+[4.808949] (-) TimerEvent: {}
+[4.909162] (-) TimerEvent: {}
+[5.009370] (-) TimerEvent: {}
+[5.109567] (-) TimerEvent: {}
+[5.209806] (-) TimerEvent: {}
+[5.310023] (-) TimerEvent: {}
+[5.410222] (-) TimerEvent: {}
+[5.510423] (-) TimerEvent: {}
+[5.610659] (-) TimerEvent: {}
+[5.710875] (-) TimerEvent: {}
+[5.811116] (-) TimerEvent: {}
+[5.911376] (-) TimerEvent: {}
+[6.011592] (-) TimerEvent: {}
+[6.111801] (-) TimerEvent: {}
+[6.212045] (-) TimerEvent: {}
+[6.212320] (fuzz_gng_result_player) StdoutLine: {'line': b'[100%] Linking CXX executable gng_result_player\n'}
+[6.312150] (-) TimerEvent: {}
+[6.315254] (fuzz_gng_result_player) StdoutLine: {'line': b'[100%] Built target gng_result_player\n'}
+[6.325863] (fuzz_gng_result_player) CommandEnded: {'returncode': 0}
+[6.326550] (fuzz_gng_result_player) JobProgress: {'identifier': 'fuzz_gng_result_player', 'progress': 'install'}
+[6.334393] (fuzz_gng_result_player) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player'], 'cwd': '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player', 'env': OrderedDict([('GJS_DEBUG_TOPICS', 'JS ERROR;JS LOG'), ('LESSOPEN', '| /usr/bin/lesspipe %s'), ('VSCODE_CWD', '/home/fuzzrobo'), ('VSCODE_ESM_ENTRYPOINT', 'vs/workbench/api/node/extensionHostProcess'), ('CODEX_CI', '1'), ('USER', 'fuzzrobo'), ('CODEX_INTERNAL_ORIGINATOR_OVERRIDE', 'codex_vscode'), ('VSCODE_NLS_CONFIG', '{"userLocale":"en-us","osLocale":"ja-jp","resolvedLanguage":"en","defaultMessagesFile":"/usr/share/code/resources/app/out/nls.messages.json","locale":"en-us","availableLanguages":{}}'), ('VSCODE_HANDLES_UNCAUGHT_ERRORS', 'true'), ('XDG_SESSION_TYPE', 'wayland'), ('DEBUG', 'release'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs/lib:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib'), ('HOME', '/home/fuzzrobo'), ('CHROME_DESKTOP', 'code.desktop'), ('OLDPWD', '/home/fuzzrobo/uraki_ws'), ('DESKTOP_SESSION', 'ubuntu'), ('VSCODE_IPC_HOOK', '/run/user/1000/vscode-fd99c7bc-1.11-main.sock'), ('GIO_LAUNCHED_DESKTOP_FILE', '/usr/share/applications/code.desktop'), ('ROS_PYTHON_VERSION', '3'), ('GNOME_SHELL_SESSION_MODE', 'ubuntu'), ('GTK_MODULES', 'gail:atk-bridge'), ('PAGER', 'cat'), ('COPILOT_OTEL_FILE_EXPORTER_PATH', '/dev/null'), ('MANAGERPID', '1979'), ('LC_CTYPE', 'C.UTF-8'), ('SYSTEMD_EXEC_PID', '2159'), ('IM_CONFIG_CHECK_ENV', '1'), ('NO_COLOR', '1'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('COLORTERM', ''), ('GIO_LAUNCHED_DESKTOP_FILE_PID', '2747'), ('VSCODE_CRASH_REPORTER_PROCESS_TYPE', 'extensionHost'), ('IM_CONFIG_PHASE', '1'), ('WAYLAND_DISPLAY', 'wayland-0'), ('VSCODE_L10N_BUNDLE_LOCATION', ''), ('COLCON_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install'), ('APPLICATION_INSIGHTS_NO_STATSBEAT', 'true'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'fuzzrobo'), ('OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT', 'true'), ('JOURNAL_STREAM', '8:6960'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('XDG_SESSION_CLASS', 'user'), ('RUST_LOG', 'warn'), ('USERNAME', 'fuzzrobo'), ('TERM', 'dumb'), ('GNOME_DESKTOP_SESSION_ID', 'this-is-deprecated'), ('FC_FONTATIONS', '1'), ('ROS_LOCALHOST_ONLY', '0'), ('PATH', '/home/fuzzrobo/.codex/tmp/arg0/codex-arg0tRaxCW:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/fuzzrobo/.vscode/extensions/openai.chatgpt-26.409.20454-linux-x64/bin/linux-x86_64'), ('SESSION_MANAGER', 'local/fuzzrobo:@/tmp/.ICE-unix/2131,unix/fuzzrobo:/tmp/.ICE-unix/2131'), ('INVOCATION_ID', '1711b02e103c4e2dab6f056c610ceb71'), ('XDG_MENU_PREFIX', 'gnome-'), ('GNOME_SETUP_DISPLAY', ':1'), ('XDG_RUNTIME_DIR', '/run/user/1000'), ('GDK_BACKEND', 'wayland'), ('DISPLAY', ':0'), ('CODEX_SANDBOX_NETWORK_DISABLED', '1'), ('LANG', 'ja_JP.UTF-8'), ('XDG_CURRENT_DESKTOP', 'ubuntu:GNOME'), ('XMODIFIERS', '@im=ibus'), ('GH_PAGER', 'cat'), ('XDG_SESSION_DESKTOP', 'ubuntu'), ('XAUTHORITY', '/run/user/1000/.mutter-Xwaylandauth.STMHN3'), ('COPILOT_OTEL_ENABLED', 'true'), ('SSH_AGENT_LAUNCHER', 'gnome-keyring'), ('SSH_AUTH_SOCK', '/run/user/1000/keyring/ssh'), ('AMENT_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/topo_fuzzy_viewer:/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('QT_ACCESSIBILITY', '1'), ('ELECTRON_RUN_AS_NODE', '1'), ('GDMSESSION', 'ubuntu'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('CODEX_THREAD_ID', '019d90a2-3fe0-7653-bcea-49a82ba68ab3'), ('GJS_DEBUG_OUTPUT', 'stderr'), ('GIT_PAGER', 'cat'), ('QT_IM_MODULE', 'ibus'), ('PWD', '/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player'), ('LC_ALL', 'C.UTF-8'), ('XDG_CONFIG_DIRS', '/etc/xdg/xdg-ubuntu:/etc/xdg'), ('VSCODE_CODE_CACHE_PATH', '/home/fuzzrobo/.config/Code/CachedData/e7fb5e96c0730b9deb70b33781f98e2f35975036'), ('XDG_DATA_DIRS', '/usr/share/ubuntu:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop'), ('PYTHONPATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('COLCON', '1'), ('CMAKE_PREFIX_PATH', '/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/topo_fuzzy_viewer:/home/fuzzrobo/uraki_ws/ToPoFuzzy-Viewer/backend/install/ais_gng_msgs:/opt/ros/humble'), ('VSCODE_PID', '2747'), ('COPILOT_OTEL_EXPORTER_TYPE', 'file')]), 'shell': False}
+[6.341619] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[6.341924] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Execute custom install script\n'}
+[6.342092] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/gng_result_player\n'}
+[6.342237] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/udp_joint_state_player\n'}
+[6.342383] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/lib/fuzz_gng_result_player/robot_description_player\n'}
+[6.342595] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/launch/visualize_result.launch.py\n'}
+[6.342668] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/launch/visualize_result_with_arm.launch.py\n'}
+[6.342829] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/config/gng_result_player.rviz\n'}
+[6.342915] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/config/gng_result_player_arm.rviz\n'}
+[6.343016] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/package_run_dependencies/fuzz_gng_result_player\n'}
+[6.343121] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/parent_prefix_path/fuzz_gng_result_player\n'}
+[6.343227] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/ament_prefix_path.sh\n'}
+[6.343321] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/ament_prefix_path.dsv\n'}
+[6.343414] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/path.sh\n'}
+[6.343503] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/environment/path.dsv\n'}
+[6.343572] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.bash\n'}
+[6.343655] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.sh\n'}
+[6.343747] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.zsh\n'}
+[6.343834] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/local_setup.dsv\n'}
+[6.343889] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Symlinking: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/package.dsv\n'}
+[6.352057] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/ament_index/resource_index/packages/fuzz_gng_result_player\n'}
+[6.352321] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/cmake/fuzz_gng_result_playerConfig.cmake\n'}
+[6.352390] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/cmake/fuzz_gng_result_playerConfig-version.cmake\n'}
+[6.352512] (fuzz_gng_result_player) StdoutLine: {'line': b'-- Up-to-date symlink: /home/fuzzrobo/uraki_ws/fuzz_vis_ws/install/fuzz_gng_result_player/share/fuzz_gng_result_player/package.xml\n'}
+[6.412258] (-) TimerEvent: {}
+[6.512454] (-) TimerEvent: {}
+[6.612637] (-) TimerEvent: {}
+[6.712826] (-) TimerEvent: {}
+[6.813017] (-) TimerEvent: {}
+[6.913188] (-) TimerEvent: {}
+[7.013377] (-) TimerEvent: {}
+[7.113532] (-) TimerEvent: {}
+[7.213711] (-) TimerEvent: {}
+[7.313969] (-) TimerEvent: {}
+[7.414149] (-) TimerEvent: {}
+[7.514336] (-) TimerEvent: {}
+[7.614517] (-) TimerEvent: {}
+[7.714766] (-) TimerEvent: {}
+[7.814975] (-) TimerEvent: {}
+[7.915234] (-) TimerEvent: {}
+[8.015427] (-) TimerEvent: {}
+[8.115632] (-) TimerEvent: {}
+[8.215892] (-) TimerEvent: {}
+[8.316149] (-) TimerEvent: {}
+[8.416443] (-) TimerEvent: {}
+[8.516689] (-) TimerEvent: {}
+[8.616907] (-) TimerEvent: {}
+[8.717116] (-) TimerEvent: {}
+[8.817307] (-) TimerEvent: {}
+[8.917560] (-) TimerEvent: {}
+[9.017834] (-) TimerEvent: {}
+[9.118039] (-) TimerEvent: {}
+[9.218237] (-) TimerEvent: {}
+[9.318438] (-) TimerEvent: {}
+[9.418639] (-) TimerEvent: {}
+[9.518849] (-) TimerEvent: {}
+[9.619045] (-) TimerEvent: {}
+[9.719244] (-) TimerEvent: {}
+[9.819470] (-) TimerEvent: {}
+[9.919676] (-) TimerEvent: {}
+[10.019896] (-) TimerEvent: {}
+[10.120097] (-) TimerEvent: {}
+[10.220325] (-) TimerEvent: {}
+[10.320553] (-) TimerEvent: {}
+[10.420780] (-) TimerEvent: {}
+[10.521003] (-) TimerEvent: {}
+[10.621227] (-) TimerEvent: {}
+[10.721457] (-) TimerEvent: {}
+[10.821663] (-) TimerEvent: {}
+[10.921877] (-) TimerEvent: {}
+[11.022064] (-) TimerEvent: {}
+[11.122235] (-) TimerEvent: {}
+[11.222409] (-) TimerEvent: {}
+[11.322604] (-) TimerEvent: {}
+[11.422757] (-) TimerEvent: {}
+[11.522942] (-) TimerEvent: {}
+[11.623135] (-) TimerEvent: {}
+[11.723350] (-) TimerEvent: {}
+[11.823533] (-) TimerEvent: {}
+[11.923731] (-) TimerEvent: {}
+[12.023934] (-) TimerEvent: {}
+[12.124109] (-) TimerEvent: {}
+[12.224290] (-) TimerEvent: {}
+[12.324463] (-) TimerEvent: {}
+[12.424651] (-) TimerEvent: {}
+[12.524856] (-) TimerEvent: {}
+[12.625054] (-) TimerEvent: {}
+[12.725242] (-) TimerEvent: {}
+[12.825458] (-) TimerEvent: {}
+[12.925689] (-) TimerEvent: {}
+[13.025940] (-) TimerEvent: {}
+[13.126224] (-) TimerEvent: {}
+[13.226446] (-) TimerEvent: {}
+[13.326687] (-) TimerEvent: {}
+[13.426925] (-) TimerEvent: {}
+[13.527191] (-) TimerEvent: {}
+[13.627437] (-) TimerEvent: {}
+[13.727643] (-) TimerEvent: {}
+[13.827883] (-) TimerEvent: {}
+[13.928111] (-) TimerEvent: {}
+[14.028307] (-) TimerEvent: {}
+[14.128529] (-) TimerEvent: {}
+[14.228732] (-) TimerEvent: {}
+[14.329106] (-) TimerEvent: {}
+[14.429448] (-) TimerEvent: {}
+[14.529695] (-) TimerEvent: {}
+[14.629952] (-) TimerEvent: {}
+[14.730186] (-) TimerEvent: {}
+[14.830396] (-) TimerEvent: {}
+[14.930763] (-) TimerEvent: {}
+[15.030946] (-) TimerEvent: {}
+[15.131163] (-) TimerEvent: {}
+[15.231374] (-) TimerEvent: {}
+[15.331551] (-) TimerEvent: {}
+[15.431857] (-) TimerEvent: {}
+[15.532098] (-) TimerEvent: {}
+[15.632344] (-) TimerEvent: {}
+[15.732623] (-) TimerEvent: {}
+[15.832798] (-) TimerEvent: {}
+[15.932988] (-) TimerEvent: {}
+[16.033168] (-) TimerEvent: {}
+[16.133362] (-) TimerEvent: {}
+[16.233581] (-) TimerEvent: {}
+[16.333771] (-) TimerEvent: {}
+[16.434035] (-) TimerEvent: {}
+[16.534301] (-) TimerEvent: {}
+[16.634509] (-) TimerEvent: {}
+[16.734694] (-) TimerEvent: {}
+[16.834874] (-) TimerEvent: {}
+[16.935087] (-) TimerEvent: {}
+[17.035274] (-) TimerEvent: {}
+[17.135448] (-) TimerEvent: {}
+[17.235638] (-) TimerEvent: {}
+[17.335884] (-) TimerEvent: {}
+[17.436123] (-) TimerEvent: {}
+[17.536350] (-) TimerEvent: {}
+[17.636560] (-) TimerEvent: {}
+[17.736770] (-) TimerEvent: {}
+[17.836970] (-) TimerEvent: {}
+[17.937173] (-) TimerEvent: {}
+[18.037400] (-) TimerEvent: {}
+[18.137609] (-) TimerEvent: {}
+[18.237832] (-) TimerEvent: {}
+[18.338032] (-) TimerEvent: {}
+[18.438269] (-) TimerEvent: {}
+[18.538486] (-) TimerEvent: {}
+[18.638737] (-) TimerEvent: {}
+[18.738987] (-) TimerEvent: {}
+[18.839215] (-) TimerEvent: {}
+[18.939420] (-) TimerEvent: {}
+[19.039603] (-) TimerEvent: {}
+[19.139831] (-) TimerEvent: {}
+[19.240046] (-) TimerEvent: {}
+[19.340300] (-) TimerEvent: {}
+[19.440519] (-) TimerEvent: {}
+[19.540774] (-) TimerEvent: {}
+[19.641005] (-) TimerEvent: {}
+[19.741204] (-) TimerEvent: {}
+[19.841398] (-) TimerEvent: {}
+[19.941584] (-) TimerEvent: {}
+[20.041766] (-) TimerEvent: {}
+[20.141960] (-) TimerEvent: {}
+[20.242163] (-) TimerEvent: {}
+[20.342349] (-) TimerEvent: {}
+[20.442531] (-) TimerEvent: {}
+[20.542745] (-) TimerEvent: {}
+[20.642995] (-) TimerEvent: {}
+[20.743272] (-) TimerEvent: {}
+[20.843476] (-) TimerEvent: {}
+[20.943677] (-) TimerEvent: {}
+[21.043923] (-) TimerEvent: {}
+[21.144151] (-) TimerEvent: {}
+[21.244375] (-) TimerEvent: {}
+[21.344598] (-) TimerEvent: {}
+[21.444837] (-) TimerEvent: {}
+[21.545070] (-) TimerEvent: {}
+[21.645267] (-) TimerEvent: {}
+[21.745476] (-) TimerEvent: {}
+[21.845669] (-) TimerEvent: {}
+[21.945914] (-) TimerEvent: {}
+[22.046717] (-) TimerEvent: {}
+[22.146917] (-) TimerEvent: {}
+[22.247124] (-) TimerEvent: {}
+[22.347338] (-) TimerEvent: {}
+[22.447535] (-) TimerEvent: {}
+[22.547757] (-) TimerEvent: {}
+[22.647952] (-) TimerEvent: {}
+[22.748144] (-) TimerEvent: {}
+[22.848334] (-) TimerEvent: {}
+[22.948520] (-) TimerEvent: {}
+[23.048726] (-) TimerEvent: {}
+[23.148931] (-) TimerEvent: {}
+[23.249178] (-) TimerEvent: {}
+[23.349417] (-) TimerEvent: {}
+[23.449589] (-) TimerEvent: {}
+[23.549746] (-) TimerEvent: {}
+[23.649932] (-) TimerEvent: {}
+[23.750126] (-) TimerEvent: {}
+[23.850315] (-) TimerEvent: {}
+[23.950518] (-) TimerEvent: {}
+[24.050726] (-) TimerEvent: {}
+[24.150952] (-) TimerEvent: {}
+[24.251169] (-) TimerEvent: {}
+[24.351365] (-) TimerEvent: {}
+[24.451562] (-) TimerEvent: {}
+[24.551765] (-) TimerEvent: {}
+[24.651966] (-) TimerEvent: {}
+[24.752164] (-) TimerEvent: {}
+[24.852345] (-) TimerEvent: {}
+[24.952531] (-) TimerEvent: {}
+[25.052750] (-) TimerEvent: {}
+[25.152982] (-) TimerEvent: {}
+[25.253225] (-) TimerEvent: {}
+[25.353415] (-) TimerEvent: {}
+[25.453598] (-) TimerEvent: {}
+[25.553787] (-) TimerEvent: {}
+[25.653992] (-) TimerEvent: {}
+[25.754165] (-) TimerEvent: {}
+[25.854360] (-) TimerEvent: {}
+[25.954562] (-) TimerEvent: {}
+[26.054747] (-) TimerEvent: {}
+[26.154939] (-) TimerEvent: {}
+[26.255129] (-) TimerEvent: {}
+[26.355314] (-) TimerEvent: {}
+[26.455491] (-) TimerEvent: {}
+[26.555697] (-) TimerEvent: {}
+[26.655916] (-) TimerEvent: {}
+[26.756122] (-) TimerEvent: {}
+[26.856315] (-) TimerEvent: {}
+[26.956524] (-) TimerEvent: {}
+[27.056721] (-) TimerEvent: {}
+[27.156928] (-) TimerEvent: {}
+[27.257128] (-) TimerEvent: {}
+[27.357317] (-) TimerEvent: {}
+[27.457490] (-) TimerEvent: {}
+[27.557690] (-) TimerEvent: {}
+[27.657869] (-) TimerEvent: {}
+[27.758075] (-) TimerEvent: {}
+[27.858264] (-) TimerEvent: {}
+[27.958455] (-) TimerEvent: {}
+[28.058613] (-) TimerEvent: {}
+[28.158775] (-) TimerEvent: {}
+[28.258951] (-) TimerEvent: {}
+[28.359154] (-) TimerEvent: {}
+[28.459420] (-) TimerEvent: {}
+[28.559750] (-) TimerEvent: {}
+[28.660055] (-) TimerEvent: {}
+[28.760301] (-) TimerEvent: {}
+[28.860559] (-) TimerEvent: {}
+[28.960823] (-) TimerEvent: {}
+[29.061030] (-) TimerEvent: {}
+[29.161243] (-) TimerEvent: {}
+[29.261418] (-) TimerEvent: {}
+[29.361653] (-) TimerEvent: {}
+[29.461888] (-) TimerEvent: {}
+[29.562095] (-) TimerEvent: {}
+[29.662249] (-) TimerEvent: {}
+[29.762439] (-) TimerEvent: {}
+[29.862666] (-) TimerEvent: {}
+[29.962920] (-) TimerEvent: {}
+[30.025892] (fuzz_gng_result_player) CommandEnded: {'returncode': 0}
+[30.037241] (fuzz_gng_result_player) JobEnded: {'identifier': 'fuzz_gng_result_player', 'rc': 0}
+[30.037595] (-) EventReactorShutdown: {}

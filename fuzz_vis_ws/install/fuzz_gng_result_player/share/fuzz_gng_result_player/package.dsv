@@ -1,0 +1,8 @@
+source;share/fuzz_gng_result_player/hook/cmake_prefix_path.ps1
+source;share/fuzz_gng_result_player/hook/cmake_prefix_path.dsv
+source;share/fuzz_gng_result_player/hook/cmake_prefix_path.sh
+source;share/fuzz_gng_result_player/local_setup.bash
+source;share/fuzz_gng_result_player/local_setup.dsv
+source;share/fuzz_gng_result_player/local_setup.ps1
+source;share/fuzz_gng_result_player/local_setup.sh
+source;share/fuzz_gng_result_player/local_setup.zsh
