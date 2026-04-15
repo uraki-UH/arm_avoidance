@@ -280,11 +280,11 @@ TINYXML2_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libtinyxml2.so
 //The directory containing a CMake configuration file for TinyXML2.
 TinyXML2_DIR:PATH=TinyXML2_DIR-NOTFOUND
 
-//No help, variable specified on the command line.
-USE_DRAWSTUFF:UNINITIALIZED=OFF
+//Enable drawstuff-based visualization components
+USE_DRAWSTUFF:BOOL=OFF
 
-//No help, variable specified on the command line.
-USE_ODE:UNINITIALIZED=OFF
+//Enable ODE-based simulation components
+USE_ODE:BOOL=OFF
 
 //Path to a library.
 _lib:FILEPATH=/opt/ros/humble/lib/liburdf.so

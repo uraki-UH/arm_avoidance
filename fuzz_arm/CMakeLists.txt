@@ -4,6 +4,9 @@ project(gng_planner)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(USE_ODE "Enable ODE-based simulation components" ON)
+option(USE_DRAWSTUFF "Enable drawstuff-based visualization components" ON)
+
 find_package(ament_cmake QUIET)
 
 if(ament_cmake_FOUND)
