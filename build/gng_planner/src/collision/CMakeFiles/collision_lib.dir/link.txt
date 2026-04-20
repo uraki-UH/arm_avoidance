@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcollision_lib.a CMakeFiles/collision_lib.dir/collision_detector.cpp.o CMakeFiles/collision_lib.dir/environment_collision_checker.cpp.o CMakeFiles/collision_lib.dir/geometric_self_collision_checker.cpp.o CMakeFiles/collision_lib.dir/point_cloud_collision_checker.cpp.o CMakeFiles/collision_lib.dir/self_collision_checker.cpp.o CMakeFiles/collision_lib.dir/fcl/fcl_collision_detector.cpp.o
-/usr/bin/ranlib libcollision_lib.a

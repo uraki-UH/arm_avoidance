@@ -1,2 +1,0 @@
-/usr/bin/ar qc libcontrol_lib.a CMakeFiles/control_lib.dir/trajectory_safety_manager.cpp.o
-/usr/bin/ranlib libcontrol_lib.a

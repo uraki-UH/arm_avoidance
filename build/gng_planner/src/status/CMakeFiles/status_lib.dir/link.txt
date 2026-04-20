@@ -1,2 +1,0 @@
-/usr/bin/ar qc libstatus_lib.a CMakeFiles/status_lib.dir/manipulability.cpp.o CMakeFiles/status_lib.dir/dynamic_manipulability.cpp.o
-/usr/bin/ranlib libstatus_lib.a

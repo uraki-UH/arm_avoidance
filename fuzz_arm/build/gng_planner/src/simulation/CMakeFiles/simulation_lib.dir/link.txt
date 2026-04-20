@@ -1,2 +1,0 @@
-/usr/bin/ar qc libsimulation_lib.a CMakeFiles/simulation_lib.dir/robot/geometry_management.cpp.o CMakeFiles/simulation_lib.dir/robot/kinematic_adapter.cpp.o CMakeFiles/simulation_lib.dir/robot/robot_collision_model.cpp.o CMakeFiles/simulation_lib.dir/robot/stl_loader.cpp.o CMakeFiles/simulation_lib.dir/robot/urdf_loader.cpp.o CMakeFiles/simulation_lib.dir/sensing/robot_point_cloud_sampler.cpp.o
-/usr/bin/ranlib libsimulation_lib.a

@@ -1,2 +1,0 @@
-/usr/bin/ar qc libgng_lib.a CMakeFiles/gng_lib.dir/GrowingNeuralGas_offline.cpp.o
-/usr/bin/ranlib libgng_lib.a
