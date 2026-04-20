@@ -1,0 +1,88 @@
+ais_gng:
+  ros__parameters:
+    node.num_max: 2000
+    node.learning_num: 	20000
+    node.unknown_learning_rate: 0.08 # p
+    node.eta_s1: 0.08 # p
+    node.eta_s2: 0.008 # p
+    node.edge_age_max: 10
+    node.s1_reset_range: 0.1
+    node.s1_age: [1, 1, 1, 1] #[default, safe, wall, unknown]
+    node.clusted_s1_age: [1, 1, 1, 1] #[default, safe, wall, unknown]
+    node.interval: [0.35, 0.35, 0.35, 0.80] #[default, safe, wall, unknown] p
+    node.static.age_min: -1 # 長期記憶の年齢 p
+
+    ds.transformed: true
+    ds.range_max: 0.2
+    ds.all.num_max: 2000
+    ds.unknown.num_max: 2000
+    ds.human.num_max: 3000
+
+    label.fuzzy.unknown: 0.6
+    label.fuzzy.min: 0.5
+    label.fuzzy.lpf_time_constant: 0.5
+    label.honda_safe: 30.0
+
+    cluster.num_min: 2
+    cluster.velocity.lpf_time_constant: 0.75
+    cluster.plane.volume: 10.0
+    # cluster.unknown.edge_distance_max: 1.0
+    # cluster.other.edge_distance_max: 1.0
+    cluster.unknown.edge_distance_max: 10.0
+    cluster.other.edge_distance_max: 10.0
+    cluster.human.radius: 0.6
+    cluster.human.hysteresis_age: 2
+    cluster.human.confirmation_age: 2
+    cluster.car.hysteresis_age: 5
+    cluster.car.confirmation_age: 5
+    cluster.safe_terrain.merge_distance_max: 3.0
+    cluster.safe_terrain.merge_normal_angle_deg: 15.0
+    cluster.non_safe.merge_distance_max: 0.1 # 非SAFE_TERRAINをほぼ1クラスタに寄せる
+
+    classify.human: true
+    classify.human.model: "NN_human.pt"
+    classify.car: false
+    classify.car.model: "NN_car.pt"
+    classify.threshold: 0.5
+    classify.simple_reliability.human: 0.00
+    classify.simple_reliability.car: 0.00
+    classify.simple_reliability.unknown: 0.00
+
+    input.point_cloud_num: 2000000
+    # input.base_frame_id: "base_link"
+    # input.local_coordinates: true
+    input.base_frame_id: ""
+    input.local_coordinates: true
+    input.voxel_grid_unit: 0.01 # p
+    input.visualize: true
+    # input.x_min: 2.0
+    # input.x_max: 50.
+    # input.y_min: -20.
+    # input.y_max: 20.
+    # input.z_min: -5.
+    # input.z_max: 5.
+    input.x_min: -2.0
+    input.x_max: 2.
+    input.y_min: -2.
+    input.y_max: 2.
+    input.z_min: -2.0
+    input.z_max: 2.0
+    input.local.x_min: -10.
+    input.local.x_max: 50.0
+    input.local.y_min: -40.0
+    input.local.y_max: 40.0
+    input.local.z_min: -30.0
+    input.local.z_max: 30.0
+
+visualizar:
+  ros__parameters:
+    visual.cluster_nodes.enable: false
+    visual.cluster_nodes.alpha: 0.2
+    visual.cluster_nodes.scale: 0.08
+    visual.cluster_nodes.scale_by_age.enable: true
+    visual.cluster_nodes.scale_by_age.gain_per_age: 0.03
+    visual.cluster_nodes.scale_by_age.max_scale: 0.30
+    visual.topological_map.node.width: 0.05
+    visual.topological_map.edge.width: 0.01
+    visual.topological_map.node.opacity: 0.1
+    visual.topological_map.edge.opacity: 0.1

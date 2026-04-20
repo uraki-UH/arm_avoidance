@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: ToPoFuzzy-Viewer/Dockerfile
+    image: topofuzzy-viewer:humble
+    container_name: topofuzzy-backend
+    working_dir: /opt/topofuzzy/backend
+    command: >
+      bash -lc "
+      source /opt/ros/humble/setup.bash;
+      source /opt/topofuzzy/backend/install/setup.bash;
+      ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
+      "
+    environment:
+      - ROS_DOMAIN_ID
+    ports:
+      - "9001:9001"
+    networks:
+      - gng
+
+  frontend:
+    image: topofuzzy-viewer:humble
+    container_name: topofuzzy-frontend
+    depends_on:
+      - backend
+    working_dir: /opt/topofuzzy/frontend
+    command: >
+      bash -lc "
+      npm run dev -- --host 0.0.0.0 --port 5173
+      "
+    ports:
+      - "5173:5173"
+    networks:
+      - gng
+
+networks:
+  gng:
+    external: true

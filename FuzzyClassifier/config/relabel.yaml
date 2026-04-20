@@ -1,0 +1,113 @@
+fuzzy_cluster_relabel:
+  ros__parameters:
+    input_topic: "/topological_map"
+    output_topic: "/fuzzy_classifier/topological_map"
+    rewrite_label: true
+    rewrite_label_inferred: false
+    preserve_structural_labels: true
+    score.min_nodes: 10
+    score.set_reliability_from_score: false
+
+    score.human.threshold: 0.2000
+    score.human.bias: 0.0
+    score.human.speed_weight: 0.7
+    score.human.reliability_weight: 0.8
+    score.human.match_weight: 0.2
+    score.human.node_count_weight: 0.01
+    score.human.inv_volume_weight: 0.5
+
+    score.car.threshold_for_small: 0.50
+    score.car.threshold_for_big: 0.50
+    score.car.bias: 0.0
+    score.car.speed_weight: 0.6
+    score.car.reliability_weight: 0.8
+    score.car.match_weight: 0.2
+    score.car.node_count_weight: 0.01
+    score.car.volume_weight: 0.3
+
+    class.human.small.width.lowest: 0.00
+    class.human.small.width.low: 0.20
+    class.human.small.width.high: 0.60
+    class.human.small.width.highest: 0.80
+
+    class.human.big.width.lowest: 0.35
+    class.human.big.width.low: 0.40
+    class.human.big.width.high: 1.00
+    class.human.big.width.highest: 1.10
+
+    class.human.small.diff_tate_yoko.lowest: 0.10
+    class.human.small.diff_tate_yoko.low: 0.20
+    class.human.small.diff_tate_yoko.high: 0.70
+    class.human.small.diff_tate_yoko.highest: 0.80
+
+    class.human.big.diff_tate_yoko.lowest: 0.20
+    class.human.big.diff_tate_yoko.low: 0.25
+    class.human.big.diff_tate_yoko.high: 0.59
+    class.human.big.diff_tate_yoko.highest: 0.60
+
+    class.human.small.height.lowest: 1.20
+    class.human.small.height.low: 1.25
+    class.human.small.height.high: 1.75
+    class.human.small.height.highest: 1.80
+
+    class.human.big.height.lowest: 1.20
+    class.human.big.height.low: 1.30
+    class.human.big.height.high: 2.40
+    class.human.big.height.highest: 2.50
+
+    class.car.small.width.lowest: 1.00
+    class.car.small.width.low: 1.10
+    class.car.small.width.high: 1.90 
+    class.car.small.width.highest: 2.30
+
+    class.car.big.width.lowest: 1.20
+    class.car.big.width.low: 1.30
+    class.car.big.width.high: 3.50
+    class.car.big.width.highest: 3.60
+
+    class.car.small.diff_tate_yoko.lowest: 0.90
+    class.car.small.diff_tate_yoko.low: 1.10
+    class.car.small.diff_tate_yoko.high: 3.80
+    class.car.small.diff_tate_yoko.highest: 4.00
+
+    class.car.big.diff_tate_yoko.lowest: 1.80
+    class.car.big.diff_tate_yoko.low: 2.00
+    class.car.big.diff_tate_yoko.high: 11.00
+    class.car.big.diff_tate_yoko.highest: 13.00
+
+    class.car.small.height.lowest: 0.80
+    class.car.small.height.low: 1.00
+    class.car.small.height.high: 1.90
+    class.car.small.height.highest: 2.10
+
+    class.car.big.height.lowest: 1.30
+    class.car.big.height.low: 1.40
+    class.car.big.height.high: 3.50
+    class.car.big.height.highest: 4.50
+
+    class.human.cf.bbb: 0.30
+    class.human.cf.bbs: 0.00
+    class.human.cf.bsb: 0.00
+    class.human.cf.bss: 0.00
+    class.human.cf.sbb: 0.00
+    class.human.cf.sbs: 0.00
+    class.human.cf.ssb: 1.00
+    class.human.cf.sss: 0.70
+
+    class.car.cf.small_car.bbb: 0.00
+    class.car.cf.small_car.bbs: 0.00
+    class.car.cf.small_car.bsb: 0.00
+    class.car.cf.small_car.bss: 0.00
+    class.car.cf.small_car.sbb: 0.40
+    class.car.cf.small_car.sbs: 0.40
+    class.car.cf.small_car.ssb: 0.80
+    class.car.cf.small_car.sss: 1.00
+
+    class.car.cf.big_car.bbb: 1.00
+    class.car.cf.big_car.bbs: 0.80
+    class.car.cf.big_car.bsb: 0.00
+    class.car.cf.big_car.bss: 0.00
+    class.car.cf.big_car.sbb: 0.60
+    class.car.cf.big_car.sbs: 0.60
+    class.car.cf.big_car.ssb: 0.00
+    class.car.cf.big_car.sss: 0.00

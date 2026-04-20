@@ -1,0 +1,52 @@
+ais_gng:
+  ros__parameters:
+    node.num_max: 20000
+    node.learning_num: 4000
+    node.unknown_learning_rate: 0.8
+    node.eta_s1: 0.08
+    node.eta_s2: 0.008
+    node.edge_age_max: 100
+    node.s1_reset_range: 0.8
+    node.s1_age: [10, 10, 10, 10] #[default, safe, wall, unknown]
+    node.clusted_s1_age: [20, 20, 20, 20] #[default, safe, wall, unknown]
+    node.interval: [0.5, 1.0, 1.0, 0.5] #[default, safe, wall, unknown]
+    node.static.age_min: -1 # 長期記憶の年齢
+
+    ds.transformed: true
+    ds.range_max: 0.2
+    ds.all.num_max: 4000
+    ds.unknown.num_max: 2000
+    ds.human.num_max: 3000
+
+    label.fuzzy.unknown: 0.6
+    label.fuzzy.min: 0.5
+    label.fuzzy.lpf_time_constant: 0.5
+
+    cluster.num_min: 10
+    cluster.velocity.lpf_time_constant: 0.5
+    cluster.plane.volume: 10.0
+    cluster.unknown.edge_distance_max: 0.2
+    cluster.other.edge_distance_max: 0.4
+    cluster.human.radius: 0.6
+    cluster.human.hysteresis_age: 5
+    cluster.human.confirmation_age: 5
+    cluster.car.hysteresis_age: 5
+    cluster.car.confirmation_age: 5
+
+    classify.human: true
+    classify.human.model: "NN_human.pt"
+    classify.car: true
+    classify.car.model: "NN_car.pt"
+    classify.threshold: 0.7
+
+    input.point_cloud_num: 1000000
+    input.base_frame_id: "map"
+    input.voxel_grid_unit: 0.1
+    input.visualize: true
+    input.local_coordinates: true
+    input.x_min: -50.
+    input.x_max: 50.
+    input.y_min: -50.
+    input.y_max: 50.
+    input.z_min: -50.
+    input.z_max: 50.

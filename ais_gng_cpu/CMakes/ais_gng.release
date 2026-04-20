@@ -1,0 +1,56 @@
+cmake_minimum_required(VERSION 3.8)
+project(ais_gng)
+
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-O3 -Wall -Wextra -Wpedantic)
+endif()
+
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+# Pytorchを探す
+execute_process(
+    COMMAND python3 -c "import torch; print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE TORCH_CMAKE_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE PYTHON_RESULT
+)
+
+# パスの取得が成功したかを確認
+if(PYTHON_RESULT EQUAL 0)
+    # 取得したパスを CMAKE_PREFIX_PATH に追加
+    message(STATUS "Automatically found PyTorch CMake path: ${TORCH_CMAKE_PATH}")
+    list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_PATH}")
+else()
+    message(FATAL_ERROR "Failed to find PyTorch CMake path using Python. Please check your Python environment or manually set CMAKE_PREFIX_PATH.")
+endif()
+
+find_package(Torch REQUIRED)
+
+ament_auto_add_executable(visualizar src/visualizar.cpp)
+ament_auto_add_library(ais_gng SHARED src/ais_gng.cpp src/cluster_classification.cpp src/downsampling.cpp src/visualize_filter.cpp)
+
+set(GNG_LIBRARIES ${CMAKE_CURRENT_LIST_DIR}/libgng/lib_${CMAKE_HOST_SYSTEM_PROCESSOR}/libgng_cpu.so)
+if(EXISTS ${GNG_LIBRARIES})
+  include_directories(ais_gng ${CMAKE_CURRENT_LIST_DIR}/libgng/include)
+  target_link_libraries(ais_gng ${GNG_LIBRARIES} ${TORCH_LIBRARIES} ykpiv)
+  rclcpp_components_register_node(ais_gng PLUGIN "fuzzrobo::AiSGNG" EXECUTABLE ais_gng_node)
+else()
+  message(FATAL_ERROR "ais_gng cannot support ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif()
+
+install(
+ DIRECTORY include config launch
+ DESTINATION share/${PROJECT_NAME}/
+)
+
+ament_auto_package()

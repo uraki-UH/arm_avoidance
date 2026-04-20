@@ -1,0 +1,33 @@
+# C++ / CMake
+build/
+backend/install/
+backend/log/
+bin/
+lib/
+*.d
+*.o
+*.a
+*.so
+compile_commands.json
+
+/data
+
+.venv/
+
+*.zip
+
+# Node.js
+node_modules/
+dist/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+TLS0AS001.xml

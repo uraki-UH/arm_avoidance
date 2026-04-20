@@ -1,0 +1,7 @@
+The ais_gng and source distributions bundle a library that is 
+compatibly licensed.  We list these here.
+
+Name: OpenSSL
+License: Apache-2.0
+Files: https://github.com/openssl/openssl/tree/openssl-3.5.1
+  For details, see: third_party/LICENSE.txt

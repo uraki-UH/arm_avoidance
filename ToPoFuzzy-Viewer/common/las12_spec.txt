@@ -1,0 +1,37 @@
+// LAS 1.2 Specification Quick Reference
+// Header size: 227 bytes
+
+// Byte offsets:
+// 0-3: File Signature "LASF"
+// 4-5: File Source ID (uint16)
+// 6-7: Global Encoding (uint16)
+// 8-23: Project ID GUID (16 bytes)
+// 24: Version Major (uint8)
+// 25: Version Minor (uint8)
+// 26-57: System Identifier (32 bytes)
+// 58-89: Generating Software (32 bytes)
+// 90-91: File Creation Day of Year (uint16)
+// 92-93: File Creation Year (uint16)
+// 94-95: Header Size (uint16)
+// 96-99: Offset to point data (uint32)
+// 100-103: Number of Variable Length Records (uint32)
+// 104: Point Data Record Format (uint8)
+// 105-106: Point Data Record Length (uint16)
+// 107-110: Legacy Number of point records (uint32)
+// 111-130: Legacy Number of points by return [5] (uint32 x 5)
+// 131-138: X scale factor (double)
+// 139-146: Y scale factor (double)
+// 147-154: Z scale factor (double)
+// 155-162: X offset (double)
+// 163-170: Y offset (double)
+// 171-178: Z offset (double)
+// 179-186: Max X (double)
+// 187-194: Max Y (double)
+// 195-202: Max Z (double)
+// 203-210: Min X (double)
+// 211-218: Min Y (double)
+// 219-226: Min Z (double)
+
+// Coordinate transformation:
+// coordinate = (raw_value * scale) + offset
+// raw_value = (coordinate - offset) / scale
