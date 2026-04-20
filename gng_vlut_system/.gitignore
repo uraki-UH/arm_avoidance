@@ -1,0 +1,26 @@
+build/
+.vscode/
+.cache/
+
+install/
+log/
+
+tex 
+
+
+.DS_Store
+
+*.bin
+
+# Generated files
+compile_commands.json
+
+# Data files
+*.bin
+*.dat
+
+experiment_logs/*
+gng_results/*
+
+# Config (User preference)
+# config.txt
