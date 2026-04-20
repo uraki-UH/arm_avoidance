@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>fuzzbot</name>
+  <version>1.0.0</version>
+  <description>fuzzbot</description>
+  <maintainer email="nagashima@fuzzrobo.com">nagashima</maintainer>
+  <license>Apache 2.0</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>fuzzbot_bringup</depend>
+  <depend>fuzzbot_cartographer</depend>
+  <depend>fuzzbot_description</depend>
+  <depend>fuzzbot_hardware</depend>
+  <depend>fuzzbot_navigation</depend>
+  <depend>fuzzbot_teleop</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

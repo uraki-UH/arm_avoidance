@@ -1,0 +1,9 @@
+/**:
+    ros__parameters:
+        wheels:
+            radius: 0.120
+            tread_width: 0.287
+        odometry:
+            topic: "odom"
+            frame_id: "map"
+            child_frame_id: "base_footprint"
