@@ -1,1 +1,0 @@
-/home/fuzzrobo/uraki_ws/fuzz_vis_ws/src/fuzz_gng_result_player/launch/visualize_result_with_arm.launch.py

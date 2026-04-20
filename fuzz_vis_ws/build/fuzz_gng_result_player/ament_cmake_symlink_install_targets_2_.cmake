@@ -1,1 +1,0 @@
-ament_cmake_symlink_install_targets("TARGET_FILES" "/home/fuzzrobo/uraki_ws/fuzz_vis_ws/build/fuzz_gng_result_player/robot_description_player" "TARGETS" "robot_description_player" "DESTINATION" "lib/fuzz_gng_result_player")
