@@ -18,27 +18,32 @@ namespace common {
  */
 inline std::string resolvePath(const std::string &relative_path) {
   if (relative_path.empty()) return "";
-  
-  std::filesystem::path input_path(relative_path);
+
+  std::string normalized_path = relative_path;
+  if (normalized_path.find("file://") == 0) {
+    normalized_path = normalized_path.substr(7);
+  }
+
+  std::filesystem::path input_path(normalized_path);
   if (input_path.is_absolute()) {
-    return relative_path;
+    return normalized_path;
   }
 
   // Handle "package://" URLs (ROS-style)
-  std::string clean_rel = relative_path;
-  if (relative_path.find("package://") == 0) {
-    size_t second_slash = relative_path.find("/", 10);
+  std::string clean_rel = normalized_path;
+  if (normalized_path.find("package://") == 0) {
+    size_t second_slash = normalized_path.find("/", 10);
     if (second_slash != std::string::npos) {
-        std::string pkg_name = relative_path.substr(10, second_slash - 10);
-        std::string sub_path = relative_path.substr(second_slash + 1);
+        std::string pkg_name = normalized_path.substr(10, second_slash - 10);
+        std::string sub_path = normalized_path.substr(second_slash + 1);
         try {
 #ifdef USE_ROS2
             std::string pkg_path = ament_index_cpp::get_package_share_directory(pkg_name);
             return (std::filesystem::path(pkg_path) / sub_path).string();
 #endif
         } catch (...) {}
-    }
-    clean_rel = relative_path.substr(10); 
+      }
+    clean_rel = normalized_path.substr(10); 
   }
   std::filesystem::path clean_rel_path(clean_rel);
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -7,6 +8,22 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+def _write_resolved_robot_description(robot_description_file: str) -> str:
+    text = Path(robot_description_file).read_text(encoding="utf-8")
+    package_prefix = "package://topoarm_description/meshes/topoarm/"
+    replacement = "file://" + os.path.join(
+        get_package_share_directory("gng_safety"),
+        "urdf",
+        "topoarm_description",
+        "meshes",
+        "topoarm",
+    ) + "/"
+    resolved_text = text.replace(package_prefix, replacement)
+    resolved_path = Path("/tmp/gng_safety_resolved_topoarm_gazebo.urdf")
+    resolved_path.write_text(resolved_text, encoding="utf-8")
+    return str(resolved_path)
 
 
 def generate_launch_description():
@@ -41,7 +58,9 @@ def generate_launch_description():
         default_value="0.0",
         description="Gazebo spawn yaw",
     )
-    robot_description_file = os.path.join(package_share, "temp_robot.urdf")
+    robot_description_file = _write_resolved_robot_description(
+        os.path.join(package_share, "temp_robot.urdf")
+    )
 
     gazebo_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

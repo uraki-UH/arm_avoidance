@@ -5,12 +5,24 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
-def _read_robot_description(robot_description_file: str) -> str:
-    return Path(robot_description_file).read_text(encoding="utf-8")
+def _write_resolved_robot_description(robot_description_file: str) -> str:
+    text = Path(robot_description_file).read_text(encoding="utf-8")
+    package_prefix = "package://topoarm_description/meshes/topoarm/"
+    replacement = "file://" + os.path.join(
+        get_package_share_directory("gng_safety"),
+        "urdf",
+        "topoarm_description",
+        "meshes",
+        "topoarm",
+    ) + "/"
+    resolved_text = text.replace(package_prefix, replacement)
+    resolved_path = Path("/tmp/gng_safety_resolved_topoarm.urdf")
+    resolved_path.write_text(resolved_text, encoding="utf-8")
+    return str(resolved_path)
 
 
 def generate_launch_description():
@@ -18,7 +30,7 @@ def generate_launch_description():
 
     robot_description_file_default = os.path.join(package_share, "temp_robot.urdf")
     robot_mesh_root_dir_default = os.path.join(
-        package_share, "urdf", "real_model", "topoarm_description", "meshes", "topoarm"
+        package_share, "urdf", "topoarm_description", "meshes", "topoarm"
     )
 
     robot_description_topic = DeclareLaunchArgument(
@@ -46,28 +58,24 @@ def generate_launch_description():
         default_value="false",
         description="Whether to start safety_monitor_node",
     )
-    gng_results_dir = DeclareLaunchArgument(
-        "gng_results_dir",
-        default_value="gng_results",
-        description="Directory that contains GNG outputs",
-    )
-    gng_experiment_id = DeclareLaunchArgument(
-        "gng_experiment_id",
-        default_value="topoarm_full_v2",
-        description="Experiment subdirectory under gng_results/",
-    )
     gng_model_path = DeclareLaunchArgument(
         "gng_model_path",
-        default_value="topoarm_full_v2_phase2.bin",
-        description="GNG model file name under gng_results/<experiment_id>/",
+        default_value="",
+        description="Optional GNG model override; defaults come from gng_results/config.txt",
     )
     vlut_path = DeclareLaunchArgument(
         "vlut_path",
-        default_value="gng_spatial_correlation.bin",
-        description="VLUT file name under gng_results/<experiment_id>/",
+        default_value="",
+        description="Optional VLUT override; defaults come from gng_results/config.txt",
+    )
+    gng_results_config_path = DeclareLaunchArgument(
+        "gng_results_config_path",
+        default_value="gng_results/config.txt",
+        description="Path to the GNG results config file",
     )
 
-    robot_description_text = _read_robot_description(robot_description_file_default)
+    robot_description_file_resolved = _write_resolved_robot_description(robot_description_file_default)
+    robot_description_text = Path(robot_description_file_resolved).read_text(encoding="utf-8")
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -83,7 +91,7 @@ def generate_launch_description():
         name="robot_description_player",
         output="screen",
         parameters=[{
-            "robot_description_file": robot_description_file_default,
+            "robot_description_file": robot_description_file_resolved,
             "mesh_root_dir": robot_mesh_root_dir_default,
             "topic_name": LaunchConfiguration("robot_description_topic"),
             "poll_ms": 1000,
@@ -142,7 +150,7 @@ def generate_launch_description():
         name="self_recognition_viz_node",
         output="screen",
         parameters=[{
-            "robot_urdf_path": robot_description_file_default,
+            "robot_urdf_path": robot_description_file_resolved,
         }],
     )
 
@@ -153,16 +161,9 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(LaunchConfiguration("enable_safety_monitor")),
         parameters=[{
-            "gng_model_path": PathJoinSubstitution([
-                LaunchConfiguration("gng_results_dir"),
-                LaunchConfiguration("gng_experiment_id"),
-                LaunchConfiguration("gng_model_path"),
-            ]),
-            "vlut_path": PathJoinSubstitution([
-                LaunchConfiguration("gng_results_dir"),
-                LaunchConfiguration("gng_experiment_id"),
-                LaunchConfiguration("vlut_path"),
-            ]),
+            "gng_results_config_path": LaunchConfiguration("gng_results_config_path"),
+            "gng_model_path": LaunchConfiguration("gng_model_path"),
+            "vlut_path": LaunchConfiguration("vlut_path"),
             "lidar_pos": [0.0, 0.0, 1.0],
             "lidar_rot": [0.0, 0.0, 0.0],
             "robot_pos": [0.0, 0.0, 0.0],
@@ -176,8 +177,7 @@ def generate_launch_description():
         joint_state_source,
         frame_id,
         enable_safety_monitor,
-        gng_results_dir,
-        gng_experiment_id,
+        gng_results_config_path,
         gng_model_path,
         vlut_path,
         robot_state_publisher,

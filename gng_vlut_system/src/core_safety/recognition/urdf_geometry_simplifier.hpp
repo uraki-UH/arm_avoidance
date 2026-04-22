@@ -10,6 +10,7 @@
 #include "description/robot_model.hpp"
 #include "description/stl_loader.hpp"
 #include "collision/collision_detector.hpp"
+#include "common/resource_utils.hpp"
 
 namespace robot_sim {
 namespace recognition {
@@ -43,7 +44,8 @@ public:
         for (const auto& col : link.collisions) {
             if (col.geometry.type == simulation::GeometryType::MESH) {
                 // 1. 生のメッシュを保持
-                auto mesh = simulation::StlLoader::loadBinaryStl(col.geometry.mesh_filename);
+                const std::string resolved_mesh = robot_sim::common::resolvePath(col.geometry.mesh_filename);
+                auto mesh = simulation::StlLoader::loadBinaryStl(resolved_mesh);
                 if (!mesh.vertices.empty()) {
                     res.meshes.push_back(mesh);
                     res.mesh_origins.push_back(col.origin);

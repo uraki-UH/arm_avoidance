@@ -58,11 +58,8 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
 
 ```bash
 ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
-  joint_state_source:=rviz \
   enable_safety_monitor:=true \
-  gng_experiment_id:=topoarm_full_v2 \
-  gng_model_path:=topoarm_full_v2_phase2.bin \
-  vlut_path:=gng_spatial_correlation.bin
+  gng_results_config_path:=gng_results/config.txt
 ```
 
 ## 4. ボクセル色変化テスト
@@ -100,7 +97,7 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 
 - `topoarm_runtime.launch.py` は `robot_state_publisher`、`robot_description_player`、`joint_state_mux_node`、`self_recognition_viz_node`、`safety_monitor_node` をまとめる
 - `visualize_topoarm_rviz.launch.py` は `topoarm_runtime.launch.py` を呼び出したうえで RViz だけを起動する
-- GNG の色付き marker は `safety_monitor_node` が `/gng_viz` に出すので、見たいときは `enable_safety_monitor:=true` と `gng_experiment_id` / `gng_model_path` / `vlut_path` を `gng_results/<experiment_id>/` 前提で指定する
+- GNG の色付き marker は `safety_monitor_node` が `/gng_viz` に出す。通常は `gng_results/config.txt` が優先され、必要なときだけ `gng_model_path` / `vlut_path` を上書きする
 - `spawn_topoarm_gazebo.launch.py` は `gzserver` と必要なら `gzclient` を起動し、`temp_robot.urdf` を直接 spawn する
 - 既定では GUI は起動しない。`gazebo_gui:=true` で ROS plugin なしの素の `gzclient` を出し、Qt は `xcb` を使う
 - `spawn_x`, `spawn_y`, `spawn_z`, `spawn_yaw` で初期配置を調整できる

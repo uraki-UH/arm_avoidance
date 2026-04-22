@@ -135,7 +135,6 @@ def main():
     output_file = "tex/smc2026/smc_uraki/figure/edge_distribution.png"
     plt.savefig(output_file, dpi=300)
     print(f"Plot saved to {output_file}")
-    # plt.show() # Uncomment if running locally with display
 
 if __name__ == "__main__":
     main()

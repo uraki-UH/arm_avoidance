@@ -10,6 +10,7 @@
 #include "core_safety/analysis/safety_vlut_mapper.hpp"
 #include "core_safety/persistence/safety_system_loader.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
+#include "common/config_manager.hpp"
 #include "common/resource_utils.hpp"
 
 #include <Eigen/Geometry>
@@ -22,8 +23,9 @@ class SafetyMonitorNode : public rclcpp::Node {
 public:
     SafetyMonitorNode() : Node("safety_monitor_node") {
         // Parameters
-        this->declare_parameter("gng_model_path", "topoarm_full_v2_phase2.bin");
-        this->declare_parameter("vlut_path", "gng_spatial_correlation.bin");
+        this->declare_parameter("gng_results_config_path", "gng_results/config.txt");
+        this->declare_parameter("gng_model_path", "");
+        this->declare_parameter("vlut_path", "");
         this->declare_parameter("voxel_size", 0.02);
         this->declare_parameter("dilation_radius", 1);
         
@@ -35,8 +37,13 @@ public:
         this->declare_parameter("robot_pos", std::vector<double>{0.0, 0.0, 0.0});
         this->declare_parameter("robot_rot", std::vector<double>{0.0, 0.0, 0.0});
 
-        std::string gng_path = resolveResultPath(this->get_parameter("gng_model_path").as_string());
-        std::string vlut_path = resolveResultPath(this->get_parameter("vlut_path").as_string());
+        loadResultsConfigIfAvailable(this->get_parameter("gng_results_config_path").as_string());
+        std::string gng_path = resolveResultPath(
+            this->get_parameter("gng_model_path").as_string(),
+            /*is_vlut=*/false);
+        std::string vlut_path = resolveResultPath(
+            this->get_parameter("vlut_path").as_string(),
+            /*is_vlut=*/true);
         voxel_size_ = this->get_parameter("voxel_size").as_double();
         dilation_ = this->get_parameter("dilation_radius").as_int();
         
@@ -94,9 +101,20 @@ public:
     }
 
 private:
-    std::string resolveResultPath(const std::string& path) const {
+    void loadResultsConfigIfAvailable(const std::string& config_path) {
+        if (config_path.empty()) {
+            return;
+        }
+
+        const std::string resolved = robot_sim::common::resolvePath(config_path);
+        if (std::filesystem::exists(resolved)) {
+            common::ConfigManager::Instance().Load(resolved);
+        }
+    }
+
+    std::string resolveResultPath(const std::string& path, bool is_vlut) const {
         if (path.empty()) {
-            return path;
+            return resolveFromConfig(is_vlut);
         }
 
         if (std::filesystem::path(path).is_absolute()) {
@@ -107,7 +125,28 @@ private:
             return robot_sim::common::resolvePath(path);
         }
 
-        return robot_sim::common::resolvePath(std::string("gng_results/") + path);
+        if (path.find('/') != std::string::npos) {
+            return robot_sim::common::resolvePath(path);
+        }
+
+        const auto &cfg = common::ConfigManager::Instance();
+        const std::string data_dir = cfg.Get("data_directory", "gng_results");
+        const std::string exp_id = cfg.Get("experiment_id", "default_run");
+        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + path);
+    }
+
+    std::string resolveFromConfig(bool is_vlut) const {
+        const auto &cfg = common::ConfigManager::Instance();
+        const std::string data_dir = cfg.Get("data_directory", "gng_results");
+        const std::string exp_id = cfg.Get("experiment_id", "default_run");
+
+        if (is_vlut) {
+            const std::string vlut_name = cfg.Get("vlut_filename", "gng_spatial_correlation.bin");
+            return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + vlut_name);
+        }
+
+        const std::string model_name = cfg.Get("gng_model_filename", exp_id + ".bin");
+        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + model_name);
     }
 
     void updateSafety(const std::vector<long>& occ_vids, const std::vector<long>& dan_vids) {
@@ -137,9 +176,6 @@ private:
         occ_vids.reserve(msg->data.size());
         for (auto val : msg->data) occ_vids.push_back((long)val);
         
-        // For direct voxel input, if danger voxels are not provided, we could dilate here,
-        // but typically "final voxel info" should already include dilation if needed.
-        // For now, we update only occupied state if danger list is empty.
         updateSafety(occ_vids, latest_dan_vids_);
         latest_occ_vids_ = occ_vids;
     }

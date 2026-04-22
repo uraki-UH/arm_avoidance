@@ -44,25 +44,20 @@ def generate_launch_description():
         default_value="false",
         description="Whether to start safety_monitor_node",
     )
-    gng_results_dir = DeclareLaunchArgument(
-        "gng_results_dir",
-        default_value="gng_results",
-        description="Directory that contains the GNG model and VLUT outputs",
-    )
-    gng_experiment_id = DeclareLaunchArgument(
-        "gng_experiment_id",
-        default_value="topoarm_full_v2",
-        description="Experiment subdirectory under gng_results/",
-    )
     gng_model_path = DeclareLaunchArgument(
         "gng_model_path",
-        default_value="topoarm_full_v2_phase2.bin",
-        description="GNG model file name under gng_results/<experiment_id>/",
+        default_value="",
+        description="Optional GNG model override; defaults come from gng_results/config.txt",
     )
     vlut_path = DeclareLaunchArgument(
         "vlut_path",
-        default_value="gng_spatial_correlation.bin",
-        description="VLUT file name under gng_results/<experiment_id>/",
+        default_value="",
+        description="Optional VLUT override; defaults come from gng_results/config.txt",
+    )
+    gng_results_config_path = DeclareLaunchArgument(
+        "gng_results_config_path",
+        default_value="gng_results/config.txt",
+        description="Path to the GNG results config file",
     )
     rviz_config = DeclareLaunchArgument(
         "rviz_config",
@@ -80,8 +75,7 @@ def generate_launch_description():
             "robot_description_topic": LaunchConfiguration("robot_description_topic"),
             "udp_port": LaunchConfiguration("udp_port"),
             "enable_safety_monitor": LaunchConfiguration("enable_safety_monitor"),
-            "gng_results_dir": LaunchConfiguration("gng_results_dir"),
-            "gng_experiment_id": LaunchConfiguration("gng_experiment_id"),
+            "gng_results_config_path": LaunchConfiguration("gng_results_config_path"),
             "gng_model_path": LaunchConfiguration("gng_model_path"),
             "vlut_path": LaunchConfiguration("vlut_path"),
         }.items(),
@@ -102,8 +96,7 @@ def generate_launch_description():
         frame_id,
         use_rviz,
         enable_safety_monitor,
-        gng_results_dir,
-        gng_experiment_id,
+        gng_results_config_path,
         gng_model_path,
         vlut_path,
         rviz_config,

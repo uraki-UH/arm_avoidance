@@ -23,7 +23,7 @@ public:
         "robot_description_file", pkg_share + "/temp_robot.urdf");
     mesh_root_dir_ = declare_parameter<std::string>(
         "mesh_root_dir",
-        pkg_share + "/urdf/real_model/topoarm_description/meshes/topoarm");
+        pkg_share + "/urdf/topoarm_description/meshes/topoarm");
     topic_name_ = declare_parameter<std::string>("topic_name", "robot_description");
     poll_ms_ = declare_parameter<int>("poll_ms", 1000);
     republish_ms_ = declare_parameter<int>("republish_ms", 1000);
