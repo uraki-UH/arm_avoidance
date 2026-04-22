@@ -7,7 +7,6 @@ namespace analysis {
 
 /**
  * @brief 汎用グラフのためのトポロジー（連結成分）解析クラス
- *
  * テンプレートと事前に確保したバッファを用いることで、
  * アロケーションのオーバーヘッドを無くし、リアルタイムループ内で高速に動作します。
  */
@@ -17,8 +16,7 @@ public:
   ~GraphTopologyAnalyzer() = default;
 
   /**
-   * @brief トポロジー解析を実行し、最大の連結成分（本土）を特定します。
-   *
+   * @brief トポロジー解析を実行し、最大の連結成分（mainland）を特定します。
    * @tparam Validator 関数またはラムダ型: bool(int node_id) ->
    * ノードが安全/有効か判定
    * @tparam NeighborProvider 関数またはラムダ型: const Container&(int node_id)

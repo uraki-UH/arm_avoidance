@@ -29,6 +29,18 @@ RViz 用の入力源を使う場合:
 ros2 launch gng_safety visualize_topoarm_ros2.launch.py
 ```
 
+Gazebo でも同じ URDF を召喚する場合:
+
+```bash
+ros2 launch gng_safety spawn_topoarm_gazebo.launch.py
+```
+
+Gazebo の GUI を出す場合:
+
+```bash
+ros2 launch gng_safety spawn_topoarm_gazebo.launch.py gazebo_gui:=true
+```
+
 実機の現在姿勢を使う場合:
 
 ```bash
@@ -76,3 +88,10 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 - `robot_bridge_node` は実機向け UDP のブリッジで `/joint_states_real` を出す
 - `joint_state_mux_node` が選択中のソースを `/joint_states` にまとめる
 - `joint_state_source:=rviz` なら RViz 用入力、`joint_state_source:=real` なら実機姿勢を使う
+
+## 7. Gazebo のメモ
+
+- `spawn_topoarm_gazebo.launch.py` は `gzserver` と `robot_description_player` を起動し、`topoarm` を spawn する
+- 既定では GUI は起動しない。`gazebo_gui:=true` で ROS plugin なしの素の `gzclient` を出し、Qt は `xcb` を使う
+- `spawn_x`, `spawn_y`, `spawn_z`, `spawn_yaw` で初期配置を調整できる
+- 既定では `spawn_z:=0.02` なので、床との干渉が気になる場合は少し上げるとよい

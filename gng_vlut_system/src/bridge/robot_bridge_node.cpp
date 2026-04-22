@@ -11,7 +11,6 @@
 #include <cmath>
 #include <memory>
 
-//１１１
 class RobotBridgeNode : public rclcpp::Node {
 public:
     RobotBridgeNode() : Node("robot_bridge_node") {

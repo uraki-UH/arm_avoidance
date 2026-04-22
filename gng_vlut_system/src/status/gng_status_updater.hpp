@@ -31,13 +31,11 @@ public:
         spatial_index->insert(node.id, pos);
       }
     }
-    // spatial_index->build(); // Now we call it explicitly
     spatial_index->build();
   }
 
   /**
    * @brief Apply aggregated collision and danger counts to GNG nodes.
-   *
    * @param gng Pointer to the GNG object
    * @param collision_counts Aggregated collision counts per node ID
    * @param danger_counts Aggregated danger (proximity) counts per node ID
