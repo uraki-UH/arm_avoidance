@@ -66,6 +66,11 @@ public:
             rclcpp::QoS(rclcpp::KeepLast(10)),
             std::bind(&ViewerWsGatewayNode::handleGraph, this, std::placeholders::_1));
 
+        robotArmSub_ = create_subscription<std_msgs::msg::String>(
+            viewer_internal::topics::kStreamRobotArm,
+            rclcpp::QoS(rclcpp::KeepLast(10)),
+            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+
         jobEventSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kEditJobEvents,
             100,
@@ -323,6 +328,13 @@ private:
         broadcastText(event.dump());
     }
 
+    void handleRobotArm(const std_msgs::msg::String::SharedPtr msg) {
+        if (msg->data.empty()) {
+            return;
+        }
+        broadcastText(msg->data);
+    }
+
     void broadcastBinary(const std::vector<uint8_t>& payload) {
         // Copy payload for deferred execution on uWS event loop thread
         auto shared = std::make_shared<std::vector<uint8_t>>(payload);
@@ -358,6 +370,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pointCloudMetaSub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr graphSub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotArmSub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr jobEventSub_;
 
     std::mutex pendingMutex_;

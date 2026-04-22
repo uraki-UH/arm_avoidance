@@ -5,6 +5,7 @@ import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
 import { PointCloudData, HeatmapSettings, GraphNode, EditRegion } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
+import { RobotArmRenderer } from './features/visualization/RobotArmRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
@@ -109,6 +110,7 @@ function App() {
     const {
         pointCloud: wsPointCloud,
         graphData,
+        robotArmData,
         lastJobEvent,
         isConnected,
         error: wsError,
@@ -674,6 +676,12 @@ function App() {
                             selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
                             onClusterSelect={handleClusterSelect}
                             enableClusterSelection={!zoneMonitor.isDrawing}
+                        />
+                    )}
+
+                    {robotArmData && (
+                        <RobotArmRenderer
+                            data={robotArmData}
                         />
                     )}
 

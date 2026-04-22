@@ -45,3 +45,17 @@ ament_target_dependencies(topofuzzy_bridge_node
     ais_gng_msgs
 )
 install(TARGETS topofuzzy_bridge_node DESTINATION lib/${PROJECT_NAME})
+
+# 5. Robot Arm Bridge Node
+add_executable(robot_arm_bridge_node robot_arm_bridge_node.cpp)
+target_link_libraries(robot_arm_bridge_node
+    description_lib
+    kinematics_lib
+)
+ament_target_dependencies(robot_arm_bridge_node
+    rclcpp
+    sensor_msgs
+    std_msgs
+    ament_index_cpp
+)
+install(TARGETS robot_arm_bridge_node DESTINATION lib/${PROJECT_NAME})

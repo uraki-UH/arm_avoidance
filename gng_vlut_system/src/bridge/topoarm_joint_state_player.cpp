@@ -35,13 +35,18 @@ public:
     base_frame_ = declare_parameter<std::string>("base_frame", "world");
     output_topic_ = declare_parameter<std::string>("output_topic", "/joint_states_rviz");
 
-    joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(output_topic_, 10);
+    joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+        output_topic_, rclcpp::QoS(1).reliable().transient_local());
     startSocket();
 
     // Publish the initial pose only once.
     // After that, RViz/consumers should keep the last received joint state
     // until a new UDP packet arrives.
     publishDefaultPose();
+
+    default_pose_timer_ = create_wall_timer(
+        std::chrono::seconds(1),
+        std::bind(&TopoArmJointStatePlayer::publishDefaultPose, this));
 
     RCLCPP_INFO(get_logger(),
                 "topoarm_joint_state_player started: port=%d base_frame=%s output_topic=%s",
@@ -198,7 +203,6 @@ private:
     };
 
     joint_state_pub_->publish(msg);
-    received_udp_.store(true);
   }
 
   int udp_port_ = 12345;
@@ -209,6 +213,7 @@ private:
   std::atomic<bool> received_udp_{false};
   std::thread thread_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
+  rclcpp::TimerBase::SharedPtr default_pose_timer_;
 };
 
 int main(int argc, char **argv) {

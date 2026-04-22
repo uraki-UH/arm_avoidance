@@ -71,6 +71,15 @@ export interface GraphData {
     clusterLabels?: number[];
 }
 
+export interface RobotArmData {
+    timestamp: number;
+    frameId: string;
+    jointNames: string[];
+    jointValues: number[];
+    positions: [number, number, number][];
+    orientations: [number, number, number, number][];
+}
+
 // --- WebSocket / RPC Types ---
 
 export interface DataSource {

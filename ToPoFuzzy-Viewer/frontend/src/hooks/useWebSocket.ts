@@ -3,6 +3,7 @@ import { deserializePointCloud } from '../utils/protocol';
 import {
     PointCloudData,
     GraphData,
+    RobotArmData,
     DataSource,
     RosbagInfo,
     PlaybackStatus,
@@ -44,6 +45,7 @@ interface PendingRequest {
 interface UseWebSocketReturn {
     pointCloud: PointCloudData | null;
     graphData: GraphData | null;
+    robotArmData: RobotArmData | null;
     lastJobEvent: EditJobEvent | null;
     isConnected: boolean;
     error: string | null;
@@ -99,6 +101,7 @@ interface UseWebSocketReturn {
 export function useWebSocket(url: string): UseWebSocketReturn {
     const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
     const [graphData, setGraphData] = useState<GraphData | null>(null);
+    const [robotArmData, setRobotArmData] = useState<RobotArmData | null>(null);
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -182,6 +185,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
                     if (payload.type === 'stream.graph' && payload.graph) {
                         setGraphData(payload.graph as GraphData);
+                        return;
+                    }
+
+                    if (payload.type === 'stream.robot_arm' && payload.robotArm) {
+                        setRobotArmData(payload.robotArm as RobotArmData);
                         return;
                     }
 
@@ -412,6 +420,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     return {
         pointCloud,
         graphData,
+        robotArmData,
         lastJobEvent,
         isConnected,
         error,
