@@ -10,6 +10,7 @@
 - `robot_description_player`: `/robot_description` を publish
 - `self_recognition_viz_node`: 自己認識マスクを `/self_mask_viz` に表示
 - `safety_monitor_node`: GNG/VLUT の安全状態を `/gng_viz` に表示
+- `topofuzzy_bridge_node`: `/topological_map` を Viewer 互換の形式で publish
 - `voxel_status_test_publisher`: 仮想ボクセルを流して色変化を確認
 
 ## 2. ビルド
@@ -62,6 +63,12 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
   gng_results_config_path:=gng_results/config.txt
 ```
 
+ToPoFuzzy-Viewer へ流す場合:
+
+```bash
+ros2 launch gng_safety topofuzzy_bridge.launch.py
+```
+
 ## 4. ボクセル色変化テスト
 
 球状の占有・危険ボクセルを流す例:
@@ -69,11 +76,20 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
 ```bash
 ros2 run gng_safety voxel_status_test_publisher --ros-args \
   -p scenario:=sphere \
-  -p sphere_center_world_cm:="[20.0, 20.0, 30.0]" \
+  -p sphere_center_world_cm:="[0.0, 0.0, 30.0]" \
+  -p sphere_orbit_radius_cm:=25.0 \
+  -p sphere_orbit_period_s:=20.0 \
   -p sphere_radius_cm:=10.0 \
   -p sphere_danger_margin_cm:=3.0 \
+  -p scenario_period_s:=0.1 \
   -p voxel_size:=0.02
 ```
+
+色の意味:
+
+- `safe` = 緑
+- `danger` = 黄
+- `collision` = 赤
 
 ## 5. トピック
 
@@ -83,6 +99,7 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 - `/robot_description`
 - `/self_mask_viz`
 - `/gng_viz`
+- `/topological_map`
 - `/occupied_voxels`
 - `/danger_voxels`
 
@@ -98,6 +115,8 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 - `topoarm_runtime.launch.py` は `robot_state_publisher`、`robot_description_player`、`joint_state_mux_node`、`self_recognition_viz_node`、`safety_monitor_node` をまとめる
 - `visualize_topoarm_rviz.launch.py` は `topoarm_runtime.launch.py` を呼び出したうえで RViz だけを起動する
 - GNG の色付き marker は `safety_monitor_node` が `/gng_viz` に出す。通常は `gng_results/config.txt` が優先され、必要なときだけ `gng_model_path` / `vlut_path` を上書きする
+- `topofuzzy_bridge.launch.py` は `/occupied_voxels` と `/danger_voxels` を受けて `/topological_map` を publish する。Viewer 側は `viewer_stack.launch.py` を起動しておけばそのまま受け取れる
+- `voxel_status_test_publisher` の `sphere` シナリオは `scenario_period_s` で更新周期を決める。`sphere_orbit_radius_cm` と `sphere_orbit_period_s` を入れると、中心が XY 平面で原点まわりを回る
 - `spawn_topoarm_gazebo.launch.py` は `gzserver` と必要なら `gzclient` を起動し、`temp_robot.urdf` を直接 spawn する
 - 既定では GUI は起動しない。`gazebo_gui:=true` で ROS plugin なしの素の `gzclient` を出し、Qt は `xcb` を使う
 - `spawn_x`, `spawn_y`, `spawn_z`, `spawn_yaw` で初期配置を調整できる

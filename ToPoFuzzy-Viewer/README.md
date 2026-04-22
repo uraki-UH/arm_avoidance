@@ -108,6 +108,15 @@ ros2 run ais_gng ais_gng_node
     *   Click **Delete** to remove selected points (syncs with server if streamed).
 5.  **Visibility**: Toggle the "Eye" icon in the Layer list to show/hide Point Clouds or GNG topology.
 
+### Topological Map Notes
+
+- The viewer consumes `/topological_map` directly through the backend bridge node.
+- The current color convention for topology labels is:
+  - `safe` = green
+  - `danger` = yellow
+  - `collision` = red
+- In the GNG Topology panel, `Nodes` and `Edges` can be toggled independently, and `Edge Width` adjusts the whole graph thickness.
+
 ## ROS2 Packages
 
 | Package | Description |
