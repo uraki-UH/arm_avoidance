@@ -26,7 +26,13 @@ source install/setup.bash
 RViz 用の入力源を使う場合:
 
 ```bash
-ros2 launch gng_safety visualize_topoarm_ros2.launch.py
+ros2 launch gng_safety visualize_topoarm_rviz.launch.py
+```
+
+トピック送信だけを起動する場合:
+
+```bash
+ros2 launch gng_safety topoarm_runtime.launch.py
 ```
 
 Gazebo でも同じ URDF を召喚する場合:
@@ -44,18 +50,19 @@ ros2 launch gng_safety spawn_topoarm_gazebo.launch.py gazebo_gui:=true
 実機の現在姿勢を使う場合:
 
 ```bash
-ros2 launch gng_safety visualize_topoarm_ros2.launch.py \
+ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
   joint_state_source:=real
 ```
 
 安全監視まで見る場合:
 
 ```bash
-ros2 launch gng_safety visualize_topoarm_ros2.launch.py \
+ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
   joint_state_source:=rviz \
   enable_safety_monitor:=true \
-  gng_model_path:=/path/to/topoarm_real_v1_phase2.bin \
-  vlut_path:=/path/to/gng_spatial_correlation.bin
+  gng_experiment_id:=topoarm_full_v2 \
+  gng_model_path:=topoarm_full_v2_phase2.bin \
+  vlut_path:=gng_spatial_correlation.bin
 ```
 
 ## 4. ボクセル色変化テスト
@@ -89,9 +96,12 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 - `joint_state_mux_node` が選択中のソースを `/joint_states` にまとめる
 - `joint_state_source:=rviz` なら RViz 用入力、`joint_state_source:=real` なら実機姿勢を使う
 
-## 7. Gazebo のメモ
+## 7. 起動分離のメモ
 
-- `spawn_topoarm_gazebo.launch.py` は `gzserver` と `robot_description_player` を起動し、`topoarm` を spawn する
+- `topoarm_runtime.launch.py` は `robot_state_publisher`、`robot_description_player`、`joint_state_mux_node`、`self_recognition_viz_node`、`safety_monitor_node` をまとめる
+- `visualize_topoarm_rviz.launch.py` は `topoarm_runtime.launch.py` を呼び出したうえで RViz だけを起動する
+- GNG の色付き marker は `safety_monitor_node` が `/gng_viz` に出すので、見たいときは `enable_safety_monitor:=true` と `gng_experiment_id` / `gng_model_path` / `vlut_path` を `gng_results/<experiment_id>/` 前提で指定する
+- `spawn_topoarm_gazebo.launch.py` は `gzserver` と必要なら `gzclient` を起動し、`temp_robot.urdf` を直接 spawn する
 - 既定では GUI は起動しない。`gazebo_gui:=true` で ROS plugin なしの素の `gzclient` を出し、Qt は `xcb` を使う
 - `spawn_x`, `spawn_y`, `spawn_z`, `spawn_yaw` で初期配置を調整できる
 - 既定では `spawn_z:=0.02` なので、床との干渉が気になる場合は少し上げるとよい

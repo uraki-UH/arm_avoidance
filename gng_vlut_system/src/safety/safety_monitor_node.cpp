@@ -10,9 +10,11 @@
 #include "core_safety/analysis/safety_vlut_mapper.hpp"
 #include "core_safety/persistence/safety_system_loader.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
+#include "common/resource_utils.hpp"
 
 #include <Eigen/Geometry>
 
+#include <filesystem>
 #include <mutex>
 #include <vector>
 
@@ -20,8 +22,8 @@ class SafetyMonitorNode : public rclcpp::Node {
 public:
     SafetyMonitorNode() : Node("safety_monitor_node") {
         // Parameters
-        this->declare_parameter("gng_model_path", "data/gng_model.bin");
-        this->declare_parameter("vlut_path", "data/safety_vlut.vlut");
+        this->declare_parameter("gng_model_path", "topoarm_full_v2_phase2.bin");
+        this->declare_parameter("vlut_path", "gng_spatial_correlation.bin");
         this->declare_parameter("voxel_size", 0.02);
         this->declare_parameter("dilation_radius", 1);
         
@@ -33,8 +35,8 @@ public:
         this->declare_parameter("robot_pos", std::vector<double>{0.0, 0.0, 0.0});
         this->declare_parameter("robot_rot", std::vector<double>{0.0, 0.0, 0.0});
 
-        std::string gng_path = this->get_parameter("gng_model_path").as_string();
-        std::string vlut_path = this->get_parameter("vlut_path").as_string();
+        std::string gng_path = resolveResultPath(this->get_parameter("gng_model_path").as_string());
+        std::string vlut_path = resolveResultPath(this->get_parameter("vlut_path").as_string());
         voxel_size_ = this->get_parameter("voxel_size").as_double();
         dilation_ = this->get_parameter("dilation_radius").as_int();
         
@@ -92,6 +94,22 @@ public:
     }
 
 private:
+    std::string resolveResultPath(const std::string& path) const {
+        if (path.empty()) {
+            return path;
+        }
+
+        if (std::filesystem::path(path).is_absolute()) {
+            return path;
+        }
+
+        if (path.rfind("gng_results/", 0) == 0) {
+            return robot_sim::common::resolvePath(path);
+        }
+
+        return robot_sim::common::resolvePath(std::string("gng_results/") + path);
+    }
+
     void updateSafety(const std::vector<long>& occ_vids, const std::vector<long>& dan_vids) {
         std::lock_guard<std::mutex> lock(update_mutex_);
         if (!context_) return;

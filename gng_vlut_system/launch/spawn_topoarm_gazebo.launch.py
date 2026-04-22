@@ -11,17 +11,6 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     package_share = get_package_share_directory("gng_safety")
-
-    robot_description_file_default = os.path.join(package_share, "temp_robot.urdf")
-    robot_mesh_root_dir_default = os.path.join(
-        package_share, "urdf", "real_model", "topoarm_description", "meshes", "topoarm"
-    )
-
-    robot_description_topic = DeclareLaunchArgument(
-        "robot_description_topic",
-        default_value="robot_description",
-        description="Topic used by gazebo_ros/spawn_entity.py",
-    )
     gazebo_gui = DeclareLaunchArgument(
         "gazebo_gui",
         default_value="false",
@@ -52,20 +41,7 @@ def generate_launch_description():
         default_value="0.0",
         description="Gazebo spawn yaw",
     )
-
-    robot_description_player = Node(
-        package="gng_safety",
-        executable="robot_description_player",
-        name="robot_description_player",
-        output="screen",
-        parameters=[{
-            "robot_description_file": robot_description_file_default,
-            "mesh_root_dir": robot_mesh_root_dir_default,
-            "topic_name": LaunchConfiguration("robot_description_topic"),
-            "poll_ms": 1000,
-            "republish_ms": 1000,
-        }],
-    )
+    robot_description_file = os.path.join(package_share, "temp_robot.urdf")
 
     gazebo_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -91,8 +67,8 @@ def generate_launch_description():
         name="gazebo_spawn_entity",
         output="screen",
         arguments=[
-            "-topic",
-            LaunchConfiguration("robot_description_topic"),
+            "-file",
+            robot_description_file,
             "-entity",
             LaunchConfiguration("spawn_entity_name"),
             "-x",
@@ -107,14 +83,12 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        robot_description_topic,
         gazebo_gui,
         spawn_entity_name,
         spawn_x,
         spawn_y,
         spawn_z,
         spawn_yaw,
-        robot_description_player,
         gazebo_server,
         gazebo_client,
         gazebo_spawn_entity,
