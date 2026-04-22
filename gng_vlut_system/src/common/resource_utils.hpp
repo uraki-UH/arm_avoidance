@@ -13,16 +13,59 @@
 namespace robot_sim {
 namespace common {
 
+inline std::string stripUriScheme(const std::string &path) {
+  if (path.find("file://") == 0) {
+    return path.substr(7);
+  }
+  return path;
+}
+
+inline std::filesystem::path deriveResourceRootFromMeshRoot(
+    const std::string &mesh_root_dir) {
+  std::filesystem::path mesh_root(stripUriScheme(mesh_root_dir));
+  if (mesh_root.empty()) {
+    return {};
+  }
+
+  // Accept either ".../meshes" or ".../meshes/<variant>" and return the
+  // directory above meshes so package:// URIs can be rewritten generically.
+  if (mesh_root.filename() == "meshes") {
+    return mesh_root.parent_path();
+  }
+  if (mesh_root.has_parent_path() && mesh_root.parent_path().filename() == "meshes") {
+    return mesh_root.parent_path().parent_path();
+  }
+  return mesh_root.parent_path();
+}
+
+inline std::string rewritePackageUrisToRoot(
+    const std::string &text, const std::filesystem::path &resource_root_dir) {
+  if (text.empty() || resource_root_dir.empty()) {
+    return text;
+  }
+
+  const std::string root_prefix = "file://" + resource_root_dir.string() + "/";
+  std::string rewritten = text;
+  std::size_t pos = 0;
+  while ((pos = rewritten.find("package://", pos)) != std::string::npos) {
+    const std::size_t subpath_start = rewritten.find('/', pos + 10);
+    if (subpath_start == std::string::npos) {
+      break;
+    }
+
+    rewritten.replace(pos, subpath_start - pos + 1, root_prefix);
+    pos += root_prefix.size();
+  }
+  return rewritten;
+}
+
 /**
  * @brief Resolves a relative path to an absolute path based on project root or ROS 2 package share.
  */
 inline std::string resolvePath(const std::string &relative_path) {
   if (relative_path.empty()) return "";
 
-  std::string normalized_path = relative_path;
-  if (normalized_path.find("file://") == 0) {
-    normalized_path = normalized_path.substr(7);
-  }
+  std::string normalized_path = stripUriScheme(relative_path);
 
   std::filesystem::path input_path(normalized_path);
   if (input_path.is_absolute()) {

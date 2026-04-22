@@ -12,7 +12,6 @@ namespace simulation {
 /**
  * @brief Evaluates path cost by incorporating danger levels from
  * SafetyStateManager.
- *
  * Cost Function:
  * Cost(u, v) = Distance(u, v) * (1.0 + w_risk * max(Danger(u), Danger(v)))
  */

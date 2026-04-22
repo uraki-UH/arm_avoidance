@@ -13,7 +13,6 @@ namespace analysis {
 
 /**
  * @brief NodeSpatialSensorMapper
- * 
  * 把持物体や手先ノードを「空間センサー」として扱うための支援クラス。
  * 特定のノードの手先位置（weight_coord）が障害物に埋まった際、
  * VLUTを介して「他にどのノードが影響を受けるか（使用不能になるか）」をマッピングする。

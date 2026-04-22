@@ -3,8 +3,14 @@
 #include "description/robot_model.hpp"
 
 #include <Eigen/Dense>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <fstream>
+#include <sstream>
+#include <atomic>
+#include <cstdint>
+#include <unistd.h>
 #include <urdf_model/model.h>
 #include <urdf_parser/urdf_parser.h>
 
@@ -30,7 +36,50 @@ Eigen::Isometry3d toEigen(const urdf::Pose &pose) {
   return T;
 }
 
-RobotModel loadRobotFromUrdf(const std::string &urdf_path) {
+std::filesystem::path resolveResourceRoot(const std::string &resource_root_dir,
+                                         const std::string &mesh_root_dir) {
+  if (!resource_root_dir.empty()) {
+    return std::filesystem::path(robot_sim::common::stripUriScheme(resource_root_dir));
+  }
+  if (!mesh_root_dir.empty()) {
+    return robot_sim::common::deriveResourceRootFromMeshRoot(mesh_root_dir);
+  }
+  return {};
+}
+
+std::string materializeResolvedUrdf(const std::string &source_path,
+                                    const std::filesystem::path &resource_root) {
+  if (resource_root.empty()) {
+    return source_path;
+  }
+
+  std::ifstream ifs(source_path);
+  if (!ifs) {
+    throw std::runtime_error("Failed to open URDF file: " + source_path);
+  }
+
+  std::ostringstream oss;
+  oss << ifs.rdbuf();
+  const std::string rewritten =
+      robot_sim::common::rewritePackageUrisToRoot(oss.str(), resource_root);
+
+  static std::atomic<uint64_t> temp_counter{0};
+  const uint64_t seq = temp_counter.fetch_add(1, std::memory_order_relaxed);
+  const std::filesystem::path temp_path =
+      std::filesystem::temp_directory_path() /
+      ("gng_safety_resolved_robot_" + std::to_string(::getpid()) + "_" +
+       std::to_string(seq) + ".urdf");
+  std::ofstream ofs(temp_path);
+  if (!ofs) {
+    throw std::runtime_error("Failed to write resolved URDF: " + temp_path.string());
+  }
+  ofs << rewritten;
+  return temp_path.string();
+}
+
+RobotModel loadRobotFromUrdf(const std::string &urdf_path,
+                             const std::string &resource_root_dir,
+                             const std::string &mesh_root_dir) {
   // Resolve the path using improved utility
   std::string resolved_path = robot_sim::common::resolvePath(urdf_path);
   
@@ -62,6 +111,12 @@ RobotModel loadRobotFromUrdf(const std::string &urdf_path) {
       throw std::runtime_error("Xacro expansion failed: " + cmd);
     }
     final_path = temp_urdf;
+  }
+
+  const std::filesystem::path resource_root =
+      resolveResourceRoot(resource_root_dir, mesh_root_dir);
+  if (!resource_root.empty()) {
+    final_path = materializeResolvedUrdf(final_path, resource_root);
   }
 
   // 1. Parse the URDF file using urdfdom

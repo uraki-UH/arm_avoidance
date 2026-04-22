@@ -13,6 +13,8 @@
 #include <string>
 #include <utility>
 
+#include "common/resource_utils.hpp"
+
 class RobotDescriptionPlayer : public rclcpp::Node {
 public:
   RobotDescriptionPlayer()
@@ -21,12 +23,16 @@ public:
 
     description_file_ = declare_parameter<std::string>(
         "robot_description_file", pkg_share + "/temp_robot.urdf");
-    mesh_root_dir_ = declare_parameter<std::string>(
-        "mesh_root_dir",
-        pkg_share + "/urdf/topoarm_description/meshes/topoarm");
+    resource_root_dir_ = declare_parameter<std::string>("resource_root_dir", "");
+    mesh_root_dir_ = declare_parameter<std::string>("mesh_root_dir", "");
     topic_name_ = declare_parameter<std::string>("topic_name", "robot_description");
     poll_ms_ = declare_parameter<int>("poll_ms", 1000);
     republish_ms_ = declare_parameter<int>("republish_ms", 1000);
+
+    if (resource_root_dir_.empty()) {
+      resource_root_dir_ =
+          robot_sim::common::deriveResourceRootFromMeshRoot(mesh_root_dir_).string();
+    }
 
     description_pub_ = create_publisher<std_msgs::msg::String>(
         topic_name_, rclcpp::QoS(1).transient_local().reliable());
@@ -69,13 +75,8 @@ private:
       out_text = oss.str();
     }
 
-    const std::string package_prefix = "package://topoarm_description/meshes/topoarm/";
-    const std::string replacement = "file://" + mesh_root_dir_ + "/";
-    std::size_t pos = 0;
-    while ((pos = out_text.find(package_prefix, pos)) != std::string::npos) {
-      out_text.replace(pos, package_prefix.size(), replacement);
-      pos += replacement.size();
-    }
+    out_text = robot_sim::common::rewritePackageUrisToRoot(
+        out_text, std::filesystem::path(resource_root_dir_));
     return !out_text.empty();
   }
 
@@ -130,6 +131,7 @@ private:
   }
 
   std::string description_file_;
+  std::string resource_root_dir_;
   std::string mesh_root_dir_;
   std::string topic_name_;
   int poll_ms_ = 1000;

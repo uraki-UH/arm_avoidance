@@ -9,18 +9,29 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
-def _write_resolved_robot_description(robot_description_file: str) -> str:
+def _write_resolved_robot_description(
+    robot_description_file: str,
+    resource_root_dir: str,
+    output_name: str,
+) -> str:
     text = Path(robot_description_file).read_text(encoding="utf-8")
-    package_prefix = "package://topoarm_description/meshes/topoarm/"
-    replacement = "file://" + os.path.join(
-        get_package_share_directory("gng_safety"),
-        "urdf",
-        "topoarm_description",
-        "meshes",
-        "topoarm",
-    ) + "/"
-    resolved_text = text.replace(package_prefix, replacement)
-    resolved_path = Path("/tmp/gng_safety_resolved_topoarm.urdf")
+    replacement = "file://" + resource_root_dir.rstrip("/") + "/"
+    resolved_text = text
+    pos = 0
+    while True:
+        pos = resolved_text.find("package://", pos)
+        if pos == -1:
+            break
+        subpath_start = resolved_text.find("/", pos + len("package://"))
+        if subpath_start == -1:
+            break
+        resolved_text = (
+            resolved_text[:pos]
+            + replacement
+            + resolved_text[subpath_start + 1 :]
+        )
+        pos += len(replacement)
+    resolved_path = Path("/tmp") / output_name
     resolved_path.write_text(resolved_text, encoding="utf-8")
     return str(resolved_path)
 
@@ -29,8 +40,9 @@ def generate_launch_description():
     package_share = get_package_share_directory("gng_safety")
 
     robot_description_file_default = os.path.join(package_share, "temp_robot.urdf")
+    resource_root_dir_default = os.path.join(package_share, "urdf", "topoarm_description")
     robot_mesh_root_dir_default = os.path.join(
-        package_share, "urdf", "topoarm_description", "meshes", "topoarm"
+        resource_root_dir_default, "meshes", "topoarm"
     )
 
     robot_description_topic = DeclareLaunchArgument(
@@ -74,7 +86,11 @@ def generate_launch_description():
         description="Path to the GNG results config file",
     )
 
-    robot_description_file_resolved = _write_resolved_robot_description(robot_description_file_default)
+    robot_description_file_resolved = _write_resolved_robot_description(
+        robot_description_file_default,
+        resource_root_dir_default,
+        "gng_safety_resolved_topoarm.urdf",
+    )
     robot_description_text = Path(robot_description_file_resolved).read_text(encoding="utf-8")
     robot_state_publisher = Node(
         package="robot_state_publisher",
@@ -92,6 +108,7 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "robot_description_file": robot_description_file_resolved,
+            "resource_root_dir": resource_root_dir_default,
             "mesh_root_dir": robot_mesh_root_dir_default,
             "topic_name": LaunchConfiguration("robot_description_topic"),
             "poll_ms": 1000,
