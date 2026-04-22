@@ -151,6 +151,7 @@ function App() {
         visible: true,
         removed: false,
         showGraph: true,
+        showEdges: true,
         showClusters: true,
         showClusterText: true,
         showNormals: true,
@@ -664,7 +665,7 @@ function App() {
                         <GraphRenderer
                             data={graphData}
                             showNodes={gngLayer.showGraph}
-                            showEdges={gngLayer.showGraph}
+                            showEdges={gngLayer.showEdges}
                             showClusters={gngLayer.showClusters}
                             showClusterText={gngLayer.showClusterText}
                             visibleLabels={gngLayer.visibleLabels}

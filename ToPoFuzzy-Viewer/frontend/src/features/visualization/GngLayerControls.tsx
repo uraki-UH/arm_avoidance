@@ -6,6 +6,7 @@ export interface GngLayerState {
     visible: boolean;
     removed: boolean;
     showGraph: boolean;
+    showEdges: boolean;
     showClusters: boolean;
     showClusterText: boolean;
     showNormals: boolean;
@@ -30,11 +31,11 @@ interface GngLayerControlsProps {
 }
 
 const LABEL_CONFIG = [
-    { label: 1, name: 'Safe', color: '#FF00FF' },
-    { label: 2, name: 'Wall', color: '#0000FF' },
-    { label: 3, name: 'Unknown', color: '#FFFF00' },
-    { label: 4, name: 'Human', color: '#FF0000' },
-    { label: 5, name: 'Car', color: '#00FF00' },
+    { label: 1, name: 'Safe', color: '#00FF00' },
+    { label: 2, name: 'Collision', color: '#FF0000' },
+    { label: 3, name: 'Danger', color: '#FFFF00' },
+    { label: 4, name: 'Unused', color: '#808080' },
+    { label: 5, name: 'Other', color: '#808080' },
 ] as const;
 
 export function GngLayerControls({
@@ -76,9 +77,15 @@ export function GngLayerControls({
             {gngLayer.visible && (
                 <div className="space-y-2">
                     <ToggleRow
-                        label="Graph"
+                        label="Nodes"
                         isOn={gngLayer.showGraph}
                         onToggle={() => setGngLayer((prev) => ({ ...prev, showGraph: !prev.showGraph }))}
+                    />
+
+                    <ToggleRow
+                        label="Edges"
+                        isOn={gngLayer.showEdges}
+                        onToggle={() => setGngLayer((prev) => ({ ...prev, showEdges: !prev.showEdges }))}
                     />
 
                     <ToggleRow

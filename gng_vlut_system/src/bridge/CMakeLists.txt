@@ -31,3 +31,17 @@ ament_target_dependencies(topoarm_joint_state_player
     sensor_msgs
 )
 install(TARGETS topoarm_joint_state_player DESTINATION lib/${PROJECT_NAME})
+
+# 4. ToPoFuzzy Bridge Node
+add_executable(topofuzzy_bridge_node topofuzzy_bridge_node.cpp)
+target_link_libraries(topofuzzy_bridge_node
+    core_safety
+)
+ament_target_dependencies(topofuzzy_bridge_node
+    rclcpp
+    sensor_msgs
+    std_msgs
+    geometry_msgs
+    ais_gng_msgs
+)
+install(TARGETS topofuzzy_bridge_node DESTINATION lib/${PROJECT_NAME})

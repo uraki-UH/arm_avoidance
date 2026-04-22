@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <memory>
 #include "../spatial/ispatial_index.hpp"
@@ -36,26 +37,35 @@ public:
                           const std::vector<long>& current_danger) {
         if (!spatial_index_) return;
 
+        auto normalized_occupied = current_occupied;
+        auto normalized_danger = current_danger;
+        std::sort(normalized_occupied.begin(), normalized_occupied.end());
+        normalized_occupied.erase(std::unique(normalized_occupied.begin(), normalized_occupied.end()),
+                                  normalized_occupied.end());
+        std::sort(normalized_danger.begin(), normalized_danger.end());
+        normalized_danger.erase(std::unique(normalized_danger.begin(), normalized_danger.end()),
+                                normalized_danger.end());
+
         added_occ_.clear(); removed_occ_.clear();
         std::set_difference(prev_occupied_voxels_.begin(), prev_occupied_voxels_.end(),
-                            current_occupied.begin(), current_occupied.end(),
+                            normalized_occupied.begin(), normalized_occupied.end(),
                             std::back_inserter(removed_occ_));
-        std::set_difference(current_occupied.begin(), current_occupied.end(),
+        std::set_difference(normalized_occupied.begin(), normalized_occupied.end(),
                             prev_occupied_voxels_.begin(), prev_occupied_voxels_.end(),
                             std::back_inserter(added_occ_));
 
         added_dan_.clear(); removed_dan_.clear();
         std::set_difference(prev_danger_voxels_.begin(), prev_danger_voxels_.end(),
-                            current_danger.begin(), current_danger.end(),
+                            normalized_danger.begin(), normalized_danger.end(),
                             std::back_inserter(removed_dan_));
-        std::set_difference(current_danger.begin(), current_danger.end(),
+        std::set_difference(normalized_danger.begin(), normalized_danger.end(),
                             prev_danger_voxels_.begin(), prev_danger_voxels_.end(),
                             std::back_inserter(added_dan_));
 
         updateFromDiff(added_occ_, removed_occ_, added_dan_, removed_dan_);
 
-        prev_occupied_voxels_ = current_occupied;
-        prev_danger_voxels_   = current_danger;
+        prev_occupied_voxels_ = std::move(normalized_occupied);
+        prev_danger_voxels_   = std::move(normalized_danger);
     }
 
     /**

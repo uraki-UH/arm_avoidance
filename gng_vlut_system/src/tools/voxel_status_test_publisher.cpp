@@ -22,6 +22,9 @@ public:
     this->declare_parameter<std::vector<double>>("sphere_center_world_cm", std::vector<double>{20.0, 20.0, 30.0});
     this->declare_parameter<double>("sphere_radius_cm", 10.0);
     this->declare_parameter<double>("sphere_danger_margin_cm", 3.0);
+    this->declare_parameter<double>("sphere_orbit_radius_cm", 0.0);
+    this->declare_parameter<double>("sphere_orbit_period_s", 0.0);
+    this->declare_parameter<double>("sphere_orbit_phase_rad", 0.0);
     this->declare_parameter<double>("voxel_size", 0.02);
     this->declare_parameter<double>("publish_hz", 1.0);
     this->declare_parameter<bool>("publish_once", false);
@@ -37,10 +40,13 @@ public:
 
     if (!publish_once_) {
       const double hz = std::max(0.1, scenario_period_s_ > 0.0 ? (1.0 / scenario_period_s_) : publish_hz_);
+      publish_interval_s_ = 1.0 / hz;
       timer_ = this->create_wall_timer(
           std::chrono::duration_cast<std::chrono::milliseconds>(
               std::chrono::duration<double>(1.0 / hz)),
           std::bind(&VoxelStatusTestPublisher::publishCurrentScenario, this));
+    } else {
+      publish_interval_s_ = 0.0;
     }
 
     RCLCPP_INFO(this->get_logger(),
@@ -58,6 +64,9 @@ private:
     sphere_center_world_cm_ = this->get_parameter("sphere_center_world_cm").as_double_array();
     sphere_radius_cm_ = this->get_parameter("sphere_radius_cm").as_double();
     sphere_danger_margin_cm_ = this->get_parameter("sphere_danger_margin_cm").as_double();
+    sphere_orbit_radius_cm_ = this->get_parameter("sphere_orbit_radius_cm").as_double();
+    sphere_orbit_period_s_ = this->get_parameter("sphere_orbit_period_s").as_double();
+    sphere_orbit_phase_rad_ = this->get_parameter("sphere_orbit_phase_rad").as_double();
     voxel_size_ = this->get_parameter("voxel_size").as_double();
     publish_hz_ = this->get_parameter("publish_hz").as_double();
     publish_once_ = this->get_parameter("publish_once").as_bool();
@@ -121,21 +130,43 @@ private:
     }
 
     if (scenario_ == "sphere") {
-      return generateSphereScenario();
+      return generateSphereScenario(tick);
     }
 
     return {occupied_voxels_, danger_voxels_};
   }
 
-  std::pair<std::vector<int64_t>, std::vector<int64_t>> generateSphereScenario() const {
+  Eigen::Vector3d sphereCenterWorldMForTick(std::size_t tick) const {
+    if (sphere_center_world_cm_.size() != 3) {
+      return Eigen::Vector3d::Zero();
+    }
+
+    const Eigen::Vector3d base_center_world_m(
+        sphere_center_world_cm_[0] / 100.0,
+        sphere_center_world_cm_[1] / 100.0,
+        sphere_center_world_cm_[2] / 100.0);
+
+    if (sphere_orbit_radius_cm_ <= 0.0 || sphere_orbit_period_s_ <= 0.0 || publish_interval_s_ <= 0.0) {
+      return base_center_world_m;
+    }
+
+    const double elapsed_s = static_cast<double>(tick) * publish_interval_s_;
+    const double theta = (2.0 * M_PI * std::fmod(elapsed_s, sphere_orbit_period_s_) / sphere_orbit_period_s_) +
+                         sphere_orbit_phase_rad_;
+    const double orbit_radius_m = sphere_orbit_radius_cm_ / 100.0;
+
+    return Eigen::Vector3d(
+        orbit_radius_m * std::cos(theta),
+        orbit_radius_m * std::sin(theta),
+        base_center_world_m.z());
+  }
+
+  std::pair<std::vector<int64_t>, std::vector<int64_t>> generateSphereScenario(std::size_t tick) const {
     if (sphere_center_world_cm_.size() != 3 || voxel_size_ <= 0.0) {
       return {occupied_voxels_, danger_voxels_};
     }
 
-    const Eigen::Vector3d center_world_m(
-        sphere_center_world_cm_[0] / 100.0,
-        sphere_center_world_cm_[1] / 100.0,
-        sphere_center_world_cm_[2] / 100.0);
+    const Eigen::Vector3d center_world_m = sphereCenterWorldMForTick(tick);
     const Eigen::Vector3i center_idx = GNG::Analysis::IndexVoxelGrid::getIndex(
         center_world_m.cast<float>(), static_cast<float>(voxel_size_));
     const double r_occ = std::max(0.0, sphere_radius_cm_ / 100.0);
@@ -178,15 +209,19 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   std::vector<int64_t> occupied_voxels_;
   std::vector<int64_t> danger_voxels_;
-  std::vector<double> sphere_center_world_cm_;
-  std::string scenario_ = "static";
-  double scenario_period_s_ = 1.0;
-  double sphere_radius_cm_ = 10.0;
-  double sphere_danger_margin_cm_ = 3.0;
-  double voxel_size_ = 0.02;
-  double publish_hz_ = 1.0;
-  bool publish_once_ = false;
-  std::size_t tick_ = 0;
+    std::vector<double> sphere_center_world_cm_;
+    std::string scenario_ = "static";
+    double scenario_period_s_ = 1.0;
+    double sphere_orbit_radius_cm_ = 0.0;
+    double sphere_orbit_period_s_ = 0.0;
+    double sphere_orbit_phase_rad_ = 0.0;
+    double sphere_radius_cm_ = 10.0;
+    double sphere_danger_margin_cm_ = 3.0;
+    double voxel_size_ = 0.02;
+    double publish_hz_ = 1.0;
+    double publish_interval_s_ = 1.0;
+    bool publish_once_ = false;
+    std::size_t tick_ = 0;
 };
 
 int main(int argc, char **argv) {

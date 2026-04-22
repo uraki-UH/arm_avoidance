@@ -3,3 +3,8 @@
 *.db
 *.VC.db
 *.vc.db
+
+
+install/
+log/
+build/
