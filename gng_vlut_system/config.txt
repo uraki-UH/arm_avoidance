@@ -10,10 +10,6 @@ ground_z_threshold = 0.0
 leaf_link_name = end_effector_link
 gng_dimension = 6
 
-# --- Phase Definitions ---
-phase2_output_suffix = _phase2
-online_input_suffix = _phase2
-
 # --- Voxel Resolution Settings ---
 spatial_map_resolution = 0.02
 sensing_resolution = 0.02
@@ -21,4 +17,3 @@ arm_cache_resolution = 0.008
 
 # --- Safety Settings ---
 danger_threshold = 0.025
-use_mesh_collision = 0

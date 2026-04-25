@@ -160,7 +160,7 @@ uint8_t relabel_from_config(
 
   const double speed = cluster_speed_mps(cluster);
   const double volume = cluster_volume_m3(cluster);
-  const double reliability = clamp01(safe_double(cluster.label_reliability));
+  const double reliability = clamp01(safe_double(cluster.reliability));
   const double match = clamp01(safe_double(cluster.match));
   const double node_count = static_cast<double>(cluster.nodes.size());
   const double speed_norm = normalized_ratio(speed, 1.0);
@@ -587,7 +587,7 @@ private:
         ++changed;
       }
       if (set_reliability_from_score_) {
-        cluster.label_reliability = static_cast<float>(
+        cluster.reliability = static_cast<float>(
           std::clamp(std::max(human_score, car_score), 0.0, 1.0));
       }
     }

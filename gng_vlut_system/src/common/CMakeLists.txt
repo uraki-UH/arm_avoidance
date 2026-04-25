@@ -19,8 +19,4 @@ target_include_directories(common_lib PUBLIC
     ${_eigen_include_dirs}
 )
 
-if(BUILD_WITH_ROS2)
-    ament_target_dependencies(common_lib Eigen3 ament_index_cpp)
-else()
-    target_link_libraries(common_lib Eigen3::Eigen)
-endif()
+ament_target_dependencies(common_lib Eigen3 ament_index_cpp)

@@ -9,3 +9,9 @@ float32 match
 geometry_msgs/Point32 velocity
 float32 reliability
 uint16[] nodes
+# Fields required by FuzzyClassifier
+bool has_velocity_observation
+float32 vel_cov_xx
+float32 vel_cov_xy
+float32 vel_cov_yy
+uint32 frame

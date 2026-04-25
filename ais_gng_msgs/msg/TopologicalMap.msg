@@ -9,3 +9,5 @@ std_msgs/Header header
 ais_gng_msgs/TopologicalNode[] nodes
 uint16[] edges
 ais_gng_msgs/TopologicalCluster[] clusters
+# Field required by FuzzyClassifier
+uint32 frame_number

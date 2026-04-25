@@ -584,7 +584,7 @@ private:
       const std::uint32_t age = msg->frame_number >= cluster.frame ?
         msg->frame_number - cluster.frame : 0U;
 
-      reliabilities.push_back(safe_double(cluster.label_reliability));
+      reliabilities.push_back(safe_double(cluster.reliability));
       matches.push_back(safe_double(cluster.match));
       node_counts.push_back(node_count);
       node_counts_for_mean.push_back(static_cast<double>(node_count));
@@ -601,7 +601,7 @@ private:
         row.node_count = node_count;
         row.frame = cluster.frame;
         row.age = age;
-        row.reliability = safe_double(cluster.label_reliability);
+        row.reliability = safe_double(cluster.reliability);
         row.match = safe_double(cluster.match);
         row.speed_mps = safe_double(speed);
         row.has_velocity_observation = cluster.has_velocity_observation;

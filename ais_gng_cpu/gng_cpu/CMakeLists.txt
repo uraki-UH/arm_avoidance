@@ -82,12 +82,12 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
     endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     message(WARNING "build target 🎯 x86_64")
-    set(OpenSSL_DIR "/usr/local/openssl-x86_64/lib64/cmake/OpenSSL") #x86
-    include_directories(/usr/local/openssl-x86_64/include) #x86
+    # set(OpenSSL_DIR "/usr/local/openssl-x86_64/lib64/cmake/OpenSSL") #x86
+    # include_directories(/usr/local/openssl-x86_64/include) #x86
 endif()
-set(OpenSSL_USE_STATIC_LIBS TRUE)
+# set(OpenSSL_USE_STATIC_LIBS TRUE) # Prefer dynamic linking for ROS packages
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-find_package(OpenSSL CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 # find_package(ykpiv
 #              NAMES libykpiv.a # 拡張子まで指定して静的ライブラリを探させる
 #              PATHS /usr/local/lib/)

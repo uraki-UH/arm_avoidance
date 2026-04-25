@@ -18,7 +18,14 @@
 #include "description/urdf_loader.hpp"
 #include <iostream>
 
-int main() {
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    std::cerr << "Usage: " << argv[0] << " <experiment_id>" << std::endl;
+    return 1;
+  }
+  std::string experiment_id = argv[1];
+  std::string gng_file = "gng_results/" + experiment_id + "/gng.bin";
+
   common::ConfigManager &config = common::ConfigManager::Instance();
   if (!config.Load("config.txt")) {
     std::cerr << "Failed to load config.txt" << std::endl;
@@ -28,13 +35,6 @@ int main() {
   std::string urdf_name = config.Get("robot_urdf_path", "custom_robot");
   std::string urdf_file = "urdf/" + urdf_name + ".urdf";
   std::string leaf_link = config.Get("leaf_link_name", "link_7");
-  std::string exp_id = config.Get("experiment_id", "default_run");
-  std::string suffix = config.Get("online_input_suffix", "_final");
-  std::string data_dir = config.Get("data_directory", "gng_results");
-  if (!data_dir.empty() && data_dir.back() != '/')
-    data_dir += "/";
-
-  std::string gng_file = data_dir + exp_id + suffix + ".bin";
 
   auto model_obj = simulation::loadRobotFromUrdf(urdf_file);
   simulation::RobotModel robot_model(model_obj);
