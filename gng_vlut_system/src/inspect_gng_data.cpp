@@ -1,3 +1,17 @@
+//
+// GNGマップファイル (.bin) のデータ一貫性を検証するための診断ツール。
+//
+// 機能:
+// 1. GNGマップを読み込む。
+// 2. 各ノードに保存されている関節角度 (weight_angle) から順運動学を再計算し、
+//    エンドエフェクタの座標を求める。
+// 3. 再計算した座標と、ノードに直接保存されている座標 (weight_coord) を比較し、
+//    その差 (エラー) を出力する。
+//
+// 目的:
+// - GNGマップ内のデータの自己矛盾をチェックする。
+// - 順運動学モデルやGNG生成プロセスのデバッグに利用する。
+//
 #include "common/config_manager.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
 #include "description/kinematic_adapter.hpp"

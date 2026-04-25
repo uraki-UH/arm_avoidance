@@ -225,15 +225,17 @@ int main(int argc, char **argv) {
   initStatusProviders(gng, composite_checker.get(), &arm);
 
   std::string exp_id = config.Get("experiment_id", "standalone_train");
-  std::string data_dir = "gng_results/";
-  gng.setStatsLogPath(data_dir + exp_id + "_distance_stats.dat");
+  std::filesystem::path output_dir = std::filesystem::path("gng_results/") / exp_id;
+
+  gng.setStatsLogPath((output_dir / (exp_id + "_distance_stats.dat")).string());
+
+  // Define standard file paths
+  std::string gng_file_path = (output_dir / "gng.bin").string();
 
   // 4. Training Steps
-  std::string out_bin = config.GetFileName("phase2_output_suffix", "_phase2");
-
   if (vlut_only) {
-      std::cout << "[Step 0] Skipping GNG training. Loading existing map: " << out_bin << std::endl;
-      if (!gng.load(out_bin)) {
+      std::cout << "[Step 0] Skipping GNG training. Loading existing map: " << gng_file_path << std::endl;
+      if (!gng.load(gng_file_path)) {
           std::cerr << "[Error] Failed to load GNG map for VLUT reconstruction." << std::endl;
           return -1;
       }
@@ -370,19 +372,18 @@ int main(int argc, char **argv) {
 #endif
 
   // 6. Save Everything
-  std::filesystem::path folder = std::filesystem::path(out_bin).parent_path();
-  std::filesystem::create_directories(folder);
+  std::filesystem::create_directories(output_dir);
 
   // Backup config
-  try { std::filesystem::copy_file(config_file, folder / "config.txt", std::filesystem::copy_options::overwrite_existing); } catch(...) {}
+  try { std::filesystem::copy_file(config_file, output_dir / "config.txt", std::filesystem::copy_options::overwrite_existing); } catch(...) {}
 
   // Save GNG Map
-  if (gng.save(out_bin)) { std::cout << "[Success] GNG saved to: " << out_bin << std::endl; }
+  if (gng.save(gng_file_path)) { std::cout << "[Success] GNG saved to: " << gng_file_path << std::endl; }
 
   // Save VLUT
 #ifdef USE_FCL
-  std::string vlut_file = (folder / "gng_spatial_correlation.bin").string();
-  std::ofstream ofs(vlut_file, std::ios::binary);
+  std::string vlut_file_path = (output_dir / "vlut.bin").string();
+  std::ofstream ofs(vlut_file_path, std::ios::binary);
   if (ofs) {
       // --- Add Self-Describing Header ---
       // Convert a 4-character string to a 32-bit binary identifier (e.g., "VLUT")
@@ -410,7 +411,7 @@ int main(int argc, char **argv) {
           ofs.write((char *)&rel.vid, sizeof(long)); ofs.write((char *)&rel.nid, sizeof(int));
           ofs.write((char *)&d0, sizeof(float)); ofs.write((char *)&rel.lid, sizeof(int));
       }
-      std::cout << "[Success] VLUT saved to: " << vlut_file << " (Res: " << res << "m)" << std::endl;
+      std::cout << "[Success] VLUT saved to: " << vlut_file_path << " (Res: " << res << "m)" << std::endl;
   }
 #endif
 

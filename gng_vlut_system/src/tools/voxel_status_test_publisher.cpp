@@ -17,7 +17,7 @@ public:
   VoxelStatusTestPublisher() : Node("voxel_status_test_publisher") {
     this->declare_parameter<std::vector<int64_t>>("occupied_voxels", std::vector<int64_t>{});
     this->declare_parameter<std::vector<int64_t>>("danger_voxels", std::vector<int64_t>{});
-    this->declare_parameter<std::string>("scenario", "static");
+    this->declare_parameter<std::string>("scenario", "sphere");
     this->declare_parameter<double>("scenario_period_s", 1.0);
     this->declare_parameter<std::vector<double>>("sphere_center_world_cm", std::vector<double>{20.0, 20.0, 30.0});
     this->declare_parameter<double>("sphere_radius_cm", 10.0);
