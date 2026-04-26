@@ -18,61 +18,17 @@ def generate_launch_description():
         resource_root_dir_default, "meshes", "topoarm"
     )
     
-    params_file_arg = DeclareLaunchArgument(
-        "params_file",
-        default_value=os.path.join(gng_vlut_system_share, "config", "gng_safety_params.yaml"),
-        description="Path to the ROS 2 parameters file for the GNG nodes.",
-    )
-
-    robot_description_file_arg = DeclareLaunchArgument(
-        "robot_description_file",
-        default_value=robot_description_file_default,
-        description="URDF/Xacro file for the robot",
-    )
-
-    robot_description_topic = DeclareLaunchArgument(
-        "robot_description_topic",
-        default_value="robot_description",
-        description="Topic used by the robot_description_player",
-    )
-    udp_port = DeclareLaunchArgument(
-        "udp_port",
-        default_value="12345",
-        description="UDP port that feeds the topoarm joint state player",
-    )
-    joint_state_source = DeclareLaunchArgument(
-        "joint_state_source",
-        default_value="rviz",
-        description="Which source should drive /joint_states: rviz or real",
-    )
-    frame_id = DeclareLaunchArgument(
-        "frame_id",
-        default_value="world",
-        description="Fixed frame for RViz-oriented publishers",
-    )
-    enable_safety_monitor = DeclareLaunchArgument(
-        "enable_safety_monitor",
-        default_value="false",
-        description="Whether to start safety_monitor_node",
-    )
-    gng_model_path = DeclareLaunchArgument(
-        "gng_model_path",
-        default_value="",
-        description="Optional GNG model override; defaults come from params file",
-    )
-    vlut_path = DeclareLaunchArgument(
-        "vlut_path",
-        default_value="",
-        description="Optional VLUT override; defaults come from params file",
-    )
-    experiment_id = DeclareLaunchArgument(
-        "experiment_id",
-        default_value="default_experiment",
-    )
-    data_directory = DeclareLaunchArgument(
-        "data_directory",
-        default_value="gng_results",
-    )
+    DeclareLaunchArgument("params_file", default_value=os.path.join(gng_vlut_system_share, "config", "gng_safety_params.yaml")),
+    DeclareLaunchArgument("robot_description_file", default_value=robot_description_file_default),
+    DeclareLaunchArgument("robot_description_topic", default_value="robot_description"),
+    DeclareLaunchArgument("udp_port", default_value="12345"),
+    DeclareLaunchArgument("joint_state_source", default_value="rviz"),
+    DeclareLaunchArgument("frame_id", default_value="world"),
+    DeclareLaunchArgument("enable_safety_monitor", default_value="false"),
+    DeclareLaunchArgument("gng_model_path", default_value=""),
+    DeclareLaunchArgument("vlut_path", default_value=""),
+    DeclareLaunchArgument("experiment_id", default_value="default_experiment"),
+    DeclareLaunchArgument("data_directory", default_value="gng_results"),
 
     # Use xacro to expand the robot description
     robot_description_content = Command([

@@ -56,9 +56,6 @@ float safetyScore(const GNG::Status &status) {
   if (status.is_danger) {
     return 0.35f;
   }
-  if (!status.is_mainland) {
-    return 0.6f;
-  }
   if (status.is_boundary) {
     return 0.8f;
   }
@@ -333,7 +330,7 @@ private:
   }
 
   ais_gng_msgs::msg::TopologicalMap buildGraphMessage() {
-    annotateTopologyLocked();
+    // annotateTopologyLocked(); // Skipping heavy topology analysis
 
     ais_gng_msgs::msg::TopologicalMap msg;
     msg.header.stamp = now();

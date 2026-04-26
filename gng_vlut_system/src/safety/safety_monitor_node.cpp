@@ -19,9 +19,34 @@
 #include <mutex>
 #include <vector>
 
+#include <ais_gng_msgs/msg/topological_map.hpp>
+#include <ais_gng_msgs/msg/topological_node.hpp>
+#include <geometry_msgs/msg/point32.hpp>
+#include <std_msgs/msg/int64_multi_array.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <unordered_map>
+#include <unordered_set>
+
+namespace {
+constexpr float kEps = 1e-6f;
+
+uint8_t viewerLabelFromStatus(const GNG::Status &status) {
+    if (status.is_colliding) return 2; // red
+    if (status.is_danger) return 3;    // yellow
+    return 1;                         // green
+}
+
+geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3f &v) {
+    geometry_msgs::msg::Point32 p;
+    p.x = v.x(); p.y = v.y(); p.z = v.z();
+    return p;
+}
+}
 
 namespace robot_sim {
 namespace safety {
@@ -41,6 +66,7 @@ public:
         this->declare_parameter("vlut_filename", "vlut.bin");
         this->declare_parameter("robot_urdf_path", "");
         this->declare_parameter("base_frame", "base_link");
+        this->declare_parameter("publish_hz", 20.0);
 
         std::string gng_path = resolveResultPath(
             this->get_parameter("gng_model_path").as_string(),
@@ -51,6 +77,7 @@ public:
         voxel_size_ = this->get_parameter("voxel_size").as_double();
         dilation_ = this->get_parameter("dilation_radius").as_int();
         base_frame_ = this->get_parameter("base_frame").as_string();
+        double hz = this->get_parameter("publish_hz").as_double();
         
         // Setup TF2
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -70,7 +97,6 @@ public:
         point_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             "/points", rclcpp::SensorDataQoS(), std::bind(&SafetyMonitorNode::pointCloudCallback, this, std::placeholders::_1));
 
-        // New Direct Voxel Inputs
         occupied_voxel_sub_ = this->create_subscription<std_msgs::msg::Int64MultiArray>(
             "/occupied_voxels", 10, std::bind(&SafetyMonitorNode::occupiedVoxelCallback, this, std::placeholders::_1));
         
@@ -81,12 +107,16 @@ public:
             "/joint_states", 10, std::bind(&SafetyMonitorNode::jointStateCallback, this, std::placeholders::_1));
 
         marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/gng_viz", 10);
+        
+        topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+            "/topological_map", rclcpp::QoS(1).reliable().transient_local());
 
         viz_timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(100), std::bind(&SafetyMonitorNode::publishVisualization, this));
+            std::chrono::milliseconds(static_cast<int>(1000.0 / hz)), 
+            std::bind(&SafetyMonitorNode::publishTimerCallback, this));
 
-        RCLCPP_INFO(this->get_logger(), "Safety Monitor initialized (Component) with %zu nodes. Listening to /points and /occupied_voxels.", 
-                    context_->gng->getNodes().size());
+        RCLCPP_INFO(this->get_logger(), "Safety Monitor (Integrated) initialized with %zu nodes. Publishing to /topological_map at %.1f Hz", 
+                    context_->gng->getNodes().size(), hz);
     }
 
 private:
@@ -121,22 +151,23 @@ private:
         std::lock_guard<std::mutex> lock(update_mutex_);
         if (!context_) return;
 
-        // Update Mapper & GNG Node Status using VLUT
         context_->update(occ_vids, dan_vids);
         
         auto& gng = *context_->gng;
         const auto& col_counts = context_->mapper->getCollisionCounts();
         const auto& dgr_counts = context_->mapper->getDangerCounts();
 
-        for (int i = 0; i < (int)gng.getNodes().size(); ++i) {
-            if (gng.getNodes()[i].id == -1) continue;
-            auto& status = gng.getNodes()[i].status;
-            status.collision_count = col_counts[i];
-            status.danger_count = dgr_counts[i];
+        for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+            auto& node = gng.getNodes()[i];
+            if (node.id == -1) continue;
+            auto& status = node.status;
+            status.collision_count = (i < col_counts.size()) ? col_counts[i] : 0;
+            status.danger_count = (i < dgr_counts.size()) ? dgr_counts[i] : 0;
             
-            status.is_colliding = (col_counts[i] > 0);
-            status.is_danger = (dgr_counts[i] > 0);
+            status.is_colliding = (status.collision_count > 0);
+            status.is_danger = (status.danger_count > 0 && !status.is_colliding);
         }
+        graph_dirty_ = true;
     }
 
     void occupiedVoxelCallback(const std_msgs::msg::Int64MultiArray::SharedPtr msg) {
@@ -165,7 +196,6 @@ private:
 
         geometry_msgs::msg::TransformStamped tf_msg;
         try {
-            // Lookup transform from sensor frame to base frame
             tf_msg = tf_buffer_->lookupTransform(base_frame_, msg->header.frame_id, tf2::TimePointZero);
         } catch (const tf2::TransformException & ex) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Could not transform from %s to %s: %s", 
@@ -187,7 +217,6 @@ private:
             transformed_points.push_back(p_robot.cast<float>());
         }
 
-        // Process to Voxels
         auto occupied_vids = processor_->voxelize(transformed_points);
         auto danger_vids = processor_->dilate(occupied_vids, (float)dilation_ * (float)voxel_size_);
 
@@ -199,36 +228,83 @@ private:
         latest_joints_ = *msg;
     }
 
-    void publishVisualization() {
+    void publishTimerCallback() {
         std::lock_guard<std::mutex> lock(update_mutex_);
+        if (!graph_dirty_) return;
+        
+        publishGraphLocked();
+        publishMarkersLocked();
+        graph_dirty_ = false;
+    }
+
+    void publishGraphLocked() {
         if (!context_ || !context_->gng) return;
 
-        visualization_msgs::msg::MarkerArray markers;
-        const auto& nodes = context_->gng->getNodes();
-        
-        int id = 0;
-        for (const auto& node : nodes) {
+        ais_gng_msgs::msg::TopologicalMap msg;
+        msg.header.stamp = this->now();
+        msg.header.frame_id = base_frame_;
+
+        auto& gng = *context_->gng;
+        std::unordered_map<int, uint16_t> id_to_index;
+        msg.nodes.reserve(gng.getNodes().size());
+
+        // 1. Build Nodes
+        for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+            const auto& node = gng.getNodes()[i];
             if (node.id == -1) continue;
 
+            ais_gng_msgs::msg::TopologicalNode out;
+            out.id = static_cast<uint16_t>(node.id);
+            out.pos = toPoint32(node.weight_coord);
+            out.rho = 0.0f; // Default (unused). Re-implement as density/cost if needed.
+            out.label = viewerLabelFromStatus(node.status);
+            
+            id_to_index[node.id] = static_cast<uint16_t>(msg.nodes.size());
+            msg.nodes.push_back(std::move(out));
+        }
+
+        // 2. Build Edges (Coord edges for standard offline map)
+        std::unordered_set<uint64_t> seen_edges;
+        for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+            const auto& node = gng.getNodes()[i];
+            if (node.id == -1) continue;
+
+            const auto& neighbors = gng.getNeighborsCoord(static_cast<int>(i));
+            for (int neighbor_id : neighbors) {
+                if (neighbor_id < 0 || id_to_index.find(neighbor_id) == id_to_index.end()) continue;
+
+                int lo = std::min((int)node.id, neighbor_id);
+                int hi = std::max((int)node.id, neighbor_id);
+                uint64_t key = (static_cast<uint64_t>(lo) << 32) | static_cast<uint32_t>(hi);
+                if (!seen_edges.insert(key).second) continue;
+
+                msg.edges.push_back(id_to_index[node.id]);
+                msg.edges.push_back(id_to_index[neighbor_id]);
+            }
+        }
+
+        topological_map_pub_->publish(msg);
+    }
+
+    void publishMarkersLocked() {
+        if (!context_ || !context_->gng) return;
+        visualization_msgs::msg::MarkerArray markers;
+        int id = 0;
+        for (const auto& node : context_->gng->getNodes()) {
+            if (node.id == -1) continue;
             visualization_msgs::msg::Marker m;
-            m.header.frame_id = base_frame_; 
-            m.header.stamp = this->now();
-            m.ns = "gng_safety";
-            m.id = id++;
+            m.header.frame_id = base_frame_; m.header.stamp = this->now();
+            m.ns = "gng_safety"; m.id = id++;
             m.type = visualization_msgs::msg::Marker::SPHERE;
             m.scale.x = m.scale.y = m.scale.z = 0.01;
-            
             m.pose.position.x = node.weight_coord.x();
             m.pose.position.y = node.weight_coord.y();
             m.pose.position.z = node.weight_coord.z();
-
-            if (node.status.is_colliding) {
-                m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.15;
-            } else if (node.status.is_danger) {
-                m.color.r = 1.0; m.color.g = 1.0; m.color.b = 0.0; m.color.a = 0.15;
-            } else {
-                m.color.r = 0.0; m.color.g = 1.0; m.color.b = 0.0; m.color.a = 0.1;
-            }
+            
+            uint8_t label = viewerLabelFromStatus(node.status);
+            if (label == 2) { m.color.r = 1.0; m.color.a = 0.5; } // Red
+            else if (label == 3) { m.color.r = 1.0; m.color.g = 1.0; m.color.a = 0.5; } // Yellow
+            else { m.color.g = 1.0; m.color.a = 0.2; } // Green
             markers.markers.push_back(m);
         }
         marker_pub_->publish(markers);
@@ -237,16 +313,19 @@ private:
     // Members
     std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
     std::unique_ptr<robot_sim::analysis::VoxelProcessor> processor_;
-    
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    
     std::string base_frame_;
+    bool graph_dirty_ = true;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub_;
     rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_voxel_sub_;
     rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_voxel_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
+    
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
+    rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
     rclcpp::TimerBase::SharedPtr viz_timer_;
 
     std::mutex update_mutex_;

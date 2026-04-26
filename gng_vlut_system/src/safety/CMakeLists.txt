@@ -10,6 +10,7 @@ ament_target_dependencies(safety_monitor_node_component
     rclcpp_components
     sensor_msgs
     visualization_msgs
+    ais_gng_msgs
     tf2
     tf2_ros
     tf2_eigen
