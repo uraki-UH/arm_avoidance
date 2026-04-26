@@ -71,9 +71,10 @@ export interface GraphData {
     clusterLabels?: number[];
 }
 
-export interface RobotArmData {
+export interface RobotData {
     timestamp: number;
     frameId: string;
+    urdf?: string;
     jointNames: string[];
     jointValues: number[];
     positions: [number, number, number][];

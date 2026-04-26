@@ -3,17 +3,17 @@ import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import { RobotArmData } from '../../types';
+import { RobotData } from '../../types';
 
-interface RobotArmRendererProps {
-    data: RobotArmData | null;
+interface RobotRendererProps {
+    data: RobotData | null;
     visible?: boolean;
 }
 
-export function RobotArmRenderer({
+export function RobotRenderer({
     data,
     visible = true,
-}: RobotArmRendererProps) {
+}: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const [loading, setLoading] = useState(false);
@@ -22,19 +22,14 @@ export function RobotArmRenderer({
     // --- Initialize Loaders ---
     const loaders = useMemo(() => {
         const dracoLoader = new DRACOLoader();
-        // Use Google's CDN for the draco decoder files (WASM)
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
         
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
         
         const urdfLoader = new URDFLoader();
-        // Register GLTFLoader to handle .gltf and .glb files mentioned in the URDF
-        // This is the key to supporting compressed meshes
-        // @ts-ignore: urdf-loader supports setting loaders for different extensions
-        urdfLoader.fetchOptions = {
-            // Some versions of urdf-loader might need specific setup for gltf
-        };
+        // @ts-ignore
+        urdfLoader.fetchOptions = {};
 
         return { urdfLoader, gltfLoader, dracoLoader };
     }, []);
@@ -55,9 +50,7 @@ export function RobotArmRenderer({
 
         try {
             const robotObj = urdfLoader.parse(data.urdf);
-            // Three.js URDFLoader returns a group. 
-            // We need to rotate it if Y-up is expected but URDF is Z-up
-            // Usually ROS is Z-up, Three.js is Y-up.
+            // Rotate to match Three.js coordinate system (Y-up)
             robotObj.rotation.x = -Math.PI / 2; 
             
             setRobot(robotObj);

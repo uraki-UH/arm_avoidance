@@ -6,7 +6,7 @@ import { PointCloudRenderer } from './features/visualization/PointCloudRenderer'
 import { PointCloudData, HeatmapSettings, GraphNode, EditRegion } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
-import { RobotArmRenderer } from './features/visualization/RobotArmRenderer';
+import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
@@ -111,7 +111,7 @@ function App() {
     const {
         pointCloud: wsPointCloud,
         graphData,
-        robotArmData,
+        robotData,
         lastJobEvent,
         isConnected,
         error: wsError,
@@ -696,9 +696,9 @@ function App() {
                         )
                     )}
 
-                    {robotArmData && (
-                        <RobotArmRenderer
-                            data={robotArmData}
+                    {robotData && (
+                        <RobotRenderer
+                            data={robotData}
                         />
                     )}
 

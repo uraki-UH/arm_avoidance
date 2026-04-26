@@ -18,21 +18,21 @@ add_executable(topofuzzy_bridge_node topofuzzy_bridge_node.cpp)
 target_link_libraries(topofuzzy_bridge_node core_safety)
 ament_target_dependencies(topofuzzy_bridge_node rclcpp sensor_msgs std_msgs geometry_msgs ais_gng_msgs)
 
-# 5. Robot Arm Bridge Node (Component)
-add_library(robot_arm_bridge_node_component SHARED robot_arm_bridge_node.cpp)
-target_link_libraries(robot_arm_bridge_node_component description_lib kinematics_lib common_lib)
-ament_target_dependencies(robot_arm_bridge_node_component
+# 5. Robot Viewer Bridge Node (Component)
+add_library(robot_viewer_bridge_node_component SHARED robot_viewer_bridge_node.cpp)
+target_link_libraries(robot_viewer_bridge_node_component description_lib kinematics_lib common_lib)
+ament_target_dependencies(robot_viewer_bridge_node_component
     rclcpp
     rclcpp_components
     sensor_msgs
     std_msgs
     ament_index_cpp
 )
-rclcpp_components_register_nodes(robot_arm_bridge_node_component "robot_sim::bridge::RobotArmBridgeNode")
+rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 
-# 5b. Robot Arm Bridge Node (Executable)
-add_executable(robot_arm_bridge_node src/robot_arm_bridge_node_main.cpp)
-target_link_libraries(robot_arm_bridge_node robot_arm_bridge_node_component)
+# 5b. Robot Viewer Bridge Node (Executable)
+add_executable(robot_viewer_bridge_node src/robot_viewer_bridge_node_main.cpp)
+target_link_libraries(robot_viewer_bridge_node robot_viewer_bridge_node_component)
 
 # Installation
 install(TARGETS
@@ -40,11 +40,11 @@ install(TARGETS
     joint_state_mux_node
     topoarm_udp_bridge
     topofuzzy_bridge_node
-    robot_arm_bridge_node
+    robot_viewer_bridge_node
     DESTINATION lib/${PROJECT_NAME}
 )
 
 install(TARGETS
-    robot_arm_bridge_node_component
+    robot_viewer_bridge_node_component
     DESTINATION lib/${PROJECT_NAME}
 )
