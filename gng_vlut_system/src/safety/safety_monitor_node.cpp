@@ -75,7 +75,7 @@ public:
             this->get_parameter("vlut_path").as_string(),
             /*is_vlut=*/true);
         voxel_size_ = this->get_parameter("voxel_size").as_double();
-        dilation_ = this->get_parameter("dilation_radius").as_int();
+        safety_margin_ = this->get_parameter("safety_margin").as_double();
         base_frame_ = this->get_parameter("base_frame").as_string();
         double hz = this->get_parameter("publish_hz").as_double();
         
@@ -218,7 +218,7 @@ private:
         }
 
         auto occupied_vids = processor_->voxelize(transformed_points);
-        auto danger_vids = processor_->dilate(occupied_vids, (float)dilation_ * (float)voxel_size_);
+        auto danger_vids = processor_->dilate(occupied_vids, (float)safety_margin_);
 
         updateSafety(occupied_vids, danger_vids);
     }
@@ -339,7 +339,7 @@ private:
     std::vector<long> latest_dan_vids_;
 
     double voxel_size_;
-    int dilation_;
+    double safety_margin_;
 };
 
 } // namespace safety

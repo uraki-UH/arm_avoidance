@@ -13,6 +13,7 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
+        DeclareLaunchArgument("safety_margin", default_value="0.05"),
         DeclareLaunchArgument("publish_hz", default_value="20.0"),
         DeclareLaunchArgument("edge_mode", default_value="-1"),
         DeclareLaunchArgument("frame_id", default_value="base_link"),
@@ -29,6 +30,7 @@ def generate_launch_description():
                 {
                     "gng_model_path": LaunchConfiguration("gng_model_path"),
                     "vlut_path": LaunchConfiguration("vlut_path"),
+                    "safety_margin": LaunchConfiguration("safety_margin"),
                     "publish_hz": LaunchConfiguration("publish_hz"),
                     "edge_mode": LaunchConfiguration("edge_mode"),
                     "frame_id": LaunchConfiguration("frame_id"),
