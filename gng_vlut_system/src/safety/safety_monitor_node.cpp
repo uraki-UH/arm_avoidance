@@ -11,6 +11,8 @@
 #include "core_safety/analysis/safety_vlut_mapper.hpp"
 #include "core_safety/persistence/safety_system_loader.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
+#include "core_safety/recognition/self_recognition_manager.hpp"
+#include "description/urdf_loader.hpp"
 #include "common/resource_utils.hpp"
 
 #include <Eigen/Geometry>
@@ -92,6 +94,30 @@ public:
 
         // Initialize Processor
         processor_ = std::make_unique<robot_sim::analysis::VoxelProcessor>(voxel_size_);
+
+        // Initialize Self Recognition
+        const std::string robot_urdf_path = this->get_parameter("robot_urdf_path").as_string();
+        if (!robot_urdf_path.empty()) {
+            const std::string resolved_urdf = robot_sim::common::resolvePath(robot_urdf_path);
+            const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
+            const std::string resource_root = pkg_share; // Default
+            const std::string mesh_root = pkg_share + "/urdf/topoarm_description/meshes";
+
+            auto robot_model = simulation::loadRobotFromUrdf(resolved_urdf, resource_root, mesh_root);
+            auto chain = simulation::createKinematicChainFromModel(robot_model, "");
+            
+            chain_ = std::move(chain);
+            self_rec_manager_ = std::make_unique<recognition::SelfRecognitionManager>();
+            self_rec_manager_->initialize(robot_model, chain_, voxel_size_);
+
+            // Build joint index map for fast lookup
+            for (int i = 0; i < chain_->getNumJoints(); ++i) {
+                if (chain_->getJointDOF(i) > 0) {
+                    active_joint_names_.push_back(chain_->getJointName(i));
+                }
+            }
+            RCLCPP_INFO(this->get_logger(), "Self Recognition initialized for %zu joints.", active_joint_names_.size());
+        }
 
         // ROS Interfaces
         point_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -194,6 +220,7 @@ private:
             return;
         }
 
+        // 1. 世界座標（base_frame）への変換
         geometry_msgs::msg::TransformStamped tf_msg;
         try {
             tf_msg = tf_buffer_->lookupTransform(base_frame_, msg->header.frame_id, tf2::TimePointZero);
@@ -204,20 +231,49 @@ private:
         }
 
         Eigen::Isometry3d sensor_to_base = tf2::transformToEigen(tf_msg);
-        std::vector<Eigen::Vector3f> transformed_points;
-        transformed_points.reserve(msg->width * msg->height);
+        std::vector<Eigen::Vector3d> all_points;
+        all_points.reserve(msg->width * msg->height);
 
         sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
         sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
         sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
 
         for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-            Eigen::Vector3d p_sensor(*iter_x, *iter_y, *iter_z);
-            Eigen::Vector3d p_robot = sensor_to_base * p_sensor;
-            transformed_points.push_back(p_robot.cast<float>());
+            all_points.push_back(sensor_to_base * Eigen::Vector3d(*iter_x, *iter_y, *iter_z));
         }
 
-        auto occupied_vids = processor_->voxelize(transformed_points);
+        // 2. 自己認識フィルタ（Broad Phase AABB + Narrow Phase Inverse Lookup）
+        std::vector<Eigen::Vector3d> filtered_points;
+        std::vector<Eigen::Vector3d> self_points;
+        
+        if (self_rec_manager_ && !latest_joints_.name.empty()) {
+            std::vector<double> current_joints(active_joint_names_.size(), 0.0);
+            std::lock_guard<std::mutex> lock(update_mutex_);
+            
+            std::unordered_map<std::string, double> incoming_map;
+            for (size_t i = 0; i < latest_joints_.name.size(); ++i) {
+                if (i < latest_joints_.position.size()) {
+                    incoming_map[latest_joints_.name[i]] = latest_joints_.position[i];
+                }
+            }
+            
+            for (size_t i = 0; i < active_joint_names_.size(); ++i) {
+                if (incoming_map.count(active_joint_names_[i])) {
+                    current_joints[i] = incoming_map[active_joint_names_[i]];
+                }
+            }
+            
+            self_rec_manager_->filterPointCloud(all_points, current_joints, filtered_points, self_points);
+        } else {
+            filtered_points = all_points;
+        }
+
+        // 3. ボクセル化と安全判定の更新
+        std::vector<Eigen::Vector3f> float_points;
+        float_points.reserve(filtered_points.size());
+        for (const auto& p : filtered_points) float_points.push_back(p.cast<float>());
+
+        auto occupied_vids = processor_->voxelize(float_points);
         auto danger_vids = processor_->dilate(occupied_vids, (float)safety_margin_);
 
         updateSafety(occupied_vids, danger_vids);
@@ -318,6 +374,10 @@ private:
     // Members
     std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
     std::unique_ptr<robot_sim::analysis::VoxelProcessor> processor_;
+    std::unique_ptr<recognition::SelfRecognitionManager> self_rec_manager_;
+    std::shared_ptr<kinematics::KinematicChain> chain_;
+    std::vector<std::string> active_joint_names_;
+
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     
