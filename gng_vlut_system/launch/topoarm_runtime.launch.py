@@ -1,46 +1,18 @@
 import os
-from pathlib import Path
-
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PythonExpression
+from launch.substitutions import LaunchConfiguration, PythonExpression, Command, PathJoinSubstitution
 from launch_ros.actions import Node
 
-
-def _write_resolved_robot_description(
-    robot_description_file: str,
-    resource_root_dir: str,
-    output_name: str,
-) -> str:
-    text = Path(robot_description_file).read_text(encoding="utf-8")
-    replacement = "file://" + resource_root_dir.rstrip("/") + "/"
-    resolved_text = text
-    pos = 0
-    while True:
-        pos = resolved_text.find("package://", pos)
-        if pos == -1:
-            break
-        subpath_start = resolved_text.find("/", pos + len("package://"))
-        if subpath_start == -1:
-            break
-        resolved_text = (
-            resolved_text[:pos]
-            + replacement
-            + resolved_text[subpath_start + 1 :]
-        )
-        pos += len(replacement)
-    resolved_path = Path("/tmp") / output_name
-    resolved_path.write_text(resolved_text, encoding="utf-8")
-    return str(resolved_path)
-
-
 def generate_launch_description():
-    package_share = get_package_share_directory("gng_vlut_system")
-
     gng_vlut_system_share = get_package_share_directory("gng_vlut_system")
-    robot_description_file_default = os.path.join(gng_vlut_system_share, "urdf/temp_robot.urdf")
+    
+    # Default to the topoarm xacro
+    robot_description_file_default = os.path.join(
+        gng_vlut_system_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro"
+    )
     resource_root_dir_default = os.path.join(gng_vlut_system_share, "urdf")
     robot_mesh_root_dir_default = os.path.join(
         resource_root_dir_default, "meshes", "topoarm"
@@ -48,8 +20,14 @@ def generate_launch_description():
     
     params_file_arg = DeclareLaunchArgument(
         "params_file",
-        default_value=os.path.join(package_share, "config", "gng_safety_params.yaml"),
+        default_value=os.path.join(gng_vlut_system_share, "config", "gng_safety_params.yaml"),
         description="Path to the ROS 2 parameters file for the GNG nodes.",
+    )
+
+    robot_description_file_arg = DeclareLaunchArgument(
+        "robot_description_file",
+        default_value=robot_description_file_default,
+        description="URDF/Xacro file for the robot",
     )
 
     robot_description_topic = DeclareLaunchArgument(
@@ -87,19 +65,26 @@ def generate_launch_description():
         default_value="",
         description="Optional VLUT override; defaults come from params file",
     )
-
-    robot_description_file_resolved = _write_resolved_robot_description(
-        robot_description_file_default,
-        resource_root_dir_default,
-        "gng_safety_resolved_topoarm.urdf",
+    experiment_id = DeclareLaunchArgument(
+        "experiment_id",
+        default_value="default_experiment",
     )
-    robot_description_text = Path(robot_description_file_resolved).read_text(encoding="utf-8")
+    data_directory = DeclareLaunchArgument(
+        "data_directory",
+        default_value="gng_results",
+    )
+
+    # Use xacro to expand the robot description
+    robot_description_content = Command([
+        'xacro ', LaunchConfiguration('robot_description_file')
+    ])
+
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         output="screen",
         parameters=[{
-            "robot_description": robot_description_text,
+            "robot_description": robot_description_content,
         }],
     )
 
@@ -109,7 +94,7 @@ def generate_launch_description():
         name="robot_description_player",
         output="screen",
         parameters=[{
-            "robot_description_file": robot_description_file_resolved,
+            "robot_description_file": LaunchConfiguration("robot_description_file"),
             "resource_root_dir": resource_root_dir_default,
             "mesh_root_dir": robot_mesh_root_dir_default,
             "topic_name": LaunchConfiguration("robot_description_topic"),
@@ -169,7 +154,7 @@ def generate_launch_description():
         name="self_recognition_viz_node",
         output="screen",
         parameters=[{
-            "robot_urdf_path": robot_description_file_resolved,
+            "robot_urdf_path": LaunchConfiguration("robot_description_file"),
         }],
     )
 
@@ -192,12 +177,14 @@ def generate_launch_description():
                 "data_directory": LaunchConfiguration("data_directory"),
                 "gng_model_filename": "gng.bin",
                 "vlut_filename": "vlut.bin",
+                "robot_urdf_path": LaunchConfiguration("robot_description_file"),
             },
         ],
     )
 
     return LaunchDescription([
         params_file_arg,
+        robot_description_file_arg,
         robot_description_topic,
         udp_port,
         joint_state_source,
@@ -205,6 +192,8 @@ def generate_launch_description():
         enable_safety_monitor,
         gng_model_path,
         vlut_path,
+        experiment_id,
+        data_directory,
         robot_state_publisher,
         robot_description_player,
         topoarm_joint_state_player,

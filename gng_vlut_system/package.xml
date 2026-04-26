@@ -21,6 +21,7 @@
   <depend>fcl</depend>
   <depend>eigen</depend>
   <depend>ament_index_cpp</depend>
+  <depend>rclcpp_components</depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>

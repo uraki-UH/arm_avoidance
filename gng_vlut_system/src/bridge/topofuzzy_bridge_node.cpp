@@ -182,7 +182,8 @@ private:
             }
         }
 
-        const std::string data_dir = get_parameter("data_directory").as_string();
+        const std::string data_dir = robot_sim::common::resolveDataPath(
+            get_parameter("data_directory").as_string());
         const std::string exp_id = get_parameter("experiment_id").as_string();
         std::string filename = path;
 

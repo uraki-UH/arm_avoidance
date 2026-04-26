@@ -28,6 +28,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)
 find_package(tinyxml2_vendor REQUIRED)
@@ -75,6 +76,9 @@ include_directories(src/core_safety)
 add_subdirectory(src)
 
 # --- 3. Executables ---
-install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME}/)
-install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+# --- 3. Resource Installation ---
+install(DIRECTORY urdf config launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 ament_auto_package()

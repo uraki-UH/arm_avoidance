@@ -109,7 +109,8 @@ public:
 
     // 0. Declare and Get Parameters
     experiment_id_ = this->declare_parameter<std::string>("experiment_id", "standalone_train");
-    data_directory_ = this->declare_parameter<std::string>("data_directory", "gng_results");
+    data_directory_ = robot_sim::common::resolveDataPath(
+        this->declare_parameter<std::string>("data_directory", "gng_results"));
     robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path", "temp_robot.urdf");
     ground_z_threshold_ = this->declare_parameter<double>("ground_z_threshold", 0.0);
     leaf_link_name_ = this->declare_parameter<std::string>("leaf_link_name", "end_effector_link");
@@ -149,37 +150,27 @@ public:
     kinematics::KinematicChain arm;
     simulation::RobotModel *model = nullptr;
     try {
-        std::string full_urdf = robot_sim::common::resolvePath(robot_urdf_path_);
+        std::string resolved_path = robot_sim::common::resolvePath(robot_urdf_path_);
 
-        if (!std::filesystem::exists(full_urdf)) {
-             // Try common extensions if needed
-             if (std::filesystem::exists(robot_sim::common::resolvePath(robot_urdf_path_ + ".urdf"))) {
-                 full_urdf = robot_sim::common::resolvePath(robot_urdf_path_ + ".urdf");
-             } else if (std::filesystem::exists(robot_sim::common::resolvePath(robot_urdf_path_ + ".xacro"))) {
-                 full_urdf = robot_sim::common::resolvePath(robot_urdf_path_ + ".xacro");
-             }
+        if (resolved_path.empty() || !std::filesystem::exists(resolved_path) || std::filesystem::is_directory(resolved_path)) {
+            // Try common extensions as a fallback
+            std::string with_xacro = robot_sim::common::resolvePath(robot_urdf_path_ + ".xacro");
+            if (!with_xacro.empty() && std::filesystem::exists(with_xacro)) {
+                resolved_path = with_xacro;
+            } else {
+                std::string with_urdf = robot_sim::common::resolvePath(robot_urdf_path_ + ".urdf");
+                if (!with_urdf.empty() && std::filesystem::exists(with_urdf)) {
+                    resolved_path = with_urdf;
+                }
+            }
         }
 
-        if (!std::filesystem::exists(full_urdf) || std::filesystem::is_directory(full_urdf)) {
+        if (resolved_path.empty() || !std::filesystem::exists(resolved_path)) {
             throw std::runtime_error("Could not find robot model for: " + robot_urdf_path_);
         }
 
-        // Manage temporary URDF if using xacro
-        bool is_xacro = (full_urdf.find(".xacro") != std::string::npos);
-        std::string temp_urdf = (std::filesystem::temp_directory_path() / "temp_robot.urdf").string();
-        
-        if (is_xacro) {
-            RCLCPP_INFO(this->get_logger(), "[Robot] Xacro detected. Expanding macros...");
-            std::string cmd = "xacro " + full_urdf + " > " + temp_urdf;
-            RCLCPP_INFO(this->get_logger(), "[Robot] Running: %s", cmd.c_str());
-            if (std::system(cmd.c_str()) != 0) {
-                RCLCPP_ERROR(this->get_logger(), "[Error] Failed to run xacro command. Make sure xacro is installed.");
-                throw std::runtime_error("Xacro command failed.");
-            }
-            full_urdf = temp_urdf;
-        }
-
-    auto model_obj = simulation::loadRobotFromUrdf(full_urdf);
+        RCLCPP_INFO(this->get_logger(), "[Robot] Loading from resolved path: %s", resolved_path.c_str());
+        auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
     model = new simulation::RobotModel(model_obj);
     arm = simulation::createKinematicChainFromModel(*model, leaf_link_name_);
     arm.setBase(Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());

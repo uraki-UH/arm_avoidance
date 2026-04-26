@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_components/register_node_macro.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -15,14 +16,17 @@
 
 #include "common/resource_utils.hpp"
 
+namespace robot_sim {
+namespace self_recognition {
+
 class RobotDescriptionPlayer : public rclcpp::Node {
 public:
-  RobotDescriptionPlayer()
-  : Node("robot_description_player") {
-    const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_safety");
+  explicit RobotDescriptionPlayer(const rclcpp::NodeOptions & options)
+  : Node("robot_description_player", options) {
+    const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
 
     description_file_ = declare_parameter<std::string>(
-        "robot_description_file", pkg_share + "/temp_robot.urdf");
+        "robot_description_file", pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro");
     resource_root_dir_ = declare_parameter<std::string>("resource_root_dir", "");
     mesh_root_dir_ = declare_parameter<std::string>("mesh_root_dir", "");
     topic_name_ = declare_parameter<std::string>("topic_name", "robot_description");
@@ -75,8 +79,7 @@ private:
       out_text = oss.str();
     }
 
-    out_text = robot_sim::common::rewritePackageUrisToRoot(
-        out_text, std::filesystem::path(resource_root_dir_));
+    out_text = robot_sim::common::resolvePackageUris(out_text);
     return !out_text.empty();
   }
 
@@ -146,9 +149,7 @@ private:
   bool missing_warned_ = false;
 };
 
-int main(int argc, char **argv) {
-  rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<RobotDescriptionPlayer>());
-  rclcpp::shutdown();
-  return 0;
-}
+} // namespace self_recognition
+} // namespace robot_sim
+
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::self_recognition::RobotDescriptionPlayer)

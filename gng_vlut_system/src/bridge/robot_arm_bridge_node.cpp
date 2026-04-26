@@ -1,6 +1,7 @@
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_components/register_node_macro.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <builtin_interfaces/msg/time.hpp>
-#include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
 
@@ -21,6 +22,9 @@
 #include "common/resource_utils.hpp"
 #include "description/kinematic_adapter.hpp"
 #include "description/urdf_loader.hpp"
+
+namespace robot_sim {
+namespace bridge {
 
 namespace {
 
@@ -48,9 +52,12 @@ std::string escapeJson(const std::string& text) {
 
 class RobotArmBridgeNode : public rclcpp::Node {
 public:
-    RobotArmBridgeNode()
-    : Node("robot_arm_bridge_node") {
-        declare_parameter<std::string>("robot_description_file", "");
+    explicit RobotArmBridgeNode(const rclcpp::NodeOptions & options)
+    : Node("robot_arm_bridge_node", options) {
+        const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
+        const std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro";
+
+        declare_parameter<std::string>("robot_description_file", default_urdf);
         declare_parameter<std::string>("resource_root_dir", "");
         declare_parameter<std::string>("mesh_root_dir", "");
         declare_parameter<std::string>("end_effector_name", "");
@@ -59,13 +66,13 @@ public:
         declare_parameter<std::string>("frame_id", "world");
         declare_parameter<double>("publish_hz", 20.0);
 
-        const std::string robot_description_file = resolveRobotDescriptionFile(get_parameter("robot_description_file").as_string());
+        const std::string robot_description_file = get_parameter("robot_description_file").as_string();
         const std::string resource_root_dir = get_parameter("resource_root_dir").as_string();
         const std::string mesh_root_dir = get_parameter("mesh_root_dir").as_string();
         const std::string end_effector_name = get_parameter("end_effector_name").as_string();
 
         auto robot_model = simulation::loadRobotFromUrdf(
-            robot_description_file, resource_root_dir, mesh_root_dir);
+            robot_sim::common::resolvePath(robot_description_file), resource_root_dir, mesh_root_dir);
         chain_ = simulation::createKinematicChainFromModel(robot_model, end_effector_name);
 
         buildJointIndexMap();
@@ -90,20 +97,11 @@ public:
         publishCurrentState();
 
         RCLCPP_INFO(get_logger(),
-                    "robot_arm_bridge_node initialized: joint_state_topic=%s stream_topic=%s joints=%zu",
+                    "robot_arm_bridge_node initialized (Component): joint_state_topic=%s stream_topic=%s joints=%zu",
                     joint_state_topic_.c_str(), stream_topic_.c_str(), active_joint_names_.size());
     }
 
 private:
-    std::string resolveRobotDescriptionFile(const std::string& configured_path) const {
-        if (!configured_path.empty()) {
-            return robot_sim::common::resolvePath(configured_path);
-        }
-
-        const auto pkg_share = ament_index_cpp::get_package_share_directory("gng_safety");
-        return pkg_share + "/temp_robot.urdf";
-    }
-
     void buildJointIndexMap() {
         active_joint_names_.clear();
         joint_name_to_active_index_.clear();
@@ -236,9 +234,7 @@ private:
     double publish_hz_ = 20.0;
 };
 
-int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<RobotArmBridgeNode>());
-    rclcpp::shutdown();
-    return 0;
-}
+} // namespace bridge
+} // namespace robot_sim
+
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::RobotArmBridgeNode)

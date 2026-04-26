@@ -3,7 +3,7 @@
 
   <xacro:macro name="topoarm" params="prefix parent xyz rpy">
 
-    <xacro:property name="meshes_file_direction" value="package://topoarm_description/meshes/topoarm"/>
+    <xacro:property name="meshes_file_direction" value="package://gng_vlut_system/urdf/topoarm_description/meshes/topoarm"/>
 
     <joint name="${prefix}base_joint" type="fixed">
       <parent link="${parent}"/>

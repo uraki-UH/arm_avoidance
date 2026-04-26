@@ -47,12 +47,7 @@ std::filesystem::path resolveResourceRoot(const std::string &resource_root_dir,
   return {};
 }
 
-std::string materializeResolvedUrdf(const std::string &source_path,
-                                    const std::filesystem::path &resource_root) {
-  if (resource_root.empty()) {
-    return source_path;
-  }
-
+std::string materializeResolvedUrdf(const std::string &source_path) {
   std::ifstream ifs(source_path);
   if (!ifs) {
     throw std::runtime_error("Failed to open URDF file: " + source_path);
@@ -61,7 +56,7 @@ std::string materializeResolvedUrdf(const std::string &source_path,
   std::ostringstream oss;
   oss << ifs.rdbuf();
   const std::string rewritten =
-      robot_sim::common::rewritePackageUrisToRoot(oss.str(), resource_root);
+      robot_sim::common::resolvePackageUris(oss.str());
 
   static std::atomic<uint64_t> temp_counter{0};
   const uint64_t seq = temp_counter.fetch_add(1, std::memory_order_relaxed);
@@ -113,11 +108,7 @@ RobotModel loadRobotFromUrdf(const std::string &urdf_path,
     final_path = temp_urdf;
   }
 
-  const std::filesystem::path resource_root =
-      resolveResourceRoot(resource_root_dir, mesh_root_dir);
-  if (!resource_root.empty()) {
-    final_path = materializeResolvedUrdf(final_path, resource_root);
-  }
+  final_path = materializeResolvedUrdf(final_path);
 
   // 1. Parse the URDF file using urdfdom
   urdf::ModelInterfaceSharedPtr urdf_model = urdf::parseURDFFile(final_path);

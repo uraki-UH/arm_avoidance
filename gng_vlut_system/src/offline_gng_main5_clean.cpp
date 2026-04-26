@@ -49,7 +49,8 @@ public:
         GNG2 gng(arm.getTotalDOF(), 3, &arm);
         // gng.loadParameters("gng_offline.cfg"); // This should be handled by ROS params if needed
 
-        std::string data_dir = this->get_parameter("data_directory").as_string();
+        std::string data_dir = robot_sim::common::resolveDataPath(
+            this->get_parameter("data_directory").as_string());
         std::string exp_id = this->get_parameter("experiment_id").as_string();
         std::string input_suffix = this->get_parameter("phase4_input_suffix").as_string();
         std::string input_file = data_dir + "/" + exp_id + "/" + exp_id + input_suffix + ".bin";

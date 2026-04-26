@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_components/register_node_macro.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -18,9 +19,13 @@
 #include <mutex>
 #include <vector>
 
+namespace robot_sim {
+namespace safety {
+
 class SafetyMonitorNode : public rclcpp::Node {
 public:
-    SafetyMonitorNode() : Node("safety_monitor_node") {
+    explicit SafetyMonitorNode(const rclcpp::NodeOptions & options)
+    : Node("safety_monitor_node", options) {
         // Parameters
         this->declare_parameter("gng_model_path", "");
         this->declare_parameter("vlut_path", "");
@@ -30,6 +35,7 @@ public:
         this->declare_parameter("experiment_id", "default_run");
         this->declare_parameter("gng_model_filename", "");
         this->declare_parameter("vlut_filename", "gng_spatial_correlation.bin");
+        this->declare_parameter("robot_urdf_path", "");
         
         // LiDAR to World Transform Params (default: identity)
         this->declare_parameter("lidar_pos", std::vector<double>{0.0, 0.0, 1.0}); // x,y,z
@@ -88,7 +94,7 @@ public:
         
         danger_voxel_sub_ = this->create_subscription<std_msgs::msg::Int64MultiArray>(
             "/danger_voxels", 10, std::bind(&SafetyMonitorNode::dangerVoxelCallback, this, std::placeholders::_1));
-
+        
         joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
             "/joint_states", 10, std::bind(&SafetyMonitorNode::jointStateCallback, this, std::placeholders::_1));
 
@@ -97,7 +103,7 @@ public:
         viz_timer_ = this->create_wall_timer(
             std::chrono::milliseconds(100), std::bind(&SafetyMonitorNode::publishVisualization, this));
 
-        RCLCPP_INFO(this->get_logger(), "Safety Monitor initialized with %zu nodes. Listening to /points and /occupied_voxels.", 
+        RCLCPP_INFO(this->get_logger(), "Safety Monitor initialized (Component) with %zu nodes. Listening to /points and /occupied_voxels.", 
                     context_->gng->getNodes().size());
     }
 
@@ -106,9 +112,6 @@ private:
         if (!path.empty()) {
             if (std::filesystem::path(path).is_absolute()) {
                 return path;
-            }
-            if (path.rfind("gng_results/", 0) == 0 || path.find('/') != std::string::npos) {
-                return robot_sim::common::resolvePath(path);
             }
         }
 
@@ -126,7 +129,10 @@ private:
                 }
             }
         }
-        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + filename);
+        
+        // Resolve path relative to package root
+        std::string data_dir_abs = robot_sim::common::resolveDataPath(data_dir);
+        return (std::filesystem::path(data_dir_abs) / exp_id / filename).string();
     }
 
     void updateSafety(const std::vector<long>& occ_vids, const std::vector<long>& dan_vids) {
@@ -254,10 +260,7 @@ private:
     int dilation_;
 };
 
-int main(int argc, char** argv) {
-    rclcpp::init(argc, argv);
-    auto node = std::make_shared<SafetyMonitorNode>();
-    rclcpp::spin(node);
-    rclcpp::shutdown();
-    return 0;
-}
+} // namespace safety
+} // namespace robot_sim
+
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::safety::SafetyMonitorNode)

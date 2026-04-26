@@ -28,7 +28,8 @@ public:
 
     void run() {
         // 2. Determine Input File
-        std::string data_dir = this->get_parameter("data_directory").as_string();
+        std::string data_dir = robot_sim::common::resolveDataPath(
+            this->get_parameter("data_directory").as_string());
         std::string exp_id = this->get_parameter("experiment_id").as_string();
         std::string suffix = this->get_parameter("updater_target_suffix").as_string();
         std::string input_file = data_dir + "/" + exp_id + "/" + exp_id + suffix + ".bin";
