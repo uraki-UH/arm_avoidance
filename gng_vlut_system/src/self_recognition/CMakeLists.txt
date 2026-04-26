@@ -20,4 +20,7 @@ ament_target_dependencies(self_recognition_viz_node
     visualization_msgs
     Eigen3
 )
+target_include_directories(self_recognition_viz_node PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
 install(TARGETS self_recognition_viz_node DESTINATION lib/${PROJECT_NAME})

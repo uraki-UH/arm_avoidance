@@ -226,7 +226,7 @@ public:
   gng.setStatsLogPath((output_dir / (experiment_id_ + "_distance_stats.dat")).string());
 
   // Define standard file paths
-  std::string gng_file_path = (output_dir / (experiment_id_ + ".bin")).string();
+  std::string gng_file_path = (output_dir / "gng.bin").string();
 
   // 4. Training Steps
   if (vlut_only_) {
@@ -377,7 +377,7 @@ public:
 
   // Save VLUT
 #ifdef USE_FCL
-  std::string vlut_file_path = (output_dir_path / (experiment_id_ + "_vlut.bin")).string();
+  std::string vlut_file_path = (output_dir_path / "vlut.bin").string();
   std::ofstream ofs(vlut_file_path, std::ios::binary);
   if (ofs) {
       // --- Add Self-Describing Header ---

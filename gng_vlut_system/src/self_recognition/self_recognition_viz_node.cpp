@@ -8,7 +8,6 @@
 #include "description/kinematic_adapter.hpp"
 #include "core_safety/recognition/self_recognition_manager.hpp"
 #include "common/resource_utils.hpp"
-#include "common/config_manager.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <memory>

@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("gng_vlut_system")
+    pkg_share = get_package_share_directory("gng_safety")
     
     params_file_arg = DeclareLaunchArgument(
         "params_file",
@@ -34,7 +34,7 @@ def generate_launch_description():
     )
 
     trainer_node = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="offline_urdf_trainer",
         name="offline_urdf_trainer",
         output="screen",
@@ -42,9 +42,7 @@ def generate_launch_description():
             LaunchConfiguration("params_file"),
             # Pass through overrides
             {
-                "robot_urdf_path": LaunchConfiguration("robot_urdf_path"),
-                "experiment_id": LaunchConfiguration("experiment_id"),
-                "vlut_only": LaunchConfiguration("vlut_only"),
+                # No parameters here
             },
         ],
     )
