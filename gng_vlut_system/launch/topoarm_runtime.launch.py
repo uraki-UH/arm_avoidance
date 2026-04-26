@@ -37,12 +37,18 @@ def _write_resolved_robot_description(
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("gng_safety")
+    package_share = get_package_share_directory("gng_vlut_system")
 
-    robot_description_file_default = os.path.join(package_share, "temp_robot.urdf")
+    robot_description_file_default = os.path.join(package_share, "urdf/topoarm.urdf")
     resource_root_dir_default = os.path.join(package_share, "urdf", "topoarm_description")
     robot_mesh_root_dir_default = os.path.join(
         resource_root_dir_default, "meshes", "topoarm"
+    )
+    
+    params_file_arg = DeclareLaunchArgument(
+        "params_file",
+        default_value=os.path.join(package_share, "config", "gng_safety_params.yaml"),
+        description="Path to the ROS 2 parameters file for the GNG nodes.",
     )
 
     robot_description_topic = DeclareLaunchArgument(
@@ -73,17 +79,12 @@ def generate_launch_description():
     gng_model_path = DeclareLaunchArgument(
         "gng_model_path",
         default_value="",
-        description="Optional GNG model override; defaults come from gng_results/config.txt",
+        description="Optional GNG model override; defaults come from params file",
     )
     vlut_path = DeclareLaunchArgument(
         "vlut_path",
         default_value="",
-        description="Optional VLUT override; defaults come from gng_results/config.txt",
-    )
-    gng_results_config_path = DeclareLaunchArgument(
-        "gng_results_config_path",
-        default_value="gng_results/config.txt",
-        description="Path to the GNG results config file",
+        description="Optional VLUT override; defaults come from params file",
     )
 
     robot_description_file_resolved = _write_resolved_robot_description(
@@ -102,7 +103,7 @@ def generate_launch_description():
     )
 
     robot_description_player = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="robot_description_player",
         name="robot_description_player",
         output="screen",
@@ -117,7 +118,7 @@ def generate_launch_description():
     )
 
     topoarm_joint_state_player = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="topoarm_joint_state_player",
         name="topoarm_joint_state_player",
         output="screen",
@@ -134,7 +135,7 @@ def generate_launch_description():
     )
 
     robot_bridge_node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="robot_bridge_node",
         name="robot_bridge_node",
         output="screen",
@@ -149,7 +150,7 @@ def generate_launch_description():
     )
 
     joint_state_mux_node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="joint_state_mux_node",
         name="joint_state_mux_node",
         output="screen",
@@ -162,7 +163,7 @@ def generate_launch_description():
     )
 
     self_recognition_viz_node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="self_recognition_viz_node",
         name="self_recognition_viz_node",
         output="screen",
@@ -172,29 +173,31 @@ def generate_launch_description():
     )
 
     safety_monitor_node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="safety_monitor_node",
         name="safety_monitor_node",
         output="screen",
         condition=IfCondition(LaunchConfiguration("enable_safety_monitor")),
-        parameters=[{
-            "gng_results_config_path": LaunchConfiguration("gng_results_config_path"),
-            "gng_model_path": LaunchConfiguration("gng_model_path"),
-            "vlut_path": LaunchConfiguration("vlut_path"),
-            "lidar_pos": [0.0, 0.0, 1.0],
-            "lidar_rot": [0.0, 0.0, 0.0],
-            "robot_pos": [0.0, 0.0, 0.0],
-            "robot_rot": [0.0, 0.0, 0.0],
-        }],
+        parameters=[
+            LaunchConfiguration("params_file"),
+            {
+                "gng_model_path": LaunchConfiguration("gng_model_path"),
+                "vlut_path": LaunchConfiguration("vlut_path"),
+                "lidar_pos": [0.0, 0.0, 1.0],
+                "lidar_rot": [0.0, 0.0, 0.0],
+                "robot_pos": [0.0, 0.0, 0.0],
+                "robot_rot": [0.0, 0.0, 0.0],
+            },
+        ],
     )
 
     return LaunchDescription([
+        params_file_arg,
         robot_description_topic,
         udp_port,
         joint_state_source,
         frame_id,
         enable_safety_monitor,
-        gng_results_config_path,
         gng_model_path,
         vlut_path,
         robot_state_publisher,

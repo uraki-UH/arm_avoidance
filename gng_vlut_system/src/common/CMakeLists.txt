@@ -10,7 +10,6 @@ if(NOT _eigen_include_dirs)
 endif()
 
 add_library(common_lib STATIC
-    config_manager.cpp
     geometry_utils.cpp
 )
 

@@ -1,6 +1,5 @@
 #include "GrowingNeuralGas.hpp"
 #include "../analysis/iself_collision_checker.hpp"
-#include "common/config_manager.hpp"
 #include "common/resource_utils.hpp"
 #include <Eigen/Core>
 #include <algorithm>
@@ -1154,63 +1153,6 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
       add_node(wa, dummy_wc);
     }
   }
-}
-
-template <typename T_angle, typename T_coord>
-void GrowingNeuralGas<T_angle, T_coord>::loadParameters(
-    const std::string &filename) {
-  common::ConfigManager &cfg = common::ConfigManager::Instance();
-  if (!cfg.Load(filename)) {
-    std::cerr << "[GNG] Warning: Failed to load GNG parameters from "
-              << filename << ". Using defaults." << std::endl;
-    return;
-  }
-
-  params_.lambda = cfg.GetInt("lambda", params_.lambda);
-  params_.max_node_num = cfg.GetInt("max_node_num", params_.max_node_num);
-  params_.num_samples = cfg.GetInt("num_samples", params_.num_samples);
-  params_.max_iterations = cfg.GetInt("max_iterations", params_.max_iterations);
-  params_.refine_iterations =
-      cfg.GetInt("refine_iterations", params_.refine_iterations);
-  params_.coord_edge_iterations =
-      cfg.GetInt("coord_edge_iterations", params_.coord_edge_iterations);
-
-  params_.learn_rate_s1 =
-      (float)cfg.GetDouble("learn_rate_s1", params_.learn_rate_s1);
-  params_.learn_rate_s2 =
-      (float)cfg.GetDouble("learn_rate_s2", params_.learn_rate_s2);
-  params_.alpha = (float)cfg.GetDouble("alpha", params_.alpha);
-  params_.beta = (float)cfg.GetDouble("beta", params_.beta);
-  params_.max_edge_age = cfg.GetInt("max_edge_age", params_.max_edge_age);
-  params_.start_node_num = cfg.GetInt("start_node_num", params_.start_node_num);
-  params_.n_best_candidates =
-      cfg.GetInt("n_best_candidates", params_.n_best_candidates);
-  params_.ais_threshold =
-      (float)cfg.GetDouble("ais_threshold", params_.ais_threshold);
-
-  // Resize internal data structures if max_node_num changed
-  if (nodes.size() != (size_t)params_.max_node_num) {
-    std::cout << "[GNG] Resizing to " << params_.max_node_num << " nodes."
-              << std::endl;
-    edges_angle.resize(nodes.size());
-    edges_coord.resize(nodes.size());
-    for (int i = 0; i < (int)nodes.size(); ++i) {
-      edges_angle[i].clear();
-      edges_coord[i].clear();
-    }
-    edges_angle_per_node.assign(nodes.size(), std::vector<int>());
-    edges_coord_per_node.assign(nodes.size(), std::vector<int>());
-
-    // Reset addable indices
-    std::queue<int> empty_queue;
-    addable_node_indicies.swap(empty_queue);
-    for (int i = 0; i < (int)nodes.size(); ++i) {
-      if (nodes[i].id == -1)
-        addable_node_indicies.push(i);
-    }
-  }
-
-  std::cout << "[GNG] Parameters loaded from " << filename << std::endl;
 }
 
 template <typename T_angle, typename T_coord>

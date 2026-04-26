@@ -10,7 +10,6 @@
 #include "core_safety/analysis/safety_vlut_mapper.hpp"
 #include "core_safety/persistence/safety_system_loader.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
-#include "common/config_manager.hpp"
 #include "common/resource_utils.hpp"
 
 #include <Eigen/Geometry>
@@ -23,11 +22,14 @@ class SafetyMonitorNode : public rclcpp::Node {
 public:
     SafetyMonitorNode() : Node("safety_monitor_node") {
         // Parameters
-        this->declare_parameter("gng_results_config_path", "gng_results/config.txt");
         this->declare_parameter("gng_model_path", "");
         this->declare_parameter("vlut_path", "");
         this->declare_parameter("voxel_size", 0.02);
         this->declare_parameter("dilation_radius", 1);
+        this->declare_parameter("data_directory", "gng_results");
+        this->declare_parameter("experiment_id", "default_run");
+        this->declare_parameter("gng_model_filename", "");
+        this->declare_parameter("vlut_filename", "gng_spatial_correlation.bin");
         
         // LiDAR to World Transform Params (default: identity)
         this->declare_parameter("lidar_pos", std::vector<double>{0.0, 0.0, 1.0}); // x,y,z
@@ -37,7 +39,6 @@ public:
         this->declare_parameter("robot_pos", std::vector<double>{0.0, 0.0, 0.0});
         this->declare_parameter("robot_rot", std::vector<double>{0.0, 0.0, 0.0});
 
-        loadResultsConfigIfAvailable(this->get_parameter("gng_results_config_path").as_string());
         std::string gng_path = resolveResultPath(
             this->get_parameter("gng_model_path").as_string(),
             /*is_vlut=*/false);
@@ -101,52 +102,31 @@ public:
     }
 
 private:
-    void loadResultsConfigIfAvailable(const std::string& config_path) {
-        if (config_path.empty()) {
-            return;
-        }
-
-        const std::string resolved = robot_sim::common::resolvePath(config_path);
-        if (std::filesystem::exists(resolved)) {
-            common::ConfigManager::Instance().Load(resolved);
-        }
-    }
-
     std::string resolveResultPath(const std::string& path, bool is_vlut) const {
-        if (path.empty()) {
-            return resolveFromConfig(is_vlut);
+        if (!path.empty()) {
+            if (std::filesystem::path(path).is_absolute()) {
+                return path;
+            }
+            if (path.rfind("gng_results/", 0) == 0 || path.find('/') != std::string::npos) {
+                return robot_sim::common::resolvePath(path);
+            }
         }
 
-        if (std::filesystem::path(path).is_absolute()) {
-            return path;
+        const std::string data_dir = get_parameter("data_directory").as_string();
+        const std::string exp_id = get_parameter("experiment_id").as_string();
+        std::string filename = path;
+
+        if (filename.empty()) {
+            if (is_vlut) {
+                filename = get_parameter("vlut_filename").as_string();
+            } else {
+                filename = get_parameter("gng_model_filename").as_string();
+                if (filename.empty()) {
+                    filename = exp_id + ".bin";
+                }
+            }
         }
-
-        if (path.rfind("gng_results/", 0) == 0) {
-            return robot_sim::common::resolvePath(path);
-        }
-
-        if (path.find('/') != std::string::npos) {
-            return robot_sim::common::resolvePath(path);
-        }
-
-        const auto &cfg = common::ConfigManager::Instance();
-        const std::string data_dir = cfg.Get("data_directory", "gng_results");
-        const std::string exp_id = cfg.Get("experiment_id", "default_run");
-        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + path);
-    }
-
-    std::string resolveFromConfig(bool is_vlut) const {
-        const auto &cfg = common::ConfigManager::Instance();
-        const std::string data_dir = cfg.Get("data_directory", "gng_results");
-        const std::string exp_id = cfg.Get("experiment_id", "default_run");
-
-        if (is_vlut) {
-            const std::string vlut_name = cfg.Get("vlut_filename", "gng_spatial_correlation.bin");
-            return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + vlut_name);
-        }
-
-        const std::string model_name = cfg.Get("gng_model_filename", exp_id + ".bin");
-        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + model_name);
+        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + filename);
     }
 
     void updateSafety(const std::vector<long>& occ_vids, const std::vector<long>& dan_vids) {

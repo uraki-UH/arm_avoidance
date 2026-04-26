@@ -9,12 +9,11 @@
 #include <atomic>
 #include <set>
 
-#include "rclcpp/rclcpp.hpp" // New include for ROS 2 Node
+#include "rclcpp/rclcpp.hpp"
 
 #include "collision/composite_collision_checker.hpp"
 #include "collision/environment_collision_checker.hpp"
 #include "collision/geometric_self_collision_checker.hpp"
-// #include "common/config_manager.hpp" // Removed
 #include "common/resource_utils.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
 #include "kinematics/kinematic_chain.hpp"
@@ -105,7 +104,7 @@ static bool triBoxOverlap(const fcl::Vector3d& boxcenter, const fcl::Vector3d& b
 
 class OfflineUrdfTrainerNode : public rclcpp::Node {
 public:
-  OfflineUrdfTrainerNode(rclcpp::NodeOptions options) : rclcpp::Node("offline_urdf_trainer", options) {
+  OfflineUrdfTrainerNode(const rclcpp::NodeOptions& options) : rclcpp::Node("offline_urdf_trainer", options) {
     RCLCPP_INFO(this->get_logger(), "--- Standalone URDF-based Unified GNG/VLUT Pipeline ---");
 
     // 0. Declare and Get Parameters
@@ -209,7 +208,6 @@ public:
 
   // Initialize GNG parameters from ROS 2 parameters
   gng.setParams(gng_params_);
-  // gng.loadParameters("gng_offline.cfg"); // Removed
 
   gng.setSelfCollisionChecker(composite_checker.get());
   // Initialize Status Providers
@@ -228,7 +226,7 @@ public:
   gng.setStatsLogPath((output_dir / (experiment_id_ + "_distance_stats.dat")).string());
 
   // Define standard file paths
-  std::string gng_file_path = (output_dir / "gng.bin").string();
+  std::string gng_file_path = (output_dir / (experiment_id_ + ".bin")).string();
 
   // 4. Training Steps
   if (vlut_only_) {
@@ -258,171 +256,16 @@ public:
       gng.triggerBatchUpdates();
   }
 
-private:
-  // Member variables to store parameters
-  std::string experiment_id_;
-  std::string data_directory_;
-  std::string robot_urdf_path_;
-  double ground_z_threshold_;
-  std::string leaf_link_name_;
-  int gng_dimension_;
-  double spatial_map_resolution_;
-  double sensing_resolution_;
-  double arm_cache_resolution_;
-  double danger_threshold_;
-  bool vlut_only_ = false; // For --vlut-only flag
-
-  // GNG Parameters struct
-  GNG::GngParameters gng_params_;
-};
-
-int main(int argc, char **argv) {
-  std::cout << "--- Standalone URDF-based Unified GNG/VLUT Pipeline ---" << std::endl;
-
-  // 0. Load Configuration
-  std::string config_file = "config.txt";
-
-  // Check if first arg is a config file (.txt)
-  if (argc > 1 && std::string(argv[1]).find(".txt") != std::string::npos) {
-    config_file = argv[1];
-  }
-
-  auto &config = common::ConfigManager::Instance();
-  if (!config.Load(config_file)) {
-    std::cerr << "[Error] Failed to load config file: " << config_file << std::endl;
-    return -1;
-  }
-
-  bool vlut_only = false;
-  // Parse Overrides
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "--urdf" && i + 1 < argc) {
-      config.Set("robot_urdf_path", argv[++i]);
-    } else if (arg == "--id" && i + 1 < argc) {
-      config.Set("experiment_id", argv[++i]);
-    } else if (arg == "--res" && i + 1 < argc) {
-      config.Set("spatial_map_resolution", argv[++i]);
-    } else if (arg == "--leaf" && i + 1 < argc) {
-      config.Set("leaf_link_name", argv[++i]);
-    } else if (arg == "--vlut-only") {
-      vlut_only = true;
-    }
-  }
-
-    // 1. Robot Setup
-    kinematics::KinematicChain arm;
-    simulation::RobotModel *model = nullptr;
-    try {
-        std::string urdf_arg = config.Get("robot_urdf_path", "custom_robot");
-        std::string full_urdf = robot_sim::common::resolvePath(urdf_arg);
-
-        if (!std::filesystem::exists(full_urdf)) {
-             // Try common extensions if needed
-             if (std::filesystem::exists(robot_sim::common::resolvePath(urdf_arg + ".urdf"))) {
-                 full_urdf = robot_sim::common::resolvePath(urdf_arg + ".urdf");
-             } else if (std::filesystem::exists(robot_sim::common::resolvePath(urdf_arg + ".xacro"))) {
-                 full_urdf = robot_sim::common::resolvePath(urdf_arg + ".xacro");
-             }
-        }
-
-        if (!std::filesystem::exists(full_urdf) || std::filesystem::is_directory(full_urdf)) {
-            throw std::runtime_error("Could not find robot model for: " + urdf_arg);
-        }
-
-        // Manage temporary URDF if using xacro
-        bool is_xacro = (full_urdf.find(".xacro") != std::string::npos);
-        std::string temp_urdf = (std::filesystem::temp_directory_path() / "temp_robot.urdf").string();
-        
-        if (is_xacro) {
-            std::cout << "[Robot] Xacro detected. Expanding macros..." << std::endl;
-            std::string cmd = "xacro " + full_urdf + " > " + temp_urdf;
-            std::cout << "[Robot] Running: " << cmd << std::endl;
-            if (std::system(cmd.c_str()) != 0) {
-                std::cerr << "[Error] Failed to run xacro command. Make sure xacro is installed." << std::endl;
-                return -1;
-            }
-            full_urdf = temp_urdf;
-        }
-
-    std::string leaf_link = config.Get("leaf_link_name", "link_7");
-    
-    auto model_obj = simulation::loadRobotFromUrdf(full_urdf);
-    model = new simulation::RobotModel(model_obj);
-    arm = simulation::createKinematicChainFromModel(*model, leaf_link);
-    arm.setBase(Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
-    std::cout << "[Robot] Loaded: " << full_urdf << ", DOF: " << arm.getTotalDOF() << std::endl;
-  } catch (const std::exception &e) {
-    std::cerr << "[Error] Robot fail: " << e.what() << std::endl; return 1;
-  }
-
-  // 2. Setup Checkers
-  auto self_checker = std::make_shared<simulation::GeometricSelfCollisionChecker>(*model, arm);
-  auto env_checker = std::make_shared<simulation::EnvironmentCollisionChecker>();
-  double ground_z = config.GetDouble("ground_z_threshold", 0.0);
-  env_checker->addBoxObstacle("ground", Eigen::Vector3d(0, 0, ground_z - 0.05),
-                              Eigen::Matrix3d::Identity(), Eigen::Vector3d(10.0, 10.0, 0.05));
-#ifdef USE_FCL
-  self_checker->setStrictMode(true);
-#endif
-
-  auto composite_checker = std::make_shared<simulation::CompositeCollisionChecker>();
-  composite_checker->setSelfCollisionChecker(self_checker);
-  composite_checker->setEnvironmentCollisionChecker(env_checker);
-  
-  // 3. GNG Setup
-  int gng_dim = config.GetInt("gng_dimension", arm.getTotalDOF());
-  GNG2 gng(gng_dim, 3, &arm);
-
-  initGngParameters(gng);
-  gng.setSelfCollisionChecker(composite_checker.get());
-  initStatusProviders(gng, composite_checker.get(), &arm);
-
-  std::string exp_id = config.Get("experiment_id", "standalone_train");
-  std::filesystem::path output_dir = std::filesystem::path("gng_results/") / exp_id;
-
-  gng.setStatsLogPath((output_dir / (exp_id + "_distance_stats.dat")).string());
-
-  // Define standard file paths
-  std::string gng_file_path = (output_dir / "gng.bin").string();
-
-  // 4. Training Steps
-  if (vlut_only) {
-      std::cout << "[Step 0] Skipping GNG training. Loading existing map: " << gng_file_path << std::endl;
-      if (!gng.load(gng_file_path)) {
-          std::cerr << "[Error] Failed to load GNG map for VLUT reconstruction." << std::endl;
-          return -1;
-      }
-  } else {
-      std::cout << "[Step 1] Initial Exploration..." << std::endl;
-      gng.setCollisionAware(false); gng.gngTrainOnTheFly(gng.getParams().max_iterations);
-      
-      std::cout << "[Step 2] Intermediate Filter..." << std::endl;
-      gng.strictFilter();
-      
-      std::cout << "[Step 3] Refinement (Self-Collision Aware)..." << std::endl;
-      gng.setCollisionAware(true); gng.gngTrainOnTheFly(gng.getParams().refine_iterations);
-      
-      std::cout << "[Step 4] Final Verification..." << std::endl;
-      gng.strictFilter(); gng.refresh_coord_weights();
-      
-      std::cout << "[Step 5] Coordinate Space Edge construction..." << std::endl;
-      gng.trainCoordEdgesOnTheFly(gng.getParams().coord_edge_iterations);
-
-      // Metadata update for finale
-      gng.triggerBatchUpdates();
-  }
-
   // 5. High-Fidelity Voxelization (VLUT Generation)
 #ifdef USE_FCL
   struct VRel { long vid; int nid; int lid; };
   std::vector<VRel> v_rels;
-  double res = config.GetDouble("spatial_map_resolution", 0.02);
+  double res = spatial_map_resolution_;
   fcl::Vector3d box_half_size(res * 0.5, res * 0.5, res * 0.5);
   auto active_ids = gng.getActiveIndices();
   int processed = 0;
 
-  std::cout << "[Step 6] Pre-voxelizing Robot Links..." << std::endl;
+  RCLCPP_INFO(this->get_logger(), "[Step 6] Pre-voxelizing Robot Links...");
   
   // Cache for local voxel centers of each link
   struct LocalVoxelCloud { std::vector<fcl::Vector3d> centers; };
@@ -431,8 +274,6 @@ int main(int argc, char **argv) {
   const auto& objects = self_checker->getCollisionObjects();
   for (size_t i = 0; i < objects.size(); ++i) {
       if (objects[i].type != collision::SelfCollisionChecker::ShapeType::MESH) {
-          // Add basic support for primitives if needed, but primary focus is MESH
-          // For now, we skip non-mesh links in VLUT to focus on the main body
           continue;
       }
       auto fcl_obj = self_checker->getFCLObject(i);
@@ -468,11 +309,11 @@ int main(int argc, char **argv) {
               }
           }
       }
-      std::cout << "  Link [" << i << "] (" << objects[i].name << ") voxelized: " 
-                << cloud.centers.size() << " voxels. Local Z-range: [" << mesh_min.z() << ", " << mesh_max.z() << "]" << std::endl;
+      RCLCPP_INFO(this->get_logger(), "  Link [%zu] (%s) voxelized: %zu voxels. Local Z-range: [%f, %f]",
+                  i, objects[i].name.c_str(), cloud.centers.size(), mesh_min.z(), mesh_max.z());
   }
 
-  std::cout << "[Step 6] Building Spatial Index (Voxel Cloud Transformation)..." << std::endl;
+  RCLCPP_INFO(this->get_logger(), "[Step 6] Building Spatial Index (Voxel Cloud Transformation)...");
   v_rels.reserve(active_ids.size() * 500); // Pre-reserve to avoid reallocations
   std::unordered_set<long> seen; 
 
@@ -506,10 +347,10 @@ int main(int argc, char **argv) {
       }
       processed++;
       if (processed % 100 == 0 || processed == (int)active_ids.size()) {
-          std::cout << "  Analyzed Node " << processed << "/" << active_ids.size() << " (" << v_rels.size() << " rels)\r" << std::flush;
+          RCLCPP_INFO(this->get_logger(), "  Analyzed Node %d/%zu (%zu rels)", processed, active_ids.size(), v_rels.size());
       }
   }
-  std::cout << std::endl;
+  RCLCPP_INFO(this->get_logger(), "");
 
   // Calculate Relative Margin (10% of the detected range, min 2cm)
   fcl::Vector3d range = actual_max - actual_min;
@@ -520,19 +361,15 @@ int main(int argc, char **argv) {
   actual_max += margin;
   
   Eigen::Vector3i final_dims = ((actual_max - actual_min) / res).array().ceil().cast<int>().cwiseMax(1);
-  RCLCPP_INFO(this->get_logger(), "[Step 6] Final Voxel Grid: %s (%ld total voxels)", 
-            final_dims.transpose().eval().c_str(), (long)final_dims.x() * final_dims.y() * final_dims.z());
-  RCLCPP_INFO(this->get_logger(), "[Step 6] Workspace Bounds: Min(%s), Max(%s)", 
-            actual_min.transpose().eval().c_str(), actual_max.transpose().eval().c_str());
+  RCLCPP_INFO(this->get_logger(), "[Step 6] Final Voxel Grid: [%ld, %ld, %ld] (%ld total voxels)", 
+            (long)final_dims.x(), (long)final_dims.y(), (long)final_dims.z(), (long)final_dims.x() * final_dims.y() * final_dims.z());
+  RCLCPP_INFO(this->get_logger(), "[Step 6] Workspace Bounds: Min(%f, %f, %f), Max(%f, %f, %f)", 
+            actual_min.x(), actual_min.y(), actual_min.z(), actual_max.x(), actual_max.y(), actual_max.z());
 #endif
 
   // 6. Save Everything
   std::filesystem::path output_dir_path = std::filesystem::path(data_directory_) / experiment_id_;
   std::filesystem::create_directories(output_dir_path);
-
-  // Backup config (now params are from ROS, so save the YAML file used)
-  // try { std::filesystem::copy_file(config_file, output_dir_path / "config.txt", std::filesystem::copy_options::overwrite_existing); } catch(...) {}
-  // Instead, we should save the parameters used to a YAML file. This will be handled by the launch file.
 
   // Save GNG Map
   if (gng.save(gng_file_path)) { RCLCPP_INFO(this->get_logger(), "[Success] GNG saved to: %s", gng_file_path.c_str()); }
@@ -540,11 +377,10 @@ int main(int argc, char **argv) {
 
   // Save VLUT
 #ifdef USE_FCL
-  std::string vlut_file_path = (output_dir_path / "vlut.bin").string();
+  std::string vlut_file_path = (output_dir_path / (experiment_id_ + "_vlut.bin")).string();
   std::ofstream ofs(vlut_file_path, std::ios::binary);
   if (ofs) {
       // --- Add Self-Describing Header ---
-      // Convert a 4-character string to a 32-bit binary identifier (e.g., "VLUT")
       auto pack4CharsToUint32 = [](const char* s) {
           return (uint32_t)(s[0] << 24 | s[1] << 16 | s[2] << 8 | s[3]);
       };
@@ -575,53 +411,45 @@ int main(int argc, char **argv) {
 #endif
 
   delete model;
-  // return 0; // No return in method
 }
 
-  // 6. Save Everything
-  std::filesystem::create_directories(output_dir);
+private:
+  // Member variables to store parameters
+  std::string experiment_id_;
+  std::string data_directory_;
+  std::string robot_urdf_path_;
+  double ground_z_threshold_;
+  std::string leaf_link_name_;
+  int gng_dimension_;
+  double spatial_map_resolution_;
+  double sensing_resolution_;
+  double arm_cache_resolution_;
+  double danger_threshold_;
+  bool vlut_only_ = false;
 
-  // Backup config
-  try { std::filesystem::copy_file(config_file, output_dir / "config.txt", std::filesystem::copy_options::overwrite_existing); } catch(...) {}
+  // GNG Parameters struct
+  GNG::GngParameters gng_params_;
+};
 
-  // Save GNG Map
-  if (gng.save(gng_file_path)) { std::cout << "[Success] GNG saved to: " << gng_file_path << std::endl; }
+int main(int argc, char **argv) {
+  rclcpp::init(argc, argv);
+  
+  // Pass command-line arguments to the node options
+  rclcpp::NodeOptions options;
+  options.allow_undeclared_parameters(true);
+  options.automatically_declare_parameters_from_overrides(true);
 
-  // Save VLUT
-#ifdef USE_FCL
-  std::string vlut_file_path = (output_dir / "vlut.bin").string();
-  std::ofstream ofs(vlut_file_path, std::ios::binary);
-  if (ofs) {
-      // --- Add Self-Describing Header ---
-      // Convert a 4-character string to a 32-bit binary identifier (e.g., "VLUT")
-      auto pack4CharsToUint32 = [](const char* s) {
-          return (uint32_t)(s[0] << 24 | s[1] << 16 | s[2] << 8 | s[3]);
-      };
-      uint32_t file_id = pack4CharsToUint32("VLUT");
-      uint32_t version = 2;        // Updated version to include bounds
-      float save_res = (float)res;
-      float min_b[3] = { (float)actual_min.x(), (float)actual_min.y(), (float)actual_min.z() };
-      float max_b[3] = { (float)actual_max.x(), (float)actual_max.y(), (float)actual_max.z() };
-      
-      ofs.write((char *)&file_id, sizeof(uint32_t));
-      ofs.write((char *)&version, sizeof(uint32_t));
-      ofs.write((char *)&save_res, sizeof(float));
-      ofs.write((char *)min_b, sizeof(float) * 3);
-      ofs.write((char *)max_b, sizeof(float) * 3);
+  auto node = std::make_shared<OfflineUrdfTrainerNode>(options);
 
-      std::sort(v_rels.begin(), v_rels.end(), [](const auto &a, const auto &b){
-          return (a.vid != b.vid) ? a.vid < b.vid : a.nid < b.nid;
-      });
-      size_t total = v_rels.size(); ofs.write((char *)&total, sizeof(size_t));
-      float d0 = 0.0f;
-      for (const auto &rel : v_rels) {
-          ofs.write((char *)&rel.vid, sizeof(long)); ofs.write((char *)&rel.nid, sizeof(int));
-          ofs.write((char *)&d0, sizeof(float)); ofs.write((char *)&rel.lid, sizeof(int));
-      }
-      std::cout << "[Success] VLUT saved to: " << vlut_file_path << " (Res: " << res << "m)" << std::endl;
+  try {
+    node->run_training_pipeline();
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(node->get_logger(), "Caught exception during training pipeline: %s", e.what());
+    rclcpp::shutdown();
+    return -1;
   }
-#endif
-
-  delete model;
+  
+  RCLCPP_INFO(node->get_logger(), "Training pipeline finished successfully.");
+  rclcpp::shutdown();
   return 0;
 }

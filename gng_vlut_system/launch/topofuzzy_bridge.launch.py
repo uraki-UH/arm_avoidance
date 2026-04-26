@@ -1,3 +1,6 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -5,20 +8,22 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    gng_results_config_path = DeclareLaunchArgument(
-        "gng_results_config_path",
-        default_value="gng_results/config.txt",
-        description="Path to the GNG results config file",
+    pkg_share = get_package_share_directory("gng_vlut_system")
+    
+    params_file_arg = DeclareLaunchArgument(
+        "params_file",
+        default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
+        description="Path to the ROS 2 parameters file for the GNG nodes.",
     )
     gng_model_path = DeclareLaunchArgument(
         "gng_model_path",
         default_value="",
-        description="Optional GNG model override; defaults come from gng_results/config.txt",
+        description="Optional GNG model override; defaults come from the params file",
     )
     vlut_path = DeclareLaunchArgument(
         "vlut_path",
         default_value="",
-        description="Optional VLUT override; defaults come from gng_results/config.txt",
+        description="Optional VLUT override; defaults come from the params file",
     )
     publish_hz = DeclareLaunchArgument(
         "publish_hz",
@@ -47,24 +52,26 @@ def generate_launch_description():
     )
 
     bridge_node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="topofuzzy_bridge_node",
         name="topofuzzy_bridge_node",
         output="screen",
-        parameters=[{
-            "gng_results_config_path": LaunchConfiguration("gng_results_config_path"),
-            "gng_model_path": LaunchConfiguration("gng_model_path"),
-            "vlut_path": LaunchConfiguration("vlut_path"),
-            "publish_hz": LaunchConfiguration("publish_hz"),
-            "edge_mode": LaunchConfiguration("edge_mode"),
-            "frame_id": LaunchConfiguration("frame_id"),
-            "occupied_voxels_topic": LaunchConfiguration("occupied_voxels_topic"),
-            "danger_voxels_topic": LaunchConfiguration("danger_voxels_topic"),
-        }],
+        parameters=[
+            LaunchConfiguration("params_file"),
+            {
+                "gng_model_path": LaunchConfiguration("gng_model_path"),
+                "vlut_path": LaunchConfiguration("vlut_path"),
+                "publish_hz": LaunchConfiguration("publish_hz"),
+                "edge_mode": LaunchConfiguration("edge_mode"),
+                "frame_id": LaunchConfiguration("frame_id"),
+                "occupied_voxels_topic": LaunchConfiguration("occupied_voxels_topic"),
+                "danger_voxels_topic": LaunchConfiguration("danger_voxels_topic"),
+            },
+        ],
     )
 
     return LaunchDescription([
-        gng_results_config_path,
+        params_file_arg,
         gng_model_path,
         vlut_path,
         publish_hz,

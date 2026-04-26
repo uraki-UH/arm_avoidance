@@ -10,7 +10,6 @@
 #include <geometry_msgs/msg/point32.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 
-#include "common/config_manager.hpp"
 #include "common/resource_utils.hpp"
 #include "core_safety/analysis/safety_vlut_mapper.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
@@ -117,7 +116,6 @@ class TopoFuzzyBridgeNode : public rclcpp::Node {
 public:
     TopoFuzzyBridgeNode()
     : Node("topofuzzy_bridge_node") {
-        declare_parameter("gng_results_config_path", "gng_results/config.txt");
         declare_parameter("gng_model_path", "");
         declare_parameter("vlut_path", "");
         declare_parameter("publish_hz", 5.0);
@@ -125,8 +123,11 @@ public:
         declare_parameter("frame_id", "world");
         declare_parameter("occupied_voxels_topic", "/occupied_voxels");
         declare_parameter("danger_voxels_topic", "/danger_voxels");
+        declare_parameter("data_directory", "gng_results");
+        declare_parameter("experiment_id", "default_run");
+        declare_parameter("gng_model_filename", "");
+        declare_parameter("vlut_filename", "gng_spatial_correlation.bin");
 
-        loadResultsConfigIfAvailable(get_parameter("gng_results_config_path").as_string());
         const std::string gng_path = resolveResultPath(get_parameter("gng_model_path").as_string(), false);
         const std::string vlut_path = resolveResultPath(get_parameter("vlut_path").as_string(), true);
 
@@ -171,48 +172,31 @@ public:
     }
 
 private:
-    void loadResultsConfigIfAvailable(const std::string& config_path) {
-        if (config_path.empty()) {
-            return;
-        }
-
-        const std::string resolved = robot_sim::common::resolvePath(config_path);
-        if (std::filesystem::exists(resolved)) {
-            common::ConfigManager::Instance().Load(resolved);
-        }
-    }
-
     std::string resolveResultPath(const std::string& path, bool is_vlut) const {
-        if (path.empty()) {
-            return resolveFromConfig(is_vlut);
+        if (!path.empty()) {
+            if (std::filesystem::path(path).is_absolute()) {
+                return path;
+            }
+            if (path.rfind("gng_results/", 0) == 0 || path.find('/') != std::string::npos) {
+                return robot_sim::common::resolvePath(path);
+            }
         }
 
-        if (std::filesystem::path(path).is_absolute()) {
-            return path;
+        const std::string data_dir = get_parameter("data_directory").as_string();
+        const std::string exp_id = get_parameter("experiment_id").as_string();
+        std::string filename = path;
+
+        if (filename.empty()) {
+            if (is_vlut) {
+                filename = get_parameter("vlut_filename").as_string();
+            } else {
+                filename = get_parameter("gng_model_filename").as_string();
+                if (filename.empty()) {
+                    filename = exp_id + ".bin";
+                }
+            }
         }
-
-        if (path.rfind("gng_results/", 0) == 0 || path.find('/') != std::string::npos) {
-            return robot_sim::common::resolvePath(path);
-        }
-
-        const auto& cfg = common::ConfigManager::Instance();
-        const std::string data_dir = cfg.Get("data_directory", "gng_results");
-        const std::string exp_id = cfg.Get("experiment_id", "default_run");
-        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + path);
-    }
-
-    std::string resolveFromConfig(bool is_vlut) const {
-        const auto& cfg = common::ConfigManager::Instance();
-        const std::string data_dir = cfg.Get("data_directory", "gng_results");
-        const std::string exp_id = cfg.Get("experiment_id", "default_run");
-
-        if (is_vlut) {
-            const std::string vlut_name = cfg.Get("vlut_filename", "gng_spatial_correlation.bin");
-            return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + vlut_name);
-        }
-
-        const std::string model_name = cfg.Get("gng_model_filename", exp_id + ".bin");
-        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + model_name);
+        return robot_sim::common::resolvePath(data_dir + "/" + exp_id + "/" + filename);
     }
 
     void occupiedVoxelCallback(const std_msgs::msg::Int64MultiArray::SharedPtr msg) {
