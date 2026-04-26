@@ -19,7 +19,7 @@ public:
         this->declare_parameter("robot_port", 8888);
         this->declare_parameter("listen_port", 8886);
         this->declare_parameter("update_hz", 50.0);
-        this->declare_parameter("joint_state_topic", "/joint_states_real");
+        this->declare_parameter("joint_state_topic", "/joint_states");
 
         std::string robot_ip = this->get_parameter("robot_ip").as_string();
         int robot_port = this->get_parameter("robot_port").as_int();

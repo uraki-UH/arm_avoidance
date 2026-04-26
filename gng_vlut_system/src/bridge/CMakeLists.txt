@@ -8,10 +8,10 @@ add_executable(joint_state_mux_node joint_state_mux_node.cpp)
 target_link_libraries(joint_state_mux_node core_safety)
 ament_target_dependencies(joint_state_mux_node rclcpp sensor_msgs)
 
-# 3. TopoArm Joint State Player
-add_executable(topoarm_joint_state_player topoarm_joint_state_player.cpp)
-target_link_libraries(topoarm_joint_state_player core_safety)
-ament_target_dependencies(topoarm_joint_state_player rclcpp sensor_msgs)
+# 3. TopoArm UDP Bridge
+add_executable(topoarm_udp_bridge topoarm_udp_bridge.cpp)
+target_link_libraries(topoarm_udp_bridge core_safety)
+ament_target_dependencies(topoarm_udp_bridge rclcpp sensor_msgs)
 
 # 4. ToPoFuzzy Bridge Node
 add_executable(topofuzzy_bridge_node topofuzzy_bridge_node.cpp)
@@ -38,7 +38,7 @@ target_link_libraries(robot_arm_bridge_node robot_arm_bridge_node_component)
 install(TARGETS
     robot_bridge_node
     joint_state_mux_node
-    topoarm_joint_state_player
+    topoarm_udp_bridge
     topofuzzy_bridge_node
     robot_arm_bridge_node
     DESTINATION lib/${PROJECT_NAME}
