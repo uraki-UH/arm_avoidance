@@ -17,6 +17,10 @@ if(BUILD_WITH_ROS2)
   # --- Offline Training Tools ---
   # 1. Unified URDF Trainer (GNG + VLUT)
   add_executable(offline_urdf_trainer offline_urdf_trainer.cpp)
+  target_compile_options(offline_urdf_trainer PRIVATE
+    $<$<CONFIG:Release>:-O3 -DNDEBUG>
+    $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>
+  )
   target_link_libraries(offline_urdf_trainer
       core_safety
       collision_lib

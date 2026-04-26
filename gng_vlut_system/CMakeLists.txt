@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(gng_safety)
 
+# Set default build type to Release for optimized performance
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 # C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
