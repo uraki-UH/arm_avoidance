@@ -61,7 +61,6 @@ ros2 run gng_safety offline_urdf_trainer --id my_robot_v1 --vlut-only --res 0.03
 
 - `gng.bin`: 学習済みのGNGマップ。
 - `vlut.bin`: 生成されたVLUT (Voxel Look-Up Table)。
-- `config.txt`: 学習時に使用された設定のバックアップ。
 
 ### 補助ツール (任意)
 

@@ -39,8 +39,9 @@ def _write_resolved_robot_description(
 def generate_launch_description():
     package_share = get_package_share_directory("gng_vlut_system")
 
-    robot_description_file_default = os.path.join(package_share, "urdf/topoarm.urdf")
-    resource_root_dir_default = os.path.join(package_share, "urdf", "topoarm_description")
+    gng_vlut_system_share = get_package_share_directory("gng_vlut_system")
+    robot_description_file_default = os.path.join(gng_vlut_system_share, "urdf/temp_robot.urdf")
+    resource_root_dir_default = os.path.join(gng_vlut_system_share, "urdf")
     robot_mesh_root_dir_default = os.path.join(
         resource_root_dir_default, "meshes", "topoarm"
     )
@@ -103,7 +104,7 @@ def generate_launch_description():
     )
 
     robot_description_player = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="robot_description_player",
         name="robot_description_player",
         output="screen",
@@ -118,7 +119,7 @@ def generate_launch_description():
     )
 
     topoarm_joint_state_player = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="topoarm_joint_state_player",
         name="topoarm_joint_state_player",
         output="screen",
@@ -135,7 +136,7 @@ def generate_launch_description():
     )
 
     robot_bridge_node = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="robot_bridge_node",
         name="robot_bridge_node",
         output="screen",
@@ -150,7 +151,7 @@ def generate_launch_description():
     )
 
     joint_state_mux_node = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="joint_state_mux_node",
         name="joint_state_mux_node",
         output="screen",
@@ -163,7 +164,7 @@ def generate_launch_description():
     )
 
     self_recognition_viz_node = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="self_recognition_viz_node",
         name="self_recognition_viz_node",
         output="screen",
@@ -173,7 +174,7 @@ def generate_launch_description():
     )
 
     safety_monitor_node = Node(
-        package="gng_vlut_system",
+        package="gng_safety",
         executable="safety_monitor_node",
         name="safety_monitor_node",
         output="screen",
@@ -187,6 +188,10 @@ def generate_launch_description():
                 "lidar_rot": [0.0, 0.0, 0.0],
                 "robot_pos": [0.0, 0.0, 0.0],
                 "robot_rot": [0.0, 0.0, 0.0],
+                "experiment_id": LaunchConfiguration("experiment_id"),
+                "data_directory": LaunchConfiguration("data_directory"),
+                "gng_model_filename": "gng.bin",
+                "vlut_filename": "vlut.bin",
             },
         ],
     )

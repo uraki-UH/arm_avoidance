@@ -5,12 +5,12 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("gng_safety")
+    package_share = get_package_share_directory("gng_vlut_system")
 
     rviz_config_default = os.path.join(package_share, "config", "rviz", "gng_safety.rviz")
 
@@ -54,20 +54,25 @@ def generate_launch_description():
         default_value="",
         description="Optional VLUT override; defaults come from gng_results/config.txt",
     )
-    gng_results_config_path = DeclareLaunchArgument(
-        "gng_results_config_path",
-        default_value="gng_results/config.txt",
-        description="Path to the GNG results config file",
-    )
     rviz_config = DeclareLaunchArgument(
         "rviz_config",
         default_value=rviz_config_default,
         description="RViz config file",
     )
+    experiment_id = DeclareLaunchArgument(
+        "experiment_id",
+        default_value="standalone_train",
+        description="ID of the experiment to load GNG/VLUT data from.",
+    )
+    data_directory = DeclareLaunchArgument(
+        "data_directory",
+        default_value="gng_results",
+        description="Root directory where GNG/VLUT data is stored.",
+    )
 
     runtime = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(get_package_share_directory("gng_safety"), "launch", "topoarm_runtime.launch.py")
+            os.path.join(get_package_share_directory("gng_vlut_system"), "launch", "topoarm_runtime.launch.py")
         ),
         launch_arguments={
             "frame_id": LaunchConfiguration("frame_id"),
@@ -75,9 +80,10 @@ def generate_launch_description():
             "robot_description_topic": LaunchConfiguration("robot_description_topic"),
             "udp_port": LaunchConfiguration("udp_port"),
             "enable_safety_monitor": LaunchConfiguration("enable_safety_monitor"),
-            "gng_results_config_path": LaunchConfiguration("gng_results_config_path"),
             "gng_model_path": LaunchConfiguration("gng_model_path"),
             "vlut_path": LaunchConfiguration("vlut_path"),
+            "experiment_id": LaunchConfiguration("experiment_id"),
+            "data_directory": LaunchConfiguration("data_directory"),
         }.items(),
     )
 
@@ -85,7 +91,7 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         arguments=["-d", LaunchConfiguration("rviz_config"), "-f", LaunchConfiguration("frame_id")],
-        output="screen",
+        output="log",
         condition=IfCondition(LaunchConfiguration("use_rviz")),
     )
 
@@ -96,10 +102,11 @@ def generate_launch_description():
         frame_id,
         use_rviz,
         enable_safety_monitor,
-        gng_results_config_path,
         gng_model_path,
         vlut_path,
         rviz_config,
+        experiment_id, # 追加
+        data_directory, # 追加
         runtime,
         rviz2,
     ])

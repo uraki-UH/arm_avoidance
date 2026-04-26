@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(gng_safety)
+project(gng_vlut_system)
 
 # Set default build type to Release for optimized performance
 if(NOT CMAKE_BUILD_TYPE)
@@ -75,7 +75,6 @@ include_directories(src/core_safety)
 add_subdirectory(src)
 
 # --- 3. Executables ---
-install(FILES temp_robot.urdf DESTINATION share/${PROJECT_NAME})
-install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME}/)
 install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 ament_auto_package()

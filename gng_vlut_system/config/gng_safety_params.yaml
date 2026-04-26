@@ -3,6 +3,8 @@ gng_safety:
     # Experiment Settings
     experiment_id: "topoarm_full_v2"
     data_directory: "gng_results"
+    gng_model_filename: "gng.bin"
+    vlut_filename: "vlut.bin"
 
     # Robot Settings
     robot_urdf_path: "temp_robot.urdf"
