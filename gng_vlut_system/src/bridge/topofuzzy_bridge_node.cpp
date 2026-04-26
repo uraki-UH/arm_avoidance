@@ -46,25 +46,7 @@ Eigen::Isometry3d makeIsometry(const std::vector<double> &pos,
   return T;
 }
 
-float safetyScore(const GNG::Status &status) {
-  if (!status.valid || !status.active) {
-    return 0.0f;
-  }
-  if (status.is_colliding) {
-    return 0.0f;
-  }
-  if (status.is_danger) {
-    return 0.35f;
-  }
-  if (status.is_boundary) {
-    return 0.8f;
-  }
-  return 1.0f;
-}
-
 uint8_t viewerLabelFromStatus(const GNG::Status &status) {
-  // The viewer uses semantic labels for color selection.
-  // Here we intentionally treat them as visualization states.
   if (status.is_colliding) {
     return 2; // COLLISION -> red
   }
@@ -269,8 +251,6 @@ private:
       return edge_mode_;
     }
 
-    // Auto: prefer coord graph if it exists, otherwise fall back to angle
-    // graph.
     if (!context_ || !context_->gng) {
       return 1;
     }
@@ -330,7 +310,8 @@ private:
   }
 
   ais_gng_msgs::msg::TopologicalMap buildGraphMessage() {
-    // annotateTopologyLocked(); // Skipping heavy topology analysis
+    // annotateTopologyLocked(); //
+    // BFSによる連結成分分析だが未使用なためコメントアウト
 
     ais_gng_msgs::msg::TopologicalMap msg;
     msg.header.stamp = now();
@@ -366,10 +347,7 @@ private:
                                          ? node.status.ee_direction.normalized()
                                          : Eigen::Vector3f::UnitZ();
       out.normal = toPoint32(normal);
-      out.rho = safetyScore(node.status);
       out.label = viewerLabelFromStatus(node.status);
-      out.age = 0;
-      out.inpcl_ids.clear();
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node.id, published_index);

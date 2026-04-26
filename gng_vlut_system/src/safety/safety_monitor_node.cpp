@@ -256,7 +256,11 @@ private:
             ais_gng_msgs::msg::TopologicalNode out;
             out.id = static_cast<uint16_t>(node.id);
             out.pos = toPoint32(node.weight_coord);
-            out.rho = 0.0f; // Default (unused). Re-implement as density/cost if needed.
+            
+            const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
+                                               ? node.status.ee_direction.normalized()
+                                               : Eigen::Vector3f::UnitZ();
+            out.normal = toPoint32(normal);
             out.label = viewerLabelFromStatus(node.status);
             
             id_to_index[node.id] = static_cast<uint16_t>(msg.nodes.size());
