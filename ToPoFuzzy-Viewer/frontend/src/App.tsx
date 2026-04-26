@@ -5,6 +5,7 @@ import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
 import { PointCloudData, HeatmapSettings, GraphNode, EditRegion } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
+import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
 import { RobotArmRenderer } from './features/visualization/RobotArmRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useClippingPlanes } from './hooks/useClippingPlanes';
@@ -664,19 +665,35 @@ function App() {
                     />
 
                     {graphData && gngLayer.visible && !gngLayer.removed && (
-                        <GraphRenderer
-                            data={graphData}
-                            showNodes={gngLayer.showGraph}
-                            showEdges={gngLayer.showEdges}
-                            showClusters={gngLayer.showClusters}
-                            showClusterText={gngLayer.showClusterText}
-                            visibleLabels={gngLayer.visibleLabels}
-                            nodeScale={gngLayer.nodeScale}
-                            edgeWidth={gngLayer.edgeWidth}
-                            selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
-                            onClusterSelect={handleClusterSelect}
-                            enableClusterSelection={!zoneMonitor.isDrawing}
-                        />
+                        graphData.frameId && graphData.frameId !== 'world' ? (
+                            <StaticGraphRenderer
+                                data={graphData}
+                                showNodes={gngLayer.showGraph}
+                                showEdges={gngLayer.showEdges}
+                                showClusters={gngLayer.showClusters}
+                                showClusterText={gngLayer.showClusterText}
+                                visibleLabels={gngLayer.visibleLabels}
+                                nodeScale={gngLayer.nodeScale}
+                                edgeWidth={gngLayer.edgeWidth}
+                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
+                                onClusterSelect={handleClusterSelect}
+                                enableClusterSelection={!zoneMonitor.isDrawing}
+                            />
+                        ) : (
+                            <GraphRenderer
+                                data={graphData}
+                                showNodes={gngLayer.showGraph}
+                                showEdges={gngLayer.showEdges}
+                                showClusters={gngLayer.showClusters}
+                                showClusterText={gngLayer.showClusterText}
+                                visibleLabels={gngLayer.visibleLabels}
+                                nodeScale={gngLayer.nodeScale}
+                                edgeWidth={gngLayer.edgeWidth}
+                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
+                                onClusterSelect={handleClusterSelect}
+                                enableClusterSelection={!zoneMonitor.isDrawing}
+                            />
+                        )
                     )}
 
                     {robotArmData && (

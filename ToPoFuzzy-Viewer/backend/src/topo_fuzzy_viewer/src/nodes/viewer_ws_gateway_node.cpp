@@ -133,6 +133,9 @@ private:
         };
 
         uWS::App()
+            .get("/*", [this](auto* res, auto* req) {
+                this->handleHttpGet(res, req);
+            })
             .ws<PerSocketData>("/*", std::move(behavior))
             .listen(port, [this, port](auto* socket) {
                 if (socket) {
@@ -321,11 +324,41 @@ private:
         graph["nodes"] = nodes;
         graph["edges"] = edges;
         graph["clusters"] = clusters;
+        graph["frameId"] = msg->header.frame_id;
 
         viewer_internal::json event;
         event["type"] = "stream.graph";
         event["graph"] = graph;
         broadcastText(event.dump());
+    }
+
+    void handleHttpGet(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
+        std::string url = std::string(req->getUrl());
+        
+        if (url.rfind("/meshes/", 0) == 0) {
+            std::string subpath = url.substr(8); // remove "/meshes/"
+            size_t slash_pos = subpath.find('/');
+            if (slash_pos != std::string::npos) {
+                std::string pkg_name = subpath.substr(0, slash_pos);
+                std::string rel_path = subpath.substr(slash_pos + 1);
+                
+                try {
+                    std::string pkg_share = ament_index_cpp::get_package_share_directory(pkg_name);
+                    std::filesystem::path full_path = std::filesystem::path(pkg_share) / rel_path;
+                    
+                    if (std::filesystem::exists(full_path) && !std::filesystem::is_directory(full_path)) {
+                        std::ifstream file(full_path, std::ios::binary);
+                        if (file) {
+                            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                            res->end(content);
+                            return;
+                        }
+                    }
+                } catch (...) {}
+            }
+        }
+        
+        res->writeStatus("404 Not Found")->end("File not found");
     }
 
     void handleRobotArm(const std_msgs::msg::String::SharedPtr msg) {

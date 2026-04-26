@@ -10,6 +10,10 @@ ament_target_dependencies(safety_monitor_node_component
     rclcpp_components
     sensor_msgs
     visualization_msgs
+    tf2
+    tf2_ros
+    tf2_eigen
+    tf2_geometry_msgs
     Eigen3
 )
 rclcpp_components_register_nodes(safety_monitor_node_component "robot_sim::safety::SafetyMonitorNode")

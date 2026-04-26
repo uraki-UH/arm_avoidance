@@ -37,7 +37,7 @@ def generate_launch_description():
     )
     frame_id = DeclareLaunchArgument(
         "frame_id",
-        default_value="world",
+        default_value="base_link",
         description="Frame id for the published topological map",
     )
     occupied_voxels_topic = DeclareLaunchArgument(

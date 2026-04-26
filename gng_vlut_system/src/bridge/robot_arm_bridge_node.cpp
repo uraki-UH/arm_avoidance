@@ -67,12 +67,22 @@ public:
         declare_parameter<double>("publish_hz", 20.0);
 
         const std::string robot_description_file = get_parameter("robot_description_file").as_string();
+        const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
+        
+        // Read URDF content for the viewer
+        std::ifstream urdf_file(resolved_urdf_path);
+        if (urdf_file) {
+            urdf_content_ = std::string((std::istreambuf_iterator<char>(urdf_file)), std::istreambuf_iterator<char>());
+        } else {
+            RCLCPP_WARN(get_logger(), "Could not open URDF file for reading: %s", resolved_urdf_path.c_str());
+        }
+
         const std::string resource_root_dir = get_parameter("resource_root_dir").as_string();
         const std::string mesh_root_dir = get_parameter("mesh_root_dir").as_string();
         const std::string end_effector_name = get_parameter("end_effector_name").as_string();
 
         auto robot_model = simulation::loadRobotFromUrdf(
-            robot_sim::common::resolvePath(robot_description_file), resource_root_dir, mesh_root_dir);
+            resolved_urdf_path, resource_root_dir, mesh_root_dir);
         chain_ = simulation::createKinematicChainFromModel(robot_model, end_effector_name);
 
         buildJointIndexMap();
@@ -160,6 +170,7 @@ private:
             << "\"robotArm\":{"
             << "\"timestamp\":" << timestamp_sec << ','
             << "\"frameId\":\"" << escapeJson(frame_id_) << "\","
+            << "\"urdf\":\"" << escapeJson(urdf_content_) << "\","
             << "\"jointNames\":[";
 
         for (size_t i = 0; i < active_joint_names_.size(); ++i) {
@@ -227,6 +238,7 @@ private:
     std::vector<double> current_joint_values_;
     builtin_interfaces::msg::Time last_joint_state_stamp_;
     bool has_joint_state_ = false;
+    std::string urdf_content_;
 
     std::string joint_state_topic_ = "/joint_states";
     std::string stream_topic_ = "/viewer/internal/stream/robot_arm";

@@ -19,6 +19,10 @@
 #include <mutex>
 #include <vector>
 
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+
 namespace robot_sim {
 namespace safety {
 
@@ -32,18 +36,11 @@ public:
         this->declare_parameter("voxel_size", 0.02);
         this->declare_parameter("dilation_radius", 1);
         this->declare_parameter("data_directory", "gng_results");
-        this->declare_parameter("experiment_id", "default_run");
-        this->declare_parameter("gng_model_filename", "");
-        this->declare_parameter("vlut_filename", "gng_spatial_correlation.bin");
+        this->declare_parameter("experiment_id", "standard_train");
+        this->declare_parameter("gng_model_filename", "gng.bin");
+        this->declare_parameter("vlut_filename", "vlut.bin");
         this->declare_parameter("robot_urdf_path", "");
-        
-        // LiDAR to World Transform Params (default: identity)
-        this->declare_parameter("lidar_pos", std::vector<double>{0.0, 0.0, 1.0}); // x,y,z
-        this->declare_parameter("lidar_rot", std::vector<double>{0.0, 0.0, 0.0}); // r,p,y (deg)
-        
-        // Robot to World Transform Params (default: identity)
-        this->declare_parameter("robot_pos", std::vector<double>{0.0, 0.0, 0.0});
-        this->declare_parameter("robot_rot", std::vector<double>{0.0, 0.0, 0.0});
+        this->declare_parameter("base_frame", "base_link");
 
         std::string gng_path = resolveResultPath(
             this->get_parameter("gng_model_path").as_string(),
@@ -53,26 +50,11 @@ public:
             /*is_vlut=*/true);
         voxel_size_ = this->get_parameter("voxel_size").as_double();
         dilation_ = this->get_parameter("dilation_radius").as_int();
+        base_frame_ = this->get_parameter("base_frame").as_string();
         
-        // Setup Transforms
-        auto setup_transform = [](const std::vector<double>& pos, const std::vector<double>& rot) {
-            Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
-            T.translation() = Eigen::Vector3d(pos[0], pos[1], pos[2]);
-            T.linear() = (Eigen::AngleAxisd(rot[2] * M_PI / 180.0, Eigen::Vector3d::UnitZ()) *
-                          Eigen::AngleAxisd(rot[1] * M_PI / 180.0, Eigen::Vector3d::UnitY()) *
-                          Eigen::AngleAxisd(rot[0] * M_PI / 180.0, Eigen::Vector3d::UnitX())).toRotationMatrix();
-            return T;
-        };
-
-        lidar_to_world_ = setup_transform(
-            this->get_parameter("lidar_pos").as_double_array(),
-            this->get_parameter("lidar_rot").as_double_array());
-        
-        Eigen::Isometry3d robot_to_world = setup_transform(
-            this->get_parameter("robot_pos").as_double_array(),
-            this->get_parameter("robot_rot").as_double_array());
-        
-        world_to_robot_ = robot_to_world.inverse();
+        // Setup TF2
+        tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
         // Load Safety System
         context_ = robot_sim::analysis::SafetySystemLoader::load(gng_path, vlut_path, 7);
@@ -176,6 +158,22 @@ private:
     }
 
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+        if (msg->header.frame_id.empty()) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Received point cloud with empty frame_id!");
+            return;
+        }
+
+        geometry_msgs::msg::TransformStamped tf_msg;
+        try {
+            // Lookup transform from sensor frame to base frame
+            tf_msg = tf_buffer_->lookupTransform(base_frame_, msg->header.frame_id, tf2::TimePointZero);
+        } catch (const tf2::TransformException & ex) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Could not transform from %s to %s: %s", 
+                                msg->header.frame_id.c_str(), base_frame_.c_str(), ex.what());
+            return;
+        }
+
+        Eigen::Isometry3d sensor_to_base = tf2::transformToEigen(tf_msg);
         std::vector<Eigen::Vector3f> transformed_points;
         transformed_points.reserve(msg->width * msg->height);
 
@@ -184,12 +182,12 @@ private:
         sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
 
         for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-            Eigen::Vector3d p_env(*iter_x, *iter_y, *iter_z);
-            Eigen::Vector3d p_robot = world_to_robot_ * (lidar_to_world_ * p_env);
+            Eigen::Vector3d p_sensor(*iter_x, *iter_y, *iter_z);
+            Eigen::Vector3d p_robot = sensor_to_base * p_sensor;
             transformed_points.push_back(p_robot.cast<float>());
         }
 
-        // Process to Voxels (Internal conversion fallback)
+        // Process to Voxels
         auto occupied_vids = processor_->voxelize(transformed_points);
         auto danger_vids = processor_->dilate(occupied_vids, (float)dilation_ * (float)voxel_size_);
 
@@ -213,17 +211,16 @@ private:
             if (node.id == -1) continue;
 
             visualization_msgs::msg::Marker m;
-            m.header.frame_id = "world"; 
+            m.header.frame_id = base_frame_; 
             m.header.stamp = this->now();
             m.ns = "gng_safety";
             m.id = id++;
             m.type = visualization_msgs::msg::Marker::SPHERE;
             m.scale.x = m.scale.y = m.scale.z = 0.01;
             
-            Eigen::Vector3d p_world = world_to_robot_.inverse() * node.weight_coord.cast<double>();
-            m.pose.position.x = p_world.x();
-            m.pose.position.y = p_world.y();
-            m.pose.position.z = p_world.z();
+            m.pose.position.x = node.weight_coord.x();
+            m.pose.position.y = node.weight_coord.y();
+            m.pose.position.z = node.weight_coord.z();
 
             if (node.status.is_colliding) {
                 m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.15;
@@ -241,8 +238,9 @@ private:
     std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
     std::unique_ptr<robot_sim::analysis::VoxelProcessor> processor_;
     
-    Eigen::Isometry3d lidar_to_world_;
-    Eigen::Isometry3d world_to_robot_;
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    std::string base_frame_;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub_;
     rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_voxel_sub_;
