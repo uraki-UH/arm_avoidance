@@ -173,7 +173,7 @@ public:
         auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
     model = new simulation::RobotModel(model_obj);
     arm = simulation::createKinematicChainFromModel(*model, leaf_link_name_);
-    arm.setBase(Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+    arm.setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
     RCLCPP_INFO(this->get_logger(), "[Robot] Loaded: %s, DOF: %d", full_urdf.c_str(), arm.getTotalDOF());
   } catch (const std::exception &e) {
     RCLCPP_ERROR(this->get_logger(), "[Error] Robot setup failed: %s", e.what());

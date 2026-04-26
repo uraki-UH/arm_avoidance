@@ -304,6 +304,7 @@ private:
             m.pose.position.x = node.weight_coord.x();
             m.pose.position.y = node.weight_coord.y();
             m.pose.position.z = node.weight_coord.z();
+            m.pose.orientation.w = 1.0; // Essential for valid quaternion
             
             uint8_t label = viewerLabelFromStatus(node.status);
             if (label == 2) { m.color.r = 1.0; m.color.a = 0.5; } // Red
