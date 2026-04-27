@@ -121,7 +121,7 @@ public:
         }
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kStreamRobotArm,
+            viewer_internal::topics::kStreamRobot,
             rclcpp::QoS(rclcpp::KeepLast(10)),
             std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
 
@@ -436,6 +436,9 @@ private:
 
     void handleHttpGet(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
         std::string url = std::string(req->getUrl());
+        res->writeHeader("Access-Control-Allow-Origin", "*");
+        res->writeHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        res->writeHeader("Access-Control-Allow-Headers", "Content-Type");
         
         if (url.rfind("/meshes/", 0) == 0) {
             std::string subpath = url.substr(8); // remove "/meshes/"

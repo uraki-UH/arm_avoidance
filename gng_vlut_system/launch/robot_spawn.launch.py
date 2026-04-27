@@ -24,17 +24,22 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
-    robot_urdf = LaunchConfiguration("robot_description_file", default=robot_desc_default)
+    robot_urdf = LaunchConfiguration("robot_description_file").perform(context) or robot_desc_default
 
     return [
         Node(
+            package="joint_state_publisher",
+            executable="joint_state_publisher",
+            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+        ),
+        Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
-            parameters=[{"robot_description": Command(['xacro ', robot_urdf])}]
+            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
         ),
         Node(
             package="gng_vlut_system",
-            executable="robot_description_player",
+            executable="robot_description_player_node",
             name="robot_description_player",
             parameters=[{
                 "robot_description_file": robot_urdf,

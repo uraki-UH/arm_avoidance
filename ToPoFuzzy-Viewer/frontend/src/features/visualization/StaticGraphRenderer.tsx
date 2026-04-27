@@ -108,7 +108,7 @@ export function StaticGraphRenderer({
 
     // --- Node material ---
     const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#ffffff',
+        color: '#c8ff4a',
         transparent: true,
         opacity: opacity,
         depthTest: false,
@@ -184,7 +184,7 @@ export function StaticGraphRenderer({
 
     // --- Edge material ---
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#08d408',
+        color: '#b9ff3f',
         transparent: true,
         opacity: opacity,
         depthTest: false,

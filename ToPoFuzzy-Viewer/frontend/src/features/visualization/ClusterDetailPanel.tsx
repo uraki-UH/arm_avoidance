@@ -249,7 +249,6 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                         ))}
 
 
-
                         {/* Bounding Box & Dimensions */}
                         {dimensions && (
                             <group>

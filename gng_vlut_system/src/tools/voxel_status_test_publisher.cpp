@@ -240,6 +240,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_pub_;
   rclcpp::Publisher<std_msgs::msg::Int64MultiArray>::SharedPtr danger_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
   std::vector<int64_t> occupied_voxels_;
   std::vector<int64_t> danger_voxels_;
     std::vector<double> sphere_center_world_cm_;

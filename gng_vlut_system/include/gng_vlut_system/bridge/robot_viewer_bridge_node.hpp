@@ -23,6 +23,7 @@ public:
     explicit RobotViewerBridgeNode(const rclcpp::NodeOptions & options);
 
 private:
+    bool loadRobotDescription(std::string& out_text, const std::string& source_path) const;
     void buildJointIndexMap();
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     std::string buildRobotJsonLocked(
@@ -50,4 +51,3 @@ private:
 
 } // namespace bridge
 } // namespace robot_sim
-

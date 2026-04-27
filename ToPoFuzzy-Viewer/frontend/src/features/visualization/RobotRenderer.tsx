@@ -14,9 +14,20 @@ export function RobotRenderer({
     data,
     visible = true,
 }: RobotRendererProps) {
+    const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastUrdfRef = useRef<string>('');
+    const robotMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: '#00ff66',
+        transparent: false,
+        depthWrite: true,
+        depthTest: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        side: THREE.DoubleSide,
+    }), []);
 
     // --- Initialize Loaders ---
     const loaders = useMemo(() => {
@@ -43,20 +54,34 @@ export function RobotRenderer({
         
         // Redirect package:// to our mesh server
         urdfLoader.packages = (pkg) => {
-            return `http://localhost:9001/meshes/${pkg}`;
+            return `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
         };
 
-        try {
+            try {
             const robotObj = urdfLoader.parse(data.urdf);
-            // Rotate to match Three.js coordinate system (Y-up)
-            robotObj.rotation.x = -Math.PI / 2; 
+            // Make the robot easier to see in the viewer by overriding imported materials.
+            robotObj.traverse((child: any) => {
+                if (child?.isMesh) {
+                    child.material = robotMaterial;
+                    child.castShadow = false;
+                    child.receiveShadow = false;
+                    child.renderOrder = 10;
+                    if (child.material && 'polygonOffset' in child.material) {
+                        (child.material as THREE.Material & {
+                            polygonOffset?: boolean;
+                            polygonOffsetFactor?: number;
+                            polygonOffsetUnits?: number;
+                        }).polygonOffset = true;
+                    }
+                }
+            });
             
             setRobot(robotObj);
             console.log("URDF Robot model loaded successfully");
         } catch (err) {
             console.error("Failed to parse URDF:", err);
         }
-    }, [data?.urdf]);
+    }, [data?.urdf, loaders, robotMaterial, viewerPort]);
 
     // --- Update Joints ---
     useEffect(() => {
@@ -75,7 +100,7 @@ export function RobotRenderer({
         <primitive 
             ref={groupRef}
             object={robot} 
-            renderOrder={2}
+            renderOrder={10}
         />
     );
 }

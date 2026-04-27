@@ -4,10 +4,13 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
+#include <stdexcept>
 #include <sstream>
 #include <utility>
 
@@ -55,10 +58,8 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
 
     const std::string robot_description_file = get_parameter("robot_description_file").as_string();
     const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
-    
-    std::ifstream urdf_file(resolved_urdf_path);
-    if (urdf_file) {
-        urdf_content_ = std::string((std::istreambuf_iterator<char>(urdf_file)), std::istreambuf_iterator<char>());
+    if (!loadRobotDescription(urdf_content_, resolved_urdf_path)) {
+        throw std::runtime_error("Failed to load robot description: " + resolved_urdf_path);
     }
 
     const std::string resource_root_dir = get_parameter("resource_root_dir").as_string();
@@ -88,6 +89,38 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
         std::bind(&RobotViewerBridgeNode::publishCurrentState, this));
 
     RCLCPP_INFO(get_logger(), "Robot Viewer Bridge initialized: %s", stream_topic_.c_str());
+}
+
+bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const std::string& source_path) const {
+    std::ifstream source_file(source_path);
+    if (!source_file) {
+        return false;
+    }
+
+    if (source_path.rfind(".xacro") != std::string::npos) {
+        const std::string cmd = "xacro " + source_path;
+        std::array<char, 4096> buffer{};
+        std::string result;
+
+        if (FILE* pipe = popen(cmd.c_str(), "r")) {
+            while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr) {
+                result += buffer.data();
+            }
+
+            const int status = pclose(pipe);
+            if (status != 0) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        out_text = std::move(result);
+    } else {
+        out_text = std::string((std::istreambuf_iterator<char>(source_file)), std::istreambuf_iterator<char>());
+    }
+
+    return !out_text.empty();
 }
 
 void RobotViewerBridgeNode::buildJointIndexMap() {

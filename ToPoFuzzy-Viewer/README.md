@@ -101,7 +101,7 @@ ros2 run ais_gng ais_gng_node
 2.  **Streaming**:
     *   Publish PointCloud2 messages to `/points`.
     *   Publish GNG TopologicalMap messages to `/topological_map`.
-    *   Publish robot arm payloads to `/viewer/internal/stream/robot_arm`.
+    *   Publish robot payloads to `/viewer/internal/stream/robot`.
     *   The viewer will automatically stream and visualize the data.
 3.  **File Import**: Drag & Drop `.pcd`, `.las`, `.laz`, or `.ply` files into the viewer, or use the Import button.
 4.  **Editing**:
@@ -112,7 +112,7 @@ ros2 run ais_gng ais_gng_node
 ### Topological Map Notes
 
 - The viewer consumes `/topological_map` directly through the backend bridge node.
-- The viewer consumes robot-arm pose updates from `/viewer/internal/stream/robot_arm` through the backend bridge node.
+- The viewer consumes robot pose updates from `/viewer/internal/stream/robot` through the backend bridge node.
 - When using `gng_safety`, `topoarm_viewer_bridge.launch.py` now includes the joint-state runtime, so one launch can prepare `/joint_states` and stream the arm pose.
 - The current color convention for topology labels is:
   - `safe` = green

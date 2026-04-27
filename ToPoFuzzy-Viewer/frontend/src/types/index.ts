@@ -196,12 +196,12 @@ export interface SetParameterResult {
 // --- Constants ---
 
 export const LAYER_COLORS = [
-    '#808080', // 0: DEFAULT (Gray)
-    '#00FF00', // 1: SAFE_TERRAIN (Green)
+    '#7c8c66', // 0: DEFAULT (muted gray-green)
+    '#c8ff4a', // 1: SAFE_TERRAIN (yellow-green)
     '#FF0000', // 2: COLLISION (Red)
     '#FFFF00', // 3: DANGER (Yellow)
-    '#00FF00', // 4: UNUSED / legacy (Green fallback)
-    '#00FF00'  // 5: OTHER / fallback (Green)
+    '#b9ff3f', // 4: UNUSED / legacy (yellow-green fallback)
+    '#d4ff6a'  // 5: OTHER / fallback (light yellow-green)
 ];
 
 export const LAYER_LABELS = [

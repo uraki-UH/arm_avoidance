@@ -103,12 +103,13 @@ function App() {
         max: 5,
         colorScheme: 'viridis',
         pointSize: 0.02,
-        simpleColor: '#ffffff',
+        simpleColor: '#c8ff4a',
     });
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-    const wsUrl = `ws://${window.location.hostname}:9001`;
+    const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
+    const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
     const {
         pointCloud: wsPointCloud,
         graphData,

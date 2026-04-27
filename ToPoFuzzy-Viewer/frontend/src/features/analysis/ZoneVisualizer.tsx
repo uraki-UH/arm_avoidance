@@ -25,7 +25,7 @@ export function ZoneVisualizer({ points, isDrawing, isWarning = false, onAddPoin
                 materialRef.current.color.set('#ff0000');
             } else {
                 materialRef.current.opacity = 0.2;
-                materialRef.current.color.set('#00ff00');
+                materialRef.current.color.set('#c8ff4a');
             }
         }
     });
@@ -141,7 +141,7 @@ export function ZoneVisualizer({ points, isDrawing, isWarning = false, onAddPoin
             {(isDrawing || points.length < 3) && points.map((p, i) => (
                 <mesh key={i} position={[p.x, p.y, p.z]}>
                     <sphereGeometry args={[0.1, 16, 16]} />
-                    <meshBasicMaterial color={isDrawing ? "red" : "lime"} />
+                    <meshBasicMaterial color={isDrawing ? "red" : "#c8ff4a"} />
                 </mesh>
             ))}
 
