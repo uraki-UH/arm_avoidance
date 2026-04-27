@@ -118,7 +118,7 @@ function App() {
         error: wsError,
         connect,
         disconnect,
-        clearGraphLayer,
+        deleteGraphLayer,
         getSources,
         subscribeSource,
         unsubscribeSource,
@@ -167,7 +167,7 @@ function App() {
                     visible: true,
                     showNodes: true,
                     showEdges: true,
-                    showClusters: true,
+                    showClusters: false,
                     opacity: 1.0
                 };
                 changed = true;
@@ -187,7 +187,7 @@ function App() {
     };
 
     const removeLayer = (tag: string) => {
-        clearGraphLayer(tag);
+        deleteGraphLayer(tag);
         setLayerSettings(prev => {
             const next = { ...prev };
             delete next[tag];
@@ -217,7 +217,6 @@ function App() {
         removed: false,
         showGraph: true,
         showEdges: true,
-        showClusters: true,
         showClusterText: true,
         showNormals: true,
         normalArrowLength: 0.15,

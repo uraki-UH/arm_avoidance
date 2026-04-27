@@ -37,12 +37,6 @@ struct PendingResponse {
     std::string payload;
 };
 
-struct CachedGraphPayload {
-    std::string payload;
-    std::string mode;
-    std::chrono::steady_clock::time_point last_seen;
-};
-
 template <typename T, typename = void>
 struct has_tag_member : std::false_type {};
 
@@ -58,10 +52,9 @@ struct has_mode_member<T, std::void_t<decltype(std::declval<const T&>().mode)>> 
 template <typename MsgT>
 std::string extractGraphTag(const MsgT& msg, const std::string& fallbackTag) {
     if constexpr (has_tag_member<MsgT>::value) {
-        const std::string tag = msg.tag.empty() ? fallbackTag : msg.tag;
-        return tag == "topofuzzy_static" ? "static" : tag;
+        return msg.tag.empty() ? fallbackTag : msg.tag;
     } else {
-        return fallbackTag == "topofuzzy_static" ? "static" : fallbackTag;
+        return fallbackTag;
     }
 }
 
@@ -79,11 +72,7 @@ public:
     ViewerWsGatewayNode()
         : rclcpp::Node("viewer_ws_gateway_node") {
         this->declare_parameter<int>("port", 9001);
-        this->declare_parameter<double>("dynamic_graph_ttl_sec", 5.0);
-        this->declare_parameter<double>("static_graph_ttl_sec", 30.0);
         const int port = this->get_parameter("port").as_int();
-        dynamicGraphTtlSec_ = this->get_parameter("dynamic_graph_ttl_sec").as_double();
-        staticGraphTtlSec_ = this->get_parameter("static_graph_ttl_sec").as_double();
 
         sourceRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcSourceRequest, 50);
         fileRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcFileRequest, 50);
@@ -144,9 +133,6 @@ public:
             });
 
         startServer(port);
-        graphPurgeTimer_ = this->create_wall_timer(
-            std::chrono::seconds(1),
-            std::bind(&ViewerWsGatewayNode::purgeStaleGraphs, this));
 
         RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
     }
@@ -188,9 +174,9 @@ private:
             {
                 std::lock_guard<std::mutex> graphLock(graphMutex_);
                 cachedGraphs.reserve(lastGraphPayloads_.size());
-                for (const auto& [tag, entry] : lastGraphPayloads_) {
+                for (const auto& [tag, payload] : lastGraphPayloads_) {
                     (void)tag;
-                    cachedGraphs.push_back(entry.payload);
+                    cachedGraphs.push_back(payload);
                 }
             }
             std::lock_guard<std::mutex> lock(connectionMutex_);
@@ -202,6 +188,15 @@ private:
         behavior.message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) {
             if (opCode != uWS::OpCode::TEXT) {
                 return;
+            }
+            viewer_internal::json incoming;
+            if (viewer_internal::parseJson(std::string(message), incoming)) {
+                const std::string type = incoming.value("type", "");
+                const std::string tag = incoming.value("tag", "");
+                if (type == "stream.graph.delete" && !tag.empty()) {
+                    this->removeGraphLayer(tag);
+                    return;
+                }
             }
             this->handleWsRequest(ws, std::string(message));
         };
@@ -428,11 +423,7 @@ private:
         const std::string payload = event.dump();
         {
             std::lock_guard<std::mutex> lock(graphMutex_);
-            lastGraphPayloads_[tag] = CachedGraphPayload{
-                payload,
-                mode,
-                std::chrono::steady_clock::now()
-            };
+            lastGraphPayloads_[tag] = payload;
         }
         broadcastText(payload);
 
@@ -502,34 +493,17 @@ private:
         });
     }
 
-    void purgeStaleGraphs() {
-        std::vector<std::string> staleTags;
-        const auto now = std::chrono::steady_clock::now();
+    void removeGraphLayer(const std::string& tag) {
         {
             std::lock_guard<std::mutex> lock(graphMutex_);
-            for (const auto& [tag, entry] : lastGraphPayloads_) {
-                const double ttlSec = (entry.mode == "static") ? staticGraphTtlSec_ : dynamicGraphTtlSec_;
-                if (ttlSec <= 0.0) {
-                    continue;
-                }
-                const auto ageSec = std::chrono::duration<double>(now - entry.last_seen).count();
-                if (ageSec > ttlSec) {
-                    staleTags.push_back(tag);
-                }
-            }
-
-            for (const auto& tag : staleTags) {
-                lastGraphPayloads_.erase(tag);
-            }
+            lastGraphPayloads_.erase(tag);
         }
 
-        for (const auto& tag : staleTags) {
-            viewer_internal::json event;
-            event["type"] = "stream.graph.delete";
-            event["tag"] = tag;
-            broadcastText(event.dump());
-            RCLCPP_INFO(this->get_logger(), "Expired graph layer tag=%s", tag.c_str());
-        }
+        viewer_internal::json event;
+        event["type"] = "stream.graph.delete";
+        event["tag"] = tag;
+        broadcastText(event.dump());
+        RCLCPP_INFO(this->get_logger(), "Removed graph layer tag=%s", tag.c_str());
     }
 
 private:
@@ -554,10 +528,7 @@ private:
     std::vector<uWS::WebSocket<false, true, PerSocketData>*> connections_;
 
     std::mutex graphMutex_;
-    std::unordered_map<std::string, CachedGraphPayload> lastGraphPayloads_;
-    double dynamicGraphTtlSec_ = 5.0;
-    double staticGraphTtlSec_ = 30.0;
-    rclcpp::TimerBase::SharedPtr graphPurgeTimer_;
+    std::unordered_map<std::string, std::string> lastGraphPayloads_;
 
     std::thread serverThread_;
     us_listen_socket_t* listenSocket_ = nullptr;

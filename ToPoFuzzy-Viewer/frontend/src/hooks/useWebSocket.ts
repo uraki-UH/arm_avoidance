@@ -52,6 +52,7 @@ interface UseWebSocketReturn {
     connect: () => void;
     disconnect: () => void;
     clearGraphLayer: (tag: string) => void;
+    deleteGraphLayer: (tag: string) => void;
 
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string; active: boolean }>;
@@ -130,6 +131,19 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             return next;
         });
     }, []);
+
+    const deleteGraphLayer = useCallback((tag: string) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            clearGraphLayer(tag);
+            return;
+        }
+
+        clearGraphLayer(tag);
+        ws.send(JSON.stringify({
+            type: 'stream.graph.delete',
+            tag,
+        }));
+    }, [ws, clearGraphLayer]);
 
     const connect = useCallback(() => {
         if (ws) {
@@ -456,6 +470,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         connect,
         disconnect,
         clearGraphLayer,
+        deleteGraphLayer,
         getSources,
         subscribeSource,
         unsubscribeSource,

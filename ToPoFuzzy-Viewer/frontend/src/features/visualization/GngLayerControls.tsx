@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, EyeOff, Trash2, Box, Share2, Square } from 'lucide-react';
+import { Eye, EyeOff, Trash2, Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 
 export interface GngLayerState {
@@ -7,7 +7,6 @@ export interface GngLayerState {
     removed: boolean;
     showGraph: boolean;
     showEdges: boolean;
-    showClusters: boolean;
     showClusterText: boolean;
     showNormals: boolean;
     normalArrowLength: number;
@@ -31,14 +30,6 @@ interface GngLayerControlsProps {
     onUpdate: (updates: Partial<LayerSettings>) => void;
     onRemove: () => void;
 }
-
-const LABEL_CONFIG = [
-    { label: 1, name: 'Safe', color: '#00FF00' },
-    { label: 2, name: 'Collision', color: '#FF0000' },
-    { label: 3, name: 'Danger', color: '#FFFF00' },
-    { label: 4, name: 'Unused', color: '#808080' },
-    { label: 5, name: 'Other', color: '#808080' },
-] as const;
 
 export function GngLayerControls({
     tag,
@@ -133,34 +124,6 @@ export function GngLayerControls({
                         />
                     </div>
 
-                    {/* Clusters Toggle (Collapsible-like) */}
-                    <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-2">
-                        <CompactToggle
-                            icon={<Box size={12} />}
-                            label="Clusters"
-                            isOn={settings.showClusters}
-                            onToggle={() => onUpdate({ showClusters: !settings.showClusters })}
-                        />
-                        
-                        {settings.showClusters && (
-                            <div className="mt-2 grid grid-cols-5 gap-1 pt-1 border-t border-white/5">
-                                {LABEL_CONFIG.map(({ label, name, color }) => {
-                                    return (
-                                        <div 
-                                            key={label}
-                                            className="h-1.5 rounded-full"
-                                            style={{ 
-                                                backgroundColor: color, 
-                                                boxShadow: `0 0 4px ${color}44`,
-                                                opacity: 0.8
-                                            }}
-                                            title={name}
-                                        />
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
                 </div>
             )}
         </div>
