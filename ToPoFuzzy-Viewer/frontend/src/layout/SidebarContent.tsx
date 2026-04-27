@@ -264,6 +264,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                                 onRemove={() => props.onRemoveGngLayer(tag)}
+                                showOpacity={false}
                             />
                         ))}
                     </div>

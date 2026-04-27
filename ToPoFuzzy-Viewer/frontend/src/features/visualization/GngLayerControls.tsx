@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Trash2, Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 
@@ -29,6 +29,7 @@ interface GngLayerControlsProps {
     settings: LayerSettings;
     onUpdate: (updates: Partial<LayerSettings>) => void;
     onRemove: () => void;
+    showOpacity?: boolean;
 }
 
 export function GngLayerControls({
@@ -36,10 +37,18 @@ export function GngLayerControls({
     graphData,
     settings,
     onUpdate,
-    onRemove
+    onRemove,
+    showOpacity = false
 }: GngLayerControlsProps) {
     const isStatic = graphData.mode === 'static';
     const displayTag = graphData.tag || tag;
+
+    // Local buffered opacity to avoid firing frequent onUpdate during drag.
+    const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? 1);
+
+    useEffect(() => {
+        setLocalOpacity(settings.opacity ?? 1);
+    }, [settings.opacity]);
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
@@ -103,26 +112,31 @@ export function GngLayerControls({
                         />
                     </div>
 
-                    {/* Opacity Slider */}
-                    <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                                Opacity
-                            </label>
-                            <span className="text-[10px] font-mono text-[var(--accent-strong)]">
-                                {Math.round(settings.opacity * 100)}%
-                            </span>
+                    {/* Opacity Slider (optional) */}
+                    {showOpacity && (
+                        <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                                    Opacity
+                                </label>
+                                <span className="text-[10px] font-mono text-[var(--accent-strong)]">
+                                    {Math.round(localOpacity * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.01"
+                                value={localOpacity}
+                                onChange={(e) => setLocalOpacity(parseFloat(e.target.value))}
+                                onMouseUp={() => onUpdate({ opacity: localOpacity })}
+                                onPointerUp={() => onUpdate({ opacity: localOpacity })}
+                                onTouchEnd={() => onUpdate({ opacity: localOpacity })}
+                                className="w-full accent-[var(--accent-color)]"
+                            />
                         </div>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={settings.opacity}
-                            onChange={(e) => onUpdate({ opacity: parseFloat(e.target.value) })}
-                            className="w-full accent-[var(--accent-color)]"
-                        />
-                    </div>
+                    )}
 
                 </div>
             )}
