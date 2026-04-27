@@ -18,12 +18,17 @@ export function RobotRenderer({
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastUrdfRef = useRef<string>('');
-    const robotMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    const lastJointSignatureRef = useRef<string>('');
+    const robotMaterial = useMemo(() => new THREE.MeshPhongMaterial({
         color: '#00ff66',
+        emissive: '#003300',
+        specular: '#000000',
+        shininess: 0,
+        flatShading: true,
         transparent: false,
         depthWrite: true,
         depthTest: true,
-        side: THREE.FrontSide,
+        side: THREE.DoubleSide,
     }), []);
 
     // --- Initialize Loaders ---
@@ -109,6 +114,12 @@ export function RobotRenderer({
     // --- Update Joints ---
     useEffect(() => {
         if (!robot || !data?.jointNames || !data?.jointValues) return;
+
+        const signature = data.jointValues.map((value) => Number.isFinite(value) ? value.toFixed(6) : 'nan').join(',');
+        if (signature === lastJointSignatureRef.current) {
+            return;
+        }
+        lastJointSignatureRef.current = signature;
 
         data.jointNames.forEach((name, i) => {
             if (robot.joints[name]) {
