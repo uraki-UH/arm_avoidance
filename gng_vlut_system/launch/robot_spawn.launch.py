@@ -8,6 +8,7 @@ from launch_ros.actions import Node
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
+    enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
     
     # Auto-detect robot description package
     try:
@@ -26,12 +27,18 @@ def launch_setup(context, *args, **kwargs):
 
     robot_urdf = LaunchConfiguration("robot_description_file").perform(context) or robot_desc_default
 
-    return [
-        Node(
-            package="joint_state_publisher",
-            executable="joint_state_publisher",
-            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
-        ),
+    nodes = []
+
+    if enable_joint_state_publisher:
+        nodes.append(
+            Node(
+                package="joint_state_publisher",
+                executable="joint_state_publisher",
+                parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+            )
+        )
+
+    nodes.extend([
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -47,11 +54,14 @@ def launch_setup(context, *args, **kwargs):
                 "mesh_root_dir": mesh_root,
             }]
         )
-    ]
+    ])
+
+    return nodes
 
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
         OpaqueFunction(function=launch_setup)
     ])

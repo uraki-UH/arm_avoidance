@@ -43,7 +43,10 @@ def launch_setup(context, *args, **kwargs):
         # 1. ロボットモデルの展開 (Digital Twin / TF)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
-            launch_arguments={"robot_name": LaunchConfiguration("robot_name")}.items()
+            launch_arguments={
+                "robot_name": LaunchConfiguration("robot_name"),
+                "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
+            }.items()
         ),
 
         # 2. センサー位置の静的TF配信 (Calibration)
@@ -125,6 +128,7 @@ def generate_launch_description():
         
         # --- 安全設定 ---
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("safety_margin", default_value="0.05", description="安全マージン [m]"),
         
         # --- センサーキャリブレーション（実測値をここに入力） ---

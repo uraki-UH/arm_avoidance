@@ -20,7 +20,7 @@ export function RobotRenderer({
     const lastUrdfRef = useRef<string>('');
     const lastJointSignatureRef = useRef<string>('');
     const robotMaterial = useMemo(() => new THREE.MeshPhongMaterial({
-        color: '#00ff66',
+        color: '#0000FF',
         emissive: '#003300',
         specular: '#000000',
         shininess: 0,
