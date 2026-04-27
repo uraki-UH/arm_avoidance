@@ -44,6 +44,7 @@ import {
     ContinuousPublishStatus,
     NodeParameters,
     SetParameterResult,
+    LayerSettings,
 } from '../types';
 
 interface SidebarContentProps {
@@ -84,7 +85,10 @@ interface SidebarContentProps {
     onToggleVisibility: (id: string) => void;
     onRemoveLayer: (id: string) => void;
 
-    graphData: GraphData | null;
+    graphData: Record<string, GraphData>;
+    layerSettings: Record<string, LayerSettings>;
+    onUpdateLayerSettings: (tag: string, updates: Partial<LayerSettings>) => void;
+    onRemoveGngLayer: (tag: string) => void;
     gngLayer: GngLayerState;
     setGngLayer: React.Dispatch<React.SetStateAction<GngLayerState>>;
 
@@ -246,13 +250,22 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             </div>
                         ))}
 
-                        {hasGngLayer && props.graphData && (
+                        {Object.entries(props.graphData).map(([tag, data]) => (
                             <GngLayerControls
-                                graphData={props.graphData}
-                                gngLayer={props.gngLayer}
-                                setGngLayer={props.setGngLayer}
+                                key={tag}
+                                tag={tag}
+                                graphData={data}
+                                settings={props.layerSettings[tag] || {
+                                    visible: true,
+                                    showNodes: true,
+                                    showEdges: true,
+                                    showClusters: true,
+                                    opacity: 1.0
+                                }}
+                                onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
+                                onRemove={() => props.onRemoveGngLayer(tag)}
                             />
-                        )}
+                        ))}
                     </div>
 
                     {props.pointClouds.length === 0 && !hasGngLayer && (

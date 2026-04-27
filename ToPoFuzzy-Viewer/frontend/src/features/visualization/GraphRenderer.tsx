@@ -32,6 +32,7 @@ interface GraphRendererProps {
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
     enableClusterSelection?: boolean;
+    opacity?: number;
 }
 
 export function GraphRenderer({
@@ -46,7 +47,8 @@ export function GraphRenderer({
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
-    enableClusterSelection = true
+    enableClusterSelection = true,
+    opacity = 1.0
 }: GraphRendererProps) {
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
@@ -84,8 +86,8 @@ export function GraphRenderer({
 
     // --- Node material ---
     const nodeMaterial = useMemo(() => {
-        return new THREE.MeshBasicMaterial({ color: '#ffffff' });
-    }, []);
+        return new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: opacity });
+    }, [opacity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
 
@@ -130,8 +132,8 @@ export function GraphRenderer({
 
     // --- Edge material ---
     const edgeMaterial = useMemo(() => {
-        return new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: 1.0 });
-    }, []);
+        return new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: opacity });
+    }, [opacity]);
 
     // --- Calculate edge count (pairs) ---
     const edgePairCount = useMemo(() => {
@@ -257,7 +259,7 @@ export function GraphRenderer({
                                 <meshStandardMaterial
                                     color={color}
                                     transparent
-                                    opacity={isSelected ? 0.1 : 0.3}
+                                    opacity={isSelected ? 0.1 : 0.3 * opacity}
                                     emissive={isSelected ? '#FFFFFF' : '#000000'}
                                     emissiveIntensity={isSelected ? 0.2 : 0}
                                     depthWrite={false}

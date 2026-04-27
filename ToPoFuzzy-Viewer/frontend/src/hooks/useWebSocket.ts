@@ -44,7 +44,7 @@ interface PendingRequest {
 
 interface UseWebSocketReturn {
     pointCloud: PointCloudData | null;
-    graphData: GraphData | null;
+    graphData: Record<string, GraphData>;
     robotData: RobotData | null;
     lastJobEvent: EditJobEvent | null;
     isConnected: boolean;
@@ -100,7 +100,7 @@ interface UseWebSocketReturn {
 
 export function useWebSocket(url: string): UseWebSocketReturn {
     const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
-    const [graphData, setGraphData] = useState<GraphData | null>(null);
+    const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
     const [robotData, setRobotData] = useState<RobotData | null>(null);
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -184,7 +184,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     }
 
                     if (payload.type === 'stream.graph' && payload.graph) {
-                        setGraphData(payload.graph as GraphData);
+                        const tag = payload.tag || 'default';
+                        setGraphData((prev) => ({
+                            ...prev,
+                            [tag]: payload.graph as GraphData,
+                        }));
                         return;
                     }
 

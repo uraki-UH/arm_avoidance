@@ -1,14 +1,24 @@
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'gng_topics',
+            default_value=['/viewer/internal/stream/graph', '/topological_map', '/topological_map_transformed'],
+            description='List of GNG topics to subscribe to'
+        ),
         Node(
             package='topo_fuzzy_viewer',
             executable='viewer_ws_gateway_node',
             name='viewer_ws_gateway_node',
-            output='screen'
+            output='screen',
+            parameters=[{
+                'gng_topics': LaunchConfiguration('gng_topics')
+            }]
         ),
         Node(
             package='topo_fuzzy_viewer',

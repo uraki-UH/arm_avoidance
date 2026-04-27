@@ -69,6 +69,15 @@ export interface GraphData {
     edges: number[]; // Flat array of indices [src, tgt, src, tgt...]
     clusters: GraphCluster[];
     clusterLabels?: number[];
+    frameId?: string;
+}
+
+export interface LayerSettings {
+    visible: boolean;
+    showNodes: boolean;
+    showEdges: boolean;
+    showClusters: boolean;
+    opacity: number;
 }
 
 export interface RobotData {

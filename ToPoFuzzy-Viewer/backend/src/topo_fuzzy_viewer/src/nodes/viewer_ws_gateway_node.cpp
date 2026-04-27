@@ -61,10 +61,24 @@ public:
             rclcpp::QoS(rclcpp::KeepLast(10)),
             std::bind(&ViewerWsGatewayNode::handlePointCloud, this, std::placeholders::_1));
 
-        graphSub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
-            viewer_internal::topics::kStreamGraph,
-            rclcpp::QoS(rclcpp::KeepLast(10)),
-            std::bind(&ViewerWsGatewayNode::handleGraph, this, std::placeholders::_1));
+        // Declare and get GNG topics
+        this->declare_parameter<std::vector<std::string>>("gng_topics", {viewer_internal::topics::kStreamGraph});
+        auto gngTopics = this->get_parameter("gng_topics").as_string_array();
+
+        for (const auto& topic : gngTopics) {
+            std::string tag = topic;
+            // Use last part of topic as default tag if it's long? 
+            // For now, keep full topic name for uniqueness.
+            
+            auto sub = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+                topic,
+                rclcpp::QoS(rclcpp::KeepLast(10)),
+                [this, tag](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                    this->handleGraph(msg, tag);
+                });
+            graphSubs_.push_back(sub);
+            RCLCPP_INFO(this->get_logger(), "Subscribed to GNG topic: %s (tag: %s)", topic.c_str(), tag.c_str());
+        }
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kStreamRobotArm,
@@ -279,7 +293,7 @@ private:
         broadcastBinary(serialized);
     }
 
-    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag) {
         viewer_internal::json graph;
         graph["timestamp"] = msg->header.stamp.sec;
 
@@ -328,6 +342,7 @@ private:
 
         viewer_internal::json event;
         event["type"] = "stream.graph";
+        event["tag"] = tag;
         event["graph"] = graph;
         broadcastText(event.dump());
     }
@@ -402,7 +417,7 @@ private:
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pointCloudMetaSub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
-    rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr graphSub_;
+    std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotArmSub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr jobEventSub_;
 

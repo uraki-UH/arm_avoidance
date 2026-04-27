@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
-import { PointCloudData, HeatmapSettings, GraphNode, EditRegion } from './types';
+import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, GraphData, LayerSettings } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
@@ -146,7 +146,63 @@ function App() {
     const clipping = useClippingPlanes();
     const zoneMonitor = useZoneMonitor();
 
-    const zoneCounts = useMemo(() => zoneMonitor.getZoneCounts(graphData), [graphData, zoneMonitor.points]);
+    // Multi-layer GNG settings
+    const [layerSettings, setLayerSettings] = useState<Record<string, LayerSettings>>({});
+
+    // Initialize settings for new tags
+    useEffect(() => {
+        const newSettings = { ...layerSettings };
+        let changed = false;
+
+        Object.keys(graphData).forEach(tag => {
+            if (!newSettings[tag]) {
+                const isStatic = tag.toLowerCase().includes('static') || tag.toLowerCase().includes('map');
+                newSettings[tag] = {
+                    visible: true,
+                    showNodes: true,
+                    showEdges: true,
+                    showClusters: true,
+                    opacity: isStatic ? 0.6 : 1.0
+                };
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            setLayerSettings(newSettings);
+        }
+    }, [graphData]);
+
+    const updateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
+        setLayerSettings(prev => ({
+            ...prev,
+            [tag]: { ...prev[tag], ...updates }
+        }));
+    };
+
+    const removeLayer = (tag: string) => {
+        setLayerSettings(prev => {
+            const next = { ...prev };
+            delete next[tag];
+            return next;
+        });
+        // Note: Actual GNG source removal would require an RPC call to the backend
+    };
+
+    const zoneCounts = useMemo(() => {
+        // Aggregate zone counts across all visible GNG layers
+        const aggregated = new Map<string, number>();
+        Object.entries(graphData).forEach(([tag, data]) => {
+            const settings = layerSettings[tag];
+            if (settings?.visible) {
+                const counts = zoneMonitor.getZoneCounts(data);
+                counts.forEach((count, label) => {
+                    aggregated.set(label, (aggregated.get(label) || 0) + count);
+                });
+            }
+        });
+        return aggregated;
+    }, [graphData, layerSettings, zoneMonitor.points]);
 
     const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
 
@@ -229,9 +285,7 @@ function App() {
     }, [pointCloudOpacity]);
 
     useEffect(() => {
-        if (graphData) {
-            setGngLayer((prev) => prev.removed ? { ...prev, removed: false, visible: true } : prev);
-        }
+        // No-op for now as layerSettings handles visibility
     }, [graphData]);
 
     useEffect(() => {
@@ -532,21 +586,30 @@ function App() {
             return;
         }
 
-        if (!graphData) return;
+        // Find which graph has this cluster (simplified: search all)
+        let foundCluster = null;
+        let foundGraph = null;
+        for (const data of Object.values(graphData)) {
+            const c = data.clusters.find((c) => c.id === clusterId);
+            if (c) {
+                foundCluster = c;
+                foundGraph = data;
+                break;
+            }
+        }
 
-        const cluster = graphData.clusters.find((c) => c.id === clusterId);
-        if (!cluster) return;
+        if (!foundCluster || !foundGraph) return;
 
-        const nodeIdsSet = new Set(cluster.nodeIds);
-        const nodes = cluster.nodeIds.map((idx) => graphData.nodes[idx]).filter((n) => n !== undefined);
+        const nodeIdsSet = new Set(foundCluster.nodeIds);
+        const nodes = foundCluster.nodeIds.map((idx) => foundGraph!.nodes[idx]).filter((n) => n !== undefined);
 
         const edges: { source: GraphNode; target: GraphNode }[] = [];
-        for (let i = 0; i < graphData.edges.length; i += 2) {
-            const srcIdx = graphData.edges[i];
-            const dstIdx = graphData.edges[i + 1];
+        for (let i = 0; i < foundGraph.edges.length; i += 2) {
+            const srcIdx = foundGraph.edges[i];
+            const dstIdx = foundGraph.edges[i + 1];
             if (nodeIdsSet.has(srcIdx) && nodeIdsSet.has(dstIdx)) {
-                const srcNode = graphData.nodes[srcIdx];
-                const dstNode = graphData.nodes[dstIdx];
+                const srcNode = foundGraph.nodes[srcIdx];
+                const dstNode = foundGraph.nodes[dstIdx];
                 if (srcNode && dstNode) {
                     edges.push({ source: srcNode, target: dstNode });
                 }
@@ -592,6 +655,9 @@ function App() {
                         onToggleVisibility={handleToggleVisibility}
                         onRemoveLayer={handleRemoveLayer}
                         graphData={graphData}
+                        layerSettings={layerSettings}
+                        onUpdateLayerSettings={updateLayerSettings}
+                        onRemoveGngLayer={removeLayer}
                         gngLayer={gngLayer}
                         setGngLayer={setGngLayer}
                         heatmapSettings={heatmapSettings}
@@ -664,37 +730,32 @@ function App() {
                         onChange={handleDraftRegionChange}
                     />
 
-                    {graphData && gngLayer.visible && !gngLayer.removed && (
-                        graphData.frameId && graphData.frameId !== 'world' ? (
-                            <StaticGraphRenderer
-                                data={graphData}
-                                showNodes={gngLayer.showGraph}
-                                showEdges={gngLayer.showEdges}
-                                showClusters={gngLayer.showClusters}
-                                showClusterText={gngLayer.showClusterText}
-                                visibleLabels={gngLayer.visibleLabels}
-                                nodeScale={gngLayer.nodeScale}
-                                edgeWidth={gngLayer.edgeWidth}
-                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
-                                onClusterSelect={handleClusterSelect}
-                                enableClusterSelection={!zoneMonitor.isDrawing}
-                            />
-                        ) : (
-                            <GraphRenderer
-                                data={graphData}
-                                showNodes={gngLayer.showGraph}
-                                showEdges={gngLayer.showEdges}
-                                showClusters={gngLayer.showClusters}
-                                showClusterText={gngLayer.showClusterText}
-                                visibleLabels={gngLayer.visibleLabels}
-                                nodeScale={gngLayer.nodeScale}
-                                edgeWidth={gngLayer.edgeWidth}
-                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
-                                onClusterSelect={handleClusterSelect}
-                                enableClusterSelection={!zoneMonitor.isDrawing}
-                            />
-                        )
-                    )}
+                    {Object.entries(graphData).map(([tag, data]) => {
+                        const settings = layerSettings[tag];
+                        if (!settings || !settings.visible) return null;
+
+                        const commonProps = {
+                            key: tag,
+                            data: data,
+                            showNodes: settings.showNodes,
+                            showEdges: settings.showEdges,
+                            showClusters: settings.showClusters,
+                            opacity: settings.opacity,
+                            showClusterText: gngLayer.showClusterText,
+                            visibleLabels: gngLayer.visibleLabels,
+                            nodeScale: gngLayer.nodeScale,
+                            edgeWidth: gngLayer.edgeWidth,
+                            selectedClusterId: selectedClusterSnapshot?.cluster.id ?? null,
+                            onClusterSelect: handleClusterSelect,
+                            enableClusterSelection: !zoneMonitor.isDrawing,
+                        };
+
+                        if (data.frameId && data.frameId !== 'world' && data.frameId !== 'map') {
+                            return <StaticGraphRenderer {...commonProps} />;
+                        } else {
+                            return <GraphRenderer {...commonProps} />;
+                        }
+                    })}
 
                     {robotData && (
                         <RobotRenderer

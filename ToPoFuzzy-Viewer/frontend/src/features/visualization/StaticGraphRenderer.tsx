@@ -33,6 +33,7 @@ interface GraphRendererProps {
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
     enableClusterSelection?: boolean;
+    opacity?: number;
 }
 
 export function StaticGraphRenderer({
@@ -47,7 +48,8 @@ export function StaticGraphRenderer({
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
-    enableClusterSelection = true
+    enableClusterSelection = true,
+    opacity = 1.0
 }: GraphRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const nodesRef = useRef<THREE.InstancedMesh>(null);
@@ -105,7 +107,7 @@ export function StaticGraphRenderer({
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
 
     // --- Node material ---
-    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff' }), []);
+    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: opacity }), [opacity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
 
@@ -163,7 +165,7 @@ export function StaticGraphRenderer({
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
 
     // --- Edge material ---
-    const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: 1.0 }), []);
+    const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: opacity }), [opacity]);
 
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
@@ -271,7 +273,7 @@ export function StaticGraphRenderer({
                                 <meshStandardMaterial
                                     color={color}
                                     transparent
-                                    opacity={isSelected ? 0.1 : 0.3}
+                                    opacity={isSelected ? 0.1 : 0.3 * opacity}
                                     emissive={isSelected ? '#FFFFFF' : '#000000'}
                                     emissiveIntensity={isSelected ? 0.2 : 0}
                                     depthWrite={false}
