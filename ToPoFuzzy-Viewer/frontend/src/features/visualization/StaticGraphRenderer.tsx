@@ -62,26 +62,36 @@ export function StaticGraphRenderer({
 
     // --- Frame Anchoring (TF-like logic) ---
     useEffect(() => {
-        if (!groupRef.current || !graph.frameId || graph.frameId === 'world') {
-            // Re-attach to scene if no frame is specified or it's 'world'
-            if (groupRef.current?.parent && groupRef.current.parent !== scene) {
-                scene.add(groupRef.current);
-                groupRef.current.position.set(0, 0, 0);
-                groupRef.current.rotation.set(0, 0, 0);
-            }
-            return;
-        }
+        let timeoutId: number;
 
-        // Try to find the link in the scene (robot link name)
-        const anchor = scene.getObjectByName(graph.frameId);
-        if (anchor && groupRef.current.parent !== anchor) {
-            console.log(`[StaticGraphRenderer] Anchoring to frame: ${graph.frameId}`);
-            anchor.add(groupRef.current);
-            
-            // Set local transform to identity to align with the frame
-            groupRef.current.position.set(0, 0, 0);
-            groupRef.current.rotation.set(0, 0, 0);
-        }
+        const attemptAnchor = () => {
+            if (!groupRef.current || !graph.frameId || graph.frameId === 'world') {
+                if (groupRef.current?.parent && groupRef.current.parent !== scene) {
+                    scene.add(groupRef.current);
+                    groupRef.current.position.set(0, 0, 0);
+                    groupRef.current.rotation.set(0, 0, 0);
+                }
+                return;
+            }
+
+            const anchor = scene.getObjectByName(graph.frameId);
+            if (anchor) {
+                if (groupRef.current.parent !== anchor) {
+                    console.log(`[StaticGraphRenderer] Anchoring to frame: ${graph.frameId}`);
+                    anchor.add(groupRef.current);
+                    groupRef.current.position.set(0, 0, 0);
+                    groupRef.current.rotation.set(0, 0, 0);
+                }
+            } else {
+                // If not found, retry in 500ms (robot might still be loading)
+                timeoutId = window.setTimeout(attemptAnchor, 500);
+            }
+        };
+
+        attemptAnchor();
+        return () => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+        };
     }, [graph.frameId, scene]);
 
     // Handle cluster click with drag filtering

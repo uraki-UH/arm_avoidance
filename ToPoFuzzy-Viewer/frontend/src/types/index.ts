@@ -93,6 +93,8 @@ export interface RobotData {
     jointValues: number[];
     positions: [number, number, number][];
     orientations: [number, number, number, number][];
+    basePosition?: [number, number, number];
+    baseOrientation?: [number, number, number, number];
 }
 
 // --- WebSocket / RPC Types ---

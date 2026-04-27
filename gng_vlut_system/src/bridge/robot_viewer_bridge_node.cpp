@@ -12,6 +12,7 @@
 #include <iomanip>
 #include <stdexcept>
 #include <sstream>
+#include <tf2_eigen/tf2_eigen.h>
 #include <utility>
 
 #include "common/resource_utils.hpp"
@@ -86,6 +87,9 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_state_topic_, rclcpp::QoS(10),
         std::bind(&RobotViewerBridgeNode::jointStateCallback, this, std::placeholders::_1));
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
@@ -176,6 +180,19 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
         << "\"robot\":{"
         << "\"timestamp\":" << ts << ','
         << "\"frameId\":\"" << escapeJson(frame_id_) << "\",";
+    
+    // Add base transform if available
+    try {
+        geometry_msgs::msg::TransformStamped tf = tf_buffer_->lookupTransform("world", frame_id_, tf2::TimePointZero);
+        Eigen::Affine3d eigen_tf = tf2::transformToEigen(tf);
+        last_base_pos_ = eigen_tf.translation();
+        last_base_quat_ = eigen_tf.linear(); // Implicitly converts to Quaternion
+    } catch (const tf2::TransformException & ex) {
+        // Use last valid transform instead of jumping to origin
+    }
+
+    oss << "\"basePosition\":[" << last_base_pos_.x() << "," << last_base_pos_.y() << "," << last_base_pos_.z() << "],";
+    oss << "\"baseOrientation\":[" << last_base_quat_.x() << "," << last_base_quat_.y() << "," << last_base_quat_.z() << "," << last_base_quat_.w() << "],";
 
     if (include_urdf) {
         oss << "\"urdf\":\"" << escapeJson(urdf_content_) << "\",";
@@ -219,12 +236,16 @@ void RobotViewerBridgeNode::publishCurrentStateLocked() {
     chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
 
     std_msgs::msg::String msg;
-    if (first_publish_) {
-        // Send full description once (or when needed)
+    static int tick_count = 0;
+    const int desc_interval_ticks = static_cast<int>(publish_hz_ * 5.0); // Every 5 seconds
+
+    if (first_publish_ || (tick_count % std::max(1, desc_interval_ticks) == 0)) {
+        // Send full description periodically to ensure late subscribers get it
         msg.data = buildRobotJsonLocked("stream.robot.description", positions, orientations, true);
         robot_pub_->publish(msg);
         first_publish_ = false;
     }
+    tick_count++;
 
     // Send lightweight pose update
     msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, false);

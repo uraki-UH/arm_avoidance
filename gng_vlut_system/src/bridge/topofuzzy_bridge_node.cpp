@@ -92,16 +92,6 @@ std::string activeEdgeModeName(int edge_mode) {
   return "auto";
 }
 
-uint8_t parseGraphMode(const std::string &mode) {
-  std::string lower;
-  lower.reserve(mode.size());
-  for (char c : mode) {
-    lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-  }
-  return (lower == "static" || lower == "0")
-      ? ais_gng_msgs::msg::TopologicalMap::STATIC
-      : ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
-}
 
 } // namespace
 
@@ -332,8 +322,6 @@ private:
     ais_gng_msgs::msg::TopologicalMap msg;
     msg.header.stamp = now();
     msg.header.frame_id = frame_id_;
-    msg.tag = tag_;
-    msg.mode = parseGraphMode(mode_);
 
     if (!context_ || !context_->gng) {
       return msg;

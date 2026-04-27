@@ -7,6 +7,9 @@
 
 #include <Eigen/Geometry>
 
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -51,6 +54,12 @@ private:
     std::string frame_id_;
     double publish_hz_;
     bool first_publish_ = true;
+
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+    mutable Eigen::Vector3d last_base_pos_{0, 0, 0};
+    mutable Eigen::Quaterniond last_base_quat_{1, 0, 0, 0};
 };
 
 } // namespace bridge

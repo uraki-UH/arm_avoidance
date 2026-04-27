@@ -40,16 +40,6 @@
 namespace {
 constexpr float kEps = 1e-6f;
 
-uint8_t parseGraphMode(const std::string &mode) {
-    std::string lower;
-    lower.reserve(mode.size());
-    for (char c : mode) {
-        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-    }
-    return (lower == "static" || lower == "0")
-        ? ais_gng_msgs::msg::TopologicalMap::STATIC
-        : ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
-}
 
 uint8_t viewerLabelFromStatus(const GNG::Status &status) {
     if (status.is_colliding) return 2; // red
@@ -317,8 +307,6 @@ private:
         ais_gng_msgs::msg::TopologicalMap msg;
         msg.header.stamp = this->now();
         msg.header.frame_id = base_frame_;
-        msg.tag = tag_;
-        msg.mode = parseGraphMode(mode_);
 
         auto& gng = *context_->gng;
         std::unordered_map<int, uint16_t> id_to_index;

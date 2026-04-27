@@ -14,6 +14,8 @@ def launch_setup(context, *args, **kwargs):
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
     gng_tag = LaunchConfiguration("tag").perform(context)
     gng_mode = LaunchConfiguration("mode").perform(context)
+    robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
+    gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
     
     # Auto-detect robot description package
@@ -53,6 +55,7 @@ def launch_setup(context, *args, **kwargs):
                 "experiment_id": exp_id,
                 "tag": gng_tag,
                 "mode": gng_mode,
+                "frame_id": gng_frame_id,
             }]
         ),
 
@@ -68,6 +71,7 @@ def launch_setup(context, *args, **kwargs):
                 "mesh_root_dir": mesh_root,
                 "joint_state_topic": "/joint_states",
                 "stream_topic": "/viewer/internal/stream/robot",
+                "frame_id": robot_base_frame,
                 "publish_hz": publish_hz,
             }]
         )
@@ -82,6 +86,8 @@ def generate_launch_description():
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("tag", default_value="static"),
         DeclareLaunchArgument("mode", default_value="static"),
+        DeclareLaunchArgument("robot_base_frame", default_value="world"),
+        DeclareLaunchArgument("gng_frame_id", default_value="world"),
         DeclareLaunchArgument("publish_hz", default_value="30.0"),
         OpaqueFunction(function=launch_setup)
     ])

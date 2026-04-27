@@ -1,124 +1,74 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RobotData } from '../../types';
 
 interface RobotRendererProps {
-    data: RobotData | null;
+    tag: string;
+    data: RobotData;
     visible?: boolean;
 }
 
-export function RobotRenderer({
-    data,
-    visible = true,
-}: RobotRendererProps) {
-    const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
+export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
-    const lastUrdfRef = useRef<string>('');
-    const lastJointSignatureRef = useRef<string>('');
-    const robotMaterial = useMemo(() => new THREE.MeshPhongMaterial({
-        color: '#0000FF',
-        emissive: '#003300',
-        specular: '#000000',
-        shininess: 0,
-        flatShading: true,
-        transparent: false,
-        depthWrite: true,
-        depthTest: true,
-        side: THREE.DoubleSide,
+    const lastUrdfRef = useRef<string | null>(null);
+    const lastJointSignatureRef = useRef<string | null>(null);
+    
+    const { scene } = useThree();
+    const viewerPort = 9001; // Actual mesh server port in gateway node
+
+    // --- Memoize Robot Material ---
+    const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: '#888888',
+        roughness: 0.5,
+        metalness: 0.5,
+        transparent: true,
+        opacity: 0.8,
     }), []);
 
-    // --- Initialize Loaders ---
-    const loaders = useMemo(() => {
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
-        
-        const gltfLoader = new GLTFLoader();
-        gltfLoader.setDRACOLoader(dracoLoader);
-        
-        const urdfLoader = new URDFLoader();
-        // @ts-ignore
-        urdfLoader.fetchOptions = {};
-
-        return { urdfLoader, gltfLoader, dracoLoader };
-    }, []);
-
-    const applyRobotMaterial = useMemo(() => {
-        return (root: THREE.Object3D) => {
-            root.traverse((child: any) => {
-                if (!child?.isMesh) {
-                    return;
-                }
-
-                const material = robotMaterial.clone();
-                child.material = material;
-                child.castShadow = false;
-                child.receiveShadow = false;
-                child.renderOrder = 10;
-                child.material.needsUpdate = true;
-            });
-        };
+    // --- Memoize Helper Function ---
+    const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
+        obj.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                mesh.material = robotMaterial;
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
+                mesh.renderOrder = 10;
+            }
+        });
     }, [robotMaterial]);
 
-    // --- Load URDF ---
+    // --- Load URDF (Only when content changes) ---
     useEffect(() => {
         if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
         
         lastUrdfRef.current = data.urdf;
+        console.log(`[RobotRenderer] Parsing new URDF for: ${tag}`);
 
-        const { urdfLoader } = loaders;
-        
+        const urdfLoader = new URDFLoader();
         // Redirect package:// to our mesh server
-        urdfLoader.packages = (pkg) => {
-            return `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
-        };
-        urdfLoader.loadMeshCb = (path, manager, done) => {
-            urdfLoader.defaultMeshLoader(path, manager, (obj, err) => {
-                if (obj) {
-                    if ((obj as THREE.Mesh).isMesh) {
-                        const mesh = obj as THREE.Mesh;
-                        mesh.material = robotMaterial.clone();
-                        mesh.castShadow = false;
-                        mesh.receiveShadow = false;
-                        mesh.renderOrder = 10;
-                        mesh.material.needsUpdate = true;
-
-                        const wrapper = new THREE.Group();
-                        wrapper.add(mesh);
-                        done(wrapper, err);
-                        return;
-                    }
-
-                    applyRobotMaterial(obj);
-                }
-                done(obj, err);
-            });
-        };
-
+        urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
+        
         try {
             const robotObj = urdfLoader.parse(data.urdf);
-
-            // Make the robot easier to see in the viewer by overriding imported materials.
             applyRobotMaterial(robotObj);
-            
             setRobot(robotObj);
-            console.log("URDF Robot model loaded successfully");
         } catch (err) {
             console.error("Failed to parse URDF:", err);
+            lastUrdfRef.current = null; // Allow retry
         }
-    }, [data?.urdf, loaders, robotMaterial, viewerPort, applyRobotMaterial]);
+    }, [data?.urdf, viewerPort, applyRobotMaterial, tag]);
 
     // --- Update Joints ---
     useEffect(() => {
         if (!robot || !data?.jointNames || !data?.jointValues) return;
 
-        const signature = data.jointValues.map((value) => Number.isFinite(value) ? value.toFixed(6) : 'nan').join(',');
-        if (signature === lastJointSignatureRef.current) {
-            return;
-        }
+        // Create a signature to avoid redundant joint updates
+        const signature = data.jointValues.map((v) => v.toFixed(4)).join(',');
+        if (signature === lastJointSignatureRef.current) return;
         lastJointSignatureRef.current = signature;
 
         data.jointNames.forEach((name, i) => {
@@ -132,8 +82,11 @@ export function RobotRenderer({
 
     return (
         <primitive 
+            key={tag} // Ensure fresh component if tag changes
             ref={groupRef}
             object={robot} 
+            position={data?.basePosition || [0, 0, 0]}
+            quaternion={data?.baseOrientation || [0, 0, 0, 1]}
             renderOrder={10}
         />
     );

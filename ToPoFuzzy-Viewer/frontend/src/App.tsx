@@ -169,7 +169,7 @@ function App() {
                     showNodes: true,
                     showEdges: true,
                     showClusters: false,
-                    opacity: 1.0
+                    opacity: 0.1
                 };
                 changed = true;
             }
@@ -761,11 +761,12 @@ function App() {
                         } else {
                             return <GraphRenderer {...commonProps} />;
                         }
-                    })} 
+                    })}
 
                     {Object.entries(robotData).map(([tag, data]) => (
                         <RobotRenderer
                             key={`robot-${tag}`}
+                            tag={tag}
                             data={data}
                         />
                     ))}

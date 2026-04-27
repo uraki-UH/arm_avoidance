@@ -26,6 +26,10 @@ ament_target_dependencies(robot_viewer_bridge_node_component
     rclcpp_components
     sensor_msgs
     std_msgs
+    geometry_msgs
+    tf2_ros
+    tf2_geometry_msgs
+    tf2_eigen
     ament_index_cpp
 )
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")

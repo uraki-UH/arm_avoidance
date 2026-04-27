@@ -58,13 +58,16 @@ std::string extractGraphTag(const MsgT& msg, const std::string& fallbackTag) {
     }
 }
 
-template <typename MsgT>
-std::string extractGraphMode(const MsgT& msg) {
-    if constexpr (has_mode_member<MsgT>::value) {
-        return (msg.mode == ais_gng_msgs::msg::TopologicalMap::STATIC) ? "static" : "dynamic";
-    } else {
-        return "dynamic";
+std::string determineGraphMode(const std::string& topic, const std::vector<std::string>& staticTopics) {
+    auto it = std::find(staticTopics.begin(), staticTopics.end(), topic);
+    if (it != staticTopics.end()) {
+        return "static";
     }
+    // Fallback: heuristic if topic contains "static"
+    if (topic.find("static") != std::string::npos) {
+        return "static";
+    }
+    return "dynamic";
 }
 
 class ViewerWsGatewayNode : public rclcpp::Node {
@@ -122,7 +125,7 @@ public:
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kStreamRobot,
-            rclcpp::QoS(rclcpp::KeepLast(10)),
+            rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local(),
             std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
 
         jobEventSub_ = create_subscription<std_msgs::msg::String>(
@@ -137,6 +140,9 @@ public:
             std::bind(&ViewerWsGatewayNode::checkLiveness, this));
 
         startServer(port);
+
+        this->declare_parameter<std::vector<std::string>>("static_topics", std::vector<std::string>());
+        staticTopics_ = this->get_parameter("static_topics").as_string_array();
 
         RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
     }
@@ -365,7 +371,7 @@ private:
 
     void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& subscriptionTag) {
         const std::string tag = extractGraphTag(*msg, subscriptionTag);
-        const std::string mode = extractGraphMode(*msg);
+        const std::string mode = determineGraphMode(subscriptionTag, staticTopics_);
 
         RCLCPP_INFO(
             this->get_logger(),
@@ -601,6 +607,7 @@ private:
     std::atomic<bool> serverRunning_{false};
     uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
+    std::vector<std::string> staticTopics_;
 };
 
 } // namespace

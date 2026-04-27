@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { Billboard, Text } from '@react-three/drei';
-import { ThreeEvent } from '@react-three/fiber';
+import { ThreeEvent, useThree } from '@react-three/fiber';
 import { GraphData, LAYER_COLORS, LAYER_LABELS } from '../../types';
 
 const EMPTY_GRAPH: GraphData = {
@@ -52,7 +52,9 @@ export function GraphRenderer({
 }: GraphRendererProps) {
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
+    const groupRef = useRef<THREE.Group>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
+    const { scene } = useThree();
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     // Handle cluster click with drag filtering
@@ -160,6 +162,40 @@ export function GraphRenderer({
         }
     }, [edgePairCount, edgeCapacity]);
 
+    // --- Frame Anchoring (TF-like logic) ---
+    useEffect(() => {
+        let timeoutId: number;
+
+        const attemptAnchor = () => {
+            if (!groupRef.current || !graph.frameId || graph.frameId === 'world') {
+                if (groupRef.current?.parent && groupRef.current.parent !== scene) {
+                    scene.add(groupRef.current);
+                    groupRef.current.position.set(0, 0, 0);
+                    groupRef.current.rotation.set(0, 0, 0);
+                }
+                return;
+            }
+
+            const anchor = scene.getObjectByName(graph.frameId);
+            if (anchor) {
+                if (groupRef.current.parent !== anchor) {
+                    console.log(`[GraphRenderer] Anchoring to frame: ${graph.frameId}`);
+                    anchor.add(groupRef.current);
+                    groupRef.current.position.set(0, 0, 0);
+                    groupRef.current.rotation.set(0, 0, 0);
+                }
+            } else {
+                // If not found, retry in 500ms
+                timeoutId = window.setTimeout(attemptAnchor, 500);
+            }
+        };
+
+        attemptAnchor();
+        return () => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+        };
+    }, [graph.frameId, scene]);
+
     // --- Update instanced edges ---
     useEffect(() => {
         if (!edgesRef.current || !showEdges || edgePairCount === 0) return;
@@ -211,7 +247,7 @@ export function GraphRenderer({
     const canRenderEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
 
     return (
-        <group>
+        <group ref={groupRef}>
             {/* Nodes as instanced spheres */}
             {canRenderNodes && (
                 <instancedMesh
