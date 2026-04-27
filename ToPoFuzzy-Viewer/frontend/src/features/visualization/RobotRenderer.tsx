@@ -23,10 +23,7 @@ export function RobotRenderer({
         transparent: false,
         depthWrite: true,
         depthTest: true,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
     }), []);
 
     // --- Initialize Loaders ---
@@ -44,6 +41,23 @@ export function RobotRenderer({
         return { urdfLoader, gltfLoader, dracoLoader };
     }, []);
 
+    const applyRobotMaterial = useMemo(() => {
+        return (root: THREE.Object3D) => {
+            root.traverse((child: any) => {
+                if (!child?.isMesh) {
+                    return;
+                }
+
+                const material = robotMaterial.clone();
+                child.material = material;
+                child.castShadow = false;
+                child.receiveShadow = false;
+                child.renderOrder = 10;
+                child.material.needsUpdate = true;
+            });
+        };
+    }, [robotMaterial]);
+
     // --- Load URDF ---
     useEffect(() => {
         if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
@@ -56,32 +70,41 @@ export function RobotRenderer({
         urdfLoader.packages = (pkg) => {
             return `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
         };
+        urdfLoader.loadMeshCb = (path, manager, done) => {
+            urdfLoader.defaultMeshLoader(path, manager, (obj, err) => {
+                if (obj) {
+                    if ((obj as THREE.Mesh).isMesh) {
+                        const mesh = obj as THREE.Mesh;
+                        mesh.material = robotMaterial.clone();
+                        mesh.castShadow = false;
+                        mesh.receiveShadow = false;
+                        mesh.renderOrder = 10;
+                        mesh.material.needsUpdate = true;
 
-            try {
-            const robotObj = urdfLoader.parse(data.urdf);
-            // Make the robot easier to see in the viewer by overriding imported materials.
-            robotObj.traverse((child: any) => {
-                if (child?.isMesh) {
-                    child.material = robotMaterial;
-                    child.castShadow = false;
-                    child.receiveShadow = false;
-                    child.renderOrder = 10;
-                    if (child.material && 'polygonOffset' in child.material) {
-                        (child.material as THREE.Material & {
-                            polygonOffset?: boolean;
-                            polygonOffsetFactor?: number;
-                            polygonOffsetUnits?: number;
-                        }).polygonOffset = true;
+                        const wrapper = new THREE.Group();
+                        wrapper.add(mesh);
+                        done(wrapper, err);
+                        return;
                     }
+
+                    applyRobotMaterial(obj);
                 }
+                done(obj, err);
             });
+        };
+
+        try {
+            const robotObj = urdfLoader.parse(data.urdf);
+
+            // Make the robot easier to see in the viewer by overriding imported materials.
+            applyRobotMaterial(robotObj);
             
             setRobot(robotObj);
             console.log("URDF Robot model loaded successfully");
         } catch (err) {
             console.error("Failed to parse URDF:", err);
         }
-    }, [data?.urdf, loaders, robotMaterial, viewerPort]);
+    }, [data?.urdf, loaders, robotMaterial, viewerPort, applyRobotMaterial]);
 
     // --- Update Joints ---
     useEffect(() => {
