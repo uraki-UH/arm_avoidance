@@ -7,6 +7,7 @@ set(DESCRIPTION_SRCS
 )
 
 add_library(description_lib STATIC ${DESCRIPTION_SRCS})
+set_target_properties(description_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(description_lib PUBLIC .)
 target_link_libraries(description_lib common_lib kinematics_lib)
 
@@ -14,6 +15,7 @@ if(BUILD_WITH_ROS2)
     ament_target_dependencies(description_lib 
         urdf 
         urdfdom 
+        urdfdom_headers
         Eigen3
     )
 else()

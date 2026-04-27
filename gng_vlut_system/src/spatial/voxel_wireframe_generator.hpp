@@ -7,9 +7,6 @@
 namespace GNG {
 namespace Analysis {
 
-/**
- * @brief Utility to generate wireframe segments from a set of voxels.
- */
 class VoxelWireframeGenerator {
 public:
   /**
@@ -22,10 +19,6 @@ public:
   static std::vector<std::pair<Eigen::Vector3f, Eigen::Vector3f>>
   generate(const std::vector<Eigen::Vector3i> &voxels, double voxel_size);
 
-  /**
-   * @brief Generates only the exterior surface edges of the voxel cloud.
-   * (More complex, but cleaner visualization)
-   */
   static std::vector<std::pair<Eigen::Vector3f, Eigen::Vector3f>>
   generateSurface(const std::vector<Eigen::Vector3i> &voxels,
                   double voxel_size);

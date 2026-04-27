@@ -16,7 +16,6 @@ export function RobotRenderer({
 }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
     const lastUrdfRef = useRef<string>('');
 
     // --- Initialize Loaders ---
@@ -39,7 +38,6 @@ export function RobotRenderer({
         if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
         
         lastUrdfRef.current = data.urdf;
-        setLoading(true);
 
         const { urdfLoader } = loaders;
         
@@ -54,11 +52,9 @@ export function RobotRenderer({
             robotObj.rotation.x = -Math.PI / 2; 
             
             setRobot(robotObj);
-            setLoading(false);
             console.log("URDF Robot model loaded successfully");
         } catch (err) {
             console.error("Failed to parse URDF:", err);
-            setLoading(false);
         }
     }, [data?.urdf]);
 

@@ -1,126 +1,106 @@
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_components/register_node_macro.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
+#include "gng_vlut_system/self_recognition/self_recognition_viz_node.hpp"
 
-// Relocated loaders
-#include "description/urdf_loader.hpp"
-#include "description/robot_model.hpp"
-#include "description/kinematic_adapter.hpp"
-#include "core_safety/recognition/self_recognition_manager.hpp"
-#include "common/resource_utils.hpp"
+#include <rclcpp_components/register_node_macro.hpp>
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include <memory>
-#include <vector>
-#include <mutex>
 #include <chrono>
+#include <memory>
+#include <mutex>
+#include <vector>
+
+#include <Eigen/Core>
+
+#include <geometry_msgs/msg/point.hpp>
+
+#include "common/resource_utils.hpp"
+#include "core_safety/recognition/self_recognition_manager.hpp"
+#include "description/kinematic_adapter.hpp"
+#include "description/robot_model.hpp"
+#include "description/urdf_loader.hpp"
 
 namespace robot_sim {
 namespace self_recognition {
 
-/**
- * @brief SelfRecognitionVizNode
- * ロボットの自己認識領域（メッシュベースのボクセル・マスク）をリアルタイムで可視化するノード。
- */
-class SelfRecognitionVizNode : public rclcpp::Node {
-public:
-    explicit SelfRecognitionVizNode(const rclcpp::NodeOptions & options)
-    : Node("self_recognition_viz_node", options) {
-        // Compute default URDF path using package share
-        std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-        std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro";
+SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & options)
+: Node("self_recognition_viz_node", options) {
+    std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
+    std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro";
 
-        declare_parameter("robot_urdf_path", default_urdf);
-        declare_parameter("voxel_size", 0.02);
-        declare_parameter("update_hz", 10.0);
+    declare_parameter("robot_urdf_path", default_urdf);
+    declare_parameter("voxel_size", 0.02);
+    declare_parameter("update_hz", 10.0);
 
-        std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
-        std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
-        double voxel_size_param = get_parameter("voxel_size").as_double();
-        double hz = get_parameter("update_hz").as_double();
+    std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
+    std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
+    double voxel_size_param = get_parameter("voxel_size").as_double();
+    double hz = get_parameter("update_hz").as_double();
 
-        // 1. Robot Model Load (description_lib)
-        auto model = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
-        
-        // 2. Kinematic Chain Setup
-        auto chain = std::make_shared<kinematics::KinematicChain>(
-            simulation::createKinematicChainFromModel(*model)
-        );
+    auto model = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
 
-        // 3. Recognition Manager Setup
-        recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
-        recognition_manager_->initialize(*model, chain, voxel_size_param);
-        voxel_size_f_ = (float)voxel_size_param;
+    auto chain = std::make_shared<kinematics::KinematicChain>(
+        simulation::createKinematicChainFromModel(*model)
+    );
 
-        // 4. ROS Interfaces
-        joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_states", 10, 
-            [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                current_joints_ = msg->position;
-            });
+    recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
+    recognition_manager_->initialize(*model, chain, voxel_size_param);
+    voxel_size_f_ = static_cast<float>(voxel_size_param);
 
-        marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/self_mask_viz", 10);
-
-        timer_ = create_wall_timer(
-            std::chrono::milliseconds(static_cast<int>(1000.0 / hz)),
-            [this]() { this->publishViz(); });
-
-        RCLCPP_INFO(get_logger(), "Self Recognition Viz Node started (Component).");
-    }
-
-private:
-    void publishViz() {
-        std::vector<double> joints;
-        {
+    joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+        "/joint_states", 10,
+        [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
-            if (current_joints_.empty()) return;
-            joints = current_joints_;
-        }
+            current_joints_ = msg->position;
+        });
 
-        // 高精度判定を実行
-        auto vids = recognition_manager_->getSelfVoxelMask(joints, true);
-        
-        visualization_msgs::msg::MarkerArray markers;
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "world";
-        marker.header.stamp = now();
-        marker.ns = "self_voxels";
-        marker.id = 0;
-        marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.scale.x = (double)voxel_size_f_;
-        marker.scale.y = (double)voxel_size_f_;
-        marker.scale.z = (double)voxel_size_f_;
-        marker.color.r = 0.0;
-        marker.color.g = 0.5;
-        marker.color.b = 1.0;
-        marker.color.a = 0.5;
+    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/self_mask_viz", 10);
 
-        for (long vid : vids) {
-            Eigen::Vector3i idx = GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
-            geometry_msgs::msg::Point p;
-            Eigen::Vector3f pf = (idx.cast<float>() * voxel_size_f_) + Eigen::Vector3f::Constant(voxel_size_f_ * 0.5f);
-            p.x = (double)pf.x();
-            p.y = (double)pf.y();
-            p.z = (double)pf.z();
-            marker.points.push_back(p);
-        }
+    timer_ = create_wall_timer(
+        std::chrono::milliseconds(static_cast<int>(1000.0 / hz)),
+        [this]() { this->publishViz(); });
 
-        markers.markers.push_back(marker);
-        marker_pub_->publish(markers);
+    RCLCPP_INFO(get_logger(), "Self Recognition Viz Node started (Component).");
+}
+
+void SelfRecognitionVizNode::publishViz() {
+    std::vector<double> joints;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (current_joints_.empty()) return;
+        joints = current_joints_;
     }
 
-    std::unique_ptr<robot_sim::recognition::SelfRecognitionManager> recognition_manager_;
-    float voxel_size_f_;
-    std::vector<double> current_joints_;
-    std::mutex mutex_;
+    auto vids = recognition_manager_->getSelfVoxelMask(joints, true);
 
-    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
-    rclcpp::TimerBase::SharedPtr timer_;
-};
+    visualization_msgs::msg::MarkerArray markers;
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id = "world";
+    marker.header.stamp = now();
+    marker.ns = "self_voxels";
+    marker.id = 0;
+    marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.scale.x = static_cast<double>(voxel_size_f_);
+    marker.scale.y = static_cast<double>(voxel_size_f_);
+    marker.scale.z = static_cast<double>(voxel_size_f_);
+    marker.color.r = 0.0;
+    marker.color.g = 0.5;
+    marker.color.b = 1.0;
+    marker.color.a = 0.5;
+
+    for (long vid : vids) {
+        Eigen::Vector3i idx = GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+        geometry_msgs::msg::Point p;
+        Eigen::Vector3f pf = (idx.cast<float>() * voxel_size_f_) + Eigen::Vector3f::Constant(voxel_size_f_ * 0.5f);
+        p.x = static_cast<double>(pf.x());
+        p.y = static_cast<double>(pf.y());
+        p.z = static_cast<double>(pf.z());
+        marker.points.push_back(p);
+    }
+
+    markers.markers.push_back(marker);
+    marker_pub_->publish(markers);
+}
 
 } // namespace self_recognition
 } // namespace robot_sim

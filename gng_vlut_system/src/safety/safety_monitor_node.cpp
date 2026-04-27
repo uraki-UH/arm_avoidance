@@ -12,11 +12,13 @@
 #include "core_safety/persistence/safety_system_loader.hpp"
 #include "core_safety/gng/GrowingNeuralGas.hpp"
 #include "core_safety/recognition/self_recognition_manager.hpp"
+#include "description/kinematic_adapter.hpp"
 #include "description/urdf_loader.hpp"
 #include "common/resource_utils.hpp"
 
 #include <Eigen/Geometry>
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <filesystem>
 #include <mutex>
 #include <vector>
@@ -69,6 +71,8 @@ public:
         this->declare_parameter("robot_urdf_path", "");
         this->declare_parameter("base_frame", "base_link");
         this->declare_parameter("publish_hz", 20.0);
+        this->declare_parameter("safety_margin", 0.05);
+        this->declare_parameter("tag", "dynamic");
 
         std::string gng_path = resolveResultPath(
             this->get_parameter("gng_model_path").as_string(),
@@ -79,6 +83,7 @@ public:
         voxel_size_ = this->get_parameter("voxel_size").as_double();
         safety_margin_ = this->get_parameter("safety_margin").as_double();
         base_frame_ = this->get_parameter("base_frame").as_string();
+        tag_ = this->get_parameter("tag").as_string();
         double hz = this->get_parameter("publish_hz").as_double();
         
         // Setup TF2
@@ -104,9 +109,8 @@ public:
             const std::string mesh_root = pkg_share + "/urdf/topoarm_description/meshes";
 
             auto robot_model = simulation::loadRobotFromUrdf(resolved_urdf, resource_root, mesh_root);
-            auto chain = simulation::createKinematicChainFromModel(robot_model, "");
-            
-            chain_ = std::move(chain);
+            chain_ = std::make_shared<kinematics::KinematicChain>(
+                simulation::createKinematicChainFromModel(robot_model, ""));
             self_rec_manager_ = std::make_unique<recognition::SelfRecognitionManager>();
             self_rec_manager_->initialize(robot_model, chain_, voxel_size_);
 
@@ -299,6 +303,8 @@ private:
         ais_gng_msgs::msg::TopologicalMap msg;
         msg.header.stamp = this->now();
         msg.header.frame_id = base_frame_;
+        msg.tag = tag_;
+        msg.mode = ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
 
         auto& gng = *context_->gng;
         std::unordered_map<int, uint16_t> id_to_index;
@@ -382,6 +388,7 @@ private:
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
     
     std::string base_frame_;
+    std::string tag_ = "dynamic";
     bool graph_dirty_ = true;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub_;

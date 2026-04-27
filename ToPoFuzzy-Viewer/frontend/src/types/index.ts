@@ -63,6 +63,8 @@ export interface GraphCluster {
     nodeIds: number[];  // IDs of nodes belonging to this cluster
 }
 
+export type GraphMode = 'static' | 'dynamic';
+
 export interface GraphData {
     timestamp: number;
     nodes: GraphNode[];
@@ -70,6 +72,8 @@ export interface GraphData {
     clusters: GraphCluster[];
     clusterLabels?: number[];
     frameId?: string;
+    tag?: string;
+    mode?: GraphMode;
 }
 
 export interface LayerSettings {

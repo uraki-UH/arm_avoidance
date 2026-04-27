@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
-import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, GraphData, LayerSettings } from './types';
+import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, LayerSettings } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
@@ -12,6 +12,7 @@ import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
+import { type GngLayerState } from './features/visualization/GngLayerControls';
 
 import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
@@ -143,6 +144,11 @@ function App() {
         getContinuousPublishStatus,
     } = useWebSocket(wsUrl);
 
+    useEffect(() => {
+        connect();
+        return () => disconnect();
+    }, []);
+
     const clipping = useClippingPlanes();
     const zoneMonitor = useZoneMonitor();
 
@@ -156,13 +162,12 @@ function App() {
 
         Object.keys(graphData).forEach(tag => {
             if (!newSettings[tag]) {
-                const isStatic = tag.toLowerCase().includes('static') || tag.toLowerCase().includes('map');
                 newSettings[tag] = {
                     visible: true,
                     showNodes: true,
                     showEdges: true,
                     showClusters: true,
-                    opacity: isStatic ? 0.6 : 1.0
+                    opacity: 1.0
                 };
                 changed = true;
             }
@@ -206,7 +211,7 @@ function App() {
 
     const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
 
-    const [gngLayer, setGngLayer] = useState({
+    const [gngLayer, setGngLayer] = useState<GngLayerState>({
         visible: true,
         removed: false,
         showGraph: true,
@@ -216,8 +221,8 @@ function App() {
         showNormals: true,
         normalArrowLength: 0.15,
         normalArrowColor: '#00FFFF',
-        nodeScale: 0.015,
-        edgeWidth: 0.007,
+        nodeScale: 0.03,
+        edgeWidth: 0.012,
         visibleLabels: {
             0: true,
             1: true,
@@ -617,7 +622,7 @@ function App() {
         }
 
         setSelectedClusterSnapshot({
-            cluster: JSON.parse(JSON.stringify(cluster)),
+            cluster: JSON.parse(JSON.stringify(foundCluster)),
             nodes: JSON.parse(JSON.stringify(nodes)),
             edges: JSON.parse(JSON.stringify(edges)),
         });
@@ -750,12 +755,12 @@ function App() {
                             enableClusterSelection: !zoneMonitor.isDrawing,
                         };
 
-                        if (data.frameId && data.frameId !== 'world' && data.frameId !== 'map') {
+                        if (data.mode === 'static') {
                             return <StaticGraphRenderer {...commonProps} />;
                         } else {
                             return <GraphRenderer {...commonProps} />;
                         }
-                    })}
+                    })} 
 
                     {robotData && (
                         <RobotRenderer

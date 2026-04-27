@@ -31,7 +31,7 @@ ament_target_dependencies(robot_viewer_bridge_node_component
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 
 # 5b. Robot Viewer Bridge Node (Executable)
-add_executable(robot_viewer_bridge_node src/robot_viewer_bridge_node_main.cpp)
+add_executable(robot_viewer_bridge_node robot_viewer_bridge_node_main.cpp)
 target_link_libraries(robot_viewer_bridge_node robot_viewer_bridge_node_component)
 
 # Installation

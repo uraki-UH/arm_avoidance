@@ -7,9 +7,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
-            'gng_topics',
-            default_value=['/viewer/internal/stream/graph', '/topological_map', '/topological_map_transformed'],
-            description='List of GNG topics to subscribe to'
+            'ws_port',
+            default_value='9001',
+            description='WebSocket port for the viewer gateway'
         ),
         Node(
             package='topo_fuzzy_viewer',
@@ -17,7 +17,8 @@ def generate_launch_description():
             name='viewer_ws_gateway_node',
             output='screen',
             parameters=[{
-                'gng_topics': LaunchConfiguration('gng_topics')
+                'gng_topics': ['/viewer/internal/stream/graph', '/topological_map', '/topological_map_transformed'],
+                'port': LaunchConfiguration('ws_port')
             }]
         ),
         Node(

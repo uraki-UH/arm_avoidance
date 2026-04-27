@@ -9,6 +9,7 @@ endif()
 # C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # --- 1. Try to find ROS 2 (ament_cmake) ---
 find_package(ament_cmake QUIET)
@@ -31,6 +32,7 @@ find_package(ais_gng_msgs REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)
+find_package(urdfdom_headers REQUIRED)
 find_package(tinyxml2_vendor REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -48,6 +50,18 @@ if(NOT _eigen_include_dirs)
 endif()
 message(STATUS "Eigen3_INCLUDE_DIRS: ${_eigen_include_dirs}")
 include_directories(${_eigen_include_dirs})
+
+set(_urdfdom_headers_include_dirs "${urdfdom_headers_INCLUDE_DIRS}")
+if(NOT _urdfdom_headers_include_dirs)
+    set(_urdfdom_headers_include_dirs "/opt/ros/humble/include/urdfdom_headers")
+endif()
+include_directories(${_urdfdom_headers_include_dirs})
+
+set(_urdfdom_include_dirs "${urdfdom_INCLUDE_DIRS}")
+if(NOT _urdfdom_include_dirs)
+    set(_urdfdom_include_dirs "/opt/ros/humble/include/urdfdom")
+endif()
+include_directories(${_urdfdom_include_dirs})
 
 find_package(ament_index_cpp REQUIRED)
 include_directories(${ament_index_cpp_INCLUDE_DIRS})
@@ -73,6 +87,7 @@ else()
 endif()
 
 # Include directories
+include_directories(include)
 include_directories(src)
 include_directories(src/core_safety)
 
@@ -81,8 +96,11 @@ add_subdirectory(src)
 
 # --- 3. Executables ---
 # --- 3. Resource Installation ---
-install(DIRECTORY urdf config launch
+install(DIRECTORY urdf config launch gng_results
   DESTINATION share/${PROJECT_NAME}
+)
+install(DIRECTORY include/
+  DESTINATION include
 )
 
 ament_auto_package()

@@ -99,8 +99,8 @@ bool GngProcessManager::startGng(const GngParams& params) {
         // Source workspace before running GNG
         std::string sourceCmd;
         if (!projectRoot_.empty()) {
-             // Portable path
-             sourceCmd = "source " + projectRoot_ + "/backend/install/setup.bash && ";
+             // projectRoot_ already points at the backend workspace root.
+             sourceCmd = "source " + projectRoot_ + "/install/setup.bash && ";
         }
 
         std::string fullCmd = sourceCmd + "ros2 run ais_gng ais_gng_node --ros-args" + args;

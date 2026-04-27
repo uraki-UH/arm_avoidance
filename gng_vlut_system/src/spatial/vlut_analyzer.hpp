@@ -7,10 +7,6 @@
 namespace robot_sim {
 namespace spatial {
 
-/**
- * @brief Independent and fast GNG node occupancy counter from voxel data.
- * Optimized for Version 3 VLUT format (binary hit detection).
- */
 class VlutAnalyzer {
 public:
   // Binary compatible with Version 3 VLUT file format (4 bytes per record)

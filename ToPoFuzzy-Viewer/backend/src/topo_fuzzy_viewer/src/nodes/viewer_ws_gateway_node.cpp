@@ -14,13 +14,17 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <type_traits>
 #include <utility>
 #include <vector>
+
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace {
 
@@ -33,10 +37,43 @@ struct PendingResponse {
     std::string payload;
 };
 
+template <typename T, typename = void>
+struct has_tag_member : std::false_type {};
+
+template <typename T>
+struct has_tag_member<T, std::void_t<decltype(std::declval<const T&>().tag)>> : std::true_type {};
+
+template <typename T, typename = void>
+struct has_mode_member : std::false_type {};
+
+template <typename T>
+struct has_mode_member<T, std::void_t<decltype(std::declval<const T&>().mode)>> : std::true_type {};
+
+template <typename MsgT>
+std::string extractGraphTag(const MsgT& msg, const std::string& fallbackTag) {
+    if constexpr (has_tag_member<MsgT>::value) {
+        return msg.tag.empty() ? fallbackTag : msg.tag;
+    } else {
+        return fallbackTag;
+    }
+}
+
+template <typename MsgT>
+std::string extractGraphMode(const MsgT& msg) {
+    if constexpr (has_mode_member<MsgT>::value) {
+        return (msg.mode == ais_gng_msgs::msg::TopologicalMap::STATIC) ? "static" : "dynamic";
+    } else {
+        return "dynamic";
+    }
+}
+
 class ViewerWsGatewayNode : public rclcpp::Node {
 public:
     ViewerWsGatewayNode()
         : rclcpp::Node("viewer_ws_gateway_node") {
+        this->declare_parameter<int>("port", 9001);
+        const int port = this->get_parameter("port").as_int();
+
         sourceRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcSourceRequest, 50);
         fileRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcFileRequest, 50);
         rosbagRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcRosbagRequest, 50);
@@ -66,18 +103,21 @@ public:
         auto gngTopics = this->get_parameter("gng_topics").as_string_array();
 
         for (const auto& topic : gngTopics) {
-            std::string tag = topic;
-            // Use last part of topic as default tag if it's long? 
-            // For now, keep full topic name for uniqueness.
+            std::string subscriptionTag = topic;
             
+            rclcpp::QoS qos(rclcpp::KeepLast(10));
+            if (topic == "/topological_map" || topic == "/topological_map_transformed") {
+                qos.reliable().transient_local();
+            }
+
             auto sub = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
                 topic,
-                rclcpp::QoS(rclcpp::KeepLast(10)),
-                [this, tag](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
-                    this->handleGraph(msg, tag);
+                qos,
+                [this, subscriptionTag](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                    this->handleGraph(msg, subscriptionTag);
                 });
             graphSubs_.push_back(sub);
-            RCLCPP_INFO(this->get_logger(), "Subscribed to GNG topic: %s (tag: %s)", topic.c_str(), tag.c_str());
+            RCLCPP_INFO(this->get_logger(), "Subscribed to GNG topic: %s (default tag: %s)", topic.c_str(), subscriptionTag.c_str());
         }
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
@@ -92,9 +132,9 @@ public:
                 this->broadcastText(msg->data);
             });
 
-        startServer(9001);
+        startServer(port);
 
-        RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:9001");
+        RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
     }
 
     ~ViewerWsGatewayNode() override {
@@ -130,8 +170,20 @@ private:
         behavior.maxPayloadLength = 64 * 1024 * 1024;
         behavior.maxBackpressure = 16 * 1024 * 1024;
         behavior.open = [this](auto* ws) {
+            std::vector<std::string> cachedGraphs;
+            {
+                std::lock_guard<std::mutex> graphLock(graphMutex_);
+                cachedGraphs.reserve(lastGraphPayloads_.size());
+                for (const auto& [tag, payload] : lastGraphPayloads_) {
+                    (void)tag;
+                    cachedGraphs.push_back(payload);
+                }
+            }
             std::lock_guard<std::mutex> lock(connectionMutex_);
             connections_.push_back(ws);
+            for (const auto& payload : cachedGraphs) {
+                ws->send(payload, uWS::OpCode::TEXT);
+            }
         };
         behavior.message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) {
             if (opCode != uWS::OpCode::TEXT) {
@@ -293,9 +345,24 @@ private:
         broadcastBinary(serialized);
     }
 
-    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag) {
+    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& subscriptionTag) {
+        const std::string tag = extractGraphTag(*msg, subscriptionTag);
+        const std::string mode = extractGraphMode(*msg);
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Received graph topic tag=%s mode=%s frame_id=%s nodes=%zu edges=%zu clusters=%zu",
+            tag.c_str(),
+            mode.c_str(),
+            msg->header.frame_id.c_str(),
+            msg->nodes.size(),
+            msg->edges.size() / 2,
+            msg->clusters.size());
+
         viewer_internal::json graph;
         graph["timestamp"] = msg->header.stamp.sec;
+        graph["tag"] = tag;
+        graph["mode"] = mode;
 
         viewer_internal::json nodes = viewer_internal::json::array();
         for (const auto& node : msg->nodes) {
@@ -344,7 +411,18 @@ private:
         event["type"] = "stream.graph";
         event["tag"] = tag;
         event["graph"] = graph;
-        broadcastText(event.dump());
+        const std::string payload = event.dump();
+        {
+            std::lock_guard<std::mutex> lock(graphMutex_);
+            lastGraphPayloads_[tag] = payload;
+        }
+        broadcastText(payload);
+
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Broadcasted stream.graph tag=%s payload_bytes=%zu",
+            tag.c_str(),
+            payload.size());
     }
 
     void handleHttpGet(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
@@ -426,6 +504,9 @@ private:
 
     std::mutex connectionMutex_;
     std::vector<uWS::WebSocket<false, true, PerSocketData>*> connections_;
+
+    std::mutex graphMutex_;
+    std::unordered_map<std::string, std::string> lastGraphPayloads_;
 
     std::thread serverThread_;
     us_listen_socket_t* listenSocket_ = nullptr;

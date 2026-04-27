@@ -46,7 +46,7 @@ public:
 
         gngSourceSub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
             "/topological_map",
-            rclcpp::QoS(rclcpp::KeepLast(10)),
+            rclcpp::QoS(rclcpp::KeepLast(10)).reliable().transient_local(),
             std::bind(&ViewerSourceNode::handleGraph, this, std::placeholders::_1));
 
         RCLCPP_INFO(get_logger(), "viewer_source_node initialized");

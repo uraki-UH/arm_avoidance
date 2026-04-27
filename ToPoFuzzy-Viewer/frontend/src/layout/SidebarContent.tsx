@@ -344,7 +344,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 max="0.1"
                                 step="0.001"
                                 value={props.gngLayer.nodeScale}
-                                onChange={(e) => props.setGngLayer((prev) => ({ ...prev, nodeScale: parseFloat(e.target.value) }))}
+                                onChange={(e) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, nodeScale: parseFloat(e.target.value) }))}
                                 className="w-full"
                             />
                         </div>
@@ -356,7 +356,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 max="0.05"
                                 step="0.001"
                                 value={props.gngLayer.edgeWidth}
-                                onChange={(e) => props.setGngLayer((prev) => ({ ...prev, edgeWidth: parseFloat(e.target.value) }))}
+                                onChange={(e) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, edgeWidth: parseFloat(e.target.value) }))}
                                 className="w-full"
                             />
                         </div>

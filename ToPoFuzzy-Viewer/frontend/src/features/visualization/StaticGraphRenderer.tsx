@@ -107,7 +107,13 @@ export function StaticGraphRenderer({
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
 
     // --- Node material ---
-    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: opacity }), [opacity]);
+    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: '#ffffff',
+        transparent: true,
+        opacity: opacity,
+        depthTest: false,
+        depthWrite: false,
+    }), [opacity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
 
@@ -165,7 +171,13 @@ export function StaticGraphRenderer({
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
 
     // --- Edge material ---
-    const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: opacity }), [opacity]);
+    const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: '#08d408',
+        transparent: true,
+        opacity: opacity,
+        depthTest: false,
+        depthWrite: false,
+    }), [opacity]);
 
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
@@ -234,7 +246,7 @@ export function StaticGraphRenderer({
                     args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
                     count={graph.nodes.length}
                     frustumCulled={false}
-                    renderOrder={1}
+                    renderOrder={10}
                 />
             )}
 
@@ -244,7 +256,7 @@ export function StaticGraphRenderer({
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
                     count={edgePairCount}
                     frustumCulled={false}
-                    renderOrder={0}
+                    renderOrder={9}
                 />
             )}
 

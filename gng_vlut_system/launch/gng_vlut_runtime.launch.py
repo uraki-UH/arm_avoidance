@@ -12,8 +12,12 @@ def generate_launch_description():
     return LaunchDescription([
         # --- 基本設定 ---
         DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボット名（URDF等の検索に使用）"),
-        DeclareLaunchArgument("experiment_id", default_value="", description="VLUTデータセットのID"),
+        DeclareLaunchArgument("id", default_value="", description="VLUTデータセットのID"),
+        DeclareLaunchArgument("experiment_id", default_value="", description="(deprecated) VLUTデータセットのID"),
+        DeclareLaunchArgument("dir", default_value="gng_results", description="GNG/VLUT データの置き場所"),
+        DeclareLaunchArgument("data_directory", default_value="", description="(deprecated) GNG/VLUT データの置き場所"),
         DeclareLaunchArgument("base_frame", default_value="base_link", description="ロボットの基準座標系"),
+        DeclareLaunchArgument("tag", default_value="dynamic", description="GNG layer tag"),
         
         # --- 安全設定 ---
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
@@ -65,9 +69,13 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gng_vlut_monitor.launch.py")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
+                "id": LaunchConfiguration("id"),
                 "experiment_id": LaunchConfiguration("experiment_id"),
+                "dir": LaunchConfiguration("dir"),
+                "data_directory": LaunchConfiguration("data_directory"),
                 "frame_id": LaunchConfiguration("base_frame"),
                 "safety_margin": LaunchConfiguration("safety_margin"),
+                "tag": LaunchConfiguration("tag"),
             }.items()
         ),
         

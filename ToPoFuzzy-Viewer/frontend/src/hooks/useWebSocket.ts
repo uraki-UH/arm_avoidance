@@ -109,6 +109,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
+    const intentionalCloseRef = useRef(false);
 
     const flushPendingWithError = useCallback((message: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -120,6 +121,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const connect = useCallback(() => {
         if (ws) {
+            intentionalCloseRef.current = true;
             ws.close();
         }
 
@@ -214,6 +216,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 setIsConnected(false);
                 pendingTopicQueueRef.current = [];
                 flushPendingWithError('WebSocket closed');
+                if (intentionalCloseRef.current) {
+                    intentionalCloseRef.current = false;
+                    return;
+                }
                 if (event.code !== 1000) {
                     setError(`WebSocket disconnected (code=${event.code}${event.reason ? `, reason=${event.reason}` : ''})`);
                 }
@@ -227,6 +233,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const disconnect = useCallback(() => {
         if (ws) {
+            intentionalCloseRef.current = true;
             ws.close();
             setWs(null);
         }
@@ -234,6 +241,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     useEffect(() => {
         return () => {
+            intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
             if (ws) {
                 ws.close();

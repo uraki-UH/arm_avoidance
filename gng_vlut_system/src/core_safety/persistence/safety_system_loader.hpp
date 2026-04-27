@@ -10,10 +10,6 @@
 namespace robot_sim {
 namespace analysis {
 
-/**
- * @brief State container for the initialized safety analysis system.
- * Keeps all components synchronized and ready for real-time updates.
- */
 struct SafetySystemContext {
     std::shared_ptr<::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>> gng;
     std::shared_ptr<::robot_sim::analysis::ISpatialIndex> spatial_index;

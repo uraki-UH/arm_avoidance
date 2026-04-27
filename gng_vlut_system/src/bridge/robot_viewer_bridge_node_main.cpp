@@ -1,5 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
-#include "robot_viewer_bridge_node.cpp"
+#include "gng_vlut_system/bridge/robot_viewer_bridge_node.hpp"
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);

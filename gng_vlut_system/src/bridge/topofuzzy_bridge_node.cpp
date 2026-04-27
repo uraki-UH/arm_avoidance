@@ -101,6 +101,7 @@ public:
     declare_parameter("publish_hz", 20.0);
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
+    declare_parameter("tag", "topofuzzy_static");
     declare_parameter("occupied_voxels_topic", "/occupied_voxels");
     declare_parameter("danger_voxels_topic", "/danger_voxels");
     declare_parameter("data_directory", "gng_results");
@@ -124,6 +125,7 @@ public:
 
     edge_mode_ = get_parameter("edge_mode").as_int();
     frame_id_ = get_parameter("frame_id").as_string();
+    tag_ = get_parameter("tag").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
@@ -316,6 +318,8 @@ private:
     ais_gng_msgs::msg::TopologicalMap msg;
     msg.header.stamp = now();
     msg.header.frame_id = frame_id_;
+    msg.tag = tag_;
+    msg.mode = ais_gng_msgs::msg::TopologicalMap::STATIC;
 
     if (!context_ || !context_->gng) {
       return msg;
@@ -440,6 +444,7 @@ private:
 
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
+  std::string tag_ = "topofuzzy_static";
   double publish_hz_ = 5.0;
   std::string occupied_voxels_topic_ = "/occupied_voxels";
   std::string danger_voxels_topic_ = "/danger_voxels";

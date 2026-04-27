@@ -11,3 +11,9 @@ uint16[] edges
 ais_gng_msgs/TopologicalCluster[] clusters
 # Field required by FuzzyClassifier
 uint32 frame_number
+
+# Viewer metadata
+string tag
+uint8 mode
+uint8 STATIC=0
+uint8 DYNAMIC=1

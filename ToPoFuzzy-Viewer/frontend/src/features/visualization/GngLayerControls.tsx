@@ -1,6 +1,28 @@
 import React from 'react';
 import { Eye, EyeOff, Trash2, Box, Share2, Square } from 'lucide-react';
-import { GraphData, LayerSettings, LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { GraphData, LayerSettings } from '../../types';
+
+export interface GngLayerState {
+    visible: boolean;
+    removed: boolean;
+    showGraph: boolean;
+    showEdges: boolean;
+    showClusters: boolean;
+    showClusterText: boolean;
+    showNormals: boolean;
+    normalArrowLength: number;
+    normalArrowColor: string;
+    nodeScale: number;
+    edgeWidth: number;
+    visibleLabels: {
+        0: boolean;
+        1: boolean;
+        2: boolean;
+        3: boolean;
+        4: boolean;
+        5: boolean;
+    };
+}
 
 interface GngLayerControlsProps {
     tag: string;
@@ -25,7 +47,8 @@ export function GngLayerControls({
     onUpdate,
     onRemove
 }: GngLayerControlsProps) {
-    const isStatic = tag.toLowerCase().includes('static') || tag.toLowerCase().includes('map');
+    const isStatic = graphData.mode === 'static';
+    const displayTag = graphData.tag || tag;
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
@@ -48,10 +71,10 @@ export function GngLayerControls({
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-50">
-                                {isStatic ? 'Static' : 'Stream'}
+                                {isStatic ? 'Static' : 'Dynamic'}
                             </span>
                             <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                                {tag === 'default' ? 'GNG Topology' : tag}
+                                {displayTag === 'default' ? 'GNG Topology' : displayTag}
                             </div>
                         </div>
                         <div className="text-[10px] text-[var(--text-secondary)]">

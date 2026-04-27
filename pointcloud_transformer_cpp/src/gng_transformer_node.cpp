@@ -13,22 +13,14 @@
 #include "tf2_ros/transform_listener.h"
 #include <Eigen/Geometry>
 
-/**
- * @brief High-performance GNG Transformer Node.
- * Transforms a TopologicalMap from sensor frame to target frame (e.g.,
- * base_link) using Eigen matrix operations for maximum speed. Supports optional
- * workspace filtering.
- */
+//Eigenを用いたGNGマップの座標変換ノード
 class GngTransformerNode : public rclcpp::Node {
 public:
   GngTransformerNode() : Node("gng_transformer_node") {
-    // Declare and get parameters
     this->declare_parameter<std::string>("target_frame", "base_link");
     this->declare_parameter<std::string>("input_topic", "/gng_map");
-    this->declare_parameter<std::string>("output_topic",
-                                         "/topological_map_transformed");
-    this->declare_parameter<double>("filter_radius",
-                                    -1.0); // Negative to disable
+    this->declare_parameter<std::string>("output_topic", "/topological_map_transformed");
+    this->declare_parameter<double>("filter_radius", 1.0); // Negative to disable
     this->declare_parameter<double>("filter_z_min", -1.0);
     this->declare_parameter<double>("filter_z_max", 1.0);
 
@@ -52,8 +44,7 @@ public:
                       std::placeholders::_1));
 
     // Publisher
-    publisher_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-        output_topic, 10);
+    publisher_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(output_topic, 10);
 
     RCLCPP_INFO(this->get_logger(),
                 "GNG Transformer started: %s -> %s (Target: %s, Filter: %.2f)",

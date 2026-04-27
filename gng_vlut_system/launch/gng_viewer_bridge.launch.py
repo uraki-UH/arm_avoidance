@@ -1,14 +1,18 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
-from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
+    data_dir = LaunchConfiguration("dir").perform(context)
+    exp_id = LaunchConfiguration("id").perform(context)
+    gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
+    vlut_path = LaunchConfiguration("vlut_path").perform(context)
+    gng_tag = LaunchConfiguration("tag").perform(context)
     
     # Auto-detect robot description package
     try:
@@ -25,6 +29,15 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
+    def resolve_result_path(path: str, default_filename: str) -> str:
+        if path:
+            if os.path.isabs(path):
+                return path
+            if path.startswith("gng_results/") or "/" in path:
+                return os.path.join(pkg_share, path)
+        filename = path or default_filename
+        return os.path.join(pkg_share, data_dir, exp_id, filename)
+
     return [
         # 1. GNG Bridge (Topofuzzy)
         Node(
@@ -32,8 +45,11 @@ def launch_setup(context, *args, **kwargs):
             executable="topofuzzy_bridge_node",
             name="topofuzzy_bridge_node",
             parameters=[{
-                "input_topic": "/gng_status",
-                "stream_topic": "/viewer/internal/stream/gng",
+                "gng_model_path": resolve_result_path(gng_model_path, "gng.bin"),
+                "vlut_path": resolve_result_path(vlut_path, "vlut.bin"),
+                "data_directory": data_dir,
+                "experiment_id": exp_id,
+                "tag": gng_tag,
             }]
         ),
 
@@ -56,5 +72,10 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("dir", default_value="gng_results"),
+        DeclareLaunchArgument("id", default_value="standard_train"),
+        DeclareLaunchArgument("gng_model_path", default_value=""),
+        DeclareLaunchArgument("vlut_path", default_value=""),
+        DeclareLaunchArgument("tag", default_value="topofuzzy_static"),
         OpaqueFunction(function=launch_setup)
     ])

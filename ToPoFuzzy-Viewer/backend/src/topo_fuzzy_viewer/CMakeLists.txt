@@ -10,6 +10,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
@@ -34,6 +35,7 @@ set(ROS2_DEPENDENCIES_PC
 
 set(ROS2_DEPENDENCIES_GRAPH
   rclcpp
+  ament_index_cpp
   sensor_msgs
   std_msgs
   pcl_conversions

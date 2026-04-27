@@ -86,7 +86,13 @@ export function GraphRenderer({
 
     // --- Node material ---
     const nodeMaterial = useMemo(() => {
-        return new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: opacity });
+        return new THREE.MeshBasicMaterial({
+            color: '#ffffff',
+            transparent: true,
+            opacity: opacity,
+            depthTest: false,
+            depthWrite: false,
+        });
     }, [opacity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
@@ -132,7 +138,13 @@ export function GraphRenderer({
 
     // --- Edge material ---
     const edgeMaterial = useMemo(() => {
-        return new THREE.MeshBasicMaterial({ color: '#08d408', transparent: true, opacity: opacity });
+        return new THREE.MeshBasicMaterial({
+            color: '#08d408',
+            transparent: true,
+            opacity: opacity,
+            depthTest: false,
+            depthWrite: false,
+        });
     }, [opacity]);
 
     // --- Calculate edge count (pairs) ---
@@ -208,7 +220,7 @@ export function GraphRenderer({
                     args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
                     count={graph.nodes.length}
                     frustumCulled={false}
-                    renderOrder={1}  // Display in front of edges
+                    renderOrder={10}
                 />
             )}
 
@@ -220,7 +232,7 @@ export function GraphRenderer({
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
                     count={edgePairCount}
                     frustumCulled={false}
-                    renderOrder={0}  // Draw at the very back
+                    renderOrder={9}
                 />
             )}
 

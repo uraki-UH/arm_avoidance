@@ -17,6 +17,7 @@
   <depend>ais_gng_msgs</depend>
   <depend>urdf</depend>
   <depend>urdfdom</depend>
+  <depend>urdfdom_headers</depend>
   <depend>tinyxml2_vendor</depend>
   <depend>fcl</depend>
   <depend>eigen</depend>
