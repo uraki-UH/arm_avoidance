@@ -27,8 +27,10 @@ private:
     void buildJointIndexMap();
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     std::string buildRobotJsonLocked(
+        const std::string& type,
         const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>& positions,
-        const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations) const;
+        const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations,
+        bool include_urdf) const;
     void publishCurrentState();
     void publishCurrentStateLocked();
 
@@ -43,10 +45,12 @@ private:
     builtin_interfaces::msg::Time last_joint_state_stamp_;
     bool has_joint_state_ = false;
     std::string urdf_content_;
+    std::string robot_name_;
     std::string joint_state_topic_;
     std::string stream_topic_;
     std::string frame_id_;
     double publish_hz_;
+    bool first_publish_ = true;
 };
 
 } // namespace bridge

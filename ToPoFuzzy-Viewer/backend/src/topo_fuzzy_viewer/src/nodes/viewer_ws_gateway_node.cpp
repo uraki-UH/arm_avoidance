@@ -132,6 +132,10 @@ public:
                 this->broadcastText(msg->data);
             });
 
+        livenessTimer_ = create_wall_timer(
+            std::chrono::milliseconds(1000),
+            std::bind(&ViewerWsGatewayNode::checkLiveness, this));
+
         startServer(port);
 
         RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
@@ -170,18 +174,23 @@ private:
         behavior.maxPayloadLength = 64 * 1024 * 1024;
         behavior.maxBackpressure = 16 * 1024 * 1024;
         behavior.open = [this](auto* ws) {
-            std::vector<std::string> cachedGraphs;
+            std::vector<std::string> cachedPayloads;
             {
                 std::lock_guard<std::mutex> graphLock(graphMutex_);
-                cachedGraphs.reserve(lastGraphPayloads_.size());
                 for (const auto& [tag, payload] : lastGraphPayloads_) {
-                    (void)tag;
-                    cachedGraphs.push_back(payload);
+                    cachedPayloads.push_back(payload);
                 }
             }
+            {
+                std::lock_guard<std::mutex> robotLock(robotMutex_);
+                for (const auto& [tag, payload] : lastRobotDescriptions_) {
+                    cachedPayloads.push_back(payload);
+                }
+            }
+
             std::lock_guard<std::mutex> lock(connectionMutex_);
             connections_.push_back(ws);
-            for (const auto& payload : cachedGraphs) {
+            for (const auto& payload : cachedPayloads) {
                 ws->send(payload, uWS::OpCode::TEXT);
             }
         };
@@ -470,7 +479,58 @@ private:
         if (msg->data.empty()) {
             return;
         }
+
+        try {
+            viewer_internal::json j = viewer_internal::json::parse(msg->data);
+            const std::string type = j.value("type", "");
+            const std::string tag = j.value("tag", "default");
+
+            if (type == "stream.robot.description") {
+                std::lock_guard<std::mutex> lock(robotMutex_);
+                lastRobotDescriptions_[tag] = msg->data;
+            }
+
+            // Track which tag comes from which publisher for liveness monitoring
+            // We'll use the publisher count for the topic for now as a simple measure,
+            // but for exact per-robot cleanup, we'd need to track publisher GIDs.
+        } catch (...) {}
+
         broadcastText(msg->data);
+    }
+
+    void checkLiveness() {
+        // Monitor GNG topics
+        // (Existing GNG monitor logic could go here, but focusing on robots for now)
+
+        // Monitor Robot topics
+        auto publishers = this->get_publishers_info_by_topic(viewer_internal::topics::kStreamRobot);
+        
+        std::lock_guard<std::mutex> lock(robotMutex_);
+        std::vector<std::string> tagsToRemove;
+        
+        if (publishers.empty() && !lastRobotDescriptions_.empty()) {
+            // All robot bridges are gone
+            for (auto const& [tag, _] : lastRobotDescriptions_) {
+                tagsToRemove.push_back(tag);
+            }
+        }
+
+        for (const auto& tag : tagsToRemove) {
+            removeRobotLayer(tag);
+        }
+    }
+
+    void removeRobotLayer(const std::string& tag) {
+        {
+            std::lock_guard<std::mutex> lock(robotMutex_);
+            lastRobotDescriptions_.erase(tag);
+        }
+
+        viewer_internal::json event;
+        event["type"] = "stream.robot.delete";
+        event["tag"] = tag;
+        broadcastText(event.dump());
+        RCLCPP_INFO(this->get_logger(), "Removed robot layer tag=%s due to disconnect", tag.c_str());
     }
 
     void broadcastBinary(const std::vector<uint8_t>& payload) {
@@ -533,10 +593,14 @@ private:
     std::mutex graphMutex_;
     std::unordered_map<std::string, std::string> lastGraphPayloads_;
 
+    std::mutex robotMutex_;
+    std::unordered_map<std::string, std::string> lastRobotDescriptions_;
+
     std::thread serverThread_;
     us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false};
     uWS::Loop* loop_ = nullptr;
+    rclcpp::TimerBase::SharedPtr livenessTimer_;
 };
 
 } // namespace

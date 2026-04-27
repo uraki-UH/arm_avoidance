@@ -47,6 +47,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
     const std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro";
 
+    declare_parameter<std::string>("robot_name", "topoarm");
     declare_parameter<std::string>("robot_description_file", default_urdf);
     declare_parameter<std::string>("resource_root_dir", "");
     declare_parameter<std::string>("mesh_root_dir", "");
@@ -54,7 +55,9 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     declare_parameter<std::string>("joint_state_topic", "/joint_states");
     declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
     declare_parameter<std::string>("frame_id", "world");
-    declare_parameter<double>("publish_hz", 20.0);
+    declare_parameter<double>("publish_hz", 30.0);
+
+    robot_name_ = get_parameter("robot_name").as_string();
 
     const std::string robot_description_file = get_parameter("robot_description_file").as_string();
     const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
@@ -150,12 +153,15 @@ void RobotViewerBridgeNode::jointStateCallback(const sensor_msgs::msg::JointStat
     }
     last_joint_state_stamp_ = msg->header.stamp;
     has_joint_state_ = true;
-    publishCurrentStateLocked();
+    // Removed immediate publish to eliminate jitter and double-publishing.
+    // The publish_timer_ will handle steady 30Hz (or configured rate) streaming.
 }
 
 std::string RobotViewerBridgeNode::buildRobotJsonLocked(
+    const std::string& type,
     const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>& positions,
-    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations) const {
+    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations,
+    bool include_urdf) const {
     std::ostringstream oss;
     oss.setf(std::ios::fixed);
     oss << std::setprecision(6);
@@ -165,12 +171,17 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
         : now().seconds();
 
     oss << '{'
-        << "\"type\":\"stream.robot\","
+        << "\"type\":\"" << type << "\","
+        << "\"tag\":\"" << escapeJson(robot_name_) << "\","
         << "\"robot\":{"
         << "\"timestamp\":" << ts << ','
-        << "\"frameId\":\"" << escapeJson(frame_id_) << "\","
-        << "\"urdf\":\"" << escapeJson(urdf_content_) << "\","
-        << "\"jointNames\":[";
+        << "\"frameId\":\"" << escapeJson(frame_id_) << "\",";
+
+    if (include_urdf) {
+        oss << "\"urdf\":\"" << escapeJson(urdf_content_) << "\",";
+    }
+
+    oss << "\"jointNames\":[";
 
     for (size_t i = 0; i < active_joint_names_.size(); ++i) {
         if (i > 0) oss << ',';
@@ -202,11 +213,21 @@ void RobotViewerBridgeNode::publishCurrentState() {
 
 void RobotViewerBridgeNode::publishCurrentStateLocked() {
     if (!robot_pub_) return;
+
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
     chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
+
     std_msgs::msg::String msg;
-    msg.data = buildRobotJsonLocked(positions, orientations);
+    if (first_publish_) {
+        // Send full description once (or when needed)
+        msg.data = buildRobotJsonLocked("stream.robot.description", positions, orientations, true);
+        robot_pub_->publish(msg);
+        first_publish_ = false;
+    }
+
+    // Send lightweight pose update
+    msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, false);
     robot_pub_->publish(msg);
 }
 

@@ -763,11 +763,12 @@ function App() {
                         }
                     })} 
 
-                    {robotData && (
+                    {Object.entries(robotData).map(([tag, data]) => (
                         <RobotRenderer
-                            data={robotData}
+                            key={`robot-${tag}`}
+                            data={data}
                         />
-                    )}
+                    ))}
 
                     <ZoneVisualizer
                         points={zoneMonitor.points}

@@ -87,6 +87,7 @@ export interface LayerSettings {
 export interface RobotData {
     timestamp: number;
     frameId: string;
+    tag?: string;
     urdf?: string;
     jointNames: string[];
     jointValues: number[];

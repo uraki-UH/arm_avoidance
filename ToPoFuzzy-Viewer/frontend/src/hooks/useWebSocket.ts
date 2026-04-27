@@ -45,7 +45,7 @@ interface PendingRequest {
 interface UseWebSocketReturn {
     pointCloud: PointCloudData | null;
     graphData: Record<string, GraphData>;
-    robotData: RobotData | null;
+    robotData: Record<string, RobotData>;
     lastJobEvent: EditJobEvent | null;
     isConnected: boolean;
     error: string | null;
@@ -103,7 +103,7 @@ interface UseWebSocketReturn {
 export function useWebSocket(url: string): UseWebSocketReturn {
     const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
-    const [robotData, setRobotData] = useState<RobotData | null>(null);
+    const [robotData, setRobotData] = useState<Record<string, RobotData>>({});
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -225,8 +225,50 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         return;
                     }
 
+                    if (payload.type === 'stream.robot.description' && payload.robot) {
+                        const tag = payload.tag || 'default';
+                        setRobotData((prev) => ({
+                            ...prev,
+                            [tag]: payload.robot as RobotData,
+                        }));
+                        return;
+                    }
+
+                    if (payload.type === 'stream.robot.pose' && payload.robot) {
+                        const tag = payload.tag || 'default';
+                        setRobotData((prev) => {
+                            const existing = prev[tag];
+                            if (!existing) return prev; // Wait for description
+                            return {
+                                ...prev,
+                                [tag]: {
+                                    ...existing,
+                                    ...payload.robot,
+                                    // Preserve description fields
+                                    urdf: existing.urdf,
+                                    jointNames: existing.jointNames,
+                                } as RobotData,
+                            };
+                        });
+                        return;
+                    }
+
+                    if (payload.type === 'stream.robot.delete' && typeof payload.tag === 'string') {
+                        setRobotData((prev) => {
+                            const next = { ...prev };
+                            delete next[payload.tag];
+                            return next;
+                        });
+                        return;
+                    }
+
+                    // Legacy support for combined stream.robot
                     if (payload.type === 'stream.robot' && payload.robot) {
-                        setRobotData(payload.robot as RobotData);
+                        const tag = payload.tag || 'default';
+                        setRobotData((prev) => ({
+                            ...prev,
+                            [tag]: payload.robot as RobotData,
+                        }));
                         return;
                     }
 

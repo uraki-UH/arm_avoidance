@@ -14,6 +14,7 @@ def launch_setup(context, *args, **kwargs):
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
     gng_tag = LaunchConfiguration("tag").perform(context)
     gng_mode = LaunchConfiguration("mode").perform(context)
+    publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
     
     # Auto-detect robot description package
     try:
@@ -61,12 +62,13 @@ def launch_setup(context, *args, **kwargs):
             executable="robot_viewer_bridge_node",
             name="robot_viewer_bridge_node",
             parameters=[{
+                "robot_name": robot_name,
                 "robot_description_file": robot_desc_default,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
                 "joint_state_topic": "/joint_states",
                 "stream_topic": "/viewer/internal/stream/robot",
-                "publish_hz": 20.0,
+                "publish_hz": publish_hz,
             }]
         )
     ]
@@ -80,5 +82,6 @@ def generate_launch_description():
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("tag", default_value="static"),
         DeclareLaunchArgument("mode", default_value="static"),
+        DeclareLaunchArgument("publish_hz", default_value="30.0"),
         OpaqueFunction(function=launch_setup)
     ])
