@@ -36,8 +36,41 @@ public:
     danger_pub_ = this->create_publisher<std_msgs::msg::Int64MultiArray>(
         "/danger_voxels", rclcpp::SystemDefaultsQoS());
 
+    // Publish initial scenario
     publishCurrentScenario();
 
+    // Setup parameter change callback so parameters can be updated at runtime
+    param_cb_handle_ = this->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> &params) {
+          (void)params;
+          // refreshParameters will read all parameters and update internal state
+          this->refreshParameters();
+          // update timer if needed
+          if (!publish_once_) {
+            const double hz = std::max(0.1, scenario_period_s_ > 0.0 ? (1.0 / scenario_period_s_) : publish_hz_);
+            publish_interval_s_ = 1.0 / hz;
+            if (timer_) {
+              timer_->cancel();
+            }
+            timer_ = this->create_wall_timer(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::duration<double>(1.0 / hz)),
+                std::bind(&VoxelStatusTestPublisher::publishCurrentScenario, this));
+          } else {
+            publish_interval_s_ = 0.0;
+            if (timer_) {
+              timer_->cancel();
+              timer_.reset();
+            }
+          }
+
+          rcl_interfaces::msg::SetParametersResult result;
+          result.successful = true;
+          result.reason = "ok";
+          return result;
+        });
+
+    // Create timer according to initial parameters
     if (!publish_once_) {
       const double hz = std::max(0.1, scenario_period_s_ > 0.0 ? (1.0 / scenario_period_s_) : publish_hz_);
       publish_interval_s_ = 1.0 / hz;
@@ -82,22 +115,22 @@ private:
   }
 
   void publishCurrentScenario() {
-    refreshParameters();
+    // Parameters are refreshed via parameter callback; avoid heavy work each tick
     if (scenario_ == "static") {
       occupied_pub_->publish(makeMsg(occupied_voxels_));
       danger_pub_->publish(makeMsg(danger_voxels_));
-      RCLCPP_INFO(this->get_logger(),
-                  "Published voxel test input: occupied=%zu danger=%zu",
-                  occupied_voxels_.size(), danger_voxels_.size());
+      RCLCPP_DEBUG(this->get_logger(),
+                   "Published voxel test input: occupied=%zu danger=%zu",
+                   occupied_voxels_.size(), danger_voxels_.size());
       return;
     }
 
     const auto pair = scenarioForTick(tick_++);
     occupied_pub_->publish(makeMsg(pair.first));
     danger_pub_->publish(makeMsg(pair.second));
-    RCLCPP_INFO(this->get_logger(),
-                "Published voxel test scenario '%s' step=%zu occ=%zu danger=%zu",
-                scenario_.c_str(), tick_, pair.first.size(), pair.second.size());
+    RCLCPP_DEBUG(this->get_logger(),
+                 "Published voxel test scenario '%s' step=%zu occ=%zu danger=%zu",
+                 scenario_.c_str(), tick_, pair.first.size(), pair.second.size());
   }
 
   std::pair<std::vector<int64_t>, std::vector<int64_t>> scenarioForTick(std::size_t tick) const {

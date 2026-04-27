@@ -19,7 +19,7 @@
 
 ## 1. ビルド
 
-まず、`gng_safety` パッケージをビルドします。
+まず、`gng_vlut_system` パッケージをビルドします。
 
 ```bash
 # ワークスペースのルートに移動
@@ -29,7 +29,7 @@ cd ~/arm_avoidance
 source /opt/ros/humble/setup.bash
 
 # ビルド
-colcon build --symlink-install --packages-select gng_safety
+colcon build --symlink-install --packages-select gng_vlut_system
 
 # ビルド後の環境をセットアップ
 source install/setup.bash
@@ -42,7 +42,7 @@ source install/setup.bash
 ### 基本的な学習コマンド
 
 ```bash
-ros2 run gng_safety offline_urdf_trainer --id my_robot_v1 --res 0.02
+ros2 run gng_vlut_system offline_urdf_trainer --id my_robot_v1 --res 0.02
 ```
 - `--id`: 実験名を指定します。この名前で結果を保存するディレクトリが作成されます。
 - `--res`: VLUTのボクセル解像度 (m) を指定します。
@@ -52,7 +52,7 @@ ros2 run gng_safety offline_urdf_trainer --id my_robot_v1 --res 0.02
 GNGの学習は行わず、既存のGNGマップからVLUTの再構築だけを行いたい場合は `--vlut-only` オプションを使用します。
 
 ```bash
-ros2 run gng_safety offline_urdf_trainer --id my_robot_v1 --vlut-only --res 0.03
+ros2 run gng_vlut_system offline_urdf_trainer --id my_robot_v1 --vlut-only --res 0.03
 ```
 
 ### 出力ファイル
@@ -78,7 +78,7 @@ ros2 run gng_safety offline_urdf_trainer --id my_robot_v1 --vlut-only --res 0.03
 RVizでロボットモデルとGNGの安全状態を可視化します。
 
 ```bash
-ros2 launch gng_safety visualize_topoarm_rviz.launch.py
+ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py
 ```
 
 ### 安全監視の有効化
@@ -86,7 +86,7 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py
 GNG/VLUTによる安全監視を有効にして、RVizで確認する場合。
 
 ```bash
-ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
+ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
   enable_safety_monitor:=true \
   gng_results_config_path:=gng_results/my_robot_v1/config.txt
 ```
@@ -96,15 +96,15 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
 
 - **実機**の関節角度を使用する場合:
   ```bash
-  ros2 launch gng_safety visualize_topoarm_rviz.launch.py joint_state_source:=real
+  ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py joint_state_source:=real
   ```
 - **Gazebo**でシミュレーションを行う場合:
   ```bash
   # Gazeboサーバーとロボットを起動
-  ros2 launch gng_safety spawn_topoarm_gazebo.launch.py
+  ros2 launch gng_vlut_system spawn_topoarm_gazebo.launch.py
   
   # 別のターミナルでRVizを起動
-  ros2 launch gng_safety visualize_topoarm_rviz.launch.py
+  ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py
   ```
   GazeboのGUIを表示したい場合は `gazebo_gui:=true` を追加します。
 
@@ -114,11 +114,11 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
 
 - **GNGマップを送信**:
   ```bash
-  ros2 launch gng_safety topofuzzy_bridge.launch.py
+  ros2 launch gng_vlut_system topofuzzy_bridge.launch.py
   ```
 - **アーム姿勢を送信**:
   ```bash
-  ros2 launch gng_safety topoarm_viewer_bridge.launch.py
+  ros2 launch gng_vlut_system topoarm_viewer_bridge.launch.py
   ```
 
 ## 4. テストとデバッグ
@@ -131,13 +131,13 @@ ros2 launch gng_safety visualize_topoarm_rviz.launch.py \
 
 ```bash
 # デフォルト設定で実行
-ros2 run gng_safety voxel_status_test_publisher
+ros2 run gng_vlut_system voxel_status_test_publisher
 ```
 
 中心座標や半径、オービット（周回）軌道などを変更したい場合は、パラメータで上書きできます。
 ```bash
 # 例: 半径5cmの球を、Z=40cmの高さで、半径25cmの軌道上を20秒で周回させる
-ros2 run gng_safety voxel_status_test_publisher --ros-args \
+ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
   -p sphere_radius_cm:=5.0 \
   -p sphere_center_world_cm:="[0.0, 0.0, 40.0]" \
   -p sphere_orbit_radius_cm:=25.0 \
@@ -173,3 +173,16 @@ ros2 run gng_safety voxel_status_test_publisher --ros-args \
 - `/occupied_voxels`: 占有ボクセル。
 - `/danger_voxels`: 危険ボクセル。
 - ...など
+
+
+
+
+
+
+最新版
+
+
+
+ros2 launch gng_vlut_system gng_vlut_monitor.launch.py \robot_name:=topoarm \dir:=gng_results \id:=topoarm_full_v2 \mode:=STATIC \tag:=topoarm
+
+など
