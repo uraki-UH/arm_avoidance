@@ -147,6 +147,18 @@ export function StaticGraphRenderer({
         lastNodeCountRef.current = graph.nodes.length;
     }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity]); // Note: only depend on length for matrices in static mode
 
+    useEffect(() => {
+        if (!nodesRef.current || showNodes) return;
+
+        // When nodes are hidden, clear any previously uploaded instances so the layer
+        // does not keep stale geometry around when the mesh is toggled back on.
+        nodesRef.current.count = 0;
+        nodesRef.current.instanceMatrix.needsUpdate = true;
+        if (nodesRef.current.instanceColor) {
+            nodesRef.current.instanceColor.needsUpdate = true;
+        }
+    }, [showNodes]);
+
     // 2. Color Update (Status) - When labels change (e.g. collision/danger)
     useEffect(() => {
         if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
@@ -233,6 +245,14 @@ export function StaticGraphRenderer({
         edgesRef.current.instanceMatrix.needsUpdate = true;
     }, [graph.nodes.length, edgePairCount, showEdges, edgeWidth, edgeCapacity]);
 
+    useEffect(() => {
+        if (!edgesRef.current || showEdges) return;
+
+        // Clear stale edge instances when hidden.
+        edgesRef.current.count = 0;
+        edgesRef.current.instanceMatrix.needsUpdate = true;
+    }, [showEdges]);
+
     if (!data || !visible) return null;
 
     const canRenderNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
@@ -242,6 +262,7 @@ export function StaticGraphRenderer({
         <group ref={groupRef}>
             {canRenderNodes && (
                 <instancedMesh
+                    key={`static-nodes-${nodeCapacity}-${showNodes ? 'on' : 'off'}`}
                     ref={nodesRef}
                     args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
                     count={graph.nodes.length}
@@ -252,6 +273,7 @@ export function StaticGraphRenderer({
 
             {canRenderEdges && (
                 <instancedMesh
+                    key={`static-edges-${edgeCapacity}-${showEdges ? 'on' : 'off'}`}
                     ref={edgesRef}
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
                     count={edgePairCount}

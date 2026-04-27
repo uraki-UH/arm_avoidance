@@ -76,6 +76,6 @@ def generate_launch_description():
         DeclareLaunchArgument("id", default_value="standard_train"),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
-        DeclareLaunchArgument("tag", default_value="topofuzzy_static"),
+        DeclareLaunchArgument("tag", default_value="static"),
         OpaqueFunction(function=launch_setup)
     ])
