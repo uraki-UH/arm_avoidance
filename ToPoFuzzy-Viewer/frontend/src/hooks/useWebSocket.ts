@@ -51,6 +51,7 @@ interface UseWebSocketReturn {
     error: string | null;
     connect: () => void;
     disconnect: () => void;
+    clearGraphLayer: (tag: string) => void;
 
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string; active: boolean }>;
@@ -117,6 +118,17 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             pending.reject(new Error(message));
         }
         pendingRequestsRef.current.clear();
+    }, []);
+
+    const clearGraphLayer = useCallback((tag: string) => {
+        setGraphData((prev) => {
+            if (!prev[tag]) {
+                return prev;
+            }
+            const next = { ...prev };
+            delete next[tag];
+            return next;
+        });
     }, []);
 
     const connect = useCallback(() => {
@@ -191,6 +203,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             ...prev,
                             [tag]: payload.graph as GraphData,
                         }));
+                        return;
+                    }
+
+                    if (payload.type === 'stream.graph.delete' && typeof payload.tag === 'string') {
+                        clearGraphLayer(payload.tag);
                         return;
                     }
 
@@ -438,6 +455,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         error,
         connect,
         disconnect,
+        clearGraphLayer,
         getSources,
         subscribeSource,
         unsubscribeSource,

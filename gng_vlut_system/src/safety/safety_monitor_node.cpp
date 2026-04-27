@@ -19,6 +19,7 @@
 #include <Eigen/Geometry>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <cctype>
 #include <filesystem>
 #include <mutex>
 #include <vector>
@@ -38,6 +39,17 @@
 
 namespace {
 constexpr float kEps = 1e-6f;
+
+uint8_t parseGraphMode(const std::string &mode) {
+    std::string lower;
+    lower.reserve(mode.size());
+    for (char c : mode) {
+        lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    }
+    return (lower == "static" || lower == "0")
+        ? ais_gng_msgs::msg::TopologicalMap::STATIC
+        : ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
+}
 
 uint8_t viewerLabelFromStatus(const GNG::Status &status) {
     if (status.is_colliding) return 2; // red
@@ -73,6 +85,7 @@ public:
         this->declare_parameter("publish_hz", 20.0);
         this->declare_parameter("safety_margin", 0.05);
         this->declare_parameter("tag", "dynamic");
+        this->declare_parameter("mode", "dynamic");
 
         std::string gng_path = resolveResultPath(
             this->get_parameter("gng_model_path").as_string(),
@@ -84,6 +97,7 @@ public:
         safety_margin_ = this->get_parameter("safety_margin").as_double();
         base_frame_ = this->get_parameter("base_frame").as_string();
         tag_ = this->get_parameter("tag").as_string();
+        mode_ = this->get_parameter("mode").as_string();
         double hz = this->get_parameter("publish_hz").as_double();
         
         // Setup TF2
@@ -304,7 +318,7 @@ private:
         msg.header.stamp = this->now();
         msg.header.frame_id = base_frame_;
         msg.tag = tag_;
-        msg.mode = ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
+        msg.mode = parseGraphMode(mode_);
 
         auto& gng = *context_->gng;
         std::unordered_map<int, uint16_t> id_to_index;
@@ -389,6 +403,7 @@ private:
     
     std::string base_frame_;
     std::string tag_ = "dynamic";
+    std::string mode_ = "dynamic";
     bool graph_dirty_ = true;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_sub_;

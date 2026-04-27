@@ -17,6 +17,7 @@
 #include "status/graph_topology_analyzer.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -91,6 +92,17 @@ std::string activeEdgeModeName(int edge_mode) {
   return "auto";
 }
 
+uint8_t parseGraphMode(const std::string &mode) {
+  std::string lower;
+  lower.reserve(mode.size());
+  for (char c : mode) {
+    lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+  }
+  return (lower == "static" || lower == "0")
+      ? ais_gng_msgs::msg::TopologicalMap::STATIC
+      : ais_gng_msgs::msg::TopologicalMap::DYNAMIC;
+}
+
 } // namespace
 
 class TopoFuzzyBridgeNode : public rclcpp::Node {
@@ -102,6 +114,7 @@ public:
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
     declare_parameter("tag", "static");
+    declare_parameter("mode", "static");
     declare_parameter("occupied_voxels_topic", "/occupied_voxels");
     declare_parameter("danger_voxels_topic", "/danger_voxels");
     declare_parameter("data_directory", "gng_results");
@@ -126,6 +139,7 @@ public:
     edge_mode_ = get_parameter("edge_mode").as_int();
     frame_id_ = get_parameter("frame_id").as_string();
     tag_ = get_parameter("tag").as_string();
+    mode_ = get_parameter("mode").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
@@ -319,7 +333,7 @@ private:
     msg.header.stamp = now();
     msg.header.frame_id = frame_id_;
     msg.tag = tag_;
-    msg.mode = ais_gng_msgs::msg::TopologicalMap::STATIC;
+    msg.mode = parseGraphMode(mode_);
 
     if (!context_ || !context_->gng) {
       return msg;
@@ -445,6 +459,7 @@ private:
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
   std::string tag_ = "static";
+  std::string mode_ = "static";
   double publish_hz_ = 5.0;
   std::string occupied_voxels_topic_ = "/occupied_voxels";
   std::string danger_voxels_topic_ = "/danger_voxels";

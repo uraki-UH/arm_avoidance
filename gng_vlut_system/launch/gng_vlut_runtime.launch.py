@@ -18,6 +18,7 @@ def generate_launch_description():
         DeclareLaunchArgument("data_directory", default_value="", description="(deprecated) GNG/VLUT データの置き場所"),
         DeclareLaunchArgument("base_frame", default_value="base_link", description="ロボットの基準座標系"),
         DeclareLaunchArgument("tag", default_value="dynamic", description="GNG layer tag"),
+        DeclareLaunchArgument("mode", default_value="dynamic", description="GNG layer mode"),
         
         # --- 安全設定 ---
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
@@ -76,6 +77,7 @@ def generate_launch_description():
                 "frame_id": LaunchConfiguration("base_frame"),
                 "safety_margin": LaunchConfiguration("safety_margin"),
                 "tag": LaunchConfiguration("tag"),
+                "mode": LaunchConfiguration("mode"),
             }.items()
         ),
         

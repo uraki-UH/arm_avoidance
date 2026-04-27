@@ -13,6 +13,7 @@ def launch_setup(context, *args, **kwargs):
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
     gng_tag = LaunchConfiguration("tag").perform(context)
+    gng_mode = LaunchConfiguration("mode").perform(context)
     
     # Auto-detect robot description package
     try:
@@ -50,6 +51,7 @@ def launch_setup(context, *args, **kwargs):
                 "data_directory": data_dir,
                 "experiment_id": exp_id,
                 "tag": gng_tag,
+                "mode": gng_mode,
             }]
         ),
 
@@ -77,5 +79,6 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("tag", default_value="static"),
+        DeclareLaunchArgument("mode", default_value="static"),
         OpaqueFunction(function=launch_setup)
     ])

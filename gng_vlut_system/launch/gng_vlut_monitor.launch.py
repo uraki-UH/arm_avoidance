@@ -23,6 +23,7 @@ def launch_setup(context, *args, **kwargs):
     gng_path = os.path.join(data_dir, experiment_id, "gng.bin")
     vlut_path = os.path.join(data_dir, experiment_id, "vlut.bin")
     gng_tag = LaunchConfiguration("tag").perform(context)
+    gng_mode = LaunchConfiguration("mode").perform(context)
 
     return [
         Node(
@@ -39,6 +40,7 @@ def launch_setup(context, *args, **kwargs):
                     "base_frame": LaunchConfiguration("frame_id"),
                     "experiment_id": experiment_id,
                     "tag": gng_tag,
+                    "mode": gng_mode,
                 },
             ]
         )
@@ -56,5 +58,6 @@ def generate_launch_description():
         DeclareLaunchArgument("frame_id", default_value="world"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
         DeclareLaunchArgument("tag", default_value="dynamic"),
+        DeclareLaunchArgument("mode", default_value="dynamic"),
         OpaqueFunction(function=launch_setup)
     ])

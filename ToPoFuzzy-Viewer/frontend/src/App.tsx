@@ -118,6 +118,7 @@ function App() {
         error: wsError,
         connect,
         disconnect,
+        clearGraphLayer,
         getSources,
         subscribeSource,
         unsubscribeSource,
@@ -186,12 +187,12 @@ function App() {
     };
 
     const removeLayer = (tag: string) => {
+        clearGraphLayer(tag);
         setLayerSettings(prev => {
             const next = { ...prev };
             delete next[tag];
             return next;
         });
-        // Note: Actual GNG source removal would require an RPC call to the backend
     };
 
     const zoneCounts = useMemo(() => {
