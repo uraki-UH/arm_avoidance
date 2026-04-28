@@ -149,6 +149,9 @@ public:
 
     ~ViewerWsGatewayNode() override {
         stopServer();
+        if (serverThread_.joinable()) {
+            serverThread_.join();
+        }
     }
 
 private:
@@ -160,7 +163,6 @@ private:
         serverThread_ = std::thread([this, port]() {
             this->runServerLoop(port);
         });
-        serverThread_.detach();
     }
 
     void stopServer() {
@@ -168,9 +170,21 @@ private:
             return;
         }
         serverRunning_ = false;
-        if (listenSocket_) {
-            us_listen_socket_close(0, listenSocket_);
-            listenSocket_ = nullptr;
+        
+        if (loop_) {
+            loop_->defer([this]() {
+                if (listenSocket_) {
+                    us_listen_socket_close(0, listenSocket_);
+                    listenSocket_ = nullptr;
+                }
+                
+                // Force close all active connections to break the loop
+                std::lock_guard<std::mutex> lock(connectionMutex_);
+                for (auto* ws : connections_) {
+                    ws->close();
+                }
+                connections_.clear();
+            });
         }
     }
 
