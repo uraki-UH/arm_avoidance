@@ -125,7 +125,7 @@ public:
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kStreamRobot,
-            rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local(),
+            rclcpp::QoS(1).transient_local(),
             std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
 
         jobEventSub_ = create_subscription<std_msgs::msg::String>(
