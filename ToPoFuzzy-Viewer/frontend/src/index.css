@@ -21,12 +21,12 @@
   --text-secondary: #a7bfd5;
   --text-muted: #7f96ac;
 
-  --brand-color: #c8ff4a;
-  --accent-color: #b9ff3f;
-  --accent-hover: #8fd428;
-  --accent-rgb: 185 255 63;
-  --accent-soft: rgba(185, 255, 63, 0.16);
-  --accent-strong: #ecffc1;
+  --brand-color: #38bdf8;
+  --accent-color: #51b8ff;
+  --accent-hover: #3b82f6;
+  --accent-rgb: 81 184 255;
+  --accent-soft: rgba(81, 184, 255, 0.16);
+  --accent-strong: #e0f2fe;
 
   --danger: #f87171;
   --success: #22c55e;
@@ -59,7 +59,7 @@ body,
 body {
   position: relative;
   background:
-    radial-gradient(1000px 560px at -15% -10%, rgba(185, 255, 63, 0.10), transparent 62%),
+    radial-gradient(1000px 560px at -15% -10%, rgba(56, 189, 248, 0.10), transparent 62%),
     radial-gradient(980px 560px at 115% -15%, rgba(255, 255, 255, 0.04), transparent 66%),
     linear-gradient(150deg, #0b1219 0%, #101a24 50%, #152231 100%);
 }
@@ -76,7 +76,7 @@ body::before {
   inset: auto auto 7% -8%;
   width: 40vw;
   height: 40vw;
-  background: radial-gradient(circle, rgba(185, 255, 63, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.08) 0%, transparent 70%);
   filter: blur(10px);
 }
 

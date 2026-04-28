@@ -21,7 +21,7 @@ export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps)
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: 'skyblue',//'#888888',
+        color: 'skyblue',
         roughness: 0.5,
         metalness: 0.5,
         transparent: true,
