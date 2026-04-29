@@ -16,7 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "description/kinematic_adapter.hpp"
+#include "robot_model/kinematic_adapter.hpp"
 
 namespace robot_sim {
 namespace bridge {

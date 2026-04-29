@@ -93,7 +93,7 @@ endif()
 # Include directories
 include_directories(include)
 include_directories(src)
-include_directories(src/core_safety)
+include_directories(src/core/safety_engine)
 
 # Subdirectories
 add_subdirectory(src)

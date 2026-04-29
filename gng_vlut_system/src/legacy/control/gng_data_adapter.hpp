@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core_safety/gng/GrowingNeuralGas.hpp"
+#include "safety_engine/gng/GrowingNeuralGas.hpp"
 #include "common/visual_types.hpp"
 
 namespace simulation {
