@@ -11,7 +11,7 @@ def generate_launch_description():
         # --- Arguments ---
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
         DeclareLaunchArgument("mode", default_value="generic", description="generic or topoarm_udp"),
-        DeclareLaunchArgument("joint_state_topic", default_value="/joint_states"),
+        DeclareLaunchArgument("joint_state_topic", default_value="/joint_states_real"),
         DeclareLaunchArgument("base_frame", default_value="base_link"),
 
         # 1. Generic Robot Bridge (New high-performance bridge)

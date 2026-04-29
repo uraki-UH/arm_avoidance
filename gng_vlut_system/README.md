@@ -160,14 +160,18 @@ ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
 ## 5. 主要なノードとトピック (リファレンス)
 
 ### ノード
-- `joint_state_mux_node`: RViz用と実機用の `JointState` を `/joint_states` に集約。
+- `joint_state_mux_node`: `joint_states_sim` / `joint_states_real` / `joint_states_test` を `/joint_states` に集約。
+  - 複数ロボットで使う場合は、各 launch の `joint_state_*_topic` をロボットごとに変えるか、namespace を分けてください。
 - `safety_monitor_node`: GNG/VLUT の安全状態を `/gng_viz` に表示。
 - `self_recognition_viz_node`: 自己認識マスクを `/self_mask_viz` に表示。
 - `topofuzzy_bridge_node`: `/topological_map` を Viewer 互換形式で publish。
 - ...など
 
 ### トピック
-- `/joint_states`: 現在のアーム姿勢。
+- `/joint_states_sim`: シミュレーション用の関節角度。
+- `/joint_states_real`: 実機用の関節角度。
+- `/joint_states_test`: テスト用の関節角度。
+- `/joint_states`: 現在のアーム姿勢の集約結果。
 - `/gng_viz`: GNGノードとエッジのマーカー。
 - `/self_mask_viz`: 自己認識マスクのマーカー。
 - `/occupied_voxels`: 占有ボクセル。

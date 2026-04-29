@@ -9,6 +9,7 @@ def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
+    joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context)
     
     # Auto-detect robot description package
     try:
@@ -34,7 +35,11 @@ def launch_setup(context, *args, **kwargs):
             Node(
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
-                parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+                parameters=[{"robot_description": Command(["xacro ", robot_urdf])}],
+                remappings=[
+                    ("joint_states", joint_state_topic),
+                    ("/joint_states", joint_state_topic),
+                ],
             )
         )
 
@@ -42,7 +47,11 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
-            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}],
+            remappings=[
+                ("joint_states", joint_state_topic),
+                ("/joint_states", joint_state_topic),
+            ],
         ),
         Node(
             package="gng_vlut_system",
@@ -63,5 +72,6 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
+        DeclareLaunchArgument("joint_state_topic", default_value="/joint_states_sim"),
         OpaqueFunction(function=launch_setup)
     ])

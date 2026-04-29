@@ -4,7 +4,7 @@ robot_bridge_node:
     robot_port: 8888
     listen_port: 8886
     update_hz: 50.0
-    joint_state_topic: "/joint_states"
+    joint_state_topic: "/joint_states_real"
     joint_command_topic: "/joint_commands"
     joint_names: [
       "slave_j1", "slave_j2", "slave_j3", "slave_j4", "slave_j5", "slave_j6", "slave_gripper",

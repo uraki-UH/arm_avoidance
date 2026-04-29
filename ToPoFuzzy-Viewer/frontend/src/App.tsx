@@ -201,7 +201,7 @@ function App() {
                     showNodes: true,
                     showEdges: true,
                     showClusters: false,
-                    opacity: 0.1
+                    opacity: 0.1,
                 };
                 changed = true;
             }

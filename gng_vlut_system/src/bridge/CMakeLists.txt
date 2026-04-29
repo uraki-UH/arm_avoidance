@@ -52,3 +52,9 @@ install(TARGETS
     robot_viewer_bridge_node_component
     DESTINATION lib/${PROJECT_NAME}
 )
+
+install(PROGRAMS
+    ../../scripts/wave_joint_states.py
+    DESTINATION lib/${PROJECT_NAME}
+    RENAME wave_joint_states
+)

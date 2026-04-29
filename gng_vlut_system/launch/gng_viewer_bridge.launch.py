@@ -16,6 +16,7 @@ def launch_setup(context, *args, **kwargs):
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
     topic_name = LaunchConfiguration("topic_name").perform(context)
+    joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context)
     
     # Auto-detect robot description package
     try:
@@ -68,7 +69,7 @@ def launch_setup(context, *args, **kwargs):
                 "robot_description_file": robot_desc_default,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
-                "joint_state_topic": "/joint_states",
+                "joint_state_topic": joint_state_topic,
                 "stream_topic": "/viewer/internal/stream/robot",
                 "frame_id": robot_base_frame,
                 "publish_hz": publish_hz,
@@ -87,5 +88,6 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_frame_id", default_value="world"),
         DeclareLaunchArgument("publish_hz", default_value="30.0"),
         DeclareLaunchArgument("topic_name", default_value="/topological_map_static"),
+        DeclareLaunchArgument("joint_state_topic", default_value="/joint_states"),
         OpaqueFunction(function=launch_setup)
     ])

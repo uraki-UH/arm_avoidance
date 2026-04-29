@@ -26,7 +26,7 @@ public:
         this->declare_parameter<int>("robot_port", 8888);
         this->declare_parameter<int>("listen_port", 8886);
         this->declare_parameter<double>("update_hz", 50.0);
-        this->declare_parameter<std::string>("joint_state_topic", "/joint_states");
+        this->declare_parameter<std::string>("joint_state_topic", "/joint_states_real");
         this->declare_parameter<std::string>("joint_command_topic", "/joint_commands");
         this->declare_parameter<std::vector<std::string>>("joint_names", std::vector<std::string>{
             "j1", "j2", "j3", "j4", "j5", "j6"

@@ -46,6 +46,7 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
                 "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
+                "joint_state_topic": LaunchConfiguration("joint_state_sim_topic"),
             }.items()
         ),
 
@@ -74,7 +75,22 @@ def launch_setup(context, *args, **kwargs):
             }]
         ),
 
-        # 4. 安全監視・判定ノード (Core Logic)
+        # 4b. JointState 中継 (sim / real / test -> /joint_states)
+        Node(
+            package="gng_vlut_system",
+            executable="joint_state_mux_node",
+            name="joint_state_mux",
+            parameters=[{
+                "sim_topic": LaunchConfiguration("joint_state_sim_topic"),
+                "real_topic": LaunchConfiguration("joint_state_real_topic"),
+                "test_topic": LaunchConfiguration("joint_state_test_topic"),
+                "output_topic": LaunchConfiguration("joint_state_output_topic"),
+                "active_source": LaunchConfiguration("joint_state_mux_mode"),
+                "max_age_sec": LaunchConfiguration("joint_state_max_age_sec"),
+            }]
+        ),
+
+        # 5. 安全監視・判定ノード (Core Logic)
         *(
             [
                 IncludeLaunchDescription(
@@ -96,7 +112,7 @@ def launch_setup(context, *args, **kwargs):
             else []
         ),
 
-        # 5. 可視化ブリッジ (React Viewer用)
+        # 6. 可視化ブリッジ (React Viewer用)
         Node(
             package="gng_vlut_system",
             executable="robot_viewer_bridge_node",
@@ -105,7 +121,7 @@ def launch_setup(context, *args, **kwargs):
                 "robot_description_file": robot_desc_default,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
-                "joint_state_topic": "/joint_states",
+                "joint_state_topic": LaunchConfiguration("joint_state_output_topic"),
                 "stream_topic": "/viewer/internal/stream/robot",
                 "publish_hz": 20.0,
             }]
@@ -129,6 +145,12 @@ def generate_launch_description():
         # --- 安全設定 ---
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument("joint_state_sim_topic", default_value="/joint_states_sim"),
+        DeclareLaunchArgument("joint_state_real_topic", default_value="/joint_states_real"),
+        DeclareLaunchArgument("joint_state_test_topic", default_value="/joint_states_test"),
+        DeclareLaunchArgument("joint_state_output_topic", default_value="/joint_states"),
+        DeclareLaunchArgument("joint_state_mux_mode", default_value="priority"),
+        DeclareLaunchArgument("joint_state_max_age_sec", default_value="0.5"),
         DeclareLaunchArgument("safety_margin", default_value="0.05", description="安全マージン [m]"),
         
         # --- センサーキャリブレーション（実測値をここに入力） ---

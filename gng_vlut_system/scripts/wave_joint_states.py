@@ -30,10 +30,11 @@ def build_joint_names(prefix: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Publish waving JointState messages for topoarm testing.")
-    parser.add_argument("--topic", default="/joint_states", help="JointState topic to publish")
+    parser.add_argument("--topic", default="/joint_states_test", help="JointState topic to publish")
     parser.add_argument("--hz", type=float, default=20.0, help="Publish rate in Hz")
     parser.add_argument("--prefix", default="", help="Joint name prefix, if the URDF uses one")
-    parser.add_argument("--segment-sec", type=float, default=4.0, help="Seconds spent between poses")
+    parser.add_argument("--period-sec", type=float, default=24.0, help="Seconds per full wave cycle")
+    parser.add_argument("--amplitude", type=float, default=1.0, help="Multiply the wave amplitude")
     parser.add_argument("--debug", action="store_true", help="Print computed poses while publishing")
     args = parser.parse_args()
 
@@ -44,16 +45,12 @@ def main() -> int:
     names = build_joint_names(args.prefix)
     t0 = time.time()
 
-    # A small looping set of poses. The robot transitions smoothly between them.
-    poses = [
-        [0.00, 0.10, -0.25, 0.05, 0.15, 0.00, 0.010, -0.010],
-        [0.45, 0.25, -0.05, 0.20, 0.05, 0.18, 0.020, -0.020],
-        [0.85, -0.10, 0.20, -0.15, 0.10, -0.08, 0.006, -0.006],
-        [0.20, -0.30, 0.35, 0.12, -0.18, 0.22, 0.018, -0.018],
-    ]
-    segment_count = len(poses)
-    segment_sec = max(0.25, args.segment_sec)
-    total_sec = segment_count * segment_sec
+    # Each joint gets its own phase and amplitude so the motion reads clearly in the viewer.
+    base_positions = [0.00, 0.20, -0.45, 0.10, 0.18, -0.08, 0.020, -0.020]
+    joint_amplitudes = [0.18, 0.55, 0.80, 0.60, 0.50, 0.45, 0.030, 0.030]
+    phase_offsets = [0.0, 0.7, 1.5, 2.2, 2.9, 3.6, 0.0, math.pi]
+    period_sec = max(2.0, args.period_sec)
+    omega = 2.0 * math.pi / period_sec
 
     print(f"publishing wave joint_states on {args.topic}", flush=True)
     print(f"joint names: {', '.join(names)}", flush=True)
@@ -63,18 +60,14 @@ def main() -> int:
     try:
         while rclpy.ok():
             t = time.time() - t0
-            phase = (t % total_sec) / segment_sec
-            seg_idx = int(phase) % segment_count
-            next_idx = (seg_idx + 1) % segment_count
-            local_t = phase - int(phase)
-            smooth_t = local_t * local_t * (3.0 - 2.0 * local_t)
-
-            current_pose = poses[seg_idx]
-            next_pose = poses[next_idx]
             positions = [
-                current_pose[i] + (next_pose[i] - current_pose[i]) * smooth_t
-                for i in range(len(current_pose))
+                base_positions[i] + joint_amplitudes[i] * args.amplitude * math.sin(omega * t + phase_offsets[i])
+                for i in range(len(base_positions))
             ]
+
+            # Keep the gripper within a sane visible range even if amplitude is increased.
+            positions[6] = max(-0.08, min(0.08, positions[6]))
+            positions[7] = max(-0.08, min(0.08, positions[7]))
 
             msg = JointState()
             msg.header.stamp = node.get_clock().now().to_msg()
@@ -85,7 +78,7 @@ def main() -> int:
             if last_debug_print == 0.0:
                 formatted = ", ".join(f"{value:+.3f}" for value in positions)
                 print(
-                    f"initial pose seg={seg_idx}->{next_idx} smooth={smooth_t:4.2f} "
+                    f"initial wave t={t:6.2f}s period={period_sec:4.1f}s "
                     f"pos=[{formatted}]",
                     flush=True,
                 )
@@ -94,8 +87,7 @@ def main() -> int:
             if args.debug and (t - last_debug_print >= 1.0):
                 formatted = ", ".join(f"{value:+.3f}" for value in positions)
                 print(
-                    f"t={t:6.2f}s phase={phase:5.2f} seg={seg_idx}->{next_idx} "
-                    f"smooth={smooth_t:4.2f} pos=[{formatted}]"
+                    f"t={t:6.2f}s omega={omega:5.2f} pos=[{formatted}]"
                 , flush=True)
                 last_debug_print = t
 
