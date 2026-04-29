@@ -178,8 +178,18 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         window.clearInterval(challengeInterval);
                     }
                 }, 3000);
-                // Stop challenging after 30s (data should have arrived by then)
-                window.setTimeout(() => window.clearInterval(challengeInterval), 30000);
+
+                // Stop challenging as soon as we get any data
+                const stopChallenge = () => window.clearInterval(challengeInterval);
+                socket.addEventListener('message', (e) => {
+                    if (typeof e.data === 'string' && (e.data.includes('stream.graph') || e.data.includes('stream.robot'))) {
+                        stopChallenge();
+                    }
+                }, { once: true });
+
+                // Safety timeout: stop challenging after 15s regardless
+                window.setTimeout(stopChallenge, 15000);
+                
                 // Send immediately on connect too
                 socket.send(JSON.stringify({ type: 'request.state' }));
             };
@@ -234,10 +244,16 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
                     if (payload.type === 'stream.graph' && payload.graph) {
                         const tag = payload.tag || 'default';
-                        setGraphData((prev) => ({
-                            ...prev,
-                            [tag]: payload.graph as GraphData,
-                        }));
+                        setGraphData((prev) => {
+                            const existing = prev[tag];
+                            if (existing && existing.timestamp === payload.graph.timestamp && existing.nodes.length === payload.graph.nodes.length) {
+                                return prev; // Skip update if identical
+                            }
+                            return {
+                                ...prev,
+                                [tag]: payload.graph as GraphData,
+                            };
+                        });
                         return;
                     }
 
@@ -260,6 +276,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         setRobotData((prev) => {
                             const existing = prev[tag];
                             if (!existing) return prev; // Wait for description
+                            
+                            // Check if anything actually changed (timestamp)
+                            if (existing.timestamp === payload.robot.timestamp) {
+                                return prev;
+                            }
+
                             return {
                                 ...prev,
                                 [tag]: {
