@@ -81,15 +81,21 @@ export function GngLayerControls({
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges</span>
-                            {graphData.frameId && graphData.frameId !== 'world' && (
-                                <span className="flex items-center gap-1">
-                                    <span
-                                        className={`inline-block h-1.5 w-1.5 rounded-full ${hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                        title={hasTf ? 'TF active' : 'TF not yet received'}
-                                    />
-                                    <span className="font-mono opacity-70">{graphData.frameId}</span>
-                                </span>
-                            )}
+                            {graphData.frameId && (() => {
+                                const isWorld = graphData.frameId === 'world';
+                                const dotClass = isWorld
+                                    ? 'bg-white/30'
+                                    : hasTf
+                                        ? 'bg-green-400 shadow-[0_0_4px_#4ade80]'
+                                        : 'bg-yellow-400';
+                                const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                                return (
+                                    <span className="flex items-center gap-1">
+                                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
+                                        <span className="font-mono opacity-70">{graphData.frameId}</span>
+                                    </span>
+                                );
+                            })()}
                         </div>
                     </div>
                 </div>
