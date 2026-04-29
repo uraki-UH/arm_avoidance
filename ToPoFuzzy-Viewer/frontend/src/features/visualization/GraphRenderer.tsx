@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { Billboard, Text } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { ThreeEvent } from '@react-three/fiber';
 import { GraphData, LAYER_COLORS, LAYER_LABELS } from '../../types';
 
@@ -52,6 +53,7 @@ export function GraphRenderer({
     opacity = 1.0,
     tf = null,
 }: GraphRendererProps) {
+    const { invalidate } = useThree();
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
@@ -110,7 +112,8 @@ export function GraphRenderer({
         }
         groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
         groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-    }, [tf]);
+        invalidate();
+    }, [tf, invalidate]);
 
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) {
@@ -144,7 +147,8 @@ export function GraphRenderer({
         if (nodesRef.current.instanceColor) {
             nodesRef.current.instanceColor.needsUpdate = true;
         }
-    }, [graph.nodes, showNodes, nodeScale, nodeCapacity]);
+        invalidate();
+    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate]);
 
     // --- Edge cylinder geometry (shared) ---
     const edgeCylinderGeometry = useMemo(() => {
@@ -218,7 +222,8 @@ export function GraphRenderer({
         }
 
         edgesRef.current.instanceMatrix.needsUpdate = true;
-    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgePairCount, edgeCapacity]);
+        invalidate();
+    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgePairCount, edgeCapacity, invalidate]);
 
     if (!data || !visible) return null;
 

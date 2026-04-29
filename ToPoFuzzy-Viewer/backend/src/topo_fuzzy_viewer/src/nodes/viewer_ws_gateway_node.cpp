@@ -76,8 +76,8 @@ public:
         for (const auto& topic : gngTopics) {
             std::string subscriptionTag = topic;
             
-            rclcpp::QoS qos(rclcpp::KeepLast(10));
-            if (topic == "/topological_map" || topic == "/topological_map_transformed") {
+            rclcpp::QoS qos(rclcpp::KeepLast(1));
+            if (topic.find("topological_map") != std::string::npos) {
                 qos.reliable().transient_local();
             }
 

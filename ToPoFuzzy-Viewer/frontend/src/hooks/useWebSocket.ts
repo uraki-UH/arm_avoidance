@@ -191,6 +191,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 window.setTimeout(stopChallenge, 15000);
                 
                 // Send immediately on connect too
+                console.log('WebSocket connected. Sending initial request.state challenge...');
                 socket.send(JSON.stringify({ type: 'request.state' }));
             };
 
@@ -336,23 +337,31 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }
             };
 
-            socket.onerror = () => {
+            socket.onerror = (e) => {
+                console.error('WebSocket Error:', e);
                 setError('WebSocket connection error');
             };
 
-            socket.onclose = (event) => {
+            socket.onclose = () => {
                 setIsConnected(false);
                 pendingTopicQueueRef.current = [];
                 flushPendingWithError('WebSocket closed');
+                
                 if (intentionalCloseRef.current) {
                     intentionalCloseRef.current = false;
                     return;
                 }
-                // Auto-reconnect with exponential backoff
-                const delay = Math.min(1000 * Math.pow(2, reconnectCountRef.current), 16000);
-                reconnectCountRef.current += 1;
-                setError(`Disconnected. Reconnecting in ${Math.round(delay / 1000)}s...`);
+                
+                // Fixed 2s interval is better for detecting backend startup
+                const delay = 2000;
+                setError(`Disconnected. Reconnecting...`);
+                
+                if (reconnectTimerRef.current !== null) {
+                    window.clearTimeout(reconnectTimerRef.current);
+                }
+                
                 reconnectTimerRef.current = window.setTimeout(() => {
+                    console.log('Attempting to reconnect WebSocket...');
                     connect();
                 }, delay);
             };
@@ -361,7 +370,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [flushPendingWithError, url, ws]);
+    }, [flushPendingWithError, url]);
 
     const disconnect = useCallback(() => {
         if (ws) {

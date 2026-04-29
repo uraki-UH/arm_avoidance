@@ -744,10 +744,13 @@ function App() {
         >
             <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
                 <Canvas
+                    frameloop="demand"
                     camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
                     gl={{
                         localClippingEnabled: false,
                         clippingPlanes: clipping.getThreePlanes(),
+                        powerPreference: 'high-performance',
+                        antialias: true,
                     }}
                 >
                     <ambientLight intensity={0.3} />
@@ -831,7 +834,6 @@ function App() {
 
                     <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                     <OrbitControls makeDefault />
-                    <Stats />
                 </Canvas>
 
                 {selectedClusterSnapshot && (

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData } from '../../types';
@@ -18,6 +19,7 @@ export function RobotRenderer({
     color = 'skyblue',
     tf = null,
 }: RobotRendererProps) {
+    const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastUrdfRef = useRef<string | null>(null);
@@ -99,7 +101,8 @@ export function RobotRenderer({
                 robot.joints[name].setJointValue(data.jointValues[i]);
             }
         });
-    }, [robot, data?.jointNames, data?.jointValues]);
+        invalidate();
+    }, [robot, data?.jointNames, data?.jointValues, invalidate]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -116,7 +119,8 @@ export function RobotRenderer({
             const orient = data.baseOrientation || [0, 0, 0, 1];
             groupRef.current.quaternion.set(orient[0], orient[1], orient[2], orient[3]);
         }
-    }, [tf, data.basePosition, data.baseOrientation]);
+        invalidate();
+    }, [tf, data.basePosition, data.baseOrientation, invalidate]);
 
     if (!visible || !robot) return null;
 

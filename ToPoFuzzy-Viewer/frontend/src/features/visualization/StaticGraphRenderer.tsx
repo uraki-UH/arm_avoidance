@@ -53,6 +53,7 @@ export function StaticGraphRenderer({
     opacity = 1.0,
     tf = null,
 }: GraphRendererProps) {
+    const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
@@ -135,7 +136,8 @@ export function StaticGraphRenderer({
 
         nodesRef.current.instanceMatrix.needsUpdate = true;
         lastNodeCountRef.current = graph.nodes.length;
-    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity]); // Note: only depend on length for matrices in static mode
+        invalidate(); // Trigger re-render for 'demand' frameloop
+    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, invalidate]);
 
     useEffect(() => {
         if (!nodesRef.current || showNodes) return;
@@ -233,7 +235,8 @@ export function StaticGraphRenderer({
         }
 
         edgesRef.current.instanceMatrix.needsUpdate = true;
-    }, [graph.nodes.length, edgePairCount, showEdges, edgeWidth, edgeCapacity]);
+        invalidate();
+    }, [graph.nodes.length, edgePairCount, showEdges, edgeWidth, edgeCapacity, invalidate]);
 
     useEffect(() => {
         if (!edgesRef.current || showEdges) return;
