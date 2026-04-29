@@ -1,0 +1,29 @@
+services:
+  gng_cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gng_cpu:latest
+    container_name: gng_cpu_container    
+    tty: true                 # 対話的なプロンプトを維持
+    stdin_open: true          # 標準入力を開いたままにする
+    ipc: host # ホストのIPC名前空間を使用
+    environment:
+      - DISPLAY=${DISPLAY}             # ホストのディスプレイ番号をコンテナに渡す
+      - QT_X11_NO_MITSHM=1           # Qtアプリケーションでのエラーを回避
+      - XDG_RUNTIME_DIR=/tmp/runtime/  # Wayland互換性のための設定
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix  # X11ソケットの共有
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro # X認証情報（ホストでxhostを実行済みの場合）
+      - .:/ros2_ws/src
+      - build_ros2_ws:/ros2_ws/build
+      - install_ros2_ws:/ros2_ws/install
+      - ros_ws_volume:/ros2_ws/install
+      - ros_ws_build_volume:/ros2_ws/build
+      - ~/rosbag:/rosbag
+      - ~/datasets:/datasets
+    working_dir: /ros2_ws/src/ais_gng
+    #command: "sh /ros2_ws/src/ais_gng/release.sh"
+volumes:
+  ros_ws_volume:
+  ros_ws_build_volume:

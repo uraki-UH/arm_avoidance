@@ -5,9 +5,6 @@ build/
 install/
 log/
 
-tex 
-
-
 .DS_Store
 
 *.bin
@@ -20,7 +17,6 @@ compile_commands.json
 *.dat
 
 experiment_logs/*
-gng_results/*
 
 # Config (User preference)
 # config.txt
