@@ -131,6 +131,12 @@ interface SidebarContentProps {
 
     zoneMonitor: any;
     zoneCounts: Map<string, number>;
+
+    robotData: Record<string, RobotData>;
+    robotSettings: Record<string, RobotSettings>;
+    onUpdateRobotSettings: (tag: string, updates: Partial<RobotSettings>) => void;
+    onRemoveRobot: (tag: string) => void;
+    transforms: Record<string, any>;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -265,7 +271,45 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                                 onRemove={() => props.onRemoveGngLayer(tag)}
                                 showOpacity={false}
+                                hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
                             />
+                        ))}
+
+                        {Object.entries(props.robotData).map(([tag, data]) => (
+                            <div
+                                key={`robot-${tag}`}
+                                className={`rounded-lg border p-2 transition-colors border-white/10 bg-white/5 hover:bg-white/10`}
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="mb-1 flex items-center gap-2">
+                                            <button
+                                                onClick={() => props.onUpdateRobotSettings(tag, { visible: !props.robotSettings[tag]?.visible })}
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                            >
+                                                {props.robotSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
+                                            </button>
+                                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
+                                    </div>
+                                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                        <span>Frame:</span>
+                                        <span className="flex items-center gap-1">
+                                            <span
+                                                className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                                title={props.transforms[data.frameId] ? 'TF active' : 'TF not yet received'}
+                                            />
+                                            <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
+                                        </span>
+                                    </div>
+                                    </div>
+                                    <button
+                                        onClick={() => props.onRemoveRobot(tag)}
+                                        className="btn-icon btn-icon-danger"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            </div>
                         ))}
                     </div>
 

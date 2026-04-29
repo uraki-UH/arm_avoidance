@@ -40,7 +40,10 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
-    rclpy.shutdown()
+    finally:
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

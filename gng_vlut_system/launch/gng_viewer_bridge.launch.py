@@ -12,11 +12,10 @@ def launch_setup(context, *args, **kwargs):
     exp_id = LaunchConfiguration("id").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
-    gng_tag = LaunchConfiguration("tag").perform(context)
-    gng_mode = LaunchConfiguration("mode").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
+    topic_name = LaunchConfiguration("topic_name").perform(context)
     
     # Auto-detect robot description package
     try:
@@ -53,9 +52,9 @@ def launch_setup(context, *args, **kwargs):
                 "vlut_path": resolve_result_path(vlut_path, "vlut.bin"),
                 "data_directory": data_dir,
                 "experiment_id": exp_id,
-                "tag": gng_tag,
-                "mode": gng_mode,
                 "frame_id": gng_frame_id,
+                "publish_hz": publish_hz,
+                "topic_name": topic_name,
             }]
         ),
 
@@ -81,13 +80,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
         DeclareLaunchArgument("dir", default_value="gng_results"),
-        DeclareLaunchArgument("id", default_value="standard_train"),
+        DeclareLaunchArgument("id", default_value="topoarm"),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
-        DeclareLaunchArgument("tag", default_value="static"),
-        DeclareLaunchArgument("mode", default_value="static"),
         DeclareLaunchArgument("robot_base_frame", default_value="world"),
         DeclareLaunchArgument("gng_frame_id", default_value="world"),
         DeclareLaunchArgument("publish_hz", default_value="30.0"),
+        DeclareLaunchArgument("topic_name", default_value="/topological_map_static"),
         OpaqueFunction(function=launch_setup)
     ])

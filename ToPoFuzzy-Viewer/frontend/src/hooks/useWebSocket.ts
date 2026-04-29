@@ -46,6 +46,7 @@ interface UseWebSocketReturn {
     pointCloud: PointCloudData | null;
     graphData: Record<string, GraphData>;
     robotData: Record<string, RobotData>;
+    transforms: Record<string, TransformData>;
     lastJobEvent: EditJobEvent | null;
     isConnected: boolean;
     error: string | null;
@@ -104,6 +105,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
     const [robotData, setRobotData] = useState<Record<string, RobotData>>({});
+    const [transforms, setTransforms] = useState<Record<string, TransformData>>({});
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const intentionalCloseRef = useRef(false);
+    const reconnectCountRef = useRef(0);
+    const reconnectTimerRef = useRef<number | null>(null);
 
     const flushPendingWithError = useCallback((message: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -161,6 +165,23 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             socket.onopen = () => {
                 setIsConnected(true);
                 setError(null);
+                reconnectCountRef.current = 0;
+                if (reconnectTimerRef.current !== null) {
+                    window.clearTimeout(reconnectTimerRef.current);
+                    reconnectTimerRef.current = null;
+                }
+                // Challenge: periodically request state until data arrives
+                const challengeInterval = window.setInterval(() => {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'request.state' }));
+                    } else {
+                        window.clearInterval(challengeInterval);
+                    }
+                }, 3000);
+                // Stop challenging after 30s (data should have arrived by then)
+                window.setTimeout(() => window.clearInterval(challengeInterval), 30000);
+                // Send immediately on connect too
+                socket.send(JSON.stringify({ type: 'request.state' }));
             };
 
             socket.onmessage = (event) => {
@@ -247,8 +268,20 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                                     // Preserve description fields
                                     urdf: existing.urdf,
                                     jointNames: existing.jointNames,
+                                    jointValues: payload.robot.jointValues || existing.jointValues,
                                 } as RobotData,
                             };
+                        });
+                        return;
+                    }
+
+                    if (payload.type === 'stream.tf' && payload.transforms) {
+                        setTransforms((prev) => {
+                            const next = { ...prev };
+                            payload.transforms.forEach((ts: TransformData) => {
+                                next[ts.childFrameId] = ts;
+                            });
+                            return next;
                         });
                         return;
                     }
@@ -293,9 +326,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     intentionalCloseRef.current = false;
                     return;
                 }
-                if (event.code !== 1000) {
-                    setError(`WebSocket disconnected (code=${event.code}${event.reason ? `, reason=${event.reason}` : ''})`);
-                }
+                // Auto-reconnect with exponential backoff
+                const delay = Math.min(1000 * Math.pow(2, reconnectCountRef.current), 16000);
+                reconnectCountRef.current += 1;
+                setError(`Disconnected. Reconnecting in ${Math.round(delay / 1000)}s...`);
+                reconnectTimerRef.current = window.setTimeout(() => {
+                    connect();
+                }, delay);
             };
 
             setWs(socket);
@@ -506,6 +543,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         pointCloud,
         graphData,
         robotData,
+        transforms,
         lastJobEvent,
         isConnected,
         error,

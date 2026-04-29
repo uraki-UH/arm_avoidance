@@ -1,5 +1,4 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
-import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData } from '../../types';
@@ -8,16 +7,23 @@ interface RobotRendererProps {
     tag: string;
     data: RobotData;
     visible?: boolean;
+    color?: string;
+    tf?: { pos: number[]; quat: number[] } | null;
 }
 
-export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps) {
+export function RobotRenderer({
+    tag,
+    data,
+    visible = true,
+    color = 'skyblue',
+    tf = null,
+}: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastUrdfRef = useRef<string | null>(null);
     const lastJointSignatureRef = useRef<string | null>(null);
 
-    const { scene } = useThree();
-    const viewerPort = 9001; // Actual mesh server port in gateway node
+    const viewerPort = 9001;
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -65,10 +71,8 @@ export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps)
         if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
 
         lastUrdfRef.current = data.urdf;
-        console.log(`[RobotRenderer] Parsing new URDF for: ${tag}`);
 
         const urdfLoader = new URDFLoader();
-        // Redirect package:// to our mesh server
         urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
 
         try {
@@ -77,7 +81,7 @@ export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps)
             setRobot(robotObj);
         } catch (err) {
             console.error("Failed to parse URDF:", err);
-            lastUrdfRef.current = null; // Allow retry
+            lastUrdfRef.current = null;
         }
     }, [data?.urdf, viewerPort, applyRobotMaterial, tag]);
 
@@ -97,16 +101,28 @@ export function RobotRenderer({ tag, data, visible = true }: RobotRendererProps)
         });
     }, [robot, data?.jointNames, data?.jointValues]);
 
+    // --- TF-based Positioning ---
+    useEffect(() => {
+        if (!groupRef.current) return;
+        if (tf) {
+            groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
+            groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
+        } else {
+            groupRef.current.position.set(
+                data.basePosition?.[0] || 0,
+                data.basePosition?.[1] || 0,
+                data.basePosition?.[2] || 0
+            );
+            const orient = data.baseOrientation || [0, 0, 0, 1];
+            groupRef.current.quaternion.set(orient[0], orient[1], orient[2], orient[3]);
+        }
+    }, [tf, data.basePosition, data.baseOrientation]);
+
     if (!visible || !robot) return null;
 
     return (
-        <primitive
-            key={tag} // Ensure fresh component if tag changes
-            ref={groupRef}
-            object={robot}
-            position={data?.basePosition || [0, 0, 0]}
-            quaternion={data?.baseOrientation || [0, 0, 0, 1]}
-            renderOrder={10}
-        />
+        <group ref={groupRef} name={tag} visible={visible}>
+            {robot && <primitive key={tag} object={robot} />}
+        </group>
     );
 }

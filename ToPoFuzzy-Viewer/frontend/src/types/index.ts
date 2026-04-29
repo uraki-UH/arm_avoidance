@@ -84,6 +84,11 @@ export interface LayerSettings {
     opacity: number;
 }
 
+export interface RobotSettings {
+    visible: boolean;
+    color: string;
+}
+
 export interface RobotData {
     timestamp: number;
     frameId: string;
@@ -95,6 +100,13 @@ export interface RobotData {
     orientations: [number, number, number, number][];
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
+}
+
+export interface TransformData {
+    frameId: string;
+    childFrameId: string;
+    pos: [number, number, number];
+    quat: [number, number, number, number];
 }
 
 // --- WebSocket / RPC Types ---

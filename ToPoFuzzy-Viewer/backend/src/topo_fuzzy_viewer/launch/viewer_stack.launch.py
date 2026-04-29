@@ -17,7 +17,7 @@ def generate_launch_description():
             name='viewer_ws_gateway_node',
             output='screen',
             parameters=[{
-                'gng_topics': ['/topological_map'],
+                'gng_topics': ['/topological_map', '/topological_map_static'],
                 'port': LaunchConfiguration('ws_port')
             }]
         ),

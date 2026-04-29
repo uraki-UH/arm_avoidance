@@ -7,6 +7,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include <App.h>
 
@@ -36,39 +37,6 @@ struct PendingResponse {
     bool done = false;
     std::string payload;
 };
-
-template <typename T, typename = void>
-struct has_tag_member : std::false_type {};
-
-template <typename T>
-struct has_tag_member<T, std::void_t<decltype(std::declval<const T&>().tag)>> : std::true_type {};
-
-template <typename T, typename = void>
-struct has_mode_member : std::false_type {};
-
-template <typename T>
-struct has_mode_member<T, std::void_t<decltype(std::declval<const T&>().mode)>> : std::true_type {};
-
-template <typename MsgT>
-std::string extractGraphTag(const MsgT& msg, const std::string& fallbackTag) {
-    if constexpr (has_tag_member<MsgT>::value) {
-        return msg.tag.empty() ? fallbackTag : msg.tag;
-    } else {
-        return fallbackTag;
-    }
-}
-
-std::string determineGraphMode(const std::string& topic, const std::vector<std::string>& staticTopics) {
-    auto it = std::find(staticTopics.begin(), staticTopics.end(), topic);
-    if (it != staticTopics.end()) {
-        return "static";
-    }
-    // Fallback: heuristic if topic contains "static"
-    if (topic.find("static") != std::string::npos) {
-        return "static";
-    }
-    return "dynamic";
-}
 
 class ViewerWsGatewayNode : public rclcpp::Node {
 public:
@@ -125,8 +93,9 @@ public:
 
         robotArmSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kStreamRobot,
-            rclcpp::QoS(1).transient_local(),
+            rclcpp::QoS(1).reliable().transient_local(),
             std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+        RCLCPP_INFO(this->get_logger(), "Subscribed to Robot topic: %s", viewer_internal::topics::kStreamRobot);
 
         jobEventSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kEditJobEvents,
@@ -135,14 +104,17 @@ public:
                 this->broadcastText(msg->data);
             });
 
+        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
+            "/tf",
+            100,
+            std::bind(&ViewerWsGatewayNode::handleTf, this, std::placeholders::_1));
+
         livenessTimer_ = create_wall_timer(
             std::chrono::milliseconds(1000),
             std::bind(&ViewerWsGatewayNode::checkLiveness, this));
 
         startServer(port);
 
-        this->declare_parameter<std::vector<std::string>>("static_topics", std::vector<std::string>());
-        staticTopics_ = this->get_parameter("static_topics").as_string_array();
 
         RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
     }
@@ -222,8 +194,30 @@ private:
             if (viewer_internal::parseJson(std::string(message), incoming)) {
                 const std::string type = incoming.value("type", "");
                 const std::string tag = incoming.value("tag", "");
+
                 if (type == "stream.graph.delete" && !tag.empty()) {
                     this->removeGraphLayer(tag);
+                    return;
+                }
+
+                // Challenge: client requests full state resend
+                if (type == "request.state") {
+                    std::vector<std::string> payloads;
+                    {
+                        std::lock_guard<std::mutex> graphLock(graphMutex_);
+                        for (const auto& [t, payload] : lastGraphPayloads_) {
+                            payloads.push_back(payload);
+                        }
+                    }
+                    {
+                        std::lock_guard<std::mutex> robotLock(robotMutex_);
+                        for (const auto& [t, payload] : lastRobotDescriptions_) {
+                            payloads.push_back(payload);
+                        }
+                    }
+                    for (const auto& payload : payloads) {
+                        ws->send(payload, uWS::OpCode::TEXT);
+                    }
                     return;
                 }
             }
@@ -384,23 +378,16 @@ private:
     }
 
     void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& subscriptionTag) {
-        const std::string tag = extractGraphTag(*msg, subscriptionTag);
-        const std::string mode = determineGraphMode(subscriptionTag, staticTopics_);
+        //トピック名にstaticが含まれていればstatic、含まれていなければdynamicとする
+        const std::string& tag = subscriptionTag;
+        const std::string mode = (subscriptionTag.find("static") != std::string::npos) ? "static" : "dynamic";
 
-        RCLCPP_INFO(
-            this->get_logger(),
-            "Received graph topic tag=%s mode=%s frame_id=%s nodes=%zu edges=%zu clusters=%zu",
-            tag.c_str(),
-            mode.c_str(),
-            msg->header.frame_id.c_str(),
-            msg->nodes.size(),
-            msg->edges.size() / 2,
-            msg->clusters.size());
 
         viewer_internal::json graph;
         graph["timestamp"] = msg->header.stamp.sec;
         graph["tag"] = tag;
         graph["mode"] = mode;
+        graph["frameId"] = msg->header.frame_id;
 
         viewer_internal::json nodes = viewer_internal::json::array();
         for (const auto& node : msg->nodes) {
@@ -455,12 +442,6 @@ private:
             lastGraphPayloads_[tag] = payload;
         }
         broadcastText(payload);
-
-        RCLCPP_INFO(
-            this->get_logger(),
-            "Broadcasted stream.graph tag=%s payload_bytes=%zu",
-            tag.c_str(),
-            payload.size());
     }
 
     void handleHttpGet(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
@@ -495,6 +476,23 @@ private:
         res->writeStatus("404 Not Found")->end("File not found");
     }
 
+    void handleTf(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+        viewer_internal::json transforms = viewer_internal::json::array();
+        for (const auto& ts : msg->transforms) {
+            transforms.push_back({
+                {"frameId", ts.header.frame_id},
+                {"childFrameId", ts.child_frame_id},
+                {"pos", {ts.transform.translation.x, ts.transform.translation.y, ts.transform.translation.z}},
+                {"quat", {ts.transform.rotation.x, ts.transform.rotation.y, ts.transform.rotation.z, ts.transform.rotation.w}}
+            });
+        }
+
+        viewer_internal::json event;
+        event["type"] = "stream.tf";
+        event["transforms"] = transforms;
+        broadcastText(event.dump());
+    }
+
     void handleRobotArm(const std_msgs::msg::String::SharedPtr msg) {
         if (msg->data.empty()) {
             return;
@@ -510,26 +508,18 @@ private:
                 lastRobotDescriptions_[tag] = msg->data;
             }
 
-            // Track which tag comes from which publisher for liveness monitoring
-            // We'll use the publisher count for the topic for now as a simple measure,
-            // but for exact per-robot cleanup, we'd need to track publisher GIDs.
         } catch (...) {}
 
         broadcastText(msg->data);
     }
 
     void checkLiveness() {
-        // Monitor GNG topics
-        // (Existing GNG monitor logic could go here, but focusing on robots for now)
-
-        // Monitor Robot topics
         auto publishers = this->get_publishers_info_by_topic(viewer_internal::topics::kStreamRobot);
         
         std::lock_guard<std::mutex> lock(robotMutex_);
         std::vector<std::string> tagsToRemove;
         
         if (publishers.empty() && !lastRobotDescriptions_.empty()) {
-            // All robot bridges are gone
             for (auto const& [tag, _] : lastRobotDescriptions_) {
                 tagsToRemove.push_back(tag);
             }
@@ -602,6 +592,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
     std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotArmSub_;
+    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr jobEventSub_;
 
     std::mutex pendingMutex_;
@@ -621,7 +612,7 @@ private:
     std::atomic<bool> serverRunning_{false};
     uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
-    std::vector<std::string> staticTopics_;
+
 };
 
 } // namespace

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { Billboard, Text } from '@react-three/drei';
-import { ThreeEvent, useThree } from '@react-three/fiber';
+import { ThreeEvent } from '@react-three/fiber';
 import { GraphData, LAYER_COLORS, LAYER_LABELS } from '../../types';
 
 const EMPTY_GRAPH: GraphData = {
@@ -33,6 +33,7 @@ interface GraphRendererProps {
     onClusterSelect?: (clusterId: number | null) => void;
     enableClusterSelection?: boolean;
     opacity?: number;
+    tf?: { pos: number[]; quat: number[] } | null;
 }
 
 export function GraphRenderer({
@@ -48,13 +49,13 @@ export function GraphRenderer({
     selectedClusterId = null,
     onClusterSelect,
     enableClusterSelection = true,
-    opacity = 1.0
+    opacity = 1.0,
+    tf = null,
 }: GraphRendererProps) {
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
-    const { scene } = useThree();
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     // Handle cluster click with drag filtering
@@ -98,6 +99,18 @@ export function GraphRenderer({
     }, [opacity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
+
+    // --- TF-based Positioning ---
+    useEffect(() => {
+        if (!groupRef.current) return;
+        if (!tf) {
+            groupRef.current.position.set(0, 0, 0);
+            groupRef.current.rotation.set(0, 0, 0);
+            return;
+        }
+        groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
+        groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
+    }, [tf]);
 
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) {
@@ -161,40 +174,6 @@ export function GraphRenderer({
             setEdgeCapacity(edgePairCount);
         }
     }, [edgePairCount, edgeCapacity]);
-
-    // --- Frame Anchoring (TF-like logic) ---
-    useEffect(() => {
-        let timeoutId: number;
-
-        const attemptAnchor = () => {
-            if (!groupRef.current || !graph.frameId || graph.frameId === 'world') {
-                if (groupRef.current?.parent && groupRef.current.parent !== scene) {
-                    scene.add(groupRef.current);
-                    groupRef.current.position.set(0, 0, 0);
-                    groupRef.current.rotation.set(0, 0, 0);
-                }
-                return;
-            }
-
-            const anchor = scene.getObjectByName(graph.frameId);
-            if (anchor) {
-                if (groupRef.current.parent !== anchor) {
-                    console.log(`[GraphRenderer] Anchoring to frame: ${graph.frameId}`);
-                    anchor.add(groupRef.current);
-                    groupRef.current.position.set(0, 0, 0);
-                    groupRef.current.rotation.set(0, 0, 0);
-                }
-            } else {
-                // If not found, retry in 500ms
-                timeoutId = window.setTimeout(attemptAnchor, 500);
-            }
-        };
-
-        attemptAnchor();
-        return () => {
-            if (timeoutId) window.clearTimeout(timeoutId);
-        };
-    }, [graph.frameId, scene]);
 
     // --- Update instanced edges ---
     useEffect(() => {

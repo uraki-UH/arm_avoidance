@@ -19,6 +19,7 @@ find_package(tf2_ros REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 
 set(ROS2_DEPENDENCIES_BASE
   rclcpp
@@ -41,6 +42,7 @@ set(ROS2_DEPENDENCIES_GRAPH
   pcl_conversions
   pcl_ros
   ais_gng_msgs
+  tf2_msgs
 )
 
 set(ROS2_DEPENDENCIES_EDIT

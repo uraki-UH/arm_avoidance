@@ -103,14 +103,13 @@ public:
     declare_parameter("publish_hz", 20.0);
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
-    declare_parameter("tag", "static");
-    declare_parameter("mode", "static");
     declare_parameter("occupied_voxels_topic", "/occupied_voxels");
     declare_parameter("danger_voxels_topic", "/danger_voxels");
     declare_parameter("data_directory", "gng_results");
     declare_parameter("experiment_id", "standard_train");
     declare_parameter("gng_model_filename", "gng.bin");
     declare_parameter("vlut_filename", "vlut.bin");
+    declare_parameter("topic_name", "/topological_map");
 
     const std::string gng_path =
         resolveResultPath(get_parameter("gng_model_path").as_string(), false);
@@ -128,8 +127,6 @@ public:
 
     edge_mode_ = get_parameter("edge_mode").as_int();
     frame_id_ = get_parameter("frame_id").as_string();
-    tag_ = get_parameter("tag").as_string();
-    mode_ = get_parameter("mode").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
@@ -144,8 +141,9 @@ public:
         std::bind(&TopoFuzzyBridgeNode::dangerVoxelCallback, this,
                   std::placeholders::_1));
 
+    const std::string topic_name = get_parameter("topic_name").as_string();
     topological_map_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-        "/topological_map", rclcpp::QoS(1).reliable().transient_local());
+        topic_name, rclcpp::QoS(1).reliable().transient_local());
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
@@ -446,8 +444,6 @@ private:
 
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
-  std::string tag_ = "static";
-  std::string mode_ = "static";
   double publish_hz_ = 5.0;
   std::string occupied_voxels_topic_ = "/occupied_voxels";
   std::string danger_voxels_topic_ = "/danger_voxels";

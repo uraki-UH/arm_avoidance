@@ -107,6 +107,7 @@ function App() {
     });
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -114,6 +115,7 @@ function App() {
         pointCloud: wsPointCloud,
         graphData,
         robotData,
+        transforms,
         lastJobEvent,
         isConnected,
         error: wsError,
@@ -145,6 +147,36 @@ function App() {
         stopContinuousPublish,
         getContinuousPublishStatus,
     } = useWebSocket(wsUrl);
+
+    // --- Initialize Robot Settings ---
+    useEffect(() => {
+        setRobotSettings(prev => {
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(robotData).forEach(tag => {
+                if (!next[tag]) {
+                    next[tag] = { visible: true, color: 'skyblue' };
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [robotData]);
+
+    const handleUpdateRobotSettings = (tag: string, updates: Partial<RobotSettings>) => {
+        setRobotSettings(prev => ({
+            ...prev,
+            [tag]: { ...prev[tag], ...updates }
+        }));
+    };
+
+    const handleRemoveRobot = (tag: string) => {
+        setRobotSettings(prev => {
+            const next = { ...prev };
+            delete next[tag];
+            return next;
+        });
+    };
 
     useEffect(() => {
         connect();
@@ -701,6 +733,11 @@ function App() {
                         startContinuousPublish={startContinuousPublish}
                         stopContinuousPublish={stopContinuousPublish}
                         getContinuousPublishStatus={getContinuousPublishStatus}
+                        robotData={robotData}
+                        robotSettings={robotSettings}
+                        onUpdateRobotSettings={handleUpdateRobotSettings}
+                        onRemoveRobot={handleRemoveRobot}
+                        transforms={transforms}
                     />
                 </Sidebar>
             }
@@ -740,6 +777,9 @@ function App() {
                         const settings = layerSettings[tag];
                         if (!settings || !settings.visible) return null;
 
+                        const frameId = data.frameId || 'world';
+                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+
                         const commonProps = {
                             key: tag,
                             data: data,
@@ -754,6 +794,7 @@ function App() {
                             selectedClusterId: selectedClusterSnapshot?.cluster.id ?? null,
                             onClusterSelect: handleClusterSelect,
                             enableClusterSelection: !zoneMonitor.isDrawing,
+                            tf: tf,
                         };
 
                         if (data.mode === 'static') {
@@ -763,13 +804,22 @@ function App() {
                         }
                     })}
 
-                    {Object.entries(robotData).map(([tag, data]) => (
-                        <RobotRenderer
-                            key={`robot-${tag}`}
-                            tag={tag}
-                            data={data}
-                        />
-                    ))}
+                    {Object.entries(robotData).map(([tag, data]) => {
+                        const settings = robotSettings[tag] || { visible: true, color: 'skyblue' };
+                        if (!settings.visible) return null;
+                        const frameId = data.frameId || 'world';
+                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+                        return (
+                            <RobotRenderer
+                                key={tag}
+                                tag={tag}
+                                data={data}
+                                visible={true}
+                                color={settings.color}
+                                tf={tf}
+                            />
+                        );
+                    })}
 
                     <ZoneVisualizer
                         points={zoneMonitor.points}

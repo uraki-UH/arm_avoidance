@@ -34,6 +34,7 @@ interface GraphRendererProps {
     onClusterSelect?: (clusterId: number | null) => void;
     enableClusterSelection?: boolean;
     opacity?: number;
+    tf?: { pos: number[]; quat: number[] } | null;
 }
 
 export function StaticGraphRenderer({
@@ -49,7 +50,8 @@ export function StaticGraphRenderer({
     selectedClusterId = null,
     onClusterSelect,
     enableClusterSelection = true,
-    opacity = 1.0
+    opacity = 1.0,
+    tf = null,
 }: GraphRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const nodesRef = useRef<THREE.InstancedMesh>(null);
@@ -60,39 +62,17 @@ export function StaticGraphRenderer({
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
 
-    // --- Frame Anchoring (TF-like logic) ---
+    // --- TF-based Positioning ---
     useEffect(() => {
-        let timeoutId: number;
-
-        const attemptAnchor = () => {
-            if (!groupRef.current || !graph.frameId || graph.frameId === 'world') {
-                if (groupRef.current?.parent && groupRef.current.parent !== scene) {
-                    scene.add(groupRef.current);
-                    groupRef.current.position.set(0, 0, 0);
-                    groupRef.current.rotation.set(0, 0, 0);
-                }
-                return;
-            }
-
-            const anchor = scene.getObjectByName(graph.frameId);
-            if (anchor) {
-                if (groupRef.current.parent !== anchor) {
-                    console.log(`[StaticGraphRenderer] Anchoring to frame: ${graph.frameId}`);
-                    anchor.add(groupRef.current);
-                    groupRef.current.position.set(0, 0, 0);
-                    groupRef.current.rotation.set(0, 0, 0);
-                }
-            } else {
-                // If not found, retry in 500ms (robot might still be loading)
-                timeoutId = window.setTimeout(attemptAnchor, 500);
-            }
-        };
-
-        attemptAnchor();
-        return () => {
-            if (timeoutId) window.clearTimeout(timeoutId);
-        };
-    }, [graph.frameId, scene]);
+        if (!groupRef.current) return;
+        if (!tf) {
+            groupRef.current.position.set(0, 0, 0);
+            groupRef.current.rotation.set(0, 0, 0);
+            return;
+        }
+        groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
+        groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
+    }, [tf]);
 
     // Handle cluster click with drag filtering
     const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {

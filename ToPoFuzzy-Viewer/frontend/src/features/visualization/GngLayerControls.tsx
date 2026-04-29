@@ -30,6 +30,7 @@ interface GngLayerControlsProps {
     onUpdate: (updates: Partial<LayerSettings>) => void;
     onRemove: () => void;
     showOpacity?: boolean;
+    hasTf?: boolean;
 }
 
 export function GngLayerControls({
@@ -38,7 +39,8 @@ export function GngLayerControls({
     settings,
     onUpdate,
     onRemove,
-    showOpacity = false
+    showOpacity = false,
+    hasTf = false,
 }: GngLayerControlsProps) {
     const isStatic = graphData.mode === 'static';
     const displayTag = graphData.tag || tag;
@@ -77,8 +79,17 @@ export function GngLayerControls({
                                 {displayTag === 'default' ? 'GNG Topology' : displayTag}
                             </div>
                         </div>
-                        <div className="text-[10px] text-[var(--text-secondary)]">
-                            {graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                            <span>{graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges</span>
+                            {graphData.frameId && graphData.frameId !== 'world' && (
+                                <span className="flex items-center gap-1">
+                                    <span
+                                        className={`inline-block h-1.5 w-1.5 rounded-full ${hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                        title={hasTf ? 'TF active' : 'TF not yet received'}
+                                    />
+                                    <span className="font-mono opacity-70">{graphData.frameId}</span>
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
