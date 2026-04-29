@@ -129,21 +129,21 @@ public:
 
         // ROS Interfaces
         point_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            "/points", rclcpp::SensorDataQoS(), std::bind(&SafetyMonitorNode::pointCloudCallback, this, std::placeholders::_1));
+            "points", rclcpp::SensorDataQoS(), std::bind(&SafetyMonitorNode::pointCloudCallback, this, std::placeholders::_1));
 
         occupied_voxel_sub_ = this->create_subscription<std_msgs::msg::Int64MultiArray>(
-            "/occupied_voxels", 10, std::bind(&SafetyMonitorNode::occupiedVoxelCallback, this, std::placeholders::_1));
+            "occupied_voxels", 10, std::bind(&SafetyMonitorNode::occupiedVoxelCallback, this, std::placeholders::_1));
         
         danger_voxel_sub_ = this->create_subscription<std_msgs::msg::Int64MultiArray>(
-            "/danger_voxels", 10, std::bind(&SafetyMonitorNode::dangerVoxelCallback, this, std::placeholders::_1));
+            "danger_voxels", 10, std::bind(&SafetyMonitorNode::dangerVoxelCallback, this, std::placeholders::_1));
         
         joint_state_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
-            "/joint_states", 10, std::bind(&SafetyMonitorNode::jointStateCallback, this, std::placeholders::_1));
+            "joint_states", 10, std::bind(&SafetyMonitorNode::jointStateCallback, this, std::placeholders::_1));
 
-        marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/gng_viz", 10);
+        marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("gng_viz", 10);
         
         topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-            "/topological_map", rclcpp::QoS(1).reliable().transient_local());
+            "topological_map", rclcpp::QoS(1).reliable().transient_local());
 
         viz_timer_ = this->create_wall_timer(
             std::chrono::milliseconds(static_cast<int>(1000.0 / hz)), 

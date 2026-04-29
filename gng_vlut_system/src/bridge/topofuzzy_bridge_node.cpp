@@ -103,13 +103,13 @@ public:
     declare_parameter("publish_hz", 20.0);
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
-    declare_parameter("occupied_voxels_topic", "/occupied_voxels");
-    declare_parameter("danger_voxels_topic", "/danger_voxels");
+    declare_parameter("occupied_voxels_topic", "occupied_voxels");
+    declare_parameter("danger_voxels_topic", "danger_voxels");
     declare_parameter("data_directory", "gng_results");
     declare_parameter("experiment_id", "standard_train");
     declare_parameter("gng_model_filename", "gng.bin");
     declare_parameter("vlut_filename", "vlut.bin");
-    declare_parameter("topic_name", "/topological_map");
+    declare_parameter("topic_name", "topological_map");
 
     const std::string gng_path =
         resolveResultPath(get_parameter("gng_model_path").as_string(), false);
@@ -445,8 +445,8 @@ private:
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
   double publish_hz_ = 5.0;
-  std::string occupied_voxels_topic_ = "/occupied_voxels";
-  std::string danger_voxels_topic_ = "/danger_voxels";
+  std::string occupied_voxels_topic_ = "occupied_voxels";
+  std::string danger_voxels_topic_ = "danger_voxels";
 };
 
 int main(int argc, char **argv) {

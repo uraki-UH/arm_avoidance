@@ -34,8 +34,8 @@ public:
     robot_ip_ = declare_parameter<std::string>("robot_ip", "192.168.4.1"); // Target IP
     robot_port_ = declare_parameter<int>("robot_port", 12346); // Target Port
     base_frame_ = declare_parameter<std::string>("base_frame", "world");
-    output_topic_ = declare_parameter<std::string>("output_topic", "/joint_states");
-    command_topic_ = declare_parameter<std::string>("command_topic", "/joint_commands");
+    output_topic_ = declare_parameter<std::string>("output_topic", "joint_states");
+    command_topic_ = declare_parameter<std::string>("command_topic", "joint_commands");
 
     // ROS Interfaces
     joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(

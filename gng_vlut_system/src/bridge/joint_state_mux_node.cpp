@@ -52,9 +52,9 @@ class JointStateMuxNode : public rclcpp::Node {
 public:
   JointStateMuxNode()
   : Node("joint_state_mux_node") {
-    rviz_topic_ = declare_parameter<std::string>("rviz_topic", "/joint_states_rviz");
-    real_topic_ = declare_parameter<std::string>("real_topic", "/joint_states_real");
-    output_topic_ = declare_parameter<std::string>("output_topic", "/joint_states");
+    rviz_topic_ = declare_parameter<std::string>("rviz_topic", "joint_states_rviz");
+    real_topic_ = declare_parameter<std::string>("real_topic", "joint_states_real");
+    output_topic_ = declare_parameter<std::string>("output_topic", "joint_states");
     active_source_ = declare_parameter<std::string>("active_source", "rviz");
     publish_hz_ = declare_parameter<double>("publish_hz", 20.0);
 

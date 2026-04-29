@@ -16,7 +16,7 @@ export function RobotRenderer({
     tag,
     data,
     visible = true,
-    color = 'skyblue',
+    color = 'blue',
     tf = null,
 }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
@@ -31,12 +31,13 @@ export function RobotRenderer({
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: 'skyblue',
-        roughness: 0.5,
-        metalness: 0.5,
+        color: new THREE.Color(color),
+        emissive: new THREE.Color(color).multiplyScalar(0.2), // 微かに自己発光させて暗部を明るくする
+        roughness: 0.7,
+        metalness: 0.1,
         transparent: true,
-        opacity: 1.0,
-    }), []);
+        opacity: 0.8,
+    }), [color]);
 
     const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
         if (!obj) return;

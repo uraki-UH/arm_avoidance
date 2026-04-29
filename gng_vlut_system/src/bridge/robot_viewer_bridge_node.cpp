@@ -53,7 +53,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     declare_parameter<std::string>("resource_root_dir", "");
     declare_parameter<std::string>("mesh_root_dir", "");
     declare_parameter<std::string>("end_effector_name", "");
-    declare_parameter<std::string>("joint_state_topic", "/joint_states");
+    declare_parameter<std::string>("joint_state_topic", "joint_states");
     declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
     declare_parameter<std::string>("frame_id", "world");
     declare_parameter<double>("publish_hz", 30.0);
