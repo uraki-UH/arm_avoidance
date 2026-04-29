@@ -301,19 +301,24 @@ function App() {
             }
 
             setPointClouds((prev) => {
-                const existingCloud = prev.find((pc) => pc.id === wsPointCloud.id);
-                const filtered = prev.filter((pc) => pc.id !== wsPointCloud.id);
-
+                const index = prev.findIndex((pc) => pc.id === wsPointCloud.id);
+                
                 const newCloud = {
                     ...wsPointCloud,
-                    visible: existingCloud ? existingCloud.visible : true,
-                    opacity: existingCloud?.opacity ?? pointCloudOpacity,
-                    position: existingCloud?.position || wsPointCloud.position || [0, 0, 0],
-                    rotation: existingCloud?.rotation || wsPointCloud.rotation || [0, 0, 0],
-                    scale: existingCloud?.scale || wsPointCloud.scale || [1, 1, 1],
+                    visible: index >= 0 ? prev[index].visible : true,
+                    opacity: index >= 0 ? prev[index].opacity : pointCloudOpacity,
+                    position: index >= 0 ? prev[index].position : (wsPointCloud.position || [0, 0, 0]),
+                    rotation: index >= 0 ? prev[index].rotation : (wsPointCloud.rotation || [0, 0, 0]),
+                    scale: index >= 0 ? prev[index].scale : (wsPointCloud.scale || [1, 1, 1]),
                 };
 
-                return [...filtered, newCloud];
+                if (index === -1) {
+                    return [...prev, newCloud];
+                }
+
+                const next = [...prev];
+                next[index] = newCloud;
+                return next;
             });
         }
     }, [wsPointCloud, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);

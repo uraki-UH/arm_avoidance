@@ -35,7 +35,7 @@ export function RobotRenderer({
         roughness: 0.5,
         metalness: 0.5,
         transparent: true,
-        opacity: 0.8,
+        opacity: 1.0,
     }), []);
 
     const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {

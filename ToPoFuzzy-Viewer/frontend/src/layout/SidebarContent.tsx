@@ -289,18 +289,18 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             >
                                                 {props.robotSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
                                             </button>
-                                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
-                                    </div>
-                                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                                        <span>Frame:</span>
-                                        <span className="flex items-center gap-1">
-                                            <span
-                                                className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                                title={props.transforms[data.frameId] ? 'TF active' : 'TF not yet received'}
-                                            />
-                                            <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
-                                        </span>
-                                    </div>
+                                            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
+                                        </div>
+                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                            <span>Frame:</span>
+                                            <span className="flex items-center gap-1">
+                                                <span
+                                                    className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                                    title={props.transforms[data.frameId] ? 'TF active' : 'TF not yet received'}
+                                                />
+                                                <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
+                                            </span>
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => props.onRemoveRobot(tag)}
