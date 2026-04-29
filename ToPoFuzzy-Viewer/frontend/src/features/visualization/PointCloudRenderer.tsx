@@ -99,7 +99,7 @@ export function PointCloudRenderer({
             return new THREE.PointsMaterial({
                 size: pointSize,
                 vertexColors: !isSimple,
-                color: isSimple ? new THREE.Color(simpleColor) : new THREE.Color('#c8ff4a'),
+                color: isSimple ? new THREE.Color(simpleColor) : new THREE.Color('#ffffff'),
                 sizeAttenuation: true,
                 opacity,
                 transparent: isTransparent,
