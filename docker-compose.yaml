@@ -23,7 +23,31 @@ services:
       - ~/rosbag:/rosbag
       - ~/datasets:/datasets
     working_dir: /ros2_ws/src/ais_gng
+    ports:
+      - "9001:9001"
     #command: "sh /ros2_ws/src/ais_gng/release.sh"
+
+    #npm run devをdockerで実行する用
+  frontend:
+    image: gng_cpu:latest
+    depends_on:
+      - gng_cpu
+    tty: true
+    stdin_open: true
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro
+      - .:/ros2_ws/src
+      - topofuzzy_frontend_node_modules:/ros2_ws/src/ToPoFuzzy-Viewer/frontend/node_modules
+    working_dir: /ros2_ws/src/ToPoFuzzy-Viewer/frontend
+    command: >
+      bash -lc "
+      npm run dev -- --host 0.0.0.0 --port 5173
+      "
+    ports:
+      - "5173:5173"
+
 volumes:
   ros_ws_volume:
   ros_ws_build_volume:
+  topofuzzy_frontend_node_modules:
