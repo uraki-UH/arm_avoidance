@@ -1,9 +1,10 @@
 import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
+import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { ThreeEvent } from '@react-three/fiber';
 import { GraphData, LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 
 const EMPTY_GRAPH: GraphData = {
     timestamp: 0,
@@ -58,10 +59,12 @@ export function StaticGraphRenderer({
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
-    const { scene } = useThree();
     
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
+
+    // Trigger re-render in demand mode for any visual changes
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -94,10 +97,8 @@ export function StaticGraphRenderer({
         }
     };
 
-    // --- Node sphere geometry (shared) ---
+    // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-
-    // --- Node material ---
     const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
         color: '#c8ff4a',
         transparent: true,
@@ -106,75 +107,7 @@ export function StaticGraphRenderer({
         depthWrite: false,
     }), [opacity]);
 
-    const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
-
-    useEffect(() => {
-        if (graph.nodes.length > nodeCapacity) {
-            setNodeCapacity(graph.nodes.length);
-        }
-    }, [graph.nodes.length, nodeCapacity]);
-
-    // --- Update instanced nodes (Split into Matrix and Color for efficiency) ---
-    const lastNodeCountRef = useRef<number>(0);
-
-    // 1. Matrix Update (Positions) - Only when node count or data structure changes
-    useEffect(() => {
-        if (!nodesRef.current || !showNodes) return;
-        if (graph.nodes.length === 0) return;
-        if (graph.nodes.length > nodeCapacity) return;
-
-        // In Static mode, we only need to set matrices once (or when nodes move in their local frame)
-        // For urdf_trainer nodes, they NEVER move relative to their frame.
-        const tempMatrix = new THREE.Matrix4();
-        nodesRef.current.count = graph.nodes.length;
-
-        graph.nodes.forEach((node, i) => {
-            tempMatrix.makeTranslation(node.x, node.y, node.z);
-            tempMatrix.scale(new THREE.Vector3(nodeScale, nodeScale, nodeScale));
-            nodesRef.current!.setMatrixAt(i, tempMatrix);
-        });
-
-        nodesRef.current.instanceMatrix.needsUpdate = true;
-        lastNodeCountRef.current = graph.nodes.length;
-        invalidate(); // Trigger re-render for 'demand' frameloop
-    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, invalidate]);
-
-    useEffect(() => {
-        if (!nodesRef.current || showNodes) return;
-
-        // When nodes are hidden, clear any previously uploaded instances so the layer
-        // does not keep stale geometry around when the mesh is toggled back on.
-        nodesRef.current.count = 0;
-        nodesRef.current.instanceMatrix.needsUpdate = true;
-        if (nodesRef.current.instanceColor) {
-            nodesRef.current.instanceColor.needsUpdate = true;
-        }
-    }, [showNodes]);
-
-    // 2. Color Update (Status) - When labels change (e.g. collision/danger)
-    useEffect(() => {
-        if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
-        
-        const tempColor = new THREE.Color();
-        const nodes = graph.nodes;
-
-        for (let i = 0; i < nodes.length; i++) {
-            const labelValue = Number.isFinite(nodes[i].label) ? Math.trunc(nodes[i].label) : 0;
-            const safeIndex = ((labelValue % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-            const colorHex = LAYER_COLORS[safeIndex] ?? LAYER_COLORS[0];
-            tempColor.set(colorHex);
-            nodesRef.current!.setColorAt(i, tempColor);
-        }
-
-        if (nodesRef.current.instanceColor) {
-            nodesRef.current.instanceColor.needsUpdate = true;
-        }
-    }, [graph.nodes, showNodes]); // Depend on full nodes array for color/label updates
-
-    // --- Edge cylinder geometry (shared) ---
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
-
-    // --- Edge material ---
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
         color: '#b9ff3f',
         transparent: true,
@@ -183,68 +116,49 @@ export function StaticGraphRenderer({
         depthWrite: false,
     }), [opacity]);
 
+    const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
 
     useEffect(() => {
-        if (edgePairCount > edgeCapacity) {
-            setEdgeCapacity(edgePairCount);
-        }
+        if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
+    }, [graph.nodes.length, nodeCapacity]);
+
+    useEffect(() => {
+        if (edgePairCount > edgeCapacity) setEdgeCapacity(edgePairCount);
     }, [edgePairCount, edgeCapacity]);
 
-    // --- Update instanced edges ---
+    // --- Node Instances ---
+    useEffect(() => {
+        if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
+        if (graph.nodes.length > nodeCapacity) return;
+
+        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale);
+        invalidate(); 
+    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate]);
+
+    useEffect(() => {
+        if (!nodesRef.current || showNodes) return;
+        nodesRef.current.count = 0;
+        nodesRef.current.instanceMatrix.needsUpdate = true;
+        invalidate();
+    }, [showNodes, invalidate]);
+
+    // --- Edge Instances ---
     useEffect(() => {
         if (!edgesRef.current || !showEdges || edgePairCount === 0) return;
         if (edgePairCount > edgeCapacity) return;
 
-        // Edges in static mode also don't change their matrices unless nodes move locally
-        const tempMatrix = new THREE.Matrix4();
-        const up = new THREE.Vector3(0, 1, 0);
-        const direction = new THREE.Vector3();
-        const quaternion = new THREE.Quaternion();
-
-        edgesRef.current.count = edgePairCount;
-
-        for (let i = 0; i < edgePairCount; i++) {
-            const srcIdx = graph.edges[i * 2];
-            const tgtIdx = graph.edges[i * 2 + 1];
-
-            if (srcIdx >= graph.nodes.length || tgtIdx >= graph.nodes.length) {
-                tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
-                edgesRef.current!.setMatrixAt(i, tempMatrix);
-                continue;
-            }
-
-            const srcNode = graph.nodes[srcIdx];
-            const tgtNode = graph.nodes[tgtIdx];
-
-            const start = new THREE.Vector3(srcNode.x, srcNode.y, srcNode.z);
-            const end = new THREE.Vector3(tgtNode.x, tgtNode.y, tgtNode.z);
-
-            const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-            const length = start.distanceTo(end);
-
-            direction.subVectors(end, start).normalize();
-            quaternion.setFromUnitVectors(up, direction);
-
-            tempMatrix.makeRotationFromQuaternion(quaternion);
-            tempMatrix.scale(new THREE.Vector3(edgeWidth, length, edgeWidth));
-            tempMatrix.setPosition(midpoint);
-
-            edgesRef.current!.setMatrixAt(i, tempMatrix);
-        }
-
-        edgesRef.current.instanceMatrix.needsUpdate = true;
+        updateEdgeInstances(edgesRef.current, graph.edges, graph.nodes, edgeWidth);
         invalidate();
-    }, [graph.nodes.length, edgePairCount, showEdges, edgeWidth, edgeCapacity, invalidate]);
+    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgeCapacity, edgePairCount, invalidate]);
 
     useEffect(() => {
         if (!edgesRef.current || showEdges) return;
-
-        // Clear stale edge instances when hidden.
         edgesRef.current.count = 0;
         edgesRef.current.instanceMatrix.needsUpdate = true;
-    }, [showEdges]);
+        invalidate();
+    }, [showEdges, invalidate]);
 
     if (!data || !visible) return null;
 
@@ -255,7 +169,7 @@ export function StaticGraphRenderer({
         <group ref={groupRef}>
             {canRenderNodes && (
                 <instancedMesh
-                    key={`static-nodes-${nodeCapacity}-${showNodes ? 'on' : 'off'}`}
+                    key={`static-nodes-${nodeCapacity}`}
                     ref={nodesRef}
                     args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
                     count={graph.nodes.length}
@@ -266,7 +180,7 @@ export function StaticGraphRenderer({
 
             {canRenderEdges && (
                 <instancedMesh
-                    key={`static-edges-${edgeCapacity}-${showEdges ? 'on' : 'off'}`}
+                    key={`static-edges-${edgeCapacity}`}
                     ref={edgesRef}
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
                     count={edgePairCount}
@@ -281,12 +195,9 @@ export function StaticGraphRenderer({
                     const isSelected = selectedClusterId === cluster.id;
                     const color = isSelected ? '#FFFFFF' : LAYER_COLORS[cluster.label % LAYER_COLORS.length];
                     const isHuman = cluster.label === 4; 
-                    const handlePointerDown = selectionEnabled
-                        ? (e: ThreeEvent<PointerEvent>) => { dragStartRef.current = { x: e.clientX, y: e.clientY }; }
-                        : undefined;
-                    const handleClick = selectionEnabled
-                        ? (e: ThreeEvent<MouseEvent>) => handleClusterClick(cluster.id, e)
-                        : undefined;
+                    const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+                        if (selectionEnabled) dragStartRef.current = { x: e.clientX, y: e.clientY };
+                    };
 
                     return (
                         <group key={cluster.id} position={cluster.pos} quaternion={new THREE.Quaternion(...cluster.quat)}>
@@ -294,7 +205,7 @@ export function StaticGraphRenderer({
                                 scale={isHuman ? [cluster.scale[0], cluster.scale[2], cluster.scale[1]] : cluster.scale}
                                 rotation={isHuman ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
                                 onPointerDown={handlePointerDown}
-                                onClick={handleClick}
+                                onClick={(e) => handleClusterClick(cluster.id, e as any)}
                             >
                                 {isHuman ? <cylinderGeometry args={[0.5, 0.5, 1, 16]} /> : <boxGeometry args={[1, 1, 1]} />}
                                 <meshStandardMaterial
