@@ -35,7 +35,6 @@ private:
         const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations,
         bool include_urdf) const;
     void publishCurrentState();
-    void publishCurrentStateLocked();
 
     kinematics::KinematicChain chain_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;

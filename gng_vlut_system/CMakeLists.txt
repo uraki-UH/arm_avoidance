@@ -43,6 +43,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(fcl REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 set(_eigen_include_dirs "${Eigen3_INCLUDE_DIRS}")
 if(NOT _eigen_include_dirs AND EIGEN3_INCLUDE_DIR)

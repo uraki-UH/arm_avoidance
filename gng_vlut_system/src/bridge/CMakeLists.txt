@@ -31,6 +31,7 @@ ament_target_dependencies(robot_viewer_bridge_node_component
     tf2_geometry_msgs
     tf2_eigen
     ament_index_cpp
+    nlohmann_json
 )
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 
