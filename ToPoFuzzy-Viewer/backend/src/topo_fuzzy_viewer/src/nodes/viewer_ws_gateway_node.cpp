@@ -8,8 +8,8 @@
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
-
 #include <App.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -21,16 +21,14 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include <type_traits>
 #include <utility>
 #include <vector>
-
+#include <filesystem>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
 namespace {
-
+using json = nlohmann::json;
 struct PerSocketData {};
-
 struct PendingResponse {
     std::mutex mutex;
     std::condition_variable cv;
@@ -40,108 +38,66 @@ struct PendingResponse {
 
 class ViewerWsGatewayNode : public rclcpp::Node {
 public:
-    ViewerWsGatewayNode()
-        : rclcpp::Node("viewer_ws_gateway_node") {
-        this->declare_parameter<int>("port", 9001);
-        const int port = this->get_parameter("port").as_int();
+    ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
+        const int port = declare_parameter<int>("port", 9001);
 
-        sourceRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcSourceRequest, 50);
-        fileRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcFileRequest, 50);
-        rosbagRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcRosbagRequest, 50);
-        gngRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcGngRequest, 50);
-        paramRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcParamRequest, 50);
-        editRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcEditRequest, 50);
-
-        rpcResponseSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kRpcResponse,
-            100,
-            std::bind(&ViewerWsGatewayNode::handleRpcResponse, this, std::placeholders::_1));
-
-        pointCloudMetaSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kStreamPointCloudMeta,
-            100,
-            [this](const std_msgs::msg::String::SharedPtr msg) {
-                this->broadcastText(msg->data);
-            });
-
-        pointCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-            viewer_internal::topics::kStreamPointCloud,
-            rclcpp::QoS(rclcpp::KeepLast(10)),
-            std::bind(&ViewerWsGatewayNode::handlePointCloud, this, std::placeholders::_1));
-
-        // Declare and get GNG topics
-        this->declare_parameter<std::vector<std::string>>("gng_topics", {viewer_internal::topics::kStreamGraph});
-        auto gngTopics = this->get_parameter("gng_topics").as_string_array();
-
-        for (const auto& topic : gngTopics) {
-            std::string subscriptionTag = topic;
-            
-            rclcpp::QoS qos(rclcpp::KeepLast(1));
-            if (topic.find("topological_map") != std::string::npos) {
-                qos.reliable().transient_local();
-            }
-
-            auto sub = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
-                topic,
-                qos,
-                [this, subscriptionTag](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
-                    this->handleGraph(msg, subscriptionTag);
-                });
-            graphSubs_.push_back(sub);
-            RCLCPP_INFO(this->get_logger(), "Subscribed to GNG topic: %s (default tag: %s)", topic.c_str(), subscriptionTag.c_str());
+        const std::vector<std::pair<std::string, std::string>> rpc_configs = {
+            {"sources", viewer_internal::topics::kRpcSourceRequest},
+            {"publish", viewer_internal::topics::kRpcSourceRequest},
+            {"files",   viewer_internal::topics::kRpcFileRequest},
+            {"rosbag",  viewer_internal::topics::kRpcRosbagRequest},
+            {"gng",     viewer_internal::topics::kRpcGngRequest},
+            {"params",  viewer_internal::topics::kRpcParamRequest},
+            {"edit",    viewer_internal::topics::kRpcEditRequest}
+        };
+        for (const auto& [prefix, topic] : rpc_configs) {
+            rpcPubs_[prefix] = create_publisher<std_msgs::msg::String>(topic, 50);
         }
 
-        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
-            "/tf",
-            100,
-            std::bind(&ViewerWsGatewayNode::handleTf, this, std::placeholders::_1));
+        rpcResponseSub_ = create_subscription<std_msgs::msg::String>(
+            viewer_internal::topics::kRpcResponse, 100, std::bind(&ViewerWsGatewayNode::handleRpcResponse, this, std::placeholders::_1));
 
-        livenessTimer_ = create_wall_timer(
-            std::chrono::milliseconds(1000),
-            std::bind(&ViewerWsGatewayNode::checkLiveness, this));
+        pointCloudMetaSub_ = create_subscription<std_msgs::msg::String>(
+            viewer_internal::topics::kStreamPointCloudMeta, 100, 
+            [this](const std_msgs::msg::String::SharedPtr msg) { broadcastText(msg->data); });
+
+        pointCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
+            viewer_internal::topics::kStreamPointCloud, rclcpp::QoS(10), 
+            std::bind(&ViewerWsGatewayNode::handlePointCloud, this, std::placeholders::_1));
+
+        auto gngTopics = declare_parameter<std::vector<std::string>>("gng_topics", {viewer_internal::topics::kStreamGraph});
+        for (const auto& topic : gngTopics) {
+            auto qos = rclcpp::QoS(1);
+            if (topic.find("topological_map") != std::string::npos) qos.reliable().transient_local();
+            graphSubs_.push_back(create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+                topic, qos, [this, topic](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) { handleGraph(msg, topic); }));
+        }
+
+        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>("/tf", 100, std::bind(&ViewerWsGatewayNode::handleTf, this, std::placeholders::_1));
+        livenessTimer_ = create_wall_timer(std::chrono::seconds(1), std::bind(&ViewerWsGatewayNode::checkLiveness, this));
 
         startServer(port);
-
-
-        RCLCPP_INFO(get_logger(), "viewer_ws_gateway_node initialized on ws://0.0.0.0:%d", port);
+        RCLCPP_INFO(get_logger(), "Gateway initialized on port %d", port);
     }
 
     ~ViewerWsGatewayNode() override {
         stopServer();
-        if (serverThread_.joinable()) {
-            serverThread_.join();
-        }
+        if (serverThread_.joinable()) serverThread_.join();
     }
 
 private:
     void startServer(int port) {
-        if (serverRunning_) {
-            return;
-        }
         serverRunning_ = true;
-        serverThread_ = std::thread([this, port]() {
-            this->runServerLoop(port);
-        });
+        serverThread_ = std::thread([this, port]() { runServerLoop(port); });
     }
 
     void stopServer() {
-        if (!serverRunning_) {
-            return;
-        }
         serverRunning_ = false;
-        
         if (loop_) {
             loop_->defer([this]() {
-                if (listenSocket_) {
-                    us_listen_socket_close(0, listenSocket_);
-                    listenSocket_ = nullptr;
-                }
-                
-                // Force close all active connections to break the loop
+                if (listenSocket_) { us_listen_socket_close(0, listenSocket_); listenSocket_ = nullptr; }
                 std::lock_guard<std::mutex> lock(connectionMutex_);
-                for (auto* ws : connections_) {
-                    ws->close();
-                }
+                for (auto* ws : connections_) ws->close();
                 connections_.clear();
             });
         }
@@ -151,501 +107,204 @@ private:
         loop_ = uWS::Loop::get();
         uWS::App::WebSocketBehavior<PerSocketData> behavior;
         behavior.maxPayloadLength = 64 * 1024 * 1024;
-        behavior.maxBackpressure = 16 * 1024 * 1024;
         behavior.open = [this](auto* ws) {
-            std::vector<std::string> cachedPayloads;
+            std::vector<std::string> cached;
+            { std::lock_guard<std::mutex> l(graphMutex_); for (auto& p : lastGraphPayloads_) cached.push_back(p.second); }
+            { std::lock_guard<std::mutex> l(robotMutex_); for (auto& p : lastRobotDescriptions_) cached.push_back(p.second); }
             {
-                std::lock_guard<std::mutex> graphLock(graphMutex_);
-                for (const auto& [tag, payload] : lastGraphPayloads_) {
-                    cachedPayloads.push_back(payload);
-                }
-            }
-            {
-                std::lock_guard<std::mutex> robotLock(robotMutex_);
-                for (const auto& [tag, payload] : lastRobotDescriptions_) {
-                    cachedPayloads.push_back(payload);
-                }
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(connectionMutex_);
-                if (connections_.empty()) {
-                    // First client connected, subscribe to streaming topics
-                    this->subscribeStreamingTopics();
-                }
+                std::lock_guard<std::mutex> l(connectionMutex_);
+                if (connections_.empty()) subscribeStreamingTopics();
                 connections_.push_back(ws);
             }
-
-            for (const auto& payload : cachedPayloads) {
-                ws->send(payload, uWS::OpCode::TEXT);
-            }
+            for (auto& p : cached) ws->send(p, uWS::OpCode::TEXT);
         };
-        behavior.message = [this](auto* ws, std::string_view message, uWS::OpCode opCode) {
-            if (opCode != uWS::OpCode::TEXT) {
+        behavior.message = [this](auto* ws, std::string_view msg, uWS::OpCode op) {
+            if (op != uWS::OpCode::TEXT) return;
+            json incoming = json::parse(msg, nullptr, false);
+            if (incoming.is_discarded()) return;
+            std::string type = incoming.value("type", ""), tag = incoming.value("tag", "");
+            if (type == "stream.graph.delete" && !tag.empty()) { removeGraphLayer(tag); return; }
+            if (type == "request.state") {
+                std::vector<std::string> payloads;
+                { std::lock_guard<std::mutex> l(graphMutex_); for (auto& p : lastGraphPayloads_) payloads.push_back(p.second); }
+                { std::lock_guard<std::mutex> l(robotMutex_); for (auto& p : lastRobotDescriptions_) payloads.push_back(p.second); }
+                for (auto& p : payloads) ws->send(p, uWS::OpCode::TEXT);
                 return;
             }
-            viewer_internal::json incoming;
-            if (viewer_internal::parseJson(std::string(message), incoming)) {
-                const std::string type = incoming.value("type", "");
-                const std::string tag = incoming.value("tag", "");
-
-                if (type == "stream.graph.delete" && !tag.empty()) {
-                    this->removeGraphLayer(tag);
-                    return;
-                }
-
-                // Challenge: client requests full state resend
-                if (type == "request.state") {
-                    std::vector<std::string> payloads;
-                    {
-                        std::lock_guard<std::mutex> graphLock(graphMutex_);
-                        for (const auto& [t, payload] : lastGraphPayloads_) {
-                            payloads.push_back(payload);
-                        }
-                    }
-                    {
-                        std::lock_guard<std::mutex> robotLock(robotMutex_);
-                        for (const auto& [t, payload] : lastRobotDescriptions_) {
-                            payloads.push_back(payload);
-                        }
-                    }
-                    for (const auto& payload : payloads) {
-                        ws->send(payload, uWS::OpCode::TEXT);
-                    }
-                    return;
-                }
-            }
-            this->handleWsRequest(ws, std::string(message));
+            handleWsRequest(ws, std::string(msg));
         };
         behavior.close = [this](auto* ws, int, std::string_view) {
             std::lock_guard<std::mutex> lock(connectionMutex_);
-            connections_.erase(
-                std::remove(connections_.begin(), connections_.end(), ws),
-                connections_.end());
-            
-            if (connections_.empty()) {
-                // Last client disconnected, unsubscribe from streaming topics to save resources
-                this->unsubscribeStreamingTopics();
-            }
+            connections_.erase(std::remove(connections_.begin(), connections_.end(), ws), connections_.end());
+            if (connections_.empty()) unsubscribeStreamingTopics();
         };
 
-        uWS::App()
-            .get("/*", [this](auto* res, auto* req) {
-                this->handleHttpGet(res, req);
-            })
+        uWS::App().get("/*", [this](auto* res, auto* req) { handleHttpGet(res, req); })
             .ws<PerSocketData>("/*", std::move(behavior))
-            .listen(port, [this, port](auto* socket) {
-                if (socket) {
-                    listenSocket_ = socket;
-                    RCLCPP_INFO(this->get_logger(), "WebSocket listening on port %d", port);
-                } else {
-                    RCLCPP_ERROR(this->get_logger(), "Failed to bind port %d", port);
-                }
-            })
+            .listen(port, [this, port](auto* s) { if (s) { listenSocket_ = s; RCLCPP_INFO(get_logger(), "WS listening on %d", port); } })
             .run();
     }
 
     void handleWsRequest(uWS::WebSocket<false, true, PerSocketData>* ws, const std::string& text) {
-        viewer_internal::json request;
-        if (!viewer_internal::parseJson(text, request)) {
-            ws->send(
-                viewer_internal::makeErrorResponse("", "INVALID_JSON", "Failed to parse JSON request"),
-                uWS::OpCode::TEXT);
-            return;
-        }
+        json req = json::parse(text, nullptr, false);
+        if (req.is_discarded()) return;
+        std::string id = req.value("id", ""), method = req.value("method", "");
+        auto it = rpcPubs_.find(method.substr(0, method.find('.')));
+        auto pub = (it != rpcPubs_.end()) ? it->second : nullptr;
+        if (!pub) { ws->send(viewer_internal::makeErrorResponse(id, "METHOD_NOT_FOUND", "Unsupported"), uWS::OpCode::TEXT); return; }
 
-        const std::string id = viewer_internal::getId(request);
-        const std::string method = viewer_internal::getMethod(request);
-        if (id.empty() || method.empty()) {
-            ws->send(
-                viewer_internal::makeErrorResponse(id, "INVALID_REQUEST", "Missing id or method"),
-                uWS::OpCode::TEXT);
-            return;
-        }
-
-        auto publisher = routePublisher(method);
-        if (!publisher) {
-            ws->send(
-                viewer_internal::makeErrorResponse(id, "METHOD_NOT_FOUND", "Method is not supported"),
-                uWS::OpCode::TEXT);
-            return;
-        }
-
-        const int timeoutMs = 30000;
-        std::thread([this, ws, id, text, publisher, timeoutMs]() {
-            const std::string response = callInternalRpc(id, text, publisher, timeoutMs);
-            loop_->defer([this, ws, response]() {
+        std::thread([this, ws, id, text, pub]() {
+            std::string resp = callInternalRpc(id, text, pub, 30000);
+            loop_->defer([this, ws, resp]() {
                 std::lock_guard<std::mutex> lock(connectionMutex_);
-                auto it = std::find(connections_.begin(), connections_.end(), ws);
-                if (it != connections_.end()) {
-                    ws->send(response, uWS::OpCode::TEXT);
-                }
+                if (std::find(connections_.begin(), connections_.end(), ws) != connections_.end()) ws->send(resp, uWS::OpCode::TEXT);
             });
         }).detach();
     }
 
     void subscribeStreamingTopics() {
-        const std::string robotBase = viewer_internal::topics::kStreamRobot;
-        
-        robotDescSub_ = this->create_subscription<std_msgs::msg::String>(
-            robotBase + "/description",
-            rclcpp::QoS(1).reliable().transient_local(),
-            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
-
-        robotPoseSub_ = this->create_subscription<std_msgs::msg::String>(
-            robotBase + "/pose",
-            rclcpp::QoS(1).best_effort(),
-            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
-
-        jobEventSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kEditJobEvents,
-            100,
-            [this](const std_msgs::msg::String::SharedPtr msg) {
-                this->broadcastText(msg->data);
-            });
-
-        RCLCPP_INFO(this->get_logger(), "Subscribed to Robot topics (description & pose)");
+        std::string base = viewer_internal::topics::kStreamRobot;
+        robotDescSub_ = create_subscription<std_msgs::msg::String>(base + "/description", rclcpp::QoS(1).reliable().transient_local(), std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+        robotPoseSub_ = create_subscription<std_msgs::msg::String>(base + "/pose", rclcpp::QoS(1).best_effort(), std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+        jobEventSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kEditJobEvents, 100, [this](const std_msgs::msg::String::SharedPtr msg) { broadcastText(msg->data); });
+        RCLCPP_INFO(get_logger(), "Subscribed to streaming topics");
     }
 
     void unsubscribeStreamingTopics() {
-        robotDescSub_.reset();
-        robotPoseSub_.reset();
-        jobEventSub_.reset();
-        RCLCPP_INFO(this->get_logger(), "Unsubscribed from Robot topics (No active clients)");
+        robotDescSub_.reset(); robotPoseSub_.reset(); jobEventSub_.reset();
+        RCLCPP_INFO(get_logger(), "Unsubscribed (No active clients)");
     }
 
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr routePublisher(const std::string& method) {
-        if (viewer_internal::startsWith(method, "sources.")) {
-            return sourceRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "publish.")) {
-            return sourceRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "files.")) {
-            return fileRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "rosbag.")) {
-            return rosbagRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "gng.")) {
-            return gngRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "params.")) {
-            return paramRequestPub_;
-        }
-        if (viewer_internal::startsWith(method, "edit.")) {
-            return editRequestPub_;
-        }
-        return nullptr;
-    }
-
-    std::string callInternalRpc(
-        const std::string& id,
-        const std::string& request,
-        const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& publisher,
-        int timeoutMs) {
+    std::string callInternalRpc(const std::string& id, const std::string& request, const rclcpp::Publisher<std_msgs::msg::String>::SharedPtr& pub, int timeoutMs) {
         auto pending = std::make_shared<PendingResponse>();
-
-        {
-            std::lock_guard<std::mutex> lock(pendingMutex_);
-            pendingResponses_[id] = pending;
-        }
-
-        publisher->publish(viewer_internal::toStringMsg(request));
-
+        { std::lock_guard<std::mutex> l(pendingMutex_); pendingResponses_[id] = pending; }
+        pub->publish(viewer_internal::toStringMsg(request));
         std::unique_lock<std::mutex> lock(pending->mutex);
-        const bool ready = pending->cv.wait_for(
-            lock,
-            std::chrono::milliseconds(timeoutMs),
-            [&pending]() { return pending->done; });
-
-        {
-            std::lock_guard<std::mutex> pendingLock(pendingMutex_);
-            pendingResponses_.erase(id);
-        }
-
-        if (!ready) {
-            return viewer_internal::makeErrorResponse(id, "TIMEOUT", "Timed out waiting backend node response");
-        }
-        return pending->payload;
+        bool ready = pending->cv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [&]() { return pending->done; });
+        { std::lock_guard<std::mutex> l(pendingMutex_); pendingResponses_.erase(id); }
+        return ready ? pending->payload : viewer_internal::makeErrorResponse(id, "TIMEOUT", "Backend node timeout");
     }
 
     void handleRpcResponse(const std_msgs::msg::String::SharedPtr msg) {
-        viewer_internal::json response;
-        if (!viewer_internal::parseJson(msg->data, response)) {
-            return;
-        }
-
-        const std::string id = viewer_internal::getId(response);
-        if (id.empty()) {
-            return;
-        }
-
+        json resp = json::parse(msg->data, nullptr, false);
+        std::string id = resp.value("id", "");
+        if (id.empty()) return;
         std::shared_ptr<PendingResponse> pending;
-        {
-            std::lock_guard<std::mutex> lock(pendingMutex_);
-            auto it = pendingResponses_.find(id);
-            if (it == pendingResponses_.end()) {
-                return;
-            }
-            pending = it->second;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(pending->mutex);
-            pending->payload = msg->data;
-            pending->done = true;
-        }
-        pending->cv.notify_all();
+        { std::lock_guard<std::mutex> l(pendingMutex_); auto it = pendingResponses_.find(id); if (it != pendingResponses_.end()) pending = it->second; }
+        if (pending) { std::lock_guard<std::mutex> l(pending->mutex); pending->payload = msg->data; pending->done = true; pending->cv.notify_all(); }
     }
 
     void handlePointCloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-        auto converted = utils::convertFromRosMsg(msg);
-        auto protocolMessage = utils::convertToProtocolMessage(converted);
-        auto serialized = protocolMessage.serialize();
-        broadcastBinary(serialized);
+        broadcastBinary(utils::convertToProtocolMessage(utils::convertFromRosMsg(msg)).serialize());
     }
 
-    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& subscriptionTag) {
-        //トピック名にstaticが含まれていればstatic、含まれていなければdynamicとする
-        const std::string& tag = subscriptionTag;
-        const std::string mode = (subscriptionTag.find("static") != std::string::npos) ? "static" : "dynamic";
-
-
-        viewer_internal::json graph;
-        graph["timestamp"] = msg->header.stamp.sec;
-        graph["tag"] = tag;
-        graph["mode"] = mode;
-        graph["frameId"] = msg->header.frame_id;
-
-        viewer_internal::json nodes = viewer_internal::json::array();
-        for (const auto& node : msg->nodes) {
-            nodes.push_back({
-                {"x", node.pos.x},
-                {"y", node.pos.y},
-                {"z", node.pos.z},
-                {"nx", node.normal.x},
-                {"ny", node.normal.y},
-                {"nz", node.normal.z},
-                {"label", node.label},
-                {"age", node.age}
-            });
+    void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag) {
+        json g;
+        g["timestamp"] = msg->header.stamp.sec;
+        g["tag"] = tag;
+        g["mode"] = (tag.find("static") != std::string::npos) ? "static" : "dynamic";
+        g["frameId"] = msg->header.frame_id;
+        
+        auto& nodes = g["nodes"] = json::array();
+        for (auto& n : msg->nodes) nodes.push_back({{"x",n.pos.x},{"y",n.pos.y},{"z",n.pos.z},{"nx",n.normal.x},{"ny",n.normal.y},{"nz",n.normal.z},{"label",n.label},{"age",n.age}});
+        g["edges"] = msg->edges;
+        
+        auto& clusters = g["clusters"] = json::array();
+        for (auto& c : msg->clusters) {
+            clusters.push_back({{"id",c.id},{"label",c.label},{"pos",{c.pos.x,c.pos.y,c.pos.z}},{"scale",{c.scale.x,c.scale.y,c.scale.z}},{"quat",{c.quat.x,c.quat.y,c.quat.z,c.quat.w}},{"match",c.match},{"reliability",c.reliability},{"velocity",{c.velocity.x,c.velocity.y,c.velocity.z}},{"nodeIds",c.nodes}});
         }
 
-        viewer_internal::json edges = viewer_internal::json::array();
-        for (const auto edge : msg->edges) {
-            edges.push_back(edge);
-        }
-
-        viewer_internal::json clusters = viewer_internal::json::array();
-        for (const auto& cluster : msg->clusters) {
-            viewer_internal::json nodeIds = viewer_internal::json::array();
-            for (const auto nodeId : cluster.nodes) {
-                nodeIds.push_back(nodeId);
-            }
-            clusters.push_back({
-                {"id", cluster.id},
-                {"label", cluster.label},
-                {"pos", {cluster.pos.x, cluster.pos.y, cluster.pos.z}},
-                {"scale", {cluster.scale.x, cluster.scale.y, cluster.scale.z}},
-                {"quat", {cluster.quat.x, cluster.quat.y, cluster.quat.z, cluster.quat.w}},
-                {"match", cluster.match},
-                {"reliability", cluster.reliability},
-                {"velocity", {cluster.velocity.x, cluster.velocity.y, cluster.velocity.z}},
-                {"nodeIds", nodeIds}
-            });
-        }
-
-        graph["nodes"] = nodes;
-        graph["edges"] = edges;
-        graph["clusters"] = clusters;
-        graph["frameId"] = msg->header.frame_id;
-
-        viewer_internal::json event;
-        event["type"] = "stream.graph";
-        event["tag"] = tag;
-        event["graph"] = graph;
-        const std::string payload = event.dump();
-        {
-            std::lock_guard<std::mutex> lock(graphMutex_);
-            lastGraphPayloads_[tag] = payload;
-        }
+        json event = {{"type", "stream.graph"}, {"tag", tag}, {"graph", g}};
+        std::string payload = event.dump();
+        { std::lock_guard<std::mutex> l(graphMutex_); lastGraphPayloads_[tag] = payload; }
         broadcastText(payload);
     }
 
     void handleHttpGet(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
-        std::string url = std::string(req->getUrl());
+        std::string url(req->getUrl());
         res->writeHeader("Access-Control-Allow-Origin", "*");
-        res->writeHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-        res->writeHeader("Access-Control-Allow-Headers", "Content-Type");
-        
         if (url.rfind("/meshes/", 0) == 0) {
-            std::string subpath = url.substr(8); // remove "/meshes/"
-            size_t slash_pos = subpath.find('/');
-            if (slash_pos != std::string::npos) {
-                std::string pkg_name = subpath.substr(0, slash_pos);
-                std::string rel_path = subpath.substr(slash_pos + 1);
-                
+            std::string sub = url.substr(8); size_t slash = sub.find('/');
+            if (slash != std::string::npos) {
                 try {
-                    std::string pkg_share = ament_index_cpp::get_package_share_directory(pkg_name);
-                    std::filesystem::path full_path = std::filesystem::path(pkg_share) / rel_path;
-                    
-                    if (std::filesystem::exists(full_path) && !std::filesystem::is_directory(full_path)) {
-                        std::ifstream file(full_path, std::ios::binary);
-                        if (file) {
-                            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-                            res->end(content);
-                            return;
-                        }
+                    auto path = std::filesystem::path(ament_index_cpp::get_package_share_directory(sub.substr(0, slash))) / sub.substr(slash + 1);
+                    if (std::filesystem::exists(path) && !std::filesystem::is_directory(path)) {
+                        std::ifstream f(path, std::ios::binary);
+                        res->end(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()));
+                        return;
                     }
                 } catch (...) {}
             }
         }
-        
-        res->writeStatus("404 Not Found")->end("File not found");
+        res->writeStatus("404 Not Found")->end("Not found");
     }
 
     void handleTf(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
-        viewer_internal::json transforms = viewer_internal::json::array();
-        for (const auto& ts : msg->transforms) {
-            transforms.push_back({
-                {"frameId", ts.header.frame_id},
-                {"childFrameId", ts.child_frame_id},
-                {"pos", {ts.transform.translation.x, ts.transform.translation.y, ts.transform.translation.z}},
-                {"quat", {ts.transform.rotation.x, ts.transform.rotation.y, ts.transform.rotation.z, ts.transform.rotation.w}}
-            });
-        }
-
-        viewer_internal::json event;
-        event["type"] = "stream.tf";
-        event["transforms"] = transforms;
-        broadcastText(event.dump());
+        json tfs = json::array();
+        for (auto& ts : msg->transforms) tfs.push_back({{"frameId",ts.header.frame_id},{"childFrameId",ts.child_frame_id},{"pos",{ts.transform.translation.x,ts.transform.translation.y,ts.transform.translation.z}},{"quat",{ts.transform.rotation.x,ts.transform.rotation.y,ts.transform.rotation.z,ts.transform.rotation.w}}});
+        broadcastText(json({{"type", "stream.tf"}, {"transforms", tfs}}).dump());
     }
 
     void handleRobotArm(const std_msgs::msg::String::SharedPtr msg) {
-        if (msg->data.empty()) {
-            return;
+        if (msg->data.empty()) return;
+        json j = json::parse(msg->data, nullptr, false);
+        if (!j.is_discarded() && j.value("type", "") == "stream.robot.description") {
+            std::lock_guard<std::mutex> lock(robotMutex_);
+            lastRobotDescriptions_[j.value("tag", "default")] = msg->data;
         }
-
-        try {
-            viewer_internal::json j = viewer_internal::json::parse(msg->data);
-            const std::string type = j.value("type", "");
-            const std::string tag = j.value("tag", "default");
-
-            if (type == "stream.robot.description") {
-                std::lock_guard<std::mutex> lock(robotMutex_);
-                lastRobotDescriptions_[tag] = msg->data;
-            }
-
-        } catch (...) {}
-
         broadcastText(msg->data);
     }
 
     void checkLiveness() {
-        auto publishers = this->get_publishers_info_by_topic(viewer_internal::topics::kStreamRobot);
-        
-        std::lock_guard<std::mutex> lock(robotMutex_);
-        std::vector<std::string> tagsToRemove;
-        
-        if (publishers.empty() && !lastRobotDescriptions_.empty()) {
-            for (auto const& [tag, _] : lastRobotDescriptions_) {
-                tagsToRemove.push_back(tag);
-            }
-        }
-
-        for (const auto& tag : tagsToRemove) {
-            removeRobotLayer(tag);
-        }
-    }
-
-    void removeRobotLayer(const std::string& tag) {
-        {
+        const std::string descTopic = std::string(viewer_internal::topics::kStreamRobot) + "/description";
+        if (this->get_publishers_info_by_topic(descTopic).empty()) {
             std::lock_guard<std::mutex> lock(robotMutex_);
-            lastRobotDescriptions_.erase(tag);
+            for (auto const& [tag, _] : lastRobotDescriptions_) {
+                json ev = {{"type", "stream.robot.delete"}, {"tag", tag}};
+                broadcastText(ev.dump());
+            }
+            lastRobotDescriptions_.clear();
         }
-
-        viewer_internal::json event;
-        event["type"] = "stream.robot.delete";
-        event["tag"] = tag;
-        broadcastText(event.dump());
-        RCLCPP_INFO(this->get_logger(), "Removed robot layer tag=%s due to disconnect", tag.c_str());
     }
 
     void broadcastBinary(const std::vector<uint8_t>& payload) {
-        // Copy payload for deferred execution on uWS event loop thread
         auto shared = std::make_shared<std::vector<uint8_t>>(payload);
         loop_->defer([this, shared]() {
             std::lock_guard<std::mutex> lock(connectionMutex_);
             std::string_view view(reinterpret_cast<const char*>(shared->data()), shared->size());
-            for (auto* ws : connections_) {
-                ws->send(view, uWS::OpCode::BINARY);
-            }
+            for (auto* ws : connections_) ws->send(view, uWS::OpCode::BINARY);
         });
     }
 
     void broadcastText(const std::string& payload) {
-        // Copy payload for deferred execution on uWS event loop thread
         auto shared = std::make_shared<std::string>(payload);
         loop_->defer([this, shared]() {
             std::lock_guard<std::mutex> lock(connectionMutex_);
-            for (auto* ws : connections_) {
-                ws->send(*shared, uWS::OpCode::TEXT);
-            }
+            for (auto* ws : connections_) ws->send(*shared, uWS::OpCode::TEXT);
         });
     }
 
     void removeGraphLayer(const std::string& tag) {
-        {
-            std::lock_guard<std::mutex> lock(graphMutex_);
-            lastGraphPayloads_.erase(tag);
-        }
-
-        viewer_internal::json event;
-        event["type"] = "stream.graph.delete";
-        event["tag"] = tag;
-        broadcastText(event.dump());
-        RCLCPP_INFO(this->get_logger(), "Removed graph layer tag=%s", tag.c_str());
+        { std::lock_guard<std::mutex> l(graphMutex_); lastGraphPayloads_.erase(tag); }
+        broadcastText(json({{"type", "stream.graph.delete"}, {"tag", tag}}).dump());
     }
 
-private:
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr sourceRequestPub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr fileRequestPub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rosbagRequestPub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr gngRequestPub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr paramRequestPub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr editRequestPub_;
-
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pointCloudMetaSub_;
+    std::unordered_map<std::string, rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> rpcPubs_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, pointCloudMetaSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
-    std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotDescSub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotPoseSub_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr jobEventSub_;
-
-    std::mutex pendingMutex_;
+    std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
+    std::mutex pendingMutex_, connectionMutex_, graphMutex_, robotMutex_;
     std::unordered_map<std::string, std::shared_ptr<PendingResponse>> pendingResponses_;
-
-    std::mutex connectionMutex_;
     std::vector<uWS::WebSocket<false, true, PerSocketData>*> connections_;
-
-    std::mutex graphMutex_;
-    std::unordered_map<std::string, std::string> lastGraphPayloads_;
-
-    std::mutex robotMutex_;
-    std::unordered_map<std::string, std::string> lastRobotDescriptions_;
-
+    std::unordered_map<std::string, std::string> lastGraphPayloads_, lastRobotDescriptions_;
     std::thread serverThread_;
     us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false};
     uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
-
 };
-
-} // namespace
+}
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
