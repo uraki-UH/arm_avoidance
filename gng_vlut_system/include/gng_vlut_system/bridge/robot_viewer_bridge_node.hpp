@@ -39,7 +39,8 @@ private:
 
     kinematics::KinematicChain chain_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr robot_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr description_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pose_pub_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
     std::mutex state_mutex_;
     std::vector<std::string> active_joint_names_;
@@ -60,6 +61,9 @@ private:
 
     mutable Eigen::Vector3d last_base_pos_{0, 0, 0};
     mutable Eigen::Quaterniond last_base_quat_{1, 0, 0, 0};
+
+    rclcpp::Time start_time_;
+    int tick_count_ = 0;
 };
 
 } // namespace bridge

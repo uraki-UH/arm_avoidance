@@ -91,19 +91,6 @@ public:
             RCLCPP_INFO(this->get_logger(), "Subscribed to GNG topic: %s (default tag: %s)", topic.c_str(), subscriptionTag.c_str());
         }
 
-        robotArmSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kStreamRobot,
-            rclcpp::QoS(1).reliable().transient_local(),
-            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
-        RCLCPP_INFO(this->get_logger(), "Subscribed to Robot topic: %s", viewer_internal::topics::kStreamRobot);
-
-        jobEventSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kEditJobEvents,
-            100,
-            [this](const std_msgs::msg::String::SharedPtr msg) {
-                this->broadcastText(msg->data);
-            });
-
         tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
             "/tf",
             100,
@@ -180,8 +167,15 @@ private:
                 }
             }
 
-            std::lock_guard<std::mutex> lock(connectionMutex_);
-            connections_.push_back(ws);
+            {
+                std::lock_guard<std::mutex> lock(connectionMutex_);
+                if (connections_.empty()) {
+                    // First client connected, subscribe to streaming topics
+                    this->subscribeStreamingTopics();
+                }
+                connections_.push_back(ws);
+            }
+
             for (const auto& payload : cachedPayloads) {
                 ws->send(payload, uWS::OpCode::TEXT);
             }
@@ -228,6 +222,11 @@ private:
             connections_.erase(
                 std::remove(connections_.begin(), connections_.end(), ws),
                 connections_.end());
+            
+            if (connections_.empty()) {
+                // Last client disconnected, unsubscribe from streaming topics to save resources
+                this->unsubscribeStreamingTopics();
+            }
         };
 
         uWS::App()
@@ -283,6 +282,36 @@ private:
                 }
             });
         }).detach();
+    }
+
+    void subscribeStreamingTopics() {
+        const std::string robotBase = viewer_internal::topics::kStreamRobot;
+        
+        robotDescSub_ = this->create_subscription<std_msgs::msg::String>(
+            robotBase + "/description",
+            rclcpp::QoS(1).reliable().transient_local(),
+            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+
+        robotPoseSub_ = this->create_subscription<std_msgs::msg::String>(
+            robotBase + "/pose",
+            rclcpp::QoS(1).best_effort(),
+            std::bind(&ViewerWsGatewayNode::handleRobotArm, this, std::placeholders::_1));
+
+        jobEventSub_ = create_subscription<std_msgs::msg::String>(
+            viewer_internal::topics::kEditJobEvents,
+            100,
+            [this](const std_msgs::msg::String::SharedPtr msg) {
+                this->broadcastText(msg->data);
+            });
+
+        RCLCPP_INFO(this->get_logger(), "Subscribed to Robot topics (description & pose)");
+    }
+
+    void unsubscribeStreamingTopics() {
+        robotDescSub_.reset();
+        robotPoseSub_.reset();
+        jobEventSub_.reset();
+        RCLCPP_INFO(this->get_logger(), "Unsubscribed from Robot topics (No active clients)");
     }
 
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr routePublisher(const std::string& method) {
@@ -591,7 +620,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr pointCloudMetaSub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
     std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotArmSub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotDescSub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robotPoseSub_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr jobEventSub_;
 

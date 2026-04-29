@@ -254,8 +254,8 @@ function App() {
         showNormals: true,
         normalArrowLength: 0.15,
         normalArrowColor: '#00FFFF',
-        nodeScale: 0.03,
-        edgeWidth: 0.012,
+        nodeScale: 0.01,
+        edgeWidth: 0.002,
         visibleLabels: {
             0: true,
             1: true,
@@ -302,7 +302,7 @@ function App() {
 
             setPointClouds((prev) => {
                 const index = prev.findIndex((pc) => pc.id === wsPointCloud.id);
-                
+
                 const newCloud = {
                     ...wsPointCloud,
                     visible: index >= 0 ? prev[index].visible : true,

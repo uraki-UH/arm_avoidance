@@ -12,7 +12,7 @@
 #include <iomanip>
 #include <stdexcept>
 #include <sstream>
-#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.hpp>
 #include <utility>
 
 #include "common/resource_utils.hpp"
@@ -81,8 +81,11 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     frame_id_ = get_parameter("frame_id").as_string();
     publish_hz_ = std::max(1.0, get_parameter("publish_hz").as_double());
 
-    robot_pub_ = create_publisher<std_msgs::msg::String>(
-        stream_topic_, rclcpp::QoS(1).reliable().transient_local());
+    description_pub_ = create_publisher<std_msgs::msg::String>(
+        stream_topic_ + "/description", rclcpp::QoS(1).reliable().transient_local());
+
+    pose_pub_ = create_publisher<std_msgs::msg::String>(
+        stream_topic_ + "/pose", rclcpp::QoS(1).best_effort());
 
     joint_state_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_state_topic_, rclcpp::QoS(10),
@@ -94,6 +97,14 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
         std::bind(&RobotViewerBridgeNode::publishCurrentState, this));
+
+    // Initially publish description to the transient_local topic
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> init_pos;
+    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> init_quat;
+    chain_.forwardKinematicsAt(current_joint_values_, init_pos, init_quat);
+    std_msgs::msg::String init_msg;
+    init_msg.data = buildRobotJsonLocked("stream.robot.description", init_pos, init_quat, true);
+    description_pub_->publish(init_msg);
 
     RCLCPP_INFO(get_logger(), "Robot Viewer Bridge initialized: %s", stream_topic_.c_str());
 }
@@ -157,8 +168,6 @@ void RobotViewerBridgeNode::jointStateCallback(const sensor_msgs::msg::JointStat
     }
     last_joint_state_stamp_ = msg->header.stamp;
     has_joint_state_ = true;
-    // Removed immediate publish to eliminate jitter and double-publishing.
-    // The publish_timer_ will handle steady 30Hz (or configured rate) streaming.
 }
 
 std::string RobotViewerBridgeNode::buildRobotJsonLocked(
@@ -181,15 +190,12 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
         << "\"timestamp\":" << ts << ','
         << "\"frameId\":\"" << escapeJson(frame_id_) << "\",";
     
-    // Add base transform if available
     try {
         geometry_msgs::msg::TransformStamped tf = tf_buffer_->lookupTransform("world", frame_id_, tf2::TimePointZero);
         Eigen::Affine3d eigen_tf = tf2::transformToEigen(tf);
         last_base_pos_ = eigen_tf.translation();
-        last_base_quat_ = eigen_tf.linear(); // Implicitly converts to Quaternion
-    } catch (const tf2::TransformException & ex) {
-        // Use last valid transform instead of jumping to origin
-    }
+        last_base_quat_ = eigen_tf.linear();
+    } catch (const tf2::TransformException & ex) {}
 
     oss << "\"basePosition\":[" << last_base_pos_.x() << "," << last_base_pos_.y() << "," << last_base_pos_.z() << "],";
     oss << "\"baseOrientation\":[" << last_base_quat_.x() << "," << last_base_quat_.y() << "," << last_base_quat_.z() << "," << last_base_quat_.w() << "],";
@@ -199,7 +205,6 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     }
 
     oss << "\"jointNames\":[";
-
     for (size_t i = 0; i < active_joint_names_.size(); ++i) {
         if (i > 0) oss << ',';
         oss << '"' << escapeJson(active_joint_names_[i]) << '"';
@@ -224,32 +229,26 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
 }
 
 void RobotViewerBridgeNode::publishCurrentState() {
+    // Only perform heavy FK and JSON building if someone is actually watching
+    if (pose_pub_->get_subscription_count() == 0 && description_pub_->get_subscription_count() == 0) {
+        return;
+    }
+
     std::lock_guard<std::mutex> lock(state_mutex_);
     publishCurrentStateLocked();
 }
 
 void RobotViewerBridgeNode::publishCurrentStateLocked() {
-    if (!robot_pub_) return;
-
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
     chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
 
     std_msgs::msg::String msg;
-    static int tick_count = 0;
-    const int desc_interval_ticks = static_cast<int>(publish_hz_ * 5.0); // Every 5 seconds
-
-    if (first_publish_ || (tick_count % std::max(1, desc_interval_ticks) == 0)) {
-        // Send full description periodically to ensure late subscribers get it
-        msg.data = buildRobotJsonLocked("stream.robot.description", positions, orientations, true);
-        robot_pub_->publish(msg);
-        first_publish_ = false;
+    // Poses are only sent if someone is listening to the pose topic
+    if (pose_pub_->get_subscription_count() > 0) {
+        msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, false);
+        pose_pub_->publish(msg);
     }
-    tick_count++;
-
-    // Send lightweight pose update
-    msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, false);
-    robot_pub_->publish(msg);
 }
 
 } // namespace bridge
