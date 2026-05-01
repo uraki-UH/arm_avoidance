@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Advanced Robot Collision Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <style>
+        body { margin: 0; background-color: #050505; color: #00ffcc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        #overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
+        #loader { position: absolute; top: 80px; left: 20px; z-index: 20; background: rgba(0,255,200,0.1); border: 1px solid #00ffcc; padding: 15px; border-radius: 8px; pointer-events: auto; }
+        button { background: #00ffcc; color: #000; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <h1 style="margin:0; font-size: 1.5em; letter-spacing: 2px;">TOPOARM COLLISION INSPECTOR</h1>
+        <p style="margin:5px 0; color: #777;">[ WITH GRIPPER CONTROL ]</p>
+    </div>
+    <div id="loader">
+        <p style="margin-top:0; font-size: 0.9em;">Reload <code>robot_meshes.json</code>:</p>
+        <input type="file" id="fileInput" accept=".json">
+    </div>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 10);
+        camera.up.set(0, 0, 1); 
+        camera.position.set(0.4, -0.4, 0.4);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, 0.1);
+        
+        const grid = new THREE.GridHelper(1, 10, 0x444444, 0x222222);
+        grid.rotation.x = Math.PI/2;
+        scene.add(grid);
+        
+        scene.add(new THREE.AmbientLight(0x888888));
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(1, -1, 1);
+        scene.add(light);
+
+        const config = {
+            voxelSize: 0.02,
+            showRealMesh: true,
+            showVoxels: true,
+            opacity: 0.6,
+            j1: 0, j2: 0, j3: 0, j4: 0, j5: 0, j6: 0,
+            gripper: 0
+        };
+
+        const joints = [
+            { name: "fixed", parent: "world", child: "link1", xyz: [0, 0, 0], axis: null },
+            { name: "j1", parent: "link1", child: "link2", xyz: [0, 0, 0.051], axis: "z" },
+            { name: "j2", parent: "link2", child: "link3", xyz: [0, 0, 0.0405], axis: "y" },
+            { name: "j3", parent: "link3", child: "link4", xyz: [0, 0, 0.1235], axis: "y" },
+            { name: "j4", parent: "link4", child: "link5", xyz: [0, 0, 0.06385], axis: "z" },
+            { name: "j5", parent: "link5", child: "link6", xyz: [0, 0, 0.0405], axis: "y" },
+            { name: "j6", parent: "link6", child: "link7", xyz: [0, 0, 0.028], axis: "z" },
+            // Gripper
+            { name: "g_left", parent: "link7", child: "gripper_left_link", xyz: [-0.0005, 0.021, 0.0898], axis: "y_prismatic" },
+            { name: "g_right", parent: "link7", child: "gripper_right_link", xyz: [-0.0005, -0.021, 0.0898], axis: "y_prismatic_inv" }
+        ];
+
+        const linkGroups = { "world": new THREE.Group() };
+        const realMeshes = [];
+        const voxelGroups = new THREE.Group();
+        scene.add(linkGroups["world"]);
+        scene.add(voxelGroups);
+
+        joints.forEach(j => {
+            const group = new THREE.Group();
+            group.position.set(j.xyz[0], j.xyz[1], j.xyz[2]);
+            linkGroups[j.parent].add(group);
+            linkGroups[j.child] = group;
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                loadMeshData(data);
+                document.getElementById('loader').style.display = 'none';
+            };
+            reader.readAsText(file);
+        });
+
+        function loadMeshData(data) {
+            Object.keys(data).forEach(linkName => {
+                if (!linkGroups[linkName]) return;
+                data[linkName].forEach(meshData => {
+                    const geometry = new THREE.BufferGeometry();
+                    const vertices = [];
+                    meshData.vertices.forEach(tri => {
+                        tri.forEach(v => {
+                            vertices.push(v[0] * meshData.scale[0], v[1] * meshData.scale[1], v[2] * meshData.scale[2]);
+                        });
+                    });
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                    geometry.computeVertexNormals();
+                    const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc, transparent: true, opacity: config.opacity });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    const o = meshData.origin;
+                    const mat = new THREE.Matrix4().set(
+                        o[0][0], o[0][1], o[0][2], o[0][3],
+                        o[1][0], o[1][1], o[1][2], o[1][3],
+                        o[2][0], o[2][1], o[2][2], o[2][3],
+                        o[3][0], o[3][1], o[3][2], o[3][3]
+                    );
+                    mesh.applyMatrix4(mat);
+                    linkGroups[linkName].add(mesh);
+                    realMeshes.push(mesh);
+                });
+            });
+            updateVoxels();
+        }
+
+        function updateVoxels() {
+            voxelGroups.clear();
+            if (!config.showVoxels) return;
+            const voxelMat = new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4 });
+            const boxGeom = new THREE.BoxGeometry(config.voxelSize, config.voxelSize, config.voxelSize);
+            const edges = new THREE.EdgesGeometry(boxGeom);
+
+            realMeshes.forEach(mesh => {
+                if (!mesh.visible) return;
+                const worldPos = new THREE.Vector3();
+                const worldQuat = new THREE.Quaternion();
+                mesh.getWorldPosition(worldPos);
+                mesh.getWorldQuaternion(worldQuat);
+                const positions = mesh.geometry.attributes.position.array;
+                const vSize = config.voxelSize;
+                const uniqueVoxels = new Set();
+                for (let i = 0; i < positions.length; i += 9) {
+                    for(let j=0; j<3; j++) {
+                        const p = new THREE.Vector3(positions[i+j*3], positions[i+j*3+1], positions[i+j*3+2]).applyQuaternion(worldQuat).add(worldPos);
+                        const vid = `${Math.floor(p.x/vSize)},${Math.floor(p.y/vSize)},${Math.floor(p.z/vSize)}`;
+                        if (!uniqueVoxels.has(vid)) {
+                            uniqueVoxels.add(vid);
+                            const wire = new THREE.LineSegments(edges, voxelMat);
+                            wire.position.set(Math.floor(p.x/vSize)*vSize + vSize/2, Math.floor(p.y/vSize)*vSize + vSize/2, Math.floor(p.z/vSize)*vSize + vSize/2);
+                            voxelGroups.add(wire);
+                        }
+                    }
+                }
+            });
+        }
+
+        const gui = new dat.GUI();
+        const f1 = gui.addFolder('Visibility');
+        f1.add(config, 'showRealMesh').name('Real STL Mesh').onChange(v => { realMeshes.forEach(m => m.visible = v); updateVoxels(); });
+        f1.add(config, 'showVoxels').name('Voxels').onChange(updateVoxels);
+        f1.add(config, 'opacity', 0, 1).name('Mesh Opacity').onChange(v => { realMeshes.forEach(m => m.material.opacity = v); });
+        f1.add(config, 'voxelSize', 0.01, 0.05).name('Voxel Size').onFinishChange(updateVoxels);
+        f1.open();
+
+        const f2 = gui.addFolder('Control');
+        const update = () => {
+            linkGroups["link2"].rotation.z = config.j1;
+            linkGroups["link3"].rotation.y = config.j2;
+            linkGroups["link4"].rotation.y = config.j3;
+            linkGroups["link5"].rotation.z = config.j4;
+            linkGroups["link6"].rotation.y = config.j5;
+            linkGroups["link7"].rotation.z = config.j6;
+            // Gripper prismatic movement
+            linkGroups["gripper_left_link"].position.y = 0.021 + config.gripper;
+            linkGroups["gripper_right_link"].position.y = -0.021 - config.gripper;
+            updateVoxels();
+        };
+        ["j1", "j2", "j3", "j4", "j5", "j6"].forEach(j => f2.add(config, j, -3.14, 3.14).onChange(update));
+        f2.add(config, 'gripper', -0.01, 0.019).name('Gripper').onChange(update);
+        f2.open();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
