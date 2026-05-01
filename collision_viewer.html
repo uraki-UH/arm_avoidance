@@ -71,15 +71,15 @@
         scene.add(new THREE.AmbientLight(0x888888));
         const light = new THREE.DirectionalLight(0xffffff, 1); light.position.set(1, -1, 1); scene.add(light);
 
-        const config = { voxelSize: 0.01, showMesh: true, showVoxels: true, showCapsules: true, opacity: 0.3 };
+        const config = { voxelSize: 0.01, showMesh: true, showVoxels: true, showCapsules: true, showAABB: true, opacity: 0.3 };
         let gui = null;
         let robotData = null;
         let linkGroups = {};
         let jointNodes = {};
         let realMeshes = [];
         let capsuleGroups = {};
-        const voxelGroup = new THREE.Group(); scene.add(voxelGroup);
-        let voxelInstancedMesh = null;
+        let linkVoxelMeshes = {}; // { linkName: InstancedMesh }
+        let aabbHelpers = {};     // { linkName: BoxHelper }
 
         document.getElementById('fileInput').addEventListener('change', e => {
             const reader = new FileReader();
@@ -94,8 +94,9 @@
         function buildRobot() {
             // Clean existing scene
             Object.values(linkGroups).forEach(g => { if (g.parent) g.parent.remove(g); });
-            linkGroups = {}; jointNodes = {}; realMeshes = []; capsuleGroups = {};
-            
+            Object.values(aabbHelpers).forEach(h => scene.remove(h));
+            linkGroups = {}; jointNodes = {}; realMeshes = []; capsuleGroups = {}; linkVoxelMeshes = {}; aabbHelpers = {};
+
             // Re-init GUI
             if (gui) gui.destroy();
             gui = new dat.GUI();
@@ -117,13 +118,11 @@
                 if (j.type === 'revolute' || j.type === 'continuous') {
                     f2.add(config, j.name, -3.14, 3.14).onChange(v => {
                         jGroup.setRotationFromAxisAngle(jointNodes[j.name].axis, v);
-                        updateVoxels();
                     });
                 } else if (j.type === 'prismatic') {
                     f2.add(config, j.name, -0.05, 0.05).onChange(v => {
                         const axis = jointNodes[j.name].axis.clone().multiplyScalar(v);
                         jGroup.position.set(j.xyz[0] + axis.x, j.xyz[1] + axis.y, j.xyz[2] + axis.z);
-                        updateVoxels();
                     });
                 }
             });
@@ -131,6 +130,9 @@
 
             Object.keys(robotData.links).forEach(name => {
                 const link = robotData.links[name];
+                const visualOnlyGroup = new THREE.Group(); // Only for AABB/Visuals
+                linkGroups[name].add(visualOnlyGroup);
+
                 link.meshes.forEach(m => {
                     const geometry = new THREE.BufferGeometry();
                     const vFlat = []; m.vertices.forEach(tri => tri.forEach(v => vFlat.push(...v)));
@@ -139,9 +141,12 @@
                     const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x00ffcc, transparent: true, opacity: config.opacity }));
                     mesh.position.set(...m.origin.xyz);
                     mesh.rotation.set(...m.origin.rpy);
-                    linkGroups[name].add(mesh);
+                    visualOnlyGroup.add(mesh);
                     realMeshes.push(mesh);
                 });
+
+                // Generate Local Voxels (internally adds to linkGroups[name])
+                generateLinkVoxels(name, visualOnlyGroup);
 
                 if (link.capsule) {
                     const c = link.capsule;
@@ -162,82 +167,100 @@
                         capGroup.visible = config.showCapsules;
                     };
                     updateCap();
-                    linkGroups[name].add(capGroup);
+                    visualOnlyGroup.add(capGroup);
                     capsuleGroups[name] = { group: capGroup, update: updateCap, data: c };
                     const f = f3.addFolder(name);
                     f.add(c, 'r', 0, 0.1).name('Radius').onChange(updateCap);
                     f.add(c, 'h', 0, 0.4).name('Height').onChange(updateCap);
                     f.add(c, 'oz', -0.3, 0.3).name('Offset').onChange(updateCap);
                 }
+
+                // AABB Helper (Targets only the visuals of THIS link)
+                const helper = new THREE.BoxHelper(visualOnlyGroup, 0xffff00);
+                helper.visible = config.showAABB;
+                scene.add(helper);
+                aabbHelpers[name] = helper;
             });
 
-            f1.add(config, 'showMesh').name('STL Mesh').onChange(v => { realMeshes.forEach(m => m.visible = v); updateVoxels(); });
-            f1.add(config, 'showVoxels').name('Voxels').onChange(updateVoxels);
-            f1.add(config, 'showCapsules').name('Capsules').onChange(v => Object.values(capsuleGroups).forEach(g => g.group.visible = v));
-            f1.add(config, 'opacity', 0, 1).name('Mesh Opacity').onChange(v => realMeshes.forEach(m => m.material.opacity = v));
-            f1.add(config, 'voxelSize', 0.005, 0.05).name('Voxel Size').onFinishChange(updateVoxels);
+            f1.add(config, 'showMesh').name('STL Mesh').onChange(v => { realMeshes.forEach(m => m.visible = v); });
+            f1.add(config, 'showVoxels').name('Show Voxels').onChange(v => Object.values(linkVoxelMeshes).forEach(m => m.visible = v));
+            f1.add(config, 'showCapsules').name('Show Capsules').onChange(v => Object.values(capsuleGroups).forEach(g => g.group.visible = v));
+            f1.add(config, 'showAABB').name('Show AABB').onChange(v => Object.values(aabbHelpers).forEach(h => h.visible = v));
+            f1.add(config, 'opacity', 0, 1).onChange(v => realMeshes.forEach(m => m.material.opacity = v));
+            f1.add(config, 'voxelSize', 0.005, 0.05).name('Voxel Size').onFinishChange(() => {
+                Object.keys(robotData.links).forEach(name => generateLinkVoxels(name));
+            });
             f1.open(); f2.open();
-            updateVoxels();
         }
 
-        function updateVoxels() {
-            if (voxelInstancedMesh) {
-                voxelGroup.remove(voxelInstancedMesh);
-                voxelInstancedMesh.geometry.dispose();
-                voxelInstancedMesh.material.dispose();
-                voxelInstancedMesh = null;
+        function generateLinkVoxels(linkName, targetGroup) {
+            const parent = targetGroup || linkGroups[linkName];
+            // Remove old voxel mesh for this link
+            if (linkVoxelMeshes[linkName]) {
+                parent.remove(linkVoxelMeshes[linkName]);
+                linkVoxelMeshes[linkName].geometry.dispose();
+                linkVoxelMeshes[linkName].material.dispose();
             }
-            if (!config.showVoxels || !robotData) return;
 
-            scene.updateMatrixWorld(true);
+            const link = robotData.links[linkName];
+            if (!link.meshes || link.meshes.length === 0) return;
+
             const vSize = config.voxelSize;
             const uniqueVoxels = new Set();
             const voxelPositions = [];
-            const tempV1 = new THREE.Vector3(), tempV2 = new THREE.Vector3(), tempV3 = new THREE.Vector3();
-            const worldPos = new THREE.Vector3(), worldQuat = new THREE.Quaternion();
 
-            realMeshes.forEach(mesh => {
-                if (!mesh.visible) return;
-                mesh.getWorldPosition(worldPos);
-                mesh.getWorldQuaternion(worldQuat);
-                const positions = mesh.geometry.attributes.position.array;
-                for (let i = 0; i < positions.length; i += 9) {
-                    tempV1.set(positions[i], positions[i+1], positions[i+2]).applyQuaternion(worldQuat).add(worldPos);
-                    tempV2.set(positions[i+3], positions[i+4], positions[i+5]).applyQuaternion(worldQuat).add(worldPos);
-                    tempV3.set(positions[i+6], positions[i+7], positions[i+8]).applyQuaternion(worldQuat).add(worldPos);
-                    const d12 = tempV1.distanceTo(tempV2), d13 = tempV1.distanceTo(tempV3);
+            link.meshes.forEach(m => {
+                const localPos = new THREE.Vector3(...m.origin.xyz);
+                const localQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(...m.origin.rpy));
+
+                for (let i = 0; i < m.vertices.length; i++) {
+                    const tri = m.vertices[i];
+                    const v1 = new THREE.Vector3(...tri[0]).applyQuaternion(localQuat).add(localPos);
+                    const v2 = new THREE.Vector3(...tri[1]).applyQuaternion(localQuat).add(localPos);
+                    const v3 = new THREE.Vector3(...tri[2]).applyQuaternion(localQuat).add(localPos);
+
+                    const d12 = v1.distanceTo(v2), d13 = v1.distanceTo(v3);
                     const steps1 = Math.max(1, Math.ceil(d12 / vSize)), steps2 = Math.max(1, Math.ceil(d13 / vSize));
+
                     for (let s1 = 0; s1 <= steps1; s1++) {
                         const t1 = s1 / steps1;
                         for (let s2 = 0; s2 <= steps2 * (1 - t1); s2++) {
                             const t2 = s2 / steps2;
-                            const px = tempV1.x + t1 * (tempV2.x - tempV1.x) + t2 * (tempV3.x - tempV1.x);
-                            const py = tempV1.y + t1 * (tempV2.y - tempV1.y) + t2 * (tempV3.y - tempV1.y);
-                            const pz = tempV1.z + t1 * (tempV2.z - tempV1.z) + t2 * (tempV3.z - tempV1.z);
+                            const px = v1.x + t1 * (v2.x - v1.x) + t2 * (v3.x - v1.x);
+                            const py = v1.y + t1 * (v2.y - v1.y) + t2 * (v3.y - v1.y);
+                            const pz = v1.z + t1 * (v2.z - v1.z) + t2 * (v3.z - v1.z);
                             const vx = Math.floor(px / vSize), vy = Math.floor(py / vSize), vz = Math.floor(pz / vSize);
                             const vid = `${vx},${vy},${vz}`;
                             if (!uniqueVoxels.has(vid)) {
                                 uniqueVoxels.add(vid);
-                                voxelPositions.push(vx * vSize + vSize/2, vy * vSize + vSize/2, vz * vSize + vSize/2);
+                                voxelPositions.push(vx * vSize + vSize / 2, vy * vSize + vSize / 2, vz * vSize + vSize / 2);
                             }
                         }
                     }
                 }
             });
-            if (voxelPositions.length === 0) return;
-            const boxGeom = new THREE.BoxGeometry(vSize * 0.95, vSize * 0.95, vSize * 0.95);
-            const voxelMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4, wireframe: true });
-            voxelInstancedMesh = new THREE.InstancedMesh(boxGeom, voxelMat, voxelPositions.length / 3);
-            const dummy = new THREE.Object3D();
-            for (let i = 0; i < voxelPositions.length; i += 3) {
-                dummy.position.set(voxelPositions[i], voxelPositions[i+1], voxelPositions[i+2]);
-                dummy.updateMatrix();
-                voxelInstancedMesh.setMatrixAt(i / 3, dummy.matrix);
+
+            if (voxelPositions.length > 0) {
+                const boxGeom = new THREE.BoxGeometry(vSize * 0.95, vSize * 0.95, vSize * 0.95);
+                const voxelMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4, wireframe: true });
+                const instMesh = new THREE.InstancedMesh(boxGeom, voxelMat, voxelPositions.length / 3);
+                const dummy = new THREE.Object3D();
+                for (let i = 0; i < voxelPositions.length; i += 3) {
+                    dummy.position.set(voxelPositions[i], voxelPositions[i + 1], voxelPositions[i + 2]);
+                    dummy.updateMatrix();
+                    instMesh.setMatrixAt(i / 3, dummy.matrix);
+                }
+                instMesh.visible = config.showVoxels;
+                linkGroups[linkName].add(instMesh);
+                linkVoxelMeshes[linkName] = instMesh;
             }
-            voxelGroup.add(voxelInstancedMesh);
         }
 
-        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+        function animate() {
+            requestAnimationFrame(animate);
+            Object.values(aabbHelpers).forEach(h => h.update());
+            controls.update(); renderer.render(scene, camera);
+        }
         animate();
         window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
