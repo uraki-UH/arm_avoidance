@@ -19,7 +19,6 @@ def generate_launch_description():
             parameters=[{
                 'gng_topics': [
                     '/viewer/internal/stream/graph',
-                    '/topological_map',
                     '/topological_map_static',
                 ],
                 'port': LaunchConfiguration('ws_port')

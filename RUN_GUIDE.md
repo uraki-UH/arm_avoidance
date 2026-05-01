@@ -28,6 +28,12 @@ cd ToPoFuzzy-Viewer/frontend && npm install && npm run dev
 - `/topological_map` を出す安全監視は止めています。
 - ロボット姿勢は `robot_viewer_bridge_node` から `/viewer/internal/stream/robot` に流します。
 
+## 📌 graph の今後の方針
+- `topological_map` をそのまま viewer に入れられるなら、基本は direct topic を優先します。
+- `/viewer/internal/stream/graph` は viewer 内部の中継レーンです。将来の正規化や差し替えには便利ですが、いまは複製の原因になりやすいです。
+- 処理時間の差はありますが、GNG 本体の計算や描画に比べると小さいです。direct topic のほうが 1 hop 少ない分だけ素直、internal stream は 1 hop ぶんだけ余計、という理解で十分です。
+- static / dynamic を両方使うときは、どちらの経路に一本化するかを先に決めて、二重購読しないようにします。
+
 
 python3 test_joint_state_publisher.py 
 オプションジョイント名をつけたい場合

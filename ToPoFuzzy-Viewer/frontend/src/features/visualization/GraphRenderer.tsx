@@ -36,6 +36,8 @@ interface GraphRendererProps {
     enableClusterSelection?: boolean;
     opacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
+    nodeColor?: string;
+    edgeColor?: string;
 }
 
 export function GraphRenderer({
@@ -53,6 +55,8 @@ export function GraphRenderer({
     enableClusterSelection = true,
     opacity = 1.0,
     tf = null,
+    nodeColor = '#7c8c66',
+    edgeColor = '#08d408',
 }: GraphRendererProps) {
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
@@ -64,7 +68,7 @@ export function GraphRenderer({
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -99,22 +103,28 @@ export function GraphRenderer({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#c8ff4a',
+    const nodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        vertexColors: true,
         transparent: true,
         opacity: opacity,
+        emissive: '#ffffff',
+        emissiveIntensity: 0.08,
+        roughness: 0.35,
+        metalness: 0.0,
         depthTest: false,
         depthWrite: false,
-    }), [opacity]);
+        toneMapped: false,
+    }), [opacity, nodeColor]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#b9ff3f',
+        color: edgeColor,
         transparent: true,
         opacity: opacity,
         depthTest: false,
         depthWrite: false,
-    }), [opacity]);
+    }), [opacity, edgeColor]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -133,9 +143,9 @@ export function GraphRenderer({
         if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
         if (graph.nodes.length > nodeCapacity) return;
 
-        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale);
+        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale, { colorMode: 'label', baseColor: nodeColor });
         invalidate();
-    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate]);
+    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate, nodeColor]);
 
     // --- Edge Instances ---
     useEffect(() => {

@@ -11,15 +11,57 @@ const startVec = new THREE.Vector3();
 const endVec = new THREE.Vector3();
 const midpointVec = new THREE.Vector3();
 
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+export function buildNodePalette(
+    baseColor?: string,
+    customPalette?: string[]
+): string[] {
+    if (customPalette && customPalette.length > 0) {
+        return customPalette;
+    }
+    if (!baseColor) {
+        return LAYER_COLORS;
+    }
+
+    const color = new THREE.Color(baseColor);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+
+    const swatches = [
+        { s: clamp01(hsl.s * 0.65), l: clamp01(hsl.l - 0.24) },
+        { s: clamp01(hsl.s * 0.90), l: clamp01(hsl.l - 0.08) },
+        { s: clamp01(hsl.s * 1.00), l: clamp01(hsl.l + 0.00) },
+        { s: clamp01(hsl.s * 1.10), l: clamp01(hsl.l + 0.10) },
+        { s: clamp01(hsl.s * 0.80), l: clamp01(hsl.l + 0.22) },
+        { s: clamp01(hsl.s * 1.05), l: clamp01(hsl.l + 0.30) },
+    ];
+
+    return swatches.map(({ s, l }) => {
+        const swatch = new THREE.Color();
+        swatch.setHSL(hsl.h, s, l);
+        return `#${swatch.getHexString()}`;
+    });
+}
+
 /**
  * Updates the instance matrices and colors for a GNG node InstancedMesh.
  */
 export function updateNodeInstances(
     mesh: THREE.InstancedMesh,
     nodes: GraphData['nodes'],
-    nodeScale: number
+    nodeScale: number,
+    options?: {
+        colorMode?: 'label' | 'uniform';
+        uniformColor?: string;
+        palette?: string[];
+        baseColor?: string;
+    }
 ) {
     if (!mesh) return;
+    const colorMode = options?.colorMode ?? 'label';
+    const uniformColor = options?.uniformColor ?? LAYER_COLORS[1];
+    const palette = buildNodePalette(options?.baseColor, options?.palette);
     mesh.count = nodes.length;
 
     nodes.forEach((node, i) => {
@@ -28,9 +70,13 @@ export function updateNodeInstances(
         tempMatrix.scale(tempVec3);
         mesh.setMatrixAt(i, tempMatrix);
 
-        const labelValue = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
-        const safeIndex = ((labelValue % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-        const colorHex = LAYER_COLORS[safeIndex] ?? LAYER_COLORS[0];
+        const colorHex = colorMode === 'uniform'
+            ? uniformColor
+            : (() => {
+                const labelValue = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+                const safeIndex = ((labelValue % palette.length) + palette.length) % palette.length;
+                return palette[safeIndex] ?? palette[0];
+            })();
         tempColor.set(colorHex);
         mesh.setColorAt(i, tempColor);
     });
@@ -51,6 +97,9 @@ export function updateEdgeInstances(
     edgeWidth: number
 ) {
     if (!mesh) return;
+    const safeEdgeWidth = Number.isFinite(edgeWidth)
+        ? Math.max(0.0005, Math.min(edgeWidth, 0.02))
+        : 0.007;
     const edgePairCount = Math.floor(edges.length / 2);
     mesh.count = edgePairCount;
 
@@ -77,7 +126,7 @@ export function updateEdgeInstances(
         quaternion.setFromUnitVectors(up, direction);
 
         tempMatrix.makeRotationFromQuaternion(quaternion);
-        tempVec3.set(edgeWidth, length, edgeWidth);
+        tempVec3.set(safeEdgeWidth, length, safeEdgeWidth);
         tempMatrix.scale(tempVec3);
         tempMatrix.setPosition(midpointVec);
 

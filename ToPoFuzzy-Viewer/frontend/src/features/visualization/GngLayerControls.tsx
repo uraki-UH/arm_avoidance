@@ -47,10 +47,20 @@ export function GngLayerControls({
 
     // Local buffered opacity to avoid firing frequent onUpdate during drag.
     const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? 1);
+    const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || '#c8ff4a');
+    const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || '#08d408');
 
     useEffect(() => {
         setLocalOpacity(settings.opacity ?? 1);
     }, [settings.opacity]);
+
+    useEffect(() => {
+        setLocalNodeColor(settings.nodeColor || '#c8ff4a');
+    }, [settings.nodeColor]);
+
+    useEffect(() => {
+        setLocalEdgeColor(settings.edgeColor || '#08d408');
+    }, [settings.edgeColor]);
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
@@ -127,6 +137,37 @@ export function GngLayerControls({
                             isOn={settings.showEdges}
                             onToggle={() => onUpdate({ showEdges: !settings.showEdges })}
                         />
+                    </div>
+
+                    <div className="space-y-2 rounded-md border border-white/5 bg-black/15 p-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                                {isStatic ? 'Static Node' : 'Node Color'}
+                            </label>
+                            <input
+                                type="color"
+                                value={localNodeColor}
+                                onChange={(e) => setLocalNodeColor(e.target.value)}
+                                onBlur={() => onUpdate({ nodeColor: localNodeColor })}
+                                onPointerUp={() => onUpdate({ nodeColor: localNodeColor })}
+                                className="h-6 w-10 cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                title={isStatic ? 'Static node color' : 'Dynamic node palette base color'}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                                {isStatic ? 'Static Edge' : 'Edge Color'}
+                            </label>
+                            <input
+                                type="color"
+                                value={localEdgeColor}
+                                onChange={(e) => setLocalEdgeColor(e.target.value)}
+                                onBlur={() => onUpdate({ edgeColor: localEdgeColor })}
+                                onPointerUp={() => onUpdate({ edgeColor: localEdgeColor })}
+                                className="h-6 w-10 cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                title={isStatic ? 'Static edge color' : 'Dynamic edge color'}
+                            />
+                        </div>
                     </div>
 
                     {/* Opacity Slider (optional) */}

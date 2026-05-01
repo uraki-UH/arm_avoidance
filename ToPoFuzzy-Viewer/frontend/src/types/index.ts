@@ -82,8 +82,9 @@ export interface LayerSettings {
     showEdges: boolean;
     showClusters: boolean;
     opacity: number;
+    nodeColor?: string;
+    edgeColor?: string;
 }
-
 export interface RobotSettings {
     visible: boolean;
     color: string;

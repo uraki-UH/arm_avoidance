@@ -202,17 +202,39 @@ function App() {
         let changed = false;
 
         Object.keys(graphData).forEach(tag => {
-            if (!newSettings[tag]) {
-                newSettings[tag] = {
-                    visible: true,
-                    showNodes: true,
-                    showEdges: true,
-                    showClusters: false,
-                    opacity: 0.1
-                };
-                changed = true;
-            }
-        });
+            const isStatic = graphData[tag]?.mode === 'static';
+                if (!newSettings[tag]) {
+                    newSettings[tag] = {
+                        visible: true,
+                        showNodes: true,
+                        showEdges: true,
+                        showClusters: false,
+                        opacity: 0.1,
+                        ...(isStatic ? {
+                            nodeColor: '#c8ff4a',
+                            edgeColor: '#08d408',
+                        } : {
+                            nodeColor: '#7c8c66',
+                            edgeColor: '#08d408',
+                        })
+                    };
+                    changed = true;
+                } else if (isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
+                    newSettings[tag] = {
+                        ...newSettings[tag],
+                        nodeColor: newSettings[tag].nodeColor || '#c8ff4a',
+                        edgeColor: newSettings[tag].edgeColor || '#08d408',
+                    };
+                    changed = true;
+                } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
+                    newSettings[tag] = {
+                        ...newSettings[tag],
+                        nodeColor: newSettings[tag].nodeColor || '#7c8c66',
+                        edgeColor: newSettings[tag].edgeColor || '#08d408',
+                    };
+                    changed = true;
+                }
+            });
 
         if (changed) {
             setLayerSettings(newSettings);
@@ -794,6 +816,8 @@ function App() {
 
                         const frameId = data.frameId || 'world';
                         const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+                        const staticEdgeWidth = 0.0008;
+                        const staticNodeScale = 0.008;
 
                         const commonProps = {
                             key: tag,
@@ -810,10 +834,18 @@ function App() {
                             onClusterSelect: handleClusterSelect,
                             enableClusterSelection: !zoneMonitor.isDrawing,
                             tf: tf,
+                            nodeColor: settings.nodeColor,
+                            edgeColor: settings.edgeColor,
                         };
 
                         if (data.mode === 'static') {
-                            return <StaticGraphRenderer {...commonProps} />;
+                            return (
+                                <StaticGraphRenderer
+                                    {...commonProps}
+                                    nodeScale={staticNodeScale}
+                                    edgeWidth={staticEdgeWidth}
+                                />
+                            );
                         } else {
                             return <GraphRenderer {...commonProps} />;
                         }

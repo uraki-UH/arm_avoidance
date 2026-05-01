@@ -36,6 +36,8 @@ interface GraphRendererProps {
     enableClusterSelection?: boolean;
     opacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
+    nodeColor?: string;
+    edgeColor?: string;
 }
 
 export function StaticGraphRenderer({
@@ -53,6 +55,8 @@ export function StaticGraphRenderer({
     enableClusterSelection = true,
     opacity = 1.0,
     tf = null,
+    nodeColor = '#c8ff4a',
+    edgeColor = '#08d408',
 }: GraphRendererProps) {
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
@@ -64,7 +68,7 @@ export function StaticGraphRenderer({
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -99,22 +103,29 @@ export function StaticGraphRenderer({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#c8ff4a',
-        transparent: true,
-        opacity: opacity,
-        depthTest: false,
+    const nodeOpacity = Math.min(0.1, opacity);
+    const nodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        vertexColors: true,
+        transparent: nodeOpacity < 1,
+        opacity: nodeOpacity,
+        emissive: '#ffffff',
+        emissiveIntensity: 0.12,
+        roughness: 0.25,
+        metalness: 0.0,
+        depthTest: true,
         depthWrite: false,
-    }), [opacity]);
+        toneMapped: false,
+    }), [nodeOpacity, nodeColor]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
-        color: '#b9ff3f',
-        transparent: true,
+        color: edgeColor,
+        transparent: opacity < 1,
         opacity: opacity,
-        depthTest: false,
+        depthTest: true,
         depthWrite: false,
-    }), [opacity]);
+    }), [opacity, edgeColor]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -133,9 +144,9 @@ export function StaticGraphRenderer({
         if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
         if (graph.nodes.length > nodeCapacity) return;
 
-        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale);
+        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale, { colorMode: 'uniform', uniformColor: nodeColor });
         invalidate(); 
-    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate]);
+    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate, nodeColor]);
 
     useEffect(() => {
         if (!nodesRef.current || showNodes) return;
