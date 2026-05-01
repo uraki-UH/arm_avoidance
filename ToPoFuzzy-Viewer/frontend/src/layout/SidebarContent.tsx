@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Activity,
     Box,
@@ -24,7 +24,7 @@ import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
 import { TransformPanel } from '../features/manipulation/TransformPanel';
-import { PointCloudTransformPanel } from '../features/manipulation/PointCloudTransformPanel';
+import { PointCloudTransformModal } from '../features/manipulation/PointCloudTransformModal';
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
@@ -147,6 +147,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const visibleLayerCount = props.pointClouds.filter((pc) => pc.visible !== false).length;
     const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
     const isLayerActionDisabled = props.isEditMode;
+    const [pointCloudTransformId, setPointCloudTransformId] = useState<string | null>(null);
+    const transformTarget = props.pointClouds.find((pc) => pc.id === pointCloudTransformId) || null;
 
     const layersTab = (
         <div className="space-y-3">
@@ -238,6 +240,17 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 title={pc.visible !== false ? 'Hide layer' : 'Show layer'}
                                             >
                                                 {pc.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPointCloudTransformId(pc.id);
+                                                }}
+                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                title="Open transform dialog"
+                                            >
+                                                <Move size={12} />
+                                                Transform
                                             </button>
                                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pc.name}</p>
                                         </div>
@@ -348,17 +361,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
-            {selectedLayer && !props.isEditMode && (
-                <CollapsibleSection title="Selected Cloud Transform" icon={<Move size={16} />} defaultOpen={true}>
-                    <div className="surface-muted p-3">
-                        <PointCloudTransformPanel
-                            cloudData={selectedLayer}
-                            onUpdate={(updates) => props.onUpdateTransform(selectedLayer.id, updates)}
-                        />
-                    </div>
-                </CollapsibleSection>
-            )}
-
             <CollapsibleSection title="Server Files" icon={<Server size={16} />} defaultOpen={false}>
                 <ServerFileBrowser
                     isConnected={props.isConnected}
@@ -383,6 +385,16 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
             <CollapsibleSection title="Export" icon={<UploadCloud size={16} />} defaultOpen={false}>
                 <ExportPanel pointClouds={props.pointClouds} selectedLayerId={props.selectedLayerId} />
             </CollapsibleSection>
+
+            <PointCloudTransformModal
+                open={Boolean(transformTarget)}
+                cloudData={transformTarget}
+                onClose={() => setPointCloudTransformId(null)}
+                onUpdate={(updates) => {
+                    if (!transformTarget) return;
+                    props.onUpdateTransform(transformTarget.id, updates);
+                }}
+            />
 
         </div>
     );
