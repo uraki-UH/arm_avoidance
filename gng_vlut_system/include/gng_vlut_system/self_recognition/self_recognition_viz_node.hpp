@@ -25,6 +25,7 @@ private:
 
     std::unique_ptr<robot_sim::recognition::SelfRecognitionManager> recognition_manager_;
     float voxel_size_f_ = 0.0f;
+    std::string frame_id_ = "base_link";
     std::vector<double> current_joints_;
     std::mutex mutex_;
 

@@ -55,7 +55,7 @@ def generate_launch_description():
         DeclareLaunchArgument("dir", default_value="gng_results"),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
         DeclareLaunchArgument("data_directory", default_value=""),
-        DeclareLaunchArgument("frame_id", default_value="world"),
+        DeclareLaunchArgument("frame_id", default_value="base_link"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
         DeclareLaunchArgument("tag", default_value="dynamic"),
         DeclareLaunchArgument("mode", default_value="dynamic"),

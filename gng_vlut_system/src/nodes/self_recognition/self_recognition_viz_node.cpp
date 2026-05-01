@@ -28,11 +28,13 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     std::string default_urdf = pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro";
 
     declare_parameter("robot_urdf_path", default_urdf);
+    declare_parameter("frame_id", "base_link");
     declare_parameter("voxel_size", 0.02);
     declare_parameter("update_hz", 10.0);
 
     std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
+    frame_id_ = get_parameter("frame_id").as_string();
     double voxel_size_param = get_parameter("voxel_size").as_double();
     double hz = get_parameter("update_hz").as_double();
 
@@ -74,7 +76,7 @@ void SelfRecognitionVizNode::publishViz() {
 
     visualization_msgs::msg::MarkerArray markers;
     visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = "world";
+    marker.header.frame_id = frame_id_;
     marker.header.stamp = now();
     marker.ns = "self_voxels";
     marker.id = 0;

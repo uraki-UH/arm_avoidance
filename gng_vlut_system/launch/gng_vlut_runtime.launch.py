@@ -107,6 +107,7 @@ def launch_setup(context, *args, **kwargs):
                 "mesh_root_dir": mesh_root,
                 "joint_state_topic": "/joint_states",
                 "stream_topic": "/viewer/internal/stream/robot",
+                "frame_id": LaunchConfiguration("base_frame"),
                 "publish_hz": 20.0,
             }]
         )

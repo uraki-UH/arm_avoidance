@@ -16,7 +16,7 @@ def load_stl(filename):
         print(f"Error: {e}")
         return None
 
-path = "/Users/kubotamacbookair/Desktop/arm_avoidance/gng_vlut_system/urdf/topoarm_description/meshes/topoarm/link1.stl"
+path = "~/uraki_ws/gng_vlut_system/urdf/topoarm_description/meshes/topoarm/link1.stl"
 v = load_stl(path)
 if v is not None:
     flat = v.reshape(-1, 3)

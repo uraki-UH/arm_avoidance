@@ -9,6 +9,10 @@
 #include <ais_gng_msgs/msg/topological_node.hpp>
 #include <geometry_msgs/msg/point32.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
+#include <tf2/exceptions.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include "common/resource_utils.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
@@ -82,6 +86,18 @@ geometry_msgs::msg::Quaternion toQuaternion(const Eigen::Quaternionf &q) {
   return out;
 }
 
+Eigen::Vector3f transformPoint(const Eigen::Isometry3d &tf,
+                               const Eigen::Vector3f &point) {
+  const Eigen::Vector3d transformed = tf * point.cast<double>();
+  return transformed.cast<float>();
+}
+
+Eigen::Vector3f transformVector(const Eigen::Isometry3d &tf,
+                                const Eigen::Vector3f &vec) {
+  const Eigen::Vector3d transformed = tf.linear() * vec.cast<double>();
+  return transformed.cast<float>();
+}
+
 std::string activeEdgeModeName(int edge_mode) {
   if (edge_mode == 0) {
     return "angle";
@@ -103,6 +119,7 @@ public:
     declare_parameter("publish_hz", 20.0);
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
+    declare_parameter("source_frame_id", "world");
     declare_parameter("occupied_voxels_topic", "occupied_voxels");
     declare_parameter("danger_voxels_topic", "danger_voxels");
     declare_parameter("data_directory", "gng_results");
@@ -127,7 +144,11 @@ public:
 
     edge_mode_ = get_parameter("edge_mode").as_int();
     frame_id_ = get_parameter("frame_id").as_string();
+    source_frame_id_ = get_parameter("source_frame_id").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
     danger_voxels_topic_ = get_parameter("danger_voxels_topic").as_string();
@@ -325,6 +346,22 @@ private:
       return msg;
     }
 
+    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
+    const bool need_transform = frame_id_ != source_frame_id_;
+    if (need_transform) {
+      try {
+        const auto ts = tf_buffer_->lookupTransform(
+            frame_id_, source_frame_id_, tf2::TimePointZero);
+        source_to_target = tf2::transformToEigen(ts.transform);
+      } catch (const tf2::TransformException &ex) {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 5000,
+            "topofuzzy_bridge: TF lookup failed from '%s' to '%s': %s",
+            source_frame_id_.c_str(), frame_id_.c_str(), ex.what());
+        source_to_target.setIdentity();
+      }
+    }
+
     const auto &gng = *context_->gng;
     const int mode = selectedEdgeMode();
 
@@ -345,12 +382,23 @@ private:
 
       ais_gng_msgs::msg::TopologicalNode out;
       out.id = static_cast<uint16_t>(node.id);
-      out.pos = toPoint32(node.weight_coord);
+      const Eigen::Vector3f transformed_pos = need_transform
+                                                  ? transformPoint(source_to_target, node.weight_coord)
+                                                  : node.weight_coord;
+      out.pos = toPoint32(transformed_pos);
 
       const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
                                          ? node.status.ee_direction.normalized()
                                          : Eigen::Vector3f::UnitZ();
-      out.normal = toPoint32(normal);
+      Eigen::Vector3f transformed_normal = need_transform
+                                               ? transformVector(source_to_target, normal)
+                                               : normal;
+      if (transformed_normal.norm() > kEps) {
+        transformed_normal.normalize();
+      } else {
+        transformed_normal = Eigen::Vector3f::UnitZ();
+      }
+      out.normal = toPoint32(transformed_normal);
       out.label = viewerLabelFromStatus(node.status);
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
@@ -444,9 +492,12 @@ private:
 
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
+  std::string source_frame_id_ = "world";
   double publish_hz_ = 5.0;
   std::string occupied_voxels_topic_ = "occupied_voxels";
   std::string danger_voxels_topic_ = "danger_voxels";
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };
 
 int main(int argc, char **argv) {

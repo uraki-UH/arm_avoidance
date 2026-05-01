@@ -14,6 +14,7 @@ def launch_setup(context, *args, **kwargs):
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
+    gng_source_frame_id = LaunchConfiguration("gng_source_frame_id").perform(context)
     publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
     topic_name = LaunchConfiguration("topic_name").perform(context)
     
@@ -53,6 +54,7 @@ def launch_setup(context, *args, **kwargs):
                 "data_directory": data_dir,
                 "experiment_id": exp_id,
                 "frame_id": gng_frame_id,
+                "source_frame_id": gng_source_frame_id,
                 "publish_hz": publish_hz,
                 "topic_name": topic_name,
             }]
@@ -83,8 +85,9 @@ def generate_launch_description():
         DeclareLaunchArgument("id", default_value="topoarm"),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
-        DeclareLaunchArgument("robot_base_frame", default_value="world"),
+        DeclareLaunchArgument("robot_base_frame", default_value="base_link"),
         DeclareLaunchArgument("gng_frame_id", default_value="world"),
+        DeclareLaunchArgument("gng_source_frame_id", default_value="world"),
         DeclareLaunchArgument("publish_hz", default_value="30.0"),
         DeclareLaunchArgument("topic_name", default_value="/topological_map_static"),
         OpaqueFunction(function=launch_setup)
