@@ -3,10 +3,11 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
-import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, LayerSettings } from './types';
+import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, LayerSettings, RobotSettings } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
+import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
@@ -155,7 +156,13 @@ function App() {
             let changed = false;
             Object.keys(robotData).forEach(tag => {
                 if (!next[tag]) {
-                    next[tag] = { visible: true, color: 'skyblue' };
+                    next[tag] = {
+                        visible: true,
+                        color: 'skyblue',
+                        showVisual: true,
+                        showCollision: false,
+                        collisionColor: '#ff9f1c',
+                    };
                     changed = true;
                 }
             });
@@ -813,19 +820,37 @@ function App() {
                     })}
 
                     {Object.entries(robotData).map(([tag, data]) => {
-                        const settings = robotSettings[tag] || { visible: true, color: 'skyblue' };
+                        const settings = robotSettings[tag] || {
+                            visible: true,
+                            color: 'skyblue',
+                            showVisual: true,
+                            showCollision: false,
+                            collisionColor: '#ff9f1c',
+                        };
                         if (!settings.visible) return null;
                         const frameId = data.frameId || 'world';
                         const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
                         return (
-                            <RobotRenderer
-                                key={tag}
-                                tag={tag}
-                                data={data}
-                                visible={true}
-                                color={settings.color}
-                                tf={tf}
-                            />
+                            <group key={tag}>
+                                {settings.showVisual && (
+                                    <RobotRenderer
+                                        tag={tag}
+                                        data={data}
+                                        visible={true}
+                                        color={settings.color}
+                                        tf={tf}
+                                    />
+                                )}
+                                {settings.showCollision && (
+                                    <CollisionRenderer
+                                        tag={tag}
+                                        data={data}
+                                        visible={true}
+                                        color={settings.collisionColor}
+                                        tf={tf}
+                                    />
+                                )}
+                            </group>
                         );
                     })}
 

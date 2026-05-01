@@ -45,6 +45,8 @@ import {
     NodeParameters,
     SetParameterResult,
     LayerSettings,
+    RobotData,
+    RobotSettings,
 } from '../types';
 
 interface SidebarContentProps {
@@ -300,6 +302,32 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 />
                                                 <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
                                             </span>
+                                        </div>
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => props.onUpdateRobotSettings(tag, { showVisual: !props.robotSettings[tag]?.showVisual })}
+                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${
+                                                    props.robotSettings[tag]?.showVisual
+                                                        ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
+                                                        : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
+                                                }`}
+                                                title={props.robotSettings[tag]?.showVisual ? 'Hide visual model' : 'Show visual model'}
+                                            >
+                                                {props.robotSettings[tag]?.showVisual ? <Eye size={12} /> : <EyeOff size={12} />}
+                                                Visual
+                                            </button>
+                                            <button
+                                                onClick={() => props.onUpdateRobotSettings(tag, { showCollision: !props.robotSettings[tag]?.showCollision })}
+                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${
+                                                    props.robotSettings[tag]?.showCollision
+                                                        ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
+                                                        : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
+                                                }`}
+                                                title={props.robotSettings[tag]?.showCollision ? 'Hide collision model' : 'Show collision model'}
+                                            >
+                                                <Box size={12} />
+                                                Collision
+                                            </button>
                                         </div>
                                     </div>
                                     <button

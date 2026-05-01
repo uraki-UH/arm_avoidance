@@ -87,6 +87,9 @@ export interface LayerSettings {
 export interface RobotSettings {
     visible: boolean;
     color: string;
+    showVisual: boolean;
+    showCollision: boolean;
+    collisionColor: string;
 }
 
 export interface RobotData {
