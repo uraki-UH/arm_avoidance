@@ -14,6 +14,9 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
     const [rotation, setRotation] = useState<GraphTransform['rotation']>(transform.rotation);
     const [scale, setScale] = useState<GraphTransform['scale']>(transform.scale);
     const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+    const [positionStep, setPositionStep] = useState(0.01);
+    const [rotationStepDeg, setRotationStepDeg] = useState(1);
+    const [scaleStep, setScaleStep] = useState(0.01);
 
     useEffect(() => setPosition(transform.position), [transform.position]);
     useEffect(() => setRotation(transform.rotation), [transform.rotation]);
@@ -47,6 +50,10 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
         onUpdate({ position: next });
     };
 
+    const nudgePosition = (axis: number, direction: number) => {
+        updatePosition(axis, (position[axis] || 0) + (positionStep * direction));
+    };
+
     const updateRotationDeg = (axis: number, value: number) => {
         const next: GraphTransform['rotation'] = [...rotation] as GraphTransform['rotation'];
         next[axis] = (clamp(value, -180, 180) * Math.PI) / 180;
@@ -54,11 +61,19 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
         onUpdate({ rotation: next });
     };
 
+    const nudgeRotationDeg = (axis: number, direction: number) => {
+        updateRotationDeg(axis, ((rotation[axis] || 0) * 180 / Math.PI) + (rotationStepDeg * direction));
+    };
+
     const updateScale = (axis: number, value: number) => {
         const next: GraphTransform['scale'] = [...scale] as GraphTransform['scale'];
         next[axis] = clamp(value, 0.1, 4);
         setScale(next);
         onUpdate({ scale: next });
+    };
+
+    const nudgeScale = (axis: number, direction: number) => {
+        updateScale(axis, (scale[axis] || 1) + (scaleStep * direction));
     };
 
     const reset = () => {
@@ -107,12 +122,30 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Position</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Position</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.001, 0.01, 0.1].map((step) => (
+                            <button
+                                key={step}
+                                onClick={() => setPositionStep(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${positionStep === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(3)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{position[i].toFixed(2)}</span>
+                            <div className="flex items-center gap-1">
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, -1)}>-</button>
+                                <span className="font-mono">{position[i].toFixed(2)}</span>
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"
@@ -128,12 +161,30 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Rotation (deg)</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Rotation (deg)</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.1, 1, 5].map((step) => (
+                            <button
+                                key={step}
+                                onClick={() => setRotationStepDeg(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${rotationStepDeg === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(1)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{((rotation[i] * 180) / Math.PI).toFixed(1)}</span>
+                            <div className="flex items-center gap-1">
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, -1)}>-</button>
+                                <span className="font-mono">{((rotation[i] * 180) / Math.PI).toFixed(1)}</span>
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"
@@ -149,12 +200,30 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Scale (viewer only)</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Scale (viewer only)</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.001, 0.01, 0.1].map((step) => (
+                            <button
+                                key={step}
+                                onClick={() => setScaleStep(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${scaleStep === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(3)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{scale[i].toFixed(2)}</span>
+                            <div className="flex items-center gap-1">
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, -1)}>-</button>
+                                <span className="font-mono">{scale[i].toFixed(2)}</span>
+                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"

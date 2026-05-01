@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import { PointCloudData } from '../../types';
-import { PointCloudTransformPanel } from './PointCloudTransformPanel';
+import { GraphTransform } from '../../types';
+import { GraphTransformPanel } from './GraphTransformPanel';
 
-interface PointCloudTransformModalProps {
-    cloudData: PointCloudData | null;
+interface GraphTransformModalProps {
+    title: string;
     open: boolean;
+    transform: GraphTransform | null;
     onClose: () => void;
-    onUpdate: (updates: Partial<PointCloudData>) => void;
+    onUpdate: (updates: Partial<GraphTransform>) => void;
 }
 
-export function PointCloudTransformModal({
-    cloudData,
+export function GraphTransformModal({
+    title,
     open,
+    transform,
     onClose,
     onUpdate,
-}: PointCloudTransformModalProps) {
+}: GraphTransformModalProps) {
+    const dialogRef = useRef<HTMLDivElement>(null);
     const dragStateRef = useRef<{
         startX: number;
         startY: number;
@@ -31,7 +34,7 @@ export function PointCloudTransformModal({
             setDragging(false);
             dragStateRef.current = null;
         }
-    }, [open, cloudData?.id]);
+    }, [open, title]);
 
     useEffect(() => {
         const onMove = (event: PointerEvent) => {
@@ -56,18 +59,19 @@ export function PointCloudTransformModal({
         };
     }, []);
 
-    if (!open || !cloudData) return null;
+    if (!open || !transform) return null;
 
     return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4 py-6 backdrop-blur-sm">
             <button
                 type="button"
-                aria-label="Close point cloud transform dialog"
+                aria-label="Close graph transform dialog"
                 className="absolute inset-0 cursor-default"
                 onClick={onClose}
             />
 
             <div
+                ref={dialogRef}
                 role="dialog"
                 aria-modal="true"
                 className={`relative z-[81] w-full max-w-3xl overflow-hidden rounded-xl border border-white/10 bg-[rgba(8,19,29,0.96)] shadow-2xl ${dragging ? 'cursor-grabbing' : 'cursor-default'}`}
@@ -95,8 +99,8 @@ export function PointCloudTransformModal({
                     }}
                 >
                     <div className="min-w-0">
-                        <p className="panel-title">Point Cloud Transform</p>
-                        <p className="truncate text-sm text-[var(--text-secondary)]">{cloudData.name}</p>
+                        <p className="panel-title">Graph Transform</p>
+                        <p className="truncate text-sm text-[var(--text-secondary)]">{title}</p>
                         <p className="text-[10px] text-[var(--text-secondary)]">Drag this header to move the window.</p>
                     </div>
                     <button
@@ -110,7 +114,7 @@ export function PointCloudTransformModal({
                 </div>
 
                 <div className="max-h-[78vh] overflow-y-auto p-4">
-                    <PointCloudTransformPanel cloudData={cloudData} onUpdate={onUpdate} />
+                    <GraphTransformPanel transform={transform} onUpdate={onUpdate} />
                 </div>
             </div>
         </div>

@@ -25,6 +25,7 @@ import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
 import { TransformPanel } from '../features/manipulation/TransformPanel';
 import { PointCloudTransformModal } from '../features/manipulation/PointCloudTransformModal';
+import { GraphTransformModal } from '../features/manipulation/GraphTransformModal';
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
@@ -149,6 +150,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const isLayerActionDisabled = props.isEditMode;
     const [pointCloudTransformId, setPointCloudTransformId] = useState<string | null>(null);
     const transformTarget = props.pointClouds.find((pc) => pc.id === pointCloudTransformId) || null;
+    const [graphTransformTag, setGraphTransformTag] = useState<string | null>(null);
+    const graphTransformTarget = graphTransformTag ? props.graphData[graphTransformTag] : null;
 
     const layersTab = (
         <div className="space-y-3">
@@ -288,6 +291,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 onRemove={() => props.onRemoveGngLayer(tag)}
                                 showOpacity={false}
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
+                                onOpenTransform={() => setGraphTransformTag(tag)}
                             />
                         ))}
 
@@ -393,6 +397,34 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 onUpdate={(updates) => {
                     if (!transformTarget) return;
                     props.onUpdateTransform(transformTarget.id, updates);
+                }}
+            />
+
+            <GraphTransformModal
+                open={Boolean(graphTransformTarget)}
+                title={graphTransformTarget ? (graphTransformTarget.tag || graphTransformTag || 'graph') : ''}
+                transform={
+                    props.layerSettings[graphTransformTag || '']?.graphTransform || {
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    }
+                }
+                onClose={() => setGraphTransformTag(null)}
+                onUpdate={(updates) => {
+                    if (!graphTransformTag) return;
+                    const current = props.layerSettings[graphTransformTag]?.graphTransform || {
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    };
+                    props.onUpdateLayerSettings(graphTransformTag, {
+                        graphTransform: {
+                            position: updates.position || current.position,
+                            rotation: updates.rotation || current.rotation,
+                            scale: updates.scale || current.scale,
+                        },
+                    });
                 }}
             />
 

@@ -14,6 +14,9 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
     const [rotation, setRotation] = useState<PointCloudData['rotation']>(cloudData.rotation || [0, 0, 0]);
     const [scale, setScale] = useState<PointCloudData['scale']>(cloudData.scale || [1, 1, 1]);
     const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+    const [positionStep, setPositionStep] = useState(0.01);
+    const [rotationStepDeg, setRotationStepDeg] = useState(1);
+    const [scaleStep, setScaleStep] = useState(0.01);
 
     useEffect(() => setPosition(cloudData.position || [0, 0, 0]), [cloudData.position]);
     useEffect(() => setRotation(cloudData.rotation || [0, 0, 0]), [cloudData.rotation]);
@@ -47,6 +50,10 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
         onUpdate({ position: next });
     };
 
+    const nudgePosition = (axis: number, direction: number) => {
+        updatePosition(axis, (position?.[axis] ?? 0) + (positionStep * direction));
+    };
+
     const updateRotationDeg = (axis: number, value: number) => {
         const next: PointCloudData['rotation'] = [...(rotation || [0, 0, 0])] as PointCloudData['rotation'];
         next![axis] = (clamp(value, -180, 180) * Math.PI) / 180;
@@ -54,11 +61,19 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
         onUpdate({ rotation: next });
     };
 
+    const nudgeRotationDeg = (axis: number, direction: number) => {
+        updateRotationDeg(axis, (((rotation?.[axis] ?? 0) * 180) / Math.PI) + (rotationStepDeg * direction));
+    };
+
     const updateScale = (axis: number, value: number) => {
         const next: PointCloudData['scale'] = [...(scale || [1, 1, 1])] as PointCloudData['scale'];
         next![axis] = clamp(value, 0.1, 4);
         setScale(next);
         onUpdate({ scale: next });
+    };
+
+    const nudgeScale = (axis: number, direction: number) => {
+        updateScale(axis, (scale?.[axis] ?? 1) + (scaleStep * direction));
     };
 
     const reset = () => {
@@ -107,12 +122,31 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Position</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Position</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.001, 0.01, 0.1].map((step) => (
+                            <button
+                                key={step}
+                                type="button"
+                                onClick={() => setPositionStep(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${positionStep === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(3)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{(position?.[i] ?? 0).toFixed(2)}</span>
+                            <div className="flex items-center gap-1">
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, -1)}>-</button>
+                                <span className="font-mono">{(position?.[i] ?? 0).toFixed(2)}</span>
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"
@@ -128,12 +162,31 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Rotation (deg)</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Rotation (deg)</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.1, 1, 5].map((step) => (
+                            <button
+                                key={step}
+                                type="button"
+                                onClick={() => setRotationStepDeg(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${rotationStepDeg === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(1)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{(((rotation?.[i] ?? 0) * 180) / Math.PI).toFixed(1)}</span>
+                            <div className="flex items-center gap-1">
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, -1)}>-</button>
+                                <span className="font-mono">{(((rotation?.[i] ?? 0) * 180) / Math.PI).toFixed(1)}</span>
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"
@@ -149,12 +202,31 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
             </div>
 
             <div className="surface-muted space-y-2 p-3">
-                <p className="control-label mb-1 block">Scale (viewer only)</p>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="control-label mb-1 block">Scale (viewer only)</p>
+                    <div className="flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
+                        <span>Step</span>
+                        {[0.001, 0.01, 0.1].map((step) => (
+                            <button
+                                key={step}
+                                type="button"
+                                onClick={() => setScaleStep(step)}
+                                className={`rounded border px-1.5 py-0.5 font-mono ${scaleStep === step ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20'}`}
+                            >
+                                {step.toFixed(3)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                     <div key={axis} className="space-y-1">
-                        <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
+                        <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
-                            <span className="font-mono">{(scale?.[i] ?? 1).toFixed(2)}</span>
+                            <div className="flex items-center gap-1">
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, -1)}>-</button>
+                                <span className="font-mono">{(scale?.[i] ?? 1).toFixed(2)}</span>
+                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, 1)}>+</button>
+                            </div>
                         </div>
                         <input
                             type="range"

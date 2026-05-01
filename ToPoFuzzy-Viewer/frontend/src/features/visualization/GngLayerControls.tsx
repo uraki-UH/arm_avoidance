@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Trash2, Share2, Square, Move } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
-import { GraphTransformPanel } from '../manipulation/GraphTransformPanel';
 
 export interface GngLayerState {
     visible: boolean;
@@ -30,6 +29,7 @@ interface GngLayerControlsProps {
     settings: LayerSettings;
     onUpdate: (updates: Partial<LayerSettings>) => void;
     onRemove: () => void;
+    onOpenTransform?: () => void;
     showOpacity?: boolean;
     hasTf?: boolean;
 }
@@ -40,6 +40,7 @@ export function GngLayerControls({
     settings,
     onUpdate,
     onRemove,
+    onOpenTransform,
     showOpacity = false,
     hasTf = false,
 }: GngLayerControlsProps) {
@@ -110,16 +111,30 @@ export function GngLayerControls({
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onRemove();
-                    }}
-                    className="btn-icon btn-icon-danger"
-                    title="Remove layer"
-                >
-                    <Trash2 size={13} />
-                </button>
+                <div className="flex items-center gap-1">
+                    {onOpenTransform && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenTransform();
+                            }}
+                            className="btn-icon"
+                            title="Open graph transform dialog"
+                        >
+                            <Move size={13} />
+                        </button>
+                    )}
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove();
+                        }}
+                        className="btn-icon btn-icon-danger"
+                        title="Remove layer"
+                    >
+                        <Trash2 size={13} />
+                    </button>
+                </div>
             </div>
 
             {settings.visible && (
@@ -169,32 +184,6 @@ export function GngLayerControls({
                                 title={isStatic ? 'Static edge color' : 'Dynamic edge color'}
                             />
                         </div>
-                    </div>
-
-                    <div className="space-y-2 rounded-md border border-white/5 bg-black/15 p-2">
-                        <div className="flex items-center justify-between gap-2">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                                Graph Transform
-                            </label>
-                            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--text-secondary)]">
-                                <Move size={11} />
-                                manual offset
-                            </span>
-                        </div>
-                        <GraphTransformPanel
-                            transform={settings.graphTransform || {
-                                position: [0, 0, 0],
-                                rotation: [0, 0, 0],
-                                scale: [1, 1, 1],
-                            }}
-                            onUpdate={(updates) => onUpdate({
-                                graphTransform: {
-                                    position: updates.position || settings.graphTransform?.position || [0, 0, 0],
-                                    rotation: updates.rotation || settings.graphTransform?.rotation || [0, 0, 0],
-                                    scale: updates.scale || settings.graphTransform?.scale || [1, 1, 1],
-                                }
-                            })}
-                        />
                     </div>
 
                     {/* Opacity Slider (optional) */}
