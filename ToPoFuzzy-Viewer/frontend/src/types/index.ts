@@ -76,6 +76,12 @@ export interface GraphData {
     mode?: GraphMode;
 }
 
+export interface GraphTransform {
+    position: [number, number, number];
+    rotation: [number, number, number];
+    scale: [number, number, number];
+}
+
 export interface LayerSettings {
     visible: boolean;
     showNodes: boolean;
@@ -84,6 +90,7 @@ export interface LayerSettings {
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
+    graphTransform?: GraphTransform;
 }
 export interface RobotSettings {
     visible: boolean;

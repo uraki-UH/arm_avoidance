@@ -19,10 +19,10 @@ def generate_launch_description():
         default_value='kimura.yaml',
         description='GNG parameter yaml under config/gng',
     )
-    base_frame_id_arg = DeclareLaunchArgument(
-        'base_frame_id',
-        default_value='camera_depth_optical_frame',
-        description='target base frame for TF transformation',
+    target_frame_id_arg = DeclareLaunchArgument(
+        'target_frame_id',
+        default_value='base_link',
+        description='target frame for TF transformation (e.g. base_link, map)',
     )
     use_sim_time_arg = DeclareLaunchArgument(
         'use_sim_time',
@@ -39,7 +39,7 @@ def generate_launch_description():
             gng_config_path,
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'input.base_frame_id': LaunchConfiguration('base_frame_id'),
+                'input.base_frame_id': LaunchConfiguration('target_frame_id'),
             },
         ],
         remappings=[('scan', LaunchConfiguration('scan_topic'))],
@@ -48,7 +48,7 @@ def generate_launch_description():
     return LaunchDescription([
         scan_topic_arg,
         lidar_arg,
-        base_frame_id_arg,
+        target_frame_id_arg,
         use_sim_time_arg,
         ais_gng,
     ])

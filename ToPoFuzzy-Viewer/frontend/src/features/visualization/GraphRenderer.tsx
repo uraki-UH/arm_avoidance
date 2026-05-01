@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { GraphData, GraphTransform, LAYER_COLORS, LAYER_LABELS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 
@@ -38,6 +38,7 @@ interface GraphRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
+    manualTransform?: GraphTransform | null;
 }
 
 export function GraphRenderer({
@@ -57,9 +58,11 @@ export function GraphRenderer({
     tf = null,
     nodeColor = '#7c8c66',
     edgeColor = '#08d408',
+    manualTransform = null,
 }: GraphRendererProps) {
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
+    const offsetGroupRef = useRef<THREE.Group>(null);
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
@@ -68,7 +71,7 @@ export function GraphRenderer({
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, manualTransform]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -81,6 +84,18 @@ export function GraphRenderer({
         groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
         groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
     }, [tf]);
+
+    useEffect(() => {
+        if (!offsetGroupRef.current) return;
+        const offset = manualTransform || {
+            position: [0, 0, 0] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number],
+            scale: [1, 1, 1] as [number, number, number],
+        };
+        offsetGroupRef.current.position.set(offset.position[0], offset.position[1], offset.position[2]);
+        offsetGroupRef.current.rotation.set(offset.rotation[0], offset.rotation[1], offset.rotation[2]);
+        offsetGroupRef.current.scale.set(offset.scale[0], offset.scale[1], offset.scale[2]);
+    }, [manualTransform]);
 
     // Handle cluster click with drag filtering
     const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {
@@ -163,29 +178,30 @@ export function GraphRenderer({
 
     return (
         <group ref={groupRef}>
-            {canRenderNodes && (
-                <instancedMesh
-                    key={`nodes-${nodeCapacity}`}
-                    ref={nodesRef}
-                    args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
-                    count={graph.nodes.length}
-                    frustumCulled={false}
-                    renderOrder={10}
-                />
-            )}
+            <group ref={offsetGroupRef}>
+                {canRenderNodes && (
+                    <instancedMesh
+                        key={`nodes-${nodeCapacity}`}
+                        ref={nodesRef}
+                        args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
+                        count={graph.nodes.length}
+                        frustumCulled={false}
+                        renderOrder={10}
+                    />
+                )}
 
-            {canRenderEdges && (
-                <instancedMesh
-                    key={`edges-${edgeCapacity}`}
-                    ref={edgesRef}
-                    args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
-                    count={edgePairCount}
-                    frustumCulled={false}
-                    renderOrder={9}
-                />
-            )}
+                {canRenderEdges && (
+                    <instancedMesh
+                        key={`edges-${edgeCapacity}`}
+                        ref={edgesRef}
+                        args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
+                        count={edgePairCount}
+                        frustumCulled={false}
+                        renderOrder={9}
+                    />
+                )}
 
-            {showClusters && graph.clusters
+                {showClusters && graph.clusters
                 .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
                 .map((cluster) => {
                     const isSelected = selectedClusterId === cluster.id;
@@ -225,6 +241,7 @@ export function GraphRenderer({
                         </group>
                     );
                 })}
+            </group>
         </group>
     );
 }

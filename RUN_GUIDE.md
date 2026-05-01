@@ -44,4 +44,6 @@ python3 test_tf_publisher.py --ros-args -p frame_id:=base_link
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py   topic_name:=/topological_map_static   robot_base_frame:=base_link   gng_frame_id:=base_link
 
 realsenseのrosbag
-ros2 launch ais_gng camera_depth_points.launch.py \base_frame_id:=camera_depth_optical_frame
+ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=base_link
+
+map に直したい場合は `target_frame_id:=map` を使います。入力点群の `header.frame_id` がセンサー座標系で、GNG 側が TF を引いて target frame に変換します。

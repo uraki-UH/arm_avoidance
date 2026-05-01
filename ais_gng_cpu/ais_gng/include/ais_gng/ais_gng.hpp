@@ -50,6 +50,8 @@ class AiSGNG : public rclcpp::Node {
    private:
     rcl_interfaces::msg::SetParametersResult param_cb(const std::vector<rclcpp::Parameter> &params);
     void pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
+    sensor_msgs::msg::PointCloud2::SharedPtr transformInputPointCloud(
+        const sensor_msgs::msg::PointCloud2::SharedPtr msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
         const std_msgs::msg::Header &msg);

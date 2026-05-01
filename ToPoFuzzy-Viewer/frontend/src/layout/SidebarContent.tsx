@@ -24,6 +24,7 @@ import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
 import { TransformPanel } from '../features/manipulation/TransformPanel';
+import { PointCloudTransformPanel } from '../features/manipulation/PointCloudTransformPanel';
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
@@ -346,6 +347,17 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     )}
                 </div>
             </CollapsibleSection>
+
+            {selectedLayer && !props.isEditMode && (
+                <CollapsibleSection title="Selected Cloud Transform" icon={<Move size={16} />} defaultOpen={true}>
+                    <div className="surface-muted p-3">
+                        <PointCloudTransformPanel
+                            cloudData={selectedLayer}
+                            onUpdate={(updates) => props.onUpdateTransform(selectedLayer.id, updates)}
+                        />
+                    </div>
+                </CollapsibleSection>
+            )}
 
             <CollapsibleSection title="Server Files" icon={<Server size={16} />} defaultOpen={false}>
                 <ServerFileBrowser

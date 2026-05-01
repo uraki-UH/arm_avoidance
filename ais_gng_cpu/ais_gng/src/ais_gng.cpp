@@ -1,4 +1,5 @@
 #include <ais_gng/ais_gng.hpp>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 
 using namespace fuzzrobo;
 
@@ -283,14 +284,16 @@ void AiSGNG::pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
 
     auto start = std::chrono::steady_clock::now();
 
+    auto transformed_input_msg = transformInputPointCloud(msg);
+
     // 出力のヘッダー
     std_msgs::msg::Header header;
-    header.frame_id = base_frame_id_.empty() ? msg->header.frame_id : base_frame_id_;
-    header.stamp = msg->header.stamp;
+    header.frame_id = base_frame_id_.empty() ? transformed_input_msg->header.frame_id : base_frame_id_;
+    header.stamp = transformed_input_msg->header.stamp;
 
     // GNGに点群を入力
-    auto lidar_config = getBase2LidarFrame(msg);
-    gng_setPointCloud(msg->data.data(), msg->width * msg->height, &lidar_config);
+    auto lidar_config = getBase2LidarFrame(transformed_input_msg);
+    gng_setPointCloud(transformed_input_msg->data.data(), transformed_input_msg->width * transformed_input_msg->height, &lidar_config);
 
     // GNGの実行
     gng_exec();
@@ -305,7 +308,7 @@ void AiSGNG::pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     auto map_msg = makeTopologicalMapMsg(map, header);
 
     // アフィン変換後の点群をROS2メッセージに変換
-    auto transformed_msg = makePointCloud2Msg(msg, transformed_pcl, transformed_pcl_num, header);
+    auto transformed_msg = makePointCloud2Msg(transformed_input_msg, transformed_pcl, transformed_pcl_num, header);
 
     // ここでクラスタ後処理を実施する。
     // 1) SAFE_TERRAIN の幾何統合（距離・法線角度）
@@ -332,7 +335,7 @@ void AiSGNG::pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     if(downsampling_.transformed){
         downsampling_.publish<std::unique_ptr<sensor_msgs::msg::PointCloud2>>(transformed_msg, label, label_num, header); // 変換後の点群をPublish
     }else{
-        downsampling_.publish<sensor_msgs::msg::PointCloud2::SharedPtr>(msg, label, label_num, msg->header); // 変換前の点群をPublish
+        downsampling_.publish<sensor_msgs::msg::PointCloud2::SharedPtr>(transformed_input_msg, label, label_num, transformed_input_msg->header); // 変換前の点群をPublish
     }
 
 
@@ -346,6 +349,30 @@ void AiSGNG::pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     RCLCPP_INFO(this->get_logger(), "Processing time: %ld ms", duration.count());
+}
+
+sensor_msgs::msg::PointCloud2::SharedPtr AiSGNG::transformInputPointCloud(
+    const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+    static auto tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    static auto tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+    if (base_frame_id_.empty() || base_frame_id_ == msg->header.frame_id) {
+        return msg;
+    }
+
+    try {
+        const auto tf_msg = tf_buffer_->lookupTransform(
+            base_frame_id_, msg->header.frame_id, tf2::TimePointZero);
+        auto transformed = std::make_shared<sensor_msgs::msg::PointCloud2>();
+        tf2::doTransform(*msg, *transformed, tf_msg);
+        transformed->header.frame_id = base_frame_id_;
+        return transformed;
+    } catch (const tf2::TransformException &ex) {
+        RCLCPP_ERROR(
+            this->get_logger(), "Could not transform %s to %s: %s",
+            msg->header.frame_id.c_str(), base_frame_id_.c_str(), ex.what());
+        return msg;
+    }
 }
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNG::makeTopologicalMapMsg(

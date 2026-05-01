@@ -210,6 +210,11 @@ function App() {
                         showEdges: true,
                         showClusters: false,
                         opacity: 0.1,
+                        graphTransform: {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1],
+                        },
                         ...(isStatic ? {
                             nodeColor: '#c8ff4a',
                             edgeColor: '#08d408',
@@ -224,6 +229,11 @@ function App() {
                         ...newSettings[tag],
                         nodeColor: newSettings[tag].nodeColor || '#c8ff4a',
                         edgeColor: newSettings[tag].edgeColor || '#08d408',
+                        graphTransform: newSettings[tag].graphTransform || {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1],
+                        },
                     };
                     changed = true;
                 } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
@@ -231,6 +241,11 @@ function App() {
                         ...newSettings[tag],
                         nodeColor: newSettings[tag].nodeColor || '#7c8c66',
                         edgeColor: newSettings[tag].edgeColor || '#08d408',
+                        graphTransform: newSettings[tag].graphTransform || {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1],
+                        },
                     };
                     changed = true;
                 }
@@ -586,8 +601,8 @@ function App() {
     };
 
     const handleUpdateTransform = (id: string, updates: Partial<PointCloudData>) => {
-        if (!isEditMode || id !== editLayerId) return;
         if (editJobStatus?.isRunning) return;
+        if (isEditMode && id !== editLayerId) return;
 
         setPointClouds((prev) => prev.map((pc) => (
             pc.id === id ? { ...pc, ...updates } : pc
@@ -836,6 +851,7 @@ function App() {
                             tf: tf,
                             nodeColor: settings.nodeColor,
                             edgeColor: settings.edgeColor,
+                            manualTransform: settings.graphTransform,
                         };
 
                         if (data.mode === 'static') {
