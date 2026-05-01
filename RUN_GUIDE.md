@@ -27,3 +27,15 @@ cd ToPoFuzzy-Viewer/frontend && npm install && npm run dev
 - `/topological_map_static` のみを使います。
 - `/topological_map` を出す安全監視は止めています。
 - ロボット姿勢は `robot_viewer_bridge_node` から `/viewer/internal/stream/robot` に流します。
+
+
+python3 test_joint_state_publisher.py 
+オプションジョイント名をつけたい場合
+--prefix topoarm_
+
+python3 test_tf_publisher.py --ros-args -p frame_id:=base_link
+
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py   topic_name:=/topological_map_static   robot_base_frame:=base_link   gng_frame_id:=base_link
+
+realsenseのrosbag
+ros2 launch ais_gng camera_depth_points.launch.py \base_frame_id:=camera_depth_optical_frame

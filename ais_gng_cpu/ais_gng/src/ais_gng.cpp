@@ -11,7 +11,9 @@ AiSGNG::AiSGNG(const rclcpp::NodeOptions & options) : Node("ais_gng", options) {
     // Filter
     filter_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("filter", 10);
 
-    topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>("topological_map", 30);
+    topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+        "topological_map",
+        rclcpp::QoS(30).reliable().transient_local());
 
     auto qos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort();
     pcl_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>("scan", qos, std::bind(&AiSGNG::pcl_cb, this, _1));

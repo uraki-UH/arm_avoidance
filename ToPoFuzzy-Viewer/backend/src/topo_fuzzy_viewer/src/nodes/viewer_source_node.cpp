@@ -37,7 +37,7 @@ public:
 
         streamGraphPub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
             viewer_internal::topics::kStreamGraph,
-            rclcpp::QoS(rclcpp::KeepLast(10)));
+            rclcpp::QoS(rclcpp::KeepLast(10)).reliable().transient_local());
 
         loadedCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
             viewer_internal::topics::kFileLoadedCloud,
@@ -275,6 +275,13 @@ private:
     }
 
     void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+        RCLCPP_INFO_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "Forwarding topological map to %s (%zu nodes, %zu edges, %zu clusters)",
+            viewer_internal::topics::kStreamGraph,
+            msg->nodes.size(),
+            msg->edges.size() / 2,
+            msg->clusters.size());
         streamGraphPub_->publish(*msg);
     }
 
