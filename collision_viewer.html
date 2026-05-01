@@ -1,196 +1,246 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>Advanced Robot Collision Viewer</title>
+    <title>Universal Robot Collision Inspector</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
     <style>
-        body { margin: 0; background-color: #050505; color: #00ffcc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
-        #overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
-        #loader { position: absolute; top: 80px; left: 20px; z-index: 20; background: rgba(0,255,200,0.1); border: 1px solid #00ffcc; padding: 15px; border-radius: 8px; pointer-events: auto; }
-        button { background: #00ffcc; color: #000; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        body {
+            margin: 0;
+            background-color: #050505;
+            color: #00ffcc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #loader {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            z-index: 20;
+            background: rgba(0, 255, 200, 0.1);
+            border: 1px solid #00ffcc;
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: auto;
+        }
+
+        button {
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <div id="overlay">
-        <h1 style="margin:0; font-size: 1.5em; letter-spacing: 2px;">TOPOARM COLLISION INSPECTOR</h1>
-        <p style="margin:5px 0; color: #777;">[ WITH GRIPPER CONTROL ]</p>
+        <h1 style="margin:0; font-size: 1.5em; letter-spacing: 2px;">UNIVERSAL COLLISION INSPECTOR</h1>
+        <p style="margin:5px 0; color: #777;">[ MESH + CAPSULE + VOXEL ]</p>
     </div>
     <div id="loader">
-        <p style="margin-top:0; font-size: 0.9em;">Reload <code>robot_meshes.json</code>:</p>
+        <p style="margin-top:0; font-size: 0.9em;">Load <code>robot_model.json</code>:</p>
         <input type="file" id="fileInput" accept=".json">
     </div>
 
     <script>
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x050505);
-        
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 10);
-        camera.up.set(0, 0, 1); 
-        camera.position.set(0.4, -0.4, 0.4);
-
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 20);
+        camera.up.set(0, 0, 1);
+        camera.position.set(0.6, -0.6, 0.6);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
-
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, 0.1);
-        
-        const grid = new THREE.GridHelper(1, 10, 0x444444, 0x222222);
-        grid.rotation.x = Math.PI/2;
-        scene.add(grid);
-        
+        scene.add(new THREE.GridHelper(2, 20, 0x444444, 0x222222).rotateX(Math.PI / 2));
         scene.add(new THREE.AmbientLight(0x888888));
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(1, -1, 1);
-        scene.add(light);
+        const light = new THREE.DirectionalLight(0xffffff, 1); light.position.set(1, -1, 1); scene.add(light);
 
-        const config = {
-            voxelSize: 0.02,
-            showRealMesh: true,
-            showVoxels: true,
-            opacity: 0.6,
-            j1: 0, j2: 0, j3: 0, j4: 0, j5: 0, j6: 0,
-            gripper: 0
-        };
+        const config = { voxelSize: 0.01, showMesh: true, showVoxels: true, showCapsules: true, opacity: 0.3 };
+        let gui = null;
+        let robotData = null;
+        let linkGroups = {};
+        let jointNodes = {};
+        let realMeshes = [];
+        let capsuleGroups = {};
+        const voxelGroup = new THREE.Group(); scene.add(voxelGroup);
+        let voxelInstancedMesh = null;
 
-        const joints = [
-            { name: "fixed", parent: "world", child: "link1", xyz: [0, 0, 0], axis: null },
-            { name: "j1", parent: "link1", child: "link2", xyz: [0, 0, 0.051], axis: "z" },
-            { name: "j2", parent: "link2", child: "link3", xyz: [0, 0, 0.0405], axis: "y" },
-            { name: "j3", parent: "link3", child: "link4", xyz: [0, 0, 0.1235], axis: "y" },
-            { name: "j4", parent: "link4", child: "link5", xyz: [0, 0, 0.06385], axis: "z" },
-            { name: "j5", parent: "link5", child: "link6", xyz: [0, 0, 0.0405], axis: "y" },
-            { name: "j6", parent: "link6", child: "link7", xyz: [0, 0, 0.028], axis: "z" },
-            // Gripper
-            { name: "g_left", parent: "link7", child: "gripper_left_link", xyz: [-0.0005, 0.021, 0.0898], axis: "y_prismatic" },
-            { name: "g_right", parent: "link7", child: "gripper_right_link", xyz: [-0.0005, -0.021, 0.0898], axis: "y_prismatic_inv" }
-        ];
-
-        const linkGroups = { "world": new THREE.Group() };
-        const realMeshes = [];
-        const voxelGroups = new THREE.Group();
-        scene.add(linkGroups["world"]);
-        scene.add(voxelGroups);
-
-        joints.forEach(j => {
-            const group = new THREE.Group();
-            group.position.set(j.xyz[0], j.xyz[1], j.xyz[2]);
-            linkGroups[j.parent].add(group);
-            linkGroups[j.child] = group;
-        });
-
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+        document.getElementById('fileInput').addEventListener('change', e => {
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = JSON.parse(e.target.result);
-                loadMeshData(data);
+            reader.onload = e => {
+                robotData = JSON.parse(e.target.result);
+                buildRobot();
                 document.getElementById('loader').style.display = 'none';
             };
-            reader.readAsText(file);
+            reader.readAsText(e.target.files[0]);
         });
 
-        function loadMeshData(data) {
-            Object.keys(data).forEach(linkName => {
-                if (!linkGroups[linkName]) return;
-                data[linkName].forEach(meshData => {
-                    const geometry = new THREE.BufferGeometry();
-                    const vertices = [];
-                    meshData.vertices.forEach(tri => {
-                        tri.forEach(v => {
-                            vertices.push(v[0] * meshData.scale[0], v[1] * meshData.scale[1], v[2] * meshData.scale[2]);
-                        });
+        function buildRobot() {
+            // Clean existing scene
+            Object.values(linkGroups).forEach(g => { if (g.parent) g.parent.remove(g); });
+            linkGroups = {}; jointNodes = {}; realMeshes = []; capsuleGroups = {};
+            
+            // Re-init GUI
+            if (gui) gui.destroy();
+            gui = new dat.GUI();
+            const f1 = gui.addFolder('Visibility');
+            const f2 = gui.addFolder('Robot Control');
+            const f3 = gui.addFolder('Capsule Tuning');
+
+            Object.keys(robotData.links).forEach(name => { linkGroups[name] = new THREE.Group(); });
+
+            robotData.joints.forEach(j => {
+                const jGroup = new THREE.Group();
+                jGroup.position.set(j.xyz[0], j.xyz[1], j.xyz[2]);
+                jGroup.rotation.set(j.rpy[0], j.rpy[1], j.rpy[2]);
+                linkGroups[j.parent].add(jGroup);
+                jGroup.add(linkGroups[j.child]);
+                jointNodes[j.name] = { group: jGroup, axis: new THREE.Vector3(...j.axis), type: j.type, originXYZ: [...j.xyz] };
+
+                config[j.name] = 0;
+                if (j.type === 'revolute' || j.type === 'continuous') {
+                    f2.add(config, j.name, -3.14, 3.14).onChange(v => {
+                        jGroup.setRotationFromAxisAngle(jointNodes[j.name].axis, v);
+                        updateVoxels();
                     });
-                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                } else if (j.type === 'prismatic') {
+                    f2.add(config, j.name, -0.05, 0.05).onChange(v => {
+                        const axis = jointNodes[j.name].axis.clone().multiplyScalar(v);
+                        jGroup.position.set(j.xyz[0] + axis.x, j.xyz[1] + axis.y, j.xyz[2] + axis.z);
+                        updateVoxels();
+                    });
+                }
+            });
+            scene.add(linkGroups[Object.keys(linkGroups)[0]]);
+
+            Object.keys(robotData.links).forEach(name => {
+                const link = robotData.links[name];
+                link.meshes.forEach(m => {
+                    const geometry = new THREE.BufferGeometry();
+                    const vFlat = []; m.vertices.forEach(tri => tri.forEach(v => vFlat.push(...v)));
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vFlat, 3));
                     geometry.computeVertexNormals();
-                    const material = new THREE.MeshStandardMaterial({ color: 0x00ffcc, transparent: true, opacity: config.opacity });
-                    const mesh = new THREE.Mesh(geometry, material);
-                    const o = meshData.origin;
-                    const mat = new THREE.Matrix4().set(
-                        o[0][0], o[0][1], o[0][2], o[0][3],
-                        o[1][0], o[1][1], o[1][2], o[1][3],
-                        o[2][0], o[2][1], o[2][2], o[2][3],
-                        o[3][0], o[3][1], o[3][2], o[3][3]
-                    );
-                    mesh.applyMatrix4(mat);
-                    linkGroups[linkName].add(mesh);
+                    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x00ffcc, transparent: true, opacity: config.opacity }));
+                    mesh.position.set(...m.origin.xyz);
+                    mesh.rotation.set(...m.origin.rpy);
+                    linkGroups[name].add(mesh);
                     realMeshes.push(mesh);
                 });
+
+                if (link.capsule) {
+                    const c = link.capsule;
+                    const capGroup = new THREE.Group();
+                    const mat = new THREE.MeshPhongMaterial({ color: 0xff00ff, transparent: true, opacity: 0.3 });
+                    const updateCap = () => {
+                        capGroup.clear();
+                        const cyl = new THREE.Mesh(new THREE.CylinderGeometry(c.r, c.r, c.h, 16), mat);
+                        const s1 = new THREE.Mesh(new THREE.SphereGeometry(c.r, 16, 16), mat);
+                        const s2 = new THREE.Mesh(new THREE.SphereGeometry(c.r, 16, 16), mat);
+                        s1.position.y = c.h / 2; s2.position.y = -c.h / 2;
+                        capGroup.add(cyl, s1, s2);
+                        if (c.axis === 0) capGroup.rotation.z = Math.PI / 2;
+                        else if (c.axis === 2) capGroup.rotation.x = Math.PI / 2;
+                        if (c.axis === 0) capGroup.position.x = c.oz;
+                        else if (c.axis === 1) capGroup.position.y = c.oz;
+                        else if (c.axis === 2) capGroup.position.z = c.oz;
+                        capGroup.visible = config.showCapsules;
+                    };
+                    updateCap();
+                    linkGroups[name].add(capGroup);
+                    capsuleGroups[name] = { group: capGroup, update: updateCap, data: c };
+                    const f = f3.addFolder(name);
+                    f.add(c, 'r', 0, 0.1).name('Radius').onChange(updateCap);
+                    f.add(c, 'h', 0, 0.4).name('Height').onChange(updateCap);
+                    f.add(c, 'oz', -0.3, 0.3).name('Offset').onChange(updateCap);
+                }
             });
+
+            f1.add(config, 'showMesh').name('STL Mesh').onChange(v => { realMeshes.forEach(m => m.visible = v); updateVoxels(); });
+            f1.add(config, 'showVoxels').name('Voxels').onChange(updateVoxels);
+            f1.add(config, 'showCapsules').name('Capsules').onChange(v => Object.values(capsuleGroups).forEach(g => g.group.visible = v));
+            f1.add(config, 'opacity', 0, 1).name('Mesh Opacity').onChange(v => realMeshes.forEach(m => m.material.opacity = v));
+            f1.add(config, 'voxelSize', 0.005, 0.05).name('Voxel Size').onFinishChange(updateVoxels);
+            f1.open(); f2.open();
             updateVoxels();
         }
 
         function updateVoxels() {
-            voxelGroups.clear();
-            if (!config.showVoxels) return;
-            const voxelMat = new THREE.LineBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4 });
-            const boxGeom = new THREE.BoxGeometry(config.voxelSize, config.voxelSize, config.voxelSize);
-            const edges = new THREE.EdgesGeometry(boxGeom);
+            if (voxelInstancedMesh) {
+                voxelGroup.remove(voxelInstancedMesh);
+                voxelInstancedMesh.geometry.dispose();
+                voxelInstancedMesh.material.dispose();
+                voxelInstancedMesh = null;
+            }
+            if (!config.showVoxels || !robotData) return;
+
+            scene.updateMatrixWorld(true);
+            const vSize = config.voxelSize;
+            const uniqueVoxels = new Set();
+            const voxelPositions = [];
+            const tempV1 = new THREE.Vector3(), tempV2 = new THREE.Vector3(), tempV3 = new THREE.Vector3();
+            const worldPos = new THREE.Vector3(), worldQuat = new THREE.Quaternion();
 
             realMeshes.forEach(mesh => {
                 if (!mesh.visible) return;
-                const worldPos = new THREE.Vector3();
-                const worldQuat = new THREE.Quaternion();
                 mesh.getWorldPosition(worldPos);
                 mesh.getWorldQuaternion(worldQuat);
                 const positions = mesh.geometry.attributes.position.array;
-                const vSize = config.voxelSize;
-                const uniqueVoxels = new Set();
                 for (let i = 0; i < positions.length; i += 9) {
-                    for(let j=0; j<3; j++) {
-                        const p = new THREE.Vector3(positions[i+j*3], positions[i+j*3+1], positions[i+j*3+2]).applyQuaternion(worldQuat).add(worldPos);
-                        const vid = `${Math.floor(p.x/vSize)},${Math.floor(p.y/vSize)},${Math.floor(p.z/vSize)}`;
-                        if (!uniqueVoxels.has(vid)) {
-                            uniqueVoxels.add(vid);
-                            const wire = new THREE.LineSegments(edges, voxelMat);
-                            wire.position.set(Math.floor(p.x/vSize)*vSize + vSize/2, Math.floor(p.y/vSize)*vSize + vSize/2, Math.floor(p.z/vSize)*vSize + vSize/2);
-                            voxelGroups.add(wire);
+                    tempV1.set(positions[i], positions[i+1], positions[i+2]).applyQuaternion(worldQuat).add(worldPos);
+                    tempV2.set(positions[i+3], positions[i+4], positions[i+5]).applyQuaternion(worldQuat).add(worldPos);
+                    tempV3.set(positions[i+6], positions[i+7], positions[i+8]).applyQuaternion(worldQuat).add(worldPos);
+                    const d12 = tempV1.distanceTo(tempV2), d13 = tempV1.distanceTo(tempV3);
+                    const steps1 = Math.max(1, Math.ceil(d12 / vSize)), steps2 = Math.max(1, Math.ceil(d13 / vSize));
+                    for (let s1 = 0; s1 <= steps1; s1++) {
+                        const t1 = s1 / steps1;
+                        for (let s2 = 0; s2 <= steps2 * (1 - t1); s2++) {
+                            const t2 = s2 / steps2;
+                            const px = tempV1.x + t1 * (tempV2.x - tempV1.x) + t2 * (tempV3.x - tempV1.x);
+                            const py = tempV1.y + t1 * (tempV2.y - tempV1.y) + t2 * (tempV3.y - tempV1.y);
+                            const pz = tempV1.z + t1 * (tempV2.z - tempV1.z) + t2 * (tempV3.z - tempV1.z);
+                            const vx = Math.floor(px / vSize), vy = Math.floor(py / vSize), vz = Math.floor(pz / vSize);
+                            const vid = `${vx},${vy},${vz}`;
+                            if (!uniqueVoxels.has(vid)) {
+                                uniqueVoxels.add(vid);
+                                voxelPositions.push(vx * vSize + vSize/2, vy * vSize + vSize/2, vz * vSize + vSize/2);
+                            }
                         }
                     }
                 }
             });
+            if (voxelPositions.length === 0) return;
+            const boxGeom = new THREE.BoxGeometry(vSize * 0.95, vSize * 0.95, vSize * 0.95);
+            const voxelMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, transparent: true, opacity: 0.4, wireframe: true });
+            voxelInstancedMesh = new THREE.InstancedMesh(boxGeom, voxelMat, voxelPositions.length / 3);
+            const dummy = new THREE.Object3D();
+            for (let i = 0; i < voxelPositions.length; i += 3) {
+                dummy.position.set(voxelPositions[i], voxelPositions[i+1], voxelPositions[i+2]);
+                dummy.updateMatrix();
+                voxelInstancedMesh.setMatrixAt(i / 3, dummy.matrix);
+            }
+            voxelGroup.add(voxelInstancedMesh);
         }
 
-        const gui = new dat.GUI();
-        const f1 = gui.addFolder('Visibility');
-        f1.add(config, 'showRealMesh').name('Real STL Mesh').onChange(v => { realMeshes.forEach(m => m.visible = v); updateVoxels(); });
-        f1.add(config, 'showVoxels').name('Voxels').onChange(updateVoxels);
-        f1.add(config, 'opacity', 0, 1).name('Mesh Opacity').onChange(v => { realMeshes.forEach(m => m.material.opacity = v); });
-        f1.add(config, 'voxelSize', 0.01, 0.05).name('Voxel Size').onFinishChange(updateVoxels);
-        f1.open();
-
-        const f2 = gui.addFolder('Control');
-        const update = () => {
-            linkGroups["link2"].rotation.z = config.j1;
-            linkGroups["link3"].rotation.y = config.j2;
-            linkGroups["link4"].rotation.y = config.j3;
-            linkGroups["link5"].rotation.z = config.j4;
-            linkGroups["link6"].rotation.y = config.j5;
-            linkGroups["link7"].rotation.z = config.j6;
-            // Gripper prismatic movement
-            linkGroups["gripper_left_link"].position.y = 0.021 + config.gripper;
-            linkGroups["gripper_right_link"].position.y = -0.021 - config.gripper;
-            updateVoxels();
-        };
-        ["j1", "j2", "j3", "j4", "j5", "j6"].forEach(j => f2.add(config, j, -3.14, 3.14).onChange(update));
-        f2.add(config, 'gripper', -0.01, 0.019).name('Gripper').onChange(update);
-        f2.open();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
         animate();
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
     </script>
 </body>
+
 </html>
