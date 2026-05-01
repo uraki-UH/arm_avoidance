@@ -8,6 +8,7 @@ interface PointCloudTransformModalProps {
     open: boolean;
     onClose: () => void;
     onUpdate: (updates: Partial<PointCloudData>) => void;
+    onReset: () => void;
 }
 
 export function PointCloudTransformModal({
@@ -15,6 +16,7 @@ export function PointCloudTransformModal({
     open,
     onClose,
     onUpdate,
+    onReset,
 }: PointCloudTransformModalProps) {
     const dragStateRef = useRef<{
         startX: number;
@@ -110,7 +112,7 @@ export function PointCloudTransformModal({
                 </div>
 
                 <div className="max-h-[78vh] overflow-y-auto p-4">
-                    <PointCloudTransformPanel cloudData={cloudData} onUpdate={onUpdate} />
+                    <PointCloudTransformPanel cloudData={cloudData} onUpdate={onUpdate} onReset={onReset} />
                 </div>
             </div>
         </div>

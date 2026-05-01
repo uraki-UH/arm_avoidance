@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { GraphTransform } from '../../types';
 
 interface GraphTransformPanelProps {
     transform: GraphTransform;
     onUpdate: (updates: Partial<GraphTransform>) => void;
+    onReset?: () => void;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanelProps) {
+export function GraphTransformPanel({ transform, onUpdate, onReset }: GraphTransformPanelProps) {
     const [position, setPosition] = useState<GraphTransform['position']>(transform.position);
     const [rotation, setRotation] = useState<GraphTransform['rotation']>(transform.rotation);
     const [scale, setScale] = useState<GraphTransform['scale']>(transform.scale);
@@ -17,10 +18,19 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
     const [positionStep, setPositionStep] = useState(0.01);
     const [rotationStepDeg, setRotationStepDeg] = useState(1);
     const [scaleStep, setScaleStep] = useState(0.01);
+    const repeatTimerRef = useRef<number | null>(null);
 
     useEffect(() => setPosition(transform.position), [transform.position]);
     useEffect(() => setRotation(transform.rotation), [transform.rotation]);
     useEffect(() => setScale(transform.scale), [transform.scale]);
+    useEffect(() => {
+        return () => {
+            if (repeatTimerRef.current !== null) {
+                window.clearInterval(repeatTimerRef.current);
+                repeatTimerRef.current = null;
+            }
+        };
+    }, []);
 
     const summaryText = useMemo(() => {
         const pos = position.map((v) => v.toFixed(4)).join(' ');
@@ -41,6 +51,19 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
         } catch {
             setCopyState('idle');
         }
+    };
+
+    const stopRepeat = () => {
+        if (repeatTimerRef.current !== null) {
+            window.clearInterval(repeatTimerRef.current);
+            repeatTimerRef.current = null;
+        }
+    };
+
+    const startRepeat = (fn: () => void) => {
+        stopRepeat();
+        fn();
+        repeatTimerRef.current = window.setInterval(fn, 80);
     };
 
     const updatePosition = (axis: number, value: number) => {
@@ -85,6 +108,10 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
         setPosition(next.position);
         setRotation(next.rotation);
         setScale(next.scale);
+        if (onReset) {
+            onReset();
+            return;
+        }
         onUpdate(next);
     };
 
@@ -142,9 +169,23 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgePosition(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{position[i].toFixed(2)}</span>
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgePosition(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input
@@ -181,9 +222,23 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeRotationDeg(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{((rotation[i] * 180) / Math.PI).toFixed(1)}</span>
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeRotationDeg(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input
@@ -220,9 +275,23 @@ export function GraphTransformPanel({ transform, onUpdate }: GraphTransformPanel
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeScale(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{scale[i].toFixed(2)}</span>
-                                <button className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeScale(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input

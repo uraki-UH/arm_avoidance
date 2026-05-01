@@ -9,6 +9,7 @@ interface GraphTransformModalProps {
     transform: GraphTransform | null;
     onClose: () => void;
     onUpdate: (updates: Partial<GraphTransform>) => void;
+    onReset: () => void;
 }
 
 export function GraphTransformModal({
@@ -17,6 +18,7 @@ export function GraphTransformModal({
     transform,
     onClose,
     onUpdate,
+    onReset,
 }: GraphTransformModalProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
     const dragStateRef = useRef<{
@@ -114,7 +116,7 @@ export function GraphTransformModal({
                 </div>
 
                 <div className="max-h-[78vh] overflow-y-auto p-4">
-                    <GraphTransformPanel transform={transform} onUpdate={onUpdate} />
+                    <GraphTransformPanel transform={transform} onUpdate={onUpdate} onReset={onReset} />
                 </div>
             </div>
         </div>

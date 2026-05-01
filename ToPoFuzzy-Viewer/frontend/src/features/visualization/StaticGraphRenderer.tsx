@@ -14,6 +14,14 @@ const EMPTY_GRAPH: GraphData = {
     clusterLabels: []
 };
 
+const isIdentityTransform = (transform: GraphTransform | null | undefined) => {
+    if (!transform) return true;
+    const [px, py, pz] = transform.position;
+    const [rx, ry, rz] = transform.rotation;
+    const [sx, sy, sz] = transform.scale;
+    return px === 0 && py === 0 && pz === 0 && rx === 0 && ry === 0 && rz === 0 && sx === 1 && sy === 1 && sz === 1;
+};
+
 interface GraphRendererProps {
     data: GraphData | null;
     visible?: boolean;
@@ -69,9 +77,11 @@ export function StaticGraphRenderer({
     
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
+    const manualOffsetEnabled = !isIdentityTransform(manualTransform);
+    const effectiveManualTransform = manualOffsetEnabled ? manualTransform : null;
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, manualTransform]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, effectiveManualTransform]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -86,7 +96,7 @@ export function StaticGraphRenderer({
     }, [tf]);
 
     useEffect(() => {
-        if (!offsetGroupRef.current) return;
+        if (!manualOffsetEnabled || !offsetGroupRef.current) return;
         const offset = manualTransform || {
             position: [0, 0, 0] as [number, number, number],
             rotation: [0, 0, 0] as [number, number, number],
@@ -95,7 +105,7 @@ export function StaticGraphRenderer({
         offsetGroupRef.current.position.set(offset.position[0], offset.position[1], offset.position[2]);
         offsetGroupRef.current.rotation.set(offset.rotation[0], offset.rotation[1], offset.rotation[2]);
         offsetGroupRef.current.scale.set(offset.scale[0], offset.scale[1], offset.scale[2]);
-    }, [manualTransform]);
+    }, [manualOffsetEnabled, effectiveManualTransform]);
 
     // Handle cluster click with drag filtering
     const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {
@@ -191,72 +201,76 @@ export function StaticGraphRenderer({
     const canRenderNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canRenderEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
 
+    const content = (
+        <>
+            {canRenderNodes && (
+                <instancedMesh
+                    key={`static-nodes-${nodeCapacity}`}
+                    ref={nodesRef}
+                    args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
+                    count={graph.nodes.length}
+                    frustumCulled={false}
+                    renderOrder={10}
+                />
+            )}
+
+            {canRenderEdges && (
+                <instancedMesh
+                    key={`static-edges-${edgeCapacity}`}
+                    ref={edgesRef}
+                    args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
+                    count={edgePairCount}
+                    frustumCulled={false}
+                    renderOrder={9}
+                />
+            )}
+
+            {showClusters && graph.clusters
+            .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
+            .map((cluster) => {
+                const isSelected = selectedClusterId === cluster.id;
+                const color = isSelected ? '#FFFFFF' : LAYER_COLORS[cluster.label % LAYER_COLORS.length];
+                const isHuman = cluster.label === 4;
+                const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+                    if (selectionEnabled) dragStartRef.current = { x: e.clientX, y: e.clientY };
+                };
+
+                return (
+                    <group key={cluster.id} position={cluster.pos} quaternion={new THREE.Quaternion(...cluster.quat)}>
+                        <mesh
+                            scale={isHuman ? [cluster.scale[0], cluster.scale[2], cluster.scale[1]] : cluster.scale}
+                            rotation={isHuman ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
+                            onPointerDown={handlePointerDown}
+                            onClick={(e) => handleClusterClick(cluster.id, e as any)}
+                        >
+                            {isHuman ? <cylinderGeometry args={[0.5, 0.5, 1, 16]} /> : <boxGeometry args={[1, 1, 1]} />}
+                            <meshStandardMaterial
+                                color={color}
+                                transparent
+                                opacity={isSelected ? 0.1 : 0.3 * opacity}
+                                emissive={isSelected ? '#FFFFFF' : '#000000'}
+                                emissiveIntensity={isSelected ? 0.2 : 0}
+                                depthWrite={false}
+                                side={THREE.DoubleSide}
+                            />
+                        </mesh>
+
+                        {showClusterText && (
+                            <Billboard position={[0, 0, cluster.scale[2] / 2 + 0.2]}>
+                                <Text fontSize={0.2} color="#FFFFFF" anchorX="center" anchorY="bottom">
+                                    {`${LAYER_LABELS[cluster.label] || 'obj'}\nR:${cluster.reliability.toFixed(2)}`}
+                                </Text>
+                            </Billboard>
+                        )}
+                    </group>
+                );
+            })}
+        </>
+    );
+
     return (
         <group ref={groupRef}>
-            <group ref={offsetGroupRef}>
-                {canRenderNodes && (
-                    <instancedMesh
-                        key={`static-nodes-${nodeCapacity}`}
-                        ref={nodesRef}
-                        args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
-                        count={graph.nodes.length}
-                        frustumCulled={false}
-                        renderOrder={10}
-                    />
-                )}
-
-                {canRenderEdges && (
-                    <instancedMesh
-                        key={`static-edges-${edgeCapacity}`}
-                        ref={edgesRef}
-                        args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
-                        count={edgePairCount}
-                        frustumCulled={false}
-                        renderOrder={9}
-                    />
-                )}
-
-                {showClusters && graph.clusters
-                .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
-                .map((cluster) => {
-                    const isSelected = selectedClusterId === cluster.id;
-                    const color = isSelected ? '#FFFFFF' : LAYER_COLORS[cluster.label % LAYER_COLORS.length];
-                    const isHuman = cluster.label === 4; 
-                    const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-                        if (selectionEnabled) dragStartRef.current = { x: e.clientX, y: e.clientY };
-                    };
-
-                    return (
-                        <group key={cluster.id} position={cluster.pos} quaternion={new THREE.Quaternion(...cluster.quat)}>
-                            <mesh
-                                scale={isHuman ? [cluster.scale[0], cluster.scale[2], cluster.scale[1]] : cluster.scale}
-                                rotation={isHuman ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
-                                onPointerDown={handlePointerDown}
-                                onClick={(e) => handleClusterClick(cluster.id, e as any)}
-                            >
-                                {isHuman ? <cylinderGeometry args={[0.5, 0.5, 1, 16]} /> : <boxGeometry args={[1, 1, 1]} />}
-                                <meshStandardMaterial
-                                    color={color}
-                                    transparent
-                                    opacity={isSelected ? 0.1 : 0.3 * opacity}
-                                    emissive={isSelected ? '#FFFFFF' : '#000000'}
-                                    emissiveIntensity={isSelected ? 0.2 : 0}
-                                    depthWrite={false}
-                                    side={THREE.DoubleSide}
-                                />
-                            </mesh>
-
-                            {showClusterText && (
-                                <Billboard position={[0, 0, cluster.scale[2] / 2 + 0.2]}>
-                                    <Text fontSize={0.2} color="#FFFFFF" anchorX="center" anchorY="bottom">
-                                        {`${LAYER_LABELS[cluster.label] || 'obj'}\nR:${cluster.reliability.toFixed(2)}`}
-                                    </Text>
-                                </Billboard>
-                            )}
-                        </group>
-                    );
-                })}
-            </group>
+            {manualOffsetEnabled ? <group ref={offsetGroupRef}>{content}</group> : content}
         </group>
     );
 }

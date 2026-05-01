@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { PointCloudData } from '../../types';
 
 interface PointCloudTransformPanelProps {
     cloudData: PointCloudData;
     onUpdate: (updates: Partial<PointCloudData>) => void;
+    onReset?: () => void;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTransformPanelProps) {
+export function PointCloudTransformPanel({ cloudData, onUpdate, onReset }: PointCloudTransformPanelProps) {
     const [position, setPosition] = useState<PointCloudData['position']>(cloudData.position || [0, 0, 0]);
     const [rotation, setRotation] = useState<PointCloudData['rotation']>(cloudData.rotation || [0, 0, 0]);
     const [scale, setScale] = useState<PointCloudData['scale']>(cloudData.scale || [1, 1, 1]);
@@ -17,10 +18,19 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
     const [positionStep, setPositionStep] = useState(0.01);
     const [rotationStepDeg, setRotationStepDeg] = useState(1);
     const [scaleStep, setScaleStep] = useState(0.01);
+    const repeatTimerRef = useRef<number | null>(null);
 
     useEffect(() => setPosition(cloudData.position || [0, 0, 0]), [cloudData.position]);
     useEffect(() => setRotation(cloudData.rotation || [0, 0, 0]), [cloudData.rotation]);
     useEffect(() => setScale(cloudData.scale || [1, 1, 1]), [cloudData.scale]);
+    useEffect(() => {
+        return () => {
+            if (repeatTimerRef.current !== null) {
+                window.clearInterval(repeatTimerRef.current);
+                repeatTimerRef.current = null;
+            }
+        };
+    }, []);
 
     const summaryText = useMemo(() => {
         const pos = (position || [0, 0, 0]).map((v) => v.toFixed(4)).join(' ');
@@ -41,6 +51,19 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
         } catch {
             setCopyState('idle');
         }
+    };
+
+    const stopRepeat = () => {
+        if (repeatTimerRef.current !== null) {
+            window.clearInterval(repeatTimerRef.current);
+            repeatTimerRef.current = null;
+        }
+    };
+
+    const startRepeat = (fn: () => void) => {
+        stopRepeat();
+        fn();
+        repeatTimerRef.current = window.setInterval(fn, 80);
     };
 
     const updatePosition = (axis: number, value: number) => {
@@ -85,6 +108,10 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
         setPosition(next.position);
         setRotation(next.rotation);
         setScale(next.scale);
+        if (onReset) {
+            onReset();
+            return;
+        }
         onUpdate(next);
     };
 
@@ -143,9 +170,23 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgePosition(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{(position?.[i] ?? 0).toFixed(2)}</span>
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgePosition(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgePosition(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input
@@ -183,9 +224,23 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeRotationDeg(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{(((rotation?.[i] ?? 0) * 180) / Math.PI).toFixed(1)}</span>
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeRotationDeg(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeRotationDeg(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input
@@ -223,9 +278,23 @@ export function PointCloudTransformPanel({ cloudData, onUpdate }: PointCloudTran
                         <div className="flex items-center justify-between gap-2 text-[10px] text-[var(--text-secondary)]">
                             <span>{axis}</span>
                             <div className="flex items-center gap-1">
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, -1)}>-</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeScale(i, -1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >-</button>
                                 <span className="font-mono">{(scale?.[i] ?? 1).toFixed(2)}</span>
-                                <button type="button" className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono" onClick={() => nudgeScale(i, 1)}>+</button>
+                                <button
+                                    type="button"
+                                    className="rounded border border-white/10 bg-black/20 px-1.5 py-0.5 font-mono"
+                                    onPointerDown={() => startRepeat(() => nudgeScale(i, 1))}
+                                    onPointerUp={stopRepeat}
+                                    onPointerLeave={stopRepeat}
+                                    onContextMenu={(e) => e.preventDefault()}
+                                >+</button>
                             </div>
                         </div>
                         <input

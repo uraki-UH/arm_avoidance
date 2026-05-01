@@ -398,6 +398,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     if (!transformTarget) return;
                     props.onUpdateTransform(transformTarget.id, updates);
                 }}
+                onReset={() => {
+                    if (!transformTarget) return;
+                    props.onUpdateTransform(transformTarget.id, {
+                        position: undefined,
+                        rotation: undefined,
+                        scale: undefined,
+                    });
+                }}
             />
 
             <GraphTransformModal
@@ -424,6 +432,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             rotation: updates.rotation || current.rotation,
                             scale: updates.scale || current.scale,
                         },
+                    });
+                }}
+                onReset={() => {
+                    if (!graphTransformTag) return;
+                    props.onUpdateLayerSettings(graphTransformTag, {
+                        graphTransform: undefined,
                     });
                 }}
             />

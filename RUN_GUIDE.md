@@ -49,7 +49,7 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=base_link
 map に直したい場合は `target_frame_id:=map` を使います。入力点群の `header.frame_id` がセンサー座標系で、GNG 側が TF を引いて target frame に変換します。
 
 
-realsenseを位置合わせする場合
+realsenseを位置合わせする場合（目安）ロボットの位置を合わせている
 position: 0.5600 -0.5600 0.2800
 rotation_deg: -101.00 -43.00 -3.00
 scale: 1.0000 1.0000 1.0000
