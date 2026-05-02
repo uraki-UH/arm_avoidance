@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { Tabs } from '../components/ui/Tabs';
 import { CollapsibleSection } from '../components/ui/CollapsibleSection';
-
 import { ServerFileBrowser } from '../features/io/ServerFileBrowser';
 import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
@@ -31,6 +30,7 @@ import { GngLayerControls, type GngLayerState } from '../features/visualization/
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
 import { RosbagPlayer } from '../features/io/RosbagPlayer';
+import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
 
 import {
     PointCloudData,
@@ -324,11 +324,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                         <div className="mt-2 grid grid-cols-2 gap-2">
                                             <button
                                                 onClick={() => props.onUpdateRobotSettings(tag, { showVisual: !props.robotSettings[tag]?.showVisual })}
-                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${
-                                                    props.robotSettings[tag]?.showVisual
+                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showVisual
                                                         ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
                                                         : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                                }`}
+                                                    }`}
                                                 title={props.robotSettings[tag]?.showVisual ? 'Hide visual model' : 'Show visual model'}
                                             >
                                                 {props.robotSettings[tag]?.showVisual ? <Eye size={12} /> : <EyeOff size={12} />}
@@ -336,11 +335,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             </button>
                                             <button
                                                 onClick={() => props.onUpdateRobotSettings(tag, { showCollision: !props.robotSettings[tag]?.showCollision })}
-                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${
-                                                    props.robotSettings[tag]?.showCollision
+                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showCollision
                                                         ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
                                                         : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                                }`}
+                                                    }`}
                                                 title={props.robotSettings[tag]?.showCollision ? 'Hide collision model' : 'Show collision model'}
                                             >
                                                 <Box size={12} />
@@ -600,6 +598,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     size: [{props.draftRegion.size.map((v) => v.toFixed(2)).join(', ')}]
                                 </div>
                             </div>
+
+                            <CollapsibleSection title="TF Calibration (Real-time)" icon={<Move size={16} />} defaultOpen={true}>
+                                <TfCalibrationPanel
+                                    isConnected={props.isConnected}
+                                    getParameters={props.getParameters}
+                                    setParameter={props.setParameter}
+                                />
+                            </CollapsibleSection>
 
                             <button
                                 onClick={props.onAddRegion}

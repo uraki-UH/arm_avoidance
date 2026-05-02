@@ -87,7 +87,7 @@ The server will start listening on `ws://localhost:9001`.
 cd frontend
 npm run dev
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Open [http://localhost:5173]in your browser.
 
 ### 3. Start GNG Processing (Optional)
 

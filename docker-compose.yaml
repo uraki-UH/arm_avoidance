@@ -30,6 +30,8 @@ services:
     #npm run devをdockerで実行する用
   frontend:
     image: gng_cpu:latest
+    profiles:
+      - manual
     depends_on:
       - gng_cpu
     tty: true
