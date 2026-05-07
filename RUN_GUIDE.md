@@ -95,7 +95,4 @@ scale: 1.0000 1.0000 1.0000
 位置合わせでtfに直接できるようにしてしまう？
 
 
-ros2 run tf2_ros static_transform_publisher --x 0.693 --y -0.434 --z 0.279 --yaw -0.059 --pitch 1.812 --roll 0.504 --frame-id base_link --child-frame-id camera_link
-
-
 python3 scratch/transform_pointcloud.py
