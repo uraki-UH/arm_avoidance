@@ -7,11 +7,8 @@ docker compose --profile manual up  frontend
 以下で終了できる-dを押していても終了はできる
 docker compose stop frontend
 
-
 ## ロスバグの再生例
-ros2 bag play /rosbag/rosbag2_2026_04_22-19_10_41 --loop
-
-
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera/depth/color/points  --loop
 
 ## 1. バックエンドのビルドと起動
 バックエンド（C++）の修正を反映し、WebSocketゲートウェイを立ち上げます。
@@ -94,6 +91,5 @@ scale: 1.0000 1.0000 1.0000
 
 
 python3 scratch/transform_pointcloud.py
-
 
 ros2 run gng_vlut_system self_recognition_filter_node
