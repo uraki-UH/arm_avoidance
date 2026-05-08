@@ -20,11 +20,34 @@
 
     <link name="base_footprint"/>
 
+    <!-- Central pillar obstacle: 4 cm x 4 cm x 60 cm, rooted at origin -->
+    <joint name="pillar_joint" type="fixed">
+        <parent link="world"/>
+        <child link="pillar_link"/>
+        <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    </joint>
+
+    <link name="pillar_link">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.04 0.04 0.6"/>
+            </geometry>
+            <material name="green"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.04 0.04 0.6"/>
+            </geometry>
+        </collision>
+    </link>
+
     <!-- Left arm -->
     <xacro:topoarm prefix="left_" parent="base_footprint" xyz="0.0 0.1 0.5" rpy="3.14 0 1.57"/>
 
     <!-- Right arm -->
-    <xacro:topoarm prefix="right_" parent="base_footprint" xyz="0.0 -0.1 0.5" rpy="3.14 0 1.57"/>
+    <xacro:topoarm prefix="right_" parent="base_footprint" xyz="0.0 -0.1 0.5" rpy="3.14 0 -1.57"/>
 
     <!-- <xacro:include filename="$(find topoarm_description)/ros2_control/topoarm.ros2_control.xacro" />
     <xacro:include filename="$(find topoarm_description)/gazebo/topoarm.gazebo.xacro" /> -->
