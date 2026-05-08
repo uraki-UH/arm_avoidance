@@ -19,7 +19,6 @@ find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_auto REQUIRED)
 
 message(STATUS "ROS 2 (Humble) environment detected.")
-set(USE_ROS2 ON)
 
 # ROS 2 packages
 find_package(rclcpp REQUIRED)

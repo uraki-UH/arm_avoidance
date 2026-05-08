@@ -216,6 +216,10 @@ public:
         return all_vids;
     }
 
+    const std::vector<CachedLinkVoxels>& getLinkVoxelCaches() const {
+        return link_voxel_caches_;
+    }
+
 private:
     std::shared_ptr<kinematics::KinematicChain> chain_;
     double voxel_size_ = 0.02;

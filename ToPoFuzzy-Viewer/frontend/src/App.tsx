@@ -3,11 +3,21 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
-import { PointCloudData, HeatmapSettings, GraphNode, EditRegion, LayerSettings, RobotSettings } from './types';
+import {
+    PointCloudData,
+    HeatmapSettings,
+    GraphNode,
+    EditRegion,
+    LayerSettings,
+    RobotSettings,
+    STATIC_GNG_DEFAULTS,
+    DYNAMIC_GNG_DEFAULTS,
+} from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
+import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
@@ -114,6 +124,7 @@ function App() {
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
     const {
         pointCloud: wsPointCloud,
+        markerData,
         graphData,
         robotData,
         transforms,
@@ -209,26 +220,26 @@ function App() {
                         showNodes: true,
                         showEdges: true,
                         showClusters: false,
-                        opacity: 0.1,
+                        opacity: STATIC_GNG_DEFAULTS.opacity,
                         graphTransform: {
                             position: [0, 0, 0],
                             rotation: [0, 0, 0],
                             scale: [1, 1, 1],
                         },
                         ...(isStatic ? {
-                            nodeColor: '#c8ff4a',
-                            edgeColor: '#08d408',
+                            nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
+                            edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
                         } : {
-                            nodeColor: '#7c8c66',
-                            edgeColor: '#08d408',
+                            nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
+                            edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
                         })
                     };
                     changed = true;
                 } else if (isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
                     newSettings[tag] = {
                         ...newSettings[tag],
-                        nodeColor: newSettings[tag].nodeColor || '#c8ff4a',
-                        edgeColor: newSettings[tag].edgeColor || '#08d408',
+                        nodeColor: newSettings[tag].nodeColor || STATIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: newSettings[tag].edgeColor || STATIC_GNG_DEFAULTS.edgeColor,
                         graphTransform: newSettings[tag].graphTransform || {
                             position: [0, 0, 0],
                             rotation: [0, 0, 0],
@@ -239,8 +250,8 @@ function App() {
                 } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
                     newSettings[tag] = {
                         ...newSettings[tag],
-                        nodeColor: newSettings[tag].nodeColor || '#7c8c66',
-                        edgeColor: newSettings[tag].edgeColor || '#08d408',
+                        nodeColor: newSettings[tag].nodeColor || DYNAMIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: newSettings[tag].edgeColor || DYNAMIC_GNG_DEFAULTS.edgeColor,
                         graphTransform: newSettings[tag].graphTransform || {
                             position: [0, 0, 0],
                             rotation: [0, 0, 0],
@@ -899,6 +910,21 @@ function App() {
                                     />
                                 )}
                             </group>
+                        );
+                    })}
+
+                    {Object.entries(markerData).map(([tag, data]) => {
+                        if (disabledSourceIds.has(tag)) return null;
+                        const frameId = data.frameId || 'world';
+                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+                        return (
+                            <MarkerArrayRenderer
+                                key={tag}
+                                tag={tag}
+                                data={data}
+                                visible={true}
+                                tf={tf}
+                            />
                         );
                     })}
 

@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
 import {
     PointCloudData,
+    MarkerArrayData,
     GraphData,
     RobotData,
+    TransformData,
     DataSource,
     RosbagInfo,
     PlaybackStatus,
@@ -44,6 +46,7 @@ interface PendingRequest {
 
 interface UseWebSocketReturn {
     pointCloud: PointCloudData | null;
+    markerData: Record<string, MarkerArrayData>;
     graphData: Record<string, GraphData>;
     robotData: Record<string, RobotData>;
     transforms: Record<string, TransformData>;
@@ -103,6 +106,7 @@ interface UseWebSocketReturn {
 
 export function useWebSocket(url: string): UseWebSocketReturn {
     const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
+    const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
     const [robotData, setRobotData] = useState<Record<string, RobotData>>({});
     const [transforms, setTransforms] = useState<Record<string, TransformData>>({});
@@ -182,7 +186,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 // Stop challenging as soon as we get any data
                 const stopChallenge = () => window.clearInterval(challengeInterval);
                 socket.addEventListener('message', (e) => {
-                    if (typeof e.data === 'string' && (e.data.includes('stream.graph') || e.data.includes('stream.robot'))) {
+                    if (typeof e.data === 'string' && (e.data.includes('stream.graph') || e.data.includes('stream.robot') || e.data.includes('stream.marker_array'))) {
                         stopChallenge();
                     }
                 }, { once: true });
@@ -240,6 +244,40 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
                     if (payload.type === 'stream.pointcloud.meta' && typeof payload.topic === 'string') {
                         pendingTopicQueueRef.current.push(payload.topic);
+                        return;
+                    }
+
+                    if (payload.type === 'stream.marker_array' && Array.isArray(payload.markers)) {
+                        const tag = payload.tag || 'default';
+                        setMarkerData((prev) => ({
+                            ...prev,
+                            [tag]: {
+                                id: tag,
+                                name: payload.name || tag,
+                                tag,
+                                frameId: payload.frameId || undefined,
+                                markers: payload.markers,
+                                count: payload.markers.length,
+                                visible: prev[tag]?.visible ?? true,
+                            } as MarkerArrayData,
+                        }));
+                        return;
+                    }
+
+                    if (payload.type === 'stream.marker' && payload.marker) {
+                        const tag = payload.tag || 'default';
+                        setMarkerData((prev) => ({
+                            ...prev,
+                            [tag]: {
+                                id: tag,
+                                name: payload.name || tag,
+                                tag,
+                                frameId: payload.frameId || undefined,
+                                markers: [payload.marker],
+                                count: 1,
+                                visible: prev[tag]?.visible ?? true,
+                            } as MarkerArrayData,
+                        }));
                         return;
                     }
 
@@ -572,6 +610,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     return {
         pointCloud,
+        markerData,
         graphData,
         robotData,
         transforms,

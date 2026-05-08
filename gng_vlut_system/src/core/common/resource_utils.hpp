@@ -6,9 +6,7 @@
 #include <string>
 #include <vector>
 
-#ifdef USE_ROS2
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#endif
 
 namespace robot_sim {
 namespace common {
@@ -54,13 +52,7 @@ inline std::string resolvePackageUris(const std::string &text) {
     std::string pkg_name = rewritten.substr(pos + 10, subpath_start - (pos + 10));
     std::string pkg_path;
     try {
-#ifdef USE_ROS2
       pkg_path = ament_index_cpp::get_package_share_directory(pkg_name);
-#else
-      // Fallback or error if not in ROS 2 environment
-      pos = subpath_start;
-      continue;
-#endif
     } catch (...) {
       // Package not found, skip this one
       pos = subpath_start;
@@ -86,11 +78,9 @@ inline std::string getPackageRoot(const std::string &pkg_name = "gng_vlut_system
   }
 #endif
 
-#ifdef USE_ROS2
   try {
     return ament_index_cpp::get_package_share_directory(pkg_name);
   } catch (...) {}
-#endif
 
   return ".";
 }
@@ -121,10 +111,8 @@ inline std::string resolvePath(const std::string &relative_path) {
           std::string pkg_name = relative_path.substr(10, second_slash - 10);
           std::string sub_path = relative_path.substr(second_slash + 1);
           try {
-#ifdef USE_ROS2
               std::string pkg_path = ament_index_cpp::get_package_share_directory(pkg_name);
               return (std::filesystem::path(pkg_path) / sub_path).string();
-#endif
           } catch (...) {}
       }
   }
@@ -152,13 +140,11 @@ inline std::string resolvePath(const std::string &relative_path) {
   };
 
   // 2. ROS 2 Package Share Directory (Priority)
-#ifdef USE_ROS2
   try {
     std::string pkg_path = ament_index_cpp::get_package_share_directory("gng_vlut_system");
     std::string found = find_in_base(std::filesystem::path(pkg_path));
     if (!found.empty()) return found;
   } catch (...) {}
-#endif
 
   // 3. Environment variable
   const char *home_env = std::getenv("ML_GBGNG_HOME");

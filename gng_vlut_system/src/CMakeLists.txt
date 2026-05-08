@@ -75,49 +75,47 @@ ament_target_dependencies(analysis_lib Eigen3)
 set(LIBS_ALL_CORE common_lib kinematics_lib robot_model_lib safety_engine collision_lib metrics_lib analysis_lib safety_engine_offline)
 
 # --- 3. ROS 2 Nodes ---
-if(USE_ROS2)
-  # Basic Nodes
-  add_executable(robot_bridge_node nodes/bridge/robot_bridge_node.cpp)
-  add_executable(joint_state_mux_node nodes/bridge/joint_state_mux_node.cpp)
-  add_executable(topoarm_udp_bridge nodes/bridge/topoarm_udp_bridge.cpp)
-  add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
-  add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cpp)
-  
-  # Grouped Nodes
-  add_executable(robot_description_player_node nodes/description/robot_description_player.cpp)
-  add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
-  add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
-  add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
+# Basic Nodes
+add_executable(robot_bridge_node nodes/bridge/robot_bridge_node.cpp)
+add_executable(joint_state_mux_node nodes/bridge/joint_state_mux_node.cpp)
+add_executable(topoarm_udp_bridge nodes/bridge/topoarm_udp_bridge.cpp)
+add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
+add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cpp)
 
-  # Link & Installation for all nodes
-  set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node)
-  foreach(node ${NODES})
-    target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-    ament_target_dependencies(${node} ${DEPS_ROS})
-    install(TARGETS ${node} DESTINATION lib/${PROJECT_NAME})
-  endforeach()
+# Grouped Nodes
+add_executable(robot_description_player_node nodes/description/robot_description_player.cpp)
+add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
+add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
+add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
 
-  # Shared Components
-  add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
-  add_library(robot_description_player_component SHARED nodes/description/robot_description_player.cpp)
-  
-  set(COMPONENTS robot_viewer_bridge_node_component robot_description_player_component)
-  foreach(comp ${COMPONENTS})
-    target_link_libraries(${comp} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-    ament_target_dependencies(${comp} ${DEPS_ROS})
-    install(TARGETS ${comp} DESTINATION lib/${PROJECT_NAME})
-  endforeach()
-  
-  rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
-  rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
+# Link & Installation for all nodes
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node)
+foreach(node ${NODES})
+  target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
+  ament_target_dependencies(${node} ${DEPS_ROS})
+  install(TARGETS ${node} DESTINATION lib/${PROJECT_NAME})
+endforeach()
 
-  # --- 4. Offline Training Tools ---
-  set(TOOLS offline_urdf_trainer offline_gng_main5_clean offline_gng_main6_island_pruning offline_gng_status_updater)
-  foreach(tool ${TOOLS})
-    add_executable(${tool} offline_tools/${tool}.cpp)
-    target_compile_options(${tool} PRIVATE $<$<CONFIG:Release>:-O3 -DNDEBUG> $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>)
-    target_link_libraries(${tool} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-    ament_target_dependencies(${tool} Eigen3 urdfdom rclcpp rmw_implementation_cmake)
-    install(TARGETS ${tool} DESTINATION lib/${PROJECT_NAME})
-  endforeach()
-endif()
+# Shared Components
+add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
+add_library(robot_description_player_component SHARED nodes/description/robot_description_player.cpp)
+
+set(COMPONENTS robot_viewer_bridge_node_component robot_description_player_component)
+foreach(comp ${COMPONENTS})
+  target_link_libraries(${comp} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
+  ament_target_dependencies(${comp} ${DEPS_ROS})
+  install(TARGETS ${comp} DESTINATION lib/${PROJECT_NAME})
+endforeach()
+
+rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
+rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
+
+# --- 4. Offline Training Tools ---
+set(TOOLS offline_urdf_trainer offline_gng_main5_clean offline_gng_main6_island_pruning offline_gng_status_updater)
+foreach(tool ${TOOLS})
+  add_executable(${tool} offline_tools/${tool}.cpp)
+  target_compile_options(${tool} PRIVATE $<$<CONFIG:Release>:-O3 -DNDEBUG> $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>)
+  target_link_libraries(${tool} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
+  ament_target_dependencies(${tool} Eigen3 urdfdom rclcpp rmw_implementation_cmake)
+  install(TARGETS ${tool} DESTINATION lib/${PROJECT_NAME})
+endforeach()

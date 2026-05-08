@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Trash2, Share2, Square, Move } from 'lucide-react';
-import { GraphData, LayerSettings } from '../../types';
+import { GraphData, LayerSettings, STATIC_GNG_DEFAULTS, DYNAMIC_GNG_DEFAULTS } from '../../types';
 
 export interface GngLayerState {
     visible: boolean;
@@ -48,21 +48,21 @@ export function GngLayerControls({
     const displayTag = graphData.tag || tag;
 
     // Local buffered opacity to avoid firing frequent onUpdate during drag.
-    const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? 1);
-    const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || '#c8ff4a');
-    const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || '#08d408');
+    const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
+    const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || STATIC_GNG_DEFAULTS.nodeColor);
+    const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || STATIC_GNG_DEFAULTS.edgeColor);
 
     useEffect(() => {
-        setLocalOpacity(settings.opacity ?? 1);
+        setLocalOpacity(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
     }, [settings.opacity]);
 
     useEffect(() => {
-        setLocalNodeColor(settings.nodeColor || '#c8ff4a');
-    }, [settings.nodeColor]);
+        setLocalNodeColor(settings.nodeColor || (isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor));
+    }, [settings.nodeColor, isStatic]);
 
     useEffect(() => {
-        setLocalEdgeColor(settings.edgeColor || '#08d408');
-    }, [settings.edgeColor]);
+        setLocalEdgeColor(settings.edgeColor || (isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor));
+    }, [settings.edgeColor, isStatic]);
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">

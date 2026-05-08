@@ -17,6 +17,45 @@ export interface PointCloudData {
     matrix?: THREE.Matrix4; // Optional pre-calculated matrix
 }
 
+export interface MarkerColor {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+}
+
+export interface MarkerPose {
+    position: [number, number, number];
+    orientation: [number, number, number, number];
+}
+
+export interface MarkerMessage {
+    ns: string;
+    id: number;
+    type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
+    action: 'add' | 'modify' | 'delete' | 'deleteall' | 'unknown';
+    frameId?: string;
+    pose: MarkerPose;
+    scale: [number, number, number];
+    color: MarkerColor;
+    points: [number, number, number][];
+    colors?: MarkerColor[];
+    text?: string;
+    meshResource?: string;
+    meshUseEmbeddedMaterials?: boolean;
+    frameLocked?: boolean;
+}
+
+export interface MarkerArrayData {
+    id: string;
+    name: string;
+    tag: string;
+    frameId?: string;
+    markers: MarkerMessage[];
+    count: number;
+    visible?: boolean;
+}
+
 export interface BoundingBox {
     id: string;
     position: [number, number, number];
@@ -125,7 +164,7 @@ export interface TransformData {
 export interface DataSource {
     id: string;
     name: string;
-    type: 'pointcloud' | 'topological_map';
+    type: 'pointcloud' | 'topological_map' | 'marker';
     active: boolean;
 }
 
@@ -233,3 +272,15 @@ export const LAYER_COLORS = [
 export const LAYER_LABELS = [
     "default", "safe", "collision", "danger", "unused", "other"
 ];
+
+export const STATIC_GNG_DEFAULTS = {
+    nodeColor: '#c8ff4a',
+    edgeColor: '#08d408',
+    opacity: 0.1,
+    nodeEmissiveIntensity: 0.12,
+} as const;
+
+export const DYNAMIC_GNG_DEFAULTS = {
+    nodeColor: '#4bdf10',
+    edgeColor: '#08d408',
+} as const;

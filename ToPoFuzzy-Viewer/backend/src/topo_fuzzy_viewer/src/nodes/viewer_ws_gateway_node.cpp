@@ -113,6 +113,7 @@ public:
         rpcResponseSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 100, [this](const std_msgs::msg::String::SharedPtr msg) { rpc_.handleResponse(msg->data); });
         pointCloudMetaSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kStreamPointCloudMeta, 100, [this](const std_msgs::msg::String::SharedPtr msg) { broadcastText(msg->data); });
         pointCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(viewer_internal::topics::kStreamPointCloud, 10, [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) { broadcastBinary(utils::convertToProtocolMessage(utils::convertFromRosMsg(msg)).serialize()); });
+        markerArraySub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kStreamMarkerArray, 100, [this](const std_msgs::msg::String::SharedPtr msg) { handleMarkerArray(msg->data); });
 
         auto gngTopics = declare_parameter<std::vector<std::string>>("gng_topics", {viewer_internal::topics::kStreamGraph});
         for (const auto& topic : gngTopics) {
@@ -147,6 +148,7 @@ private:
             std::vector<std::string> cached;
             { std::lock_guard<std::mutex> l(graphMutex_); for (auto& p : lastGraphPayloads_) cached.push_back(p.second); }
             { std::lock_guard<std::mutex> l(robotMutex_); for (auto& p : lastRobotDescriptions_) cached.push_back(p.second); }
+            { std::lock_guard<std::mutex> l(markerMutex_); for (auto& p : lastMarkerPayloads_) cached.push_back(p.second); }
             { std::lock_guard<std::mutex> l(connectionMutex_); if (connections_.empty()) subscribeStreamingTopics(); connections_.push_back(ws); }
             for (auto& p : cached) ws->send(p, uWS::OpCode::TEXT);
         };
@@ -159,9 +161,11 @@ private:
                 broadcastText(json({{"type", "stream.graph.delete"}, {"tag", tag}}).dump()); return;
             }
             if (type == "request.state") {
-                std::lock_guard<std::mutex> l1(graphMutex_); std::lock_guard<std::mutex> l2(robotMutex_);
+                std::lock_guard<std::mutex> l1(graphMutex_); std::lock_guard<std::mutex> l2(robotMutex_); std::lock_guard<std::mutex> l3(markerMutex_);
                 for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
-                for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT); return;
+                for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
+                for (auto& p : lastMarkerPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
+                return;
             }
             handleWsRequest(ws, std::string(msg), in);
         };
@@ -207,6 +211,19 @@ private:
         broadcastText(msg->data);
     }
 
+    void handleMarkerArray(const std::string& payload) {
+        if (payload.empty()) {
+            return;
+        }
+
+        json j = json::parse(payload, nullptr, false);
+        if (!j.is_discarded() && j.value("type", "") == "stream.marker_array") {
+            std::lock_guard<std::mutex> lock(markerMutex_);
+            lastMarkerPayloads_[j.value("tag", "default")] = payload;
+        }
+        broadcastText(payload);
+    }
+
     void checkLiveness() {
         const std::string descTopic = std::string(viewer_internal::topics::kStreamRobot) + "/description";
         if (this->get_publishers_info_by_topic(descTopic).empty()) {
@@ -232,11 +249,12 @@ private:
     std::unordered_map<std::string, rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> rpcPubs_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, pointCloudMetaSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr markerArraySub_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
     std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
-    std::mutex connectionMutex_, graphMutex_, robotMutex_;
+    std::mutex connectionMutex_, graphMutex_, robotMutex_, markerMutex_;
     std::vector<WebSocket*> connections_;
-    std::unordered_map<std::string, std::string> lastGraphPayloads_, lastRobotDescriptions_;
+    std::unordered_map<std::string, std::string> lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     RpcManager rpc_; MeshServer meshServer_;
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;

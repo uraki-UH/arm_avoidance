@@ -15,6 +15,7 @@ constexpr const char* kStreamPointCloud = "/viewer/internal/stream/pointcloud";
 constexpr const char* kStreamPointCloudMeta = "/viewer/internal/stream/pointcloud_meta";
 constexpr const char* kStreamGraph = "/viewer/internal/stream/graph";
 constexpr const char* kStreamRobot = "/viewer/internal/stream/robot";
+constexpr const char* kStreamMarkerArray = "/viewer/internal/stream/marker_array";
 
 constexpr const char* kFileLoadedCloud = "/viewer/internal/file/loaded_cloud";
 

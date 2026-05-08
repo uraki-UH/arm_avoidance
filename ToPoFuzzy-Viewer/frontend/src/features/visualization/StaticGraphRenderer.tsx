@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphTransform, LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { GraphData, GraphTransform, LAYER_COLORS, LAYER_LABELS, STATIC_GNG_DEFAULTS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 
@@ -62,10 +62,10 @@ export function StaticGraphRenderer({
     selectedClusterId = null,
     onClusterSelect,
     enableClusterSelection = true,
-    opacity = 1.0,
+    opacity = STATIC_GNG_DEFAULTS.opacity,
     tf = null,
-    nodeColor = '#c8ff4a',
-    edgeColor = '#08d408',
+    nodeColor = STATIC_GNG_DEFAULTS.nodeColor,
+    edgeColor = STATIC_GNG_DEFAULTS.edgeColor,
     manualTransform = null,
 }: GraphRendererProps) {
     const { invalidate } = useThree();
@@ -128,14 +128,14 @@ export function StaticGraphRenderer({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeOpacity = Math.min(0.1, opacity);
+    const nodeOpacity = opacity;
     const nodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: '#ffffff',
+        color: new THREE.Color(nodeColor),
         vertexColors: true,
         transparent: nodeOpacity < 1,
         opacity: nodeOpacity,
-        emissive: '#ffffff',
-        emissiveIntensity: 0.12,
+        emissive: new THREE.Color(nodeColor),
+        emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
         roughness: 0.25,
         metalness: 0.0,
         depthTest: true,

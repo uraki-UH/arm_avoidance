@@ -152,7 +152,7 @@ export function SourceSelector({
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
-                <h3 className="panel-title">PointCloud Topics</h3>
+                <h3 className="panel-title">Topics</h3>
                 <button
                     onClick={refreshSources}
                     disabled={isLoading}
@@ -210,12 +210,13 @@ export function SourceSelector({
 
             {sources.length === 0 ? (
                 <div className="rounded-lg border border-white/10 bg-black/20 py-3 text-center text-xs italic text-[var(--text-secondary)]">
-                    No PointCloud2 topics found.
+                    No compatible topics found.
                 </div>
             ) : (
                 <div className="max-h-60 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                     {sources.map((source) => {
                         const isRunningSource = gngStatus.isRunning && gngStatus.inputTopic === source.id;
+                        const isPointCloud = source.type === 'pointcloud';
                         return (
                             <div key={source.id} className="flex items-center gap-2">
                                 <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 transition-colors hover:bg-white/10">
@@ -228,22 +229,27 @@ export function SourceSelector({
                                     <span className="flex-1 truncate text-sm text-[var(--text-primary)]" title={source.id}>
                                         {source.name}
                                     </span>
+                                    <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
+                                        {source.type}
+                                    </span>
                                     {source.active && (
                                         <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-green-400">Active</span>
                                     )}
                                 </label>
 
-                                <button
-                                    onClick={(e) => handleStartGng(e, source.id)}
-                                    disabled={processingSource === source.id || gngStatus.isRunning}
-                                    className={`rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors ${isRunningSource
-                                        ? 'border-green-500/50 bg-green-500/20 text-green-300'
-                                        : 'border-sky-400/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 disabled:opacity-45'
-                                        }`}
-                                    title={gngStatus.isRunning ? (isRunningSource ? 'GNG running on this source' : 'GNG is already running') : 'Start GNG on this source'}
-                                >
-                                    {processingSource === source.id ? '...' : isRunningSource ? 'Running' : 'Start GNG'}
-                                </button>
+                                {isPointCloud && (
+                                    <button
+                                        onClick={(e) => handleStartGng(e, source.id)}
+                                        disabled={processingSource === source.id || gngStatus.isRunning}
+                                        className={`rounded-lg border px-3 py-2 text-[11px] font-semibold transition-colors ${isRunningSource
+                                            ? 'border-green-500/50 bg-green-500/20 text-green-300'
+                                            : 'border-sky-400/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 disabled:opacity-45'
+                                            }`}
+                                        title={gngStatus.isRunning ? (isRunningSource ? 'GNG running on this source' : 'GNG is already running') : 'Start GNG on this source'}
+                                    >
+                                        {processingSource === source.id ? '...' : isRunningSource ? 'Running' : 'Start GNG'}
+                                    </button>
+                                )}
                             </div>
                         );
                     })}

@@ -43,7 +43,7 @@ def parse_urdf(urdf_path):
     root = tree.getroot()
     links, joints = {}, []
     
-    workspace_root = "/Users/kubotamacbookair/Desktop/arm_avoidance"
+    workspace_root = "/ros2_ws/src"
     mesh_map = {}
     for r, d, f in os.walk(workspace_root):
         for file in f:
@@ -92,7 +92,7 @@ def parse_urdf(urdf_path):
     return {"links": links, "joints": joints}
 
 if __name__ == "__main__":
-    urdf_file = "/Users/kubotamacbookair/Desktop/arm_avoidance/gng_vlut_system/urdf/temp_robot.urdf"
+    urdf_file = "/ros2_ws/src/gng_vlut_system/urdf/temp_robot.urdf"
     robot_data = parse_urdf(urdf_file)
     with open("robot_model.json", "w") as f:
         json.dump(robot_data, f)

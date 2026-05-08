@@ -3,18 +3,148 @@
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/point.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace {
+
+constexpr const char* kMarkerType = "marker";
+
+bool isPointCloudTopic(const std::vector<std::string>& types) {
+    return std::find(types.begin(), types.end(), "sensor_msgs/msg/PointCloud2") != types.end();
+}
+
+bool isMarkerTopic(const std::vector<std::string>& types) {
+    return std::find(types.begin(), types.end(), "visualization_msgs/msg/Marker") != types.end() ||
+           std::find(types.begin(), types.end(), "visualization_msgs/msg/MarkerArray") != types.end();
+}
+
+std::string markerTypeToString(uint8_t type) {
+    switch (type) {
+    case visualization_msgs::msg::Marker::ARROW: return "arrow";
+    case visualization_msgs::msg::Marker::CUBE: return "cube";
+    case visualization_msgs::msg::Marker::SPHERE: return "sphere";
+    case visualization_msgs::msg::Marker::CYLINDER: return "cylinder";
+    case visualization_msgs::msg::Marker::LINE_STRIP: return "line_strip";
+    case visualization_msgs::msg::Marker::LINE_LIST: return "line_list";
+    case visualization_msgs::msg::Marker::CUBE_LIST: return "cube_list";
+    case visualization_msgs::msg::Marker::SPHERE_LIST: return "sphere_list";
+    case visualization_msgs::msg::Marker::POINTS: return "points";
+    case visualization_msgs::msg::Marker::TEXT_VIEW_FACING: return "text";
+    case visualization_msgs::msg::Marker::MESH_RESOURCE: return "mesh_resource";
+    case visualization_msgs::msg::Marker::TRIANGLE_LIST: return "triangle_list";
+    default: return "unknown";
+    }
+}
+
+std::string markerActionToString(uint8_t action) {
+    if (action == visualization_msgs::msg::Marker::ADD ||
+        action == visualization_msgs::msg::Marker::MODIFY) {
+        return "add";
+    }
+    switch (action) {
+    case visualization_msgs::msg::Marker::DELETE: return "delete";
+    case visualization_msgs::msg::Marker::DELETEALL: return "deleteall";
+    default: return "unknown";
+    }
+}
+
+viewer_internal::json pointToJson(const geometry_msgs::msg::Point& point) {
+    return {point.x, point.y, point.z};
+}
+
+viewer_internal::json markerToJson(const visualization_msgs::msg::Marker& marker) {
+    viewer_internal::json pose;
+    pose["position"] = {
+        marker.pose.position.x,
+        marker.pose.position.y,
+        marker.pose.position.z
+    };
+    pose["orientation"] = {
+        marker.pose.orientation.x,
+        marker.pose.orientation.y,
+        marker.pose.orientation.z,
+        marker.pose.orientation.w
+    };
+
+    viewer_internal::json color;
+    color["r"] = marker.color.r;
+    color["g"] = marker.color.g;
+    color["b"] = marker.color.b;
+    color["a"] = marker.color.a;
+
+    viewer_internal::json points = viewer_internal::json::array();
+    for (const auto& point : marker.points) {
+        points.push_back(pointToJson(point));
+    }
+
+    viewer_internal::json colors = viewer_internal::json::array();
+    for (const auto& col : marker.colors) {
+        colors.push_back({
+            {"r", col.r},
+            {"g", col.g},
+            {"b", col.b},
+            {"a", col.a}
+        });
+    }
+
+    viewer_internal::json out;
+    out["ns"] = marker.ns;
+    out["id"] = marker.id;
+    out["type"] = markerTypeToString(marker.type);
+    out["action"] = markerActionToString(marker.action);
+    out["frameId"] = marker.header.frame_id;
+    out["pose"] = pose;
+    out["scale"] = {marker.scale.x, marker.scale.y, marker.scale.z};
+    out["color"] = color;
+    out["points"] = points;
+    if (!colors.empty()) {
+        out["colors"] = colors;
+    }
+    out["text"] = marker.text;
+    out["meshResource"] = marker.mesh_resource;
+    out["meshUseEmbeddedMaterials"] = marker.mesh_use_embedded_materials;
+    out["frameLocked"] = marker.frame_locked;
+    return out;
+}
+
+viewer_internal::json markerArrayToJson(const visualization_msgs::msg::MarkerArray::SharedPtr& msg,
+                                        const std::string& tag) {
+    viewer_internal::json markers = viewer_internal::json::array();
+    std::string frameId;
+    for (const auto& marker : msg->markers) {
+        if (frameId.empty()) {
+            frameId = marker.header.frame_id;
+        }
+        markers.push_back(markerToJson(marker));
+    }
+
+    viewer_internal::json out;
+    out["type"] = "stream.marker_array";
+    out["tag"] = tag;
+    out["frameId"] = frameId;
+    out["markers"] = markers;
+    return out;
+}
+
+viewer_internal::json markerToPayload(const visualization_msgs::msg::Marker::SharedPtr& msg,
+                                     const std::string& tag) {
+    visualization_msgs::msg::MarkerArray array;
+    array.markers.push_back(*msg);
+    return markerArrayToJson(std::make_shared<visualization_msgs::msg::MarkerArray>(array), tag);
+}
 
 class ViewerSourceNode : public rclcpp::Node {
 public:
@@ -37,6 +167,10 @@ public:
 
         streamGraphPub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
             viewer_internal::topics::kStreamGraph,
+            rclcpp::QoS(rclcpp::KeepLast(10)).reliable().transient_local());
+
+        streamMarkerArrayPub_ = create_publisher<std_msgs::msg::String>(
+            viewer_internal::topics::kStreamMarkerArray,
             rclcpp::QoS(rclcpp::KeepLast(10)).reliable().transient_local());
 
         loadedCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -112,16 +246,21 @@ private:
             }
 
             const auto& types = entry.second;
-            const bool isPointCloud = std::find(types.begin(), types.end(), "sensor_msgs/msg/PointCloud2") != types.end();
-            if (!isPointCloud) {
+            const bool pointCloud = isPointCloudTopic(types);
+            const bool marker = isMarkerTopic(types);
+            if (!pointCloud && !marker) {
                 continue;
             }
 
-            const bool active = activePointCloudSubs_.find(topic) != activePointCloudSubs_.end();
+            const bool active = pointCloud
+                ? activePointCloudSubs_.find(topic) != activePointCloudSubs_.end()
+                : (activeMarkerArraySubs_.find(topic) != activeMarkerArraySubs_.end() ||
+                   activeMarkerSubs_.find(topic) != activeMarkerSubs_.end());
+
             sources.push_back({
                 {"id", topic},
                 {"name", topic},
-                {"type", "pointcloud"},
+                {"type", pointCloud ? "pointcloud" : kMarkerType},
                 {"active", active}
             });
         }
@@ -151,13 +290,27 @@ private:
             sourceId = "/" + sourceId;
         }
 
+        const auto topicNamesAndTypes = get_topic_names_and_types();
+        auto topicIt = std::find_if(topicNamesAndTypes.begin(), topicNamesAndTypes.end(),
+            [&sourceId](const auto& entry) {
+                return entry.first == sourceId;
+            });
+        if (topicIt == topicNamesAndTypes.end()) {
+            rpcResponsePub_->publish(viewer_internal::toStringMsg(
+                viewer_internal::makeErrorResponse(id, "INVALID_PARAMS", "sourceId not found")));
+            return;
+        }
+
+        const auto& types = topicIt->second;
+        const bool pointCloud = isPointCloudTopic(types);
+        const bool marker = isMarkerTopic(types);
+
         bool success = true;
         {
             std::lock_guard<std::mutex> lock(subscriptionMutex_);
 
             if (active) {
-                if (activePointCloudSubs_.find(sourceId) == activePointCloudSubs_.end()) {
-                    // Use transient_local QoS for edited topics to receive latched messages
+                if (pointCloud && activePointCloudSubs_.find(sourceId) == activePointCloudSubs_.end()) {
                     const bool isEdited = sourceId.size() >= 7 &&
                         sourceId.compare(sourceId.size() - 7, 7, "/edited") == 0;
                     rclcpp::QoS qos(rclcpp::KeepLast(10));
@@ -172,9 +325,36 @@ private:
                             this->forwardPointCloud(sourceId, cloudMsg);
                         });
                     activePointCloudSubs_[sourceId] = sub;
+                } else if (marker) {
+                    rclcpp::QoS qos(rclcpp::KeepLast(10));
+                    qos.reliable().transient_local();
+
+                    if (std::find(types.begin(), types.end(), "visualization_msgs/msg/MarkerArray") != types.end()) {
+                        if (activeMarkerArraySubs_.find(sourceId) == activeMarkerArraySubs_.end()) {
+                            auto sub = create_subscription<visualization_msgs::msg::MarkerArray>(
+                                sourceId,
+                                qos,
+                                [this, sourceId](const visualization_msgs::msg::MarkerArray::SharedPtr markerMsg) {
+                                    this->forwardMarkerArray(sourceId, markerMsg);
+                                });
+                            activeMarkerArraySubs_[sourceId] = sub;
+                        }
+                    } else if (std::find(types.begin(), types.end(), "visualization_msgs/msg/Marker") != types.end()) {
+                        if (activeMarkerSubs_.find(sourceId) == activeMarkerSubs_.end()) {
+                            auto sub = create_subscription<visualization_msgs::msg::Marker>(
+                                sourceId,
+                                qos,
+                                [this, sourceId](const visualization_msgs::msg::Marker::SharedPtr markerMsg) {
+                                    this->forwardMarker(sourceId, markerMsg);
+                                });
+                            activeMarkerSubs_[sourceId] = sub;
+                        }
+                    }
                 }
             } else {
                 activePointCloudSubs_.erase(sourceId);
+                activeMarkerArraySubs_.erase(sourceId);
+                activeMarkerSubs_.erase(sourceId);
             }
         }
 
@@ -274,6 +454,14 @@ private:
         streamPointCloudPub_->publish(*cloudMsg);
     }
 
+    void forwardMarkerArray(const std::string& topic, const visualization_msgs::msg::MarkerArray::SharedPtr& markerMsg) {
+        streamMarkerArrayPub_->publish(viewer_internal::toStringMsg(markerArrayToJson(markerMsg, topic)));
+    }
+
+    void forwardMarker(const std::string& topic, const visualization_msgs::msg::Marker::SharedPtr& markerMsg) {
+        streamMarkerArrayPub_->publish(viewer_internal::toStringMsg(markerToPayload(markerMsg, topic)));
+    }
+
     void handleGraph(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
         RCLCPP_INFO_THROTTLE(
             get_logger(), *get_clock(), 2000,
@@ -320,12 +508,15 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr streamPointCloudPub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr streamPointCloudMetaPub_;
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr streamGraphPub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr streamMarkerArrayPub_;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr loadedCloudSub_;
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr gngSourceSub_;
 
     std::mutex subscriptionMutex_;
     std::unordered_map<std::string, rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr> activePointCloudSubs_;
+    std::unordered_map<std::string, rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr> activeMarkerArraySubs_;
+    std::unordered_map<std::string, rclcpp::Subscription<visualization_msgs::msg::Marker>::SharedPtr> activeMarkerSubs_;
 
     std::mutex storedCloudMutex_;
     std::vector<float> storedPositions_;
