@@ -49,12 +49,12 @@ ais_gng:
     classify.simple_reliability.unknown: 0.00
 
     input.point_cloud_num: 2000000
-    # input.base_frame_id: "base_link"
     # input.local_coordinates: true
     input.base_frame_id: ""
     input.local_coordinates: true
     input.voxel_grid_unit: 0.01 # p
     input.visualize: true
+    #input.shuffle: true # 学習の偏りを防ぐために有効化
     # input.x_min: 2.0
     # input.x_max: 50.
     # input.y_min: -20.

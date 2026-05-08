@@ -125,10 +125,6 @@ AiSGNG::AiSGNG(const rclcpp::NodeOptions & options) : Node("ais_gng", options) {
     cluster_classification_.non_safe_merge_distance_threshold =
         this->get_parameter("cluster.non_safe.merge_distance_max").as_double();
 
-    // 重要:
-    // ROS2のyamlオーバーライド値はdeclare_parameterで取得できるが、
-    // そのままではCライブラリ側(gng_setParameter)へ自動で反映されない。
-    // 起動時に現在の全パラメータを一度param_cbへ流し、GNGコア設定を同期する。
     {
         const auto listed_params = this->list_parameters({}, 10);
         std::vector<rclcpp::Parameter> startup_params;
@@ -517,7 +513,6 @@ std::unique_ptr<sensor_msgs::msg::PointCloud2> AiSGNG::makePointCloud2Msg(
     pcl2_msg->data.resize(pcl2_msg->row_step * pcl2_msg->height);
 
     std::copy(msg->data.begin(), msg->data.begin() + msg->point_step * transformed_pcl_num, pcl2_msg->data.begin());
-
 
     for(uint32_t i = 0; i < transformed_pcl_num; ++i) {
         std::copy(

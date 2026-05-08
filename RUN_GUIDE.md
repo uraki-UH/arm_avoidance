@@ -51,8 +51,6 @@ cd ToPoFuzzy-Viewer/frontend && npm install && npm run dev
    - `x, y, z, roll, pitch, yaw` のスライダーを動かして、ロボットモデルと点群を合わせる
    - **点群トピック**: Sources から `/camera/transformed_points` を選択してください。
 
-3. **保存**:
-   納得のいく値が見つかったら、その値を `gng_vlut_runtime.launch.py` のデフォルト値として記録してください。
 
 ---
 

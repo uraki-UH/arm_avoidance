@@ -33,13 +33,13 @@ def generate_launch_description():
     ais_gng = Node(
         package='ais_gng',
         executable='ais_gng_node',
-        name='ais_gng_camera_node',
+        name='ais_gng',
         output='screen',
         parameters=[
             gng_config_path,
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'input.base_frame_id': "",  # Disable internal transformation
+                'input.base_frame_id': LaunchConfiguration('target_frame_id'),
             },
         ],
         remappings=[('scan', LaunchConfiguration('scan_topic'))],

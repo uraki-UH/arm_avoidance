@@ -79,7 +79,7 @@ def generate_launch_description():
     ais_gng_without_reverse = Node(
             package="ais_gng",
             executable="ais_gng_node",
-            parameters=[gng_config_path, {'use_sim_time': True}],
+            parameters=[{'use_sim_time': True}, gng_config_path],
             remappings=[('scan', LaunchConfiguration('scan_topic'))],
             condition=UnlessCondition(LaunchConfiguration('use_reverse_z')),
             output='screen',
@@ -88,7 +88,7 @@ def generate_launch_description():
     ais_gng_with_reverse = Node(
             package="ais_gng",
             executable="ais_gng_node",
-            parameters=[gng_config_path, {'use_sim_time': True}],
+            parameters=[{'use_sim_time': True}, gng_config_path],
             remappings=[('scan', LaunchConfiguration('reverse_output_topic'))],
             condition=IfCondition(LaunchConfiguration('use_reverse_z')),
             output='screen',

@@ -51,7 +51,7 @@ class AiSGNG : public rclcpp::Node {
     ClusterClassification cluster_classification_;
 
     //
-    bool shuffle_enable_ = false;
+    bool shuffle_enable_;
     //
     bool initialized_ = false;
 
