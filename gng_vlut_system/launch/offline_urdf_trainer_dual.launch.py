@@ -9,14 +9,18 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
-    
-    params_file_arg = DeclareLaunchArgument(
-        "params_file",
-        default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
-        description="Path to the ROS 2 parameters file for the GNG nodes.",
+    dual_cfg = os.path.join(
+        get_package_share_directory("gng_vlut_system"),
+        "config",
+        "topodual.yaml",
     )
 
-    # Allow overriding specific parameters from the command line
+    params_file_arg = DeclareLaunchArgument(
+        "params_file",
+        default_value=dual_cfg,
+        description="Path to the ROS 2 parameters file for the dual-arm GNG trainer.",
+    )
+
     robot_urdf_path_arg = DeclareLaunchArgument(
         "robot_urdf_path",
         default_value="",

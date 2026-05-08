@@ -618,7 +618,6 @@ int main(int argc, char **argv) {
   // Pass command-line arguments to the node options
   rclcpp::NodeOptions options;
   options.allow_undeclared_parameters(true);
-  options.automatically_declare_parameters_from_overrides(true);
 
   auto node = std::make_shared<OfflineUrdfTrainerNode>(options);
 

@@ -21,7 +21,7 @@ def generate_launch_description():
     )
 
     topoarm_joint_state_player = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="topoarm_joint_state_player",
         name="topoarm_joint_state_player",
         output="screen",

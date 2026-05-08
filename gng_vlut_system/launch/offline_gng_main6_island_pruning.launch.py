@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("gng_safety")
+    pkg_share = get_package_share_directory("gng_vlut_system")
     
     params_file_arg = DeclareLaunchArgument(
         "params_file",
@@ -17,7 +17,7 @@ def generate_launch_description():
     )
 
     node = Node(
-        package="gng_safety",
+        package="gng_vlut_system",
         executable="offline_gng_main6_island_pruning",
         name="offline_gng_main6_island_pruning",
         output="screen",
