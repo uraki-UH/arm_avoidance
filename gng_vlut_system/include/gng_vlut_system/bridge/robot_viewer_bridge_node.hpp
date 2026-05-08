@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "robot_model/kinematic_adapter.hpp"
+#include "robot_model/robot_model.hpp"
 
 namespace robot_sim {
 namespace bridge {
@@ -36,6 +37,7 @@ private:
         bool include_urdf) const;
     void publishCurrentState();
 
+    simulation::RobotModel robot_model_;
     kinematics::KinematicChain chain_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr description_pub_;

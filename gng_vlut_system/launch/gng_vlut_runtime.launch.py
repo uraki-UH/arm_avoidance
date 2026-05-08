@@ -31,7 +31,7 @@ def launch_setup(context, *args, **kwargs):
         if not os.path.exists(potential_urdf):
             potential_urdf = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
 
-        robot_desc_default = potential_urdf
+        robot_desc_default = potential_urdf if os.path.exists(potential_urdf) else ""
         resource_root = robot_desc_pkg
         mesh_root = os.path.join(robot_desc_pkg, "meshes")
     except PackageNotFoundError:

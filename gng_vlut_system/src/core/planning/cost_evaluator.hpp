@@ -17,7 +17,7 @@ public:
    * ノードuからノードvへの移動コストを評価する。
    * @param u ソースノード
    * @param v デスティネーションノード
-   * @return 移動コスト。値が高いほど移動が難しい、またはリスクが高いことを意味する。
+   * @return 移動コスト。
    */
   virtual float evaluate(const GNG::NeuronNode<T_angle, T_coord> &u,
                          const GNG::NeuronNode<T_angle, T_coord> &v) = 0;

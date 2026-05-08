@@ -91,3 +91,8 @@ scale: 1.0000 1.0000 1.0000
 
 座標変換
 ros2 run gng_vlut_system self_recognition_filter_node
+
+
+双椀召喚
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  robot_description_file:=package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro

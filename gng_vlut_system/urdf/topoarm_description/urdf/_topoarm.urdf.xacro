@@ -262,9 +262,9 @@
     <!-- https://github.com/ROBOTIS-GIT/turtlebot3_lime/issues/66  -->
     <joint name="${prefix}gripper_right_joint_mimic" type="fixed">
       <parent link="${prefix}link7" />
-      <child link="dummy_mimic_fix" />
+      <child link="${prefix}dummy_mimic_fix" />
     </joint>
-    <link name="dummy_mimic_fix"/>
+    <link name="${prefix}dummy_mimic_fix"/>
 
     <joint name="${prefix}gripper_right_joint" type="prismatic">
       <parent link="${prefix}link7"/>

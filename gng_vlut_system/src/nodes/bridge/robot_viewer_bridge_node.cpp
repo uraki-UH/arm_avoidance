@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <map>
 #include <tf2_eigen/tf2_eigen.hpp>
 
 #include "common/resource_utils.hpp"
@@ -21,7 +22,7 @@ namespace robot_sim::bridge {
 RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options)
 : Node("robot_viewer_bridge_node", options) {
     const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-    const std::string default_urdf = pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro";
+    const std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro";
 
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
     const std::string robot_description_file = declare_parameter<std::string>("robot_description_file", default_urdf);
@@ -38,8 +39,8 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
         throw std::runtime_error("Failed to load robot description: " + resolved_urdf_path);
     }
 
-    auto robot_model = simulation::loadRobotFromUrdf(resolved_urdf_path, resource_root_dir, mesh_root_dir);
-    chain_ = simulation::createKinematicChainFromModel(robot_model, end_effector_name);
+    robot_model_ = simulation::loadRobotFromUrdf(resolved_urdf_path, resource_root_dir, mesh_root_dir);
+    chain_ = simulation::createKinematicChainFromModel(robot_model_, end_effector_name);
 
     buildJointIndexMap();
     current_joint_values_.assign(active_joint_names_.size(), 0.0);
@@ -86,11 +87,12 @@ bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const st
 void RobotViewerBridgeNode::buildJointIndexMap() {
     active_joint_names_.clear();
     joint_name_to_active_index_.clear();
-    for (int i = 0; i < chain_.getNumJoints(); ++i) {
-        if (chain_.getJointDOF(i) <= 0) continue;
-        const std::string name = chain_.getJointName(i);
-        joint_name_to_active_index_[name] = active_joint_names_.size();
-        active_joint_names_.push_back(name);
+    for (const auto &[joint_name, joint_props] : robot_model_.getJoints()) {
+        if (joint_props.type == kinematics::JointType::Fixed) {
+            continue;
+        }
+        joint_name_to_active_index_[joint_name] = active_joint_names_.size();
+        active_joint_names_.push_back(joint_name);
     }
 }
 
@@ -154,7 +156,10 @@ void RobotViewerBridgeNode::publishCurrentState() {
     std::lock_guard<std::mutex> lock(state_mutex_);
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
-    chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
+    if (current_joint_values_.size() == static_cast<size_t>(chain_.getTotalDOF()) &&
+        chain_.getTotalDOF() > 0) {
+        chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
+    }
 
     if (description_pub_->get_subscription_count() > 0 && first_publish_) {
         std_msgs::msg::String msg;

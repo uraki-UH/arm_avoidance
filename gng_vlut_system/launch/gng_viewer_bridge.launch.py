@@ -12,6 +12,7 @@ def launch_setup(context, *args, **kwargs):
     exp_id = LaunchConfiguration("id").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
+    robot_description_file = LaunchConfiguration("robot_description_file").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     gng_source_frame_id = LaunchConfiguration("gng_source_frame_id").perform(context)
@@ -24,14 +25,17 @@ def launch_setup(context, *args, **kwargs):
         potential_urdf = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro")
         if not os.path.exists(potential_urdf):
             potential_urdf = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
-        
-        robot_desc_default = potential_urdf
+
+        robot_desc_default = potential_urdf if os.path.exists(potential_urdf) else ""
         resource_root = robot_desc_pkg
         mesh_root = os.path.join(robot_desc_pkg, "meshes")
     except Exception:
         robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro")
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
+
+    if not robot_description_file:
+        robot_description_file = robot_desc_default
 
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
@@ -67,7 +71,7 @@ def launch_setup(context, *args, **kwargs):
             name="robot_viewer_bridge_node",
             parameters=[{
                 "robot_name": robot_name,
-                "robot_description_file": robot_desc_default,
+                "robot_description_file": robot_description_file,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
                 "joint_state_topic": "/joint_states",
@@ -86,6 +90,7 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value="base_link"),
+        DeclareLaunchArgument("robot_description_file", default_value=""),
         DeclareLaunchArgument("gng_frame_id", default_value="world"),
         DeclareLaunchArgument("gng_source_frame_id", default_value="world"),
         DeclareLaunchArgument("publish_hz", default_value="30.0"),
