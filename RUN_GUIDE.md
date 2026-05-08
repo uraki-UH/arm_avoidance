@@ -1,5 +1,22 @@
 # ToPoFuzzy-Viewer 実行ガイド
 
+## 開発メモ
+
+### 現状整理
+- `offline_urdf_trainer` は、joint-space を1本共有しつつ、coord 側を arm ごとのレイヤーに分ける方向で拡張中です。
+- `weight_coord` は1点前提から、`weight_coords` を持てるように広げています。
+- `coord edge` は arm ごとに別レイヤーとして扱う方針です。
+- `topological_map` 自体は canonical な1本のまま維持し、複数可視化点は `MarkerArray` で補助表示する方針です。
+- `robot_viewer_bridge_node` は multi-arm の URDF と `/joint_states` に対応済みです。
+- `topodual.yaml` は双腕用の共通設定として、trainer と viewer の両方に使う前提です。
+
+### 今後の予定
+- `GrowingNeuralGas` の多層 coord 対応を整理して、コンパイルが通る形に詰める。
+- `offline_urdf_trainer` の coord layer ごとの学習を安定化する。
+- `topofuzzy_bridge_node` 側にも、必要なら arm layer ごとの補助可視化を追加する。
+- `ToPoFuzzy-Viewer` 側で多点 MarkerArray を受ける経路を確認する。
+- `topodual.yaml` と既存単腕 YAML の役割分担をもう少し見やすく整理する。
+
 これで一発でfrontendが立ち上がる
 -dをつけるとバックグラウウンドで起動し続けて面倒
 docker compose --profile manual up  frontend

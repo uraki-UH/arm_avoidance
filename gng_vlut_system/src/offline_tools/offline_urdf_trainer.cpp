@@ -358,6 +358,7 @@ public:
 
     // 3. GNG Setup
     GNG2 gng(gng_dimension_, 3, arm.get());
+    gng.setCoordLayerCount(static_cast<int>(arm->getArmCount()));
 
     // Initialize GNG parameters from ROS 2 parameters
     gng.setParams(gng_params_);
@@ -418,7 +419,9 @@ public:
 
       RCLCPP_INFO(this->get_logger(),
                   "[Step 5] Coordinate Space Edge construction...");
-      gng.trainCoordEdgesOnTheFly(gng_params_.coord_edge_iterations);
+      for (int layer = 0; layer < gng.getCoordLayerCount(); ++layer) {
+        gng.trainCoordEdgesOnTheFly(gng_params_.coord_edge_iterations, layer);
+      }
 
       // Metadata update for finale
       gng.triggerBatchUpdates();

@@ -342,6 +342,17 @@ Eigen::Quaterniond KinematicChain::getEEFOrientation() const {
   return joint_orientations_world_.back();
 }
 
+Eigen::Vector3d KinematicChain::getEEFPosition(std::size_t arm_index) const {
+  (void)arm_index;
+  return getEEFPosition();
+}
+
+Eigen::Quaterniond
+KinematicChain::getEEFOrientation(std::size_t arm_index) const {
+  (void)arm_index;
+  return getEEFOrientation();
+}
+
 const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &
 KinematicChain::getLinkPositions() const {
   return joint_positions_world_;

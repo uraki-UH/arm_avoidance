@@ -375,6 +375,28 @@ private:
             else if (label == 3) { m.color.r = 1.0; m.color.g = 1.0; m.color.a = 0.5; } // Yellow
             else { m.color.g = 1.0; m.color.a = 0.2; } // Green
             markers.markers.push_back(m);
+
+            if (node.weight_coords.size() > 1) {
+                for (size_t layer = 1; layer < node.weight_coords.size(); ++layer) {
+                    visualization_msgs::msg::Marker layer_marker;
+                    layer_marker.header.frame_id = base_frame_;
+                    layer_marker.header.stamp = this->now();
+                    layer_marker.ns = "gng_safety";
+                    layer_marker.id = node.id * 100 + static_cast<int>(layer);
+                    layer_marker.type = visualization_msgs::msg::Marker::SPHERE;
+                    layer_marker.action = visualization_msgs::msg::Marker::ADD;
+                    layer_marker.scale.x = layer_marker.scale.y = layer_marker.scale.z = 0.008;
+                    layer_marker.pose.position.x = node.weight_coords[layer].x();
+                    layer_marker.pose.position.y = node.weight_coords[layer].y();
+                    layer_marker.pose.position.z = node.weight_coords[layer].z();
+                    layer_marker.pose.orientation.w = 1.0;
+                    layer_marker.color.r = m.color.r;
+                    layer_marker.color.g = m.color.g;
+                    layer_marker.color.b = m.color.b;
+                    layer_marker.color.a = 0.35;
+                    markers.markers.push_back(layer_marker);
+                }
+            }
         }
         marker_pub_->publish(markers);
     }

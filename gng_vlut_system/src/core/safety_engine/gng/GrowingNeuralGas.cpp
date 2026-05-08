@@ -44,10 +44,12 @@ GrowingNeuralGas<T_angle, T_coord>::GrowingNeuralGas(
   edges_coord.resize(nodes.size());
   edges_angle_per_node.resize(nodes.size());
   edges_coord_per_node.resize(nodes.size());
+  edges_coord_per_layer_.assign(coord_layer_count_,
+                                std::vector<std::unordered_map<int, EdgeInfo>>(nodes.size()));
+  edges_coord_per_layer_nodes_.assign(
+      coord_layer_count_, std::vector<std::vector<int>>(nodes.size()));
 
-  // Standalone analysis / ROS 2 safety nodes may construct GNG without a
-  // kinematic chain. In that case, skip the seed-node bootstrap here; the
-  // model will be populated later by load().
+
   if (!kinematic_chain_) {
     for (int i = 0; i < (int)nodes.size(); ++i) {
       nodes[i].id = -1;
@@ -84,8 +86,45 @@ template <typename T_angle, typename T_coord>
 GrowingNeuralGas<T_angle, T_coord>::~GrowingNeuralGas() {}
 
 template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::setCoordLayerCount(int layer_count) {
+  coord_layer_count_ = std::max(1, layer_count);
+  edges_coord_per_layer_.assign(
+      coord_layer_count_,
+      std::vector<std::unordered_map<int, EdgeInfo>>(nodes.size()));
+  edges_coord_per_layer_nodes_.assign(
+      coord_layer_count_, std::vector<std::vector<int>>(nodes.size()));
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
+    for (size_t i = 0; i < nodes.size(); ++i) {
+      edges_coord_per_layer_[layer][i].clear();
+      edges_coord_per_layer_nodes_[layer][i].clear();
+    }
+  }
+  for (auto &node : nodes) {
+    if (node.id >= 0) {
+      if (node.weight_coords.size() < static_cast<size_t>(coord_layer_count_)) {
+        T_coord zero_coord;
+        if constexpr (T_coord::RowsAtCompileTime == Eigen::Dynamic ||
+                      T_coord::ColsAtCompileTime == Eigen::Dynamic) {
+          zero_coord = T_coord::Zero(coord_dimension);
+        } else {
+          zero_coord = T_coord::Zero();
+        }
+        node.weight_coords.resize(static_cast<size_t>(coord_layer_count_),
+                                  zero_coord);
+      }
+    }
+  }
+}
+
+template <typename T_angle, typename T_coord>
 T_coord
 GrowingNeuralGas<T_angle, T_coord>::calculateFK(const T_angle &angle_values) {
+  return calculateFK(angle_values, 0);
+}
+
+template <typename T_angle, typename T_coord>
+T_coord GrowingNeuralGas<T_angle, T_coord>::calculateFK(
+    const T_angle &angle_values, int coord_layer_index) {
   if (!kinematic_chain_) {
     if constexpr (T_coord::RowsAtCompileTime == Eigen::Dynamic)
       return T_coord::Zero(coord_dimension);
@@ -95,8 +134,13 @@ GrowingNeuralGas<T_angle, T_coord>::calculateFK(const T_angle &angle_values) {
   int dof = kinematic_chain_->getTotalDOF();
   kinematic_chain_->updateKinematics(
       angle_values.head(std::min((int)angle_values.size(), dof)));
-  // エンドエフェクタ先端の位置を取得
-  Eigen::Vector3d eef_position_double = kinematic_chain_->getEEFPosition();
+  if (coord_layer_index < 0) {
+    coord_layer_index = 0;
+  }
+  const std::size_t arm_index =
+      static_cast<std::size_t>(coord_layer_index);
+  Eigen::Vector3d eef_position_double =
+      kinematic_chain_->getEEFPosition(arm_index);
   return eef_position_double.cast<typename T_coord::Scalar>();
 }
 
@@ -128,10 +172,16 @@ int GrowingNeuralGas<T_angle, T_coord>::add_node(T_angle w_angle,
   T_coord calculated_w_coord = calculateFK(w_angle);
   nodes[node_id] =
       NeuronNode<T_angle, T_coord>(node_id, w_angle, calculated_w_coord);
+  nodes[node_id].weight_coords.assign(
+      static_cast<std::size_t>(coord_layer_count_), calculated_w_coord);
   edges_angle[node_id].clear();
   edges_coord[node_id].clear();
   edges_angle_per_node[node_id].clear();
   edges_coord_per_node[node_id].clear();
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
+    edges_coord_per_layer_[layer][node_id].clear();
+    edges_coord_per_layer_nodes_[layer][node_id].clear();
+  }
   active_indices_.push_back(node_id);
   runStatusProviders(node_id, UpdateTrigger::NODE_ADDED);
   return node_id;
@@ -148,6 +198,18 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
     for (int n : coord_neighbors)
       remove_edge_coord(node, n);
   }
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
+    if (node < static_cast<int>(edges_coord_per_layer_nodes_[layer].size())) {
+      std::vector<int> coord_neighbors(
+          edges_coord_per_layer_nodes_[layer][node].begin(),
+          edges_coord_per_layer_nodes_[layer][node].end());
+      for (int n : coord_neighbors) {
+        remove_edge_coord(layer, node, n);
+      }
+      edges_coord_per_layer_[layer][node].clear();
+      edges_coord_per_layer_nodes_[layer][node].clear();
+    }
+  }
 
   active_indices_.erase(
       std::remove(active_indices_.begin(), active_indices_.end(), node),
@@ -157,6 +219,7 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
   edges_coord[node].clear();
   edges_angle_per_node[node].clear();
   edges_coord_per_node[node].clear();
+  nodes[node].weight_coords.clear();
   nodes[node].id = -1;
   addable_node_indicies.push(node);
 }
@@ -196,33 +259,65 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_edge_angle(int node_1,
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::add_edge_coord(int node_1,
                                                          int node_2) {
-  if (node_1 < 0 || (size_t)node_1 >= nodes.size() || nodes[node_1].id == -1 ||
-      node_2 < 0 || (size_t)node_2 >= nodes.size() || nodes[node_2].id == -1)
-    return;
-  if (edges_coord[node_1].count(node_2)) {
-    edges_coord[node_1][node_2].age = 1;
-    edges_coord[node_2][node_1].age = 1;
-  } else {
-    edges_coord_per_node[node_1].push_back(node_2);
-    edges_coord_per_node[node_2].push_back(node_1);
-    edges_coord[node_1][node_2].age = 1;
-    edges_coord[node_2][node_1].age = 1;
-  }
+  add_edge_coord(0, node_1, node_2);
 }
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::remove_edge_coord(int node_1,
                                                             int node_2) {
+  remove_edge_coord(0, node_1, node_2);
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::add_edge_coord(int layer_index,
+                                                        int node_1,
+                                                        int node_2) {
+  if (layer_index < 0 ||
+      layer_index >= static_cast<int>(edges_coord_per_layer_.size())) {
+    return;
+  }
   if (node_1 < 0 || (size_t)node_1 >= nodes.size() || nodes[node_1].id == -1 ||
       node_2 < 0 || (size_t)node_2 >= nodes.size() || nodes[node_2].id == -1)
     return;
-  auto &v1c = edges_coord_per_node[node_1];
+  auto &edges =
+      (layer_index == 0) ? edges_coord : edges_coord_per_layer_[layer_index];
+  auto &edges_per_node = (layer_index == 0)
+                             ? edges_coord_per_node
+                             : edges_coord_per_layer_nodes_[layer_index];
+  if (edges[node_1].count(node_2)) {
+    edges[node_1][node_2].age = 1;
+    edges[node_2][node_1].age = 1;
+  } else {
+    edges_per_node[node_1].push_back(node_2);
+    edges_per_node[node_2].push_back(node_1);
+    edges[node_1][node_2].age = 1;
+    edges[node_2][node_1].age = 1;
+  }
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::remove_edge_coord(int layer_index,
+                                                           int node_1,
+                                                           int node_2) {
+  if (layer_index < 0 ||
+      layer_index >= static_cast<int>(edges_coord_per_layer_.size())) {
+    return;
+  }
+  if (node_1 < 0 || (size_t)node_1 >= nodes.size() || nodes[node_1].id == -1 ||
+      node_2 < 0 || (size_t)node_2 >= nodes.size() || nodes[node_2].id == -1)
+    return;
+  auto &edges =
+      (layer_index == 0) ? edges_coord : edges_coord_per_layer_[layer_index];
+  auto &edges_per_node = (layer_index == 0)
+                             ? edges_coord_per_node
+                             : edges_coord_per_layer_nodes_[layer_index];
+  auto &v1c = edges_per_node[node_1];
   v1c.erase(std::remove(v1c.begin(), v1c.end(), node_2), v1c.end());
-  auto &v2c = edges_coord_per_node[node_2];
+  auto &v2c = edges_per_node[node_2];
   v2c.erase(std::remove(v2c.begin(), v2c.end(), node_1), v2c.end());
 
-  edges_coord[node_1].erase(node_2);
-  edges_coord[node_2].erase(node_1);
+  edges[node_1].erase(node_2);
+  edges[node_2].erase(node_1);
 }
 
 template <typename T_angle, typename T_coord>
@@ -251,27 +346,51 @@ void GrowingNeuralGas<T_angle, T_coord>::update_node_weights(
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights() {
-  if (!kinematic_chain_) return;
+  if (!kinematic_chain_)
+    return;
+  for (int layer = 0; layer < coord_layer_count_; ++layer) {
+    refresh_coord_weights(layer);
+  }
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
+    int coord_layer_index) {
+  if (!kinematic_chain_)
+    return;
+  if (coord_layer_index < 0 ||
+      coord_layer_index >= static_cast<int>(coord_layer_count_)) {
+    return;
+  }
   for (int i : active_indices_) {
     auto &node = nodes[i];
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> pts;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> oris;
-    
-    // 全リンクのFK計算
+
     kinematic_chain_->forwardKinematicsAt(node.weight_angle, pts, oris);
-    
+
     if (!pts.empty() && !oris.empty()) {
-        // 位置の更新
-        node.weight_coord = pts.back().template cast<typename T_coord::Scalar>();
-        // 方向と姿勢の更新 (追加情報の補完)
-        node.status.ee_direction = (oris.back() * Eigen::Vector3d::UnitX()).template cast<float>();
+      const std::size_t arm_index = static_cast<std::size_t>(coord_layer_index);
+      Eigen::Vector3d eef_position = kinematic_chain_->getEEFPosition(arm_index);
+      if (coord_layer_index == 0) {
+        node.weight_coord = eef_position.template cast<typename T_coord::Scalar>();
+        node.status.ee_direction =
+            (oris.back() * Eigen::Vector3d::UnitX()).template cast<float>();
         node.status.ee_orientation = oris.back().template cast<float>();
-        
-        // 全関節位置も保存 (providers.hpp と同様の整合性維持)
         node.status.joint_positions.clear();
         for (const auto &p : pts) {
           node.status.joint_positions.push_back(p.template cast<float>());
         }
+      }
+
+      if (node.weight_coords.size() <
+          static_cast<std::size_t>(coord_layer_count_)) {
+        node.weight_coords.resize(
+            static_cast<std::size_t>(coord_layer_count_),
+            node.weight_coord);
+      }
+      node.weight_coords[coord_layer_index] =
+          eef_position.template cast<typename T_coord::Scalar>();
     }
   }
 }
@@ -544,12 +663,22 @@ void GrowingNeuralGas<T_angle, T_coord>::gngTrainOnTheFly(int max_iter) {
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(int max_iter) {
+  trainCoordEdgesOnTheFly(max_iter, 0);
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
+    int max_iter, int coord_layer_index) {
   if (!kinematic_chain_)
     return;
+  if (coord_layer_index < 0 ||
+      coord_layer_index >= static_cast<int>(coord_layer_count_)) {
+    return;
+  }
 
-  std::cout << "[GNG] Training Coordinate Edges On-the-fly..." << std::endl;
+  std::cout << "[GNG] Training Coordinate Edges On-the-fly (layer "
+            << coord_layer_index << ")..." << std::endl;
   for (int i = 0; i < max_iter; ++i) {
-    // 1. Generate sample and FK
     std::vector<double> q_vec = kinematic_chain_->sampleRandomJointValues();
     T_angle q_truncated;
     if constexpr (T_angle::RowsAtCompileTime == Eigen::Dynamic)
@@ -557,16 +686,20 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(int max_iter) {
     for (int j = 0; j < angle_dimension; ++j) {
       q_truncated(j) = static_cast<typename T_angle::Scalar>(q_vec[j]);
     }
-    T_coord s_coord = calculateFK(q_truncated);
+    T_coord s_coord = calculateFK(q_truncated, coord_layer_index);
 
-    // 2. Find 2 nearest nodes in COORD space
     int s1 = -1, s2 = -1;
     float d1 = std::numeric_limits<float>::max();
     float d2 = std::numeric_limits<float>::max();
 
     for (int n = 0; n < (int)nodes.size(); ++n) {
       if (nodes[n].id != -1) {
-        float d = calc_squaredNorm_coord(s_coord, nodes[n].weight_coord);
+        const T_coord &target_coord =
+            (coord_layer_index == 0 ||
+             nodes[n].weight_coords.size() <= static_cast<std::size_t>(coord_layer_index))
+                ? nodes[n].weight_coord
+                : nodes[n].weight_coords[coord_layer_index];
+        float d = calc_squaredNorm_coord(s_coord, target_coord);
         if (d < d1) {
           d2 = d1;
           s2 = s1;
@@ -582,30 +715,34 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(int max_iter) {
     if (s1 == -1)
       continue;
 
-    // 3. Update edges
     if (s2 != -1) {
-      add_edge_coord(s1, s2);
+      add_edge_coord(coord_layer_index, s1, s2);
     }
 
-    // Neighbors update
-    const std::vector<int> &neighbors = edges_coord_per_node[s1];
+    const std::vector<int> &neighbors =
+        getNeighborsCoord(s1, coord_layer_index);
     std::vector<int> to_remove;
     for (int nid : neighbors) {
-      edges_coord[s1][nid].age++;
-      edges_coord[nid][s1].age++;
-      if (edges_coord[s1][nid].age > params_.max_edge_age) {
+      auto &edges =
+          (coord_layer_index == 0) ? edges_coord : edges_coord_per_layer_[coord_layer_index];
+      edges[s1][nid].age++;
+      edges[nid][s1].age++;
+      if (edges[s1][nid].age > params_.max_edge_age) {
         to_remove.push_back(nid);
       }
     }
     for (int nid : to_remove) {
-      remove_edge_coord(s1, nid);
+      remove_edge_coord(coord_layer_index, s1, nid);
     }
 
     if (i % 1000 == 0 || i == max_iter - 1) {
-      std::cout << "  Coord edge Progress: " << (i * 100 / max_iter) << "% (" << i << "/" << max_iter << ")\r" << std::flush;
+      std::cout << "  Coord edge Progress [" << coord_layer_index << "]: "
+                << (i * 100 / max_iter) << "% (" << i << "/" << max_iter
+                << ")\r" << std::flush;
     }
   }
-  std::cout << std::endl << "[GNG] Coordinate Edge Training Complete." << std::endl;
+  std::cout << std::endl << "[GNG] Coordinate Edge Training Complete."
+            << std::endl;
 }
 
 template <typename T_angle, typename T_coord>
@@ -860,8 +997,9 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
   std::ofstream ofs(resolved_path, std::ios::binary);
   if (!ofs)
     return false;
-  uint32_t version = 5; // Version 5: Added is_boundary flag
+  uint32_t version = 6; // Version 6: Added multi-layer coord support
   ofs.write((char *)&version, sizeof(version));
+  ofs.write((char *)&coord_layer_count_, sizeof(coord_layer_count_));
 
   int node_count = 0;
   for (int i = 0; i < (int)nodes.size(); ++i)
@@ -878,6 +1016,13 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
 
       GrowingNeuralGas_Internal::write_eigen(ofs, nodes[i].weight_angle);
       GrowingNeuralGas_Internal::write_eigen(ofs, nodes[i].weight_coord);
+      if (version >= 6) {
+        int coord_count = static_cast<int>(nodes[i].weight_coords.size());
+        ofs.write((char *)&coord_count, sizeof(coord_count));
+        for (const auto &coord : nodes[i].weight_coords) {
+          GrowingNeuralGas_Internal::write_eigen(ofs, coord);
+        }
+      }
 
       // Status fields
       ofs.write((char *)&nodes[i].status.level, sizeof(int));
@@ -937,27 +1082,58 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
     }
   }
 
-  // Coord edges
-  int coord_edge_count = 0;
-  for (int i = 0; i < (int)nodes.size(); ++i) {
-    if (nodes[i].id != -1) {
-      for (const auto &pair : edges_coord[i]) {
-        if (i < pair.first)
-          coord_edge_count++;
+  if (version >= 6) {
+    for (int layer = 0; layer < coord_layer_count_; ++layer) {
+      const auto &edges =
+          (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
+      int coord_edge_count = 0;
+      for (int i = 0; i < (int)nodes.size(); ++i) {
+        if (nodes[i].id != -1) {
+          for (const auto &pair : edges[i]) {
+            if (i < pair.first)
+              coord_edge_count++;
+          }
+        }
+      }
+      ofs.write((char *)&coord_edge_count, sizeof(coord_edge_count));
+      for (int i = 0; i < (int)nodes.size(); ++i) {
+        if (nodes[i].id != -1) {
+          for (const auto &pair : edges[i]) {
+            int n = pair.first;
+            if (i < n) {
+              ofs.write((char *)&i, sizeof(int));
+              ofs.write((char *)&n, sizeof(int));
+              ofs.write((char *)&pair.second.age, sizeof(int));
+              bool e_active = pair.second.active;
+              ofs.write((char *)&e_active, sizeof(bool));
+            }
+          }
+        }
       }
     }
-  }
-  ofs.write((char *)&coord_edge_count, sizeof(coord_edge_count));
-  for (int i = 0; i < (int)nodes.size(); ++i) {
-    if (nodes[i].id != -1) {
-      for (const auto &pair : edges_coord[i]) {
-        int n = pair.first;
-        if (i < n) {
-          ofs.write((char *)&i, sizeof(int));
-          ofs.write((char *)&n, sizeof(int));
-          ofs.write((char *)&pair.second.age, sizeof(int));
-          bool e_active = pair.second.active;
-          ofs.write((char *)&e_active, sizeof(bool));
+  } else {
+    // Coord edges
+    int coord_edge_count = 0;
+    for (int i = 0; i < (int)nodes.size(); ++i) {
+      if (nodes[i].id != -1) {
+        for (const auto &pair : edges_coord[i]) {
+          if (i < pair.first)
+            coord_edge_count++;
+        }
+      }
+    }
+    ofs.write((char *)&coord_edge_count, sizeof(coord_edge_count));
+    for (int i = 0; i < (int)nodes.size(); ++i) {
+      if (nodes[i].id != -1) {
+        for (const auto &pair : edges_coord[i]) {
+          int n = pair.first;
+          if (i < n) {
+            ofs.write((char *)&i, sizeof(int));
+            ofs.write((char *)&n, sizeof(int));
+            ofs.write((char *)&pair.second.age, sizeof(int));
+            bool e_active = pair.second.active;
+            ofs.write((char *)&e_active, sizeof(bool));
+          }
         }
       }
     }
@@ -992,6 +1168,14 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     return false;
   }
 
+  if (version >= 6) {
+    ifs.read((char *)&coord_layer_count_, sizeof(coord_layer_count_));
+    coord_layer_count_ = std::max(1, coord_layer_count_);
+  } else {
+    coord_layer_count_ = 1;
+  }
+  setCoordLayerCount(coord_layer_count_);
+
   int node_count = 0;
   ifs.read((char *)&node_count, sizeof(node_count));
 
@@ -1010,6 +1194,21 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
 
     GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_angle);
     GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coord);
+    nodes[id].weight_coords.clear();
+    if (version >= 6) {
+      int coord_count = 0;
+      ifs.read((char *)&coord_count, sizeof(coord_count));
+      coord_count = std::max(0, coord_count);
+      nodes[id].weight_coords.resize(coord_count);
+      for (int c = 0; c < coord_count; ++c) {
+        GrowingNeuralGas_Internal::read_eigen(ifs, nodes[id].weight_coords[c]);
+      }
+      if (!nodes[id].weight_coords.empty()) {
+        nodes[id].weight_coord = nodes[id].weight_coords.front();
+      }
+    } else {
+      nodes[id].weight_coords.push_back(nodes[id].weight_coord);
+    }
 
     // Status
     ifs.read((char *)&nodes[id].status.level, sizeof(int));
@@ -1074,27 +1273,56 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
   }
 
-  // Edges Coord
-  int coord_edge_count = 0;
-  ifs.read((char *)&coord_edge_count, sizeof(coord_edge_count));
-  for (int k = 0; k < coord_edge_count; ++k) {
-    int n1, n2, age;
-    ifs.read((char *)&n1, sizeof(int));
-    ifs.read((char *)&n2, sizeof(int));
-    ifs.read((char *)&age, sizeof(int));
+  if (version >= 6) {
+    for (int layer = 0; layer < coord_layer_count_; ++layer) {
+      int coord_edge_count = 0;
+      ifs.read((char *)&coord_edge_count, sizeof(coord_edge_count));
+      for (int k = 0; k < coord_edge_count; ++k) {
+        int n1, n2, age;
+        ifs.read((char *)&n1, sizeof(int));
+        ifs.read((char *)&n2, sizeof(int));
+        ifs.read((char *)&age, sizeof(int));
 
-    bool active = true;
-    if (version >= 3) {
-      ifs.read((char *)&active, sizeof(bool));
+        bool active = true;
+        if (version >= 3) {
+          ifs.read((char *)&active, sizeof(bool));
+        }
+
+        if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
+            (size_t)n2 < nodes.size()) {
+          add_edge_coord(layer, n1, n2);
+          auto &edges =
+              (layer == 0) ? edges_coord : edges_coord_per_layer_[layer];
+          edges[n1][n2].age = age;
+          edges[n2][n1].age = age;
+          edges[n1][n2].active = active;
+          edges[n2][n1].active = active;
+        }
+      }
     }
+  } else {
+    // Edges Coord
+    int coord_edge_count = 0;
+    ifs.read((char *)&coord_edge_count, sizeof(coord_edge_count));
+    for (int k = 0; k < coord_edge_count; ++k) {
+      int n1, n2, age;
+      ifs.read((char *)&n1, sizeof(int));
+      ifs.read((char *)&n2, sizeof(int));
+      ifs.read((char *)&age, sizeof(int));
 
-    if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
-        (size_t)n2 < nodes.size()) {
-      add_edge_coord(n1, n2);
-      edges_coord[n1][n2].age = age;
-      edges_coord[n2][n1].age = age;
-      edges_coord[n1][n2].active = active;
-      edges_coord[n2][n1].active = active;
+      bool active = true;
+      if (version >= 3) {
+        ifs.read((char *)&active, sizeof(bool));
+      }
+
+      if (n1 >= 0 && (size_t)n1 < nodes.size() && n2 >= 0 &&
+          (size_t)n2 < nodes.size()) {
+        add_edge_coord(n1, n2);
+        edges_coord[n1][n2].age = age;
+        edges_coord[n2][n1].age = age;
+        edges_coord[n1][n2].active = active;
+        edges_coord[n2][n1].active = active;
+      }
     }
   }
 
@@ -1139,6 +1367,7 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
     }
     edges_angle_per_node.assign(nodes.size(), std::vector<int>());
     edges_coord_per_node.assign(nodes.size(), std::vector<int>());
+    setCoordLayerCount(coord_layer_count_);
     n_learning = 0;
     n_trial_angle = 0;
 

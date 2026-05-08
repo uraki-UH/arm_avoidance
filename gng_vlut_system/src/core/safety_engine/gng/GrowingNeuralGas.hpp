@@ -30,7 +30,7 @@ namespace GNG {
  */
 template <typename T_angle, typename T_coord> class GrowingNeuralGas {
 public:
-  uint32_t version = 5; // Version 5: Added is_boundary flag
+  uint32_t version = 6; // Version 6: Added multi-layer coord support
   using UpdateTrigger = GNG::UpdateTrigger;
   using NodeType = NeuronNode<T_angle, T_coord>;
   using ManipulabilityCallback =
@@ -77,6 +77,15 @@ public:
     return edges_coord_per_node[node_id];
   }
 
+  const std::vector<int> &getNeighborsCoord(int node_id,
+                                            int coord_layer_index) const {
+    if (coord_layer_index <= 0 ||
+        coord_layer_index >= static_cast<int>(edges_coord_per_layer_.size())) {
+      return getNeighborsCoord(node_id);
+    }
+    return edges_coord_per_layer_[coord_layer_index][node_id];
+  }
+
   bool isEdgeActive(int n1, int n2, int mode = 0) const {
     if (n1 < 0 || n2 < 0 || (size_t)n1 >= nodes.size() ||
         (size_t)n2 >= nodes.size())
@@ -94,10 +103,14 @@ public:
     }
   }
 
+  void setCoordLayerCount(int layer_count);
+  int getCoordLayerCount() const { return coord_layer_count_; }
   void refresh_coord_weights();
+  void refresh_coord_weights(int coord_layer_index);
   void trainCoordEdges(const std::vector<T_angle> &angle_samples,
                        int max_iter = -1);
   void trainCoordEdgesOnTheFly(int max_iter);
+  void trainCoordEdgesOnTheFly(int max_iter, int coord_layer_index);
 
   void strictFilter();
   void removeInactiveElements();
@@ -223,13 +236,16 @@ private:
   void add_edge_angle(int node_1, int node_2);
   void remove_edge_angle(int node_1, int node_2);
   void add_edge_coord(int node_1, int node_2);
+  void add_edge_coord(int layer_index, int node_1, int node_2);
   void remove_edge_coord(int node_1, int node_2);
+  void remove_edge_coord(int layer_index, int node_1, int node_2);
   void update_node_weights(int node_id, const T_angle &sample_angle,
                            float step);
 
   float calc_squaredNorm_angle(const T_angle &w1, const T_angle &w2) const;
   float calc_squaredNorm_coord(const T_coord &w1, const T_coord &w2) const;
   T_coord calculateFK(const T_angle &angle_values);
+  T_coord calculateFK(const T_angle &angle_values, int coord_layer_index);
   void runStatusProviders(int node_id, UpdateTrigger trigger);
 
   bool internalCheckColliding(const T_angle &angles);
@@ -244,6 +260,9 @@ private:
 
   std::vector<std::vector<int>> edges_coord_per_node;
   std::vector<std::unordered_map<int, EdgeInfo>> edges_coord;
+  std::vector<std::vector<std::vector<int>>> edges_coord_per_layer_nodes_;
+  std::vector<std::vector<std::unordered_map<int, EdgeInfo>>>
+      edges_coord_per_layer_;
 
   int n_learning = 0;
   int n_trial_angle = 0;
@@ -271,6 +290,7 @@ private:
   std::string stats_log_path_ = "gng_distance_stats.dat";
   std::ofstream stats_ofs_;
   GngParameters params_;
+  int coord_layer_count_ = 1;
 
   // Optimization buffers
   mutable std::vector<std::pair<float, int>> candidates_buffer_;

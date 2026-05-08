@@ -89,6 +89,7 @@ public:
 
   int getNumJoints() const override;
   int getTotalDOF() const override;
+  std::size_t getArmCount() const override;
   Eigen::Vector3d getJointPosition(int joint_index) const override;
   Eigen::Quaterniond getJointOrientation(int joint_index) const override;
   std::string getJointName(int joint_index) const override;
@@ -96,6 +97,8 @@ public:
   std::string getLinkName(int link_index) const override;
   Eigen::Vector3d getEEFPosition() const override;
   Eigen::Quaterniond getEEFOrientation() const override;
+  Eigen::Vector3d getEEFPosition(std::size_t arm_index) const override;
+  Eigen::Quaterniond getEEFOrientation(std::size_t arm_index) const override;
   const std::vector<Eigen::Vector3d,
                     Eigen::aligned_allocator<Eigen::Vector3d>> &
   getLinkPositions() const override;

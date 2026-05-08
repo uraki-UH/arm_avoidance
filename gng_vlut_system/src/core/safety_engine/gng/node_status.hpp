@@ -81,10 +81,12 @@ public:
   float error_coord = 0.0f;
   T_angle weight_angle;
   T_coord weight_coord;
+  std::vector<T_coord> weight_coords;
   Status status;
   NeuronNode() {};
   NeuronNode(int id_, T_angle w_angle, T_coord w_coord)
-      : id(id_), weight_angle(w_angle), weight_coord(w_coord) {};
+      : id(id_), weight_angle(w_angle), weight_coord(w_coord),
+        weight_coords{w_coord} {};
   ~NeuronNode() {};
 };
 

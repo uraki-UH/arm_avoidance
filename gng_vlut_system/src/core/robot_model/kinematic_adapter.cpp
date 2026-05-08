@@ -474,6 +474,10 @@ int MultiArmKinematicAdapter::getTotalDOF() const {
   return total;
 }
 
+std::size_t MultiArmKinematicAdapter::getArmCount() const {
+  return arms_.size();
+}
+
 Eigen::Vector3d
 MultiArmKinematicAdapter::getJointPosition(int joint_index) const {
   if (joint_index < 0 || joint_index >= static_cast<int>(cached_positions_.size())) {
@@ -534,11 +538,27 @@ Eigen::Vector3d MultiArmKinematicAdapter::getEEFPosition() const {
   return arms_[primary_arm_index_].chain.getEEFPosition();
 }
 
+Eigen::Vector3d
+MultiArmKinematicAdapter::getEEFPosition(std::size_t arm_index) const {
+  if (arms_.empty() || arm_index >= arms_.size()) {
+    return base_position_;
+  }
+  return arms_[arm_index].chain.getEEFPosition();
+}
+
 Eigen::Quaterniond MultiArmKinematicAdapter::getEEFOrientation() const {
   if (arms_.empty()) {
     return base_orientation_;
   }
   return arms_[primary_arm_index_].chain.getEEFOrientation();
+}
+
+Eigen::Quaterniond
+MultiArmKinematicAdapter::getEEFOrientation(std::size_t arm_index) const {
+  if (arms_.empty() || arm_index >= arms_.size()) {
+    return base_orientation_;
+  }
+  return arms_[arm_index].chain.getEEFOrientation();
 }
 
 const std::vector<Eigen::Vector3d,

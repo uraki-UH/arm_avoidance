@@ -160,6 +160,9 @@ public:
 
   virtual Eigen::Vector3d getEEFPosition() const;
   virtual Eigen::Quaterniond getEEFOrientation() const;
+  virtual std::size_t getArmCount() const { return 1; }
+  virtual Eigen::Vector3d getEEFPosition(std::size_t arm_index) const;
+  virtual Eigen::Quaterniond getEEFOrientation(std::size_t arm_index) const;
 
   // --- アクセサ追加 ---
   virtual const std::vector<Eigen::Vector3d,
