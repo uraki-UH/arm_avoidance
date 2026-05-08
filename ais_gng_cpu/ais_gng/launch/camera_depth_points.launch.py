@@ -11,12 +11,12 @@ def generate_launch_description():
 
     scan_topic_arg = DeclareLaunchArgument(
         'scan_topic',
-        default_value='/camera/camera/depth/color/points',
+        default_value='/camera/transformed_points',
         description='camera point cloud topic used by ais_gng',
     )
     lidar_arg = DeclareLaunchArgument(
         'lidar',
-        default_value='kimura.yaml',
+        default_value='realsense_gng.yaml',
         description='GNG parameter yaml under config/gng',
     )
     target_frame_id_arg = DeclareLaunchArgument(
@@ -39,7 +39,7 @@ def generate_launch_description():
             gng_config_path,
             {
                 'use_sim_time': LaunchConfiguration('use_sim_time'),
-                'input.base_frame_id': LaunchConfiguration('target_frame_id'),
+                'input.base_frame_id': "",  # Disable internal transformation
             },
         ],
         remappings=[('scan', LaunchConfiguration('scan_topic'))],

@@ -1,5 +1,7 @@
 #include <ais_gng/ais_gng.hpp>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
+#include <random>
+#include <numeric>
 
 using namespace fuzzrobo;
 
@@ -82,6 +84,7 @@ AiSGNG::AiSGNG(const rclcpp::NodeOptions & options) : Node("ais_gng", options) {
     this->declare_parameter("input.base_frame_id", "map");  // 入力点群の基準フレームID
     this->declare_parameter("input.voxel_grid_unit", 0.1);  // ボクセルグリッドのサイズ(m)
     this->declare_parameter("input.visualize", true);       // 位置フィルタの可視化
+    this->declare_parameter("input.shuffle", false);         // 点群のシャッフル有効化
     this->declare_parameter("input.local_coordinates", false); // ローカル座標系を使用するか
     this->declare_parameter("input.x_min", -20.);           // 位置フィルタの最小 x
     this->declare_parameter("input.x_max", 20.);            // 位置フィルタの最大 x
@@ -239,6 +242,8 @@ rcl_interfaces::msg::SetParametersResult AiSGNG::param_cb(const std::vector<rclc
             cluster_classification_.non_safe_merge_distance_threshold = p.as_double();
         } else if (name == "input.visualize"){
             filter_.enable = p.as_bool();
+        } else if (name == "input.shuffle"){
+            shuffle_enable_ = p.as_bool();
         } else if (name == "input.base_frame_id"){
             base_frame_id_ = p.as_string();
         } else if (name == "ds.transformed") {
@@ -293,7 +298,34 @@ void AiSGNG::pcl_cb(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
 
     // GNGに点群を入力
     auto lidar_config = getBase2LidarFrame(transformed_input_msg);
-    gng_setPointCloud(transformed_input_msg->data.data(), transformed_input_msg->width * transformed_input_msg->height, &lidar_config);
+    
+    if (shuffle_enable_) {
+        // 点群をランダムにシャッフルして学習の偏りを防ぐ
+        uint32_t num_points = transformed_input_msg->width * transformed_input_msg->height;
+        uint32_t point_step = transformed_input_msg->point_step;
+        
+        if (shuffle_indices_.size() != num_points) {
+            shuffle_indices_.resize(num_points);
+            std::iota(shuffle_indices_.begin(), shuffle_indices_.end(), 0);
+        }
+        if (shuffle_temp_data_.size() != transformed_input_msg->data.size()) {
+            shuffle_temp_data_.resize(transformed_input_msg->data.size());
+        }
+
+        static std::mt19937 g(std::random_device{}());
+        std::shuffle(shuffle_indices_.begin(), shuffle_indices_.end(), g);
+        
+        for (uint32_t i = 0; i < num_points; ++i) {
+            std::copy(transformed_input_msg->data.begin() + shuffle_indices_[i] * point_step,
+                      transformed_input_msg->data.begin() + (shuffle_indices_[i] + 1) * point_step,
+                      shuffle_temp_data_.begin() + i * point_step);
+        }
+        gng_setPointCloud(shuffle_temp_data_.data(), num_points, &lidar_config);
+    } else {
+        gng_setPointCloud(transformed_input_msg->data.data(), 
+                          transformed_input_msg->width * transformed_input_msg->height, 
+                          &lidar_config);
+    }
 
     // GNGの実行
     gng_exec();

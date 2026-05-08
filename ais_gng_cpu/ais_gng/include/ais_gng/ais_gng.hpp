@@ -37,10 +37,22 @@ class AiSGNG : public rclcpp::Node {
 
     std::string base_frame_id_;
 
+    //リアルセンスにおいて点群からランダムに学習するための一時的な設定
+    //--------------------------------
+    std::string target_frame_;
+
+    //点群をランダムにシャッフルするためのバッファ
+    std::vector<uint32_t> shuffle_indices_;
+    std::vector<uint8_t> shuffle_temp_data_;
+    //--------------------------------
+
     Downsampling downsampling_;
     VisualizeFilter filter_;
     ClusterClassification cluster_classification_;
 
+    //
+    bool shuffle_enable_ = false;
+    //
     bool initialized_ = false;
 
    public:

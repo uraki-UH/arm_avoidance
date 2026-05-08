@@ -1,0 +1,46 @@
+ais_gng:
+  ros__parameters:
+    node.num_max: 5000
+    node.learning_num: 50000
+    node.unknown_learning_rate: 0.2
+    node.eta_s1: 0.08
+    node.eta_s2: 0.008
+    node.edge_age_max: 200
+    node.s1_reset_range: 0.1
+    node.s1_age: [10, 10, 10, 10]
+    node.clusted_s1_age: [20, 20, 20, 20]
+    node.interval: [0.05, 0.05, 0.05, 0.05]
+    node.static.age_min: -1
+
+    ds.transformed: true
+    ds.range_max: 20.0
+    ds.all.num_max: 500000
+    ds.unknown.num_max: 500000
+    ds.human.num_max: 500000
+
+    label.fuzzy.unknown: 0.6
+    label.fuzzy.min: 0.5
+    label.fuzzy.lpf_time_constant: 0.5
+
+    cluster.num_min: 5
+    cluster.velocity.lpf_time_constant: 0.5
+    cluster.plane.volume: 10.0
+    cluster.unknown.edge_distance_max: 0.5
+    cluster.other.edge_distance_max: 0.5
+
+    classify.human: false # 腕を人と誤認しないよう一旦オフ
+    classify.human.model: "NN_human.pt"
+    classify.threshold: 0.7
+
+    input.point_cloud_num: 1000000 # 制限を大幅に増やす
+    input.base_frame_id: "" # すでに変換済みなので空にする
+    input.voxel_grid_unit: 0.05 # 5cm間隔（点数を増やしたので少し粗くして負荷を抑える）
+    input.visualize: true
+    input.shuffle: true # 学習の偏りを防ぐために有効化
+    input.local_coordinates: false
+    input.x_min: -10.0
+    input.x_max: 10.0
+    input.y_min: -10.0
+    input.y_max: 10.0
+    input.z_min: -10.0
+    input.z_max: 10.0
