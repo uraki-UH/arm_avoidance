@@ -1,5 +1,9 @@
 offline_urdf_trainer:
   ros__parameters:
+    experiment_id: "topoarm_full_v2"
+    data_directory: "gng_results"
+    gng_model_filename: "gng.bin"
+    vlut_filename: "vlut.bin"
     gng_params:
       lambda: 50
       max_node_num: 10000
@@ -15,3 +19,12 @@ offline_urdf_trainer:
       n_best_candidates: 4
       ais_threshold: 1.0
       start_node_num: 2
+
+robot_viewer_bridge_node:
+  ros__parameters:
+    robot_name: "topoarm"
+    robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
+    joint_state_topic: "/joint_states"
+    stream_topic: "/viewer/internal/stream/robot"
+    frame_id: "world"
+    publish_hz: 30.0

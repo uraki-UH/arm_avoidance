@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <map>
 #include <tf2_eigen/tf2_eigen.hpp>
 
@@ -29,6 +30,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
+    arm_leaf_link_names_ = declare_parameter<std::string>("arm_leaf_link_names", "");
     joint_state_topic_ = declare_parameter<std::string>("joint_state_topic", "joint_states");
     stream_topic_ = declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
     frame_id_ = declare_parameter<std::string>("frame_id", "world");
@@ -40,7 +42,19 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     }
 
     robot_model_ = simulation::loadRobotFromUrdf(resolved_urdf_path, resource_root_dir, mesh_root_dir);
-    chain_ = simulation::createKinematicChainFromModel(robot_model_, end_effector_name);
+    auto arm_leaf_names = splitCommaSeparated(arm_leaf_link_names_);
+    if (arm_leaf_names.empty()) {
+        arm_leaf_names = inferLeafLinkNames();
+    }
+    if (arm_leaf_names.size() > 1) {
+        chain_ = simulation::createMultiArmKinematicChainFromModels(robot_model_, arm_leaf_names);
+    } else if (arm_leaf_names.size() == 1) {
+        chain_ = std::make_unique<kinematics::KinematicChain>(
+            simulation::createKinematicChainFromModel(robot_model_, arm_leaf_names.front()));
+    } else {
+        chain_ = std::make_unique<kinematics::KinematicChain>(
+            simulation::createKinematicChainFromModel(robot_model_, end_effector_name));
+    }
 
     buildJointIndexMap();
     current_joint_values_.assign(active_joint_names_.size(), 0.0);
@@ -82,6 +96,42 @@ bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const st
         out_text = std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     }
     return !out_text.empty();
+}
+
+std::vector<std::string> RobotViewerBridgeNode::splitCommaSeparated(const std::string &text) {
+    std::vector<std::string> items;
+    std::stringstream ss(text);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        auto begin = token.find_first_not_of(" \t");
+        auto end = token.find_last_not_of(" \t");
+        if (begin == std::string::npos) {
+            continue;
+        }
+        items.push_back(token.substr(begin, end - begin + 1));
+    }
+    return items;
+}
+
+std::vector<std::string> RobotViewerBridgeNode::inferLeafLinkNames() const {
+    std::vector<std::string> leaf_names;
+    std::unordered_map<std::string, bool> is_parent;
+    for (const auto &[joint_name, joint_props] : robot_model_.getJoints()) {
+        (void)joint_name;
+        is_parent[joint_props.parent_link] = true;
+    }
+
+    const std::string root_name = robot_model_.getRootLinkName();
+    for (const auto &[link_name, link_props] : robot_model_.getLinks()) {
+        (void)link_props;
+        if (link_name == root_name) {
+            continue;
+        }
+        if (is_parent.find(link_name) == is_parent.end()) {
+            leaf_names.push_back(link_name);
+        }
+    }
+    return leaf_names;
 }
 
 void RobotViewerBridgeNode::buildJointIndexMap() {
@@ -156,9 +206,9 @@ void RobotViewerBridgeNode::publishCurrentState() {
     std::lock_guard<std::mutex> lock(state_mutex_);
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
-    if (current_joint_values_.size() == static_cast<size_t>(chain_.getTotalDOF()) &&
-        chain_.getTotalDOF() > 0) {
-        chain_.forwardKinematicsAt(current_joint_values_, positions, orientations);
+    if (chain_ && chain_->getTotalDOF() > 0 &&
+        current_joint_values_.size() >= static_cast<size_t>(chain_->getTotalDOF())) {
+        chain_->forwardKinematicsAt(current_joint_values_, positions, orientations);
     }
 
     if (description_pub_->get_subscription_count() > 0 && first_publish_) {

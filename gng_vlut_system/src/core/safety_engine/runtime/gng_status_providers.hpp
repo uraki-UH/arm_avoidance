@@ -11,6 +11,8 @@
 #include "robot_model/robot_model.hpp"
 #include "metrics/manipulability.hpp"
 
+#include <algorithm>
+
 namespace GNG {
 
 /**
@@ -41,10 +43,15 @@ public:
                 Eigen::aligned_allocator<Eigen::Quaterniond>>
         orientations;
     chain_->forwardKinematicsAt(node.weight_angle, pts, orientations);
+    if (orientations.empty()) {
+      return;
+    }
 
     // 手先方向 (末端リンクのX軸)
+    const int ee_index = std::min<int>(chain_->getNumJoints() + 1,
+                                       static_cast<int>(orientations.size()) - 1);
     node.status.ee_direction =
-        (orientations.back() * Eigen::Vector3d::UnitX()).cast<float>();
+        (orientations[ee_index] * Eigen::Vector3d::UnitX()).cast<float>();
 
     // 全関節位置を保存 (プランニング時の方向評価用)
     node.status.joint_positions.clear();

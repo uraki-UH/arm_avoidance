@@ -165,6 +165,12 @@ bool KinematicChain::setJointValues(const std::vector<double> &values) {
   return true;
 }
 
+void KinematicChain::updateKinematics(const std::vector<double> &values) {
+  if (setJointValues(values)) {
+    forwardKinematics();
+  }
+}
+
 std::vector<double> KinematicChain::getJointValues() const {
   std::vector<double> values;
   values.reserve(total_dof_);
@@ -334,6 +340,17 @@ Eigen::Quaterniond KinematicChain::getEEFOrientation() const {
   if (joint_orientations_world_.empty())
     return base_orientation_;
   return joint_orientations_world_.back();
+}
+
+const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &
+KinematicChain::getLinkPositions() const {
+  return joint_positions_world_;
+}
+
+const std::vector<Eigen::Quaterniond,
+                  Eigen::aligned_allocator<Eigen::Quaterniond>> &
+KinematicChain::getLinkOrientations() const {
+  return joint_orientations_world_;
 }
 
 Eigen::MatrixXd

@@ -1,4 +1,5 @@
 import os
+import yaml
 from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
@@ -8,6 +9,7 @@ from launch_ros.actions import Node
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    params_file = LaunchConfiguration("params_file").perform(context)
     robot_name = LaunchConfiguration("robot_name").perform(context)
     experiment_id = LaunchConfiguration("id").perform(context)
     if not experiment_id:
@@ -18,11 +20,34 @@ def launch_setup(context, *args, **kwargs):
     data_dir = LaunchConfiguration("dir").perform(context)
     if not data_dir:
         data_dir = LaunchConfiguration("data_directory").perform(context)
+    yaml_data_dir = data_dir
+    yaml_exp_id = experiment_id
+    gng_model_filename = "gng.bin"
+    vlut_filename = "vlut.bin"
+    if params_file and os.path.exists(params_file):
+        try:
+            with open(params_file, "r", encoding="utf-8") as f:
+                params_yaml = yaml.safe_load(f) or {}
+            for node_key in ("offline_urdf_trainer", "gng_safety"):
+                ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
+                if ros_params:
+                    yaml_data_dir = ros_params.get("data_directory", yaml_data_dir)
+                    yaml_exp_id = ros_params.get("experiment_id", yaml_exp_id)
+                    gng_model_filename = ros_params.get("gng_model_filename", gng_model_filename)
+                    vlut_filename = ros_params.get("vlut_filename", vlut_filename)
+                    break
+        except Exception:
+            pass
+
+    if not data_dir:
+        data_dir = yaml_data_dir
+    if not experiment_id:
+        experiment_id = yaml_exp_id
     if not os.path.isabs(data_dir):
         data_dir = os.path.join(pkg_share, data_dir)
 
-    gng_path = os.path.join(data_dir, experiment_id, "gng.bin")
-    vlut_path = os.path.join(data_dir, experiment_id, "vlut.bin")
+    gng_path = os.path.join(data_dir, experiment_id, gng_model_filename)
+    vlut_path = os.path.join(data_dir, experiment_id, vlut_filename)
     enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
 
     try:
@@ -85,6 +110,7 @@ def launch_setup(context, *args, **kwargs):
                         "experiment_id": LaunchConfiguration("experiment_id"),
                         "dir": LaunchConfiguration("dir"),
                         "data_directory": LaunchConfiguration("data_directory"),
+                        "params_file": LaunchConfiguration("params_file"),
                         "frame_id": LaunchConfiguration("base_frame"),
                         "safety_margin": LaunchConfiguration("safety_margin"),
                         "tag": LaunchConfiguration("tag"),
@@ -123,6 +149,7 @@ def generate_launch_description():
         DeclareLaunchArgument("experiment_id", default_value="", description="(deprecated) VLUTデータセットのID"),
         DeclareLaunchArgument("dir", default_value="gng_results", description="GNG/VLUT データの置き場所"),
         DeclareLaunchArgument("data_directory", default_value="", description="(deprecated) GNG/VLUT データの置き場所"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
         DeclareLaunchArgument("base_frame", default_value="base_link", description="ロボットの基準座標系"),
         DeclareLaunchArgument("tag", default_value="dynamic", description="GNG layer tag"),
         DeclareLaunchArgument("mode", default_value="dynamic", description="GNG layer mode"),

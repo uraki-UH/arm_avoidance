@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <set>
 #include <string>
 #include <vector>
@@ -30,6 +31,21 @@
 #endif
 
 using GNG2 = GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
+
+static std::vector<std::string> splitCommaSeparated(const std::string &text) {
+  std::vector<std::string> items;
+  std::stringstream ss(text);
+  std::string token;
+  while (std::getline(ss, token, ',')) {
+    auto begin = token.find_first_not_of(" \t");
+    auto end = token.find_last_not_of(" \t");
+    if (begin == std::string::npos) {
+      continue;
+    }
+    items.push_back(token.substr(begin, end - begin + 1));
+  }
+  return items;
+}
 
 #ifdef USE_FCL
 // --- Fast Triangle-Box Overlap Test (Akenine-Möller) ---
@@ -192,10 +208,18 @@ public:
         this->declare_parameter<std::string>("data_directory", "gng_results"));
     robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path",
                                                             "temp_robot.urdf");
+    gng_model_filename_ = this->declare_parameter<std::string>(
+        "gng_model_filename", "gng.bin");
+    vlut_filename_ = this->declare_parameter<std::string>(
+        "vlut_filename", "vlut.bin");
     ground_z_threshold_ =
         this->declare_parameter<double>("ground_z_threshold", 0.0);
+    arm_leaf_link_names_ = this->declare_parameter<std::string>(
+        "arm_leaf_link_names", "");
     leaf_link_name_ = this->declare_parameter<std::string>("leaf_link_name",
                                                            "end_effector_link");
+    paired_leaf_link_name_ = this->declare_parameter<std::string>(
+        "paired_leaf_link_name", "");
     gng_dimension_ = this->declare_parameter<int>("gng_dimension", 6);
     spatial_map_resolution_ =
         this->declare_parameter<double>("spatial_map_resolution", 0.02);
@@ -250,7 +274,7 @@ public:
 
   void run_training_pipeline() {
     // 1. Robot Setup
-    kinematics::KinematicChain arm;
+    std::unique_ptr<kinematics::KinematicChain> arm;
     simulation::RobotModel *model = nullptr;
     try {
       std::string resolved_path =
@@ -281,10 +305,31 @@ public:
                   resolved_path.c_str());
       auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
       model = new simulation::RobotModel(model_obj);
-      arm = simulation::createKinematicChainFromModel(*model, leaf_link_name_);
-      arm.setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+      std::vector<std::string> arm_leaf_names =
+          splitCommaSeparated(arm_leaf_link_names_);
+      if (!arm_leaf_names.empty()) {
+        if (arm_leaf_names.size() == 1) {
+          arm = std::make_unique<kinematics::KinematicChain>(
+              simulation::createKinematicChainFromModel(
+                  *model, arm_leaf_names.front()));
+        } else {
+          arm = simulation::createMultiArmKinematicChainFromModels(
+              *model, arm_leaf_names);
+        }
+      } else if (!paired_leaf_link_name_.empty()) {
+        arm = simulation::createMultiArmKinematicChainFromModel(
+            *model, leaf_link_name_, paired_leaf_link_name_);
+      } else if (leaf_link_name_.rfind("left_", 0) == 0) {
+        std::string inferred_right = "right_" + leaf_link_name_.substr(5);
+        arm = simulation::createMultiArmKinematicChainFromModel(
+            *model, leaf_link_name_, inferred_right);
+      } else {
+        arm = std::make_unique<kinematics::KinematicChain>(
+            simulation::createKinematicChainFromModel(*model, leaf_link_name_));
+      }
+      arm->setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
       RCLCPP_INFO(this->get_logger(), "[Robot] Loaded: %s, DOF: %d",
-                  resolved_path.c_str(), arm.getTotalDOF());
+                  resolved_path.c_str(), arm->getTotalDOF());
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "[Error] Robot setup failed: %s",
                    e.what());
@@ -296,7 +341,7 @@ public:
     // 2. Setup Checkers
     auto self_checker =
         std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
-                                                                    arm);
+                                                                    *arm);
     auto env_checker =
         std::make_shared<simulation::EnvironmentCollisionChecker>();
     env_checker->addBoxObstacle(
@@ -312,7 +357,7 @@ public:
     composite_checker->setEnvironmentCollisionChecker(env_checker);
 
     // 3. GNG Setup
-    GNG2 gng(gng_dimension_, 3, &arm);
+    GNG2 gng(gng_dimension_, 3, arm.get());
 
     // Initialize GNG parameters from ROS 2 parameters
     gng.setParams(gng_params_);
@@ -322,14 +367,15 @@ public:
     gng.registerStatusProvider(
         std::make_shared<GNG::GeometricSelfCollisionProvider<Eigen::VectorXf,
                                                              Eigen::Vector3f>>(
-            composite_checker.get(), &arm));
+            composite_checker.get(), arm.get()));
     gng.registerStatusProvider(
         std::make_shared<
             GNG::ManipulabilityProvider<Eigen::VectorXf, Eigen::Vector3f>>(
-            &arm));
+            arm.get()));
     gng.registerStatusProvider(
         std::make_shared<
-            GNG::EEDirectionProvider<Eigen::VectorXf, Eigen::Vector3f>>(&arm));
+            GNG::EEDirectionProvider<Eigen::VectorXf, Eigen::Vector3f>>(
+            arm.get()));
 
     std::filesystem::path output_dir =
         std::filesystem::path(data_directory_) / experiment_id_;
@@ -337,7 +383,7 @@ public:
         (output_dir / (experiment_id_ + "_distance_stats.dat")).string());
 
     // Define standard file paths
-    std::string gng_file_path = (output_dir / "gng.bin").string();
+    std::string gng_file_path = (output_dir / gng_model_filename_).string();
 
     // 4. Training Steps
     if (vlut_only_) {
@@ -476,10 +522,10 @@ public:
     for (int nid : active_ids) {
       auto &node = gng.nodeAt(nid);
       Eigen::VectorXd q = node.weight_angle.template cast<double>().head(
-          std::min((int)node.weight_angle.size(), arm.getTotalDOF()));
-      arm.updateKinematics(q);
-      self_checker->updateBodyPoses(arm.getLinkPositions(),
-                                    arm.getLinkOrientations());
+          std::min((int)node.weight_angle.size(), arm->getTotalDOF()));
+      arm->updateKinematics(q);
+      self_checker->updateBodyPoses(arm->getLinkPositions(),
+                                    arm->getLinkOrientations());
 
       for (auto const &[link_idx, cloud] : link_voxel_clouds) {
         fcl::Transform3d tf =
@@ -550,7 +596,7 @@ public:
 
     // Save VLUT
 #ifdef USE_FCL
-    std::string vlut_file_path = (output_dir_path / "vlut.bin").string();
+    std::string vlut_file_path = (output_dir_path / vlut_filename_).string();
     std::ofstream ofs(vlut_file_path, std::ios::binary);
     if (ofs) {
       // --- Add Self-Describing Header ---
@@ -599,8 +645,12 @@ private:
   std::string experiment_id_;
   std::string data_directory_;
   std::string robot_urdf_path_;
+  std::string gng_model_filename_;
+  std::string vlut_filename_;
   double ground_z_threshold_;
+  std::string arm_leaf_link_names_;
   std::string leaf_link_name_;
+  std::string paired_leaf_link_name_;
   int gng_dimension_;
   double spatial_map_resolution_;
   double sensing_resolution_;

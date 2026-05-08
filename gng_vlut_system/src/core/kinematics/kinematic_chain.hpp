@@ -22,21 +22,23 @@ struct Link {
 class KinematicChain {
 public:
   KinematicChain() = default;
+  virtual ~KinematicChain() = default;
 
   // --- 構造の定義 ---
-  void setBase(
+  virtual void setBase(
       const Eigen::Vector3d &position,
       const Eigen::Quaterniond &orientation = Eigen::Quaterniond::Identity());
-  void addSegment(const Link &link, const Joint &joint);
+  virtual void addSegment(const Link &link, const Joint &joint);
 
   // --- 関節変数の設定/取得 ---
-  bool setJointValues(const std::vector<double> &values);
-  std::vector<double> getJointValues() const;
-  bool isWithinLimits(const std::vector<double> &values) const;
-  void clampToLimits(std::vector<double> &values) const;
+  virtual bool setJointValues(const std::vector<double> &values);
+  virtual std::vector<double> getJointValues() const;
+  virtual bool isWithinLimits(const std::vector<double> &values) const;
+  virtual void clampToLimits(std::vector<double> &values) const;
 
   // --- 計算メソッド ---
   // 内部状態を変更する共通API追加: Eigenベクターから直接関節値を設定しFKを実行
+  virtual void updateKinematics(const std::vector<double> &values);
   template <typename Derived>
   void updateKinematics(const Eigen::MatrixBase<Derived> &q_eigen) {
     if (q_eigen.size() == 0)
@@ -45,8 +47,7 @@ public:
     for (int i = 0; i < q_eigen.size(); ++i) {
       q_vec[i] = static_cast<double>(q_eigen[i]);
     }
-    setJointValues(q_vec);
-    forwardKinematics();
+    updateKinematics(q_vec);
   }
 
   // 非破壊版：指定 joint 値ベクトルを使って FK を計算（内部状態は変更しない）
@@ -82,24 +83,24 @@ public:
     }
     forwardKinematicsAt(q_vec, out_positions, out_orientations);
   }
-  void forwardKinematicsAt(
+  virtual void forwardKinematicsAt(
       const std::vector<double> &values,
       std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
           &out_positions,
       std::vector<Eigen::Quaterniond,
                   Eigen::aligned_allocator<Eigen::Quaterniond>>
           &out_orientations) const;
-  void forwardKinematicsAt(const std::vector<double> &values);
+  virtual void forwardKinematicsAt(const std::vector<double> &values);
 
   // 順運動学 (FK)
-  void forwardKinematics();
+  virtual void forwardKinematics();
 
   // 非破壊版：指定 joint 値ベクトルを使って target_joint_index
   // に対するヤコビアンを計算
-  Eigen::MatrixXd calculateJacobianAt(int target_joint_index,
-                                      const std::vector<double> &values) const;
+  virtual Eigen::MatrixXd calculateJacobianAt(int target_joint_index,
+                                              const std::vector<double> &values) const;
   // ヤコビアンの計算
-  Eigen::MatrixXd calculateJacobian(int target_joint_index) const;
+  virtual Eigen::MatrixXd calculateJacobian(int target_joint_index) const;
   // 逆運動学 (IK)
   /* 非破壊 IK (フル姿勢) */
   bool inverseKinematicsAt(
@@ -141,14 +142,14 @@ public:
                             double pos_tolerance = 1e-3);
 
   // --- ゲッター (FK実行後に有効) ---
-  int getNumJoints() const;
-  int getTotalDOF() const;
-  Eigen::Vector3d getJointPosition(int joint_index) const;
-  Eigen::Quaterniond getJointOrientation(int joint_index) const;
-  std::string getJointName(int joint_index) const;
-  int getJointDOF(int joint_index) const;
+  virtual int getNumJoints() const;
+  virtual int getTotalDOF() const;
+  virtual Eigen::Vector3d getJointPosition(int joint_index) const;
+  virtual Eigen::Quaterniond getJointOrientation(int joint_index) const;
+  virtual std::string getJointName(int joint_index) const;
+  virtual int getJointDOF(int joint_index) const;
 
-  std::string getLinkName(int link_index) const;
+  virtual std::string getLinkName(int link_index) const;
   Eigen::Vector3d getLinkVector(int link_index) const {
     if (link_index >= 0 && link_index < (int)links_.size())
       return links_[link_index].vector;
@@ -157,29 +158,25 @@ public:
 
   const Link &getLink(int link_index) const { return links_.at(link_index); }
 
-  Eigen::Vector3d getEEFPosition() const;
-  Eigen::Quaterniond getEEFOrientation() const;
+  virtual Eigen::Vector3d getEEFPosition() const;
+  virtual Eigen::Quaterniond getEEFOrientation() const;
 
   // --- アクセサ追加 ---
-  const std::vector<Eigen::Vector3d,
-                    Eigen::aligned_allocator<Eigen::Vector3d>> &
-  getLinkPositions() const {
-    return joint_positions_world_;
-  }
-  const std::vector<Eigen::Quaterniond,
-                    Eigen::aligned_allocator<Eigen::Quaterniond>> &
-  getLinkOrientations() const {
-    return joint_orientations_world_;
-  }
+  virtual const std::vector<Eigen::Vector3d,
+                            Eigen::aligned_allocator<Eigen::Vector3d>> &
+  getLinkPositions() const;
+  virtual const std::vector<Eigen::Quaterniond,
+                            Eigen::aligned_allocator<Eigen::Quaterniond>> &
+  getLinkOrientations() const;
 
   // --- 先端オフセットの設定 ---
-  void setEEFOffset(const Eigen::Vector3d &offset);
-  Eigen::Vector3d getEEFOffset() const;
+  virtual void setEEFOffset(const Eigen::Vector3d &offset);
+  virtual Eigen::Vector3d getEEFOffset() const;
 
   // --- 全リンク姿勢の構築（固定リンク対応） ---
   // forwardKinematicsAtの結果から、固定リンクを含む全リンクの姿勢を構築
   // RobotModelの情報を使って固定リンクの位置を計算
-  void buildAllLinkTransforms(
+  virtual void buildAllLinkTransforms(
       const std::vector<Eigen::Vector3d,
                         Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
       const std::vector<Eigen::Quaterniond,
@@ -190,11 +187,11 @@ public:
       std::map<std::string, Eigen::Isometry3d> &link_transforms) const;
 
   // --- 追加：内部状態を変更しないサンプリングAPI ---
-  std::vector<double> sampleRandomJointValues()
+  virtual std::vector<double> sampleRandomJointValues()
       const; // 全DOFをサンプリング（内部状態は変更しない）
-  std::vector<double> sampleRandomJointValue(int joint_index)
+  virtual std::vector<double> sampleRandomJointValue(int joint_index)
       const; // 指定1関節のみサンプリングした全DOFベクトルを返す
-  std::vector<double>
+  virtual std::vector<double>
   sampleRandomJointValues(const std::vector<int> &joint_indices)
       const; // 指定複数関節のみサンプリング
 

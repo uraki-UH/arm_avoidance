@@ -28,6 +28,8 @@ public:
 
 private:
     bool loadRobotDescription(std::string& out_text, const std::string& source_path) const;
+    static std::vector<std::string> splitCommaSeparated(const std::string &text);
+    std::vector<std::string> inferLeafLinkNames() const;
     void buildJointIndexMap();
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     std::string buildRobotJsonLocked(
@@ -38,7 +40,7 @@ private:
     void publishCurrentState();
 
     simulation::RobotModel robot_model_;
-    kinematics::KinematicChain chain_;
+    std::unique_ptr<kinematics::KinematicChain> chain_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr description_pub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pose_pub_;
@@ -54,6 +56,7 @@ private:
     std::string joint_state_topic_;
     std::string stream_topic_;
     std::string frame_id_;
+    std::string arm_leaf_link_names_;
     double publish_hz_;
     bool first_publish_ = true;
 

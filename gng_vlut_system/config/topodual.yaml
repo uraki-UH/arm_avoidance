@@ -3,12 +3,16 @@ offline_urdf_trainer:
     # Experiment Settings
     experiment_id: "topoarm_double_test"
     data_directory: "gng_results"
+    gng_model_filename: "gng.bin"
+    vlut_filename: "vlut.bin"
 
     # Robot Settings
     robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     ground_z_threshold: 0.0
-    leaf_link_name: "left_end_effector_link"
-    gng_dimension: 6
+    arm_leaf_link_names: "left_link7,right_link7"
+    leaf_link_name: "left_link7"
+    paired_leaf_link_name: "right_link7"
+    gng_dimension: 12
 
     # Voxel Resolution Settings
     spatial_map_resolution: 0.02
@@ -34,3 +38,13 @@ offline_urdf_trainer:
       n_best_candidates: 4
       ais_threshold: 1.0
       start_node_num: 2
+
+robot_viewer_bridge_node:
+  ros__parameters:
+    robot_name: "topoarm"
+    robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
+    arm_leaf_link_names: "left_link7,right_link7"
+    joint_state_topic: "/joint_states"
+    stream_topic: "/viewer/internal/stream/robot"
+    frame_id: "world"
+    publish_hz: 30.0
