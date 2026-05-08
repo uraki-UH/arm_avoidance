@@ -87,9 +87,10 @@ if(USE_ROS2)
   add_executable(robot_description_player_node nodes/description/robot_description_player.cpp)
   add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
   add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
+  add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
 
   # Link & Installation for all nodes
-  set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node)
+  set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node)
   foreach(node ${NODES})
     target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
     ament_target_dependencies(${node} ${DEPS_ROS})

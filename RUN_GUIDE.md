@@ -96,3 +96,6 @@ scale: 1.0000 1.0000 1.0000
 
 
 python3 scratch/transform_pointcloud.py
+
+
+ros2 run gng_vlut_system self_recognition_filter_node
