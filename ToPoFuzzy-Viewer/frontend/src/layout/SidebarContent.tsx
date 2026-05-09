@@ -29,8 +29,8 @@ import { GngLayerControls, type GngLayerState } from '../features/visualization/
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
 import { RosbagPlayer } from '../features/io/RosbagPlayer';
+import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
-import { LayerItem } from '../components/ui/LayerItem';
 
 import {
     PointCloudData,
@@ -369,60 +369,45 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
         <div className="space-y-3">
             <CollapsibleSection title="Rendering" icon={<Gauge size={16} />} defaultOpen={true}>
                 <div className="surface-muted space-y-4 p-3">
-                    <div>
-                        <label className="control-label mb-1 block">Point Size: {props.heatmapSettings.pointSize.toFixed(3)}</label>
-                        <input
-                            type="range"
-                            min="0.01"
-                            max="0.2"
-                            step="0.01"
-                            value={props.heatmapSettings.pointSize}
-                            onChange={(e) => props.setHeatmapSettings({ ...props.heatmapSettings, pointSize: parseFloat(e.target.value) })}
-                            className="w-full"
-                        />
-                    </div>
-                    <div>
-                        <label className="control-label mb-1 block">Opacity: {props.pointCloudOpacity.toFixed(2)}</label>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.05"
-                            value={props.pointCloudOpacity}
-                            onChange={(e) => props.setPointCloudOpacity(parseFloat(e.target.value))}
-                            className="w-full"
-                        />
-                    </div>
+                    <ControlSlider
+                        label="Point Size"
+                        value={props.heatmapSettings.pointSize}
+                        min={0.01}
+                        max={0.2}
+                        step={0.01}
+                        onChange={(val) => props.setHeatmapSettings({ ...props.heatmapSettings, pointSize: val })}
+                    />
+                    <ControlSlider
+                        label="Opacity"
+                        value={props.pointCloudOpacity}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={props.setPointCloudOpacity}
+                        formatValue={(v) => `${Math.round(v * 100)}%`}
+                    />
                 </div>
             </CollapsibleSection>
 
             {hasGngLayer && (
                 <CollapsibleSection title="Topology Display" icon={<Box size={16} />} defaultOpen={false}>
                     <div className="surface-muted space-y-4 p-3">
-                        <div>
-                            <label className="control-label mb-1 block">Node Size: {props.gngLayer.nodeScale.toFixed(3)}</label>
-                            <input
-                                type="range"
-                                min="0.005"
-                                max="0.1"
-                                step="0.001"
-                                value={props.gngLayer.nodeScale}
-                                onChange={(e) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, nodeScale: parseFloat(e.target.value) }))}
-                                className="w-full"
-                            />
-                        </div>
-                        <div>
-                            <label className="control-label mb-1 block">Edge Width: {props.gngLayer.edgeWidth.toFixed(3)}</label>
-                            <input
-                                type="range"
-                                min="0.001"
-                                max="0.05"
-                                step="0.001"
-                                value={props.gngLayer.edgeWidth}
-                                onChange={(e) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, edgeWidth: parseFloat(e.target.value) }))}
-                                className="w-full"
-                            />
-                        </div>
+                        <ControlSlider
+                            label="Node Size"
+                            value={props.gngLayer.nodeScale}
+                            min={0.005}
+                            max={0.1}
+                            step={0.001}
+                            onChange={(val) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, nodeScale: val }))}
+                        />
+                        <ControlSlider
+                            label="Edge Width"
+                            value={props.gngLayer.edgeWidth}
+                            min={0.001}
+                            max={0.05}
+                            step={0.001}
+                            onChange={(val) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, edgeWidth: val }))}
+                        />
                     </div>
                 </CollapsibleSection>
             )}

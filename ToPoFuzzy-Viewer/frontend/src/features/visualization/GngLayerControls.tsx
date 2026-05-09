@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings, STATIC_GNG_DEFAULTS, DYNAMIC_GNG_DEFAULTS } from '../../types';
 
@@ -34,9 +34,7 @@ interface GngLayerControlsProps {
     hasTf?: boolean;
 }
 
-import { getStatusLabel } from '../../utils/rosUtils';
-
-import { LayerItem } from '../../components/ui/LayerItem';
+import { getStatusLabel, LayerItem, CompactToggle, ControlSlider } from '../../components/ui/SharedControls';
 
 export function GngLayerControls({
     tag,
@@ -50,7 +48,6 @@ export function GngLayerControls({
 }: GngLayerControlsProps) {
     const isStatic = graphData.mode === 'static';
 
-    // Local buffered opacity... (keeping existing hooks)
     const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
     const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || STATIC_GNG_DEFAULTS.nodeColor);
     const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || STATIC_GNG_DEFAULTS.edgeColor);
@@ -97,7 +94,6 @@ export function GngLayerControls({
 
             {settings.visible && (
                 <div className="mt-3 space-y-3">
-                    {/* Main Toggles */}
                     <div className="grid grid-cols-2 gap-2">
                         <CompactToggle
                             icon={<Square size={12} />}
@@ -144,63 +140,20 @@ export function GngLayerControls({
                         </div>
                     </div>
 
-                    {/* Opacity Slider (optional) */}
                     {showOpacity && (
-                        <div className="space-y-1">
-                            <div className="flex items-center justify-between">
-                                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                                    Opacity
-                                </label>
-                                <span className="text-[10px] font-mono text-[var(--accent-strong)]">
-                                    {Math.round(localOpacity * 100)}%
-                                </span>
-                            </div>
-                            <input
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.01"
-                                value={localOpacity}
-                                onChange={(e) => setLocalOpacity(parseFloat(e.target.value))}
-                                onMouseUp={() => onUpdate({ opacity: localOpacity })}
-                                onPointerUp={() => onUpdate({ opacity: localOpacity })}
-                                onTouchEnd={() => onUpdate({ opacity: localOpacity })}
-                                className="w-full accent-[var(--accent-color)]"
-                            />
-                        </div>
+                        <ControlSlider
+                            label="Opacity"
+                            value={localOpacity}
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            onChange={setLocalOpacity}
+                            onPointerUp={() => onUpdate({ opacity: localOpacity })}
+                            formatValue={(v) => `${Math.round(v * 100)}%`}
+                        />
                     )}
-
                 </div>
             )}
         </div>
-    );
-}
-
-interface CompactToggleProps {
-    icon: React.ReactNode;
-    label: string;
-    isOn: boolean;
-    onToggle: () => void;
-}
-
-function CompactToggle({ icon, label, isOn, onToggle }: CompactToggleProps) {
-    return (
-        <button
-            onClick={(e) => {
-                e.stopPropagation();
-                onToggle();
-            }}
-            className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 transition-all w-full ${
-                isOn 
-                ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)]/50 text-[var(--text-primary)]' 
-                : 'border-white/5 bg-black/20 text-[var(--text-secondary)] opacity-60'
-            }`}
-        >
-            <div className="flex items-center gap-1.5">
-                <span className={isOn ? 'text-[var(--accent-strong)]' : ''}>{icon}</span>
-                <span className="text-[11px] font-medium">{label}</span>
-            </div>
-            <div className={`h-1.5 w-1.5 rounded-full ${isOn ? 'bg-[var(--accent-color)] shadow-[0_0_5px_var(--accent-color)]' : 'bg-white/20'}`} />
-        </button>
     );
 }
