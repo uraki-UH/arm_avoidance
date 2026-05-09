@@ -24,40 +24,33 @@ export function GenericTransformModal({
     if (!open || !transform) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm transition-all animate-in fade-in">
-            <div className="absolute inset-0 cursor-default" onClick={onClose} />
-
-            <div
-                role="dialog"
-                className="relative z-[101] w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-[#0c141d] shadow-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-5 py-4">
+        <div className="fixed top-20 left-4 z-[9999] w-72 animate-in fade-in slide-in-from-left-2 duration-300">
+            <div className="surface-panel flex flex-col overflow-hidden shadow-2xl ring-1 ring-white/10">
+                <div className="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
                     <div className="min-w-0">
-                        <h2 className="text-base font-semibold text-white leading-tight">{title}</h2>
-                        {subtitle && <p className="mt-1 truncate text-xs text-gray-400">{subtitle}</p>}
+                        <h2 className="text-sm font-bold text-white leading-tight">{title}</h2>
+                        {subtitle && <p className="mt-0.5 truncate text-[10px] text-gray-400 font-mono opacity-70">{subtitle}</p>}
                     </div>
                     <button
                         onClick={onClose}
-                        className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white/10 hover:text-white transition-all"
                     >
-                        <X size={18} />
+                        <X size={16} />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+                <div className="max-h-[70vh] overflow-y-auto p-4 custom-scrollbar bg-[#0c141d]/50">
                     <GenericTransformPanel 
-                        title="Transformation Settings"
+                        title="Manual Transform"
                         transform={transform} 
                         onUpdate={onUpdate} 
                         onReset={onReset}
-                        description="Adjust the spatial orientation for visualization."
                     />
                 </div>
 
-                <div className="border-t border-white/5 bg-black/20 px-5 py-3">
-                    <p className="text-[10px] text-gray-500 italic">
-                        * Changes are applied instantly to the visualization.
+                <div className="border-t border-white/5 bg-black/30 px-4 py-2">
+                    <p className="text-[9px] text-gray-500 italic leading-tight">
+                        * Real-time spatial transformation for current layer.
                     </p>
                 </div>
             </div>

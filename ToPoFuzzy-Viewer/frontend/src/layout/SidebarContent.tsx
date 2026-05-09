@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     Activity,
     Box,
@@ -23,7 +23,7 @@ import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
 import { GenericTransformPanel } from '../features/manipulation/GenericTransformPanel';
-import { GenericTransformModal } from '../features/manipulation/GenericTransformModal';
+// removed
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
@@ -149,6 +149,7 @@ interface SidebarContentProps {
     onRemoveMarker: (tag: string) => void;
 
     transforms: Record<string, TransformData>;
+    onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker', id: string, title: string) => void;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -156,11 +157,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const visibleLayerCount = props.pointClouds.filter((pc) => pc.visible !== false).length;
     const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
     const isLayerActionDisabled = props.isEditMode;
-    const [transformContext, setTransformContext] = useState<{
-        type: 'pointcloud' | 'graph' | 'robot' | 'marker';
-        id: string;
-        title: string;
-    } | null>(null);
 
     const layersTab = (
         <div className="space-y-3">
@@ -256,7 +252,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setTransformContext({ type: 'pointcloud', id: pc.id, title: pc.name });
+                                                    props.onOpenTransform('cloud', pc.id, pc.name);
                                                 }}
                                                 className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
@@ -300,7 +296,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 onRemove={() => props.onRemoveGngLayer(tag)}
                                 showOpacity={false}
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
-                                onOpenTransform={() => setTransformContext({ type: 'graph', id: tag, title: `Graph: ${tag}` })}
+                                onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
                             />
                         ))}
 
@@ -319,7 +315,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 {props.robotSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
                                             </button>
                                             <button
-                                                onClick={() => setTransformContext({ type: 'robot', id: tag, title: `Robot: ${tag}` })}
+                                                onClick={() => props.onOpenTransform('robot', tag, `Robot: ${tag}`)}
                                                 className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
                                             >
@@ -389,7 +385,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 {props.markerSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
                                             </button>
                                             <button
-                                                onClick={() => setTransformContext({ type: 'marker', id: tag, title: `Markers: ${tag}` })}
+                                                onClick={() => props.onOpenTransform('marker', tag, `Markers: ${tag}`)}
                                                 className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
                                             >
@@ -452,85 +448,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 <ExportPanel pointClouds={props.pointClouds} selectedLayerId={props.selectedLayerId} />
             </CollapsibleSection>
 
-            <GenericTransformModal
-                title={transformContext?.title || 'Transform'}
-                subtitle={transformContext?.id}
-                open={Boolean(transformContext)}
-                transform={(() => {
-                    if (!transformContext) return null;
-                    if (transformContext.type === 'pointcloud') {
-                        const target = props.pointClouds.find(pc => pc.id === transformContext.id);
-                        return target ? {
-                            position: target.position || [0, 0, 0],
-                            rotation: target.rotation || [0, 0, 0],
-                            scale: target.scale || [1, 1, 1]
-                        } : null;
-                    }
-                    if (transformContext.type === 'graph') {
-                        return props.layerSettings[transformContext.id]?.graphTransform || {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1]
-                        };
-                    }
-                    if (transformContext.type === 'robot') {
-                        return props.robotSettings[transformContext.id]?.transform || {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1]
-                        };
-                    }
-                    if (transformContext.type === 'marker') {
-                        return props.markerSettings[transformContext.id]?.transform || {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1]
-                        };
-                    }
-                    return null;
-                })()}
-                onClose={() => setTransformContext(null)}
-                onUpdate={(updates) => {
-                    if (!transformContext) return;
-                    if (transformContext.type === 'pointcloud') {
-                        props.onUpdateTransform(transformContext.id, updates);
-                    } else if (transformContext.type === 'graph') {
-                        const current = props.layerSettings[transformContext.id]?.graphTransform || {
-                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
-                        };
-                        props.onUpdateLayerSettings(transformContext.id, {
-                            graphTransform: { ...current, ...updates }
-                        });
-                    } else if (transformContext.type === 'robot') {
-                        const current = props.robotSettings[transformContext.id]?.transform || {
-                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
-                        };
-                        props.onUpdateRobotSettings(transformContext.id, {
-                            transform: { ...current, ...updates }
-                        });
-                    } else if (transformContext.type === 'marker') {
-                        const current = props.markerSettings[transformContext.id]?.transform || {
-                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
-                        };
-                        props.onUpdateMarkerSettings(transformContext.id, {
-                            transform: { ...current, ...updates }
-                        });
-                    }
-                }}
-                onReset={() => {
-                    if (!transformContext) return;
-                    const identity: Transform = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
-                    if (transformContext.type === 'pointcloud') {
-                        props.onUpdateTransform(transformContext.id, identity);
-                    } else if (transformContext.type === 'graph') {
-                        props.onUpdateLayerSettings(transformContext.id, { graphTransform: identity });
-                    } else if (transformContext.type === 'robot') {
-                        props.onUpdateRobotSettings(transformContext.id, { transform: identity });
-                    } else if (transformContext.type === 'marker') {
-                        props.onUpdateMarkerSettings(transformContext.id, { transform: identity });
-                    }
-                }}
-            />
 
         </div>
     );

@@ -25,6 +25,7 @@ import { useZoneMonitor } from './features/analysis/useZoneMonitor';
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
 import { type GngLayerState } from './features/visualization/GngLayerControls';
+import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
 
 import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
@@ -42,6 +43,12 @@ interface EditJobStatus {
     progress: number;
     stage: string;
     error?: string;
+}
+
+interface TransformContext {
+    type: 'cloud' | 'layer' | 'robot' | 'marker';
+    id: string;
+    title: string;
 }
 
 const cloneVec3 = (
@@ -121,6 +128,7 @@ function App() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
+    const [transformContext, setTransformContext] = useState<TransformContext | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -249,60 +257,60 @@ function App() {
 
         Object.keys(graphData).forEach(tag => {
             const isStatic = graphData[tag]?.mode === 'static';
-                if (!newSettings[tag]) {
-                    newSettings[tag] = {
-                        visible: true,
-                        showNodes: true,
-                        showEdges: true,
-                        showClusters: false,
-                        opacity: STATIC_GNG_DEFAULTS.opacity,
-                        graphTransform: {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1],
-                        },
-                        ...(isStatic ? {
-                            nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
-                            edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
-                        } : {
-                            nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
-                            edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
-                        })
-                    };
-                    changed = true;
-                } else if (isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
-                    newSettings[tag] = {
-                        ...newSettings[tag],
-                        nodeColor: newSettings[tag].nodeColor || STATIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: newSettings[tag].edgeColor || STATIC_GNG_DEFAULTS.edgeColor,
-                        graphTransform: newSettings[tag].graphTransform || {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1],
-                        },
-                    };
-                    changed = true;
-                } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
-                    newSettings[tag] = {
-                        ...newSettings[tag],
-                        nodeColor: newSettings[tag].nodeColor || DYNAMIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: newSettings[tag].edgeColor || DYNAMIC_GNG_DEFAULTS.edgeColor,
-                        graphTransform: newSettings[tag].graphTransform || {
-                            position: [0, 0, 0],
-                            rotation: [0, 0, 0],
-                            scale: [1, 1, 1],
-                        },
-                    };
-                    changed = true;
-                }
-            });
+            if (!newSettings[tag]) {
+                newSettings[tag] = {
+                    visible: true,
+                    showNodes: true,
+                    showEdges: true,
+                    showClusters: false,
+                    opacity: STATIC_GNG_DEFAULTS.opacity,
+                    graphTransform: {
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    },
+                    ...(isStatic ? {
+                        nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
+                    } : {
+                        nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
+                    })
+                };
+                changed = true;
+            } else if (isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    nodeColor: newSettings[tag].nodeColor || STATIC_GNG_DEFAULTS.nodeColor,
+                    edgeColor: newSettings[tag].edgeColor || STATIC_GNG_DEFAULTS.edgeColor,
+                    graphTransform: newSettings[tag].graphTransform || {
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    },
+                };
+                changed = true;
+            } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    nodeColor: newSettings[tag].nodeColor || DYNAMIC_GNG_DEFAULTS.nodeColor,
+                    edgeColor: newSettings[tag].edgeColor || DYNAMIC_GNG_DEFAULTS.edgeColor,
+                    graphTransform: newSettings[tag].graphTransform || {
+                        position: [0, 0, 0],
+                        rotation: [0, 0, 0],
+                        scale: [1, 1, 1],
+                    },
+                };
+                changed = true;
+            }
+        });
 
         if (changed) {
             setLayerSettings(newSettings);
         }
     }, [graphData]);
 
-    const updateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
+    const handleUpdateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
         setLayerSettings(prev => ({
             ...prev,
             [tag]: { ...prev[tag], ...updates }
@@ -776,239 +784,294 @@ function App() {
     };
 
     return (
-        <MainLayout
-            isSidebarOpen={isSidebarOpen}
-            sidebar={
-                <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar}>
-                    <SidebarContent
-                        isConnected={isConnected}
-                        connect={connect}
-                        disconnect={disconnect}
-                        wsError={wsError}
-                        getSources={getSources}
-                        subscribeSource={subscribeSource}
-                        unsubscribeSource={unsubscribeSource}
-                        onSourceToggled={handleSourceToggled}
-                        onLoadCloud={handleAddPointCloud}
-                        listRosbags={listRosbags}
-                        playRosbag={playRosbag}
-                        stopRosbag={stopRosbag}
-                        getRosbagStatus={getRosbagStatus}
-                        listPointCloudFiles={listPointCloudFiles}
-                        loadPointCloudFile={loadPointCloudFile}
-                        totalPoints={totalPoints}
-                        pointClouds={pointClouds}
-                        selectedLayerId={selectedLayerId}
-                        onSelectLayer={handleSelectLayer}
-                        onToggleVisibility={handleToggleVisibility}
-                        onRemoveLayer={handleRemoveLayer}
-                        graphData={graphData}
-                        layerSettings={layerSettings}
-                        onUpdateLayerSettings={updateLayerSettings}
-                        onRemoveGngLayer={removeLayer}
-                        gngLayer={gngLayer}
-                        setGngLayer={setGngLayer}
-                        heatmapSettings={heatmapSettings}
-                        setHeatmapSettings={setHeatmapSettings}
-                        pointCloudOpacity={pointCloudOpacity}
-                        setPointCloudOpacity={setPointCloudOpacity}
-                        bounds={bounds}
-                        selectedCloud={selectedCloud}
-                        transformMode={transformMode}
-                        setTransformMode={setTransformMode}
-                        onUpdateTransform={handleUpdateTransform}
-                        clipping={clipping}
-                        onPublishEdited={handlePublishEditedCloud}
-                        isEditMode={isEditMode}
-                        onStartEdit={handleStartEdit}
-                        onCancelEdit={handleCancelEdit}
-                        canStartEdit={canStartEdit}
-                        startEditDisabledReason={startEditDisabledReason}
-                        editRegions={editRegions}
-                        onAddRegion={handleAddRegion}
-                        onRemoveRegion={handleRemoveRegion}
-                        onClearRegions={handleClearRegions}
-                        draftRegion={draftRegion}
-                        regionGizmoMode={regionGizmoMode}
-                        setRegionGizmoMode={setRegionGizmoMode}
-                        editJobStatus={editJobStatus}
-                        zoneMonitor={zoneMonitor}
-                        zoneCounts={zoneCounts}
-                        startGng={startGng}
-                        stopGng={stopGng}
-                        getGngStatus={getGngStatus}
-                        listGngConfigs={listGngConfigs}
-                        getParameters={getParameters}
-                        setParameter={setParameter}
-                        startContinuousPublish={startContinuousPublish}
-                        stopContinuousPublish={stopContinuousPublish}
-                        getContinuousPublishStatus={getContinuousPublishStatus}
-                        robotData={robotData}
-                        robotSettings={robotSettings}
-                        onUpdateRobotSettings={handleUpdateRobotSettings}
-                        onRemoveRobot={handleRemoveRobot}
-                        markerData={markerData}
-                        markerSettings={markerSettings}
-                        onUpdateMarkerSettings={handleUpdateMarkerSettings}
-                        onRemoveMarker={handleRemoveMarker}
-                        transforms={transforms}
-                    />
-                </Sidebar>
-            }
-        >
-            <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
-                <Canvas
-                    frameloop="demand"
-                    camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
-                    gl={{
-                        localClippingEnabled: false,
-                        clippingPlanes: clipping.getThreePlanes(),
-                        powerPreference: 'high-performance',
-                        antialias: true,
-                    }}
-                >
-                    <ambientLight intensity={0.3} />
-                    <pointLight position={[10, 10, 10]} intensity={0.5} />
-                    <pointLight position={[-10, -10, -10]} intensity={0.3} />
-
-                    {renderClouds.map((pc) => (
-                        <PointCloudRenderer
-                            key={pc.id}
-                            data={pc}
+        <>
+            <MainLayout
+                isSidebarOpen={isSidebarOpen}
+                sidebar={
+                    <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar}>
+                        <SidebarContent
+                            isConnected={isConnected}
+                            connect={connect}
+                            disconnect={disconnect}
+                            wsError={wsError}
+                            getSources={getSources}
+                            subscribeSource={subscribeSource}
+                            unsubscribeSource={unsubscribeSource}
+                            onSourceToggled={handleSourceToggled}
+                            onLoadCloud={handleAddPointCloud}
+                            listRosbags={listRosbags}
+                            playRosbag={playRosbag}
+                            stopRosbag={stopRosbag}
+                            getRosbagStatus={getRosbagStatus}
+                            listPointCloudFiles={listPointCloudFiles}
+                            loadPointCloudFile={loadPointCloudFile}
+                            totalPoints={totalPoints}
+                            pointClouds={pointClouds}
+                            selectedLayerId={selectedLayerId}
+                            onSelectLayer={handleSelectLayer}
+                            onToggleVisibility={handleToggleVisibility}
+                            onRemoveLayer={handleRemoveLayer}
+                            graphData={graphData}
+                            layerSettings={layerSettings}
+                            onUpdateLayerSettings={handleUpdateLayerSettings}
+                            onRemoveGngLayer={removeLayer}
+                            gngLayer={gngLayer}
+                            setGngLayer={setGngLayer}
                             heatmapSettings={heatmapSettings}
-                            selected={isEditMode && pc.id === editLayerId}
+                            setHeatmapSettings={setHeatmapSettings}
+                            pointCloudOpacity={pointCloudOpacity}
+                            setPointCloudOpacity={setPointCloudOpacity}
+                            bounds={bounds}
+                            selectedCloud={selectedCloud}
                             transformMode={transformMode}
-                            onTransformChange={(pos, rot, scale) => handleTransformChange(pc.id, pos, rot, scale)}
+                            setTransformMode={setTransformMode}
+                            onUpdateTransform={handleUpdateTransform}
+                            clipping={clipping}
+                            onPublishEdited={handlePublishEditedCloud}
+                            isEditMode={isEditMode}
+                            onStartEdit={handleStartEdit}
+                            onCancelEdit={handleCancelEdit}
+                            canStartEdit={canStartEdit}
+                            startEditDisabledReason={startEditDisabledReason}
+                            editRegions={editRegions}
+                            onAddRegion={handleAddRegion}
+                            onRemoveRegion={handleRemoveRegion}
+                            onClearRegions={handleClearRegions}
+                            draftRegion={draftRegion}
+                            regionGizmoMode={regionGizmoMode}
+                            setRegionGizmoMode={setRegionGizmoMode}
+                            editJobStatus={editJobStatus}
+                            zoneMonitor={zoneMonitor}
+                            zoneCounts={zoneCounts}
+                            startGng={startGng}
+                            stopGng={stopGng}
+                            getGngStatus={getGngStatus}
+                            listGngConfigs={listGngConfigs}
+                            getParameters={getParameters}
+                            setParameter={setParameter}
+                            startContinuousPublish={startContinuousPublish}
+                            stopContinuousPublish={stopContinuousPublish}
+                            getContinuousPublishStatus={getContinuousPublishStatus}
+                            robotData={robotData}
+                            robotSettings={robotSettings}
+                            onUpdateRobotSettings={handleUpdateRobotSettings}
+                            onRemoveRobot={handleRemoveRobot}
+                            markerData={markerData}
+                            markerSettings={markerSettings}
+                            onUpdateMarkerSettings={handleUpdateMarkerSettings}
+                            onRemoveMarker={handleRemoveMarker}
+                            transforms={transforms}
+                            onOpenTransform={(type, id, title) => setTransformContext({ type, id, title })}
                         />
-                    ))}
+                    </Sidebar>
+                }
+            >
+                <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
+                        <Canvas
+                        frameloop="demand"
+                        camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
+                        gl={{
+                            localClippingEnabled: false,
+                            clippingPlanes: clipping.getThreePlanes(),
+                            powerPreference: 'high-performance',
+                            antialias: true,
+                        }}
+                    >
+                        <ambientLight intensity={0.3} />
+                        <pointLight position={[10, 10, 10]} intensity={0.5} />
+                        <pointLight position={[-10, -10, -10]} intensity={0.3} />
 
-                    <EditAabbTool
-                        enabled={isEditMode && !editJobStatus?.isRunning}
-                        center={draftRegion.center}
-                        size={draftRegion.size}
-                        mode={regionGizmoMode}
-                        onChange={handleDraftRegionChange}
-                    />
+                        {renderClouds.map((pc) => (
+                            <PointCloudRenderer
+                                key={pc.id}
+                                data={pc}
+                                heatmapSettings={heatmapSettings}
+                                selected={isEditMode && pc.id === editLayerId}
+                                transformMode={transformMode}
+                                onTransformChange={(pos, rot, scale) => handleTransformChange(pc.id, pos, rot, scale)}
+                            />
+                        ))}
 
-                    {Object.entries(graphData).map(([tag, data]) => {
-                        const settings = layerSettings[tag];
-                        if (!settings || !settings.visible) return null;
+                        <EditAabbTool
+                            enabled={isEditMode && !editJobStatus?.isRunning}
+                            center={draftRegion.center}
+                            size={draftRegion.size}
+                            mode={regionGizmoMode}
+                            onChange={handleDraftRegionChange}
+                        />
 
-                        const frameId = data.frameId || 'world';
-                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                        const staticEdgeWidth = 0.0008;
-                        const staticNodeScale = 0.008;
+                        {Object.entries(graphData).map(([tag, data]) => {
+                            const settings = layerSettings[tag];
+                            if (!settings || !settings.visible) return null;
 
-                        const commonProps = {
-                            key: tag,
-                            tag: tag,
-                            data: data,
-                            visible: settings.visible,
-                            showNodes: settings.showNodes,
-                            showEdges: settings.showEdges,
-                            showClusters: settings.showClusters,
-                            opacity: settings.opacity,
-                            showClusterText: gngLayer.showClusterText,
-                            visibleLabels: gngLayer.visibleLabels,
-                            nodeScale: gngLayer.nodeScale,
-                            edgeWidth: gngLayer.edgeWidth,
-                            selectedClusterId: selectedClusterSnapshot?.cluster.id ?? null,
-                            onClusterSelect: handleClusterSelect,
-                            enableClusterSelection: !zoneMonitor.isDrawing,
-                            tf: tf,
-                            nodeColor: settings.nodeColor,
-                            edgeColor: settings.edgeColor,
-                            manualTransform: settings.graphTransform,
-                        };
+                            const frameId = data.frameId || 'world';
+                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+                            const staticEdgeWidth = 0.0008;
+                            const staticNodeScale = 0.008;
 
-                        if (data.mode === 'static') {
+                            const commonProps = {
+                                key: tag,
+                                tag: tag,
+                                data: data,
+                                visible: settings.visible,
+                                showNodes: settings.showNodes,
+                                showEdges: settings.showEdges,
+                                showClusters: settings.showClusters,
+                                opacity: settings.opacity,
+                                showClusterText: gngLayer.showClusterText,
+                                visibleLabels: gngLayer.visibleLabels,
+                                nodeScale: gngLayer.nodeScale,
+                                edgeWidth: gngLayer.edgeWidth,
+                                selectedClusterId: selectedClusterSnapshot?.cluster.id ?? null,
+                                onClusterSelect: handleClusterSelect,
+                                enableClusterSelection: !zoneMonitor.isDrawing,
+                                tf: tf,
+                                nodeColor: settings.nodeColor,
+                                edgeColor: settings.edgeColor,
+                                manualTransform: settings.graphTransform,
+                            };
+
+                            if (data.mode === 'static') {
+                                return (
+                                    <StaticGraphRenderer
+                                        {...commonProps}
+                                        nodeScale={staticNodeScale}
+                                        edgeWidth={staticEdgeWidth}
+                                    />
+                                );
+                            } else {
+                                return <GraphRenderer {...commonProps} />;
+                            }
+                        })}
+
+                        {Object.entries(robotData).map(([tag, data]) => {
+                            const settings = robotSettings[tag] || {
+                                visible: true,
+                                color: 'skyblue',
+                                showVisual: true,
+                                showCollision: false,
+                                collisionColor: '#ff9f1c',
+                                transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+                            };
+                            if (!settings.visible) return null;
+                            const frameId = data.frameId || 'world';
+                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
                             return (
-                                <StaticGraphRenderer
-                                    {...commonProps}
-                                    nodeScale={staticNodeScale}
-                                    edgeWidth={staticEdgeWidth}
+                                <group key={tag}>
+                                    {settings.showVisual && (
+                                        <RobotRenderer
+                                            tag={tag}
+                                            data={data}
+                                            visible={true}
+                                            color={settings.color}
+                                            tf={tf}
+                                            manualTransform={settings.transform}
+                                        />
+                                    )}
+                                    {settings.showCollision && (
+                                        <CollisionRenderer
+                                            tag={tag}
+                                            data={data}
+                                            visible={true}
+                                            color={settings.collisionColor}
+                                            tf={tf}
+                                            manualTransform={settings.transform}
+                                        />
+                                    )}
+                                </group>
+                            );
+                        })}
+
+                        {Object.entries(markerData).map(([tag, data]) => {
+                            const settings = markerSettings[tag] || { visible: true };
+                            if (!settings.visible || disabledSourceIds.has(tag)) return null;
+                            const frameId = data.frameId || 'world';
+                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
+                            return (
+                                <MarkerArrayRenderer
+                                    key={tag}
+                                    tag={tag}
+                                    data={data}
+                                    visible={true}
+                                    tf={tf}
+                                    manualTransform={settings.transform}
                                 />
                             );
-                        } else {
-                            return <GraphRenderer {...commonProps} />;
-                        }
-                    })}
+                        })}
 
-                    {Object.entries(robotData).map(([tag, data]) => {
-                        const settings = robotSettings[tag] || {
-                            visible: true,
-                            color: 'skyblue',
-                            showVisual: true,
-                            showCollision: false,
-                            collisionColor: '#ff9f1c',
-                            transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
-                        };
-                        if (!settings.visible) return null;
-                        const frameId = data.frameId || 'world';
-                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                        return (
-                            <group key={tag}>
-                                {settings.showVisual && (
-                                    <RobotRenderer
-                                        tag={tag}
-                                        data={data}
-                                        visible={true}
-                                        color={settings.color}
-                                        tf={tf}
-                                        manualTransform={settings.transform}
-                                    />
-                                )}
-                                {settings.showCollision && (
-                                    <CollisionRenderer
-                                        tag={tag}
-                                        data={data}
-                                        visible={true}
-                                        color={settings.collisionColor}
-                                        tf={tf}
-                                        manualTransform={settings.transform}
-                                    />
-                                )}
-                            </group>
-                        );
-                    })}
+                        <ZoneVisualizer
+                            points={zoneMonitor.points}
+                            isDrawing={zoneMonitor.isDrawing}
+                            zRange={zoneMonitor.zRange}
+                            isWarning={(zoneCounts.get('human') || 0) > 0}
+                            onAddPoint={zoneMonitor.addPoint}
+                        />
 
-                    {Object.entries(markerData).map(([tag, data]) => {
-                        const settings = markerSettings[tag] || { visible: true };
-                        if (!settings.visible || disabledSourceIds.has(tag)) return null;
-                        const frameId = data.frameId || 'world';
-                        const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                        return (
-                            <MarkerArrayRenderer
-                                key={tag}
-                                tag={tag}
-                                data={data}
-                                visible={true}
-                                tf={tf}
-                                manualTransform={settings.transform}
-                            />
-                        );
-                    })}
 
-                    <ZoneVisualizer
-                        points={zoneMonitor.points}
-                        isDrawing={zoneMonitor.isDrawing}
-                        zRange={zoneMonitor.zRange}
-                        isWarning={(zoneCounts.get('human') || 0) > 0}
-                        onAddPoint={zoneMonitor.addPoint}
-                    />
 
-                    <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
-                    <OrbitControls makeDefault />
-                </Canvas>
+                        <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
+                        <OrbitControls makeDefault />
+                    </Canvas>
 
-                {selectedClusterSnapshot && (
-                    <ClusterDetailPanel
-                        snapshot={selectedClusterSnapshot}
-                        onClose={() => setSelectedClusterSnapshot(null)}
-                    />
-                )}
-            </div>
-        </MainLayout>
+                    {selectedClusterSnapshot && (
+                        <ClusterDetailPanel
+                            snapshot={selectedClusterSnapshot}
+                            onClose={() => setSelectedClusterSnapshot(null)}
+                        />
+                    )}
+                </div>
+            </MainLayout>
+
+            <GenericTransformModal
+                open={!!transformContext}
+                title={transformContext?.title || ''}
+                transform={useMemo(() => {
+                    if (!transformContext) return null;
+                    const { type, id } = transformContext;
+                    if (type === 'cloud') {
+                        const cloud = pointClouds.find(pc => pc.id === id);
+                        if (!cloud) return null;
+                        return {
+                            position: cloud.position || [0, 0, 0],
+                            rotation: cloud.rotation || [0, 0, 0],
+                            scale: cloud.scale || [1, 1, 1]
+                        } as Transform;
+                    }
+                    if (type === 'layer') return layerSettings[id]?.graphTransform || null;
+                    if (type === 'robot') return robotSettings[id]?.transform || null;
+                    if (type === 'marker') return markerSettings[id]?.transform || null;
+                    return null;
+                }, [transformContext, pointClouds, layerSettings, robotSettings, markerSettings])}
+                onClose={() => setTransformContext(null)}
+                onUpdate={(updates: Partial<Transform>) => {
+                    if (!transformContext) return;
+                    const { type, id } = transformContext;
+                    if (type === 'cloud') {
+                        setPointClouds(prev => prev.map(pc => pc.id === id ? { ...pc, ...updates } : pc));
+                    } else if (type === 'layer') {
+                        handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } });
+                    } else if (type === 'robot') {
+                        handleUpdateRobotSettings(id, { transform: { ...(robotSettings[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } });
+                    } else if (type === 'marker') {
+                        setMarkerSettings(prev => ({ ...prev, [id]: { ...prev[id], transform: { ...(prev[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } } }));
+                    }
+                }}
+                onReset={() => {
+                    if (!transformContext) return;
+                    const identity = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
+                    const { type, id } = transformContext;
+                    if (type === 'cloud') {
+                        setPointClouds(prev => prev.map(pc => pc.id === id ? { ...pc, ...identity } : pc));
+                    } else if (type === 'layer') {
+                        handleUpdateLayerSettings(id, { graphTransform: identity });
+                    } else if (type === 'robot') {
+                        handleUpdateRobotSettings(id, { transform: identity });
+                    } else if (type === 'marker') {
+                        setMarkerSettings(prev => ({ ...prev, [id]: { ...prev[id], transform: identity } }));
+                    }
+                }}
+            />
+        </>
     );
 }
 
