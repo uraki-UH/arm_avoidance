@@ -155,10 +155,10 @@ export function GngLayerControls({
                         />
                     </div>
 
-                    <div className="space-y-2 rounded-md border border-white/5 bg-black/15 p-2">
-                        <div className="flex items-center justify-between gap-2">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                                {isStatic ? 'Static Node' : 'Node Color'}
+                    <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
+                                Node Color
                             </label>
                             <input
                                 type="color"
@@ -166,13 +166,13 @@ export function GngLayerControls({
                                 onChange={(e) => setLocalNodeColor(e.target.value)}
                                 onBlur={() => onUpdate({ nodeColor: localNodeColor })}
                                 onPointerUp={() => onUpdate({ nodeColor: localNodeColor })}
-                                className="h-6 w-10 cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
                                 title={isStatic ? 'Static node color' : 'Dynamic node palette base color'}
                             />
                         </div>
-                        <div className="flex items-center justify-between gap-2">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                                {isStatic ? 'Static Edge' : 'Edge Color'}
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
+                                Edge Color
                             </label>
                             <input
                                 type="color"
@@ -180,7 +180,7 @@ export function GngLayerControls({
                                 onChange={(e) => setLocalEdgeColor(e.target.value)}
                                 onBlur={() => onUpdate({ edgeColor: localEdgeColor })}
                                 onPointerUp={() => onUpdate({ edgeColor: localEdgeColor })}
-                                className="h-6 w-10 cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
                                 title={isStatic ? 'Static edge color' : 'Dynamic edge color'}
                             />
                         </div>

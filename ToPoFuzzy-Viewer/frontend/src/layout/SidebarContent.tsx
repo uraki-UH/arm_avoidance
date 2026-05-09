@@ -254,11 +254,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                     e.stopPropagation();
                                                     props.onOpenTransform('cloud', pc.id, pc.name);
                                                 }}
-                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
                                             >
                                                 <Move size={12} />
-                                                Transform
                                             </button>
                                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pc.name}</p>
                                         </div>
@@ -316,11 +315,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             </button>
                                             <button
                                                 onClick={() => props.onOpenTransform('robot', tag, `Robot: ${tag}`)}
-                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
                                             >
                                                 <Move size={12} />
-                                                Transform
                                             </button>
                                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
                                         </div>
@@ -386,11 +384,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             </button>
                                             <button
                                                 onClick={() => props.onOpenTransform('marker', tag, `Markers: ${tag}`)}
-                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
                                             >
                                                 <Move size={12} />
-                                                Transform
                                             </button>
                                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Markers: {tag}</p>
                                         </div>

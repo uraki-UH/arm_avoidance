@@ -226,15 +226,9 @@ export function SourceSelector({
                                         onChange={() => handleToggleSource(source)}
                                         className="h-4 w-4 rounded border-gray-500 bg-transparent text-[var(--accent-color)] focus:ring-[var(--accent-color)]"
                                     />
-                                    <span className="flex-1 truncate text-sm text-[var(--text-primary)]" title={source.id}>
-                                        {source.name}
+                                    <span className="flex-1 truncate text-[13px] font-medium text-[var(--text-primary)]" title={source.id}>
+                                        {source.id}
                                     </span>
-                                    <span className="rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-secondary)]">
-                                        {source.type}
-                                    </span>
-                                    {source.active && (
-                                        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-green-400">Active</span>
-                                    )}
                                 </label>
 
                                 {isPointCloud && (
