@@ -22,12 +22,6 @@ def generate_launch_description():
         ),
         Node(
             package='topo_fuzzy_viewer',
-            executable='viewer_source_node',
-            name='viewer_source_node',
-            output='screen'
-        ),
-        Node(
-            package='topo_fuzzy_viewer',
             executable='viewer_file_node',
             name='viewer_file_node',
             output='screen'

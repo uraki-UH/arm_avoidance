@@ -108,13 +108,7 @@ target_link_libraries(viewer_ws_gateway_node
 )
 ament_target_dependencies(viewer_ws_gateway_node ${ROS2_DEPENDENCIES_GRAPH})
 
-add_executable(viewer_source_node
-  src/nodes/viewer_source_node.cpp
-  src/common/pcl_converter.cpp
-)
-target_include_directories(viewer_source_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(viewer_source_node ${PCL_LIBRARIES} Threads::Threads)
-ament_target_dependencies(viewer_source_node ${ROS2_DEPENDENCIES_GRAPH})
+
 
 add_executable(viewer_file_node
   src/nodes/viewer_file_node.cpp
@@ -164,7 +158,6 @@ endif()
 
 install(TARGETS
   viewer_ws_gateway_node
-  viewer_source_node
   viewer_file_node
   viewer_rosbag_node
   viewer_gng_node

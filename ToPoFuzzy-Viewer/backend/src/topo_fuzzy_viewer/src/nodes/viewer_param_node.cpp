@@ -16,7 +16,7 @@ public:
         : rclcpp::Node("viewer_param_node") {
 
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
-            viewer_internal::topics::kRpcParamRequest,
+            "/viewer/internal/rpc/request",
             20,
             std::bind(&ViewerParamNode::handleRpcRequest, this, std::placeholders::_1));
 
