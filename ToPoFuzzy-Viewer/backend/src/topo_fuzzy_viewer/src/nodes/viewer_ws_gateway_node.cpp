@@ -7,6 +7,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
 #include <App.h>
 #include <nlohmann/json.hpp>
@@ -33,6 +34,32 @@ using WebSocket = uWS::WebSocket<false, true, PerSocketData>;
 
 // --- 1. Protocol Converter ---
 namespace converter {
+    json marker_to_json(const visualization_msgs::msg::Marker& m) {
+        json j = {{"id", m.id}, {"ns", m.ns}, {"type", m.type}, {"action", m.action},
+                  {"pos", {m.pose.position.x, m.pose.position.y, m.pose.position.z}},
+                  {"quat", {m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z, m.pose.orientation.w}},
+                  {"scale", {m.scale.x, m.scale.y, m.scale.z}},
+                  {"color", {m.color.r, m.color.g, m.color.b, m.color.a}},
+                  {"frameId", m.header.frame_id}};
+        if (!m.points.empty()) {
+            json pts = json::array();
+            for (auto& p : m.points) pts.push_back({p.x, p.y, p.z});
+            j["points"] = pts;
+        }
+        if (!m.colors.empty()) {
+            json cols = json::array();
+            for (auto& c : m.colors) cols.push_back({c.r, c.g, c.b, c.a});
+            j["colors"] = cols;
+        }
+        return j;
+    }
+
+    json marker_array_to_json(const visualization_msgs::msg::MarkerArray::SharedPtr msg, const std::string& tag) {
+        json markers = json::array();
+        for (auto& m : msg->markers) markers.push_back(marker_to_json(m));
+        return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
+    }
+
     json to_json(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag) {
         json nodes = json::array();
         for (auto& n : msg->nodes) nodes.push_back({{"x",n.pos.x},{"y",n.pos.y},{"z",n.pos.z},{"nx",n.normal.x},{"ny",n.normal.y},{"nz",n.normal.z},{"label",n.label},{"age",n.age}});
@@ -111,20 +138,14 @@ public:
         rpcPubs_["edit"] = cpub(viewer_internal::topics::kRpcEditRequest);
 
         rpcResponseSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 100, [this](const std_msgs::msg::String::SharedPtr msg) { rpc_.handleResponse(msg->data); });
-        pointCloudMetaSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kStreamPointCloudMeta, 100, [this](const std_msgs::msg::String::SharedPtr msg) { broadcastText(msg->data); });
-        pointCloudSub_ = create_subscription<sensor_msgs::msg::PointCloud2>(viewer_internal::topics::kStreamPointCloud, 10, [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) { broadcastBinary(utils::convertToProtocolMessage(utils::convertFromRosMsg(msg)).serialize()); });
-        markerArraySub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kStreamMarkerArray, 100, [this](const std_msgs::msg::String::SharedPtr msg) { handleMarkerArray(msg->data); });
 
-        auto gngTopics = declare_parameter<std::vector<std::string>>("gng_topics", {viewer_internal::topics::kStreamGraph});
-        for (const auto& topic : gngTopics) {
-            auto qos = rclcpp::QoS(1); if (topic.find("topological_map") != std::string::npos) qos.reliable().transient_local();
-            graphSubs_.push_back(create_subscription<ais_gng_msgs::msg::TopologicalMap>(topic, qos, [this, topic](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
-                std::string payload = converter::to_json(msg, topic).dump();
-                { std::lock_guard<std::mutex> l(graphMutex_); lastGraphPayloads_[topic] = payload; }
-                broadcastText(payload);
-            }));
-        }
-        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>("/tf", 100, [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) { broadcastText(converter::to_json(msg).dump()); });
+        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>("/tf", 100, [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+            auto now = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTfTime_).count() > 33) { // ~30Hz limit
+                broadcastText(converter::to_json(msg).dump());
+                lastTfTime_ = now;
+            }
+        });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
         RCLCPP_INFO(get_logger(), "Gateway initialized on port %d", port);
@@ -182,6 +203,10 @@ private:
 
     void handleWsRequest(WebSocket* ws, const std::string& text, const json& req) {
         std::string id = req.value("id", ""), method = req.value("method", "");
+        if (method == "sources.setActive") {
+            handleSourcesSetActive(id, req.value("params", json::object()));
+            return;
+        }
         auto it = rpcPubs_.find(method.substr(0, method.find('.')));
         if (it == rpcPubs_.end()) { ws->send(viewer_internal::makeErrorResponse(id, "METHOD_NOT_FOUND", "No route"), uWS::OpCode::TEXT); return; }
         std::thread([this, ws, id, text, pub = it->second]() {
@@ -191,6 +216,61 @@ private:
                 if (std::find(connections_.begin(), connections_.end(), ws) != connections_.end()) ws->send(resp, uWS::OpCode::TEXT);
             });
         }).detach();
+    }
+
+    void handleSourcesSetActive(const std::string& id, const json& params) {
+        std::string sourceId = params.value("sourceId", "");
+        bool active = params.value("active", false);
+        if (sourceId.empty()) return;
+        if (sourceId.front() != '/') sourceId = "/" + sourceId;
+
+        std::lock_guard<std::mutex> lock(connectionMutex_);
+        if (active) {
+            if (activeDynamicSubs_.count(sourceId)) return;
+            // Topic type discovery would normally happen via source_node rpc,
+            // here we just subscribe based on name/prefix for simplicity or implement a quick lookup
+            auto topicNamesAndTypes = this->get_topic_names_and_types();
+            if (topicNamesAndTypes.count(sourceId)) {
+                const auto& types = topicNamesAndTypes[sourceId];
+                if (std::find(types.begin(), types.end(), "sensor_msgs/msg/PointCloud2") != types.end()) {
+                    activeDynamicSubs_[sourceId] = create_subscription<sensor_msgs::msg::PointCloud2>(sourceId, 10, [this, sourceId](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
+                        this->broadcastPointCloud(sourceId, utils::convertToProtocolMessage(utils::convertFromRosMsg(msg)).serialize());
+                    });
+                } else if (std::find(types.begin(), types.end(), "ais_gng_msgs/msg/TopologicalMap") != types.end()) {
+                    activeDynamicSubs_[sourceId] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sourceId, rclcpp::QoS(10).reliable().transient_local(), [this, sourceId](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                        broadcastText(converter::to_json(msg, sourceId).dump());
+                    });
+                } else if (std::find(types.begin(), types.end(), "visualization_msgs/msg/MarkerArray") != types.end()) {
+                    activeDynamicSubs_[sourceId] = create_subscription<visualization_msgs::msg::MarkerArray>(sourceId, rclcpp::QoS(10).reliable().transient_local(), [this, sourceId](const visualization_msgs::msg::MarkerArray::SharedPtr msg) {
+                        broadcastText(converter::marker_array_to_json(msg, sourceId).dump());
+                    });
+                }
+            }
+        } else {
+            if (activeDynamicSubs_.count(sourceId)) {
+                // Determine type before erasing to send correct delete message
+                auto topicNamesAndTypes = this->get_topic_names_and_types();
+                if (topicNamesAndTypes.count(sourceId)) {
+                    const auto& types = topicNamesAndTypes[sourceId];
+                    if (std::find(types.begin(), types.end(), "sensor_msgs/msg/PointCloud2") != types.end()) {
+                        broadcastText(json({{"type", "stream.pointcloud.delete"}, {"topic", sourceId}}).dump());
+                    } else if (std::find(types.begin(), types.end(), "ais_gng_msgs/msg/TopologicalMap") != types.end()) {
+                        broadcastText(json({{"type", "stream.graph.delete"}, {"tag", sourceId}}).dump());
+                    } else if (std::find(types.begin(), types.end(), "visualization_msgs/msg/MarkerArray") != types.end()) {
+                        broadcastText(json({{"type", "stream.marker_array.delete"}, {"tag", sourceId}}).dump());
+                    }
+                }
+                activeDynamicSubs_.erase(sourceId);
+            }
+        }
+        // Notify source node of the change so its state stays in sync
+        json syncReq = {{"method", "sources.setActive"}, {"params", params}};
+        std_msgs::msg::String msg; msg.data = syncReq.dump();
+        rpcPubs_["sources"]->publish(msg);
+
+        // Send response back to GUI to confirm the state change
+        json result = {{"success", true}, {"sourceId", sourceId}, {"active", active}};
+        broadcastText(viewer_internal::makeOkResponse(id, result));
     }
 
     void subscribeStreamingTopics() {
@@ -217,9 +297,16 @@ private:
         }
 
         json j = json::parse(payload, nullptr, false);
-        if (!j.is_discarded() && j.value("type", "") == "stream.marker_array") {
-            std::lock_guard<std::mutex> lock(markerMutex_);
-            lastMarkerPayloads_[j.value("tag", "default")] = payload;
+        if (!j.is_discarded()) {
+            std::string type = j.value("type", "");
+            std::string tag = j.value("tag", "default");
+            if (type == "stream.marker_array") {
+                std::lock_guard<std::mutex> lock(markerMutex_);
+                lastMarkerPayloads_[tag] = payload;
+            } else if (type == "stream.graph") {
+                std::lock_guard<std::mutex> lock(graphMutex_);
+                lastGraphPayloads_[tag] = payload;
+            }
         }
         broadcastText(payload);
     }
@@ -231,6 +318,18 @@ private:
             for (auto const& [tag, _] : lastRobotDescriptions_) broadcastText(json({{"type", "stream.robot.delete"}, {"tag", tag}}).dump());
             lastRobotDescriptions_.clear();
         }
+    }
+
+    void broadcastPointCloud(const std::string& topic, const std::vector<uint8_t>& data) {
+        auto s = std::make_shared<std::vector<uint8_t>>(data);
+        auto meta = std::make_shared<std::string>(json({{"type", "stream.pointcloud.meta"}, {"topic", topic}}).dump());
+        loop_->defer([this, meta, s]() {
+            std::lock_guard<std::mutex> l(connectionMutex_);
+            for (auto* ws : connections_) {
+                ws->send(*meta, uWS::OpCode::TEXT);
+                ws->send(std::string_view(reinterpret_cast<const char*>(s->data()), s->size()), uWS::OpCode::BINARY);
+            }
+        });
     }
 
     void broadcastBinary(const std::vector<uint8_t>& payload) {
@@ -247,11 +346,10 @@ private:
     }
 
     std::unordered_map<std::string, rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> rpcPubs_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, pointCloudMetaSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointCloudSub_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr markerArraySub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
-    std::vector<rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> graphSubs_;
+    std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
+    std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, graphMutex_, robotMutex_, markerMutex_;
     std::vector<WebSocket*> connections_;
     std::unordered_map<std::string, std::string> lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;

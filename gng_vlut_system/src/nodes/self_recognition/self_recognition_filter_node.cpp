@@ -3,6 +3,7 @@
 #include <rclcpp_components/register_node_macro.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include "common/resource_utils.hpp"
 #include "safety_engine/recognition/self_recognition_manager.hpp"
@@ -47,6 +48,7 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         input_topic, 10, std::bind(&SelfRecognitionFilterNode::pcl_cb, this, std::placeholders::_1));
 
     pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(output_topic, 10);
+    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/self_recognition_markers", 10);
 
     RCLCPP_INFO(get_logger(), "Self Recognition Filter Node started. Voxel size: %.3f", voxel_size);
 }
@@ -60,6 +62,12 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
     current_mask_vids_.clear();
     for (long vid : vids) {
         current_mask_vids_.insert(vid);
+    }
+
+    if (marker_pub_->get_subscription_count() > 0 || true) {
+        double time_sec = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
+        auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, "base_link", time_sec);
+        marker_pub_->publish(markers);
     }
 }
 

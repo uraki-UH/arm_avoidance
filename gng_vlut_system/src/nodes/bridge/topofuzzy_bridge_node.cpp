@@ -13,6 +13,8 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 
 #include "common/resource_utils.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
@@ -165,6 +167,14 @@ public:
     const std::string topic_name = get_parameter("topic_name").as_string();
     topological_map_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         topic_name, rclcpp::QoS(1).reliable().transient_local());
+
+    const int layer_count = context_->gng->getCoordLayerCount();
+    if (layer_count > 1) {
+      for (int i = 0; i < layer_count; ++i) {
+        layer_pubs_.push_back(create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+            topic_name + "_layer_" + std::to_string(i), rclcpp::QoS(1).reliable().transient_local()));
+      }
+    }
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
@@ -462,6 +472,95 @@ private:
     graph_dirty_ = false;
   }
 
+  ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(int layer) {
+    ais_gng_msgs::msg::TopologicalMap msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = frame_id_;
+
+    if (!context_ || !context_->gng) {
+      return msg;
+    }
+
+    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
+    const bool need_transform = frame_id_ != source_frame_id_;
+    if (need_transform) {
+      try {
+        const auto ts = tf_buffer_->lookupTransform(
+            frame_id_, source_frame_id_, tf2::TimePointZero);
+        source_to_target = tf2::transformToEigen(ts.transform);
+      } catch (const tf2::TransformException &ex) {
+        source_to_target.setIdentity();
+      }
+    }
+
+    const auto &gng = *context_->gng;
+
+    std::unordered_map<int, uint16_t> id_to_index;
+    msg.nodes.reserve(gng.getNodes().size());
+
+    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+      const auto &node = gng.getNodes()[i];
+      if (node.id == -1) continue;
+      if (layer >= static_cast<int>(node.weight_coords.size())) continue;
+      
+      if (msg.nodes.size() >= std::numeric_limits<uint16_t>::max()) break;
+
+      ais_gng_msgs::msg::TopologicalNode out;
+      out.id = static_cast<uint16_t>(node.id);
+      
+      const Eigen::Vector3f transformed_pos = need_transform
+                                                  ? transformPoint(source_to_target, node.weight_coords[layer])
+                                                  : node.weight_coords[layer];
+      out.pos = toPoint32(transformed_pos);
+
+      const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
+                                         ? node.status.ee_direction.normalized()
+                                         : Eigen::Vector3f::UnitZ();
+      Eigen::Vector3f transformed_normal = need_transform
+                                               ? transformVector(source_to_target, normal)
+                                               : normal;
+      if (transformed_normal.norm() > kEps) {
+        transformed_normal.normalize();
+      } else {
+        transformed_normal = Eigen::Vector3f::UnitZ();
+      }
+      out.normal = toPoint32(transformed_normal);
+      out.label = viewerLabelFromStatus(node.status);
+
+      const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
+      id_to_index.emplace(node.id, published_index);
+      msg.nodes.push_back(std::move(out));
+    }
+
+    std::unordered_set<uint64_t> seen_edges;
+    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+      const auto &node = gng.getNodes()[i];
+      if (node.id == -1) continue;
+      if (layer >= static_cast<int>(node.weight_coords.size())) continue;
+
+      const auto &neighbors = gng.getNeighborsCoord(static_cast<int>(i), layer);
+      const auto src_it = id_to_index.find(node.id);
+      if (src_it == id_to_index.end()) continue;
+
+      for (const int neighbor_id : neighbors) {
+        if (neighbor_id < 0) continue;
+        const auto tgt_it = id_to_index.find(neighbor_id);
+        if (tgt_it == id_to_index.end()) continue;
+
+        const int lo = std::min(node.id, neighbor_id);
+        const int hi = std::max(node.id, neighbor_id);
+        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(lo)) << 32) | static_cast<uint32_t>(hi);
+        if (!seen_edges.insert(key).second) continue;
+
+        msg.edges.push_back(src_it->second);
+        msg.edges.push_back(tgt_it->second);
+      }
+    }
+
+    msg.clusters.clear();
+    return msg;
+  }
+
   void publishGraph() {
     std::lock_guard<std::mutex> lock(update_mutex_);
     publishGraphLocked();
@@ -473,6 +572,11 @@ private:
       return;
     }
     topological_map_pub_->publish(buildGraphMessage());
+    for (size_t i = 0; i < layer_pubs_.size(); ++i) {
+      if (layer_pubs_[i]) {
+        layer_pubs_[i]->publish(buildLayerGraphMessage(static_cast<int>(i)));
+      }
+    }
   }
 
 private:
@@ -483,6 +587,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
       topological_map_pub_;
+  std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   std::mutex update_mutex_;

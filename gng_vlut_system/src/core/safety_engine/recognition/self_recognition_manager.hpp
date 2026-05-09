@@ -13,6 +13,7 @@
 #include "kinematics/kinematic_chain.hpp"
 #include "GNG/Analysis/IndexVoxelGrid.hpp"
 #include "common/geometry_utils.hpp"
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace robot_sim {
 namespace recognition {
@@ -87,6 +88,10 @@ public:
                 local_sphere.center = total_tf * slink.spheres[i].center;
                 auto points = PrimitiveSpatialMapper::sampleSpherePoints(local_sphere, voxel_size_);
                 for (const auto& p : points) add_point(p);
+            }
+
+            if (cache.debug_points.empty()) {
+                continue; // ジオメトリを持たないリンク（中間リンクなど）はスキップ
             }
 
             // AABBを少し太らせる（安全マージン）
@@ -214,6 +219,98 @@ public:
         std::sort(all_vids.begin(), all_vids.end());
         all_vids.erase(std::unique(all_vids.begin(), all_vids.end()), all_vids.end());
         return all_vids;
+    }
+
+    /**
+     * @brief 可視化用のマーカー（AABBやボクセル点）を取得する
+     */
+    visualization_msgs::msg::MarkerArray getVisualizationMarkers(const std::vector<double>& joints, const std::string& frame_id, double time_sec) {
+        visualization_msgs::msg::MarkerArray msg;
+        if (!chain_) return msg;
+
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> j_pos;
+        std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> j_ori;
+        chain_->forwardKinematicsAt(joints, j_pos, j_ori);
+        std::map<std::string, Eigen::Isometry3d> link_tfs;
+        chain_->buildAllLinkTransforms(j_pos, j_ori, fixed_link_info_, link_tfs);
+
+        int marker_id = 0;
+        int32_t sec = static_cast<int32_t>(time_sec);
+        uint32_t nanosec = static_cast<uint32_t>((time_sec - sec) * 1e9);
+
+        for (const auto& cache : link_voxel_caches_) {
+            if (cache.debug_points.empty()) continue; // Skip links with no geometry
+
+            auto it = link_tfs.find(cache.name);
+            if (it == link_tfs.end()) continue;
+            const Eigen::Isometry3d& link_tf = it->second;
+
+            // Voxel Points
+            visualization_msgs::msg::Marker pts_marker;
+            pts_marker.header.frame_id = frame_id;
+            pts_marker.header.stamp.sec = sec;
+            pts_marker.header.stamp.nanosec = nanosec;
+            pts_marker.ns = "self_voxels";
+            pts_marker.id = marker_id++;
+            pts_marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+            pts_marker.action = visualization_msgs::msg::Marker::ADD;
+            pts_marker.scale.x = voxel_size_ * 0.9;
+            pts_marker.scale.y = voxel_size_ * 0.9;
+            pts_marker.scale.z = voxel_size_ * 0.9;
+            pts_marker.color.r = 0.0f;
+            pts_marker.color.g = 1.0f;
+            pts_marker.color.b = 0.5f;
+            pts_marker.color.a = 0.6f;
+            pts_marker.pose.orientation.w = 1.0;
+
+            for (const auto& lp : cache.debug_points) {
+                Eigen::Vector3d wp = link_tf * lp;
+                geometry_msgs::msg::Point p;
+                p.x = wp.x(); p.y = wp.y(); p.z = wp.z();
+                pts_marker.points.push_back(p);
+            }
+            if (!pts_marker.points.empty()) {
+                msg.markers.push_back(pts_marker);
+            }
+
+            // AABB Wireframe
+            visualization_msgs::msg::Marker box_marker;
+            box_marker.header = pts_marker.header;
+            box_marker.ns = "self_aabb";
+            box_marker.id = marker_id++;
+            box_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+            box_marker.action = visualization_msgs::msg::Marker::ADD;
+            box_marker.scale.x = 0.005; // line width
+            box_marker.color.r = 1.0f;
+            box_marker.color.g = 0.5f;
+            box_marker.color.b = 0.0f;
+            box_marker.color.a = 0.8f;
+            box_marker.pose.orientation.w = 1.0;
+
+            Eigen::Vector3d corners[8];
+            for(int i=0; i<8; ++i) {
+                Eigen::Vector3d c = cache.local_min;
+                if (i & 1) c.x() = cache.local_max.x();
+                if (i & 2) c.y() = cache.local_max.y();
+                if (i & 4) c.z() = cache.local_max.z();
+                corners[i] = link_tf * c;
+            }
+
+            int edges[12][2] = {
+                {0,1}, {1,3}, {3,2}, {2,0},
+                {4,5}, {5,7}, {7,6}, {6,4},
+                {0,4}, {1,5}, {2,6}, {3,7}
+            };
+            for (auto& edge : edges) {
+                geometry_msgs::msg::Point p1, p2;
+                p1.x = corners[edge[0]].x(); p1.y = corners[edge[0]].y(); p1.z = corners[edge[0]].z();
+                p2.x = corners[edge[1]].x(); p2.y = corners[edge[1]].y(); p2.z = corners[edge[1]].z();
+                box_marker.points.push_back(p1);
+                box_marker.points.push_back(p2);
+            }
+            msg.markers.push_back(box_marker);
+        }
+        return msg;
     }
 
     const std::vector<CachedLinkVoxels>& getLinkVoxelCaches() const {

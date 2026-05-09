@@ -65,3 +65,4 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
         OpaqueFunction(function=launch_setup)
     ])
+

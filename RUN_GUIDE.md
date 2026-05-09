@@ -1,6 +1,7 @@
 # ToPoFuzzy-Viewer 実行ガイド
 
 ## 開発メモ
+@contextScopeItemMention に現状整理と今後の方針を書いています。ひとまずの目標はtopofuzzyviewerで複数アームの場合のweight coordsについて可視化できるようにすることです。またこの際に
 
 ### 現状整理
 - `offline_urdf_trainer` は、joint-space を1本共有しつつ、coord 側を arm ごとのレイヤーに分ける方向で拡張中です。
@@ -100,11 +101,6 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 robotの自己認識ボクセル
 ros2 launch gng_vlut_system self_recognition_viz.launch.py marker_frame_id:=world display_mode:=link_local
-
-realsenseを位置合わせする場合（目安）ロボットの位置を合わせている
-position: 0.4340 -0.6930 0.2790
-rotation_deg: -103.80 -28.90 -3.40
-scale: 1.0000 1.0000 1.0000
 
 座標変換
 ros2 run gng_vlut_system self_recognition_filter_node

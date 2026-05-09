@@ -83,7 +83,7 @@ public:
         coord_layer_index >= static_cast<int>(edges_coord_per_layer_.size())) {
       return getNeighborsCoord(node_id);
     }
-    return edges_coord_per_layer_[coord_layer_index][node_id];
+    return edges_coord_per_layer_nodes_[coord_layer_index][node_id];
   }
 
   bool isEdgeActive(int n1, int n2, int mode = 0) const {
@@ -131,32 +131,23 @@ public:
 
   NeuronNode<T_angle, T_coord> &nodeAt(int idx) { return nodes[idx]; }
 
-  /**
-   * @brief Get currently active node indices.
-   */
   const std::vector<int>& getActiveIndices() const { return active_indices_; }
 
-  /**
-   * @brief Iterate over active nodes (mutable).
-   */
+
   template <typename Fn> void forEachActive(Fn &&fn) {
     for (int i : active_indices_) {
       fn(i, nodes[i]);
     }
   }
 
-  /**
-   * @brief Iterate over active nodes (const).
-   */
+
   template <typename Fn> void forEachActive(Fn &&fn) const {
     for (int i : active_indices_) {
       fn(i, nodes[i]);
     }
   }
 
-  /**
-   * @brief Iterate over active + valid nodes (mutable).
-   */
+
   template <typename Fn> void forEachActiveValid(Fn &&fn) {
     for (int i : active_indices_) {
       auto &n = nodes[i];
@@ -165,9 +156,7 @@ public:
     }
   }
 
-  /**
-   * @brief Iterate over active + valid nodes (const).
-   */
+
   template <typename Fn> void forEachActiveValid(Fn &&fn) const {
     for (int i : active_indices_) {
       const auto &n = nodes[i];
@@ -176,14 +165,9 @@ public:
     }
   }
 
-  /**
-   * @brief Get nodes vector (mutable).
-   */
+
   std::vector<NeuronNode<T_angle, T_coord>> &getNodes() { return nodes; }
 
-  /**
-   * @brief Get nodes vector (const).
-   */
   const std::vector<NeuronNode<T_angle, T_coord>> &getNodes() const {
     return nodes;
   }

@@ -64,6 +64,23 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
+    # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
+    # 明示的に指定された項目のみを上書き対象とする
+    viewer_params = {}
+    if robot_desc_default:
+        viewer_params["robot_description_file"] = robot_desc_default
+    if resource_root:
+        viewer_params["resource_root_dir"] = resource_root
+    if mesh_root:
+        viewer_params["mesh_root_dir"] = mesh_root
+    
+    viewer_params.update({
+        "joint_state_topic": "/joint_states",
+        "stream_topic": "/viewer/internal/stream/robot",
+        "frame_id": LaunchConfiguration("base_frame"),
+        "publish_hz": 20.0,
+    })
+
     return [
         # 1. ロボットモデルの展開 (Digital Twin / TF)
         IncludeLaunchDescription(
@@ -74,7 +91,7 @@ def launch_setup(context, *args, **kwargs):
             }.items()
         ),
 
-        # 2. センサー位置の静的TF配信 (Calibration)
+        # 2. センサー位置の静的TF配信 (キャリブレーション用)
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
@@ -99,7 +116,7 @@ def launch_setup(context, *args, **kwargs):
             }]
         ),
 
-        # 4. 安全監視・判定ノード (Core Logic)
+        # 4. 安全監視・判定ノード (中核ロジック)
         *(
             [
                 IncludeLaunchDescription(
@@ -127,15 +144,7 @@ def launch_setup(context, *args, **kwargs):
             package="gng_vlut_system",
             executable="robot_viewer_bridge_node",
             name="robot_viewer_bridge",
-            parameters=[{
-                "robot_description_file": robot_desc_default,
-                "resource_root_dir": resource_root,
-                "mesh_root_dir": mesh_root,
-                "joint_state_topic": "/joint_states",
-                "stream_topic": "/viewer/internal/stream/robot",
-                "frame_id": LaunchConfiguration("base_frame"),
-                "publish_hz": 20.0,
-            }]
+            parameters=[viewer_params]
         )
     ]
 

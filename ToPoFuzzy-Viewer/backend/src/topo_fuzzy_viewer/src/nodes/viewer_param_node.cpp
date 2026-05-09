@@ -14,7 +14,6 @@ class ViewerParamNode : public rclcpp::Node {
 public:
     ViewerParamNode()
         : rclcpp::Node("viewer_param_node") {
-        parameterManager_ = std::make_unique<ros2_bridge::ROS2ParameterManager>("/ais_gng");
 
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kRpcParamRequest,
@@ -58,7 +57,7 @@ private:
         auto paramsOpt = parameterManager_->getNodeParameters();
         if (!paramsOpt.has_value()) {
             viewer_internal::json result;
-            result["nodeName"] = "/ais_gng";
+            result["nodeName"] = "unknown";
             result["parameters"] = viewer_internal::json::array();
             publishOk(id, result);
             return;
