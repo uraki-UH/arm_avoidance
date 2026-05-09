@@ -22,9 +22,8 @@ import { ServerFileBrowser } from '../features/io/ServerFileBrowser';
 import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
-import { TransformPanel } from '../features/manipulation/TransformPanel';
-import { PointCloudTransformModal } from '../features/manipulation/PointCloudTransformModal';
-import { GraphTransformModal } from '../features/manipulation/GraphTransformModal';
+import { GenericTransformPanel } from '../features/manipulation/GenericTransformPanel';
+import { GenericTransformModal } from '../features/manipulation/GenericTransformModal';
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
@@ -49,6 +48,9 @@ import {
     LayerSettings,
     RobotData,
     RobotSettings,
+    MarkerArrayData,
+    Transform,
+    TransformData,
 } from '../types';
 
 interface SidebarContentProps {
@@ -140,7 +142,13 @@ interface SidebarContentProps {
     robotSettings: Record<string, RobotSettings>;
     onUpdateRobotSettings: (tag: string, updates: Partial<RobotSettings>) => void;
     onRemoveRobot: (tag: string) => void;
-    transforms: Record<string, any>;
+
+    markerData: Record<string, MarkerArrayData>;
+    markerSettings: Record<string, { visible: boolean, transform?: Transform }>;
+    onUpdateMarkerSettings: (tag: string, updates: Partial<{ visible: boolean, transform?: Transform }>) => void;
+    onRemoveMarker: (tag: string) => void;
+
+    transforms: Record<string, TransformData>;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -148,10 +156,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const visibleLayerCount = props.pointClouds.filter((pc) => pc.visible !== false).length;
     const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
     const isLayerActionDisabled = props.isEditMode;
-    const [pointCloudTransformId, setPointCloudTransformId] = useState<string | null>(null);
-    const transformTarget = props.pointClouds.find((pc) => pc.id === pointCloudTransformId) || null;
-    const [graphTransformTag, setGraphTransformTag] = useState<string | null>(null);
-    const graphTransformTarget = graphTransformTag ? props.graphData[graphTransformTag] : null;
+    const [transformContext, setTransformContext] = useState<{
+        type: 'pointcloud' | 'graph' | 'robot' | 'marker';
+        id: string;
+        title: string;
+    } | null>(null);
 
     const layersTab = (
         <div className="space-y-3">
@@ -247,7 +256,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setPointCloudTransformId(pc.id);
+                                                    setTransformContext({ type: 'pointcloud', id: pc.id, title: pc.name });
                                                 }}
                                                 className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                                                 title="Open transform dialog"
@@ -291,7 +300,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 onRemove={() => props.onRemoveGngLayer(tag)}
                                 showOpacity={false}
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
-                                onOpenTransform={() => setGraphTransformTag(tag)}
+                                onOpenTransform={() => setTransformContext({ type: 'graph', id: tag, title: `Graph: ${tag}` })}
                             />
                         ))}
 
@@ -309,6 +318,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             >
                                                 {props.robotSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
                                             </button>
+                                            <button
+                                                onClick={() => setTransformContext({ type: 'robot', id: tag, title: `Robot: ${tag}` })}
+                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                title="Open transform dialog"
+                                            >
+                                                <Move size={12} />
+                                                Transform
+                                            </button>
                                             <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
                                         </div>
                                         <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
@@ -316,7 +333,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <span className="flex items-center gap-1">
                                                 <span
                                                     className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                                    title={props.transforms[data.frameId] ? 'TF active' : 'TF not yet received'}
+                                                    title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
                                                 />
                                                 <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
                                             </span>
@@ -349,6 +366,53 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     <button
                                         onClick={() => props.onRemoveRobot(tag)}
                                         className="btn-icon btn-icon-danger"
+                                        title="Remove robot layer"
+                                    >
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+
+                        {Object.entries(props.markerData).map(([tag, data]) => (
+                            <div
+                                key={`marker-${tag}`}
+                                className={`rounded-lg border p-2 transition-colors border-white/10 bg-white/5 hover:bg-white/10`}
+                            >
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <div className="mb-1 flex items-center gap-2">
+                                            <button
+                                                onClick={() => props.onUpdateMarkerSettings(tag, { visible: !props.markerSettings[tag]?.visible })}
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                            >
+                                                {props.markerSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
+                                            </button>
+                                            <button
+                                                onClick={() => setTransformContext({ type: 'marker', id: tag, title: `Markers: ${tag}` })}
+                                                className="inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-black/20 px-2 text-[10px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                                                title="Open transform dialog"
+                                            >
+                                                <Move size={12} />
+                                                Transform
+                                            </button>
+                                            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Markers: {tag}</p>
+                                        </div>
+                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                            <span>Frame:</span>
+                                            <span className="flex items-center gap-1">
+                                                <span
+                                                    className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                                    title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
+                                                />
+                                                <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => props.onRemoveMarker(tag)}
+                                        className="btn-icon btn-icon-danger"
+                                        title="Remove marker layer"
                                     >
                                         <Trash2 size={13} />
                                     </button>
@@ -388,55 +452,83 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 <ExportPanel pointClouds={props.pointClouds} selectedLayerId={props.selectedLayerId} />
             </CollapsibleSection>
 
-            <PointCloudTransformModal
-                open={Boolean(transformTarget)}
-                cloudData={transformTarget}
-                onClose={() => setPointCloudTransformId(null)}
-                onUpdate={(updates) => {
-                    if (!transformTarget) return;
-                    props.onUpdateTransform(transformTarget.id, updates);
-                }}
-                onReset={() => {
-                    if (!transformTarget) return;
-                    props.onUpdateTransform(transformTarget.id, {
-                        position: undefined,
-                        rotation: undefined,
-                        scale: undefined,
-                    });
-                }}
-            />
-
-            <GraphTransformModal
-                open={Boolean(graphTransformTarget)}
-                title={graphTransformTarget ? (graphTransformTarget.tag || graphTransformTag || 'graph') : ''}
-                transform={
-                    props.layerSettings[graphTransformTag || '']?.graphTransform || {
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
+            <GenericTransformModal
+                title={transformContext?.title || 'Transform'}
+                subtitle={transformContext?.id}
+                open={Boolean(transformContext)}
+                transform={(() => {
+                    if (!transformContext) return null;
+                    if (transformContext.type === 'pointcloud') {
+                        const target = props.pointClouds.find(pc => pc.id === transformContext.id);
+                        return target ? {
+                            position: target.position || [0, 0, 0],
+                            rotation: target.rotation || [0, 0, 0],
+                            scale: target.scale || [1, 1, 1]
+                        } : null;
                     }
-                }
-                onClose={() => setGraphTransformTag(null)}
+                    if (transformContext.type === 'graph') {
+                        return props.layerSettings[transformContext.id]?.graphTransform || {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1]
+                        };
+                    }
+                    if (transformContext.type === 'robot') {
+                        return props.robotSettings[transformContext.id]?.transform || {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1]
+                        };
+                    }
+                    if (transformContext.type === 'marker') {
+                        return props.markerSettings[transformContext.id]?.transform || {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1]
+                        };
+                    }
+                    return null;
+                })()}
+                onClose={() => setTransformContext(null)}
                 onUpdate={(updates) => {
-                    if (!graphTransformTag) return;
-                    const current = props.layerSettings[graphTransformTag]?.graphTransform || {
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    };
-                    props.onUpdateLayerSettings(graphTransformTag, {
-                        graphTransform: {
-                            position: updates.position || current.position,
-                            rotation: updates.rotation || current.rotation,
-                            scale: updates.scale || current.scale,
-                        },
-                    });
+                    if (!transformContext) return;
+                    if (transformContext.type === 'pointcloud') {
+                        props.onUpdateTransform(transformContext.id, updates);
+                    } else if (transformContext.type === 'graph') {
+                        const current = props.layerSettings[transformContext.id]?.graphTransform || {
+                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
+                        };
+                        props.onUpdateLayerSettings(transformContext.id, {
+                            graphTransform: { ...current, ...updates }
+                        });
+                    } else if (transformContext.type === 'robot') {
+                        const current = props.robotSettings[transformContext.id]?.transform || {
+                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
+                        };
+                        props.onUpdateRobotSettings(transformContext.id, {
+                            transform: { ...current, ...updates }
+                        });
+                    } else if (transformContext.type === 'marker') {
+                        const current = props.markerSettings[transformContext.id]?.transform || {
+                            position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1]
+                        };
+                        props.onUpdateMarkerSettings(transformContext.id, {
+                            transform: { ...current, ...updates }
+                        });
+                    }
                 }}
                 onReset={() => {
-                    if (!graphTransformTag) return;
-                    props.onUpdateLayerSettings(graphTransformTag, {
-                        graphTransform: undefined,
-                    });
+                    if (!transformContext) return;
+                    const identity: Transform = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+                    if (transformContext.type === 'pointcloud') {
+                        props.onUpdateTransform(transformContext.id, identity);
+                    } else if (transformContext.type === 'graph') {
+                        props.onUpdateLayerSettings(transformContext.id, { graphTransform: identity });
+                    } else if (transformContext.type === 'robot') {
+                        props.onUpdateRobotSettings(transformContext.id, { transform: identity });
+                    } else if (transformContext.type === 'marker') {
+                        props.onUpdateMarkerSettings(transformContext.id, { transform: identity });
+                    }
                 }}
             />
 
@@ -550,12 +642,26 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
 
             {props.selectedCloud && props.isEditMode && (
                 <CollapsibleSection title="Transform" icon={<Move size={16} />} defaultOpen={true}>
-                    <TransformPanel
-                        cloudData={props.selectedCloud}
-                        onUpdate={(updates) => props.onUpdateTransform(props.selectedCloud!.id, updates)}
-                        transformMode={props.transformMode}
-                        onModeChange={props.setTransformMode}
-                    />
+                <GenericTransformPanel
+                    title="Active Transform"
+                    transform={props.selectedCloud ? {
+                        position: props.selectedCloud.position || [0, 0, 0],
+                        rotation: props.selectedCloud.rotation || [0, 0, 0],
+                        scale: props.selectedCloud.scale || [1, 1, 1]
+                    } : { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }}
+                    onUpdate={(updates) => {
+                        if (!props.selectedCloud) return;
+                        props.onUpdateTransform(props.selectedCloud.id, updates);
+                    }}
+                    onReset={() => {
+                        if (!props.selectedCloud) return;
+                        props.onUpdateTransform(props.selectedCloud.id, {
+                            position: [0, 0, 0],
+                            rotation: [0, 0, 0],
+                            scale: [1, 1, 1]
+                        });
+                    }}
+                />
                 </CollapsibleSection>
             )}
 

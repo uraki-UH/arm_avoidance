@@ -23,7 +23,7 @@ public:
         fileManager_ = std::make_unique<ros2_bridge::PointCloudFileManager>(pointCloudRoot.string());
 
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
-            "/viewer/internal/rpc/request",
+            viewer_internal::topics::kRpcRequest,
             20,
             std::bind(&ViewerFileNode::handleRpcRequest, this, std::placeholders::_1));
 

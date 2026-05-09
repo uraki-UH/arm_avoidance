@@ -117,7 +117,7 @@ public:
         , tfBuffer_(get_clock())
         , tfListener_(tfBuffer_) {
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
-            "/viewer/internal/rpc/request",
+            viewer_internal::topics::kRpcRequest,
             50,
             std::bind(&ViewerEditNode::handleRpcRequest, this, std::placeholders::_1));
 

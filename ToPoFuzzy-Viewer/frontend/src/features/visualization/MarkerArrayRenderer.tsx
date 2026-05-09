@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { MarkerArrayData, MarkerMessage } from '../../types';
+import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface MarkerArrayRendererProps {
@@ -9,6 +9,7 @@ interface MarkerArrayRendererProps {
     data: MarkerArrayData;
     visible?: boolean;
     tf?: { pos: number[]; quat: number[] } | null;
+    manualTransform?: Transform;
 }
 
 const isDeleteAll = (marker: MarkerMessage) => marker.action === 'deleteall';
@@ -88,13 +89,15 @@ function LineMarker({
     }, [material, geometry]);
 
     return strip ? (
-        <line
-            geometry={geometry}
-            material={material}
+        <primitive
+            object={(() => {
+                const l = new THREE.Line(geometry, material);
+                l.renderOrder = 30;
+                return l;
+            })()}
             position={marker.pose.position}
             rotation={rotation}
             scale={marker.scale}
-            renderOrder={30}
         />
     ) : (
         <lineSegments
@@ -143,13 +146,15 @@ function PointsMarker({ marker }: { marker: MarkerMessage }) {
     }, [material, geometry]);
 
     return (
-        <points
-            geometry={geometry}
-            material={material}
+        <primitive
+            object={(() => {
+                const p = new THREE.Points(geometry, material);
+                p.renderOrder = 30;
+                return p;
+            })()}
             position={marker.pose.position}
             rotation={rotation}
             scale={marker.scale}
-            renderOrder={30}
         />
     );
 }
@@ -280,16 +285,24 @@ export function MarkerArrayRenderer({
     data,
     visible = true,
     tf = null,
+    manualTransform,
 }: MarkerArrayRendererProps) {
     const groupRef = useMarkerFrame(tf);
+    const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
-    useDemandUpdate([tag, data, visible, tf]);
+    useDemandUpdate([tag, data, visible, tf, manualTransform]);
 
     if (!visible || data.visible === false || data.markers.length === 0) return null;
 
     return (
         <group ref={groupRef} name={`${tag}-markers`}>
-            {data.markers.map(renderMarker)}
+            <group
+                position={transform.position}
+                rotation={transform.rotation}
+                scale={transform.scale}
+            >
+                {data.markers.map(renderMarker)}
+            </group>
         </group>
     );
 }

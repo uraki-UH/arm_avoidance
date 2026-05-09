@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphTransform, LAYER_COLORS, LAYER_LABELS, STATIC_GNG_DEFAULTS } from '../../types';
+import { GraphData, Transform, LAYER_COLORS, LAYER_LABELS, STATIC_GNG_DEFAULTS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 
@@ -14,15 +14,11 @@ const EMPTY_GRAPH: GraphData = {
     clusterLabels: []
 };
 
-const isIdentityTransform = (transform: GraphTransform | null | undefined) => {
-    if (!transform) return true;
-    const [px, py, pz] = transform.position;
-    const [rx, ry, rz] = transform.rotation;
-    const [sx, sy, sz] = transform.scale;
-    return px === 0 && py === 0 && pz === 0 && rx === 0 && ry === 0 && rz === 0 && sx === 1 && sy === 1 && sz === 1;
-};
+// Removed isIdentityTransform
+
 
 interface GraphRendererProps {
+    tag: string;
     data: GraphData | null;
     visible?: boolean;
     showNodes?: boolean;
@@ -46,10 +42,11 @@ interface GraphRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
-    manualTransform?: GraphTransform | null;
+    manualTransform?: Transform | null;
 }
 
 export function StaticGraphRenderer({
+    tag,
     data,
     visible = true,
     showNodes = true,
@@ -69,43 +66,33 @@ export function StaticGraphRenderer({
     manualTransform = null,
 }: GraphRendererProps) {
     const { invalidate } = useThree();
+    const graph = data ?? EMPTY_GRAPH;
+    const selectionEnabled = enableClusterSelection && !!onClusterSelect;
+    const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+
+    // Trigger re-render in demand mode for any visual changes
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, transform]);
+
     const groupRef = useRef<THREE.Group>(null);
-    const offsetGroupRef = useRef<THREE.Group>(null);
     const nodesRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
-    
-    const graph = data ?? EMPTY_GRAPH;
-    const selectionEnabled = enableClusterSelection && !!onClusterSelect;
-    const manualOffsetEnabled = !isIdentityTransform(manualTransform);
-    const effectiveManualTransform = manualOffsetEnabled ? manualTransform : null;
-
-    // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, effectiveManualTransform]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
         if (!groupRef.current) return;
         if (!tf) {
             groupRef.current.position.set(0, 0, 0);
-            groupRef.current.rotation.set(0, 0, 0);
+            groupRef.current.quaternion.set(0, 0, 0, 1);
             return;
         }
         groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
         groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
     }, [tf]);
 
-    useEffect(() => {
-        if (!manualOffsetEnabled || !offsetGroupRef.current) return;
-        const offset = manualTransform || {
-            position: [0, 0, 0] as [number, number, number],
-            rotation: [0, 0, 0] as [number, number, number],
-            scale: [1, 1, 1] as [number, number, number],
-        };
-        offsetGroupRef.current.position.set(offset.position[0], offset.position[1], offset.position[2]);
-        offsetGroupRef.current.rotation.set(offset.rotation[0], offset.rotation[1], offset.rotation[2]);
-        offsetGroupRef.current.scale.set(offset.scale[0], offset.scale[1], offset.scale[2]);
-    }, [manualOffsetEnabled, effectiveManualTransform]);
+
+// Removed imperative offset logic
+
 
     // Handle cluster click with drag filtering
     const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {
@@ -269,8 +256,14 @@ export function StaticGraphRenderer({
     );
 
     return (
-        <group ref={groupRef}>
-            {manualOffsetEnabled ? <group ref={offsetGroupRef}>{content}</group> : content}
+        <group ref={groupRef} name={tag}>
+            <group
+                position={transform.position}
+                rotation={transform.rotation}
+                scale={transform.scale}
+            >
+                {content}
+            </group>
         </group>
     );
 }

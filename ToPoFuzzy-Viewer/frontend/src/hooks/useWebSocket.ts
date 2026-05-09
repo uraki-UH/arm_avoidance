@@ -45,7 +45,7 @@ interface PendingRequest {
 }
 
 interface UseWebSocketReturn {
-    pointCloud: PointCloudData | null;
+    pointClouds: Record<string, PointCloudData>;
     markerData: Record<string, MarkerArrayData>;
     graphData: Record<string, GraphData>;
     robotData: Record<string, RobotData>;
@@ -105,7 +105,7 @@ interface UseWebSocketReturn {
 }
 
 export function useWebSocket(url: string): UseWebSocketReturn {
-    const [pointCloud, setPointCloud] = useState<PointCloudData | null>(null);
+    const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
     const [robotData, setRobotData] = useState<Record<string, RobotData>>({});
@@ -202,19 +202,38 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             socket.onmessage = (event) => {
                 if (event.data instanceof ArrayBuffer) {
                     try {
-                        const deserialized = deserializePointCloud(event.data);
-                        const queuedTopic = pendingTopicQueueRef.current.shift();
-                        const layerId = queuedTopic || '__stream_fallback__';
+                        const buffer = event.data;
+                        const view = new DataView(buffer);
+                        
+                        // Read topic name prefix (1 byte length + topic name string)
+                        const topicLen = view.getUint8(0);
+                        const topicBytes = new Uint8Array(buffer, 1, topicLen);
+                        const topicName = new TextDecoder().decode(topicBytes);
+                        
+                        // Remaining buffer is the PCDX data
+                        const pcdBuffer = buffer.slice(1 + topicLen);
+                        const deserialized = deserializePointCloud(pcdBuffer);
+                        
+                        // Use the extracted topic name as the layerId
+                        const layerId = topicName || '__stream_fallback__';
+
+                        // Sync the queue just in case other logic depends on it
+                        if (pendingTopicQueueRef.current.length > 0 && pendingTopicQueueRef.current[0] === layerId) {
+                            pendingTopicQueueRef.current.shift();
+                        }
 
                         const data: PointCloudData = {
                             id: layerId,
-                            name: queuedTopic || 'Streamed Point Cloud',
+                            name: layerId,
                             points: deserialized.positions,
                             colors: deserialized.colors ? convertToFloat32RGB(deserialized.colors) : undefined,
                             intensities: deserialized.intensities,
                             count: deserialized.pointCount,
                         };
-                        setPointCloud(data);
+                        setPointClouds((prev) => ({
+                            ...prev,
+                            [layerId]: data
+                        }));
                     } catch (parseError) {
                         console.error('Failed to parse binary point cloud:', parseError);
                     }
@@ -353,6 +372,18 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             delete next[payload.tag];
                             return next;
                         });
+                        return;
+                    }
+
+                    if (payload.type === 'stream.delete' || payload.type === 'stream.pointcloud.delete' || payload.type === 'stream.remove_layer') {
+                        const targetId = payload.topic || payload.tag || payload.id;
+                        if (targetId) {
+                            setPointClouds((prev) => {
+                                const next = { ...prev };
+                                delete next[targetId];
+                                return next;
+                            });
+                        }
                         return;
                     }
 
@@ -609,7 +640,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }, [sendRpc]);
 
     return {
-        pointCloud,
+        pointClouds,
         markerData,
         graphData,
         robotData,

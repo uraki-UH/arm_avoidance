@@ -23,7 +23,7 @@ public:
         rosbagManager_ = std::make_unique<ros2_bridge::RosbagManager>(rosbagRoot.string());
 
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
-            "/viewer/internal/rpc/request",
+            viewer_internal::topics::kRpcRequest,
             20,
             std::bind(&ViewerRosbagNode::handleRpcRequest, this, std::placeholders::_1));
 

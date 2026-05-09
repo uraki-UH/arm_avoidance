@@ -26,7 +26,7 @@ public:
         }
 
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
-            "/viewer/internal/rpc/request",
+            viewer_internal::topics::kRpcRequest,
             20,
             std::bind(&ViewerGngNode::handleRpcRequest, this, std::placeholders::_1));
 

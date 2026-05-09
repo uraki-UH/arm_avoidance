@@ -83,7 +83,7 @@ class ViewerWsGatewayNode : public rclcpp::Node {
 public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
         const int port = declare_parameter<int>("port", 9001);
-        rpcRequestPub_ = create_publisher<std_msgs::msg::String>("/viewer/internal/rpc/request", 100);
+        rpcRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcRequest, 100);
         rpcResponseSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 100, [this](const std_msgs::msg::String::SharedPtr msg) { rpc_.handleResponse(msg->data); });
         tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>("/tf", 100, [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
             auto now = std::chrono::steady_clock::now();
@@ -165,9 +165,25 @@ private:
     }
 
     void broadcastPointCloud(const std::string& topic, const std::vector<uint8_t>& data) {
-        auto s = std::make_shared<std::vector<uint8_t>>(data);
+        // Prepend topic name for reliable identification (ROS-style multiplexing)
+        uint8_t topicLen = static_cast<uint8_t>(std::min<size_t>(topic.length(), 255));
+        std::vector<uint8_t> packet;
+        packet.reserve(1 + topicLen + data.size());
+        packet.push_back(topicLen);
+        packet.insert(packet.end(), topic.begin(), topic.begin() + topicLen);
+        packet.insert(packet.end(), data.begin(), data.end());
+
+        auto s = std::make_shared<std::vector<uint8_t>>(std::move(packet));
+        // We still send the meta for legacy/sync reasons, but the binary now contains its own ID
         auto meta = std::make_shared<std::string>(json({{"type", "stream.pointcloud.meta"}, {"topic", topic}, {"tag", topic}}).dump());
-        loop_->defer([this, meta, s]() { std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) { ws->send(*meta, uWS::OpCode::TEXT); ws->send(std::string_view(reinterpret_cast<const char*>(s->data()), s->size()), uWS::OpCode::BINARY); } });
+        
+        loop_->defer([this, meta, s]() { 
+            std::lock_guard<std::mutex> l(connectionMutex_); 
+            for (auto* ws : connections_) { 
+                ws->send(*meta, uWS::OpCode::TEXT); 
+                ws->send(std::string_view(reinterpret_cast<const char*>(s->data()), s->size()), uWS::OpCode::BINARY); 
+            } 
+        });
     }
 
     void broadcastText(const std::string& payload) { auto s = std::make_shared<std::string>(payload); loop_->defer([this, s]() { std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->send(*s, uWS::OpCode::TEXT); }); }
@@ -180,8 +196,7 @@ private:
         broadcastText(json({{"type", "stream.pointcloud.delete"}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.graph.delete"}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.marker_array.delete"}, {"tag", id}}).dump());
-        // Send empty binary to force clear the buffer in the GUI
-        broadcastPointCloud(id, {});
+        // Clear any cached graph data for this topic
         { std::lock_guard<std::mutex> l(graphMutex_); lastGraphPayloads_.erase(id); }
     }
 

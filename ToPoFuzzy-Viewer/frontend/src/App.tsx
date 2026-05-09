@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stats } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
 import {
@@ -10,6 +10,7 @@ import {
     EditRegion,
     LayerSettings,
     RobotSettings,
+    Transform,
     STATIC_GNG_DEFAULTS,
     DYNAMIC_GNG_DEFAULTS,
 } from './types';
@@ -119,11 +120,12 @@ function App() {
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
+    const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
     const {
-        pointCloud: wsPointCloud,
+        pointClouds: wsPointClouds,
         markerData,
         graphData,
         robotData,
@@ -173,6 +175,7 @@ function App() {
                         showVisual: true,
                         showCollision: false,
                         collisionColor: '#ff9f1c',
+                        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
                     };
                     changed = true;
                 }
@@ -180,6 +183,23 @@ function App() {
             return changed ? next : prev;
         });
     }, [robotData]);
+
+    useEffect(() => {
+        setMarkerSettings(prev => {
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(markerData).forEach(tag => {
+                if (!next[tag]) {
+                    next[tag] = {
+                        visible: true,
+                        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+                    };
+                    changed = true;
+                }
+            });
+            return changed ? next : prev;
+        });
+    }, [markerData]);
 
     const handleUpdateRobotSettings = (tag: string, updates: Partial<RobotSettings>) => {
         setRobotSettings(prev => ({
@@ -190,6 +210,21 @@ function App() {
 
     const handleRemoveRobot = (tag: string) => {
         setRobotSettings(prev => {
+            const next = { ...prev };
+            delete next[tag];
+            return next;
+        });
+    };
+
+    const handleUpdateMarkerSettings = (tag: string, updates: Partial<{ visible: boolean, transform?: Transform }>) => {
+        setMarkerSettings(prev => ({
+            ...prev,
+            [tag]: { ...prev[tag], ...updates }
+        }));
+    };
+
+    const handleRemoveMarker = (tag: string) => {
+        setMarkerSettings(prev => {
             const next = { ...prev };
             delete next[tag];
             return next;
@@ -350,33 +385,48 @@ function App() {
     };
 
     useEffect(() => {
-        if (wsPointCloud && !disabledSourceIds.has(wsPointCloud.id)) {
-            if (isEditMode && editLayerId === wsPointCloud.id) {
-                return;
-            }
+        setPointClouds((prev) => {
+            let next = [...prev];
+            let changed = false;
 
-            setPointClouds((prev) => {
-                const index = prev.findIndex((pc) => pc.id === wsPointCloud.id);
+            Object.values(wsPointClouds).forEach((cloud) => {
+                if (disabledSourceIds.has(cloud.id)) return;
+                if (isEditMode && editLayerId === cloud.id) return;
 
+                const index = next.findIndex((pc) => pc.id === cloud.id);
                 const newCloud = {
-                    ...wsPointCloud,
-                    visible: index >= 0 ? prev[index].visible : true,
-                    opacity: index >= 0 ? prev[index].opacity : pointCloudOpacity,
-                    position: index >= 0 ? prev[index].position : (wsPointCloud.position || [0, 0, 0]),
-                    rotation: index >= 0 ? prev[index].rotation : (wsPointCloud.rotation || [0, 0, 0]),
-                    scale: index >= 0 ? prev[index].scale : (wsPointCloud.scale || [1, 1, 1]),
+                    ...cloud,
+                    visible: index >= 0 ? next[index].visible : true,
+                    opacity: index >= 0 ? next[index].opacity : pointCloudOpacity,
+                    position: index >= 0 ? next[index].position : (cloud.position || [0, 0, 0]),
+                    rotation: index >= 0 ? next[index].rotation : (cloud.rotation || [0, 0, 0]),
+                    scale: index >= 0 ? next[index].scale : (cloud.scale || [1, 1, 1]),
                 };
 
                 if (index === -1) {
-                    return [...prev, newCloud];
+                    next.push(newCloud);
+                    changed = true;
+                } else {
+                    const existing = next[index];
+                    // Compare content to avoid unnecessary updates
+                    if (existing.points !== newCloud.points || existing.count !== newCloud.count) {
+                        next[index] = newCloud;
+                        changed = true;
+                    }
                 }
-
-                const next = [...prev];
-                next[index] = newCloud;
-                return next;
             });
-        }
-    }, [wsPointCloud, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);
+
+            // Also remove pointclouds that are no longer in wsPointClouds
+            const activeIds = new Set(Object.keys(wsPointClouds));
+            const filtered = next.filter((pc) => activeIds.has(pc.id) || (isEditMode && editLayerId === pc.id));
+            if (filtered.length !== next.length) {
+                next = filtered;
+                changed = true;
+            }
+
+            return changed ? next : prev;
+        });
+    }, [wsPointClouds, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);
 
     useEffect(() => {
         setPointClouds((prev) => prev.map((pc) => ({ ...pc, opacity: pointCloudOpacity })));
@@ -797,6 +847,10 @@ function App() {
                         robotSettings={robotSettings}
                         onUpdateRobotSettings={handleUpdateRobotSettings}
                         onRemoveRobot={handleRemoveRobot}
+                        markerData={markerData}
+                        markerSettings={markerSettings}
+                        onUpdateMarkerSettings={handleUpdateMarkerSettings}
+                        onRemoveMarker={handleRemoveMarker}
                         transforms={transforms}
                     />
                 </Sidebar>
@@ -847,7 +901,9 @@ function App() {
 
                         const commonProps = {
                             key: tag,
+                            tag: tag,
                             data: data,
+                            visible: settings.visible,
                             showNodes: settings.showNodes,
                             showEdges: settings.showEdges,
                             showClusters: settings.showClusters,
@@ -885,6 +941,7 @@ function App() {
                             showVisual: true,
                             showCollision: false,
                             collisionColor: '#ff9f1c',
+                            transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
                         };
                         if (!settings.visible) return null;
                         const frameId = data.frameId || 'world';
@@ -898,6 +955,7 @@ function App() {
                                         visible={true}
                                         color={settings.color}
                                         tf={tf}
+                                        manualTransform={settings.transform}
                                     />
                                 )}
                                 {settings.showCollision && (
@@ -907,6 +965,7 @@ function App() {
                                         visible={true}
                                         color={settings.collisionColor}
                                         tf={tf}
+                                        manualTransform={settings.transform}
                                     />
                                 )}
                             </group>
@@ -914,7 +973,8 @@ function App() {
                     })}
 
                     {Object.entries(markerData).map(([tag, data]) => {
-                        if (disabledSourceIds.has(tag)) return null;
+                        const settings = markerSettings[tag] || { visible: true };
+                        if (!settings.visible || disabledSourceIds.has(tag)) return null;
                         const frameId = data.frameId || 'world';
                         const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
                         return (
@@ -924,6 +984,7 @@ function App() {
                                 data={data}
                                 visible={true}
                                 tf={tf}
+                                manualTransform={settings.transform}
                             />
                         );
                     })}

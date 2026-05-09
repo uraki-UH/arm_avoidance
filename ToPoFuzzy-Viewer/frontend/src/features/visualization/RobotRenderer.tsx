@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
-import { RobotData } from '../../types';
+import { RobotData, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface RobotRendererProps {
@@ -10,6 +10,7 @@ interface RobotRendererProps {
     visible?: boolean;
     color?: string;
     tf?: { pos: number[]; quat: number[] } | null;
+    manualTransform?: Transform;
 }
 
 export function RobotRenderer({
@@ -18,6 +19,7 @@ export function RobotRenderer({
     visible = true,
     color = 'blue',
     tf = null,
+    manualTransform,
 }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
@@ -94,6 +96,8 @@ export function RobotRenderer({
         });
     }, [robot, data?.jointNames, data?.jointValues]);
 
+    const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+
     // --- TF-based Positioning ---
     useEffect(() => {
         if (!groupRef.current) return;
@@ -115,7 +119,13 @@ export function RobotRenderer({
 
     return (
         <group ref={groupRef} name={tag} visible={visible}>
-            {robot && <primitive key={tag} object={robot} />}
+            <group 
+                position={effectiveTransform.position} 
+                rotation={effectiveTransform.rotation} 
+                scale={effectiveTransform.scale}
+            >
+                {robot && <primitive key={tag} object={robot} />}
+            </group>
         </group>
     );
 }

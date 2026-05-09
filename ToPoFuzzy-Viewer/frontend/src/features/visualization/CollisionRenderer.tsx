@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
-import { RobotData } from '../../types';
+import { RobotData, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface CollisionRendererProps {
@@ -10,6 +10,7 @@ interface CollisionRendererProps {
     visible?: boolean;
     color?: string;
     tf?: { pos: number[]; quat: number[] } | null;
+    manualTransform?: Transform;
 }
 
 export function CollisionRenderer({
@@ -18,6 +19,7 @@ export function CollisionRenderer({
     visible = true,
     color = '#ff9f1c',
     tf = null,
+    manualTransform,
 }: CollisionRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
@@ -26,7 +28,9 @@ export function CollisionRenderer({
 
     const viewerPort = 9001;
 
-    useDemandUpdate([robot, data, visible, color, tf]);
+    useDemandUpdate([robot, data, visible, color, tf, manualTransform]);
+
+    const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
     const collisionMaterial = useMemo(() => new THREE.MeshBasicMaterial({
         color: new THREE.Color(color),
@@ -114,7 +118,13 @@ export function CollisionRenderer({
 
     return (
         <group ref={groupRef} name={`${tag}-collision`} visible={visible}>
-            {robot && <primitive key={`${tag}-collision`} object={robot} />}
+            <group
+                position={effectiveTransform.position}
+                rotation={effectiveTransform.rotation}
+                scale={effectiveTransform.scale}
+            >
+                {robot && <primitive key={`${tag}-collision`} object={robot} />}
+            </group>
         </group>
     );
 }

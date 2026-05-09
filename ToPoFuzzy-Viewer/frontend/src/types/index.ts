@@ -115,7 +115,7 @@ export interface GraphData {
     mode?: GraphMode;
 }
 
-export interface GraphTransform {
+export interface Transform {
     position: [number, number, number];
     rotation: [number, number, number];
     scale: [number, number, number];
@@ -129,7 +129,7 @@ export interface LayerSettings {
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
-    graphTransform?: GraphTransform;
+    graphTransform?: Transform;
 }
 export interface RobotSettings {
     visible: boolean;
@@ -137,6 +137,7 @@ export interface RobotSettings {
     showVisual: boolean;
     showCollision: boolean;
     collisionColor: string;
+    transform?: Transform;
 }
 
 export interface RobotData {

@@ -2,17 +2,10 @@
 
 namespace viewer_internal::topics {
 
-constexpr const char* kRpcSourceRequest = "/viewer/internal/rpc/source/request";
-constexpr const char* kRpcFileRequest = "/viewer/internal/rpc/file/request";
-constexpr const char* kRpcRosbagRequest = "/viewer/internal/rpc/rosbag/request";
-constexpr const char* kRpcGngRequest = "/viewer/internal/rpc/gng/request";
-constexpr const char* kRpcParamRequest = "/viewer/internal/rpc/param/request";
-constexpr const char* kRpcEditRequest = "/viewer/internal/rpc/edit/request";
+constexpr const char* kRpcRequest = "/viewer/internal/rpc/request";
 
 constexpr const char* kRpcResponse = "/viewer/internal/rpc/response";
 
-constexpr const char* kStreamPointCloud = "/viewer/internal/stream/pointcloud";
-constexpr const char* kStreamPointCloudMeta = "/viewer/internal/stream/pointcloud_meta";
 constexpr const char* kStreamGraph = "/viewer/internal/stream/graph";
 constexpr const char* kStreamRobot = "/viewer/internal/stream/robot";
 constexpr const char* kStreamMarkerArray = "/viewer/internal/stream/marker_array";
