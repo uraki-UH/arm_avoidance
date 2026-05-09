@@ -234,9 +234,17 @@ public:
     /**
      * @brief 可視化用のマーカー（AABBやボクセル点）を取得する
      */
-    visualization_msgs::msg::MarkerArray getVisualizationMarkers(const std::vector<double>& joints, const std::string& frame_id, double time_sec) {
-        visualization_msgs::msg::MarkerArray msg;
-        if (!chain_) return msg;
+    struct VisualizationMarkers {
+        visualization_msgs::msg::MarkerArray voxels;
+        visualization_msgs::msg::MarkerArray aabb;
+    };
+
+    /**
+     * @brief 可視化用のマーカー（AABBやボクセル点）を取得する
+     */
+    VisualizationMarkers getVisualizationMarkers(const std::vector<double>& joints, const std::string& frame_id, double time_sec) {
+        VisualizationMarkers res;
+        if (!chain_) return res;
 
         std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> j_pos;
         std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> j_ori;
@@ -249,13 +257,13 @@ public:
         uint32_t nanosec = static_cast<uint32_t>((time_sec - sec) * 1e9);
 
         for (const auto& cache : link_voxel_caches_) {
-            if (cache.debug_points.empty()) continue; // Skip links with no geometry
+            if (cache.debug_points.empty()) continue;
 
             auto it = link_tfs.find(cache.name);
             if (it == link_tfs.end()) continue;
             const Eigen::Isometry3d& link_tf = it->second;
 
-            // Voxel Points - ローカル座標をワールド座標に変換してから送信
+            // Voxel Points
             visualization_msgs::msg::Marker pts_marker;
             pts_marker.header.frame_id = frame_id;
             pts_marker.header.stamp.sec = sec;
@@ -280,14 +288,13 @@ public:
             pts_marker.pose.orientation.z = 0.0;
 
             for (const auto& lp : cache.debug_points) {
-                // ローカルボクセル中心 -> ワールド座標
                 Eigen::Vector3d wp = link_tf * lp;
                 geometry_msgs::msg::Point p;
                 p.x = wp.x(); p.y = wp.y(); p.z = wp.z();
                 pts_marker.points.push_back(p);
             }
             if (!pts_marker.points.empty()) {
-                msg.markers.push_back(pts_marker);
+                res.voxels.markers.push_back(pts_marker);
             }
 
             // AABB Wireframe
@@ -302,7 +309,7 @@ public:
             box_marker.color.g = 0.5f;
             box_marker.color.b = 0.0f;
             box_marker.color.a = 0.8f;
-            box_marker.pose = pts_marker.pose; // identity（ワールド座標で送信）
+            box_marker.pose = pts_marker.pose;
 
             Eigen::Vector3d corners[8];
             for(int i=0; i<8; ++i) {
@@ -310,7 +317,7 @@ public:
                 if (i & 1) c.x() = cache.local_max.x();
                 if (i & 2) c.y() = cache.local_max.y();
                 if (i & 4) c.z() = cache.local_max.z();
-                corners[i] = link_tf * c; // ワールド座標に変換（ボクセル点と同様）
+                corners[i] = link_tf * c;
             }
 
             int edges[12][2] = {
@@ -325,9 +332,9 @@ public:
                 box_marker.points.push_back(p1);
                 box_marker.points.push_back(p2);
             }
-            msg.markers.push_back(box_marker);
+            res.aabb.markers.push_back(box_marker);
         }
-        return msg;
+        return res;
     }
 
     const std::vector<CachedLinkVoxels>& getLinkVoxelCaches() const {

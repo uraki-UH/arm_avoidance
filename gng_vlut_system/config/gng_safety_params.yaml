@@ -53,3 +53,15 @@ robot_viewer_bridge_node:
     stream_topic: "/viewer/internal/stream/robot"
     frame_id: "world"
     publish_hz: 30.0
+
+self_recognition_filter_node:
+  ros__parameters:
+    robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
+    voxel_size: 0.02
+    input_topic: "/camera/transformed_points"
+    output_topic: "/camera/self_filtered_points"
+    
+    # アーム構成の設定 (topoarm_dual)
+    root_link: "base_footprint"
+    leaf_links: ["left_end_effector_link", "right_end_effector_link"]
+    prefixes: ["left_", "right_"]

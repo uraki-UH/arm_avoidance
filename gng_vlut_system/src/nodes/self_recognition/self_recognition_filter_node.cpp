@@ -20,59 +20,82 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
     std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
     std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm.urdf.xacro";
 
-    declare_parameter("robot_urdf_path", default_urdf);
-    declare_parameter("voxel_size", 0.02);
-    declare_parameter("input_topic", "/camera/transformed_points");
-    declare_parameter("output_topic", "/camera/self_filtered_points");
+    // パラメータ宣言（デフォルト値なし：YAML等での指定を必須とする）
+    declare_parameter<std::string>("robot_urdf_path");
+    declare_parameter<double>("voxel_size");
+    declare_parameter<std::string>("input_topic");
+    declare_parameter<std::string>("output_topic");
+    declare_parameter<std::string>("root_link");
+    declare_parameter<std::vector<std::string>>("leaf_links");
+    declare_parameter<std::vector<std::string>>("prefixes");
 
+    // パラメータの取得
     std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     double voxel_size = get_parameter("voxel_size").as_double();
     std::string input_topic = get_parameter("input_topic").as_string();
     std::string output_topic = get_parameter("output_topic").as_string();
+    
+    std::string root_link = get_parameter("root_link").as_string();
+    std::vector<std::string> leaf_links = get_parameter("leaf_links").as_string_array();
+    std::vector<std::string> prefixes = get_parameter("prefixes").as_string_array();
 
     voxel_size_inv_ = 1.0f / static_cast<float>(voxel_size);
 
-    // ロボットモデルの初期化
+    // ロボットモデルのロード
     auto model = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
     
-    // Find all end effector links (links with no children)
-    std::vector<std::string> leaf_links;
-    for (const auto &[link_name, link_props] : model->getLinks()) {
-        bool is_parent = false;
-        for (const auto &[j_name, j_props] : model->getJoints()) {
-            if (j_props.parent_link == link_name) {
-                is_parent = true;
-                break;
+    // ルートリンクの設定
+    if (root_link.empty()) {
+        root_link = model->getRootLinkName();
+    }
+    frame_id_ = root_link;
+
+    // 末端リンクの設定（YAMLが空の場合は自動検出を試みるが、警告を出す）
+    if (leaf_links.empty()) {
+        RCLCPP_WARN(get_logger(), "leaf_links is empty in YAML. Attempting auto-detection...");
+        for (const auto &[link_name, link_props] : model->getLinks()) {
+            bool is_parent = false;
+            for (const auto &[j_name, j_props] : model->getJoints()) {
+                if (j_props.parent_link == link_name) {
+                    is_parent = true;
+                    break;
+                }
+            }
+            if (!is_parent && link_name != model->getRootLinkName()) {
+                leaf_links.push_back(link_name);
             }
         }
-        if (!is_parent && link_name != model->getRootLinkName()) {
-            leaf_links.push_back(link_name);
+    }
+    
+    // プリフィックスの設定
+    if (prefixes.empty()) {
+        RCLCPP_WARN(get_logger(), "prefixes is empty in YAML. Using default 'armN_'...");
+        for (size_t i = 0; i < leaf_links.size(); ++i) {
+            prefixes.push_back("arm" + std::to_string(i) + "_");
         }
     }
-    
-    if (leaf_links.empty()) {
-        throw std::runtime_error("No end-effector links found in URDF.");
+
+    if (leaf_links.size() != prefixes.size()) {
+        throw std::runtime_error("Size mismatch between leaf_links and prefixes in YAML!");
     }
-    
-    std::vector<std::string> prefixes;
+
+    RCLCPP_INFO(get_logger(), "--- Self Recognition Configuration ---");
+    RCLCPP_INFO(get_logger(), "  Root Link : %s", frame_id_.c_str());
+    RCLCPP_INFO(get_logger(), "  Voxel Size: %.3f m", voxel_size);
     for (size_t i = 0; i < leaf_links.size(); ++i) {
-        prefixes.push_back("arm" + std::to_string(i) + "_");
+        RCLCPP_INFO(get_logger(), "  Arm [%zu]: Leaf=[%s], Prefix=[%s]", i, leaf_links[i].c_str(), prefixes[i].c_str());
     }
-    
-    // Create multi-arm kinematic chain to support topoarm_dual
+    RCLCPP_INFO(get_logger(), "---------------------------------------");
+
+    // マルチアーム対応の KinematicChain 構築
     auto chain_ptr = simulation::createMultiArmKinematicChainFromModels(*model, leaf_links, prefixes, Eigen::Vector3d::Zero());
     auto chain = std::shared_ptr<kinematics::KinematicChain>(std::move(chain_ptr));
 
     recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
     recognition_manager_->initialize(*model, chain, voxel_size);
 
-    frame_id_ = model->getRootLinkName();
-    if (frame_id_.empty()) {
-        frame_id_ = "base_link"; // fallback
-    }
-
-    // Sub/Pub
+    // サブスクライバ / パブリッシャ
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", 10, std::bind(&SelfRecognitionFilterNode::joint_cb, this, std::placeholders::_1));
 
@@ -80,31 +103,30 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         input_topic, 10, std::bind(&SelfRecognitionFilterNode::pcl_cb, this, std::placeholders::_1));
 
     pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(output_topic, 10);
-    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-        "/robot_voxels", rclcpp::QoS(10).transient_local());
+    voxel_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/self_recognition/voxels", rclcpp::QoS(10).transient_local());
+    aabb_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/self_recognition/aabb", rclcpp::QoS(10).transient_local());
 
-    // アクティブな関節名の抽出
+    // 関節リストの準備
     for (size_t i = 0; i < chain->getNumJoints(); ++i) {
         if (chain->getJointDOF(i) > 0) {
             active_joint_names_.push_back(chain->getJointName(i));
         }
     }
-
-    // デフォルト姿勢（オール0）で初期化
     current_joints_.resize(active_joint_names_.size(), 0.0);
 
-    // 10Hzの描画タイマー
+    // 10Hzタイマー
     timer_ = create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&SelfRecognitionFilterNode::timer_cb, this));
 
-    RCLCPP_INFO(get_logger(), "Self Recognition Filter Node started. Voxel size: %.3f", voxel_size);
+    RCLCPP_INFO(get_logger(), "Self Recognition Filter Node initialized.");
 }
 
 void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    // 受信した配列を名前ベースの辞書に変換
     std::unordered_map<std::string, double> incoming_map;
     for (size_t i = 0; i < msg->name.size(); ++i) {
         if (i < msg->position.size()) {
@@ -112,7 +134,6 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
         }
     }
     
-    // 期待する正しい順番で上書き
     for (size_t i = 0; i < active_joint_names_.size(); ++i) {
         if (incoming_map.count(active_joint_names_[i])) {
             current_joints_[i] = incoming_map[active_joint_names_[i]];
@@ -120,7 +141,7 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
     }
     has_received_joints_ = true;
     
-    // 現在の姿勢に基づいてマスクを更新
+    // マスク更新
     auto vids = recognition_manager_->getSelfVoxelMask(current_joints_);
     current_mask_vids_.clear();
     for (long vid : vids) {
@@ -129,12 +150,18 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
 }
 
 void SelfRecognitionFilterNode::timer_cb() {
-    if (!has_received_joints_) return; // 安全ロック：関節角度を受信するまでは描画しない
+    if (!has_received_joints_) return;
 
-    if (marker_pub_->get_subscription_count() > 0) {
+    if (voxel_pub_->get_subscription_count() > 0 || aabb_pub_->get_subscription_count() > 0) {
         std::lock_guard<std::mutex> lock(mutex_);
         auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, frame_id_, this->now().seconds());
-        marker_pub_->publish(markers);
+        
+        if (voxel_pub_->get_subscription_count() > 0) {
+            voxel_pub_->publish(markers.voxels);
+        }
+        if (aabb_pub_->get_subscription_count() > 0) {
+            aabb_pub_->publish(markers.aabb);
+        }
     }
 }
 
@@ -143,19 +170,17 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!has_received_joints_ || current_mask_vids_.empty()) {
-            pcl_pub_->publish(*msg); // 安全ロック：関節角度が来るまではフィルタリングせずそのまま通す
+            pcl_pub_->publish(*msg);
             return;
         }
         mask_vids = current_mask_vids_;
     }
 
     auto out_msg = std::make_shared<sensor_msgs::msg::PointCloud2>(*msg);
-    
     sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
     sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
     
-    // 出力用バッファ（とりあえず最大サイズで確保し、後でリサイズする）
     std::vector<uint8_t> filtered_data;
     filtered_data.reserve(msg->data.size());
     uint32_t kept_points = 0;
@@ -165,7 +190,6 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
         float y = *iter_y;
         float z = *iter_z;
 
-        // 座標からボクセルインデックスを計算
         Eigen::Vector3i idx(
             static_cast<int>(std::floor(x * voxel_size_inv_)),
             static_cast<int>(std::floor(y * voxel_size_inv_)),
@@ -173,7 +197,6 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
         );
         long vid = GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx);
 
-        // マスクに含まれていなければ残す
         if (mask_vids.find(vid) == mask_vids.end()) {
             size_t point_offset = i * msg->point_step;
             const uint8_t* src_ptr = &msg->data[point_offset];

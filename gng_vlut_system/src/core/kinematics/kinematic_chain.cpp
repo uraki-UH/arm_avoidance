@@ -3,6 +3,7 @@
 #include <iostream>
 #include <limits>
 #include <random>
+#include <set>
 #include <vector>
 
 namespace kinematics {
@@ -879,7 +880,20 @@ void KinematicChain::buildAllLinkTransforms(
   Eigen::Isometry3d base_tf = Eigen::Isometry3d::Identity();
   base_tf.translate(base_position_);
   base_tf.rotate(base_orientation_);
-  link_transforms["base_link"] = base_tf;
+
+  // 動的なルートリンク特定: 子リンクとして現れない親リンクを探す
+  std::string detected_root = "base_link";
+  if (!fixed_link_info.empty()) {
+    std::set<std::string> children;
+    for (const auto& [child, info] : fixed_link_info) children.insert(child);
+    for (const auto& [child, info] : fixed_link_info) {
+      if (children.find(info.first) == children.end()) {
+        detected_root = info.first;
+        break;
+      }
+    }
+  }
+  link_transforms[detected_root] = base_tf;
 
   for (size_t i = 0; i < links_.size(); ++i) {
     if (i < positions.size() - 1) {
