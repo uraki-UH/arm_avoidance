@@ -98,6 +98,9 @@ public:
             cache.local_min -= Eigen::Vector3d::Constant(voxel_size_);
             cache.local_max += Eigen::Vector3d::Constant(voxel_size_);
 
+            std::cout << "[Recognition] Link [" << cache.name << "] generated " 
+                      << cache.local_vids.size() << " voxels." << std::endl;
+
             link_voxel_caches_.push_back(cache);
         }
 

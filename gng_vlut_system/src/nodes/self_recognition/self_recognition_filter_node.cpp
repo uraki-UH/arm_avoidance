@@ -48,14 +48,44 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         input_topic, 10, std::bind(&SelfRecognitionFilterNode::pcl_cb, this, std::placeholders::_1));
 
     pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(output_topic, 10);
-    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/self_recognition_markers", 10);
+    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/robot_voxels", 10);
+
+    // アクティブな関節名の抽出
+    for (size_t i = 0; i < chain->getNumJoints(); ++i) {
+        if (chain->getJointDOF(i) > 0) {
+            active_joint_names_.push_back(chain->getJointName(i));
+        }
+    }
+
+    // デフォルト姿勢（オール0）で初期化
+    current_joints_.resize(active_joint_names_.size(), 0.0);
+
+    // 10Hzの描画タイマー
+    timer_ = create_wall_timer(
+        std::chrono::milliseconds(100),
+        std::bind(&SelfRecognitionFilterNode::timer_cb, this));
 
     RCLCPP_INFO(get_logger(), "Self Recognition Filter Node started. Voxel size: %.3f", voxel_size);
 }
 
 void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
     std::lock_guard<std::mutex> lock(mutex_);
-    current_joints_ = msg->position;
+    
+    // 受信した配列を名前ベースの辞書に変換
+    std::unordered_map<std::string, double> incoming_map;
+    for (size_t i = 0; i < msg->name.size(); ++i) {
+        if (i < msg->position.size()) {
+            incoming_map[msg->name[i]] = msg->position[i];
+        }
+    }
+    
+    // 期待する正しい順番で上書き
+    for (size_t i = 0; i < active_joint_names_.size(); ++i) {
+        if (incoming_map.count(active_joint_names_[i])) {
+            current_joints_[i] = incoming_map[active_joint_names_[i]];
+        }
+    }
+    has_received_joints_ = true;
     
     // 現在の姿勢に基づいてマスクを更新
     auto vids = recognition_manager_->getSelfVoxelMask(current_joints_);
@@ -63,10 +93,14 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
     for (long vid : vids) {
         current_mask_vids_.insert(vid);
     }
+}
 
-    if (marker_pub_->get_subscription_count() > 0 || true) {
-        double time_sec = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
-        auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, "base_link", time_sec);
+void SelfRecognitionFilterNode::timer_cb() {
+    if (!has_received_joints_) return; // 安全ロック：関節角度を受信するまでは描画しない
+
+    if (marker_pub_->get_subscription_count() > 0) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, "base_link", this->now().seconds());
         marker_pub_->publish(markers);
     }
 }
@@ -75,8 +109,8 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
     std::unordered_set<long> mask_vids;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (current_mask_vids_.empty()) {
-            pcl_pub_->publish(*msg);
+        if (!has_received_joints_ || current_mask_vids_.empty()) {
+            pcl_pub_->publish(*msg); // 安全ロック：関節角度が来るまではフィルタリングせずそのまま通す
             return;
         }
         mask_vids = current_mask_vids_;

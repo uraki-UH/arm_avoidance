@@ -47,6 +47,16 @@ public:
                 const std::string resolved_mesh = robot_sim::common::resolvePath(col.geometry.mesh_filename);
                 auto mesh = simulation::StlLoader::loadBinaryStl(resolved_mesh);
                 if (!mesh.vertices.empty()) {
+                    // URDFのメッシュスケールを適用（ミリメートルからメートルへの変換等を反映）
+                    Eigen::Vector3d scale = col.geometry.size;
+                    if (scale.norm() < 1e-6) scale = Eigen::Vector3d(1, 1, 1); // 未設定時のフォールバック
+                    
+                    for (size_t i = 0; i < mesh.vertices.size() / 3; ++i) {
+                        mesh.vertices[i*3+0] *= scale.x();
+                        mesh.vertices[i*3+1] *= scale.y();
+                        mesh.vertices[i*3+2] *= scale.z();
+                    }
+
                     res.meshes.push_back(mesh);
                     res.mesh_origins.push_back(col.origin);
 

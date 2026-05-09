@@ -23,15 +23,19 @@ public:
 private:
     void pcl_cb(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
     void joint_cb(const sensor_msgs::msg::JointState::ConstSharedPtr msg);
+    void timer_cb();
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_sub_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
+    rclcpp::TimerBase::SharedPtr timer_;
 
     std::unique_ptr<robot_sim::recognition::SelfRecognitionManager> recognition_manager_;
     
     std::mutex mutex_;
+    bool has_received_joints_ = false;
+    std::vector<std::string> active_joint_names_;
     std::vector<double> current_joints_;
     std::unordered_set<long> current_mask_vids_;
     

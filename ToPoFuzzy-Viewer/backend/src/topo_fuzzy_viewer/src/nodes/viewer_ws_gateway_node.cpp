@@ -49,8 +49,26 @@ namespace topic_utils {
 }
 
 namespace converter {
+    std::string getMarkerTypeStr(int type) {
+        switch(type) {
+            case visualization_msgs::msg::Marker::ARROW: return "arrow";
+            case visualization_msgs::msg::Marker::CUBE: return "cube";
+            case visualization_msgs::msg::Marker::SPHERE: return "sphere";
+            case visualization_msgs::msg::Marker::CYLINDER: return "cylinder";
+            case visualization_msgs::msg::Marker::LINE_STRIP: return "line_strip";
+            case visualization_msgs::msg::Marker::LINE_LIST: return "line_list";
+            case visualization_msgs::msg::Marker::CUBE_LIST: return "cube_list";
+            case visualization_msgs::msg::Marker::SPHERE_LIST: return "sphere_list";
+            case visualization_msgs::msg::Marker::POINTS: return "points";
+            case visualization_msgs::msg::Marker::TEXT_VIEW_FACING: return "text";
+            case visualization_msgs::msg::Marker::MESH_RESOURCE: return "mesh_resource";
+            case visualization_msgs::msg::Marker::TRIANGLE_LIST: return "triangle_list";
+            default: return "unknown";
+        }
+    }
+
     json marker_to_json(const visualization_msgs::msg::Marker& m) {
-        json j = {{"id", m.id}, {"ns", m.ns}, {"type", m.type}, {"action", m.action},
+        json j = {{"id", m.id}, {"ns", m.ns}, {"type", getMarkerTypeStr(m.type)}, {"action", m.action},
                   {"pos", {m.pose.position.x, m.pose.position.y, m.pose.position.z}},
                   {"quat", {m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z, m.pose.orientation.w}},
                   {"scale", {m.scale.x, m.scale.y, m.scale.z}},
