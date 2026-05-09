@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Trash2, Share2, Square, Move } from 'lucide-react';
+import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings, STATIC_GNG_DEFAULTS, DYNAMIC_GNG_DEFAULTS } from '../../types';
 
 export interface GngLayerState {
@@ -34,6 +34,10 @@ interface GngLayerControlsProps {
     hasTf?: boolean;
 }
 
+import { getStatusLabel } from '../../utils/rosUtils';
+
+import { LayerItem } from '../../components/ui/LayerItem';
+
 export function GngLayerControls({
     tag,
     graphData,
@@ -45,9 +49,8 @@ export function GngLayerControls({
     hasTf = false,
 }: GngLayerControlsProps) {
     const isStatic = graphData.mode === 'static';
-    const displayTag = graphData.tag || tag;
 
-    // Local buffered opacity to avoid firing frequent onUpdate during drag.
+    // Local buffered opacity... (keeping existing hooks)
     const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
     const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || STATIC_GNG_DEFAULTS.nodeColor);
     const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || STATIC_GNG_DEFAULTS.edgeColor);
@@ -66,76 +69,31 @@ export function GngLayerControls({
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
-            <div className="mb-2 flex items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onUpdate({ visible: !settings.visible });
-                        }}
-                        className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-all ${
-                            settings.visible 
-                            ? 'border-[var(--accent-color)]/50 bg-[var(--accent-soft)] text-[var(--accent-strong)]' 
-                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                        }`}
-                        title={settings.visible ? 'Hide layer' : 'Show layer'}
-                    >
-                        {settings.visible ? <Eye size={14} /> : <EyeOff size={14} />}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-50">
-                                {isStatic ? 'Static' : 'Dynamic'}
+            <LayerItem
+                id={tag}
+                type="graph"
+                headerOnly
+                visible={settings.visible}
+                statusLabel={getStatusLabel('graph', graphData.mode)}
+                onToggleVisibility={() => onUpdate({ visible: !settings.visible })}
+                onRemove={onRemove}
+                onOpenTransform={onOpenTransform}
+            >
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                    <span>{graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges</span>
+                    {graphData.frameId && (() => {
+                        const isWorld = graphData.frameId === 'world';
+                        const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
+                        const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                        return (
+                            <span className="flex items-center gap-1">
+                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
+                                <span className="font-mono opacity-70">{graphData.frameId}</span>
                             </span>
-                            <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                                {displayTag === 'default' ? 'GNG Topology' : displayTag}
-                            </div>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                            <span>{graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges</span>
-                            {graphData.frameId && (() => {
-                                const isWorld = graphData.frameId === 'world';
-                                const dotClass = isWorld
-                                    ? 'bg-white/30'
-                                    : hasTf
-                                        ? 'bg-green-400 shadow-[0_0_4px_#4ade80]'
-                                        : 'bg-yellow-400';
-                                const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
-                                return (
-                                    <span className="flex items-center gap-1">
-                                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
-                                        <span className="font-mono opacity-70">{graphData.frameId}</span>
-                                    </span>
-                                );
-                            })()}
-                        </div>
-                    </div>
+                        );
+                    })()}
                 </div>
-                <div className="flex items-center gap-1">
-                    {onOpenTransform && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenTransform();
-                            }}
-                            className="btn-icon"
-                            title="Open graph transform dialog"
-                        >
-                            <Move size={13} />
-                        </button>
-                    )}
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onRemove();
-                        }}
-                        className="btn-icon btn-icon-danger"
-                        title="Remove layer"
-                    >
-                        <Trash2 size={13} />
-                    </button>
-                </div>
-            </div>
+            </LayerItem>
 
             {settings.visible && (
                 <div className="mt-3 space-y-3">

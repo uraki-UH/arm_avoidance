@@ -30,6 +30,7 @@ import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
 import { RosbagPlayer } from '../features/io/RosbagPlayer';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
+import { LayerItem } from '../components/ui/LayerItem';
 
 import {
     PointCloudData,
@@ -222,61 +223,20 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             </div>
                         )}
                         {props.pointClouds.map((pc) => (
-                            <div
+                            <LayerItem
                                 key={pc.id}
-                                onClick={() => {
-                                    if (!isLayerActionDisabled) {
-                                        props.onSelectLayer(pc.id);
-                                    }
-                                }}
-                                className={`rounded-lg border p-2 transition-colors cursor-pointer ${props.selectedLayerId === pc.id
-                                    ? 'border-[var(--accent-color)]/70 bg-[var(--accent-soft)]'
-                                    : 'border-white/10 bg-white/5 hover:bg-white/10'
-                                    } ${isLayerActionDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                id={pc.id}
+                                type="cloud"
+                                visible={pc.visible !== false}
+                                isSelected={props.selectedLayerId === pc.id}
+                                isActionDisabled={isLayerActionDisabled}
+                                onSelect={() => !isLayerActionDisabled && props.onSelectLayer(pc.id)}
+                                onToggleVisibility={() => props.onToggleVisibility(pc.id)}
+                                onRemove={() => props.onRemoveLayer(pc.id)}
+                                onOpenTransform={() => props.onOpenTransform('cloud', pc.id, pc.name)}
                             >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="mb-1 flex items-center gap-2">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (isLayerActionDisabled) return;
-                                                    props.onToggleVisibility(pc.id);
-                                                }}
-                                                disabled={isLayerActionDisabled}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                                title={pc.visible !== false ? 'Hide layer' : 'Show layer'}
-                                            >
-                                                {pc.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    props.onOpenTransform('cloud', pc.id, pc.name);
-                                                }}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                                title="Open transform dialog"
-                                            >
-                                                <Move size={12} />
-                                            </button>
-                                            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{pc.name}</p>
-                                        </div>
-                                        <p className="text-[11px] text-[var(--text-secondary)]">{pc.count.toLocaleString()} pts</p>
-                                    </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (isLayerActionDisabled) return;
-                                            props.onRemoveLayer(pc.id);
-                                        }}
-                                        disabled={isLayerActionDisabled}
-                                        className="btn-icon btn-icon-danger disabled:cursor-not-allowed disabled:opacity-50"
-                                        title="Remove layer"
-                                    >
-                                        <Trash2 size={13} />
-                                    </button>
-                                </div>
-                            </div>
+                                <p className="text-[11px] text-[var(--text-secondary)]">{pc.count.toLocaleString()} pts</p>
+                            </LayerItem>
                         ))}
 
                         {Object.entries(props.graphData).map(([tag, data]) => (
@@ -300,117 +260,73 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         ))}
 
                         {Object.entries(props.robotData).map(([tag, data]) => (
-                            <div
+                            <LayerItem
                                 key={`robot-${tag}`}
-                                className={`rounded-lg border p-2 transition-colors border-white/10 bg-white/5 hover:bg-white/10`}
+                                id={tag}
+                                type="robot"
+                                visible={props.robotSettings[tag]?.visible !== false}
+                                onToggleVisibility={() => props.onUpdateRobotSettings(tag, { visible: !props.robotSettings[tag]?.visible })}
+                                onRemove={() => props.onRemoveRobot(tag)}
+                                onOpenTransform={() => props.onOpenTransform('robot', tag, `Robot: ${tag}`)}
                             >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="mb-1 flex items-center gap-2">
-                                            <button
-                                                onClick={() => props.onUpdateRobotSettings(tag, { visible: !props.robotSettings[tag]?.visible })}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                            >
-                                                {props.robotSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
-                                            </button>
-                                            <button
-                                                onClick={() => props.onOpenTransform('robot', tag, `Robot: ${tag}`)}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                                title="Open transform dialog"
-                                            >
-                                                <Move size={12} />
-                                            </button>
-                                            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Robot: {tag}</p>
-                                        </div>
-                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                                            <span>Frame:</span>
-                                            <span className="flex items-center gap-1">
-                                                <span
-                                                    className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                                    title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
-                                                />
-                                                <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
-                                            </span>
-                                        </div>
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                            <button
-                                                onClick={() => props.onUpdateRobotSettings(tag, { showVisual: !props.robotSettings[tag]?.showVisual })}
-                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showVisual
-                                                        ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
-                                                        : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                                    }`}
-                                                title={props.robotSettings[tag]?.showVisual ? 'Hide visual model' : 'Show visual model'}
-                                            >
-                                                {props.robotSettings[tag]?.showVisual ? <Eye size={12} /> : <EyeOff size={12} />}
-                                                Visual
-                                            </button>
-                                            <button
-                                                onClick={() => props.onUpdateRobotSettings(tag, { showCollision: !props.robotSettings[tag]?.showCollision })}
-                                                className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showCollision
-                                                        ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
-                                                        : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                                    }`}
-                                                title={props.robotSettings[tag]?.showCollision ? 'Hide collision model' : 'Show collision model'}
-                                            >
-                                                <Box size={12} />
-                                                Collision
-                                            </button>
-                                        </div>
-                                    </div>
+                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                    <span>Frame:</span>
+                                    <span className="flex items-center gap-1">
+                                        <span
+                                            className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                            title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
+                                        />
+                                        <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
+                                    </span>
+                                </div>
+                                <div className="mt-2 grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={() => props.onRemoveRobot(tag)}
-                                        className="btn-icon btn-icon-danger"
-                                        title="Remove robot layer"
+                                        onClick={() => props.onUpdateRobotSettings(tag, { showVisual: !props.robotSettings[tag]?.showVisual })}
+                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showVisual
+                                            ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
+                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
+                                            }`}
+                                        title={props.robotSettings[tag]?.showVisual ? 'Hide visual model' : 'Show visual model'}
                                     >
-                                        <Trash2 size={13} />
+                                        {props.robotSettings[tag]?.showVisual ? <Eye size={12} /> : <EyeOff size={12} />}
+                                        Visual
+                                    </button>
+                                    <button
+                                        onClick={() => props.onUpdateRobotSettings(tag, { showCollision: !props.robotSettings[tag]?.showCollision })}
+                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showCollision
+                                            ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
+                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
+                                            }`}
+                                        title={props.robotSettings[tag]?.showCollision ? 'Hide collision model' : 'Show collision model'}
+                                    >
+                                        <Box size={12} />
+                                        Collision
                                     </button>
                                 </div>
-                            </div>
+                            </LayerItem>
                         ))}
 
                         {Object.entries(props.markerData).map(([tag, data]) => (
-                            <div
+                            <LayerItem
                                 key={`marker-${tag}`}
-                                className={`rounded-lg border p-2 transition-colors border-white/10 bg-white/5 hover:bg-white/10`}
+                                id={tag}
+                                type="marker"
+                                visible={props.markerSettings[tag]?.visible !== false}
+                                onToggleVisibility={() => props.onUpdateMarkerSettings(tag, { visible: !props.markerSettings[tag]?.visible })}
+                                onRemove={() => props.onRemoveMarker(tag)}
+                                onOpenTransform={() => props.onOpenTransform('marker', tag, `Markers: ${tag}`)}
                             >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="mb-1 flex items-center gap-2">
-                                            <button
-                                                onClick={() => props.onUpdateMarkerSettings(tag, { visible: !props.markerSettings[tag]?.visible })}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                            >
-                                                {props.markerSettings[tag]?.visible !== false ? <Eye size={14} /> : <EyeOff size={14} />}
-                                            </button>
-                                            <button
-                                                onClick={() => props.onOpenTransform('marker', tag, `Markers: ${tag}`)}
-                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                                title="Open transform dialog"
-                                            >
-                                                <Move size={12} />
-                                            </button>
-                                            <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Markers: {tag}</p>
-                                        </div>
-                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                                            <span>Frame:</span>
-                                            <span className="flex items-center gap-1">
-                                                <span
-                                                    className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                                    title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
-                                                />
-                                                <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => props.onRemoveMarker(tag)}
-                                        className="btn-icon btn-icon-danger"
-                                        title="Remove marker layer"
-                                    >
-                                        <Trash2 size={13} />
-                                    </button>
+                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                    <span>Frame:</span>
+                                    <span className="flex items-center gap-1">
+                                        <span
+                                            className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
+                                            title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
+                                        />
+                                        <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
+                                    </span>
                                 </div>
-                            </div>
+                            </LayerItem>
                         ))}
                     </div>
 
