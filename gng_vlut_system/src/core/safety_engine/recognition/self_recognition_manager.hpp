@@ -56,7 +56,6 @@ public:
             cache.local_max = Eigen::Vector3d::Constant(std::numeric_limits<double>::lowest());
 
             auto add_point = [&](const Eigen::Vector3d& p) {
-                cache.debug_points.push_back(p);
                 long vid = ::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(
                     ::common::geometry::VoxelUtils::worldToVoxel(p.cast<float>(), (float)voxel_size_)
                 );
@@ -90,8 +89,16 @@ public:
                 for (const auto& p : points) add_point(p);
             }
 
-            if (cache.debug_points.empty()) {
+            if (cache.local_vids.empty()) {
                 continue; // ジオメトリを持たないリンク（中間リンクなど）はスキップ
+            }
+
+            // 生の点ではなく、量子化された一意のボクセル中心座標を描画用に使用する
+            for (long vid : cache.local_vids) {
+                Eigen::Vector3i idx = ::GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+                cache.debug_points.push_back(
+                    ::common::geometry::VoxelUtils::voxelToWorld(idx, (float)voxel_size_).cast<double>()
+                );
             }
 
             // AABBを少し太らせる（安全マージン）
@@ -248,7 +255,7 @@ public:
             if (it == link_tfs.end()) continue;
             const Eigen::Isometry3d& link_tf = it->second;
 
-            // Voxel Points
+            // Voxel Points - ローカル座標をワールド座標に変換してから送信
             visualization_msgs::msg::Marker pts_marker;
             pts_marker.header.frame_id = frame_id;
             pts_marker.header.stamp.sec = sec;
@@ -257,16 +264,23 @@ public:
             pts_marker.id = marker_id++;
             pts_marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
             pts_marker.action = visualization_msgs::msg::Marker::ADD;
-            pts_marker.scale.x = voxel_size_ * 0.9;
-            pts_marker.scale.y = voxel_size_ * 0.9;
-            pts_marker.scale.z = voxel_size_ * 0.9;
+            pts_marker.scale.x = voxel_size_;
+            pts_marker.scale.y = voxel_size_;
+            pts_marker.scale.z = voxel_size_;
             pts_marker.color.r = 0.0f;
             pts_marker.color.g = 1.0f;
             pts_marker.color.b = 0.5f;
             pts_marker.color.a = 0.6f;
+            pts_marker.pose.position.x = 0.0;
+            pts_marker.pose.position.y = 0.0;
+            pts_marker.pose.position.z = 0.0;
             pts_marker.pose.orientation.w = 1.0;
+            pts_marker.pose.orientation.x = 0.0;
+            pts_marker.pose.orientation.y = 0.0;
+            pts_marker.pose.orientation.z = 0.0;
 
             for (const auto& lp : cache.debug_points) {
+                // ローカルボクセル中心 -> ワールド座標
                 Eigen::Vector3d wp = link_tf * lp;
                 geometry_msgs::msg::Point p;
                 p.x = wp.x(); p.y = wp.y(); p.z = wp.z();
@@ -288,7 +302,7 @@ public:
             box_marker.color.g = 0.5f;
             box_marker.color.b = 0.0f;
             box_marker.color.a = 0.8f;
-            box_marker.pose.orientation.w = 1.0;
+            box_marker.pose = pts_marker.pose; // identity（ワールド座標で送信）
 
             Eigen::Vector3d corners[8];
             for(int i=0; i<8; ++i) {
@@ -296,7 +310,7 @@ public:
                 if (i & 1) c.x() = cache.local_max.x();
                 if (i & 2) c.y() = cache.local_max.y();
                 if (i & 4) c.z() = cache.local_max.z();
-                corners[i] = link_tf * c;
+                corners[i] = link_tf * c; // ワールド座標に変換（ボクセル点と同様）
             }
 
             int edges[12][2] = {

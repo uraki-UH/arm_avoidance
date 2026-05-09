@@ -12,22 +12,42 @@ interface MarkerArrayRendererProps {
     manualTransform?: Transform;
 }
 
-const isDeleteAll = (marker: MarkerMessage) => marker.action === 'deleteall';
+const isDeleteAll = (marker: MarkerMessage) => marker.action === 3; // 3 is DELETEALL in ROS
 
-const toMaterialParams = (marker: MarkerMessage) => {
-    const hasExplicitColor = Boolean(marker.color) && (
-        (marker.color?.r ?? 0) !== 0 ||
-        (marker.color?.g ?? 0) !== 0 ||
-        (marker.color?.b ?? 0) !== 0 ||
-        (marker.color?.a ?? 0) > 0
-    );
-    const alpha = hasExplicitColor ? (marker.color?.a ?? 1) : 1;
+const getPose = (marker: any) => {
+    const pos = marker.pos || [0, 0, 0];
+    const quat = marker.quat || [0, 0, 0, 1];
+    
+    // Fallback for object format if needed
+    const px = pos.x ?? pos[0] ?? 0;
+    const py = pos.y ?? pos[1] ?? 0;
+    const pz = pos.z ?? pos[2] ?? 0;
+    
+    const qx = quat.x ?? quat[0] ?? 0;
+    const qy = quat.y ?? quat[1] ?? 0;
+    const qz = quat.z ?? quat[2] ?? 0;
+    const qw = quat.w ?? quat[3] ?? 1;
+
+    const position = [px, py, pz] as [number, number, number];
+    const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
+    const euler = new THREE.Euler().setFromQuaternion(quaternion);
+    const rotation = [euler.x, euler.y, euler.z] as [number, number, number];
+    
+    return { position, rotation };
+};
+
+const getColor = (color: any) => {
+    if (Array.isArray(color)) {
+        return {
+            color: new THREE.Color(color[0], color[1], color[2]),
+            opacity: color[3] ?? 1,
+            transparent: (color[3] ?? 1) < 1,
+        };
+    }
     return {
-        color: hasExplicitColor
-            ? new THREE.Color(marker.color?.r ?? 1, marker.color?.g ?? 1, marker.color?.b ?? 1)
-            : new THREE.Color(1, 1, 1),
-        opacity: alpha,
-        transparent: alpha < 1,
+        color: new THREE.Color(color?.r ?? 1, color?.g ?? 1, color?.b ?? 1),
+        opacity: color?.a ?? 1,
+        transparent: (color?.a ?? 1) < 1,
     };
 };
 
@@ -50,36 +70,166 @@ function useMarkerFrame(tf: { pos: number[]; quat: number[] } | null) {
     return groupRef;
 }
 
-function LineMarker({
-    marker,
-    strip,
-}: {
-    marker: MarkerMessage;
-    strip: boolean;
-}) {
-    const params = useMemo(() => toMaterialParams(marker), [marker]);
-    const rotation = useMemo(() => {
-        const quaternion = new THREE.Quaternion(
-            marker.pose.orientation[0],
-            marker.pose.orientation[1],
-            marker.pose.orientation[2],
-            marker.pose.orientation[3]
-        );
-        const euler = new THREE.Euler().setFromQuaternion(quaternion);
-        return [euler.x, euler.y, euler.z] as [number, number, number];
-    }, [marker.pose.orientation]);
-    const material = useMemo(() => new THREE.LineBasicMaterial({
-        color: params.color,
-        transparent: params.transparent,
-        opacity: params.opacity,
-        depthTest: true,
-        depthWrite: false,
-    }), [params]);
-    const geometry = useMemo(() => {
-        const positions = new Float32Array(marker.points.flat());
+function ListMarker({ marker }: { marker: MarkerMessage }) {
+    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const pts = marker.points || [];
+    const pointsLen = pts.length;
+    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    
+    const isCube = marker.type === 'cube_list';
+    
+    const lineGeometry = useMemo(() => {
+        if (!isCube || pointsLen === 0) return null;
+        const sx = Math.max(0.0001, marker.scale[0] || 0.02);
+        const sy = Math.max(0.0001, marker.scale[1] || 0.02);
+        const sz = Math.max(0.0001, marker.scale[2] || 0.02);
+        const hx = sx / 2, hy = sy / 2, hz = sz / 2;
+        
+        const positions = new Float32Array(pts.length * 24 * 3);
+        let idx = 0;
+        for (let i = 0; i < pts.length; i++) {
+            const pt = pts[i];
+            const px = pt[0], py = pt[1], pz = pt[2];
+            // 12 edges without diagonals
+            const c = [
+                px-hx, py-hy, pz-hz,  px+hx, py-hy, pz-hz,  px+hx, py+hy, pz-hz,  px-hx, py+hy, pz-hz,
+                px-hx, py-hy, pz+hz,  px+hx, py-hy, pz+hz,  px+hx, py+hy, pz+hz,  px-hx, py+hy, pz+hz
+            ];
+            const edges = [0,1, 1,2, 2,3, 3,0, 4,5, 5,6, 6,7, 7,4, 0,4, 1,5, 2,6, 3,7];
+            for (let e = 0; e < 24; e++) {
+                const vi = edges[e] * 3;
+                positions[idx++] = c[vi];
+                positions[idx++] = c[vi+1];
+                positions[idx++] = c[vi+2];
+            }
+        }
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geom.computeBoundingSphere();
+        return geom;
+    }, [isCube, pts, marker.scale, pointsLen]);
+
+    const lineMaterial = useMemo(() => new THREE.LineBasicMaterial({
+        color, transparent, opacity, depthTest: true, depthWrite: false,
+    }), [color, transparent, opacity]);
+
+    const meshGeometry = useMemo(() => isCube ? null : new THREE.SphereGeometry(0.5, 12, 8), [isCube]);
+    const meshMaterial = useMemo(() => isCube ? null : new THREE.MeshLambertMaterial({
+        color, transparent, opacity, depthTest: true, depthWrite: true,
+    }), [color, transparent, opacity, isCube]);
+
+    const instRef = useRef<THREE.InstancedMesh>(null);
+    useEffect(() => {
+        if (isCube || !instRef.current || pointsLen === 0) return;
+        const dummy = new THREE.Object3D();
+        const sx = marker.scale[0] || 1, sy = marker.scale[1] || 1, sz = marker.scale[2] || 1;
+        pts.forEach((pt, index) => {
+            dummy.position.set(pt[0], pt[1], pt[2]);
+            dummy.scale.set(sx, sy, sz);
+            dummy.updateMatrix();
+            instRef.current?.setMatrixAt(index, dummy.matrix);
+        });
+        instRef.current.count = pointsLen;
+        instRef.current.instanceMatrix.needsUpdate = true;
+    }, [isCube, pts, marker.scale, pointsLen]);
+
+    useEffect(() => () => {
+        lineMaterial.dispose();
+        lineGeometry?.dispose();
+        meshMaterial?.dispose();
+        meshGeometry?.dispose();
+    }, [lineMaterial, lineGeometry, meshMaterial, meshGeometry]);
+
+    if (isCube) {
+        if (!lineGeometry) return null;
+        return (
+            <lineSegments
+                geometry={lineGeometry}
+                material={lineMaterial}
+                position={position}
+                rotation={rotation}
+                renderOrder={30}
+            />
+        );
+    }
+
+    return (
+        <instancedMesh
+            key={pointsLen}
+            ref={instRef}
+            args={[meshGeometry!, meshMaterial!, Math.max(1, pointsLen)]}
+            count={pointsLen}
+            position={position}
+            rotation={rotation}
+            renderOrder={30}
+        />
+    );
+}
+
+function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
+    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    const isCube = marker.type === 'cube';
+
+    const geometry = useMemo(() => {
+        if (marker.type === 'sphere') return new THREE.SphereGeometry(0.5, 16, 12);
+        if (marker.type === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+        return isCube ? new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)) : new THREE.BoxGeometry(1, 1, 1);
+    }, [marker.type, isCube]);
+
+    const material = useMemo(() => {
+        if (isCube) return new THREE.LineBasicMaterial({ color, transparent, opacity, depthTest: true, depthWrite: false });
+        return new THREE.MeshLambertMaterial({ color, transparent, opacity, depthTest: true, depthWrite: true });
+    }, [isCube, color, transparent, opacity]);
+
+    useEffect(() => () => {
+        material.dispose();
+        geometry.dispose();
+    }, [material, geometry]);
+
+    const scale: [number, number, number] = [
+        Math.max(0.0001, marker.scale[0] || 1),
+        Math.max(0.0001, marker.scale[1] || 1),
+        Math.max(0.0001, marker.scale[2] || 1),
+    ];
+
+    if (isCube) {
+        return (
+            <lineSegments
+                geometry={geometry}
+                material={material as THREE.LineBasicMaterial}
+                position={position}
+                rotation={rotation}
+                scale={scale}
+                renderOrder={30}
+            />
+        );
+    }
+
+    return (
+        <mesh
+            geometry={geometry}
+            material={material}
+            position={position}
+            rotation={rotation}
+            scale={scale}
+            renderOrder={30}
+        />
+    );
+}
+
+function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
+    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    
+    const material = useMemo(() => new THREE.LineBasicMaterial({
+        color, transparent, opacity, depthTest: true, depthWrite: false,
+    }), [color, transparent, opacity]);
+
+    const geometry = useMemo(() => {
+        const flatPoints = marker.points.flat();
+        const positions = new Float32Array(flatPoints);
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         return geom;
     }, [marker.points]);
 
@@ -89,170 +239,21 @@ function LineMarker({
     }, [material, geometry]);
 
     return strip ? (
-        <primitive
-            object={(() => {
-                const l = new THREE.Line(geometry, material);
-                l.renderOrder = 30;
-                return l;
-            })()}
-            position={marker.pose.position}
+        <line
+            geometry={geometry}
+            material={material}
+            position={position}
             rotation={rotation}
             scale={marker.scale}
+            renderOrder={30}
         />
     ) : (
         <lineSegments
             geometry={geometry}
             material={material}
-            position={marker.pose.position}
+            position={position}
             rotation={rotation}
             scale={marker.scale}
-            renderOrder={30}
-        />
-    );
-}
-
-function PointsMarker({ marker }: { marker: MarkerMessage }) {
-    const params = useMemo(() => toMaterialParams(marker), [marker]);
-    const rotation = useMemo(() => {
-        const quaternion = new THREE.Quaternion(
-            marker.pose.orientation[0],
-            marker.pose.orientation[1],
-            marker.pose.orientation[2],
-            marker.pose.orientation[3]
-        );
-        const euler = new THREE.Euler().setFromQuaternion(quaternion);
-        return [euler.x, euler.y, euler.z] as [number, number, number];
-    }, [marker.pose.orientation]);
-    const material = useMemo(() => new THREE.PointsMaterial({
-        color: params.color,
-        transparent: params.transparent,
-        opacity: params.opacity,
-        size: Math.max(0.001, marker.scale[0] || 0.01),
-        sizeAttenuation: true,
-        depthTest: true,
-        depthWrite: false,
-    }), [params, marker.scale]);
-    const geometry = useMemo(() => {
-        const positions = new Float32Array(marker.points.flat());
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geom.computeBoundingSphere();
-        return geom;
-    }, [marker.points]);
-
-    useEffect(() => () => {
-        material.dispose();
-        geometry.dispose();
-    }, [material, geometry]);
-
-    return (
-        <primitive
-            object={(() => {
-                const p = new THREE.Points(geometry, material);
-                p.renderOrder = 30;
-                return p;
-            })()}
-            position={marker.pose.position}
-            rotation={rotation}
-            scale={marker.scale}
-        />
-    );
-}
-
-function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
-    const params = useMemo(() => toMaterialParams(marker), [marker]);
-    const rotation = useMemo(() => {
-        const quaternion = new THREE.Quaternion(
-            marker.pose.orientation[0],
-            marker.pose.orientation[1],
-            marker.pose.orientation[2],
-            marker.pose.orientation[3]
-        );
-        const euler = new THREE.Euler().setFromQuaternion(quaternion);
-        return [euler.x, euler.y, euler.z] as [number, number, number];
-    }, [marker.pose.orientation]);
-    const geometry = useMemo(() => {
-        if (marker.type === 'sphere') {
-            return new THREE.SphereGeometry(0.5, 16, 12);
-        }
-        if (marker.type === 'cylinder') {
-            return new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
-        }
-        return new THREE.BoxGeometry(1, 1, 1);
-    }, [marker.type]);
-    const material = useMemo(() => new THREE.MeshBasicMaterial({
-        color: params.color,
-        transparent: params.transparent,
-        opacity: params.opacity,
-        wireframe: true,
-        depthTest: true,
-        depthWrite: false,
-    }), [params]);
-
-    useEffect(() => () => {
-        material.dispose();
-        geometry.dispose();
-    }, [material, geometry]);
-
-    return (
-        <mesh
-            geometry={geometry}
-            position={marker.pose.position}
-            rotation={rotation}
-            scale={[
-                Math.max(0.0001, marker.scale[0] || 1),
-                Math.max(0.0001, marker.scale[1] || 1),
-                Math.max(0.0001, marker.scale[2] || 1),
-            ]}
-            material={material}
-            renderOrder={30}
-        />
-    );
-}
-
-function ListMarker({ marker }: { marker: MarkerMessage }) {
-    const params = useMemo(() => toMaterialParams(marker), [marker]);
-    const geometry = useMemo(() => (
-        marker.type === 'sphere_list'
-            ? new THREE.SphereGeometry(0.5, 12, 8)
-            : new THREE.BoxGeometry(1, 1, 1)
-    ), [marker.type]);
-    const material = useMemo(() => new THREE.MeshBasicMaterial({
-        color: params.color,
-        transparent: params.transparent,
-        opacity: params.opacity,
-        wireframe: true,
-        depthTest: true,
-        depthWrite: false,
-    }), [params]);
-    const instRef = useRef<THREE.InstancedMesh>(null);
-
-    useEffect(() => {
-        if (!instRef.current) return;
-        const dummy = new THREE.Object3D();
-        const sx = Math.max(0.0001, marker.scale[0] || 1);
-        const sy = Math.max(0.0001, marker.scale[1] || 1);
-        const sz = Math.max(0.0001, marker.scale[2] || 1);
-        marker.points.forEach((point, index) => {
-            dummy.position.set(point[0], point[1], point[2]);
-            dummy.scale.set(sx, sy, sz);
-            dummy.updateMatrix();
-            instRef.current?.setMatrixAt(index, dummy.matrix);
-        });
-        instRef.current.count = marker.points.length;
-        instRef.current.instanceMatrix.needsUpdate = true;
-    }, [marker.points, marker.scale]);
-
-    useEffect(() => () => {
-        material.dispose();
-        geometry.dispose();
-    }, [material, geometry]);
-
-    return (
-        <instancedMesh
-            ref={instRef}
-            args={[geometry, material, Math.max(1, marker.points.length)]}
-            count={marker.points.length}
             renderOrder={30}
         />
     );
@@ -270,8 +271,6 @@ function renderMarker(marker: MarkerMessage) {
         return <LineMarker key={`${marker.ns}:${marker.id}`} marker={marker} strip={true} />;
     case 'line_list':
         return <LineMarker key={`${marker.ns}:${marker.id}`} marker={marker} strip={false} />;
-    case 'points':
-        return <PointsMarker key={`${marker.ns}:${marker.id}`} marker={marker} />;
     case 'cube_list':
     case 'sphere_list':
         return <ListMarker key={`${marker.ns}:${marker.id}`} marker={marker} />;

@@ -33,13 +33,15 @@ export interface MarkerMessage {
     ns: string;
     id: number;
     type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
-    action: 'add' | 'modify' | 'delete' | 'deleteall' | 'unknown';
+    action: number;
     frameId?: string;
-    pose: MarkerPose;
+    pos?: [number, number, number];
+    quat?: [number, number, number, number];
+    pose?: MarkerPose; // Keep for compatibility but prioritize pos/quat
     scale: [number, number, number];
-    color: MarkerColor;
+    color: [number, number, number, number] | MarkerColor;
     points: [number, number, number][];
-    colors?: MarkerColor[];
+    colors?: ([number, number, number, number] | MarkerColor)[];
     text?: string;
     meshResource?: string;
     meshUseEmbeddedMaterials?: boolean;

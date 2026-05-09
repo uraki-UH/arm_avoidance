@@ -35,10 +35,42 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
 
     // ロボットモデルの初期化
     auto model = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
-    auto chain = std::make_shared<kinematics::KinematicChain>(simulation::createKinematicChainFromModel(*model));
+    
+    // Find all end effector links (links with no children)
+    std::vector<std::string> leaf_links;
+    for (const auto &[link_name, link_props] : model->getLinks()) {
+        bool is_parent = false;
+        for (const auto &[j_name, j_props] : model->getJoints()) {
+            if (j_props.parent_link == link_name) {
+                is_parent = true;
+                break;
+            }
+        }
+        if (!is_parent && link_name != model->getRootLinkName()) {
+            leaf_links.push_back(link_name);
+        }
+    }
+    
+    if (leaf_links.empty()) {
+        throw std::runtime_error("No end-effector links found in URDF.");
+    }
+    
+    std::vector<std::string> prefixes;
+    for (size_t i = 0; i < leaf_links.size(); ++i) {
+        prefixes.push_back("arm" + std::to_string(i) + "_");
+    }
+    
+    // Create multi-arm kinematic chain to support topoarm_dual
+    auto chain_ptr = simulation::createMultiArmKinematicChainFromModels(*model, leaf_links, prefixes, Eigen::Vector3d::Zero());
+    auto chain = std::shared_ptr<kinematics::KinematicChain>(std::move(chain_ptr));
 
     recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
     recognition_manager_->initialize(*model, chain, voxel_size);
+
+    frame_id_ = model->getRootLinkName();
+    if (frame_id_.empty()) {
+        frame_id_ = "base_link"; // fallback
+    }
 
     // Sub/Pub
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
@@ -48,7 +80,8 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         input_topic, 10, std::bind(&SelfRecognitionFilterNode::pcl_cb, this, std::placeholders::_1));
 
     pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(output_topic, 10);
-    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/robot_voxels", 10);
+    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/robot_voxels", rclcpp::QoS(10).transient_local());
 
     // アクティブな関節名の抽出
     for (size_t i = 0; i < chain->getNumJoints(); ++i) {
@@ -100,7 +133,7 @@ void SelfRecognitionFilterNode::timer_cb() {
 
     if (marker_pub_->get_subscription_count() > 0) {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, "base_link", this->now().seconds());
+        auto markers = recognition_manager_->getVisualizationMarkers(current_joints_, frame_id_, this->now().seconds());
         marker_pub_->publish(markers);
     }
 }
