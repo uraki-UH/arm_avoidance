@@ -1,7 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RotateCcw, Copy, Check } from 'lucide-react';
 import { Transform } from '../../types';
-import { useLongPress } from '../../hooks/useLongPress';
+
+function useLongPress(callback: () => void, ms = 80) {
+    const timerRef = useRef<number | null>(null);
+    const callbackRef = useRef(callback);
+
+    useEffect(() => {
+        callbackRef.current = callback;
+    }, [callback]);
+
+    const stop = () => {
+        if (timerRef.current !== null) {
+            window.clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+    };
+
+    const start = () => {
+        stop();
+        callbackRef.current();
+        timerRef.current = window.setInterval(() => callbackRef.current(), ms);
+    };
+
+    useEffect(() => stop, []);
+
+    return {
+        onPointerDown: start,
+        onPointerUp: stop,
+        onPointerLeave: stop,
+    };
+}
 
 interface GenericTransformPanelProps {
     title: string;
@@ -32,17 +61,17 @@ export function GenericTransformPanel({ title, transform, onUpdate, onReset, des
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="space-y-3">
+            <div className="flex items-center justify-between pb-1">
                 <div>
-                    <h3 className="text-sm font-medium text-white">{title}</h3>
-                    {description && <p className="text-[10px] text-gray-400">{description}</p>}
+                    <h3 className="text-xs font-bold text-white/90 tracking-tight">{title}</h3>
+                    {description && <p className="text-[9px] text-gray-500 leading-none mt-0.5">{description}</p>}
                 </div>
-                <div className="flex gap-1">
-                    <button onClick={handleCopy} className="btn-secondary px-2 py-1 text-[10px] flex items-center gap-1">
+                <div className="flex gap-1.5">
+                    <button onClick={handleCopy} className="text-[10px] text-gray-400 hover:text-white transition-colors flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                         {copyState ? <Check size={10} className="text-green-400" /> : <Copy size={10} />} {copyState ? 'Copied' : 'Copy'}
                     </button>
-                    <button onClick={onReset} className="btn-secondary px-2 py-1 text-[10px] flex items-center gap-1 hover:text-red-400">
+                    <button onClick={onReset} className="text-[10px] text-gray-400 hover:text-red-400 transition-colors flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                         <RotateCcw size={10} /> Reset
                     </button>
                 </div>
@@ -64,18 +93,20 @@ function ControlSection({ label, values, step, onStepChange, onUpdate, format, s
     return (
         <div className="rounded-lg bg-white/5 border border-white/5 p-3 space-y-3">
             <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-gray-300">{label}</span>
-                <div className="flex gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400/80">{label}</span>
+                <div className="flex gap-1.5">
                     {steps.map((s: number) => (
-                        <button key={s} onClick={() => onStepChange(s)} className={`rounded px-1.5 py-0.5 font-mono text-[9px] border ${step === s ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'bg-black/20 text-gray-500 border-white/5'}`}>
-                            {s < 1 ? s.toString().replace(/^0/, '') : s}
+                        <button key={s} onClick={() => onStepChange(s)} className={`rounded min-w-[32px] px-3 py-0.5 font-mono text-[9px] border transition-all ${step === s ? 'bg-blue-500/30 text-blue-300 border-blue-500/50 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : 'bg-black/30 text-gray-500 border-white/5 hover:border-white/20 hover:text-gray-300'}`}>
+                            {s}
                         </button>
                     ))}
                 </div>
             </div>
-            {['X', 'Y', 'Z'].map((axis, i) => (
-                <AxisControl key={axis} label={axis} value={values[i]} step={step} onUpdate={(v: number) => onUpdate(i, v)} format={format} min={min} max={max} />
-            ))}
+            <div className="grid grid-cols-3 gap-3">
+                {['X', 'Y', 'Z'].map((axis, i) => (
+                    <AxisControl key={axis} label={axis} value={values[i]} step={step} onUpdate={(v: number) => onUpdate(i, v)} format={format} min={min} max={max} />
+                ))}
+            </div>
         </div>
     );
 }
@@ -85,16 +116,20 @@ function AxisControl({ label, value, step, onUpdate, format, min, max }: any) {
     const up = useLongPress(() => onUpdate(value + step));
 
     return (
-        <div className="space-y-1">
-            <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] text-gray-500">{label}</span>
-                <div className="flex items-center gap-2">
-                    <button {...down} className={BTN_CLS}>-</button>
-                    <span className="min-w-[4rem] text-center font-mono text-[11px] text-white">{format(value)}</span>
-                    <button {...up} className={BTN_CLS}>+</button>
-                </div>
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+                <span className="font-mono text-[10px] font-bold text-gray-500">{label}</span>
+                <span className="font-mono text-[10px] text-white tabular-nums">{format(value)}</span>
             </div>
-            <input type="range" min={min} max={max} step={0.001} value={value} onChange={e => onUpdate(parseFloat(e.target.value))} className="h-1 w-full accent-blue-500" />
+            <div className="flex items-center gap-1">
+                <button {...down} className={`${BTN_CLS} flex-1`}>-</button>
+                <button {...up} className={`${BTN_CLS} flex-1`}>+</button>
+            </div>
+            <input 
+                type="range" min={min} max={max} step={0.001} value={value} 
+                onChange={e => onUpdate(parseFloat(e.target.value))} 
+                className="h-1 w-full accent-blue-500 bg-white/5 rounded-full appearance-none cursor-pointer" 
+            />
         </div>
     );
 }

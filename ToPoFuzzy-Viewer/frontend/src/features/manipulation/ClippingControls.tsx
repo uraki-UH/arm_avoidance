@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
-import { ClippingPlane, ClippingAxis } from '../../hooks/useClippingPlanes';
+import { ClippingPlane, ClippingAxis } from '../../types';
 
 interface ClippingBounds {
     minX: number;

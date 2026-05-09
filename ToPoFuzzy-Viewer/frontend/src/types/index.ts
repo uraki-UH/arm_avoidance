@@ -285,3 +285,22 @@ export const DYNAMIC_GNG_DEFAULTS = {
     nodeColor: '#4bdf10',
     edgeColor: '#08d408',
 } as const;
+
+export type ClippingAxis = 'x' | 'y' | 'z' | 'none';
+
+export interface ClippingPlane {
+    id: string;
+    axis: ClippingAxis;
+    position: number;
+    inverted: boolean;
+    enabled: boolean;
+}
+
+export interface ClippingBounds {
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    minZ: number;
+    maxZ: number;
+}

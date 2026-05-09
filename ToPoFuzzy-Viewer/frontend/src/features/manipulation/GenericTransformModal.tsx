@@ -24,7 +24,7 @@ export function GenericTransformModal({
     if (!open || !transform) return null;
 
     return (
-        <div className="fixed top-20 left-4 z-[9999] w-72 animate-in fade-in slide-in-from-left-2 duration-300">
+        <div className="fixed top-20 left-4 z-[9999] w-[480px] animate-in fade-in slide-in-from-left-2 duration-300">
             <div className="surface-panel flex flex-col overflow-hidden shadow-2xl ring-1 ring-white/10">
                 <div className="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
                     <div className="min-w-0">
@@ -39,7 +39,7 @@ export function GenericTransformModal({
                     </button>
                 </div>
 
-                <div className="max-h-[70vh] overflow-y-auto p-4 custom-scrollbar bg-[#0c141d]/50">
+                <div className="p-4 bg-[#0c141d]/50">
                     <GenericTransformPanel 
                         title="Manual Transform"
                         transform={transform} 

@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
@@ -13,6 +14,8 @@ import {
     Transform,
     STATIC_GNG_DEFAULTS,
     DYNAMIC_GNG_DEFAULTS,
+    ClippingPlane,
+    ClippingAxis
 } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
@@ -20,8 +23,46 @@ import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useClippingPlanes } from './hooks/useClippingPlanes';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
+
+function useClippingPlanes() {
+    const [planes, setPlanes] = useState<ClippingPlane[]>([]);
+
+    const addPlane = (axis: ClippingAxis) => {
+        const id = `plane-${Date.now()}`;
+        const newPlane: ClippingPlane = {
+            id, axis, position: 0, inverted: false, enabled: true,
+        };
+        setPlanes(prev => [...prev, newPlane]);
+        return id;
+    };
+
+    const updatePlane = (id: string, updates: Partial<ClippingPlane>) => {
+        setPlanes(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    };
+
+    const removePlane = (id: string) => {
+        setPlanes(prev => prev.filter(p => p.id !== id));
+    };
+
+    const removeAll = () => setPlanes([]);
+
+    const getThreePlanes = (): THREE.Plane[] => {
+        return planes
+            .filter(p => p.enabled && p.axis !== 'none')
+            .map(p => {
+                const normal = new THREE.Vector3(
+                    p.axis === 'x' ? 1 : 0,
+                    p.axis === 'y' ? 1 : 0,
+                    p.axis === 'z' ? 1 : 0
+                );
+                if (p.inverted) normal.multiplyScalar(-1);
+                return new THREE.Plane(normal, -p.position);
+            });
+    };
+
+    return { planes, addPlane, updatePlane, removePlane, removeAll, getThreePlanes };
+}
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
 import { type GngLayerState } from './features/visualization/GngLayerControls';
@@ -170,44 +211,42 @@ function App() {
         getContinuousPublishStatus,
     } = useWebSocket(wsUrl);
 
-    // --- Initialize Robot Settings ---
+    // --- Initialize Entity Settings (Consolidated) ---
     useEffect(() => {
-        setRobotSettings(prev => {
-            const next = { ...prev };
+        const initialize = (data: any, settings: any, setSettings: any, defaults: any) => {
+            const next = { ...settings };
             let changed = false;
-            Object.keys(robotData).forEach(tag => {
-                if (!next[tag]) {
-                    next[tag] = {
-                        visible: true,
-                        color: 'skyblue',
-                        showVisual: true,
-                        showCollision: false,
-                        collisionColor: '#ff9f1c',
-                        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
-                    };
-                    changed = true;
-                }
+            Object.keys(data).forEach(tag => {
+                if (!next[tag]) { next[tag] = { ...defaults }; changed = true; }
             });
-            return changed ? next : prev;
-        });
-    }, [robotData]);
+            if (changed) setSettings(next);
+        };
 
+        initialize(robotData, robotSettings, setRobotSettings, { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } });
+        initialize(markerData, markerSettings, setMarkerSettings, { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } });
+    }, [robotData, markerData]);
+
+    // Graph settings need slightly different logic due to static/dynamic defaults
     useEffect(() => {
-        setMarkerSettings(prev => {
+        setLayerSettings(prev => {
             const next = { ...prev };
             let changed = false;
-            Object.keys(markerData).forEach(tag => {
+            Object.keys(graphData).forEach(tag => {
                 if (!next[tag]) {
+                    const isStatic = graphData[tag]?.mode === 'static';
                     next[tag] = {
-                        visible: true,
-                        transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
+                        visible: true, showNodes: true, showEdges: true, showClusters: false,
+                        opacity: STATIC_GNG_DEFAULTS.opacity,
+                        graphTransform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+                        nodeColor: isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
                     };
                     changed = true;
                 }
             });
             return changed ? next : prev;
         });
-    }, [markerData]);
+    }, [graphData]);
 
     const handleUpdateRobotSettings = (tag: string, updates: Partial<RobotSettings>) => {
         setRobotSettings(prev => ({
@@ -861,13 +900,13 @@ function App() {
                             onUpdateMarkerSettings={handleUpdateMarkerSettings}
                             onRemoveMarker={handleRemoveMarker}
                             transforms={transforms}
-                            onOpenTransform={(type, id, title) => setTransformContext({ type, id, title })}
+                            onOpenTransform={(type, id, title) => setTransformContext(prev => (prev?.type === type && prev?.id === id) ? null : { type, id, title })}
                         />
                     </Sidebar>
                 }
             >
                 <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
-                        <Canvas
+                    <Canvas
                         frameloop="demand"
                         camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
                         gl={{
@@ -944,81 +983,41 @@ function App() {
                             }
                         })}
 
-                        {Object.entries(robotData).map(([tag, data]) => {
-                            const settings = robotSettings[tag] || {
-                                visible: true,
-                                color: 'skyblue',
-                                showVisual: true,
-                                showCollision: false,
-                                collisionColor: '#ff9f1c',
-                                transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }
-                            };
-                            if (!settings.visible) return null;
-                            const frameId = data.frameId || 'world';
-                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                            return (
+                        {/* Entities (Consolidated rendering logic) */}
+                        {[
+                            { data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                 <group key={tag}>
-                                    {settings.showVisual && (
-                                        <RobotRenderer
-                                            tag={tag}
-                                            data={data}
-                                            visible={true}
-                                            color={settings.color}
-                                            tf={tf}
-                                            manualTransform={settings.transform}
-                                        />
-                                    )}
-                                    {settings.showCollision && (
-                                        <CollisionRenderer
-                                            tag={tag}
-                                            data={data}
-                                            visible={true}
-                                            color={settings.collisionColor}
-                                            tf={tf}
-                                            manualTransform={settings.transform}
-                                        />
-                                    )}
+                                    {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} tf={tf} manualTransform={s.transform} />}
+                                    {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
                                 </group>
-                            );
+                            ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } } },
+                            { data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
+                            ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true }
+                        ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) => 
+                            Object.entries(data).map(([tag, d]: [string, any]) => {
+                                const s = (settings as any)[tag] || defaultSettings;
+                                if (!s.visible || (skipIfDisabled && disabledSourceIds.has(tag))) return null;
+                                const tf = d.frameId && d.frameId !== 'world' ? (transforms[d.frameId] ?? null) : null;
+                                return component(tag, d, s, tf);
+                            })
+                        )}
+
+                        {Object.entries(graphData).map(([tag, data]) => {
+                            const settings = layerSettings[tag];
+                            if (!settings || !settings.visible) return null;
+                            const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
+                            const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor };
+                            return data.mode === 'static' 
+                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={0.008} edgeWidth={0.0008} />
+                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
-                        {Object.entries(markerData).map(([tag, data]) => {
-                            const settings = markerSettings[tag] || { visible: true };
-                            if (!settings.visible || disabledSourceIds.has(tag)) return null;
-                            const frameId = data.frameId || 'world';
-                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                            return (
-                                <MarkerArrayRenderer
-                                    key={tag}
-                                    tag={tag}
-                                    data={data}
-                                    visible={true}
-                                    tf={tf}
-                                    manualTransform={settings.transform}
-                                />
-                            );
-                        })}
-
-                        <ZoneVisualizer
-                            points={zoneMonitor.points}
-                            isDrawing={zoneMonitor.isDrawing}
-                            zRange={zoneMonitor.zRange}
-                            isWarning={(zoneCounts.get('human') || 0) > 0}
-                            onAddPoint={zoneMonitor.addPoint}
-                        />
-
-
-
+                        <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
                         <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                         <OrbitControls makeDefault />
                     </Canvas>
-
-                    {selectedClusterSnapshot && (
-                        <ClusterDetailPanel
-                            snapshot={selectedClusterSnapshot}
-                            onClose={() => setSelectedClusterSnapshot(null)}
-                        />
-                    )}
+                    {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={() => setSelectedClusterSnapshot(null)} />}
                 </div>
             </MainLayout>
 
@@ -1028,47 +1027,33 @@ function App() {
                 transform={useMemo(() => {
                     if (!transformContext) return null;
                     const { type, id } = transformContext;
-                    if (type === 'cloud') {
-                        const cloud = pointClouds.find(pc => pc.id === id);
-                        if (!cloud) return null;
-                        return {
-                            position: cloud.position || [0, 0, 0],
-                            rotation: cloud.rotation || [0, 0, 0],
-                            scale: cloud.scale || [1, 1, 1]
-                        } as Transform;
-                    }
-                    if (type === 'layer') return layerSettings[id]?.graphTransform || null;
-                    if (type === 'robot') return robotSettings[id]?.transform || null;
-                    if (type === 'marker') return markerSettings[id]?.transform || null;
-                    return null;
+                    const map: any = { cloud: pointClouds.find(p => p.id === id), layer: layerSettings[id]?.graphTransform, robot: robotSettings[id]?.transform, marker: markerSettings[id]?.transform };
+                    const res = map[type];
+                    return type === 'cloud' ? (res ? { position: res.position || [0,0,0], rotation: res.rotation || [0,0,0], scale: res.scale || [1,1,1] } : null) : res;
                 }, [transformContext, pointClouds, layerSettings, robotSettings, markerSettings])}
                 onClose={() => setTransformContext(null)}
-                onUpdate={(updates: Partial<Transform>) => {
+                onUpdate={(u) => {
                     if (!transformContext) return;
                     const { type, id } = transformContext;
-                    if (type === 'cloud') {
-                        setPointClouds(prev => prev.map(pc => pc.id === id ? { ...pc, ...updates } : pc));
-                    } else if (type === 'layer') {
-                        handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } });
-                    } else if (type === 'robot') {
-                        handleUpdateRobotSettings(id, { transform: { ...(robotSettings[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } });
-                    } else if (type === 'marker') {
-                        setMarkerSettings(prev => ({ ...prev, [id]: { ...prev[id], transform: { ...(prev[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...updates } } }));
-                    }
+                    const updaters: any = {
+                        cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...u } : p)),
+                        layer: () => handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
+                        robot: () => handleUpdateRobotSettings(id, { transform: { ...(robotSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
+                        marker: () => handleUpdateMarkerSettings(id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
+                    };
+                    updaters[type]?.();
                 }}
                 onReset={() => {
                     if (!transformContext) return;
-                    const identity = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
                     const { type, id } = transformContext;
-                    if (type === 'cloud') {
-                        setPointClouds(prev => prev.map(pc => pc.id === id ? { ...pc, ...identity } : pc));
-                    } else if (type === 'layer') {
-                        handleUpdateLayerSettings(id, { graphTransform: identity });
-                    } else if (type === 'robot') {
-                        handleUpdateRobotSettings(id, { transform: identity });
-                    } else if (type === 'marker') {
-                        setMarkerSettings(prev => ({ ...prev, [id]: { ...prev[id], transform: identity } }));
-                    }
+                    const iden = { position: [0,0,0] as [number,number,number], rotation: [0,0,0] as [number,number,number], scale: [1,1,1] as [number,number,number] };
+                    const resets: any = {
+                        cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...iden } : p)),
+                        layer: () => handleUpdateLayerSettings(id, { graphTransform: iden }),
+                        robot: () => handleUpdateRobotSettings(id, { transform: iden }),
+                        marker: () => handleUpdateMarkerSettings(id, { transform: iden })
+                    };
+                    resets[type]?.();
                 }}
             />
         </>
