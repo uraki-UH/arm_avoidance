@@ -59,8 +59,18 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     auto root_links = get_parameter("root_links").as_string_array();
     auto leaf_links = get_parameter("leaf_links").as_string_array();
     std::string global_root_link = get_parameter("root_link").as_string();
-    if (global_root_link.empty()) global_root_link = model_->getRootLinkName();
-    root_link_ = global_root_link;
+    if (global_root_link.empty()) {
+        std::string base_name = model_->getRootLinkName();
+        std::string ns = get_namespace();
+        if (ns != "/" && !ns.empty()) {
+            if (ns[0] == '/') ns = ns.substr(1);
+            root_link_ = ns + "/" + base_name;
+        } else {
+            root_link_ = base_name;
+        }
+    } else {
+        root_link_ = global_root_link;
+    }
 
     // 衝突形状を持つ全リンクと、木構造の全末端リンクを抽出
     std::vector<std::string> all_collision_links;
@@ -150,7 +160,20 @@ void SelfRecognitionVizNode::updateAndPublish() {
         auto t_fk = (this->now() - t_start).seconds() * 1000.0;
 
         std::string target_frame = get_parameter("target_frame_id").as_string();
-        if (target_frame.empty()) target_frame = root_link_;
+        
+        // 名前空間の補完ロジック
+        auto resolve_frame = [&](const std::string& frame) {
+            if (frame.empty()) return root_link_;
+            if (frame == "world" || frame[0] == '/') return frame;
+            std::string ns = get_namespace();
+            if (ns != "/" && !ns.empty()) {
+                if (ns[0] == '/') ns = ns.substr(1);
+                return ns + "/" + frame;
+            }
+            return frame;
+        };
+
+        target_frame = resolve_frame(target_frame);
 
         Eigen::Isometry3d target_to_base = Eigen::Isometry3d::Identity();
         if (target_frame != root_link_) {

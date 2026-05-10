@@ -5,7 +5,7 @@ import math
 
 class DummyJointPublisher(Node):
     def __init__(self):
-        super().__init__('dummy_joint_publisher', namespace='topoarm')
+        super().__init__('dummy_joint_publisher', namespace='topoarm_dual')
         self.publisher_ = self.create_publisher(JointState, 'joint_states', 10)
         self.timer = self.create_timer(0.1, self.timer_callback)
         self.t = 0.0

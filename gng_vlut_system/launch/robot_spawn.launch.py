@@ -45,7 +45,14 @@ def launch_setup(context, *args, **kwargs):
             package="robot_state_publisher",
             executable="robot_state_publisher",
             namespace=robot_name,
-            parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}]
+            parameters=[{
+                "robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str),
+                "frame_prefix": robot_name + "/"
+            }],
+            remappings=[
+                ("tf", "/tf"),
+                ("tf_static", "/tf_static"),
+            ]
         ),
         Node(
             package="gng_vlut_system",
@@ -64,7 +71,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
         OpaqueFunction(function=launch_setup)

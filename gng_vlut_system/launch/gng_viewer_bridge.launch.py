@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
-    robot_name = LaunchConfiguration("robot_name").perform(context)
+    # robot_name は後続のロジックで決定
     params_file = LaunchConfiguration("params_file").perform(context)
     data_dir = LaunchConfiguration("dir").perform(context)
     exp_id = LaunchConfiguration("id").perform(context)
@@ -25,13 +25,31 @@ def launch_setup(context, *args, **kwargs):
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
+    yaml_robot_name = "topoarm"
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
                 params_yaml = yaml.safe_load(f) or {}
-            for node_key in ("offline_urdf_trainer", "gng_safety"):
+            
+            # robot_name を全階層から探す
+            def find_robot_name(d):
+                if not isinstance(d, dict): return None
+                if 'robot_name' in d.get('ros__parameters', {}):
+                    return d['ros__parameters']['robot_name']
+                if 'ros__parameters' in d:
+                    return d['ros__parameters'].get('robot_name')
+                for v in d.values():
+                    res = find_robot_name(v)
+                    if res: return res
+                return None
+            
+            extracted_name = find_robot_name(params_yaml)
+            if extracted_name:
+                yaml_robot_name = extracted_name
+
+            for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
                 if ros_params:
                     yaml_data_dir = ros_params.get("data_directory", yaml_data_dir)
@@ -41,6 +59,13 @@ def launch_setup(context, *args, **kwargs):
                     break
         except Exception:
             pass
+
+    # 名前空間の決定（YAML優先、コマンドライン指定があればそちら）
+    robot_name_default = LaunchConfiguration("robot_name").perform(context)
+    if robot_name_default and robot_name_default != "topoarm_dual":
+        robot_name = robot_name_default
+    else:
+        robot_name = yaml_robot_name
 
     if not data_dir:
         data_dir = yaml_data_dir
@@ -160,7 +185,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボットの名前"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm_dual", description="ロボットの名前"),
         DeclareLaunchArgument("dir", default_value="gng_results", description="GNGデータのディレクトリ"),
         DeclareLaunchArgument("id", default_value="topoarm", description="実験ID"),
         DeclareLaunchArgument("gng_model_path", default_value="", description="GNGモデルバイナリへのパス"),

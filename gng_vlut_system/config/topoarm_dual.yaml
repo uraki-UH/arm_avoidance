@@ -8,7 +8,7 @@
       z_shift: 0
       offset: 1000000
 
-    robot_name: "topoarm"
+    robot_name: "topoarm_dual"
     robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     arm_leaf_link_names: "left_link7,right_link7"
@@ -44,16 +44,15 @@
       start_node_num: 2
 
     # --- Bridge & Viewer Settings ---
-    joint_state_topic: "/joint_states"
+    joint_state_topic: "joint_states" # 相対名に変更（名前空間内で解決）
     stream_topic: "/viewer/internal/stream/robot"
-    frame_id: "base_link"
-    source_frame_id: "base_link"
+    frame_id: "world"                # 世界座標系の中でロボットを動かす
+    source_frame_id: "world"
     publish_hz: 30.0
 
     # --- Self Recognition Settings ---
-    # 計算と表示の両方を base_link に統一
-    target_frame_id: "base_link"
-    marker_frame_id: "base_link"
+    target_frame_id: "world"
+    marker_frame_id: "world"
     update_hz: 30.0
     input_topic: "/camera/transformed_points"
     output_topic: "/camera/self_filtered_points"

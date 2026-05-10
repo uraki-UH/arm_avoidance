@@ -1,4 +1,5 @@
 import os
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -28,6 +29,39 @@ def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
     
+    # --- YAMLから設定を自動抽出するロジック ---
+    robot_name_default = LaunchConfiguration("robot_name").perform(context)
+    robot_name = robot_name_default
+    
+    if params_file and os.path.exists(params_file):
+        try:
+            with open(params_file, 'r') as f:
+                config = yaml.safe_load(f)
+                # YAMLの全階層から robot_name を探す（/**: やノード別設定に対応）
+                def find_robot_name(d):
+                    if not isinstance(d, dict): return None
+                    if 'ros__parameters' in d.get('ros__parameters', {}):
+                        return d['ros__parameters']['robot_name']
+                    if 'ros__parameters' in d:
+                        return d['ros__parameters'].get('robot_name')
+                    for v in d.values():
+                        res = find_robot_name(v)
+                        if res: return res
+                    return None
+                
+                extracted_name = find_robot_name(config)
+                if extracted_name:
+                    robot_name = extracted_name
+        except Exception as e:
+            print(f"Warning: Failed to parse YAML for robot_name: {e}")
+
+    # コマンドラインで明示的に指定された場合はそちらを優先
+    # LaunchConfigurationは一度performしないと値が取れないため注意
+    user_robot_name = LaunchConfiguration("robot_name").perform(context)
+    # デフォルト値以外が指定されていれば、それを優先
+    if user_robot_name and user_robot_name != robot_name_default:
+        robot_name = user_robot_name
+
     robot_description_raw = LaunchConfiguration("robot_description_file").perform(context)
     robot_urdf = resolve_robot_description_path(pkg_share, robot_description_raw)
 
@@ -60,8 +94,7 @@ def launch_setup(context, *args, **kwargs):
         final_params_list.append(params_file)
     final_params_list.append(node_params)
 
-    # 名前空間の決定
-    robot_name = LaunchConfiguration("robot_name").perform(context)
+    # 名前空間の決定 (既に上でYAML等から決定済み)
 
     return [
         # ロボットモデルの展開 (名前空間付き)
@@ -84,6 +117,8 @@ def launch_setup(context, *args, **kwargs):
             # トピックのリマップ（名前空間外の/joint_statesを参照したい場合などに対応）
             remappings=[
                 ("/joint_states", f"/{robot_name}/joint_states"),
+                ("tf", "/tf"),
+                ("tf_static", "/tf_static"),
             ]
         )
     ]
@@ -92,7 +127,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボットの名前"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm_dual", description="ロボットの名前"),
         DeclareLaunchArgument("robot_description_file", default_value="", description="URDF/Xacroファイルへのパス"),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml"), description="設定YAMLファイル"),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false", description="JointStatePublisherを起動するか"),
