@@ -19,7 +19,8 @@ def launch_setup(context, *args, **kwargs):
     arm_leaf_link_names = LaunchConfiguration("arm_leaf_link_names").perform(context)
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     gng_source_frame_id = LaunchConfiguration("gng_source_frame_id").perform(context)
-    publish_hz = float(LaunchConfiguration("publish_hz").perform(context))
+    publish_hz_str = LaunchConfiguration("publish_hz").perform(context)
+    publish_hz = float(publish_hz_str) if publish_hz_str else 30.0
     topic_name = LaunchConfiguration("topic_name").perform(context)
 
     yaml_data_dir = data_dir
@@ -57,7 +58,7 @@ def launch_setup(context, *args, **kwargs):
         resource_root = robot_desc_pkg
         mesh_root = os.path.join(robot_desc_pkg, "meshes")
     except Exception:
-        robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro")
+        robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro")
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
@@ -83,12 +84,14 @@ def launch_setup(context, *args, **kwargs):
     if arm_leaf_link_names:
         common_params["arm_leaf_link_names"] = arm_leaf_link_names
     
-    # 座標系(frame_id)はデフォルトの"world"以外、または明示的に指定された場合のみ上書き
-    if robot_base_frame != "world":
-        common_params["frame_id"] = robot_base_frame
-    
-    if publish_hz != 30.0:
-        common_params["publish_hz"] = publish_hz
+    # 座標系(frame_id)などは明示的に指定された場合のみ上書き
+    def add_if_not_empty(name, config_name):
+        val = LaunchConfiguration(config_name).perform(context)
+        if val:
+            common_params[name] = val
+
+    add_if_not_empty("frame_id", "robot_base_frame")
+    add_if_not_empty("publish_hz", "publish_hz")
     
     if resource_root:
         common_params["resource_root_dir"] = resource_root
@@ -119,31 +122,37 @@ def launch_setup(context, *args, **kwargs):
 
     return [
         # 1. GNGブリッジ (Topofuzzy)
-        # GNGグラフを購読し、ビューアが解釈可能な形式に変換して配信します。
         Node(
             package="gng_vlut_system",
             executable="topofuzzy_bridge_node",
             name="topofuzzy_bridge_node",
-            parameters=[{
-                "gng_model_path": resolve_result_path(gng_model_path, gng_model_filename),
-                "vlut_path": resolve_result_path(vlut_path, vlut_filename),
-                "data_directory": data_dir,
-                "experiment_id": exp_id,
-                "frame_id": gng_frame_id,
-                "source_frame_id": gng_source_frame_id,
-                "publish_hz": publish_hz,
-                "topic_name": topic_name,
-                "robot_description_file": robot_description_file,
-                "arm_leaf_link_names": arm_leaf_link_names,
-            }]
+            namespace=robot_name,
+            parameters=[
+                params_file,
+                {
+                    "gng_model_path": resolve_result_path(gng_model_path, gng_model_filename),
+                    "vlut_path": resolve_result_path(vlut_path, vlut_filename),
+                    "data_directory": data_dir,
+                    "experiment_id": exp_id,
+                    "publish_hz": publish_hz,
+                    "topic_name": topic_name,
+                    "robot_description_file": robot_description_file,
+                },
+                # 座標系などは指定がある場合のみ上書き
+                {k: v for k, v in {
+                    "frame_id": gng_frame_id,
+                    "source_frame_id": gng_source_frame_id,
+                    "arm_leaf_link_names": arm_leaf_link_names,
+                }.items() if v}
+            ]
         ),
 
         # 2. ロボットビューアブリッジ
-        # ロボットのURDFモデルと現在の関節状態をビューアに送信し、3D表示させます。
         Node(
             package="gng_vlut_system",
             executable="robot_viewer_bridge_node",
             name="robot_viewer_bridge_node",
+            namespace=robot_name,
             parameters=viewer_bridge_params,
         )
     ]
@@ -156,13 +165,13 @@ def generate_launch_description():
         DeclareLaunchArgument("id", default_value="topoarm", description="実験ID"),
         DeclareLaunchArgument("gng_model_path", default_value="", description="GNGモデルバイナリへのパス"),
         DeclareLaunchArgument("vlut_path", default_value="", description="VLUTバイナリへのパス"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topodual.yaml"), description="設定YAMLファイル"),
-        DeclareLaunchArgument("robot_base_frame", default_value="world", description="ロボットのベース座標系"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml"), description="設定YAMLファイル"),
+        DeclareLaunchArgument("robot_base_frame", default_value="", description="ロボットのベース座標系"),
         DeclareLaunchArgument("robot_description_file", default_value="", description="URDF/Xacroファイルへのパス"),
         DeclareLaunchArgument("arm_leaf_link_names", default_value="", description="手先リンク名のリスト（カンマ区切り）"),
-        DeclareLaunchArgument("gng_frame_id", default_value="world", description="グラフを表示する座標系"),
-        DeclareLaunchArgument("gng_source_frame_id", default_value="world", description="グラフデータの元の座標系"),
-        DeclareLaunchArgument("publish_hz", default_value="30.0", description="配信周波数"),
+        DeclareLaunchArgument("gng_frame_id", default_value="", description="グラフを表示する座標系"),
+        DeclareLaunchArgument("gng_source_frame_id", default_value="", description="グラフデータの元の座標系"),
+        DeclareLaunchArgument("publish_hz", default_value="", description="配信周波数"),
         DeclareLaunchArgument("topic_name", default_value="/topological_map_static", description="配信トピック名"),
         OpaqueFunction(function=launch_setup)
     ])

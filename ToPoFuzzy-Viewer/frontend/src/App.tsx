@@ -948,7 +948,7 @@ function App() {
                                 <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
                             ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true },
                             { data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout }} settings={s} tf={tf} />
+                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} />
                             ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 }, skipIfDisabled: true }
                         ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {

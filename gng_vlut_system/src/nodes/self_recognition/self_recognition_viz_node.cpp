@@ -10,6 +10,9 @@
 #include "robot_model/robot_model.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "common/constants.hpp"
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace robot_sim::self_recognition {
 
@@ -32,18 +35,32 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("voxel_indexing.y_shift", ::robot_sim::common::Constants::DEFAULT_Y_SHIFT);
     declare_parameter("voxel_indexing.z_shift", ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
     declare_parameter("voxel_indexing.offset", ::robot_sim::common::Constants::DEFAULT_OFFSET);
+    declare_parameter("target_frame_id", ""); // 空ならロボットのベースを使用
 
     const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
+    if (urdf_path.empty()) {
+        RCLCPP_ERROR(get_logger(), "Failed to resolve URDF path: %s", urdf_rel.c_str());
+        throw std::runtime_error("Could not find URDF file");
+    }
+    RCLCPP_INFO(get_logger(), "Loading URDF from: %s", urdf_path.c_str());
+
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     const double voxel_size_param = get_parameter("voxel_size").as_double();
 
     // モデルとチェインの構築
-    model_ = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
+    try {
+        model_ = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(get_logger(), "Failed to load robot model: %s", e.what());
+        throw;
+    }
+
     auto root_links = get_parameter("root_links").as_string_array();
     auto leaf_links = get_parameter("leaf_links").as_string_array();
     std::string global_root_link = get_parameter("root_link").as_string();
     if (global_root_link.empty()) global_root_link = model_->getRootLinkName();
+    root_link_ = global_root_link;
 
     // 衝突形状を持つ全リンクと、木構造の全末端リンクを抽出
     std::vector<std::string> all_collision_links;
@@ -105,6 +122,9 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
             current_joints_ = chain_->getJointValues();
         });
 
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
+
     mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
         "/self_recognition/voxel_mask", rclcpp::QoS(1).transient_local());
 
@@ -118,7 +138,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 void SelfRecognitionVizNode::updateAndPublish() {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (current_joints_.empty()) return;
+    if (current_joints_.empty()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Waiting for joint states on topic: %s", joint_sub_->get_topic_name());
+        return;
+    }
 
     try {
         // 1. 関節角度の更新と順運動学 (FK)
@@ -126,17 +149,32 @@ void SelfRecognitionVizNode::updateAndPublish() {
         recognition_manager_->updateRobotState(current_joints_);
         auto t_fk = (this->now() - t_start).seconds() * 1000.0;
 
-        // 2. ボクセルマスクの生成 (座標変換 + 重複排除)
-        auto t_voxel_start = this->now();
-        const auto vids = recognition_manager_->getSelfVoxelMask();
-        auto t_voxel = (this->now() - t_voxel_start).seconds() * 1000.0;
-        
-        auto t_total = t_fk + t_voxel;
+        std::string target_frame = get_parameter("target_frame_id").as_string();
+        if (target_frame.empty()) target_frame = root_link_;
 
-        // 配信処理
+        Eigen::Isometry3d target_to_base = Eigen::Isometry3d::Identity();
+        if (target_frame != root_link_) {
+            try {
+                auto tf_stamped = tf_buffer_->lookupTransform(
+                    target_frame, root_link_, tf2::TimePointZero);
+                target_to_base = tf2::transformToEigen(tf_stamped.transform);
+                
+                if (recognition_manager_->isTfChanged(target_to_base)) {
+                    const auto& t = target_to_base.translation();
+                    RCLCPP_INFO(get_logger(), "Robot moved! TF [%s -> %s]: pos=(%.2f, %.2f, %.2f)", 
+                               root_link_.c_str(), target_frame.c_str(), t.x(), t.y(), t.z());
+                }
+            } catch (const tf2::TransformException & ex) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, 
+                                   "TF lookup failed! target_frame='%s', root_link='%s'. Error: %s", 
+                                   target_frame.c_str(), root_link_.c_str(), ex.what());
+            }
+        }
+
+        // 3. ボクセルマスクの生成 (座標変換 + 重複排除)
         auto mask_msg = std::make_shared<voxel_msgs::msg::Voxel>();
         mask_msg->header.stamp = get_clock()->now();
-        mask_msg->header.frame_id = ::robot_sim::common::Constants::DEFAULT_FOOTPRINT_FRAME; 
+        mask_msg->header.frame_id = target_frame; 
         mask_msg->voxel_size = static_cast<float>(recognition_manager_->getVoxelSize());
         
         mask_msg->x_shift = get_parameter("voxel_indexing.x_shift").as_int();
@@ -144,17 +182,19 @@ void SelfRecognitionVizNode::updateAndPublish() {
         mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
         mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
         
+        // 計算前にインデックスパラメータを同期
         recognition_manager_->getIndexGrid()->setIndexingParams(
             mask_msg->x_shift, mask_msg->y_shift, mask_msg->z_shift, mask_msg->offset
         );
 
+        const auto vids = recognition_manager_->getSelfVoxelMask(target_to_base);
         mask_msg->data.assign(vids.begin(), vids.end());
         mask_pub_->publish(*mask_msg);
 
         // 毎フレームログ出力（学習検討用）
-        RCLCPP_INFO(get_logger(), "Voxel Gen: Total %.2f ms | Vids: %zu (Pre: %zu)", 
-                    recognition_manager_->getLastCalcTimeMs(), vids.size(), 
-                    recognition_manager_->getLastPreUniqueCount());
+        RCLCPP_INFO(get_logger(), "Voxel Gen [%s]: Total %.2f ms | Vids: %zu (Pre: %zu)", 
+                    target_frame.c_str(), recognition_manager_->getLastCalcTimeMs(), 
+                    vids.size(), recognition_manager_->getLastPreUniqueCount());
 
     } catch (const std::exception & e) {
         RCLCPP_ERROR(this->get_logger(), "Error in updateAndPublish: %s", e.what());

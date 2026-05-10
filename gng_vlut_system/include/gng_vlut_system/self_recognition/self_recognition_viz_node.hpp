@@ -10,6 +10,12 @@
 
 #include "robot_model/robot_model.hpp"
 #include "kinematics/kinematic_chain.hpp"
+#include <tf2_eigen/tf2_eigen.hpp>
+
+namespace tf2_ros {
+class Buffer;
+class TransformListener;
+}
 
 namespace robot_sim {
 namespace recognition {
@@ -33,6 +39,10 @@ private:
     std::shared_ptr<simulation::RobotModel> model_;
     std::shared_ptr<kinematics::KinematicChain> chain_;
     
+    std::string root_link_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
     std::vector<double> current_joints_;
     std::mutex mutex_;
 

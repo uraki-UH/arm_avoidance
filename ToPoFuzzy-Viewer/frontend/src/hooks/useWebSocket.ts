@@ -329,7 +329,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             if (p.data) {
                                 setVoxelData(prev => ({
                                     ...prev,
-                                    [tag]: { id: tag, tag, data: p.data, layout: p.layout } as VoxelData
+                                    [tag]: { id: tag, tag, data: p.data, layout: p.layout, frameId: p.frameId } as VoxelData
                                 }));
                             }
                         },

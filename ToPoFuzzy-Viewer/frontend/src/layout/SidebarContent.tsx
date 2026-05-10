@@ -275,9 +275,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 </div>
                               )},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
-                            { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', 
+                            { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
                               extra: (_: string, __: any, d: any) => (
-                                <div className="mt-1 text-[10px] text-[var(--text-secondary)]">Resolution: <span className="text-[var(--text-primary)]">{d.layout?.voxelSize}m</span></div>
+                                <div className="mt-1 text-[10px] text-[var(--text-secondary)]">Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span></div>
                               )}
                         ].map(({ type, data, settings, label, hasTf, extra }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {

@@ -175,6 +175,7 @@ export interface VoxelData {
     tag: string;
     data: string[];
     layout: VoxelLayout;
+    frameId?: string;
     visible?: boolean;
 }
 

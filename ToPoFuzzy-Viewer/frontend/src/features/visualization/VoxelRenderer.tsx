@@ -17,6 +17,7 @@ interface VoxelMessage {
     tag: string;
     data: string[]; // BigInt IDs as strings
     layout: VoxelLayout;
+    frameId?: string;
 }
 
 export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage, settings: VoxelSettings, tf?: { pos: number[]; quat: number[] } | null }) => {
@@ -24,7 +25,7 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
     const groupRef = useRef<THREE.Group>(null);
     const { invalidate } = useThree();
     const { data, layout } = message;
-    const voxelSize = layout.voxelSize;
+    const voxelSize = Math.round(layout.voxelSize * 1000) / 1000;
 
     // TFの適用
     useEffect(() => {

@@ -9,8 +9,8 @@ from launch_ros.actions import Node
 
 
 def resolve_robot_description_path(pkg_share: str, raw_path: str) -> str:
-    if not raw_path:
-        return os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro")
+    if (not raw_path):
+        return os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro")
 
     if raw_path.startswith("package://gng_vlut_system/"):
         return os.path.join(pkg_share, raw_path[len("package://gng_vlut_system/"):])
@@ -36,41 +36,55 @@ def launch_setup(context, *args, **kwargs):
     if robot_urdf:
         node_params["robot_urdf_path"] = robot_urdf
     
-    # コマンドライン引数を辞書に追加（デフォルト値でない場合や明示的な指定を想定）
-    # ※ LaunchConfigurationは常に値を持つため、YAMLがある場合はそれらを含める
-    node_params.update({
-        "marker_frame_id": LaunchConfiguration("marker_frame_id"),
-        "joint_topic": LaunchConfiguration("joint_topic"),
-        "voxel_size": LaunchConfiguration("voxel_size"),
-        "update_hz": LaunchConfiguration("update_hz"),
-        "publish_self_mask": LaunchConfiguration("publish_self_mask"),
-        "publish_link_voxels": LaunchConfiguration("publish_link_voxels"),
-        "publish_link_aabb": LaunchConfiguration("publish_link_aabb"),
-        "display_mode": LaunchConfiguration("display_mode"),
-    })
+    # コマンドライン引数を辞書に追加（明示的に指定された場合のみ、適切な型でYAMLを上書きするようにする）
+    def add_if_not_empty(name, config_name, type_func=None):
+        val = LaunchConfiguration(config_name).perform(context)
+        if val:
+            try:
+                node_params[name] = type_func(val) if type_func else val
+            except ValueError:
+                node_params[name] = val
+
+    add_if_not_empty("marker_frame_id", "marker_frame_id")
+    add_if_not_empty("joint_topic", "joint_topic")
+    add_if_not_empty("voxel_size", "voxel_size", float)
+    add_if_not_empty("update_hz", "update_hz", float)
+    add_if_not_empty("publish_self_mask", "publish_self_mask") # boolは文字列でも解釈されることが多いが
+    add_if_not_empty("publish_link_voxels", "publish_link_voxels")
+    add_if_not_empty("publish_link_aabb", "publish_link_aabb")
+    add_if_not_empty("display_mode", "display_mode", int)
+    add_if_not_empty("target_frame_id", "target_frame_id")
 
     final_params_list = []
     if params_file and os.path.exists(params_file):
         final_params_list.append(params_file)
     final_params_list.append(node_params)
 
+    # 名前空間の決定
+    robot_name = LaunchConfiguration("robot_name").perform(context)
+
     return [
-        # ロボットモデルの展開 (Digital Twin)
+        # ロボットモデルの展開 (名前空間付き)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
-                "robot_name": LaunchConfiguration("robot_name"),
+                "robot_name": robot_name,
                 "robot_description_file": robot_urdf,
                 "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
             }.items()
         ),
-        # 自己認識可視化ノード
+        # 自己認識可視化ノード (名前空間付き)
         Node(
             package="gng_vlut_system",
             executable="self_recognition_viz_node",
             name="self_recognition_viz_node",
+            namespace=robot_name, # 名前空間を適用
             output="screen",
             parameters=final_params_list,
+            # トピックのリマップ（名前空間外の/joint_statesを参照したい場合などに対応）
+            remappings=[
+                ("/joint_states", f"/{robot_name}/joint_states"),
+            ]
         )
     ]
 
@@ -80,8 +94,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボットの名前"),
         DeclareLaunchArgument("robot_description_file", default_value="", description="URDF/Xacroファイルへのパス"),
-        DeclareLaunchArgument("params_file", default_value="", description="設定YAMLファイル（任意）"),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true", description="JointStatePublisherを起動するか"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml"), description="設定YAMLファイル"),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false", description="JointStatePublisherを起動するか"),
         DeclareLaunchArgument("marker_frame_id", default_value="world", description="マーカーを表示する座標系"),
         DeclareLaunchArgument("joint_topic", default_value="/joint_states", description="関節状態の購読トピック"),
         DeclareLaunchArgument("voxel_size", default_value="0.02", description="ボクセル解像度 [m]"),
@@ -90,5 +104,6 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_link_voxels", default_value="true", description="リンク毎のボクセルを配信するか"),
         DeclareLaunchArgument("publish_link_aabb", default_value="true", description="リンク毎のAABBを配信するか"),
         DeclareLaunchArgument("display_mode", default_value="link_local", description="表示モード (link_local / world)"),
+        DeclareLaunchArgument("target_frame_id", default_value="", description="ボクセル計算の基準座標系 (空ならベースリンク基準)"),
         OpaqueFunction(function=launch_setup),
     ])

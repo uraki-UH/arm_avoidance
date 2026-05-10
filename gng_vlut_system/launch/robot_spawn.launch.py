@@ -4,6 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
@@ -21,7 +22,7 @@ def launch_setup(context, *args, **kwargs):
         resource_root = robot_desc_pkg
         mesh_root = os.path.join(robot_desc_pkg, "meshes")
     except PackageNotFoundError:
-        robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro")
+        robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro")
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
@@ -34,7 +35,8 @@ def launch_setup(context, *args, **kwargs):
             Node(
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
-                parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+                namespace=robot_name,
+                parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}]
             )
         )
 
@@ -42,12 +44,14 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
-            parameters=[{"robot_description": Command(["xacro ", robot_urdf])}]
+            namespace=robot_name,
+            parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}]
         ),
         Node(
             package="gng_vlut_system",
             executable="robot_description_player_node",
             name="robot_description_player",
+            namespace=robot_name,
             parameters=[{
                 "robot_description_file": robot_urdf,
                 "resource_root_dir": resource_root,

@@ -1,0 +1,59 @@
+/**:
+  ros__parameters:
+    # --- Global & System-wide Settings ---
+    # ロボット基準で計算するため、世界座標用のシフト値は 0 に設定
+    voxel_indexing:
+      x_shift: 42
+      y_shift: 21
+      z_shift: 0
+      offset: 1000000
+
+    robot_name: "topoarm"
+    robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
+    robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
+    arm_leaf_link_names: "left_link7,right_link7"
+    voxel_size: 0.02
+    padding: 0.02
+
+    # --- GNG & Safety Settings ---
+    experiment_id: "topoarm_double_test"
+    data_directory: "gng_results"
+    gng_model_filename: "gng.bin"
+    vlut_filename: "vlut.bin"
+    ground_z_threshold: 0.0
+    gng_dimension: 12
+    spatial_map_resolution: 0.02
+    self_recognition_resolution: 0.02
+    arm_cache_resolution: 0.008
+    danger_threshold: 0.025
+    
+    gng_params:
+      lambda: 50
+      max_node_num: 10000
+      num_samples: 1000000
+      max_iterations: 1000000
+      refine_iterations: 100000
+      coord_edge_iterations: 200000
+      learn_rate_s1: 0.08
+      learn_rate_s2: 0.008
+      max_edge_age: 500
+      alpha: 0.5
+      beta: 0.0005
+      n_best_candidates: 4
+      ais_threshold: 1.0
+      start_node_num: 2
+
+    # --- Bridge & Viewer Settings ---
+    joint_state_topic: "/joint_states"
+    stream_topic: "/viewer/internal/stream/robot"
+    frame_id: "base_link"
+    source_frame_id: "base_link"
+    publish_hz: 30.0
+
+    # --- Self Recognition Settings ---
+    # 計算と表示の両方を base_link に統一
+    target_frame_id: "base_link"
+    marker_frame_id: "base_link"
+    update_hz: 30.0
+    input_topic: "/camera/transformed_points"
+    output_topic: "/camera/self_filtered_points"

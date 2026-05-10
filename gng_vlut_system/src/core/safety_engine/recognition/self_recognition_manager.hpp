@@ -73,7 +73,17 @@ public:
         return link_tfs;
     }
 
-    std::vector<long> getSelfVoxelMask() {
+    bool isTfChanged(const Eigen::Isometry3d& target_to_base) {
+        return !target_to_base.matrix().isApprox(last_target_to_base_.matrix(), 1e-4);
+    }
+
+    std::vector<long> getSelfVoxelMask(const Eigen::Isometry3d& target_to_base = Eigen::Isometry3d::Identity()) {
+        // target_to_base の変化をチェック
+        if (isTfChanged(target_to_base)) {
+            last_target_to_base_ = target_to_base;
+            need_mask_update_ = true;
+        }
+
         if (!need_mask_update_ && !last_vids_.empty()) {
             return last_vids_;
         }
@@ -93,7 +103,8 @@ public:
         for (const auto& data : link_data_list_) {
             auto it = tfs.find(data.name);
             if (it != tfs.end()) {
-                jobs.push_back({&data.local_voxel_centers, it->second});
+                // target_to_base * base_to_link = target_to_link
+                jobs.push_back({&data.local_voxel_centers, target_to_base * it->second});
                 total_points += data.local_voxel_centers.size();
             }
         }
@@ -214,33 +225,46 @@ public:
     double getVoxelSize() const { return voxel_size_; }
 
     void radixSort(std::vector<long>& v) {
-        if (v.empty()) return;
-        std::vector<long> tmp(v.size());
-        const int bits = 8; // 256 buckets
+        if (v.size() < 2) return;
+        if (radix_tmp_.size() < v.size()) radix_tmp_.resize(v.size());
+        
+        const int bits = 8;
         const int mask = (1 << bits) - 1;
         
+        long* src = v.data();
+        long* dst = radix_tmp_.data();
+        
+        // 64bitを8bitずつ常に8回まわす (確定的パフォーマンス)
         for (int shift = 0; shift < 64; shift += bits) {
             size_t count[256] = {0};
-            bool has_data = false;
-            for (long x : v) {
-                int bucket = (x >> shift) & mask;
-                count[bucket]++;
-                if (bucket > 0 || x >> (shift + bits) > 0) has_data = true;
-            }
-            if (!has_data && shift > 0) break; 
             
+            // カウント (分岐なし)
+            for (size_t i = 0; i < v.size(); ++i) {
+                count[(src[i] >> shift) & mask]++;
+            }
+            
+            // オフセット計算
             size_t pos[256];
             pos[0] = 0;
             for (int i = 1; i < 256; i++) pos[i] = pos[i-1] + count[i-1];
             
-            for (long x : v) tmp[pos[(x >> shift) & mask]++] = x;
-            v.swap(tmp);
+            // 転送
+            for (size_t i = 0; i < v.size(); ++i) {
+                dst[pos[(src[i] >> shift) & mask]++] = src[i];
+            }
+            
+            // ポインタ入れ替え
+            std::swap(src, dst);
         }
+        
+        // 8回(偶数回)回した後は必ず src == v.data() に戻っている
     }
 
 private:
+    std::vector<long> radix_tmp_;
     size_t last_total_points_pre_unique_ = 0;
     double last_calc_time_ms_ = 0;
+    Eigen::Isometry3d last_target_to_base_ = Eigen::Isometry3d::Identity();
     std::vector<double> last_joints_;
     std::vector<long> last_vids_;
     bool need_mask_update_ = true;
