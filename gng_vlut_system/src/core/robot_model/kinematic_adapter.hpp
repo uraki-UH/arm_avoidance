@@ -79,6 +79,7 @@ public:
                    Eigen::Quaterniond::Identity()) override;
 
   bool setJointValues(const std::vector<double> &values) override;
+  void updateJointValuesByName(const std::vector<std::string> &names, const std::vector<double> &values) override;
   std::vector<double> getJointValues() const override;
   bool isWithinLimits(const std::vector<double> &values) const override;
   void clampToLimits(std::vector<double> &values) const override;

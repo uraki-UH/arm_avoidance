@@ -32,6 +32,7 @@ public:
 
   // --- 関節変数の設定/取得 ---
   virtual bool setJointValues(const std::vector<double> &values);
+  virtual void updateJointValuesByName(const std::vector<std::string> &names, const std::vector<double> &values);
   virtual std::vector<double> getJointValues() const;
   virtual bool isWithinLimits(const std::vector<double> &values) const;
   virtual void clampToLimits(std::vector<double> &values) const;

@@ -227,6 +227,34 @@ MultiArmKinematicAdapter::MultiArmKinematicAdapter(
   syncCachedState();
 }
 
+void MultiArmKinematicAdapter::updateJointValuesByName(const std::vector<std::string> &names, const std::vector<double> &values) {
+  for (auto &arm : arms_) {
+    // 各腕の updateJointValuesByName を呼び出す
+    // 名前がプレフィックス付きで送られてくることを想定
+    // ただし、子アーム側ではプレフィックスなしの名前を期待している可能性があるため
+    // プレフィックスを剥がして渡すか、あるいは子アーム側で判定させる
+    
+    std::vector<std::string> local_names;
+    std::vector<double> local_values;
+    
+    for (size_t i = 0; i < names.size(); ++i) {
+      if (arm.prefix.empty() || startsWith(names[i], arm.prefix)) {
+        std::string stripped_name = names[i];
+        if (!arm.prefix.empty()) {
+            stripped_name = names[i].substr(arm.prefix.length());
+        }
+        local_names.push_back(stripped_name);
+        local_values.push_back(values[i]);
+      }
+    }
+    
+    if (!local_names.empty()) {
+        arm.chain.updateJointValuesByName(local_names, local_values);
+    }
+  }
+  forwardKinematics();
+}
+
 void MultiArmKinematicAdapter::setBase(const Eigen::Vector3d &position,
                                        const Eigen::Quaterniond &orientation) {
     base_position_ = position;

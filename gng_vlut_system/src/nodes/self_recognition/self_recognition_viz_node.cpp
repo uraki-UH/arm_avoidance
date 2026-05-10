@@ -98,7 +98,9 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         joint_topic, 10,
         [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
-            current_joints_ = msg->position;
+            // 名前ベースで関節値を更新し、FKを実行
+            chain_->updateJointValuesByName(msg->name, msg->position);
+            current_joints_ = chain_->getJointValues();
         });
 
     mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
@@ -112,35 +114,36 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 }
 
 void SelfRecognitionVizNode::updateAndPublish() {
-    std::vector<double> joints;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (current_joints_.empty()) return;
-        joints = current_joints_;
+    std::lock_guard<std::mutex> lock(mutex_);
+    
+    if (current_joints_.empty()) return;
+
+    try {
+        // 計算 (すでにlock内なので安全にchain_を参照できる)
+        recognition_manager_->updateRobotState(current_joints_);
+        const auto vids = recognition_manager_->getSelfVoxelMask();
+
+        // 配信
+        auto mask_msg = std::make_shared<voxel_msgs::msg::Voxel>();
+        mask_msg->header.stamp = get_clock()->now();
+        mask_msg->header.frame_id = ::robot_sim::common::Constants::DEFAULT_FOOTPRINT_FRAME; 
+        mask_msg->voxel_size = static_cast<float>(recognition_manager_->getVoxelSize());
+        
+        mask_msg->x_shift = get_parameter("voxel_indexing.x_shift").as_int();
+        mask_msg->y_shift = get_parameter("voxel_indexing.y_shift").as_int();
+        mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
+        mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
+        
+        // インデックスパラメータの同期
+        recognition_manager_->getIndexGrid()->setIndexingParams(
+            mask_msg->x_shift, mask_msg->y_shift, mask_msg->z_shift, mask_msg->offset
+        );
+
+        mask_msg->data.assign(vids.begin(), vids.end());
+        mask_pub_->publish(*mask_msg);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Error in updateAndPublish: %s", e.what());
     }
-
-    // 計算
-    recognition_manager_->updateRobotState(joints);
-    const auto vids = recognition_manager_->getSelfVoxelMask();
-
-    // 配信
-    auto mask_msg = std::make_shared<voxel_msgs::msg::Voxel>();
-    mask_msg->header.stamp = get_clock()->now();
-    mask_msg->header.frame_id = ::robot_sim::common::Constants::DEFAULT_FOOTPRINT_FRAME; 
-    mask_msg->voxel_size = static_cast<float>(recognition_manager_->getVoxelSize());
-    
-    mask_msg->x_shift = get_parameter("voxel_indexing.x_shift").as_int();
-    mask_msg->y_shift = get_parameter("voxel_indexing.y_shift").as_int();
-    mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
-    mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
-    
-    // インデックスパラメータの同期
-    recognition_manager_->getIndexGrid()->setIndexingParams(
-        mask_msg->x_shift, mask_msg->y_shift, mask_msg->z_shift, mask_msg->offset
-    );
-
-    mask_msg->data.assign(vids.begin(), vids.end());
-    mask_pub_->publish(*mask_msg);
 }
 
 } // namespace robot_sim::self_recognition

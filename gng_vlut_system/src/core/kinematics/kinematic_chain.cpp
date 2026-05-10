@@ -173,6 +173,29 @@ void KinematicChain::updateKinematics(const std::vector<double> &values) {
   }
 }
 
+void KinematicChain::updateJointValuesByName(const std::vector<std::string> &names, const std::vector<double> &values) {
+  std::vector<double> q = getJointValues();
+  bool changed = false;
+  for (std::size_t i = 0; i < names.size(); ++i) {
+    int current_dof_idx = 0;
+    for (int j = 0; j < (int)joints_.size(); ++j) {
+      if (joints_[j].name == names[i]) {
+        if (i < values.size()) {
+          // Assume single DOF for now (most common case in URDF)
+          if (joints_[j].getDOF() == 1) {
+              q[current_dof_idx] = values[i];
+              changed = true;
+          }
+        }
+      }
+      current_dof_idx += joints_[j].getDOF();
+    }
+  }
+  if (changed) {
+    updateKinematics(q);
+  }
+}
+
 std::vector<double> KinematicChain::getJointValues() const {
   std::vector<double> values;
   values.reserve(total_dof_);
@@ -884,22 +907,23 @@ void KinematicChain::buildAllLinkTransforms(
   base_tf.translate(base_position_);
   base_tf.rotate(base_orientation_);
 
-  // 動的なルートリンク特定: 子リンクとして現れない親リンクを探す
-  std::string detected_root = "base_link";
+  // 1. 基底ルートの決定
+  std::string root_name = "base_link";
   if (!fixed_link_info.empty()) {
     std::set<std::string> children;
-    for (const auto& [child, info] : fixed_link_info) children.insert(child);
-    for (const auto& [child, info] : fixed_link_info) {
-      if (children.find(info.first) == children.end()) {
-        detected_root = info.first;
+    for (const auto& pair : fixed_link_info) children.insert(pair.first);
+    for (const auto& pair : fixed_link_info) {
+      if (children.find(pair.second.first) == children.end()) {
+        root_name = pair.second.first;
         break;
       }
     }
   }
-  link_transforms[detected_root] = base_tf;
+  link_transforms[root_name] = base_tf;
 
+  // 2. 動的なリンク（KinematicChainに含まれるもの）を登録
   for (size_t i = 0; i < links_.size(); ++i) {
-    if (i < positions.size() - 1) {
+    if (i + 1 < positions.size()) {
       Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
       tf.translate(positions[i + 1]);
       tf.rotate(orientations[i + 1]);
@@ -907,30 +931,26 @@ void KinematicChain::buildAllLinkTransforms(
     }
   }
 
-  std::function<Eigen::Isometry3d(const std::string &)> get_transform;
-  get_transform = [&](const std::string &link_name) -> Eigen::Isometry3d {
-    auto it = link_transforms.find(link_name);
-    if (it != link_transforms.end()) {
-      return it->second;
+  // 3. 固定リンクの解消（反復法）
+  bool changed = true;
+  size_t max_iters = fixed_link_info.size() + 1;
+  size_t iter = 0;
+  
+  while (changed && iter < max_iters) {
+    changed = false;
+    iter++;
+    for (const auto& pair : fixed_link_info) {
+      const std::string& child_name = pair.first;
+      if (link_transforms.count(child_name)) continue;
+
+      const std::string& parent_name = pair.second.first;
+      auto it_parent = link_transforms.find(parent_name);
+      
+      if (it_parent != link_transforms.end()) {
+        link_transforms[child_name] = it_parent->second * pair.second.second;
+        changed = true;
+      }
     }
-
-    auto fixed_it = fixed_link_info.find(link_name);
-    if (fixed_it == fixed_link_info.end()) {
-      return Eigen::Isometry3d::Identity();
-    }
-
-    const std::string &parent_name = fixed_it->second.first;
-    const Eigen::Isometry3d &joint_origin = fixed_it->second.second;
-
-    Eigen::Isometry3d parent_tf = get_transform(parent_name);
-    Eigen::Isometry3d child_tf = parent_tf * joint_origin;
-    link_transforms[link_name] = child_tf;
-
-    return child_tf;
-  };
-
-  for (const auto &[link_name, info] : fixed_link_info) {
-    get_transform(link_name);
   }
 }
 
