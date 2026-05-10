@@ -23,24 +23,33 @@ namespace simulation {
  * @throws std::runtime_error if the model is empty or describes a structure
  *         that cannot be represented as a single kinematic chain.
  */
+struct ArmConfig {
+    std::string root_link;
+    std::string leaf_link;
+    std::string prefix;
+    // 今後「除外リンク」などを追加する場合もここを拡張すれば良い
+};
+
 kinematics::KinematicChain
 createKinematicChainFromModel(const RobotModel &model,
                               const std::string &end_effector_name = "",
-                              const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero());
+                              const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero(),
+                              const std::string &root_link_name = "");
 
 std::unique_ptr<kinematics::KinematicChain>
-createMultiArmKinematicChainFromModel(
-    const RobotModel &model, const std::string &left_end_effector_name,
-    const std::string &right_end_effector_name,
-    const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero(),
-    const std::string &left_prefix = "left_",
-    const std::string &right_prefix = "right_");
+createMultiArmKinematicChain(
+    const RobotModel &model,
+    const std::vector<ArmConfig> &arm_configs,
+    const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero());
 
+// 以下は後方互換性のためのラッパー
+// 以下は利便性のためのラッパー
 std::unique_ptr<kinematics::KinematicChain>
 createMultiArmKinematicChainFromModels(
     const RobotModel &model, const std::vector<std::string> &end_effector_names,
     const std::vector<std::string> &prefixes = {},
-    const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero());
+    const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero(),
+    const std::string &root_link_name = "");
 
 /**
  * @brief Multi-arm adapter that exposes several independent KinematicChain

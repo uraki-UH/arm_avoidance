@@ -110,12 +110,8 @@ endforeach()
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
 
-# --- 4. Offline Training Tools ---
-set(TOOLS offline_urdf_trainer offline_gng_main5_clean offline_gng_main6_island_pruning offline_gng_status_updater)
-foreach(tool ${TOOLS})
-  add_executable(${tool} offline_tools/${tool}.cpp)
-  target_compile_options(${tool} PRIVATE $<$<CONFIG:Release>:-O3 -DNDEBUG> $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>)
-  target_link_libraries(${tool} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-  ament_target_dependencies(${tool} Eigen3 urdfdom rclcpp rmw_implementation_cmake)
-  install(TARGETS ${tool} DESTINATION lib/${PROJECT_NAME})
-endforeach()
+# --- 5. Verification Tools ---
+add_executable(verify_sync verify_sync.cpp)
+target_link_libraries(verify_sync ${LIBS_ALL_CORE} ${EXTRA_LIBS})
+ament_target_dependencies(verify_sync ${DEPS_ROS})
+install(TARGETS verify_sync DESTINATION lib/${PROJECT_NAME})

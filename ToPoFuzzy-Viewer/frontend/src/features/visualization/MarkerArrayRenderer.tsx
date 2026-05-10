@@ -226,34 +226,35 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     }), [color, transparent, opacity]);
 
     const geometry = useMemo(() => {
-        const flatPoints = marker.points.flat();
-        const positions = new Float32Array(flatPoints);
+        // pts: [number, number, number][] -> Float32Array: [x, y, z, x, y, z, ...]
+        const pts = marker.points || [];
+        const positions = new Float32Array(pts.length * 3);
+        for (let i = 0; i < pts.length; i++) {
+            positions[i * 3 + 0] = pts[i][0];
+            positions[i * 3 + 1] = pts[i][1];
+            positions[i * 3 + 2] = pts[i][2];
+        }
         const geom = new THREE.BufferGeometry();
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         return geom;
     }, [marker.points]);
+
+    const lineObject = useMemo(() => {
+        const obj = strip ? new THREE.Line(geometry, material) : new THREE.LineSegments(geometry, material);
+        obj.computeLineDistances();
+        return obj;
+    }, [strip, geometry, material]);
 
     useEffect(() => () => {
         material.dispose();
         geometry.dispose();
     }, [material, geometry]);
 
-    return strip ? (
-        <line
-            geometry={geometry}
-            material={material}
+    return (
+        <primitive
+            object={lineObject}
             position={position}
             rotation={rotation}
-            scale={marker.scale}
-            renderOrder={30}
-        />
-    ) : (
-        <lineSegments
-            geometry={geometry}
-            material={material}
-            position={position}
-            rotation={rotation}
-            scale={marker.scale}
             renderOrder={30}
         />
     );

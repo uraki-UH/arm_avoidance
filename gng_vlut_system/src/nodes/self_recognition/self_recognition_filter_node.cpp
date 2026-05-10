@@ -26,8 +26,10 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
     declare_parameter<std::string>("input_topic");
     declare_parameter<std::string>("output_topic");
     declare_parameter<std::string>("root_link");
+    declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{}); // 各アーム個別のルート用（オプション）
     declare_parameter<std::vector<std::string>>("leaf_links");
     declare_parameter<std::vector<std::string>>("prefixes");
+    declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
 
     // パラメータの取得
     std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
@@ -36,24 +38,26 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
     std::string input_topic = get_parameter("input_topic").as_string();
     std::string output_topic = get_parameter("output_topic").as_string();
     
-    std::string root_link = get_parameter("root_link").as_string();
+    std::string global_root_link = get_parameter("root_link").as_string();
+    std::vector<std::string> root_links = get_parameter("root_links").as_string_array();
     std::vector<std::string> leaf_links = get_parameter("leaf_links").as_string_array();
     std::vector<std::string> prefixes = get_parameter("prefixes").as_string_array();
+    std::vector<std::string> exclude_links = get_parameter("exclude_links").as_string_array();
 
     voxel_size_inv_ = 1.0f / static_cast<float>(voxel_size);
 
     // ロボットモデルのロード
     auto model = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
     
-    // ルートリンクの設定
-    if (root_link.empty()) {
-        root_link = model->getRootLinkName();
+    // グローバルルートの設定
+    if (global_root_link.empty()) {
+        global_root_link = model->getRootLinkName();
     }
-    frame_id_ = root_link;
+    frame_id_ = global_root_link;
 
-    // 末端リンクの設定（YAMLが空の場合は自動検出を試みるが、警告を出す）
+    // 末端リンクの自動検出
     if (leaf_links.empty()) {
-        RCLCPP_WARN(get_logger(), "leaf_links is empty in YAML. Attempting auto-detection...");
+        RCLCPP_WARN(get_logger(), "leaf_links is empty. Auto-detecting...");
         for (const auto &[link_name, link_props] : model->getLinks()) {
             bool is_parent = false;
             for (const auto &[j_name, j_props] : model->getJoints()) {
@@ -67,8 +71,8 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
             }
         }
     }
-    
-    // プリフィックスの設定
+
+    // プリフィックスの設定（未指定時のフォールバック）
     if (prefixes.empty()) {
         RCLCPP_WARN(get_logger(), "prefixes is empty in YAML. Using default 'armN_'...");
         for (size_t i = 0; i < leaf_links.size(); ++i) {
@@ -76,24 +80,38 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         }
     }
 
-    if (leaf_links.size() != prefixes.size()) {
-        throw std::runtime_error("Size mismatch between leaf_links and prefixes in YAML!");
+    // Arm構成の組み立て
+    std::vector<simulation::ArmConfig> arm_configs;
+    for (size_t i = 0; i < leaf_links.size(); ++i) {
+        simulation::ArmConfig cfg;
+        cfg.leaf_link = leaf_links[i];
+        cfg.prefix = (i < prefixes.size()) ? prefixes[i] : ("arm" + std::to_string(i) + "_");
+        
+        // 個別のルート指定があればそれを使用、なければグローバルルート
+        if (i < root_links.size() && !root_links[i].empty()) {
+            cfg.root_link = root_links[i];
+        } else {
+            cfg.root_link = global_root_link;
+        }
+        
+        arm_configs.push_back(cfg);
     }
 
     RCLCPP_INFO(get_logger(), "--- Self Recognition Configuration ---");
-    RCLCPP_INFO(get_logger(), "  Root Link : %s", frame_id_.c_str());
+    RCLCPP_INFO(get_logger(), "  Global Root: %s", frame_id_.c_str());
     RCLCPP_INFO(get_logger(), "  Voxel Size: %.3f m", voxel_size);
-    for (size_t i = 0; i < leaf_links.size(); ++i) {
-        RCLCPP_INFO(get_logger(), "  Arm [%zu]: Leaf=[%s], Prefix=[%s]", i, leaf_links[i].c_str(), prefixes[i].c_str());
+    for (size_t i = 0; i < arm_configs.size(); ++i) {
+        RCLCPP_INFO(get_logger(), "  Arm [%zu]: Root=[%s], Leaf=[%s], Prefix=[%s]", 
+                   i, arm_configs[i].root_link.c_str(), arm_configs[i].leaf_link.c_str(), arm_configs[i].prefix.c_str());
     }
     RCLCPP_INFO(get_logger(), "---------------------------------------");
 
     // マルチアーム対応の KinematicChain 構築
-    auto chain_ptr = simulation::createMultiArmKinematicChainFromModels(*model, leaf_links, prefixes, Eigen::Vector3d::Zero());
+    auto chain_ptr = simulation::createMultiArmKinematicChain(*model, arm_configs, Eigen::Vector3d::Zero());
     auto chain = std::shared_ptr<kinematics::KinematicChain>(std::move(chain_ptr));
 
     recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
-    recognition_manager_->initialize(*model, chain, voxel_size);
+    recognition_manager_->initialize(*model, chain, voxel_size, exclude_links);
 
     // サブスクライバ / パブリッシャ
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
@@ -141,8 +159,9 @@ void SelfRecognitionFilterNode::joint_cb(const sensor_msgs::msg::JointState::Con
     }
     has_received_joints_ = true;
     
+    recognition_manager_->updateRobotState(current_joints_);
     // マスク更新
-    auto vids = recognition_manager_->getSelfVoxelMask(current_joints_);
+    auto vids = recognition_manager_->getSelfVoxelMask();
     current_mask_vids_.clear();
     for (long vid : vids) {
         current_mask_vids_.insert(vid);

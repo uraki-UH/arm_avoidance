@@ -317,12 +317,12 @@ public:
               *model, arm_leaf_names);
         }
       } else if (!paired_leaf_link_name_.empty()) {
-        arm = simulation::createMultiArmKinematicChainFromModel(
-            *model, leaf_link_name_, paired_leaf_link_name_);
+        arm = simulation::createMultiArmKinematicChainFromModels(
+            *model, {leaf_link_name_, paired_leaf_link_name_});
       } else if (leaf_link_name_.rfind("left_", 0) == 0) {
         std::string inferred_right = "right_" + leaf_link_name_.substr(5);
-        arm = simulation::createMultiArmKinematicChainFromModel(
-            *model, leaf_link_name_, inferred_right);
+        arm = simulation::createMultiArmKinematicChainFromModels(
+            *model, {leaf_link_name_, inferred_right});
       } else {
         arm = std::make_unique<kinematics::KinematicChain>(
             simulation::createKinematicChainFromModel(*model, leaf_link_name_));
@@ -555,7 +555,7 @@ public:
                     processed, active_ids.size(), v_rels.size());
       }
     }
-    RCLCPP_INFO(this->get_logger(), "");
+    RCLCPP_INFO(this->get_logger(), "[Step 6] Analysis completed.");
 
     // Calculate Relative Margin (10% of the detected range, min 2cm)
     fcl::Vector3d range = actual_max - actual_min;

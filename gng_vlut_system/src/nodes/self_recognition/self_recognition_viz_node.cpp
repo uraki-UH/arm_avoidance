@@ -218,7 +218,8 @@ void SelfRecognitionVizNode::publishViz() {
     int marker_id = 0;
 
     if (publish_self_mask_) {
-        const auto vids = recognition_manager_->getSelfVoxelMask(joints);
+        recognition_manager_->updateRobotState(joints);
+    const auto vids = recognition_manager_->getSelfVoxelMask();
         std::unordered_set<long> voxel_set(vids.begin(), vids.end());
         const auto points = buildVoxelCenters(voxel_set);
         geometry_msgs::msg::Pose identity_pose;
@@ -227,7 +228,7 @@ void SelfRecognitionVizNode::publishViz() {
             "self_mask", marker_id++, marker_frame_id_, identity_pose, points));
     }
 
-    const auto& caches = recognition_manager_->getLinkVoxelCaches();
+    const auto& caches = recognition_manager_->getLinkVoxelDataList();
     for (const auto& cache : caches) {
         const auto tf_it = link_tfs.find(cache.name);
         if (tf_it == link_tfs.end()) {
@@ -238,7 +239,12 @@ void SelfRecognitionVizNode::publishViz() {
 
         if (publish_link_voxels_) {
             geometry_msgs::msg::Pose marker_pose = pose;
-            auto points = buildVoxelCenters(cache.local_vids);
+            std::unordered_set<long> local_vids_set;
+            for (const auto& p : cache.local_voxel_centers) {
+                Eigen::Vector3i idx = ::common::geometry::VoxelUtils::worldToVoxel(p.cast<float>(), voxel_size_f_);
+                local_vids_set.insert(::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx));
+            }
+            auto points = buildVoxelCenters(local_vids_set);
             if (display_world_coordinates_) {
                 points = transformPoints(points, tf_it->second);
                 marker_pose.position.x = 0.0;

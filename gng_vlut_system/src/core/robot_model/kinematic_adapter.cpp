@@ -11,7 +11,8 @@ namespace simulation {
 kinematics::KinematicChain
 createKinematicChainFromModel(const RobotModel &model,
                               const std::string &end_effector_name,
-                              const Eigen::Vector3d &base_position) {
+                              const Eigen::Vector3d &base_position,
+                              const std::string &root_link_name) {
   kinematics::KinematicChain chain;
   chain.setBase(base_position,
                 Eigen::Quaterniond::Identity()); // Set base position
@@ -55,7 +56,8 @@ createKinematicChainFromModel(const RobotModel &model,
   std::vector<const JointProperties *> chain_joints_reversed;
   std::string current_link_name = leaf_name;
 
-  while (current_link_name != model.getRootLinkName() &&
+  std::string root_name = root_link_name.empty() ? model.getRootLinkName() : root_link_name;
+  while (current_link_name != root_name &&
          !current_link_name.empty()) {
     const JointProperties *joint = child_link_to_joint[current_link_name];
     if (!joint) {
@@ -149,27 +151,23 @@ createKinematicChainFromModel(const RobotModel &model,
 }
 
 std::unique_ptr<kinematics::KinematicChain>
-createMultiArmKinematicChainFromModels(
-    const RobotModel &model, const std::vector<std::string> &end_effector_names,
-    const std::vector<std::string> &prefixes,
+createMultiArmKinematicChain(
+    const RobotModel &model,
+    const std::vector<ArmConfig> &arm_configs,
     const Eigen::Vector3d &base_position) {
-  if (end_effector_names.empty()) {
-    throw std::runtime_error("No end-effector names were provided.");
+  if (arm_configs.empty()) {
+    throw std::runtime_error("No arm configurations were provided.");
   }
 
   std::vector<MultiArmKinematicAdapter::ArmEntry,
               Eigen::aligned_allocator<MultiArmKinematicAdapter::ArmEntry>>
       arms;
-  arms.reserve(end_effector_names.size());
-  for (size_t i = 0; i < end_effector_names.size(); ++i) {
+  arms.reserve(arm_configs.size());
+  for (const auto &cfg : arm_configs) {
     MultiArmKinematicAdapter::ArmEntry arm_entry;
     arm_entry.chain = createKinematicChainFromModel(
-        model, end_effector_names[i], base_position);
-    if (i < prefixes.size()) {
-      arm_entry.prefix = prefixes[i];
-    } else {
-      arm_entry.prefix = "arm" + std::to_string(i) + "_";
-    }
+        model, cfg.leaf_link, base_position, cfg.root_link);
+    arm_entry.prefix = cfg.prefix;
     arms.push_back(std::move(arm_entry));
   }
 
@@ -180,15 +178,27 @@ createMultiArmKinematicChainFromModels(
 }
 
 std::unique_ptr<kinematics::KinematicChain>
-createMultiArmKinematicChainFromModel(
-    const RobotModel &model, const std::string &left_end_effector_name,
-    const std::string &right_end_effector_name,
-    const Eigen::Vector3d &base_position, const std::string &left_prefix,
-    const std::string &right_prefix) {
-  return createMultiArmKinematicChainFromModels(
-      model, {left_end_effector_name, right_end_effector_name},
-      {left_prefix, right_prefix}, base_position);
+createMultiArmKinematicChainFromModels(
+    const RobotModel &model, const std::vector<std::string> &end_effector_names,
+    const std::vector<std::string> &prefixes,
+    const Eigen::Vector3d &base_position,
+    const std::string &root_link_name) {
+  
+  std::vector<ArmConfig> configs;
+  for (size_t i = 0; i < end_effector_names.size(); ++i) {
+    ArmConfig cfg;
+    cfg.root_link = root_link_name;
+    cfg.leaf_link = end_effector_names[i];
+    if (i < prefixes.size()) {
+      cfg.prefix = prefixes[i];
+    } else {
+      cfg.prefix = "arm" + std::to_string(i) + "_";
+    }
+    configs.push_back(cfg);
+  }
+  return createMultiArmKinematicChain(model, configs, base_position);
 }
+
 
 MultiArmKinematicAdapter::MultiArmKinematicAdapter(
     std::vector<ArmEntry, Eigen::aligned_allocator<ArmEntry>> arms,
@@ -395,7 +405,9 @@ void MultiArmKinematicAdapter::forwardKinematicsAt(
 
 void MultiArmKinematicAdapter::forwardKinematicsAt(
     const std::vector<double> &values) {
-  setJointValues(values);
+  if (setJointValues(values)) {
+      forwardKinematics();
+  }
 }
 
 void MultiArmKinematicAdapter::forwardKinematics() {
@@ -460,10 +472,11 @@ MultiArmKinematicAdapter::calculateJacobian(int target_joint_index) const {
 }
 
 int MultiArmKinematicAdapter::getNumJoints() const {
-  if (arms_.empty()) {
-    return 0;
+  int total = 0;
+  for (const auto &arm : arms_) {
+    total += arm.chain.getNumJoints();
   }
-  return arms_[primary_arm_index_].chain.getNumJoints();
+  return total;
 }
 
 int MultiArmKinematicAdapter::getTotalDOF() const {
@@ -500,7 +513,7 @@ std::string MultiArmKinematicAdapter::getJointName(int joint_index) const {
   for (const auto &arm : arms_) {
     int n = arm.chain.getNumJoints();
     if (joint_index < static_cast<int>(cursor + n)) {
-      return arm.chain.getJointName(joint_index - static_cast<int>(cursor));
+        return arm.prefix + arm.chain.getJointName(joint_index - static_cast<int>(cursor));
     }
     cursor += static_cast<std::size_t>(n);
   }
@@ -524,7 +537,7 @@ std::string MultiArmKinematicAdapter::getLinkName(int link_index) const {
   for (const auto &arm : arms_) {
     int n = arm.chain.getNumJoints();
     if (link_index < static_cast<int>(cursor + n)) {
-      return arm.chain.getLinkName(link_index - static_cast<int>(cursor));
+        return arm.prefix + arm.chain.getLinkName(link_index - static_cast<int>(cursor));
     }
     cursor += static_cast<std::size_t>(n);
   }
@@ -629,20 +642,13 @@ void MultiArmKinematicAdapter::buildAllLinkTransforms(
     arm.chain.buildAllLinkTransforms(arm_positions, arm_orientations,
                                      fixed_link_info, arm_map);
     for (const auto &[name, tf] : arm_map) {
-      link_transforms.insert_or_assign(name, tf);
+      link_transforms.insert_or_assign(arm.prefix + name, tf);
     }
   };
 
-  if (primary_arm_index_ < arms_.size()) {
-    process_arm(arms_[primary_arm_index_], offset);
-    offset += arms_[primary_arm_index_].chain.getLinkPositions().size();
-  }
-  for (std::size_t i = 0; i < arms_.size(); ++i) {
-    if (i == primary_arm_index_) {
-      continue;
-    }
-    process_arm(arms_[i], offset);
-    offset += arms_[i].chain.getLinkPositions().size();
+  for (const auto &arm : arms_) {
+    process_arm(arm, offset);
+    offset += arm.chain.getLinkPositions().size();
   }
 }
 
@@ -700,28 +706,11 @@ std::vector<double> MultiArmKinematicAdapter::sampleRandomJointValues(
 void MultiArmKinematicAdapter::syncCachedState() const {
   cached_positions_.clear();
   cached_orientations_.clear();
-  if (arms_.empty()) {
-    return;
-  }
-
-  auto append_arm = [&](const ArmEntry &arm) {
+  for (const auto &arm : arms_) {
     const auto &p = arm.chain.getLinkPositions();
     const auto &o = arm.chain.getLinkOrientations();
-    if (p.empty() || o.empty()) {
-      return;
-    }
     cached_positions_.insert(cached_positions_.end(), p.begin(), p.end());
     cached_orientations_.insert(cached_orientations_.end(), o.begin(), o.end());
-  };
-
-  if (primary_arm_index_ < arms_.size()) {
-    append_arm(arms_[primary_arm_index_]);
-  }
-  for (std::size_t i = 0; i < arms_.size(); ++i) {
-    if (i == primary_arm_index_) {
-      continue;
-    }
-    append_arm(arms_[i]);
   }
 }
 
