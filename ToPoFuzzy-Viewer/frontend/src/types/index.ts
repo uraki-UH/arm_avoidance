@@ -162,12 +162,37 @@ export interface TransformData {
     quat: [number, number, number, number];
 }
 
+export interface VoxelLayout {
+    voxelSize: number;
+    xShift: number;
+    yShift: number;
+    zShift: number;
+    offset: number;
+}
+
+export interface VoxelData {
+    id: string;
+    tag: string;
+    data: string[];
+    layout: VoxelLayout;
+    visible?: boolean;
+}
+
+export type EntityType = 'robot' | 'marker' | 'voxel' | 'graph';
+
+export interface VoxelSettings {
+    visible: boolean;
+    color: string;
+    wireframe: boolean;
+    opacity: number;
+}
+
 // --- WebSocket / RPC Types ---
 
 export interface DataSource {
     id: string;
     name: string;
-    type: 'pointcloud' | 'topological_map' | 'marker';
+    type: 'pointcloud' | 'topological_map' | 'marker' | 'voxel';
     active: boolean;
 }
 

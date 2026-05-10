@@ -172,6 +172,10 @@ public:
                             Eigen::aligned_allocator<Eigen::Quaterniond>> &
   getLinkOrientations() const;
 
+  // --- ベースポーズの取得 ---
+  Eigen::Vector3d getBasePosition() const { return base_position_; }
+  Eigen::Quaterniond getBaseOrientation() const { return base_orientation_; }
+
   // --- 先端オフセットの設定 ---
   virtual void setEEFOffset(const Eigen::Vector3d &offset);
   virtual Eigen::Vector3d getEEFOffset() const;

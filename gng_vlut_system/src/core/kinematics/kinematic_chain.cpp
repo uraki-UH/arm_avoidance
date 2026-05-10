@@ -1,4 +1,5 @@
 #include "kinematics/kinematic_chain.hpp"
+#include "common/constants.hpp"
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -193,8 +194,8 @@ bool KinematicChain::isWithinLimits(const std::vector<double> &values) const {
                        joint.max_limits.size() == (size_t)dof);
     if (has_limits) {
       for (int d = 0; d < dof; ++d) {
-        if (values[idx + d] < joint.min_limits[d] - 1e-4 ||
-            values[idx + d] > joint.max_limits[d] + 1e-4)
+        if (values[idx + d] < joint.min_limits[d] - ::robot_sim::common::Constants::JOINT_LIMIT_TOLERANCE ||
+            values[idx + d] > joint.max_limits[d] + ::robot_sim::common::Constants::JOINT_LIMIT_TOLERANCE)
           return false;
       }
     }
@@ -669,7 +670,9 @@ bool KinematicChain::inverseKinematicsPSOAt(
     double best_error = std::numeric_limits<double>::max();
   };
 
-  const double w = 0.7, c1 = 0.8, c2 = 0.9;
+  const double w = ::robot_sim::common::Constants::PSO_INERTIA_WEIGHT;
+  const double c1 = ::robot_sim::common::Constants::PSO_COGNITIVE_WEIGHT;
+  const double c2 = ::robot_sim::common::Constants::PSO_SOCIAL_WEIGHT;
   std::random_device rd;
   std::mt19937 gen(rd());
 
@@ -681,7 +684,7 @@ bool KinematicChain::inverseKinematicsPSOAt(
       double minv = has_limits ? joint.min_limits[j] : -M_PI;
       double maxv = has_limits ? joint.max_limits[j] : M_PI;
       limits.emplace_back(minv, maxv);
-      max_vel.push_back((maxv - minv) * 0.1);
+      max_vel.push_back((maxv - minv) * ::robot_sim::common::Constants::PSO_VELOCITY_SCALE);
     }
   }
   int dofN = total_dof_;

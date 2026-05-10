@@ -9,6 +9,7 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
+#include <voxel_msgs/msg/voxel.hpp>
 #include <App.h>
 #include <nlohmann/json.hpp>
 
@@ -43,6 +44,7 @@ namespace topic_utils {
             if (t.find("PointCloud2") != std::string::npos) return "pointcloud";
             if (t.find("TopologicalMap") != std::string::npos) return "topological_map";
             if (t.find("Marker") != std::string::npos) return "marker";
+            if (t.find("Voxel") != std::string::npos) return "voxel";
         }
         return "";
     }
@@ -94,6 +96,13 @@ namespace converter {
     json to_json(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
         json tfs = json::array(); for (auto& ts : msg->transforms) tfs.push_back({{"frameId",ts.header.frame_id},{"childFrameId",ts.child_frame_id},{"pos",{ts.transform.translation.x,ts.transform.translation.y,ts.transform.translation.z}},{"quat",{ts.transform.rotation.x,ts.transform.rotation.y,ts.transform.rotation.z,ts.transform.rotation.w}}});
         return {{"type", "stream.tf"}, {"transforms", tfs}};
+    }
+
+    //idからボクセルを復元して可視化する
+    json to_json(const voxel_msgs::msg::Voxel::SharedPtr msg, const std::string& tag) {
+        json ids = json::array(); for (auto id : msg->data) ids.push_back(std::to_string(id));
+        return {{"type", "stream.voxel"}, {"tag", tag}, {"data", ids}, 
+                {"layout", {{"voxelSize", msg->voxel_size}, {"xShift", msg->x_shift}, {"yShift", msg->y_shift}, {"zShift", msg->z_shift}, {"offset", msg->offset}}}};
     }
 }
 
@@ -166,6 +175,9 @@ private:
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";
                     activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
+                } else if (st == "voxel") {
+                    activeSubTypes_[sid] = "voxel";
+                    activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
                 }
             }
         } else {

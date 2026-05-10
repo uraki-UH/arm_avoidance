@@ -21,6 +21,7 @@
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 #include "safety_engine/builder/safety_system_loader.hpp"
 #include "metrics/graph_topology_analyzer.hpp"
+#include "common/constants.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -39,7 +40,7 @@
 
 namespace {
 
-constexpr float kEps = 1e-6f;
+constexpr float kEps = static_cast<float>(::robot_sim::common::Constants::GEOM_EPSILON);
 
 Eigen::Isometry3d makeIsometry(const std::vector<double> &pos,
                                const std::vector<double> &rot_deg) {
@@ -118,7 +119,7 @@ public:
   TopoFuzzyBridgeNode() : Node("topofuzzy_bridge_node") {
     declare_parameter("gng_model_path", "");
     declare_parameter("vlut_path", "");
-    declare_parameter("publish_hz", 20.0);
+    declare_parameter("publish_hz", ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ);
     declare_parameter("edge_mode", -1);
     declare_parameter("frame_id", "world");
     declare_parameter("source_frame_id", "world");
@@ -598,7 +599,7 @@ private:
   int edge_mode_ = -1;
   std::string frame_id_ = "world";
   std::string source_frame_id_ = "world";
-  double publish_hz_ = 5.0;
+  double publish_hz_ = ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ;
   std::string occupied_voxels_topic_ = "occupied_voxels";
   std::string danger_voxels_topic_ = "danger_voxels";
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

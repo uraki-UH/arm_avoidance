@@ -21,6 +21,8 @@
   <depend>pcl_ros</depend>
   <depend>ais_gng_msgs</depend>
   <depend>tf2_msgs</depend>
+  <!-- voxelmsgs -->
+  <depend>voxel_msgs</depend>
   <depend>nlohmann_json</depend>
 
   <exec_depend>launch</exec_depend>

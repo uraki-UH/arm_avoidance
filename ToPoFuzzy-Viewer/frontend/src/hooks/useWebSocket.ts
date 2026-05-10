@@ -19,6 +19,7 @@ import {
     EditRegion,
     EditSessionInfo,
     EditJobEvent,
+    VoxelData,
 } from '../types';
 import { generateUUID } from '../utils/uuid';
 
@@ -49,6 +50,7 @@ interface UseWebSocketReturn {
     markerData: Record<string, MarkerArrayData>;
     graphData: Record<string, GraphData>;
     robotData: Record<string, RobotData>;
+    voxelData: Record<string, VoxelData>;
     transforms: Record<string, TransformData>;
     lastJobEvent: EditJobEvent | null;
     isConnected: boolean;
@@ -109,6 +111,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
     const [robotData, setRobotData] = useState<Record<string, RobotData>>({});
+    const [voxelData, setVoxelData] = useState<Record<string, VoxelData>>({});
     const [transforms, setTransforms] = useState<Record<string, TransformData>>({});
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -247,6 +250,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 try {
                     const payload = JSON.parse(event.data);
 
+                    // Handle RPC responses
                     if (payload && typeof payload.id === 'string' && pendingRequestsRef.current.has(payload.id)) {
                         const pending = pendingRequestsRef.current.get(payload.id)!;
                         pendingRequestsRef.current.delete(payload.id);
@@ -261,145 +265,108 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         return;
                     }
 
-                    if (payload.type === 'stream.pointcloud.meta' && typeof payload.topic === 'string') {
-                        pendingTopicQueueRef.current.push(payload.topic);
-                        return;
-                    }
+                    // Dispatcher for streaming messages
+                    const type = payload.type as string;
+                    const tag = payload.tag || 'default';
 
-                    if (payload.type === 'stream.marker_array' && Array.isArray(payload.markers)) {
-                        const tag = payload.tag || 'default';
-                        setMarkerData((prev) => ({
-                            ...prev,
-                            [tag]: {
-                                id: tag,
-                                name: payload.name || tag,
-                                tag,
-                                frameId: payload.frameId || undefined,
-                                markers: payload.markers,
-                                count: payload.markers.length,
-                                visible: prev[tag]?.visible ?? true,
-                            } as MarkerArrayData,
-                        }));
-                        return;
-                    }
-
-                    if (payload.type === 'stream.marker' && payload.marker) {
-                        const tag = payload.tag || 'default';
-                        setMarkerData((prev) => ({
-                            ...prev,
-                            [tag]: {
-                                id: tag,
-                                name: payload.name || tag,
-                                tag,
-                                frameId: payload.frameId || undefined,
-                                markers: [payload.marker],
-                                count: 1,
-                                visible: prev[tag]?.visible ?? true,
-                            } as MarkerArrayData,
-                        }));
-                        return;
-                    }
-
-                    if (payload.type === 'stream.graph' && payload.graph) {
-                        const tag = payload.tag || 'default';
-                        setGraphData((prev) => {
-                            const existing = prev[tag];
-                            if (existing && existing.timestamp === payload.graph.timestamp && existing.nodes.length === payload.graph.nodes.length) {
-                                return prev; // Skip update if identical
-                            }
-                            return {
-                                ...prev,
-                                [tag]: payload.graph as GraphData,
-                            };
-                        });
-                        return;
-                    }
-
-                    if (payload.type === 'stream.graph.delete' && typeof payload.tag === 'string') {
-                        clearGraphLayer(payload.tag);
-                        return;
-                    }
-
-                    if (payload.type === 'stream.robot.description' && payload.robot) {
-                        const tag = payload.tag || 'default';
-                        setRobotData((prev) => ({
-                            ...prev,
-                            [tag]: payload.robot as RobotData,
-                        }));
-                        return;
-                    }
-
-                    if (payload.type === 'stream.robot.pose' && payload.robot) {
-                        const tag = payload.tag || 'default';
-                        setRobotData((prev) => {
-                            const existing = prev[tag];
-                            if (!existing) return prev; // Wait for description
-                            
-                            // Check if anything actually changed (timestamp)
-                            if (existing.timestamp === payload.robot.timestamp) {
-                                return prev;
-                            }
-
-                            return {
+                    const handlers: Record<string, (p: any) => void> = {
+                        'stream.pointcloud.meta': (p) => {
+                            if (typeof p.topic === 'string') pendingTopicQueueRef.current.push(p.topic);
+                        },
+                        'stream.marker_array': (p) => {
+                            if (!Array.isArray(p.markers)) return;
+                            setMarkerData(prev => ({
                                 ...prev,
                                 [tag]: {
-                                    ...existing,
-                                    ...payload.robot,
-                                    // Preserve description fields
-                                    urdf: existing.urdf,
-                                    jointNames: existing.jointNames,
-                                    jointValues: payload.robot.jointValues || existing.jointValues,
-                                } as RobotData,
-                            };
-                        });
-                        return;
-                    }
-
-                    if (payload.type === 'stream.tf' && payload.transforms) {
-                        setTransforms((prev) => {
-                            const next = { ...prev };
-                            payload.transforms.forEach((ts: TransformData) => {
-                                next[ts.childFrameId] = ts;
+                                    id: tag, name: p.name || tag, tag,
+                                    frameId: p.frameId || undefined,
+                                    markers: p.markers, count: p.markers.length,
+                                    visible: prev[tag]?.visible ?? true,
+                                } as MarkerArrayData,
+                            }));
+                        },
+                        'stream.marker': (p) => {
+                            if (!p.marker) return;
+                            setMarkerData(prev => ({
+                                ...prev,
+                                [tag]: {
+                                    id: tag, name: p.name || tag, tag,
+                                    frameId: p.frameId || undefined,
+                                    markers: [p.marker], count: 1,
+                                    visible: prev[tag]?.visible ?? true,
+                                } as MarkerArrayData,
+                            }));
+                        },
+                        'stream.graph': (p) => {
+                            if (!p.graph) return;
+                            setGraphData(prev => {
+                                const existing = prev[tag];
+                                if (existing && existing.timestamp === p.graph.timestamp && existing.nodes.length === p.graph.nodes.length) return prev;
+                                return { ...prev, [tag]: p.graph as GraphData };
                             });
-                            return next;
-                        });
-                        return;
-                    }
-
-                    if (payload.type === 'stream.robot.delete' && typeof payload.tag === 'string') {
-                        setRobotData((prev) => {
-                            const next = { ...prev };
-                            delete next[payload.tag];
-                            return next;
-                        });
-                        return;
-                    }
-
-                    if (payload.type === 'stream.delete' || payload.type === 'stream.pointcloud.delete' || payload.type === 'stream.remove_layer') {
-                        const targetId = payload.topic || payload.tag || payload.id;
-                        if (targetId) {
-                            setPointClouds((prev) => {
+                        },
+                        'stream.graph.delete': (p) => {
+                            if (typeof p.tag === 'string') clearGraphLayer(p.tag);
+                        },
+                        'stream.robot.description': (p) => {
+                            if (p.robot) setRobotData(prev => ({ ...prev, [tag]: p.robot as RobotData }));
+                        },
+                        'stream.robot.pose': (p) => {
+                            if (!p.robot) return;
+                            setRobotData(prev => {
+                                const existing = prev[tag];
+                                if (!existing || existing.timestamp === p.robot.timestamp) return prev;
+                                return {
+                                    ...prev,
+                                    [tag]: { ...existing, ...p.robot, 
+                                        urdf: existing.urdf, jointNames: existing.jointNames,
+                                        jointValues: p.robot.jointValues || existing.jointValues 
+                                    } as RobotData,
+                                };
+                            });
+                        },
+                        'stream.voxel': (p) => {
+                            if (p.data) {
+                                setVoxelData(prev => ({
+                                    ...prev,
+                                    [tag]: { id: tag, tag, data: p.data, layout: p.layout } as VoxelData
+                                }));
+                            }
+                        },
+                        'stream.tf': (p) => {
+                            if (p.transforms) {
+                                setTransforms(prev => {
+                                    const next = { ...prev };
+                                    p.transforms.forEach((ts: TransformData) => { next[ts.childFrameId] = ts; });
+                                    return next;
+                                });
+                            }
+                        },
+                        'stream.robot.delete': (p) => {
+                            if (typeof p.tag === 'string') setRobotData(prev => {
+                                const next = { ...prev };
+                                delete next[p.tag];
+                                return next;
+                            });
+                        },
+                        'stream.delete': (p) => {
+                            const targetId = p.topic || p.tag || p.id;
+                            if (targetId) setPointClouds(prev => {
                                 const next = { ...prev };
                                 delete next[targetId];
                                 return next;
                             });
-                        }
-                        return;
-                    }
+                        },
+                        'stream.pointcloud.delete': (p) => handlers['stream.delete'](p),
+                        'stream.remove_layer': (p) => handlers['stream.delete'](p),
+                        'stream.robot': (p) => handlers['stream.robot.description'](p), // Legacy support
+                        'job.progress': (p) => setLastJobEvent(p as EditJobEvent),
+                        'job.completed': (p) => setLastJobEvent(p as EditJobEvent),
+                        'job.failed': (p) => setLastJobEvent(p as EditJobEvent),
+                    };
 
-                    // Legacy support for combined stream.robot
-                    if (payload.type === 'stream.robot' && payload.robot) {
-                        const tag = payload.tag || 'default';
-                        setRobotData((prev) => ({
-                            ...prev,
-                            [tag]: payload.robot as RobotData,
-                        }));
-                        return;
-                    }
-
-                    if (payload.type === 'job.progress' || payload.type === 'job.completed' || payload.type === 'job.failed') {
-                        setLastJobEvent(payload as EditJobEvent);
-                        return;
+                    if (handlers[type]) {
+                        handlers[type](payload);
                     }
                 } catch (jsonError) {
                     console.error('Failed to parse text message:', jsonError);
@@ -644,6 +611,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         markerData,
         graphData,
         robotData,
+        voxelData,
         transforms,
         lastJobEvent,
         isConnected,

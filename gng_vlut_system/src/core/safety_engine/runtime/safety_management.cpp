@@ -153,7 +153,7 @@ void SafetyStateManager::updateDangerFieldFromVoxels(
   auto add_viz = [&](const std::vector<long> &voxels, float level) {
     for (long vid : voxels) {
       Eigen::Vector3i g_idx =
-          GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+          spatial_index->getGrid().getIndexFromFlatId(vid);
       VoxelVizData vvd;
       vvd.center = spatial_index->getWorldMin() +
                    (g_idx.cast<double>() + Eigen::Vector3d::Constant(0.5)) *
@@ -190,7 +190,7 @@ void SafetyStateManager::updateDangerFieldFromPoints(
 
     // Get absolute voxel index from the ID
     Eigen::Vector3i v_idx =
-        GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+        spatial_index->getGrid().getIndexFromFlatId(vid);
 
     // Dilation Loop (Cube search + Sphere distance filter)
     for (int dz = -K; dz <= K; ++dz) {
@@ -206,7 +206,7 @@ void SafetyStateManager::updateDangerFieldFromPoints(
           float level = (dx == 0 && dy == 0 && dz == 0) ? 1.0f : 0.5f;
 
           Eigen::Vector3i n_idx = v_idx + Eigen::Vector3i(dx, dy, dz);
-          long neighbor_vid = GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(n_idx);
+          long neighbor_vid = spatial_index->getGrid().getFlatVoxelId(n_idx);
           std::vector<int> nodes = spatial_index->getNodesInVoxel(neighbor_vid);
           for (int nid : nodes) {
               if (nid < 0 || nid >= (int)danger_levels_.size())
@@ -354,7 +354,7 @@ void InstantaneousSafetyStrategy::updateDangerField(
           vvd.danger = danger_val;
           manager.debug_voxels_.push_back(vvd);
 
-          std::vector<int> nodes = spatial_index->getNodesInVoxel(GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(Eigen::Vector3i(x,y,z)));
+          std::vector<int> nodes = spatial_index->getNodesInVoxel(spatial_index->getGrid().getFlatVoxelId(Eigen::Vector3i(x,y,z)));
           for (int nid : nodes) {
               if (danger_val > manager.getDangerLevel(nid))
                 manager.setDangerLevel(nid, danger_val);
@@ -499,7 +499,7 @@ void TimeDecaySafetyStrategy::updateDangerField(
           for (int dz2 = -1; dz2 <= 1; ++dz2) {
             for (int dy2 = -1; dy2 <= 1; ++dy2) {
               for (int dx2 = -1; dx2 <= 1; ++dx2) {
-                std::vector<int> nodes = spatial_index->getNodesInVoxel(GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(Eigen::Vector3i(x+dx2, y+dy2, z+dz2)));
+                std::vector<int> nodes = spatial_index->getNodesInVoxel(spatial_index->getGrid().getFlatVoxelId(Eigen::Vector3i(x+dx2, y+dy2, z+dz2)));
                 float dist_decay =
                     (dx2 == 0 && dy2 == 0 && dz2 == 0) ? 1.0f : 0.8f;
                 float effective_val = val * dist_decay;

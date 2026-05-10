@@ -36,7 +36,7 @@ public:
    */
   DenseSpatialIndex(double res, const Eigen::Vector3d &min_bounds,
                     const Eigen::Vector3d &max_bounds)
-      : resolution_(res), world_min_(min_bounds) {
+      : grid_(res), world_min_(min_bounds) {
 
     dims_ = ((max_bounds - min_bounds) / res)
                 .array()
@@ -50,7 +50,9 @@ public:
               << " (" << headers_.size() << " voxels)" << std::endl;
   }
 
-  double getVoxelSize() const override { return resolution_; }
+  double getVoxelSize() const override { return grid_.getVoxelSize(); }
+  ::GNG::Analysis::IndexVoxelGrid& getGrid() { return grid_; }
+  const ::GNG::Analysis::IndexVoxelGrid& getGrid() const { return grid_; }
 
   Eigen::Vector3d getWorldMin() const override { return world_min_; }
 
@@ -76,7 +78,7 @@ public:
         ifs.read(reinterpret_cast<char *>(&version), sizeof(uint32_t));        ifs.read(reinterpret_cast<char *>(&file_res), sizeof(float));
         
         // Auto-adopt resolution from file
-        resolution_ = (double)file_res;
+        grid_.setVoxelSize((double)file_res);
 
         if (version >= 2) {
             float min_b[3], max_b[3];
@@ -86,16 +88,16 @@ public:
             // FORCE adopt workspace bounds and resolution from file to ensure efficiency
             world_min_ = Eigen::Vector3d((double)min_b[0], (double)min_b[1], (double)min_b[2]);
             Eigen::Vector3d world_max((double)max_b[0], (double)max_b[1], (double)max_b[2]);
-            resolution_ = (double)file_res;
+            grid_.setVoxelSize((double)file_res);
 
             // Re-calculate grid dimensions and offset based on file header
-            dims_ = ((world_max - world_min_) / resolution_)
-                        .array().ceil().cast<int>().cwiseMax(1);
-            index_offset_ = (world_min_.array() / resolution_).floor().cast<int>();
+            dims_ = ((world_max - world_min_) / grid_.getVoxelSize())
+                        .array().ceil().template cast<int>().cwiseMax(1);
+            index_offset_ = (world_min_.array() / grid_.getVoxelSize()).floor().template cast<int>();
 
             // Re-allocate headers to match the optimal bounds from the file
             headers_.assign(dims_.x() * dims_.y() * dims_.z(), {0, 0});
-            std::cout << "[DenseSpatialIndex] Adopted File Config: Res=" << resolution_ << "m, Dims=" << dims_.transpose() << std::endl;
+            std::cout << "[DenseSpatialIndex] Adopted File Config: Res=" << grid_.getVoxelSize() << "m, Dims=" << dims_.transpose() << std::endl;
         } else {
             std::cout << "[DenseSpatialIndex] Version 1 VLUT: Adopting resolution " << file_res << "m (using default bounds)" << std::endl;
         }
@@ -127,7 +129,7 @@ public:
       ifs.read(reinterpret_cast<char *>(&raw_buffer[i].dist), sizeof(float));
       ifs.read(reinterpret_cast<char *>(&raw_buffer[i].lid), sizeof(int));
 
-      Eigen::Vector3i v_idx = GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(raw_buffer[i].vid);
+      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(raw_buffer[i].vid);
       Eigen::Vector3i g_idx = v_idx - index_offset_;
 
       if ((g_idx.array() >= 0).all() && (g_idx.array() < dims_.array()).all()) {
@@ -153,7 +155,7 @@ public:
     // Step 3: Populate node_data_ using the offsets
     for (size_t i = 0; i < total_relations; ++i) {
       // Use the raw voxel index from the file
-      Eigen::Vector3i v_idx = GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(raw_buffer[i].vid);
+      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(raw_buffer[i].vid);
       
       // Convert world-voxel-index to local-grid-index using the offset
       Eigen::Vector3i g_idx = v_idx - index_offset_;
@@ -184,8 +186,8 @@ public:
   }
 
   long getVoxelId(const Eigen::Vector3d &pos) const override {
-    Eigen::Vector3i idx = (pos.array() / resolution_).floor().cast<int>();
-    return GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx);
+    Eigen::Vector3i idx = (pos.array() / grid_.getVoxelSize()).floor().cast<int>();
+    return grid_.getFlatVoxelId(idx);
   }
 
   void queryAABB(const Eigen::Vector3d &min_pt, const Eigen::Vector3d &max_pt,
@@ -193,12 +195,12 @@ public:
                  std::vector<int> &danger_counts, float threshold,
                  int delta) const override {
 
-    Eigen::Vector3i start_idx = ((min_pt - world_min_).array() / resolution_)
+    Eigen::Vector3i start_idx = ((min_pt - world_min_).array() / grid_.getVoxelSize())
                                     .floor()
                                     .cast<int>()
                                     .cwiseMax(0);
     Eigen::Vector3i end_idx =
-        ((max_pt - world_min_).array() / resolution_).ceil().cast<int>();
+        ((max_pt - world_min_).array() / grid_.getVoxelSize()).ceil().cast<int>();
 
     end_idx = end_idx.cwiseMin(dims_ - Eigen::Vector3i::Ones()).cwiseMax(0);
     start_idx = start_idx.cwiseMin(dims_ - Eigen::Vector3i::Ones());
@@ -237,8 +239,7 @@ public:
                     std::vector<int> &counts, int delta,
                     float threshold = -1.0f) const override {
     for (long vid : voxel_ids) {
-      Eigen::Vector3i v_idx =
-          GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+      Eigen::Vector3i v_idx = grid_.getIndexFromFlatId(vid);
 
       Eigen::Vector3i g_idx = v_idx - index_offset_;
 
@@ -270,7 +271,7 @@ public:
   std::vector<int>
   getNodesInVoxel(const Eigen::Vector3d &point) const override {
     Eigen::Vector3i g_idx =
-        ((point - world_min_).array() / resolution_).floor().cast<int>();
+        ((point - world_min_).array() / grid_.getVoxelSize()).floor().cast<int>();
 
     if ((g_idx.array() < 0).any() || (g_idx.array() >= dims_.array()).any()) {
       return {};
@@ -298,7 +299,7 @@ public:
 
   std::vector<int> getNodesInVoxel(long voxel_id) const override {
     Eigen::Vector3i v_idx =
-        GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(voxel_id);
+        grid_.getIndexFromFlatId(voxel_id);
     Eigen::Vector3i g_idx = v_idx - index_offset_;
 
     if ((g_idx.array() < 0).any() || (g_idx.array() >= dims_.array()).any()) {
@@ -331,13 +332,13 @@ public:
   std::pair<const int *, int>
   getNodesInVoxelRaw(const Eigen::Vector3d &p_voxel) const {
     Eigen::Vector3i g_idx =
-        ((p_voxel - world_min_).array() / resolution_).floor().cast<int>();
+        ((p_voxel - world_min_).array() / grid_.getVoxelSize()).floor().cast<int>();
     return getNodesInVoxelRawByIndex(g_idx);
   }
 
   std::pair<const Relation *, int> getRelationsInVoxelRaw(long voxel_id) const {
     Eigen::Vector3i v_idx =
-        GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(voxel_id);
+        grid_.getIndexFromFlatId(voxel_id);
     Eigen::Vector3i g_idx = v_idx - index_offset_;
     return getRelationsInVoxelRawByIndex(g_idx);
   }
@@ -365,7 +366,7 @@ public:
     return {nullptr, 0};
   }
 
-  double getResolution() const { return resolution_; }
+  double getResolution() const { return grid_.getVoxelSize(); }
   const Eigen::Vector3i &getDims() const { return dims_; }
 
   // --- Dynamic Update Implementation ---
@@ -384,7 +385,7 @@ public:
     if (is_static_) return;
     // Calculate Voxel ID
     Eigen::Vector3i g_idx =
-        ((pos - world_min_).array() / resolution_).floor().cast<int>();
+        ((pos - world_min_).array() / grid_.getVoxelSize()).floor().cast<int>();
 
     if ((g_idx.array() >= 0).all() && (g_idx.array() < dims_.array()).all()) {
       int flat_g_idx =
@@ -393,7 +394,7 @@ public:
       // Calculate distance from voxel center (approximation)
       Eigen::Vector3d voxel_center =
           world_min_ +
-          (g_idx.cast<double>() + Eigen::Vector3d(0.5, 0.5, 0.5)) * resolution_;
+          (g_idx.cast<double>() + Eigen::Vector3d(0.5, 0.5, 0.5)) * grid_.getVoxelSize();
       float dist = (float)(pos - voxel_center).norm();
 
       pending_updates_[flat_g_idx].push_back({id, dist, -1});
@@ -425,7 +426,7 @@ public:
   }
 
 private:
-  double resolution_;
+  ::GNG::Analysis::IndexVoxelGrid grid_;
   Eigen::Vector3d world_min_;
   Eigen::Vector3i dims_;
   Eigen::Vector3i index_offset_;

@@ -2,13 +2,14 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <mutex>
 #include <map>
+#include "common/constants.hpp"
 
 class JointStateMuxNode : public rclcpp::Node {
 public:
   JointStateMuxNode() : Node("joint_state_mux_node") {
     const std::string output_topic = declare_parameter<std::string>("output_topic", "joint_states");
     active_source_ = declare_parameter<std::string>("active_source", "sim");
-    const double hz = declare_parameter<double>("publish_hz", 20.0);
+    const double hz = declare_parameter<double>("publish_hz", ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ);
 
     const std::map<std::string, std::string> source_topics = {
       {"target", declare_parameter<std::string>("target_topic", "target_joint_states")},

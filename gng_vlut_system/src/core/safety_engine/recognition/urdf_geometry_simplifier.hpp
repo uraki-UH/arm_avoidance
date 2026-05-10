@@ -11,6 +11,7 @@
 #include "robot_model/stl_loader.hpp"
 #include "collision/collision_detector.hpp"
 #include "common/resource_utils.hpp"
+#include "common/constants.hpp"
 
 namespace robot_sim {
 namespace recognition {
@@ -49,7 +50,7 @@ public:
                 if (!mesh.vertices.empty()) {
                     // URDFのメッシュスケールを適用（ミリメートルからメートルへの変換等を反映）
                     Eigen::Vector3d scale = col.geometry.size;
-                    if (scale.norm() < 1e-6) scale = Eigen::Vector3d(1, 1, 1); // 未設定時のフォールバック
+                    if (scale.norm() < ::robot_sim::common::Constants::GEOM_EPSILON) scale = Eigen::Vector3d(1, 1, 1); // 未設定時のフォールバック
                     
                     for (size_t i = 0; i < mesh.vertices.size() / 3; ++i) {
                         mesh.vertices[i*3+0] *= scale.x();

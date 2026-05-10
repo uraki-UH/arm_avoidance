@@ -52,59 +52,65 @@ createKinematicChainFromModel(const RobotModel &model,
   std::cout << "Building KinematicChain up to leaf link: " << leaf_name
             << std::endl;
 
-  // 3. Traverse from end-effector back to the root to get the correct order
-  std::vector<const JointProperties *> chain_joints_reversed;
-  std::string current_link_name = leaf_name;
+  // 3. Traverse from end-effector back to the TRUE model root
+  std::vector<const JointProperties *> total_path_reversed;
+  std::string path_link = leaf_name;
+  std::string true_root = model.getRootLinkName();
 
-  std::string root_name = root_link_name.empty() ? model.getRootLinkName() : root_link_name;
-  while (current_link_name != root_name &&
-         !current_link_name.empty()) {
-    const JointProperties *joint = child_link_to_joint[current_link_name];
-    if (!joint) {
-      throw std::runtime_error(
-          "Chain is broken. No joint found for child link: " +
-          current_link_name);
-    }
-    chain_joints_reversed.push_back(joint);
-    current_link_name = joint->parent_link;
+  while (path_link != true_root && !path_link.empty()) {
+    const JointProperties *joint = child_link_to_joint[path_link];
+    if (!joint) break;
+    total_path_reversed.push_back(joint);
+    path_link = joint->parent_link;
   }
 
-  // 4. Add segments to the KinematicChain in base-to-tip order
-  for (auto it = chain_joints_reversed.rbegin();
-       it != chain_joints_reversed.rend(); ++it) {
-    const JointProperties *sim_joint_props = *it;
-    const LinkProperties *sim_link_props =
-        model.getLink(sim_joint_props->child_link);
-    if (!sim_link_props) {
-      throw std::runtime_error("Link not found in model: " +
-                               sim_joint_props->child_link);
+  // 4. Calculate base offset up to root_link_name and build segments after that
+  std::string target_root = root_link_name.empty() ? true_root : root_link_name;
+  Eigen::Isometry3d accumulated_base_tf = Eigen::Isometry3d::Identity();
+  accumulated_base_tf.translate(base_position);
+
+  bool reached_target_root = (true_root == target_root);
+  
+  for (auto it = total_path_reversed.rbegin(); it != total_path_reversed.rend(); ++it) {
+    const JointProperties *sim_joint = *it;
+
+    if (!reached_target_root) {
+      // Accumulate transform into base offset
+      accumulated_base_tf = accumulated_base_tf * sim_joint->origin;
+      if (sim_joint->child_link == target_root) {
+        reached_target_root = true;
+      }
+      continue;
     }
 
-    // Convert simulation::LinkProperties -> kinematics::Link
+    // After target_root, add as segments
+    const LinkProperties *sim_link_props = model.getLink(sim_joint->child_link);
+    if (!sim_link_props) {
+      throw std::runtime_error("Link not found: " + sim_joint->child_link);
+    }
+
     kinematics::Link kin_link;
     kin_link.name = sim_link_props->name;
+    kin_link.vector = sim_joint->origin.translation();
 
-    // The "vector" of a kinematic link is the transform from the previous
-    // joint's origin to the current joint's origin. This is defined in the
-    // current joint's <origin> tag in URDF.
-    kin_link.vector = sim_joint_props->origin.translation();
-
-    // Convert simulation::JointProperties -> kinematics::Joint
     kinematics::Joint kin_joint;
-    kin_joint.name = sim_joint_props->name;
-    kin_joint.type = static_cast<kinematics::JointType>(sim_joint_props->type);
-    kin_joint.local_rotation =
-        Eigen::Quaterniond(sim_joint_props->origin.rotation());
-    kin_joint.axis1 = sim_joint_props->axis;
+    kin_joint.name = sim_joint->name;
+    kin_joint.type = static_cast<kinematics::JointType>(sim_joint->type);
+    kin_joint.local_rotation = Eigen::Quaterniond(sim_joint->origin.rotation());
+    kin_joint.axis1 = sim_joint->axis;
 
-    // Add limits
-    if (sim_joint_props->limits.lower < sim_joint_props->limits.upper) {
-      kin_joint.min_limits = {sim_joint_props->limits.lower};
-      kin_joint.max_limits = {sim_joint_props->limits.upper};
+    if (sim_joint->limits.lower < sim_joint->limits.upper) {
+      kin_joint.min_limits = {sim_joint->limits.lower};
+      kin_joint.max_limits = {sim_joint->limits.upper};
     }
-
-    // Add the joint and link to the chain
     chain.addSegment(kin_link, kin_joint);
+  }
+
+  // Set the calculated base pose
+  chain.setBase(accumulated_base_tf.translation(), Eigen::Quaterniond(accumulated_base_tf.rotation()));
+
+  if (!reached_target_root && !root_link_name.empty()) {
+     std::cerr << "[WARNING Adapter] root_link_name '" << root_link_name << "' was not found in the path from '" << leaf_name << "' to root!" << std::endl;
   }
 
   const LinkProperties *leaf_props = model.getLink(leaf_name);
@@ -168,6 +174,9 @@ createMultiArmKinematicChain(
     arm_entry.chain = createKinematicChainFromModel(
         model, cfg.leaf_link, base_position, cfg.root_link);
     arm_entry.prefix = cfg.prefix;
+    // Store the calculated base as relative offset
+    arm_entry.relative_base_pos = arm_entry.chain.getBasePosition();
+    arm_entry.relative_base_ori = arm_entry.chain.getBaseOrientation();
     arms.push_back(std::move(arm_entry));
   }
 
@@ -218,13 +227,17 @@ MultiArmKinematicAdapter::MultiArmKinematicAdapter(
   syncCachedState();
 }
 
-void MultiArmKinematicAdapter::setBase(
-    const Eigen::Vector3d &position, const Eigen::Quaterniond &orientation) {
-  base_position_ = position;
-  base_orientation_ = orientation;
-  for (auto &arm : arms_) {
-    arm.chain.setBase(position, orientation);
-  }
+void MultiArmKinematicAdapter::setBase(const Eigen::Vector3d &position,
+                                       const Eigen::Quaterniond &orientation) {
+    base_position_ = position;
+    base_orientation_ = orientation;
+    
+    for (auto &arm : arms_) {
+        // Compose global base with relative arm offset
+        Eigen::Vector3d arm_pos = orientation * arm.relative_base_pos + position;
+        Eigen::Quaterniond arm_ori = orientation * arm.relative_base_ori;
+        arm.chain.setBase(arm_pos, arm_ori);
+    }
   forwardKinematics();
 }
 

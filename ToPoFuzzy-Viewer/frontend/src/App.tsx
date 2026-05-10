@@ -5,13 +5,15 @@ import { OrbitControls } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
 import {
+    RobotSettings,
+    Transform,
+    VoxelSettings,
+    EntityType,
     PointCloudData,
     HeatmapSettings,
     GraphNode,
     EditRegion,
     LayerSettings,
-    RobotSettings,
-    Transform,
     STATIC_GNG_DEFAULTS,
     DYNAMIC_GNG_DEFAULTS,
     ClippingPlane,
@@ -24,6 +26,7 @@ import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
+import { VoxelRenderer } from './features/visualization/VoxelRenderer';
 
 function useClippingPlanes() {
     const [planes, setPlanes] = useState<ClippingPlane[]>([]);
@@ -84,12 +87,6 @@ interface EditJobStatus {
     progress: number;
     stage: string;
     error?: string;
-}
-
-interface TransformContext {
-    type: 'cloud' | 'layer' | 'robot' | 'marker';
-    id: string;
-    title: string;
 }
 
 const cloneVec3 = (
@@ -155,6 +152,8 @@ function draftToMinMax(draft: DraftRegion): {
 
 function App() {
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
     const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
     const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
@@ -166,10 +165,10 @@ function App() {
         simpleColor: '#c8ff4a',
     });
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
-    const [transformContext, setTransformContext] = useState<TransformContext | null>(null);
+    const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
+    const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker', id: string, title: string } | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -178,6 +177,7 @@ function App() {
         markerData,
         graphData,
         robotData,
+        voxelData,
         transforms,
         lastJobEvent,
         isConnected,
@@ -210,73 +210,6 @@ function App() {
         stopContinuousPublish,
         getContinuousPublishStatus,
     } = useWebSocket(wsUrl);
-
-    // --- Initialize Entity Settings (Consolidated) ---
-    useEffect(() => {
-        const initialize = (data: any, settings: any, setSettings: any, defaults: any) => {
-            const next = { ...settings };
-            let changed = false;
-            Object.keys(data).forEach(tag => {
-                if (!next[tag]) { next[tag] = { ...defaults }; changed = true; }
-            });
-            if (changed) setSettings(next);
-        };
-
-        initialize(robotData, robotSettings, setRobotSettings, { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } });
-        initialize(markerData, markerSettings, setMarkerSettings, { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } });
-    }, [robotData, markerData]);
-
-    // Graph settings need slightly different logic due to static/dynamic defaults
-    useEffect(() => {
-        setLayerSettings(prev => {
-            const next = { ...prev };
-            let changed = false;
-            Object.keys(graphData).forEach(tag => {
-                if (!next[tag]) {
-                    const isStatic = graphData[tag]?.mode === 'static';
-                    next[tag] = {
-                        visible: true, showNodes: true, showEdges: true, showClusters: false,
-                        opacity: STATIC_GNG_DEFAULTS.opacity,
-                        graphTransform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-                        nodeColor: isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
-                    };
-                    changed = true;
-                }
-            });
-            return changed ? next : prev;
-        });
-    }, [graphData]);
-
-    const handleUpdateRobotSettings = (tag: string, updates: Partial<RobotSettings>) => {
-        setRobotSettings(prev => ({
-            ...prev,
-            [tag]: { ...prev[tag], ...updates }
-        }));
-    };
-
-    const handleRemoveRobot = (tag: string) => {
-        setRobotSettings(prev => {
-            const next = { ...prev };
-            delete next[tag];
-            return next;
-        });
-    };
-
-    const handleUpdateMarkerSettings = (tag: string, updates: Partial<{ visible: boolean, transform?: Transform }>) => {
-        setMarkerSettings(prev => ({
-            ...prev,
-            [tag]: { ...prev[tag], ...updates }
-        }));
-    };
-
-    const handleRemoveMarker = (tag: string) => {
-        setMarkerSettings(prev => {
-            const next = { ...prev };
-            delete next[tag];
-            return next;
-        });
-    };
 
     useEffect(() => {
         connect();
@@ -317,30 +250,6 @@ function App() {
                     })
                 };
                 changed = true;
-            } else if (isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    nodeColor: newSettings[tag].nodeColor || STATIC_GNG_DEFAULTS.nodeColor,
-                    edgeColor: newSettings[tag].edgeColor || STATIC_GNG_DEFAULTS.edgeColor,
-                    graphTransform: newSettings[tag].graphTransform || {
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
-                };
-                changed = true;
-            } else if (!isStatic && (!newSettings[tag].nodeColor || !newSettings[tag].edgeColor)) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    nodeColor: newSettings[tag].nodeColor || DYNAMIC_GNG_DEFAULTS.nodeColor,
-                    edgeColor: newSettings[tag].edgeColor || DYNAMIC_GNG_DEFAULTS.edgeColor,
-                    graphTransform: newSettings[tag].graphTransform || {
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
-                };
-                changed = true;
             }
         });
 
@@ -348,6 +257,50 @@ function App() {
             setLayerSettings(newSettings);
         }
     }, [graphData]);
+
+    // --- Unified Entity Initialization ---
+    useEffect(() => {
+        const configs: Record<string, { data: any, set: any, defaults: any }> = {
+            robot: { 
+                data: robotData, 
+                set: setRobotSettings, 
+                defaults: { 
+                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', 
+                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] } 
+                } 
+            },
+            marker: { 
+                data: markerData, 
+                set: setMarkerSettings, 
+                defaults: { 
+                    visible: true, 
+                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] } 
+                } 
+            },
+            voxel: { data: voxelData, set: setVoxelSettings, defaults: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 } }
+        };
+
+        Object.entries(configs).forEach(([_, { data, set, defaults }]) => {
+            set((prev: any) => {
+                const next = { ...prev };
+                let changed = false;
+                Object.keys(data).forEach(tag => {
+                    if (!next[tag]) { next[tag] = { ...defaults }; changed = true; }
+                });
+                return changed ? next : prev;
+            });
+        });
+    }, [robotData, markerData, voxelData]);
+
+    const updateEntitySettings = (type: EntityType, tag: string, updates: any) => {
+        const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
+        updaters[type]?.((prev: any) => ({ ...prev, [tag]: { ...prev[tag], ...updates } }));
+    };
+
+    const removeEntity = (type: EntityType, tag: string) => {
+        const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
+        updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
+    };
 
     const handleUpdateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
         setLayerSettings(prev => ({
@@ -893,13 +846,13 @@ function App() {
                             getContinuousPublishStatus={getContinuousPublishStatus}
                             robotData={robotData}
                             robotSettings={robotSettings}
-                            onUpdateRobotSettings={handleUpdateRobotSettings}
-                            onRemoveRobot={handleRemoveRobot}
                             markerData={markerData}
                             markerSettings={markerSettings}
-                            onUpdateMarkerSettings={handleUpdateMarkerSettings}
-                            onRemoveMarker={handleRemoveMarker}
+                            onUpdateSettings={updateEntitySettings}
+                            onRemoveEntity={removeEntity}
                             transforms={transforms}
+                            voxelData={voxelData}
+                            voxelSettings={voxelSettings}
                             onOpenTransform={(type, id, title) => setTransformContext(prev => (prev?.type === type && prev?.id === id) ? null : { type, id, title })}
                         />
                     </Sidebar>
@@ -993,7 +946,10 @@ function App() {
                             ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } } },
                             { data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                 <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
-                            ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true }
+                            ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true },
+                            { data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout }} settings={s} tf={tf} />
+                            ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 }, skipIfDisabled: true }
                         ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = (settings as any)[tag] || defaultSettings;
@@ -1038,8 +994,8 @@ function App() {
                     const updaters: any = {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...u } : p)),
                         layer: () => handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        robot: () => handleUpdateRobotSettings(id, { transform: { ...(robotSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        marker: () => handleUpdateMarkerSettings(id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
+                        robot: () => updateEntitySettings('robot', id, { transform: { ...(robotSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
+                        marker: () => updateEntitySettings('marker', id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
                     };
                     updaters[type]?.();
                 }}
@@ -1050,8 +1006,8 @@ function App() {
                     const resets: any = {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...iden } : p)),
                         layer: () => handleUpdateLayerSettings(id, { graphTransform: iden }),
-                        robot: () => handleUpdateRobotSettings(id, { transform: iden }),
-                        marker: () => handleUpdateMarkerSettings(id, { transform: iden })
+                        robot: () => updateEntitySettings('robot', id, { transform: iden }),
+                        marker: () => updateEntitySettings('marker', id, { transform: iden })
                     };
                     resets[type]?.();
                 }}

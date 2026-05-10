@@ -16,16 +16,16 @@ int main(int argc, char** argv) {
     std::string urdf_path = "/tmp/temp_robot_online.urdf";
     
     std::cout << "[Test] Loading URDF: " << urdf_path << std::endl;
-    auto model = simulation::loadRobotFromUrdf(urdf_path);
+    auto model = std::make_shared<::simulation::RobotModel>(::simulation::loadRobotFromUrdf(urdf_path));
     
-    std::vector<simulation::ArmConfig> configs;
+    std::vector<::simulation::ArmConfig> configs;
     // URDF内の名前を確認 (left_link1, right_link1 などが直接あるはず)
     configs.push_back({"base_footprint", "left_end_effector_link", "left_"});
     configs.push_back({"base_footprint", "right_end_effector_link", "right_"});
     
     std::cout << "[Test] Creating KinematicChain (Multi-Arm)..." << std::endl;
-    auto chain_ptr = simulation::createMultiArmKinematicChain(model, configs);
-    std::shared_ptr<kinematics::KinematicChain> chain = std::move(chain_ptr);
+    auto chain_ptr = ::simulation::createMultiArmKinematicChain(*model, configs);
+    std::shared_ptr<::kinematics::KinematicChain> chain = std::move(chain_ptr);
     
     if (!chain) {
         std::cerr << "[FAIL] Failed to create kinematic chain!" << std::endl;
@@ -34,7 +34,9 @@ int main(int argc, char** argv) {
 
     std::cout << "[Test] Initializing Manager..." << std::endl;
     recognition::SelfRecognitionManager manager;
-    manager.initialize(model, chain, 0.02);
+    manager.getIndexGrid()->setVoxelSize(0.02);
+    auto voxel_data = ::simulation::RobotVoxelizer::build(*model, chain, *manager.getIndexGrid());
+    manager.initialize(chain, model, voxel_data, 0.02);
 
     auto verify_tracking = [&](const std::vector<double>& joints, const std::string& label) {
         manager.updateRobotState(joints);

@@ -15,6 +15,7 @@
 
 #include "common/resource_utils.hpp"
 #include "robot_model/urdf_loader.hpp"
+#include "common/constants.hpp"
 
 using json = nlohmann::json;
 
@@ -33,8 +34,8 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     arm_leaf_link_names_ = declare_parameter<std::string>("arm_leaf_link_names", "");
     joint_state_topic_ = declare_parameter<std::string>("joint_state_topic", "joint_states");
     stream_topic_ = declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
-    frame_id_ = declare_parameter<std::string>("frame_id", "world");
-    publish_hz_ = std::max(1.0, declare_parameter<double>("publish_hz", 30.0));
+    frame_id_ = declare_parameter<std::string>("frame_id", ::robot_sim::common::Constants::DEFAULT_WORLD_FRAME);
+    publish_hz_ = std::max(1.0, declare_parameter<double>("publish_hz", ::robot_sim::common::Constants::DEFAULT_VIEWER_HZ));
 
     const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
     if (!loadRobotDescription(urdf_content_, resolved_urdf_path)) {
@@ -166,13 +167,13 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     
     json robot;
     robot["timestamp"] = has_joint_state_ 
-        ? (static_cast<double>(last_joint_state_stamp_.sec) + last_joint_state_stamp_.nanosec * 1e-9)
+        ? (static_cast<double>(last_joint_state_stamp_.sec) + last_joint_state_stamp_.nanosec * ::robot_sim::common::Constants::NANO_TO_SEC)
         : this->now().seconds();
     robot["frameId"] = frame_id_;
 
-    if (frame_id_ != "world") {
+    if (frame_id_ != ::robot_sim::common::Constants::DEFAULT_WORLD_FRAME) {
         try {
-            auto tf = tf_buffer_->lookupTransform("world", frame_id_, tf2::TimePointZero);
+            auto tf = tf_buffer_->lookupTransform(::robot_sim::common::Constants::DEFAULT_WORLD_FRAME, frame_id_, tf2::TimePointZero);
             last_base_pos_ = {tf.transform.translation.x, tf.transform.translation.y, tf.transform.translation.z};
             last_base_quat_ = {tf.transform.rotation.w, tf.transform.rotation.x, tf.transform.rotation.y, tf.transform.rotation.z};
         } catch (...) {}

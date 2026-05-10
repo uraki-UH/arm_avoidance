@@ -3,6 +3,7 @@
 #include <Eigen/Dense>
 #include <string>
 #include <vector>
+#include "safety_engine/indexing/index_voxel_grid.hpp"
 
 namespace robot_sim {
 namespace analysis {
@@ -16,6 +17,9 @@ namespace analysis {
 class ISpatialIndex {
 public:
   virtual ~ISpatialIndex() = default;
+
+  virtual const ::GNG::Analysis::IndexVoxelGrid& getGrid() const = 0;
+  virtual ::GNG::Analysis::IndexVoxelGrid& getGrid() = 0;
 
   /**
    * @brief Get the minimum bounds of the workspace covered by this index.

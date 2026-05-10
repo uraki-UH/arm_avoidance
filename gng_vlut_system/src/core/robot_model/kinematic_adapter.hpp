@@ -65,6 +65,8 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     kinematics::KinematicChain chain;
     std::string prefix;
+    Eigen::Vector3d relative_base_pos = Eigen::Vector3d::Zero();
+    Eigen::Quaterniond relative_base_ori = Eigen::Quaterniond::Identity();
   };
 
   MultiArmKinematicAdapter() = default;

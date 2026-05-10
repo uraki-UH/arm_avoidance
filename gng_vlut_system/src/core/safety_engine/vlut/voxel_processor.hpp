@@ -16,7 +16,8 @@ namespace analysis {
  */
 class VoxelProcessor {
 public:
-    VoxelProcessor(double voxel_size) : voxel_size_(voxel_size) {}
+    VoxelProcessor(double voxel_size) 
+        : grid_(voxel_size) {}
 
     /**
      * @brief Converts a set of 3D points into a unique list of voxel IDs.
@@ -26,9 +27,10 @@ public:
         std::vector<long> vids;
         vids.reserve(points.size());
 
+        float vs = static_cast<float>(grid_.getVoxelSize());
         for (const auto& p : points) {
-            Eigen::Vector3i idx = (p / (float)voxel_size_).array().floor().cast<int>();
-            vids.push_back(::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx));
+            Eigen::Vector3i idx = (p / vs).array().floor().template cast<int>();
+            vids.push_back(grid_.getFlatVoxelId(idx));
         }
 
         std::sort(vids.begin(), vids.end());
@@ -48,15 +50,16 @@ public:
         std::vector<long> danger_vids;
         danger_vids.reserve(occupied_vids.size() * 27); // Heuristic for 1-voxel dilation
 
+        float vs = static_cast<float>(grid_.getVoxelSize());
         for (long vid : occupied_vids) {
-            Eigen::Vector3i center_idx = ::GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
-            Eigen::Vector3f center_pos = (center_idx.cast<float>() + Eigen::Vector3f::Constant(0.5f)) * (float)voxel_size_;
+            Eigen::Vector3i center_idx = grid_.getIndexFromFlatId(vid);
+            Eigen::Vector3f center_pos = (center_idx.cast<float>() + Eigen::Vector3f::Constant(0.5f)) * vs;
 
             // Use the sphere generator utility
             auto sphere_vids = ::common::geometry::VoxelUtils::getSphereVoxels(
-                center_pos, radius, (float)voxel_size_, 
-                [](const Eigen::Vector3i& idx) {
-                    return ::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx);
+                center_pos, radius, vs, 
+                [this](const Eigen::Vector3i& idx) {
+                    return grid_.getFlatVoxelId(idx);
                 });
             
             danger_vids.insert(danger_vids.end(), sphere_vids.begin(), sphere_vids.end());
@@ -69,8 +72,11 @@ public:
         return danger_vids;
     }
 
+    ::GNG::Analysis::IndexVoxelGrid& getGrid() { return grid_; }
+    const ::GNG::Analysis::IndexVoxelGrid& getGrid() const { return grid_; }
+
 private:
-    double voxel_size_;
+    ::GNG::Analysis::IndexVoxelGrid grid_;
 };
 
 } // namespace analysis

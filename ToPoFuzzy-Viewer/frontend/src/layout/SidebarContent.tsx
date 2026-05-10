@@ -52,6 +52,9 @@ import {
     MarkerArrayData,
     Transform,
     TransformData,
+    VoxelData,
+    VoxelSettings,
+    EntityType,
 } from '../types';
 
 interface SidebarContentProps {
@@ -141,14 +144,13 @@ interface SidebarContentProps {
 
     robotData: Record<string, RobotData>;
     robotSettings: Record<string, RobotSettings>;
-    onUpdateRobotSettings: (tag: string, updates: Partial<RobotSettings>) => void;
-    onRemoveRobot: (tag: string) => void;
-
     markerData: Record<string, MarkerArrayData>;
     markerSettings: Record<string, { visible: boolean, transform?: Transform }>;
-    onUpdateMarkerSettings: (tag: string, updates: Partial<{ visible: boolean, transform?: Transform }>) => void;
-    onRemoveMarker: (tag: string) => void;
+    voxelData: Record<string, VoxelData>;
+    voxelSettings: Record<string, VoxelSettings>;
 
+    onUpdateSettings: (type: EntityType, tag: string, updates: any) => void;
+    onRemoveEntity: (type: EntityType, tag: string) => void;
     transforms: Record<string, TransformData>;
     onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker', id: string, title: string) => void;
 }
@@ -259,75 +261,51 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             />
                         ))}
 
-                        {Object.entries(props.robotData).map(([tag, data]) => (
-                            <LayerItem
-                                key={`robot-${tag}`}
-                                id={tag}
-                                type="robot"
-                                visible={props.robotSettings[tag]?.visible !== false}
-                                onToggleVisibility={() => props.onUpdateRobotSettings(tag, { visible: !props.robotSettings[tag]?.visible })}
-                                onRemove={() => props.onRemoveRobot(tag)}
-                                onOpenTransform={() => props.onOpenTransform('robot', tag, `Robot: ${tag}`)}
-                            >
-                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                                    <span>Frame:</span>
-                                    <span className="flex items-center gap-1">
-                                        <span
-                                            className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                            title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
-                                        />
-                                        <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
-                                    </span>
-                                </div>
+                        {/* Unified Entity Layers */}
+                        {[
+                            { type: 'robot', data: props.robotData, settings: props.robotSettings, label: 'Source ID', hasTf: true, 
+                              extra: (tag: string, s: any) => (
                                 <div className="mt-2 grid grid-cols-2 gap-2">
-                                    <button
-                                        onClick={() => props.onUpdateRobotSettings(tag, { showVisual: !props.robotSettings[tag]?.showVisual })}
-                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showVisual
-                                            ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
-                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                            }`}
-                                        title={props.robotSettings[tag]?.showVisual ? 'Hide visual model' : 'Show visual model'}
-                                    >
-                                        {props.robotSettings[tag]?.showVisual ? <Eye size={12} /> : <EyeOff size={12} />}
-                                        Visual
+                                    <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn ${s.showVisual ? 'active-indigo' : ''}`}>
+                                        {s.showVisual ? <Eye size={12} /> : <EyeOff size={12} />} Visual
                                     </button>
-                                    <button
-                                        onClick={() => props.onUpdateRobotSettings(tag, { showCollision: !props.robotSettings[tag]?.showCollision })}
-                                        className={`inline-flex h-7 items-center gap-2 rounded-md border px-2 text-[11px] font-medium transition-all ${props.robotSettings[tag]?.showCollision
-                                            ? 'border-[var(--accent-color)]/40 bg-[var(--accent-soft)]/60 text-[var(--text-primary)]'
-                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'
-                                            }`}
-                                        title={props.robotSettings[tag]?.showCollision ? 'Hide collision model' : 'Show collision model'}
-                                    >
-                                        <Box size={12} />
-                                        Collision
+                                    <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn ${s.showCollision ? 'active-orange' : ''}`}>
+                                        <Box size={12} /> Collision
                                     </button>
                                 </div>
-                            </LayerItem>
-                        ))}
-
-                        {Object.entries(props.markerData).map(([tag, data]) => (
-                            <LayerItem
-                                key={`marker-${tag}`}
-                                id={tag}
-                                type="marker"
-                                visible={props.markerSettings[tag]?.visible !== false}
-                                onToggleVisibility={() => props.onUpdateMarkerSettings(tag, { visible: !props.markerSettings[tag]?.visible })}
-                                onRemove={() => props.onRemoveMarker(tag)}
-                                onOpenTransform={() => props.onOpenTransform('marker', tag, `Markers: ${tag}`)}
-                            >
-                                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                                    <span>Frame:</span>
-                                    <span className="flex items-center gap-1">
-                                        <span
-                                            className={`inline-block h-1.5 w-1.5 rounded-full ${data.frameId && data.frameId !== 'world' && props.transforms[data.frameId] ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400'}`}
-                                            title={(data.frameId && props.transforms[data.frameId]) ? 'TF active' : 'TF not yet received'}
-                                        />
-                                        <span className="font-mono opacity-70">{data.frameId || 'world'}</span>
-                                    </span>
-                                </div>
-                            </LayerItem>
-                        ))}
+                              )},
+                            { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
+                            { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', 
+                              extra: (_: string, __: any, d: any) => (
+                                <div className="mt-1 text-[10px] text-[var(--text-secondary)]">Resolution: <span className="text-[var(--text-primary)]">{d.layout?.voxelSize}m</span></div>
+                              )}
+                        ].map(({ type, data, settings, label, hasTf, extra }) => 
+                            Object.entries(data).map(([tag, d]: [string, any]) => {
+                                const s = settings[tag] || {};
+                                return (
+                                    <LayerItem key={`${type}-${tag}`} id={tag} type={type as any} visible={s.visible !== false}
+                                        onToggleVisibility={() => props.onUpdateSettings(type as EntityType, tag, { visible: !s.visible })}
+                                        onRemove={() => props.onRemoveEntity(type as EntityType, tag)}
+                                        onOpenTransform={() => hasTf && props.onOpenTransform(type as any, tag, `${type}: ${tag}`)}
+                                    >
+                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                            <span className="opacity-70">{label}:</span>
+                                            <span className="font-mono opacity-70">{tag}</span>
+                                        </div>
+                                        {hasTf && (
+                                            <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                                <span>Frame:</span>
+                                                <span className="flex items-center gap-1">
+                                                    <span className={`tf-dot ${d.frameId && d.frameId !== 'world' && props.transforms[d.frameId] ? 'active' : 'inactive'}`} />
+                                                    <span className="font-mono opacity-70">{d.frameId || 'world'}</span>
+                                                </span>
+                                            </div>
+                                        )}
+                                        {extra?.(tag, s, d)}
+                                    </LayerItem>
+                                );
+                            })
+                        )}
                     </div>
 
                     {props.pointClouds.length === 0 && !hasGngLayer && (
@@ -388,6 +366,47 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     />
                 </div>
             </CollapsibleSection>
+
+            {Object.keys(props.voxelData).length > 0 && (
+                <CollapsibleSection title="Voxel Rendering" icon={<Box size={16} />} defaultOpen={true}>
+                    <div className="surface-muted space-y-4 p-3">
+                        {Object.entries(props.voxelData).map(([tag]) => {
+                            const settings = props.voxelSettings[tag] || { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 };
+                            return (
+                                <div key={tag} className="space-y-3 border-b border-white/5 pb-3 last:border-0 last:pb-0">
+                                    <p className="text-[11px] font-semibold text-[var(--text-primary)]">{tag}</p>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] text-[var(--text-secondary)]">Wireframe</label>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={settings.wireframe}
+                                            onChange={(e) => props.onUpdateSettings('voxel', tag, { wireframe: e.target.checked })}
+                                            className="h-3 w-3 accent-[var(--accent-color)]"
+                                        />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] text-[var(--text-secondary)]">Color</label>
+                                        <input 
+                                            type="color" 
+                                            value={settings.color}
+                                            onChange={(e) => props.onUpdateSettings('voxel', tag, { color: e.target.value })}
+                                            className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent"
+                                        />
+                                    </div>
+                                    <ControlSlider
+                                        label="Opacity"
+                                        value={settings.opacity}
+                                        min={0}
+                                        max={1}
+                                        step={0.05}
+                                        onChange={(v) => props.onUpdateSettings('voxel', tag, { opacity: v })}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                </CollapsibleSection>
+            )}
 
             {hasGngLayer && (
                 <CollapsibleSection title="Topology Display" icon={<Box size={16} />} defaultOpen={false}>

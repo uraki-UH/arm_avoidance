@@ -31,6 +31,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
+find_package(voxel_msgs REQUIRED)#追加
 find_package(rclcpp_components REQUIRED)
 find_package(urdf REQUIRED)
 find_package(urdfdom REQUIRED)

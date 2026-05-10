@@ -6,6 +6,7 @@
 #include "safety_engine/indexing/dense_spatial_index.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"
+#include "common/constants.hpp"
 
 namespace robot_sim {
 namespace analysis {
@@ -17,7 +18,7 @@ struct SafetySystemContext {
     std::shared_ptr<::robot_sim::analysis::VoxelProcessor> processor;
 
     size_t num_nodes = 0;
-    double voxel_size = 0.02;
+    double voxel_size = ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE;
 
     void update(const std::vector<long>& occupied_vids, const std::vector<long>& danger_vids) {
         if (mapper) {
@@ -48,7 +49,7 @@ public:
         // 2. Load Spatial Index (V-LUT)
         // Note: Default bounds will be overridden by the file header (Version 2)
         auto index = std::make_shared<::robot_sim::analysis::DenseSpatialIndex>(
-            0.02, Eigen::Vector3d::Zero(), Eigen::Vector3d::Ones());
+            ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE, Eigen::Vector3d::Zero(), Eigen::Vector3d::Ones());
         
         if (!index->load(vlut_bin)) {
             std::cerr << "[SafetySystemLoader] Failed to load VLUT: " << vlut_bin << std::endl;
@@ -63,6 +64,7 @@ public:
 
         // 4. Initialize Processor
         ctx->processor = std::make_shared<::robot_sim::analysis::VoxelProcessor>(ctx->voxel_size);
+        ctx->processor->getGrid() = ctx->spatial_index->getGrid();
 
         std::cout << "[SafetySystemLoader] Successfully initialized context with " 
                   << ctx->num_nodes << " nodes." << std::endl;

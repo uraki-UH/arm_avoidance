@@ -78,13 +78,13 @@ public:
    * @brief Compute the centroid of a set of voxels.
    */
   static Eigen::Vector3f calculateCentroid(const std::vector<long> &voxels,
-                                           float voxel_size) {
+                                           const ::GNG::Analysis::IndexVoxelGrid &grid) {
     if (voxels.empty())
       return Eigen::Vector3f::Zero();
+    float voxel_size = static_cast<float>(grid.getVoxelSize());
     Eigen::Vector3f sum = Eigen::Vector3f::Zero();
     for (long vid : voxels) {
-      Eigen::Vector3i idx =
-          ::GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
+      Eigen::Vector3i idx = grid.getIndexFromFlatId(vid);
       sum += (idx.cast<float>() + Eigen::Vector3f::Constant(0.5f)) * voxel_size;
     }
     return sum / (float)voxels.size();

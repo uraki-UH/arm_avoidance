@@ -15,6 +15,7 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "common/resource_utils.hpp"
+#include "common/constants.hpp"
 
 #include <Eigen/Geometry>
 
@@ -64,16 +65,16 @@ public:
         // Parameters
         this->declare_parameter("gng_model_path", "");
         this->declare_parameter("vlut_path", "");
-        this->declare_parameter("voxel_size", 0.02);
+        this->declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
         this->declare_parameter("dilation_radius", 1);
         this->declare_parameter("data_directory", "gng_results");
         this->declare_parameter("experiment_id", "standard_train");
         this->declare_parameter("gng_model_filename", "gng.bin");
         this->declare_parameter("vlut_filename", "vlut.bin");
         this->declare_parameter("robot_urdf_path", "");
-        this->declare_parameter("base_frame", "base_link");
-        this->declare_parameter("publish_hz", 20.0);
-        this->declare_parameter("safety_margin", 0.05);
+        this->declare_parameter("base_frame", ::robot_sim::common::Constants::DEFAULT_BASE_FRAME);
+        this->declare_parameter("publish_hz", ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ);
+        this->declare_parameter("safety_margin", ::robot_sim::common::Constants::DEFAULT_SAFETY_MARGIN);
         this->declare_parameter("tag", "dynamic");
         this->declare_parameter("mode", "dynamic");
 
@@ -103,29 +104,6 @@ public:
 
         // Initialize Processor
         processor_ = std::make_unique<robot_sim::analysis::VoxelProcessor>(voxel_size_);
-
-        // Initialize Self Recognition
-        const std::string robot_urdf_path = this->get_parameter("robot_urdf_path").as_string();
-        if (!robot_urdf_path.empty()) {
-            const std::string resolved_urdf = robot_sim::common::resolvePath(robot_urdf_path);
-            const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-            const std::string resource_root = pkg_share; // Default
-            const std::string mesh_root = pkg_share + "/urdf/topoarm_robot_model/meshes";
-
-            auto robot_model = simulation::loadRobotFromUrdf(resolved_urdf, resource_root, mesh_root);
-            chain_ = std::make_shared<kinematics::KinematicChain>(
-                simulation::createKinematicChainFromModel(robot_model, ""));
-            self_rec_manager_ = std::make_unique<recognition::SelfRecognitionManager>();
-            self_rec_manager_->initialize(robot_model, chain_, voxel_size_);
-
-            // Build joint index map for fast lookup
-            for (int i = 0; i < chain_->getNumJoints(); ++i) {
-                if (chain_->getJointDOF(i) > 0) {
-                    active_joint_names_.push_back(chain_->getJointName(i));
-                }
-            }
-            RCLCPP_INFO(this->get_logger(), "Self Recognition initialized for %zu joints.", active_joint_names_.size());
-        }
 
         // ROS Interfaces
         point_cloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
@@ -250,36 +228,10 @@ private:
             all_points.push_back(sensor_to_base * Eigen::Vector3d(*iter_x, *iter_y, *iter_z));
         }
 
-        // 2. 自己認識フィルタ（Broad Phase AABB + Narrow Phase Inverse Lookup）
-        std::vector<Eigen::Vector3d> filtered_points;
-        std::vector<Eigen::Vector3d> self_points;
-        
-        if (self_rec_manager_ && !latest_joints_.name.empty()) {
-            std::vector<double> current_joints(active_joint_names_.size(), 0.0);
-            std::lock_guard<std::mutex> lock(update_mutex_);
-            
-            std::unordered_map<std::string, double> incoming_map;
-            for (size_t i = 0; i < latest_joints_.name.size(); ++i) {
-                if (i < latest_joints_.position.size()) {
-                    incoming_map[latest_joints_.name[i]] = latest_joints_.position[i];
-                }
-            }
-            
-            for (size_t i = 0; i < active_joint_names_.size(); ++i) {
-                if (incoming_map.count(active_joint_names_[i])) {
-                    current_joints[i] = incoming_map[active_joint_names_[i]];
-                }
-            }
-            
-            self_rec_manager_->filterPointCloud(all_points, current_joints, filtered_points, self_points);
-        } else {
-            filtered_points = all_points;
-        }
-
         // 3. ボクセル化と安全判定の更新
         std::vector<Eigen::Vector3f> float_points;
-        float_points.reserve(filtered_points.size());
-        for (const auto& p : filtered_points) float_points.push_back(p.cast<float>());
+        float_points.reserve(all_points.size());
+        for (const auto& p : all_points) float_points.push_back(p.cast<float>());
 
         auto occupied_vids = processor_->voxelize(float_points);
         auto danger_vids = processor_->dilate(occupied_vids, (float)safety_margin_);
@@ -287,9 +239,8 @@ private:
         updateSafety(occupied_vids, danger_vids);
     }
 
-    void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
-        std::lock_guard<std::mutex> lock(update_mutex_);
-        latest_joints_ = *msg;
+    void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr) {
+        // No longer needed for self-recognition in monitor node
     }
 
     void publishTimerCallback() {
@@ -404,9 +355,6 @@ private:
     // Members
     std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
     std::unique_ptr<robot_sim::analysis::VoxelProcessor> processor_;
-    std::unique_ptr<recognition::SelfRecognitionManager> self_rec_manager_;
-    std::shared_ptr<kinematics::KinematicChain> chain_;
-    std::vector<std::string> active_joint_names_;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -426,7 +374,6 @@ private:
     rclcpp::TimerBase::SharedPtr viz_timer_;
 
     std::mutex update_mutex_;
-    sensor_msgs::msg::JointState latest_joints_;
     std::vector<long> latest_occ_vids_;
     std::vector<long> latest_dan_vids_;
 

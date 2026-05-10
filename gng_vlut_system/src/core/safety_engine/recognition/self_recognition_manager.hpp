@@ -4,108 +4,51 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <unordered_map>
-#include <unordered_set>
-#include <iostream>
-#include <algorithm>
 #include <map>
+#include <unordered_set>
+#include <algorithm>
+
+#include "robot_model/robot_model.hpp"
+#include "robot_model/robot_voxelizer.hpp"
+#include "kinematics/kinematic_chain.hpp"
+#include "common/voxel_utils.hpp"
+#include "safety_engine/indexing/index_voxel_grid.hpp"
 
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <geometry_msgs/msg/point.hpp>
 
-#include "robot_model/robot_model.hpp"
-#include "robot_model/kinematic_adapter.hpp"
-#include "safety_engine/recognition/urdf_geometry_simplifier.hpp"
-#include "safety_engine/recognition/primitive_spatial_mapper.hpp"
-#include "common/voxel_utils.hpp"
-#include "safety_engine/indexing/index_voxel_grid.hpp"
-
 namespace robot_sim {
 namespace recognition {
 
-struct LinkVoxelData {
-    std::string name;
-    std::vector<Eigen::Vector3d> local_voxel_centers;
-    Eigen::Vector3d local_min;
-    Eigen::Vector3d local_max;
-};
-
+/**
+ * @brief 自己認識・ロボット干渉除去の実行管理クラス
+ */
 class SelfRecognitionManager {
 public:
-    // 第4引数に確実にデフォルト値を設定し、引数3つでも呼べるようにする
-    void initialize(const simulation::RobotModel& model, 
-                    std::shared_ptr<kinematics::KinematicChain> chain,
-                    double voxel_size,
-                    const std::vector<std::string>& exclude_links = std::vector<std::string>()) {
+    void initialize(std::shared_ptr<::kinematics::KinematicChain> chain,
+                    std::shared_ptr<::simulation::RobotModel> model,
+                    const std::vector<::simulation::LinkVoxelData>& voxel_data,
+                    double voxel_size) {
         chain_ = chain;
+        model_ = model;
+        link_data_list_ = voxel_data;
         voxel_size_ = voxel_size;
-        link_data_list_.clear();
-
-        std::unordered_set<std::string> exclude_set(exclude_links.begin(), exclude_links.end());
-        
-        std::cout << "[Recognition] Initializing Manager (Name-based)." << std::endl;
-
-        for (int i = 0; i < chain_->getNumJoints(); ++i) {
-            std::string full_name = chain_->getLinkName(i);
-            if (exclude_set.count(full_name)) continue;
-
-            const simulation::LinkProperties* props = findLinkProperties(model, full_name);
-            if (!props || props->collisions.empty()) continue;
-
-            auto slink = UrdfGeometrySimplifier::simplifyLink(*props);
-            
-            LinkVoxelData data;
-            data.name = full_name;
-            data.local_min.setConstant(std::numeric_limits<double>::max());
-            data.local_max.setConstant(std::numeric_limits<double>::lowest());
-
-            std::unordered_set<long> vids;
-            for (size_t m_idx = 0; m_idx < slink.meshes.size(); ++m_idx) {
-                const auto& mesh = slink.meshes[m_idx];
-                const auto& origin = slink.mesh_origins[m_idx];
-                for (size_t t = 0; t < mesh.vertices.size() / 9; ++t) {
-                    Eigen::Vector3d v[3];
-                    for(int k=0; k<3; ++k) v[k] = origin * Eigen::Vector3d(mesh.vertices[t*9+k*3], mesh.vertices[t*9+k*3+1], mesh.vertices[t*9+k*3+2]);
-                    double d12 = (v[1]-v[0]).norm(), d13 = (v[2]-v[0]).norm();
-                    int s1 = std::max(1, (int)std::ceil(d12/voxel_size_)), s2 = std::max(1, (int)std::ceil(d13/voxel_size_));
-                    for(int i1=0; i1<=s1; ++i1) {
-                        double t1 = (double)i1/s1;
-                        for(int i2=0; i2<=std::max(0, (int)(s2*(1.0-t1))); ++i2) {
-                            double t2 = (double)i2/s2;
-                            Eigen::Vector3d p = v[0] + t1*(v[1]-v[0]) + t2*(v[2]-v[0]);
-                            vids.insert(::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(::common::geometry::VoxelUtils::worldToVoxel(p.cast<float>(), (float)voxel_size_)));
-                        }
-                    }
-                }
-            }
-
-            for (long vid : vids) {
-                Eigen::Vector3i idx = ::GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
-                Eigen::Vector3d p = ::common::geometry::VoxelUtils::voxelToWorld(idx, (float)voxel_size_).cast<double>();
-                data.local_voxel_centers.push_back(p);
-                data.local_min = data.local_min.cwiseMin(p);
-                data.local_max = data.local_max.cwiseMax(p);
-            }
-
-            if (!data.local_voxel_centers.empty()) {
-                link_data_list_.push_back(data);
-                std::cout << "[Recognition]   Mapped: " << full_name << std::endl;
-            }
-        }
+        grid_.setVoxelSize(voxel_size);
     }
 
     void updateRobotState(const std::vector<double>& joints) {
         if (chain_) chain_->updateKinematics(joints);
-        current_joints_ = joints;
     }
 
     std::map<std::string, Eigen::Isometry3d> getCurrentLinkTransforms() {
-        if (!chain_) return {};
         std::map<std::string, Eigen::Isometry3d> link_tfs;
+        if (!chain_ || !model_) return link_tfs;
+
+        auto fixed_info = model_->getFixedLinkInfo();
         chain_->buildAllLinkTransforms(
             chain_->getLinkPositions(), 
             chain_->getLinkOrientations(), 
-            {}, 
+            fixed_info, 
             link_tfs
         );
         return link_tfs;
@@ -121,7 +64,8 @@ public:
                 const auto& tf = tfs.at(data.name);
                 for (const auto& lp : data.local_voxel_centers) {
                     Eigen::Vector3d wp = tf * lp;
-                    all_vids.push_back(::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(::common::geometry::VoxelUtils::worldToVoxel(wp.cast<float>(), (float)voxel_size_)));
+                    all_vids.push_back(grid_.getFlatVoxelId(
+                        ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_)));
                 }
             }
         }
@@ -130,9 +74,17 @@ public:
         return all_vids;
     }
 
-    std::vector<long> getSelfVoxelMask(const std::vector<double>& joints) {
+    void filterPointCloud(const std::vector<Eigen::Vector3d>& all_points, const std::vector<double>& joints, 
+                          std::vector<Eigen::Vector3d>& filtered, std::vector<Eigen::Vector3d>& self) {
         updateRobotState(joints);
-        return getSelfVoxelMask();
+        auto vids = getSelfVoxelMask();
+        std::unordered_set<long> vset(vids.begin(), vids.end());
+        filtered.clear(); self.clear();
+        for (const auto& p : all_points) {
+            long vid = grid_.getFlatVoxelId(
+                ::common::geometry::VoxelUtils::worldToVoxel(p.template cast<float>(), (float)voxel_size_));
+            if (vset.count(vid)) self.push_back(p); else filtered.push_back(p);
+        }
     }
 
     struct VisualizationMarkers {
@@ -159,15 +111,14 @@ public:
                 m.color.g = 1.0f; m.color.a = 0.5f; m.pose.orientation.w = 1.0;
                 for (const auto& lp : data.local_voxel_centers) {
                     Eigen::Vector3d wp = tf * lp;
-                    geometry_msgs::msg::Point p; p.x = wp.x(); p.y = wp.y(); p.z = wp.z();
-                    m.points.push_back(p);
+                    geometry_msgs::msg::Point p_msg; p_msg.x = wp.x(); p_msg.y = wp.y(); p_msg.z = wp.z();
+                    m.points.push_back(p_msg);
                 }
                 if (!m.points.empty()) msg.voxels.markers.push_back(m);
 
                 visualization_msgs::msg::Marker b;
                 b.header = m.header; b.ns = "self_aabb"; b.id = marker_id++;
                 b.type = visualization_msgs::msg::Marker::LINE_LIST;
-                b.action = visualization_msgs::msg::Marker::ADD;
                 b.scale.x = 0.002; b.color.r = 1.0f; b.color.g = 0.5f; b.color.a = 0.8f; b.pose.orientation.w = 1.0;
                 Eigen::Vector3d corners[8];
                 for(int i=0; i<8; ++i) {
@@ -193,34 +144,17 @@ public:
         return getVisualizationMarkers(frame_id, time_sec);
     }
 
-    void filterPointCloud(const std::vector<Eigen::Vector3d>& all_points, const std::vector<double>& joints, 
-                          std::vector<Eigen::Vector3d>& filtered, std::vector<Eigen::Vector3d>& self) {
-        updateRobotState(joints);
-        auto vids = getSelfVoxelMask();
-        std::unordered_set<long> vset(vids.begin(), vids.end());
-        filtered.clear(); self.clear();
-        for (const auto& p : all_points) {
-            long vid = ::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(::common::geometry::VoxelUtils::worldToVoxel(p.cast<float>(), (float)voxel_size_));
-            if (vset.count(vid)) self.push_back(p); else filtered.push_back(p);
-        }
-    }
-
-    const std::vector<LinkVoxelData>& getLinkVoxelDataList() const { return link_data_list_; }
-    std::shared_ptr<kinematics::KinematicChain> getKinematicChain() { return chain_; }
+    const std::vector<::simulation::LinkVoxelData>& getLinkVoxelDataList() const { return link_data_list_; }
+    std::shared_ptr<::kinematics::KinematicChain> getKinematicChain() { return chain_; }
+    ::GNG::Analysis::IndexVoxelGrid* getIndexGrid() { return &grid_; }
+    double getVoxelSize() const { return voxel_size_; }
 
 private:
-    const simulation::LinkProperties* findLinkProperties(const simulation::RobotModel& model, const std::string& name) {
-        if (model.getLinks().count(name)) return &model.getLinks().at(name);
-        for (const auto& [m_name, m_props] : model.getLinks()) {
-            if (name.size() > m_name.size() && name.compare(name.size() - m_name.size(), m_name.size(), m_name) == 0) return &m_props;
-        }
-        return nullptr;
-    }
-
-    std::shared_ptr<kinematics::KinematicChain> chain_;
+    std::shared_ptr<::kinematics::KinematicChain> chain_;
+    std::shared_ptr<::simulation::RobotModel> model_;
     double voxel_size_;
-    std::vector<LinkVoxelData> link_data_list_;
-    std::vector<double> current_joints_;
+    std::vector<::simulation::LinkVoxelData> link_data_list_;
+    ::GNG::Analysis::IndexVoxelGrid grid_{0.0}; // initialize()で上書き必須
 };
 
 } // namespace recognition

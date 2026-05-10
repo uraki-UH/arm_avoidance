@@ -1,93 +1,99 @@
 #include "gng_vlut_system/self_recognition/self_recognition_viz_node.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
-
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
 #include <algorithm>
 #include <chrono>
-#include <cmath>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <unordered_set>
-#include <unordered_map>
-#include <vector>
-
-#include <Eigen/Core>
-
-#include <geometry_msgs/msg/point.hpp>
-#include <geometry_msgs/msg/pose.hpp>
-#include <visualization_msgs/msg/marker.hpp>
 
 #include "common/resource_utils.hpp"
-#include "common/voxel_utils.hpp"
 #include "safety_engine/recognition/self_recognition_manager.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/urdf_loader.hpp"
+#include "common/constants.hpp"
 
-namespace {
-geometry_msgs::msg::Point makePoint(double x, double y, double z) {
-    geometry_msgs::msg::Point p;
-    p.x = x;
-    p.y = y;
-    p.z = z;
-    return p;
-}
-
-geometry_msgs::msg::Pose poseFromIsometry(const Eigen::Isometry3d& tf) {
-    geometry_msgs::msg::Pose pose;
-    pose.position.x = tf.translation().x();
-    pose.position.y = tf.translation().y();
-    pose.position.z = tf.translation().z();
-    const Eigen::Quaterniond q(tf.rotation());
-    pose.orientation.x = q.x();
-    pose.orientation.y = q.y();
-    pose.orientation.z = q.z();
-    pose.orientation.w = q.w();
-    return pose;
-}
-}  // namespace
-
-namespace robot_sim {
-namespace self_recognition {
+namespace robot_sim::self_recognition {
 
 SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & options)
 : Node("self_recognition_viz_node", options) {
-    const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-    const std::string default_urdf = pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro";
-
-    declare_parameter("robot_urdf_path", default_urdf);
+    
+    // パラメータ：計算に必要な最小限の設定
+    declare_parameter("robot_urdf_path", "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro");
     declare_parameter("joint_topic", "/joint_states");
-    declare_parameter("voxel_size", 0.02);
-    declare_parameter("update_hz", 10.0);
-    declare_parameter("marker_frame_id", "world");
-    declare_parameter("publish_self_mask", true);
-    declare_parameter("publish_link_voxels", true);
-    declare_parameter("publish_link_aabb", true);
-    declare_parameter("display_mode", "link_local");
+    declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
+    declare_parameter("update_hz", 20.0); // フィルタリングの精度を上げるため、少し頻度を上げます
+    declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{});
+    declare_parameter<std::vector<std::string>>("leaf_links", std::vector<std::string>{});
+    declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
+    declare_parameter<std::string>("root_link", "");
+ 
+    // ボクセル展開パラメータの宣言
+    declare_parameter("voxel_indexing.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
+    declare_parameter("voxel_indexing.y_shift", ::robot_sim::common::Constants::DEFAULT_Y_SHIFT);
+    declare_parameter("voxel_indexing.z_shift", ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
+    declare_parameter("voxel_indexing.offset", ::robot_sim::common::Constants::DEFAULT_OFFSET);
 
     const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     const double voxel_size_param = get_parameter("voxel_size").as_double();
     const double hz = get_parameter("update_hz").as_double();
-    marker_frame_id_ = get_parameter("marker_frame_id").as_string();
-    publish_self_mask_ = get_parameter("publish_self_mask").as_bool();
-    publish_link_voxels_ = get_parameter("publish_link_voxels").as_bool();
-    publish_link_aabb_ = get_parameter("publish_link_aabb").as_bool();
-    display_world_coordinates_ = get_parameter("display_mode").as_string() == "world";
 
+    // モデルとチェインの構築
     model_ = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
-    chain_ = std::make_shared<kinematics::KinematicChain>(
-        simulation::createKinematicChainFromModel(*model_));
-    fixed_link_info_ = model_->getFixedLinkInfo();
+    auto root_links = get_parameter("root_links").as_string_array();
+    auto leaf_links = get_parameter("leaf_links").as_string_array();
+    std::string global_root_link = get_parameter("root_link").as_string();
+    if (global_root_link.empty()) global_root_link = model_->getRootLinkName();
 
+    // 衝突形状を持つ全リンクと、木構造の全末端リンクを抽出
+    std::vector<std::string> all_collision_links;
+    std::vector<std::string> current_leaf_links = leaf_links;
+
+    for (const auto &[link_name, link_props] : model_->getLinks()) {
+        if (!link_props.collisions.empty()) {
+            all_collision_links.push_back(link_name);
+        }
+        
+        if (leaf_links.empty()) {
+            bool has_child = false;
+            for (const auto &[j_name, j_props] : model_->getJoints()) {
+                if (j_props.parent_link == link_name) { has_child = true; break; }
+            }
+            if (!has_child && link_name != global_root_link) {
+                current_leaf_links.push_back(link_name);
+            }
+        }
+    }
+
+    std::vector<simulation::ArmConfig> arm_configs;
+    for (size_t i = 0; i < current_leaf_links.size(); ++i) {
+        simulation::ArmConfig cfg;
+        cfg.leaf_link = current_leaf_links[i];
+        cfg.prefix = ""; 
+        cfg.root_link = (i < root_links.size() && !root_links[i].empty()) ? root_links[i] : global_root_link;
+        arm_configs.push_back(cfg);
+    }
+
+    auto multi_chain = simulation::createMultiArmKinematicChain(*model_, arm_configs, Eigen::Vector3d::Zero());
+    chain_ = std::shared_ptr<kinematics::KinematicChain>(std::move(multi_chain));
+
+    // マネージャーの初期化
     recognition_manager_ = std::make_unique<robot_sim::recognition::SelfRecognitionManager>();
-    recognition_manager_->initialize(*model_, chain_, voxel_size_param);
-    voxel_size_f_ = static_cast<float>(voxel_size_param);
+    
+    // グリッド設定の初期化（パラメータから反映）
+    auto* grid = recognition_manager_->getIndexGrid();
+    grid->setVoxelSize(voxel_size_param);
+    grid->setIndexingParams(
+        get_parameter("voxel_indexing.x_shift").as_int(),
+        get_parameter("voxel_indexing.y_shift").as_int(),
+        get_parameter("voxel_indexing.z_shift").as_int(),
+        get_parameter("voxel_indexing.offset").as_int());
 
+    // ボクセル化の実行（全衝突リンクを対象）
+    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid);
+    recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
+
+    // 通信
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_topic, 10,
         [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
@@ -95,203 +101,52 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
             current_joints_ = msg->position;
         });
 
-    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("/self_recognition_voxel_viz", 10);
+    mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
+        "/self_recognition/voxel_mask", rclcpp::QoS(1).transient_local());
 
     timer_ = create_wall_timer(
-        std::chrono::milliseconds(std::max(50, static_cast<int>(1000.0 / std::max(hz, 0.1)))),
-        [this]() { this->publishViz(); });
+        std::chrono::milliseconds(static_cast<int>(1000.0 / std::max(hz, 0.1))),
+        [this]() { this->updateAndPublish(); });
 
-    RCLCPP_INFO(get_logger(),
-                "SelfRecognitionVizNode started: urdf=%s joint_topic=%s marker_frame=%s voxel=%.4f",
-                urdf_path.c_str(), joint_topic.c_str(), marker_frame_id_.c_str(), voxel_size_param);
+    RCLCPP_INFO(get_logger(), "Voxel Mask Provider started (ID-only mode). Hz: %.1f", hz);
 }
 
-geometry_msgs::msg::Point SelfRecognitionVizNode::makePoint(double x, double y, double z) const {
-    return ::makePoint(x, y, z);
-}
-
-std::vector<geometry_msgs::msg::Point> transformPoints(
-    const std::vector<geometry_msgs::msg::Point>& points,
-    const Eigen::Isometry3d& tf) {
-    std::vector<geometry_msgs::msg::Point> transformed;
-    transformed.reserve(points.size());
-    for (const auto& point : points) {
-        const Eigen::Vector3d p(point.x, point.y, point.z);
-        const Eigen::Vector3d tp = tf * p;
-        transformed.push_back(makePoint(tp.x(), tp.y(), tp.z()));
-    }
-    return transformed;
-}
-
-std::vector<geometry_msgs::msg::Point> SelfRecognitionVizNode::buildVoxelCenters(
-    const std::unordered_set<long>& vids) const {
-    std::vector<geometry_msgs::msg::Point> points;
-    points.reserve(vids.size());
-    for (long vid : vids) {
-        const Eigen::Vector3i idx = GNG::Analysis::IndexVoxelGrid::getIndexFromFlatId(vid);
-        const Eigen::Vector3f center =
-            ::common::geometry::VoxelUtils::voxelToWorld(idx, voxel_size_f_);
-        points.push_back(makePoint(center.x(), center.y(), center.z()));
-    }
-    return points;
-}
-
-std::vector<geometry_msgs::msg::Point> SelfRecognitionVizNode::buildAabbLines(
-    const Eigen::Vector3d& min_pt,
-    const Eigen::Vector3d& max_pt) const {
-    const geometry_msgs::msg::Point p000 = makePoint(min_pt.x(), min_pt.y(), min_pt.z());
-    const geometry_msgs::msg::Point p001 = makePoint(min_pt.x(), min_pt.y(), max_pt.z());
-    const geometry_msgs::msg::Point p010 = makePoint(min_pt.x(), max_pt.y(), min_pt.z());
-    const geometry_msgs::msg::Point p011 = makePoint(min_pt.x(), max_pt.y(), max_pt.z());
-    const geometry_msgs::msg::Point p100 = makePoint(max_pt.x(), min_pt.y(), min_pt.z());
-    const geometry_msgs::msg::Point p101 = makePoint(max_pt.x(), min_pt.y(), max_pt.z());
-    const geometry_msgs::msg::Point p110 = makePoint(max_pt.x(), max_pt.y(), min_pt.z());
-    const geometry_msgs::msg::Point p111 = makePoint(max_pt.x(), max_pt.y(), max_pt.z());
-
-    return {
-        p000, p001, p000, p010, p000, p100,
-        p111, p101, p111, p110, p111, p011,
-        p001, p011, p001, p101,
-        p010, p011, p010, p110,
-        p100, p101, p100, p110,
-    };
-}
-
-visualization_msgs::msg::Marker SelfRecognitionVizNode::makeCubeListMarker(
-    const std::string& ns,
-    int id,
-    const std::string& frame_id,
-    const geometry_msgs::msg::Pose& pose,
-    const std::vector<geometry_msgs::msg::Point>& points) const {
-    visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = frame_id;
-    marker.header.stamp = now();
-    marker.ns = ns;
-    marker.id = id;
-    marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
-    marker.action = visualization_msgs::msg::Marker::ADD;
-    marker.pose = pose;
-    marker.scale.x = voxel_size_f_;
-    marker.scale.y = voxel_size_f_;
-    marker.scale.z = voxel_size_f_;
-    marker.points = points;
-    return marker;
-}
-
-visualization_msgs::msg::Marker SelfRecognitionVizNode::makeLineListMarker(
-    const std::string& ns,
-    int id,
-    const std::string& frame_id,
-    const geometry_msgs::msg::Pose& pose,
-    const std::vector<geometry_msgs::msg::Point>& points) const {
-    visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = frame_id;
-    marker.header.stamp = now();
-    marker.ns = ns;
-    marker.id = id;
-    marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-    marker.action = visualization_msgs::msg::Marker::ADD;
-    marker.pose = pose;
-    marker.scale.x = std::max(0.001f, voxel_size_f_ * 0.1f);
-    marker.points = points;
-    return marker;
-}
-
-void SelfRecognitionVizNode::publishViz() {
+void SelfRecognitionVizNode::updateAndPublish() {
     std::vector<double> joints;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (current_joints_.empty()) {
-            return;
-        }
+        if (current_joints_.empty()) return;
         joints = current_joints_;
     }
 
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> j_pos;
-    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> j_ori;
-    chain_->forwardKinematicsAt(joints, j_pos, j_ori);
-
-    std::map<std::string, Eigen::Isometry3d> link_tfs;
-    chain_->buildAllLinkTransforms(j_pos, j_ori, fixed_link_info_, link_tfs);
-
-    visualization_msgs::msg::MarkerArray markers;
-    int marker_id = 0;
-
-    if (publish_self_mask_) {
-        recognition_manager_->updateRobotState(joints);
+    // 計算
+    recognition_manager_->updateRobotState(joints);
     const auto vids = recognition_manager_->getSelfVoxelMask();
-        std::unordered_set<long> voxel_set(vids.begin(), vids.end());
-        const auto points = buildVoxelCenters(voxel_set);
-        geometry_msgs::msg::Pose identity_pose;
-        identity_pose.orientation.w = 1.0;
-        markers.markers.push_back(makeCubeListMarker(
-            "self_mask", marker_id++, marker_frame_id_, identity_pose, points));
-    }
 
-    const auto& caches = recognition_manager_->getLinkVoxelDataList();
-    for (const auto& cache : caches) {
-        const auto tf_it = link_tfs.find(cache.name);
-        if (tf_it == link_tfs.end()) {
-            continue;
-        }
+    // 配信
+    auto mask_msg = std::make_shared<voxel_msgs::msg::Voxel>();
+    mask_msg->header.stamp = get_clock()->now();
+    mask_msg->header.frame_id = ::robot_sim::common::Constants::DEFAULT_FOOTPRINT_FRAME; 
+    mask_msg->voxel_size = static_cast<float>(recognition_manager_->getVoxelSize());
+    
+    mask_msg->x_shift = get_parameter("voxel_indexing.x_shift").as_int();
+    mask_msg->y_shift = get_parameter("voxel_indexing.y_shift").as_int();
+    mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
+    mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
+    
+    // インデックスパラメータの同期
+    recognition_manager_->getIndexGrid()->setIndexingParams(
+        mask_msg->x_shift, mask_msg->y_shift, mask_msg->z_shift, mask_msg->offset
+    );
 
-        const geometry_msgs::msg::Pose pose = poseFromIsometry(tf_it->second);
-
-        if (publish_link_voxels_) {
-            geometry_msgs::msg::Pose marker_pose = pose;
-            std::unordered_set<long> local_vids_set;
-            for (const auto& p : cache.local_voxel_centers) {
-                Eigen::Vector3i idx = ::common::geometry::VoxelUtils::worldToVoxel(p.cast<float>(), voxel_size_f_);
-                local_vids_set.insert(::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx));
-            }
-            auto points = buildVoxelCenters(local_vids_set);
-            if (display_world_coordinates_) {
-                points = transformPoints(points, tf_it->second);
-                marker_pose.position.x = 0.0;
-                marker_pose.position.y = 0.0;
-                marker_pose.position.z = 0.0;
-                marker_pose.orientation.x = 0.0;
-                marker_pose.orientation.y = 0.0;
-                marker_pose.orientation.z = 0.0;
-                marker_pose.orientation.w = 1.0;
-            }
-            markers.markers.push_back(makeCubeListMarker(
-                "link_voxels/" + cache.name,
-                marker_id++,
-                marker_frame_id_,
-                marker_pose,
-                points));
-        }
-
-        if (publish_link_aabb_) {
-            geometry_msgs::msg::Pose marker_pose = pose;
-            auto points = buildAabbLines(cache.local_min, cache.local_max);
-            if (display_world_coordinates_) {
-                points = transformPoints(points, tf_it->second);
-                marker_pose.position.x = 0.0;
-                marker_pose.position.y = 0.0;
-                marker_pose.position.z = 0.0;
-                marker_pose.orientation.x = 0.0;
-                marker_pose.orientation.y = 0.0;
-                marker_pose.orientation.z = 0.0;
-                marker_pose.orientation.w = 1.0;
-            }
-            markers.markers.push_back(makeLineListMarker(
-                "link_aabb/" + cache.name,
-                marker_id++,
-                marker_frame_id_,
-                marker_pose,
-                points));
-        }
-    }
-
-    marker_pub_->publish(markers);
+    mask_msg->data.assign(vids.begin(), vids.end());
+    mask_pub_->publish(*mask_msg);
 }
 
-} // namespace self_recognition
-} // namespace robot_sim
+} // namespace robot_sim::self_recognition
 
-#include <rclcpp/rclcpp.hpp>
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::self_recognition::SelfRecognitionVizNode)
+
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<robot_sim::self_recognition::SelfRecognitionVizNode>(rclcpp::NodeOptions());
@@ -299,5 +154,3 @@ int main(int argc, char **argv) {
     rclcpp::shutdown();
     return 0;
 }
-
-RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::self_recognition::SelfRecognitionVizNode)
