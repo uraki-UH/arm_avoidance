@@ -45,10 +45,10 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
         const yShift = BigInt(layout.yShift);
         const zShift = BigInt(layout.zShift);
         const offset = BigInt(layout.offset);
-        
+
         // y_shiftが各軸のビット幅の間隔として使われている前提の簡易マスク
         // 本来は (1n << bitWidth) - 1n だが、現在の21bit packingに合わせて構成
-        const mask = (1n << yShift) - 1n; 
+        const mask = (1n << yShift) - 1n;
 
         return data.map(idStr => {
             const id = BigInt(idStr);
@@ -77,6 +77,8 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
         meshRef.current.instanceMatrix.needsUpdate = true;
     }, [positions]);
 
+    const displaySize = voxelSize;
+
     return (
         <group ref={groupRef}>
             <instancedMesh
@@ -84,12 +86,13 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
                 args={[undefined, undefined, positions.length]}
                 frustumCulled={false}
             >
-                <boxGeometry args={[voxelSize, voxelSize, voxelSize]} />
+                <boxGeometry args={[displaySize, displaySize, displaySize]} />
                 <meshStandardMaterial
                     color={settings?.color || "#00ff88"}
-                    wireframe={settings?.wireframe ?? true}
                     transparent={true}
-                    opacity={settings?.opacity ?? 0.5}
+                    opacity={settings?.opacity ?? 0.6}
+                    metalness={0.2}
+                    roughness={0.1}
                 />
             </instancedMesh>
         </group>

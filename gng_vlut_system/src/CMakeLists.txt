@@ -9,7 +9,7 @@ include_directories(
 # Standard ROS 2 Dependencies
 set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json fcl)
 # System libraries
-set(EXTRA_LIBS fcl ccd octomap octomath m)
+set(EXTRA_LIBS fcl ccd octomap octomath m OpenMP::OpenMP_CXX)
 
 # --- 2. Core Libraries (STATIC) ---
 

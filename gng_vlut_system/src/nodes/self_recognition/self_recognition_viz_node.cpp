@@ -20,11 +20,12 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("robot_urdf_path", "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro");
     declare_parameter("joint_topic", "/joint_states");
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
-    declare_parameter("update_hz", 20.0); // フィルタリングの精度を上げるため、少し頻度を上げます
+    declare_parameter("update_hz", 50.0); 
     declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("leaf_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
     declare_parameter<std::string>("root_link", "");
+    declare_parameter("padding", 0.02);
  
     // ボクセル展開パラメータの宣言
     declare_parameter("voxel_indexing.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
@@ -36,7 +37,6 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     const double voxel_size_param = get_parameter("voxel_size").as_double();
-    const double hz = get_parameter("update_hz").as_double();
 
     // モデルとチェインの構築
     model_ = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
@@ -89,8 +89,11 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         get_parameter("voxel_indexing.z_shift").as_int(),
         get_parameter("voxel_indexing.offset").as_int());
 
+    double hz = get_parameter("update_hz").as_double();
+    double padding = get_parameter("padding").as_double();
+
     // ボクセル化の実行（全衝突リンクを対象）
-    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid);
+    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid, {}, padding);
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
     // 通信
@@ -98,7 +101,6 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         joint_topic, 10,
         [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
-            // 名前ベースで関節値を更新し、FKを実行
             chain_->updateJointValuesByName(msg->name, msg->position);
             current_joints_ = chain_->getJointValues();
         });
@@ -119,11 +121,19 @@ void SelfRecognitionVizNode::updateAndPublish() {
     if (current_joints_.empty()) return;
 
     try {
-        // 計算 (すでにlock内なので安全にchain_を参照できる)
+        // 1. 関節角度の更新と順運動学 (FK)
+        auto t_start = this->now();
         recognition_manager_->updateRobotState(current_joints_);
-        const auto vids = recognition_manager_->getSelfVoxelMask();
+        auto t_fk = (this->now() - t_start).seconds() * 1000.0;
 
-        // 配信
+        // 2. ボクセルマスクの生成 (座標変換 + 重複排除)
+        auto t_voxel_start = this->now();
+        const auto vids = recognition_manager_->getSelfVoxelMask();
+        auto t_voxel = (this->now() - t_voxel_start).seconds() * 1000.0;
+        
+        auto t_total = t_fk + t_voxel;
+
+        // 配信処理
         auto mask_msg = std::make_shared<voxel_msgs::msg::Voxel>();
         mask_msg->header.stamp = get_clock()->now();
         mask_msg->header.frame_id = ::robot_sim::common::Constants::DEFAULT_FOOTPRINT_FRAME; 
@@ -134,14 +144,19 @@ void SelfRecognitionVizNode::updateAndPublish() {
         mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
         mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
         
-        // インデックスパラメータの同期
         recognition_manager_->getIndexGrid()->setIndexingParams(
             mask_msg->x_shift, mask_msg->y_shift, mask_msg->z_shift, mask_msg->offset
         );
 
         mask_msg->data.assign(vids.begin(), vids.end());
         mask_pub_->publish(*mask_msg);
-    } catch (const std::exception& e) {
+
+        // 毎フレームログ出力（学習検討用）
+        RCLCPP_INFO(get_logger(), "Voxel Gen: Total %.2f ms | Vids: %zu (Pre: %zu)", 
+                    recognition_manager_->getLastCalcTimeMs(), vids.size(), 
+                    recognition_manager_->getLastPreUniqueCount());
+
+    } catch (const std::exception & e) {
         RCLCPP_ERROR(this->get_logger(), "Error in updateAndPublish: %s", e.what());
     }
 }

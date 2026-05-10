@@ -37,7 +37,26 @@ public:
     }
 
     void updateRobotState(const std::vector<double>& joints) {
-        if (chain_) chain_->updateKinematics(joints);
+        if (!chain_) return;
+
+        // 関節角度の変化をチェックして不要な計算を避ける
+        bool changed = false;
+        if (last_joints_.size() != joints.size()) {
+            changed = true;
+        } else {
+            for (size_t i = 0; i < joints.size(); ++i) {
+                if (std::abs(last_joints_[i] - joints[i]) > 1e-4) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (changed) {
+            chain_->updateKinematics(joints);
+            last_joints_ = joints;
+            need_mask_update_ = true;
+        }
     }
 
     std::map<std::string, Eigen::Isometry3d> getCurrentLinkTransforms() {
@@ -55,24 +74,69 @@ public:
     }
 
     std::vector<long> getSelfVoxelMask() {
+        if (!need_mask_update_ && !last_vids_.empty()) {
+            return last_vids_;
+        }
+
         auto tfs = getCurrentLinkTransforms();
         if (tfs.empty()) return {};
 
-        std::vector<long> all_vids;
+        // 1. 準備
+        size_t total_points = 0;
+        struct LinkJob {
+            const std::vector<Eigen::Vector3d>* centers;
+            Eigen::Isometry3d tf;
+        };
+        std::vector<LinkJob> jobs;
+        jobs.reserve(link_data_list_.size());
+
         for (const auto& data : link_data_list_) {
-            if (tfs.count(data.name)) {
-                const auto& tf = tfs.at(data.name);
-                for (const auto& lp : data.local_voxel_centers) {
-                    Eigen::Vector3d wp = tf * lp;
-                    all_vids.push_back(grid_.getFlatVoxelId(
-                        ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_)));
-                }
+            auto it = tfs.find(data.name);
+            if (it != tfs.end()) {
+                jobs.push_back({&data.local_voxel_centers, it->second});
+                total_points += data.local_voxel_centers.size();
             }
         }
-        std::sort(all_vids.begin(), all_vids.end());
-        all_vids.erase(std::unique(all_vids.begin(), all_vids.end()), all_vids.end());
+
+        if (total_points == 0) return {};
+
+        // 2. 座標変換（シングルスレッド）
+        auto t1 = std::chrono::high_resolution_clock::now();
+        std::vector<long> all_vids(total_points);
+        size_t offset = 0;
+
+        for (const auto& job : jobs) {
+            const auto& centers = *job.centers;
+            const auto& tf = job.tf;
+            size_t n = centers.size();
+            for (size_t i = 0; i < n; ++i) {
+                Eigen::Vector3d wp = tf * centers[i];
+                all_vids[offset + i] = grid_.getFlatVoxelId(
+                    ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_));
+            }
+            offset += n;
+        }
+        auto t2 = std::chrono::high_resolution_clock::now();
+
+        size_t before_unique = all_vids.size();
+        
+        // 3. Radix Sort (O(N)) による高速重複削除
+        if (all_vids.size() > 1) {
+            radixSort(all_vids);
+            all_vids.erase(std::unique(all_vids.begin(), all_vids.end()), all_vids.end());
+        }
+        auto t_end = std::chrono::high_resolution_clock::now();
+
+        last_total_points_pre_unique_ = before_unique;
+        last_calc_time_ms_ = std::chrono::duration<double, std::milli>(t_end - t1).count();
+        
+        last_vids_ = all_vids;
+        need_mask_update_ = false;
         return all_vids;
     }
+
+    size_t getLastPreUniqueCount() const { return last_total_points_pre_unique_; }
+    double getLastCalcTimeMs() const { return last_calc_time_ms_; }
 
     void filterPointCloud(const std::vector<Eigen::Vector3d>& all_points, const std::vector<double>& joints, 
                           std::vector<Eigen::Vector3d>& filtered, std::vector<Eigen::Vector3d>& self) {
@@ -149,12 +213,43 @@ public:
     ::GNG::Analysis::IndexVoxelGrid* getIndexGrid() { return &grid_; }
     double getVoxelSize() const { return voxel_size_; }
 
+    void radixSort(std::vector<long>& v) {
+        if (v.empty()) return;
+        std::vector<long> tmp(v.size());
+        const int bits = 8; // 256 buckets
+        const int mask = (1 << bits) - 1;
+        
+        for (int shift = 0; shift < 64; shift += bits) {
+            size_t count[256] = {0};
+            bool has_data = false;
+            for (long x : v) {
+                int bucket = (x >> shift) & mask;
+                count[bucket]++;
+                if (bucket > 0 || x >> (shift + bits) > 0) has_data = true;
+            }
+            if (!has_data && shift > 0) break; 
+            
+            size_t pos[256];
+            pos[0] = 0;
+            for (int i = 1; i < 256; i++) pos[i] = pos[i-1] + count[i-1];
+            
+            for (long x : v) tmp[pos[(x >> shift) & mask]++] = x;
+            v.swap(tmp);
+        }
+    }
+
 private:
+    size_t last_total_points_pre_unique_ = 0;
+    double last_calc_time_ms_ = 0;
+    std::vector<double> last_joints_;
+    std::vector<long> last_vids_;
+    bool need_mask_update_ = true;
+
     std::shared_ptr<::kinematics::KinematicChain> chain_;
     std::shared_ptr<::simulation::RobotModel> model_;
     double voxel_size_;
     std::vector<::simulation::LinkVoxelData> link_data_list_;
-    ::GNG::Analysis::IndexVoxelGrid grid_{0.0}; // initialize()で上書き必須
+    ::GNG::Analysis::IndexVoxelGrid grid_{0.0};
 };
 
 } // namespace recognition

@@ -33,20 +33,22 @@ public:
     static std::vector<LinkVoxelData> build(const RobotModel& model, 
                                             std::shared_ptr<::kinematics::KinematicChain> chain,
                                             const ::GNG::Analysis::IndexVoxelGrid& grid,
-                                            const std::vector<std::string>& exclude_links = {}) {
+                                            const std::vector<std::string>& exclude_links = {},
+                                            double padding = 0.0) {
         std::vector<std::string> target_links;
         for (int i = 0; i < chain->getNumJoints(); ++i) {
             target_links.push_back(chain->getLinkName(i));
         }
         std::unordered_set<std::string> exclude_set(exclude_links.begin(), exclude_links.end());
-        return build(model, target_links, grid, exclude_set);
+        return build(model, target_links, grid, exclude_set, padding);
     }
 
     // New signature for all-link voxelization
     static std::vector<LinkVoxelData> build(const RobotModel& model, 
                                             const std::vector<std::string>& target_links,
                                             const ::GNG::Analysis::IndexVoxelGrid& grid,
-                                            const std::unordered_set<std::string>& exclude_set = {}) {
+                                            const std::unordered_set<std::string>& exclude_set = {},
+                                            double padding = 0.0) {
         std::vector<LinkVoxelData> link_data_list;
         double voxel_size = grid.getVoxelSize();
         // ... (rest of implementation below)
@@ -78,11 +80,11 @@ public:
                 if (col.geometry.type == GeometryType::MESH) {
                     has_mesh = true;
                 } else if (col.geometry.type == GeometryType::BOX) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeBox(col.geometry.size, col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeBox(col.geometry.size + Eigen::Vector3d::Constant(padding * 2.0), col.origin, grid, vids);
                 } else if (col.geometry.type == GeometryType::SPHERE) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeSphere(col.geometry.size.x(), col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeSphere(col.geometry.size.x() + padding, col.origin, grid, vids);
                 } else if (col.geometry.type == GeometryType::CYLINDER) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeCylinder(col.geometry.size.x(), col.geometry.size.y(), col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeCylinder(col.geometry.size.x() + padding, col.geometry.size.y() + padding * 2.0, col.origin, grid, vids);
                 }
             }
 
@@ -93,7 +95,12 @@ public:
                     const auto& origin = slink.mesh_origins[m_idx];
                     std::vector<Eigen::Vector3d> world_verts;
                     for (size_t i = 0; i < mesh.vertices.size() / 3; ++i) {
-                        world_verts.push_back(origin * Eigen::Vector3d(mesh.vertices[i*3], mesh.vertices[i*3+1], mesh.vertices[i*3+2]));
+                        Eigen::Vector3d v(mesh.vertices[i*3], mesh.vertices[i*3+1], mesh.vertices[i*3+2]);
+                        // Simple inflation for mesh: push vertices outward from their origin
+                        if (padding > 0.0 && v.norm() > 1e-6) {
+                            v += v.normalized() * padding;
+                        }
+                        world_verts.push_back(origin * v);
                     }
                     ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(world_verts, grid, vids);
                 }
