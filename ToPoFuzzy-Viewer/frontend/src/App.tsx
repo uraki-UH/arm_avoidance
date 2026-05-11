@@ -168,7 +168,7 @@ function App() {
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
-    const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker', id: string, title: string } | null>(null);
+    const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string } | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -261,21 +261,21 @@ function App() {
     // --- Unified Entity Initialization ---
     useEffect(() => {
         const configs: Record<string, { data: any, set: any, defaults: any }> = {
-            robot: { 
-                data: robotData, 
-                set: setRobotSettings, 
-                defaults: { 
-                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', 
-                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] } 
-                } 
+            robot: {
+                data: robotData,
+                set: setRobotSettings,
+                defaults: {
+                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c',
+                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
+                }
             },
-            marker: { 
-                data: markerData, 
-                set: setMarkerSettings, 
-                defaults: { 
-                    visible: true, 
-                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] } 
-                } 
+            marker: {
+                data: markerData,
+                set: setMarkerSettings,
+                defaults: {
+                    visible: true,
+                    transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
+                }
             },
             voxel: { data: voxelData, set: setVoxelSettings, defaults: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 } }
         };
@@ -300,7 +300,7 @@ function App() {
     const removeEntity = (type: EntityType, tag: string) => {
         const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
         updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
-        
+
         // Also unsubscribe from the stream if it's a streamable entity
         if (type === 'marker' || type === 'voxel') {
             unsubscribeSource(tag);
@@ -858,7 +858,10 @@ function App() {
                             transforms={transforms}
                             voxelData={voxelData}
                             voxelSettings={voxelSettings}
-                            onOpenTransform={(type, id, title) => setTransformContext(prev => (prev?.type === type && prev?.id === id) ? null : { type, id, title })}
+                            onOpenTransform={(type, id, title) => {
+                                console.log(`[App] onOpenTransform triggered:`, type, id, title);
+                                setTransformContext(prev => (prev?.type === type && prev?.id === id) ? null : { type, id, title });
+                            }}
                         />
                     </Sidebar>
                 }
@@ -943,19 +946,25 @@ function App() {
 
                         {/* Entities (Consolidated rendering logic) */}
                         {[
-                            { data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                <group key={tag}>
-                                    {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} tf={tf} manualTransform={s.transform} />}
-                                    {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
-                                </group>
-                            ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } } },
-                            { data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
-                            ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true },
-                            { data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
-                            ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true }
-                        ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) => 
+                            {
+                                data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                    <group key={tag}>
+                                        {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} tf={tf} manualTransform={s.transform} />}
+                                        {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
+                                    </group>
+                                ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                            },
+                            {
+                                data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                    <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
+                                ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
+                            },
+                            {
+                                data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                    <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
+                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
+                            }
+                        ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) =>
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = (settings as any)[tag] || defaultSettings;
                                 if (!s.visible || (skipIfDisabled && disabledSourceIds.has(tag))) return null;
@@ -969,7 +978,7 @@ function App() {
                             if (!settings || !settings.visible) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor };
-                            return data.mode === 'static' 
+                            return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={0.008} edgeWidth={0.0008} />
                                 : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
@@ -990,25 +999,29 @@ function App() {
                     const { type, id } = transformContext;
                     const map: any = { cloud: pointClouds.find(p => p.id === id), layer: layerSettings[id]?.graphTransform, robot: robotSettings[id]?.transform, marker: markerSettings[id]?.transform, voxel: voxelSettings[id]?.transform };
                     const res = map[type];
-                    return type === 'cloud' ? (res ? { position: res.position || [0,0,0], rotation: res.rotation || [0,0,0], scale: res.scale || [1,1,1] } : null) : res;
-                }, [transformContext, pointClouds, layerSettings, robotSettings, markerSettings])}
+                    const defaultT: Transform = { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+                    if (type === 'cloud') {
+                        return res ? { position: res.position || [0, 0, 0], rotation: res.rotation || [0, 0, 0], scale: res.scale || [1, 1, 1] } : null;
+                    }
+                    return res || defaultT;
+                }, [transformContext, pointClouds, layerSettings, robotSettings, markerSettings, voxelSettings])}
                 onClose={() => setTransformContext(null)}
                 onUpdate={(u) => {
                     if (!transformContext) return;
                     const { type, id } = transformContext;
                     const updaters: any = {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...u } : p)),
-                        layer: () => handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        robot: () => updateEntitySettings('robot', id, { transform: { ...(robotSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        marker: () => updateEntitySettings('marker', id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        voxel: () => updateEntitySettings('voxel', id, { transform: { ...(voxelSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
+                        layer: () => handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...u } }),
+                        robot: () => updateEntitySettings('robot', id, { transform: { ...(robotSettings[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...u } }),
+                        marker: () => updateEntitySettings('marker', id, { transform: { ...(markerSettings[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...u } }),
+                        voxel: () => updateEntitySettings('voxel', id, { transform: { ...(voxelSettings[id]?.transform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] }), ...u } })
                     };
                     updaters[type]?.();
                 }}
                 onReset={() => {
                     if (!transformContext) return;
                     const { type, id } = transformContext;
-                    const iden = { position: [0,0,0] as [number,number,number], rotation: [0,0,0] as [number,number,number], scale: [1,1,1] as [number,number,number] };
+                    const iden = { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] };
                     const resets: any = {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...iden } : p)),
                         layer: () => handleUpdateLayerSettings(id, { graphTransform: iden }),

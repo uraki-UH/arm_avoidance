@@ -27,9 +27,11 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
     const { data, layout } = message;
     const voxelSize = Math.round(layout.voxelSize * 1000) / 1000;
 
-    // TFの適用
+    // TFおよび手動トランスフォームの適用
     useEffect(() => {
         if (!groupRef.current) return;
+        
+        // ベース位置をTFまたは原点にリセット
         if (tf) {
             groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
             groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
@@ -38,7 +40,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             groupRef.current.quaternion.set(0, 0, 0, 1);
         }
 
-        // Manual transform application
+        // 手動オフセットの適用（既存の共通仕様）
         if (manualTransform) {
             if (manualTransform.position) {
                 groupRef.current.position.x += manualTransform.position[0];
@@ -64,7 +66,6 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         const yShift = BigInt(layout.yShift);
         const zShift = BigInt(layout.zShift);
         const offset = BigInt(layout.offset);
-
         const mask = (1n << yShift) - 1n;
 
         return data.map(idStr => {
@@ -76,20 +77,16 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         });
     }, [data, layout, voxelSize]);
 
-    // マニュアルでの描画更新指示
     useDemandUpdate([positions]);
 
-    // InstancedMeshの更新
     useEffect(() => {
         if (!meshRef.current) return;
-
         const dummy = new THREE.Object3D();
         positions.forEach((pos, i) => {
             dummy.position.set(pos[0], pos[1], pos[2]);
             dummy.updateMatrix();
             meshRef.current?.setMatrixAt(i, dummy.matrix);
         });
-
         meshRef.current.count = positions.length;
         meshRef.current.instanceMatrix.needsUpdate = true;
     }, [positions]);
@@ -98,11 +95,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
 
     return (
         <group ref={groupRef}>
-            <instancedMesh
-                ref={meshRef}
-                args={[undefined, undefined, positions.length]}
-                frustumCulled={false}
-            >
+            <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} frustumCulled={false}>
                 <boxGeometry args={[displaySize, displaySize, displaySize]} />
                 <meshStandardMaterial
                     color={settings?.color || "#00ff88"}

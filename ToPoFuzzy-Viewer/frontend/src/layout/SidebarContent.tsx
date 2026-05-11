@@ -152,7 +152,7 @@ interface SidebarContentProps {
     onUpdateSettings: (type: EntityType, tag: string, updates: any) => void;
     onRemoveEntity: (type: EntityType, tag: string) => void;
     transforms: Record<string, TransformData>;
-    onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker', id: string, title: string) => void;
+    onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string) => void;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -289,7 +289,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             props.onUpdateSettings(type as EntityType, tag, { visible: !isVisible });
                                         }}
                                         onRemove={() => props.onRemoveEntity(type as EntityType, tag)}
-                                        onOpenTransform={() => hasTf && props.onOpenTransform(type as any, tag, `${type}: ${tag}`)}
+                                        onOpenTransform={() => {
+                                            console.log(`[Sidebar] Opening transform for ${type}: ${tag}`);
+                                            props.onOpenTransform(type as any, tag, `${type}: ${tag}`);
+                                        }}
                                     >
                                         <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
                                             <span className="opacity-70">{label}:</span>
