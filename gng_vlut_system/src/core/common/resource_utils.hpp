@@ -36,6 +36,41 @@ inline std::filesystem::path deriveResourceRootFromMeshRoot(
   return mesh_root.parent_path();
 }
 
+inline std::filesystem::path findLocalPackageShareFallback(
+    const std::string &pkg_name) {
+  if (pkg_name != "topoarm_description") {
+    return {};
+  }
+
+  std::vector<std::filesystem::path> bases;
+#ifdef PROJECT_SOURCE_DIR
+  bases.emplace_back(PROJECT_SOURCE_DIR);
+  if (std::filesystem::exists(PROJECT_SOURCE_DIR)) {
+    bases.emplace_back(std::filesystem::path(PROJECT_SOURCE_DIR).parent_path());
+    bases.emplace_back(std::filesystem::path(PROJECT_SOURCE_DIR).parent_path().parent_path());
+  }
+#endif
+  bases.emplace_back(std::filesystem::current_path());
+  bases.emplace_back(std::filesystem::current_path().parent_path());
+
+  const std::vector<std::filesystem::path> rel_candidates = {
+      std::filesystem::path("ToPoDualArm") / "topoarm_description",
+      std::filesystem::path("topoarm_description"),
+      std::filesystem::path("gng_vlut_system") / "urdf" / "topoarm_description",
+  };
+
+  for (const auto &base : bases) {
+    if (base.empty()) continue;
+    for (const auto &rel : rel_candidates) {
+      auto candidate = base / rel;
+      if (std::filesystem::exists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return {};
+}
+
 inline std::string resolvePackageUris(const std::string &text) {
   if (text.empty()) {
     return text;
@@ -54,9 +89,13 @@ inline std::string resolvePackageUris(const std::string &text) {
     try {
       pkg_path = ament_index_cpp::get_package_share_directory(pkg_name);
     } catch (...) {
-      // Package not found, skip this one
-      pos = subpath_start;
-      continue;
+      const auto fallback = findLocalPackageShareFallback(pkg_name);
+      if (fallback.empty()) {
+        // Package not found, skip this one
+        pos = subpath_start;
+        continue;
+      }
+      pkg_path = fallback.string();
     }
 
     const std::string replacement = "file://" + pkg_path + "/";
@@ -110,10 +149,14 @@ inline std::string resolvePath(const std::string &relative_path) {
       if (second_slash != std::string::npos) {
           std::string pkg_name = relative_path.substr(10, second_slash - 10);
           std::string sub_path = relative_path.substr(second_slash + 1);
-          try {
+      try {
               std::string pkg_path = ament_index_cpp::get_package_share_directory(pkg_name);
               return (std::filesystem::path(pkg_path) / sub_path).string();
           } catch (...) {}
+          const auto fallback = findLocalPackageShareFallback(pkg_name);
+          if (!fallback.empty()) {
+              return (fallback / sub_path).string();
+          }
       }
   }
 

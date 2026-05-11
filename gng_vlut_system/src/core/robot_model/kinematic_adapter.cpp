@@ -201,7 +201,10 @@ createMultiArmKinematicChainFromModels(
     if (i < prefixes.size()) {
       cfg.prefix = prefixes[i];
     } else {
-      cfg.prefix = "arm" + std::to_string(i) + "_";
+      // 未指定時はURDF上の素のリンク名をそのまま使う。
+      // offline URDF trainer や viewer bridge では、voxel/TF 側の名前と
+      // 一致させるために prefix を付けない方が自然。
+      cfg.prefix = "";
     }
     configs.push_back(cfg);
   }

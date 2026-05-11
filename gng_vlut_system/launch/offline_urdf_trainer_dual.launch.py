@@ -17,6 +17,10 @@ def launch_setup(context, *args, **kwargs):
     use_voxel_collision = LaunchConfiguration("use_voxel_collision").perform(context)
     voxel_padding = LaunchConfiguration("voxel_padding").perform(context)
     initial_collision_only = LaunchConfiguration("initial_collision_only").perform(context)
+    validate_voxel_link_masks = LaunchConfiguration("validate_voxel_link_masks").perform(context)
+    validation_focus_links = LaunchConfiguration("validation_focus_links").perform(context)
+    validation_max_print_voxels = LaunchConfiguration("validation_max_print_voxels").perform(context)
+    validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -31,13 +35,24 @@ def launch_setup(context, *args, **kwargs):
     if voxel_padding:
         overrides["voxel_padding"] = float(voxel_padding)
     if initial_collision_only != "false":
+        value = (initial_collision_only.lower() == "true")
+        overrides["initial_collision_only"] = value
         overrides["collision.initial_collision_only"] = (
-            initial_collision_only.lower() == "true"
+            value
         )
+    if validate_voxel_link_masks != "false":
+        value = (validate_voxel_link_masks.lower() == "true")
+        overrides["collision.validate_voxel_link_masks"] = value
+    if validation_focus_links:
+        overrides["collision.validation_focus_links"] = validation_focus_links
+    if validation_max_print_voxels:
+        overrides["collision.validation_max_print_voxels"] = int(validation_max_print_voxels)
+    if validation_dump_path:
+        overrides["collision.validation_dump_path"] = validation_dump_path
 
     return [
         # オフラインURDFトレーナーノード (デュアルアーム用)
-        # 設定ファイルとしてデフォルトで topodual.yaml を使用します。
+        # 設定ファイルとしてデフォルトで topoarm_dual.yaml を使用します。
         Node(
             package="gng_vlut_system",
             executable="offline_urdf_trainer",
@@ -52,7 +67,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
-    dual_cfg = os.path.join(pkg_share, "config", "topodual.yaml")
+    dual_cfg = os.path.join(pkg_share, "config", "topoarm_dual.yaml")
     
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -73,7 +88,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "vlut_only",
             default_value="false",
-            description="'true'にするとGNG学習をスキップし、VLUT生成のみ行います",
+            description="'true'にするとGNG学習をスキップし、VLUT生成のみ行う",
         ),
         DeclareLaunchArgument(
             "use_voxel_collision",
@@ -88,7 +103,27 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "initial_collision_only",
             default_value="false",
-            description="trueにすると初期姿勢の承認用YAMLだけ生成して終了します",
+            description="trueにすると初期姿勢の承認用YAMLだけ生成して終了",
+        ),
+        DeclareLaunchArgument(
+            "validate_voxel_link_masks",
+            default_value="false",
+            description="trueにすると初期姿勢のlink別voxel mask検証レポートを出す",
+        ),
+        DeclareLaunchArgument(
+            "validation_focus_links",
+            default_value="",
+            description="検証レポートを出すリンク名のカンマ区切り。空なら全件",
+        ),
+        DeclareLaunchArgument(
+            "validation_max_print_voxels",
+            default_value="8",
+            description="各リンクで詳細表示する voxel 数の上限",
+        ),
+        DeclareLaunchArgument(
+            "validation_dump_path",
+            default_value="",
+            description="検証レポートを書き出すファイルパス",
         ),
         OpaqueFunction(function=launch_setup)
     ])

@@ -8,6 +8,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/int64_multi_array.hpp>
 
+#include "common/voxel_utils.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 
 using namespace std::chrono_literals;
@@ -200,7 +201,8 @@ private:
     }
 
     const Eigen::Vector3d center_world_m = sphereCenterWorldMForTick(tick);
-    const Eigen::Vector3i center_idx = GNG::Analysis::IndexVoxelGrid::getIndex(
+    GNG::Analysis::IndexVoxelGrid grid(voxel_size_);
+    const Eigen::Vector3i center_idx = ::common::geometry::VoxelUtils::worldToVoxel(
         center_world_m.cast<float>(), static_cast<float>(voxel_size_));
     const double r_occ = std::max(0.0, sphere_radius_cm_ / 100.0);
     const double r_dan = std::max(r_occ, r_occ + std::max(0.0, sphere_danger_margin_cm_ / 100.0));
@@ -223,7 +225,7 @@ private:
           const Eigen::Vector3d voxel_center_world =
               ((idx.cast<double>() + Eigen::Vector3d::Constant(0.5)) * voxel_size_);
           const double dist_sq = (voxel_center_world - center_world_m).squaredNorm();
-          const int64_t flat = static_cast<int64_t>(GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx));
+          const int64_t flat = static_cast<int64_t>(grid.getFlatVoxelId(idx));
 
           if (dist_sq <= occ_sq) {
             occupied.push_back(flat);

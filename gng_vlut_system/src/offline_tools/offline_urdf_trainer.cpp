@@ -3,11 +3,15 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <map>
 #include <sstream>
 #include <set>
 #include <string>
+#include <tuple>
+#include <unordered_set>
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
@@ -17,6 +21,7 @@
 #include "collision/geometric_self_collision_checker.hpp"
 #include "collision/voxel_collision_checker.hpp"
 #include "common/resource_utils.hpp"
+#include "common/voxel_utils.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
@@ -109,6 +114,163 @@ static void writeInitialCollisionApprovalYaml(
 
   for (const auto &pair : sorted_pairs) {
     ofs << "    - \"" << pair.first << "|" << pair.second << "\"\n";
+  }
+}
+
+static std::string vec3ToString(const Eigen::Vector3d &v, int prec = 3) {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(prec)
+      << "(" << v.x() << ", " << v.y() << ", " << v.z() << ")";
+  return oss.str();
+}
+
+static std::string vec3iToString(const Eigen::Vector3i &v) {
+  std::ostringstream oss;
+  oss << "(" << v.x() << ", " << v.y() << ", " << v.z() << ")";
+  return oss.str();
+}
+
+static void writeVoxelValidationReport(
+    const rclcpp::Logger &logger,
+    const simulation::VoxelCollisionChecker &voxel_checker,
+    double voxel_size,
+    const std::vector<std::string> &focus_links,
+    int max_print_voxels,
+    const std::string &dump_path) {
+  const auto &link_data = voxel_checker.getLinkVoxelDataList();
+  const auto checker_masks = voxel_checker.getLinkVoxelMasks();
+  const auto named_tfs = voxel_checker.getCurrentLinkTransforms();
+
+  std::unordered_set<std::string> focus_set(focus_links.begin(), focus_links.end());
+  const bool show_all = focus_set.empty();
+
+  GNG::Analysis::IndexVoxelGrid grid(voxel_size);
+
+  std::ostringstream report;
+  report << "Voxel link-mask validation report\n";
+  report << "voxel_size=" << voxel_size << "\n";
+  report << "link_count=" << link_data.size() << "\n";
+  report << "focus_links=";
+  if (show_all) {
+    report << "(all)\n\n";
+  } else {
+    for (std::size_t i = 0; i < focus_links.size(); ++i) {
+      report << (i == 0 ? " " : ", ") << focus_links[i];
+    }
+    report << "\n\n";
+  }
+
+  std::size_t mismatch_count = 0;
+  for (std::size_t i = 0; i < link_data.size(); ++i) {
+    const auto &data = link_data[i];
+    const bool has_tf = i < named_tfs.size() && named_tfs[i].first == data.name;
+    const Eigen::Isometry3d tf =
+        has_tf ? named_tfs[i].second : Eigen::Isometry3d::Identity();
+
+    std::vector<long> direct_mask;
+    direct_mask.reserve(data.local_voxel_centers.size());
+    std::vector<std::tuple<Eigen::Vector3d, Eigen::Vector3d, Eigen::Vector3i, long>>
+        samples;
+    samples.reserve(static_cast<std::size_t>(std::max(0, max_print_voxels)));
+
+    for (std::size_t k = 0; k < data.local_voxel_centers.size(); ++k) {
+      const Eigen::Vector3d world = tf * data.local_voxel_centers[k];
+      const Eigen::Vector3i idx = ::common::geometry::VoxelUtils::worldToVoxel(
+          world.template cast<float>(), static_cast<float>(voxel_size));
+      const long flat = grid.getFlatVoxelId(idx);
+      direct_mask.push_back(flat);
+      if (static_cast<int>(k) < max_print_voxels) {
+        const Eigen::Vector3i roundtrip_idx = grid.getIndexFromFlatId(flat);
+        const Eigen::Vector3d roundtrip_world =
+            ::common::geometry::VoxelUtils::voxelToWorld(
+                roundtrip_idx, static_cast<float>(voxel_size))
+                .template cast<double>();
+        samples.emplace_back(world, roundtrip_world, idx, flat);
+      }
+    }
+
+    if (direct_mask.size() > 1) {
+      ::common::geometry::VoxelUtils::radixSort(direct_mask);
+      direct_mask.erase(std::unique(direct_mask.begin(), direct_mask.end()),
+                        direct_mask.end());
+    }
+
+    const bool has_checker_mask = i < checker_masks.size();
+    const bool match = has_checker_mask && direct_mask == checker_masks[i];
+    if (!match) {
+      ++mismatch_count;
+    }
+
+    if (!show_all && focus_set.count(data.name) == 0) {
+      continue;
+    }
+
+    report << "[" << (match ? "OK" : "MISMATCH") << "] " << data.name << "\n";
+    report << "  local_voxels=" << data.local_voxel_centers.size()
+           << " direct_unique=" << direct_mask.size()
+           << " checker_unique="
+           << (has_checker_mask ? checker_masks[i].size() : 0)
+           << " tf=" << (has_tf ? "yes" : "missing") << "\n";
+    report << "  local_min=" << vec3ToString(data.local_min)
+           << " local_max=" << vec3ToString(data.local_max) << "\n";
+
+    if (has_tf) {
+      const auto &t = tf.translation();
+      report << "  tf_translation=" << vec3ToString(t) << "\n";
+    } else {
+      report << "  tf_translation=(missing)\n";
+    }
+
+    report << "  samples=" << samples.size() << "\n";
+    for (std::size_t s = 0; s < samples.size(); ++s) {
+      const auto &sample = samples[s];
+      const auto &world = std::get<0>(sample);
+      const auto &roundtrip_world = std::get<1>(sample);
+      const auto &idx = std::get<2>(sample);
+      const auto flat = std::get<3>(sample);
+      report << "    [" << s << "] world=" << vec3ToString(world)
+             << " idx=" << vec3iToString(idx) << " flat=" << flat
+             << " roundtrip_world=" << vec3ToString(roundtrip_world)
+             << " delta=" << vec3ToString(world - roundtrip_world) << "\n";
+    }
+
+    if (direct_mask.size() <= 24) {
+      report << "  ids=";
+      for (std::size_t j = 0; j < direct_mask.size(); ++j) {
+        report << (j == 0 ? " " : ", ") << direct_mask[j];
+      }
+      report << "\n";
+    } else {
+      report << "  ids(first8)=";
+      for (std::size_t j = 0; j < std::min<std::size_t>(8, direct_mask.size()); ++j) {
+        report << (j == 0 ? " " : ", ") << direct_mask[j];
+      }
+      report << " ... total=" << direct_mask.size() << "\n";
+    }
+    report << "\n";
+  }
+
+  report << "Summary:\n";
+  report << "  mismatched_links=" << mismatch_count << "\n";
+
+  RCLCPP_INFO(logger, "%s", report.str().c_str());
+  if (mismatch_count > 0) {
+    RCLCPP_WARN(logger, "Voxel validation found %zu mismatched link(s).",
+                mismatch_count);
+  } else {
+    RCLCPP_INFO(logger, "Voxel validation passed.");
+  }
+
+  if (!dump_path.empty()) {
+    std::ofstream ofs(dump_path);
+    if (!ofs.is_open()) {
+      RCLCPP_WARN(logger, "Failed to open validation dump path: %s",
+                  dump_path.c_str());
+      return;
+    }
+    ofs << report.str();
+    RCLCPP_INFO(logger, "Wrote voxel validation report to: %s",
+                dump_path.c_str());
   }
 }
 
@@ -272,7 +434,7 @@ public:
     data_directory_ = robot_sim::common::resolveDataPath(
         this->declare_parameter<std::string>("data_directory", "gng_results"));
     robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path",
-                                                            "temp_robot.urdf");
+                                                            "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     gng_model_filename_ = this->declare_parameter<std::string>(
         "gng_model_filename", "gng.bin");
     vlut_filename_ = this->declare_parameter<std::string>(
@@ -316,13 +478,28 @@ public:
         this->declare_parameter<std::vector<std::string>>(
             "collision.approved_initial_collision_pairs",
             std::vector<std::string>{});
+    validate_voxel_link_masks_ =
+        this->declare_parameter<bool>("collision.validate_voxel_link_masks", false);
+    validation_focus_links_ = this->declare_parameter<std::string>(
+        "collision.validation_focus_links", "");
+    validation_max_print_voxels_ = this->declare_parameter<int>(
+        "collision.validation_max_print_voxels", 8);
+    validation_dump_path_ = this->declare_parameter<std::string>(
+        "collision.validation_dump_path", "");
+    initial_collision_only_ =
+        this->declare_parameter<bool>("initial_collision_only", false);
     initial_collision_only_ = this->declare_parameter<bool>(
         "collision.initial_collision_only", false);
+    initial_collision_only_ = initial_collision_only_ ||
+                              this->get_parameter("initial_collision_only").as_bool();
+    generate_initial_collision_approval_only_ =
+        this->declare_parameter<bool>("generate_initial_collision_approval_only", false);
     generate_initial_collision_approval_only_ =
         this->declare_parameter<bool>(
             "collision.generate_initial_collision_approval_only", false);
     generate_initial_collision_approval_only_ =
-        generate_initial_collision_approval_only_ || initial_collision_only_;
+        generate_initial_collision_approval_only_ || initial_collision_only_ ||
+        this->get_parameter("generate_initial_collision_approval_only").as_bool();
 
     // GNG Parameters (nested under gng_params)
     gng_params_.lambda = this->declare_parameter<int>("gng_params.lambda", 50);
@@ -478,11 +655,34 @@ public:
     Eigen::VectorXd zero_q(arm->getTotalDOF());
     zero_q.setZero();
     arm->updateKinematics(zero_q);
+    std::map<std::string, double> joint_hints;
+    const auto joint_values = arm->getJointValues();
+    std::size_t joint_cursor = 0;
+    for (int i = 0; i < arm->getNumJoints(); ++i) {
+      const int dof = arm->getJointDOF(i);
+      if (dof == 1 && joint_cursor < joint_values.size()) {
+        joint_hints[arm->getJointName(i)] = joint_values[joint_cursor];
+      }
+      joint_cursor += static_cast<std::size_t>(std::max(0, dof));
+    }
+    if (voxel_checker) {
+      voxel_checker->setJointValueHints(joint_hints);
+    }
     self_checker->updateBodyPoses(arm->getLinkPositions(),
                                   arm->getLinkOrientations());
     if (voxel_checker) {
       voxel_checker->updateBodyPoses(arm->getLinkPositions(),
                                      arm->getLinkOrientations());
+    }
+
+    if (validate_voxel_link_masks_ && voxel_checker) {
+      std::vector<std::string> focus_links = splitCommaSeparated(validation_focus_links_);
+      writeVoxelValidationReport(
+          this->get_logger(), *voxel_checker, spatial_map_resolution_,
+          focus_links, validation_max_print_voxels_, validation_dump_path_);
+    } else if (validate_voxel_link_masks_ && !voxel_checker) {
+      RCLCPP_WARN(this->get_logger(),
+                  "[Collision][Validation] Requested voxel validation, but voxel collision is disabled.");
     }
 
     std::vector<std::pair<std::string, std::string>> initial_collisions;
@@ -666,6 +866,7 @@ public:
     std::vector<VRel> v_rels;
     double res = vlut_resolution_;
     fcl::Vector3d box_half_size(res * 0.5, res * 0.5, res * 0.5);
+    GNG::Analysis::IndexVoxelGrid voxel_grid(res);
     auto active_ids = gng.getActiveIndices();
     int processed = 0;
 
@@ -772,7 +973,7 @@ public:
           actual_max = actual_max.cwiseMax(world_p);
 
           Eigen::Vector3i idx = (world_p / res).array().floor().cast<int>();
-          long vid = ::GNG::Analysis::IndexVoxelGrid::getFlatVoxelId(idx);
+          long vid = voxel_grid.getFlatVoxelId(idx);
           if (seen.insert(vid).second) {
             v_rels.push_back({vid, nid, link_idx});
           }
@@ -885,13 +1086,20 @@ private:
   std::string paired_leaf_link_name_;
   int gng_dimension_;
   double spatial_map_resolution_;
+  double vlut_resolution_;
   double sensing_resolution_;
   double arm_cache_resolution_;
   double danger_threshold_;
+  double spatial_map_inflation_ = 0.0;
+  double self_recognition_inflation_ = 0.0;
   std::vector<std::string> environment_ignore_links_;
   std::vector<std::string> self_collision_exclusion_pairs_;
   bool require_initial_collision_approval_ = false;
   std::vector<std::string> approved_initial_collision_pairs_;
+  bool validate_voxel_link_masks_ = false;
+  std::string validation_focus_links_;
+  int validation_max_print_voxels_ = 8;
+  std::string validation_dump_path_;
   bool initial_collision_only_ = false;
   bool generate_initial_collision_approval_only_ = false;
   bool vlut_only_ = false;

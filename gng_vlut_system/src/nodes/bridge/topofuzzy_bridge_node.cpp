@@ -145,6 +145,17 @@ public:
           "topofuzzy_bridge: failed to load safety context");
     }
 
+    const int coord_layer_count = context_->gng->getCoordLayerCount();
+    RCLCPP_INFO(get_logger(),
+                "Loaded GNG/VLUT: gng=%s vlut=%s coord_layer_count=%d",
+                gng_path.c_str(), vlut_path.c_str(), coord_layer_count);
+    if (coord_layer_count > 1) {
+      for (int i = 0; i < coord_layer_count; ++i) {
+        RCLCPP_INFO(get_logger(), "  layer topic: %s_layer_%d",
+                    get_parameter("topic_name").as_string().c_str(), i);
+      }
+    }
+
     edge_mode_ = get_parameter("edge_mode").as_int();
     frame_id_ = get_parameter("frame_id").as_string();
     source_frame_id_ = get_parameter("source_frame_id").as_string();

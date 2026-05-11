@@ -89,6 +89,10 @@ struct JointProperties {
   Eigen::Isometry3d origin =
       Eigen::Isometry3d::Identity(); // 親リンク原点からのオフセット
   Eigen::Vector3d axis = Eigen::Vector3d::UnitZ();
+  bool has_mimic = false;
+  std::string mimic_joint_name;
+  double mimic_multiplier = 1.0;
+  double mimic_offset = 0.0;
   JointLimits limits;
   JointDynamics dynamics;
   bool has_limits = false; // 可動域が存在するかどうか

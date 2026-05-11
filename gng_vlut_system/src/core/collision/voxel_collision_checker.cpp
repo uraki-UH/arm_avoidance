@@ -56,6 +56,19 @@ void VoxelCollisionChecker::updateBodyPoses(
             current_tfs_.push_back(Eigen::Isometry3d::Identity());
         }
     }
+
+    augmentBranchLinkTransforms(link_tfs);
+
+    current_tfs_.clear();
+    current_tfs_.reserve(link_data.size());
+    for (const auto& data : link_data) {
+        auto it = link_tfs.find(data.name);
+        if (it != link_tfs.end()) {
+            current_tfs_.push_back(it->second);
+        } else {
+            current_tfs_.push_back(Eigen::Isometry3d::Identity());
+        }
+    }
 }
 
 void VoxelCollisionChecker::addCollisionExclusion(const std::string& link1, const std::string& link2) {
@@ -68,8 +81,79 @@ void VoxelCollisionChecker::addEnvironmentIgnoreLink(const std::string& link_nam
     environment_ignore_links_.insert(link_name);
 }
 
+double VoxelCollisionChecker::getJointValueHint(const std::string& joint_name) const {
+    auto it = joint_value_hints_.find(joint_name);
+    if (it == joint_value_hints_.end()) {
+        return 0.0;
+    }
+    return it->second;
+}
+
+Eigen::Isometry3d VoxelCollisionChecker::computeJointMotionTransform(
+    const simulation::JointProperties& joint, double joint_value) const {
+    Eigen::Isometry3d motion = Eigen::Isometry3d::Identity();
+    switch (joint.type) {
+    case kinematics::JointType::Revolute:
+      motion.rotate(Eigen::AngleAxisd(joint_value, joint.axis.normalized()));
+      break;
+    case kinematics::JointType::Prismatic:
+      motion.translate(joint.axis.normalized() * joint_value);
+      break;
+    default:
+      break;
+    }
+    return motion;
+}
+
+void VoxelCollisionChecker::augmentBranchLinkTransforms(
+    std::map<std::string, Eigen::Isometry3d>& link_tfs) const {
+    bool changed = true;
+    const auto& joints = model_.getJoints();
+    std::size_t iter = 0;
+    while (changed && iter < joints.size() + 1) {
+        changed = false;
+        ++iter;
+        for (const auto& [joint_name, joint] : joints) {
+            (void)joint_name;
+            if (link_tfs.count(joint.child_link) > 0) {
+                continue;
+            }
+            auto parent_it = link_tfs.find(joint.parent_link);
+            if (parent_it == link_tfs.end()) {
+                continue;
+            }
+
+            double joint_value = 0.0;
+            if (joint.has_mimic) {
+                const double source_value = getJointValueHint(joint.mimic_joint_name);
+                joint_value = source_value * joint.mimic_multiplier + joint.mimic_offset;
+            } else {
+                joint_value = getJointValueHint(joint.name);
+            }
+
+            link_tfs[joint.child_link] =
+                parent_it->second * joint.origin *
+                computeJointMotionTransform(joint, joint_value);
+            changed = true;
+        }
+    }
+}
+
 std::vector<std::vector<long>> VoxelCollisionChecker::getLinkVoxelMasks() const {
     return computeLinkVoxelMasks();
+}
+
+std::vector<std::pair<std::string, Eigen::Isometry3d>>
+VoxelCollisionChecker::getCurrentLinkTransforms() const {
+    std::vector<std::pair<std::string, Eigen::Isometry3d>> named_tfs;
+    const auto& link_data = manager_.getLinkVoxelDataList();
+    named_tfs.reserve(link_data.size());
+    for (std::size_t i = 0; i < link_data.size(); ++i) {
+        const auto& data = link_data[i];
+        Eigen::Isometry3d tf = (i < current_tfs_.size()) ? current_tfs_[i] : Eigen::Isometry3d::Identity();
+        named_tfs.emplace_back(data.name, tf);
+    }
+    return named_tfs;
 }
 
 std::vector<std::pair<std::string, std::string>>
@@ -79,9 +163,18 @@ VoxelCollisionChecker::collectSelfCollisionPairs() const {
     auto link_vids = computeLinkVoxelMasks();
 
     for (size_t i = 0; i < link_data.size(); ++i) {
+        const auto& n1_raw = link_data[i].name;
+        if (environment_ignore_links_.count(n1_raw) > 0) {
+            continue;
+        }
         for (size_t j = i + 1; j < link_data.size(); ++j) {
-            std::string n1 = link_data[i].name;
-            std::string n2 = link_data[j].name;
+            const auto& n2_raw = link_data[j].name;
+            if (environment_ignore_links_.count(n2_raw) > 0) {
+                continue;
+            }
+
+            std::string n1 = n1_raw;
+            std::string n2 = n2_raw;
             if (n1 > n2) std::swap(n1, n2);
             if (exclusion_pairs_.count({n1, n2})) {
                 continue;
@@ -188,9 +281,18 @@ bool VoxelCollisionChecker::checkCollision() {
         auto link_vids = computeLinkVoxelMasks();
         
         for (size_t i = 0; i < link_data.size(); ++i) {
+            const auto& n1_raw = link_data[i].name;
+            if (environment_ignore_links_.count(n1_raw) > 0) {
+                continue;
+            }
             for (size_t j = i + 1; j < link_data.size(); ++j) {
-                std::string n1 = link_data[i].name;
-                std::string n2 = link_data[j].name;
+                const auto& n2_raw = link_data[j].name;
+                if (environment_ignore_links_.count(n2_raw) > 0) {
+                    continue;
+                }
+
+                std::string n1 = n1_raw;
+                std::string n2 = n2_raw;
                 if (n1 > n2) std::swap(n1, n2);
                 if (exclusion_pairs_.count({n1, n2})) continue;
 

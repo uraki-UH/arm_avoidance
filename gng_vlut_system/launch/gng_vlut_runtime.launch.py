@@ -51,12 +51,11 @@ def launch_setup(context, *args, **kwargs):
     enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
 
     try:
-        robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-        potential_urdf = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro")
-        if not os.path.exists(potential_urdf):
-            potential_urdf = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
-
-        robot_desc_default = potential_urdf if os.path.exists(potential_urdf) else ""
+        robot_desc_pkg = get_package_share_directory("topoarm_description")
+        candidate = os.path.join(robot_desc_pkg, "urdf", "topo_dual_arm.urdf.xacro")
+        if not os.path.exists(candidate):
+            candidate = os.path.join(robot_desc_pkg, "urdf", "topoarm.urdf.xacro")
+        robot_desc_default = candidate if os.path.exists(candidate) else ""
         resource_root = robot_desc_pkg
         mesh_root = os.path.join(robot_desc_pkg, "meshes")
     except PackageNotFoundError:

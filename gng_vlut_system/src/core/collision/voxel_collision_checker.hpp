@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <set>
+#include <map>
 
 namespace simulation {
 
@@ -54,11 +55,32 @@ public:
     }
 
     /**
+     * @brief 動的な関節値のヒントを設定する
+     * mimic 関節や非チェーンリンクの補完に使う。
+     */
+    void setJointValueHints(const std::map<std::string, double>& joint_values) {
+        joint_value_hints_ = joint_values;
+    }
+
+    /**
      * @brief 現在姿勢における各リンクの voxel 占有 ID を取得する
      * updateBodyPoses() で更新された current_tfs_ を使うため、
      * SelfRecognitionManager の内部 FK 状態には依存しない。
      */
     std::vector<std::vector<long>> getLinkVoxelMasks() const;
+
+    /**
+     * @brief ボクセル化済みリンク情報を取得する
+     * 位置検証用に、リンク名と local voxel center を参照できるようにする。
+     */
+    const std::vector<simulation::LinkVoxelData>& getLinkVoxelDataList() const {
+        return manager_.getLinkVoxelDataList();
+    }
+
+    /**
+     * @brief 現在姿勢のリンク変換を、リンク名付きで取得する
+     */
+    std::vector<std::pair<std::string, Eigen::Isometry3d>> getCurrentLinkTransforms() const;
 
     /**
      * @brief 現在姿勢で自己衝突しているリンクペアを列挙する
@@ -87,6 +109,7 @@ private:
     double ground_z_threshold_ = -std::numeric_limits<double>::infinity();
     bool enable_self_collision_ = true;
     std::set<std::string> environment_ignore_links_;
+    std::map<std::string, double> joint_value_hints_;
 
     std::set<std::pair<std::string, std::string>> exclusion_pairs_;
     
@@ -94,6 +117,10 @@ private:
     std::vector<Eigen::Isometry3d> current_tfs_;
 
     std::vector<std::vector<long>> computeLinkVoxelMasks() const;
+    void augmentBranchLinkTransforms(std::map<std::string, Eigen::Isometry3d>& link_tfs) const;
+    Eigen::Isometry3d computeJointMotionTransform(const simulation::JointProperties& joint,
+                                                  double joint_value) const;
+    double getJointValueHint(const std::string& joint_name) const;
 
     bool checkSelfCollision();
     bool checkEnvironmentCollision();

@@ -268,6 +268,13 @@ RobotModel loadRobotFromUrdf(const std::string &urdf_path,
       joint_props.dynamics.friction = joint_ptr->dynamics->friction;
     }
 
+    if (joint_ptr->mimic) {
+      joint_props.has_mimic = true;
+      joint_props.mimic_joint_name = joint_ptr->mimic->joint_name;
+      joint_props.mimic_multiplier = joint_ptr->mimic->multiplier;
+      joint_props.mimic_offset = joint_ptr->mimic->offset;
+    }
+
     robot_model.addJoint(joint_props);
   }
 

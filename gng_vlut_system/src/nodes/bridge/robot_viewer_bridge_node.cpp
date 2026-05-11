@@ -24,7 +24,12 @@ namespace robot_sim::bridge {
 RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options)
 : Node("robot_viewer_bridge_node", options) {
     const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-    const std::string default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro";
+    std::string default_urdf;
+    try {
+        default_urdf = ament_index_cpp::get_package_share_directory("topoarm_description") + "/urdf/topo_dual_arm.urdf.xacro";
+    } catch (...) {
+        default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro";
+    }
 
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
     const std::string robot_description_file = declare_parameter<std::string>("robot_description_file", default_urdf);

@@ -9,20 +9,51 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def resolve_robot_description_path(pkg_share: str, raw_path: str) -> str:
-    if (not raw_path):
-        return os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro")
+def resolve_package_uri(raw_path: str) -> str:
+    if not raw_path.startswith("package://"):
+        return raw_path
 
-    if raw_path.startswith("package://gng_vlut_system/"):
-        return os.path.join(pkg_share, raw_path[len("package://gng_vlut_system/"):])
+    pkg_and_path = raw_path[len("package://"):]
+    pkg_name, _, rel_path = pkg_and_path.partition("/")
+    if not pkg_name or not rel_path:
+        return raw_path
 
-    if raw_path.startswith("package://"):
-        pkg_and_path = raw_path[len("package://"):]
-        _, _, rel_path = pkg_and_path.partition("/")
-        if rel_path:
-            return os.path.join(pkg_share, rel_path)
+    try:
+        pkg_share = get_package_share_directory(pkg_name)
+    except Exception:
+        return raw_path
+    return os.path.join(pkg_share, rel_path)
 
-    return raw_path
+
+def resolve_robot_description_path(pkg_share: str, robot_name: str, raw_path: str) -> str:
+    if raw_path:
+        resolved = resolve_package_uri(raw_path)
+        return resolved if os.path.exists(resolved) else raw_path
+
+    candidates = []
+    try:
+        topoarm_pkg = get_package_share_directory("topoarm_description")
+        candidates.extend([
+            os.path.join(topoarm_pkg, "urdf", "topo_dual_arm.urdf.xacro"),
+            os.path.join(topoarm_pkg, "urdf", "topoarm.urdf.xacro"),
+        ])
+    except Exception:
+        pass
+
+    try:
+        robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
+        candidates.extend([
+            os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
+            os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
+        ])
+    except Exception:
+        pass
+
+    candidates.append(os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro"))
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return candidates[-1]
 
 
 def launch_setup(context, *args, **kwargs):
@@ -63,7 +94,7 @@ def launch_setup(context, *args, **kwargs):
         robot_name = user_robot_name
 
     robot_description_raw = LaunchConfiguration("robot_description_file").perform(context)
-    robot_urdf = resolve_robot_description_path(pkg_share, robot_description_raw)
+    robot_urdf = resolve_robot_description_path(pkg_share, robot_name, robot_description_raw)
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     node_params = {}

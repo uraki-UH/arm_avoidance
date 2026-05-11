@@ -84,13 +84,19 @@ add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
 add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cpp)
 
 # Grouped Nodes
-add_executable(robot_description_player_node nodes/description/robot_description_player.cpp)
+add_executable(robot_description_player_node nodes/robot_description_player.cpp)
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
 
+# Offline tools
+add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
+
+# Offline validation tools
+add_subdirectory(offline_tools/tools)
+
 # Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node)
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node offline_urdf_trainer)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})
@@ -99,7 +105,7 @@ endforeach()
 
 # Shared Components
 add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
-add_library(robot_description_player_component SHARED nodes/description/robot_description_player.cpp)
+add_library(robot_description_player_component SHARED nodes/robot_description_player.cpp)
 
 set(COMPONENTS robot_viewer_bridge_node_component robot_description_player_component)
 foreach(comp ${COMPONENTS})
@@ -110,4 +116,3 @@ endforeach()
 
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
-

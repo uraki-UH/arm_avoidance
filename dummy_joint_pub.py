@@ -27,10 +27,25 @@ class DummyJointPublisher(Node):
         # ゆっくりとしたサイン波で両腕を動かす
         val = math.sin(self.t) * 0.5
         val_r = math.cos(self.t) * 0.5
+        # val=0.0
+        # val_r=0.0
+
+        # msg.position = [
+        #     val, val * 0.8, val * 0.6, val * 0.4, val * 0.2, 0.0, 0.0, 0.0, 0.0, # Left
+        #     val_r, val_r * 0.8, val_r * 0.6, val_r * 0.4, val_r * 0.2, 0.0, 0.0, 0.0, 0.0 # Right
+        # ]
+
+        # msg.position = [
+        #     val, val * 0.8, val * 0.6, val * 0.4, val * 0.2, 0.0, 0.0, 0.0,  val * 0.2, # Left
+        #     val_r, val_r * 0.8, val_r * 0.6, val_r * 0.4, val_r * 0.2, 0.0, 0.0, 0.0,  val * 0.2 # Right
+        # ]
+
         msg.position = [
-            val, val * 0.8, val * 0.6, val * 0.4, val * 0.2, 0.0, 0.0, 0.0, 0.0, # Left
-            val_r, val_r * 0.8, val_r * 0.6, val_r * 0.4, val_r * 0.2, 0.0, 0.0, 0.0, 0.0 # Right
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  val * 0.2, # Left
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,  val * 0.2 # Right
         ]
+
+        
         
         self.publisher_.publish(msg)
         self.t += 0.1
