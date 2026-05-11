@@ -108,6 +108,6 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py
 ros2 run gng_vlut_system self_recognition_filter_node
 
 
-双椀召喚
+双腕召喚
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   robot_description_file:=package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro

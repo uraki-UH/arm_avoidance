@@ -73,7 +73,8 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             const x = Number((id >> xShift)) - Number(offset);
             const y = Number((id >> yShift) & mask) - Number(offset);
             const z = Number((id >> zShift) & mask) - Number(offset);
-            return [x * voxelSize, y * voxelSize, z * voxelSize];
+            // Voxel IDs represent grid cells, so render at the cell center.
+            return [(x + 0.5) * voxelSize, (y + 0.5) * voxelSize, (z + 0.5) * voxelSize];
         });
     }, [data, layout, voxelSize]);
 
