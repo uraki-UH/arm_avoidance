@@ -16,7 +16,7 @@ class TestTFPublisher(Node):
     def __init__(self):
         super().__init__("test_tf_publisher")
 
-        self.frame_id = self.declare_parameter("frame_id", "topoarm_dual/base_link").value
+        self.frame_id = self.declare_parameter("frame_id", "ToPoDualArm/base_link").value
         self.world_frame = self.declare_parameter("world_frame", "world").value
         self.publish_hz = float(self.declare_parameter("publish_hz", 20.0).value)
         self.orbit_radius = float(self.declare_parameter("orbit_radius", 0.8).value)

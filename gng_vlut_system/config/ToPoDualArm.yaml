@@ -17,8 +17,8 @@
     padding: 0.0
 
     # --- GNG & Safety Settings ---
-    experiment_id: "topo_dual_arm_test"
-    data_directory: "gng_results"
+    experiment_id: "topoarm_double_test"
+    data_directory: "/ros2_ws/src/gng_vlut_system/gng_results"
     gng_model_filename: "gng.bin"
     vlut_filename: "vlut.bin"
     ground_z_threshold: 0.0

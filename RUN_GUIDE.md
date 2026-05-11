@@ -80,3 +80,26 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/topoarm_dual.yaml \
   use_voxel_collision:=true \
   initial_collision_only:=true
+
+
+
+
+ToPoDualArmの場合
+
+
+  python3 dummy_joint_pub.py --robot topo_dual_arm (--namespace ToPoDualArm)
+
+  python3 dummy_joint_pub.py --robot topo_dual_arm
+
+
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  topic_name:=/topological_map_static
+
+
+  ros2 launch gng_vlut_system self_recognition_viz.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   robot_name:=ToPoDualArm
+
+
+  ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  use_voxel_collision:=true

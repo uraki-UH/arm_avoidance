@@ -95,7 +95,15 @@ def launch_setup(context, *args, **kwargs):
             if extracted_name:
                 yaml_robot_name = extracted_name
 
-            root_ros_params = params_yaml.get('ros__parameters', {})
+            root_ros_params = {}
+            for root_key in ('/**', 'ros__parameters'):
+                candidate = params_yaml.get(root_key, {})
+                if isinstance(candidate, dict) and 'ros__parameters' in candidate:
+                    candidate = candidate.get('ros__parameters', {})
+                if isinstance(candidate, dict):
+                    root_ros_params = candidate
+                    break
+
             if isinstance(root_ros_params, dict):
                 yaml_data_dir = root_ros_params.get('data_directory', yaml_data_dir)
                 yaml_exp_id = root_ros_params.get('experiment_id', yaml_exp_id)
@@ -123,9 +131,9 @@ def launch_setup(context, *args, **kwargs):
     else:
         robot_name = yaml_robot_name
 
-    if not data_dir:
+    if not data_dir or data_dir == "gng_results":
         data_dir = yaml_data_dir
-    if not exp_id:
+    if not exp_id or exp_id == "topoarm":
         exp_id = yaml_exp_id
     
     # Auto-detect robot description package
