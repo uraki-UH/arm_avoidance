@@ -28,7 +28,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter<std::vector<std::string>>("leaf_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
     declare_parameter<std::string>("root_link", "");
-    declare_parameter("padding", 0.02);
+    declare_parameter("self_recognition.inflation", 0.02);
  
     // ボクセル展開パラメータの宣言
     declare_parameter("voxel_indexing.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
@@ -46,7 +46,14 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     RCLCPP_INFO(get_logger(), "Loading URDF from: %s", urdf_path.c_str());
 
     const std::string joint_topic = get_parameter("joint_topic").as_string();
-    const double voxel_size_param = get_parameter("voxel_size").as_double();
+    
+    // Prefer self_recognition.resolution if specified, otherwise fallback to voxel_size
+    declare_parameter("self_recognition.resolution", 0.0);
+    double res_param = get_parameter("self_recognition.resolution").as_double();
+    if (res_param <= 0.0) {
+        res_param = get_parameter("voxel_size").as_double();
+    }
+    const double voxel_size_param = res_param;
 
     // モデルとチェインの構築
     try {
@@ -117,10 +124,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         get_parameter("voxel_indexing.offset").as_int());
 
     double hz = get_parameter("update_hz").as_double();
-    double padding = get_parameter("padding").as_double();
+    double inflation = get_parameter("self_recognition.inflation").as_double();
 
     // ボクセル化の実行（全衝突リンクを対象）
-    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid, {}, padding);
+    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid, {}, inflation);
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
     // 通信

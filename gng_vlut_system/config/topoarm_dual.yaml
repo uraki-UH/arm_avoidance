@@ -12,20 +12,27 @@
     robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     arm_leaf_link_names: "left_link7,right_link7"
-    voxel_size: 0.02
-    padding: 0.0
-
-    # --- GNG & Safety Settings ---
     experiment_id: "topoarm_double_test"
     data_directory: "gng_results"
     gng_model_filename: "gng.bin"
     vlut_filename: "vlut.bin"
     ground_z_threshold: 0.0
     gng_dimension: 12
-    spatial_map_resolution: 0.02
-    self_recognition_resolution: 0.02
-    arm_cache_resolution: 0.008
-    danger_threshold: 0.025
+
+    # --- Resolution & Inflation Settings ---
+    spatial_map:
+      resolution: 0.02      # GNG学習・障害物判定の解像度
+      inflation: 0.00       # 学習時のロボットの膨張量 (0.0推奨)
+    
+    self_recognition:
+      resolution: 0.01      # 自己認識（センサーマスク）の解像度
+      inflation: 0.0      # マスク生成時のロボットの膨張量 (少し太らせる)
+    
+    vlut:
+      resolution: 0.01      # 保存されるVoxel LUTの解像度
+
+    arm_cache_resolution: 0.008       # ロボット形状キャッシュの解像度 (細かめ推奨)
+    danger_threshold: 0.025           # 危険判定距離
     
     gng_params:
       lambda: 50

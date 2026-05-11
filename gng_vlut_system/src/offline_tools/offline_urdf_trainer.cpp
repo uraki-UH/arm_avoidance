@@ -223,17 +223,22 @@ public:
         "paired_leaf_link_name", "");
     gng_dimension_ = this->declare_parameter<int>("gng_dimension", 6);
     spatial_map_resolution_ =
-        this->declare_parameter<double>("spatial_map_resolution", 0.02);
+        this->declare_parameter<double>("spatial_map.resolution", 0.02);
     sensing_resolution_ =
         this->declare_parameter<double>("sensing_resolution", 0.02);
     arm_cache_resolution_ =
         this->declare_parameter<double>("arm_cache_resolution", 0.008);
     danger_threshold_ =
         this->declare_parameter<double>("danger_threshold", 0.025);
+    vlut_resolution_ =
+        this->declare_parameter<double>("vlut.resolution", 0.02);
     vlut_only_ = this->declare_parameter<bool>("vlut_only", false);
     use_voxel_collision_ =
         this->declare_parameter<bool>("use_voxel_collision", false);
-    voxel_padding_ = this->declare_parameter<double>("voxel_padding", 0.0);
+    spatial_map_inflation_ =
+        this->declare_parameter<double>("spatial_map.inflation", 0.0);
+    self_recognition_inflation_ =
+        this->declare_parameter<double>("self_recognition.inflation", 0.02);
 
     // GNG Parameters (nested under gng_params)
     gng_params_.lambda = this->declare_parameter<int>("gng_params.lambda", 50);
@@ -367,7 +372,7 @@ public:
                   "[Collision] Using VoxelCollisionChecker (Res: %f)",
                   spatial_map_resolution_);
       auto voxel_checker = std::make_shared<simulation::VoxelCollisionChecker>(
-          *model, *arm, spatial_map_resolution_, voxel_padding_);
+          *model, *arm, spatial_map_resolution_, spatial_map_inflation_);
       voxel_checker->setGroundZThreshold(ground_z_threshold_);
       voxel_checker->setEnableSelfCollision(true);
       final_checker = voxel_checker;
@@ -453,7 +458,7 @@ public:
       int lid;
     };
     std::vector<VRel> v_rels;
-    double res = spatial_map_resolution_;
+    double res = vlut_resolution_;
     fcl::Vector3d box_half_size(res * 0.5, res * 0.5, res * 0.5);
     auto active_ids = gng.getActiveIndices();
     int processed = 0;
