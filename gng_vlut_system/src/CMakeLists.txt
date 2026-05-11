@@ -52,6 +52,7 @@ add_library(collision_lib STATIC
     core/collision/point_cloud_collision_checker.cpp
     core/collision/self_collision_checker.cpp
     core/collision/voxel_grid.cpp
+    core/collision/voxel_collision_checker.cpp
     core/collision/fcl/fcl_collision_detector.cpp
 )
 add_definitions(-DUSE_FCL)
@@ -110,8 +111,3 @@ endforeach()
 rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
 
-# --- 5. Verification Tools ---
-add_executable(verify_sync verify_sync.cpp)
-target_link_libraries(verify_sync ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-ament_target_dependencies(verify_sync ${DEPS_ROS})
-install(TARGETS verify_sync DESTINATION lib/${PROJECT_NAME})

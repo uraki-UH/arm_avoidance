@@ -15,6 +15,7 @@
 #include "collision/composite_collision_checker.hpp"
 #include "collision/environment_collision_checker.hpp"
 #include "collision/geometric_self_collision_checker.hpp"
+#include "collision/voxel_collision_checker.hpp"
 #include "common/resource_utils.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include "robot_model/kinematic_adapter.hpp"
@@ -230,6 +231,9 @@ public:
     danger_threshold_ =
         this->declare_parameter<double>("danger_threshold", 0.025);
     vlut_only_ = this->declare_parameter<bool>("vlut_only", false);
+    use_voxel_collision_ =
+        this->declare_parameter<bool>("use_voxel_collision", false);
+    voxel_padding_ = this->declare_parameter<double>("voxel_padding", 0.0);
 
     // GNG Parameters (nested under gng_params)
     gng_params_.lambda = this->declare_parameter<int>("gng_params.lambda", 50);
@@ -357,18 +361,32 @@ public:
     composite_checker->setEnvironmentCollisionChecker(env_checker);
 
     // 3. GNG Setup
+    std::shared_ptr<simulation::ISelfCollisionChecker> final_checker;
+    if (use_voxel_collision_) {
+      RCLCPP_INFO(this->get_logger(),
+                  "[Collision] Using VoxelCollisionChecker (Res: %f)",
+                  spatial_map_resolution_);
+      auto voxel_checker = std::make_shared<simulation::VoxelCollisionChecker>(
+          *model, *arm, spatial_map_resolution_, voxel_padding_);
+      voxel_checker->setGroundZThreshold(ground_z_threshold_);
+      voxel_checker->setEnableSelfCollision(true);
+      final_checker = voxel_checker;
+    } else {
+      final_checker = composite_checker;
+    }
+
     GNG2 gng(gng_dimension_, 3, arm.get());
     gng.setCoordLayerCount(static_cast<int>(arm->getArmCount()));
 
     // Initialize GNG parameters from ROS 2 parameters
     gng.setParams(gng_params_);
 
-    gng.setSelfCollisionChecker(composite_checker.get());
+    gng.setSelfCollisionChecker(final_checker.get());
     // Initialize Status Providers
     gng.registerStatusProvider(
         std::make_shared<GNG::GeometricSelfCollisionProvider<Eigen::VectorXf,
                                                              Eigen::Vector3f>>(
-            composite_checker.get(), arm.get()));
+            final_checker.get(), arm.get()));
     gng.registerStatusProvider(
         std::make_shared<
             GNG::ManipulabilityProvider<Eigen::VectorXf, Eigen::Vector3f>>(
@@ -660,6 +678,8 @@ private:
   double arm_cache_resolution_;
   double danger_threshold_;
   bool vlut_only_ = false;
+  bool use_voxel_collision_ = false;
+  double voxel_padding_ = 0.0;
 
   // GNG Parameters struct
   GNG::GngParameters gng_params_;

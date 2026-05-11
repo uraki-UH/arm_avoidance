@@ -150,6 +150,19 @@ public:
     source_frame_id_ = get_parameter("source_frame_id").as_string();
     publish_hz_ = std::max(0.1, get_parameter("publish_hz").as_double());
 
+    // Resolve frame IDs with namespace if they are relative
+    std::string ns = get_namespace();
+    if (ns != "/" && !ns.empty()) {
+        if (ns[0] == '/') ns = ns.substr(1);
+        auto prefix_frame = [&](std::string &f) {
+            if (!f.empty() && f != "world" && f[0] != '/') {
+                f = ns + "/" + f;
+            }
+        };
+        prefix_frame(frame_id_);
+        prefix_frame(source_frame_id_);
+    }
+
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 

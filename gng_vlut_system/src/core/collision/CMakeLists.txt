@@ -6,6 +6,7 @@ set(COLLISION_SRCS
     point_cloud_collision_checker.cpp
     self_collision_checker.cpp
     voxel_grid.cpp
+    voxel_collision_checker.cpp
 )
 
 # Force FCL usage for safety monitor

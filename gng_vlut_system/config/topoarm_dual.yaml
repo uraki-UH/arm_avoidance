@@ -46,13 +46,13 @@
     # --- Bridge & Viewer Settings ---
     joint_state_topic: "joint_states" # 相対名に変更（名前空間内で解決）
     stream_topic: "/viewer/internal/stream/robot"
-    frame_id: "world"                # 世界座標系の中でロボットを動かす
-    source_frame_id: "world"
+    frame_id: "base_link"
+    source_frame_id: "base_link"
     publish_hz: 30.0
 
     # --- Self Recognition Settings ---
-    target_frame_id: "world"
-    marker_frame_id: "world"
+    target_frame_id: "base_link"
+    marker_frame_id: "base_link"
     update_hz: 30.0
     input_topic: "/camera/transformed_points"
     output_topic: "/camera/self_filtered_points"

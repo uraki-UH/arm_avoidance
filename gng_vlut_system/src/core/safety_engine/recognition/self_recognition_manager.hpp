@@ -14,8 +14,6 @@
 #include "common/voxel_utils.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 
-#include <visualization_msgs/msg/marker_array.hpp>
-#include <geometry_msgs/msg/point.hpp>
 
 namespace robot_sim {
 namespace recognition {
@@ -133,7 +131,7 @@ public:
         
         // 3. Radix Sort (O(N)) による高速重複削除
         if (all_vids.size() > 1) {
-            radixSort(all_vids);
+            ::common::geometry::VoxelUtils::radixSort(all_vids);
             all_vids.erase(std::unique(all_vids.begin(), all_vids.end()), all_vids.end());
         }
         auto t_end = std::chrono::high_resolution_clock::now();
@@ -162,106 +160,40 @@ public:
         }
     }
 
-    struct VisualizationMarkers {
-        visualization_msgs::msg::MarkerArray voxels;
-        visualization_msgs::msg::MarkerArray aabb;
-    };
-
-    VisualizationMarkers getVisualizationMarkers(const std::string& frame_id, double time_sec) {
-        VisualizationMarkers msg;
-        auto tfs = getCurrentLinkTransforms();
-        if (tfs.empty()) return msg;
-
-        int marker_id = 0;
-        for (const auto& data : link_data_list_) {
-            if (tfs.count(data.name)) {
-                const auto& tf = tfs.at(data.name);
-                
-                visualization_msgs::msg::Marker m;
-                m.header.frame_id = frame_id; m.header.stamp.sec = (int32_t)time_sec;
-                m.header.stamp.nanosec = static_cast<uint32_t>((time_sec - (double)m.header.stamp.sec) * 1e9);
-                m.ns = "self_voxels"; m.id = marker_id++;
-                m.type = visualization_msgs::msg::Marker::CUBE_LIST;
-                m.scale.x = m.scale.y = m.scale.z = voxel_size_;
-                m.color.g = 1.0f; m.color.a = 0.5f; m.pose.orientation.w = 1.0;
-                for (const auto& lp : data.local_voxel_centers) {
-                    Eigen::Vector3d wp = tf * lp;
-                    geometry_msgs::msg::Point p_msg; p_msg.x = wp.x(); p_msg.y = wp.y(); p_msg.z = wp.z();
-                    m.points.push_back(p_msg);
-                }
-                if (!m.points.empty()) msg.voxels.markers.push_back(m);
-
-                visualization_msgs::msg::Marker b;
-                b.header = m.header; b.ns = "self_aabb"; b.id = marker_id++;
-                b.type = visualization_msgs::msg::Marker::LINE_LIST;
-                b.scale.x = 0.002; b.color.r = 1.0f; b.color.g = 0.5f; b.color.a = 0.8f; b.pose.orientation.w = 1.0;
-                Eigen::Vector3d corners[8];
-                for(int i=0; i<8; ++i) {
-                    Eigen::Vector3d c = data.local_min;
-                    if(i&1) c.x()=data.local_max.x(); if(i&2) c.y()=data.local_max.y(); if(i&4) c.z()=data.local_max.z();
-                    corners[i] = tf * c;
-                }
-                int ed[12][2]={{0,1},{1,3},{3,2},{2,0},{4,5},{5,7},{7,6},{6,4},{0,4},{1,5},{2,6},{3,7}};
-                for(auto& e:ed) {
-                    geometry_msgs::msg::Point p1,p2;
-                    p1.x=corners[e[0]].x(); p1.y=corners[e[0]].y(); p1.z=corners[e[0]].z();
-                    p2.x=corners[e[1]].x(); p2.y=corners[e[1]].y(); p2.z=corners[e[1]].z();
-                    b.points.push_back(p1); b.points.push_back(p2);
-                }
-                msg.aabb.markers.push_back(b);
-            }
-        }
-        return msg;
-    }
-
-    VisualizationMarkers getVisualizationMarkers(const std::vector<double>& joints, const std::string& frame_id, double time_sec) {
-        updateRobotState(joints);
-        return getVisualizationMarkers(frame_id, time_sec);
-    }
 
     const std::vector<::simulation::LinkVoxelData>& getLinkVoxelDataList() const { return link_data_list_; }
     std::shared_ptr<::kinematics::KinematicChain> getKinematicChain() { return chain_; }
     ::GNG::Analysis::IndexVoxelGrid* getIndexGrid() { return &grid_; }
     double getVoxelSize() const { return voxel_size_; }
 
-    void radixSort(std::vector<long>& v) {
-        if (v.size() < 2) return;
-        if (radix_tmp_.size() < v.size()) radix_tmp_.resize(v.size());
+    /**
+     * @brief リンクごとのボクセルIDリストを取得する
+     */
+    std::vector<std::vector<long>> getLinkVoxelMasks(const Eigen::Isometry3d& target_to_base = Eigen::Isometry3d::Identity()) {
+        auto tfs = getCurrentLinkTransforms();
+        std::vector<std::vector<long>> result(link_data_list_.size());
         
-        const int bits = 8;
-        const int mask = (1 << bits) - 1;
-        
-        long* src = v.data();
-        long* dst = radix_tmp_.data();
-        
-        // 64bitを8bitずつ常に8回まわす (確定的パフォーマンス)
-        for (int shift = 0; shift < 64; shift += bits) {
-            size_t count[256] = {0};
-            
-            // カウント (分岐なし)
-            for (size_t i = 0; i < v.size(); ++i) {
-                count[(src[i] >> shift) & mask]++;
+        for (size_t i = 0; i < link_data_list_.size(); ++i) {
+            const auto& data = link_data_list_[i];
+            auto it = tfs.find(data.name);
+            if (it != tfs.end()) {
+                Eigen::Isometry3d tf = target_to_base * it->second;
+                result[i].reserve(data.local_voxel_centers.size());
+                for (const auto& lp : data.local_voxel_centers) {
+                    Eigen::Vector3d wp = tf * lp;
+                    result[i].push_back(grid_.getFlatVoxelId(
+                        ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_)));
+                }
+                if (result[i].size() > 1) {
+                    ::common::geometry::VoxelUtils::radixSort(result[i]);
+                    result[i].erase(std::unique(result[i].begin(), result[i].end()), result[i].end());
+                }
             }
-            
-            // オフセット計算
-            size_t pos[256];
-            pos[0] = 0;
-            for (int i = 1; i < 256; i++) pos[i] = pos[i-1] + count[i-1];
-            
-            // 転送
-            for (size_t i = 0; i < v.size(); ++i) {
-                dst[pos[(src[i] >> shift) & mask]++] = src[i];
-            }
-            
-            // ポインタ入れ替え
-            std::swap(src, dst);
         }
-        
-        // 8回(偶数回)回した後は必ず src == v.data() に戻っている
+        return result;
     }
 
 private:
-    std::vector<long> radix_tmp_;
     size_t last_total_points_pre_unique_ = 0;
     double last_calc_time_ms_ = 0;
     Eigen::Isometry3d last_target_to_base_ = Eigen::Isometry3d::Identity();

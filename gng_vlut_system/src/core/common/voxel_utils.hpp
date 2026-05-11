@@ -109,6 +109,35 @@ public:
                         sorted_old.begin(), sorted_old.end(),
                         std::back_inserter(added));
   }
+  /**
+   * @brief Fast Radix Sort for 64-bit voxel IDs.
+   */
+  static void radixSort(std::vector<long>& v) {
+      if (v.size() < 2) return;
+      static thread_local std::vector<long> radix_tmp;
+      if (radix_tmp.size() < v.size()) radix_tmp.resize(v.size());
+      
+      const int bits = 8;
+      const int mask = (1 << bits) - 1;
+      
+      long* src = v.data();
+      long* dst = radix_tmp.data();
+      
+      for (int shift = 0; shift < 64; shift += bits) {
+          size_t count[256] = {0};
+          for (size_t i = 0; i < v.size(); ++i) {
+              count[(src[i] >> shift) & mask]++;
+          }
+          size_t pos[256];
+          pos[0] = 0;
+          for (int i = 1; i < 256; i++) pos[i] = pos[i-1] + count[i-1];
+          for (size_t i = 0; i < v.size(); ++i) {
+              dst[pos[(src[i] >> shift) & mask]++] = src[i];
+          }
+          std::swap(src, dst);
+      }
+      // After 8 rounds, src == v.data()
+  }
 };
 
 } // namespace geometry

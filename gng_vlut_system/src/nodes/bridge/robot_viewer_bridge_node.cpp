@@ -37,6 +37,16 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     frame_id_ = declare_parameter<std::string>("frame_id", ::robot_sim::common::Constants::DEFAULT_WORLD_FRAME);
     publish_hz_ = std::max(1.0, declare_parameter<double>("publish_hz", ::robot_sim::common::Constants::DEFAULT_VIEWER_HZ));
 
+    // Resolve frame_id with namespace if it's not a global frame
+    std::string ns = get_namespace();
+    if (ns != "/" && !ns.empty()) {
+        if (ns[0] == '/') ns = ns.substr(1);
+        // Only prefix if it's a relative frame and not "world"
+        if (!frame_id_.empty() && frame_id_ != "world" && frame_id_[0] != '/') {
+            frame_id_ = ns + "/" + frame_id_;
+        }
+    }
+
     const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
     if (!loadRobotDescription(urdf_content_, resolved_urdf_path)) {
         throw std::runtime_error("Failed to load robot description: " + resolved_urdf_path);
