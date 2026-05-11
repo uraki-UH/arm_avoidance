@@ -82,15 +82,15 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボットの名前"),
-        DeclareLaunchArgument("id", default_value="", description="実験ID (experiment_id)"),
-        DeclareLaunchArgument("experiment_id", default_value="", description="(旧) 実験ID"),
-        DeclareLaunchArgument("dir", default_value="gng_results", description="GNGデータのディレクトリ"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"), description="設定YAMLファイル"),
-        DeclareLaunchArgument("data_directory", default_value="", description="(旧) データディレクトリ"),
-        DeclareLaunchArgument("frame_id", default_value="base_link", description="基準座標系"),
-        DeclareLaunchArgument("safety_margin", default_value="0.05", description="安全マージン [m]"),
-        DeclareLaunchArgument("tag", default_value="dynamic", description="GNGレイヤータグ"),
-        DeclareLaunchArgument("mode", default_value="dynamic", description="動作モード"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("id", default_value=""),
+        DeclareLaunchArgument("experiment_id", default_value=""),
+        DeclareLaunchArgument("dir", default_value="gng_results"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("data_directory", default_value=""),
+        DeclareLaunchArgument("frame_id", default_value="base_link"),
+        DeclareLaunchArgument("safety_margin", default_value="0.05"),
+        DeclareLaunchArgument("tag", default_value="dynamic"),
+        DeclareLaunchArgument("mode", default_value="dynamic"),
         OpaqueFunction(function=launch_setup)
     ])

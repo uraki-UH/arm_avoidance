@@ -36,6 +36,13 @@ public:
 
   bool checkCollision() override;
 
+  /**
+   * @brief 現在の姿勢で自己衝突しているリンクペアを列挙する
+   * 既に除外済みのペアは含めない。
+   */
+  std::vector<std::pair<std::string, std::string>>
+  collectSelfCollisionPairs() const;
+
   // 衝突除外ペアの管理
   void addCollisionExclusion(const std::string &link1,
                              const std::string &link2);

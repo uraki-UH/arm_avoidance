@@ -22,6 +22,12 @@ VoxelCollisionChecker::VoxelCollisionChecker(const RobotModel& model,
     }
 
     auto voxel_data = RobotVoxelizer::build(model, collision_links, grid, {}, padding);
+
+    // 自己衝突では、URDF上で joint で直接つながる隣接リンクは除外する。
+    // これは geometric self checker の挙動に合わせるため。
+    for (const auto& [joint_name, joint] : model.getJoints()) {
+        addCollisionExclusion(joint.parent_link, joint.child_link);
+    }
     
     // マネージャの初期化（共有ロジックを利用）
     auto chain_ptr = std::make_shared<kinematics::KinematicChain>(chain);
@@ -58,6 +64,79 @@ void VoxelCollisionChecker::addCollisionExclusion(const std::string& link1, cons
     exclusion_pairs_.insert({l1, l2});
 }
 
+void VoxelCollisionChecker::addEnvironmentIgnoreLink(const std::string& link_name) {
+    environment_ignore_links_.insert(link_name);
+}
+
+std::vector<std::vector<long>> VoxelCollisionChecker::getLinkVoxelMasks() const {
+    return computeLinkVoxelMasks();
+}
+
+std::vector<std::pair<std::string, std::string>>
+VoxelCollisionChecker::collectSelfCollisionPairs() const {
+    std::vector<std::pair<std::string, std::string>> pairs;
+    const auto& link_data = manager_.getLinkVoxelDataList();
+    auto link_vids = computeLinkVoxelMasks();
+
+    for (size_t i = 0; i < link_data.size(); ++i) {
+        for (size_t j = i + 1; j < link_data.size(); ++j) {
+            std::string n1 = link_data[i].name;
+            std::string n2 = link_data[j].name;
+            if (n1 > n2) std::swap(n1, n2);
+            if (exclusion_pairs_.count({n1, n2})) {
+                continue;
+            }
+
+            const auto& vids1 = link_vids[i];
+            const auto& vids2 = link_vids[j];
+            auto it1 = vids1.begin();
+            auto it2 = vids2.begin();
+            while (it1 != vids1.end() && it2 != vids2.end()) {
+                if (*it1 == *it2) {
+                    pairs.emplace_back(n1, n2);
+                    break;
+                }
+                if (*it1 < *it2) ++it1;
+                else ++it2;
+            }
+        }
+    }
+
+    std::sort(pairs.begin(), pairs.end());
+    pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
+    return pairs;
+}
+
+std::vector<std::vector<long>> VoxelCollisionChecker::computeLinkVoxelMasks() const {
+    std::vector<std::vector<long>> link_vids;
+    const auto& link_data = manager_.getLinkVoxelDataList();
+    link_vids.resize(link_data.size());
+
+    auto* grid = manager_.getIndexGrid();
+    if (!grid || current_tfs_.size() != link_data.size()) {
+        return link_vids;
+    }
+
+    for (size_t i = 0; i < link_data.size(); ++i) {
+        const auto& data = link_data[i];
+        const auto& tf = current_tfs_[i];
+        auto& vids = link_vids[i];
+        vids.reserve(data.local_voxel_centers.size());
+        for (const auto& lp : data.local_voxel_centers) {
+            Eigen::Vector3d wp = tf * lp;
+            vids.push_back(grid->getFlatVoxelId(
+                ::common::geometry::VoxelUtils::worldToVoxel(
+                    wp.template cast<float>(), (float)voxel_size_)));
+        }
+        if (vids.size() > 1) {
+            ::common::geometry::VoxelUtils::radixSort(vids);
+            vids.erase(std::unique(vids.begin(), vids.end()), vids.end());
+        }
+    }
+
+    return link_vids;
+}
+
 bool VoxelCollisionChecker::checkCollision() {
     const auto& link_data = manager_.getLinkVoxelDataList();
 
@@ -65,6 +144,9 @@ bool VoxelCollisionChecker::checkCollision() {
     if (ground_z_threshold_ > -1000.0) {
         for (size_t i = 0; i < link_data.size(); ++i) {
             const auto& data = link_data[i];
+            if (environment_ignore_links_.count(data.name) > 0) {
+                continue;
+            }
             const auto& tf = current_tfs_[i];
             
             // AABBでまずチェック
@@ -83,6 +165,9 @@ bool VoxelCollisionChecker::checkCollision() {
     if (env_checker_) {
         for (size_t i = 0; i < link_data.size(); ++i) {
             const auto& data = link_data[i];
+            if (environment_ignore_links_.count(data.name) > 0) {
+                continue;
+            }
             const auto& tf = current_tfs_[i];
             for (const auto& lp : data.local_voxel_centers) {
                 Eigen::Vector3d wp = tf * lp;
@@ -99,8 +184,8 @@ bool VoxelCollisionChecker::checkCollision() {
 
     // 3. 自己干渉判定
     if (enable_self_collision_) {
-        // マネージャからリンクごとのボクセルIDリストを取得（RadixSort済み）
-        auto link_vids = manager_.getLinkVoxelMasks();
+        // 現在姿勢に基づいてリンクごとのボクセルIDリストを作る
+        auto link_vids = computeLinkVoxelMasks();
         
         for (size_t i = 0; i < link_data.size(); ++i) {
             for (size_t j = i + 1; j < link_data.size(); ++j) {

@@ -1,6 +1,7 @@
 #include "collision/geometric_self_collision_checker.hpp"
 #include "common/resource_utils.hpp"
 #include "robot_model/stl_loader.hpp"
+#include <algorithm>
 #include <iostream>
 #include <unordered_set>
 
@@ -290,6 +291,36 @@ bool GeometricSelfCollisionChecker::checkCollision() {
   }
 #endif
   return checker_.checkSelfCollision(collision_objects_);
+}
+
+std::vector<std::pair<std::string, std::string>>
+GeometricSelfCollisionChecker::collectSelfCollisionPairs() const {
+  std::vector<std::pair<std::string, std::string>> pairs;
+
+  for (size_t i = 0; i < collision_objects_.size(); ++i) {
+    for (size_t j = i + 1; j < collision_objects_.size(); ++j) {
+      const auto &obj_i = collision_objects_[i];
+      const auto &obj_j = collision_objects_[j];
+      const auto &link_i = object_map_[i].link_name;
+      const auto &link_j = object_map_[j].link_name;
+
+      if (link_i == link_j || shouldSkipCollision(link_i, link_j)) {
+        continue;
+      }
+
+      if (checker_.checkPair(obj_i, obj_j)) {
+        std::string a = link_i;
+        std::string b = link_j;
+        if (a > b)
+          std::swap(a, b);
+        pairs.emplace_back(a, b);
+      }
+    }
+  }
+
+  std::sort(pairs.begin(), pairs.end());
+  pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
+  return pairs;
 }
 
 void GeometricSelfCollisionChecker::addCollisionExclusion(

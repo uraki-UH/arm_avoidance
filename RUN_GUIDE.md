@@ -77,7 +77,7 @@ cd ToPoFuzzy-Viewer/frontend && npm install && npm run dev
 ## 📌 graph の今後の方針
 - `topological_map` をそのまま viewer に入れられるなら、基本は direct topic を優先します。
 - `/viewer/internal/stream/graph` は viewer 内部の中継レーンです。将来の正規化や差し替えには便利ですが、いまは複製の原因になりやすいです。
-- 処理時間の差はありますが、GNG 本体の計算や描画に比べると小さいです。direct topic のほうが 1 hop 少ない分だけ素直、internal stream は 1 hop ぶんだけ余計、という理解で十分です。
+。
 - static / dynamic を両方使うときは、どちらの経路に一本化するかを先に決めて、二重購読しないようにします。
 
 
@@ -85,7 +85,8 @@ python3 test_joint_state_publisher.py
 オプションジョイント名をつけたい場合
 --prefix topoarm_
 
-python3 test_tf_publisher.py --ros-args -p frame_id:=base_link
+python3 test_tf_publisher.py
+(--ros-args -p frame_id:=topoarm/base_link)
 
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py   topic_name:=/topological_map_static   robot_base_frame:=base_link   gng_frame_id:=base_link
 
@@ -100,7 +101,8 @@ realsenseにおけるGNG
 ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 robotの自己認識ボクセル
-ros2 launch gng_vlut_system self_recognition_viz.launch.py marker_frame_id:=world display_mode:=link_local
+ros2 launch gng_vlut_system self_recognition_viz.launch.py 
+(marker_frame_id:=world display_mode:=link_local)
 
 座標変換
 ros2 run gng_vlut_system self_recognition_filter_node

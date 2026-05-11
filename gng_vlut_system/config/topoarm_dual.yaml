@@ -29,10 +29,24 @@
       inflation: 0.0      # マスク生成時のロボットの膨張量 (少し太らせる)
     
     vlut:
-      resolution: 0.01      # 保存されるVoxel LUTの解像度
+      resolution: 0.02     # 保存されるVoxel LUTの解像度
 
     arm_cache_resolution: 0.008       # ロボット形状キャッシュの解像度 (細かめ推奨)
     danger_threshold: 0.025           # 危険判定距離
+
+    # --- Collision Exclusions ---
+    # self_collision_exclusion_pairs:
+    #   - "linkA|linkB"
+    #   - "linkC|linkD"
+    # environment_ignore_links:
+    #   - "pillar_link"
+    collision:
+      require_initial_collision_approval: true
+      environment_ignore_links:
+        - "pillar_link"
+        - "base_footprint"
+        - "left_link1"
+        - "right_link1"
     
     gng_params:
       lambda: 50

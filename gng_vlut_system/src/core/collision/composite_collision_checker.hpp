@@ -4,6 +4,8 @@
 #include "collision/geometric_self_collision_checker.hpp"
 #include "safety_engine/vlut/iself_collision_checker.hpp"
 #include <memory>
+#include <set>
+#include <string>
 
 namespace simulation {
 
@@ -25,6 +27,17 @@ public:
   void setEnvironmentCollisionChecker(
       std::shared_ptr<EnvironmentCollisionChecker> checker) {
     env_checker_ = checker;
+    syncEnvironmentIgnores();
+  }
+
+  /**
+   * @brief 環境衝突の対象から除外するリンク名を追加する
+   * self collision のペア除外とは独立に、床や固定障害物との衝突だけを
+   * スキップしたい場合に使う。
+   */
+  void addEnvironmentIgnoreLink(const std::string &link_name) {
+    environment_ignore_links_.insert(link_name);
+    syncEnvironmentIgnores();
   }
 
   // --- ISelfCollisionChecker Interface ---
@@ -60,8 +73,24 @@ public:
   }
 
 private:
+  void syncEnvironmentIgnores() {
+    if (!self_checker_ || !env_checker_) {
+      return;
+    }
+
+    const auto &objects = self_checker_->getCollisionObjects();
+    for (const auto &link_name : environment_ignore_links_) {
+      for (const auto &obj : objects) {
+        if (self_checker_->getLinkNameForObject(obj.id) == link_name) {
+          env_checker_->addIgnoreRobotLink(obj.id);
+        }
+      }
+    }
+  }
+
   std::shared_ptr<GeometricSelfCollisionChecker> self_checker_;
   std::shared_ptr<EnvironmentCollisionChecker> env_checker_;
+  std::set<std::string> environment_ignore_links_;
 };
 
 } // namespace simulation

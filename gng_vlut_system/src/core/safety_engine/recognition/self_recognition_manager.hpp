@@ -164,6 +164,7 @@ public:
     const std::vector<::simulation::LinkVoxelData>& getLinkVoxelDataList() const { return link_data_list_; }
     std::shared_ptr<::kinematics::KinematicChain> getKinematicChain() { return chain_; }
     ::GNG::Analysis::IndexVoxelGrid* getIndexGrid() { return &grid_; }
+    const ::GNG::Analysis::IndexVoxelGrid* getIndexGrid() const { return &grid_; }
     double getVoxelSize() const { return voxel_size_; }
 
     /**

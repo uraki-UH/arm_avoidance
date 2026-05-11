@@ -16,6 +16,7 @@ def launch_setup(context, *args, **kwargs):
     vlut_only = LaunchConfiguration("vlut_only").perform(context)
     use_voxel_collision = LaunchConfiguration("use_voxel_collision").perform(context)
     voxel_padding = LaunchConfiguration("voxel_padding").perform(context)
+    initial_collision_only = LaunchConfiguration("initial_collision_only").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -29,6 +30,10 @@ def launch_setup(context, *args, **kwargs):
         overrides["use_voxel_collision"] = (use_voxel_collision.lower() == "true")
     if voxel_padding:
         overrides["voxel_padding"] = float(voxel_padding)
+    if initial_collision_only != "false":
+        overrides["collision.initial_collision_only"] = (
+            initial_collision_only.lower() == "true"
+        )
 
     return [
         # オフラインURDFトレーナーノード
@@ -78,6 +83,11 @@ def generate_launch_description():
             "voxel_padding",
             default_value="0.0",
             description="ボクセル衝突判定時のパディング量 (学習時は0.0推奨)",
+        ),
+        DeclareLaunchArgument(
+            "initial_collision_only",
+            default_value="false",
+            description="trueにすると初期姿勢の承認用YAMLだけ生成して終了します",
         ),
         OpaqueFunction(function=launch_setup)
     ])

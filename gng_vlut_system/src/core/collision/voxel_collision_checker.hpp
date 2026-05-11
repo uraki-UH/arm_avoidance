@@ -54,9 +54,28 @@ public:
     }
 
     /**
+     * @brief 現在姿勢における各リンクの voxel 占有 ID を取得する
+     * updateBodyPoses() で更新された current_tfs_ を使うため、
+     * SelfRecognitionManager の内部 FK 状態には依存しない。
+     */
+    std::vector<std::vector<long>> getLinkVoxelMasks() const;
+
+    /**
+     * @brief 現在姿勢で自己衝突しているリンクペアを列挙する
+     * 既に除外済みのペアは含めない。
+     */
+    std::vector<std::pair<std::string, std::string>> collectSelfCollisionPairs() const;
+
+    /**
      * @brief 自己干渉から除外するペアを追加する
      */
     void addCollisionExclusion(const std::string& link1, const std::string& link2);
+
+    /**
+     * @brief 地面や環境障害物との衝突判定から除外するリンク名を追加する
+     * self collision の除外ペアとは独立して扱う。
+     */
+    void addEnvironmentIgnoreLink(const std::string& link_name);
 
 private:
     const RobotModel& model_;
@@ -67,11 +86,14 @@ private:
     std::shared_ptr<EnvironmentCollisionChecker> env_checker_;
     double ground_z_threshold_ = -std::numeric_limits<double>::infinity();
     bool enable_self_collision_ = true;
+    std::set<std::string> environment_ignore_links_;
 
     std::set<std::pair<std::string, std::string>> exclusion_pairs_;
     
     // 現在のリンク姿勢
     std::vector<Eigen::Isometry3d> current_tfs_;
+
+    std::vector<std::vector<long>> computeLinkVoxelMasks() const;
 
     bool checkSelfCollision();
     bool checkEnvironmentCollision();
