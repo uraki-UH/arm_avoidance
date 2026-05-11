@@ -233,7 +233,7 @@ function App() {
                 newSettings[tag] = {
                     visible: true,
                     showNodes: true,
-                    showEdges: true,
+                    showEdges: !isStatic,
                     showClusters: false,
                     opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {

@@ -249,7 +249,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 settings={props.layerSettings[tag] || {
                                     visible: true,
                                     showNodes: true,
-                                    showEdges: true,
+                                    showEdges: data.mode !== 'static',
                                     showClusters: false,
                                     opacity: 1.0
                                 }}
