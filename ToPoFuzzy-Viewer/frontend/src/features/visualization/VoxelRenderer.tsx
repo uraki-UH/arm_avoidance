@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { VoxelSettings } from '../../types';
+import { VoxelSettings, Transform } from '../../types';
 
 interface VoxelLayout {
     voxelSize: number;
@@ -20,7 +20,7 @@ interface VoxelMessage {
     frameId?: string;
 }
 
-export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage, settings: VoxelSettings, tf?: { pos: number[]; quat: number[] } | null }) => {
+export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { message: VoxelMessage, settings: VoxelSettings, tf?: { pos: number[]; quat: number[] } | null, manualTransform?: Transform }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
     const { invalidate } = useThree();
@@ -37,8 +37,26 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
             groupRef.current.position.set(0, 0, 0);
             groupRef.current.quaternion.set(0, 0, 0, 1);
         }
+
+        // Manual transform application
+        if (manualTransform) {
+            if (manualTransform.position) {
+                groupRef.current.position.x += manualTransform.position[0];
+                groupRef.current.position.y += manualTransform.position[1];
+                groupRef.current.position.z += manualTransform.position[2];
+            }
+            if (manualTransform.rotation) {
+                const euler = new THREE.Euler(
+                    manualTransform.rotation[0] * Math.PI / 180,
+                    manualTransform.rotation[1] * Math.PI / 180,
+                    manualTransform.rotation[2] * Math.PI / 180
+                );
+                groupRef.current.quaternion.multiply(new THREE.Quaternion().setFromEuler(euler));
+            }
+        }
+
         invalidate();
-    }, [tf, invalidate]);
+    }, [tf, manualTransform, invalidate]);
 
     // ボクセルの復元計算
     const positions = useMemo(() => {
@@ -47,8 +65,6 @@ export const VoxelRenderer = ({ message, settings, tf }: { message: VoxelMessage
         const zShift = BigInt(layout.zShift);
         const offset = BigInt(layout.offset);
 
-        // y_shiftが各軸のビット幅の間隔として使われている前提の簡易マスク
-        // 本来は (1n << bitWidth) - 1n だが、現在の21bit packingに合わせて構成
         const mask = (1n << yShift) - 1n;
 
         return data.map(idStr => {

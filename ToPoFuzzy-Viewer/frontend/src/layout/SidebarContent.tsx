@@ -284,7 +284,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 const s = settings[tag] || {};
                                 return (
                                     <LayerItem key={`${type}-${tag}`} id={tag} type={type as any} visible={s.visible !== false}
-                                        onToggleVisibility={() => props.onUpdateSettings(type as EntityType, tag, { visible: !s.visible })}
+                                        onToggleVisibility={() => {
+                                            const isVisible = s.visible !== false;
+                                            props.onUpdateSettings(type as EntityType, tag, { visible: !isVisible });
+                                        }}
                                         onRemove={() => props.onRemoveEntity(type as EntityType, tag)}
                                         onOpenTransform={() => hasTf && props.onOpenTransform(type as any, tag, `${type}: ${tag}`)}
                                     >

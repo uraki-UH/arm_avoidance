@@ -186,6 +186,7 @@ export interface VoxelSettings {
     color: string;
     wireframe: boolean;
     opacity: number;
+    transform?: Transform;
 }
 
 // --- WebSocket / RPC Types ---

@@ -468,7 +468,14 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }, [sendRpc]);
 
     const unsubscribeSource = useCallback(async (sourceId: string): Promise<{ success: boolean; sourceId: string; active: boolean }> => {
-        return sendRpc('sources.setActive', { sourceId, active: false });
+        const result = await sendRpc<{ success: boolean; sourceId: string; active: boolean }>('sources.setActive', { sourceId, active: false });
+        if (result.success) {
+            // Immediately clear local data to prevent App.tsx from re-initializing it
+            setPointClouds((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
+            setVoxelData((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
+            setMarkerData((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
+        }
+        return result;
     }, [sendRpc]);
 
     const listRosbags = useCallback(async (): Promise<RosbagInfo[]> => {

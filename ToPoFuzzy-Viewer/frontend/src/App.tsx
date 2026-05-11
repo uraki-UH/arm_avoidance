@@ -300,6 +300,11 @@ function App() {
     const removeEntity = (type: EntityType, tag: string) => {
         const updaters: Record<string, any> = { robot: setRobotSettings, marker: setMarkerSettings, voxel: setVoxelSettings };
         updaters[type]?.((prev: any) => { const n = { ...prev }; delete n[tag]; return n; });
+        
+        // Also unsubscribe from the stream if it's a streamable entity
+        if (type === 'marker' || type === 'voxel') {
+            unsubscribeSource(tag);
+        }
     };
 
     const handleUpdateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
@@ -948,8 +953,8 @@ function App() {
                                 <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
                             ), defaultSettings: { visible: true, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true },
                             { data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} />
-                            ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 }, skipIfDisabled: true }
+                                <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
+                            ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }, skipIfDisabled: true }
                         ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = (settings as any)[tag] || defaultSettings;
@@ -983,7 +988,7 @@ function App() {
                 transform={useMemo(() => {
                     if (!transformContext) return null;
                     const { type, id } = transformContext;
-                    const map: any = { cloud: pointClouds.find(p => p.id === id), layer: layerSettings[id]?.graphTransform, robot: robotSettings[id]?.transform, marker: markerSettings[id]?.transform };
+                    const map: any = { cloud: pointClouds.find(p => p.id === id), layer: layerSettings[id]?.graphTransform, robot: robotSettings[id]?.transform, marker: markerSettings[id]?.transform, voxel: voxelSettings[id]?.transform };
                     const res = map[type];
                     return type === 'cloud' ? (res ? { position: res.position || [0,0,0], rotation: res.rotation || [0,0,0], scale: res.scale || [1,1,1] } : null) : res;
                 }, [transformContext, pointClouds, layerSettings, robotSettings, markerSettings])}
@@ -995,7 +1000,8 @@ function App() {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...u } : p)),
                         layer: () => handleUpdateLayerSettings(id, { graphTransform: { ...(layerSettings[id]?.graphTransform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
                         robot: () => updateEntitySettings('robot', id, { transform: { ...(robotSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
-                        marker: () => updateEntitySettings('marker', id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
+                        marker: () => updateEntitySettings('marker', id, { transform: { ...(markerSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } }),
+                        voxel: () => updateEntitySettings('voxel', id, { transform: { ...(voxelSettings[id]?.transform || { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] }), ...u } })
                     };
                     updaters[type]?.();
                 }}
@@ -1007,7 +1013,8 @@ function App() {
                         cloud: () => setPointClouds(prev => prev.map(p => p.id === id ? { ...p, ...iden } : p)),
                         layer: () => handleUpdateLayerSettings(id, { graphTransform: iden }),
                         robot: () => updateEntitySettings('robot', id, { transform: iden }),
-                        marker: () => updateEntitySettings('marker', id, { transform: iden })
+                        marker: () => updateEntitySettings('marker', id, { transform: iden }),
+                        voxel: () => updateEntitySettings('voxel', id, { transform: iden })
                     };
                     resets[type]?.();
                 }}
