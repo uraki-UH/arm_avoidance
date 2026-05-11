@@ -93,16 +93,30 @@ public:
                 for (size_t m_idx = 0; m_idx < slink.meshes.size(); ++m_idx) {
                     const auto& mesh = slink.meshes[m_idx];
                     const auto& origin = slink.mesh_origins[m_idx];
-                    std::vector<Eigen::Vector3d> world_verts;
+                    
+                    // Transform all vertices first
+                    std::vector<Eigen::Vector3d> transformed_verts;
+                    transformed_verts.reserve(mesh.vertices.size() / 3);
                     for (size_t i = 0; i < mesh.vertices.size() / 3; ++i) {
                         Eigen::Vector3d v(mesh.vertices[i*3], mesh.vertices[i*3+1], mesh.vertices[i*3+2]);
-                        // Simple inflation for mesh: push vertices outward from their origin
                         if (padding > 0.0 && v.norm() > 1e-6) {
                             v += v.normalized() * padding;
                         }
-                        world_verts.push_back(origin * v);
+                        transformed_verts.push_back(origin * v);
                     }
-                    ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(world_verts, grid, vids);
+
+                    // Voxelize each triangle using the indices
+                    std::vector<Eigen::Vector3d> triangle_soup;
+                    triangle_soup.reserve(mesh.indices.size());
+                    for (size_t i = 0; i < mesh.indices.size() / 3; ++i) {
+                        triangle_soup.push_back(transformed_verts[mesh.indices[i*3 + 0]]);
+                        triangle_soup.push_back(transformed_verts[mesh.indices[i*3 + 1]]);
+                        triangle_soup.push_back(transformed_verts[mesh.indices[i*3 + 2]]);
+                    }
+
+                    if (!triangle_soup.empty()) {
+                        ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(triangle_soup, grid, vids);
+                    }
                 }
             }
 

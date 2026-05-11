@@ -13,7 +13,7 @@
     robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro"
     arm_leaf_link_names: "left_link7,right_link7"
     voxel_size: 0.02
-    padding: 0.02
+    padding: 0.0
 
     # --- GNG & Safety Settings ---
     experiment_id: "topoarm_double_test"
