@@ -107,6 +107,35 @@ namespace converter {
     }
 }
 
+std::filesystem::path findLocalTopoarmDescriptionShare() {
+    const std::vector<std::filesystem::path> bases = {
+#ifdef PROJECT_SOURCE_DIR
+        std::filesystem::path(PROJECT_SOURCE_DIR),
+        std::filesystem::path(PROJECT_SOURCE_DIR).parent_path(),
+        std::filesystem::path(PROJECT_SOURCE_DIR).parent_path().parent_path(),
+#endif
+        std::filesystem::current_path(),
+        std::filesystem::current_path().parent_path(),
+    };
+
+    const std::vector<std::filesystem::path> rel_candidates = {
+        std::filesystem::path("ToPoDualArm") / "topoarm_description",
+        std::filesystem::path("topoarm_description"),
+    };
+
+    for (const auto& base : bases) {
+        if (base.empty()) continue;
+        for (const auto& rel : rel_candidates) {
+            const auto candidate = base / rel;
+            if (std::filesystem::exists(candidate / "meshes") &&
+                std::filesystem::exists(candidate / "urdf")) {
+                return candidate;
+            }
+        }
+    }
+    return {};
+}
+
 class ViewerWsGatewayNode : public rclcpp::Node {
 public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
@@ -276,7 +305,26 @@ private:
             std::string url(req->getUrl()); res->writeHeader("Access-Control-Allow-Origin", "*");
             if (url.rfind("/meshes/", 0) == 0) {
                 std::string sub = url.substr(8); size_t slash = sub.find('/');
-                if (slash != std::string::npos) { try { auto path = std::filesystem::path(ament_index_cpp::get_package_share_directory(sub.substr(0, slash))) / sub.substr(slash + 1); if (std::filesystem::exists(path) && !std::filesystem::is_directory(path)) { std::ifstream f(path, std::ios::binary); res->end(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>())); return; } } catch (...) {} }
+                if (slash != std::string::npos) {
+                    const std::string pkg = sub.substr(0, slash);
+                    const std::string rel = sub.substr(slash + 1);
+                    std::filesystem::path path;
+                    try {
+                        path = std::filesystem::path(ament_index_cpp::get_package_share_directory(pkg)) / rel;
+                    } catch (...) {
+                        if (pkg == "topoarm_description") {
+                            const auto fallback = findLocalTopoarmDescriptionShare();
+                            if (!fallback.empty()) {
+                                path = fallback / rel;
+                            }
+                        }
+                    }
+                    if (!path.empty() && std::filesystem::exists(path) && !std::filesystem::is_directory(path)) {
+                        std::ifstream f(path, std::ios::binary);
+                        res->end(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()));
+                        return;
+                    }
+                }
             }
             res->writeStatus("404 Not Found")->end("Not found");
         }

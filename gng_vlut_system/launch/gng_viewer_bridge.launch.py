@@ -72,6 +72,8 @@ def launch_setup(context, *args, **kwargs):
     yaml_robot_name = "topoarm"
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"
+    yaml_resource_root_dir = ""
+    yaml_mesh_root_dir = ""
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -93,6 +95,15 @@ def launch_setup(context, *args, **kwargs):
             if extracted_name:
                 yaml_robot_name = extracted_name
 
+            root_ros_params = params_yaml.get('ros__parameters', {})
+            if isinstance(root_ros_params, dict):
+                yaml_data_dir = root_ros_params.get('data_directory', yaml_data_dir)
+                yaml_exp_id = root_ros_params.get('experiment_id', yaml_exp_id)
+                gng_model_filename = root_ros_params.get('gng_model_filename', gng_model_filename)
+                vlut_filename = root_ros_params.get('vlut_filename', vlut_filename)
+                yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
+                yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
+
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
                 if ros_params:
@@ -101,6 +112,7 @@ def launch_setup(context, *args, **kwargs):
                     gng_model_filename = ros_params.get("gng_model_filename", gng_model_filename)
                     vlut_filename = ros_params.get("vlut_filename", vlut_filename)
                     break
+
         except Exception:
             pass
 
@@ -133,6 +145,11 @@ def launch_setup(context, *args, **kwargs):
         robot_description_file = robot_desc_default
     else:
         robot_description_file = resolve_package_uri(robot_description_file)
+
+    if yaml_resource_root_dir:
+        resource_root = yaml_resource_root_dir
+    if yaml_mesh_root_dir:
+        mesh_root = yaml_mesh_root_dir
 
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
