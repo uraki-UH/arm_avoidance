@@ -97,7 +97,7 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   topic_name:=/topological_map_static
 
 
-  ros2 launch gng_vlut_system self_recognition_viz.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   robot_name:=ToPoDualArm
+  ros2 launch gng_vlut_system self_recognition_viz.launch.py   \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml 
 
 
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
