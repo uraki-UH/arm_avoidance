@@ -1,8 +1,13 @@
 #include "gng_vlut_system/self_recognition/self_recognition_viz_node.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
+#include <cctype>
 #include <algorithm>
 #include <chrono>
+#include <functional>
+#include <sstream>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "common/resource_utils.hpp"
 #include "safety_engine/recognition/self_recognition_manager.hpp"
@@ -26,6 +31,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("update_hz", 50.0); 
     declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("leaf_links", std::vector<std::string>{});
+    declare_parameter<std::string>("arm_leaf_link_names", "");
     declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
     declare_parameter<std::string>("root_link", "");
     declare_parameter("self_recognition.inflation", 0.02);
@@ -81,6 +87,63 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 
     // 衝突形状を持つ全リンクと、木構造の全末端リンクを抽出
     std::vector<std::string> all_collision_links;
+    auto expandTerminalLeafLinks = [&](const std::vector<std::string>& roots) {
+        std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+        for (const auto &[j_name, j_props] : model_->getJoints()) {
+            children_by_parent[j_props.parent_link].push_back(j_props.child_link);
+        }
+
+        std::vector<std::string> expanded;
+        std::unordered_set<std::string> visited;
+
+        std::function<void(const std::string&)> collect_terminals = [&](const std::string& link_name) {
+            if (visited.count(link_name)) return;
+            visited.insert(link_name);
+
+            auto it = children_by_parent.find(link_name);
+            if (it == children_by_parent.end() || it->second.empty()) {
+                expanded.push_back(link_name);
+                return;
+            }
+
+            bool has_child = false;
+            for (const auto& child : it->second) {
+                has_child = true;
+                collect_terminals(child);
+            }
+            if (!has_child) {
+                expanded.push_back(link_name);
+            }
+        };
+
+        for (const auto& root : roots) {
+            if (!root.empty()) {
+                collect_terminals(root);
+            }
+        }
+
+        std::sort(expanded.begin(), expanded.end());
+        expanded.erase(std::unique(expanded.begin(), expanded.end()), expanded.end());
+        return expanded;
+    };
+
+    auto splitCommaSeparated = [](const std::string& input) {
+        std::vector<std::string> out;
+        std::stringstream ss(input);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            token.erase(token.begin(), std::find_if(token.begin(), token.end(),
+                                                    [](unsigned char ch) { return !std::isspace(ch); }));
+            token.erase(std::find_if(token.rbegin(), token.rend(),
+                                     [](unsigned char ch) { return !std::isspace(ch); }).base(),
+                        token.end());
+            if (!token.empty()) {
+                out.push_back(token);
+            }
+        }
+        return out;
+    };
+
     std::vector<std::string> current_leaf_links = leaf_links;
 
     for (const auto &[link_name, link_props] : model_->getLinks()) {
@@ -100,6 +163,23 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     }
 
     std::vector<simulation::ArmConfig> arm_configs;
+    if (!leaf_links.empty()) {
+        current_leaf_links = leaf_links;
+        auto expanded = expandTerminalLeafLinks(leaf_links);
+        current_leaf_links.insert(current_leaf_links.end(), expanded.begin(), expanded.end());
+        std::sort(current_leaf_links.begin(), current_leaf_links.end());
+        current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
+    } else {
+        auto arm_leaf_roots = splitCommaSeparated(get_parameter("arm_leaf_link_names").as_string());
+        if (!arm_leaf_roots.empty()) {
+            current_leaf_links = arm_leaf_roots;
+            auto expanded = expandTerminalLeafLinks(arm_leaf_roots);
+            current_leaf_links.insert(current_leaf_links.end(), expanded.begin(), expanded.end());
+            std::sort(current_leaf_links.begin(), current_leaf_links.end());
+            current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
+        }
+    }
+
     for (size_t i = 0; i < current_leaf_links.size(); ++i) {
         simulation::ArmConfig cfg;
         cfg.leaf_link = current_leaf_links[i];

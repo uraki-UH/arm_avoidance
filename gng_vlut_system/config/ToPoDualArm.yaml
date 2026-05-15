@@ -12,7 +12,7 @@
     robot_description_file: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
     resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
     mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
-    arm_leaf_link_names: "left_link7,right_link7"
+    arm_leaf_link_names: "left_link8,right_link8"
     voxel_size: 0.01
     padding: 0.0
 

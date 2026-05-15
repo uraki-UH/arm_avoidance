@@ -447,7 +447,7 @@ public:
                                                            "end_effector_link");
     paired_leaf_link_name_ = this->declare_parameter<std::string>(
         "paired_leaf_link_name", "");
-    gng_dimension_ = this->declare_parameter<int>("gng_dimension", 6);
+    gng_dimension_ = this->declare_parameter<int>("gng_dimension", 12);
     spatial_map_resolution_ =
         this->declare_parameter<double>("spatial_map.resolution", 0.02);
     sensing_resolution_ =
@@ -761,8 +761,7 @@ public:
       }
     }
 
-    // 承認済みの初期衝突候補は、そのまま除外ペアとして採用する。
-    // 承認制OFFの場合は、初期候補を自動採用する。
+    // 承認済みの初期衝突候補は、そのまま除外ペアとして採用。承認制OFFの場合は、初期候補を自動採用。
     const bool auto_accept_initial_collisions =
         !require_initial_collision_approval_;
     for (const auto &pair : filtered_initial_collisions) {

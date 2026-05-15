@@ -148,9 +148,6 @@ createKinematicChainFromModel(const RobotModel &model,
     }
 
     chain.setEEFOffset(tip_offset);
-    std::cout << "[DEBUG Adapter] Set EEF Offset (Tip) for '" << leaf_name
-              << "': " << tip_offset.transpose() << " (Center was "
-              << center_offset.transpose() << ")" << std::endl;
   }
 
   return chain;
@@ -685,8 +682,22 @@ void MultiArmKinematicAdapter::buildAllLinkTransforms(
     std::map<std::string, Eigen::Isometry3d> arm_map;
     arm.chain.buildAllLinkTransforms(arm_positions, arm_orientations,
                                      fixed_link_info, arm_map);
+    auto is_identity = [](const Eigen::Isometry3d &tf) {
+      return tf.matrix().isApprox(Eigen::Isometry3d::Identity().matrix(), 1e-9);
+    };
     for (const auto &[name, tf] : arm_map) {
-      link_transforms.insert_or_assign(arm.prefix + name, tf);
+      const std::string key = arm.prefix + name;
+      auto it = link_transforms.find(key);
+      if (it == link_transforms.end()) {
+        link_transforms.emplace(key, tf);
+        continue;
+      }
+      if (is_identity(tf) && !is_identity(it->second)) {
+        continue;
+      }
+      if (!is_identity(tf) || is_identity(it->second)) {
+        it->second = tf;
+      }
     }
   };
 
