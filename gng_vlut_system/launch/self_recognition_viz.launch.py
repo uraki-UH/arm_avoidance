@@ -119,6 +119,7 @@ def launch_setup(context, *args, **kwargs):
     add_if_not_empty("publish_link_aabb", "publish_link_aabb")
     add_if_not_empty("display_mode", "display_mode", int)
     add_if_not_empty("target_frame_id", "target_frame_id")
+    add_if_not_empty("self_output_topic", "self_output_topic")
 
     final_params_list = []
     if params_file and os.path.exists(params_file):
@@ -171,5 +172,6 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_link_aabb", default_value="true", description="リンク毎のAABBを配信するか"),
         DeclareLaunchArgument("display_mode", default_value="link_local", description="表示モード (link_local / world)"),
         DeclareLaunchArgument("target_frame_id", default_value="", description="ボクセル計算の基準座標系 (空ならベースリンク基準)"),
+        DeclareLaunchArgument("self_output_topic", default_value="/self_recognition_points", description="自己認識ボクセル内の点群トピック"),
         OpaqueFunction(function=launch_setup),
     ])

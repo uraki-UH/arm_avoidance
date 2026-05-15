@@ -1,6 +1,7 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
+#include <Eigen/Dense>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <voxel_msgs/msg/voxel.hpp>
 #include <std_msgs/msg/int64_multi_array.hpp>
@@ -17,11 +18,15 @@ public:
 
 private:
     void pcl_cb(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg);
+    sensor_msgs::msg::PointCloud2 makePointCloud(
+        const sensor_msgs::msg::PointCloud2 & input,
+        const std::vector<Eigen::Vector3f> & points) const;
 
     // 軽量フィルタに必要なメンバのみ
     rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr mask_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_sub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr self_pcl_pub_;
 
     std::unordered_set<long> current_mask_vids_;
     std::mutex mask_mutex_;

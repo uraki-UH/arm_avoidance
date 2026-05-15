@@ -18,11 +18,13 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<std::string>("input_topic", "/points");
     declare_parameter<std::string>("output_topic", "/self_filtered_points");
+    declare_parameter<std::string>("self_output_topic", "/self_recognition_points");
     declare_parameter<std::string>("mask_topic", "/self_recognition/voxel_mask");
 
     grid_.setVoxelSize(get_parameter("voxel_size").as_double());
     std::string input_topic = get_parameter("input_topic").as_string();
     std::string output_topic = get_parameter("output_topic").as_string();
+    std::string self_output_topic = get_parameter("self_output_topic").as_string();
     std::string mask_topic = get_parameter("mask_topic").as_string();
 
     // マスク（他ノードが計算したもの）を受け取る
@@ -41,8 +43,38 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
         input_topic, 10, std::bind(&SelfRecognitionFilterNode::pcl_cb, this, std::placeholders::_1));
 
     pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(output_topic, 10);
+    self_pcl_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(self_output_topic, 10);
 
-    RCLCPP_INFO(get_logger(), "SelfRecognitionFilterNode initialized. Mask topic: %s", mask_topic.c_str());
+    RCLCPP_INFO(
+        get_logger(),
+        "SelfRecognitionFilterNode initialized. Mask topic: %s, filtered output: %s, self output: %s",
+        mask_topic.c_str(),
+        output_topic.c_str(),
+        self_output_topic.c_str());
+}
+
+sensor_msgs::msg::PointCloud2 SelfRecognitionFilterNode::makePointCloud(
+    const sensor_msgs::msg::PointCloud2 & input,
+    const std::vector<Eigen::Vector3f> & points) const
+{
+    sensor_msgs::msg::PointCloud2 out_msg;
+    out_msg.header = input.header;
+
+    sensor_msgs::PointCloud2Modifier modifier(out_msg);
+    modifier.setPointCloud2FieldsByString(1, "xyz");
+    modifier.resize(points.size());
+
+    sensor_msgs::PointCloud2Iterator<float> out_x(out_msg, "x"), out_y(out_msg, "y"), out_z(out_msg, "z");
+    for (const auto & p : points) {
+        *out_x = p.x();
+        *out_y = p.y();
+        *out_z = p.z();
+        ++out_x;
+        ++out_y;
+        ++out_z;
+    }
+
+    return out_msg;
 }
 
 void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
@@ -53,6 +85,7 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
             RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, 
                 "No mask received yet. Passing through raw point cloud (%ux%u)", msg->width, msg->height);
             pcl_pub_->publish(*msg);
+            self_pcl_pub_->publish(makePointCloud(*msg, {}));
             return;
         }
         local_mask = current_mask_vids_;
@@ -61,14 +94,10 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
     RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, 
         "Filtering point cloud (%ux%u) using mask with %zu voxels", msg->width, msg->height, local_mask.size());
 
-    auto out_msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
-    out_msg->header = msg->header;
-    
-    sensor_msgs::PointCloud2Modifier modifier(*out_msg);
-    modifier.setPointCloud2FieldsByString(1, "xyz");
-    
     std::vector<Eigen::Vector3f> filtered_points;
+    std::vector<Eigen::Vector3f> self_points;
     filtered_points.reserve(msg->width * msg->height);
+    self_points.reserve(msg->width * msg->height);
 
     sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x"), iter_y(*msg, "y"), iter_z(*msg, "z");
 
@@ -81,17 +110,13 @@ void SelfRecognitionFilterNode::pcl_cb(const sensor_msgs::msg::PointCloud2::Cons
 
         if (local_mask.find(vid) == local_mask.end()) {
             filtered_points.push_back(p);
+        } else {
+            self_points.push_back(p);
         }
     }
 
-    modifier.resize(filtered_points.size());
-    sensor_msgs::PointCloud2Iterator<float> out_x(*out_msg, "x"), out_y(*out_msg, "y"), out_z(*out_msg, "z");
-    for (const auto& p : filtered_points) {
-        *out_x = p.x(); *out_y = p.y(); *out_z = p.z();
-        ++out_x; ++out_y; ++out_z;
-    }
-
-    pcl_pub_->publish(*out_msg);
+    pcl_pub_->publish(makePointCloud(*msg, filtered_points));
+    self_pcl_pub_->publish(makePointCloud(*msg, self_points));
 }
 
 } // namespace robot_sim::self_recognition

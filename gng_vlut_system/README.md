@@ -163,6 +163,7 @@ ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
 - `joint_state_mux_node`: RViz用と実機用の `JointState` を `/joint_states` に集約。
 - `safety_monitor_node`: GNG/VLUT の安全状態を `/gng_viz` に表示。
 - `self_recognition_viz_node`: 自己認識マスクを `/self_mask_viz` に表示。
+- `self_recognition_filter_node`: 自己認識ボクセル内の点群を `/self_recognition_points`、それ以外を `/self_filtered_points` に表示。
 - `topofuzzy_bridge_node`: `/topological_map` を Viewer 互換形式で publish。
 - ...など
 
@@ -170,6 +171,8 @@ ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
 - `/joint_states`: 現在のアーム姿勢。
 - `/gng_viz`: GNGノードとエッジのマーカー。
 - `/self_mask_viz`: 自己認識マスクのマーカー。
+- `/self_recognition_points`: 自己認識ボクセル内の点群。
+- `/self_filtered_points`: 自己認識ボクセル外の点群。
 - `/occupied_voxels`: 占有ボクセル。
 - `/danger_voxels`: 危険ボクセル。
 - ...など

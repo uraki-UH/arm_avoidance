@@ -55,3 +55,4 @@
     update_hz: 30.0
     input_topic: "/camera/transformed_points"
     output_topic: "/camera/self_filtered_points"
+    self_output_topic: "/camera/self_points"
