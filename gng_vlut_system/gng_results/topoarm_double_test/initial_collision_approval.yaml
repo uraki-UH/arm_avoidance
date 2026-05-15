@@ -2,5 +2,5 @@
 # Paste this under the `collision:` section of your YAML.
 collision:
   approved_initial_collision_pairs:
-    - "left_link5|left_link7"
-    - "right_link5|right_link7"
+    - "left_link6|left_link8"
+    - "right_link6|right_link8"

@@ -1,13 +1,5 @@
 # ToPoFuzzy-Viewer 実行ガイド
 
-## 開発メモ
-
-### 現状整理
-
-
-### 今後の予定
-
-
 ##　実行ガイド
 これで一発でfrontendが立ち上がる(-dをつけるとバックグラウウンドで起動し続けて面倒)
 docker compose --profile manual up  frontend
@@ -70,26 +62,15 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py
 ros2 run gng_vlut_system self_recognition_filter_node
 
 
-双腕召喚
-ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  robot_description_file:=package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm_dual.urdf.xacro
-
-
 学習の実行　(vlut_only:=trueも可能)
 ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/topoarm_dual.yaml \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
   use_voxel_collision:=true \
   initial_collision_only:=true
 
 
-
-
 ToPoDualArmの場合
-
-
-  python3 dummy_joint_pub.py --robot topo_dual_arm (--namespace ToPoDualArm)
-
-  python3 dummy_joint_pub.py --robot topo_dual_arm
+python3 dummy_joint_pub.py --robot topo_dual_arm
 
 
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
@@ -103,3 +84,9 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   use_voxel_collision:=true
+  
+
+dynamixel
+ros2 launch dynamixel_handler dynamixel_handler_launch.xml
+
+ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm

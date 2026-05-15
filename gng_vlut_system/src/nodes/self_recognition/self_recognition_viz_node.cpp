@@ -26,7 +26,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     
     // パラメータ：計算に必要な最小限の設定
     declare_parameter("robot_urdf_path", "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
-    declare_parameter("joint_topic", "/joint_states");
+    declare_parameter("joint_topic", "joint_states");
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("update_hz", 50.0); 
     declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{});

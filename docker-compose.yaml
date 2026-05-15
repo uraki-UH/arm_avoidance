@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: gng_cpu:latest
+    privileged: true
     container_name: gng_cpu_container    
     tty: true                 # 対話的なプロンプトを維持
     stdin_open: true          # 標準入力を開いたままにする
@@ -22,6 +23,8 @@ services:
       - ros_ws_build_volume:/ros2_ws/build
       - ~/rosbag:/rosbag
       - ~/datasets:/datasets
+    devices:
+      - "/dev/usb/bus/:/dev/usb/bus/"
     working_dir: /ros2_ws/src/ais_gng
     ports:
       - "9001:9001"
@@ -49,6 +52,7 @@ services:
     ports:
       - "5173:5173"
 
+  
 volumes:
   ros_ws_volume:
   ros_ws_build_volume:

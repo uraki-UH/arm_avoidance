@@ -88,6 +88,294 @@ static std::string makePairKey(std::string a, std::string b) {
   return a + "|" + b;
 }
 
+struct JointSelectionSpec {
+  std::vector<int> selected_joint_indices;
+  std::vector<std::string> selected_joint_names;
+  std::unordered_set<int> selected_joint_index_set;
+  int selected_dof = 0;
+};
+
+static JointSelectionSpec buildJointSelectionSpec(
+    const kinematics::KinematicChain &chain,
+    const std::vector<std::string> &exclude_joint_names) {
+  JointSelectionSpec spec;
+  std::unordered_set<std::string> exclude_set(exclude_joint_names.begin(),
+                                              exclude_joint_names.end());
+  for (int joint_idx = 0; joint_idx < chain.getNumJoints(); ++joint_idx) {
+    const std::string joint_name = chain.getJointName(joint_idx);
+    if (exclude_set.count(joint_name) > 0) {
+      continue;
+    }
+    const int joint_dof = chain.getJointDOF(joint_idx);
+    if (joint_dof <= 0) {
+      continue;
+    }
+    spec.selected_joint_indices.push_back(joint_idx);
+    spec.selected_joint_names.push_back(joint_name);
+    spec.selected_joint_index_set.insert(joint_idx);
+    spec.selected_dof += joint_dof;
+  }
+  return spec;
+}
+
+static std::vector<double> packSelectedJointValues(
+    const kinematics::KinematicChain &chain, const JointSelectionSpec &spec,
+    const std::vector<double> &full_values) {
+  std::vector<double> selected_values;
+  selected_values.reserve(static_cast<std::size_t>(std::max(0, spec.selected_dof)));
+
+  std::size_t full_cursor = 0;
+  for (int joint_idx = 0; joint_idx < chain.getNumJoints(); ++joint_idx) {
+    const int joint_dof = chain.getJointDOF(joint_idx);
+    if (joint_dof <= 0) {
+      continue;
+    }
+
+    if (spec.selected_joint_index_set.count(joint_idx) > 0) {
+      for (int d = 0; d < joint_dof; ++d) {
+        const std::size_t full_pos = full_cursor + static_cast<std::size_t>(d);
+        if (full_pos < full_values.size()) {
+          selected_values.push_back(full_values[full_pos]);
+        } else {
+          selected_values.push_back(0.0);
+        }
+      }
+    }
+    full_cursor += static_cast<std::size_t>(joint_dof);
+  }
+
+  return selected_values;
+}
+
+static std::vector<double> expandSelectedJointValues(
+    const kinematics::KinematicChain &chain, const JointSelectionSpec &spec,
+    const std::vector<double> &selected_values) {
+  std::vector<double> full_values(
+      static_cast<std::size_t>(std::max(0, chain.getTotalDOF())), 0.0);
+
+  std::size_t selected_cursor = 0;
+  std::size_t full_cursor = 0;
+  for (int joint_idx = 0; joint_idx < chain.getNumJoints(); ++joint_idx) {
+    const int joint_dof = chain.getJointDOF(joint_idx);
+    if (joint_dof <= 0) {
+      continue;
+    }
+
+    if (spec.selected_joint_index_set.count(joint_idx) > 0) {
+      for (int d = 0; d < joint_dof; ++d) {
+        if (selected_cursor < selected_values.size() &&
+            full_cursor + static_cast<std::size_t>(d) < full_values.size()) {
+          full_values[full_cursor + static_cast<std::size_t>(d)] =
+              selected_values[selected_cursor];
+        }
+        ++selected_cursor;
+      }
+    }
+
+    full_cursor += static_cast<std::size_t>(joint_dof);
+  }
+
+  return full_values;
+}
+
+class SelectedJointKinematicChain : public kinematics::KinematicChain {
+public:
+  SelectedJointKinematicChain(kinematics::KinematicChain *base_chain,
+                              JointSelectionSpec selection)
+      : base_chain_(base_chain), selection_(std::move(selection)) {}
+
+  int getTotalDOF() const override { return selection_.selected_dof; }
+
+  int getNumJoints() const override {
+    return base_chain_ ? base_chain_->getNumJoints() : 0;
+  }
+
+  std::size_t getArmCount() const override {
+    return base_chain_ ? base_chain_->getArmCount() : 0;
+  }
+
+  std::string getJointName(int joint_index) const override {
+    return base_chain_ ? base_chain_->getJointName(joint_index) : "";
+  }
+
+  int getJointDOF(int joint_index) const override {
+    return base_chain_ ? base_chain_->getJointDOF(joint_index) : 0;
+  }
+
+  std::vector<double> getJointValues() const override {
+    if (!base_chain_) {
+      return {};
+    }
+    return packSelectedJointValues(*base_chain_, selection_,
+                                   base_chain_->getJointValues());
+  }
+
+  bool setJointValues(const std::vector<double> &values) override {
+    if (!base_chain_) {
+      return false;
+    }
+    return base_chain_->setJointValues(
+        expandSelectedJointValues(*base_chain_, selection_, values));
+  }
+
+  void updateKinematics(const std::vector<double> &values) override {
+    if (!base_chain_) {
+      return;
+    }
+    base_chain_->updateKinematics(
+        expandSelectedJointValues(*base_chain_, selection_, values));
+  }
+
+  void forwardKinematicsAt(
+      const std::vector<double> &values,
+      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+          &out_positions,
+      std::vector<Eigen::Quaterniond,
+                  Eigen::aligned_allocator<Eigen::Quaterniond>>
+          &out_orientations) const override {
+    if (!base_chain_) {
+      out_positions.clear();
+      out_orientations.clear();
+      return;
+    }
+    base_chain_->forwardKinematicsAt(
+        expandSelectedJointValues(*base_chain_, selection_, values),
+        out_positions, out_orientations);
+  }
+
+  void forwardKinematicsAt(const std::vector<double> &values) override {
+    if (!base_chain_) {
+      return;
+    }
+    base_chain_->forwardKinematicsAt(
+        expandSelectedJointValues(*base_chain_, selection_, values));
+  }
+
+  const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &
+  getLinkPositions() const override {
+    static const std::vector<Eigen::Vector3d,
+                             Eigen::aligned_allocator<Eigen::Vector3d>>
+        empty;
+    return base_chain_ ? base_chain_->getLinkPositions() : empty;
+  }
+
+  const std::vector<Eigen::Quaterniond,
+                    Eigen::aligned_allocator<Eigen::Quaterniond>> &
+  getLinkOrientations() const override {
+    static const std::vector<Eigen::Quaterniond,
+                             Eigen::aligned_allocator<Eigen::Quaterniond>>
+        empty;
+    return base_chain_ ? base_chain_->getLinkOrientations() : empty;
+  }
+
+  Eigen::Vector3d getEEFPosition() const override {
+    return base_chain_ ? base_chain_->getEEFPosition()
+                       : Eigen::Vector3d::Zero();
+  }
+
+  Eigen::Quaterniond getEEFOrientation() const override {
+    return base_chain_ ? base_chain_->getEEFOrientation()
+                       : Eigen::Quaterniond::Identity();
+  }
+
+  Eigen::Vector3d getEEFPosition(std::size_t arm_index) const override {
+    return base_chain_ ? base_chain_->getEEFPosition(arm_index)
+                       : Eigen::Vector3d::Zero();
+  }
+
+  Eigen::Quaterniond getEEFOrientation(std::size_t arm_index) const override {
+    return base_chain_ ? base_chain_->getEEFOrientation(arm_index)
+                       : Eigen::Quaterniond::Identity();
+  }
+
+  void setBase(const Eigen::Vector3d &position,
+               const Eigen::Quaterniond &orientation =
+                   Eigen::Quaterniond::Identity()) override {
+    if (base_chain_) {
+      base_chain_->setBase(position, orientation);
+    }
+  }
+
+  void buildAllLinkTransforms(
+      const std::vector<Eigen::Vector3d,
+                        Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
+      const std::vector<Eigen::Quaterniond,
+                        Eigen::aligned_allocator<Eigen::Quaterniond>>
+          &orientations,
+      const std::map<std::string, std::pair<std::string, Eigen::Isometry3d>>
+          &fixed_link_info,
+      std::map<std::string, Eigen::Isometry3d> &link_transforms) const override {
+    if (base_chain_) {
+      base_chain_->buildAllLinkTransforms(positions, orientations,
+                                          fixed_link_info, link_transforms);
+    } else {
+      link_transforms.clear();
+    }
+  }
+
+  Eigen::MatrixXd calculateJacobianAt(
+      int target_joint_index, const std::vector<double> &values) const override {
+    if (!base_chain_) {
+      return Eigen::MatrixXd::Zero(0, 0);
+    }
+    return base_chain_->calculateJacobianAt(
+        target_joint_index,
+        expandSelectedJointValues(*base_chain_, selection_, values));
+  }
+
+  Eigen::MatrixXd calculateJacobian(int target_joint_index) const override {
+    return base_chain_ ? base_chain_->calculateJacobian(target_joint_index)
+                       : Eigen::MatrixXd::Zero(0, 0);
+  }
+
+  std::vector<double> sampleRandomJointValues() const override {
+    if (!base_chain_) {
+      return {};
+    }
+    return packSelectedJointValues(*base_chain_, selection_,
+                                   base_chain_->sampleRandomJointValues());
+  }
+
+  std::vector<double> sampleRandomJointValue(int joint_index) const override {
+    if (!base_chain_) {
+      return {};
+    }
+    return packSelectedJointValues(*base_chain_, selection_,
+                                   base_chain_->sampleRandomJointValue(joint_index));
+  }
+
+  std::vector<double> sampleRandomJointValues(
+      const std::vector<int> &joint_indices) const override {
+    if (!base_chain_) {
+      return {};
+    }
+    return packSelectedJointValues(
+        *base_chain_, selection_,
+        base_chain_->sampleRandomJointValues(joint_indices));
+  }
+
+  bool isWithinLimits(const std::vector<double> &values) const override {
+    if (!base_chain_) {
+      return false;
+    }
+    return base_chain_->isWithinLimits(
+        expandSelectedJointValues(*base_chain_, selection_, values));
+  }
+
+  void clampToLimits(std::vector<double> &values) const override {
+    if (!base_chain_) {
+      return;
+    }
+    auto full = expandSelectedJointValues(*base_chain_, selection_, values);
+    base_chain_->clampToLimits(full);
+    values = packSelectedJointValues(*base_chain_, selection_, full);
+  }
+
+private:
+  kinematics::KinematicChain *base_chain_;
+  JointSelectionSpec selection_;
+};
+
 static void writeInitialCollisionApprovalYaml(
     const std::filesystem::path &output_dir,
     const std::vector<std::pair<std::string, std::string>> &pairs) {
@@ -441,8 +729,20 @@ public:
         "vlut_filename", "vlut.bin");
     ground_z_threshold_ =
         this->declare_parameter<double>("ground_z_threshold", 0.0);
+    enable_ground_collision_ = this->declare_parameter<bool>(
+        "collision.enable_ground_collision", true);
+    enable_self_collision_ = this->declare_parameter<bool>(
+        "collision.enable_self_collision", true);
+    apply_environment_ignore_links_ = this->declare_parameter<bool>(
+        "collision.apply_environment_ignore_links", true);
+    apply_self_collision_exclusion_pairs_ = this->declare_parameter<bool>(
+        "collision.apply_self_collision_exclusion_pairs", true);
+    eef_link_names_ = this->declare_parameter<std::string>(
+        "eef_link_names", "");
     arm_leaf_link_names_ = this->declare_parameter<std::string>(
         "arm_leaf_link_names", "");
+    gng_exclude_joint_names_ = this->declare_parameter<std::vector<std::string>>(
+        "gng_exclude_joint_names", std::vector<std::string>{});
     leaf_link_name_ = this->declare_parameter<std::string>("leaf_link_name",
                                                            "end_effector_link");
     paired_leaf_link_name_ = this->declare_parameter<std::string>(
@@ -575,9 +875,20 @@ public:
                   resolved_path.c_str());
       auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
       model = new simulation::RobotModel(model_obj);
+      std::vector<std::string> eef_names =
+          splitCommaSeparated(eef_link_names_);
       std::vector<std::string> arm_leaf_names =
           splitCommaSeparated(arm_leaf_link_names_);
-      if (!arm_leaf_names.empty()) {
+      if (!eef_names.empty()) {
+        if (eef_names.size() == 1) {
+          arm = std::make_unique<kinematics::KinematicChain>(
+              simulation::createKinematicChainFromModel(
+                  *model, eef_names.front()));
+        } else {
+          arm = simulation::createMultiArmKinematicChainFromModels(
+              *model, eef_names);
+        }
+      } else if (!arm_leaf_names.empty()) {
         if (arm_leaf_names.size() == 1) {
           arm = std::make_unique<kinematics::KinematicChain>(
               simulation::createKinematicChainFromModel(
@@ -608,15 +919,48 @@ public:
       throw; // Re-throw to indicate failure
     }
 
+    std::shared_ptr<SelectedJointKinematicChain> gng_chain;
+    if (!gng_exclude_joint_names_.empty()) {
+      auto selection = buildJointSelectionSpec(*arm, gng_exclude_joint_names_);
+      if (selection.selected_dof <= 0) {
+        throw std::runtime_error(
+            "gng_exclude_joint_names removed all movable joints.");
+      }
+      if (gng_dimension_ != selection.selected_dof) {
+        RCLCPP_WARN(this->get_logger(),
+                    "[GNG] gng_dimension (%d) differs from selected DOF (%d). "
+                    "Using the selected DOF derived from gng_exclude_joint_names.",
+                    gng_dimension_, selection.selected_dof);
+      }
+      gng_dimension_ = selection.selected_dof;
+      gng_chain = std::make_shared<SelectedJointKinematicChain>(arm.get(),
+                                                                std::move(selection));
+      std::ostringstream excluded_oss;
+      for (std::size_t i = 0; i < gng_exclude_joint_names_.size(); ++i) {
+        if (i > 0) {
+          excluded_oss << ", ";
+        }
+        excluded_oss << gng_exclude_joint_names_[i];
+      }
+      const std::string excluded_joint_names = excluded_oss.str();
+      RCLCPP_INFO(this->get_logger(),
+                  "[GNG] Excluding joint names from learning: %s",
+                  excluded_joint_names.c_str());
+      RCLCPP_INFO(this->get_logger(),
+                  "[GNG] Selected learning DOF: %d", gng_dimension_);
+    }
+
     // 2. Setup Checkers
     auto self_checker =
         std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
                                                                     *arm);
     auto env_checker =
         std::make_shared<simulation::EnvironmentCollisionChecker>();
-    env_checker->addBoxObstacle(
-        "ground", Eigen::Vector3d(0, 0, ground_z_threshold_ - 0.05),
-        Eigen::Matrix3d::Identity(), Eigen::Vector3d(10.0, 10.0, 0.05));
+    if (enable_ground_collision_) {
+      env_checker->addBoxObstacle(
+          "ground", Eigen::Vector3d(0, 0, ground_z_threshold_ - 0.05),
+          Eigen::Matrix3d::Identity(), Eigen::Vector3d(10.0, 10.0, 0.05));
+    }
 
 #ifdef USE_FCL
     self_checker->setStrictMode(true);
@@ -636,16 +980,23 @@ public:
                   spatial_map_resolution_);
       voxel_checker = std::make_shared<simulation::VoxelCollisionChecker>(
           *model, *arm, spatial_map_resolution_, spatial_map_inflation_);
-      voxel_checker->setGroundZThreshold(ground_z_threshold_);
-      voxel_checker->setEnableSelfCollision(true);
+      voxel_checker->setGroundZThreshold(enable_ground_collision_
+                                             ? ground_z_threshold_
+                                             : -std::numeric_limits<double>::infinity());
+      voxel_checker->setEnableSelfCollision(enable_self_collision_);
       voxel_checker->setEnvironmentCollisionChecker(env_checker);
-      for (const auto &link_name : environment_ignore_links_) {
-        voxel_checker->addEnvironmentIgnoreLink(link_name);
+      if (apply_environment_ignore_links_) {
+        for (const auto &link_name : environment_ignore_links_) {
+          voxel_checker->addEnvironmentIgnoreLink(link_name);
+        }
       }
       final_checker = voxel_checker;
     } else {
-      for (const auto &link_name : environment_ignore_links_) {
-        composite_checker->addEnvironmentIgnoreLink(link_name);
+      composite_checker->setEnableSelfCollision(enable_self_collision_);
+      if (apply_environment_ignore_links_) {
+        for (const auto &link_name : environment_ignore_links_) {
+          composite_checker->addEnvironmentIgnoreLink(link_name);
+        }
       }
       final_checker = composite_checker;
     }
@@ -686,15 +1037,19 @@ public:
     }
 
     std::vector<std::pair<std::string, std::string>> initial_collisions;
-    if (voxel_checker) {
-      initial_collisions = voxel_checker->collectSelfCollisionPairs();
-    } else {
-      initial_collisions = self_checker->collectSelfCollisionPairs();
+    if (enable_self_collision_) {
+      if (voxel_checker) {
+        initial_collisions = voxel_checker->collectSelfCollisionPairs();
+      } else {
+        initial_collisions = self_checker->collectSelfCollisionPairs();
+      }
     }
 
     std::set<std::string> manual_exclusion_pairs;
-    for (const auto &pair : parseLinkPairs(self_collision_exclusion_pairs_)) {
-      manual_exclusion_pairs.insert(makePairKey(pair.first, pair.second));
+    if (apply_self_collision_exclusion_pairs_) {
+      for (const auto &pair : parseLinkPairs(self_collision_exclusion_pairs_)) {
+        manual_exclusion_pairs.insert(makePairKey(pair.first, pair.second));
+      }
     }
 
     std::vector<std::pair<std::string, std::string>> filtered_initial_collisions;
@@ -706,8 +1061,10 @@ public:
     }
 
     std::set<std::string> approved_initial_pairs;
-    for (const auto &pair : parseLinkPairs(approved_initial_collision_pairs_)) {
-      approved_initial_pairs.insert(makePairKey(pair.first, pair.second));
+    if (apply_self_collision_exclusion_pairs_) {
+      for (const auto &pair : parseLinkPairs(approved_initial_collision_pairs_)) {
+        approved_initial_pairs.insert(makePairKey(pair.first, pair.second));
+      }
     }
 
     if (!filtered_initial_collisions.empty()) {
@@ -739,7 +1096,8 @@ public:
       return;
     }
 
-    if (require_initial_collision_approval_) {
+    if (require_initial_collision_approval_ && apply_self_collision_exclusion_pairs_ &&
+        enable_self_collision_) {
       std::vector<std::pair<std::string, std::string>> unapproved_pairs;
       for (const auto &pair : filtered_initial_collisions) {
         if (approved_initial_pairs.count(makePairKey(pair.first, pair.second)) ==
@@ -763,12 +1121,15 @@ public:
 
     // 承認済みの初期衝突候補は、そのまま除外ペアとして採用。承認制OFFの場合は、初期候補を自動採用。
     const bool auto_accept_initial_collisions =
-        !require_initial_collision_approval_;
-    for (const auto &pair : filtered_initial_collisions) {
-      const std::string key = makePairKey(pair.first, pair.second);
-      if (auto_accept_initial_collisions ||
-          approved_initial_pairs.count(key) > 0) {
-        manual_exclusion_pairs.insert(key);
+        !require_initial_collision_approval_ ||
+        !apply_self_collision_exclusion_pairs_ || !enable_self_collision_;
+    if (apply_self_collision_exclusion_pairs_ && enable_self_collision_) {
+      for (const auto &pair : filtered_initial_collisions) {
+        const std::string key = makePairKey(pair.first, pair.second);
+        if (auto_accept_initial_collisions ||
+            approved_initial_pairs.count(key) > 0) {
+          manual_exclusion_pairs.insert(key);
+        }
       }
     }
 
@@ -779,13 +1140,19 @@ public:
       }
       const std::string lhs = key.substr(0, sep);
       const std::string rhs = key.substr(sep + 1);
-      self_checker->addCollisionExclusion(lhs, rhs);
-      if (voxel_checker) {
-        voxel_checker->addCollisionExclusion(lhs, rhs);
+      if (apply_self_collision_exclusion_pairs_) {
+        self_checker->addCollisionExclusion(lhs, rhs);
+        if (voxel_checker) {
+          voxel_checker->addCollisionExclusion(lhs, rhs);
+        }
       }
     }
 
-    GNG2 gng(gng_dimension_, 3, arm.get());
+    kinematics::KinematicChain *gng_chain_ptr =
+        gng_chain ? static_cast<kinematics::KinematicChain *>(gng_chain.get())
+                  : arm.get();
+
+    GNG2 gng(gng_dimension_, 3, gng_chain_ptr);
     gng.setCoordLayerCount(static_cast<int>(arm->getArmCount()));
 
     // Initialize GNG parameters from ROS 2 parameters
@@ -796,15 +1163,15 @@ public:
     gng.registerStatusProvider(
         std::make_shared<GNG::GeometricSelfCollisionProvider<Eigen::VectorXf,
                                                              Eigen::Vector3f>>(
-            final_checker.get(), arm.get()));
+            final_checker.get(), gng_chain_ptr));
     gng.registerStatusProvider(
         std::make_shared<
             GNG::ManipulabilityProvider<Eigen::VectorXf, Eigen::Vector3f>>(
-            arm.get()));
+            gng_chain_ptr));
     gng.registerStatusProvider(
         std::make_shared<
             GNG::EEDirectionProvider<Eigen::VectorXf, Eigen::Vector3f>>(
-            arm.get()));
+            gng_chain_ptr));
 
     std::filesystem::path output_dir =
         std::filesystem::path(data_directory_) / experiment_id_;
@@ -953,11 +1320,14 @@ public:
 
     for (int nid : active_ids) {
       auto &node = gng.nodeAt(nid);
-      Eigen::VectorXd q = node.weight_angle.template cast<double>().head(
-          std::min((int)node.weight_angle.size(), arm->getTotalDOF()));
-      arm->updateKinematics(q);
-      self_checker->updateBodyPoses(arm->getLinkPositions(),
-                                    arm->getLinkOrientations());
+      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+          positions;
+      std::vector<Eigen::Quaterniond,
+                  Eigen::aligned_allocator<Eigen::Quaterniond>>
+          orientations;
+      gng_chain_ptr->forwardKinematicsAt(node.weight_angle.template cast<double>(),
+                                         positions, orientations);
+      self_checker->updateBodyPoses(positions, orientations);
 
       for (auto const &[link_idx, cloud] : link_voxel_clouds) {
         fcl::Transform3d tf =
@@ -1080,10 +1450,16 @@ private:
   std::string gng_model_filename_;
   std::string vlut_filename_;
   double ground_z_threshold_;
+  bool enable_ground_collision_ = true;
+  bool enable_self_collision_ = true;
+  bool apply_environment_ignore_links_ = true;
+  bool apply_self_collision_exclusion_pairs_ = true;
+  std::string eef_link_names_;
   std::string arm_leaf_link_names_;
   std::string leaf_link_name_;
   std::string paired_leaf_link_name_;
   int gng_dimension_;
+  std::vector<std::string> gng_exclude_joint_names_;
   double spatial_map_resolution_;
   double vlut_resolution_;
   double sensing_resolution_;

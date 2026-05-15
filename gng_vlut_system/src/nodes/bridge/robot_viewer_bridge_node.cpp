@@ -36,6 +36,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
+    const std::string eef_link_names = declare_parameter<std::string>("eef_link_names", "");
     arm_leaf_link_names_ = declare_parameter<std::string>("arm_leaf_link_names", "");
     joint_state_topic_ = declare_parameter<std::string>("joint_state_topic", "joint_states");
     stream_topic_ = declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
@@ -58,8 +59,11 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     }
 
     robot_model_ = simulation::loadRobotFromUrdf(resolved_urdf_path, resource_root_dir, mesh_root_dir);
+    auto eef_names = splitCommaSeparated(eef_link_names);
     auto arm_leaf_names = splitCommaSeparated(arm_leaf_link_names_);
-    if (arm_leaf_names.empty()) {
+    if (!eef_names.empty()) {
+        arm_leaf_names = eef_names;
+    } else if (arm_leaf_names.empty()) {
         arm_leaf_names = inferLeafLinkNames();
     }
     if (arm_leaf_names.size() > 1) {

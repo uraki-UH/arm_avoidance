@@ -40,6 +40,10 @@ public:
     syncEnvironmentIgnores();
   }
 
+  void setEnableSelfCollision(bool enable) {
+    enable_self_collision_ = enable;
+  }
+
   // --- ISelfCollisionChecker Interface ---
   void updateBodyPoses(
       const std::vector<Eigen::Vector3d,
@@ -56,7 +60,8 @@ public:
 
   bool checkCollision() override {
     // 1. 自己干渉チェック
-    if (self_checker_ && self_checker_->checkCollision()) {
+    if (enable_self_collision_ && self_checker_ &&
+        self_checker_->checkCollision()) {
       return true;
     }
 
@@ -91,6 +96,7 @@ private:
   std::shared_ptr<GeometricSelfCollisionChecker> self_checker_;
   std::shared_ptr<EnvironmentCollisionChecker> env_checker_;
   std::set<std::string> environment_ignore_links_;
+  bool enable_self_collision_ = true;
 };
 
 } // namespace simulation

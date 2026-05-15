@@ -364,10 +364,9 @@ void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
   }
   for (int i : active_indices_) {
     auto &node = nodes[i];
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> pts;
-    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> oris;
-
-    kinematic_chain_->forwardKinematicsAt(node.weight_angle, pts, oris);
+    kinematic_chain_->updateKinematics(node.weight_angle);
+    const auto &pts = kinematic_chain_->getLinkPositions();
+    const auto &oris = kinematic_chain_->getLinkOrientations();
 
     if (!pts.empty() && !oris.empty()) {
       const std::size_t arm_index = static_cast<std::size_t>(coord_layer_index);

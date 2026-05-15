@@ -12,6 +12,7 @@
     robot_description_file: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
     resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
     mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
+    eef_link_names: "left_end_effector_link,right_end_effector_link"
     arm_leaf_link_names: "left_link8,right_link8"
     voxel_size: 0.01
     padding: 0.0
@@ -21,23 +22,40 @@
     data_directory: "/ros2_ws/src/gng_vlut_system/gng_results"
     gng_model_filename: "gng.bin"
     vlut_filename: "vlut.bin"
-    ground_z_threshold: 0.0
-    gng_dimension: 12
+    ground_z_threshold: -10.0
+    gng_dimension: 14
     spatial_map_resolution: 0.01
     self_recognition_resolution: 0.01
     arm_cache_resolution: 0.008
     danger_threshold: 0.025
+    gng_exclude_joint_names:
+      - "left_gripper_left_joint"
+      - "left_gripper_right_joint"
+      - "right_gripper_left_joint"
+      - "right_gripper_right_joint"
+
+    collision:
+      enable_ground_collision: true
+      enable_self_collision: true
+      apply_environment_ignore_links: true
+      apply_self_collision_exclusion_pairs: true
+      environment_ignore_links:
+        - "pillar_link"
+        - "base_footprint"
+      self_collision_exclusion_pairs:
+        - "left_link5|left_link7"
+        - "right_link5|right_link7"
     
     gng_params:
       lambda: 50
-      max_node_num: 10000
+      max_node_num: 100
       num_samples: 1000000
       max_iterations: 1000000
       refine_iterations: 100000
       coord_edge_iterations: 200000
       learn_rate_s1: 0.08
       learn_rate_s2: 0.008
-      max_edge_age: 500
+      max_edge_age: 1000
       alpha: 0.5
       beta: 0.0005
       n_best_candidates: 4
@@ -45,7 +63,7 @@
       start_node_num: 2
 
     # --- Bridge & Viewer Settings ---
-    joint_state_topic: "/joint_states"
+    joint_state_topic: "joint_states"
     stream_topic: "/viewer/internal/stream/robot"
     frame_id: "base_link"
     source_frame_id: "base_link"

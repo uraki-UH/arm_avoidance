@@ -163,7 +163,7 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml"), description="設定YAMLファイル"),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false", description="JointStatePublisherを起動するか"),
         DeclareLaunchArgument("marker_frame_id", default_value="world", description="マーカーを表示する座標系"),
-        DeclareLaunchArgument("joint_topic", default_value="/joint_states", description="関節状態の購読トピック"),
+        DeclareLaunchArgument("joint_topic", default_value="joint_states", description="関節状態の購読トピック"),
         DeclareLaunchArgument("voxel_size", default_value="0.02", description="ボクセル解像度 [m]"),
         DeclareLaunchArgument("update_hz", default_value="10.0", description="更新周波数 [Hz]"),
         DeclareLaunchArgument("publish_self_mask", default_value="true", description="自己認識マスクを配信するか"),
