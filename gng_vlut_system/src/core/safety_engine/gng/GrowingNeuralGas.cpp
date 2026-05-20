@@ -1,4 +1,6 @@
 #include "GrowingNeuralGas.hpp"
+#include "collision/geometric_self_collision_checker.hpp"
+#include "collision/voxel_collision_checker.hpp"
 #include "../vlut/iself_collision_checker.hpp"
 #include "common/resource_utils.hpp"
 #include <Eigen/Core>
@@ -7,9 +9,60 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 using namespace GNG;
+
+namespace {
+
+static std::string makePairKey(std::string a, std::string b) {
+  if (a > b) {
+    std::swap(a, b);
+  }
+  return a + "|" + b;
+}
+
+static std::vector<std::pair<std::string, std::string>>
+collectCollisionPairs(simulation::ISelfCollisionChecker *checker) {
+  if (!checker) {
+    return {};
+  }
+  if (auto *voxel =
+          dynamic_cast<simulation::VoxelCollisionChecker *>(checker)) {
+    return voxel->collectSelfCollisionPairs();
+  }
+  if (auto *geometric =
+          dynamic_cast<simulation::GeometricSelfCollisionChecker *>(checker)) {
+    return geometric->collectSelfCollisionPairs();
+  }
+  return {};
+}
+
+static void printTopCollisionPairs(
+    const std::unordered_map<std::string, int> &pair_counts,
+    std::size_t max_items = 8) {
+  if (pair_counts.empty()) {
+    return;
+  }
+  std::vector<std::pair<std::string, int>> sorted(pair_counts.begin(),
+                                                  pair_counts.end());
+  std::sort(sorted.begin(), sorted.end(),
+            [](const auto &a, const auto &b) {
+              if (a.second != b.second) {
+                return a.second > b.second;
+              }
+              return a.first < b.first;
+            });
+
+  std::cout << "[StrictFilter] Top collision pairs:" << std::endl;
+  for (std::size_t i = 0; i < std::min(max_items, sorted.size()); ++i) {
+    std::cout << "  " << sorted[i].first << " -> " << sorted[i].second
+              << std::endl;
+  }
+}
+
+} // namespace
 
 namespace GrowingNeuralGas_Internal {
 template <typename T> void write_eigen(std::ofstream &out, const T &matrix) {
@@ -816,8 +869,25 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
 
   // 1. Remove colliding nodes first (and all their associated edges)
   int removed_nodes = 0;
+  std::unordered_map<std::string, int> collision_pair_counts;
+  int detailed_logs = 0;
   for (int i = 0; i < (int)nodes.size(); ++i) {
     if (nodes[i].id != -1 && internalCheckColliding(nodes[i].weight_angle)) {
+      const auto colliding_pairs = collectCollisionPairs(collision_checker_);
+      for (const auto &pair : colliding_pairs) {
+        collision_pair_counts[makePairKey(pair.first, pair.second)]++;
+      }
+      if (detailed_logs < 5) {
+        std::cout << "[StrictFilter] Colliding node idx=" << i
+                  << " id=" << nodes[i].id
+                  << " pair_count=" << colliding_pairs.size() << std::endl;
+        for (std::size_t k = 0;
+             k < std::min<std::size_t>(6, colliding_pairs.size()); ++k) {
+          std::cout << "  pair: " << colliding_pairs[k].first << " <-> "
+                    << colliding_pairs[k].second << std::endl;
+        }
+        detailed_logs++;
+      }
       // Node itself is in collision.
       // Clear all its edges first (removes from edges_angle_per_node and
       // edges_angle)
@@ -830,24 +900,26 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
     }
   }
 
-    // 2. Remove colliding edges among the remaining valid nodes
-    int removed_edges = 0;
-    for (int i = 0; i < (int)nodes.size(); ++i) {
-      if (nodes[i].id == -1)
-        continue;
-  
-      // Neighbors are already a vector
-      std::vector<int> neighbors_copy = edges_angle_per_node[i];
-      for (int n : neighbors_copy) {
-        if (i < n) { // Check each edge only once
-          if (internalCheckPathColliding(nodes[i].weight_angle,
-                                         nodes[n].weight_angle, 50)) {
-            remove_edge_angle(i, n);
-            removed_edges++;
-          }
+  printTopCollisionPairs(collision_pair_counts);
+
+  // 2. Remove colliding edges among the remaining valid nodes
+  int removed_edges = 0;
+  for (int i = 0; i < (int)nodes.size(); ++i) {
+    if (nodes[i].id == -1)
+      continue;
+
+    // Neighbors are already a vector
+    std::vector<int> neighbors_copy = edges_angle_per_node[i];
+    for (int n : neighbors_copy) {
+      if (i < n) { // Check each edge only once
+        if (internalCheckPathColliding(nodes[i].weight_angle,
+                                       nodes[n].weight_angle, 50)) {
+          remove_edge_angle(i, n);
+          removed_edges++;
         }
       }
     }
+  }
   std::cout << "[StrictFilter] Result: Removed " << removed_nodes
             << " nodes and " << removed_edges << " edges." << std::endl;
 

@@ -61,24 +61,27 @@
       environment_ignore_links:
         - "pillar_link"
         - "base_footprint"
+      #(隣接リンク同士は自動で衝突判定をしないように設定)
       self_collision_exclusion_pairs:
         - "left_link5|left_link7"
         - "right_link5|right_link7"
+        - "left_gripper_left_link|left_gripper_right_link"
+        - "right_gripper_left_link|right_gripper_right_link"
     
     gng_params:
       lambda: 50
       max_node_num: 100
       num_samples: 1000000
-      max_iterations: 10000
+      max_iterations: 100000
       refine_iterations: 100000
       coord_edge_iterations: 200000
       learn_rate_s1: 0.08
       learn_rate_s2: 0.008
-      max_edge_age: 1000
+      max_edge_age: 2000
       alpha: 0.5
       beta: 0.0005
       n_best_candidates: 4
-      ais_threshold: 1.0
+      ais_threshold: 3.0
       start_node_num: 2
 
     # --- Bridge & Viewer Settings ---
