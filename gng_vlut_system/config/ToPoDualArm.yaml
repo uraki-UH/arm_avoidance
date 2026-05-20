@@ -26,7 +26,7 @@
     gng_dimension: 14
     spatial_map_resolution: 0.01
     self_recognition_resolution: 0.01
-    arm_cache_resolution: 0.008
+    arm_cache_resolution: 0.005
     danger_threshold: 0.025
     gng_exclude_joint_names:
       - "left_gripper_left_joint"
