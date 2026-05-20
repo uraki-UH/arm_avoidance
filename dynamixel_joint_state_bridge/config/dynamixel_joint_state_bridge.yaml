@@ -46,3 +46,24 @@
       - left_joint7
       - left_gripper_left_joint
       - left_gripper_right_joint
+
+
+    joint_scales:
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - -0.015
+      - -0.015
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - -0.015
+      - -0.015
