@@ -38,11 +38,13 @@ public:
     declare_parameter<std::string>("output_topic", "joint_states");
     declare_parameter<std::vector<int64_t>>("joint_ids", {});
     declare_parameter<std::vector<std::string>>("joint_names", {});
+    declare_parameter<std::vector<double>>("joint_scales", {});
 
     input_topic_ = get_parameter("input_topic").as_string();
     output_topic_ = get_parameter("output_topic").as_string();
     const auto joint_ids_raw = get_parameter("joint_ids").as_integer_array();
     joint_names_ = get_parameter("joint_names").as_string_array();
+    joint_scales_ = get_parameter("joint_scales").as_double_array();
 
     joint_ids_.reserve(joint_ids_raw.size());
     for (const auto id : joint_ids_raw) {
@@ -62,6 +64,13 @@ public:
         "joint_names size (%zu) does not match joint_ids size (%zu). "
         "Fallback names will be used for missing entries.",
         joint_names_.size(), joint_ids_.size());
+    }
+    if (!joint_scales_.empty() && joint_scales_.size() != joint_ids_.size()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "joint_scales size (%zu) does not match joint_ids size (%zu). "
+        "Unset entries will fall back to 1.0.",
+        joint_scales_.size(), joint_ids_.size());
     }
 
     publisher_namespaced_ = create_publisher<sensor_msgs::msg::JointState>(output_topic_, rclcpp::QoS(10));
@@ -123,7 +132,7 @@ private:
           return;
         }
         joint_names.push_back(resolveJointName(i, id));
-        joint_positions.push_back(it->second * kDegToRad);
+        joint_positions.push_back(it->second * kDegToRad * resolveScale(i));
       }
     }
 
@@ -142,10 +151,17 @@ private:
     return "dxl_" + std::to_string(id);
   }
 
+  double resolveScale(size_t index) const
+  {if (index < joint_scales_.size()) {
+      return joint_scales_[index];}
+    return 1.0;
+  }
+
   std::string input_topic_;
   std::string output_topic_;
   std::vector<uint16_t> joint_ids_;
   std::vector<std::string> joint_names_;
+  std::vector<double> joint_scales_;
   rclcpp::Subscription<dynamixel_handler_msgs::msg::DynamixelPresent>::SharedPtr subscription_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_namespaced_;
 };

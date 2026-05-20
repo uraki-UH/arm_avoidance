@@ -151,6 +151,11 @@ public:
   virtual int getJointDOF(int joint_index) const;
 
   virtual std::string getLinkName(int link_index) const;
+  virtual bool getLinkTransform(
+      const std::string &link_name, Eigen::Isometry3d &out_transform) const;
+  virtual Eigen::Vector3d getLinkAxisDirection(
+      const std::string &link_name,
+      const Eigen::Vector3d &local_axis = Eigen::Vector3d::UnitX()) const;
   Eigen::Vector3d getLinkVector(int link_index) const {
     if (link_index >= 0 && link_index < (int)links_.size())
       return links_[link_index].vector;

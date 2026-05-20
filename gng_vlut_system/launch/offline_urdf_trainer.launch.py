@@ -22,13 +22,14 @@ def launch_setup(context, *args, **kwargs):
     validation_focus_links = LaunchConfiguration("validation_focus_links").perform(context)
     validation_max_print_voxels = LaunchConfiguration("validation_max_print_voxels").perform(context)
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
+    gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
     if robot_urdf_path:
         overrides["robot_urdf_path"] = robot_urdf_path
     if experiment_id:
-        overrides["experiment_id"] = experiment_id
+        overrides["gng.experiment_id"] = experiment_id
     if vlut_only != "false":
         overrides["vlut_only"] = (vlut_only.lower() == "true")
     if use_voxel_collision != "false":
@@ -50,6 +51,8 @@ def launch_setup(context, *args, **kwargs):
         overrides["collision.validation_max_print_voxels"] = int(validation_max_print_voxels)
     if validation_dump_path:
         overrides["collision.validation_dump_path"] = validation_dump_path
+    if gng_profile_names:
+        overrides["gng.profile_names"] = gng_profile_names
 
     return [
 
@@ -124,6 +127,11 @@ def generate_launch_description():
             "validation_dump_path",
             default_value="",
             description="検証レポートを書き出すファイルパス",
+        ),
+        DeclareLaunchArgument(
+            "gng_profile_names",
+            default_value="",
+            description="gng_profiles から使う profile 名のカンマ区切り (例: left_arm,right_arm)",
         ),
         OpaqueFunction(function=launch_setup)
     ])

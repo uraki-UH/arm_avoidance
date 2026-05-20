@@ -125,10 +125,10 @@ public:
     declare_parameter("source_frame_id", "world");
     declare_parameter("occupied_voxels_topic", "occupied_voxels");
     declare_parameter("danger_voxels_topic", "danger_voxels");
-    declare_parameter("data_directory", "gng_results");
-    declare_parameter("experiment_id", "standard_train");
-    declare_parameter("gng_model_filename", "gng.bin");
-    declare_parameter("vlut_filename", "vlut.bin");
+    declare_parameter("gng.data_directory", "gng_results");
+    declare_parameter("gng.experiment_id", "standard_train");
+    declare_parameter("gng.gng_model_filename", "gng.bin");
+    declare_parameter("gng.vlut_filename", "vlut.bin");
     declare_parameter("topic_name", "topological_map");
 
     const std::string gng_path =
@@ -231,15 +231,15 @@ private:
     }
 
     const std::string data_dir = robot_sim::common::resolveDataPath(
-        get_parameter("data_directory").as_string());
-    const std::string exp_id = get_parameter("experiment_id").as_string();
+        get_parameter("gng.data_directory").as_string());
+    const std::string exp_id = get_parameter("gng.experiment_id").as_string();
     std::string filename = path;
 
     if (filename.empty()) {
       if (is_vlut) {
-        filename = get_parameter("vlut_filename").as_string();
+        filename = get_parameter("gng.vlut_filename").as_string();
       } else {
-        filename = get_parameter("gng_model_filename").as_string();
+        filename = get_parameter("gng.gng_model_filename").as_string();
         if (filename.empty()) {
           filename = exp_id + ".bin";
         }

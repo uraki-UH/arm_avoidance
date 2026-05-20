@@ -19,6 +19,30 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+namespace {
+
+static std::string getStringWithFallback(
+    rclcpp::Node &node, const std::string &nested_key,
+    const std::string &legacy_key) {
+    const std::string nested = node.get_parameter(nested_key).as_string();
+    if (!nested.empty()) {
+        return nested;
+    }
+    return node.get_parameter(legacy_key).as_string();
+}
+
+static std::vector<std::string> getStringsWithFallback(
+    rclcpp::Node &node, const std::string &nested_key,
+    const std::string &legacy_key) {
+    auto nested = node.get_parameter(nested_key).as_string_array();
+    if (!nested.empty()) {
+        return nested;
+    }
+    return node.get_parameter(legacy_key).as_string_array();
+}
+
+} // namespace
+
 namespace robot_sim::self_recognition {
 
 SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & options)
@@ -27,14 +51,22 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     // パラメータ：計算に必要な最小限の設定
     declare_parameter("robot_urdf_path", "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     declare_parameter("joint_topic", "joint_states");
+    declare_parameter("robot.voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("update_hz", 50.0); 
+    declare_parameter("self_recognition.update_hz", 10.0);
     declare_parameter<std::vector<std::string>>("root_links", std::vector<std::string>{});
+    declare_parameter<std::vector<std::string>>("self_recognition.root_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("leaf_links", std::vector<std::string>{});
-    declare_parameter<std::string>("arm_leaf_link_names", "");
+    declare_parameter<std::vector<std::string>>("self_recognition.leaf_links", std::vector<std::string>{});
+    declare_parameter<std::string>("robot.arm_leaf_link_names", "");
+    declare_parameter<std::string>("self_recognition.arm_leaf_link_names", "");
     declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
+    declare_parameter<std::vector<std::string>>("self_recognition.exclude_links", std::vector<std::string>{});
     declare_parameter<std::string>("root_link", "");
+    declare_parameter<std::string>("self_recognition.root_link", "");
     declare_parameter("self_recognition.inflation", 0.02);
+    declare_parameter("robot.inflation", 0.0);
  
     // ボクセル展開パラメータの宣言
     declare_parameter("voxel_indexing.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
@@ -42,6 +74,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("voxel_indexing.z_shift", ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
     declare_parameter("voxel_indexing.offset", ::robot_sim::common::Constants::DEFAULT_OFFSET);
     declare_parameter("target_frame_id", ""); // 空ならロボットのベースを使用
+    declare_parameter("self_recognition.target_frame_id", "");
+    declare_parameter("self_recognition.marker_frame_id", "");
 
     const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -53,11 +87,14 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     
-    // Prefer self_recognition.resolution if specified, otherwise fallback to voxel_size
+    // Prefer self_recognition.resolution if specified, otherwise fallback to robot.voxel_size
     declare_parameter("self_recognition.resolution", 0.0);
     double res_param = get_parameter("self_recognition.resolution").as_double();
     if (res_param <= 0.0) {
-        res_param = get_parameter("voxel_size").as_double();
+        res_param = get_parameter("robot.voxel_size").as_double();
+        if (res_param <= 0.0) {
+            res_param = get_parameter("voxel_size").as_double();
+        }
     }
     const double voxel_size_param = res_param;
 
@@ -69,9 +106,11 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         throw;
     }
 
-    auto root_links = get_parameter("root_links").as_string_array();
-    auto leaf_links = get_parameter("leaf_links").as_string_array();
-    std::string global_root_link = get_parameter("root_link").as_string();
+    auto root_links =
+        getStringsWithFallback(*this, "self_recognition.root_links", "root_links");
+    auto leaf_links =
+        getStringsWithFallback(*this, "self_recognition.leaf_links", "leaf_links");
+    std::string global_root_link = getStringWithFallback(*this, "self_recognition.root_link", "root_link");
     if (global_root_link.empty()) {
         std::string base_name = model_->getRootLinkName();
         std::string ns = get_namespace();
@@ -170,7 +209,9 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         std::sort(current_leaf_links.begin(), current_leaf_links.end());
         current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
     } else {
-        auto arm_leaf_roots = splitCommaSeparated(get_parameter("arm_leaf_link_names").as_string());
+    auto arm_leaf_roots =
+            splitCommaSeparated(getStringWithFallback(*this,
+                "self_recognition.arm_leaf_link_names", "robot.arm_leaf_link_names"));
         if (!arm_leaf_roots.empty()) {
             current_leaf_links = arm_leaf_roots;
             auto expanded = expandTerminalLeafLinks(arm_leaf_roots);
@@ -203,8 +244,17 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         get_parameter("voxel_indexing.z_shift").as_int(),
         get_parameter("voxel_indexing.offset").as_int());
 
-    double hz = get_parameter("update_hz").as_double();
+    double hz = get_parameter("self_recognition.update_hz").as_double();
+    if (hz <= 0.0) {
+        hz = get_parameter("update_hz").as_double();
+    }
     double inflation = get_parameter("self_recognition.inflation").as_double();
+    if (inflation <= 0.0) {
+        inflation = get_parameter("robot.inflation").as_double();
+    }
+    if (inflation <= 0.0) {
+        inflation = 0.02;
+    }
 
     // ボクセル化の実行（全衝突リンクを対象）
     auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid, {}, inflation);
@@ -246,7 +296,8 @@ void SelfRecognitionVizNode::updateAndPublish() {
         recognition_manager_->updateRobotState(current_joints_);
         auto t_fk = (this->now() - t_start).seconds() * 1000.0;
 
-        std::string target_frame = get_parameter("target_frame_id").as_string();
+        std::string target_frame = getStringWithFallback(*this,
+            "self_recognition.target_frame_id", "target_frame_id");
         
         // 名前空間の補完ロジック
         auto resolve_frame = [&](const std::string& frame) {

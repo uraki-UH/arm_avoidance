@@ -105,20 +105,22 @@ def launch_setup(context, *args, **kwargs):
                     break
 
             if isinstance(root_ros_params, dict):
-                yaml_data_dir = root_ros_params.get('data_directory', yaml_data_dir)
-                yaml_exp_id = root_ros_params.get('experiment_id', yaml_exp_id)
-                gng_model_filename = root_ros_params.get('gng_model_filename', gng_model_filename)
-                vlut_filename = root_ros_params.get('vlut_filename', vlut_filename)
+                gng_ns = root_ros_params.get('gng', {}) if isinstance(root_ros_params.get('gng', {}), dict) else {}
+                yaml_data_dir = gng_ns.get('data_directory', yaml_data_dir)
+                yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
+                gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
+                vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
                 yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
                 yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
                 if ros_params:
-                    yaml_data_dir = ros_params.get("data_directory", yaml_data_dir)
-                    yaml_exp_id = ros_params.get("experiment_id", yaml_exp_id)
-                    gng_model_filename = ros_params.get("gng_model_filename", gng_model_filename)
-                    vlut_filename = ros_params.get("vlut_filename", vlut_filename)
+                    gng_ns = ros_params.get("gng", {}) if isinstance(ros_params.get("gng", {}), dict) else {}
+                    yaml_data_dir = gng_ns.get("data_directory", yaml_data_dir)
+                    yaml_exp_id = gng_ns.get("experiment_id", yaml_exp_id)
+                    gng_model_filename = gng_ns.get("gng_model_filename", gng_model_filename)
+                    vlut_filename = gng_ns.get("vlut_filename", vlut_filename)
                     break
 
         except Exception:
@@ -176,7 +178,7 @@ def launch_setup(context, *args, **kwargs):
     if robot_description_file:
         common_params["robot_description_file"] = robot_description_file
     if arm_leaf_link_names:
-        common_params["arm_leaf_link_names"] = arm_leaf_link_names
+        common_params["robot.arm_leaf_link_names"] = arm_leaf_link_names
     
     # 座標系(frame_id)などは明示的に指定された場合のみ上書き
     def add_if_not_empty(name, config_name):
@@ -226,8 +228,8 @@ def launch_setup(context, *args, **kwargs):
                 {
                     "gng_model_path": resolve_result_path(gng_model_path, gng_model_filename),
                     "vlut_path": resolve_result_path(vlut_path, vlut_filename),
-                    "data_directory": data_dir,
-                    "experiment_id": exp_id,
+                    "gng.data_directory": data_dir,
+                    "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
                     "robot_description_file": robot_description_file,
@@ -236,7 +238,7 @@ def launch_setup(context, *args, **kwargs):
                 {k: v for k, v in {
                     "frame_id": gng_frame_id,
                     "source_frame_id": gng_source_frame_id,
-                    "arm_leaf_link_names": arm_leaf_link_names,
+                    "robot.arm_leaf_link_names": arm_leaf_link_names,
                 }.items() if v}
             ]
         ),

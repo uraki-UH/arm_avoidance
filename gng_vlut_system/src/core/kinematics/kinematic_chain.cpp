@@ -378,6 +378,33 @@ KinematicChain::getEEFOrientation(std::size_t arm_index) const {
   return getEEFOrientation();
 }
 
+bool KinematicChain::getLinkTransform(const std::string &link_name,
+                                      Eigen::Isometry3d &out_transform) const {
+  std::map<std::string, Eigen::Isometry3d> link_transforms;
+  std::map<std::string, std::pair<std::string, Eigen::Isometry3d>> fixed_links;
+  buildAllLinkTransforms(getLinkPositions(), getLinkOrientations(), fixed_links,
+                         link_transforms);
+  const auto it = link_transforms.find(link_name);
+  if (it == link_transforms.end()) {
+    return false;
+  }
+  out_transform = it->second;
+  return true;
+}
+
+Eigen::Vector3d KinematicChain::getLinkAxisDirection(
+    const std::string &link_name, const Eigen::Vector3d &local_axis) const {
+  Eigen::Isometry3d tf = Eigen::Isometry3d::Identity();
+  if (!getLinkTransform(link_name, tf)) {
+    return Eigen::Vector3d::Zero();
+  }
+  Eigen::Vector3d axis = tf.linear() * local_axis;
+  if (axis.norm() > 0.0) {
+    axis.normalize();
+  }
+  return axis;
+}
+
 const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &
 KinematicChain::getLinkPositions() const {
   return joint_positions_world_;

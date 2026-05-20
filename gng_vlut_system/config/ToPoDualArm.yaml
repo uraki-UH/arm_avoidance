@@ -1,6 +1,6 @@
 /**:
   ros__parameters:
-    # --- Global & System-wide Settings ---
+  
     voxel_indexing:
       x_shift: 42
       y_shift: 21
@@ -12,27 +12,46 @@
     robot_description_file: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
     resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
     mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
-    eef_link_names: "left_end_effector_link,right_end_effector_link"
-    arm_leaf_link_names: "left_link8,right_link8"
-    voxel_size: 0.01
-    padding: 0.0
 
     # --- GNG & Safety Settings ---
-    experiment_id: "topoarm_double_test"
-    data_directory: "/ros2_ws/src/gng_vlut_system/gng_results"
-    gng_model_filename: "gng.bin"
-    vlut_filename: "vlut.bin"
-    ground_z_threshold: -10.0
-    gng_dimension: 14
-    spatial_map_resolution: 0.01
-    self_recognition_resolution: 0.01
-    arm_cache_resolution: 0.005
-    danger_threshold: 0.025
-    gng_exclude_joint_names:
-      - "left_gripper_left_joint"
-      - "left_gripper_right_joint"
-      - "right_gripper_left_joint"
-      - "right_gripper_right_joint"
+    gng:
+      experiment_id: "ToPoDualArm"
+      data_directory: "/ros2_ws/src/gng_vlut_system/gng_results"
+      gng_model_filename: "gng.bin"
+      vlut_filename: "vlut.bin"
+      ground_z_threshold: -10.0
+      spatial_map_resolution: 0.01
+      self_recognition_resolution: 0.01
+      arm_cache_resolution: 0.005
+      danger_threshold: 0.025
+      vlut_resolution: 0.02
+      sensing_resolution: 0.01
+      vlut_only: false #gngの結果だけ読み込みvlutの構築だけ実行
+      use_voxel_collision: true
+      # gng_profiles に列挙した profile は、未指定ならすべて使用
+      profiles:
+        right_arm:
+          root: "base_link"
+          eef: "right_end_effector_link"
+          exclude:
+            - "right_gripper_left_joint"
+            - "right_gripper_right_joint"
+          dof: 7
+
+        left_arm:
+          root: "base_link"
+          eef: "left_end_effector_link"
+          exclude:
+            - "left_gripper_left_joint"
+            - "left_gripper_right_joint"
+          dof: 7
+
+    # --- Robot Settings ---
+    robot:
+      eef_link_names: "left_end_effector_link,right_end_effector_link"
+      arm_leaf_link_names: "left_link8,right_link8"
+      voxel_size: 0.01
+      inflation: 0.0
 
     collision:
       enable_ground_collision: true
@@ -50,7 +69,7 @@
       lambda: 50
       max_node_num: 100
       num_samples: 1000000
-      max_iterations: 1000000
+      max_iterations: 10000
       refine_iterations: 100000
       coord_edge_iterations: 200000
       learn_rate_s1: 0.08
@@ -70,8 +89,14 @@
     publish_hz: 30.0
 
     # --- Self Recognition Settings ---
-    target_frame_id: "base_link"
-    marker_frame_id: "base_link"
-    update_hz: 30.0
-    input_topic: "/camera/transformed_points"
-    output_topic: "/camera/self_filtered_points"
+    self_recognition:
+      resolution: 0.01
+      inflation: 0.0
+      update_hz: 30.0
+      root_link: "base_link"
+      target_frame_id: "base_link"
+      marker_frame_id: "base_link"
+      input_topic: "/camera/transformed_points"
+      output_topic: "/camera/self_filtered_points"
+      self_output_topic: "/camera/self_points"
+      mask_topic: "/self_recognition/voxel_mask"

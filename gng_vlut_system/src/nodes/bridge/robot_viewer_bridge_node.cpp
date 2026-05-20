@@ -36,8 +36,8 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
-    const std::string eef_link_names = declare_parameter<std::string>("eef_link_names", "");
-    arm_leaf_link_names_ = declare_parameter<std::string>("arm_leaf_link_names", "");
+    const std::string eef_link_names = declare_parameter<std::string>("robot.eef_link_names", "");
+    arm_leaf_link_names_ = declare_parameter<std::string>("robot.arm_leaf_link_names", "");
     joint_state_topic_ = declare_parameter<std::string>("joint_state_topic", "joint_states");
     stream_topic_ = declare_parameter<std::string>("stream_topic", "/viewer/internal/stream/robot");
     frame_id_ = declare_parameter<std::string>("frame_id", ::robot_sim::common::Constants::DEFAULT_WORLD_FRAME);

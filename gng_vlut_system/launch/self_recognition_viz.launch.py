@@ -112,7 +112,8 @@ def launch_setup(context, *args, **kwargs):
 
     add_if_not_empty("marker_frame_id", "marker_frame_id")
     add_if_not_empty("joint_topic", "joint_topic")
-    add_if_not_empty("voxel_size", "voxel_size", float)
+    add_if_not_empty("robot.voxel_size", "voxel_size", float)
+    add_if_not_empty("robot.inflation", "inflation", float)
     add_if_not_empty("update_hz", "update_hz", float)
     add_if_not_empty("publish_self_mask", "publish_self_mask") # boolは文字列でも解釈されることが多いが
     add_if_not_empty("publish_link_voxels", "publish_link_voxels")
@@ -166,6 +167,7 @@ def generate_launch_description():
         DeclareLaunchArgument("marker_frame_id", default_value="world", description="マーカーを表示する座標系"),
         DeclareLaunchArgument("joint_topic", default_value="joint_states", description="関節状態の購読トピック"),
         DeclareLaunchArgument("voxel_size", default_value="0.02", description="ボクセル解像度 [m]"),
+        DeclareLaunchArgument("inflation", default_value="0.0", description="ロボットのボクセル膨張量 [m]"),
         DeclareLaunchArgument("update_hz", default_value="10.0", description="更新周波数 [Hz]"),
         DeclareLaunchArgument("publish_self_mask", default_value="true", description="自己認識マスクを配信するか"),
         DeclareLaunchArgument("publish_link_voxels", default_value="true", description="リンク毎のボクセルを配信するか"),

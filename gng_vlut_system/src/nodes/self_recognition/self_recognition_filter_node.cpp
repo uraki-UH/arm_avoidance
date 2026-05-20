@@ -15,17 +15,44 @@ SelfRecognitionFilterNode::SelfRecognitionFilterNode(const rclcpp::NodeOptions &
 : Node("self_recognition_filter_node", options) {
     
     // パラメータ
+    declare_parameter<double>("robot.voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<std::string>("input_topic", "/points");
     declare_parameter<std::string>("output_topic", "/self_filtered_points");
     declare_parameter<std::string>("self_output_topic", "/self_recognition_points");
     declare_parameter<std::string>("mask_topic", "/self_recognition/voxel_mask");
+    declare_parameter<double>("self_recognition.voxel_size", 0.01);
+    declare_parameter<std::string>("self_recognition.input_topic", "");
+    declare_parameter<std::string>("self_recognition.output_topic", "");
+    declare_parameter<std::string>("self_recognition.self_output_topic", "");
+    declare_parameter<std::string>("self_recognition.mask_topic", "");
 
-    grid_.setVoxelSize(get_parameter("voxel_size").as_double());
-    std::string input_topic = get_parameter("input_topic").as_string();
-    std::string output_topic = get_parameter("output_topic").as_string();
-    std::string self_output_topic = get_parameter("self_output_topic").as_string();
-    std::string mask_topic = get_parameter("mask_topic").as_string();
+    auto get_string_with_fallback = [this](const std::string &nested_key,
+                                           const std::string &legacy_key) {
+        const std::string nested = get_parameter(nested_key).as_string();
+        if (!nested.empty()) {
+            return nested;
+        }
+        return get_parameter(legacy_key).as_string();
+    };
+
+    auto get_double_with_fallback = [this](const std::string &nested_key,
+                                           const std::string &legacy_key) {
+        const double nested = get_parameter(nested_key).as_double();
+        if (nested > 0.0) {
+            return nested;
+        }
+        return get_parameter(legacy_key).as_double();
+    };
+
+    grid_.setVoxelSize(get_double_with_fallback("self_recognition.voxel_size", "robot.voxel_size"));
+    if (grid_.getVoxelSize() <= 0.0) {
+        grid_.setVoxelSize(get_double_with_fallback("self_recognition.voxel_size", "voxel_size"));
+    }
+    std::string input_topic = get_string_with_fallback("self_recognition.input_topic", "input_topic");
+    std::string output_topic = get_string_with_fallback("self_recognition.output_topic", "output_topic");
+    std::string self_output_topic = get_string_with_fallback("self_recognition.self_output_topic", "self_output_topic");
+    std::string mask_topic = get_string_with_fallback("self_recognition.mask_topic", "mask_topic");
 
     // マスク（他ノードが計算したもの）を受け取る
     mask_sub_ = create_subscription<voxel_msgs::msg::Voxel>(

@@ -53,6 +53,113 @@ static std::vector<std::string> splitCommaSeparated(const std::string &text) {
   return items;
 }
 
+static std::string joinProfilePrefix(const std::string &profile_name,
+                                     const std::string &key) {
+  if (profile_name.empty()) {
+    return key;
+  }
+  return "gng.profiles." + profile_name + "." + key;
+}
+
+static std::string getProfileString(rclcpp::Node *node,
+                                    const std::string &profile_name,
+                                    const std::string &profile_key,
+                                    const std::string &fallback_key,
+                                    const std::string &fallback_value = "") {
+  const std::string scoped_key = joinProfilePrefix(profile_name, profile_key);
+  if (node->has_parameter(scoped_key)) {
+    return node->get_parameter(scoped_key).as_string();
+  }
+  if (node->has_parameter(fallback_key)) {
+    return node->get_parameter(fallback_key).as_string();
+  }
+  return fallback_value;
+}
+
+static std::vector<std::string> getProfileStringArray(
+    rclcpp::Node *node, const std::string &profile_name,
+    const std::string &profile_key, const std::string &fallback_key,
+    const std::vector<std::string> &fallback_value = {}) {
+  const std::string scoped_key = joinProfilePrefix(profile_name, profile_key);
+  if (node->has_parameter(scoped_key)) {
+    return node->get_parameter(scoped_key).as_string_array();
+  }
+  if (node->has_parameter(fallback_key)) {
+    return node->get_parameter(fallback_key).as_string_array();
+  }
+  return fallback_value;
+}
+
+static int getProfileInt(rclcpp::Node *node, const std::string &profile_name,
+                         const std::string &profile_key,
+                         const std::string &fallback_key, int fallback_value) {
+  const std::string scoped_key = joinProfilePrefix(profile_name, profile_key);
+  if (node->has_parameter(scoped_key)) {
+    return node->get_parameter(scoped_key).as_int();
+  }
+  if (node->has_parameter(fallback_key)) {
+    return node->get_parameter(fallback_key).as_int();
+  }
+  return fallback_value;
+}
+
+static std::vector<std::string> resolveArmLeafNames(
+    const std::string &eef_link_names, const std::string &arm_leaf_link_names,
+    const std::string &leaf_link_name,
+    const std::string &paired_leaf_link_name) {
+  const auto eef_names = splitCommaSeparated(eef_link_names);
+  if (!eef_names.empty()) {
+    return eef_names;
+  }
+
+  const auto arm_leaf_names = splitCommaSeparated(arm_leaf_link_names);
+  if (!arm_leaf_names.empty()) {
+    return arm_leaf_names;
+  }
+
+  if (!paired_leaf_link_name.empty()) {
+    return {leaf_link_name, paired_leaf_link_name};
+  }
+
+  if (leaf_link_name.rfind("left_", 0) == 0) {
+    return {leaf_link_name, "right_" + leaf_link_name.substr(5)};
+  }
+
+  return {leaf_link_name};
+}
+
+static std::unique_ptr<kinematics::KinematicChain> buildKinematicChainFromParams(
+    const simulation::RobotModel &model, const std::string &eef_link_names,
+    const std::string &arm_leaf_link_names, const std::string &leaf_link_name,
+    const std::string &paired_leaf_link_name) {
+  const auto arm_leaf_names = resolveArmLeafNames(
+      eef_link_names, arm_leaf_link_names, leaf_link_name,
+      paired_leaf_link_name);
+
+  if (arm_leaf_names.size() == 1) {
+    return std::make_unique<kinematics::KinematicChain>(
+        simulation::createKinematicChainFromModel(model,
+                                                  arm_leaf_names.front()));
+  }
+
+  return simulation::createMultiArmKinematicChainFromModels(
+      model, arm_leaf_names);
+}
+
+static std::unique_ptr<kinematics::KinematicChain>
+buildKinematicChainFromLeafNames(
+    const simulation::RobotModel &model,
+    const std::vector<std::string> &arm_leaf_names) {
+  if (arm_leaf_names.size() == 1) {
+    return std::make_unique<kinematics::KinematicChain>(
+        simulation::createKinematicChainFromModel(model,
+                                                  arm_leaf_names.front()));
+  }
+
+  return simulation::createMultiArmKinematicChainFromModels(
+      model, arm_leaf_names);
+}
+
 static std::string trimWhitespace(const std::string &text) {
   const auto begin = text.find_first_not_of(" \t");
   if (begin == std::string::npos) {
@@ -95,14 +202,111 @@ struct JointSelectionSpec {
   int selected_dof = 0;
 };
 
+struct GngProfileConfig {
+  std::string name;
+  std::string root_link;
+  std::string eef_link_names;
+  std::string arm_leaf_link_names;
+  std::vector<std::string> include_joint_names;
+  std::vector<std::string> exclude_joint_names;
+  int dof = 0;
+};
+
+static std::vector<std::string> resolveSelectedProfileNames(
+    const std::string &profile_names, const std::string &legacy_profile_name,
+    const std::vector<std::string> &fallback_profiles) {
+  auto names = splitCommaSeparated(profile_names);
+  if (!names.empty()) {
+    return names;
+  }
+  if (!legacy_profile_name.empty()) {
+    return {legacy_profile_name};
+  }
+  return fallback_profiles;
+}
+
+static std::vector<std::string> discoverGngProfileNames(rclcpp::Node *node) {
+  std::unordered_set<std::string> names;
+  const auto listed = node->list_parameters({"gng"}, 4);
+  for (const auto &param_name : listed.names) {
+    const std::string prefix = "gng.profiles.";
+    if (param_name.rfind(prefix, 0) != 0) {
+      continue;
+    }
+    const std::string rest = param_name.substr(prefix.size());
+    const auto dot = rest.find('.');
+    if (dot == std::string::npos || dot == 0) {
+      continue;
+    }
+    names.insert(rest.substr(0, dot));
+  }
+
+  std::vector<std::string> out(names.begin(), names.end());
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+static GngProfileConfig loadGngProfileConfig(rclcpp::Node *node,
+                                             const std::string &profile_name) {
+  GngProfileConfig config;
+  config.name = profile_name;
+  config.root_link = getProfileString(node, profile_name, "root",
+                                      "gng.path_root_link", "");
+  config.eef_link_names = getProfileString(node, profile_name, "eef",
+                                           "robot.eef_link_names", "");
+  config.arm_leaf_link_names = getProfileString(
+      node, profile_name, "arm_leaf_link_names",
+      "robot.arm_leaf_link_names", "");
+  config.include_joint_names = getProfileStringArray(
+      node, profile_name, "include", "gng.include_joint_names", {});
+  config.exclude_joint_names = getProfileStringArray(
+      node, profile_name, "exclude", "gng.exclude_joint_names", {});
+  config.dof = getProfileInt(node, profile_name, "dof", "gng.dimension", 0);
+  if (config.dof <= 0) {
+    config.dof =
+        getProfileInt(node, profile_name, "gng_dimension", "gng.dimension", 0);
+  }
+  return config;
+}
+
+static void appendUnique(std::vector<std::string> &dst,
+                         const std::vector<std::string> &src) {
+  std::unordered_set<std::string> seen(dst.begin(), dst.end());
+  for (const auto &item : src) {
+    if (seen.insert(item).second) {
+      dst.push_back(item);
+    }
+  }
+}
+
+static std::string joinCommaSeparated(const std::vector<std::string> &items) {
+  std::ostringstream oss;
+  for (std::size_t i = 0; i < items.size(); ++i) {
+    if (i > 0) {
+      oss << ", ";
+    }
+    oss << items[i];
+  }
+  return oss.str();
+}
+
 static JointSelectionSpec buildJointSelectionSpec(
     const kinematics::KinematicChain &chain,
+    const std::vector<std::string> &include_joint_names,
     const std::vector<std::string> &exclude_joint_names) {
   JointSelectionSpec spec;
+  const bool use_include_list = !include_joint_names.empty();
+  std::unordered_set<std::string> include_set(include_joint_names.begin(),
+                                              include_joint_names.end());
   std::unordered_set<std::string> exclude_set(exclude_joint_names.begin(),
                                               exclude_joint_names.end());
   for (int joint_idx = 0; joint_idx < chain.getNumJoints(); ++joint_idx) {
     const std::string joint_name = chain.getJointName(joint_idx);
+    if (use_include_list) {
+      if (include_set.count(joint_name) == 0) {
+        continue;
+      }
+    }
     if (exclude_set.count(joint_name) > 0) {
       continue;
     }
@@ -116,6 +320,53 @@ static JointSelectionSpec buildJointSelectionSpec(
     spec.selected_dof += joint_dof;
   }
   return spec;
+}
+
+static std::vector<std::string> collectPathJointNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::string &leaf_link_name) {
+  std::map<std::string, const simulation::JointProperties *> child_to_joint;
+  for (const auto &[joint_name, joint_props] : model.getJoints()) {
+    (void)joint_name;
+    child_to_joint[joint_props.child_link] = &joint_props;
+  }
+
+  const std::string stop_root =
+      root_link_name.empty() ? model.getRootLinkName() : root_link_name;
+  std::vector<std::string> joint_names_reversed;
+  std::string current_link = leaf_link_name;
+  std::unordered_set<std::string> visited_links;
+
+  while (!current_link.empty() && current_link != stop_root) {
+    if (!visited_links.insert(current_link).second) {
+      break;
+    }
+    const auto it = child_to_joint.find(current_link);
+    if (it == child_to_joint.end()) {
+      break;
+    }
+    joint_names_reversed.push_back(it->second->name);
+    current_link = it->second->parent_link;
+  }
+
+  std::reverse(joint_names_reversed.begin(), joint_names_reversed.end());
+  return joint_names_reversed;
+}
+
+static std::vector<std::string> buildPathBasedJointNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::vector<std::string> &leaf_link_names) {
+  std::vector<std::string> joint_names;
+  std::unordered_set<std::string> unique_names;
+  for (const auto &leaf_link_name : leaf_link_names) {
+    for (const auto &joint_name :
+         collectPathJointNames(model, root_link_name, leaf_link_name)) {
+      if (unique_names.insert(joint_name).second) {
+        joint_names.push_back(joint_name);
+      }
+    }
+  }
+  return joint_names;
 }
 
 static std::vector<double> packSelectedJointValues(
@@ -717,18 +968,18 @@ public:
                 "--- Standalone URDF-based Unified GNG/VLUT Pipeline ---");
 
     // 0. Declare and Get Parameters
-    experiment_id_ = this->declare_parameter<std::string>("experiment_id",
-                                                          "standalone_train");
+    experiment_id_ = this->declare_parameter<std::string>("gng.experiment_id",
+                                                          "");
     data_directory_ = robot_sim::common::resolveDataPath(
-        this->declare_parameter<std::string>("data_directory", "gng_results"));
+        this->declare_parameter<std::string>("gng.data_directory", "gng_results"));
     robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path",
                                                             "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     gng_model_filename_ = this->declare_parameter<std::string>(
-        "gng_model_filename", "gng.bin");
+        "gng.gng_model_filename", "gng.bin");
     vlut_filename_ = this->declare_parameter<std::string>(
-        "vlut_filename", "vlut.bin");
+        "gng.vlut_filename", "vlut.bin");
     ground_z_threshold_ =
-        this->declare_parameter<double>("ground_z_threshold", 0.0);
+        this->declare_parameter<double>("gng.ground_z_threshold", 0.0);
     enable_ground_collision_ = this->declare_parameter<bool>(
         "collision.enable_ground_collision", true);
     enable_self_collision_ = this->declare_parameter<bool>(
@@ -737,34 +988,52 @@ public:
         "collision.apply_environment_ignore_links", true);
     apply_self_collision_exclusion_pairs_ = this->declare_parameter<bool>(
         "collision.apply_self_collision_exclusion_pairs", true);
-    eef_link_names_ = this->declare_parameter<std::string>(
-        "eef_link_names", "");
-    arm_leaf_link_names_ = this->declare_parameter<std::string>(
-        "arm_leaf_link_names", "");
+    gng_path_root_link_ = this->declare_parameter<std::string>("gng.path_root_link", "");
+    gng_profile_names_ = this->declare_parameter<std::string>("gng.profile_names", "");
+    gng_profile_name_ = this->declare_parameter<std::string>("gng.profile_name", "");
+    eef_link_names_ = this->declare_parameter<std::string>("robot.eef_link_names", "");
+    arm_leaf_link_names_ = this->declare_parameter<std::string>("robot.arm_leaf_link_names", "");
+    gng_include_joint_names_ = this->declare_parameter<std::vector<std::string>>(
+        "gng.include_joint_names", std::vector<std::string>{});
     gng_exclude_joint_names_ = this->declare_parameter<std::vector<std::string>>(
-        "gng_exclude_joint_names", std::vector<std::string>{});
+        "gng.exclude_joint_names", std::vector<std::string>{});
     leaf_link_name_ = this->declare_parameter<std::string>("leaf_link_name",
                                                            "end_effector_link");
     paired_leaf_link_name_ = this->declare_parameter<std::string>(
         "paired_leaf_link_name", "");
-    gng_dimension_ = this->declare_parameter<int>("gng_dimension", 12);
+    gng_dimension_ = this->declare_parameter<int>("gng.dimension", 12);
     spatial_map_resolution_ =
-        this->declare_parameter<double>("spatial_map.resolution", 0.02);
+        this->declare_parameter<double>("gng.spatial_map_resolution", 0.02);
     sensing_resolution_ =
-        this->declare_parameter<double>("sensing_resolution", 0.02);
+        this->declare_parameter<double>("gng.sensing_resolution", 0.02);
     arm_cache_resolution_ =
-        this->declare_parameter<double>("arm_cache_resolution", 0.008);
+        this->declare_parameter<double>("gng.arm_cache_resolution", 0.008);
     danger_threshold_ =
-        this->declare_parameter<double>("danger_threshold", 0.025);
+        this->declare_parameter<double>("gng.danger_threshold", 0.025);
     vlut_resolution_ =
-        this->declare_parameter<double>("vlut.resolution", 0.02);
-    vlut_only_ = this->declare_parameter<bool>("vlut_only", false);
+        this->declare_parameter<double>("gng.vlut_resolution", 0.02);
+    vlut_only_ = this->declare_parameter<bool>("gng.vlut_only", false);
     use_voxel_collision_ =
-        this->declare_parameter<bool>("use_voxel_collision", false);
+        this->declare_parameter<bool>("gng.use_voxel_collision", false);
     spatial_map_inflation_ =
-        this->declare_parameter<double>("spatial_map.inflation", 0.0);
+        this->declare_parameter<double>("gng.spatial_map.inflation", 0.0);
     self_recognition_inflation_ =
-        this->declare_parameter<double>("self_recognition.inflation", 0.02);
+        this->declare_parameter<double>("gng.self_recognition.inflation", 0.02);
+
+    selected_gng_profile_names_ = resolveSelectedProfileNames(
+        gng_profile_names_, gng_profile_name_, discoverGngProfileNames(this));
+    for (const auto &profile_name : selected_gng_profile_names_) {
+      const std::string profile_prefix = "gng.profiles." + profile_name;
+      declare_parameter<std::string>(profile_prefix + ".root", "");
+      declare_parameter<std::string>(profile_prefix + ".eef", "");
+      declare_parameter<std::string>(profile_prefix + ".arm_leaf_link_names", "");
+      declare_parameter<std::vector<std::string>>(profile_prefix + ".include", std::vector<std::string>{});
+      declare_parameter<std::vector<std::string>>(profile_prefix + ".exclude", std::vector<std::string>{});
+      declare_parameter<std::vector<std::string>>(profile_prefix + ".gng_include_joint_names", std::vector<std::string>{});
+      declare_parameter<std::vector<std::string>>( profile_prefix + ".gng_exclude_joint_names", std::vector<std::string>{});
+      declare_parameter<int>(profile_prefix + ".dof", 0);
+      declare_parameter<int>(profile_prefix + ".gng_dimension", 0);
+    }
     environment_ignore_links_ = this->declare_parameter<std::vector<std::string>>(
         "collision.environment_ignore_links", std::vector<std::string>{});
     self_collision_exclusion_pairs_ =
@@ -846,9 +1115,9 @@ public:
     // 1. Robot Setup
     std::unique_ptr<kinematics::KinematicChain> arm;
     simulation::RobotModel *model = nullptr;
+    std::string resolved_path;
     try {
-      std::string resolved_path =
-          robot_sim::common::resolvePath(robot_urdf_path_);
+      resolved_path = robot_sim::common::resolvePath(robot_urdf_path_);
 
       if (resolved_path.empty() || !std::filesystem::exists(resolved_path) ||
           std::filesystem::is_directory(resolved_path)) {
@@ -875,42 +1144,6 @@ public:
                   resolved_path.c_str());
       auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
       model = new simulation::RobotModel(model_obj);
-      std::vector<std::string> eef_names =
-          splitCommaSeparated(eef_link_names_);
-      std::vector<std::string> arm_leaf_names =
-          splitCommaSeparated(arm_leaf_link_names_);
-      if (!eef_names.empty()) {
-        if (eef_names.size() == 1) {
-          arm = std::make_unique<kinematics::KinematicChain>(
-              simulation::createKinematicChainFromModel(
-                  *model, eef_names.front()));
-        } else {
-          arm = simulation::createMultiArmKinematicChainFromModels(
-              *model, eef_names);
-        }
-      } else if (!arm_leaf_names.empty()) {
-        if (arm_leaf_names.size() == 1) {
-          arm = std::make_unique<kinematics::KinematicChain>(
-              simulation::createKinematicChainFromModel(
-                  *model, arm_leaf_names.front()));
-        } else {
-          arm = simulation::createMultiArmKinematicChainFromModels(
-              *model, arm_leaf_names);
-        }
-      } else if (!paired_leaf_link_name_.empty()) {
-        arm = simulation::createMultiArmKinematicChainFromModels(
-            *model, {leaf_link_name_, paired_leaf_link_name_});
-      } else if (leaf_link_name_.rfind("left_", 0) == 0) {
-        std::string inferred_right = "right_" + leaf_link_name_.substr(5);
-        arm = simulation::createMultiArmKinematicChainFromModels(
-            *model, {leaf_link_name_, inferred_right});
-      } else {
-        arm = std::make_unique<kinematics::KinematicChain>(
-            simulation::createKinematicChainFromModel(*model, leaf_link_name_));
-      }
-      arm->setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-      RCLCPP_INFO(this->get_logger(), "[Robot] Loaded: %s, DOF: %d",
-                  resolved_path.c_str(), arm->getTotalDOF());
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "[Error] Robot setup failed: %s",
                    e.what());
@@ -919,35 +1152,98 @@ public:
       throw; // Re-throw to indicate failure
     }
 
+    const std::vector<std::string> profile_names =
+        selected_gng_profile_names_.empty()
+            ? resolveSelectedProfileNames(
+                  gng_profile_names_, gng_profile_name_,
+                  discoverGngProfileNames(this))
+            : selected_gng_profile_names_;
+    if (profile_names.empty()) {
+      throw std::runtime_error(
+          "No GNG profile was specified. Set gng.profile_names or gng.profile_name.");
+    }
+
+    std::vector<GngProfileConfig> profile_configs;
+    profile_configs.reserve(profile_names.size());
+    for (const auto &profile_name : profile_names) {
+      profile_configs.push_back(loadGngProfileConfig(this, profile_name));
+    }
+
+    std::vector<std::string> combined_leaf_link_names;
+    std::vector<std::string> combined_include_joint_names;
+    std::vector<std::string> combined_exclude_joint_names;
+    int declared_dof_sum = 0;
+
+    for (const auto &cfg : profile_configs) {
+      const auto leaf_names = resolveArmLeafNames(
+          cfg.eef_link_names, cfg.arm_leaf_link_names, leaf_link_name_,
+          paired_leaf_link_name_);
+      appendUnique(combined_leaf_link_names, leaf_names);
+
+      std::vector<std::string> include_joint_names = cfg.include_joint_names;
+      if (include_joint_names.empty() && !cfg.root_link.empty()) {
+        include_joint_names =
+            buildPathBasedJointNames(*model, cfg.root_link, leaf_names);
+      }
+      appendUnique(combined_include_joint_names, include_joint_names);
+      appendUnique(combined_exclude_joint_names, cfg.exclude_joint_names);
+      if (cfg.dof > 0) {
+        declared_dof_sum += cfg.dof;
+      }
+
+      RCLCPP_INFO(this->get_logger(),
+                  "[GNG] profile %s: root=%s eef=%s dof=%d",
+                  cfg.name.c_str(), cfg.root_link.c_str(),
+                  cfg.eef_link_names.c_str(), cfg.dof);
+    }
+
+    RCLCPP_INFO(this->get_logger(), "[GNG] selected profiles: %s",
+                joinCommaSeparated(profile_names).c_str());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined leaf links: %s",
+                joinCommaSeparated(combined_leaf_link_names).c_str());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined exclude count: %zu",
+                combined_exclude_joint_names.size());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined declared dof: %d",
+                declared_dof_sum);
+
+    arm = buildKinematicChainFromLeafNames(*model, combined_leaf_link_names);
+    arm->setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+    RCLCPP_INFO(this->get_logger(), "[Robot] Loaded: %s, DOF: %d",
+                resolved_path.c_str(), arm->getTotalDOF());
+
     std::shared_ptr<SelectedJointKinematicChain> gng_chain;
-    if (!gng_exclude_joint_names_.empty()) {
-      auto selection = buildJointSelectionSpec(*arm, gng_exclude_joint_names_);
+    if (!combined_include_joint_names.empty() ||
+        !combined_exclude_joint_names.empty()) {
+      auto selection = buildJointSelectionSpec(
+          *arm, combined_include_joint_names, combined_exclude_joint_names);
       if (selection.selected_dof <= 0) {
         throw std::runtime_error(
-            "gng_exclude_joint_names removed all movable joints.");
+            "Joint selection removed all movable joints.");
       }
-      if (gng_dimension_ != selection.selected_dof) {
+      if (declared_dof_sum > 0 && declared_dof_sum != selection.selected_dof) {
         RCLCPP_WARN(this->get_logger(),
-                    "[GNG] gng_dimension (%d) differs from selected DOF (%d). "
-                    "Using the selected DOF derived from gng_exclude_joint_names.",
-                    gng_dimension_, selection.selected_dof);
+                    "[GNG] declared dof (%d) differs from selected DOF (%d). "
+                    "Using the selected DOF derived from joint selection.",
+                    declared_dof_sum, selection.selected_dof);
       }
       gng_dimension_ = selection.selected_dof;
       gng_chain = std::make_shared<SelectedJointKinematicChain>(arm.get(),
                                                                 std::move(selection));
-      std::ostringstream excluded_oss;
-      for (std::size_t i = 0; i < gng_exclude_joint_names_.size(); ++i) {
-        if (i > 0) {
-          excluded_oss << ", ";
-        }
-        excluded_oss << gng_exclude_joint_names_[i];
+      if (!combined_include_joint_names.empty()) {
+        RCLCPP_INFO(this->get_logger(),
+                    "[GNG] Including joint names for learning: %s",
+                    joinCommaSeparated(combined_include_joint_names).c_str());
       }
-      const std::string excluded_joint_names = excluded_oss.str();
       RCLCPP_INFO(this->get_logger(),
                   "[GNG] Excluding joint names from learning: %s",
-                  excluded_joint_names.c_str());
+                  joinCommaSeparated(combined_exclude_joint_names).c_str());
       RCLCPP_INFO(this->get_logger(),
                   "[GNG] Selected learning DOF: %d", gng_dimension_);
+    } else {
+      gng_dimension_ = arm->getTotalDOF();
+      RCLCPP_INFO(this->get_logger(),
+                  "[GNG] No joint filter applied. Using full DOF: %d",
+                  gng_dimension_);
     }
 
     // 2. Setup Checkers
@@ -1454,12 +1750,17 @@ private:
   bool enable_self_collision_ = true;
   bool apply_environment_ignore_links_ = true;
   bool apply_self_collision_exclusion_pairs_ = true;
+  std::string gng_path_root_link_;
   std::string eef_link_names_;
   std::string arm_leaf_link_names_;
+  std::vector<std::string> gng_include_joint_names_;
   std::string leaf_link_name_;
   std::string paired_leaf_link_name_;
   int gng_dimension_;
   std::vector<std::string> gng_exclude_joint_names_;
+  std::string gng_profile_names_;
+  std::string gng_profile_name_;
+  std::vector<std::string> selected_gng_profile_names_;
   double spatial_map_resolution_;
   double vlut_resolution_;
   double sensing_resolution_;
@@ -1481,7 +1782,6 @@ private:
   bool use_voxel_collision_ = false;
   double voxel_padding_ = 0.0;
 
-  // GNG Parameters struct
   GNG::GngParameters gng_params_;
 };
 

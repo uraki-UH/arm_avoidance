@@ -371,11 +371,13 @@ void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
     if (!pts.empty() && !oris.empty()) {
       const std::size_t arm_index = static_cast<std::size_t>(coord_layer_index);
       Eigen::Vector3d eef_position = kinematic_chain_->getEEFPosition(arm_index);
+      Eigen::Quaterniond eef_orientation =
+          kinematic_chain_->getEEFOrientation(arm_index);
       if (coord_layer_index == 0) {
         node.weight_coord = eef_position.template cast<typename T_coord::Scalar>();
         node.status.ee_direction =
-            (oris.back() * Eigen::Vector3d::UnitX()).template cast<float>();
-        node.status.ee_orientation = oris.back().template cast<float>();
+            (eef_orientation * Eigen::Vector3d::UnitX()).template cast<float>();
+        node.status.ee_orientation = eef_orientation.template cast<float>();
         node.status.joint_positions.clear();
         for (const auto &p : pts) {
           node.status.joint_positions.push_back(p.template cast<float>());
@@ -557,15 +559,16 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
   update_node_weights(s1, sample_angle, params_.learn_rate_s1);
 
   if (s2 != -1) {
-    // エッジ生成時の干渉チェック
+    // エッジ生成可能かどうかの干渉チェック
     if (!collision_aware_ ||
         !internalCheckPathColliding(nodes[s1].weight_angle,
                                     nodes[s2].weight_angle)) {
       add_edge_angle(s1, s2);
-    } else if (collision_aware_) {
-      // 衝突している場合はリフレッシュせず、既存エッジがあれば即座に削除（合理的）
-      remove_edge_angle(s1, s2);
-    }
+    } 
+    // else if (collision_aware_) {
+    //   // 衝突している場合はリフレッシュせず、既存エッジがあれば即座に削除（そうしないでエイジングで削除したほうがいい可能性あり）
+    //   remove_edge_angle(s1, s2);
+    // }
   }
 
   // 周辺ノードの更新とエイジング
