@@ -93,7 +93,7 @@
 
     # --- Self Recognition Settings ---
     self_recognition:
-      resolution: 0.01
+      resolution: 0.02
       inflation: 0.0
       update_hz: 30.0
       root_link: "base_link"

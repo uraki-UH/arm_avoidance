@@ -1329,7 +1329,7 @@ public:
       final_checker = composite_checker;
     }
 
-    // 初期姿勢での自己衝突候補を先に評価する。
+    // 初期姿勢での自己衝突候補を評価する。
     // ここでは手動の除外ペアをまだ checker に入れず、生の候補を取得する。
     Eigen::VectorXd zero_q(arm->getTotalDOF());
     zero_q.setZero();
