@@ -33,7 +33,13 @@ ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
 
 ##　自己認識ボクセルの起動
-ros2 launch gng_vlut_system self_recognition_viz.launch.py  \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml 
+ros2 launch gng_vlut_system self_recognition_viz.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+
+左腕のボクセル化
+  root_link:=left_link2 \
+  leaf_link:=left_link8 \
+  mask_topic:=/self_recognition/left_arm_voxel_mask
 
 必要に応じて
 source /opt/ros/humble/setup.bash

@@ -110,6 +110,19 @@ def launch_setup(context, *args, **kwargs):
             except ValueError:
                 node_params[name] = val
 
+    def add_override_param(name, config_name, type_func=None, aliases=None):
+        val = LaunchConfiguration(config_name).perform(context)
+        if not val:
+            return
+        try:
+            parsed = type_func(val) if type_func else val
+        except ValueError:
+            parsed = val
+        node_params[name] = parsed
+        if aliases:
+            for alias in aliases:
+                node_params[alias] = parsed
+
     add_if_not_empty("marker_frame_id", "marker_frame_id")
     add_if_not_empty("joint_topic", "joint_topic")
     add_if_not_empty("robot.voxel_size", "voxel_size", float)
@@ -119,8 +132,10 @@ def launch_setup(context, *args, **kwargs):
     add_if_not_empty("publish_link_voxels", "publish_link_voxels")
     add_if_not_empty("publish_link_aabb", "publish_link_aabb")
     add_if_not_empty("display_mode", "display_mode", int)
+    add_override_param("root_link", "root_link", aliases=["self_recognition.root_link"])
+    add_override_param("leaf_link", "leaf_link", aliases=["self_recognition.leaf_link"])
     add_if_not_empty("target_frame_id", "target_frame_id")
-    add_if_not_empty("self_output_topic", "self_output_topic")
+    add_override_param("mask_topic", "mask_topic", aliases=["self_recognition.mask_topic", "self_output_topic", "self_recognition.self_output_topic"])
 
     final_params_list = []
     if params_file and os.path.exists(params_file):
@@ -173,7 +188,9 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_link_voxels", default_value="true", description="リンク毎のボクセルを配信するか"),
         DeclareLaunchArgument("publish_link_aabb", default_value="true", description="リンク毎のAABBを配信するか"),
         DeclareLaunchArgument("display_mode", default_value="link_local", description="表示モード (link_local / world)"),
+        DeclareLaunchArgument("root_link", default_value="", description="ボクセル化の開始リンク名"),
+        DeclareLaunchArgument("leaf_link", default_value="", description="ボクセル化の終了リンク名"),
         DeclareLaunchArgument("target_frame_id", default_value="", description="ボクセル計算の基準座標系 (空ならベースリンク基準)"),
-        DeclareLaunchArgument("self_output_topic", default_value="/self_recognition_points", description="自己認識ボクセル内の点群トピック"),
+        DeclareLaunchArgument("mask_topic", default_value="/self_recognition/voxel_mask", description="自己認識マスクの送信トピック"),
         OpaqueFunction(function=launch_setup),
     ])

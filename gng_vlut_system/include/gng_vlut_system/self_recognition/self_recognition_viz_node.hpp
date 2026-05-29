@@ -40,6 +40,7 @@ private:
     std::shared_ptr<kinematics::KinematicChain> chain_;
     
     std::string root_link_;
+    std::string mask_topic_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 

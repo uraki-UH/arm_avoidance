@@ -41,6 +41,16 @@ static std::vector<std::string> getStringsWithFallback(
     return node.get_parameter(legacy_key).as_string_array();
 }
 
+static std::string findParentLink(
+    const simulation::RobotModel &model, const std::string &child_link) {
+    for (const auto &[joint_name, joint_props] : model.getJoints()) {
+        if (joint_props.child_link == child_link) {
+            return joint_props.parent_link;
+        }
+    }
+    return "";
+}
+
 } // namespace
 
 namespace robot_sim::self_recognition {
@@ -65,6 +75,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter<std::vector<std::string>>("self_recognition.exclude_links", std::vector<std::string>{});
     declare_parameter<std::string>("root_link", "");
     declare_parameter<std::string>("self_recognition.root_link", "");
+    declare_parameter<std::string>("leaf_link", "");
+    declare_parameter<std::string>("self_recognition.leaf_link", "");
     declare_parameter("self_recognition.inflation", 0.02);
     declare_parameter("robot.inflation", 0.0);
  
@@ -76,6 +88,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("target_frame_id", ""); // 空ならロボットのベースを使用
     declare_parameter("self_recognition.target_frame_id", "");
     declare_parameter("self_recognition.marker_frame_id", "");
+    declare_parameter("mask_topic", "/self_recognition/voxel_mask");
+    declare_parameter("self_recognition.mask_topic", "");
+    declare_parameter("self_output_topic", "");
+    declare_parameter("self_recognition.self_output_topic", "");
 
     const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -111,6 +127,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     auto leaf_links =
         getStringsWithFallback(*this, "self_recognition.leaf_links", "leaf_links");
     std::string global_root_link = getStringWithFallback(*this, "self_recognition.root_link", "root_link");
+    std::string explicit_leaf_link = getStringWithFallback(*this, "self_recognition.leaf_link", "leaf_link");
     if (global_root_link.empty()) {
         std::string base_name = model_->getRootLinkName();
         std::string ns = get_namespace();
@@ -123,9 +140,16 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     } else {
         root_link_ = global_root_link;
     }
+    std::string voxel_chain_root_link = global_root_link;
+    std::string explicit_voxel_root_link = getStringWithFallback(*this, "self_recognition.root_link", "root_link");
+    if (!explicit_voxel_root_link.empty()) {
+        std::string parent_link = findParentLink(*model_, explicit_voxel_root_link);
+        if (!parent_link.empty()) {
+            voxel_chain_root_link = parent_link;
+        }
+    }
 
-    // 衝突形状を持つ全リンクと、木構造の全末端リンクを抽出
-    std::vector<std::string> all_collision_links;
+    // 木構造の全末端リンクを抽出
     auto expandTerminalLeafLinks = [&](const std::vector<std::string>& roots) {
         std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
         for (const auto &[j_name, j_props] : model_->getJoints()) {
@@ -185,11 +209,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 
     std::vector<std::string> current_leaf_links = leaf_links;
 
-    for (const auto &[link_name, link_props] : model_->getLinks()) {
-        if (!link_props.collisions.empty()) {
-            all_collision_links.push_back(link_name);
-        }
-        
+    for (const auto &entry : model_->getLinks()) {
+        const auto &link_name = entry.first;
         if (leaf_links.empty()) {
             bool has_child = false;
             for (const auto &[j_name, j_props] : model_->getJoints()) {
@@ -202,14 +223,26 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     }
 
     std::vector<simulation::ArmConfig> arm_configs;
-    if (!leaf_links.empty()) {
+    if (!explicit_leaf_link.empty()) {
+        simulation::ArmConfig cfg;
+        auto expanded = expandTerminalLeafLinks({explicit_leaf_link});
+        if (expanded.empty()) {
+            expanded.push_back(explicit_leaf_link);
+        }
+        for (const auto &leaf_name : expanded) {
+            cfg.leaf_link = leaf_name;
+            cfg.prefix = "";
+            cfg.root_link = voxel_chain_root_link;
+            arm_configs.push_back(cfg);
+        }
+    } else if (!leaf_links.empty()) {
         current_leaf_links = leaf_links;
         auto expanded = expandTerminalLeafLinks(leaf_links);
         current_leaf_links.insert(current_leaf_links.end(), expanded.begin(), expanded.end());
         std::sort(current_leaf_links.begin(), current_leaf_links.end());
         current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
     } else {
-    auto arm_leaf_roots =
+        auto arm_leaf_roots =
             splitCommaSeparated(getStringWithFallback(*this,
                 "self_recognition.arm_leaf_link_names", "robot.arm_leaf_link_names"));
         if (!arm_leaf_roots.empty()) {
@@ -221,12 +254,14 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         }
     }
 
-    for (size_t i = 0; i < current_leaf_links.size(); ++i) {
-        simulation::ArmConfig cfg;
-        cfg.leaf_link = current_leaf_links[i];
-        cfg.prefix = ""; 
-        cfg.root_link = (i < root_links.size() && !root_links[i].empty()) ? root_links[i] : global_root_link;
-        arm_configs.push_back(cfg);
+    if (explicit_leaf_link.empty()) {
+        for (size_t i = 0; i < current_leaf_links.size(); ++i) {
+            simulation::ArmConfig cfg;
+            cfg.leaf_link = current_leaf_links[i];
+            cfg.prefix = "";
+            cfg.root_link = (i < root_links.size() && !root_links[i].empty()) ? root_links[i] : voxel_chain_root_link;
+            arm_configs.push_back(cfg);
+        }
     }
 
     auto multi_chain = simulation::createMultiArmKinematicChain(*model_, arm_configs, Eigen::Vector3d::Zero());
@@ -256,8 +291,14 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         inflation = 0.02;
     }
 
-    // ボクセル化の実行（全衝突リンクを対象）
-    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, all_collision_links, *grid, {}, inflation);
+    std::vector<std::string> voxel_links;
+    voxel_links.reserve(static_cast<std::size_t>(chain_->getNumJoints()));
+    for (int i = 0; i < chain_->getNumJoints(); ++i) {
+        voxel_links.push_back(chain_->getLinkName(i));
+    }
+
+    // ボクセル化の実行（チェインに含まれるリンクのみ対象。root_link 自体は含めない）
+    auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, voxel_links, *grid, {}, inflation);
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
     // 通信
@@ -272,14 +313,21 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
 
+    mask_topic_ = getStringWithFallback(*this, "self_recognition.mask_topic", "mask_topic");
+    if (mask_topic_.empty()) {
+        mask_topic_ = getStringWithFallback(*this, "self_recognition.self_output_topic", "self_output_topic");
+    }
+    if (mask_topic_.empty()) {
+        mask_topic_ = "/self_recognition/voxel_mask";
+    }
     mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
-        "/self_recognition/voxel_mask", rclcpp::QoS(1).transient_local());
+        mask_topic_, rclcpp::QoS(1).transient_local());
 
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / std::max(hz, 0.1))),
         [this]() { this->updateAndPublish(); });
 
-    RCLCPP_INFO(get_logger(), "Voxel Mask Provider started (ID-only mode). Hz: %.1f", hz);
+    RCLCPP_INFO(get_logger(), "Voxel Mask Provider started (ID-only mode). Hz: %.1f, mask_topic: %s", hz, mask_topic_.c_str());
 }
 
 void SelfRecognitionVizNode::updateAndPublish() {
