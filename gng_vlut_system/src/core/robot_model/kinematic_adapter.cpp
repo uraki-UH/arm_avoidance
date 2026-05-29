@@ -716,6 +716,16 @@ std::vector<double> MultiArmKinematicAdapter::sampleRandomJointValues() const {
   return values;
 }
 
+void MultiArmKinematicAdapter::sampleRandomJointValues(
+    std::vector<double> &out_values) const {
+  out_values.clear();
+  for (const auto &arm : arms_) {
+    std::vector<double> arm_values;
+    arm.chain.sampleRandomJointValues(arm_values);
+    out_values.insert(out_values.end(), arm_values.begin(), arm_values.end());
+  }
+}
+
 std::vector<double>
 MultiArmKinematicAdapter::sampleRandomJointValue(int joint_index) const {
   std::vector<double> values = getJointValues();
@@ -732,6 +742,25 @@ MultiArmKinematicAdapter::sampleRandomJointValue(int joint_index) const {
     offset += static_cast<std::size_t>(arm.chain.getTotalDOF());
   }
   return values;
+}
+
+void MultiArmKinematicAdapter::sampleRandomJointValue(
+    int joint_index, std::vector<double> &out_values) const {
+  out_values = getJointValues();
+  std::size_t cursor = 0;
+  std::size_t offset = 0;
+  for (const auto &arm : arms_) {
+    int n = arm.chain.getNumJoints();
+    if (joint_index < static_cast<int>(cursor + n)) {
+      std::vector<double> sample;
+      arm.chain.sampleRandomJointValue(joint_index - static_cast<int>(cursor),
+                                       sample);
+      std::copy(sample.begin(), sample.end(), out_values.begin() + offset);
+      return;
+    }
+    cursor += static_cast<std::size_t>(n);
+    offset += static_cast<std::size_t>(arm.chain.getTotalDOF());
+  }
 }
 
 std::vector<double> MultiArmKinematicAdapter::sampleRandomJointValues(
@@ -756,6 +785,31 @@ std::vector<double> MultiArmKinematicAdapter::sampleRandomJointValues(
     offset += static_cast<std::size_t>(arm.chain.getTotalDOF());
   }
   return values;
+}
+
+void MultiArmKinematicAdapter::sampleRandomJointValues(
+    const std::vector<int> &joint_indices,
+    std::vector<double> &out_values) const {
+  out_values = getJointValues();
+  std::size_t cursor = 0;
+  std::size_t offset = 0;
+  for (const auto &arm : arms_) {
+    std::vector<int> local;
+    int n = arm.chain.getNumJoints();
+    for (int idx : joint_indices) {
+      if (idx >= static_cast<int>(cursor) &&
+          idx < static_cast<int>(cursor + n)) {
+        local.push_back(idx - static_cast<int>(cursor));
+      }
+    }
+    if (!local.empty()) {
+      std::vector<double> sample;
+      arm.chain.sampleRandomJointValues(local, sample);
+      std::copy(sample.begin(), sample.end(), out_values.begin() + offset);
+    }
+    cursor += static_cast<std::size_t>(n);
+    offset += static_cast<std::size_t>(arm.chain.getTotalDOF());
+  }
 }
 
 void MultiArmKinematicAdapter::syncCachedState() const {

@@ -202,11 +202,16 @@ public:
   // --- 追加：内部状態を変更しないサンプリングAPI ---
   virtual std::vector<double> sampleRandomJointValues()
       const; // 全DOFをサンプリング（内部状態は変更しない）
+  virtual void sampleRandomJointValues(std::vector<double> &out_values) const;
   virtual std::vector<double> sampleRandomJointValue(int joint_index)
       const; // 指定1関節のみサンプリングした全DOFベクトルを返す
+  virtual void sampleRandomJointValue(int joint_index,
+                                      std::vector<double> &out_values) const;
   virtual std::vector<double>
   sampleRandomJointValues(const std::vector<int> &joint_indices)
       const; // 指定複数関節のみサンプリング
+  virtual void sampleRandomJointValues(const std::vector<int> &joint_indices,
+                                       std::vector<double> &out_values) const;
 
 private:
   // --- 構造定義 ---

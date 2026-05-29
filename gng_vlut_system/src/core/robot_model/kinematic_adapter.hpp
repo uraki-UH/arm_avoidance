@@ -129,9 +129,14 @@ public:
           &fixed_link_info,
       std::map<std::string, Eigen::Isometry3d> &link_transforms) const override;
   std::vector<double> sampleRandomJointValues() const override;
+  void sampleRandomJointValues(std::vector<double> &out_values) const override;
   std::vector<double> sampleRandomJointValue(int joint_index) const override;
+  void sampleRandomJointValue(int joint_index,
+                              std::vector<double> &out_values) const override;
   std::vector<double>
   sampleRandomJointValues(const std::vector<int> &joint_indices) const override;
+  void sampleRandomJointValues(const std::vector<int> &joint_indices,
+                               std::vector<double> &out_values) const override;
 
 private:
   void syncCachedState() const;

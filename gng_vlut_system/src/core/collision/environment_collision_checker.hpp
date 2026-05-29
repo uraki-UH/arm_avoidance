@@ -46,6 +46,8 @@ public:
    * で指定されたリンクはスキップする
    */
   bool checkCollision(
+      const collision::SelfCollisionChecker::CollisionObject &robot_object) const;
+  bool checkCollision(
       const std::vector<collision::SelfCollisionChecker::CollisionObject>
           &robot_objects) const;
 

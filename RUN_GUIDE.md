@@ -2,6 +2,10 @@
 
 ##　実行ガイド
 
+docker compose up --build
+docker compose down
+dokcer compose up -d
+
 ## frontendの起動
 cd ~/uraki_ws
 docker compose --profile manual up  frontend

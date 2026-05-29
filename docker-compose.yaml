@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     image: gng_cpu:latest
     privileged: true
-    container_name: gng_cpu_container    
+    container_name: gng_cpu_container_uraki    
     tty: true                 # 対話的なプロンプトを維持
     stdin_open: true          # 標準入力を開いたままにする
     ipc: host # ホストのIPC名前空間を使用

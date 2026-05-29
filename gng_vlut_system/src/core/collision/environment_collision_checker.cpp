@@ -2,6 +2,30 @@
 
 namespace simulation {
 
+bool EnvironmentCollisionChecker::checkCollision(
+    const collision::SelfCollisionChecker::CollisionObject &robot_object) const {
+  if (robot_object.is_fixed_to_base || ignore_link_ids_.count(robot_object.id) > 0) {
+    return false;
+  }
+
+  for (const auto &env_obs : obstacles_) {
+    if (env_obs.type == Obstacle::Type::MESH) {
+      if (robot_object.type ==
+          collision::SelfCollisionChecker::ShapeType::CAPSULE) {
+        if (collision::CollisionQuery::testCollision(robot_object.capsule,
+                                                     env_obs.mesh)) {
+          return true;
+        }
+      }
+    } else {
+      if (internal_checker_.checkPair(robot_object, env_obs.geometry)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void EnvironmentCollisionChecker::addBoxObstacle(
     const std::string &name, const Eigen::Vector3d &center,
     const Eigen::Matrix3d &rotation, const Eigen::Vector3d &extents) {
@@ -53,26 +77,8 @@ bool EnvironmentCollisionChecker::checkCollision(
     const std::vector<collision::SelfCollisionChecker::CollisionObject>
         &robot_objects) const {
   for (const auto &rob_obj : robot_objects) {
-    // 土台に固定されているリンク（base_linkなど）または明示的に無視するよう設定されたリンクは環境判定をスキップ
-    if (rob_obj.is_fixed_to_base || ignore_link_ids_.count(rob_obj.id) > 0) {
-      continue;
-    }
-
-    for (const auto &env_obs : obstacles_) {
-      if (env_obs.type == Obstacle::Type::MESH) {
-        // ロボット側の形状が Capsule の場合のみ Mesh との高速判定が利用可能
-        if (rob_obj.type ==
-            collision::SelfCollisionChecker::ShapeType::CAPSULE) {
-          if (collision::CollisionQuery::testCollision(rob_obj.capsule,
-                                                       env_obs.mesh)) {
-            return true;
-          }
-        }
-      } else {
-        if (internal_checker_.checkPair(rob_obj, env_obs.geometry)) {
-          return true;
-        }
-      }
+    if (checkCollision(rob_obj)) {
+      return true;
     }
   }
   return false;

@@ -33,23 +33,17 @@ public:
 
     bool checkCollision() override;
 
-    /**
-     * @brief 環境チェッカーを設定する
-     */
+
     void setEnvironmentCollisionChecker(std::shared_ptr<EnvironmentCollisionChecker> env_checker) {
         env_checker_ = env_checker;
     }
 
-    /**
-     * @brief 床（Z平面）との衝突判定用閾値を設定する
-     */
+
     void setGroundZThreshold(double threshold) {
         ground_z_threshold_ = threshold;
     }
 
-    /**
-     * @brief 自己干渉判定を行うかどうかを設定する
-     */
+
     void setEnableSelfCollision(bool enable) {
         enable_self_collision_ = enable;
     }
@@ -60,6 +54,7 @@ public:
      */
     void setJointValueHints(const std::map<std::string, double>& joint_values) {
         joint_value_hints_ = joint_values;
+        cached_link_voxel_masks_valid_ = false;
     }
 
     /**
@@ -88,9 +83,7 @@ public:
      */
     std::vector<std::pair<std::string, std::string>> collectSelfCollisionPairs() const;
 
-    /**
-     * @brief 自己干渉から除外するペアを追加する
-     */
+
     void addCollisionExclusion(const std::string& link1, const std::string& link2);
 
     /**
@@ -115,8 +108,11 @@ private:
     
     // 現在のリンク姿勢
     std::vector<Eigen::Isometry3d> current_tfs_;
+    mutable std::vector<std::vector<long>> cached_link_voxel_masks_;
+    mutable bool cached_link_voxel_masks_valid_ = false;
 
     std::vector<std::vector<long>> computeLinkVoxelMasks() const;
+    const std::vector<std::vector<long>>& getCachedLinkVoxelMasks() const;
     void augmentBranchLinkTransforms(std::map<std::string, Eigen::Isometry3d>& link_tfs) const;
     Eigen::Isometry3d computeJointMotionTransform(const simulation::JointProperties& joint,
                                                   double joint_value) const;

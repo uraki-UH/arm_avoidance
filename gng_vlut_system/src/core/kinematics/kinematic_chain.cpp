@@ -22,6 +22,18 @@ static std::vector<double> buildCurrentValuesVector(
   return vals;
 }
 
+static void fillCurrentValuesVector(
+    const std::vector<Joint, Eigen::aligned_allocator<Joint>> &joints,
+    int total_dof, std::vector<double> &out) {
+  out.resize(total_dof);
+  int idx = 0;
+  for (const auto &joint : joints) {
+    for (int d = 0; d < joint.getDOF(); ++d) {
+      out[idx++] = joint.values[d];
+    }
+  }
+}
+
 // ヘルパ: 引数 values が部分ベクトルでも total_dof 長の配列を作る（out を上書き）
 static void buildFullValues(
     const std::vector<Joint, Eigen::aligned_allocator<Joint>> &joints,
@@ -837,7 +849,14 @@ bool KinematicChain::inverseKinematicsPSO(
 }
 
 std::vector<double> KinematicChain::sampleRandomJointValues() const {
-  std::vector<double> new_values = buildCurrentValuesVector(joints_, total_dof_);
+  std::vector<double> new_values;
+  sampleRandomJointValues(new_values);
+  return new_values;
+}
+
+void KinematicChain::sampleRandomJointValues(
+    std::vector<double> &out_values) const {
+  fillCurrentValuesVector(joints_, total_dof_, out_values);
   int current_dof_idx = 0;
   for (const auto &joint : joints_) {
     int dof = joint.getDOF();
@@ -850,35 +869,48 @@ std::vector<double> KinematicChain::sampleRandomJointValues() const {
       double min_val = has_limits ? joint.min_limits[j] : -M_PI;
       double max_val = has_limits ? joint.max_limits[j] : M_PI;
       std::uniform_real_distribution<> dis(min_val, max_val);
-      new_values[current_dof_idx + j] = dis(rng_);
+      out_values[current_dof_idx + j] = dis(rng_);
     }
     current_dof_idx += dof;
   }
-  return new_values;
 }
 
 std::vector<double>
 KinematicChain::sampleRandomJointValue(int joint_index) const {
-  std::vector<double> new_values = buildCurrentValuesVector(joints_, total_dof_);
-  if (joint_index < 0 || (size_t)joint_index >= joints_.size()) return new_values;
+  std::vector<double> new_values;
+  sampleRandomJointValue(joint_index, new_values);
+  return new_values;
+}
+
+void KinematicChain::sampleRandomJointValue(int joint_index,
+                                            std::vector<double> &out_values) const {
+  fillCurrentValuesVector(joints_, total_dof_, out_values);
+  if (joint_index < 0 || (size_t)joint_index >= joints_.size()) return;
   int current_dof_idx = 0;
   for (int i = 0; i < joint_index; ++i) current_dof_idx += joints_[i].getDOF();
   const Joint &joint = joints_[joint_index];
   int dof = joint.getDOF();
-  if (dof == 0) return new_values;
+  if (dof == 0) return;
   bool has_limits = (joint.min_limits.size() == (size_t)dof && joint.max_limits.size() == (size_t)dof);
   for (int j = 0; j < dof; ++j) {
     double min_val = has_limits ? joint.min_limits[j] : -M_PI;
     double max_val = has_limits ? joint.max_limits[j] : M_PI;
     std::uniform_real_distribution<> dis(min_val, max_val);
-    new_values[current_dof_idx + j] = dis(rng_);
+    out_values[current_dof_idx + j] = dis(rng_);
   }
-  return new_values;
 }
 
 std::vector<double> KinematicChain::sampleRandomJointValues(
     const std::vector<int> &joint_indices) const {
-  std::vector<double> new_values = buildCurrentValuesVector(joints_, total_dof_);
+  std::vector<double> new_values;
+  sampleRandomJointValues(joint_indices, new_values);
+  return new_values;
+}
+
+void KinematicChain::sampleRandomJointValues(
+    const std::vector<int> &joint_indices,
+    std::vector<double> &out_values) const {
+  fillCurrentValuesVector(joints_, total_dof_, out_values);
   for (int target_joint_idx : joint_indices) {
     if (target_joint_idx < 0 || (size_t)target_joint_idx >= joints_.size()) continue;
     int current_dof_idx = 0;
@@ -891,10 +923,9 @@ std::vector<double> KinematicChain::sampleRandomJointValues(
       double min_val = has_limits ? joint.min_limits[j] : -M_PI;
       double max_val = has_limits ? joint.max_limits[j] : M_PI;
       std::uniform_real_distribution<> dis(min_val, max_val);
-      new_values[current_dof_idx + j] = dis(rng_);
+      out_values[current_dof_idx + j] = dis(rng_);
     }
   }
-  return new_values;
 }
 
 std::string KinematicChain::getJointName(int joint_index) const {

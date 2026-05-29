@@ -5,6 +5,7 @@
 #include "common/resource_utils.hpp"
 #include <Eigen/Core>
 #include <algorithm>
+#include <chrono>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -101,6 +102,10 @@ GrowingNeuralGas<T_angle, T_coord>::GrowingNeuralGas(
                                 std::vector<std::unordered_map<int, EdgeInfo>>(nodes.size()));
   edges_coord_per_layer_nodes_.assign(
       coord_layer_count_, std::vector<std::vector<int>>(nodes.size()));
+  random_joint_buffer_.reserve(static_cast<std::size_t>(angle_dimension));
+  if constexpr (T_angle::RowsAtCompileTime == Eigen::Dynamic) {
+    random_angle_buffer_.resize(angle_dimension);
+  }
 
 
   if (!kinematic_chain_) {
@@ -119,19 +124,11 @@ GrowingNeuralGas<T_angle, T_coord>::GrowingNeuralGas(
     else
       wa.setZero();
 
-    bool found = false;
-    for (int retry = 0; retry < 100; ++retry) {
-      std::vector<double> q_vec = kinematic_chain_->sampleRandomJointValues();
-      for (int j = 0; j < angle_dimension; ++j) {
-        wa(j) = static_cast<typename T_angle::Scalar>(q_vec[j]);
-      }
-      if (!internalCheckColliding(wa)) {
-        found = true;
-        break;
-      }
+    kinematic_chain_->sampleRandomJointValues(random_joint_buffer_);
+    for (int j = 0; j < angle_dimension; ++j) {
+      wa(j) = static_cast<typename T_angle::Scalar>(random_joint_buffer_[j]);
     }
-    // If no valid node found in 100 tries, just use the last one (it will likely be pruned later)
-    add_node(wa, calculateFK(wa));
+    add_node(wa);
   }
 }
 
@@ -215,18 +212,21 @@ void GrowingNeuralGas<T_angle, T_coord>::runStatusProviders(
 }
 
 template <typename T_angle, typename T_coord>
-int GrowingNeuralGas<T_angle, T_coord>::add_node(T_angle w_angle,
-                                                  T_coord w_coord) {
-  (void)w_coord;
+int GrowingNeuralGas<T_angle, T_coord>::add_node(const T_angle &w_angle) {
+  return add_node(w_angle, calculateFK(w_angle));
+}
+
+template <typename T_angle, typename T_coord>
+int GrowingNeuralGas<T_angle, T_coord>::add_node(const T_angle &w_angle,
+                                                  const T_coord &w_coord) {
   if (addable_node_indicies.empty())
     return -1;
   int node_id = addable_node_indicies.front();
   addable_node_indicies.pop();
-  T_coord calculated_w_coord = calculateFK(w_angle);
   nodes[node_id] =
-      NeuronNode<T_angle, T_coord>(node_id, w_angle, calculated_w_coord);
+      NeuronNode<T_angle, T_coord>(node_id, w_angle, w_coord);
   nodes[node_id].weight_coords.assign(
-      static_cast<std::size_t>(coord_layer_count_), calculated_w_coord);
+      static_cast<std::size_t>(coord_layer_count_), w_coord);
   edges_angle[node_id].clear();
   edges_coord[node_id].clear();
   edges_angle_per_node[node_id].clear();
@@ -599,7 +599,7 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
   if (s2 != -1) {
     float dist2 = std::sqrt(dist_s2_sq);
     if (dist2 > params_.ais_threshold && !addable_node_indicies.empty()) {
-      int new_id = add_node(sample_angle, calculateFK(sample_angle));
+      int new_id = add_node(sample_angle);
       if (new_id != -1)
         add_edge_angle(new_id, s1);
       n_trial_angle++;
@@ -665,7 +665,7 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
     if (q != -1 && f != -1) {
       T_angle mid = (nodes[q].weight_angle + nodes[f].weight_angle) * 0.5f;
       if (!collision_aware_ || !internalCheckColliding(mid)) {
-        int new_id = add_node(mid, T_coord());
+        int new_id = add_node(mid);
         if (new_id != -1) {
           remove_edge_angle(q, f);
           add_edge_angle(q, new_id);
@@ -698,19 +698,26 @@ void GrowingNeuralGas<T_angle, T_coord>::gngTrainOnTheFly(int max_iter) {
     return;
   
   std::cout << "[GNG] Starting Training on-the-fly (" << max_iter << " iterations)..." << std::endl;
+  const auto start_time = std::chrono::steady_clock::now();
+  const int progress_interval = std::max(1, max_iter / 20);
   for (int i = 0; i < max_iter; ++i) {
-    std::vector<double> q_vec = kinematic_chain_->sampleRandomJointValues();
-    T_angle q_truncated;
-    if constexpr (T_angle::RowsAtCompileTime == Eigen::Dynamic)
-      q_truncated.resize(angle_dimension);
+    kinematic_chain_->sampleRandomJointValues(random_joint_buffer_);
+    auto &q_truncated = random_angle_buffer_;
     for (int j = 0; j < angle_dimension; ++j) {
-      q_truncated(j) = static_cast<typename T_angle::Scalar>(q_vec[j]);
+      q_truncated(j) = static_cast<typename T_angle::Scalar>(random_joint_buffer_[j]);
     }
     one_train_update(q_truncated);
 
-    if (i % 1000 == 0 || i == max_iter - 1) {
-      std::cout << "  Progress: " << (i * 100 / max_iter) << "% (" << i << "/" << max_iter 
-                << "), Nodes: " << getActiveIndices().size() << "\r" << std::flush;
+    if (i % progress_interval == 0 || i == max_iter - 1) {
+      const auto now = std::chrono::steady_clock::now();
+      const double elapsed_sec =
+          std::chrono::duration<double>(now - start_time).count();
+      const double progress = static_cast<double>(i + 1) / std::max(1, max_iter);
+      const double eta_sec = (progress > 1e-9) ? elapsed_sec * (1.0 - progress) / progress : 0.0;
+      std::cout << "  Progress: " << (progress * 100.0) << "% ("
+                << (i + 1) << "/" << max_iter << "), Nodes: "
+                << getActiveIndices().size() << ", elapsed: "
+                << elapsed_sec << "s, ETA: " << eta_sec << "s" << std::endl;
     }
   }
   std::cout << std::endl << "[GNG] Training Complete. Final Nodes: " << getActiveIndices().size() << std::endl;
@@ -733,13 +740,13 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
 
   std::cout << "[GNG] Training Coordinate Edges On-the-fly (layer "
             << coord_layer_index << ")..." << std::endl;
+  const auto start_time = std::chrono::steady_clock::now();
+  const int progress_interval = std::max(1, max_iter / 20);
   for (int i = 0; i < max_iter; ++i) {
-    std::vector<double> q_vec = kinematic_chain_->sampleRandomJointValues();
-    T_angle q_truncated;
-    if constexpr (T_angle::RowsAtCompileTime == Eigen::Dynamic)
-      q_truncated.resize(angle_dimension);
+    kinematic_chain_->sampleRandomJointValues(random_joint_buffer_);
+    auto &q_truncated = random_angle_buffer_;
     for (int j = 0; j < angle_dimension; ++j) {
-      q_truncated(j) = static_cast<typename T_angle::Scalar>(q_vec[j]);
+      q_truncated(j) = static_cast<typename T_angle::Scalar>(random_joint_buffer_[j]);
     }
     T_coord s_coord = calculateFK(q_truncated, coord_layer_index);
 
@@ -790,10 +797,16 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
       remove_edge_coord(coord_layer_index, s1, nid);
     }
 
-    if (i % 1000 == 0 || i == max_iter - 1) {
+    if (i % progress_interval == 0 || i == max_iter - 1) {
+      const auto now = std::chrono::steady_clock::now();
+      const double elapsed_sec =
+          std::chrono::duration<double>(now - start_time).count();
+      const double progress = static_cast<double>(i + 1) / std::max(1, max_iter);
+      const double eta_sec = (progress > 1e-9) ? elapsed_sec * (1.0 - progress) / progress : 0.0;
       std::cout << "  Coord edge Progress [" << coord_layer_index << "]: "
-                << (i * 100 / max_iter) << "% (" << i << "/" << max_iter
-                << ")\r" << std::flush;
+                << (progress * 100.0) << "% (" << (i + 1) << "/" << max_iter
+                << "), elapsed: " << elapsed_sec << "s, ETA: " << eta_sec
+                << "s" << std::endl;
     }
   }
   std::cout << std::endl << "[GNG] Coordinate Edge Training Complete."
@@ -1452,8 +1465,7 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
         wa.setZero(angle_dimension);
       else
         wa.setZero();
-      T_coord dummy_wc;
-      add_node(wa, dummy_wc);
+      add_node(wa);
     }
   }
 }

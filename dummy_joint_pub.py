@@ -35,10 +35,10 @@ def make_topo_dual_arm_preset() -> RobotPreset:
 
     def positions(t: float) -> Sequence[float]:
         # ゆっくりした安全寄りの動き。必要ならこの関数だけ差し替えればよい。
-        a = math.sin(t) * 0.35
+        a = math.sin(t) * 0.8
         g = clamp(0.02 + 0.01 * math.sin(t * 0.8), 0.0, 0.0775)
 
-        left = [a, 0.6 * a, 0.5 * a, 0.4 * a, 0.2 * a, 0.0, 0.0]
+        left = [a, a,  a, a,  a, a, a]
         right = list(left)
 
         # gripper_left_joint が主関節、gripper_right_joint は mimic だが
@@ -63,9 +63,9 @@ def make_topoarm_preset() -> RobotPreset:
     ]
 
     def positions(t: float) -> Sequence[float]:
-        a = math.sin(t) * 0.35
+        a = math.sin(t) *0.8
         g = clamp(0.02 + 0.01 * math.sin(t * 0.8), 0.0, 0.0775)
-        return [a, 0.6 * a, 0.5 * a, 0.4 * a, 0.2 * a, 0.0, 0.0, g, g]
+        return [a, a, a, a, a, a, a, g, g]
 
     return RobotPreset(namespace="topoarm", joint_names=joint_names, position_fn=positions)
 

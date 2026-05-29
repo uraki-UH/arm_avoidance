@@ -587,12 +587,33 @@ public:
                                    base_chain_->sampleRandomJointValues());
   }
 
+  void sampleRandomJointValues(std::vector<double> &out_values) const override {
+    if (!base_chain_) {
+      out_values.clear();
+      return;
+    }
+    std::vector<double> full_values;
+    base_chain_->sampleRandomJointValues(full_values);
+    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
+  }
+
   std::vector<double> sampleRandomJointValue(int joint_index) const override {
     if (!base_chain_) {
       return {};
     }
     return packSelectedJointValues(*base_chain_, selection_,
                                    base_chain_->sampleRandomJointValue(joint_index));
+  }
+
+  void sampleRandomJointValue(int joint_index,
+                              std::vector<double> &out_values) const override {
+    if (!base_chain_) {
+      out_values.clear();
+      return;
+    }
+    std::vector<double> full_values;
+    base_chain_->sampleRandomJointValue(joint_index, full_values);
+    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
   }
 
   std::vector<double> sampleRandomJointValues(
@@ -603,6 +624,17 @@ public:
     return packSelectedJointValues(
         *base_chain_, selection_,
         base_chain_->sampleRandomJointValues(joint_indices));
+  }
+
+  void sampleRandomJointValues(const std::vector<int> &joint_indices,
+                               std::vector<double> &out_values) const override {
+    if (!base_chain_) {
+      out_values.clear();
+      return;
+    }
+    std::vector<double> full_values;
+    base_chain_->sampleRandomJointValues(joint_indices, full_values);
+    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
   }
 
   bool isWithinLimits(const std::vector<double> &values) const override {

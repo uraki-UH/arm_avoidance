@@ -215,7 +215,8 @@ private:
                         const T_coord &sample_coord, int mode);
   void one_train_update(const T_angle &sample_angle);
 
-  int add_node(T_angle w_angle, T_coord w_coord);
+  int add_node(const T_angle &w_angle);
+  int add_node(const T_angle &w_angle, const T_coord &w_coord);
   void remove_node(int node_id);
   void add_edge_angle(int node_1, int node_2);
   void remove_edge_angle(int node_1, int node_2);
@@ -255,6 +256,8 @@ private:
   std::queue<int> addable_node_indicies;
 
   std::vector<double> q_buffer;
+  std::vector<double> random_joint_buffer_;
+  T_angle random_angle_buffer_;
   std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
       pos_buffer;
   std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>

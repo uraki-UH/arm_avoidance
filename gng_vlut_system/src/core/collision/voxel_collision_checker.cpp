@@ -44,10 +44,11 @@ void VoxelCollisionChecker::updateBodyPoses(
     auto fixed_info = model_.getFixedLinkInfo();
     chain_.buildAllLinkTransforms(positions, orientations, fixed_info, link_tfs);
 
+    augmentBranchLinkTransforms(link_tfs);
+
     const auto& link_data = manager_.getLinkVoxelDataList();
     current_tfs_.clear();
     current_tfs_.reserve(link_data.size());
-
     for (const auto& data : link_data) {
         auto it = link_tfs.find(data.name);
         if (it != link_tfs.end()) {
@@ -57,18 +58,8 @@ void VoxelCollisionChecker::updateBodyPoses(
         }
     }
 
-    augmentBranchLinkTransforms(link_tfs);
-
-    current_tfs_.clear();
-    current_tfs_.reserve(link_data.size());
-    for (const auto& data : link_data) {
-        auto it = link_tfs.find(data.name);
-        if (it != link_tfs.end()) {
-            current_tfs_.push_back(it->second);
-        } else {
-            current_tfs_.push_back(Eigen::Isometry3d::Identity());
-        }
-    }
+    cached_link_voxel_masks_ = computeLinkVoxelMasks();
+    cached_link_voxel_masks_valid_ = true;
 }
 
 void VoxelCollisionChecker::addCollisionExclusion(const std::string& link1, const std::string& link2) {
@@ -140,7 +131,7 @@ void VoxelCollisionChecker::augmentBranchLinkTransforms(
 }
 
 std::vector<std::vector<long>> VoxelCollisionChecker::getLinkVoxelMasks() const {
-    return computeLinkVoxelMasks();
+    return getCachedLinkVoxelMasks();
 }
 
 std::vector<std::pair<std::string, Eigen::Isometry3d>>
@@ -160,7 +151,7 @@ std::vector<std::pair<std::string, std::string>>
 VoxelCollisionChecker::collectSelfCollisionPairs() const {
     std::vector<std::pair<std::string, std::string>> pairs;
     const auto& link_data = manager_.getLinkVoxelDataList();
-    auto link_vids = computeLinkVoxelMasks();
+    const auto& link_vids = getCachedLinkVoxelMasks();
 
     for (size_t i = 0; i < link_data.size(); ++i) {
         const auto& n1_raw = link_data[i].name;
@@ -230,6 +221,15 @@ std::vector<std::vector<long>> VoxelCollisionChecker::computeLinkVoxelMasks() co
     return link_vids;
 }
 
+const std::vector<std::vector<long>>&
+VoxelCollisionChecker::getCachedLinkVoxelMasks() const {
+    if (!cached_link_voxel_masks_valid_) {
+        cached_link_voxel_masks_ = computeLinkVoxelMasks();
+        cached_link_voxel_masks_valid_ = true;
+    }
+    return cached_link_voxel_masks_;
+}
+
 bool VoxelCollisionChecker::checkCollision() {
     const auto& link_data = manager_.getLinkVoxelDataList();
 
@@ -264,13 +264,14 @@ bool VoxelCollisionChecker::checkCollision() {
             const auto& tf = current_tfs_[i];
             for (const auto& lp : data.local_voxel_centers) {
                 Eigen::Vector3d wp = tf * lp;
-                std::vector<collision::SelfCollisionChecker::CollisionObject> dummy_list;
                 collision::SelfCollisionChecker::CollisionObject p_obj;
+                p_obj.id = -1;
+                p_obj.name.clear();
                 p_obj.type = collision::SelfCollisionChecker::ShapeType::SPHERE;
                 p_obj.sphere.center = wp;
                 p_obj.sphere.radius = 0.0;
-                dummy_list.push_back(p_obj);
-                if (env_checker_->checkCollision(dummy_list)) return true;
+                p_obj.is_fixed_to_base = false;
+                if (env_checker_->checkCollision(p_obj)) return true;
             }
         }
     }
@@ -278,7 +279,7 @@ bool VoxelCollisionChecker::checkCollision() {
     // 3. 自己干渉判定
     if (enable_self_collision_) {
         // 現在姿勢に基づいてリンクごとのボクセルIDリストを作る
-        auto link_vids = computeLinkVoxelMasks();
+        const auto& link_vids = getCachedLinkVoxelMasks();
         
         for (size_t i = 0; i < link_data.size(); ++i) {
             const auto& n1_raw = link_data[i].name;
