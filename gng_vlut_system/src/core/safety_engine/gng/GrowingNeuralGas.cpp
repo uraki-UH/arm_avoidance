@@ -1472,6 +1472,9 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::triggerBatchUpdates() {
+  // Keep cached spatial coordinates in sync with the latest learned joint
+  // weights before any downstream consumers read node.position-like fields.
+  refresh_coord_weights();
   forEachActive([&](int i, const auto & /*node*/) {
     runStatusProviders(i, UpdateTrigger::BATCH_UPDATE);
   });

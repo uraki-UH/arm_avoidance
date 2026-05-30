@@ -174,8 +174,8 @@ ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
 - `/self_recognition_points`: 自己認識ボクセル内の点群。
 - `/self_filtered_points`: 自己認識ボクセル外の点群。
 - `/self_recognition/voxel_mask`: 自己認識マスクの送信トピック。
-- `/occupied_voxels`: 占有ボクセル。
-- `/danger_voxels`: 危険ボクセル。
+- `/occupied_voxels`: self_recognition のボクセルIDを安全監視へ渡すトピック。
+- `/danger_voxels`: occupied を外側に膨張したシェルを渡すトピック。
 - ...など
 
 

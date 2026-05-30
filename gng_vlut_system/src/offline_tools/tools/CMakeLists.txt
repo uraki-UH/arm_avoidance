@@ -18,3 +18,13 @@ ament_target_dependencies(voxel_link_mask_validator
 target_link_libraries(voxel_link_mask_validator ${LIBS_ALL_CORE} ${EXTRA_LIBS})
 target_include_directories(voxel_link_mask_validator PRIVATE ${Eigen3_INCLUDE_DIRS})
 install(TARGETS voxel_link_mask_validator DESTINATION lib/${PROJECT_NAME})
+
+add_executable(voxel_spherizer_preview voxel_spherizer_preview.cpp)
+ament_target_dependencies(voxel_spherizer_preview
+    rclcpp
+    ament_index_cpp
+    Eigen3
+)
+target_link_libraries(voxel_spherizer_preview ${LIBS_ALL_CORE} ${EXTRA_LIBS})
+target_include_directories(voxel_spherizer_preview PRIVATE ${Eigen3_INCLUDE_DIRS})
+install(TARGETS voxel_spherizer_preview DESTINATION lib/${PROJECT_NAME})

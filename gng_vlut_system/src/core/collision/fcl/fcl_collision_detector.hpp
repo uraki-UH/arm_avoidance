@@ -80,8 +80,10 @@ public:
 
   // --- Robot Link Management ---
 
-  // Register a robot link (Capsule or Mesh)
+  // Register a robot link
   int addRobotLink(const Capsule &capsule);
+  int addRobotLink(const Sphere &sphere);
+  int addRobotLink(const Box &box);
   int addRobotMeshLink(const std::string &stl_path, const Eigen::Vector3d &scale);
 
   // Update robot link pose (should be called before checkRobotCollision)

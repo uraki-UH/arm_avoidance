@@ -73,6 +73,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter<std::string>("self_recognition.arm_leaf_link_names", "");
     declare_parameter<std::vector<std::string>>("exclude_links", std::vector<std::string>{});
     declare_parameter<std::vector<std::string>>("self_recognition.exclude_links", std::vector<std::string>{});
+    declare_parameter<std::string>("robot.voxel_link_names", "");
+    declare_parameter<std::string>("self_recognition.voxel_link_names", "");
     declare_parameter<std::string>("root_link", "");
     declare_parameter<std::string>("self_recognition.root_link", "");
     declare_parameter<std::string>("leaf_link", "");
@@ -292,9 +294,16 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     }
 
     std::vector<std::string> voxel_links;
-    voxel_links.reserve(static_cast<std::size_t>(chain_->getNumJoints()));
-    for (int i = 0; i < chain_->getNumJoints(); ++i) {
-        voxel_links.push_back(chain_->getLinkName(i));
+    const std::string explicit_voxel_links =
+        getStringWithFallback(*this, "self_recognition.voxel_link_names",
+                              "robot.voxel_link_names");
+    if (!explicit_voxel_links.empty()) {
+        voxel_links = splitCommaSeparated(explicit_voxel_links);
+    } else {
+        voxel_links.reserve(static_cast<std::size_t>(chain_->getNumJoints()));
+        for (int i = 0; i < chain_->getNumJoints(); ++i) {
+            voxel_links.push_back(chain_->getLinkName(i));
+        }
     }
 
     // ボクセル化の実行（チェインに含まれるリンクのみ対象。root_link 自体は含めない）

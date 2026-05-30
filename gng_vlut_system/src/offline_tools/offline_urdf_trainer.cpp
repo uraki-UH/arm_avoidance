@@ -25,6 +25,7 @@
 #include "kinematics/kinematic_chain.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
+#include "robot_model/robot_voxelizer.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
@@ -207,6 +208,7 @@ struct GngProfileConfig {
   std::string root_link;
   std::string eef_link_names;
   std::string arm_leaf_link_names;
+  std::vector<std::string> voxel_link_names;
   std::vector<std::string> include_joint_names;
   std::vector<std::string> exclude_joint_names;
   int dof = 0;
@@ -257,6 +259,8 @@ static GngProfileConfig loadGngProfileConfig(rclcpp::Node *node,
   config.arm_leaf_link_names = getProfileString(
       node, profile_name, "arm_leaf_link_names",
       "robot.arm_leaf_link_names", "");
+  config.voxel_link_names = splitCommaSeparated(getProfileString(
+      node, profile_name, "voxel_link_names", "robot.voxel_link_names", ""));
   config.include_joint_names = getProfileStringArray(
       node, profile_name, "include", "gng.include_joint_names", {});
   config.exclude_joint_names = getProfileStringArray(
@@ -1016,6 +1020,8 @@ public:
         "collision.enable_ground_collision", true);
     enable_self_collision_ = this->declare_parameter<bool>(
         "collision.enable_self_collision", true);
+    skip_collision_checks_ = this->declare_parameter<bool>(
+        "collision.skip_checks", false);
     apply_environment_ignore_links_ = this->declare_parameter<bool>(
         "collision.apply_environment_ignore_links", true);
     apply_self_collision_exclusion_pairs_ = this->declare_parameter<bool>(
@@ -1025,6 +1031,7 @@ public:
     gng_profile_name_ = this->declare_parameter<std::string>("gng.profile_name", "");
     eef_link_names_ = this->declare_parameter<std::string>("robot.eef_link_names", "");
     arm_leaf_link_names_ = this->declare_parameter<std::string>("robot.arm_leaf_link_names", "");
+    this->declare_parameter<std::string>("robot.voxel_link_names", "");
     gng_include_joint_names_ = this->declare_parameter<std::vector<std::string>>(
         "gng.include_joint_names", std::vector<std::string>{});
     gng_exclude_joint_names_ = this->declare_parameter<std::vector<std::string>>(
@@ -1052,6 +1059,16 @@ public:
     self_recognition_inflation_ =
         this->declare_parameter<double>("gng.self_recognition.inflation", 0.02);
 
+    if (skip_collision_checks_) {
+      enable_ground_collision_ = false;
+      enable_self_collision_ = false;
+      apply_environment_ignore_links_ = false;
+      apply_self_collision_exclusion_pairs_ = false;
+      require_initial_collision_approval_ = false;
+      generate_initial_collision_approval_only_ = false;
+      use_voxel_collision_ = false;
+    }
+
     selected_gng_profile_names_ = resolveSelectedProfileNames(
         gng_profile_names_, gng_profile_name_, discoverGngProfileNames(this));
     for (const auto &profile_name : selected_gng_profile_names_) {
@@ -1059,6 +1076,7 @@ public:
       declare_parameter<std::string>(profile_prefix + ".root", "");
       declare_parameter<std::string>(profile_prefix + ".eef", "");
       declare_parameter<std::string>(profile_prefix + ".arm_leaf_link_names", "");
+      declare_parameter<std::string>(profile_prefix + ".voxel_link_names", "");
       declare_parameter<std::vector<std::string>>(profile_prefix + ".include", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>(profile_prefix + ".exclude", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>(profile_prefix + ".gng_include_joint_names", std::vector<std::string>{});
@@ -1141,6 +1159,8 @@ public:
                 spatial_map_resolution_);
     RCLCPP_INFO(this->get_logger(), "  vlut_only: %s",
                 vlut_only_ ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(), "  skip_collision_checks: %s",
+                skip_collision_checks_ ? "true" : "false");
   } // Constructor
 
   void run_training_pipeline() {
@@ -1148,6 +1168,7 @@ public:
     std::unique_ptr<kinematics::KinematicChain> arm;
     simulation::RobotModel *model = nullptr;
     std::string resolved_path;
+    simulation::RobotModel base_model_obj;
     try {
       resolved_path = robot_sim::common::resolvePath(robot_urdf_path_);
 
@@ -1174,8 +1195,8 @@ public:
 
       RCLCPP_INFO(this->get_logger(), "[Robot] Loading from resolved path: %s",
                   resolved_path.c_str());
-      auto model_obj = simulation::loadRobotFromUrdf(resolved_path);
-      model = new simulation::RobotModel(model_obj);
+      base_model_obj = simulation::loadRobotFromUrdf(resolved_path);
+      model = new simulation::RobotModel(base_model_obj);
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "[Error] Robot setup failed: %s",
                    e.what());
@@ -1202,6 +1223,7 @@ public:
     }
 
     std::vector<std::string> combined_leaf_link_names;
+    std::vector<std::string> combined_voxel_link_names;
     std::vector<std::string> combined_include_joint_names;
     std::vector<std::string> combined_exclude_joint_names;
     int declared_dof_sum = 0;
@@ -1211,6 +1233,7 @@ public:
           cfg.eef_link_names, cfg.arm_leaf_link_names, leaf_link_name_,
           paired_leaf_link_name_);
       appendUnique(combined_leaf_link_names, leaf_names);
+      appendUnique(combined_voxel_link_names, cfg.voxel_link_names);
 
       std::vector<std::string> include_joint_names = cfg.include_joint_names;
       if (include_joint_names.empty() && !cfg.root_link.empty()) {
@@ -1233,6 +1256,8 @@ public:
                 joinCommaSeparated(profile_names).c_str());
     RCLCPP_INFO(this->get_logger(), "[GNG] combined leaf links: %s",
                 joinCommaSeparated(combined_leaf_link_names).c_str());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined voxel links: %s",
+                joinCommaSeparated(combined_voxel_link_names).c_str());
     RCLCPP_INFO(this->get_logger(), "[GNG] combined exclude count: %zu",
                 combined_exclude_joint_names.size());
     RCLCPP_INFO(this->get_logger(), "[GNG] combined declared dof: %d",
@@ -1278,31 +1303,62 @@ public:
                   gng_dimension_);
     }
 
+    if (std::getenv("GNG_DEBUG_FK_SPAN") != nullptr) {
+      RCLCPP_INFO(this->get_logger(),
+                  "[Debug] Sampling a few FK points to verify workspace span...");
+      for (int sample_idx = 0; sample_idx < 5; ++sample_idx) {
+        std::vector<double> q = gng_chain ? gng_chain->sampleRandomJointValues()
+                                          : arm->sampleRandomJointValues();
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+            positions;
+        std::vector<Eigen::Quaterniond,
+                    Eigen::aligned_allocator<Eigen::Quaterniond>>
+            orientations;
+        if (gng_chain) {
+          gng_chain->forwardKinematicsAt(q, positions, orientations);
+        } else {
+          arm->forwardKinematicsAt(q, positions, orientations);
+        }
+        Eigen::Vector3d eef = positions.empty() ? Eigen::Vector3d::Zero()
+                                                : positions.back();
+        RCLCPP_INFO(this->get_logger(),
+                    "[Debug] sample %d eef=[%.4f, %.4f, %.4f] q0=%.4f q1=%.4f q2=%.4f",
+                    sample_idx, eef.x(), eef.y(), eef.z(),
+                    q.size() > 0 ? q[0] : 0.0,
+                    q.size() > 1 ? q[1] : 0.0,
+                    q.size() > 2 ? q[2] : 0.0);
+      }
+    }
+
     // 2. Setup Checkers
-    auto self_checker =
-        std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
-                                                                    *arm);
-    auto env_checker =
-        std::make_shared<simulation::EnvironmentCollisionChecker>();
-    if (enable_ground_collision_) {
-      env_checker->addBoxObstacle(
-          "ground", Eigen::Vector3d(0, 0, ground_z_threshold_ - 0.05),
-          Eigen::Matrix3d::Identity(), Eigen::Vector3d(10.0, 10.0, 0.05));
+    std::shared_ptr<simulation::GeometricSelfCollisionChecker> self_checker;
+    std::shared_ptr<simulation::EnvironmentCollisionChecker> env_checker;
+    if (!skip_collision_checks_) {
+      self_checker =
+          std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
+                                                                      *arm);
+      env_checker =
+          std::make_shared<simulation::EnvironmentCollisionChecker>();
+      if (enable_ground_collision_) {
+        env_checker->addBoxObstacle(
+            "ground", Eigen::Vector3d(0, 0, ground_z_threshold_ - 0.05),
+            Eigen::Matrix3d::Identity(), Eigen::Vector3d(10.0, 10.0, 0.05));
+      }
     }
 
 #ifdef USE_FCL
-    self_checker->setStrictMode(true);
+    if (self_checker) {
+      self_checker->setStrictMode(true);
+    }
 #endif
-
-    auto composite_checker =
-        std::make_shared<simulation::CompositeCollisionChecker>();
-    composite_checker->setSelfCollisionChecker(self_checker);
-    composite_checker->setEnvironmentCollisionChecker(env_checker);
-
     // 3. GNG Setup
     std::shared_ptr<simulation::ISelfCollisionChecker> final_checker;
     std::shared_ptr<simulation::VoxelCollisionChecker> voxel_checker;
-    if (use_voxel_collision_) {
+    if (skip_collision_checks_) {
+      RCLCPP_WARN(this->get_logger(),
+                  "[Collision] Collision checks disabled: skipping collision-aware learning and strict filtering.");
+      final_checker.reset();
+    } else if (use_voxel_collision_) {
       RCLCPP_INFO(this->get_logger(),
                   "[Collision] Using VoxelCollisionChecker (Res: %f)",
                   spatial_map_resolution_);
@@ -1320,6 +1376,10 @@ public:
       }
       final_checker = voxel_checker;
     } else {
+      auto composite_checker =
+          std::make_shared<simulation::CompositeCollisionChecker>();
+      composite_checker->setSelfCollisionChecker(self_checker);
+      composite_checker->setEnvironmentCollisionChecker(env_checker);
       composite_checker->setEnableSelfCollision(enable_self_collision_);
       if (apply_environment_ignore_links_) {
         for (const auto &link_name : environment_ignore_links_) {
@@ -1329,47 +1389,51 @@ public:
       final_checker = composite_checker;
     }
 
-    // 初期姿勢での自己衝突候補を評価する。
-    // ここでは手動の除外ペアをまだ checker に入れず、生の候補を取得する。
-    Eigen::VectorXd zero_q(arm->getTotalDOF());
-    zero_q.setZero();
-    arm->updateKinematics(zero_q);
-    std::map<std::string, double> joint_hints;
-    const auto joint_values = arm->getJointValues();
-    std::size_t joint_cursor = 0;
-    for (int i = 0; i < arm->getNumJoints(); ++i) {
-      const int dof = arm->getJointDOF(i);
-      if (dof == 1 && joint_cursor < joint_values.size()) {
-        joint_hints[arm->getJointName(i)] = joint_values[joint_cursor];
-      }
-      joint_cursor += static_cast<std::size_t>(std::max(0, dof));
-    }
-    if (voxel_checker) {
-      voxel_checker->setJointValueHints(joint_hints);
-    }
-    self_checker->updateBodyPoses(arm->getLinkPositions(),
-                                  arm->getLinkOrientations());
-    if (voxel_checker) {
-      voxel_checker->updateBodyPoses(arm->getLinkPositions(),
-                                     arm->getLinkOrientations());
-    }
-
-    if (validate_voxel_link_masks_ && voxel_checker) {
-      std::vector<std::string> focus_links = splitCommaSeparated(validation_focus_links_);
-      writeVoxelValidationReport(
-          this->get_logger(), *voxel_checker, spatial_map_resolution_,
-          focus_links, validation_max_print_voxels_, validation_dump_path_);
-    } else if (validate_voxel_link_masks_ && !voxel_checker) {
-      RCLCPP_WARN(this->get_logger(),
-                  "[Collision][Validation] Requested voxel validation, but voxel collision is disabled.");
-    }
-
     std::vector<std::pair<std::string, std::string>> initial_collisions;
-    if (enable_self_collision_) {
+    if (!skip_collision_checks_) {
+      // 初期姿勢での自己衝突候補を評価する。
+      // ここでは手動の除外ペアをまだ checker に入れず、生の候補を取得する。
+      Eigen::VectorXd zero_q(arm->getTotalDOF());
+      zero_q.setZero();
+      arm->updateKinematics(zero_q);
+      std::map<std::string, double> joint_hints;
+      const auto joint_values = arm->getJointValues();
+      std::size_t joint_cursor = 0;
+      for (int i = 0; i < arm->getNumJoints(); ++i) {
+        const int dof = arm->getJointDOF(i);
+        if (dof == 1 && joint_cursor < joint_values.size()) {
+          joint_hints[arm->getJointName(i)] = joint_values[joint_cursor];
+        }
+        joint_cursor += static_cast<std::size_t>(std::max(0, dof));
+      }
       if (voxel_checker) {
-        initial_collisions = voxel_checker->collectSelfCollisionPairs();
-      } else {
-        initial_collisions = self_checker->collectSelfCollisionPairs();
+        voxel_checker->setJointValueHints(joint_hints);
+      }
+      if (self_checker) {
+        self_checker->updateBodyPoses(arm->getLinkPositions(),
+                                      arm->getLinkOrientations());
+      }
+      if (voxel_checker) {
+        voxel_checker->updateBodyPoses(arm->getLinkPositions(),
+                                       arm->getLinkOrientations());
+      }
+
+      if (validate_voxel_link_masks_ && voxel_checker) {
+        std::vector<std::string> focus_links = splitCommaSeparated(validation_focus_links_);
+        writeVoxelValidationReport(
+            this->get_logger(), *voxel_checker, spatial_map_resolution_,
+            focus_links, validation_max_print_voxels_, validation_dump_path_);
+      } else if (validate_voxel_link_masks_ && !voxel_checker) {
+        RCLCPP_WARN(this->get_logger(),
+                    "[Collision][Validation] Requested voxel validation, but voxel collision is disabled.");
+      }
+
+      if (enable_self_collision_) {
+        if (voxel_checker) {
+          initial_collisions = voxel_checker->collectSelfCollisionPairs();
+        } else if (self_checker) {
+          initial_collisions = self_checker->collectSelfCollisionPairs();
+        }
       }
     }
 
@@ -1424,8 +1488,8 @@ public:
       return;
     }
 
-    if (require_initial_collision_approval_ && apply_self_collision_exclusion_pairs_ &&
-        enable_self_collision_) {
+    if (!skip_collision_checks_ && require_initial_collision_approval_ &&
+        apply_self_collision_exclusion_pairs_ && enable_self_collision_) {
       std::vector<std::pair<std::string, std::string>> unapproved_pairs;
       for (const auto &pair : filtered_initial_collisions) {
         if (approved_initial_pairs.count(makePairKey(pair.first, pair.second)) ==
@@ -1451,7 +1515,7 @@ public:
     const bool auto_accept_initial_collisions =
         !require_initial_collision_approval_ ||
         !apply_self_collision_exclusion_pairs_ || !enable_self_collision_;
-    if (apply_self_collision_exclusion_pairs_ && enable_self_collision_) {
+    if (!skip_collision_checks_ && apply_self_collision_exclusion_pairs_ && enable_self_collision_) {
       for (const auto &pair : filtered_initial_collisions) {
         const std::string key = makePairKey(pair.first, pair.second);
         if (auto_accept_initial_collisions ||
@@ -1468,7 +1532,7 @@ public:
       }
       const std::string lhs = key.substr(0, sep);
       const std::string rhs = key.substr(sep + 1);
-      if (apply_self_collision_exclusion_pairs_) {
+      if (!skip_collision_checks_ && apply_self_collision_exclusion_pairs_) {
         self_checker->addCollisionExclusion(lhs, rhs);
         if (voxel_checker) {
           voxel_checker->addCollisionExclusion(lhs, rhs);
@@ -1488,10 +1552,12 @@ public:
 
     gng.setSelfCollisionChecker(final_checker.get());
     // Initialize Status Providers
-    gng.registerStatusProvider(
-        std::make_shared<GNG::GeometricSelfCollisionProvider<Eigen::VectorXf,
-                                                             Eigen::Vector3f>>(
-            final_checker.get(), gng_chain_ptr));
+    if (!skip_collision_checks_ && final_checker) {
+      gng.registerStatusProvider(
+          std::make_shared<GNG::GeometricSelfCollisionProvider<Eigen::VectorXf,
+                                                               Eigen::Vector3f>>(
+              final_checker.get(), gng_chain_ptr));
+    }
     gng.registerStatusProvider(
         std::make_shared<
             GNG::ManipulabilityProvider<Eigen::VectorXf, Eigen::Vector3f>>(
@@ -1528,16 +1594,26 @@ public:
       gng.setCollisionAware(false);
       gng.gngTrainOnTheFly(gng_params_.max_iterations);
 
-      RCLCPP_INFO(this->get_logger(), "[Step 2] Intermediate Filter...");
-      gng.strictFilter();
+      if (!skip_collision_checks_) {
+        RCLCPP_INFO(this->get_logger(), "[Step 2] Intermediate Filter...");
+        gng.strictFilter();
+      } else {
+        RCLCPP_INFO(this->get_logger(),
+                    "[Step 2] Intermediate Filter skipped (collision checks disabled)");
+      }
 
       RCLCPP_INFO(this->get_logger(),
                   "[Step 3] Refinement (Self-Collision Aware)...");
-      gng.setCollisionAware(true);
+      gng.setCollisionAware(!skip_collision_checks_);
       gng.gngTrainOnTheFly(gng_params_.refine_iterations);
 
-      RCLCPP_INFO(this->get_logger(), "[Step 4] Final Verification...");
-      gng.strictFilter();
+      if (!skip_collision_checks_) {
+        RCLCPP_INFO(this->get_logger(), "[Step 4] Final Verification...");
+        gng.strictFilter();
+      } else {
+        RCLCPP_INFO(this->get_logger(),
+                    "[Step 4] Final Verification skipped (collision checks disabled)");
+      }
       gng.refresh_coord_weights();
 
       RCLCPP_INFO(this->get_logger(),
@@ -1559,76 +1635,45 @@ public:
     };
     std::vector<VRel> v_rels;
     double res = vlut_resolution_;
-    fcl::Vector3d box_half_size(res * 0.5, res * 0.5, res * 0.5);
     GNG::Analysis::IndexVoxelGrid voxel_grid(res);
     auto active_ids = gng.getActiveIndices();
     int processed = 0;
 
     RCLCPP_INFO(this->get_logger(), "[Step 6] Pre-voxelizing Robot Links...");
 
-    // Cache for local voxel centers of each link
+    // VLUT generation always uses the original robot geometry, not the
+    // spherized training model. This keeps the arm voxelization consistent.
     struct LocalVoxelCloud {
       std::vector<fcl::Vector3d> centers;
     };
-    std::map<int, LocalVoxelCloud> link_voxel_clouds;
-
-    const auto &objects = self_checker->getCollisionObjects();
-    for (size_t i = 0; i < objects.size(); ++i) {
-      if (objects[i].type != collision::SelfCollisionChecker::ShapeType::MESH) {
-        continue;
-      }
-      auto fcl_obj = self_checker->getFCLObject(i);
-      if (!fcl_obj || !fcl_obj->collisionGeometry())
-        continue;
-      auto mesh = dynamic_cast<const fcl::BVHModel<fcl::OBBRSS<double>> *>(
-          fcl_obj->collisionGeometry().get());
-      if (!mesh || !mesh->vertices || !mesh->tri_indices)
-        continue;
-
-      LocalVoxelCloud &cloud = link_voxel_clouds[i];
-      fcl::Vector3d mesh_min, mesh_max;
-      mesh_min.setConstant(std::numeric_limits<double>::infinity());
-      mesh_max.setConstant(-std::numeric_limits<double>::infinity());
-      for (int vidx = 0; vidx < mesh->num_vertices; ++vidx) {
-        mesh_min = mesh_min.cwiseMin(mesh->vertices[vidx]);
-        mesh_max = mesh_max.cwiseMax(mesh->vertices[vidx]);
-      }
-
-      Eigen::Vector3i b_min =
-          (mesh_min / res).array().floor().cast<int>().matrix() -
-          Eigen::Vector3i::Ones();
-      Eigen::Vector3i b_max =
-          (mesh_max / res).array().ceil().cast<int>().matrix() +
-          Eigen::Vector3i::Ones();
-
-      for (int vx = b_min.x(); vx <= b_max.x(); ++vx) {
-        for (int vy = b_min.y(); vy <= b_max.y(); ++vy) {
-          for (int vz = b_min.z(); vz <= b_max.z(); ++vz) {
-            fcl::Vector3d box_center =
-                (Eigen::Vector3i(vx, vy, vz).cast<double>() +
-                 Eigen::Vector3d::Constant(0.5)) *
-                res;
-            bool occupied = false;
-            for (int t = 0; t < mesh->num_tris; ++t) {
-              const fcl::Triangle &tri = mesh->tri_indices[t];
-              fcl::Vector3d v[3] = {mesh->vertices[tri[0]],
-                                    mesh->vertices[tri[1]],
-                                    mesh->vertices[tri[2]]};
-              if (triBoxOverlap(box_center, box_half_size, v)) {
-                occupied = true;
-                break;
-              }
-            }
-            if (occupied)
-              cloud.centers.push_back(box_center);
-          }
+    std::vector<std::string> voxel_link_names;
+    std::map<std::string, int> voxel_link_to_lid;
+    if (!combined_voxel_link_names.empty()) {
+      voxel_link_names = combined_voxel_link_names;
+    } else {
+      for (const auto &pair : base_model_obj.getLinks()) {
+        if (pair.second.collisions.empty()) {
+          continue;
         }
+        voxel_link_names.push_back(pair.first);
       }
-      RCLCPP_INFO(
-          this->get_logger(),
-          "  Link [%zu] (%s) voxelized: %zu voxels. Local Z-range: [%f, %f]", i,
-          objects[i].name.c_str(), cloud.centers.size(), mesh_min.z(),
-          mesh_max.z());
+    }
+    for (const auto &name : voxel_link_names) {
+      voxel_link_to_lid[name] = static_cast<int>(voxel_link_to_lid.size());
+    }
+
+    auto voxel_link_data = simulation::RobotVoxelizer::build(
+        base_model_obj, voxel_link_names, voxel_grid, {}, 0.0);
+    std::map<std::string, LocalVoxelCloud> link_voxel_clouds;
+    for (const auto &link_data : voxel_link_data) {
+      LocalVoxelCloud &cloud = link_voxel_clouds[link_data.name];
+      cloud.centers.reserve(link_data.local_voxel_centers.size());
+      for (const auto &p : link_data.local_voxel_centers) {
+        cloud.centers.push_back(fcl::Vector3d(p.x(), p.y(), p.z()));
+      }
+      RCLCPP_INFO(this->get_logger(),
+                  "  Link (%s) voxelized: %zu voxels", link_data.name.c_str(),
+                  cloud.centers.size());
     }
 
     RCLCPP_INFO(
@@ -1655,11 +1700,24 @@ public:
           orientations;
       gng_chain_ptr->forwardKinematicsAt(node.weight_angle.template cast<double>(),
                                          positions, orientations);
-      self_checker->updateBodyPoses(positions, orientations);
+      std::map<std::string, Eigen::Isometry3d> link_transforms;
+      arm->buildAllLinkTransforms(
+          positions, orientations, base_model_obj.getFixedLinkInfo(),
+          link_transforms);
 
-      for (auto const &[link_idx, cloud] : link_voxel_clouds) {
-        fcl::Transform3d tf =
-            self_checker->getFCLObject(link_idx)->getTransform();
+      for (const auto &voxel_pair : link_voxel_clouds) {
+        const std::string &link_name = voxel_pair.first;
+        const auto &cloud = voxel_pair.second;
+        auto tf_it = link_transforms.find(link_name);
+        if (tf_it == link_transforms.end()) {
+          continue;
+        }
+        const fcl::Transform3d &tf = tf_it->second;
+        int lid = -1;
+        auto lid_it = voxel_link_to_lid.find(link_name);
+        if (lid_it != voxel_link_to_lid.end()) {
+          lid = lid_it->second;
+        }
         seen.clear(); // Re-use memory
 
         for (const auto &local_p : cloud.centers) {
@@ -1672,7 +1730,7 @@ public:
           Eigen::Vector3i idx = (world_p / res).array().floor().cast<int>();
           long vid = voxel_grid.getFlatVoxelId(idx);
           if (seen.insert(vid).second) {
-            v_rels.push_back({vid, nid, link_idx});
+            v_rels.push_back({vid, nid, lid});
           }
         }
       }
@@ -1782,6 +1840,7 @@ private:
   bool enable_self_collision_ = true;
   bool apply_environment_ignore_links_ = true;
   bool apply_self_collision_exclusion_pairs_ = true;
+  bool skip_collision_checks_ = false;
   std::string gng_path_root_link_;
   std::string eef_link_names_;
   std::string arm_leaf_link_names_;

@@ -51,6 +51,7 @@ public:
 
 #ifdef USE_FCL
   void setStrictMode(bool strict) { strict_mode_ = strict; }
+  void setUseFCLBackend(bool enable) { use_fcl_backend_ = enable; }
   collision::FCLCollisionDetector &getFCLDetector() { return fcl_detector_; }
   std::shared_ptr<fcl::CollisionObject<double>> getFCLObject(int index) const {
     if (index >= 0 && index < (int)object_fcl_ids_.size()) {
@@ -83,6 +84,7 @@ private:
 
 #ifdef USE_FCL
   bool strict_mode_ = false;
+  bool use_fcl_backend_ = true;
   collision::FCLCollisionDetector fcl_detector_;
   std::vector<int> object_fcl_ids_; // Mapping from collision_objects_ index to FCL ID
   std::vector<std::pair<int, int>> fcl_ignore_pairs_; // Pairs of FCL IDs to ignore

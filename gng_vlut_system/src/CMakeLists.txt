@@ -82,7 +82,8 @@ add_executable(joint_state_mux_node nodes/bridge/joint_state_mux_node.cpp)
 add_executable(topoarm_udp_bridge nodes/bridge/topoarm_udp_bridge.cpp)
 add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
 add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cpp)
-
+add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_robot_viewer_node.cpp)
+add_executable(self_recognition_voxel_bridge_node nodes/bridge/self_recognition_voxel_bridge_node.cpp)
 # Grouped Nodes
 add_executable(robot_description_player_node nodes/robot_description_player.cpp)
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
@@ -96,12 +97,14 @@ add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
 add_subdirectory(offline_tools/tools)
 
 # Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node offline_urdf_trainer)
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node self_recognition_voxel_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node offline_urdf_trainer)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})
   install(TARGETS ${node} DESTINATION lib/${PROJECT_NAME})
 endforeach()
+
+target_link_libraries(voxel_spherized_robot_viewer_node ${LIBS_ALL_CORE} ${EXTRA_LIBS} tinyxml2)
 
 # Shared Components
 add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)

@@ -128,6 +128,27 @@ int FCLCollisionDetector::addRobotLink(const Capsule &capsule) {
   robot_manager_dirty_ = true;
   return index;
 }
+
+int FCLCollisionDetector::addRobotLink(const Sphere &sphere) {
+  auto obj = createFCLCollisionObject(sphere);
+  int index = (int)robot_links_.size();
+  obj->setUserData((void *)(intptr_t)index);
+  robot_links_.push_back(obj);
+  robot_manager_.registerObject(obj.get());
+  robot_manager_dirty_ = true;
+  return index;
+}
+
+int FCLCollisionDetector::addRobotLink(const Box &box) {
+  auto obj = createFCLCollisionObject(box);
+  int index = (int)robot_links_.size();
+  obj->setUserData((void *)(intptr_t)index);
+  robot_links_.push_back(obj);
+  robot_manager_.registerObject(obj.get());
+  robot_manager_dirty_ = true;
+  return index;
+}
+
 int FCLCollisionDetector::addRobotMeshLink(const std::string &stl_path,
                                            const Eigen::Vector3d &scale) {
   auto mesh_geom = getOrLoadMesh(stl_path, scale);

@@ -35,11 +35,19 @@ ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py 
 ##　自己認識ボクセルの起動
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-
-左腕のボクセル化
   root_link:=left_link2 \
   leaf_link:=left_link8 \
   mask_topic:=/self_recognition/left_arm_voxel_mask
+
+##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
+ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
+  input_topic:=/self_recognition/right_arm_voxel \
+  occupied_voxels_topic:=/occupied_voxels \
+  danger_voxels_topic:=/danger_voxels \
+  danger_inflation:=0.05
+
+## urdf-spherizer を必要なときだけ入れる
+bash scripts/install_urdf_spherizer.sh
 
 必要に応じて
 source /opt/ros/humble/setup.bash
@@ -71,6 +79,7 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  use_voxel_collision:=true
+  use_voxel_collision:=true 
+  \gng_profile_names:=left_arm 
 
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証

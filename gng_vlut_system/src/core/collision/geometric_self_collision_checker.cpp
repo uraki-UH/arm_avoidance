@@ -169,10 +169,18 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
         object_map_.push_back(map);
 
 #ifdef USE_FCL
-        if (obj.type != collision::SelfCollisionChecker::ShapeType::MESH) {
-          int fcl_id = fcl_detector_.addRobotLink(obj.capsule);
-          object_fcl_ids_.push_back(fcl_id);
+        int fcl_id = -1;
+        if (obj.type == collision::SelfCollisionChecker::ShapeType::SPHERE) {
+          fcl_id = fcl_detector_.addRobotLink(obj.sphere);
+        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::BOX) {
+          fcl_id = fcl_detector_.addRobotLink(obj.box);
+        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::CAPSULE) {
+          fcl_id = fcl_detector_.addRobotLink(obj.capsule);
+        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::MESH) {
+          fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename,
+                                                  col.geometry.size);
         }
+        object_fcl_ids_.push_back(fcl_id);
 #endif
       }
     }
@@ -272,12 +280,14 @@ void GeometricSelfCollisionChecker::updateBodyPoses(
     }
 
 #ifdef USE_FCL
-    int fcl_id = object_fcl_ids_[i];
-    if (fcl_id != -1) {
-      if (obj.type == collision::SelfCollisionChecker::ShapeType::CAPSULE) {
-        fcl_detector_.updateRobotLinkCapsule(fcl_id, obj.capsule.a, obj.capsule.b);
-      } else {
-        fcl_detector_.updateRobotLinkPose(fcl_id, obj_tf);
+    if (use_fcl_backend_) {
+      int fcl_id = object_fcl_ids_[i];
+      if (fcl_id != -1) {
+        if (obj.type == collision::SelfCollisionChecker::ShapeType::CAPSULE) {
+          fcl_detector_.updateRobotLinkCapsule(fcl_id, obj.capsule.a, obj.capsule.b);
+        } else {
+          fcl_detector_.updateRobotLinkPose(fcl_id, obj_tf);
+        }
       }
     }
 #endif
@@ -286,7 +296,7 @@ void GeometricSelfCollisionChecker::updateBodyPoses(
 
 bool GeometricSelfCollisionChecker::checkCollision() {
 #ifdef USE_FCL
-  if (strict_mode_) {
+  if (use_fcl_backend_ && strict_mode_) {
     return fcl_detector_.checkSelfCollision(fcl_ignore_pairs_);
   }
 #endif

@@ -31,6 +31,7 @@ private:
     static std::vector<std::string> splitCommaSeparated(const std::string &text);
     std::vector<std::string> inferLeafLinkNames() const;
     void buildJointIndexMap();
+    void buildChainJointIndexMap();
     void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg);
     std::string buildRobotJsonLocked(
         const std::string& type,
@@ -49,6 +50,8 @@ private:
     std::vector<std::string> active_joint_names_;
     std::unordered_map<std::string, size_t> joint_name_to_active_index_;
     std::vector<double> current_joint_values_;
+    std::vector<std::string> chain_joint_names_;
+    std::unordered_map<std::string, size_t> chain_joint_name_to_active_index_;
     builtin_interfaces::msg::Time last_joint_state_stamp_;
     bool has_joint_state_ = false;
     std::string urdf_content_;
@@ -59,6 +62,7 @@ private:
     std::string arm_leaf_link_names_;
     double publish_hz_;
     bool first_publish_ = true;
+    std::size_t joint_state_msg_count_ = 0;
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

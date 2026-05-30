@@ -13,8 +13,11 @@ def launch_setup(context, *args, **kwargs):
     params_file = LaunchConfiguration("params_file").perform(context)
     robot_urdf_path = LaunchConfiguration("robot_urdf_path").perform(context)
     experiment_id = LaunchConfiguration("experiment_id").perform(context)
+    gng_data_directory = LaunchConfiguration("gng_data_directory").perform(context)
     vlut_only = LaunchConfiguration("vlut_only").perform(context)
     use_voxel_collision = LaunchConfiguration("use_voxel_collision").perform(context)
+    use_spherizer = LaunchConfiguration("use_spherizer").perform(context)
+    skip_collision_checks = LaunchConfiguration("skip_collision_checks").perform(context)
     voxel_padding = LaunchConfiguration("voxel_padding").perform(context)
     initial_collision_only = LaunchConfiguration("initial_collision_only").perform(context)
     validate_voxel_link_masks = LaunchConfiguration("validate_voxel_link_masks").perform(context)
@@ -29,10 +32,17 @@ def launch_setup(context, *args, **kwargs):
         overrides["robot_urdf_path"] = robot_urdf_path
     if experiment_id:
         overrides["gng.experiment_id"] = experiment_id
-    if vlut_only != "false":
-        overrides["vlut_only"] = (vlut_only.lower() == "true")
-    if use_voxel_collision != "false":
-        overrides["use_voxel_collision"] = (use_voxel_collision.lower() == "true")
+    if gng_data_directory:
+        overrides["gng.data_directory"] = gng_data_directory
+    vlut_only_value = (vlut_only.lower() == "true")
+    overrides["vlut_only"] = vlut_only_value
+    overrides["gng.vlut_only"] = vlut_only_value
+    use_voxel_collision_value = (use_voxel_collision.lower() == "true")
+    overrides["use_voxel_collision"] = use_voxel_collision_value
+    overrides["gng.use_voxel_collision"] = use_voxel_collision_value
+    overrides["use_spherizer"] = (use_spherizer.lower() == "true")
+    skip_collision_checks_value = (skip_collision_checks.lower() == "true")
+    overrides["collision.skip_checks"] = skip_collision_checks_value
     if voxel_padding:
         overrides["voxel_padding"] = float(voxel_padding)
     if initial_collision_only != "false":
@@ -88,6 +98,11 @@ def generate_launch_description():
             description="実験IDを上書き",
         ),
         DeclareLaunchArgument(
+            "gng_data_directory",
+            default_value="",
+            description="GNG結果の保存先ディレクトリを上書き",
+        ),
+        DeclareLaunchArgument(
             "vlut_only",
             default_value="false",
             description="'true'にするとGNG学習をスキップし、VLUT生成のみ行う",
@@ -96,6 +111,16 @@ def generate_launch_description():
             "use_voxel_collision",
             default_value="false",
             description="'true'にするとボクセルベースの衝突判定を使用します",
+        ),
+        DeclareLaunchArgument(
+            "use_spherizer",
+            default_value="false",
+            description="'true'にすると衝突形状を球に簡略化して学習します",
+        ),
+        DeclareLaunchArgument(
+            "skip_collision_checks",
+            default_value="false",
+            description="'true'にすると衝突判定とstrictFilterを丸ごと無効化します",
         ),
         DeclareLaunchArgument(
             "voxel_padding",

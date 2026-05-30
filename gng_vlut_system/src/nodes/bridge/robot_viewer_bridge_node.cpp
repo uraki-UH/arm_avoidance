@@ -77,6 +77,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     }
 
     buildJointIndexMap();
+    buildChainJointIndexMap();
     current_joint_values_.assign(active_joint_names_.size(), 0.0);
 
     description_pub_ = create_publisher<std_msgs::msg::String>(stream_topic_ + "/description", rclcpp::QoS(1).reliable().transient_local());
@@ -95,7 +96,14 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     // Initially publish description
     publishCurrentState();
 
-    RCLCPP_INFO(get_logger(), "Robot Viewer Bridge initialized: %s", stream_topic_.c_str());
+    RCLCPP_INFO(
+        get_logger(),
+        "Robot Viewer Bridge initialized: robot=%s joint_state_topic=%s stream_topic=%s joints=%zu dof=%d",
+        robot_name_.c_str(),
+        joint_state_topic_.c_str(),
+        stream_topic_.c_str(),
+        active_joint_names_.size(),
+        chain_ ? chain_->getTotalDOF() : 0);
 }
 
 bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const std::string& source_path) const {
@@ -166,16 +174,52 @@ void RobotViewerBridgeNode::buildJointIndexMap() {
     }
 }
 
+void RobotViewerBridgeNode::buildChainJointIndexMap() {
+    chain_joint_names_.clear();
+    chain_joint_name_to_active_index_.clear();
+    if (!chain_) {
+        return;
+    }
+
+    const int total_dof = chain_->getTotalDOF();
+    chain_joint_names_.reserve(static_cast<std::size_t>(std::max(0, total_dof)));
+    for (int i = 0; i < total_dof; ++i) {
+        const std::string joint_name = chain_->getJointName(i);
+        if (joint_name.empty()) {
+            continue;
+        }
+        chain_joint_name_to_active_index_[joint_name] = chain_joint_names_.size();
+        chain_joint_names_.push_back(joint_name);
+    }
+}
+
 void RobotViewerBridgeNode::jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr msg) {
     std::lock_guard<std::mutex> lock(state_mutex_);
+    std::size_t matched = 0;
+    std::size_t ignored = 0;
     for (size_t i = 0; i < msg->name.size(); ++i) {
         auto it = joint_name_to_active_index_.find(msg->name[i]);
         if (it != joint_name_to_active_index_.end() && i < msg->position.size()) {
             current_joint_values_[it->second] = msg->position[i];
+            ++matched;
+        } else {
+            ++ignored;
         }
     }
     last_joint_state_stamp_ = msg->header.stamp;
     has_joint_state_ = true;
+    ++joint_state_msg_count_;
+
+    if (joint_state_msg_count_ <= 5 || matched == 0) {
+        RCLCPP_INFO(
+            get_logger(),
+            "joint_state received: topic=%s msg=%zu matched=%zu ignored=%zu first_joint=%s",
+            joint_state_topic_.c_str(),
+            joint_state_msg_count_,
+            matched,
+            ignored,
+            active_joint_names_.empty() ? "" : active_joint_names_.front().c_str());
+    }
 }
 
 std::string RobotViewerBridgeNode::buildRobotJsonLocked(
@@ -226,9 +270,17 @@ void RobotViewerBridgeNode::publishCurrentState() {
     std::lock_guard<std::mutex> lock(state_mutex_);
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
-    if (chain_ && chain_->getTotalDOF() > 0 &&
-        current_joint_values_.size() >= static_cast<size_t>(chain_->getTotalDOF())) {
-        chain_->forwardKinematicsAt(current_joint_values_, positions, orientations);
+    if (chain_ && chain_->getTotalDOF() > 0) {
+        std::vector<double> chain_joint_values(chain_->getTotalDOF(), 0.0);
+        for (const auto &[joint_name, chain_index] : chain_joint_name_to_active_index_) {
+            auto it = joint_name_to_active_index_.find(joint_name);
+            if (it != joint_name_to_active_index_.end() &&
+                it->second < current_joint_values_.size() &&
+                chain_index < chain_joint_values.size()) {
+                chain_joint_values[chain_index] = current_joint_values_[it->second];
+            }
+        }
+        chain_->forwardKinematicsAt(chain_joint_values, positions, orientations);
     }
 
     if (description_pub_->get_subscription_count() > 0 && first_publish_) {
