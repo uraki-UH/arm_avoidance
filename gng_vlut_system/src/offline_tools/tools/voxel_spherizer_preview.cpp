@@ -63,7 +63,7 @@ public:
     declare_parameter<std::string>("resource_root_dir", "");
     declare_parameter<std::string>("mesh_root_dir", "");
     declare_parameter<std::string>("voxel_link_names", "");
-    declare_parameter<double>("voxel_size", 0.01);
+    declare_parameter<double>("voxel_size", 0.005);
     declare_parameter<double>("voxel_padding", 0.0);
     declare_parameter<int>("max_spheres", 64);
     declare_parameter<int>("min_points_per_sphere", 12);

@@ -84,7 +84,7 @@ def _setup_launch(context, *args, **kwargs):
     if not frame_id:
         frame_id = str(root_params.get("frame_id", "base_link"))
 
-    robot_voxel_size = _get_nested(root_params, ["robot", "voxel_size"], 0.01)
+    robot_voxel_size = _get_nested(root_params, ["robot", "voxel_size"], 0.005)
     robot_inflation = _get_nested(root_params, ["robot", "inflation"], 0.0)
 
     node_parameters = {
@@ -101,9 +101,9 @@ def _setup_launch(context, *args, **kwargs):
         "max_spheres": int(LaunchConfiguration("max_spheres").perform(context) or 64),
         "min_points_per_sphere": int(LaunchConfiguration("min_points_per_sphere").perform(context) or 12),
         "min_gain_ratio": float(LaunchConfiguration("min_gain_ratio").perform(context) or 0.15),
-        "capsule_min_chain_spheres": int(LaunchConfiguration("capsule_min_chain_spheres").perform(context) or 10),
-        "capsule_axis_ratio_threshold": float(LaunchConfiguration("capsule_axis_ratio_threshold").perform(context) or 8.0),
-        "capsule_radius_cv_threshold": float(LaunchConfiguration("capsule_radius_cv_threshold").perform(context) or 0.35),
+        "capsule_min_chain_spheres": int(LaunchConfiguration("capsule_min_chain_spheres").perform(context) or 5),
+        "capsule_axis_ratio_threshold": float(LaunchConfiguration("capsule_axis_ratio_threshold").perform(context) or 5.0),
+        "capsule_radius_cv_threshold": float(LaunchConfiguration("capsule_radius_cv_threshold").perform(context) or 0.45),
     }
 
     return [
@@ -128,15 +128,14 @@ def generate_launch_description():
             DeclareLaunchArgument("stream_topic", default_value=""),
             DeclareLaunchArgument("frame_id", default_value=""),
             DeclareLaunchArgument("voxel_link_names", default_value=""),
-            DeclareLaunchArgument("voxel_size", default_value=""),
+            DeclareLaunchArgument("voxel_size", default_value="0.005"),
             DeclareLaunchArgument("voxel_padding", default_value=""),
             DeclareLaunchArgument("max_spheres", default_value="64"),
             DeclareLaunchArgument("min_points_per_sphere", default_value="12"),
             DeclareLaunchArgument("min_gain_ratio", default_value="0.15"),
-            DeclareLaunchArgument("capsule_min_chain_spheres", default_value="10"),
-            DeclareLaunchArgument("capsule_axis_ratio_threshold", default_value="8.0"),
-            DeclareLaunchArgument("capsule_radius_cv_threshold", default_value="0.35"),
+            DeclareLaunchArgument("capsule_min_chain_spheres", default_value="5"),
+            DeclareLaunchArgument("capsule_axis_ratio_threshold", default_value="5.0"),
+            DeclareLaunchArgument("capsule_radius_cv_threshold", default_value="0.45"),
             OpaqueFunction(function=_setup_launch),
         ]
     )
-

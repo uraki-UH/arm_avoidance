@@ -22,12 +22,15 @@ struct VoxelSphereFitOptions {
   std::size_t max_spheres = 64;
   std::size_t min_points_per_sphere = 12;
   double min_gain_ratio = 0.15;
+  std::size_t refine_iterations = 2;
+  double containment_margin = 0.5;
   bool verbose = false;
 };
 
 struct VoxelSphereLinkResult {
   std::string link_name;
   std::size_t voxel_count = 0;
+  std::vector<Eigen::Vector3d> voxel_centers;
   std::vector<collision::Sphere> spheres;
 };
 
@@ -37,8 +40,20 @@ public:
   fit(const std::vector<Eigen::Vector3d> &voxel_centers,
       double voxel_size,
       const VoxelSphereFitOptions &options = {}) {
-    return fitRecursiveSpheres(voxel_centers, voxel_size, options,
-                               std::max<std::size_t>(1, options.max_spheres));
+    std::vector<collision::Sphere> raw_spheres = fitRecursiveSpheres(
+        voxel_centers, voxel_size, options,
+        std::max<std::size_t>(1, options.max_spheres));
+    std::vector<collision::Sphere> spheres = refineSphereSet(
+        voxel_centers, voxel_size, raw_spheres, options.refine_iterations);
+    const std::vector<collision::Sphere> pruned = pruneContainedSpheres(
+        spheres, std::max(0.0, options.containment_margin) * std::max(1e-12, voxel_size));
+
+    if (options.verbose && (raw_spheres.size() != pruned.size() || spheres.size() != pruned.size())) {
+      std::cout << "[VoxelSpherizer] refine/prune: raw=" << raw_spheres.size()
+                << " refined=" << spheres.size()
+                << " pruned=" << pruned.size() << std::endl;
+    }
+    return pruned;
   }
 
   static std::vector<VoxelSphereLinkResult>
@@ -54,6 +69,7 @@ public:
       VoxelSphereLinkResult result;
       result.link_name = link.name;
       result.voxel_count = link.local_voxel_centers.size();
+      result.voxel_centers = link.local_voxel_centers;
       result.spheres = fit(link.local_voxel_centers, voxel_size, options);
       total_voxels += result.voxel_count;
       total_spheres += result.spheres.size();
@@ -336,6 +352,89 @@ private:
                       std::size_t budget) {
     FitNode node = fitRecursiveNode(points, voxel_size, options, budget);
     return node.spheres;
+  }
+
+  static std::vector<collision::Sphere>
+  refineSphereSet(const std::vector<Eigen::Vector3d> &points,
+                  double voxel_size,
+                  const std::vector<collision::Sphere> &spheres,
+                  std::size_t refine_iterations) {
+    if (spheres.size() < 2 || points.size() < 2 || refine_iterations == 0) {
+      return spheres;
+    }
+
+    std::vector<collision::Sphere> current = spheres;
+    for (std::size_t iter = 0; iter < refine_iterations; ++iter) {
+      std::vector<std::vector<Eigen::Vector3d>> clusters(current.size());
+      for (const auto &p : points) {
+        std::size_t best_idx = 0;
+        double best_dist_sq = std::numeric_limits<double>::max();
+        for (std::size_t i = 0; i < current.size(); ++i) {
+          const double dist_sq = (p - current[i].center).squaredNorm();
+          if (dist_sq < best_dist_sq) {
+            best_dist_sq = dist_sq;
+            best_idx = i;
+          }
+        }
+        clusters[best_idx].push_back(p);
+      }
+
+      std::vector<collision::Sphere> next;
+      next.reserve(current.size());
+      for (std::size_t i = 0; i < current.size(); ++i) {
+        if (clusters[i].empty()) {
+          next.push_back(current[i]);
+          continue;
+        }
+        next.push_back(makeBoundingSphere(clusters[i], voxel_size));
+      }
+
+      current.swap(next);
+    }
+
+    return current;
+  }
+
+  static std::vector<collision::Sphere>
+  pruneContainedSpheres(const std::vector<collision::Sphere> &spheres,
+                        double margin) {
+    if (spheres.size() < 2) {
+      return spheres;
+    }
+
+    std::vector<std::size_t> order(spheres.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+      return spheres[a].radius > spheres[b].radius;
+    });
+
+    std::vector<bool> keep(spheres.size(), true);
+    for (std::size_t oi = 0; oi < order.size(); ++oi) {
+      const std::size_t i = order[oi];
+      if (!keep[i]) {
+        continue;
+      }
+      for (std::size_t oj = 0; oj < oi; ++oj) {
+        const std::size_t j = order[oj];
+        if (!keep[j]) {
+          continue;
+        }
+        const double center_dist = (spheres[i].center - spheres[j].center).norm();
+        if (center_dist + spheres[i].radius <= spheres[j].radius + margin) {
+          keep[i] = false;
+          break;
+        }
+      }
+    }
+
+    std::vector<collision::Sphere> filtered;
+    filtered.reserve(spheres.size());
+    for (std::size_t i = 0; i < spheres.size(); ++i) {
+      if (keep[i]) {
+        filtered.push_back(spheres[i]);
+      }
+    }
+    return filtered;
   }
 };
 

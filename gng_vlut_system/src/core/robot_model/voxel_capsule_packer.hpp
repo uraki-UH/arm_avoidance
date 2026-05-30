@@ -154,6 +154,94 @@ inline bool detectLinearCapsuleCandidate(
   return true;
 }
 
+inline bool detectLinearCapsuleCandidateFromPoints(
+    const std::vector<Eigen::Vector3d> &points,
+    double voxel_size,
+    std::size_t min_chain_spheres,
+    double axis_ratio_threshold,
+    double radius_cv_threshold,
+    collision::Capsule &out_capsule,
+    double &out_radius) {
+  if (points.size() < min_chain_spheres) {
+    return false;
+  }
+
+  const Eigen::Vector3d c = centroid(points);
+  const Eigen::Vector3d axis = principalAxis(points);
+  if (axis.norm() < 1e-12) {
+    return false;
+  }
+
+  Eigen::Matrix3d cov = Eigen::Matrix3d::Zero();
+  for (const auto &p : points) {
+    const Eigen::Vector3d d = p - c;
+    cov += d * d.transpose();
+  }
+  cov /= static_cast<double>(points.size());
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+  if (solver.info() != Eigen::Success) {
+    return false;
+  }
+
+  const auto eigenvalues = solver.eigenvalues();
+  const double lmax = eigenvalues.z();
+  const double lmid = eigenvalues.y();
+  const double lmin = eigenvalues.x();
+  const double lateral = std::max(lmid, lmin);
+  if (lmax < 1e-12 || lmax < axis_ratio_threshold * std::max(1e-12, lateral)) {
+    return false;
+  }
+
+  double min_t = std::numeric_limits<double>::max();
+  double max_t = std::numeric_limits<double>::lowest();
+  double max_orth_dist = 0.0;
+  double sum_orth_dist = 0.0;
+  double sum_orth_sq = 0.0;
+  for (const auto &p : points) {
+    const Eigen::Vector3d d = p - c;
+    const double t = d.dot(axis);
+    const Eigen::Vector3d orth = d - axis * t;
+    const double orth_norm = orth.norm();
+    min_t = std::min(min_t, t);
+    max_t = std::max(max_t, t);
+    max_orth_dist = std::max(max_orth_dist, orth_norm);
+    sum_orth_dist += orth_norm;
+    sum_orth_sq += orth_norm * orth_norm;
+  }
+
+  const double span = max_t - min_t;
+  if (span <= voxel_size * 2.0) {
+    return false;
+  }
+
+  const double mean_orth = sum_orth_dist / static_cast<double>(points.size());
+  const double var_orth = std::max(0.0, sum_orth_sq / static_cast<double>(points.size()) - mean_orth * mean_orth);
+  const double std_orth = std::sqrt(var_orth);
+  const double cv_orth = std_orth / std::max(1e-12, mean_orth);
+  if (cv_orth > radius_cv_threshold) {
+    return false;
+  }
+
+  const double orth_tol = std::max(voxel_size * 2.5, mean_orth * 2.0);
+  if (max_orth_dist > orth_tol) {
+    return false;
+  }
+
+  const double linearity = span / std::max(1e-12, max_orth_dist);
+  if (linearity < axis_ratio_threshold) {
+    return false;
+  }
+
+  const Eigen::Vector3d start = c + axis * min_t;
+  const Eigen::Vector3d end = c + axis * max_t;
+  out_radius = std::max(mean_orth + voxel_size * 0.5, voxel_size * 0.5);
+  out_capsule.a = start;
+  out_capsule.b = end;
+  out_capsule.radius = out_radius;
+  return true;
+}
+
 } // namespace detail
 
 inline std::vector<SimplifiedPrimitive>
@@ -161,10 +249,57 @@ convertSpheresToPrimitives(const std::vector<collision::Sphere> &spheres,
                            double voxel_size,
                            std::size_t min_chain_spheres,
                            double axis_ratio_threshold,
-                           double radius_cv_threshold) {
+                           double radius_cv_threshold,
+                           const std::vector<Eigen::Vector3d> *source_points = nullptr) {
   std::vector<SimplifiedPrimitive> primitives;
   if (spheres.empty()) {
     return primitives;
+  }
+
+  auto emitCapsule = [&](const collision::Capsule &capsule) {
+    const Eigen::Vector3d axis = capsule.b - capsule.a;
+    const double len = axis.norm();
+    if (len <= 1e-12) {
+      return false;
+    }
+    const Eigen::Quaterniond q = detail::axisToQuaternion(axis);
+    const Eigen::Vector3d mid = 0.5 * (capsule.a + capsule.b);
+    const double cyl_len = std::max(0.0, len - 2.0 * capsule.radius);
+
+    SimplifiedPrimitive cylinder;
+    cylinder.type = SimplifiedPrimitive::Type::Cylinder;
+    cylinder.xyz = mid;
+    cylinder.quat = q;
+    cylinder.radius = capsule.radius;
+    cylinder.length = cyl_len;
+    primitives.push_back(cylinder);
+
+    SimplifiedPrimitive sphere_a;
+    sphere_a.type = SimplifiedPrimitive::Type::Sphere;
+    sphere_a.xyz = capsule.a;
+    sphere_a.radius = capsule.radius;
+    primitives.push_back(sphere_a);
+
+    SimplifiedPrimitive sphere_b;
+    sphere_b.type = SimplifiedPrimitive::Type::Sphere;
+    sphere_b.xyz = capsule.b;
+    sphere_b.radius = capsule.radius;
+    primitives.push_back(sphere_b);
+    return true;
+  };
+
+  if (source_points && !source_points->empty()) {
+    collision::Capsule point_capsule;
+    double point_capsule_radius = 0.0;
+    if (detail::detectLinearCapsuleCandidateFromPoints(*source_points, voxel_size,
+                                                       min_chain_spheres, axis_ratio_threshold,
+                                                       radius_cv_threshold,
+                                                       point_capsule, point_capsule_radius)) {
+      point_capsule.radius = point_capsule_radius;
+      if (emitCapsule(point_capsule)) {
+        return primitives;
+      }
+    }
   }
 
   collision::Capsule capsule;
@@ -172,32 +307,7 @@ convertSpheresToPrimitives(const std::vector<collision::Sphere> &spheres,
   if (detail::detectLinearCapsuleCandidate(spheres, voxel_size, min_chain_spheres,
                                            axis_ratio_threshold, radius_cv_threshold,
                                            capsule, capsule_radius)) {
-    const Eigen::Vector3d axis = capsule.b - capsule.a;
-    const double len = axis.norm();
-    if (len > 1e-12) {
-      const Eigen::Quaterniond q = detail::axisToQuaternion(axis);
-      const Eigen::Vector3d mid = 0.5 * (capsule.a + capsule.b);
-      const double cyl_len = std::max(0.0, len - 2.0 * capsule_radius);
-
-      SimplifiedPrimitive cylinder;
-      cylinder.type = SimplifiedPrimitive::Type::Cylinder;
-      cylinder.xyz = mid;
-      cylinder.quat = q;
-      cylinder.radius = capsule_radius;
-      cylinder.length = cyl_len;
-      primitives.push_back(cylinder);
-
-      SimplifiedPrimitive sphere_a;
-      sphere_a.type = SimplifiedPrimitive::Type::Sphere;
-      sphere_a.xyz = capsule.a;
-      sphere_a.radius = capsule_radius;
-      primitives.push_back(sphere_a);
-
-      SimplifiedPrimitive sphere_b;
-      sphere_b.type = SimplifiedPrimitive::Type::Sphere;
-      sphere_b.xyz = capsule.b;
-      sphere_b.radius = capsule_radius;
-      primitives.push_back(sphere_b);
+    if (emitCapsule(capsule)) {
       return primitives;
     }
   }
@@ -213,4 +323,3 @@ convertSpheresToPrimitives(const std::vector<collision::Sphere> &spheres,
 }
 
 } // namespace simulation
-

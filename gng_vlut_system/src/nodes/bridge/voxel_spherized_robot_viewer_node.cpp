@@ -100,15 +100,15 @@ public:
     frame_id_ = declare_parameter<std::string>("frame_id", ::robot_sim::common::Constants::DEFAULT_WORLD_FRAME);
     publish_hz_ = std::max(1.0, declare_parameter<double>("publish_hz", ::robot_sim::common::Constants::DEFAULT_VIEWER_HZ));
 
-    const double voxel_size = declare_parameter<double>("voxel_size", 0.01);
+    const double voxel_size = declare_parameter<double>("voxel_size", 0.005);
     const double voxel_padding = declare_parameter<double>("voxel_padding", 0.0);
     const std::string voxel_link_names_param = declare_parameter<std::string>("voxel_link_names", "");
     const int max_spheres = declare_parameter<int>("max_spheres", 64);
     const int min_points_per_sphere = declare_parameter<int>("min_points_per_sphere", 12);
     const double min_gain_ratio = declare_parameter<double>("min_gain_ratio", 0.15);
-    capsule_min_chain_spheres_ = static_cast<std::size_t>(std::max<int>(3, declare_parameter<int>("capsule_min_chain_spheres", 10)));
-    capsule_axis_ratio_threshold_ = std::max(1.0, declare_parameter<double>("capsule_axis_ratio_threshold", 8.0));
-    capsule_radius_cv_threshold_ = std::max(0.0, declare_parameter<double>("capsule_radius_cv_threshold", 0.35));
+    capsule_min_chain_spheres_ = static_cast<std::size_t>(std::max<int>(3, declare_parameter<int>("capsule_min_chain_spheres", 5)));
+    capsule_axis_ratio_threshold_ = std::max(1.0, declare_parameter<double>("capsule_axis_ratio_threshold", 5.0));
+    capsule_radius_cv_threshold_ = std::max(0.0, declare_parameter<double>("capsule_radius_cv_threshold", 0.45));
 
     std::string ns = get_namespace();
     if (ns != "/" && !ns.empty()) {
@@ -373,9 +373,9 @@ private:
   double publish_hz_;
   bool first_publish_ = true;
   std::size_t joint_state_msg_count_ = 0;
-  std::size_t capsule_min_chain_spheres_ = 10;
-  double capsule_axis_ratio_threshold_ = 8.0;
-  double capsule_radius_cv_threshold_ = 0.35;
+  std::size_t capsule_min_chain_spheres_ = 5;
+  double capsule_axis_ratio_threshold_ = 5.0;
+  double capsule_radius_cv_threshold_ = 0.45;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   mutable Eigen::Vector3d last_base_pos_{0, 0, 0};
@@ -393,4 +393,3 @@ int main(int argc, char **argv) {
 }
 
 RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::VoxelSpherizedRobotViewerNode)
-

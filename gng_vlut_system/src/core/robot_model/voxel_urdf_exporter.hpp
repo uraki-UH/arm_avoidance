@@ -140,7 +140,8 @@ inline std::string buildSimplifiedUrdfXml(
 
     auto primitives = simulation::convertSpheresToPrimitives(
         entry.spheres, voxel_size, capsule_min_chain_spheres,
-        capsule_axis_ratio_threshold, capsule_radius_cv_threshold);
+        capsule_axis_ratio_threshold, capsule_radius_cv_threshold,
+        entry.voxel_centers.empty() ? nullptr : &entry.voxel_centers);
 
     auto *link_el = detail::findLinkElement(doc, entry.link_name);
     if (!link_el) {
@@ -156,4 +157,3 @@ inline std::string buildSimplifiedUrdfXml(
 }
 
 } // namespace simulation
-
