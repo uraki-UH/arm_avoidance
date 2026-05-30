@@ -16,7 +16,6 @@ def launch_setup(context, *args, **kwargs):
     gng_data_directory = LaunchConfiguration("gng_data_directory").perform(context)
     vlut_only = LaunchConfiguration("vlut_only").perform(context)
     use_voxel_collision = LaunchConfiguration("use_voxel_collision").perform(context)
-    use_spherizer = LaunchConfiguration("use_spherizer").perform(context)
     skip_collision_checks = LaunchConfiguration("skip_collision_checks").perform(context)
     voxel_padding = LaunchConfiguration("voxel_padding").perform(context)
     initial_collision_only = LaunchConfiguration("initial_collision_only").perform(context)
@@ -40,7 +39,6 @@ def launch_setup(context, *args, **kwargs):
     use_voxel_collision_value = (use_voxel_collision.lower() == "true")
     overrides["use_voxel_collision"] = use_voxel_collision_value
     overrides["gng.use_voxel_collision"] = use_voxel_collision_value
-    overrides["use_spherizer"] = (use_spherizer.lower() == "true")
     skip_collision_checks_value = (skip_collision_checks.lower() == "true")
     overrides["collision.skip_checks"] = skip_collision_checks_value
     if voxel_padding:
@@ -111,11 +109,6 @@ def generate_launch_description():
             "use_voxel_collision",
             default_value="false",
             description="'true'にするとボクセルベースの衝突判定を使用します",
-        ),
-        DeclareLaunchArgument(
-            "use_spherizer",
-            default_value="false",
-            description="'true'にすると衝突形状を球に簡略化して学習します",
         ),
         DeclareLaunchArgument(
             "skip_collision_checks",

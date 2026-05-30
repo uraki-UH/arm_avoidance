@@ -14,8 +14,13 @@
 namespace simulation {
 
 GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
-    const RobotModel &model, const kinematics::KinematicChain &chain)
-    : chain_(chain) {
+    const RobotModel &model, const kinematics::KinematicChain &chain,
+    bool enable_fcl_backend)
+    : chain_(chain)
+#ifdef USE_FCL
+      , use_fcl_backend_(enable_fcl_backend)
+#endif
+{
 
   // RobotModelから全リンク情報を取得
   const auto &all_joints = model.getJoints();
@@ -143,8 +148,10 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
           valid = true;
 
 #ifdef USE_FCL
-          int fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename, col.geometry.size);
-          object_fcl_ids_.push_back(fcl_id);
+          if (use_fcl_backend_) {
+            int fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename, col.geometry.size);
+            object_fcl_ids_.push_back(fcl_id);
+          }
 #endif
         } catch (const std::exception &e) {
           std::cerr << "[GeometricChecker] Error loading mesh " << resolved_mesh
@@ -155,7 +162,9 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
           obj.sphere.center = Eigen::Vector3d::Zero();
           valid = true;
 #ifdef USE_FCL
-          object_fcl_ids_.push_back(-1);
+          if (use_fcl_backend_) {
+            object_fcl_ids_.push_back(-1);
+          }
 #endif
         }
       }
@@ -169,18 +178,20 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
         object_map_.push_back(map);
 
 #ifdef USE_FCL
-        int fcl_id = -1;
-        if (obj.type == collision::SelfCollisionChecker::ShapeType::SPHERE) {
-          fcl_id = fcl_detector_.addRobotLink(obj.sphere);
-        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::BOX) {
-          fcl_id = fcl_detector_.addRobotLink(obj.box);
-        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::CAPSULE) {
-          fcl_id = fcl_detector_.addRobotLink(obj.capsule);
-        } else if (obj.type == collision::SelfCollisionChecker::ShapeType::MESH) {
-          fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename,
-                                                  col.geometry.size);
+        if (use_fcl_backend_) {
+          int fcl_id = -1;
+          if (obj.type == collision::SelfCollisionChecker::ShapeType::SPHERE) {
+            fcl_id = fcl_detector_.addRobotLink(obj.sphere);
+          } else if (obj.type == collision::SelfCollisionChecker::ShapeType::BOX) {
+            fcl_id = fcl_detector_.addRobotLink(obj.box);
+          } else if (obj.type == collision::SelfCollisionChecker::ShapeType::CAPSULE) {
+            fcl_id = fcl_detector_.addRobotLink(obj.capsule);
+          } else if (obj.type == collision::SelfCollisionChecker::ShapeType::MESH) {
+            fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename,
+                                                    col.geometry.size);
+          }
+          object_fcl_ids_.push_back(fcl_id);
         }
-        object_fcl_ids_.push_back(fcl_id);
 #endif
       }
     }
@@ -239,9 +250,11 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
         checker_.setIgnorePair(collision_objects_[i].id,
                                collision_objects_[j].id);
 #ifdef USE_FCL
-        if (object_fcl_ids_[i] != -1 && object_fcl_ids_[j] != -1) {
-          fcl_ignore_pairs_.push_back({object_fcl_ids_[i], object_fcl_ids_[j]});
-        }
+          if (use_fcl_backend_ && i < object_fcl_ids_.size() &&
+              j < object_fcl_ids_.size() && object_fcl_ids_[i] != -1 &&
+              object_fcl_ids_[j] != -1) {
+            fcl_ignore_pairs_.push_back({object_fcl_ids_[i], object_fcl_ids_[j]});
+          }
 #endif
       }
     }
@@ -345,7 +358,9 @@ void GeometricSelfCollisionChecker::addCollisionExclusion(
           checker_.setIgnorePair(collision_objects_[i].id,
                                  collision_objects_[j].id);
 #ifdef USE_FCL
-          if (object_fcl_ids_[i] != -1 && object_fcl_ids_[j] != -1) {
+          if (use_fcl_backend_ && i < object_fcl_ids_.size() &&
+              j < object_fcl_ids_.size() && object_fcl_ids_[i] != -1 &&
+              object_fcl_ids_[j] != -1) {
             fcl_ignore_pairs_.push_back({object_fcl_ids_[i], object_fcl_ids_[j]});
           }
 #endif

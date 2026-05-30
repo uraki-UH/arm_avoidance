@@ -74,6 +74,21 @@ Eigen::Vector3d closestPointOnTriangle(const Eigen::Vector3d &p,
 // CollisionQuery Implementation
 // ============================================================================
 
+bool CollisionQuery::testCollision(const Sphere &a, const Triangle &b) {
+  const Eigen::Vector3d closest = closestPointOnTriangle(a.center, b);
+  const double distance = (closest - a.center).norm();
+  return distance < a.radius;
+}
+
+bool CollisionQuery::testCollision(const Sphere &a, const Mesh &b) {
+  for (const auto &triangle : b.triangles) {
+    if (testCollision(a, triangle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool CollisionQuery::testCollision(const Capsule &a, const Sphere &b) {
   Eigen::Vector3d closest = closestPointOnSegment(b.center, a.a, a.b);
   double distance = (closest - b.center).norm();

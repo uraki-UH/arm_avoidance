@@ -118,6 +118,8 @@ struct Mesh {
 class CollisionQuery {
 public:
   // --- レベル1: 高速なブールチェック (早期終了) ---
+  static bool testCollision(const Sphere &a, const Triangle &b);
+  static bool testCollision(const Sphere &a, const Mesh &b);
   static bool testCollision(const Capsule &a, const Sphere &b);
   static bool testCollision(const Capsule &a, const Triangle &b);
   static bool testCollision(const Capsule &a, const Mesh &b);

@@ -26,6 +26,8 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/robot_voxelizer.hpp"
+#include "robot_model/voxel_ball_collision_model.hpp"
+#include "robot_model/voxel_ball_collision_config.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
@@ -1058,6 +1060,19 @@ public:
         this->declare_parameter<double>("gng.spatial_map.inflation", 0.0);
     self_recognition_inflation_ =
         this->declare_parameter<double>("gng.self_recognition.inflation", 0.02);
+    collision_voxel_ball_config_ = simulation::declareVoxelBallCollisionConfig(
+        *this, spatial_map_resolution_, spatial_map_inflation_);
+    RCLCPP_INFO(
+        this->get_logger(),
+        "[Collision] voxel_ball config: voxel_size=%.6f voxel_padding=%.6f max_spheres=%zu min_points_per_sphere=%zu min_gain_ratio=%.3f refine_iterations=%zu containment_margin=%.3f verbose=%s",
+        collision_voxel_ball_config_.voxel_size,
+        collision_voxel_ball_config_.voxel_padding,
+        collision_voxel_ball_config_.fit_options.max_spheres,
+        collision_voxel_ball_config_.fit_options.min_points_per_sphere,
+        collision_voxel_ball_config_.fit_options.min_gain_ratio,
+        collision_voxel_ball_config_.fit_options.refine_iterations,
+        collision_voxel_ball_config_.fit_options.containment_margin,
+        collision_voxel_ball_config_.fit_options.verbose ? "true" : "false");
 
     if (skip_collision_checks_) {
       enable_ground_collision_ = false;
@@ -1333,10 +1348,8 @@ public:
     // 2. Setup Checkers
     std::shared_ptr<simulation::GeometricSelfCollisionChecker> self_checker;
     std::shared_ptr<simulation::EnvironmentCollisionChecker> env_checker;
+    simulation::RobotModel voxel_ball_model = base_model_obj;
     if (!skip_collision_checks_) {
-      self_checker =
-          std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
-                                                                      *arm);
       env_checker =
           std::make_shared<simulation::EnvironmentCollisionChecker>();
       if (enable_ground_collision_) {
@@ -1353,29 +1366,37 @@ public:
 #endif
     // 3. GNG Setup
     std::shared_ptr<simulation::ISelfCollisionChecker> final_checker;
-    std::shared_ptr<simulation::VoxelCollisionChecker> voxel_checker;
     if (skip_collision_checks_) {
       RCLCPP_WARN(this->get_logger(),
                   "[Collision] Collision checks disabled: skipping collision-aware learning and strict filtering.");
       final_checker.reset();
     } else if (use_voxel_collision_) {
       RCLCPP_INFO(this->get_logger(),
-                  "[Collision] Using VoxelCollisionChecker (Res: %f)",
-                  spatial_map_resolution_);
-      voxel_checker = std::make_shared<simulation::VoxelCollisionChecker>(
-          *model, *arm, spatial_map_resolution_, spatial_map_inflation_);
-      voxel_checker->setGroundZThreshold(enable_ground_collision_
-                                             ? ground_z_threshold_
-                                             : -std::numeric_limits<double>::infinity());
-      voxel_checker->setEnableSelfCollision(enable_self_collision_);
-      voxel_checker->setEnvironmentCollisionChecker(env_checker);
+                  "[Collision] Using voxel-ballified GeometricSelfCollisionChecker "
+                  "(res: %f, pad: %f, fit_voxel: %f, fit_pad: %f)",
+                  spatial_map_resolution_, spatial_map_inflation_,
+                  collision_voxel_ball_config_.voxel_size,
+                  collision_voxel_ball_config_.voxel_padding);
+      voxel_ball_model = simulation::buildVoxelBallCollisionModel(
+          base_model_obj, combined_voxel_link_names,
+          collision_voxel_ball_config_);
+      self_checker = std::make_shared<simulation::GeometricSelfCollisionChecker>(
+          voxel_ball_model, *arm, false);
+      auto composite_checker =
+          std::make_shared<simulation::CompositeCollisionChecker>();
+      composite_checker->setSelfCollisionChecker(self_checker);
+      composite_checker->setEnvironmentCollisionChecker(env_checker);
+      composite_checker->setEnableSelfCollision(enable_self_collision_);
       if (apply_environment_ignore_links_) {
         for (const auto &link_name : environment_ignore_links_) {
-          voxel_checker->addEnvironmentIgnoreLink(link_name);
+          composite_checker->addEnvironmentIgnoreLink(link_name);
         }
       }
-      final_checker = voxel_checker;
+      final_checker = composite_checker;
     } else {
+      self_checker =
+          std::make_shared<simulation::GeometricSelfCollisionChecker>(*model,
+                                                                      *arm);
       auto composite_checker =
           std::make_shared<simulation::CompositeCollisionChecker>();
       composite_checker->setSelfCollisionChecker(self_checker);
@@ -1396,42 +1417,20 @@ public:
       Eigen::VectorXd zero_q(arm->getTotalDOF());
       zero_q.setZero();
       arm->updateKinematics(zero_q);
-      std::map<std::string, double> joint_hints;
-      const auto joint_values = arm->getJointValues();
-      std::size_t joint_cursor = 0;
-      for (int i = 0; i < arm->getNumJoints(); ++i) {
-        const int dof = arm->getJointDOF(i);
-        if (dof == 1 && joint_cursor < joint_values.size()) {
-          joint_hints[arm->getJointName(i)] = joint_values[joint_cursor];
-        }
-        joint_cursor += static_cast<std::size_t>(std::max(0, dof));
-      }
-      if (voxel_checker) {
-        voxel_checker->setJointValueHints(joint_hints);
-      }
       if (self_checker) {
         self_checker->updateBodyPoses(arm->getLinkPositions(),
                                       arm->getLinkOrientations());
       }
-      if (voxel_checker) {
-        voxel_checker->updateBodyPoses(arm->getLinkPositions(),
-                                       arm->getLinkOrientations());
-      }
 
-      if (validate_voxel_link_masks_ && voxel_checker) {
-        std::vector<std::string> focus_links = splitCommaSeparated(validation_focus_links_);
-        writeVoxelValidationReport(
-            this->get_logger(), *voxel_checker, spatial_map_resolution_,
-            focus_links, validation_max_print_voxels_, validation_dump_path_);
-      } else if (validate_voxel_link_masks_ && !voxel_checker) {
+      if (validate_voxel_link_masks_) {
         RCLCPP_WARN(this->get_logger(),
-                    "[Collision][Validation] Requested voxel validation, but voxel collision is disabled.");
+                    "[Collision][Validation] Requested voxel validation, "
+                    "but voxel-mask checker is no longer used in the "
+                    "ballified collision path.");
       }
 
       if (enable_self_collision_) {
-        if (voxel_checker) {
-          initial_collisions = voxel_checker->collectSelfCollisionPairs();
-        } else if (self_checker) {
+        if (self_checker) {
           initial_collisions = self_checker->collectSelfCollisionPairs();
         }
       }
@@ -1534,9 +1533,6 @@ public:
       const std::string rhs = key.substr(sep + 1);
       if (!skip_collision_checks_ && apply_self_collision_exclusion_pairs_) {
         self_checker->addCollisionExclusion(lhs, rhs);
-        if (voxel_checker) {
-          voxel_checker->addCollisionExclusion(lhs, rhs);
-        }
       }
     }
 
@@ -1871,7 +1867,7 @@ private:
   bool generate_initial_collision_approval_only_ = false;
   bool vlut_only_ = false;
   bool use_voxel_collision_ = false;
-  double voxel_padding_ = 0.0;
+  simulation::VoxelBallCollisionConfig collision_voxel_ball_config_;
 
   GNG::GngParameters gng_params_;
 };

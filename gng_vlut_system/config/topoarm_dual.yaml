@@ -42,6 +42,15 @@
     #   - "pillar_link"
     collision:
       require_initial_collision_approval: true
+      voxel_ball:
+        voxel_size: 0.0025
+        voxel_padding: 0.0
+        max_spheres: 16
+        min_points_per_sphere: 12
+        min_gain_ratio: 0.15
+        refine_iterations: 2
+        containment_margin: 0.5
+        verbose: false
       environment_ignore_links:
         - "pillar_link"
         - "base_footprint"

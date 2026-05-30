@@ -130,7 +130,7 @@ def generate_launch_description():
             DeclareLaunchArgument("voxel_link_names", default_value=""),
             DeclareLaunchArgument("voxel_size", default_value="0.0025"),
             DeclareLaunchArgument("voxel_padding", default_value=""),
-            DeclareLaunchArgument("max_spheres", default_value="16"),
+            DeclareLaunchArgument("max_spheres", default_value="8"),
             DeclareLaunchArgument("min_points_per_sphere", default_value="12"),
             DeclareLaunchArgument("min_gain_ratio", default_value="0.15"),
             DeclareLaunchArgument("capsule_min_chain_spheres", default_value="5"),

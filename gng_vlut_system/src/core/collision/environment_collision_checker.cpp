@@ -16,6 +16,12 @@ bool EnvironmentCollisionChecker::checkCollision(
                                                      env_obs.mesh)) {
           return true;
         }
+      } else if (robot_object.type ==
+                 collision::SelfCollisionChecker::ShapeType::SPHERE) {
+        if (collision::CollisionQuery::testCollision(robot_object.sphere,
+                                                     env_obs.mesh)) {
+          return true;
+        }
       }
     } else {
       if (internal_checker_.checkPair(robot_object, env_obs.geometry)) {

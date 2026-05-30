@@ -24,7 +24,8 @@ namespace simulation {
 class GeometricSelfCollisionChecker : public ISelfCollisionChecker {
 public:
   GeometricSelfCollisionChecker(const RobotModel &model,
-                                const kinematics::KinematicChain &chain);
+                                const kinematics::KinematicChain &chain,
+                                bool enable_fcl_backend = true);
   ~GeometricSelfCollisionChecker() override = default;
 
   void updateBodyPoses(
