@@ -128,7 +128,7 @@ def generate_launch_description():
             DeclareLaunchArgument("stream_topic", default_value=""),
             DeclareLaunchArgument("frame_id", default_value=""),
             DeclareLaunchArgument("voxel_link_names", default_value=""),
-            DeclareLaunchArgument("voxel_size", default_value="0.005"),
+            DeclareLaunchArgument("voxel_size", default_value="0.0025"),
             DeclareLaunchArgument("voxel_padding", default_value=""),
             DeclareLaunchArgument("max_spheres", default_value="16"),
             DeclareLaunchArgument("min_points_per_sphere", default_value="12"),

@@ -46,8 +46,6 @@ ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
   danger_voxels_topic:=/danger_voxels \
   danger_inflation:=0.05
 
-## urdf-spherizer を必要なときだけ入れる
-bash scripts/install_urdf_spherizer.sh
 
 必要に応じて
 source /opt/ros/humble/setup.bash
