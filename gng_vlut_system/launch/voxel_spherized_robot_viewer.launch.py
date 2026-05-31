@@ -50,9 +50,10 @@ def _setup_launch(context, *args, **kwargs):
     params_file = LaunchConfiguration("params_file").perform(context)
     root_params = _load_root_params(params_file)
 
+    source_robot_name = str(root_params.get("robot_name", "topoarm")).strip() or "topoarm"
     robot_name = LaunchConfiguration("robot_name").perform(context).strip()
     if not robot_name:
-        robot_name = str(root_params.get("robot_name", "topoarm"))
+        robot_name = f"{source_robot_name}_sphere"
 
     robot_description_file = LaunchConfiguration("robot_description_file").perform(context).strip()
     if not robot_description_file:
@@ -72,9 +73,9 @@ def _setup_launch(context, *args, **kwargs):
     if not joint_state_topic:
         joint_state_topic = str(root_params.get("joint_state_topic", "")).strip()
     if not joint_state_topic:
-        joint_state_topic = f"/{robot_name}/joint_states"
+        joint_state_topic = f"/{source_robot_name}/joint_states"
     elif not joint_state_topic.startswith("/"):
-        joint_state_topic = f"/{robot_name}/{joint_state_topic}"
+        joint_state_topic = f"/{source_robot_name}/{joint_state_topic}"
 
     stream_topic = LaunchConfiguration("stream_topic").perform(context).strip()
     if not stream_topic:
