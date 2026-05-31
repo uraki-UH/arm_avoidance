@@ -14,12 +14,30 @@ def launch_setup(context, *args, **kwargs):
     params_file = LaunchConfiguration("params_file").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     robot_urdf = LaunchConfiguration("robot_urdf_path").perform(context)
+    topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
+    trajectory_topic = LaunchConfiguration("trajectory_topic").perform(context)
+    trial_mode = LaunchConfiguration("trial_mode").perform(context)
+    trial_goal_interval_sec = LaunchConfiguration("trial_goal_interval_sec").perform(context)
+    trial_safe_only = LaunchConfiguration("trial_safe_only").perform(context)
+    trial_seed = LaunchConfiguration("trial_seed").perform(context)
 
     node_params = {}
     if robot_urdf:
         node_params["robot_urdf_path"] = robot_urdf
     if gng_model_path:
         node_params["gng_model_path"] = gng_model_path
+    if topological_map_topic:
+        node_params["topological_map_topic"] = topological_map_topic
+    if trajectory_topic:
+        node_params["trajectory_topic"] = trajectory_topic
+    if trial_mode:
+        node_params["trial_mode"] = trial_mode.lower() in ("1", "true", "yes", "on")
+    if trial_goal_interval_sec:
+        node_params["trial_goal_interval_sec"] = float(trial_goal_interval_sec)
+    if trial_safe_only:
+        node_params["trial_safe_only"] = trial_safe_only.lower() in ("1", "true", "yes", "on")
+    if trial_seed:
+        node_params["trial_seed"] = int(trial_seed)
 
     final_params_list = []
     if params_file and os.path.exists(params_file):
@@ -50,7 +68,20 @@ def generate_launch_description():
                               default_value="package://topoarm_description/urdf/topo_dual_arm.urdf.xacro",
                               description="ロボットURDF/Xacroのパス"),
         DeclareLaunchArgument("gng_model_path",
-                              default_value="",
-                              description="読み込むGNGモデル(gng.bin)のパス"),
+                              default_value=""),
+        DeclareLaunchArgument("topological_map_topic",
+                              default_value="/ToPoDualArm/topological_map_static",
+                              description="参照するTopologicalMapトピック名"),
+        DeclareLaunchArgument("trajectory_topic",
+                              default_value="/ToPoDualArm/planned_topological_map",
+                              description="軌道専用のTopologicalMapトピック名"),
+        DeclareLaunchArgument("trial_mode", default_value="false",
+                              description="ランダム目標でDijkstra試験を行う"),
+        DeclareLaunchArgument("trial_goal_interval_sec", default_value="4.0",
+                              description="ランダム目標の切り替え周期"),
+        DeclareLaunchArgument("trial_safe_only", default_value="true",
+                              description="安全ノードだけをランダム目標に使う"),
+        DeclareLaunchArgument("trial_seed", default_value="0",
+                              description="ランダムシード(0ならrandom_device)"),
         OpaqueFunction(function=launch_setup),
     ])
