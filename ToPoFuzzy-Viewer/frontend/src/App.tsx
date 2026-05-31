@@ -935,7 +935,7 @@ function App() {
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor };
                             return data.mode === 'static'
-                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={0.008} edgeWidth={0.0008} />
+                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} />
                                 : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 

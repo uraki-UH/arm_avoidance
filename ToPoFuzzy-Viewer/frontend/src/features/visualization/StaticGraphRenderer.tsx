@@ -129,11 +129,12 @@ export function StaticGraphRenderer({
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
     const nodeMaterials = useMemo(() => LAYER_COLORS.map((color) => new THREE.MeshBasicMaterial({
         color,
-        transparent: false,
+        transparent: opacity < 1,
+        opacity,
         depthTest: true,
         depthWrite: false,
         toneMapped: false,
-    })), []);
+    })), [opacity]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
