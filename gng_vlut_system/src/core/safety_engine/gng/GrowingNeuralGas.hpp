@@ -267,6 +267,8 @@ private:
   int coord_dimension = 0;
   bool collision_aware_ = false;
   simulation::ISelfCollisionChecker *collision_checker_ = nullptr;
+  bool task_error_ema_initialized_ = false;
+  float task_error_ema_ = 0.0f;
 
   // 距離統計用の LPF 変数
   float ema1_s1_sq = 0.0f;

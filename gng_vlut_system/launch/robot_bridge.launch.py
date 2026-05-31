@@ -19,6 +19,7 @@ def generate_launch_description():
             package="gng_vlut_system",
             executable="robot_bridge_node",
             name="robot_bridge",
+            namespace=LaunchConfiguration("robot_name"),
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration("mode"), "' == 'generic'"])),
             parameters=[{
                 "joint_state_topic": LaunchConfiguration("joint_state_topic"),
@@ -31,6 +32,7 @@ def generate_launch_description():
             package="gng_vlut_system",
             executable="topoarm_udp_bridge",
             name="topoarm_udp_bridge",
+            namespace=LaunchConfiguration("robot_name"),
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration("mode"), "' == 'topoarm_udp'"])),
             parameters=[{
                 "output_topic": LaunchConfiguration("joint_state_topic"),

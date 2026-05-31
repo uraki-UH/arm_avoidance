@@ -330,11 +330,21 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         mask_topic_ = "/self_recognition/voxel_mask";
     }
     mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
-        mask_topic_, rclcpp::QoS(1).transient_local());
+        mask_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / std::max(hz, 0.1))),
         [this]() { this->updateAndPublish(); });
+
+    graph_timer_ = create_wall_timer(
+        std::chrono::seconds(2),
+        [this]() {
+            RCLCPP_INFO(
+                get_logger(),
+                "Topic graph: mask pubs=%zu joint pubs=%zu",
+                count_publishers(mask_topic_),
+                count_publishers(joint_sub_->get_topic_name()));
+        });
 
     RCLCPP_INFO(get_logger(), "Voxel Mask Provider started (ID-only mode). Hz: %.1f, mask_topic: %s", hz, mask_topic_.c_str());
 }

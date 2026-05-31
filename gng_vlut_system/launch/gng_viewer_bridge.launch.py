@@ -232,6 +232,9 @@ def launch_setup(context, *args, **kwargs):
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
+                    # robot_name namespace 配下の相対トピックを購読する。
+                    "occupied_voxels_topic": "occupied_voxels",
+                    "danger_voxels_topic": "danger_voxels",
                     "robot_description_file": robot_description_file,
                 },
                 # 座標系などは指定がある場合のみ上書き
@@ -268,6 +271,6 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_frame_id", default_value="", description="グラフを表示する座標系"),
         DeclareLaunchArgument("gng_source_frame_id", default_value="", description="グラフデータの元の座標系"),
         DeclareLaunchArgument("publish_hz", default_value="", description="配信周波数"),
-        DeclareLaunchArgument("topic_name", default_value="/topological_map_static", description="配信トピック名"),
+        DeclareLaunchArgument("topic_name", default_value="topological_map_static", description="配信トピック名"),
         OpaqueFunction(function=launch_setup)
     ])

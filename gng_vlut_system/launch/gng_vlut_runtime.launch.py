@@ -74,7 +74,7 @@ def launch_setup(context, *args, **kwargs):
         viewer_params["mesh_root_dir"] = mesh_root
     
     viewer_params.update({
-        "joint_state_topic": "joint_states",
+        "joint_state_topic": f"/{robot_name}/joint_states",
         "stream_topic": "/viewer/internal/stream/robot",
         "frame_id": LaunchConfiguration("base_frame"),
         "publish_hz": 20.0,

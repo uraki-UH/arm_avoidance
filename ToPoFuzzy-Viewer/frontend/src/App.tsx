@@ -900,50 +900,6 @@ function App() {
                             onChange={handleDraftRegionChange}
                         />
 
-                        {Object.entries(graphData).map(([tag, data]) => {
-                            const settings = layerSettings[tag];
-                            if (!settings || !settings.visible) return null;
-
-                            const frameId = data.frameId || 'world';
-                            const tf = frameId !== 'world' ? (transforms[frameId] ?? null) : null;
-                            const staticEdgeWidth = 0.0008;
-                            const staticNodeScale = 0.008;
-
-                            const commonProps = {
-                                key: tag,
-                                tag: tag,
-                                data: data,
-                                visible: settings.visible,
-                                showNodes: settings.showNodes,
-                                showEdges: settings.showEdges,
-                                showClusters: settings.showClusters,
-                                opacity: settings.opacity,
-                                showClusterText: gngLayer.showClusterText,
-                                visibleLabels: gngLayer.visibleLabels,
-                                nodeScale: gngLayer.nodeScale,
-                                edgeWidth: gngLayer.edgeWidth,
-                                selectedClusterId: selectedClusterSnapshot?.cluster.id ?? null,
-                                onClusterSelect: handleClusterSelect,
-                                enableClusterSelection: !zoneMonitor.isDrawing,
-                                tf: tf,
-                                nodeColor: settings.nodeColor,
-                                edgeColor: settings.edgeColor,
-                                manualTransform: settings.graphTransform,
-                            };
-
-                            if (data.mode === 'static') {
-                                return (
-                                    <StaticGraphRenderer
-                                        {...commonProps}
-                                        nodeScale={staticNodeScale}
-                                        edgeWidth={staticEdgeWidth}
-                                    />
-                                );
-                            } else {
-                                return <GraphRenderer {...commonProps} />;
-                            }
-                        })}
-
                         {/* Entities (Consolidated rendering logic) */}
                         {[
                             {

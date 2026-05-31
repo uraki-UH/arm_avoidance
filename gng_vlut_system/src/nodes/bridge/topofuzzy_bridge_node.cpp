@@ -178,16 +178,34 @@ public:
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     occupied_voxels_topic_ = get_parameter("occupied_voxels_topic").as_string();
+    occupied_voxels_topic_relative_ = occupied_voxels_topic_.rfind('/') == 0
+                                          ? occupied_voxels_topic_.substr(1)
+                                          : occupied_voxels_topic_;
     danger_voxels_topic_ = get_parameter("danger_voxels_topic").as_string();
+    danger_voxels_topic_relative_ = danger_voxels_topic_.rfind('/') == 0
+                                        ? danger_voxels_topic_.substr(1)
+                                        : danger_voxels_topic_;
 
     occupied_sub_ = create_subscription<std_msgs::msg::Int64MultiArray>(
         occupied_voxels_topic_, 10,
         std::bind(&TopoFuzzyBridgeNode::occupiedVoxelCallback, this,
                   std::placeholders::_1));
+    if (occupied_voxels_topic_relative_ != occupied_voxels_topic_) {
+      occupied_sub_relative_ = create_subscription<std_msgs::msg::Int64MultiArray>(
+          occupied_voxels_topic_relative_, 10,
+          std::bind(&TopoFuzzyBridgeNode::occupiedVoxelCallback, this,
+                    std::placeholders::_1));
+    }
     danger_sub_ = create_subscription<std_msgs::msg::Int64MultiArray>(
         danger_voxels_topic_, 10,
         std::bind(&TopoFuzzyBridgeNode::dangerVoxelCallback, this,
                   std::placeholders::_1));
+    if (danger_voxels_topic_relative_ != danger_voxels_topic_) {
+      danger_sub_relative_ = create_subscription<std_msgs::msg::Int64MultiArray>(
+          danger_voxels_topic_relative_, 10,
+          std::bind(&TopoFuzzyBridgeNode::dangerVoxelCallback, this,
+                    std::placeholders::_1));
+    }
 
     const std::string topic_name = get_parameter("topic_name").as_string();
     topological_map_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
@@ -291,6 +309,9 @@ private:
     auto &gng = *context_->gng;
     const auto &col_counts = context_->mapper->getCollisionCounts();
     const auto &dgr_counts = context_->mapper->getDangerCounts();
+    size_t safe_nodes = 0;
+    size_t collision_nodes = 0;
+    size_t danger_nodes = 0;
 
     for (size_t i = 0; i < gng.getNodes().size(); ++i) {
       auto &node = gng.getNodes()[i];
@@ -303,7 +324,21 @@ private:
       status.danger_count = (i < dgr_counts.size()) ? dgr_counts[i] : 0;
       status.is_colliding = (status.collision_count > 0);
       status.is_danger = (status.danger_count > 0 && !status.is_colliding);
+
+      if (status.is_colliding) {
+        ++collision_nodes;
+      } else if (status.is_danger) {
+        ++danger_nodes;
+      } else {
+        ++safe_nodes;
+      } 
     }
+
+    RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Safety updated: occupied=%zu danger=%zu -> safe=%zu collision=%zu danger=%zu",
+        latest_occ_vids_.size(), latest_dan_vids_.size(),
+        safe_nodes, collision_nodes, danger_nodes);
   }
 
   int selectedEdgeMode() const {
@@ -440,6 +475,22 @@ private:
       id_to_index.emplace(node.id, published_index);
       msg.nodes.push_back(std::move(out));
     }
+
+    size_t label_collision = 0;
+    size_t label_danger = 0;
+    for (const auto &node : msg.nodes) {
+      if (node.label == 2) {
+        ++label_collision;
+      } else if (node.label == 3) {
+        ++label_danger;
+      } 
+    }
+    const size_t label_safe = msg.nodes.size() - label_collision - label_danger;
+
+    RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Publishing graph: nodes=%zu labels safe=%zu collision=%zu danger=%zu",
+        msg.nodes.size(), label_safe, label_collision, label_danger);
 
     std::unordered_set<uint64_t> seen_edges;
     for (size_t i = 0; i < gng.getNodes().size(); ++i) {
@@ -609,7 +660,9 @@ private:
   robot_sim::analysis::GraphTopologyAnalyzer topology_analyzer_;
 
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_sub_;
+  rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_sub_relative_;
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_;
+  rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_relative_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
       topological_map_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
@@ -625,7 +678,9 @@ private:
   std::string source_frame_id_ = "world";
   double publish_hz_ = ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ;
   std::string occupied_voxels_topic_ = "occupied_voxels";
+  std::string occupied_voxels_topic_relative_;
   std::string danger_voxels_topic_ = "danger_voxels";
+  std::string danger_voxels_topic_relative_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };

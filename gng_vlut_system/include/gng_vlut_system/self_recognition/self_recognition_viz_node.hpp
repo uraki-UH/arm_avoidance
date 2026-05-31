@@ -49,6 +49,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
     rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr mask_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr graph_timer_;
 };
 
 } // namespace self_recognition

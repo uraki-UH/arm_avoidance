@@ -45,6 +45,79 @@ interface PendingRequest {
     timer: number;
 }
 
+function graphHasChanged(prev: GraphData, next: GraphData): boolean {
+    if (
+        prev.timestamp !== next.timestamp ||
+        prev.nodes.length !== next.nodes.length ||
+        prev.edges.length !== next.edges.length ||
+        prev.clusters.length !== next.clusters.length
+    ) {
+        return true;
+    }
+
+    for (let i = 0; i < next.nodes.length; i++) {
+        const a = prev.nodes[i];
+        const b = next.nodes[i];
+        if (
+            !a ||
+            !b ||
+            a.x !== b.x ||
+            a.y !== b.y ||
+            a.z !== b.z ||
+            a.nx !== b.nx ||
+            a.ny !== b.ny ||
+            a.nz !== b.nz ||
+            a.label !== b.label ||
+            a.age !== b.age
+        ) {
+            return true;
+        }
+    }
+
+    for (let i = 0; i < next.edges.length; i++) {
+        if (prev.edges[i] !== next.edges[i]) {
+            return true;
+        }
+    }
+
+    for (let i = 0; i < next.clusters.length; i++) {
+        const a = prev.clusters[i];
+        const b = next.clusters[i];
+        if (
+            !a ||
+            !b ||
+            a.id !== b.id ||
+            a.label !== b.label ||
+            a.pos[0] !== b.pos[0] ||
+            a.pos[1] !== b.pos[1] ||
+            a.pos[2] !== b.pos[2] ||
+            a.scale[0] !== b.scale[0] ||
+            a.scale[1] !== b.scale[1] ||
+            a.scale[2] !== b.scale[2] ||
+            a.quat[0] !== b.quat[0] ||
+            a.quat[1] !== b.quat[1] ||
+            a.quat[2] !== b.quat[2] ||
+            a.quat[3] !== b.quat[3] ||
+            a.match !== b.match ||
+            a.reliability !== b.reliability ||
+            a.velocity[0] !== b.velocity[0] ||
+            a.velocity[1] !== b.velocity[1] ||
+            a.velocity[2] !== b.velocity[2] ||
+            a.nodeIds.length !== b.nodeIds.length
+        ) {
+            return true;
+        }
+
+        for (let j = 0; j < a.nodeIds.length; j++) {
+            if (a.nodeIds[j] !== b.nodeIds[j]) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 interface UseWebSocketReturn {
     pointClouds: Record<string, PointCloudData>;
     markerData: Record<string, MarkerArrayData>;
@@ -301,7 +374,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             if (!p.graph) return;
                             setGraphData(prev => {
                                 const existing = prev[tag];
-                                if (existing && existing.timestamp === p.graph.timestamp && existing.nodes.length === p.graph.nodes.length) return prev;
+                                if (existing && !graphHasChanged(existing, p.graph as GraphData)) return prev;
                                 return { ...prev, [tag]: p.graph as GraphData };
                             });
                         },

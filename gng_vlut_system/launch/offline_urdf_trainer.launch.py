@@ -25,6 +25,7 @@ def launch_setup(context, *args, **kwargs):
     validation_max_print_voxels = LaunchConfiguration("validation_max_print_voxels").perform(context)
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
+    use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -61,6 +62,8 @@ def launch_setup(context, *args, **kwargs):
         overrides["collision.validation_dump_path"] = validation_dump_path
     if gng_profile_names:
         overrides["gng.profile_names"] = gng_profile_names
+    use_task_density_bias_value = (use_task_density_bias.lower() == "true")
+    overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
 
     return [
 
@@ -113,7 +116,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "skip_collision_checks",
-            default_value="false",
+            default_value="true",
             description="'true'にすると衝突判定とstrictFilterを丸ごと無効化します",
         ),
         DeclareLaunchArgument(
@@ -150,6 +153,11 @@ def generate_launch_description():
             "gng_profile_names",
             default_value="",
             description="gng_profiles から使う profile 名のカンマ区切り (例: left_arm,right_arm)",
+        ),
+        DeclareLaunchArgument(
+            "use_task_density_bias",
+            default_value="false",
+            description="trueにすると task-space density bias を使ってGNG更新量を調整",
         ),
         OpaqueFunction(function=launch_setup)
     ])

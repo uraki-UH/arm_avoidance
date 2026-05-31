@@ -151,7 +151,11 @@ export function GraphRenderer({
         if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
         if (graph.nodes.length > nodeCapacity) return;
 
-        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale, { colorMode: 'label', baseColor: nodeColor });
+        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale, {
+            colorMode: 'label',
+            palette: LAYER_COLORS,
+            baseColor: nodeColor,
+        });
         invalidate();
     }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate, nodeColor]);
 

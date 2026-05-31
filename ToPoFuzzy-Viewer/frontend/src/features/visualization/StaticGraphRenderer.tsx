@@ -74,9 +74,21 @@ export function StaticGraphRenderer({
     useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, transform]);
 
     const groupRef = useRef<THREE.Group>(null);
-    const nodesRef = useRef<THREE.InstancedMesh>(null);
+    const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
+    const nodeBuckets = useMemo(() => {
+        const buckets: GraphData['nodes'][] = Array.from(
+            { length: LAYER_COLORS.length },
+            () => []
+        );
+        for (const node of graph.nodes) {
+            const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+            const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
+            buckets[labelIndex].push(node);
+        }
+        return buckets;
+    }, [graph.nodes]);
 
     // --- TF-based Positioning ---
     useEffect(() => {
@@ -115,20 +127,13 @@ export function StaticGraphRenderer({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeOpacity = opacity;
-    const nodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: new THREE.Color(nodeColor),
-        vertexColors: true,
-        transparent: nodeOpacity < 1,
-        opacity: nodeOpacity,
-        emissive: new THREE.Color(nodeColor),
-        emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
-        roughness: 0.25,
-        metalness: 0.0,
+    const nodeMaterials = useMemo(() => LAYER_COLORS.map((color) => new THREE.MeshBasicMaterial({
+        color,
+        transparent: false,
         depthTest: true,
         depthWrite: false,
         toneMapped: false,
-    }), [nodeOpacity, nodeColor]);
+    })), []);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
@@ -153,17 +158,28 @@ export function StaticGraphRenderer({
 
     // --- Node Instances ---
     useEffect(() => {
-        if (!nodesRef.current || !showNodes || graph.nodes.length === 0) return;
+        if (!showNodes || graph.nodes.length === 0) return;
         if (graph.nodes.length > nodeCapacity) return;
 
-        updateNodeInstances(nodesRef.current, graph.nodes, nodeScale, { colorMode: 'uniform', uniformColor: nodeColor });
-        invalidate(); 
-    }, [graph.nodes, showNodes, nodeScale, nodeCapacity, invalidate, nodeColor]);
+        nodeBuckets.forEach((bucket, labelIndex) => {
+            const solidMesh = nodeMeshRefs.current[labelIndex];
+            if (solidMesh) {
+                updateNodeInstances(solidMesh, bucket, nodeScale, {
+                    colorMode: 'uniform',
+                    uniformColor: LAYER_COLORS[labelIndex],
+                });
+            }
+        });
+        invalidate();
+    }, [graph.nodes, nodeBuckets, showNodes, nodeScale, nodeCapacity, invalidate]);
 
     useEffect(() => {
-        if (!nodesRef.current || showNodes) return;
-        nodesRef.current.count = 0;
-        nodesRef.current.instanceMatrix.needsUpdate = true;
+        if (showNodes) return;
+        nodeMeshRefs.current.forEach((mesh) => {
+            if (!mesh) return;
+            mesh.count = 0;
+            mesh.instanceMatrix.needsUpdate = true;
+        });
         invalidate();
     }, [showNodes, invalidate]);
 
@@ -190,16 +206,18 @@ export function StaticGraphRenderer({
 
     const content = (
         <>
-            {canRenderNodes && (
-                <instancedMesh
-                    key={`static-nodes-${nodeCapacity}`}
-                    ref={nodesRef}
-                    args={[nodeSphereGeometry, nodeMaterial, nodeCapacity]}
-                    count={graph.nodes.length}
-                    frustumCulled={false}
-                    renderOrder={10}
-                />
-            )}
+            {canRenderNodes && LAYER_COLORS.map((_, labelIndex) => (
+                <group key={`static-node-label-${labelIndex}`}>
+                    <instancedMesh
+                        key={`static-nodes-${labelIndex}-${nodeCapacity}`}
+                        ref={(el) => { nodeMeshRefs.current[labelIndex] = el; }}
+                        args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
+                        count={nodeBuckets[labelIndex].length}
+                        frustumCulled={false}
+                        renderOrder={10}
+                    />
+                </group>
+            ))}
 
             {canRenderEdges && (
                 <instancedMesh

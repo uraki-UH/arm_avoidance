@@ -1163,6 +1163,22 @@ public:
         this->declare_parameter<double>("gng_params.ais_threshold", 1.0);
     gng_params_.start_node_num =
         this->declare_parameter<int>("gng_params.start_node_num", 2);
+    gng_params_.use_task_density_bias = this->declare_parameter<bool>(
+        "gng_params.use_task_density_bias", false);
+    gng_params_.task_error_ema_alpha = this->declare_parameter<double>(
+        "gng_params.task_error_ema_alpha", 0.01);
+    gng_params_.task_density_ema_alpha = this->declare_parameter<double>(
+        "gng_params.task_density_ema_alpha", 0.01);
+    gng_params_.task_error_gain_min = this->declare_parameter<double>(
+        "gng_params.task_error_gain_min", 0.5);
+    gng_params_.task_error_gain_max = this->declare_parameter<double>(
+        "gng_params.task_error_gain_max", 2.0);
+    gng_params_.task_density_gain_gamma = this->declare_parameter<double>(
+        "gng_params.task_density_gain_gamma", 0.5);
+    gng_params_.task_density_gain_min = this->declare_parameter<double>(
+        "gng_params.task_density_gain_min", 0.8);
+    gng_params_.task_density_gain_max = this->declare_parameter<double>(
+        "gng_params.task_density_gain_max", 1.0);
 
     // Log parameters for verification
     RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
@@ -1172,6 +1188,30 @@ public:
                 robot_urdf_path_.c_str());
     RCLCPP_INFO(this->get_logger(), "  spatial_map_resolution: %f",
                 spatial_map_resolution_);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.use_task_density_bias: %s",
+                gng_params_.use_task_density_bias ? "true" : "false");
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_error_ema_alpha: %f",
+                gng_params_.task_error_ema_alpha);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_density_ema_alpha: %f",
+                gng_params_.task_density_ema_alpha);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_error_gain_min: %f",
+                gng_params_.task_error_gain_min);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_error_gain_max: %f",
+                gng_params_.task_error_gain_max);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_density_gain_gamma: %f",
+                gng_params_.task_density_gain_gamma);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_density_gain_min: %f",
+                gng_params_.task_density_gain_min);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.task_density_gain_max: %f",
+                gng_params_.task_density_gain_max);
     RCLCPP_INFO(this->get_logger(), "  vlut_only: %s",
                 vlut_only_ ? "true" : "false");
     RCLCPP_INFO(this->get_logger(), "  skip_collision_checks: %s",

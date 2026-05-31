@@ -79,6 +79,7 @@ public:
   int id = -1;
   float error_angle = 0.0f;
   float error_coord = 0.0f;
+  float task_density_ema = 1.0f;
   T_angle weight_angle;
   T_coord weight_coord;
   std::vector<T_coord> weight_coords;

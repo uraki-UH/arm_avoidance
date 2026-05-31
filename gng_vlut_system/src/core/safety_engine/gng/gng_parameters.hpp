@@ -21,6 +21,16 @@ struct GngParameters {
   float ais_threshold = 0.5f;
   int runtime_per_frame = 100;
   float lpf_alpha = 0.01f; // α value for EMA/Cascaded EMA
+
+  // Optional task-space density bias for learning-rate scaling
+  bool use_task_density_bias = false;
+  float task_error_ema_alpha = 0.01f;
+  float task_density_ema_alpha = 0.01f;
+  float task_error_gain_min = 0.5f;
+  float task_error_gain_max = 2.0f;
+  float task_density_gain_gamma = 0.5f;
+  float task_density_gain_min = 0.8f;
+  float task_density_gain_max = 1.0f;
 };
 
 } // namespace GNG

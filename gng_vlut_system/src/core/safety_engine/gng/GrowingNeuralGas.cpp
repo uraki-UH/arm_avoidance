@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -227,6 +228,7 @@ int GrowingNeuralGas<T_angle, T_coord>::add_node(const T_angle &w_angle,
       NeuronNode<T_angle, T_coord>(node_id, w_angle, w_coord);
   nodes[node_id].weight_coords.assign(
       static_cast<std::size_t>(coord_layer_count_), w_coord);
+  nodes[node_id].task_density_ema = 1.0f;
   edges_angle[node_id].clear();
   edges_coord[node_id].clear();
   edges_angle_per_node[node_id].clear();
@@ -274,6 +276,7 @@ void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
   edges_coord_per_node[node].clear();
   nodes[node].weight_coords.clear();
   nodes[node].id = -1;
+  nodes[node].task_density_ema = 1.0f;
   addable_node_indicies.push(node);
 }
 
@@ -566,6 +569,57 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
   float dist_s2_sq = (s2 != -1) ? winners_dist_sq[1] : 0.0f;
   float dist = std::sqrt(dist_s1_sq);
 
+  float task_space_gain = 1.0f;
+  if (params_.use_task_density_bias && kinematic_chain_) {
+    const T_coord sample_coord = calculateFK(sample_angle);
+    const T_coord winner_coord = calculateFK(nodes[s1].weight_angle);
+    const float task_error = std::sqrt(calc_squaredNorm_coord(sample_coord, winner_coord));
+    if (!task_error_ema_initialized_) {
+      task_error_ema_ = task_error;
+      task_error_ema_initialized_ = true;
+    } else {
+      const float task_alpha = std::max(0.0f, params_.task_error_ema_alpha);
+      task_error_ema_ = (1.0f - task_alpha) * task_error_ema_ + task_alpha * task_error;
+    }
+
+    float normalized_task_error = 1.0f;
+    if (task_error_ema_ > 0.0f) {
+      normalized_task_error = task_error / task_error_ema_;
+    }
+    normalized_task_error = std::clamp(
+        normalized_task_error, params_.task_error_gain_min,
+        params_.task_error_gain_max);
+
+    const float responsibility = std::exp(-normalized_task_error);
+    const float density_alpha = std::max(0.0f, params_.task_density_ema_alpha);
+    nodes[s1].task_density_ema =
+        (1.0f - density_alpha) * nodes[s1].task_density_ema +
+        density_alpha * responsibility;
+
+    float density_mean = 0.0f;
+    int density_count = 0;
+    for (int i : active_indices_) {
+      if (nodes[i].id == -1) {
+        continue;
+      }
+      density_mean += nodes[i].task_density_ema;
+      density_count++;
+    }
+    if (density_count > 0) {
+      density_mean /= static_cast<float>(density_count);
+      const float density_ratio =
+          nodes[s1].task_density_ema / density_mean;
+      float density_gain = std::pow(
+          1.0f / std::max(1.0f, density_ratio),
+          std::max(0.0f, params_.task_density_gain_gamma));
+      task_space_gain = std::clamp(
+          density_gain, params_.task_density_gain_min,
+          params_.task_density_gain_max);
+    } else {
+      task_space_gain = 1.0f;
+    }
+  }
+
   // --- 統計収集 (1次・2次遅れフィルタ) ---
   // (dist_s1_sq, dist_s2_sq は計算済みのため再利用)
 
@@ -609,7 +663,8 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
   }
 
   nodes[s1].error_angle += dist;
-  update_node_weights(s1, sample_angle, params_.learn_rate_s1);
+  update_node_weights(s1, sample_angle,
+                      params_.learn_rate_s1 * task_space_gain);
 
   if (s2 != -1) {
     // エッジ生成可能かどうかの干渉チェック
@@ -631,7 +686,8 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
     if (edges_angle[s1][nid].age > params_.max_edge_age) {
       to_remove.push_back(nid);
     } else {
-      update_node_weights(nid, sample_angle, params_.learn_rate_s2);
+      update_node_weights(nid, sample_angle,
+                          params_.learn_rate_s2 * task_space_gain);
       edges_angle[s1][nid].age++;
       edges_angle[nid][s1].age++;
     }
@@ -1457,6 +1513,8 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
     setCoordLayerCount(coord_layer_count_);
     n_learning = 0;
     n_trial_angle = 0;
+    task_error_ema_initialized_ = false;
+    task_error_ema_ = 0.0f;
 
     // 初期ノードの再追加
     for (int i = 0; i < params_.start_node_num; ++i) {
