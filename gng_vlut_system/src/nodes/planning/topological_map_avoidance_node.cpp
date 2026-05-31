@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <limits>
+#include <filesystem>
 #include <mutex>
 #include <memory>
 #include <random>
@@ -16,6 +18,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 #include "common/resource_utils.hpp"
 #include "planning/gng_dijkstra_planner.hpp"
@@ -51,6 +54,33 @@ static std::vector<std::string> collectTerminalLeafLinks(
   return leaves;
 }
 
+static std::vector<std::string> splitCommaSeparated(const std::string &text) {
+  std::vector<std::string> items;
+  std::stringstream ss(text);
+  std::string token;
+  while (std::getline(ss, token, ',')) {
+    auto begin = token.find_first_not_of(" \t");
+    auto end = token.find_last_not_of(" \t");
+    if (begin == std::string::npos) {
+      continue;
+    }
+    items.push_back(token.substr(begin, end - begin + 1));
+  }
+  return items;
+}
+
+static std::string joinStrings(const std::vector<std::string> &items,
+                               const std::string &delimiter) {
+  std::ostringstream oss;
+  for (std::size_t i = 0; i < items.size(); ++i) {
+    if (i != 0) {
+      oss << delimiter;
+    }
+    oss << items[i];
+  }
+  return oss.str();
+}
+
 static std::string getStringWithFallback(
     rclcpp::Node &node, const std::string &nested_key,
     const std::string &legacy_key) {
@@ -71,6 +101,18 @@ static std::vector<std::string> orderedJointNames(
   return names;
 }
 
+static std::vector<std::string> orderedControlledJointNames(
+    const ::kinematics::KinematicChain &chain) {
+  std::vector<std::string> names;
+  for (int i = 0; i < chain.getNumJoints(); ++i) {
+    if (chain.getJointDOF(i) <= 0) {
+      continue;
+    }
+    names.push_back(chain.getJointName(i));
+  }
+  return names;
+}
+
 static uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
   if (status.is_colliding) {
     return 2;
@@ -79,6 +121,23 @@ static uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
     return 3;
   }
   return 1;
+}
+
+static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
+  std::vector<double> out(static_cast<std::size_t>(q.size()));
+  for (int i = 0; i < q.size(); ++i) {
+    out[static_cast<std::size_t>(i)] = static_cast<double>(q[i]);
+  }
+  return out;
+}
+
+static double quaternionAngularErrorDeg(
+    const Eigen::Quaterniond &a, const Eigen::Quaterniond &b) {
+  Eigen::Quaterniond qa = a.normalized();
+  Eigen::Quaterniond qb = b.normalized();
+  double dot = std::abs(qa.dot(qb));
+  dot = std::min(1.0, std::max(-1.0, dot));
+  return 2.0 * std::acos(dot) * 180.0 / M_PI;
 }
 
 } // namespace
@@ -100,6 +159,7 @@ public:
     declare_parameter("gng.data_directory", "");
     declare_parameter("gng.experiment_id", "");
     declare_parameter("gng.gng_model_filename", "");
+    declare_parameter("gng.profile_names", "");
     declare_parameter("joint_topic", "/ToPoDualArm/joint_states");
     declare_parameter("topological_map_topic", "/ToPoDualArm/topological_map_static");
     declare_parameter("target_topic", "target_joint_states");
@@ -111,6 +171,7 @@ public:
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
     declare_parameter("trial_seed", 0);
+    declare_parameter("waypoint_tolerance", 0.05);
 
     const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -121,36 +182,75 @@ public:
     auto model = std::make_shared<::simulation::RobotModel>(
         ::simulation::loadRobotFromUrdf(urdf_path));
 
-    const auto leaf_links = collectTerminalLeafLinks(*model);
-    if (leaf_links.empty()) {
-      throw std::runtime_error("No terminal leaf links found in robot model.");
-    }
-
     std::vector<::simulation::ArmConfig> arm_configs;
-    arm_configs.reserve(leaf_links.size());
-    for (const auto &leaf : leaf_links) {
+    const auto selected_profiles =
+        splitCommaSeparated(get_parameter("gng.profile_names").as_string());
+    for (const auto &profile : selected_profiles) {
+      const std::string root_param =
+          "gng.profiles." + profile + ".root";
+      const std::string eef_param =
+          "gng.profiles." + profile + ".eef";
+      const std::string root_link =
+          declare_parameter<std::string>(root_param, model->getRootLinkName());
+      const std::string eef_link =
+          declare_parameter<std::string>(eef_param, "");
+      if (eef_link.empty()) {
+        RCLCPP_WARN(get_logger(),
+                    "Skipping empty GNG profile arm config: profile=%s root=%s",
+                    profile.c_str(), root_link.c_str());
+        continue;
+      }
+
       ::simulation::ArmConfig cfg;
-      cfg.root_link = model->getRootLinkName();
-      cfg.leaf_link = leaf;
+      cfg.root_link = root_link;
+      cfg.leaf_link = eef_link;
       cfg.prefix = "";
       arm_configs.push_back(cfg);
     }
 
-    chain_ = std::shared_ptr<::kinematics::KinematicChain>(
-        ::simulation::createMultiArmKinematicChain(*model, arm_configs,
-                                                   Eigen::Vector3d::Zero())
-            .release());
+    if (arm_configs.empty()) {
+      const auto leaf_links = collectTerminalLeafLinks(*model);
+      if (leaf_links.empty()) {
+        throw std::runtime_error("No terminal leaf links found in robot model.");
+      }
+
+      arm_configs.reserve(leaf_links.size());
+      for (const auto &leaf : leaf_links) {
+        ::simulation::ArmConfig cfg;
+        cfg.root_link = model->getRootLinkName();
+        cfg.leaf_link = leaf;
+        cfg.prefix = "";
+        arm_configs.push_back(cfg);
+      }
+    }
+
+    if (arm_configs.size() == 1) {
+      chain_ = std::make_shared<::kinematics::KinematicChain>(
+          ::simulation::createKinematicChainFromModel(
+              *model, arm_configs.front().leaf_link, Eigen::Vector3d::Zero(),
+              arm_configs.front().root_link));
+    } else {
+      chain_ = std::shared_ptr<::kinematics::KinematicChain>(
+          ::simulation::createMultiArmKinematicChain(*model, arm_configs,
+                                                     Eigen::Vector3d::Zero())
+              .release());
+    }
     if (!chain_) {
       throw std::runtime_error("Failed to build kinematic chain.");
     }
 
-    joint_names_ = orderedJointNames(*chain_);
-    joint_index_by_name_.reserve(joint_names_.size());
-    for (std::size_t i = 0; i < joint_names_.size(); ++i) {
-      joint_index_by_name_[joint_names_[i]] = i;
-    }
+    chain_joint_names_ = orderedJointNames(*chain_);
+    controlled_joint_names_ = orderedControlledJointNames(*chain_);
 
     const int dof = chain_->getTotalDOF();
+    RCLCPP_INFO(get_logger(), "Selected GNG profiles: %s",
+                joinStrings(selected_profiles, ", ").c_str());
+    RCLCPP_INFO(get_logger(), "Chain joint order (%zu): %s",
+                chain_joint_names_.size(),
+                joinStrings(chain_joint_names_, ", ").c_str());
+    RCLCPP_INFO(get_logger(), "Controlled joint order (%zu): %s",
+                controlled_joint_names_.size(),
+                joinStrings(controlled_joint_names_, ", ").c_str());
     gng_ = std::make_shared<GNGType>(dof, 3, chain_.get());
 
     std::string gng_model_path = get_parameter("gng_model_path").as_string();
@@ -158,6 +258,10 @@ public:
       std::string data_dir = get_parameter("gng.data_directory").as_string();
       std::string exp_id = get_parameter("gng.experiment_id").as_string();
       std::string model_file = get_parameter("gng.gng_model_filename").as_string();
+      if (!data_dir.empty() && std::filesystem::path(data_dir).is_absolute() &&
+          !std::filesystem::exists(data_dir)) {
+        data_dir = std::filesystem::path(data_dir).filename().string();
+      }
       if (!data_dir.empty() && !exp_id.empty() && !model_file.empty()) {
         gng_model_path = data_dir + "/" + exp_id + "/" + model_file;
       }
@@ -170,6 +274,36 @@ public:
       throw std::runtime_error("Failed to load GNG model from: " + gng_model_path);
     }
 
+    int loaded_angle_dim = -1;
+    for (const auto &node : gng_->getNodes()) {
+      if (node.id != -1) {
+        loaded_angle_dim = static_cast<int>(node.weight_angle.size());
+        break;
+      }
+    }
+    if (loaded_angle_dim > 0 &&
+        loaded_angle_dim != static_cast<int>(chain_->getTotalDOF())) {
+      RCLCPP_WARN(
+          get_logger(),
+          "GNG angle dimension (%d) does not match chain DOF (%d). Check gng.profile_names / arm config.",
+          loaded_angle_dim, chain_->getTotalDOF());
+    }
+
+    cached_safe_goal_ids_.clear();
+    cached_safe_goal_ids_.reserve(gng_->getMaxNodeNum());
+    for (const auto &node : gng_->getNodes()) {
+      if (node.id != -1 && node.status.active && node.status.valid &&
+          !node.status.is_colliding && !node.status.is_danger) {
+        cached_safe_goal_ids_.push_back(node.id);
+      }
+    }
+    if (!cached_safe_goal_ids_.empty()) {
+      RCLCPP_INFO(
+          get_logger(),
+          "Cached %zu safe GNG nodes from loaded model before map updates.",
+          cached_safe_goal_ids_.size());
+    }
+
     planner_.setCostEvaluator(
         std::make_shared<CostType>(1000.0f));
     planner_.setAvoidCollisions(get_parameter("avoid_collisions").as_bool());
@@ -179,6 +313,7 @@ public:
     trial_mode_ = get_parameter("trial_mode").as_bool();
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
     trial_safe_only_ = get_parameter("trial_safe_only").as_bool();
+    waypoint_tolerance_ = std::max(1e-6, get_parameter("waypoint_tolerance").as_double());
     const int trial_seed = get_parameter("trial_seed").as_int();
     if (trial_seed == 0) {
       rng_.seed(std::random_device{}());
@@ -218,6 +353,16 @@ public:
     target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         target_topic_, rclcpp::QoS(10).reliable());
 
+    request_update_srv_ = create_service<std_srvs::srv::Trigger>(
+        "request_trajectory_update",
+        [this](const std_srvs::srv::Trigger::Request::SharedPtr,
+               std_srvs::srv::Trigger::Response::SharedPtr response) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          trajectory_update_requested_ = true;
+          response->success = true;
+          response->message = "trajectory update requested";
+        });
+
     const double publish_hz = std::max(1.0, get_parameter("publish_hz").as_double());
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz)),
@@ -234,7 +379,7 @@ public:
 
 private:
   Eigen::VectorXf currentJointVectorLocked() const {
-    Eigen::VectorXf q(static_cast<int>(joint_names_.size()));
+    Eigen::VectorXf q(static_cast<int>(chain_->getTotalDOF()));
     q.setZero();
 
     std::unordered_map<std::string, double> value_by_name;
@@ -246,15 +391,19 @@ private:
       }
     }
 
-    const bool order_matches =
-        latest_joint_state_.name.size() == joint_names_.size();
-    for (std::size_t i = 0; i < joint_names_.size(); ++i) {
-      const auto it = value_by_name.find(joint_names_[i]);
-      if (it != value_by_name.end()) {
-        q[static_cast<int>(i)] = static_cast<float>(it->second);
-      } else if (order_matches && i < latest_joint_state_.position.size()) {
-        q[static_cast<int>(i)] =
-            static_cast<float>(latest_joint_state_.position[i]);
+    std::size_t dof_cursor = 0;
+    for (int joint_index = 0; joint_index < chain_->getNumJoints(); ++joint_index) {
+      const int joint_dof = chain_->getJointDOF(joint_index);
+      if (joint_dof <= 0) {
+        continue;
+      }
+      const std::string joint_name = chain_->getJointName(joint_index);
+      const auto it = value_by_name.find(joint_name);
+      const float v = (it != value_by_name.end())
+                          ? static_cast<float>(it->second)
+                          : 0.0f;
+      for (int d = 0; d < joint_dof && dof_cursor < static_cast<std::size_t>(q.size()); ++d) {
+        q[static_cast<int>(dof_cursor++)] = v;
       }
     }
     return q;
@@ -335,7 +484,7 @@ private:
 
   void publishTargetLocked() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!gng_ || !have_joint_state_ || !have_map_) {
+    if (!gng_ || (!have_joint_state_ && !trial_mode_)) {
       RCLCPP_INFO_THROTTLE(
           get_logger(), *get_clock(), 5000,
           "Waiting: gng=%d joint=%d map=%d (joint_topic=%s map_topic=%s trial_mode=%d)",
@@ -346,9 +495,21 @@ private:
       return;
     }
 
-    const Eigen::VectorXf current_q = currentJointVectorLocked();
-    if (current_q.size() == 0) {
+    if (!have_map_ && !trial_mode_) {
+      RCLCPP_INFO_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "Waiting for topological map: map_topic=%s trial_mode=%d",
+          get_parameter("topological_map_topic").as_string().c_str(),
+          trial_mode_ ? 1 : 0);
       return;
+    }
+
+    Eigen::VectorXf current_q = currentJointVectorLocked();
+    if (current_q.size() == 0) {
+      current_q = Eigen::VectorXf::Zero(chain_->getTotalDOF());
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "No joint_state received yet; using zero current_q fallback for trial execution.");
     }
 
     const int start_id = findNearestActiveNodeLocked(current_q);
@@ -361,102 +522,174 @@ private:
     const auto &start_node = gng_->nodeAt(start_id);
     Eigen::VectorXf target_q = current_q;
 
-    if (trial_mode_) {
-      const bool need_new_goal =
-          current_goal_id_ < 0 ||
-          (now().seconds() - last_goal_update_sec_) >= trial_goal_interval_sec_ ||
-          current_goal_id_ == start_id ||
-          !isGoalStillSelectableLocked(current_goal_id_);
-
-      if (need_new_goal) {
-        current_goal_id_ = pickRandomGoalLocked(start_id);
-        last_goal_update_sec_ = now().seconds();
-        if (current_goal_id_ >= 0) {
-          RCLCPP_INFO(
-              get_logger(),
-              "Trial goal selected: start=%d goal=%d safe_only=%d safe_count=%zu",
-              start_id, current_goal_id_, trial_safe_only_ ? 1 : 0,
-              cached_safe_goal_ids_.size());
+    if (active_trajectory_valid_) {
+      if (active_waypoint_index_ >= active_node_path_.size()) {
+        clearActiveTrajectoryLocked();
+      } else {
+        const int waypoint_node_id = active_node_path_[active_waypoint_index_];
+        if (isWaypointReachedLocked(current_q, waypoint_node_id)) {
+          ++active_waypoint_index_;
+          if (active_waypoint_index_ >= active_node_path_.size()) {
+            RCLCPP_INFO(
+                get_logger(),
+                "Trajectory completed: goal=%d path_len=%zu", active_goal_id_,
+                active_node_path_.size());
+            clearActiveTrajectoryLocked();
+            trajectory_update_requested_ = true;
+          }
         }
-        else {
+      }
+    }
+
+    if (trajectory_update_requested_ && !active_trajectory_valid_) {
+      if (trial_mode_) {
+        active_goal_id_ = pickRandomGoalLocked(start_id);
+        if (active_goal_id_ >= 0) {
+          active_node_path_ = planner_.planNodeIndices(start_id, active_goal_id_, *gng_);
+          active_waypoint_index_ = active_node_path_.size() >= 2 ? 1U : 0U;
+          active_trajectory_valid_ = !active_node_path_.empty();
+          trajectory_update_requested_ = !active_trajectory_valid_;
+          if (active_trajectory_valid_) {
+            RCLCPP_INFO(
+                get_logger(),
+                "Trial path latched: start=%d goal=%d len=%zu safe_only=%d safe_count=%zu",
+                start_id, active_goal_id_, active_node_path_.size(),
+                trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
+          } else {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 5000,
+                "Trial mode: planner returned empty path start=%d goal=%d",
+                start_id, active_goal_id_);
+          }
+        } else {
           RCLCPP_WARN_THROTTLE(
               get_logger(), *get_clock(), 5000,
               "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
               trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
-      }
-
-      if (current_goal_id_ >= 0) {
-        const auto node_path =
-            planner_.planNodeIndices(start_id, current_goal_id_, *gng_);
-        publishTrajectoryPathLocked(node_path);
-        if (!node_path.empty()) {
-          const int target_node_id =
-              (node_path.size() >= 2) ? node_path[1] : node_path[0];
-          if (target_node_id >= 0 &&
-              target_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
-            target_q = gng_->nodeAt(target_node_id).weight_angle;
+      } else if (start_node.status.is_colliding || start_node.status.is_danger) {
+        if (!cached_safe_goal_ids_.empty()) {
+          auto [reached_goal_id, node_path] =
+              planner_.planToAnyNode(start_id, cached_safe_goal_ids_, *gng_);
+          active_goal_id_ = reached_goal_id;
+          active_node_path_ = node_path;
+          active_waypoint_index_ = active_node_path_.size() >= 2 ? 1U : 0U;
+          active_trajectory_valid_ = !active_node_path_.empty();
+          trajectory_update_requested_ = !active_trajectory_valid_;
+          if (active_trajectory_valid_) {
+            RCLCPP_INFO(
+                get_logger(),
+                "Avoidance path latched: start=%d goal=%d len=%zu status(c=%d d=%d)",
+                start_id, reached_goal_id, active_node_path_.size(),
+                start_node.status.is_colliding ? 1 : 0,
+                start_node.status.is_danger ? 1 : 0);
+          } else {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 5000,
+                "Avoidance mode: planner returned empty path start=%d safe_goals=%zu",
+                start_id, cached_safe_goal_ids_.size());
           }
-          RCLCPP_INFO_THROTTLE(
-              get_logger(), *get_clock(), 2000,
-              "Trial path: start=%d goal=%d len=%zu",
-              start_id, current_goal_id_, node_path.size());
         } else {
           RCLCPP_WARN_THROTTLE(
               get_logger(), *get_clock(), 5000,
-              "Trial mode: planner returned empty path start=%d goal=%d",
-              start_id, current_goal_id_);
+              "Avoidance mode: no safe goal candidates available.");
         }
-      }
-    } else if (start_node.status.is_colliding || start_node.status.is_danger) {
-      if (!cached_safe_goal_ids_.empty()) {
-        auto [reached_goal_id, node_path] =
-            planner_.planToAnyNode(start_id, cached_safe_goal_ids_, *gng_);
-        publishTrajectoryPathLocked(node_path);
-        if (!node_path.empty()) {
-          const int target_node_id =
-              (node_path.size() >= 2) ? node_path[1] : node_path[0];
-          if (target_node_id >= 0 &&
-              target_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
-            target_q = gng_->nodeAt(target_node_id).weight_angle;
-          }
-          RCLCPP_INFO_THROTTLE(
-              get_logger(), *get_clock(), 2000,
-              "Avoidance path: start=%d goal=%d len=%zu status(c=%d d=%d)",
-              start_id, reached_goal_id, node_path.size(),
-              start_node.status.is_colliding ? 1 : 0,
-              start_node.status.is_danger ? 1 : 0);
-        } else {
-          RCLCPP_WARN_THROTTLE(
-              get_logger(), *get_clock(), 5000,
-              "Avoidance mode: planner returned empty path start=%d safe_goals=%zu",
-              start_id, cached_safe_goal_ids_.size());
-        }
-      } else {
-        RCLCPP_WARN_THROTTLE(
-            get_logger(), *get_clock(), 5000,
-            "Avoidance mode: no safe goal candidates available.");
       }
     }
 
-    if (!trial_mode_ && !(start_node.status.is_colliding || start_node.status.is_danger)) {
+    if (active_trajectory_valid_) {
+      publishTrajectoryPathLocked(active_node_path_);
+      if (active_waypoint_index_ < active_node_path_.size()) {
+        const int target_node_id = active_node_path_[active_waypoint_index_];
+        if (target_node_id >= 0 &&
+            target_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
+          target_q = gng_->nodeAt(target_node_id).weight_angle;
+
+          RCLCPP_INFO_THROTTLE(
+              get_logger(), *get_clock(), 2000,
+              "Waypoint debug: start=%d goal=%d wp_idx=%zu wp_id=%d q_dim=%d target_dim=%d",
+              start_id, active_goal_id_, active_waypoint_index_, target_node_id,
+              static_cast<int>(current_q.size()), static_cast<int>(target_q.size()));
+
+          const auto target_node_fk_q = eigenToStdVector(target_q);
+          std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+              target_positions;
+          std::vector<Eigen::Quaterniond,
+                      Eigen::aligned_allocator<Eigen::Quaterniond>>
+              target_orientations;
+          chain_->forwardKinematicsAt(target_node_fk_q, target_positions,
+                                      target_orientations);
+
+          const auto current_fk_q = eigenToStdVector(current_q);
+          std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+              current_positions;
+          std::vector<Eigen::Quaterniond,
+                      Eigen::aligned_allocator<Eigen::Quaterniond>>
+              current_orientations;
+          chain_->forwardKinematicsAt(current_fk_q, current_positions,
+                                      current_orientations);
+
+          if (!target_positions.empty() && !target_orientations.empty() &&
+              !current_positions.empty() && !current_orientations.empty()) {
+            const auto &wp = gng_->nodeAt(target_node_id);
+            const Eigen::Vector3d target_waypoint_pos = wp.weight_coord.cast<double>();
+            const Eigen::Quaterniond target_waypoint_ori =
+                wp.status.ee_orientation.cast<double>();
+            const Eigen::Vector3d current_eef_pos = current_positions.back();
+            const Eigen::Quaterniond current_eef_ori = current_orientations.back();
+            const Eigen::Vector3d target_fk_pos = target_positions.back();
+            const Eigen::Quaterniond target_fk_ori = target_orientations.back();
+
+            const double cur_pos_err = (current_eef_pos - target_waypoint_pos).norm();
+            const double tgt_pos_err = (target_fk_pos - target_waypoint_pos).norm();
+            const double cur_ori_err =
+                quaternionAngularErrorDeg(current_eef_ori, target_waypoint_ori);
+            const double tgt_ori_err =
+                quaternionAngularErrorDeg(target_fk_ori, target_waypoint_ori);
+
+            RCLCPP_INFO_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "EEF debug: current=[%.4f %.4f %.4f] target_wp=[%.4f %.4f %.4f] target_fk=[%.4f %.4f %.4f] pos_err(cur=%.4f tgtfk=%.4f) ori_err_deg(cur=%.3f tgtfk=%.3f)",
+                current_eef_pos.x(), current_eef_pos.y(), current_eef_pos.z(),
+                target_waypoint_pos.x(), target_waypoint_pos.y(),
+                target_waypoint_pos.z(), target_fk_pos.x(), target_fk_pos.y(),
+                target_fk_pos.z(), cur_pos_err, tgt_pos_err, cur_ori_err,
+                tgt_ori_err);
+          }
+        }
+      }
+    } else if (!trial_mode_ && !(start_node.status.is_colliding || start_node.status.is_danger)) {
       publishTrajectoryPathLocked({});
     }
 
     sensor_msgs::msg::JointState out;
     out.header.stamp = now();
-    out.name = joint_names_;
-    out.position.resize(static_cast<std::size_t>(target_q.size()));
-    for (int i = 0; i < target_q.size(); ++i) {
-      out.position[static_cast<std::size_t>(i)] = static_cast<double>(target_q[i]);
+    out.name = controlled_joint_names_;
+    out.position.resize(controlled_joint_names_.size(), 0.0);
+    out.velocity.resize(controlled_joint_names_.size(), 0.0);
+    out.effort.resize(controlled_joint_names_.size(), 0.0);
+    const int target_dim = static_cast<int>(target_q.size());
+    const int joint_dim = static_cast<int>(controlled_joint_names_.size());
+    const int copy_dim = std::min(target_dim, joint_dim);
+    if (target_dim != joint_dim) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "target_joint_states dimension mismatch: target_dim=%d joint_dim=%d. Clipping to %d.",
+          target_dim, joint_dim, copy_dim);
     }
+    for (int i = 0; i < copy_dim; ++i) {
+      out.position[static_cast<std::size_t>(i)] =
+          static_cast<double>(target_q[i]);
+    }
+    out.velocity.resize(controlled_joint_names_.size(), 0.0);
+    out.effort.resize(controlled_joint_names_.size(), 0.0);
     target_pub_->publish(out);
     last_target_q_ = target_q;
   }
 
   std::shared_ptr<::kinematics::KinematicChain> chain_;
-  std::vector<std::string> joint_names_;
-  std::unordered_map<std::string, std::size_t> joint_index_by_name_;
+  std::vector<std::string> chain_joint_names_;
+  std::vector<std::string> controlled_joint_names_;
   std::shared_ptr<GNGType> gng_;
   PlannerType planner_;
 
@@ -479,8 +712,13 @@ private:
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
   bool trial_safe_only_ = true;
-  int current_goal_id_ = -1;
-  double last_goal_update_sec_ = 0.0;
+  bool trajectory_update_requested_ = true;
+  bool active_trajectory_valid_ = false;
+  std::vector<int> active_node_path_;
+  std::size_t active_waypoint_index_ = 0;
+  int active_goal_id_ = -1;
+  double waypoint_tolerance_ = 0.05;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
   std::mt19937 rng_;
 
   int pickRandomGoalLocked(int start_id) {
@@ -519,6 +757,33 @@ private:
            gng_->nodeAt(goal_id).id != -1 &&
            gng_->nodeAt(goal_id).status.active &&
            gng_->nodeAt(goal_id).status.valid;
+  }
+
+  bool isWaypointReachedLocked(const Eigen::VectorXf & current_q, int waypoint_node_id) const
+  {
+    if (!gng_ || waypoint_node_id < 0 ||
+        waypoint_node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+      return false;
+    }
+    const auto & waypoint = gng_->nodeAt(waypoint_node_id);
+    if (waypoint.id == -1) {
+      return false;
+    }
+    const int dim = std::min(static_cast<int>(waypoint.weight_angle.size()),
+                             static_cast<int>(current_q.size()));
+    if (dim <= 0) {
+      return false;
+    }
+    const float d = (waypoint.weight_angle.head(dim) - current_q.head(dim)).norm();
+    return d <= static_cast<float>(waypoint_tolerance_);
+  }
+
+  void clearActiveTrajectoryLocked()
+  {
+    active_trajectory_valid_ = false;
+    active_node_path_.clear();
+    active_waypoint_index_ = 0;
+    active_goal_id_ = -1;
   }
 
   void publishTrajectoryPathLocked(const std::vector<int> &node_path) {

@@ -8,7 +8,7 @@ include_directories(
 )
 
 # Standard ROS 2 Dependencies
-set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json fcl)
+set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json fcl)
 # System libraries
 set(EXTRA_LIBS fcl ccd octomap octomath m OpenMP::OpenMP_CXX)
 
@@ -91,6 +91,8 @@ add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
 add_executable(topological_map_avoidance_node nodes/planning/topological_map_avoidance_node.cpp)
+add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
+add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_state_driver_node.cpp)
 
 # Offline tools
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
@@ -99,7 +101,7 @@ add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
 add_subdirectory(offline_tools/tools)
 
 # Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node self_recognition_voxel_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node offline_urdf_trainer)
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node self_recognition_voxel_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node target_joint_state_executor_node virtual_joint_state_driver_node offline_urdf_trainer)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})

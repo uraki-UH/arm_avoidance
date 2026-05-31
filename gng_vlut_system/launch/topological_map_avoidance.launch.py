@@ -7,6 +7,25 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
+def safe_float(value, default):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def safe_int(value, default):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
 
@@ -33,11 +52,11 @@ def launch_setup(context, *args, **kwargs):
     if trial_mode:
         node_params["trial_mode"] = trial_mode.lower() in ("1", "true", "yes", "on")
     if trial_goal_interval_sec:
-        node_params["trial_goal_interval_sec"] = float(trial_goal_interval_sec)
+        node_params["trial_goal_interval_sec"] = safe_float(trial_goal_interval_sec, 4.0)
     if trial_safe_only:
         node_params["trial_safe_only"] = trial_safe_only.lower() in ("1", "true", "yes", "on")
     if trial_seed:
-        node_params["trial_seed"] = int(trial_seed)
+        node_params["trial_seed"] = safe_int(trial_seed, 0)
 
     final_params_list = []
     if params_file and os.path.exists(params_file):

@@ -81,3 +81,13 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
   \gng_profile_names:=left_arm 
 
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
+
+
+ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py   input_topic:=/self_recognition/left_arm_voxel_mask   occupied_voxels_topic:=/occupied_voxels   danger_voxels_topic:=/ToPoDualArm/danger_voxels   danger_inflation:=0.02 \ output_voxel_size:=0.02
+
+
+
+ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true
+
+
+ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=50.0

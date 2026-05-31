@@ -79,7 +79,10 @@ def launch_setup(context, *args, **kwargs):
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
                 namespace=robot_name,
-                parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}]
+                parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}],
+                remappings=[
+                    ("joint_states", f"/{robot_name}/joint_states"),
+                ],
             )
         )
 

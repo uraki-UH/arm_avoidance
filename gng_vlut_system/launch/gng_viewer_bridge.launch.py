@@ -2,7 +2,8 @@ import os
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -50,6 +51,25 @@ def pick_robot_description(robot_name: str, fallback_pkg_share: str) -> str:
     return candidates[-1]
 
 
+
+
+def safe_float(value, default):
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def safe_int(value, default):
+    try:
+        if value is None or value == "":
+            return default
+        return int(value)
+    except Exception:
+        return default
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     # robot_name は後続のロジックで決定
@@ -64,9 +84,11 @@ def launch_setup(context, *args, **kwargs):
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
     gng_source_frame_id = LaunchConfiguration("gng_source_frame_id").perform(context)
     publish_hz_str = LaunchConfiguration("publish_hz").perform(context)
-    publish_hz = float(publish_hz_str) if publish_hz_str else 30.0
+    publish_hz = safe_float(publish_hz_str, 30.0)
     topic_name = LaunchConfiguration("topic_name").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
+    enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
+    robot_description_file = LaunchConfiguration("robot_description_file").perform(context)
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
@@ -138,6 +160,11 @@ def launch_setup(context, *args, **kwargs):
         data_dir = yaml_data_dir
     if not exp_id or exp_id == "topoarm":
         exp_id = yaml_exp_id
+
+    # YAML に古い絶対パスが入っていても、この workspace で実在しないなら
+    # package share 配下の相対ディレクトリとして扱い直す。
+    if data_dir and os.path.isabs(data_dir) and not os.path.exists(data_dir):
+        data_dir = os.path.basename(data_dir) or data_dir
     
     # Auto-detect robot description package
     robot_desc_default = pick_robot_description(robot_name, pkg_share)
@@ -165,7 +192,10 @@ def launch_setup(context, *args, **kwargs):
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
             if os.path.isabs(path):
-                return path
+                if os.path.exists(path):
+                    return path
+                # 既存の絶対パスを優先しつつ、存在しない場合は basename を相対候補として扱う。
+                path = os.path.basename(path)
             if path.startswith("gng_results/") or "/" in path:
                 return os.path.join(pkg_share, path)
         filename = path or default_filename
@@ -194,6 +224,7 @@ def launch_setup(context, *args, **kwargs):
         common_params["resource_root_dir"] = resource_root
     if mesh_root:
         common_params["mesh_root_dir"] = mesh_root
+    common_params["joint_state_topic"] = f"/{robot_name}/joint_states"
 
     # 内部ストリーム用のトピック名
     stream_topic = "/viewer/internal/stream/robot"
@@ -218,6 +249,26 @@ def launch_setup(context, *args, **kwargs):
                 p["stream_topic"] = stream_topic
 
     return [
+        # 0. ロボット本体の召喚 (TF / robot_state_publisher / optional joint_state_publisher)
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
+            launch_arguments={
+                "robot_name": robot_name,
+                "enable_joint_state_publisher": enable_joint_state_publisher,
+                "robot_description_file": robot_description_file,
+            }.items()
+        ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "virtual_joint_state_driver.launch.py")),
+            launch_arguments={
+                "robot_name": robot_name,
+                "target_topic": "target_joint_states",
+                "state_topic": f"/{robot_name}/joint_states",
+                "output_topic": f"/{robot_name}/joint_states",
+            }.items()
+        ),
+
         # 1. GNGブリッジ (Topofuzzy)
         Node(
             package="gng_vlut_system",
@@ -233,7 +284,7 @@ def launch_setup(context, *args, **kwargs):
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
-                    "edge_mode": int(edge_mode) if edge_mode else 0,
+                    "edge_mode": safe_int(edge_mode, 0),
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
                     "danger_voxels_topic": "danger_voxels",
@@ -267,8 +318,9 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
-        DeclareLaunchArgument("robot_base_frame", default_value=""),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("robot_base_frame", default_value=""),
         DeclareLaunchArgument("arm_leaf_link_names", default_value=""),
         DeclareLaunchArgument("gng_frame_id", default_value=""),
         DeclareLaunchArgument("gng_source_frame_id", default_value=""),
