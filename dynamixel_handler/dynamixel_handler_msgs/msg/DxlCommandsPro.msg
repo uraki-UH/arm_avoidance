@@ -1,0 +1,9 @@
+DynamixelControlProCurrent current_control
+DynamixelControlProVelocity velocity_control
+DynamixelControlProPosition position_control
+DynamixelControlProExtendedPosition extended_position_control
+DynamixelStatus status
+DynamixelGain gain
+DynamixelLimit limit
+DynamixelExtra extra
+

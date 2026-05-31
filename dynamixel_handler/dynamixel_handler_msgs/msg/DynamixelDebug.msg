@@ -1,0 +1,4 @@
+DynamixelStatus status
+DynamixelDebugElement current_ma
+DynamixelDebugElement velocity_deg_s
+DynamixelDebugElement position_deg
