@@ -83,9 +83,8 @@ class DummyJointPublisher(Node):
     def __init__(self, preset: RobotPreset, rate_hz: float):
         super().__init__("dummy_joint_publisher", namespace=preset.namespace)
         self._preset = preset
-        # launch を変えずに済むよう、global と namespace 配下の両方に流す。
-        self._publisher_global = self.create_publisher(JointState, "/joint_states", 10)
-        self._publisher_namespaced = self.create_publisher(JointState, "joint_states", 10)
+        # robot namespace 配下だけに publish する。
+        self._publisher = self.create_publisher(JointState, "joint_states", 10)
         self._timer = self.create_timer(max(0.01, 1.0 / rate_hz), self._timer_callback)
         self._t = 0.0
 
@@ -106,8 +105,7 @@ class DummyJointPublisher(Node):
             )
             return
 
-        self._publisher_global.publish(msg)
-        self._publisher_namespaced.publish(msg)
+        self._publisher.publish(msg)
         self._t += 0.1
 
 
