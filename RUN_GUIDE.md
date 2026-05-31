@@ -41,7 +41,7 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py \
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
-  input_topic:=/self_recognition/right_arm_voxel \
+  input_topic:=/self_recognition/left_arm_voxel_mask \
   occupied_voxels_topic:=/occupied_voxels \
   danger_voxels_topic:=/danger_voxels \
   danger_inflation:=0.05
