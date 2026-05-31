@@ -10,7 +10,7 @@ def generate_launch_description():
     return LaunchDescription([
         # --- Arguments ---
         DeclareLaunchArgument("robot_name", default_value="topoarm"),
-        DeclareLaunchArgument("mode", default_value="generic", description="generic or topoarm_udp"),
+        DeclareLaunchArgument("mode", default_value="generic"),
         DeclareLaunchArgument("joint_state_topic", default_value="joint_states"),
         DeclareLaunchArgument("base_frame", default_value="base_link"),
 

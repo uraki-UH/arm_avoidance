@@ -152,20 +152,20 @@ def generate_launch_description():
     
     return LaunchDescription([
         # --- 基本設定 ---
-        DeclareLaunchArgument("robot_name", default_value="topoarm", description="ロボット名（URDF等の検索に使用）"),
-        DeclareLaunchArgument("id", default_value="", description="VLUTデータセットのID"),
-        DeclareLaunchArgument("experiment_id", default_value="", description="(deprecated) VLUTデータセットのID"),
-        DeclareLaunchArgument("dir", default_value="gng_results", description="GNG/VLUT データの置き場所"),
-        DeclareLaunchArgument("data_directory", default_value="", description="(deprecated) GNG/VLUT データの置き場所"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("id", default_value=""),
+        DeclareLaunchArgument("experiment_id", default_value=""),
+        DeclareLaunchArgument("dir", default_value="gng_results"),
+        DeclareLaunchArgument("data_directory", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
-        DeclareLaunchArgument("base_frame", default_value="base_link", description="ロボットの基準座標系"),
-        DeclareLaunchArgument("tag", default_value="dynamic", description="GNG layer tag"),
-        DeclareLaunchArgument("mode", default_value="dynamic", description="GNG layer mode"),
+        DeclareLaunchArgument("base_frame", default_value="base_link"),
+        DeclareLaunchArgument("tag", default_value="dynamic"),
+        DeclareLaunchArgument("mode", default_value="dynamic"),
         
         # --- 安全設定 ---
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
-        DeclareLaunchArgument("safety_margin", default_value="0.05", description="安全マージン [m]"),
+        DeclareLaunchArgument("safety_margin", default_value="0.05"),
         
         # --- センサーキャリブレーション（実測値をここに入力） ---
         DeclareLaunchArgument("sensor_x", default_value="0.5"),
@@ -174,6 +174,6 @@ def generate_launch_description():
         DeclareLaunchArgument("sensor_roll", default_value="0.0"),
         DeclareLaunchArgument("sensor_pitch", default_value="0.0"),
         DeclareLaunchArgument("sensor_yaw", default_value="0.0"),
-        DeclareLaunchArgument("sensor_frame_id", default_value="camera_link", description="バッグファイル等のセンサー座標系名"),
+        DeclareLaunchArgument("sensor_frame_id", default_value="camera_link"),
         OpaqueFunction(function=launch_setup)
     ])

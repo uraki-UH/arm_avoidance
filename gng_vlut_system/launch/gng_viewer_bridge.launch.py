@@ -261,19 +261,19 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm_dual", description="ロボットの名前"),
-        DeclareLaunchArgument("dir", default_value="gng_results", description="GNGデータのディレクトリ"),
-        DeclareLaunchArgument("id", default_value="topoarm", description="実験ID"),
-        DeclareLaunchArgument("gng_model_path", default_value="", description="GNGモデルバイナリへのパス"),
-        DeclareLaunchArgument("vlut_path", default_value="", description="VLUTバイナリへのパス"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml"), description="設定YAMLファイル"),
-        DeclareLaunchArgument("robot_base_frame", default_value="", description="ロボットのベース座標系"),
-        DeclareLaunchArgument("robot_description_file", default_value="", description="URDF/Xacroファイルへのパス"),
-        DeclareLaunchArgument("arm_leaf_link_names", default_value="", description="手先リンク名のリスト（カンマ区切り）"),
-        DeclareLaunchArgument("gng_frame_id", default_value="", description="グラフを表示する座標系"),
-        DeclareLaunchArgument("gng_source_frame_id", default_value="", description="グラフデータの元の座標系"),
-        DeclareLaunchArgument("publish_hz", default_value="", description="配信周波数"),
-        DeclareLaunchArgument("topic_name", default_value="topological_map_static", description="配信トピック名"),
-        DeclareLaunchArgument("edge_mode", default_value="", description="エッジモード (0: angle, 1: coord, 空: auto)"),
+        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("dir", default_value="gng_results"),
+        DeclareLaunchArgument("id", default_value="topoarm"),
+        DeclareLaunchArgument("gng_model_path", default_value=""),
+        DeclareLaunchArgument("vlut_path", default_value=""),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("robot_base_frame", default_value=""),
+        DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("arm_leaf_link_names", default_value=""),
+        DeclareLaunchArgument("gng_frame_id", default_value=""),
+        DeclareLaunchArgument("gng_source_frame_id", default_value=""),
+        DeclareLaunchArgument("publish_hz", default_value=""),
+        DeclareLaunchArgument("topic_name", default_value="topological_map_static"),
+        DeclareLaunchArgument("edge_mode", default_value=""),
         OpaqueFunction(function=launch_setup)
     ])

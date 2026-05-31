@@ -8,7 +8,6 @@ def generate_launch_description():
     udp_port = DeclareLaunchArgument(
         "udp_port",
         default_value="12345",
-        description="UDP port that feeds the topoarm joint state player",
     )
 
     # frame_id will be passed from parent launch, so it needs to be declared here

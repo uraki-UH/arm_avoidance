@@ -13,7 +13,6 @@ def generate_launch_description():
     params_file_arg = DeclareLaunchArgument(
         "params_file",
         default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
-        description="Path to the ROS 2 parameters file for the GNG nodes.",
     )
 
     node = Node(

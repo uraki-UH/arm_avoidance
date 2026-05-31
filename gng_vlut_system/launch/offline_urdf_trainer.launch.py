@@ -87,77 +87,62 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "params_file",
             default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml"),
-            description="設定YAMLファイルへのパス",
         ),
         DeclareLaunchArgument(
             "robot_urdf_path",
             default_value="",
-            description="ロボットのURDFパスを上書き",
         ),
         DeclareLaunchArgument(
             "experiment_id",
             default_value="",
-            description="実験IDを上書き",
         ),
         DeclareLaunchArgument(
             "gng_data_directory",
             default_value="",
-            description="GNG結果の保存先ディレクトリを上書き",
         ),
         DeclareLaunchArgument(
             "vlut_only",
             default_value="false",
-            description="'true'にするとGNG学習をスキップし、VLUT生成のみ行う",
         ),
         DeclareLaunchArgument(
             "use_voxel_collision",
             default_value="false",
-            description="'true'にするとボクセルベースの衝突判定を使用",
         ),
         DeclareLaunchArgument(
             "skip_collision_checks",
             default_value="true",
-            description="'true'にすると衝突判定とstrictFilterを丸ごと無効化します",
         ),
         DeclareLaunchArgument(
             "voxel_padding",
             default_value="0.0",
-            description="ボクセル衝突判定時のパディング量 (学習時は0.0推奨)",
         ),
         DeclareLaunchArgument(
             "initial_collision_only",
             default_value="false",
-            description="trueにすると初期姿勢の承認用YAMLだけ生成して終了",
         ),
         DeclareLaunchArgument(
             "validate_voxel_link_masks",
             default_value="false",
-            description="trueにすると初期姿勢のlink別voxel mask検証レポートを出す",
         ),
         DeclareLaunchArgument(
             "validation_focus_links",
             default_value="",
-            description="検証レポートを出すリンク名のカンマ区切り。空なら全件",
         ),
         DeclareLaunchArgument(
             "validation_max_print_voxels",
             default_value="8",
-            description="各リンクで詳細表示する voxel 数の上限",
         ),
         DeclareLaunchArgument(
             "validation_dump_path",
             default_value="",
-            description="検証レポートを書き出すファイルパス",
         ),
         DeclareLaunchArgument(
             "gng_profile_names",
             default_value="",
-            description="gng_profiles から使う profile 名のカンマ区切り (例: left_arm,right_arm)",
         ),
         DeclareLaunchArgument(
             "use_task_density_bias",
             default_value="false",
-            description="trueにすると task-space density bias を使ってGNG更新量を調整",
         ),
         OpaqueFunction(function=launch_setup)
     ])
