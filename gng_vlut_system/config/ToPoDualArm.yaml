@@ -34,8 +34,10 @@
         right_arm:
           root: "base_link"
           eef: "right_end_effector_link"
-          voxel_link_names: "right_link2,right_link3,right_link4,right_link5,right_link6,right_link7,right_link8,right_gripper_left_link,right_gripper_right_link,right_end_effector_link"
-          exclude:
+          voxel_exclude:
+            - "base_link"
+            - "link1"
+          dof_exclude:
             - "right_gripper_left_joint"
             - "right_gripper_right_joint"
           dof: 7
@@ -43,8 +45,10 @@
         left_arm:
           root: "base_link"
           eef: "left_end_effector_link"
-          voxel_link_names: "left_link2,left_link3,left_link4,left_link5,left_link6,left_link7,left_link8,left_gripper_left_link,left_gripper_right_link,left_end_effector_link"
-          exclude:
+          voxel_exclude:
+            - "base_link"
+            - "link1"
+          dof_exclude:
             - "left_gripper_left_joint"
             - "left_gripper_right_joint"
           dof: 7
@@ -64,7 +68,7 @@
       voxel_ball:
         voxel_size: 0.0025
         voxel_padding: 0.0
-        max_spheres: 16
+        max_spheres: 8
         min_points_per_sphere: 5
         min_gain_ratio: 0.15
         refine_iterations: 2
@@ -75,8 +79,6 @@
         - "base_footprint"
       #(隣接リンク同士は自動で衝突判定をしないように設定)
       self_collision_exclusion_pairs:
-        - "left_link5|left_link7"
-        - "right_link5|right_link7"
         - "left_gripper_left_link|left_gripper_right_link"
         - "right_gripper_left_link|right_gripper_right_link"
     
@@ -114,4 +116,4 @@
       input_topic: "/camera/transformed_points"
       output_topic: "/camera/self_filtered_points"
       self_output_topic: "/camera/self_points"
-      mask_topic: "/self_recognition/voxel_mask"
+      mask_topic: "self_voxel"
