@@ -42,7 +42,7 @@ def make_topo_dual_arm_preset() -> RobotPreset:
         right = list(left)
 
         # gripper_left_joint が主関節、gripper_right_joint は mimic だが
-        # JointState には両方同じ値を入れておくと分かりやすい。
+        # JointState は両方同じ値
         left_gripper = [g, g]
         right_gripper = [g, g]
 
