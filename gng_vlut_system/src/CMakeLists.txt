@@ -3,6 +3,7 @@ include_directories(
     core
     nodes
     offline_tools
+    legacy
     core/safety_engine # Base for internal includes
 )
 
@@ -89,6 +90,7 @@ add_executable(robot_description_player_node nodes/robot_description_player.cpp)
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
+add_executable(topological_map_avoidance_node nodes/planning/topological_map_avoidance_node.cpp)
 
 # Offline tools
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
@@ -97,7 +99,7 @@ add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
 add_subdirectory(offline_tools/tools)
 
 # Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node self_recognition_voxel_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node offline_urdf_trainer)
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node self_recognition_voxel_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node offline_urdf_trainer)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})
