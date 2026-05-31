@@ -85,6 +85,9 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py   input_topic:=/self_recognition/left_arm_voxel_mask   occupied_voxels_topic:=/occupied_voxels   danger_voxels_topic:=/ToPoDualArm/danger_voxels   danger_inflation:=0.02 \ output_voxel_size:=0.02
 
+ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+
 
 
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true
