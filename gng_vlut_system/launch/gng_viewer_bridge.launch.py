@@ -66,6 +66,7 @@ def launch_setup(context, *args, **kwargs):
     publish_hz_str = LaunchConfiguration("publish_hz").perform(context)
     publish_hz = float(publish_hz_str) if publish_hz_str else 30.0
     topic_name = LaunchConfiguration("topic_name").perform(context)
+    edge_mode = LaunchConfiguration("edge_mode").perform(context)
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
@@ -232,6 +233,7 @@ def launch_setup(context, *args, **kwargs):
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
+                    "edge_mode": int(edge_mode) if edge_mode else 0,
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
                     "danger_voxels_topic": "danger_voxels",
@@ -272,5 +274,6 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_source_frame_id", default_value="", description="グラフデータの元の座標系"),
         DeclareLaunchArgument("publish_hz", default_value="", description="配信周波数"),
         DeclareLaunchArgument("topic_name", default_value="topological_map_static", description="配信トピック名"),
+        DeclareLaunchArgument("edge_mode", default_value="", description="エッジモード (0: angle, 1: coord, 空: auto)"),
         OpaqueFunction(function=launch_setup)
     ])
