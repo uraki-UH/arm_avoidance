@@ -3,6 +3,7 @@
 #include <rclcpp_components/register_node_macro.hpp>
 #include <cctype>
 #include <algorithm>
+#include <map>
 #include <chrono>
 #include <functional>
 #include <sstream>
@@ -49,6 +50,174 @@ static std::string findParentLink(
         }
     }
     return "";
+}
+
+static std::vector<std::string> collectTerminalLeafLinks(
+    const simulation::RobotModel &model) {
+    std::unordered_set<std::string> parent_links;
+    for (const auto &[joint_name, joint_props] : model.getJoints()) {
+        (void)joint_name;
+        parent_links.insert(joint_props.parent_link);
+    }
+
+    std::vector<std::string> leaves;
+    for (const auto &[link_name, link_props] : model.getLinks()) {
+        (void)link_props;
+        if (link_name == model.getRootLinkName()) {
+            continue;
+        }
+        if (parent_links.count(link_name) == 0) {
+            leaves.push_back(link_name);
+        }
+    }
+
+    std::sort(leaves.begin(), leaves.end());
+    leaves.erase(std::unique(leaves.begin(), leaves.end()), leaves.end());
+    return leaves;
+}
+
+static std::vector<std::string> collectPathJointNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::string &leaf_link_name) {
+    std::map<std::string, const simulation::JointProperties *> child_to_joint;
+    for (const auto &[joint_name, joint_props] : model.getJoints()) {
+        (void)joint_name;
+        child_to_joint[joint_props.child_link] = &joint_props;
+    }
+
+    const std::string stop_root =
+        root_link_name.empty() ? model.getRootLinkName() : root_link_name;
+    std::vector<std::string> joint_names_reversed;
+    std::string current_link = leaf_link_name;
+    std::unordered_set<std::string> visited_links;
+
+    while (!current_link.empty() && current_link != stop_root) {
+        if (!visited_links.insert(current_link).second) {
+            break;
+        }
+        const auto it = child_to_joint.find(current_link);
+        if (it == child_to_joint.end()) {
+            break;
+        }
+        joint_names_reversed.push_back(it->second->name);
+        current_link = it->second->parent_link;
+    }
+
+    std::reverse(joint_names_reversed.begin(), joint_names_reversed.end());
+    return joint_names_reversed;
+}
+
+static std::vector<std::string> collectPathLinkNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::string &leaf_link_name) {
+    std::vector<std::string> link_names;
+
+    if (!root_link_name.empty()) {
+        const auto &links = model.getLinks();
+        if (links.find(root_link_name) != links.end()) {
+            link_names.push_back(root_link_name);
+        }
+    }
+
+    const auto joint_names =
+        collectPathJointNames(model, root_link_name, leaf_link_name);
+    link_names.reserve(joint_names.size());
+    for (const auto &joint_name : joint_names) {
+        const auto &joints = model.getJoints();
+        const auto it = joints.find(joint_name);
+        if (it == joints.end()) {
+            continue;
+        }
+        if (it->second.child_link.empty()) {
+            continue;
+        }
+        if (std::find(link_names.begin(), link_names.end(), it->second.child_link) ==
+            link_names.end()) {
+            link_names.push_back(it->second.child_link);
+        }
+    }
+    return link_names;
+}
+
+static std::vector<std::string> collectDescendantLinkNames(
+    const simulation::RobotModel &model, const std::string &start_link_name) {
+    std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+    for (const auto &[joint_name, joint_props] : model.getJoints()) {
+        (void)joint_name;
+        children_by_parent[joint_props.parent_link].push_back(joint_props.child_link);
+    }
+
+    std::vector<std::string> descendants;
+    std::unordered_set<std::string> visited;
+    std::function<void(const std::string &)> dfs = [&](const std::string &link_name) {
+        if (!visited.insert(link_name).second) {
+            return;
+        }
+        const auto it = children_by_parent.find(link_name);
+        if (it == children_by_parent.end()) {
+            return;
+        }
+        for (const auto &child : it->second) {
+            if (std::find(descendants.begin(), descendants.end(), child) ==
+                descendants.end()) {
+                descendants.push_back(child);
+            }
+            dfs(child);
+        }
+    };
+
+    dfs(start_link_name);
+    return descendants;
+}
+
+static std::vector<std::string> collectBranchDescendantLinkNames(
+    const simulation::RobotModel &model, const std::string &branch_root_link_name) {
+    std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+    for (const auto &[joint_name, joint_props] : model.getJoints()) {
+        (void)joint_name;
+        children_by_parent[joint_props.parent_link].push_back(joint_props.child_link);
+    }
+
+    const auto child_it = children_by_parent.find(branch_root_link_name);
+    if (child_it == children_by_parent.end() || child_it->second.size() < 2) {
+        return {};
+    }
+
+    std::vector<std::string> branch_links;
+    std::unordered_set<std::string> unique_names;
+    for (const auto &branch_child : child_it->second) {
+        for (const auto &link_name : collectDescendantLinkNames(model, branch_child)) {
+            if (unique_names.insert(link_name).second) {
+                branch_links.push_back(link_name);
+            }
+        }
+        if (unique_names.insert(branch_child).second) {
+            branch_links.push_back(branch_child);
+        }
+    }
+    return branch_links;
+}
+
+static std::vector<std::string> buildPathBasedLinkNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::vector<std::string> &leaf_link_names) {
+    std::vector<std::string> link_names;
+    std::unordered_set<std::string> unique_names;
+    for (const auto &leaf_link_name : leaf_link_names) {
+        for (const auto &link_name :
+             collectPathLinkNames(model, root_link_name, leaf_link_name)) {
+            if (unique_names.insert(link_name).second) {
+                link_names.push_back(link_name);
+            }
+        }
+        for (const auto &link_name :
+             collectBranchDescendantLinkNames(model, leaf_link_name)) {
+            if (unique_names.insert(link_name).second) {
+                link_names.push_back(link_name);
+            }
+        }
+    }
+    return link_names;
 }
 
 } // namespace
@@ -209,61 +378,19 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         return out;
     };
 
-    std::vector<std::string> current_leaf_links = leaf_links;
-
-    for (const auto &entry : model_->getLinks()) {
-        const auto &link_name = entry.first;
-        if (leaf_links.empty()) {
-            bool has_child = false;
-            for (const auto &[j_name, j_props] : model_->getJoints()) {
-                if (j_props.parent_link == link_name) { has_child = true; break; }
-            }
-            if (!has_child && link_name != global_root_link) {
-                current_leaf_links.push_back(link_name);
-            }
-        }
+    const auto chain_leaf_links = collectTerminalLeafLinks(*model_);
+    if (chain_leaf_links.empty()) {
+        throw std::runtime_error("No terminal leaf links were found in the robot model");
     }
 
     std::vector<simulation::ArmConfig> arm_configs;
-    if (!explicit_leaf_link.empty()) {
+    arm_configs.reserve(chain_leaf_links.size());
+    for (const auto &leaf_name : chain_leaf_links) {
         simulation::ArmConfig cfg;
-        auto expanded = expandTerminalLeafLinks({explicit_leaf_link});
-        if (expanded.empty()) {
-            expanded.push_back(explicit_leaf_link);
-        }
-        for (const auto &leaf_name : expanded) {
-            cfg.leaf_link = leaf_name;
-            cfg.prefix = "";
-            cfg.root_link = voxel_chain_root_link;
-            arm_configs.push_back(cfg);
-        }
-    } else if (!leaf_links.empty()) {
-        current_leaf_links = leaf_links;
-        auto expanded = expandTerminalLeafLinks(leaf_links);
-        current_leaf_links.insert(current_leaf_links.end(), expanded.begin(), expanded.end());
-        std::sort(current_leaf_links.begin(), current_leaf_links.end());
-        current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
-    } else {
-        auto arm_leaf_roots =
-            splitCommaSeparated(getStringWithFallback(*this,
-                "self_recognition.arm_leaf_link_names", "robot.arm_leaf_link_names"));
-        if (!arm_leaf_roots.empty()) {
-            current_leaf_links = arm_leaf_roots;
-            auto expanded = expandTerminalLeafLinks(arm_leaf_roots);
-            current_leaf_links.insert(current_leaf_links.end(), expanded.begin(), expanded.end());
-            std::sort(current_leaf_links.begin(), current_leaf_links.end());
-            current_leaf_links.erase(std::unique(current_leaf_links.begin(), current_leaf_links.end()), current_leaf_links.end());
-        }
-    }
-
-    if (explicit_leaf_link.empty()) {
-        for (size_t i = 0; i < current_leaf_links.size(); ++i) {
-            simulation::ArmConfig cfg;
-            cfg.leaf_link = current_leaf_links[i];
-            cfg.prefix = "";
-            cfg.root_link = (i < root_links.size() && !root_links[i].empty()) ? root_links[i] : voxel_chain_root_link;
-            arm_configs.push_back(cfg);
-        }
+        cfg.leaf_link = leaf_name;
+        cfg.prefix = "";
+        cfg.root_link = model_->getRootLinkName();
+        arm_configs.push_back(cfg);
     }
 
     auto multi_chain = simulation::createMultiArmKinematicChain(*model_, arm_configs, Eigen::Vector3d::Zero());
@@ -300,13 +427,39 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     if (!explicit_voxel_links.empty()) {
         voxel_links = splitCommaSeparated(explicit_voxel_links);
     } else {
+        const auto all_chain_links = [&]() {
+            std::vector<std::string> links;
+            links.reserve(static_cast<std::size_t>(chain_->getNumJoints()));
+            for (int i = 0; i < chain_->getNumJoints(); ++i) {
+                links.push_back(chain_->getLinkName(i));
+            }
+            return links;
+        }();
+
+        if (!global_root_link.empty() || !explicit_leaf_link.empty()) {
+            if (!global_root_link.empty() && !explicit_leaf_link.empty()) {
+                voxel_links = buildPathBasedLinkNames(
+                    *model_, global_root_link, {explicit_leaf_link});
+            } else if (!global_root_link.empty()) {
+                voxel_links = buildPathBasedLinkNames(
+                    *model_, global_root_link, chain_leaf_links);
+            } else {
+                voxel_links = buildPathBasedLinkNames(
+                    *model_, model_->getRootLinkName(), {explicit_leaf_link});
+            }
+        } else {
+            voxel_links = all_chain_links;
+        }
+    }
+
+    if (voxel_links.empty()) {
         voxel_links.reserve(static_cast<std::size_t>(chain_->getNumJoints()));
         for (int i = 0; i < chain_->getNumJoints(); ++i) {
             voxel_links.push_back(chain_->getLinkName(i));
         }
     }
 
-    // ボクセル化の実行（チェインに含まれるリンクのみ対象。root_link 自体は含めない）
+    // ボクセル化の実行（チェインは全体、voxel_links だけを範囲指定）
     auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, voxel_links, *grid, {}, inflation);
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
@@ -327,7 +480,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         mask_topic_ = getStringWithFallback(*this, "self_recognition.self_output_topic", "self_output_topic");
     }
     if (mask_topic_.empty()) {
-        mask_topic_ = "/self_recognition/voxel_mask";
+        mask_topic_ = "/self_voxel";
     }
     mask_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
         mask_topic_, rclcpp::QoS(1).reliable().transient_local());

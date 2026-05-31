@@ -211,8 +211,10 @@ struct GngProfileConfig {
   std::string eef_link_names;
   std::string arm_leaf_link_names;
   std::vector<std::string> voxel_link_names;
+  std::vector<std::string> voxel_exclude_links;
   std::vector<std::string> include_joint_names;
   std::vector<std::string> exclude_joint_names;
+  std::vector<std::string> dof_exclude_joint_names;
   int dof = 0;
 };
 
@@ -263,10 +265,14 @@ static GngProfileConfig loadGngProfileConfig(rclcpp::Node *node,
       "robot.arm_leaf_link_names", "");
   config.voxel_link_names = splitCommaSeparated(getProfileString(
       node, profile_name, "voxel_link_names", "robot.voxel_link_names", ""));
+  config.voxel_exclude_links = getProfileStringArray(
+      node, profile_name, "voxel_exclude", "robot.voxel_exclude_links", {});
   config.include_joint_names = getProfileStringArray(
       node, profile_name, "include", "gng.include_joint_names", {});
   config.exclude_joint_names = getProfileStringArray(
       node, profile_name, "exclude", "gng.exclude_joint_names", {});
+  config.dof_exclude_joint_names = getProfileStringArray(
+      node, profile_name, "dof_exclude", "gng.dof_exclude_joint_names", {});
   config.dof = getProfileInt(node, profile_name, "dof", "gng.dimension", 0);
   if (config.dof <= 0) {
     config.dof =
@@ -373,6 +379,117 @@ static std::vector<std::string> buildPathBasedJointNames(
     }
   }
   return joint_names;
+}
+
+static std::vector<std::string> collectPathLinkNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::string &leaf_link_name) {
+    std::vector<std::string> link_names;
+    if (!root_link_name.empty()) {
+      const auto &links = model.getLinks();
+      if (links.find(root_link_name) != links.end()) {
+        link_names.push_back(root_link_name);
+      }
+    }
+    const auto joint_names = collectPathJointNames(model, root_link_name, leaf_link_name);
+    link_names.reserve(joint_names.size());
+    for (const auto &joint_name : joint_names) {
+      const auto *joint = model.getJoints().count(joint_name) > 0
+                            ? &model.getJoints().at(joint_name)
+                            : nullptr;
+    if (!joint) {
+      continue;
+    }
+    if (joint->child_link.empty()) {
+      continue;
+    }
+    if (std::find(link_names.begin(), link_names.end(), joint->child_link) ==
+        link_names.end()) {
+      link_names.push_back(joint->child_link);
+    }
+  }
+  return link_names;
+}
+
+static std::vector<std::string> collectDescendantLinkNames(
+    const simulation::RobotModel &model, const std::string &start_link_name) {
+  std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+  for (const auto &[joint_name, joint_props] : model.getJoints()) {
+    (void)joint_name;
+    children_by_parent[joint_props.parent_link].push_back(joint_props.child_link);
+  }
+
+  std::vector<std::string> descendants;
+  std::unordered_set<std::string> visited;
+  std::function<void(const std::string &)> dfs = [&](const std::string &link_name) {
+    if (!visited.insert(link_name).second) {
+      return;
+    }
+    const auto it = children_by_parent.find(link_name);
+    if (it == children_by_parent.end()) {
+      return;
+    }
+    for (const auto &child : it->second) {
+      if (std::find(descendants.begin(), descendants.end(), child) ==
+          descendants.end()) {
+        descendants.push_back(child);
+      }
+      dfs(child);
+    }
+  };
+
+  dfs(start_link_name);
+  return descendants;
+}
+
+static std::vector<std::string> collectBranchDescendantLinkNames(
+    const simulation::RobotModel &model, const std::string &branch_root_link_name) {
+  std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+  for (const auto &[joint_name, joint_props] : model.getJoints()) {
+    (void)joint_name;
+    children_by_parent[joint_props.parent_link].push_back(joint_props.child_link);
+  }
+
+  const auto child_it = children_by_parent.find(branch_root_link_name);
+  if (child_it == children_by_parent.end() || child_it->second.size() < 2) {
+    return {};
+  }
+
+  std::vector<std::string> branch_links;
+  std::unordered_set<std::string> unique_names;
+  for (const auto &branch_child : child_it->second) {
+    for (const auto &link_name : collectDescendantLinkNames(model, branch_child)) {
+      if (unique_names.insert(link_name).second) {
+        branch_links.push_back(link_name);
+      }
+    }
+    if (unique_names.insert(branch_child).second) {
+      branch_links.push_back(branch_child);
+    }
+  }
+  return branch_links;
+}
+
+static std::vector<std::string> buildPathBasedLinkNames(
+    const simulation::RobotModel &model, const std::string &root_link_name,
+    const std::vector<std::string> &leaf_link_names) {
+  std::vector<std::string> link_names;
+  std::unordered_set<std::string> unique_names;
+  for (const auto &leaf_link_name : leaf_link_names) {
+    for (const auto &link_name :
+         collectPathLinkNames(model, root_link_name, leaf_link_name)) {
+      if (unique_names.insert(link_name).second) {
+        link_names.push_back(link_name);
+      }
+    }
+    for (const auto &link_name :
+         collectBranchDescendantLinkNames(model, leaf_link_name)) {
+      if (unique_names.insert(link_name).second) {
+        link_names.push_back(link_name);
+      }
+    }
+  }
+  return link_names;
 }
 
 static std::vector<double> packSelectedJointValues(
@@ -1034,10 +1151,14 @@ public:
     eef_link_names_ = this->declare_parameter<std::string>("robot.eef_link_names", "");
     arm_leaf_link_names_ = this->declare_parameter<std::string>("robot.arm_leaf_link_names", "");
     this->declare_parameter<std::string>("robot.voxel_link_names", "");
+    this->declare_parameter<std::vector<std::string>>(
+        "robot.voxel_exclude_links", std::vector<std::string>{});
     gng_include_joint_names_ = this->declare_parameter<std::vector<std::string>>(
         "gng.include_joint_names", std::vector<std::string>{});
     gng_exclude_joint_names_ = this->declare_parameter<std::vector<std::string>>(
         "gng.exclude_joint_names", std::vector<std::string>{});
+    this->declare_parameter<std::vector<std::string>>(
+        "gng.dof_exclude_joint_names", std::vector<std::string>{});
     leaf_link_name_ = this->declare_parameter<std::string>("leaf_link_name",
                                                            "end_effector_link");
     paired_leaf_link_name_ = this->declare_parameter<std::string>(
@@ -1092,8 +1213,10 @@ public:
       declare_parameter<std::string>(profile_prefix + ".eef", "");
       declare_parameter<std::string>(profile_prefix + ".arm_leaf_link_names", "");
       declare_parameter<std::string>(profile_prefix + ".voxel_link_names", "");
+      declare_parameter<std::vector<std::string>>(profile_prefix + ".voxel_exclude", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>(profile_prefix + ".include", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>(profile_prefix + ".exclude", std::vector<std::string>{});
+      declare_parameter<std::vector<std::string>>(profile_prefix + ".dof_exclude", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>(profile_prefix + ".gng_include_joint_names", std::vector<std::string>{});
       declare_parameter<std::vector<std::string>>( profile_prefix + ".gng_exclude_joint_names", std::vector<std::string>{});
       declare_parameter<int>(profile_prefix + ".dof", 0);
@@ -1279,8 +1402,10 @@ public:
 
     std::vector<std::string> combined_leaf_link_names;
     std::vector<std::string> combined_voxel_link_names;
+    std::vector<std::string> combined_voxel_exclude_links;
     std::vector<std::string> combined_include_joint_names;
     std::vector<std::string> combined_exclude_joint_names;
+    std::vector<std::string> combined_dof_exclude_joint_names;
     int declared_dof_sum = 0;
 
     for (const auto &cfg : profile_configs) {
@@ -1288,7 +1413,15 @@ public:
           cfg.eef_link_names, cfg.arm_leaf_link_names, leaf_link_name_,
           paired_leaf_link_name_);
       appendUnique(combined_leaf_link_names, leaf_names);
-      appendUnique(combined_voxel_link_names, cfg.voxel_link_names);
+      if (!cfg.voxel_link_names.empty()) {
+        appendUnique(combined_voxel_link_names, cfg.voxel_link_names);
+      } else {
+        const std::string profile_root =
+            cfg.root_link.empty() ? model->getRootLinkName() : cfg.root_link;
+        appendUnique(combined_voxel_link_names,
+                     buildPathBasedLinkNames(*model, profile_root, leaf_names));
+      }
+      appendUnique(combined_voxel_exclude_links, cfg.voxel_exclude_links);
 
       std::vector<std::string> include_joint_names = cfg.include_joint_names;
       if (include_joint_names.empty() && !cfg.root_link.empty()) {
@@ -1297,6 +1430,8 @@ public:
       }
       appendUnique(combined_include_joint_names, include_joint_names);
       appendUnique(combined_exclude_joint_names, cfg.exclude_joint_names);
+      appendUnique(combined_dof_exclude_joint_names,
+                   cfg.dof_exclude_joint_names);
       if (cfg.dof > 0) {
         declared_dof_sum += cfg.dof;
       }
@@ -1313,8 +1448,13 @@ public:
                 joinCommaSeparated(combined_leaf_link_names).c_str());
     RCLCPP_INFO(this->get_logger(), "[GNG] combined voxel links: %s",
                 joinCommaSeparated(combined_voxel_link_names).c_str());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined voxel exclude links: %s",
+                joinCommaSeparated(combined_voxel_exclude_links).c_str());
     RCLCPP_INFO(this->get_logger(), "[GNG] combined exclude count: %zu",
                 combined_exclude_joint_names.size());
+    RCLCPP_INFO(this->get_logger(), "[GNG] combined dof exclude count: %zu",
+                combined_dof_exclude_joint_names.size());
+    appendUnique(combined_exclude_joint_names, combined_dof_exclude_joint_names);
     RCLCPP_INFO(this->get_logger(), "[GNG] combined declared dof: %d",
                 declared_dof_sum);
 
@@ -1684,14 +1824,12 @@ public:
     };
     std::vector<std::string> voxel_link_names;
     std::map<std::string, int> voxel_link_to_lid;
-    if (!combined_voxel_link_names.empty()) {
-      voxel_link_names = combined_voxel_link_names;
-    } else {
-      for (const auto &pair : base_model_obj.getLinks()) {
-        if (pair.second.collisions.empty()) {
-          continue;
-        }
-        voxel_link_names.push_back(pair.first);
+    std::unordered_set<std::string> voxel_exclude_set(
+        combined_voxel_exclude_links.begin(), combined_voxel_exclude_links.end());
+    voxel_link_names.reserve(combined_voxel_link_names.size());
+    for (const auto &name : combined_voxel_link_names) {
+      if (voxel_exclude_set.count(name) == 0) {
+        voxel_link_names.push_back(name);
       }
     }
     for (const auto &name : voxel_link_names) {
