@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "common/constants.hpp"
 #include "common/voxel_utils.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 
