@@ -20,7 +20,8 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   trial_mode:=true \
   trial_safe_only:=true \
-  right_arm_oscillation_enabled:=true
+  right_arm_oscillation_enabled:=true \
+  trial_return_home:=true
 
 ## docker の起動
 cd uraki_ws && docker compose up -d
@@ -108,6 +109,7 @@ ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:
 
 
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true
+ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true   trial_return_home:=true
 
 
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=50.0

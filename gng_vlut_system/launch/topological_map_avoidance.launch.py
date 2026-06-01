@@ -38,8 +38,10 @@ def launch_setup(context, *args, **kwargs):
     trial_mode = LaunchConfiguration("trial_mode").perform(context)
     trial_goal_interval_sec = LaunchConfiguration("trial_goal_interval_sec").perform(context)
     trial_safe_only = LaunchConfiguration("trial_safe_only").perform(context)
+    trial_return_home = LaunchConfiguration("trial_return_home").perform(context)
     trial_seed = LaunchConfiguration("trial_seed").perform(context)
     avoid_danger = LaunchConfiguration("avoid_danger").perform(context)
+    replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
     control_claim_priority = LaunchConfiguration("control_claim_priority").perform(context)
     control_claim_mode = LaunchConfiguration("control_claim_mode").perform(context)
@@ -67,10 +69,14 @@ def launch_setup(context, *args, **kwargs):
         node_params["trial_goal_interval_sec"] = safe_float(trial_goal_interval_sec, 4.0)
     if trial_safe_only:
         node_params["trial_safe_only"] = trial_safe_only.lower() in ("1", "true", "yes", "on")
+    if trial_return_home:
+        node_params["trial_return_home"] = trial_return_home.lower() in ("1", "true", "yes", "on")
     if trial_seed:
         node_params["trial_seed"] = safe_int(trial_seed, 0)
     if avoid_danger:
         node_params["avoid_danger"] = avoid_danger.lower() in ("1", "true", "yes", "on")
+    if replan_on_path_collision:
+        node_params["replan_on_path_collision"] = replan_on_path_collision.lower() in ("1", "true", "yes", "on")
     if target_topic:
         node_params["target_topic"] = target_topic
     if control_claim_priority:
@@ -117,9 +123,7 @@ def launch_setup(context, *args, **kwargs):
                 }],
             )
         )
-
     return nodes
-
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
@@ -138,8 +142,10 @@ def generate_launch_description():
         DeclareLaunchArgument("trial_mode", default_value="false"),
         DeclareLaunchArgument("trial_goal_interval_sec", default_value="4.0"),
         DeclareLaunchArgument("trial_safe_only", default_value="true"),
+        DeclareLaunchArgument("trial_return_home", default_value="false"),
         DeclareLaunchArgument("trial_seed", default_value="0"),
         DeclareLaunchArgument("avoid_danger", default_value="true"),
+        DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
         DeclareLaunchArgument("target_topic", default_value=""),
         DeclareLaunchArgument("control_claim_priority", default_value="10"),
         DeclareLaunchArgument("control_claim_mode", default_value="1"),
