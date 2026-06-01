@@ -64,6 +64,21 @@ export function GngLayerControls({
         setLocalEdgeColor(settings.edgeColor || (isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor));
     }, [settings.edgeColor, isStatic]);
 
+    const handleNodeColorChange = (nextColor: string) => {
+        setLocalNodeColor(nextColor);
+        onUpdate({ nodeColor: nextColor });
+    };
+
+    const handleEdgeColorChange = (nextColor: string) => {
+        setLocalEdgeColor(nextColor);
+        onUpdate({ edgeColor: nextColor });
+    };
+
+    const handleOpacityChange = (nextOpacity: number) => {
+        setLocalOpacity(nextOpacity);
+        onUpdate({ opacity: nextOpacity });
+    };
+
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
             <LayerItem
@@ -117,9 +132,8 @@ export function GngLayerControls({
                             <input
                                 type="color"
                                 value={localNodeColor}
-                                onChange={(e) => setLocalNodeColor(e.target.value)}
-                                onBlur={() => onUpdate({ nodeColor: localNodeColor })}
-                                onPointerUp={() => onUpdate({ nodeColor: localNodeColor })}
+                                onChange={(e) => handleNodeColorChange(e.target.value)}
+                                onInput={(e) => handleNodeColorChange((e.target as HTMLInputElement).value)}
                                 className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
                                 title={isStatic ? 'Static node color' : 'Dynamic node palette base color'}
                             />
@@ -131,9 +145,8 @@ export function GngLayerControls({
                             <input
                                 type="color"
                                 value={localEdgeColor}
-                                onChange={(e) => setLocalEdgeColor(e.target.value)}
-                                onBlur={() => onUpdate({ edgeColor: localEdgeColor })}
-                                onPointerUp={() => onUpdate({ edgeColor: localEdgeColor })}
+                                onChange={(e) => handleEdgeColorChange(e.target.value)}
+                                onInput={(e) => handleEdgeColorChange((e.target as HTMLInputElement).value)}
                                 className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
                                 title={isStatic ? 'Static edge color' : 'Dynamic edge color'}
                             />
@@ -147,7 +160,7 @@ export function GngLayerControls({
                             min={0}
                             max={1}
                             step={0.01}
-                            onChange={setLocalOpacity}
+                            onChange={handleOpacityChange}
                             onPointerUp={() => onUpdate({ opacity: localOpacity })}
                             formatValue={(v) => `${Math.round(v * 100)}%`}
                         />
