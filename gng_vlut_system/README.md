@@ -88,9 +88,7 @@ GNG/VLUTによる安全監視を有効にして、RVizで確認する場合。
 ```bash
 ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
   enable_safety_monitor:=true \
-  gng_results_config_path:=gng_results/my_robot_v1/config.txt
 ```
-- `gng_results_config_path`: 使用する学習済みモデルの `config.txt` のパスを指定します。
 
 ### 実機/Gazeboとの連携
 

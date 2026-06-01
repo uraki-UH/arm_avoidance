@@ -84,9 +84,9 @@
     
     gng_params:
       lambda: 200
-      max_node_num: 1000
-      num_samples: 100000
-      max_iterations: 100000
+      max_node_num: 10000
+      num_samples: 1000000
+      max_iterations: 1000000
       refine_iterations: 100000
       coord_edge_iterations: 100000
       learn_rate_s1: 0.08

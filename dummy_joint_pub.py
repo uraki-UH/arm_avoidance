@@ -104,7 +104,7 @@ class DummyJointPublisher(Node):
             return
 
         self._publisher.publish(msg)
-        self._t += 0.1
+        self._t += 0.05
 
 
 def parse_args() -> argparse.Namespace:
