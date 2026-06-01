@@ -3,7 +3,7 @@
     ros__parameters:
     # 通信機器の設定
         device_name: /dev/ttyUSB0 # 通信するデバイス名
-        baudrate: 57600 # 通信速度
+        baudrate: 1000000 # 通信速度
         latency_timer: 16 # 通信のインターバル
     # サーボの設定
         init/dummy_servo_list: [-1] # ダミーのサーボを作成するIDのリスト,同じIDのサーボが存在する場合でもダミーが優先される． 255は無視される．
@@ -12,7 +12,7 @@
         init/expected_servo_num: 0
         init/servo_auto_search: {min_id: 0, max_id: 20, retry_times: 0} # サーボのIDを自動で探索するかどうか
         init/hardware_error_auto_clean: true # 初期化時に Hardware error を自動でクリアするかどうか
-        init/torque_auto_enable:        true # 初期化時に Torque を自動でONにするかどうか
+        init/torque_auto_enable:        false # 初期化時に Torque を自動でONにするかどうか
         term/torque_auto_disable:       true # 終了時に Torque を自動でOFFにするかどうか
         term/servo_auto_stop:           true # 終了時に電流・速度制御のサーボを停止するかどうか
     # デフォルト値の設定
