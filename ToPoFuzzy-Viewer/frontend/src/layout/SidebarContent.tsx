@@ -316,15 +316,19 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
                               extra: (tag: string, _s: any, d: any) => (
-                                <div className="mt-2 space-y-2">
-                                    <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--text-secondary)]">
-                                    </div>
-                                    <ColorActionButton
-                                        title="Voxel color"
-                                        swatches={[{ color: _s.color, title: 'Voxel color' }]}
-                                        onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
-                                    />
-                                    <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+                                <div className="relative mt-1">
+                                        <button
+                                            onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
+                                            title="Voxel color"
+                                            className="btn-secondary absolute -right-[2.15rem] -top-[2.1em] inline-flex h-7 w-7 items-center justify-center p-0"
+                                        >
+                                        <span
+                                            className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                                            style={{ backgroundColor: _s.color || '#00ff88' }}
+                                            aria-hidden="true"
+                                        />
+                                    </button>
+                                    <div className="text-[10px] leading-none text-[var(--text-secondary)]">
                                         Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span>
                                     </div>
                                 </div>
