@@ -235,7 +235,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
             </CollapsibleSection>
 
             <CollapsibleSection title="Scene Layers" icon={<Layers size={16} />} defaultOpen={true}>
-                <div className="surface-muted min-h-[24rem] space-y-2 px-3 pt-2.5 pb-5">
+                <div className="surface-muted space-y-2 px-3 pt-2.5 pb-5">
                     <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                         {props.isEditMode && (
                             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
@@ -314,13 +314,13 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 );
                               }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
-                            { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
+                            { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID', hasTf: true,
                               extra: (tag: string, _s: any, d: any) => (
-                                <div className="relative mt-1">
+                                <div className="relative mt-0.5">
                                         <button
                                             onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
                                             title="Voxel color"
-                                            className="btn-secondary absolute -right-[2.15rem] -top-[2.1em] inline-flex h-7 w-7 items-center justify-center p-0"
+                                            className="entity-btn absolute -right-[2.1rem] -top-[2.05em] inline-flex h-7 w-14 flex-none items-center justify-center px-2 py-1"
                                         >
                                         <span
                                             className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
@@ -330,6 +330,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     </button>
                                     <div className="text-[10px] leading-none text-[var(--text-secondary)]">
                                         Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span>
+                                        <span className="mx-1 opacity-50">|</span>
+                                        Voxels: <span className="text-[var(--text-primary)]">{d.data?.length ?? 0}</span>
                                     </div>
                                 </div>
                               )}
