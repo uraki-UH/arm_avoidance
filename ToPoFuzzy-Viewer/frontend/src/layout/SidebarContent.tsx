@@ -185,8 +185,6 @@ const ColorActionButton: React.FC<{
 };
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
-    const selectedLayer = props.pointClouds.find((pc) => pc.id === props.selectedLayerId);
-    const visibleLayerCount = props.pointClouds.filter((pc) => pc.visible !== false).length;
     const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
     const isLayerActionDisabled = props.isEditMode;
 
@@ -237,17 +235,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
             </CollapsibleSection>
 
             <CollapsibleSection title="Scene Layers" icon={<Layers size={16} />} defaultOpen={true}>
-                <div className="surface-muted space-y-2 p-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs text-[var(--text-secondary)]">
-                        <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
-                            Visible: <span className="font-semibold text-[var(--text-primary)]">{visibleLayerCount}</span>
-                        </div>
-                        <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
-                            Selected: <span className="font-semibold text-[var(--text-primary)]">{selectedLayer ? '1' : '0'}</span>
-                        </div>
-                    </div>
-
-                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="surface-muted min-h-[24rem] space-y-2 px-3 pt-2.5 pb-5">
+                    <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
                         {props.isEditMode && (
                             <div className="rounded-md border border-amber-400/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
                                 Edited Mode active: layer switching and layer actions are locked.
