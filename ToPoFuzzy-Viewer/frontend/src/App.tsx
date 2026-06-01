@@ -32,9 +32,25 @@ function useClippingPlanes() {
     const [planes, setPlanes] = useState<ClippingPlane[]>([]);
 
     const addPlane = (axis: ClippingAxis) => {
+        const existingPlane = planes.find((plane) => plane.axis === axis);
+        if (existingPlane) {
+            setPlanes(prev => prev.map((plane) => (
+                plane.axis === axis
+                    ? { ...plane, enabled: true }
+                    : plane
+            )));
+            return existingPlane.id;
+        }
+
         const id = `plane-${Date.now()}`;
         const newPlane: ClippingPlane = {
-            id, axis, position: 0, inverted: false, enabled: true,
+            id,
+            axis,
+            position: 0,
+            min: -100,
+            max: 100,
+            inverted: false,
+            enabled: true,
         };
         setPlanes(prev => [...prev, newPlane]);
         return id;
@@ -53,14 +69,26 @@ function useClippingPlanes() {
     const getThreePlanes = (): THREE.Plane[] => {
         return planes
             .filter(p => p.enabled && p.axis !== 'none')
-            .map(p => {
+            .flatMap((p) => {
                 const normal = new THREE.Vector3(
                     p.axis === 'x' ? 1 : 0,
                     p.axis === 'y' ? 1 : 0,
                     p.axis === 'z' ? 1 : 0
                 );
-                if (p.inverted) normal.multiplyScalar(-1);
-                return new THREE.Plane(normal, -p.position);
+                const min = Math.min(
+                    p.min ?? (p.position - 0.01),
+                    p.max ?? (p.position + 0.01)
+                );
+                const max = Math.max(
+                    p.min ?? (p.position - 0.01),
+                    p.max ?? (p.position + 0.01)
+                );
+
+                const lower = new THREE.Plane(normal.clone(), -min);
+                const upper = new THREE.Plane(normal.clone().multiplyScalar(-1), max);
+
+                // Range clipping is expressed as the intersection of two planes.
+                return [lower, upper];
             });
     };
 

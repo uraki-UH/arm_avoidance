@@ -675,7 +675,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
-            <CollapsibleSection title="Clipping Planes" icon={<Scissors size={16} />} defaultOpen={false}>
+            <CollapsibleSection title="Clipping Planes" icon={<Scissors size={16} />} defaultOpen={true} headerClassName="py-4">
                 <ClippingControls
                     planes={props.clipping.planes}
                     onAddPlane={props.clipping.addPlane}

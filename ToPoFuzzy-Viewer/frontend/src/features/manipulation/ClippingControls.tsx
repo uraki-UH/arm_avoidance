@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
+import { DualRangeSlider } from '../../components/ui/DualRangeSlider';
 import { ClippingPlane, ClippingAxis } from '../../types';
 
 interface ClippingBounds {
@@ -27,7 +28,7 @@ export function ClippingControls({
     onRemoveAll,
     bounds,
 }: ClippingControlsProps) {
-    const getRange = (axis: ClippingAxis): { min: number; max: number } => {
+    const getFallbackRange = (axis: ClippingAxis): { min: number; max: number } => {
         if (!bounds) {
             return { min: -100, max: 100 };
         }
@@ -44,39 +45,44 @@ export function ClippingControls({
     };
 
     return (
-        <div className="space-y-4">
-            <div >
-                {planes.length > 0 && (
-                    <button onClick={onRemoveAll} className="btn-danger px-2.5 py-1 text-[11px] font-semibold text-white">
-                        Clear All
-                    </button>
-                )}
-            </div>
-
-            <div className="surface-muted space-y-2 p-3">
-                <label className="control-label">Add Plane</label>
-                <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-2">
+            <div className="surface-muted space-y-2 px-5 py-2.5">
+                <label className="control-label mb-0.5 block">Add Plane</label>
+                <div className="grid grid-cols-4 gap-4">
                     {(['x', 'y', 'z'] as ClippingAxis[]).map((axis) => (
                         <button
                             key={axis}
                             onClick={() => onAddPlane(axis)}
-                            className="btn-secondary px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em]"
+                            className="btn-secondary px-3 py-3 text-xs font-semibold uppercase tracking-[0.08em]"
                         >
                             {axis}
                         </button>
                     ))}
+                    {planes.length > 0 && (
+                        <button
+                            onClick={onRemoveAll}
+                            className="btn-danger inline-flex items-center justify-center px-3 py-3 text-[11px] font-semibold leading-none text-white"
+                        >
+                            Clear All
+                        </button>
+                    )}
                 </div>
             </div>
 
             {planes.length > 0 ? (
-                <div className="max-h-80 space-y-3 overflow-y-auto pr-1 scrollbar-thin">
+                <div className="max-h-[36rem] space-y-3 overflow-y-auto pr-1 pb-1 scrollbar-thin">
                     {planes.map((plane) => {
-                        const range = getRange(plane.axis);
+                        const fallbackRange = getFallbackRange(plane.axis);
+                        const min = plane.min ?? fallbackRange.min;
+                        const max = plane.max ?? fallbackRange.max;
+                        const safeMin = Math.min(min, max);
+                        const safeMax = Math.max(min, max);
+                        const safeStep = Math.max((safeMax - safeMin) / 200, 0.01);
                         return (
-                            <div key={plane.id} className="surface-muted space-y-2 p-3">
+                            <div key={plane.id} className="surface-muted space-y-2 px-3 py-3">
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="rounded bg-white/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--accent-strong)]">
+                                        <span className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--accent-strong)]">
                                             {plane.axis}-axis
                                         </span>
                                         <button
@@ -96,36 +102,22 @@ export function ClippingControls({
                                     </button>
                                 </div>
 
-                                <div>
-                                    <label className="control-label mb-1 block">
-                                        Position: {plane.position.toFixed(2)}
+                                <div className="space-y-1.5">
+                                    <label className="control-label mb-0.5 block">
+                                        Range: {safeMin.toFixed(2)} to {safeMax.toFixed(2)}
                                     </label>
-                                    <p className="mb-1 text-[10px] text-[var(--text-secondary)]">
-                                        Range {range.min.toFixed(1)} to {range.max.toFixed(1)}
-                                    </p>
-                                    <input
-                                        type="range"
-                                        min={range.min}
-                                        max={range.max}
-                                        step={(range.max - range.min) / 200}
-                                        value={plane.position}
-                                        onChange={(e) => onUpdatePlane(plane.id, { position: parseFloat(e.target.value) })}
-                                        className="w-full"
-                                        disabled={!plane.enabled}
+                                    <DualRangeSlider
+                                        min={fallbackRange.min}
+                                        max={fallbackRange.max}
+                                        step={safeStep}
+                                        value={[safeMin, safeMax]}
+                                        onChange={([nextMin, nextMax]) => onUpdatePlane(plane.id, {
+                                            min: nextMin,
+                                            max: nextMax,
+                                        })}
+                                        className={!plane.enabled ? 'opacity-50 pointer-events-none' : ''}
                                     />
                                 </div>
-
-                                <label className="inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                                    <input
-                                        type="checkbox"
-                                        id={`invert-${plane.id}`}
-                                        checked={plane.inverted}
-                                        onChange={(e) => onUpdatePlane(plane.id, { inverted: e.target.checked })}
-                                        disabled={!plane.enabled}
-                                        className="h-4 w-4 rounded border-white/30 bg-white/10 text-[var(--accent-color)]"
-                                    />
-                                    Invert normal direction
-                                </label>
                             </div>
                         );
                     })}

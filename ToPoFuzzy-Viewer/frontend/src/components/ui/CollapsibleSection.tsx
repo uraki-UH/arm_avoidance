@@ -7,6 +7,7 @@ interface CollapsibleSectionProps {
     children: React.ReactNode;
     defaultOpen?: boolean;
     className?: string;
+    headerClassName?: string;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
@@ -14,7 +15,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     icon,
     children,
     defaultOpen = false,
-    className = ""
+    className = "",
+    headerClassName = "",
 }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         <section className={`surface-soft overflow-hidden ${className}`}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors ${isOpen ? 'bg-white/5' : 'hover:bg-white/5'
+                className={`flex w-full items-center justify-between px-4 py-3 text-left transition-colors ${headerClassName} ${isOpen ? 'bg-white/5' : 'hover:bg-white/5'
                     }`}
                 aria-expanded={isOpen}
             >

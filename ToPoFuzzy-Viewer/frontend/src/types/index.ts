@@ -332,6 +332,8 @@ export interface ClippingPlane {
     id: string;
     axis: ClippingAxis;
     position: number;
+    min: number;
+    max: number;
     inverted: boolean;
     enabled: boolean;
 }

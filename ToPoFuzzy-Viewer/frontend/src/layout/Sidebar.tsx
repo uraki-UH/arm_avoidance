@@ -39,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
             >
                 <div className="surface-panel flex h-full min-h-0 w-full flex-col overflow-hidden">
-                    <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+                    <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
                         <h1 className="min-w-0 truncate text-xl font-bold text-[var(--brand-color)]">
                             {title}
                         </h1>
