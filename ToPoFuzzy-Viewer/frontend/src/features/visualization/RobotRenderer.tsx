@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData, Transform } from '../../types';
@@ -16,7 +16,7 @@ interface RobotRendererProps {
     manualTransform?: Transform;
 }
 
-export function RobotRenderer({
+function RobotRenderer({
     tag,
     data,
     visible = true,
@@ -64,10 +64,11 @@ export function RobotRenderer({
 
     useEffect(() => {
         if (!robot) return;
-        applyRobotMaterial(robot);
-        const interval = setInterval(() => applyRobotMaterial(robot), 100);
-        const timeout = setTimeout(() => clearInterval(interval), 3000);
-        return () => { clearInterval(interval); clearTimeout(timeout); };
+        const retryDelays = [0, 60, 160, 360, 760];
+        const timers = retryDelays.map((delay) => window.setTimeout(() => applyRobotMaterial(robot), delay));
+        return () => {
+            timers.forEach((timer) => window.clearTimeout(timer));
+        };
     }, [robot, applyRobotMaterial]);
 
     // --- Load URDF ---
@@ -139,3 +140,7 @@ export function RobotRenderer({
         </group>
     );
 }
+
+export const RobotRendererMemo = memo(RobotRenderer);
+export { RobotRendererMemo as RobotRenderer };
+export default RobotRendererMemo;

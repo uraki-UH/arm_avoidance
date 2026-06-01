@@ -11,8 +11,6 @@ const startVec = new THREE.Vector3();
 const endVec = new THREE.Vector3();
 const midpointVec = new THREE.Vector3();
 
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
-
 export function buildNodePalette(
     baseColor?: string,
     customPalette?: string[]
@@ -24,24 +22,7 @@ export function buildNodePalette(
         return LAYER_COLORS;
     }
 
-    const color = new THREE.Color(baseColor);
-    const hsl = { h: 0, s: 0, l: 0 };
-    color.getHSL(hsl);
-
-    const swatches = [
-        { s: clamp01(hsl.s * 0.65), l: clamp01(hsl.l - 0.24) },
-        { s: clamp01(hsl.s * 0.90), l: clamp01(hsl.l - 0.08) },
-        { s: clamp01(hsl.s * 1.00), l: clamp01(hsl.l + 0.00) },
-        { s: clamp01(hsl.s * 1.10), l: clamp01(hsl.l + 0.10) },
-        { s: clamp01(hsl.s * 0.80), l: clamp01(hsl.l + 0.22) },
-        { s: clamp01(hsl.s * 1.05), l: clamp01(hsl.l + 0.30) },
-    ];
-
-    return swatches.map(({ s, l }) => {
-        const swatch = new THREE.Color();
-        swatch.setHSL(hsl.h, s, l);
-        return `#${swatch.getHexString()}`;
-    });
+    return LAYER_COLORS.map((color, index) => (index === 1 ? baseColor : color));
 }
 
 /**

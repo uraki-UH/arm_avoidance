@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData, Transform } from '../../types';
@@ -14,7 +14,7 @@ interface CollisionRendererProps {
     manualTransform?: Transform;
 }
 
-export function CollisionRenderer({
+function CollisionRenderer({
     tag,
     data,
     visible = true,
@@ -59,12 +59,10 @@ export function CollisionRenderer({
 
     useEffect(() => {
         if (!robot) return;
-        applyCollisionMaterial(robot);
-        const interval = setInterval(() => applyCollisionMaterial(robot), 150);
-        const timeout = setTimeout(() => clearInterval(interval), 2500);
+        const retryDelays = [0, 80, 220, 520];
+        const timers = retryDelays.map((delay) => window.setTimeout(() => applyCollisionMaterial(robot), delay));
         return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
+            timers.forEach((timer) => window.clearTimeout(timer));
         };
     }, [robot, applyCollisionMaterial]);
 
@@ -130,3 +128,7 @@ export function CollisionRenderer({
         </group>
     );
 }
+
+export const CollisionRendererMemo = memo(CollisionRenderer);
+export { CollisionRendererMemo as CollisionRenderer };
+export default CollisionRendererMemo;
