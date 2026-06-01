@@ -294,11 +294,11 @@ export interface SetParameterResult {
 
 export const LAYER_COLORS = [
     '#7c8c66', // 0: DEFAULT (muted gray-green)
-    '#c8ff4a', // 1: SAFE_TERRAIN (yellow-green)
+    '#1f8f3a', // 1: SAFE_TERRAIN (deep green)
     '#FF0000', // 2: COLLISION (Red)
     '#FFFF00', // 3: DANGER (Yellow)
-    '#b9ff3f', // 4: UNUSED / legacy (yellow-green fallback)
-    '#d4ff6a'  // 5: OTHER / fallback (light yellow-green)
+    '#2aa84a', // 4: UNUSED / legacy (green fallback)
+    '#53c86a'  // 5: OTHER / fallback (soft green)
 ];
 
 export const LAYER_LABELS = [
@@ -306,14 +306,14 @@ export const LAYER_LABELS = [
 ];
 
 export const STATIC_GNG_DEFAULTS = {
-    nodeColor: '#c8ff4a',
+    nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
     opacity: 0.1,
     nodeEmissiveIntensity: 0.12,
 } as const;
 
 export const DYNAMIC_GNG_DEFAULTS = {
-    nodeColor: '#4bdf10',
+    nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
 } as const;
 
