@@ -118,6 +118,38 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
     return false;
 }
 
+function robotHasChanged(prev: RobotData, next: RobotData): boolean {
+    if (prev.timestamp !== next.timestamp) {
+        return true;
+    }
+    if (prev.frameId !== next.frameId) {
+        return true;
+    }
+    if ((prev.urdf || '') !== (next.urdf || '')) {
+        return true;
+    }
+    if (prev.jointNames.length !== next.jointNames.length || prev.jointValues.length !== next.jointValues.length) {
+        return true;
+    }
+    for (let i = 0; i < next.jointNames.length; i++) {
+        if (prev.jointNames[i] !== next.jointNames[i]) {
+            return true;
+        }
+    }
+    for (let i = 0; i < next.jointValues.length; i++) {
+        if (prev.jointValues[i] !== next.jointValues[i]) {
+            return true;
+        }
+    }
+    if ((prev.positions?.length || 0) !== (next.positions?.length || 0)) {
+        return true;
+    }
+    if ((prev.orientations?.length || 0) !== (next.orientations?.length || 0)) {
+        return true;
+    }
+    return false;
+}
+
 interface UseWebSocketReturn {
     pointClouds: Record<string, PointCloudData>;
     markerData: Record<string, MarkerArrayData>;
@@ -388,13 +420,28 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             if (!p.robot) return;
                             setRobotData(prev => {
                                 const existing = prev[tag];
-                                if (!existing || existing.timestamp === p.robot.timestamp) return prev;
+                                if (!existing) {
+                                    return {
+                                        ...prev,
+                                        [tag]: p.robot as RobotData,
+                                    };
+                                }
+
+                                const nextRobot: RobotData = {
+                                    ...existing,
+                                    ...p.robot,
+                                    urdf: existing.urdf ?? p.robot.urdf,
+                                    jointNames: (p.robot.jointNames?.length ? p.robot.jointNames : existing.jointNames),
+                                    jointValues: (p.robot.jointValues?.length ? p.robot.jointValues : existing.jointValues),
+                                };
+
+                                if (!robotHasChanged(existing, nextRobot)) {
+                                    return prev;
+                                }
+
                                 return {
                                     ...prev,
-                                    [tag]: { ...existing, ...p.robot, 
-                                        urdf: existing.urdf, jointNames: existing.jointNames,
-                                        jointValues: p.robot.jointValues || existing.jointValues 
-                                    } as RobotData,
+                                    [tag]: nextRobot,
                                 };
                             });
                         },

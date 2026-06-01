@@ -139,6 +139,8 @@ export interface RobotSettings {
     showVisual: boolean;
     showCollision: boolean;
     collisionColor: string;
+    jointControlMode?: 'live' | 'manual';
+    jointValues?: number[];
     transform?: Transform;
 }
 
