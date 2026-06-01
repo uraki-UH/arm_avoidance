@@ -6,6 +6,12 @@
     <xacro:arg name="use_fake_hardware" default="false" />
     <xacro:arg name="fake_sensor_commands" default="false" />
     <xacro:arg name="torque" default="true" />
+    <xacro:arg name="base_x" default="0.0" />
+    <xacro:arg name="base_y" default="0.0" />
+    <xacro:arg name="base_z" default="0.0" />
+    <xacro:arg name="base_roll" default="0.0" />
+    <xacro:arg name="base_pitch" default="0.0" />
+    <xacro:arg name="base_yaw" default="0.0" />
 
     <xacro:include filename="topoarm_material.urdf.xacro" />
     <xacro:include filename="_topoarm.urdf.xacro" />
@@ -18,7 +24,9 @@
     
     <joint name="fixed_base_joint" type="fixed">
         <parent link="world"/>
-        <child link="base_footprint"/> <origin xyz="0 0 0" rpy="0 0 0"/>
+        <child link="base_footprint"/>
+        <origin xyz="$(arg base_x) $(arg base_y) $(arg base_z)"
+                rpy="$(arg base_roll) $(arg base_pitch) $(arg base_yaw)"/>
     </joint>
 
     <link name="base_footprint"/>
