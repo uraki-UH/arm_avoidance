@@ -247,9 +247,11 @@ function App() {
                     ...(isStatic ? {
                         nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
                         edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
+                        emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     } : {
                         nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
                         edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
+                        emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     })
                 };
                 changed = true;
@@ -916,10 +918,10 @@ function App() {
                             {
                                 data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                        {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
-                                        {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
-                                    </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} emissiveIntensity={s.emissiveIntensity ?? 0.2} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
+                                {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
+                            </group>
+                                ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
@@ -929,7 +931,7 @@ function App() {
                             {
                                 data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
-                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
+                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
                             }
                         ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) =>
                             Object.entries(data).map(([tag, d]: [string, any]) => {
@@ -944,7 +946,7 @@ function App() {
                             const settings = layerSettings[tag];
                             if (!settings || !settings.visible) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
-                            const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor };
+                            const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor, nodeEmissiveIntensity: settings.emissiveIntensity, edgeEmissiveIntensity: settings.emissiveIntensity };
                             return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} />
                                 : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;

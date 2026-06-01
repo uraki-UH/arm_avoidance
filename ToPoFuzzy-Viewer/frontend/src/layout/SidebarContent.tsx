@@ -252,7 +252,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     showNodes: true,
                                     showEdges: data.mode !== 'static',
                                     showClusters: false,
-                                    opacity: 1.0
+                                    opacity: 1.0,
+                                    emissiveIntensity: data.mode === 'static' ? 0.10 : 0.14,
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                                 onRemove={() => props.onRemoveGngLayer(tag)}
@@ -275,6 +276,30 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn ${s.showCollision ? 'active-orange' : ''}`}>
                                                 <Box size={12} /> Collision
                                             </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
+                                            <div className="flex flex-col gap-1">
+                                                <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
+                                                    Color
+                                                </label>
+                                                <input
+                                                    type="color"
+                                                    value={s.color || '#87ceeb'}
+                                                    onChange={(e) => props.onUpdateSettings('robot', tag, { color: e.target.value })}
+                                                    className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1">
+                                                <ControlSlider
+                                                    label="Emissive"
+                                                    value={s.emissiveIntensity ?? 0.2}
+                                                    min={0}
+                                                    max={1.5}
+                                                    step={0.01}
+                                                    onChange={(v) => props.onUpdateSettings('robot', tag, { emissiveIntensity: v })}
+                                                    formatValue={(v) => `${v.toFixed(2)}x`}
+                                                />
+                                            </div>
                                         </div>
                                         <button
                                             onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
@@ -388,7 +413,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 <CollapsibleSection title="Voxel Rendering" icon={<Box size={16} />} defaultOpen={true}>
                     <div className="surface-muted space-y-4 p-3">
                         {Object.entries(props.voxelData).map(([tag]) => {
-                            const settings = props.voxelSettings[tag] || { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 };
+                            const settings = props.voxelSettings[tag] || { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2 };
                             return (
                                 <div key={tag} className="space-y-3 border-b border-white/5 pb-3 last:border-0 last:pb-0">
                                     <p className="text-[11px] font-semibold text-[var(--text-primary)]">{tag}</p>
@@ -417,6 +442,15 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                         max={1}
                                         step={0.05}
                                         onChange={(v) => props.onUpdateSettings('voxel', tag, { opacity: v })}
+                                    />
+                                    <ControlSlider
+                                        label="Emissive"
+                                        value={settings.emissiveIntensity ?? 0.2}
+                                        min={0}
+                                        max={1.5}
+                                        step={0.01}
+                                        onChange={(v) => props.onUpdateSettings('voxel', tag, { emissiveIntensity: v })}
+                                        formatValue={(v) => `${v.toFixed(2)}x`}
                                     />
                                 </div>
                             );

@@ -51,6 +51,7 @@ export function GngLayerControls({
     const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
     const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || STATIC_GNG_DEFAULTS.nodeColor);
     const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || STATIC_GNG_DEFAULTS.edgeColor);
+    const [localEmissiveIntensity, setLocalEmissiveIntensity] = useState<number>(settings.emissiveIntensity ?? (isStatic ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity));
 
     useEffect(() => {
         setLocalOpacity(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
@@ -63,6 +64,10 @@ export function GngLayerControls({
     useEffect(() => {
         setLocalEdgeColor(settings.edgeColor || (isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor));
     }, [settings.edgeColor, isStatic]);
+
+    useEffect(() => {
+        setLocalEmissiveIntensity(settings.emissiveIntensity ?? (isStatic ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity));
+    }, [settings.emissiveIntensity, isStatic]);
 
     const handleNodeColorChange = (nextColor: string) => {
         setLocalNodeColor(nextColor);
@@ -77,6 +82,11 @@ export function GngLayerControls({
     const handleOpacityChange = (nextOpacity: number) => {
         setLocalOpacity(nextOpacity);
         onUpdate({ opacity: nextOpacity });
+    };
+
+    const handleEmissiveChange = (nextValue: number) => {
+        setLocalEmissiveIntensity(nextValue);
+        onUpdate({ emissiveIntensity: nextValue });
     };
 
     return (
@@ -127,7 +137,7 @@ export function GngLayerControls({
                     <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                Node Color
+                                Default Color
                             </label>
                             <input
                                 type="color"
@@ -165,6 +175,17 @@ export function GngLayerControls({
                             formatValue={(v) => `${Math.round(v * 100)}%`}
                         />
                     )}
+
+                    <ControlSlider
+                        label="Emissive"
+                        value={localEmissiveIntensity}
+                        min={0}
+                        max={1.5}
+                        step={0.01}
+                        onChange={handleEmissiveChange}
+                        onPointerUp={() => onUpdate({ emissiveIntensity: localEmissiveIntensity })}
+                        formatValue={(v) => `${v.toFixed(2)}x`}
+                    />
                 </div>
             )}
         </div>

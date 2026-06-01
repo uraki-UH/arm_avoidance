@@ -131,6 +131,7 @@ export interface LayerSettings {
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
+    emissiveIntensity?: number;
     graphTransform?: Transform;
 }
 export interface RobotSettings {
@@ -139,6 +140,7 @@ export interface RobotSettings {
     showVisual: boolean;
     showCollision: boolean;
     collisionColor: string;
+    emissiveIntensity?: number;
     jointControlMode?: 'live' | 'manual';
     jointValues?: number[];
     transform?: Transform;
@@ -188,6 +190,7 @@ export interface VoxelSettings {
     color: string;
     wireframe: boolean;
     opacity: number;
+    emissiveIntensity?: number;
     transform?: Transform;
 }
 
@@ -309,12 +312,15 @@ export const STATIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
     opacity: 0.1,
-    nodeEmissiveIntensity: 0.12,
+    nodeEmissiveIntensity: 0.10,
+    edgeEmissiveIntensity: 0.08,
 } as const;
 
 export const DYNAMIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
+    nodeEmissiveIntensity: 0.14,
+    edgeEmissiveIntensity: 0.12,
 } as const;
 
 export type ClippingAxis = 'x' | 'y' | 'z' | 'none';

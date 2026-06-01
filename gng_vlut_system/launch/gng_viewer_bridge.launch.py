@@ -302,7 +302,7 @@ def launch_setup(context, *args, **kwargs):
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
-                    "edge_mode": safe_int(edge_mode, 0),
+                    "edge_mode": safe_int(edge_mode, 1),
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
                     "danger_voxels_topic": "danger_voxels",

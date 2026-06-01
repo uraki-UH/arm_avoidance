@@ -42,6 +42,8 @@ interface GraphRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
+    nodeEmissiveIntensity?: number;
+    edgeEmissiveIntensity?: number;
     manualTransform?: Transform | null;
 }
 
@@ -63,15 +65,18 @@ export function StaticGraphRenderer({
     tf = null,
     nodeColor = STATIC_GNG_DEFAULTS.nodeColor,
     edgeColor = STATIC_GNG_DEFAULTS.edgeColor,
+    nodeEmissiveIntensity = STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
+    edgeEmissiveIntensity = STATIC_GNG_DEFAULTS.edgeEmissiveIntensity,
     manualTransform = null,
 }: GraphRendererProps) {
     const { invalidate } = useThree();
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+    const nodePalette = useMemo(() => [nodeColor || LAYER_COLORS[0], ...LAYER_COLORS.slice(1)], [nodeColor]);
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, transform]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
 
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
@@ -127,23 +132,29 @@ export function StaticGraphRenderer({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeMaterials = useMemo(() => LAYER_COLORS.map((color) => new THREE.MeshBasicMaterial({
+    const nodeMaterials = useMemo(() => nodePalette.map((color) => new THREE.MeshStandardMaterial({
         color,
+        emissive: new THREE.Color(color),
+        emissiveIntensity: nodeEmissiveIntensity,
+        vertexColors: true,
         transparent: opacity < 1,
         opacity,
         depthTest: true,
         depthWrite: false,
         toneMapped: false,
-    })), [opacity]);
+    })), [opacity, nodeEmissiveIntensity, nodePalette]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
-    const edgeMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+    const edgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: edgeColor,
+        emissive: new THREE.Color(edgeColor),
+        emissiveIntensity: edgeEmissiveIntensity,
         transparent: opacity < 1,
         opacity: opacity,
         depthTest: true,
         depthWrite: false,
-    }), [opacity, edgeColor]);
+        toneMapped: false,
+    }), [opacity, edgeColor, edgeEmissiveIntensity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -159,9 +170,10 @@ export function StaticGraphRenderer({
             nodeCapacity,
             opacity,
             nodeColor,
+            nodeEmissiveIntensity,
             graph.timestamp,
         ].join(':');
-    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, opacity, nodeColor, graph.timestamp]);
+    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, opacity, nodeColor, nodeEmissiveIntensity, graph.timestamp]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
@@ -171,9 +183,10 @@ export function StaticGraphRenderer({
             edgeCapacity,
             opacity,
             edgeColor,
+            edgeEmissiveIntensity,
             graph.timestamp,
         ].join(':');
-    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, opacity, edgeColor, graph.timestamp]);
+    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, opacity, edgeColor, edgeEmissiveIntensity, graph.timestamp]);
     const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
     const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
 
@@ -195,7 +208,7 @@ export function StaticGraphRenderer({
             if (solidMesh) {
                 updateNodeInstances(solidMesh, bucket, nodeScale, {
                     colorMode: 'uniform',
-                    uniformColor: LAYER_COLORS[labelIndex],
+                    uniformColor: nodePalette[labelIndex] ?? LAYER_COLORS[labelIndex] ?? nodePalette[0],
                 });
             }
         });

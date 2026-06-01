@@ -26,6 +26,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
     const { invalidate } = useThree();
     const { data, layout } = message;
     const voxelSize = Math.round(layout.voxelSize * 1000) / 1000;
+    const emissiveIntensity = settings?.emissiveIntensity ?? 0.2;
 
     // TFおよび手動トランスフォームの適用
     useEffect(() => {
@@ -78,7 +79,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         });
     }, [data, layout, voxelSize]);
 
-    useDemandUpdate([positions]);
+    useDemandUpdate([positions, settings?.color, settings?.opacity, settings?.wireframe, emissiveIntensity]);
 
     useEffect(() => {
         if (!meshRef.current) return;
@@ -100,8 +101,11 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
                 <boxGeometry args={[displaySize, displaySize, displaySize]} />
                 <meshStandardMaterial
                     color={settings?.color || "#00ff88"}
+                    emissive={settings?.color || "#00ff88"}
+                    emissiveIntensity={emissiveIntensity}
                     transparent={true}
                     opacity={settings?.opacity ?? 0.6}
+                    wireframe={settings?.wireframe ?? true}
                     metalness={0.2}
                     roughness={0.1}
                 />
