@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState } from 'react';
+import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
@@ -91,7 +91,7 @@ export function GraphRenderer({
     useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, transform]);
 
     // --- TF-based Positioning ---
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!groupRef.current) return;
         if (!tf) {
             groupRef.current.position.set(0, 0, 0);
@@ -144,6 +144,34 @@ export function GraphRenderer({
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
+    const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
+    const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
+
+    const nodeRenderSignature = useMemo(() => {
+        return [
+            graph.nodes.length,
+            showNodes ? 1 : 0,
+            nodeScale,
+            nodeCapacity,
+            opacity,
+            nodeColor,
+            graph.timestamp,
+        ].join(':');
+    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, opacity, nodeColor, graph.timestamp]);
+
+    const edgeRenderSignature = useMemo(() => {
+        return [
+            edgePairCount,
+            showEdges ? 1 : 0,
+            edgeWidth,
+            edgeCapacity,
+            opacity,
+            edgeColor,
+            graph.timestamp,
+        ].join(':');
+    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, opacity, edgeColor, graph.timestamp]);
+    const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
+    const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
 
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
@@ -154,7 +182,7 @@ export function GraphRenderer({
     }, [edgePairCount, edgeCapacity]);
 
     // --- Node Instances ---
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!showNodes || graph.nodes.length === 0) return;
         if (graph.nodes.length > nodeCapacity) return;
 
@@ -167,11 +195,13 @@ export function GraphRenderer({
                 });
             }
         });
+        setNodeReadySignature(nodeRenderSignature);
         invalidate();
-    }, [graph.nodes, nodeBuckets, showNodes, nodeScale, nodeCapacity, invalidate]);
+    }, [graph.nodes, nodeBuckets, showNodes, nodeScale, nodeCapacity, nodeRenderSignature, invalidate]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (showNodes) return;
+        setNodeReadySignature(null);
         nodeMeshRefs.current.forEach((mesh) => {
             if (!mesh) return;
             mesh.count = 0;
@@ -181,40 +211,50 @@ export function GraphRenderer({
     }, [showNodes, invalidate]);
 
     // --- Edge Instances ---
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!edgesRef.current || !showEdges || edgePairCount === 0) return;
         if (edgePairCount > edgeCapacity) return;
 
         updateEdgeInstances(edgesRef.current, graph.edges, graph.nodes, edgeWidth);
+        setEdgeReadySignature(edgeRenderSignature);
         invalidate();
-    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgeCapacity, edgePairCount, invalidate]);
+    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgeCapacity, edgePairCount, edgeRenderSignature, invalidate]);
+
+    useLayoutEffect(() => {
+        if (showEdges) return;
+        setEdgeReadySignature(null);
+        if (!edgesRef.current) return;
+        edgesRef.current.count = 0;
+        edgesRef.current.instanceMatrix.needsUpdate = true;
+        invalidate();
+    }, [showEdges, invalidate]);
 
     if (!data || !visible) return null;
 
-    const canRenderNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
-    const canRenderEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
+    const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
+    const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
 
     const content = (
         <>
-            {canRenderNodes && LAYER_COLORS.map((_, labelIndex) => (
+            {canMountNodes && LAYER_COLORS.map((_, labelIndex) => (
                 <group key={`node-label-${labelIndex}`}>
                     <instancedMesh
                         key={`nodes-${labelIndex}-${nodeCapacity}`}
                         ref={(el) => { nodeMeshRefs.current[labelIndex] = el; }}
                         args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
-                        count={nodeBuckets[labelIndex].length}
+                        count={nodeRenderReady ? nodeBuckets[labelIndex].length : 0}
                         frustumCulled={false}
                         renderOrder={10}
                     />
                 </group>
             ))}
 
-            {canRenderEdges && (
+            {canMountEdges && (
                 <instancedMesh
                     key={`edges-${edgeCapacity}`}
                     ref={edgesRef}
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
-                    count={edgePairCount}
+                    count={edgeRenderReady ? edgePairCount : 0}
                     frustumCulled={false}
                     renderOrder={9}
                 />

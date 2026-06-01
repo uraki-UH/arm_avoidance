@@ -255,7 +255,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                                 onRemove={() => props.onRemoveGngLayer(tag)}
-                                showOpacity={false}
+                                showOpacity={true}
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
                                 onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
                             />
