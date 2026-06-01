@@ -8,7 +8,15 @@ dokcer compose up -d
 
 ## frontendの起動
 cd ~/uraki_ws
+docker compose --profile manual up --build frontend
 docker compose --profile manual up  frontend
+
+## 左腕をtopological_map_avoidanceで動かしつつ、右腕を適当に揺らす
+ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  trial_mode:=true \
+  trial_safe_only:=true \
+  right_arm_oscillation_enabled:=true
 
 ## docker の起動
 cd uraki_ws && docker compose up -d
@@ -20,8 +28,8 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 
 ## ロボットおよび対応する学習済みGNGの起動
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  topic_name:=/topological_map_static
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+   \topic_name:=/topological_map_static
 
 ##　dynamixel handlerの起動
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
@@ -35,15 +43,15 @@ ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py 
 ##　自己認識ボクセルの起動
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  root_link:=left_link2 \
-  leaf_link:=left_link8 \
-  mask_topic:=/self_recognition/left_arm_voxel_mask
+  root_link:=right_link2 \
+  leaf_link:=rightt_link8 \
+  mask_topic:=/ToPoDualArm/right_arm_voxel
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
-  input_topic:=/self_recognition/left_arm_voxel_mask \
-  occupied_voxels_topic:=/occupied_voxels \
-  danger_voxels_topic:=/danger_voxels \
+  input_topic:=/ToPoDualArm/right_arm_voxel \
+  occupied_voxels_topic:=/ToPoDualArm/occupied_voxels \
+  danger_voxels_topic:=/ToPoDualArm/danger_voxels \
   danger_inflation:=0.05
 
 
@@ -51,6 +59,11 @@ ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
 source /opt/ros/humble/setup.bash
 source /ros2_ws/install/setup.bash 
 
+echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc
+echo 'source /ros2_ws/install/setup.bash' >> ~/.bashrc
+
+alias sh='source /opt/ros/humble/setup.bash'
+alias sw='source /ros2_ws/install/setup.bash'
 
 
 ## 自己認識ボクセル内外の点群に分けてパブリッシュ
@@ -77,8 +90,7 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  use_voxel_collision:=true 
-  \gng_profile_names:=left_arm 
+  use_voxel_collision:=true \gng_profile_names:=left_arm 
 
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
@@ -86,8 +98,6 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py   input_topic:=/ToPodualArm/left_arm_voxel　 occupied_voxels_topic:=/ToPoDualArm/occupied_voxels   danger_voxels_topic:=/ToPoDualArm/danger_voxels   danger_inflation:=0.02 \ output_voxel_size:=0.02
 
 ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-
-
 
 
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true

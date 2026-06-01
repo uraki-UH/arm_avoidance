@@ -31,6 +31,8 @@ RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_c
 # コマンドの追加
 RUN echo '. /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'export ROS2_WS=ros2_ws' >> /root/.bashrc && \
+    echo "alias sh='source /opt/ros/humble/setup.bash'" >> /root/.bashrc && \
+    echo "alias sw='source /ros2_ws/install/setup.bash'" >> /root/.bashrc && \
     echo 'function cw() { cd /${ROS2_WS}; }' >> /root/.bashrc && \
     echo 'function cs() { cd /${ROS2_WS}/src; }' >> /root/.bashrc && \
     echo 'function cb() { cd /${ROS2_WS}; if [ -z $1 ]; then colcon build --symlink-install; else colcon build --symlink-install --packages-select $1; fi; . install/setup.bash && cd -;}' >> /root/.bashrc && \
