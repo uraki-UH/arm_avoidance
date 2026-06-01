@@ -528,11 +528,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         <p className="mt-2 text-xs text-[var(--text-secondary)]">{props.startEditDisabledReason}</p>
                     )}
                 </div>
-            ) : (
-                <div className="surface-soft p-3 text-xs italic text-[var(--text-secondary)]">
-                    Select a layer to edit transforms and point selections.
-                </div>
-            )}
+            ) : null}
 
             {props.selectedCloud && props.isEditMode && (
                 <CollapsibleSection title="Transform" icon={<Move size={16} />} defaultOpen={true}>
@@ -561,11 +557,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
 
             <CollapsibleSection title="Point Editing" icon={<Trash2 size={16} />} defaultOpen={false}>
                 <div className="surface-muted space-y-4 p-3">
-                    {!props.isEditMode && (
-                        <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-[var(--text-secondary)]">
-                            Start Edit to enable backend AABB region editing.
-                        </div>
-                    )}
                     {props.isEditMode && (
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">

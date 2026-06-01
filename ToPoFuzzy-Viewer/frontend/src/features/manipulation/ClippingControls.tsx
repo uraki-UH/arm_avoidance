@@ -45,8 +45,7 @@ export function ClippingControls({
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h3 className="panel-title">Clipping Planes</h3>
+            <div >
                 {planes.length > 0 && (
                     <button onClick={onRemoveAll} className="btn-danger px-2.5 py-1 text-[11px] font-semibold text-white">
                         Clear All

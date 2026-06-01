@@ -39,34 +39,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }`}
             >
                 <div className="surface-panel flex h-full min-h-0 w-full flex-col overflow-hidden">
-                    <header className="border-b border-white/10 px-4 pb-3 pt-4">
-                        <div className="mb-1 flex items-center justify-between">
-                            <p className="text-[0.68rem] uppercase tracking-[0.18em] text-[var(--text-muted)]">
-                                Viewer Console
-                            </p>
-                            <button
-                                onClick={onToggle}
-                                className="btn-secondary inline-flex h-8 w-8 items-center justify-center p-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                                aria-label="Close Sidebar"
-                            >
-                                <ChevronLeft size={18} />
-                            </button>
-                        </div>
-                        <h1 className="text-xl font-bold text-[var(--brand-color)]">
+                    <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
+                        <h1 className="min-w-0 truncate text-xl font-bold text-[var(--brand-color)]">
                             {title}
                         </h1>
-                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                            Point cloud operations, rendering, and analysis.
-                        </p>
+                        <button
+                            onClick={onToggle}
+                            className="btn-secondary inline-flex h-8 w-8 shrink-0 items-center justify-center p-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                            aria-label="Close Sidebar"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
                     </header>
 
                     <div className="min-h-0 flex-1 px-3 pb-3 pt-2">
                         {children}
                     </div>
 
-                    <div className="border-t border-white/10 px-4 py-2 text-[10px] tracking-[0.08em] text-[var(--text-muted)] uppercase">
-                        ToPoFuzzy Viewer
-                    </div>
                 </div>
             </div>
         </>

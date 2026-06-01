@@ -141,14 +141,6 @@ export function SourceSelector({
         }
     };
 
-    if (!isConnected) {
-        return (
-            <div className="surface-muted p-3 text-xs italic text-[var(--text-secondary)]">
-                Connect to the server to view available point cloud topics.
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-3">
             <div className="flex items-center justify-between">
