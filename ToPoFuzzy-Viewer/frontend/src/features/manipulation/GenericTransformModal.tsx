@@ -24,7 +24,11 @@ export function GenericTransformModal({
     if (!open || !transform) return null;
 
     return (
-        <div className="fixed top-20 left-4 z-[9999] w-[480px] animate-in fade-in slide-in-from-left-2 duration-300">
+        <div className="fixed inset-0 z-[9999]" onClick={onClose}>
+            <div
+                className="fixed top-20 left-4 w-[480px] animate-in fade-in slide-in-from-left-2 duration-300"
+                onClick={(e) => e.stopPropagation()}
+            >
             <div className="surface-panel flex flex-col overflow-hidden shadow-2xl ring-1 ring-white/10">
                 <div className="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
                     <div className="min-w-0">
@@ -53,6 +57,7 @@ export function GenericTransformModal({
                         * Real-time spatial transformation for current layer.
                     </p>
                 </div>
+            </div>
             </div>
         </div>
     );

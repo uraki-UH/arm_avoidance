@@ -37,7 +37,11 @@ export function RobotJointModal({
     const effectiveValues = controlMode === 'manual' ? manualValues : robotData.jointValues;
 
     return (
-        <div className="fixed left-4 top-20 z-[9999] w-[560px] animate-in fade-in slide-in-from-left-2 duration-300">
+        <div className="fixed inset-0 z-[9999]" onClick={onClose}>
+            <div
+                className="fixed left-4 top-20 w-[560px] animate-in fade-in slide-in-from-left-2 duration-300"
+                onClick={(e) => e.stopPropagation()}
+            >
             <div className="surface-panel flex max-h-[80vh] flex-col overflow-hidden shadow-2xl ring-1 ring-white/10">
                 <div className="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
                     <div className="min-w-0">
@@ -113,9 +117,8 @@ export function RobotJointModal({
                         })}
                     </div>
                 </div>
-                <div>
-                </div>
             </div>
+        </div>
         </div>
     );
 }
