@@ -7,7 +7,11 @@ docker compose down
 dokcer compose up -d
 
 ## frontendの起動
+
 cd ~/uraki_ws
+
+docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
+
 docker compose --profile manual up --build frontend
 docker compose --profile manual up  frontend
 
@@ -44,7 +48,7 @@ ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py 
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   root_link:=right_link2 \
-  leaf_link:=rightt_link8 \
+  leaf_link:=right_link8 \
   mask_topic:=/ToPoDualArm/right_arm_voxel
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
