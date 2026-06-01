@@ -4,7 +4,7 @@ import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import { GraphData, Transform, LAYER_COLORS, LAYER_LABELS, DYNAMIC_GNG_DEFAULTS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
+import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 
 const EMPTY_GRAPH: GraphData = {
     timestamp: 0,
@@ -78,7 +78,7 @@ export function GraphRenderer({
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
-    const nodePalette = useMemo(() => [nodeColor || LAYER_COLORS[0], ...LAYER_COLORS.slice(1)], [nodeColor]);
+    const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
     const nodeBuckets = useMemo(() => {
         const buckets: GraphData['nodes'][] = Array.from(
             { length: LAYER_COLORS.length },

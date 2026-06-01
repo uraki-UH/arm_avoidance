@@ -9,6 +9,7 @@ interface CollisionRendererProps {
     data: RobotData;
     visible?: boolean;
     color?: string;
+    opacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
     manualTransform?: Transform;
 }
@@ -18,6 +19,7 @@ export function CollisionRenderer({
     data,
     visible = true,
     color = '#ff9f1c',
+    opacity = 0.28,
     tf = null,
     manualTransform,
 }: CollisionRendererProps) {
@@ -28,18 +30,18 @@ export function CollisionRenderer({
 
     const viewerPort = 9001;
 
-    useDemandUpdate([robot, data, visible, color, tf, manualTransform]);
+    useDemandUpdate([robot, data, visible, color, opacity, tf, manualTransform]);
 
     const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
     const collisionMaterial = useMemo(() => new THREE.MeshBasicMaterial({
         color: new THREE.Color(color),
-        transparent: true,
-        opacity: 0.28,
+        transparent: opacity < 1,
+        opacity,
         wireframe: true,
         depthTest: false,
         depthWrite: false,
-    }), [color]);
+    }), [color, opacity]);
 
     const applyCollisionMaterial = useCallback((obj: THREE.Object3D) => {
         if (!obj) return;

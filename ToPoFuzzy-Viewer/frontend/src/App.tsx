@@ -274,7 +274,7 @@ function App() {
                 data: robotData,
                 set: setRobotSettings,
                 defaults: {
-                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', jointControlMode: 'live',
+                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
@@ -922,11 +922,11 @@ function App() {
 
                         {/* Entities (Consolidated rendering logic) */}
                         {[
-                            {
-                                data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                {
+                                    data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} emissiveIntensity={s.emissiveIntensity ?? 0.2} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
-                                {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
+                                {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
                                 ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
@@ -953,10 +953,24 @@ function App() {
                             const settings = layerSettings[tag];
                             if (!settings || !settings.visible) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
-                            const common = { key: tag, tag, data, visible: true, opacity: settings.opacity, tf, manualTransform: settings.graphTransform, nodeColor: settings.nodeColor, edgeColor: settings.edgeColor, nodeEmissiveIntensity: settings.emissiveIntensity, edgeEmissiveIntensity: settings.emissiveIntensity };
+                            const common = {
+                                key: tag,
+                                tag,
+                                data,
+                                visible: true,
+                                opacity: settings.opacity,
+                                tf,
+                                manualTransform: settings.graphTransform,
+                                nodeColor: settings.nodeColor,
+                                edgeColor: settings.edgeColor,
+                                nodeEmissiveIntensity: settings.emissiveIntensity,
+                                edgeEmissiveIntensity: settings.emissiveIntensity,
+                                nodeScale: settings.nodeScale ?? gngLayer.nodeScale,
+                                edgeWidth: settings.edgeWidth ?? gngLayer.edgeWidth,
+                            };
                             return data.mode === 'static'
-                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} />
-                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} nodeScale={gngLayer.nodeScale} edgeWidth={gngLayer.edgeWidth} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} />
+                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
                         <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
@@ -1048,6 +1062,7 @@ function App() {
                             : layerSettings[colorContext.id] || null)
                     : null}
                 graphData={colorContext?.type === 'graph' ? (graphData[colorContext.id] || null) : null}
+                graphSizeDefaults={colorContext?.type === 'graph' ? { nodeScale: gngLayer.nodeScale, edgeWidth: gngLayer.edgeWidth } : undefined}
                 onClose={() => setColorContext(null)}
                 onUpdate={(updates) => {
                     if (!colorContext) return;

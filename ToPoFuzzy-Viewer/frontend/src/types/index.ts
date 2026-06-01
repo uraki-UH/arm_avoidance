@@ -132,6 +132,8 @@ export interface LayerSettings {
     nodeColor?: string;
     edgeColor?: string;
     emissiveIntensity?: number;
+    nodeScale?: number;
+    edgeWidth?: number;
     graphTransform?: Transform;
 }
 export interface RobotSettings {
@@ -141,6 +143,7 @@ export interface RobotSettings {
     showCollision: boolean;
     collisionColor: string;
     emissiveIntensity?: number;
+    opacity?: number;
     jointControlMode?: 'live' | 'manual';
     jointValues?: number[];
     transform?: Transform;
@@ -311,16 +314,16 @@ export const LAYER_LABELS = [
 export const STATIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
-    opacity: 0.1,
-    nodeEmissiveIntensity: 0.10,
-    edgeEmissiveIntensity: 0.08,
+    opacity: 0.25,
+    nodeEmissiveIntensity: 1.00,
+    edgeEmissiveIntensity: 1.00,
 } as const;
 
 export const DYNAMIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
-    nodeEmissiveIntensity: 0.14,
-    edgeEmissiveIntensity: 0.12,
+    nodeEmissiveIntensity: 1.00,
+    edgeEmissiveIntensity: 1.00,
 } as const;
 
 export type ClippingAxis = 'x' | 'y' | 'z' | 'none';

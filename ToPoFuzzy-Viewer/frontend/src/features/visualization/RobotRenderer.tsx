@@ -10,6 +10,7 @@ interface RobotRendererProps {
     visible?: boolean;
     color?: string;
     emissiveIntensity?: number;
+    opacity?: number;
     jointValuesOverride?: number[];
     tf?: { pos: number[]; quat: number[] } | null;
     manualTransform?: Transform;
@@ -21,6 +22,7 @@ export function RobotRenderer({
     visible = true,
     color = 'blue',
     emissiveIntensity = 0.2,
+    opacity = 0.8,
     jointValuesOverride = [],
     tf = null,
     manualTransform,
@@ -33,7 +35,7 @@ export function RobotRenderer({
     const viewerPort = 9001;
 
     // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, emissiveIntensity, tf, jointValuesOverride]);
+    useDemandUpdate([robot, data, visible, color, emissiveIntensity, opacity, tf, jointValuesOverride]);
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -41,9 +43,9 @@ export function RobotRenderer({
         emissive: new THREE.Color(color).multiplyScalar(Math.max(0, emissiveIntensity)),
         roughness: 0.7,
         metalness: 0.1,
-        transparent: true,
-        opacity: 0.8,
-    }), [color, emissiveIntensity]);
+        transparent: opacity < 1,
+        opacity,
+    }), [color, emissiveIntensity, opacity]);
 
     const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
         if (!obj) return;

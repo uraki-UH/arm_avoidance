@@ -297,7 +297,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                               }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
-                              extra: (tag: string, s: any, d: any) => (
+                              extra: (tag: string, _s: any, d: any) => (
                                 <div className="mt-2 space-y-2">
                                     <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--text-secondary)]">
                                     </div>

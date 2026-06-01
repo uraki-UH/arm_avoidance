@@ -18,6 +18,10 @@ interface EntityColorModalProps {
     entityType: ColorEntityType;
     settings: RobotSettings | VoxelSettings | LayerSettings | null;
     graphData?: GraphData | null;
+    graphSizeDefaults?: {
+        nodeScale: number;
+        edgeWidth: number;
+    };
     onClose: () => void;
     onUpdate: (updates: Record<string, unknown>) => void;
 }
@@ -29,6 +33,7 @@ export function EntityColorModal({
     entityType,
     settings,
     graphData,
+    graphSizeDefaults,
     onClose,
     onUpdate,
 }: EntityColorModalProps) {
@@ -43,6 +48,8 @@ export function EntityColorModal({
     const robotSettings = settings as RobotSettings;
     const voxelSettings = settings as VoxelSettings;
     const layerSettings = settings as LayerSettings;
+    const graphNodeScaleDefault = graphSizeDefaults?.nodeScale ?? 0.01;
+    const graphEdgeWidthDefault = graphSizeDefaults?.edgeWidth ?? 0.002;
 
     return (
         <div className="fixed left-4 top-20 z-[9999] w-[560px] animate-in fade-in slide-in-from-left-2 duration-300">
@@ -102,6 +109,15 @@ export function EntityColorModal({
                                 step={0.01}
                                 onChange={(v) => onUpdate({ emissiveIntensity: v })}
                                 formatValue={(v) => `${v.toFixed(2)}x`}
+                            />
+                            <ControlSlider
+                                label="Opacity"
+                                value={robotSettings.opacity ?? 0.8}
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                onChange={(v) => onUpdate({ opacity: v })}
+                                formatValue={(v) => `${Math.round(v * 100)}%`}
                             />
                         </div>
                     )}
@@ -203,6 +219,24 @@ export function EntityColorModal({
                                 step={0.01}
                                 onChange={(v) => onUpdate({ emissiveIntensity: v })}
                                 formatValue={(v) => `${v.toFixed(2)}x`}
+                            />
+                            <ControlSlider
+                                label="Node Size"
+                                value={layerSettings.nodeScale ?? graphNodeScaleDefault}
+                                min={0.001}
+                                max={0.1}
+                                step={0.001}
+                                onChange={(v) => onUpdate({ nodeScale: v })}
+                                formatValue={(v) => `${v.toFixed(3)}m`}
+                            />
+                            <ControlSlider
+                                label="Edge Width"
+                                value={layerSettings.edgeWidth ?? graphEdgeWidthDefault}
+                                min={0.0005}
+                                max={0.05}
+                                step={0.0005}
+                                onChange={(v) => onUpdate({ edgeWidth: v })}
+                                formatValue={(v) => `${v.toFixed(3)}m`}
                             />
                         </div>
                     )}
