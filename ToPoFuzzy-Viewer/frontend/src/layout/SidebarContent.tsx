@@ -157,6 +157,33 @@ interface SidebarContentProps {
     onOpenColorSettings: (type: 'robot' | 'voxel' | 'graph', id: string, title: string) => void;
 }
 
+const ColorActionButton: React.FC<{
+    title: string;
+    swatches: { color?: string; title: string }[];
+    onClick: () => void;
+}> = ({ title, swatches, onClick }) => {
+    const previewSwatches = swatches.length > 0 ? swatches : [{ color: '#7c8c66', title }];
+    return (
+        <button
+            onClick={onClick}
+            title={title}
+            className="entity-btn w-full justify-between gap-2 px-2 py-1.5 text-[11px]"
+        >
+            <span className="flex items-center gap-2">
+                {previewSwatches.map((swatch) => (
+                    <span
+                        key={swatch.title}
+                        className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                        style={{ backgroundColor: swatch.color || '#7c8c66' }}
+                        aria-hidden="true"
+                        title={swatch.title}
+                    />
+                ))}
+            </span>
+        </button>
+    );
+};
+
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const selectedLayer = props.pointClouds.find((pc) => pc.id === props.selectedLayerId);
     const visibleLayerCount = props.pointClouds.filter((pc) => pc.visible !== false).length;
@@ -261,6 +288,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
                                 onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
                                 onOpenColorSettings={() => props.onOpenColorSettings('graph', tag, `Graph colors: ${tag}`)}
+                                nodeColorPreview={props.layerSettings[tag]?.nodeColor || (data.mode === 'static' ? '#1f8f3a' : '#7c8c66')}
+                                edgeColorPreview={props.layerSettings[tag]?.edgeColor || '#08d408'}
                             />
                         ))}
 
@@ -279,12 +308,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             </button>
                                         </div>
                                         <div className="grid grid-cols-2 gap-2">
-                                            <button
+                                            <ColorActionButton
+                                                title="Robot color"
+                                                swatches={[
+                                                    { color: s.color, title: 'Visual color' },
+                                                    { color: s.collisionColor, title: 'Collision color' },
+                                                ]}
                                                 onClick={() => props.onOpenColorSettings('robot', tag, `Robot colors: ${tag}`)}
-                                                className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
-                                            >
-                                                Color
-                                            </button>
+                                            />
                                             <button
                                                 onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
                                                 className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
@@ -301,12 +332,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 <div className="mt-2 space-y-2">
                                     <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--text-secondary)]">
                                     </div>
-                                    <button
+                                    <ColorActionButton
+                                        title="Voxel color"
+                                        swatches={[{ color: _s.color, title: 'Voxel color' }]}
                                         onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
-                                        className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
-                                    >
-                                        Color
-                                    </button>
+                                    />
                                     <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
                                         Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span>
                                     </div>

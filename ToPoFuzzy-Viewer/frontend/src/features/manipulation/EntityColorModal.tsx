@@ -102,15 +102,6 @@ export function EntityColorModal({
                                 </div>
                             </div>
                             <ControlSlider
-                                label="Emissive"
-                                value={robotSettings.emissiveIntensity ?? 0.2}
-                                min={0}
-                                max={1.5}
-                                step={0.01}
-                                onChange={(v) => onUpdate({ emissiveIntensity: v })}
-                                formatValue={(v) => `${v.toFixed(2)}x`}
-                            />
-                            <ControlSlider
                                 label="Opacity"
                                 value={robotSettings.opacity ?? 0.8}
                                 min={0}
@@ -118,6 +109,15 @@ export function EntityColorModal({
                                 step={0.01}
                                 onChange={(v) => onUpdate({ opacity: v })}
                                 formatValue={(v) => `${Math.round(v * 100)}%`}
+                            />
+                            <ControlSlider
+                                label="Emissive"
+                                value={robotSettings.emissiveIntensity ?? 0.2}
+                                min={0}
+                                max={1.5}
+                                step={0.01}
+                                onChange={(v) => onUpdate({ emissiveIntensity: v })}
+                                formatValue={(v) => `${v.toFixed(2)}x`}
                             />
                         </div>
                     )}
@@ -166,20 +166,20 @@ export function EntityColorModal({
                                     Mode: <span className="font-semibold text-[var(--text-primary)]">{graphData?.mode === 'static' ? 'Static' : 'Dynamic'}</span>
                                 </div>
                                 <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
+                                    Frame: <span className="font-mono font-semibold text-[var(--text-primary)]">{graphData?.frameId || 'world'}</span>
+                                </div>
+                                <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
                                     Nodes: <span className="font-semibold text-[var(--text-primary)]">{graphData?.nodes.length ?? 0}</span>
                                 </div>
                                 <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
                                     Edges: <span className="font-semibold text-[var(--text-primary)]">{Math.floor((graphData?.edges.length ?? 0) / 2)}</span>
-                                </div>
-                                <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
-                                    Frame: <span className="font-mono font-semibold text-[var(--text-primary)]">{graphData?.frameId || 'world'}</span>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                        Default Color
+                                        Node Color
                                     </label>
                                     <input
                                         type="color"

@@ -30,6 +30,8 @@ interface GngLayerControlsProps {
     onRemove: () => void;
     onOpenTransform?: () => void;
     onOpenColorSettings?: () => void;
+    nodeColorPreview?: string;
+    edgeColorPreview?: string;
     hasTf?: boolean;
 }
 
@@ -43,6 +45,8 @@ export function GngLayerControls({
     onRemove,
     onOpenTransform,
     onOpenColorSettings,
+    nodeColorPreview,
+    edgeColorPreview,
     hasTf = false,
 }: GngLayerControlsProps) {
     return (
@@ -92,9 +96,27 @@ export function GngLayerControls({
                     {onOpenColorSettings && (
                         <button
                             onClick={onOpenColorSettings}
-                            className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                            title="Graph colors"
+                            className="entity-btn w-full justify-start gap-3 px-2 py-1.5 text-[11px]"
                         >
-                            Color
+                            <span className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1">
+                                <span
+                                    className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                                    style={{ backgroundColor: nodeColorPreview || settings.nodeColor || '#7c8c66' }}
+                                    aria-hidden="true"
+                                    title="Node color"
+                                />
+                                <span>Node</span>
+                            </span>
+                            <span className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1">
+                                <span
+                                    className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                                    style={{ backgroundColor: edgeColorPreview || settings.edgeColor || '#08d408' }}
+                                    aria-hidden="true"
+                                    title="Edge color"
+                                />
+                                <span>Edge</span>
+                            </span>
                         </button>
                     )}
                 </div>
