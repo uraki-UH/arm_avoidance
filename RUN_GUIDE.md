@@ -82,6 +82,9 @@ python3 test_tf_publisher.py　(--ros-args -p frame_id:=topoarm/base_link)
 # joint_statesのダミー
 python3 dummy_joint_pub.py 
 
+(topoarmの場合)
+python3 dummy_joint_pub.py --robot topoarm
+
 ## realsenseのrosbag
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera/depth/color/points --loop
 

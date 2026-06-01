@@ -93,6 +93,7 @@ def launch_setup(context, *args, **kwargs):
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
     yaml_robot_name = "topoarm"
+    yaml_robot_description_file = ""
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"
     yaml_resource_root_dir = ""
@@ -135,6 +136,12 @@ def launch_setup(context, *args, **kwargs):
                 vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
                 yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
                 yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
+                candidate_robot_description = root_ros_params.get(
+                    'robot_description_file',
+                    root_ros_params.get('robot_urdf_path', yaml_robot_description_file),
+                )
+                if candidate_robot_description is not None:
+                    yaml_robot_description_file = str(candidate_robot_description).strip()
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
@@ -179,6 +186,8 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
+    if not robot_description_file and yaml_robot_description_file:
+        robot_description_file = yaml_robot_description_file
     if not robot_description_file:
         robot_description_file = robot_desc_default
     else:

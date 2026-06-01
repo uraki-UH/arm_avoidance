@@ -10,27 +10,41 @@
     robot_name: "topoarm"
     robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
     robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
-    arm_leaf_link_names: "link7"
-    voxel_size: 0.02
-    padding: 0.02
+    resource_root_dir: "/ros2_ws/src/gng_vlut_system/urdf/topoarm_description"
+    mesh_root_dir: "/ros2_ws/src/gng_vlut_system/urdf/topoarm_description/meshes"
 
     # --- GNG & Safety Settings ---
-    experiment_id: "topoarm_single_test"
+    gng:
+      experiment_id: "topoarm"
+      data_directory: "gng_results"
+      gng_model_filename: "gng.bin"
+      vlut_filename: "vlut.bin"
+      ground_z_threshold: 0.0
+      gng_dimension: 6
+      spatial_map_resolution: 0.02
+      self_recognition_resolution: 0.02
+      arm_cache_resolution: 0.008
+      danger_threshold: 0.025
+      vlut_resolution: 0.02
+      sensing_resolution: 0.02
+      vlut_only: false
+      use_voxel_collision: true
+
+    # --- Robot Settings ---
+    arm_leaf_link_names: "link7"
+    voxel_size: 0.02
+
+    # Legacy top-level keys for older launch files/tools.
+    experiment_id: "topoarm"
     data_directory: "gng_results"
     gng_model_filename: "gng.bin"
     vlut_filename: "vlut.bin"
-    ground_z_threshold: 0.0
-    gng_dimension: 6
-    spatial_map_resolution: 0.02
-    self_recognition_resolution: 0.02
-    arm_cache_resolution: 0.008
-    danger_threshold: 0.025
     
     gng_params:
       lambda: 50
-      max_node_num: 10000
-      num_samples: 1000000
-      max_iterations: 1000000
+      max_node_num: 1000
+      num_samples: 100000
+      max_iterations: 100000
       refine_iterations: 100000
       coord_edge_iterations: 200000
       learn_rate_s1: 0.08

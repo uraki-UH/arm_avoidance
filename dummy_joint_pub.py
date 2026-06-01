@@ -72,8 +72,6 @@ def make_topoarm_preset() -> RobotPreset:
 
 PRESETS: Dict[str, RobotPreset] = {
     "topo_dual_arm": make_topo_dual_arm_preset(),
-    "topodualarm": make_topo_dual_arm_preset(),
-    "to_po_dual_arm": make_topo_dual_arm_preset(),
     "ToPoDualArm": make_topo_dual_arm_preset(),
     "topoarm": make_topoarm_preset(),
 }

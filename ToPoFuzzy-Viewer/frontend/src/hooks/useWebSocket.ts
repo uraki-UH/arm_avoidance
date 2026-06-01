@@ -45,6 +45,21 @@ interface PendingRequest {
     timer: number;
 }
 
+type QueuedGraphUpdate = {
+    tag: string;
+    graph: GraphData;
+};
+
+type QueuedVoxelUpdate = {
+    tag: string;
+    voxel: VoxelData;
+};
+
+type QueuedRobotPoseUpdate = {
+    tag: string;
+    robot: RobotData;
+};
+
 function graphHasChanged(prev: GraphData, next: GraphData): boolean {
     if (
         prev.timestamp !== next.timestamp ||
@@ -225,9 +240,102 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
+    const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
+    const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
+    const pendingRobotPoseUpdatesRef = useRef<Map<string, QueuedRobotPoseUpdate>>(new Map());
+    const flushScheduledRef = useRef<number | null>(null);
     const intentionalCloseRef = useRef(false);
     const reconnectCountRef = useRef(0);
     const reconnectTimerRef = useRef<number | null>(null);
+
+    const flushBufferedStreams = useCallback(() => {
+        flushScheduledRef.current = null;
+
+        if (pendingGraphUpdatesRef.current.size > 0) {
+            const graphBatch = Array.from(pendingGraphUpdatesRef.current.values());
+            pendingGraphUpdatesRef.current.clear();
+            setGraphData((prev) => {
+                let next = prev;
+                let changed = false;
+
+                for (const { tag, graph } of graphBatch) {
+                    const existing = next[tag];
+                    if (existing && !graphHasChanged(existing, graph)) {
+                        continue;
+                    }
+                    if (next === prev) {
+                        next = { ...prev };
+                    }
+                    next[tag] = graph;
+                    changed = true;
+                }
+
+                return changed ? next : prev;
+            });
+        }
+
+        if (pendingVoxelUpdatesRef.current.size > 0) {
+            const voxelBatch = Array.from(pendingVoxelUpdatesRef.current.values());
+            pendingVoxelUpdatesRef.current.clear();
+            setVoxelData((prev) => {
+                let next = prev;
+                let changed = false;
+
+                for (const { tag, voxel } of voxelBatch) {
+                    if (next === prev) {
+                        next = { ...prev };
+                    }
+                    next[tag] = voxel;
+                    changed = true;
+                }
+
+                return changed ? next : prev;
+            });
+        }
+
+        if (pendingRobotPoseUpdatesRef.current.size > 0) {
+            const robotBatch = Array.from(pendingRobotPoseUpdatesRef.current.values());
+            pendingRobotPoseUpdatesRef.current.clear();
+            setRobotData((prev) => {
+                let next = prev;
+                let changed = false;
+
+                for (const { tag, robot } of robotBatch) {
+                    const existing = next[tag];
+                    const mergedRobot: RobotData = existing
+                        ? {
+                            ...existing,
+                            ...robot,
+                            urdf: existing.urdf ?? robot.urdf,
+                            jointNames: robot.jointNames?.length ? robot.jointNames : existing.jointNames,
+                            jointValues: robot.jointValues?.length ? robot.jointValues : existing.jointValues,
+                        }
+                        : robot;
+
+                    if (existing && !robotHasChanged(existing, mergedRobot)) {
+                        continue;
+                    }
+
+                    if (next === prev) {
+                        next = { ...prev };
+                    }
+                    next[tag] = mergedRobot;
+                    changed = true;
+                }
+
+                return changed ? next : prev;
+            });
+        }
+    }, []);
+
+    const scheduleStreamFlush = useCallback(() => {
+        if (flushScheduledRef.current !== null) {
+            return;
+        }
+        flushScheduledRef.current = window.requestAnimationFrame(() => {
+            flushBufferedStreams();
+        });
+    }, [flushBufferedStreams]);
 
     const flushPendingWithError = useCallback((message: string) => {
         for (const [, pending] of pendingRequestsRef.current) {
@@ -270,6 +378,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         try {
             pendingTopicQueueRef.current = [];
             flushPendingWithError('WebSocket reconnected');
+            pendingGraphUpdatesRef.current.clear();
+            pendingVoxelUpdatesRef.current.clear();
+            pendingRobotPoseUpdatesRef.current.clear();
+            if (flushScheduledRef.current !== null) {
+                window.cancelAnimationFrame(flushScheduledRef.current);
+                flushScheduledRef.current = null;
+            }
 
             const socket = new WebSocket(url);
             socket.binaryType = 'arraybuffer';
@@ -404,11 +519,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.graph': (p) => {
                             if (!p.graph) return;
-                            setGraphData(prev => {
-                                const existing = prev[tag];
-                                if (existing && !graphHasChanged(existing, p.graph as GraphData)) return prev;
-                                return { ...prev, [tag]: p.graph as GraphData };
+                            pendingGraphUpdatesRef.current.set(tag, {
+                                tag,
+                                graph: p.graph as GraphData,
                             });
+                            scheduleStreamFlush();
                         },
                         'stream.graph.delete': (p) => {
                             if (typeof p.tag === 'string') clearGraphLayer(p.tag);
@@ -418,39 +533,19 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.robot.pose': (p) => {
                             if (!p.robot) return;
-                            setRobotData(prev => {
-                                const existing = prev[tag];
-                                if (!existing) {
-                                    return {
-                                        ...prev,
-                                        [tag]: p.robot as RobotData,
-                                    };
-                                }
-
-                                const nextRobot: RobotData = {
-                                    ...existing,
-                                    ...p.robot,
-                                    urdf: existing.urdf ?? p.robot.urdf,
-                                    jointNames: (p.robot.jointNames?.length ? p.robot.jointNames : existing.jointNames),
-                                    jointValues: (p.robot.jointValues?.length ? p.robot.jointValues : existing.jointValues),
-                                };
-
-                                if (!robotHasChanged(existing, nextRobot)) {
-                                    return prev;
-                                }
-
-                                return {
-                                    ...prev,
-                                    [tag]: nextRobot,
-                                };
+                            pendingRobotPoseUpdatesRef.current.set(tag, {
+                                tag,
+                                robot: p.robot as RobotData,
                             });
+                            scheduleStreamFlush();
                         },
                         'stream.voxel': (p) => {
                             if (p.data) {
-                                setVoxelData(prev => ({
-                                    ...prev,
-                                    [tag]: { id: tag, tag, data: p.data, layout: p.layout, frameId: p.frameId } as VoxelData
-                                }));
+                                pendingVoxelUpdatesRef.current.set(tag, {
+                                    tag,
+                                    voxel: { id: tag, tag, data: p.data, layout: p.layout, frameId: p.frameId } as VoxelData,
+                                });
+                                scheduleStreamFlush();
                             }
                         },
                         'stream.tf': (p) => {
@@ -501,6 +596,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             socket.onclose = () => {
                 setIsConnected(false);
                 pendingTopicQueueRef.current = [];
+                pendingGraphUpdatesRef.current.clear();
+                pendingVoxelUpdatesRef.current.clear();
+                pendingRobotPoseUpdatesRef.current.clear();
+                if (flushScheduledRef.current !== null) {
+                    window.cancelAnimationFrame(flushScheduledRef.current);
+                    flushScheduledRef.current = null;
+                }
                 flushPendingWithError('WebSocket closed');
                 
                 if (intentionalCloseRef.current) {
@@ -526,7 +628,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [flushPendingWithError, url]);
+    }, [flushPendingWithError, scheduleStreamFlush, url]);
 
     const disconnect = useCallback(() => {
         if (ws) {
@@ -540,6 +642,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         return () => {
             intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
+            pendingGraphUpdatesRef.current.clear();
+            pendingVoxelUpdatesRef.current.clear();
+            pendingRobotPoseUpdatesRef.current.clear();
+            if (flushScheduledRef.current !== null) {
+                window.cancelAnimationFrame(flushScheduledRef.current);
+                flushScheduledRef.current = null;
+            }
             if (ws) {
                 ws.close();
             }

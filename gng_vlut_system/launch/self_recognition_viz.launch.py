@@ -63,6 +63,7 @@ def launch_setup(context, *args, **kwargs):
     # --- YAMLから設定を自動抽出するロジック ---
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
     robot_name = robot_name_default
+    yaml_robot_description_file = ""
     
     if params_file and os.path.exists(params_file):
         try:
@@ -83,6 +84,20 @@ def launch_setup(context, *args, **kwargs):
                 extracted_name = find_robot_name(config)
                 if extracted_name:
                     robot_name = extracted_name
+
+                root_params = {}
+                for root_key in ('/**', 'ros__parameters'):
+                    candidate = config.get(root_key, {})
+                    if isinstance(candidate, dict) and 'ros__parameters' in candidate:
+                        candidate = candidate.get('ros__parameters', {})
+                    if isinstance(candidate, dict):
+                        root_params = candidate
+                        break
+
+                if isinstance(root_params, dict):
+                    candidate_robot_description = root_params.get('robot_description_file', root_params.get('robot_urdf_path', ''))
+                    if candidate_robot_description:
+                        yaml_robot_description_file = str(candidate_robot_description).strip()
         except Exception as e:
             print(f"Warning: Failed to parse YAML for robot_name: {e}")
 
@@ -94,6 +109,8 @@ def launch_setup(context, *args, **kwargs):
         robot_name = user_robot_name
 
     robot_description_raw = LaunchConfiguration("robot_description_file").perform(context)
+    if not robot_description_raw and yaml_robot_description_file:
+        robot_description_raw = yaml_robot_description_file
     robot_urdf = resolve_robot_description_path(pkg_share, robot_name, robot_description_raw)
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
