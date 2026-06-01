@@ -84,11 +84,11 @@ def launch_setup(context, *args, **kwargs):
         # 1. ロボットモデルの展開 (Digital Twin / TF)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
-            launch_arguments={
-                "robot_name": LaunchConfiguration("robot_name"),
-                "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
-            }.items()
-        ),
+                launch_arguments={
+                    "robot_name": LaunchConfiguration("robot_name"),
+                    "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
+                }.items()
+            ),
 
         # 2. センサー位置の静的TF配信 (キャリブレーション用)
         Node(

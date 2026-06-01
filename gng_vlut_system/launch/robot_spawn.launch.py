@@ -71,6 +71,8 @@ def launch_setup(context, *args, **kwargs):
     robot_urdf_raw = LaunchConfiguration("robot_description_file").perform(context)
     robot_urdf = resolve_package_uri(robot_urdf_raw) if robot_urdf_raw else robot_desc_default
 
+    xacro_cmd = ["xacro ", robot_urdf]
+
     nodes = []
 
     if enable_joint_state_publisher:
@@ -79,7 +81,7 @@ def launch_setup(context, *args, **kwargs):
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
                 namespace=robot_name,
-                parameters=[{"robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str)}],
+                parameters=[{"robot_description": ParameterValue(Command(xacro_cmd), value_type=str)}],
                 remappings=[
                     ("joint_states", f"/{robot_name}/joint_states"),
                 ],
@@ -92,7 +94,7 @@ def launch_setup(context, *args, **kwargs):
             executable="robot_state_publisher",
             namespace=robot_name,
             parameters=[{
-                "robot_description": ParameterValue(Command(["xacro ", robot_urdf]), value_type=str),
+                "robot_description": ParameterValue(Command(xacro_cmd), value_type=str),
                 "frame_prefix": robot_name + "/"
             }],
             remappings=[
