@@ -220,6 +220,24 @@ static std::vector<std::string> buildPathBasedLinkNames(
     return link_names;
 }
 
+static std::string resolveFrameWithNamespace(
+    const rclcpp::Node &node, const std::string &frame) {
+    if (frame.empty()) {
+        return {};
+    }
+    if (frame == "world" || frame[0] == '/') {
+        return frame;
+    }
+    std::string ns = node.get_namespace();
+    if (ns != "/" && !ns.empty()) {
+        if (ns[0] == '/') {
+            ns = ns.substr(1);
+        }
+        return ns + "/" + frame;
+    }
+    return frame;
+}
+
 } // namespace
 
 namespace robot_sim::self_recognition {
@@ -300,16 +318,9 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     std::string global_root_link = getStringWithFallback(*this, "self_recognition.root_link", "root_link");
     std::string explicit_leaf_link = getStringWithFallback(*this, "self_recognition.leaf_link", "leaf_link");
     if (global_root_link.empty()) {
-        std::string base_name = model_->getRootLinkName();
-        std::string ns = get_namespace();
-        if (ns != "/" && !ns.empty()) {
-            if (ns[0] == '/') ns = ns.substr(1);
-            root_link_ = ns + "/" + base_name;
-        } else {
-            root_link_ = base_name;
-        }
+        root_link_ = resolveFrameWithNamespace(*this, model_->getRootLinkName());
     } else {
-        root_link_ = global_root_link;
+        root_link_ = resolveFrameWithNamespace(*this, global_root_link);
     }
     std::string voxel_chain_root_link = global_root_link;
     std::string explicit_voxel_root_link = getStringWithFallback(*this, "self_recognition.root_link", "root_link");
@@ -518,20 +529,7 @@ void SelfRecognitionVizNode::updateAndPublish() {
 
         std::string target_frame = getStringWithFallback(*this,
             "self_recognition.target_frame_id", "target_frame_id");
-        
-        // 名前空間の補完ロジック
-        auto resolve_frame = [&](const std::string& frame) {
-            if (frame.empty()) return root_link_;
-            if (frame == "world" || frame[0] == '/') return frame;
-            std::string ns = get_namespace();
-            if (ns != "/" && !ns.empty()) {
-                if (ns[0] == '/') ns = ns.substr(1);
-                return ns + "/" + frame;
-            }
-            return frame;
-        };
-
-        target_frame = resolve_frame(target_frame);
+        target_frame = resolveFrameWithNamespace(*this, target_frame.empty() ? root_link_ : target_frame);
 
         Eigen::Isometry3d target_to_base = Eigen::Isometry3d::Identity();
         if (target_frame != root_link_) {

@@ -64,8 +64,13 @@
     publish_hz: 30.0
 
     # --- Self Recognition Settings ---
-    target_frame_id: "base_link"
-    marker_frame_id: "base_link"
+    self_recognition:
+      target_frame_id: "world"
+      marker_frame_id: "world"
+
+    root_link: "base_link"
+    target_frame_id: "world"
+    marker_frame_id: "world"
     update_hz: 30.0
     input_topic: "/camera/transformed_points"
     output_topic: "/camera/self_filtered_points"

@@ -15,6 +15,11 @@
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"
 
+#include <tf2/exceptions.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+
 namespace robot_sim::bridge {
 
 class SelfRecognitionVoxelBridgeNode : public rclcpp::Node {
@@ -26,6 +31,7 @@ public:
     declare_parameter<std::string>("input_topic", "/self_recognition/voxel_mask");
     declare_parameter<std::string>("occupied_voxels_topic", "/occupied_voxels");
     declare_parameter<std::string>("danger_voxels_topic", "/danger_voxels");
+    declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<double>("danger_inflation", ::robot_sim::common::Constants::DEFAULT_SAFETY_MARGIN);
     declare_parameter<double>("output_voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<double>("publish_hz", 30.0);
@@ -36,9 +42,13 @@ public:
                                 : input_topic_;
     occupied_topic_ = get_parameter("occupied_voxels_topic").as_string();
     danger_topic_ = get_parameter("danger_voxels_topic").as_string();
+    target_frame_id_ = get_parameter("target_frame_id").as_string();
     danger_inflation_ = std::max(0.0, get_parameter("danger_inflation").as_double());
     output_voxel_size_ = std::max(1e-6, get_parameter("output_voxel_size").as_double());
     const double hz = std::max(0.1, get_parameter("publish_hz").as_double());
+
+    tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     mask_sub_ = create_subscription<voxel_msgs::msg::Voxel>(
         input_topic_, rclcpp::QoS(1).reliable().transient_local(),
@@ -71,9 +81,9 @@ public:
         });
 
     RCLCPP_INFO(get_logger(),
-                "SelfRecognitionVoxelBridgeNode initialized. input=%s occupied=%s danger=%s inflation=%.4f output_voxel_size=%.4f",
+                "SelfRecognitionVoxelBridgeNode initialized. input=%s occupied=%s danger=%s target_frame=%s inflation=%.4f output_voxel_size=%.4f",
                 input_topic_.c_str(), occupied_topic_.c_str(),
-                danger_topic_.c_str(), danger_inflation_, output_voxel_size_);
+                danger_topic_.c_str(), target_frame_id_.c_str(), danger_inflation_, output_voxel_size_);
   }
 
 private:
@@ -103,7 +113,8 @@ private:
   std::vector<long> convertVoxelIds(
       const std::vector<long> &input_ids,
       double input_voxel_size,
-      double output_voxel_size) const {
+      double output_voxel_size,
+      const Eigen::Isometry3d &source_to_target) const {
     if (input_ids.empty()) {
       return {};
     }
@@ -118,9 +129,11 @@ private:
     output_ids.reserve(input_ids.size());
     for (long vid : input_ids) {
       const Eigen::Vector3i input_idx = input_grid.getIndexFromFlatId(vid);
-      const Eigen::Vector3f center =
+      const Eigen::Vector3f center_source =
           (input_idx.cast<float>() + Eigen::Vector3f::Constant(0.5f)) *
           static_cast<float>(input_voxel_size);
+      const Eigen::Vector3f center =
+          (source_to_target * center_source.cast<double>()).cast<float>();
       const Eigen::Vector3i output_idx =
           ::common::geometry::VoxelUtils::worldToVoxel(center, static_cast<float>(output_voxel_size));
       output_ids.push_back(output_grid.getFlatVoxelId(output_idx));
@@ -145,6 +158,21 @@ private:
     const double input_voxel_size = msg->voxel_size > 0.0f
                                         ? static_cast<double>(msg->voxel_size)
                                         : grid_.getVoxelSize();
+    const std::string source_frame = msg->header.frame_id.empty() ? target_frame_id_ : msg->header.frame_id;
+    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
+    if (!target_frame_id_.empty() && target_frame_id_ != source_frame) {
+      try {
+        const auto ts = tf_buffer_->lookupTransform(target_frame_id_, source_frame, tf2::TimePointZero);
+        source_to_target = tf2::transformToEigen(ts.transform);
+      } catch (const tf2::TransformException & ex) {
+        RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "TF lookup failed for voxel baking: target='%s' source='%s' error=%s. Falling back to source frame.",
+            target_frame_id_.c_str(), source_frame.c_str(), ex.what());
+        source_to_target = Eigen::Isometry3d::Identity();
+      }
+    }
+
     grid_.setVoxelSize(output_voxel_size_);
     grid_.setIndexingParams(msg->x_shift, msg->y_shift, msg->z_shift, msg->offset);
     processor_.getGrid().setVoxelSize(output_voxel_size_);
@@ -152,15 +180,15 @@ private:
 
     latest_occupied_ = convertVoxelIds(
         std::vector<long>(msg->data.begin(), msg->data.end()),
-        input_voxel_size, output_voxel_size_);
+        input_voxel_size, output_voxel_size_, source_to_target);
     latest_danger_ = computeDangerShell(latest_occupied_);
     has_new_data_ = true;
 
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Mask received: input_voxel_size=%.4f input=%zu occupied=%zu danger=%zu",
+        "Mask received: input_voxel_size=%.4f input=%zu occupied=%zu danger=%zu source_frame=%s target_frame=%s",
         input_voxel_size, msg->data.size(), latest_occupied_.size(),
-        latest_danger_.size());
+        latest_danger_.size(), source_frame.c_str(), target_frame_id_.c_str());
   }
 
   void publishLatest() {
@@ -178,6 +206,7 @@ private:
   std::string input_topic_relative_;
   std::string occupied_topic_;
   std::string danger_topic_;
+  std::string target_frame_id_ = "world";
   double danger_inflation_ = 0.0;
   double output_voxel_size_ = ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE;
 
@@ -186,6 +215,9 @@ private:
   std::vector<long> latest_occupied_;
   std::vector<long> latest_danger_;
   bool has_new_data_ = false;
+
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   std::mutex mutex_;
   rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr mask_sub_;

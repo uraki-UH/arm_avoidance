@@ -207,7 +207,7 @@ def generate_launch_description():
         DeclareLaunchArgument("display_mode", default_value="link_local"),
         DeclareLaunchArgument("root_link", default_value=""),
         DeclareLaunchArgument("leaf_link", default_value=""),
-        DeclareLaunchArgument("target_frame_id", default_value=""),
+        DeclareLaunchArgument("target_frame_id", default_value="world"),
         DeclareLaunchArgument("mask_topic", default_value="/self_recognition/voxel_mask"),
         OpaqueFunction(function=launch_setup),
     ])

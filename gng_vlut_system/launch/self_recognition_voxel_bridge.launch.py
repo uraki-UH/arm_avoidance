@@ -16,6 +16,7 @@ def launch_setup(context, *args, **kwargs):
                 "input_topic": LaunchConfiguration("input_topic"),
                 "occupied_voxels_topic": LaunchConfiguration("occupied_voxels_topic"),
                 "danger_voxels_topic": LaunchConfiguration("danger_voxels_topic"),
+                "target_frame_id": LaunchConfiguration("target_frame_id"),
                 "danger_inflation": LaunchConfiguration("danger_inflation"),
                 "output_voxel_size": LaunchConfiguration("output_voxel_size"),
                 "publish_hz": LaunchConfiguration("publish_hz"),
@@ -41,6 +42,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "danger_voxels_topic",
             default_value="danger_voxels",
+        ),
+        DeclareLaunchArgument(
+            "target_frame_id",
+            default_value="world",
         ),
         DeclareLaunchArgument(
             "danger_inflation",
