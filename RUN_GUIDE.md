@@ -54,9 +54,8 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py \
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
+  robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
-  occupied_voxels_topic:=/ToPoDualArm/occupied_voxels \
-  danger_voxels_topic:=/ToPoDualArm/danger_voxels \
   danger_inflation:=0.05
 
 
@@ -103,7 +102,11 @@ ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
 
-ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py   input_topic:=/ToPodualArm/left_arm_voxel　 occupied_voxels_topic:=/ToPoDualArm/occupied_voxels   danger_voxels_topic:=/ToPoDualArm/danger_voxels   danger_inflation:=0.02 \ output_voxel_size:=0.02
+ros2 launch gng_vlut_system self_recognition_voxel_bridge.launch.py \
+  robot_name:=ToPoDualArm \
+  input_topic:=/ToPoDualArm/left_arm_voxel \
+  danger_inflation:=0.02 \
+  output_voxel_size:=0.02
 
 ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 

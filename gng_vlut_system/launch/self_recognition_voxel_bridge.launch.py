@@ -14,8 +14,8 @@ def launch_setup(context, *args, **kwargs):
             output="screen",
             parameters=[{
                 "input_topic": LaunchConfiguration("input_topic"),
-                "occupied_voxels_topic": LaunchConfiguration("occupied_voxels_topic"),
-                "danger_voxels_topic": LaunchConfiguration("danger_voxels_topic"),
+                "occupied_voxels_topic": "occupied_voxels",
+                "danger_voxels_topic": "danger_voxels",
                 "target_frame_id": LaunchConfiguration("target_frame_id"),
                 "danger_inflation": LaunchConfiguration("danger_inflation"),
                 "output_voxel_size": LaunchConfiguration("output_voxel_size"),
@@ -34,14 +34,6 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "input_topic",
             default_value="self_recognition/voxel_mask",
-        ),
-        DeclareLaunchArgument(
-            "occupied_voxels_topic",
-            default_value="occupied_voxels",
-        ),
-        DeclareLaunchArgument(
-            "danger_voxels_topic",
-            default_value="danger_voxels",
         ),
         DeclareLaunchArgument(
             "target_frame_id",
