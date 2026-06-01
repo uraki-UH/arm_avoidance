@@ -153,6 +153,7 @@ interface SidebarContentProps {
     onRemoveEntity: (type: EntityType, tag: string) => void;
     transforms: Record<string, TransformData>;
     onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string) => void;
+    onOpenRobotJoints: (id: string, title: string) => void;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -264,16 +265,26 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         {/* Unified Entity Layers */}
                         {[
                             { type: 'robot', data: props.robotData, settings: props.robotSettings, label: 'Source ID', hasTf: true, 
-                              extra: (tag: string, s: any) => (
-                                <div className="mt-2 grid grid-cols-2 gap-2">
-                                    <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn ${s.showVisual ? 'active-indigo' : ''}`}>
-                                        {s.showVisual ? <Eye size={12} /> : <EyeOff size={12} />} Visual
-                                    </button>
-                                    <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn ${s.showCollision ? 'active-orange' : ''}`}>
-                                        <Box size={12} /> Collision
-                                    </button>
-                                </div>
-                              )},
+                              extra: (tag: string, s: any) => {
+                                return (
+                                    <div className="mt-2 space-y-2">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn ${s.showVisual ? 'active-indigo' : ''}`}>
+                                                {s.showVisual ? <Eye size={12} /> : <EyeOff size={12} />} Visual
+                                            </button>
+                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn ${s.showCollision ? 'active-orange' : ''}`}>
+                                                <Box size={12} /> Collision
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
+                                            className="entity-btn w-full justify-center"
+                                        >
+                                            Joint Popup
+                                        </button>
+                                    </div>
+                                );
+                              }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
                               extra: (_: string, __: any, d: any) => (

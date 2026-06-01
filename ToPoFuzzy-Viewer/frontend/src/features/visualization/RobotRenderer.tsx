@@ -9,6 +9,7 @@ interface RobotRendererProps {
     data: RobotData;
     visible?: boolean;
     color?: string;
+    jointValuesOverride?: number[];
     tf?: { pos: number[]; quat: number[] } | null;
     manualTransform?: Transform;
 }
@@ -18,6 +19,7 @@ export function RobotRenderer({
     data,
     visible = true,
     color = 'blue',
+    jointValuesOverride = [],
     tf = null,
     manualTransform,
 }: RobotRendererProps) {
@@ -29,7 +31,7 @@ export function RobotRenderer({
     const viewerPort = 9001;
 
     // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, tf]);
+    useDemandUpdate([robot, data, visible, color, tf, jointValuesOverride]);
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -85,16 +87,20 @@ export function RobotRenderer({
     // --- Update Joints ---
     useEffect(() => {
         if (!robot || !data?.jointNames || !data?.jointValues) return;
-        const signature = data.jointValues.map((v) => v.toFixed(4)).join(',');
+        const effectiveJointValues = jointValuesOverride.length > 0
+            ? jointValuesOverride
+            : data.jointValues;
+        const signature = effectiveJointValues.map((v) => v.toFixed(4)).join(',');
         if (signature === lastJointSignatureRef.current) return;
         lastJointSignatureRef.current = signature;
 
         data.jointNames.forEach((name, i) => {
             if (robot.joints[name]) {
-                robot.joints[name].setJointValue(data.jointValues[i]);
+                const nextValue = effectiveJointValues[i] ?? data.jointValues[i];
+                robot.joints[name].setJointValue(nextValue);
             }
         });
-    }, [robot, data?.jointNames, data?.jointValues]);
+    }, [robot, data?.jointNames, data?.jointValues, jointValuesOverride]);
 
     const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 

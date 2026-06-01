@@ -70,6 +70,7 @@ import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
 import { type GngLayerState } from './features/visualization/GngLayerControls';
 import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
+import { RobotJointModal } from './features/manipulation/RobotJointModal';
 
 import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
@@ -169,6 +170,7 @@ function App() {
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
     const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string } | null>(null);
+    const [robotJointContext, setRobotJointContext] = useState<{ id: string, title: string } | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -266,7 +268,7 @@ function App() {
                 data: robotData,
                 set: setRobotSettings,
                 defaults: {
-                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c',
+                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', jointControlMode: 'live',
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
@@ -286,7 +288,12 @@ function App() {
                 const next = { ...prev };
                 let changed = false;
                 Object.keys(data).forEach(tag => {
-                    if (!next[tag]) { next[tag] = { ...defaults }; changed = true; }
+                    if (!next[tag]) {
+                        next[tag] = {
+                            ...defaults,
+                        };
+                        changed = true;
+                    }
                 });
                 return changed ? next : prev;
             });
@@ -863,6 +870,9 @@ function App() {
                                 console.log(`[App] onOpenTransform triggered:`, type, id, title);
                                 setTransformContext(prev => (prev?.type === type && prev?.id === id) ? null : { type, id, title });
                             }}
+                            onOpenRobotJoints={(id, title) => {
+                                setRobotJointContext(prev => (prev?.id === id ? null : { id, title }));
+                            }}
                         />
                     </Sidebar>
                 }
@@ -906,7 +916,7 @@ function App() {
                             {
                                 data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                        {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} tf={tf} manualTransform={s.transform} />}
+                                        {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
                                         {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} tf={tf} manualTransform={s.transform} />}
                                     </group>
                                 ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
@@ -987,6 +997,28 @@ function App() {
                         voxel: () => updateEntitySettings('voxel', id, { transform: iden })
                     };
                     resets[type]?.();
+                }}
+            />
+
+            <RobotJointModal
+                open={!!robotJointContext}
+                title={robotJointContext?.title || ''}
+                subtitle={robotJointContext ? `${robotData[robotJointContext.id]?.jointNames?.length || 0} joints` : undefined}
+                robotData={robotJointContext ? (robotData[robotJointContext.id] || null) : null}
+                controlMode={robotJointContext ? (robotSettings[robotJointContext.id]?.jointControlMode || 'live') : 'live'}
+                jointValues={robotJointContext ? (robotSettings[robotJointContext.id]?.jointValues || []) : []}
+                onClose={() => setRobotJointContext(null)}
+                onUpdate={(updates) => {
+                    if (!robotJointContext) return;
+                    updateEntitySettings('robot', robotJointContext.id, { ...updates, jointControlMode: 'manual' });
+                }}
+                onModeChange={(mode) => {
+                    if (!robotJointContext) return;
+                    updateEntitySettings('robot', robotJointContext.id, { jointControlMode: mode });
+                }}
+                onReset={() => {
+                    if (!robotJointContext) return;
+                    updateEntitySettings('robot', robotJointContext.id, { jointValues: [], jointControlMode: 'live' });
                 }}
             />
         </>

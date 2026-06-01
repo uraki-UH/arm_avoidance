@@ -7,7 +7,7 @@ const fmt = (id: string, type: string) => {
     return id.split('/').pop() || id;
 };
 
-interface ControlSliderProps { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; onPointerUp?: () => void; formatValue?: (v: number) => string }
+interface ControlSliderProps { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; onPointerUp?: () => void; formatValue?: (v: number) => string; disabled?: boolean }
 
 export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility, onRemove, onOpenTransform, statusLabel, isSelected, onSelect, isActionDisabled, children, headerOnly }) => {
     const c = (
@@ -36,7 +36,7 @@ export const CompactToggle: React.FC<any> = ({ icon, label, isOn, onToggle }) =>
     </button>
 );
 
-export const ControlSlider: React.FC<ControlSliderProps> = ({ label, value, min, max, step, onChange, onPointerUp, formatValue }) => {
+export const ControlSlider: React.FC<ControlSliderProps> = ({ label, value, min, max, step, onChange, onPointerUp, formatValue, disabled = false }) => {
     const t = useRef<any>();
     const sv = (d: number) => onChange(Math.min(max, Math.max(min, value + d)));
     const st = (d: number, ms = 400) => { sv(d); t.current = setTimeout(() => st(d, Math.max(30, ms * 0.8)), ms); };
@@ -46,9 +46,9 @@ export const ControlSlider: React.FC<ControlSliderProps> = ({ label, value, min,
         <div className="space-y-1">
             <div className="flex items-center justify-between"><label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{label}</label><span className="text-[10px] font-mono text-[var(--accent-strong)]">{formatValue ? formatValue(value) : value.toFixed(step < 0.1 ? 3 : 2)}</span></div>
             <div className="flex items-center gap-2">
-                <button onPointerDown={() => st(-step)} onPointerUp={sp} onPointerLeave={sp} className="h-6 w-6 flex items-center justify-center rounded border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:bg-white/10"><Minus size={12} /></button>
-                <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} onPointerUp={onPointerUp} className="flex-1 accent-[var(--accent-color)] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer" />
-                <button onPointerDown={() => st(step)} onPointerUp={sp} onPointerLeave={sp} className="h-6 w-6 flex items-center justify-center rounded border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:bg-white/10"><Plus size={12} /></button>
+                <button disabled={disabled} onPointerDown={() => !disabled && st(-step)} onPointerUp={sp} onPointerLeave={sp} className={`h-6 w-6 flex items-center justify-center rounded border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:bg-white/10 ${disabled ? 'opacity-40 cursor-not-allowed hover:bg-white/5' : ''}`}><Minus size={12} /></button>
+                <input disabled={disabled} type="range" min={min} max={max} step={step} value={value} onChange={e => !disabled && onChange(parseFloat(e.target.value))} onPointerUp={onPointerUp} className="flex-1 accent-[var(--accent-color)] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
+                <button disabled={disabled} onPointerDown={() => !disabled && st(step)} onPointerUp={sp} onPointerLeave={sp} className={`h-6 w-6 flex items-center justify-center rounded border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:bg-white/10 ${disabled ? 'opacity-40 cursor-not-allowed hover:bg-white/5' : ''}`}><Plus size={12} /></button>
             </div>
         </div>
     );
