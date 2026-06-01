@@ -299,15 +299,13 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                               extra: (tag: string, s: any) => {
                                 return (
                                     <div className="mt-2 space-y-2">
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn ${s.showVisual ? 'active-indigo' : ''}`}>
+                                        <div className="grid grid-cols-[1.2fr_1.2fr_1.4fr_1.0fr] gap-1">
+                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn px-3 py-1 text-[10px] ${s.showVisual ? 'active-indigo' : ''}`}>
                                                 {s.showVisual ? <Eye size={12} /> : <EyeOff size={12} />} Visual
                                             </button>
-                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn ${s.showCollision ? 'active-orange' : ''}`}>
+                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn px-3 py-1 text-[10px] ${s.showCollision ? 'active-orange' : ''}`}>
                                                 <Box size={12} /> Collision
                                             </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
                                             <ColorActionButton
                                                 title="Robot color"
                                                 swatches={[
@@ -318,7 +316,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             />
                                             <button
                                                 onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
-                                                className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                                                className="entity-btn w-full justify-center px-3 py-1 text-[10px]"
                                             >
                                                 Joint
                                             </button>
@@ -357,12 +355,12 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             props.onOpenTransform(type as any, tag, `${type}: ${tag}`);
                                         }}
                                     >
-                                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                        <div className="mt-[1px] flex items-center gap-1 text-[10px] leading-none text-[var(--text-secondary)]">
                                             <span className="opacity-70">{label}:</span>
                                             <span className="font-mono opacity-70">{tag}</span>
                                         </div>
                                         {hasTf && (
-                                            <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
+                                            <div className="mt-[1px] flex items-center gap-1 text-[10px] leading-none text-[var(--text-secondary)]">
                                                 <span>Frame:</span>
                                                 <span className="flex items-center gap-1">
                                                     <span className={`tf-dot ${d.frameId && d.frameId !== 'world' && props.transforms[d.frameId] ? 'active' : 'inactive'}`} />

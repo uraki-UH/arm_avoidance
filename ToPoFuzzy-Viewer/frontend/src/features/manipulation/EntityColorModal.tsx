@@ -168,12 +168,6 @@ export function EntityColorModal({
                                 <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
                                     Frame: <span className="font-mono font-semibold text-[var(--text-primary)]">{graphData?.frameId || 'world'}</span>
                                 </div>
-                                <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
-                                    Nodes: <span className="font-semibold text-[var(--text-primary)]">{graphData?.nodes.length ?? 0}</span>
-                                </div>
-                                <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5">
-                                    Edges: <span className="font-semibold text-[var(--text-primary)]">{Math.floor((graphData?.edges.length ?? 0) / 2)}</span>
-                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">

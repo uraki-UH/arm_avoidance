@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Eye, EyeOff, Move, Trash2, Minus, Plus } from 'lucide-react';
-export const getStatusLabel = (type: string, mode?: string) => type === 'graph' ? (mode === 'static' ? 'Static' : 'Dynamic') : type.toUpperCase();
+export const getStatusLabel = (type: string, mode?: string) => type === 'graph' ? (mode === 'static' ? 'Static Graph' : 'Dynamic Graph') : type.toUpperCase();
 
 const fmt = (id: string, type: string) => {
     if (!id || id === 'default') return type === 'graph' ? 'GNG Topology' : type === 'robot' ? 'Robot Model' : type === 'marker' ? 'Markers' : 'Layer';
@@ -11,9 +11,9 @@ interface ControlSliderProps { label: string; value: number; min: number; max: n
 
 export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility, onRemove, onOpenTransform, statusLabel, isSelected, onSelect, isActionDisabled, children, headerOnly }) => {
     const c = (
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-start gap-2">
+                <div className="mb-0.5 flex items-start gap-2">
                     <button onClick={e => { e.stopPropagation(); !isActionDisabled && onToggleVisibility(); }} className={`h-6 w-6 inline-flex items-center justify-center rounded-md border ${visible ? 'border-[var(--accent-color)]/50 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'}`}>
                         {visible ? <Eye size={14} /> : <EyeOff size={14} />}
                     </button>
@@ -29,15 +29,15 @@ export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility
                 </div>
                 {children}
             </div>
-            <button onClick={e => { e.stopPropagation(); !isActionDisabled && onRemove(); }} className="btn-icon btn-icon-danger"><Trash2 size={13} /></button>
+            <button onClick={e => { e.stopPropagation(); !isActionDisabled && onRemove(); }} className="btn-icon btn-icon-danger self-start mt-0.5"><Trash2 size={13} /></button>
         </div>
     );
-    return headerOnly ? c : <div onClick={onSelect} className={`rounded-lg border p-2 mb-2 ${isSelected ? 'border-[var(--accent-color)]/70 bg-[var(--accent-soft)]' : 'border-white/10 bg-white/5 hover:bg-white/10'} ${isActionDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}>{c}</div>;
+    return headerOnly ? c : <div onClick={onSelect} className={`rounded-lg border px-2 py-1 mb-1 ${isSelected ? 'border-[var(--accent-color)]/70 bg-[var(--accent-soft)]' : 'border-white/10 bg-white/5 hover:bg-white/10'} ${isActionDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}>{c}</div>;
 };
 
-export const CompactToggle: React.FC<any> = ({ icon, label, isOn, onToggle }) => (
-    <button onClick={e => { e.stopPropagation(); onToggle(); }} className={`flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 w-full ${isOn ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)]/50 text-[var(--text-primary)]' : 'border-white/5 bg-black/20 text-[var(--text-secondary)] opacity-60'}`}>
-        <div className="flex items-center gap-1.5"><span className={isOn ? 'text-[var(--accent-strong)]' : ''}>{icon}</span><span className="text-[11px] font-medium">{label}</span></div>
+export const CompactToggle: React.FC<any> = ({ icon, label, isOn, onToggle, className = '' }) => (
+    <button onClick={e => { e.stopPropagation(); onToggle(); }} className={`flex items-center justify-between gap-1.5 rounded-md border px-2.5 py-[0.375rem] w-full ${className} ${isOn ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)]/50 text-[var(--text-primary)]' : 'border-white/5 bg-black/20 text-[var(--text-secondary)] opacity-60'}`}>
+        <div className="flex items-center gap-1.5"><span className={isOn ? 'text-[var(--accent-strong)]' : ''}>{icon}</span><span className="text-[10px] font-medium leading-none">{label}</span></div>
         <div className={`h-1.5 w-1.5 rounded-full ${isOn ? 'bg-[var(--accent-color)] shadow-[0_0_5px_var(--accent-color)]' : 'bg-white/20'}`} />
     </button>
 );

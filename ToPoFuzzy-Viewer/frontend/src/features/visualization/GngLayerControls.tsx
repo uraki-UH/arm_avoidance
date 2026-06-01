@@ -61,64 +61,69 @@ export function GngLayerControls({
                 onRemove={onRemove}
                 onOpenTransform={onOpenTransform}
             >
-                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-secondary)]">
-                    <span>{graphData.nodes.length} nodes • {Math.floor(graphData.edges.length / 2)} edges</span>
-                    {graphData.frameId && (() => {
-                        const isWorld = graphData.frameId === 'world';
-                        const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
-                        const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
-                        return (
-                            <span className="flex items-center gap-1">
-                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
-                                <span className="font-mono opacity-70">{graphData.frameId}</span>
-                            </span>
-                        );
-                    })()}
+                <div className="mt-0 flex flex-col gap-0 pl-2 text-[10px] leading-none text-[var(--text-secondary)]">
+                    <div className="flex items-center gap-2 whitespace-nowrap font-mono tabular-nums">
+                        <span>{graphData.nodes.length} nodes</span>
+                        {graphData.frameId && (() => {
+                            const isWorld = graphData.frameId === 'world';
+                            const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
+                            const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                            return (
+                                <span className="flex items-center gap-1">
+                                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
+                                    <span className="font-mono opacity-70">{graphData.frameId}</span>
+                                </span>
+                            );
+                        })()}
+                    </div>
+                    <span className="whitespace-nowrap font-mono tabular-nums leading-none">{Math.floor(graphData.edges.length / 2)} edges</span>
                 </div>
             </LayerItem>
 
             {settings.visible && (
-                <div className="mt-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
+                <div className="mt-1">
+                    <div className="-ml-1 grid grid-cols-8 gap-1">
                         <CompactToggle
                             icon={<Square size={12} />}
                             label="Nodes"
                             isOn={settings.showNodes}
                             onToggle={() => onUpdate({ showNodes: !settings.showNodes })}
+                            className="col-span-3 w-[90%] justify-self-start"
                         />
                         <CompactToggle
                             icon={<Share2 size={12} />}
                             label="Edges"
                             isOn={settings.showEdges}
                             onToggle={() => onUpdate({ showEdges: !settings.showEdges })}
+                            className="col-span-3 w-[90%] justify-self-start"
                         />
+                        {onOpenColorSettings && (
+                            <button
+                                onClick={onOpenColorSettings}
+                                title="Graph colors"
+                                className="entity-btn col-span-2 min-w-0 flex-col items-stretch justify-center gap-0.5 overflow-hidden px-1 py-0.5 text-[10px] leading-none"
+                            >
+                                <span className="flex items-center justify-between gap-1 rounded border border-white/10 bg-black/20 px-1.5 py-0">
+                                    <span className="text-[9px] font-medium leading-none">Node</span>
+                                    <span
+                                        className="h-3 w-3 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                                        style={{ backgroundColor: nodeColorPreview || settings.nodeColor || '#7c8c66' }}
+                                        aria-hidden="true"
+                                        title="Node color"
+                                    />
+                                </span>
+                                <span className="flex items-center justify-between gap-1 rounded border border-white/10 bg-black/20 px-1.5 py-0">
+                                    <span className="text-[9px] font-medium leading-none">Edge</span>
+                                    <span
+                                        className="h-3 w-3 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
+                                        style={{ backgroundColor: edgeColorPreview || settings.edgeColor || '#08d408' }}
+                                        aria-hidden="true"
+                                        title="Edge color"
+                                    />
+                                </span>
+                            </button>
+                        )}
                     </div>
-                    {onOpenColorSettings && (
-                        <button
-                            onClick={onOpenColorSettings}
-                            title="Graph colors"
-                            className="entity-btn w-full justify-start gap-3 px-2 py-1.5 text-[11px]"
-                        >
-                            <span className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1">
-                                <span
-                                    className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
-                                    style={{ backgroundColor: nodeColorPreview || settings.nodeColor || '#7c8c66' }}
-                                    aria-hidden="true"
-                                    title="Node color"
-                                />
-                                <span>Node</span>
-                            </span>
-                            <span className="flex items-center gap-2 rounded border border-white/10 bg-black/20 px-2 py-1">
-                                <span
-                                    className="h-3.5 w-3.5 rounded border border-white/20 shadow-[0_0_0_1px_rgba(0,0,0,0.25)_inset]"
-                                    style={{ backgroundColor: edgeColorPreview || settings.edgeColor || '#08d408' }}
-                                    aria-hidden="true"
-                                    title="Edge color"
-                                />
-                                <span>Edge</span>
-                            </span>
-                        </button>
-                    )}
                 </div>
             )}
         </div>
