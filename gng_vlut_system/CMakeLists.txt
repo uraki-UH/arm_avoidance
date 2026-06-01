@@ -48,6 +48,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(voxel_indexing_common REQUIRED)
 find_package(grasping_system REQUIRED)
+find_package(gng_control_msgs REQUIRED)
 
 set(_eigen_include_dirs "${Eigen3_INCLUDE_DIRS}")
 if(NOT _eigen_include_dirs AND EIGEN3_INCLUDE_DIR)
@@ -83,6 +84,7 @@ message(STATUS "rmw_implementation_cmake_INCLUDE_DIRS: ${_rmw_include_dirs}")
 include_directories(${_rmw_include_dirs})
 include_directories(${voxel_indexing_common_INCLUDE_DIRS})
 include_directories(${grasping_system_INCLUDE_DIRS})
+include_directories(${gng_control_msgs_INCLUDE_DIRS})
 
 # Standard definitions
 add_definitions(-DPROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

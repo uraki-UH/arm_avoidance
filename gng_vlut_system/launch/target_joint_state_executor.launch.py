@@ -7,6 +7,15 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+def _resolve_topic(robot_name: str, topic: str) -> str:
+    topic = (topic or "").strip()
+    if not topic:
+        return topic
+    if topic.startswith("/"):
+        return topic
+    return f"/{robot_name}/{topic}"
+
+
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
@@ -16,6 +25,10 @@ def launch_setup(context, *args, **kwargs):
     max_joint_velocity = LaunchConfiguration("max_joint_velocity").perform(context)
     position_tolerance = LaunchConfiguration("position_tolerance").perform(context)
     use_wraparound = LaunchConfiguration("use_wraparound").perform(context)
+
+    target_topic = _resolve_topic(robot_name, target_topic or "target_joint_states")
+    state_topic = _resolve_topic(robot_name, state_topic or "joint_states")
+    command_topic = _resolve_topic(robot_name, command_topic or "joint_commands")
 
     node_params = {
         "target_topic": target_topic,

@@ -16,9 +16,12 @@
 #include <Eigen/Dense>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_srvs/srv/trigger.hpp>
+
+#include <gng_control_msgs/msg/joint_control_claim.hpp>
 
 #include "common/resource_utils.hpp"
 #include "planning/gng_dijkstra_planner.hpp"
@@ -163,9 +166,14 @@ public:
     declare_parameter("joint_topic", "/ToPoDualArm/joint_states");
     declare_parameter("topological_map_topic", "/ToPoDualArm/topological_map_static");
     declare_parameter("target_topic", "target_joint_states");
+    declare_parameter("control_claim_topic", "");
+    declare_parameter("control_claim_priority", 10);
+    declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
+    declare_parameter("control_claim_enabled", true);
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
     declare_parameter("publish_hz", 20.0);
     declare_parameter("avoid_collisions", true);
+    declare_parameter("avoid_danger", true);
     declare_parameter("strict_goal_collision_check", false);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
@@ -307,6 +315,8 @@ public:
     planner_.setCostEvaluator(
         std::make_shared<CostType>(1000.0f));
     planner_.setAvoidCollisions(get_parameter("avoid_collisions").as_bool());
+    avoid_danger_ = get_parameter("avoid_danger").as_bool();
+    planner_.setAvoidDanger(avoid_danger_);
     planner_.setStrictGoalCollisionCheck(
         get_parameter("strict_goal_collision_check").as_bool());
 
@@ -327,8 +337,19 @@ public:
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     target_topic_ = get_parameter("target_topic").as_string();
     if (target_topic_.empty()) {
-      target_topic_ = "target_joint_states";
+      const std::string ns_raw = std::string(get_namespace());
+      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
+      target_topic_ = "/" + ns + "/target_joint_states";
     }
+    control_claim_topic_ = get_parameter("control_claim_topic").as_string();
+    if (control_claim_topic_.empty()) {
+      const std::string ns_raw = std::string(get_namespace());
+      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
+      control_claim_topic_ = "/" + ns + "/control_claims";
+    }
+    control_claim_priority_ = get_parameter("control_claim_priority").as_int();
+    control_claim_mode_ = get_parameter("control_claim_mode").as_int();
+    control_claim_enabled_ = get_parameter("control_claim_enabled").as_bool();
 
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_topic, rclcpp::QoS(10).reliable(),
@@ -353,6 +374,28 @@ public:
     target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         target_topic_, rclcpp::QoS(10).reliable());
 
+    control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
+        control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+
+    param_cb_handle_ = add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> & params) {
+          rcl_interfaces::msg::SetParametersResult result;
+          result.successful = true;
+          result.reason = "ok";
+          std::lock_guard<std::mutex> lock(mutex_);
+          for (const auto & param : params) {
+            const auto & name = param.get_name();
+            if (name == "control_claim_priority") {
+              control_claim_priority_ = param.as_int();
+            } else if (name == "control_claim_mode") {
+              control_claim_mode_ = param.as_int();
+            } else if (name == "control_claim_enabled") {
+              control_claim_enabled_ = param.as_bool();
+            }
+          }
+          return result;
+        });
+
     request_update_srv_ = create_service<std_srvs::srv::Trigger>(
         "request_trajectory_update",
         [this](const std_srvs::srv::Trigger::Request::SharedPtr,
@@ -369,9 +412,9 @@ public:
         [this]() { this->publishTargetLocked(); });
 
     RCLCPP_INFO(get_logger(),
-                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s trajectory_topic=%s dof=%d trial_mode=%d",
+                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s dof=%d trial_mode=%d",
                 joint_topic.c_str(), topological_map_topic.c_str(),
-                target_topic_.c_str(), trajectory_topic_.c_str(), dof, trial_mode_ ? 1 : 0);
+                target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(), dof, trial_mode_ ? 1 : 0);
     RCLCPP_INFO(get_logger(),
                 "Waiting for inputs: joint_topic=%s topological_map_topic=%s",
                 joint_topic.c_str(), topological_map_topic.c_str());
@@ -567,7 +610,8 @@ private:
               "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
               trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
-      } else if (start_node.status.is_colliding || start_node.status.is_danger) {
+      } else if (start_node.status.is_colliding ||
+                 (start_node.status.is_danger && avoid_danger_)) {
         if (!cached_safe_goal_ids_.empty()) {
           auto [reached_goal_id, node_path] =
               planner_.planToAnyNode(start_id, cached_safe_goal_ids_, *gng_);
@@ -684,6 +728,15 @@ private:
     out.velocity.resize(controlled_joint_names_.size(), 0.0);
     out.effort.resize(controlled_joint_names_.size(), 0.0);
     target_pub_->publish(out);
+
+    gng_control_msgs::msg::JointControlClaim claim;
+    claim.command_topic = target_topic_;
+    claim.joint_names = controlled_joint_names_;
+    claim.priority = control_claim_priority_;
+    claim.mode = static_cast<uint8_t>(control_claim_mode_);
+    claim.enabled = control_claim_enabled_;
+    control_claim_pub_->publish(claim);
+
     last_target_q_ = target_q;
   }
 
@@ -694,11 +747,16 @@ private:
   PlannerType planner_;
 
   std::string target_topic_;
+  std::string control_claim_topic_;
+  int control_claim_priority_ = 10;
+  int control_claim_mode_ = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
+  bool control_claim_enabled_ = true;
   std::string trajectory_topic_;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr target_pub_;
+  rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
@@ -712,6 +770,7 @@ private:
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
   bool trial_safe_only_ = true;
+  bool avoid_danger_ = true;
   bool trajectory_update_requested_ = true;
   bool active_trajectory_valid_ = false;
   std::vector<int> active_node_path_;
@@ -719,6 +778,7 @@ private:
   int active_goal_id_ = -1;
   double waypoint_tolerance_ = 0.05;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
   std::mt19937 rng_;
 
   int pickRandomGoalLocked(int start_id) {

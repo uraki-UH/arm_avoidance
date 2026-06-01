@@ -4,6 +4,15 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+def _resolve_topic(robot_name: str, topic: str) -> str:
+    topic = (topic or "").strip()
+    if not topic:
+        return topic
+    if topic.startswith("/"):
+        return topic
+    return f"/{robot_name}/{topic}"
+
+
 def safe_float(value, default):
     try:
         if value is None or value == "":
@@ -32,6 +41,10 @@ def launch_setup(context, *args, **kwargs):
     position_tolerance = LaunchConfiguration("position_tolerance").perform(context)
     use_wraparound = LaunchConfiguration("use_wraparound").perform(context)
     hold_when_no_target = LaunchConfiguration("hold_when_no_target").perform(context)
+
+    target_topic = _resolve_topic(robot_name, target_topic or "target_joint_states")
+    state_topic = _resolve_topic(robot_name, state_topic or "joint_states")
+    output_topic = _resolve_topic(robot_name, output_topic or "joint_states")
 
     return [
         Node(

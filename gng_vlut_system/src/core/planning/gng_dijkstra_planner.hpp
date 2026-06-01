@@ -76,6 +76,8 @@ public:
    */
   void setAvoidCollisions(bool enable) { avoid_collisions_ = enable; }
 
+  void setAvoidDanger(bool enable) { avoid_danger_ = enable; }
+
   /**
    * ゴールノードの厳格な衝突チェックを設定する。
    */
@@ -146,6 +148,9 @@ public:
               continue;
             }
           }
+          if (avoid_danger_ && v.status.is_danger) {
+            continue;
+          }
           // Note: 現在のノード (current.id) が衝突していても、移動先
           // (neighbor_id) が安全なら移動を許可する（Escape）。
         }
@@ -163,6 +168,9 @@ public:
           for (int nv_id : gng.getNeighborsAngle(neighbor_id)) {
             if (gng.nodeAt(nv_id).status.is_colliding) {
               safety_penalty += 2.0f; // 1つ隣接衝突があるごとに大幅なコスト増
+            }
+            if (avoid_danger_ && gng.nodeAt(nv_id).status.is_danger) {
+              safety_penalty += 1.0f;
             }
           }
         }
@@ -264,6 +272,7 @@ public:
 
         if (avoid_collisions_) {
           bool v_colliding = v.status.is_colliding;
+          bool v_danger = v.status.is_danger;
 
           if (v_colliding) {
             // Target node is colliding
@@ -275,6 +284,9 @@ public:
             // If strict check is enabled, even goal collision is forbidden
             if (strict_goal_collision_check_)
               continue;
+          }
+          if (avoid_danger_ && v_danger) {
+            continue;
           }
 
           // Note: We ALLOW u_colliding (current) -> !v_colliding (safe)
@@ -293,6 +305,9 @@ public:
           for (int nv_id : gng.getNeighborsAngle(neighbor_id)) {
             if (gng.nodeAt(nv_id).status.is_colliding) {
               safety_penalty += 2.0f;
+            }
+            if (avoid_danger_ && gng.nodeAt(nv_id).status.is_danger) {
+              safety_penalty += 1.0f;
             }
           }
         }
@@ -469,6 +484,7 @@ public:
 private:
   std::shared_ptr<ICostEvaluator<T_angle, T_coord>> evaluator_;
   bool avoid_collisions_ = false;
+  bool avoid_danger_ = true;
   bool strict_goal_collision_check_ = false; // Added
   Stats stats_;
 };

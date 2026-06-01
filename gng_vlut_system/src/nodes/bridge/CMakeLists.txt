@@ -6,7 +6,7 @@ ament_target_dependencies(robot_bridge_node rclcpp sensor_msgs std_msgs)
 # 2. Joint State Mux Node
 add_executable(joint_state_mux_node joint_state_mux_node.cpp)
 target_link_libraries(joint_state_mux_node safety_engine)
-ament_target_dependencies(joint_state_mux_node rclcpp sensor_msgs)
+ament_target_dependencies(joint_state_mux_node rclcpp sensor_msgs gng_control_msgs)
 
 # 3. TopoArm UDP Bridge
 add_executable(topoarm_udp_bridge topoarm_udp_bridge.cpp)

@@ -32,6 +32,7 @@
   <depend>tf2</depend>
   <depend>voxel_indexing_common</depend>
   <depend>grasping_system</depend>
+  <depend>gng_control_msgs</depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>

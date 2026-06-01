@@ -259,11 +259,20 @@ def launch_setup(context, *args, **kwargs):
             }.items()
         ),
 
+        # 0.5 source claim / command を統合する mux
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "joint_state_mux.launch.py")),
+            launch_arguments={
+                "robot_name": robot_name,
+            }.items()
+        ),
+
+        # 0.6 仮想的な関節追従ドライバ（mux の target_joint_states -> joint_states）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "virtual_joint_state_driver.launch.py")),
             launch_arguments={
                 "robot_name": robot_name,
-                "target_topic": "target_joint_states",
+                "target_topic": f"/{robot_name}/target_joint_states",
                 "state_topic": f"/{robot_name}/joint_states",
                 "output_topic": f"/{robot_name}/joint_states",
             }.items()
