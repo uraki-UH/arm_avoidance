@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
 import { Share2, Square } from 'lucide-react';
-import { GraphData, LayerSettings, STATIC_GNG_DEFAULTS, DYNAMIC_GNG_DEFAULTS } from '../../types';
+import { GraphData, LayerSettings } from '../../types';
 
 export interface GngLayerState {
     visible: boolean;
@@ -30,11 +29,11 @@ interface GngLayerControlsProps {
     onUpdate: (updates: Partial<LayerSettings>) => void;
     onRemove: () => void;
     onOpenTransform?: () => void;
-    showOpacity?: boolean;
+    onOpenColorSettings?: () => void;
     hasTf?: boolean;
 }
 
-import { getStatusLabel, LayerItem, CompactToggle, ControlSlider } from '../../components/ui/SharedControls';
+import { getStatusLabel, LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 
 export function GngLayerControls({
     tag,
@@ -43,52 +42,9 @@ export function GngLayerControls({
     onUpdate,
     onRemove,
     onOpenTransform,
-    showOpacity = false,
+    onOpenColorSettings,
     hasTf = false,
 }: GngLayerControlsProps) {
-    const isStatic = graphData.mode === 'static';
-
-    const [localOpacity, setLocalOpacity] = useState<number>(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
-    const [localNodeColor, setLocalNodeColor] = useState<string>(settings.nodeColor || STATIC_GNG_DEFAULTS.nodeColor);
-    const [localEdgeColor, setLocalEdgeColor] = useState<string>(settings.edgeColor || STATIC_GNG_DEFAULTS.edgeColor);
-    const [localEmissiveIntensity, setLocalEmissiveIntensity] = useState<number>(settings.emissiveIntensity ?? (isStatic ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity));
-
-    useEffect(() => {
-        setLocalOpacity(settings.opacity ?? STATIC_GNG_DEFAULTS.opacity);
-    }, [settings.opacity]);
-
-    useEffect(() => {
-        setLocalNodeColor(settings.nodeColor || (isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor));
-    }, [settings.nodeColor, isStatic]);
-
-    useEffect(() => {
-        setLocalEdgeColor(settings.edgeColor || (isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor));
-    }, [settings.edgeColor, isStatic]);
-
-    useEffect(() => {
-        setLocalEmissiveIntensity(settings.emissiveIntensity ?? (isStatic ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity));
-    }, [settings.emissiveIntensity, isStatic]);
-
-    const handleNodeColorChange = (nextColor: string) => {
-        setLocalNodeColor(nextColor);
-        onUpdate({ nodeColor: nextColor });
-    };
-
-    const handleEdgeColorChange = (nextColor: string) => {
-        setLocalEdgeColor(nextColor);
-        onUpdate({ edgeColor: nextColor });
-    };
-
-    const handleOpacityChange = (nextOpacity: number) => {
-        setLocalOpacity(nextOpacity);
-        onUpdate({ opacity: nextOpacity });
-    };
-
-    const handleEmissiveChange = (nextValue: number) => {
-        setLocalEmissiveIntensity(nextValue);
-        onUpdate({ emissiveIntensity: nextValue });
-    };
-
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
             <LayerItem
@@ -133,59 +89,14 @@ export function GngLayerControls({
                             onToggle={() => onUpdate({ showEdges: !settings.showEdges })}
                         />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                Default Color
-                            </label>
-                            <input
-                                type="color"
-                                value={localNodeColor}
-                                onChange={(e) => handleNodeColorChange(e.target.value)}
-                                onInput={(e) => handleNodeColorChange((e.target as HTMLInputElement).value)}
-                                className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
-                                title={isStatic ? 'Static node color' : 'Dynamic node palette base color'}
-                            />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                Edge Color
-                            </label>
-                            <input
-                                type="color"
-                                value={localEdgeColor}
-                                onChange={(e) => handleEdgeColorChange(e.target.value)}
-                                onInput={(e) => handleEdgeColorChange((e.target as HTMLInputElement).value)}
-                                className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
-                                title={isStatic ? 'Static edge color' : 'Dynamic edge color'}
-                            />
-                        </div>
-                    </div>
-
-                    {showOpacity && (
-                        <ControlSlider
-                            label="Opacity"
-                            value={localOpacity}
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            onChange={handleOpacityChange}
-                            onPointerUp={() => onUpdate({ opacity: localOpacity })}
-                            formatValue={(v) => `${Math.round(v * 100)}%`}
-                        />
+                    {onOpenColorSettings && (
+                        <button
+                            onClick={onOpenColorSettings}
+                            className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                        >
+                            Color
+                        </button>
                     )}
-
-                    <ControlSlider
-                        label="Emissive"
-                        value={localEmissiveIntensity}
-                        min={0}
-                        max={1.5}
-                        step={0.01}
-                        onChange={handleEmissiveChange}
-                        onPointerUp={() => onUpdate({ emissiveIntensity: localEmissiveIntensity })}
-                        formatValue={(v) => `${v.toFixed(2)}x`}
-                    />
                 </div>
             )}
         </div>

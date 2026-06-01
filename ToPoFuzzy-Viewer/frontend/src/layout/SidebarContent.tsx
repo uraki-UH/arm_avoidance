@@ -154,6 +154,7 @@ interface SidebarContentProps {
     transforms: Record<string, TransformData>;
     onOpenTransform: (type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string) => void;
     onOpenRobotJoints: (id: string, title: string) => void;
+    onOpenColorSettings: (type: 'robot' | 'voxel' | 'graph', id: string, title: string) => void;
 }
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
@@ -257,9 +258,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                                 onRemove={() => props.onRemoveGngLayer(tag)}
-                                showOpacity={true}
                                 hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
                                 onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
+                                onOpenColorSettings={() => props.onOpenColorSettings('graph', tag, `Graph colors: ${tag}`)}
                             />
                         ))}
 
@@ -277,43 +278,39 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 <Box size={12} /> Collision
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
-                                            <div className="flex flex-col gap-1">
-                                                <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                                    Color
-                                                </label>
-                                                <input
-                                                    type="color"
-                                                    value={s.color || '#87ceeb'}
-                                                    onChange={(e) => props.onUpdateSettings('robot', tag, { color: e.target.value })}
-                                                    className="h-7 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col gap-1">
-                                                <ControlSlider
-                                                    label="Emissive"
-                                                    value={s.emissiveIntensity ?? 0.2}
-                                                    min={0}
-                                                    max={1.5}
-                                                    step={0.01}
-                                                    onChange={(v) => props.onUpdateSettings('robot', tag, { emissiveIntensity: v })}
-                                                    formatValue={(v) => `${v.toFixed(2)}x`}
-                                                />
-                                            </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => props.onOpenColorSettings('robot', tag, `Robot colors: ${tag}`)}
+                                                className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                                            >
+                                                Color
+                                            </button>
+                                            <button
+                                                onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
+                                                className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                                            >
+                                                Joint
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
-                                            className="entity-btn w-full justify-center"
-                                        >
-                                            Joint Popup
-                                        </button>
                                     </div>
                                 );
                               }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID Stream', hasTf: true,
-                              extra: (_: string, __: any, d: any) => (
-                                <div className="mt-1 text-[10px] text-[var(--text-secondary)]">Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span></div>
+                              extra: (tag: string, s: any, d: any) => (
+                                <div className="mt-2 space-y-2">
+                                    <div className="grid grid-cols-2 gap-2 text-[10px] text-[var(--text-secondary)]">
+                                    </div>
+                                    <button
+                                        onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
+                                        className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                                    >
+                                        Color
+                                    </button>
+                                    <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+                                        Resolution: <span className="text-[var(--text-primary)]">{Math.round(d.layout?.voxelSize * 1000) / 1000}m</span>
+                                    </div>
+                                </div>
                               )}
                         ].map(({ type, data, settings, label, hasTf, extra }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {
@@ -343,10 +340,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 </span>
                                             </div>
                                         )}
-                                        {extra?.(tag, s, d)}
-                                    </LayerItem>
-                                );
-                            })
+                                {extra?.(tag, s, d)}
+                            </LayerItem>
+                        );
+                    })
                         )}
                     </div>
 
@@ -409,7 +406,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
-            {Object.keys(props.voxelData).length > 0 && (
+                    {Object.keys(props.voxelData).length > 0 && (
                 <CollapsibleSection title="Voxel Rendering" icon={<Box size={16} />} defaultOpen={true}>
                     <div className="surface-muted space-y-4 p-3">
                         {Object.entries(props.voxelData).map(([tag]) => {
@@ -426,32 +423,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             className="h-3 w-3 accent-[var(--accent-color)]"
                                         />
                                     </div>
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[11px] text-[var(--text-secondary)]">Color</label>
-                                        <input 
-                                            type="color" 
-                                            value={settings.color}
-                                            onChange={(e) => props.onUpdateSettings('voxel', tag, { color: e.target.value })}
-                                            className="h-5 w-8 cursor-pointer rounded border-0 bg-transparent"
-                                        />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
+                                            className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
+                                        >
+                                            Color
+                                        </button>
                                     </div>
-                                    <ControlSlider
-                                        label="Opacity"
-                                        value={settings.opacity}
-                                        min={0}
-                                        max={1}
-                                        step={0.05}
-                                        onChange={(v) => props.onUpdateSettings('voxel', tag, { opacity: v })}
-                                    />
-                                    <ControlSlider
-                                        label="Emissive"
-                                        value={settings.emissiveIntensity ?? 0.2}
-                                        min={0}
-                                        max={1.5}
-                                        step={0.01}
-                                        onChange={(v) => props.onUpdateSettings('voxel', tag, { emissiveIntensity: v })}
-                                        formatValue={(v) => `${v.toFixed(2)}x`}
-                                    />
                                 </div>
                             );
                         })}

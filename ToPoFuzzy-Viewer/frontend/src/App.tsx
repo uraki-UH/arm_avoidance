@@ -71,6 +71,7 @@ import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/Cl
 import { type GngLayerState } from './features/visualization/GngLayerControls';
 import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
 import { RobotJointModal } from './features/manipulation/RobotJointModal';
+import { EntityColorModal } from './features/manipulation/EntityColorModal';
 
 import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
@@ -89,6 +90,8 @@ interface EditJobStatus {
     stage: string;
     error?: string;
 }
+
+type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: string };
 
 const cloneVec3 = (
     value: [number, number, number] | undefined,
@@ -171,6 +174,7 @@ function App() {
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
     const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string } | null>(null);
     const [robotJointContext, setRobotJointContext] = useState<{ id: string, title: string } | null>(null);
+    const [colorContext, setColorContext] = useState<ColorContext | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
     const wsUrl = `ws://${window.location.hostname}:${viewerPort}`;
@@ -875,6 +879,9 @@ function App() {
                             onOpenRobotJoints={(id, title) => {
                                 setRobotJointContext(prev => (prev?.id === id ? null : { id, title }));
                             }}
+                            onOpenColorSettings={(type, id, title) => {
+                                setColorContext(prev => (prev?.type === type && prev?.id === id ? null : { type, id, title }));
+                            }}
                         />
                     </Sidebar>
                 }
@@ -1021,6 +1028,36 @@ function App() {
                 onReset={() => {
                     if (!robotJointContext) return;
                     updateEntitySettings('robot', robotJointContext.id, { jointValues: [], jointControlMode: 'live' });
+                }}
+            />
+
+            <EntityColorModal
+                open={!!colorContext}
+                title={colorContext?.title || ''}
+                subtitle={colorContext ? (colorContext.type === 'graph'
+                    ? `${graphData[colorContext.id]?.nodes.length || 0} nodes`
+                    : colorContext.type === 'robot'
+                        ? `${robotData[colorContext.id]?.jointNames?.length || 0} joints`
+                        : `${voxelData[colorContext.id]?.data?.length || 0} voxels`) : undefined}
+                entityType={colorContext?.type || 'robot'}
+                settings={colorContext
+                    ? (colorContext.type === 'robot'
+                        ? robotSettings[colorContext.id] || null
+                        : colorContext.type === 'voxel'
+                            ? voxelSettings[colorContext.id] || null
+                            : layerSettings[colorContext.id] || null)
+                    : null}
+                graphData={colorContext?.type === 'graph' ? (graphData[colorContext.id] || null) : null}
+                onClose={() => setColorContext(null)}
+                onUpdate={(updates) => {
+                    if (!colorContext) return;
+                    if (colorContext.type === 'robot') {
+                        updateEntitySettings('robot', colorContext.id, updates);
+                    } else if (colorContext.type === 'voxel') {
+                        updateEntitySettings('voxel', colorContext.id, updates);
+                    } else {
+                        handleUpdateLayerSettings(colorContext.id, updates as Partial<LayerSettings>);
+                    }
                 }}
             />
         </>
