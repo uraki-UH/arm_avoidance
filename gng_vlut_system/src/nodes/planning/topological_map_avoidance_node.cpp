@@ -579,6 +579,8 @@ private:
                 active_node_path_.size());
             clearActiveTrajectoryLocked();
             trajectory_update_requested_ = true;
+            goal_replan_failures_ = 0;
+            force_goal_switch_ = false;
           }
         }
       }
@@ -647,7 +649,54 @@ private:
         const int target_node_id = active_node_path_[active_waypoint_index_];
         if (target_node_id >= 0 &&
             target_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
-          target_q = gng_->nodeAt(target_node_id).weight_angle;
+          const auto isUnsafeNode = [this](int node_id) {
+            if (!gng_ || node_id < 0 ||
+                node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+              return true;
+            }
+
+            const auto &node = gng_->nodeAt(node_id);
+            return node.id == -1 || !node.status.active || !node.status.valid ||
+                   node.status.is_colliding || node.status.is_danger;
+          };
+
+          const bool has_next = active_waypoint_index_ + 1 < active_node_path_.size();
+          const bool has_next_next = active_waypoint_index_ + 2 < active_node_path_.size();
+          const int next_node_id = has_next ? active_node_path_[active_waypoint_index_ + 1] : -1;
+          const int next_next_node_id =
+              has_next_next ? active_node_path_[active_waypoint_index_ + 2] : -1;
+
+          const bool next_unsafe = has_next && isUnsafeNode(next_node_id);
+          const bool next_next_unsafe = has_next_next && isUnsafeNode(next_next_node_id);
+
+          if (next_next_unsafe) {
+            target_q = current_q;
+            RCLCPP_INFO_THROTTLE(
+                get_logger(), *get_clock(), 2000,
+                "Hold current posture: next-next waypoint is unsafe. start=%d goal=%d wp_idx=%zu next_id=%d next_next_id=%d",
+                start_id, active_goal_id_, active_waypoint_index_, next_node_id,
+                next_next_node_id);
+          } else if (next_unsafe) {
+            if (active_waypoint_index_ > 0) {
+              const int retreat_node_id = active_node_path_[active_waypoint_index_ - 1];
+              if (retreat_node_id >= 0 &&
+                  retreat_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
+                target_q = gng_->nodeAt(retreat_node_id).weight_angle;
+                active_waypoint_index_ -= 1;
+                RCLCPP_INFO_THROTTLE(
+                    get_logger(), *get_clock(), 2000,
+                    "Retreat to previous waypoint: next waypoint is unsafe. start=%d goal=%d retreat_id=%d wp_idx=%zu next_id=%d",
+                    start_id, active_goal_id_, retreat_node_id,
+                    active_waypoint_index_, next_node_id);
+              } else {
+                target_q = current_q;
+              }
+            } else {
+              target_q = current_q;
+            }
+          } else {
+            target_q = gng_->nodeAt(target_node_id).weight_angle;
+          }
 
           RCLCPP_INFO_THROTTLE(
               get_logger(), *get_clock(), 2000,
@@ -777,6 +826,10 @@ private:
   std::size_t active_waypoint_index_ = 0;
   int active_goal_id_ = -1;
   double waypoint_tolerance_ = 0.05;
+  bool replan_on_path_collision_ = true;
+  int goal_switch_failure_threshold_ = 3;
+  int goal_replan_failures_ = 0;
+  bool force_goal_switch_ = false;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
   std::mt19937 rng_;
