@@ -1,5 +1,5 @@
 #include "kinematics/kinematic_chain.hpp"
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include <algorithm>
 #include <iostream>
 #include <limits>

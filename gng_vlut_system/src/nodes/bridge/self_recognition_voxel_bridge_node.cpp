@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include "common/voxel_utils.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"

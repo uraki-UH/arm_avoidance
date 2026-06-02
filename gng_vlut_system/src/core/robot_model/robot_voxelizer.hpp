@@ -9,7 +9,7 @@
 
 #include "robot_model/robot_model.hpp"
 #include "kinematics/kinematic_chain.hpp"
-#include "common/geometry/voxelizer_engine.hpp"
+#include "core/common/voxelizer_engine.hpp"
 #include "safety_engine/recognition/urdf_geometry_simplifier.hpp"
 
 namespace simulation {

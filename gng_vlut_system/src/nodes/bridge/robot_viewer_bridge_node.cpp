@@ -1,4 +1,4 @@
-#include "gng_vlut_system/bridge/robot_viewer_bridge_node.hpp"
+#include "bridge/robot_viewer_bridge_node.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -15,7 +15,7 @@
 
 #include "common/resource_utils.hpp"
 #include "robot_model/urdf_loader.hpp"
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 
 using json = nlohmann::json;
 

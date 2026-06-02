@@ -3,7 +3,7 @@
 #include <grasping_system/rigid/rigid_grasp_model.hpp>
 #include <grasping_system/rigid/rigid_grasp_vlut.hpp>
 #include <grasping_system/voxel/grasp_voxel_model.hpp>
-#include <voxel_indexing_common/voxel_indexing.hpp>
+#include <voxel_indexing.hpp>
 
 #include <algorithm>
 #include <unordered_map>

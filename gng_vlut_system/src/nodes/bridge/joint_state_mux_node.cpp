@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include "gng_control_msgs/msg/joint_control_claim.hpp"
 
 class JointStateMuxNode : public rclcpp::Node {

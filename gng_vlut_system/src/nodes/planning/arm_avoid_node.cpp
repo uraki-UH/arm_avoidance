@@ -20,7 +20,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include "common/resource_utils.hpp"
 #include "planning/arm_avoid_helpers.hpp"
 #include "robot_model/kinematic_adapter.hpp"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "safety_engine/indexing/index_voxel_grid.hpp"
+#include "voxel_indexing.hpp"
 #include <Eigen/Dense>
 #include <vector>
 #include <algorithm>
@@ -16,13 +17,24 @@ class VoxelUtils {
 public:
   static Eigen::Vector3i worldToVoxel(const Eigen::Vector3f &pos,
                                       float voxel_size) {
-    return (pos.array() / voxel_size).floor().cast<int>();
+    const auto idx = voxel_indexing_common::VoxelIndexingSchema::worldToIndex(
+        static_cast<double>(pos.x()),
+        static_cast<double>(pos.y()),
+        static_cast<double>(pos.z()),
+        static_cast<double>(voxel_size));
+    return Eigen::Vector3i(idx.x, idx.y, idx.z);
   }
 
   static Eigen::Vector3f voxelToWorld(const Eigen::Vector3i &idx,
                                       float voxel_size) {
-    return idx.cast<float>() * voxel_size +
-           Eigen::Vector3f::Constant(voxel_size * 0.5f);
+    const auto center =
+        voxel_indexing_common::VoxelIndexingSchema::indexToWorldCenter(
+            voxel_indexing_common::VoxelIndex{idx.x(), idx.y(), idx.z()},
+            static_cast<double>(voxel_size));
+    return Eigen::Vector3f(
+        static_cast<float>(center[0]),
+        static_cast<float>(center[1]),
+        static_cast<float>(center[2]));
   }
 
   /**

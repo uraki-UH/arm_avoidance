@@ -1,7 +1,7 @@
 #pragma once
 
 #include <grasping_system/core/grasp_geometry.hpp>
-#include <voxel_indexing_common/voxel_indexing.hpp>
+#include <voxel_indexing.hpp>
 
 #include <geometry_msgs/msg/pose.hpp>
 

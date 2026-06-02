@@ -2,11 +2,12 @@
 
 #include <memory>
 #include <string>
+
+#include "core/common/constants.hpp"
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/dense_spatial_index.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"
-#include "common/constants.hpp"
 
 namespace robot_sim {
 namespace analysis {
@@ -33,7 +34,7 @@ struct SafetySystemContext {
  */
 class SafetySystemLoader {
 public:
-    static std::shared_ptr<SafetySystemContext> load(const std::string& gng_bin, 
+    static std::shared_ptr<SafetySystemContext> load(const std::string& gng_bin,
                                                    const std::string& vlut_bin,
                                                    int angle_dim) {
         auto ctx = std::make_shared<SafetySystemContext>();
@@ -47,10 +48,9 @@ public:
         ctx->num_nodes = ctx->gng->getMaxNodeNum();
 
         // 2. Load Spatial Index (V-LUT)
-        // Note: Default bounds will be overridden by the file header (Version 2)
         auto index = std::make_shared<::robot_sim::analysis::DenseSpatialIndex>(
             ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE, Eigen::Vector3d::Zero(), Eigen::Vector3d::Ones());
-        
+
         if (!index->load(vlut_bin)) {
             std::cerr << "[SafetySystemLoader] Failed to load VLUT: " << vlut_bin << std::endl;
             return nullptr;
@@ -66,9 +66,9 @@ public:
         ctx->processor = std::make_shared<::robot_sim::analysis::VoxelProcessor>(ctx->voxel_size);
         ctx->processor->getGrid() = ctx->spatial_index->getGrid();
 
-        std::cout << "[SafetySystemLoader] Successfully initialized context with " 
+        std::cout << "[SafetySystemLoader] Successfully initialized context with "
                   << ctx->num_nodes << " nodes." << std::endl;
-        
+
         return ctx;
     }
 };

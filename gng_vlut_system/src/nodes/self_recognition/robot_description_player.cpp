@@ -1,4 +1,4 @@
-#include "gng_vlut_system/self_recognition/robot_description_player.hpp"
+#include "self_recognition/robot_description_player.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
 
@@ -133,7 +133,6 @@ void RobotDescriptionPlayer::republishLastDescription() {
 } // namespace self_recognition
 } // namespace robot_sim
 
-#include <rclcpp/rclcpp.hpp>
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<robot_sim::self_recognition::RobotDescriptionPlayer>(rclcpp::NodeOptions());

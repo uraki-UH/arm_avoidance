@@ -24,10 +24,6 @@ class SelfRecognitionManager;
 
 namespace self_recognition {
 
-/**
- * @brief ロボットの現在姿勢から占有ボクセルIDのリスト（マスク）を計算し、配信するノード。
- * 可視化（マーカー）は行わず、データの配信のみに特化する。
- */
 class SelfRecognitionVizNode : public rclcpp::Node {
 public:
     explicit SelfRecognitionVizNode(const rclcpp::NodeOptions & options);

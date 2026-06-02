@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
-    rviz_config_default = os.path.join(pkg_share, "config", "rviz", "gng_safety.rviz")
+    rviz_config_default = os.path.join(pkg_share, "config", "gng_safety.rviz")
 
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="topoarm"),

@@ -99,7 +99,6 @@ else()
 endif()
 
 # Include directories
-include_directories(include)
 include_directories(src)
 include_directories(src/core/safety_engine)
 
@@ -109,9 +108,6 @@ add_subdirectory(src)
 # --- 3. Resource Installation ---
 install(DIRECTORY urdf config launch gng_results
   DESTINATION share/${PROJECT_NAME}
-)
-install(DIRECTORY include/
-  DESTINATION include
 )
 
 ament_auto_package()

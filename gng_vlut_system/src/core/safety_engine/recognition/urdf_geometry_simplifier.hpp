@@ -8,7 +8,7 @@
 #include "robot_model/robot_model.hpp"
 #include "robot_model/stl_loader.hpp"
 #include "common/resource_utils.hpp"
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 
 namespace robot_sim {
 namespace recognition {

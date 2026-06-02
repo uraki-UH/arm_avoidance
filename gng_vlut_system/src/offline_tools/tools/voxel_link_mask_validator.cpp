@@ -12,7 +12,7 @@
 #include <Eigen/Dense>
 #include <rclcpp/rclcpp.hpp>
 
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include "common/resource_utils.hpp"
 #include "common/voxel_utils.hpp"
 #include "robot_model/kinematic_adapter.hpp"

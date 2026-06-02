@@ -86,7 +86,7 @@ add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cp
 add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_robot_viewer_node.cpp)
 add_executable(self_recognition_voxel_bridge_node nodes/bridge/self_recognition_voxel_bridge_node.cpp)
 # Grouped Nodes
-add_executable(robot_description_player_node nodes/robot_description_player.cpp)
+add_executable(robot_description_player_node nodes/self_recognition/robot_description_player.cpp)
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
@@ -113,7 +113,7 @@ target_link_libraries(voxel_spherized_robot_viewer_node ${LIBS_ALL_CORE} ${EXTRA
 
 # Shared Components
 add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
-add_library(robot_description_player_component SHARED nodes/robot_description_player.cpp)
+add_library(robot_description_player_component SHARED nodes/self_recognition/robot_description_player.cpp)
 
 set(COMPONENTS robot_viewer_bridge_node_component robot_description_player_component)
 foreach(comp ${COMPONENTS})

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <geometry_msgs/msg/pose.hpp>
-#include <voxel_indexing_common/voxel_indexing.hpp>
+#include <voxel_indexing.hpp>
 
 #include <string>
 #include <unordered_map>

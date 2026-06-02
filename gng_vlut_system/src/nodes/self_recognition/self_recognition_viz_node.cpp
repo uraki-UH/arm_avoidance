@@ -1,4 +1,4 @@
-#include "gng_vlut_system/self_recognition/self_recognition_viz_node.hpp"
+#include "self_recognition/self_recognition_viz_node.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
 #include <cctype>
@@ -15,7 +15,7 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/urdf_loader.hpp"
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>

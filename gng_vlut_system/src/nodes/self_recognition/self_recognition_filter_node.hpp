@@ -22,7 +22,6 @@ private:
         const sensor_msgs::msg::PointCloud2 & input,
         const std::vector<Eigen::Vector3f> & points) const;
 
-    // 軽量フィルタに必要なメンバのみ
     rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr mask_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_sub_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_pub_;

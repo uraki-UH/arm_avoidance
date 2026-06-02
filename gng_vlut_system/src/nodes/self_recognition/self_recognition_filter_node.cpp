@@ -1,4 +1,4 @@
-#include "gng_vlut_system/self_recognition/self_recognition_filter_node.hpp"
+#include "self_recognition/self_recognition_filter_node.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -7,7 +7,7 @@
 
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 #include "common/voxel_utils.hpp"
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 
 namespace robot_sim::self_recognition {
 

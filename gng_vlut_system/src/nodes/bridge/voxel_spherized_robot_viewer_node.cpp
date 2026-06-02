@@ -25,7 +25,7 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include "common/constants.hpp"
+#include "core/common/constants.hpp"
 #include "common/resource_utils.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
