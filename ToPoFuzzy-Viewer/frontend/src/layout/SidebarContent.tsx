@@ -429,38 +429,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 </div>
             </CollapsibleSection>
 
-                    {Object.keys(props.voxelData).length > 0 && (
-                <CollapsibleSection title="Voxel Rendering" icon={<Box size={16} />} defaultOpen={true}>
-                    <div className="surface-muted space-y-4 p-3">
-                        {Object.entries(props.voxelData).map(([tag]) => {
-                            const settings = props.voxelSettings[tag] || { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2 };
-                            return (
-                                <div key={tag} className="space-y-3 border-b border-white/5 pb-3 last:border-0 last:pb-0">
-                                    <p className="text-[11px] font-semibold text-[var(--text-primary)]">{tag}</p>
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[11px] text-[var(--text-secondary)]">Wireframe</label>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={settings.wireframe}
-                                            onChange={(e) => props.onUpdateSettings('voxel', tag, { wireframe: e.target.checked })}
-                                            className="h-3 w-3 accent-[var(--accent-color)]"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            onClick={() => props.onOpenColorSettings('voxel', tag, `Voxel colors: ${tag}`)}
-                                            className="entity-btn w-full justify-center px-2 py-1.5 text-[11px]"
-                                        >
-                                            Color
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </CollapsibleSection>
-            )}
-
             {hasGngLayer && (
                 <CollapsibleSection title="Topology Display" icon={<Box size={16} />} defaultOpen={false}>
                     <div className="surface-muted space-y-4 p-3">
