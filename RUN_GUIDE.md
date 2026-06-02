@@ -88,6 +88,7 @@ python3 dummy_joint_pub.py --robot topoarm
 ## realsenseのrosbag
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera/depth/color/points --loop
 
+
 ## 点群の座標変換版トピック
 ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py 
 
@@ -112,6 +113,8 @@ ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:
 
 
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true
+
+
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true   trial_return_home:=true
 
 

@@ -210,6 +210,7 @@ public:
 
   const std::vector<int>& getCollisionCounts() const { return vlut_mapper_->getCollisionCounts(); }
   const std::vector<int>& getDangerCounts() const { return vlut_mapper_->getDangerCounts(); }
+  double getLastVlutUpdateTimeMs() const { return last_vlut_update_time_ms_; }
 
   // Node Manipulation
   void setDangerLevel(int node_id, float level);
@@ -242,6 +243,7 @@ private:
   std::unique_ptr<ISafetyStrategy> strategy_;
   SafetyParameters params_;
   bool instantaneous_mode_ = false;
+  double last_vlut_update_time_ms_ = 0.0;
 
   // Sparse update tracking
   std::vector<int> touched_indices_;

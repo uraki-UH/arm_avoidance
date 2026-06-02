@@ -163,7 +163,15 @@ private:
         std::lock_guard<std::mutex> lock(update_mutex_);
         if (!context_) return;
 
+        const auto t0 = std::chrono::steady_clock::now();
         context_->update(occ_vids, dan_vids);
+        const auto t1 = std::chrono::steady_clock::now();
+        const double vlut_update_ms =
+            std::chrono::duration<double, std::milli>(t1 - t0).count();
+        RCLCPP_INFO_THROTTLE(
+            this->get_logger(), *this->get_clock(), 1000,
+            "VLUT update: %.3f ms | occ=%zu dan=%zu",
+            vlut_update_ms, occ_vids.size(), dan_vids.size());
         
         auto& gng = *context_->gng;
         const auto& col_counts = context_->mapper->getCollisionCounts();

@@ -122,8 +122,12 @@ void SafetyStateManager::updateDangerFieldFromVoxels(
     std::shared_ptr<analysis::ISpatialIndex> spatial_index,
     const std::vector<long> &occupied_voxels,
     const std::vector<long> &danger_voxels) {
-  if (!spatial_index)
+  const auto start_time = std::chrono::high_resolution_clock::now();
+
+  if (!spatial_index) {
+    last_vlut_update_time_ms_ = 0.0;
     return;
+  }
 
   vlut_mapper_->initialize(danger_levels_.size(), spatial_index);
   vlut_mapper_->updateFromVoxels(occupied_voxels, danger_voxels);
@@ -165,6 +169,10 @@ void SafetyStateManager::updateDangerFieldFromVoxels(
   };
   add_viz(vlut_mapper_->getPrevDangerVoxels(), 0.5f);
   add_viz(vlut_mapper_->getPrevOccupiedVoxels(), 1.0f);
+
+  const auto end_time = std::chrono::high_resolution_clock::now();
+  last_vlut_update_time_ms_ =
+      std::chrono::duration<double, std::milli>(end_time - start_time).count();
 }
 
 void SafetyStateManager::updateDangerFieldFromPoints(
