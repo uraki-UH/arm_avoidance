@@ -171,6 +171,7 @@ public:
     declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
     declare_parameter("control_claim_enabled", true);
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
+    declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
     declare_parameter("publish_hz", 20.0);
     declare_parameter("avoid_collisions", true);
     declare_parameter("avoid_danger", true);
@@ -180,6 +181,7 @@ public:
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
     declare_parameter("trial_return_home", false);
+    declare_parameter("trial_goal_candidate_count", 10);
     declare_parameter("trial_seed", 0);
     declare_parameter("waypoint_tolerance", 0.05);
 
@@ -327,6 +329,10 @@ public:
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
     trial_safe_only_ = get_parameter("trial_safe_only").as_bool();
     trial_return_home_ = get_parameter("trial_return_home").as_bool();
+    const int trial_goal_candidate_count =
+        get_parameter("trial_goal_candidate_count").as_int();
+    trial_goal_candidate_count_ =
+        (trial_goal_candidate_count < 1) ? 1 : trial_goal_candidate_count;
     waypoint_tolerance_ = std::max(1e-6, get_parameter("waypoint_tolerance").as_double());
     const int trial_seed = get_parameter("trial_seed").as_int();
     if (trial_seed == 0) {
@@ -339,6 +345,7 @@ public:
     const std::string topological_map_topic =
         get_parameter("topological_map_topic").as_string();
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
+    candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     target_topic_ = get_parameter("target_topic").as_string();
     if (target_topic_.empty()) {
       const std::string ns_raw = std::string(get_namespace());
@@ -374,6 +381,8 @@ public:
 
     trajectory_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
+    candidate_trajectory_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+        candidate_trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         target_topic_, rclcpp::QoS(10).reliable());
@@ -416,9 +425,10 @@ public:
         [this]() { this->publishTargetLocked(); });
 
     RCLCPP_INFO(get_logger(),
-                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s dof=%d trial_mode=%d",
+                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s dof=%d trial_mode=%d",
                 joint_topic.c_str(), topological_map_topic.c_str(),
-                target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(), dof, trial_mode_ ? 1 : 0);
+                target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
+                candidate_trajectory_topic_.c_str(), dof, trial_mode_ ? 1 : 0);
     RCLCPP_INFO(get_logger(),
                 "Waiting for inputs: joint_topic=%s topological_map_topic=%s",
                 joint_topic.c_str(), topological_map_topic.c_str());
@@ -582,8 +592,7 @@ private:
               "Trajectory blocked: start=%d goal=%d wp_idx=%zu path_len=%zu. Requesting immediate replan.",
               start_id, active_goal_id_, active_waypoint_index_,
               active_node_path_.size());
-          clearActiveTrajectoryLocked(true);
-          trajectory_update_requested_ = true;
+          requestReplanLocked();
           target_q = current_q;
         } else {
         const int waypoint_node_id = active_node_path_[active_waypoint_index_];
@@ -621,32 +630,80 @@ private:
           trial_home_goal_id_ = start_id;
         }
 
-        if (active_goal_id_ < 0) {
-          if (trial_return_home_ && trial_phase_ == TrialPhase::kReturnHome &&
-              trial_home_goal_id_ >= 0) {
-            active_goal_id_ = trial_home_goal_id_;
+        if (trial_return_home_ && trial_phase_ == TrialPhase::kReturnHome &&
+            trial_home_goal_id_ >= 0) {
+          active_goal_candidates_ = collectNearestGoalCandidatesLocked(
+              trial_home_goal_id_, trial_goal_candidate_count_);
+          if (active_goal_candidates_.empty()) {
+            active_goal_candidates_.push_back(trial_home_goal_id_);
+          }
+
+          std::unordered_map<int, std::vector<int>> candidate_path_by_goal;
+          std::vector<std::vector<int>> candidate_paths;
+          candidate_paths.reserve(active_goal_candidates_.size());
+
+          auto [reached_goal_id, node_path] =
+              planner_.planToAnyNode(start_id, active_goal_candidates_, *gng_);
+          if (!node_path.empty() && reached_goal_id >= 0) {
+            candidate_path_by_goal.emplace(reached_goal_id, node_path);
+          }
+
+          for (int goal_id : active_goal_candidates_) {
+            if (goal_id == reached_goal_id) {
+              continue;
+            }
+            auto candidate_path =
+                planner_.planNodeIndices(start_id, goal_id, *gng_);
+            if (candidate_path.empty()) {
+              continue;
+            }
+            candidate_path_by_goal.emplace(goal_id, candidate_path);
+            candidate_paths.push_back(std::move(candidate_path));
+          }
+
+          if (candidate_trajectory_pub_) {
+            publishCandidateTrajectoryPathsLocked(candidate_paths);
+          }
+
+          active_goal_id_ = reached_goal_id;
+          if (active_goal_id_ >= 0) {
+            const auto it = candidate_path_by_goal.find(active_goal_id_);
+            if (it != candidate_path_by_goal.end()) {
+              active_node_path_ = it->second;
+            } else {
+              active_node_path_ = node_path;
+            }
           } else {
-            active_goal_id_ = pickRandomGoalLocked(start_id);
+            active_node_path_.clear();
+          }
+        } else if (active_goal_id_ < 0) {
+          active_goal_id_ = pickRandomGoalLocked(start_id);
+          if (active_goal_id_ >= 0) {
+            active_node_path_ =
+                planner_.planNodeIndices(start_id, active_goal_id_, *gng_);
           }
         }
 
         if (active_goal_id_ >= 0) {
-          active_node_path_ = planner_.planNodeIndices(start_id, active_goal_id_, *gng_);
           active_waypoint_index_ = active_node_path_.size() >= 2 ? 1U : 0U;
           active_trajectory_valid_ = !active_node_path_.empty();
           trajectory_update_requested_ = !active_trajectory_valid_;
           if (active_trajectory_valid_) {
             RCLCPP_INFO(
                 get_logger(),
-                "Trial path latched: start=%d goal=%d len=%zu safe_only=%d safe_count=%zu phase=%s",
+                "Trial path latched: start=%d goal=%d len=%zu safe_only=%d safe_count=%zu phase=%s candidate_count=%zu",
                 start_id, active_goal_id_, active_node_path_.size(),
                 trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size(),
-                trial_phase_ == TrialPhase::kReturnHome ? "return_home" : "random_goal");
+                trial_phase_ == TrialPhase::kReturnHome ? "return_home" : "random_goal",
+                active_goal_candidates_.size());
           } else {
+            const int failed_goal_id = active_goal_id_;
+            active_goal_id_ = -1;
+            active_goal_candidates_.clear();
             RCLCPP_WARN_THROTTLE(
                 get_logger(), *get_clock(), 5000,
                 "Trial mode: planner returned empty path start=%d goal=%d. Holding the same goal and retrying.",
-                start_id, active_goal_id_);
+                start_id, failed_goal_id);
           }
         } else {
           RCLCPP_WARN_THROTTLE(
@@ -713,9 +770,10 @@ private:
 
           if (next_next_unsafe) {
             target_q = current_q;
+            requestReplanLocked();
             RCLCPP_INFO_THROTTLE(
                 get_logger(), *get_clock(), 2000,
-                "Hold current posture: next-next waypoint is unsafe. start=%d goal=%d wp_idx=%zu next_id=%d next_next_id=%d",
+                "Hold current posture and replan: next-next waypoint is unsafe. start=%d goal=%d wp_idx=%zu next_id=%d next_next_id=%d",
                 start_id, active_goal_id_, active_waypoint_index_, next_node_id,
                 next_next_node_id);
           } else if (next_unsafe) {
@@ -725,16 +783,19 @@ private:
                   retreat_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
                 target_q = gng_->nodeAt(retreat_node_id).weight_angle;
                 active_waypoint_index_ -= 1;
+                requestReplanLocked();
                 RCLCPP_INFO_THROTTLE(
                     get_logger(), *get_clock(), 2000,
-                    "Retreat to previous waypoint: next waypoint is unsafe. start=%d goal=%d retreat_id=%d wp_idx=%zu next_id=%d",
+                    "Retreat to previous waypoint and replan: next waypoint is unsafe. start=%d goal=%d retreat_id=%d wp_idx=%zu next_id=%d",
                     start_id, active_goal_id_, retreat_node_id,
                     active_waypoint_index_, next_node_id);
               } else {
                 target_q = current_q;
+                requestReplanLocked();
               }
             } else {
               target_q = current_q;
+              requestReplanLocked();
             }
           } else {
             target_q = gng_->nodeAt(target_node_id).weight_angle;
@@ -843,12 +904,14 @@ private:
   int control_claim_mode_ = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
   bool control_claim_enabled_ = true;
   std::string trajectory_topic_;
+  std::string candidate_trajectory_topic_;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr target_pub_;
   rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
+  rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   mutable std::mutex mutex_;
@@ -858,10 +921,12 @@ private:
   bool have_map_ = false;
   Eigen::VectorXf last_target_q_;
   std::vector<int> cached_safe_goal_ids_;
+  std::vector<int> active_goal_candidates_;
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
   bool trial_safe_only_ = true;
   bool trial_return_home_ = false;
+  int trial_goal_candidate_count_ = 10;
   bool avoid_danger_ = true;
   bool trajectory_update_requested_ = true;
   bool active_trajectory_valid_ = false;
@@ -877,6 +942,68 @@ private:
   enum class TrialPhase { kRandomGoal, kReturnHome };
   TrialPhase trial_phase_ = TrialPhase::kRandomGoal;
   int trial_home_goal_id_ = -1;
+
+  std::vector<int> collectNearestGoalCandidatesLocked(int reference_goal_id,
+                                                      int candidate_count) const {
+    std::vector<int> candidates;
+    if (!gng_ || reference_goal_id < 0 ||
+        reference_goal_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+      return candidates;
+    }
+
+    const auto &reference = gng_->nodeAt(reference_goal_id);
+    if (reference.id == -1) {
+      return candidates;
+    }
+
+    struct CandidateDist {
+      int id;
+      float dist;
+      bool operator<(const CandidateDist &other) const { return dist < other.dist; }
+    };
+
+    std::vector<CandidateDist> dist_candidates;
+    const auto push_candidate = [&](int id, const auto &node) {
+      if (id < 0 || id == reference_goal_id) {
+        return;
+      }
+      if (!node.status.active || !node.status.valid) {
+        return;
+      }
+      if (node.status.is_colliding || node.status.is_danger) {
+        return;
+      }
+      const int dim = std::min(static_cast<int>(node.weight_coord.size()), 3);
+      const float dist = (node.weight_coord.head(dim) - reference.weight_coord.head(dim)).norm();
+      dist_candidates.push_back({id, dist});
+    };
+
+    if (trial_safe_only_ && !cached_safe_goal_ids_.empty()) {
+      for (int id : cached_safe_goal_ids_) {
+        if (id < 0 || id >= static_cast<int>(gng_->getMaxNodeNum())) {
+          continue;
+        }
+        push_candidate(id, gng_->nodeAt(id));
+      }
+    } else {
+      gng_->forEachActiveValid([&](int id, const auto &node) {
+        push_candidate(id, node);
+      });
+    }
+
+    if (dist_candidates.empty()) {
+      return candidates;
+    }
+
+    const int limit = std::min(candidate_count, static_cast<int>(dist_candidates.size()));
+    std::partial_sort(dist_candidates.begin(), dist_candidates.begin() + limit,
+                      dist_candidates.end());
+    candidates.reserve(static_cast<std::size_t>(limit));
+    for (int i = 0; i < limit; ++i) {
+      candidates.push_back(dist_candidates[static_cast<std::size_t>(i)].id);
+    }
+    return candidates;
+  }
 
   int pickRandomGoalLocked(int start_id) {
     std::vector<int> candidates;
@@ -954,29 +1081,34 @@ private:
     }
   }
 
-  void publishTrajectoryPathLocked(const std::vector<int> &node_path) {
-    if (!trajectory_pub_ || !gng_) {
+  void requestReplanLocked()
+  {
+    clearActiveTrajectoryLocked(false);
+    active_goal_candidates_.clear();
+    active_goal_id_ = -1;
+    trajectory_update_requested_ = true;
+    if (candidate_trajectory_pub_) {
+      publishCandidateTrajectoryPathsLocked({});
+    }
+  }
+
+  void appendPathToMessageLocked(ais_gng_msgs::msg::TopologicalMap &msg,
+                                 const std::vector<int> &node_path,
+                                 std::unordered_map<int, uint16_t> &id_to_index) const {
+    if (!gng_ || node_path.empty()) {
       return;
     }
 
-    ais_gng_msgs::msg::TopologicalMap msg;
-    msg.header.stamp = now();
-    msg.header.frame_id = "world";
-    msg.frame_number = 0;
-
-    if (node_path.empty()) {
-      trajectory_pub_->publish(msg);
-      return;
-    }
-
-    std::unordered_map<int, uint16_t> id_to_index;
-    msg.nodes.reserve(node_path.size());
     for (int node_id : node_path) {
       if (node_id < 0 || node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
         continue;
       }
       const auto &node = gng_->nodeAt(node_id);
       if (node.id == -1) {
+        continue;
+      }
+
+      if (id_to_index.find(node.id) != id_to_index.end()) {
         continue;
       }
 
@@ -990,6 +1122,7 @@ private:
       out.normal.z = node.status.ee_direction.z();
       out.label = pathLabelFromStatus(node.status);
       out.age = 0;
+
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node.id, published_index);
       msg.nodes.push_back(std::move(out));
@@ -1004,8 +1137,39 @@ private:
       msg.edges.push_back(ia->second);
       msg.edges.push_back(ib->second);
     }
+  }
 
+  void publishTrajectoryPathLocked(const std::vector<int> &node_path) {
+    if (!trajectory_pub_ || !gng_) {
+      return;
+    }
+
+    ais_gng_msgs::msg::TopologicalMap msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = "world";
+    msg.frame_number = 0;
+    std::unordered_map<int, uint16_t> id_to_index;
+    appendPathToMessageLocked(msg, node_path, id_to_index);
     trajectory_pub_->publish(msg);
+  }
+
+  void publishCandidateTrajectoryPathsLocked(
+      const std::vector<std::vector<int>> &candidate_paths) {
+    if (!candidate_trajectory_pub_ || !gng_) {
+      return;
+    }
+
+    ais_gng_msgs::msg::TopologicalMap msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = "world";
+    msg.frame_number = 0;
+
+    std::unordered_map<int, uint16_t> id_to_index;
+    for (const auto &path : candidate_paths) {
+      appendPathToMessageLocked(msg, path, id_to_index);
+    }
+
+    candidate_trajectory_pub_->publish(msg);
   }
 };
 
