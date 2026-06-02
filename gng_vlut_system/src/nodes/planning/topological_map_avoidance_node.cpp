@@ -181,6 +181,7 @@ public:
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
     declare_parameter("trial_return_home", false);
+    declare_parameter("trial_auto_advance_goal", false);
     declare_parameter("trial_goal_candidate_count", 10);
     declare_parameter("trial_seed", 0);
     declare_parameter("waypoint_tolerance", 0.05);
@@ -329,6 +330,7 @@ public:
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
     trial_safe_only_ = get_parameter("trial_safe_only").as_bool();
     trial_return_home_ = get_parameter("trial_return_home").as_bool();
+    trial_auto_advance_goal_ = get_parameter("trial_auto_advance_goal").as_bool();
     const int trial_goal_candidate_count =
         get_parameter("trial_goal_candidate_count").as_int();
     trial_goal_candidate_count_ =
@@ -419,6 +421,16 @@ public:
           response->message = "trajectory update requested";
         });
 
+    trial_goal_advance_srv_ = create_service<std_srvs::srv::Trigger>(
+        "request_trial_goal_advance",
+        [this](const std_srvs::srv::Trigger::Request::SharedPtr,
+               std_srvs::srv::Trigger::Response::SharedPtr response) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          advanceTrialGoalLocked();
+          response->success = true;
+          response->message = "trial goal advanced";
+        });
+
     const double publish_hz = std::max(1.0, get_parameter("publish_hz").as_double());
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz)),
@@ -428,7 +440,8 @@ public:
                 "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s dof=%d trial_mode=%d",
                 joint_topic.c_str(), topological_map_topic.c_str(),
                 target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
-                candidate_trajectory_topic_.c_str(), dof, trial_mode_ ? 1 : 0);
+                candidate_trajectory_topic_.c_str(),
+                dof, trial_mode_ ? 1 : 0);
     RCLCPP_INFO(get_logger(),
                 "Waiting for inputs: joint_topic=%s topological_map_topic=%s",
                 joint_topic.c_str(), topological_map_topic.c_str());
@@ -580,19 +593,25 @@ private:
     Eigen::VectorXf target_q = current_q;
 
     if (active_trajectory_valid_) {
+      const bool local_neighborhood_blocked =
+          replan_on_path_collision_ && nodeHasUnsafeNeighborLocked(start_id);
       if (active_waypoint_index_ >= active_node_path_.size()) {
         clearActiveTrajectoryLocked();
       } else {
         const bool trajectory_blocked =
             replan_on_path_collision_ &&
             trajectoryHasUnsafeNodeLocked(active_waypoint_index_);
-        if (trajectory_blocked) {
+        if (trajectory_blocked || local_neighborhood_blocked) {
           RCLCPP_INFO(
               get_logger(),
-              "Trajectory blocked: start=%d goal=%d wp_idx=%zu path_len=%zu. Requesting immediate replan.",
+              "Trajectory blocked: start=%d goal=%d wp_idx=%zu path_len=%zu local_block=%d. Requesting immediate replan to the same goal.",
               start_id, active_goal_id_, active_waypoint_index_,
-              active_node_path_.size());
-          requestReplanLocked();
+              active_node_path_.size(), local_neighborhood_blocked ? 1 : 0);
+          if (trial_mode_) {
+            requestReplanCurrentTrialGoalLocked();
+          } else {
+            requestReplanSameGoalLocked();
+          }
           target_q = current_q;
         } else {
         const int waypoint_node_id = active_node_path_[active_waypoint_index_];
@@ -603,20 +622,44 @@ private:
                 get_logger(),
                 "Trajectory completed: goal=%d path_len=%zu", active_goal_id_,
                 active_node_path_.size());
-            clearActiveTrajectoryLocked();
-            trajectory_update_requested_ = true;
-            if (trial_mode_ && trial_return_home_) {
-              if (trial_phase_ == TrialPhase::kRandomGoal) {
-                trial_phase_ = TrialPhase::kReturnHome;
+            if (trial_mode_) {
+              const bool goal_coord_reached = goalCoordinateReachedLocked(current_q);
+              if (goal_coord_reached && trial_auto_advance_goal_) {
+                trial_waiting_for_key_ = false;
+                trial_hold_target_valid_ = false;
+                clearActiveTrajectoryLocked();
+                active_goal_id_ = -1;
+                active_goal_candidates_.clear();
+                trial_goal_coord_valid_ = false;
+                trajectory_update_requested_ = true;
                 RCLCPP_INFO(
                     get_logger(),
-                    "Trial outbound completed. Switching to return-home leg.");
+                    "Trial goal coordinate reached. Auto-advancing to next goal coordinate.");
+              } else if (goal_coord_reached) {
+                trial_waiting_for_key_ = true;
+                trial_hold_target_q_ = gng_->nodeAt(active_node_path_.back()).weight_angle;
+                trial_hold_target_valid_ = true;
+                clearActiveTrajectoryLocked();
+                trajectory_update_requested_ = false;
+                active_goal_id_ = -1;
+                active_goal_candidates_.clear();
+                RCLCPP_INFO(
+                    get_logger(),
+                    "Trial goal coordinate reached. Waiting for manual advance.");
               } else {
-                trial_phase_ = TrialPhase::kRandomGoal;
+                clearActiveTrajectoryLocked();
+                active_goal_id_ = -1;
+                active_goal_candidates_.clear();
+                trial_waiting_for_key_ = false;
+                trial_hold_target_valid_ = false;
+                trajectory_update_requested_ = true;
                 RCLCPP_INFO(
                     get_logger(),
-                    "Trial return-home completed. Switching to random-goal leg.");
+                    "Trial path completed before goal coordinate was reached. Replanning the same goal coordinate.");
               }
+            } else {
+              clearActiveTrajectoryLocked();
+              trajectory_update_requested_ = true;
             }
           }
         }
@@ -624,48 +667,71 @@ private:
       }
     }
 
-    if (trajectory_update_requested_ && !active_trajectory_valid_) {
+    if (active_bridge_valid_) {
+      if (active_bridge_index_ >= active_bridge_path_.size()) {
+        active_bridge_valid_ = false;
+        active_bridge_path_.clear();
+        active_bridge_index_ = 0;
+      } else {
+        target_q = active_bridge_path_[active_bridge_index_];
+        if (postureReachedLocked(current_q, target_q)) {
+          ++active_bridge_index_;
+          if (active_bridge_index_ >= active_bridge_path_.size()) {
+            active_bridge_valid_ = false;
+            active_bridge_path_.clear();
+            active_bridge_index_ = 0;
+          }
+        }
+      }
+    }
+
+    if (trial_mode_ && trial_waiting_for_key_) {
+      if (trial_hold_target_valid_) {
+        target_q = trial_hold_target_q_;
+      }
+    } else if (trajectory_update_requested_ && !active_trajectory_valid_) {
       if (trial_mode_) {
-        if (trial_return_home_ && trial_home_goal_id_ < 0) {
-          trial_home_goal_id_ = start_id;
+        if (!trial_goal_coord_valid_) {
+          if (!selectTrialGoalCoordLocked(current_q, start_id)) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 5000,
+                "Trial mode: failed to select a goal coordinate.");
+          }
         }
 
-        if (trial_return_home_ && trial_phase_ == TrialPhase::kReturnHome &&
-            trial_home_goal_id_ >= 0) {
+        if (trial_goal_coord_valid_) {
           active_goal_candidates_ = collectNearestGoalCandidatesLocked(
-              trial_home_goal_id_, trial_goal_candidate_count_);
+              trial_goal_coord_, trial_goal_candidate_count_);
           if (active_goal_candidates_.empty()) {
-            active_goal_candidates_.push_back(trial_home_goal_id_);
+            const int fallback_goal_id = pickRandomGoalLocked(start_id);
+            if (fallback_goal_id >= 0) {
+              active_goal_candidates_.push_back(fallback_goal_id);
+            }
           }
 
+          const auto start_candidates =
+              collectNearestStartCandidatesLocked(current_q, 5);
+          std::vector<int> start_candidates_or_fallback = start_candidates;
+          if (start_candidates_or_fallback.empty()) {
+            start_candidates_or_fallback.push_back(start_id);
+          }
           std::unordered_map<int, std::vector<int>> candidate_path_by_goal;
           std::vector<std::vector<int>> candidate_paths;
           candidate_paths.reserve(active_goal_candidates_.size());
 
-          auto [reached_goal_id, node_path] =
-              planner_.planToAnyNode(start_id, active_goal_candidates_, *gng_);
-          if (!node_path.empty() && reached_goal_id >= 0) {
-            candidate_path_by_goal.emplace(reached_goal_id, node_path);
-          }
-
-          for (int goal_id : active_goal_candidates_) {
-            if (goal_id == reached_goal_id) {
-              continue;
-            }
-            auto candidate_path =
-                planner_.planNodeIndices(start_id, goal_id, *gng_);
-            if (candidate_path.empty()) {
-              continue;
-            }
-            candidate_path_by_goal.emplace(goal_id, candidate_path);
-            candidate_paths.push_back(std::move(candidate_path));
-          }
+          int selected_start_id = -1;
+          auto [reached_goal_id, node_path] = planFromStartCandidatesLocked(
+              current_q, start_candidates_or_fallback, active_goal_candidates_,
+              selected_start_id, candidate_path_by_goal, candidate_paths);
 
           if (candidate_trajectory_pub_) {
             publishCandidateTrajectoryPathsLocked(candidate_paths);
           }
 
           active_goal_id_ = reached_goal_id;
+          active_bridge_valid_ = false;
+          active_bridge_path_.clear();
+          active_bridge_index_ = 0;
           if (active_goal_id_ >= 0) {
             const auto it = candidate_path_by_goal.find(active_goal_id_);
             if (it != candidate_path_by_goal.end()) {
@@ -673,14 +739,16 @@ private:
             } else {
               active_node_path_ = node_path;
             }
+            if (selected_start_id >= 0 &&
+                selected_start_id < static_cast<int>(gng_->getMaxNodeNum())) {
+              const auto &bridge_start_q = gng_->nodeAt(selected_start_id).weight_angle;
+              active_bridge_path_ =
+                  buildBridgePathLocked(current_q, bridge_start_q, 4);
+              active_bridge_valid_ = !active_bridge_path_.empty();
+              active_bridge_index_ = 0;
+            }
           } else {
             active_node_path_.clear();
-          }
-        } else if (active_goal_id_ < 0) {
-          active_goal_id_ = pickRandomGoalLocked(start_id);
-          if (active_goal_id_ >= 0) {
-            active_node_path_ =
-                planner_.planNodeIndices(start_id, active_goal_id_, *gng_);
           }
         }
 
@@ -708,19 +776,39 @@ private:
         } else {
           RCLCPP_WARN_THROTTLE(
               get_logger(), *get_clock(), 5000,
-              "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
-              trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
+                "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
+                trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
       } else if (start_node.status.is_colliding ||
                  (start_node.status.is_danger && avoid_danger_)) {
         if (!cached_safe_goal_ids_.empty()) {
-          auto [reached_goal_id, node_path] =
-              planner_.planToAnyNode(start_id, cached_safe_goal_ids_, *gng_);
+          const auto start_candidates =
+              collectNearestStartCandidatesLocked(current_q, 5);
+          std::vector<int> start_candidates_or_fallback = start_candidates;
+          if (start_candidates_or_fallback.empty()) {
+            start_candidates_or_fallback.push_back(start_id);
+          }
+          int selected_start_id = -1;
+          std::unordered_map<int, std::vector<int>> candidate_path_by_goal;
+          std::vector<std::vector<int>> candidate_paths;
+          auto [reached_goal_id, node_path] = planFromStartCandidatesLocked(
+              current_q, start_candidates_or_fallback, cached_safe_goal_ids_,
+              selected_start_id, candidate_path_by_goal, candidate_paths);
           active_goal_id_ = reached_goal_id;
           active_node_path_ = node_path;
           active_waypoint_index_ = active_node_path_.size() >= 2 ? 1U : 0U;
           active_trajectory_valid_ = !active_node_path_.empty();
           trajectory_update_requested_ = !active_trajectory_valid_;
+          active_bridge_valid_ = false;
+          active_bridge_path_.clear();
+          active_bridge_index_ = 0;
+          if (selected_start_id >= 0 &&
+              selected_start_id < static_cast<int>(gng_->getMaxNodeNum())) {
+            const auto &bridge_start_q = gng_->nodeAt(selected_start_id).weight_angle;
+            active_bridge_path_ = buildBridgePathLocked(current_q, bridge_start_q, 4);
+            active_bridge_valid_ = !active_bridge_path_.empty();
+            active_bridge_index_ = 0;
+          }
           if (active_trajectory_valid_) {
             RCLCPP_INFO(
                 get_logger(),
@@ -770,7 +858,11 @@ private:
 
           if (next_next_unsafe) {
             target_q = current_q;
-            requestReplanLocked();
+            if (trial_mode_) {
+              requestReplanCurrentTrialGoalLocked();
+            } else {
+              requestReplanSameGoalLocked();
+            }
             RCLCPP_INFO_THROTTLE(
                 get_logger(), *get_clock(), 2000,
                 "Hold current posture and replan: next-next waypoint is unsafe. start=%d goal=%d wp_idx=%zu next_id=%d next_next_id=%d",
@@ -783,7 +875,11 @@ private:
                   retreat_node_id < static_cast<int>(gng_->getMaxNodeNum())) {
                 target_q = gng_->nodeAt(retreat_node_id).weight_angle;
                 active_waypoint_index_ -= 1;
-                requestReplanLocked();
+                if (trial_mode_) {
+                  requestReplanCurrentTrialGoalLocked();
+                } else {
+                  requestReplanSameGoalLocked();
+                }
                 RCLCPP_INFO_THROTTLE(
                     get_logger(), *get_clock(), 2000,
                     "Retreat to previous waypoint and replan: next waypoint is unsafe. start=%d goal=%d retreat_id=%d wp_idx=%zu next_id=%d",
@@ -791,11 +887,19 @@ private:
                     active_waypoint_index_, next_node_id);
               } else {
                 target_q = current_q;
-                requestReplanLocked();
+                if (trial_mode_) {
+                  requestReplanCurrentTrialGoalLocked();
+                } else {
+                  requestReplanSameGoalLocked();
+                }
               }
             } else {
               target_q = current_q;
-              requestReplanLocked();
+              if (trial_mode_) {
+                requestReplanCurrentTrialGoalLocked();
+              } else {
+                requestReplanSameGoalLocked();
+              }
             }
           } else {
             target_q = gng_->nodeAt(target_node_id).weight_angle;
@@ -926,33 +1030,38 @@ private:
   double trial_goal_interval_sec_ = 4.0;
   bool trial_safe_only_ = true;
   bool trial_return_home_ = false;
+  bool trial_auto_advance_goal_ = false;
   int trial_goal_candidate_count_ = 10;
   bool avoid_danger_ = true;
   bool trajectory_update_requested_ = true;
   bool active_trajectory_valid_ = false;
+  std::vector<Eigen::VectorXf> active_bridge_path_;
+  std::size_t active_bridge_index_ = 0;
+  bool active_bridge_valid_ = false;
   std::vector<int> active_node_path_;
   std::size_t active_waypoint_index_ = 0;
   int active_goal_id_ = -1;
   double waypoint_tolerance_ = 0.05;
   bool replan_on_path_collision_ = true;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trial_goal_advance_srv_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
   std::mt19937 rng_;
 
   enum class TrialPhase { kRandomGoal, kReturnHome };
   TrialPhase trial_phase_ = TrialPhase::kRandomGoal;
-  int trial_home_goal_id_ = -1;
+  Eigen::Vector3f trial_goal_coord_ = Eigen::Vector3f::Zero();
+  bool trial_goal_coord_valid_ = false;
+  Eigen::Vector3f trial_home_coord_ = Eigen::Vector3f::Zero();
+  bool trial_home_coord_valid_ = false;
+  bool trial_waiting_for_key_ = false;
+  bool trial_hold_target_valid_ = false;
+  Eigen::VectorXf trial_hold_target_q_;
 
-  std::vector<int> collectNearestGoalCandidatesLocked(int reference_goal_id,
+  std::vector<int> collectNearestGoalCandidatesLocked(const Eigen::Vector3f &reference_coord,
                                                       int candidate_count) const {
     std::vector<int> candidates;
-    if (!gng_ || reference_goal_id < 0 ||
-        reference_goal_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-      return candidates;
-    }
-
-    const auto &reference = gng_->nodeAt(reference_goal_id);
-    if (reference.id == -1) {
+    if (!gng_) {
       return candidates;
     }
 
@@ -964,7 +1073,7 @@ private:
 
     std::vector<CandidateDist> dist_candidates;
     const auto push_candidate = [&](int id, const auto &node) {
-      if (id < 0 || id == reference_goal_id) {
+      if (id < 0) {
         return;
       }
       if (!node.status.active || !node.status.valid) {
@@ -974,7 +1083,7 @@ private:
         return;
       }
       const int dim = std::min(static_cast<int>(node.weight_coord.size()), 3);
-      const float dist = (node.weight_coord.head(dim) - reference.weight_coord.head(dim)).norm();
+      const float dist = (node.weight_coord.head(dim) - reference_coord.head(dim)).norm();
       dist_candidates.push_back({id, dist});
     };
 
@@ -1003,6 +1112,204 @@ private:
       candidates.push_back(dist_candidates[static_cast<std::size_t>(i)].id);
     }
     return candidates;
+  }
+
+  std::vector<int> collectNearestStartCandidatesLocked(const Eigen::VectorXf &reference_q,
+                                                       int candidate_count) const {
+    std::vector<int> candidates;
+    if (!gng_) {
+      return candidates;
+    }
+
+    struct CandidateDist {
+      int id;
+      float dist;
+      bool operator<(const CandidateDist &other) const { return dist < other.dist; }
+    };
+
+    std::vector<CandidateDist> dist_candidates;
+    gng_->forEachActiveValid([&](int id, const auto &node) {
+      const int dim = std::min(static_cast<int>(node.weight_angle.size()),
+                               static_cast<int>(reference_q.size()));
+      if (dim <= 0) {
+        return;
+      }
+      const float dist = (node.weight_angle.head(dim) - reference_q.head(dim)).norm();
+      dist_candidates.push_back({id, dist});
+    });
+
+    if (dist_candidates.empty()) {
+      return candidates;
+    }
+
+    const int limit = std::min(candidate_count, static_cast<int>(dist_candidates.size()));
+    std::partial_sort(dist_candidates.begin(), dist_candidates.begin() + limit,
+                      dist_candidates.end());
+    candidates.reserve(static_cast<std::size_t>(limit));
+    for (int i = 0; i < limit; ++i) {
+      candidates.push_back(dist_candidates[static_cast<std::size_t>(i)].id);
+    }
+    return candidates;
+  }
+
+  bool postureReachedLocked(const Eigen::VectorXf &current_q,
+                            const Eigen::VectorXf &target_q) const {
+    const int dim = std::min(static_cast<int>(current_q.size()),
+                             static_cast<int>(target_q.size()));
+    if (dim <= 0) {
+      return false;
+    }
+    const float d = (current_q.head(dim) - target_q.head(dim)).norm();
+    return d <= static_cast<float>(waypoint_tolerance_);
+  }
+
+  bool goalCoordinateReachedLocked(const Eigen::VectorXf &current_q) const {
+    if (!trial_goal_coord_valid_ || !chain_) {
+      return false;
+    }
+
+    const auto current_fk_q = eigenToStdVector(current_q);
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+    chain_->forwardKinematicsAt(current_fk_q, positions, orientations);
+    if (positions.empty()) {
+      return false;
+    }
+
+    const Eigen::Vector3d current_eef_pos = positions.back();
+    const Eigen::Vector3d goal_pos = trial_goal_coord_.cast<double>();
+    const double pos_err = (current_eef_pos - goal_pos).norm();
+    return pos_err <= waypoint_tolerance_;
+  }
+
+  std::vector<Eigen::VectorXf> buildBridgePathLocked(const Eigen::VectorXf &from_q,
+                                                     const Eigen::VectorXf &to_q,
+                                                     int steps) const {
+    std::vector<Eigen::VectorXf> bridge;
+    const int dim = std::min(static_cast<int>(from_q.size()), static_cast<int>(to_q.size()));
+    if (dim <= 0) {
+      return bridge;
+    }
+
+    const int clamped_steps = std::max(1, steps);
+    bridge.reserve(static_cast<std::size_t>(clamped_steps));
+    for (int i = 1; i <= clamped_steps; ++i) {
+      const float t = static_cast<float>(i) / static_cast<float>(clamped_steps);
+      Eigen::VectorXf q = from_q.head(dim) * (1.0f - t) + to_q.head(dim) * t;
+      bridge.push_back(q);
+    }
+    return bridge;
+  }
+
+  std::pair<int, std::vector<int>> planFromStartCandidatesLocked(
+      const Eigen::VectorXf &current_q, const std::vector<int> &start_candidates,
+      const std::vector<int> &goal_candidates, int &selected_start_id,
+      std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
+      std::vector<std::vector<int>> &candidate_paths) {
+    selected_start_id = -1;
+    candidate_path_by_goal.clear();
+    candidate_paths.clear();
+
+    if (!gng_ || start_candidates.empty() || goal_candidates.empty()) {
+      return {-1, {}};
+    }
+
+    float best_score = std::numeric_limits<float>::max();
+    int best_goal_id = -1;
+    std::vector<int> best_path;
+
+    for (int start_id : start_candidates) {
+      if (start_id < 0 || start_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &start_node = gng_->nodeAt(start_id);
+      if (start_node.id == -1 || !start_node.status.active || !start_node.status.valid) {
+        continue;
+      }
+
+      auto [reached_goal_id, node_path] =
+          planner_.planToAnyNode(start_id, goal_candidates, *gng_);
+      if (node_path.empty() || reached_goal_id < 0) {
+        continue;
+      }
+
+      candidate_path_by_goal.emplace(reached_goal_id, node_path);
+
+      const int dim = std::min(static_cast<int>(start_node.weight_angle.size()),
+                               static_cast<int>(current_q.size()));
+      const float start_dist = (start_node.weight_angle.head(dim) - current_q.head(dim)).norm();
+      const float score = static_cast<float>(node_path.size()) + 0.5f * start_dist;
+      if (score < best_score) {
+        best_score = score;
+        best_goal_id = reached_goal_id;
+        best_path = node_path;
+        selected_start_id = start_id;
+      }
+    }
+
+    if (best_goal_id < 0) {
+      return {-1, {}};
+    }
+
+    candidate_path_by_goal[best_goal_id] = best_path;
+
+    for (int goal_id : goal_candidates) {
+      if (goal_id == best_goal_id) {
+        continue;
+      }
+      if (goal_id < 0 || goal_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &goal_node = gng_->nodeAt(goal_id);
+      if (goal_node.id == -1 || !goal_node.status.active || !goal_node.status.valid) {
+        continue;
+      }
+      auto [reached_goal_id, path] =
+          planner_.planToAnyNode(selected_start_id, std::vector<int>{goal_id}, *gng_);
+      if (reached_goal_id >= 0 && !path.empty()) {
+        candidate_path_by_goal.emplace(reached_goal_id, path);
+        candidate_paths.push_back(std::move(path));
+      }
+    }
+
+    return {best_goal_id, best_path};
+  }
+
+  bool selectTrialGoalCoordLocked(const Eigen::VectorXf &current_q, int start_id)
+  {
+    if (!gng_) {
+      return false;
+    }
+
+    if (trial_return_home_ && trial_phase_ == TrialPhase::kReturnHome) {
+      if (!trial_home_coord_valid_) {
+        if (start_id < 0 || start_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+          return false;
+        }
+        const auto &start_node = gng_->nodeAt(start_id);
+        if (start_node.id == -1) {
+          return false;
+        }
+        trial_home_coord_ = start_node.weight_coord;
+        trial_home_coord_valid_ = true;
+      }
+      trial_goal_coord_ = trial_home_coord_;
+      trial_goal_coord_valid_ = true;
+      return true;
+    }
+
+    (void)current_q;
+    const int random_goal_id = pickRandomGoalLocked(start_id);
+    if (random_goal_id < 0 || random_goal_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+      return false;
+    }
+    const auto &goal_node = gng_->nodeAt(random_goal_id);
+    if (goal_node.id == -1) {
+      return false;
+    }
+    trial_goal_coord_ = goal_node.weight_coord;
+    trial_goal_coord_valid_ = true;
+    return true;
   }
 
   int pickRandomGoalLocked(int start_id) {
@@ -1071,9 +1378,34 @@ private:
     return false;
   }
 
+  bool nodeHasUnsafeNeighborLocked(int node_id) const {
+    if (!gng_ || node_id < 0 ||
+        node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+      return false;
+    }
+    const auto &node = gng_->nodeAt(node_id);
+    if (node.id == -1 || !node.status.active || !node.status.valid) {
+      return true;
+    }
+    for (int neighbor_id : gng_->getNeighborsAngle(node_id)) {
+      if (neighbor_id < 0 || neighbor_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        return true;
+      }
+      const auto &neighbor = gng_->nodeAt(neighbor_id);
+      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.valid ||
+          neighbor.status.is_colliding || neighbor.status.is_danger) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void clearActiveTrajectoryLocked(bool keep_goal_id = false)
   {
     active_trajectory_valid_ = false;
+    active_bridge_valid_ = false;
+    active_bridge_path_.clear();
+    active_bridge_index_ = 0;
     active_node_path_.clear();
     active_waypoint_index_ = 0;
     if (!keep_goal_id) {
@@ -1087,6 +1419,53 @@ private:
     active_goal_candidates_.clear();
     active_goal_id_ = -1;
     trajectory_update_requested_ = true;
+    if (candidate_trajectory_pub_) {
+      publishCandidateTrajectoryPathsLocked({});
+    }
+  }
+
+  void requestReplanCurrentTrialGoalLocked()
+  {
+    clearActiveTrajectoryLocked(true);
+    trajectory_update_requested_ = true;
+    if (candidate_trajectory_pub_) {
+      publishCandidateTrajectoryPathsLocked({});
+    }
+  }
+
+  void requestReplanSameGoalLocked()
+  {
+    clearActiveTrajectoryLocked(true);
+    trajectory_update_requested_ = true;
+    if (candidate_trajectory_pub_) {
+      publishCandidateTrajectoryPathsLocked({});
+    }
+  }
+
+  void advanceTrialGoalLocked()
+  {
+    trial_waiting_for_key_ = false;
+    trial_hold_target_valid_ = false;
+    clearActiveTrajectoryLocked(false);
+    active_goal_candidates_.clear();
+    active_goal_id_ = -1;
+    trial_goal_coord_valid_ = false;
+    trajectory_update_requested_ = true;
+
+    if (trial_return_home_) {
+      trial_phase_ = (trial_phase_ == TrialPhase::kRandomGoal)
+                         ? TrialPhase::kReturnHome
+                         : TrialPhase::kRandomGoal;
+      RCLCPP_INFO(
+          get_logger(),
+          "Trial goal coordinate advance requested: next phase=%s",
+          trial_phase_ == TrialPhase::kReturnHome ? "return_home" : "random_goal");
+    } else {
+      RCLCPP_INFO(
+          get_logger(),
+          "Trial goal coordinate advance requested: random goal will be reselected.");
+    }
+
     if (candidate_trajectory_pub_) {
       publishCandidateTrajectoryPathsLocked({});
     }

@@ -40,6 +40,7 @@ def launch_setup(context, *args, **kwargs):
     trial_goal_interval_sec = LaunchConfiguration("trial_goal_interval_sec").perform(context)
     trial_safe_only = LaunchConfiguration("trial_safe_only").perform(context)
     trial_return_home = LaunchConfiguration("trial_return_home").perform(context)
+    trial_auto_advance_goal = LaunchConfiguration("trial_auto_advance_goal").perform(context)
     trial_seed = LaunchConfiguration("trial_seed").perform(context)
     avoid_danger = LaunchConfiguration("avoid_danger").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
@@ -74,6 +75,8 @@ def launch_setup(context, *args, **kwargs):
         node_params["trial_safe_only"] = trial_safe_only.lower() in ("1", "true", "yes", "on")
     if trial_return_home:
         node_params["trial_return_home"] = trial_return_home.lower() in ("1", "true", "yes", "on")
+    if trial_auto_advance_goal:
+        node_params["trial_auto_advance_goal"] = trial_auto_advance_goal.lower() in ("1", "true", "yes", "on")
     if trial_seed:
         node_params["trial_seed"] = safe_int(trial_seed, 0)
     if avoid_danger:
@@ -148,6 +151,7 @@ def generate_launch_description():
         DeclareLaunchArgument("trial_goal_interval_sec", default_value="4.0"),
         DeclareLaunchArgument("trial_safe_only", default_value="true"),
         DeclareLaunchArgument("trial_return_home", default_value="false"),
+        DeclareLaunchArgument("trial_auto_advance_goal", default_value="false"),
         DeclareLaunchArgument("trial_seed", default_value="0"),
         DeclareLaunchArgument("avoid_danger", default_value="true"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
