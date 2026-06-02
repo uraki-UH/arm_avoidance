@@ -263,14 +263,13 @@ function App() {
 
         Object.keys(graphData).forEach(tag => {
             const isStatic = graphData[tag]?.mode === 'static';
-            const isPlannedTrajectory = tag === 'planned_topological_map';
             if (!newSettings[tag]) {
                 newSettings[tag] = {
                     visible: true,
                     showNodes: true,
-                    showEdges: isPlannedTrajectory || !isStatic,
+                    showEdges: !isStatic,
                     showClusters: false,
-                    opacity: isPlannedTrajectory ? 0.35 : STATIC_GNG_DEFAULTS.opacity,
+                    opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {
                         position: [0, 0, 0],
                         rotation: [0, 0, 0],

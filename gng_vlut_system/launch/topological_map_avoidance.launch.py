@@ -35,6 +35,7 @@ def launch_setup(context, *args, **kwargs):
     robot_urdf = LaunchConfiguration("robot_urdf_path").perform(context)
     topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
     trajectory_topic = LaunchConfiguration("trajectory_topic").perform(context)
+    candidate_trajectory_topic = LaunchConfiguration("candidate_trajectory_topic").perform(context)
     trial_mode = LaunchConfiguration("trial_mode").perform(context)
     trial_goal_interval_sec = LaunchConfiguration("trial_goal_interval_sec").perform(context)
     trial_safe_only = LaunchConfiguration("trial_safe_only").perform(context)
@@ -63,6 +64,8 @@ def launch_setup(context, *args, **kwargs):
         node_params["topological_map_topic"] = topological_map_topic
     if trajectory_topic:
         node_params["trajectory_topic"] = trajectory_topic
+    if candidate_trajectory_topic:
+        node_params["candidate_trajectory_topic"] = candidate_trajectory_topic
     if trial_mode:
         node_params["trial_mode"] = trial_mode.lower() in ("1", "true", "yes", "on")
     if trial_goal_interval_sec:
@@ -139,6 +142,8 @@ def generate_launch_description():
                               default_value="/ToPoDualArm/topological_map_static"),
         DeclareLaunchArgument("trajectory_topic",
                               default_value="/ToPoDualArm/planned_topological_map"),
+        DeclareLaunchArgument("candidate_trajectory_topic",
+                              default_value="/ToPoDualArm/candidate_topological_map"),
         DeclareLaunchArgument("trial_mode", default_value="false"),
         DeclareLaunchArgument("trial_goal_interval_sec", default_value="4.0"),
         DeclareLaunchArgument("trial_safe_only", default_value="true"),

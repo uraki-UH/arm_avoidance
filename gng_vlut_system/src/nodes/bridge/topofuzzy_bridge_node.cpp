@@ -304,7 +304,16 @@ private:
       return;
     }
 
+    const auto t0 = std::chrono::steady_clock::now();
     context_->update(latest_occ_vids_, latest_dan_vids_);
+    const auto t1 = std::chrono::steady_clock::now();
+    const double vlut_update_ms =
+        std::chrono::duration<double, std::milli>(t1 - t0).count();
+    RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "VLUT update: %.3f ms | occ=%zu dan=%zu",
+        vlut_update_ms, latest_occ_vids_.size(),
+        latest_dan_vids_.size());
 
     auto &gng = *context_->gng;
     const auto &col_counts = context_->mapper->getCollisionCounts();
