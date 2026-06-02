@@ -22,6 +22,7 @@
 #include "safety_engine/builder/safety_system_loader.hpp"
 #include "metrics/graph_topology_analyzer.hpp"
 #include "common/constants.hpp"
+#include "bridge/topofuzzy_bridge_helpers.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -39,67 +40,6 @@
 #include <vector>
 
 namespace {
-
-constexpr float kEps = static_cast<float>(::robot_sim::common::Constants::GEOM_EPSILON);
-
-Eigen::Isometry3d makeIsometry(const std::vector<double> &pos,
-                               const std::vector<double> &rot_deg) {
-  Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
-  T.translation() = Eigen::Vector3d(pos[0], pos[1], pos[2]);
-  T.linear() =
-      (Eigen::AngleAxisd(rot_deg[2] * M_PI / 180.0, Eigen::Vector3d::UnitZ()) *
-       Eigen::AngleAxisd(rot_deg[1] * M_PI / 180.0, Eigen::Vector3d::UnitY()) *
-       Eigen::AngleAxisd(rot_deg[0] * M_PI / 180.0, Eigen::Vector3d::UnitX()))
-          .toRotationMatrix();
-  return T;
-}
-
-uint8_t viewerLabelFromStatus(const GNG::Status &status) {
-  if (status.is_colliding) {
-    return 2; // COLLISION -> red
-  }
-  if (status.is_danger) {
-    return 3; // DANGER -> yellow
-  }
-  return 1; // SAFE -> green
-}
-
-geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3f &v) {
-  geometry_msgs::msg::Point32 p;
-  p.x = v.x();
-  p.y = v.y();
-  p.z = v.z();
-  return p;
-}
-
-geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3d &v) {
-  geometry_msgs::msg::Point32 p;
-  p.x = static_cast<float>(v.x());
-  p.y = static_cast<float>(v.y());
-  p.z = static_cast<float>(v.z());
-  return p;
-}
-
-geometry_msgs::msg::Quaternion toQuaternion(const Eigen::Quaternionf &q) {
-  geometry_msgs::msg::Quaternion out;
-  out.x = q.x();
-  out.y = q.y();
-  out.z = q.z();
-  out.w = q.w();
-  return out;
-}
-
-Eigen::Vector3f transformPoint(const Eigen::Isometry3d &tf,
-                               const Eigen::Vector3f &point) {
-  const Eigen::Vector3d transformed = tf * point.cast<double>();
-  return transformed.cast<float>();
-}
-
-Eigen::Vector3f transformVector(const Eigen::Isometry3d &tf,
-                                const Eigen::Vector3f &vec) {
-  const Eigen::Vector3d transformed = tf.linear() * vec.cast<double>();
-  return transformed.cast<float>();
-}
 
 std::string activeEdgeModeName(int edge_mode) {
   if (edge_mode == 0) {
@@ -414,138 +354,9 @@ private:
   }
 
   ais_gng_msgs::msg::TopologicalMap buildGraphMessage() {
-    // annotateTopologyLocked(); //
-    // BFSによる連結成分分析だが未使用なためコメントアウト
-
-    ais_gng_msgs::msg::TopologicalMap msg;
-    msg.header.stamp = now();
-    msg.header.frame_id = frame_id_;
-
-    if (!context_ || !context_->gng) {
-      return msg;
-    }
-
-    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
-    const bool need_transform = frame_id_ != source_frame_id_;
-    if (need_transform) {
-      try {
-        const auto ts = tf_buffer_->lookupTransform(
-            frame_id_, source_frame_id_, tf2::TimePointZero);
-        source_to_target = tf2::transformToEigen(ts.transform);
-      } catch (const tf2::TransformException &ex) {
-        RCLCPP_WARN_THROTTLE(
-            get_logger(), *get_clock(), 5000,
-            "topofuzzy_bridge: TF lookup failed from '%s' to '%s': %s",
-            source_frame_id_.c_str(), frame_id_.c_str(), ex.what());
-        source_to_target.setIdentity();
-      }
-    }
-
-    const auto &gng = *context_->gng;
-    const int mode = selectedEdgeMode();
-
-    std::unordered_map<int, uint16_t> id_to_index;
-    msg.nodes.reserve(gng.getNodes().size());
-
-    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-      const auto &node = gng.getNodes()[i];
-      if (node.id == -1) {
-        continue;
-      }
-      if (msg.nodes.size() >= std::numeric_limits<uint16_t>::max()) {
-        RCLCPP_WARN(
-            get_logger(),
-            "topofuzzy_bridge: too many nodes for uint16 indexing, truncating");
-        break;
-      }
-
-      ais_gng_msgs::msg::TopologicalNode out;
-      out.id = static_cast<uint16_t>(node.id);
-      const Eigen::Vector3f transformed_pos = need_transform
-                                                  ? transformPoint(source_to_target, node.weight_coord)
-                                                  : node.weight_coord;
-      out.pos = toPoint32(transformed_pos);
-
-      const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
-                                         ? node.status.ee_direction.normalized()
-                                         : Eigen::Vector3f::UnitZ();
-      Eigen::Vector3f transformed_normal = need_transform
-                                               ? transformVector(source_to_target, normal)
-                                               : normal;
-      if (transformed_normal.norm() > kEps) {
-        transformed_normal.normalize();
-      } else {
-        transformed_normal = Eigen::Vector3f::UnitZ();
-      }
-      out.normal = toPoint32(transformed_normal);
-      out.label = viewerLabelFromStatus(node.status);
-
-      const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
-      id_to_index.emplace(node.id, published_index);
-      msg.nodes.push_back(std::move(out));
-    }
-
-    size_t label_collision = 0;
-    size_t label_danger = 0;
-    for (const auto &node : msg.nodes) {
-      if (node.label == 2) {
-        ++label_collision;
-      } else if (node.label == 3) {
-        ++label_danger;
-      } 
-    }
-    const size_t label_safe = msg.nodes.size() - label_collision - label_danger;
-
-    RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), 1000,
-        "Publishing graph: nodes=%zu labels safe=%zu collision=%zu danger=%zu",
-        msg.nodes.size(), label_safe, label_collision, label_danger);
-
-    std::unordered_set<uint64_t> seen_edges;
-    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-      const auto &node = gng.getNodes()[i];
-      if (node.id == -1) {
-        continue;
-      }
-
-      const auto &neighbors = (mode == 0)
-                                  ? gng.getNeighborsAngle(static_cast<int>(i))
-                                  : gng.getNeighborsCoord(static_cast<int>(i));
-      const auto src_it = id_to_index.find(node.id);
-      if (src_it == id_to_index.end()) {
-        continue;
-      }
-
-      for (const int neighbor_id : neighbors) {
-        if (neighbor_id < 0) {
-          continue;
-        }
-        const auto tgt_it = id_to_index.find(neighbor_id);
-        if (tgt_it == id_to_index.end()) {
-          continue;
-        }
-
-        const int src_original = node.id;
-        const int tgt_original = neighbor_id;
-        const int lo = std::min(src_original, tgt_original);
-        const int hi = std::max(src_original, tgt_original);
-        const uint64_t key =
-            (static_cast<uint64_t>(static_cast<uint32_t>(lo)) << 32) |
-            static_cast<uint32_t>(hi);
-        if (!seen_edges.insert(key).second) {
-          continue;
-        }
-
-        msg.edges.push_back(src_it->second);
-        msg.edges.push_back(tgt_it->second);
-      }
-    }
-
-    // Clusters are optional for this bridge. We keep them empty for now so the
-    // viewer can focus on the node state + topology graph.
-    msg.clusters.clear();
-
-    return msg;
+    return robot_sim::bridge::topofuzzy::buildGraphMessage(
+        *this, context_ ? context_->gng : nullptr, tf_buffer_, frame_id_,
+        source_frame_id_, selectedEdgeMode());
   }
 
   void publishIfDirty() {
@@ -558,92 +369,9 @@ private:
   }
 
   ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(int layer) {
-    ais_gng_msgs::msg::TopologicalMap msg;
-    msg.header.stamp = now();
-    msg.header.frame_id = frame_id_;
-
-    if (!context_ || !context_->gng) {
-      return msg;
-    }
-
-    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
-    const bool need_transform = frame_id_ != source_frame_id_;
-    if (need_transform) {
-      try {
-        const auto ts = tf_buffer_->lookupTransform(
-            frame_id_, source_frame_id_, tf2::TimePointZero);
-        source_to_target = tf2::transformToEigen(ts.transform);
-      } catch (const tf2::TransformException &ex) {
-        source_to_target.setIdentity();
-      }
-    }
-
-    const auto &gng = *context_->gng;
-
-    std::unordered_map<int, uint16_t> id_to_index;
-    msg.nodes.reserve(gng.getNodes().size());
-
-    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-      const auto &node = gng.getNodes()[i];
-      if (node.id == -1) continue;
-      if (layer >= static_cast<int>(node.weight_coords.size())) continue;
-      
-      if (msg.nodes.size() >= std::numeric_limits<uint16_t>::max()) break;
-
-      ais_gng_msgs::msg::TopologicalNode out;
-      out.id = static_cast<uint16_t>(node.id);
-      
-      const Eigen::Vector3f transformed_pos = need_transform
-                                                  ? transformPoint(source_to_target, node.weight_coords[layer])
-                                                  : node.weight_coords[layer];
-      out.pos = toPoint32(transformed_pos);
-
-      const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
-                                         ? node.status.ee_direction.normalized()
-                                         : Eigen::Vector3f::UnitZ();
-      Eigen::Vector3f transformed_normal = need_transform
-                                               ? transformVector(source_to_target, normal)
-                                               : normal;
-      if (transformed_normal.norm() > kEps) {
-        transformed_normal.normalize();
-      } else {
-        transformed_normal = Eigen::Vector3f::UnitZ();
-      }
-      out.normal = toPoint32(transformed_normal);
-      out.label = viewerLabelFromStatus(node.status);
-
-      const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
-      id_to_index.emplace(node.id, published_index);
-      msg.nodes.push_back(std::move(out));
-    }
-
-    std::unordered_set<uint64_t> seen_edges;
-    for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-      const auto &node = gng.getNodes()[i];
-      if (node.id == -1) continue;
-      if (layer >= static_cast<int>(node.weight_coords.size())) continue;
-
-      const auto &neighbors = gng.getNeighborsCoord(static_cast<int>(i), layer);
-      const auto src_it = id_to_index.find(node.id);
-      if (src_it == id_to_index.end()) continue;
-
-      for (const int neighbor_id : neighbors) {
-        if (neighbor_id < 0) continue;
-        const auto tgt_it = id_to_index.find(neighbor_id);
-        if (tgt_it == id_to_index.end()) continue;
-
-        const int lo = std::min(node.id, neighbor_id);
-        const int hi = std::max(node.id, neighbor_id);
-        const uint64_t key = (static_cast<uint64_t>(static_cast<uint32_t>(lo)) << 32) | static_cast<uint32_t>(hi);
-        if (!seen_edges.insert(key).second) continue;
-
-        msg.edges.push_back(src_it->second);
-        msg.edges.push_back(tgt_it->second);
-      }
-    }
-
-    msg.clusters.clear();
-    return msg;
+    return robot_sim::bridge::topofuzzy::buildLayerGraphMessage(
+        *this, context_ ? context_->gng : nullptr, tf_buffer_, layer,
+        frame_id_, source_frame_id_);
   }
 
   void publishGraph() {

@@ -16,6 +16,7 @@
 #include "robot_model/urdf_loader.hpp"
 #include "common/resource_utils.hpp"
 #include "common/constants.hpp"
+#include "safety_monitor/safety_monitor_helpers.hpp"
 
 #include <Eigen/Geometry>
 
@@ -37,23 +38,6 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <unordered_map>
 #include <unordered_set>
-
-namespace {
-constexpr float kEps = 1e-6f;
-
-
-uint8_t viewerLabelFromStatus(const GNG::Status &status) {
-    if (status.is_colliding) return 2; // red
-    if (status.is_danger) return 3;    // yellow
-    return 1;                         // green
-}
-
-geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3f &v) {
-    geometry_msgs::msg::Point32 p;
-    p.x = v.x(); p.y = v.y(); p.z = v.z();
-    return p;
-}
-}
 
 namespace robot_sim {
 namespace safety {
@@ -261,103 +245,15 @@ private:
     }
 
     void publishGraphLocked() {
-        if (!context_ || !context_->gng) return;
-
-        ais_gng_msgs::msg::TopologicalMap msg;
-        msg.header.stamp = this->now();
-        msg.header.frame_id = base_frame_;
-
-        auto& gng = *context_->gng;
-        std::unordered_map<int, uint16_t> id_to_index;
-        msg.nodes.reserve(gng.getNodes().size());
-
-        // 1. Build Nodes
-        for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-            const auto& node = gng.getNodes()[i];
-            if (node.id == -1) continue;
-
-            ais_gng_msgs::msg::TopologicalNode out;
-            out.id = static_cast<uint16_t>(node.id);
-            out.pos = toPoint32(node.weight_coord);
-            
-            const Eigen::Vector3f normal = (node.status.ee_direction.norm() > kEps)
-                                               ? node.status.ee_direction.normalized()
-                                               : Eigen::Vector3f::UnitZ();
-            out.normal = toPoint32(normal);
-            out.label = viewerLabelFromStatus(node.status);
-            
-            id_to_index[node.id] = static_cast<uint16_t>(msg.nodes.size());
-            msg.nodes.push_back(std::move(out));
-        }
-
-        // 2. Build Edges (Coord edges for standard offline map)
-        std::unordered_set<uint64_t> seen_edges;
-        for (size_t i = 0; i < gng.getNodes().size(); ++i) {
-            const auto& node = gng.getNodes()[i];
-            if (node.id == -1) continue;
-
-            const auto& neighbors = gng.getNeighborsCoord(static_cast<int>(i));
-            for (int neighbor_id : neighbors) {
-                if (neighbor_id < 0 || id_to_index.find(neighbor_id) == id_to_index.end()) continue;
-
-                int lo = std::min((int)node.id, neighbor_id);
-                int hi = std::max((int)node.id, neighbor_id);
-                uint64_t key = (static_cast<uint64_t>(lo) << 32) | static_cast<uint32_t>(hi);
-                if (!seen_edges.insert(key).second) continue;
-
-                msg.edges.push_back(id_to_index[node.id]);
-                msg.edges.push_back(id_to_index[neighbor_id]);
-            }
-        }
-
-        topological_map_pub_->publish(msg);
+        topological_map_pub_->publish(
+            robot_sim::safety::monitor_helpers::buildGraphMessage(
+                *this, context_, base_frame_));
     }
 
     void publishMarkersLocked() {
-        if (!context_ || !context_->gng) return;
-        visualization_msgs::msg::MarkerArray markers;
-        int id = 0;
-        for (const auto& node : context_->gng->getNodes()) {
-            if (node.id == -1) continue;
-            visualization_msgs::msg::Marker m;
-            m.header.frame_id = base_frame_; m.header.stamp = this->now();
-            m.ns = "gng_safety"; m.id = id++;
-            m.type = visualization_msgs::msg::Marker::SPHERE;
-            m.scale.x = m.scale.y = m.scale.z = 0.01;
-            m.pose.position.x = node.weight_coord.x();
-            m.pose.position.y = node.weight_coord.y();
-            m.pose.position.z = node.weight_coord.z();
-            m.pose.orientation.w = 1.0; // Essential for valid quaternion
-            
-            uint8_t label = viewerLabelFromStatus(node.status);
-            if (label == 2) { m.color.r = 1.0; m.color.a = 0.5; } // Red
-            else if (label == 3) { m.color.r = 1.0; m.color.g = 1.0; m.color.a = 0.5; } // Yellow
-            else { m.color.g = 1.0; m.color.a = 0.2; } // Green
-            markers.markers.push_back(m);
-
-            if (node.weight_coords.size() > 1) {
-                for (size_t layer = 1; layer < node.weight_coords.size(); ++layer) {
-                    visualization_msgs::msg::Marker layer_marker;
-                    layer_marker.header.frame_id = base_frame_;
-                    layer_marker.header.stamp = this->now();
-                    layer_marker.ns = "gng_safety";
-                    layer_marker.id = node.id * 100 + static_cast<int>(layer);
-                    layer_marker.type = visualization_msgs::msg::Marker::SPHERE;
-                    layer_marker.action = visualization_msgs::msg::Marker::ADD;
-                    layer_marker.scale.x = layer_marker.scale.y = layer_marker.scale.z = 0.008;
-                    layer_marker.pose.position.x = node.weight_coords[layer].x();
-                    layer_marker.pose.position.y = node.weight_coords[layer].y();
-                    layer_marker.pose.position.z = node.weight_coords[layer].z();
-                    layer_marker.pose.orientation.w = 1.0;
-                    layer_marker.color.r = m.color.r;
-                    layer_marker.color.g = m.color.g;
-                    layer_marker.color.b = m.color.b;
-                    layer_marker.color.a = 0.35;
-                    markers.markers.push_back(layer_marker);
-                }
-            }
-        }
-        marker_pub_->publish(markers);
+        marker_pub_->publish(
+            robot_sim::safety::monitor_helpers::buildMarkerArray(
+                *this, context_, base_frame_));
     }
 
     // Members
