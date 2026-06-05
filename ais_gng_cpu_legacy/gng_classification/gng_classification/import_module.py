@@ -1,3 +1,0 @@
-#!/usr/bin/env python3
-
-from gng_classification.import_module import ....
