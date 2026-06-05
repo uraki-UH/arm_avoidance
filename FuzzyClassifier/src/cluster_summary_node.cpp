@@ -575,16 +575,15 @@ private:
       ++inferred_counts[cluster.label];
 
       const auto node_count = static_cast<std::int64_t>(cluster.nodes.size());
-      const double speed = cluster.has_velocity_observation ?
-        std::sqrt(
+      const double speed = std::sqrt(
         cluster.velocity.x * cluster.velocity.x + cluster.velocity.y * cluster.velocity.y +
-        cluster.velocity.z * cluster.velocity.z) : 0.0;
+        cluster.velocity.z * cluster.velocity.z);
       const double volume = std::max(cluster.scale.x, 0.0F) * std::max(cluster.scale.y, 0.0F) *
         std::max(cluster.scale.z, 0.0F);
       const std::uint32_t age = msg->frame_number >= cluster.frame ?
         msg->frame_number - cluster.frame : 0U;
 
-      reliabilities.push_back(safe_double(cluster.reliability));
+      reliabilities.push_back(safe_double(cluster.label_reliability));
       matches.push_back(safe_double(cluster.match));
       node_counts.push_back(node_count);
       node_counts_for_mean.push_back(static_cast<double>(node_count));
@@ -601,13 +600,13 @@ private:
         row.node_count = node_count;
         row.frame = cluster.frame;
         row.age = age;
-        row.reliability = safe_double(cluster.reliability);
+        row.reliability = safe_double(cluster.label_reliability);
         row.match = safe_double(cluster.match);
         row.speed_mps = safe_double(speed);
-        row.has_velocity_observation = cluster.has_velocity_observation;
-        row.vel_cov_xx = safe_double(cluster.vel_cov_xx);
-        row.vel_cov_xy = safe_double(cluster.vel_cov_xy);
-        row.vel_cov_yy = safe_double(cluster.vel_cov_yy);
+        row.has_velocity_observation = false;
+        row.vel_cov_xx = 0.0;
+        row.vel_cov_xy = 0.0;
+        row.vel_cov_yy = 0.0;
         row.position = {
           safe_double(cluster.pos.x),
           safe_double(cluster.pos.y),

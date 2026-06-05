@@ -1,0 +1,26 @@
+ais_gng_node:
+  ros__parameters:
+    node.num_max: 65534 # 65534
+    node.learning_num: 3
+    node.eta_s1: 0.4
+    node.edge_age_max: 2
+    node.s1_age_max: [20]
+    node.interval: [0.2]
+
+    # cluster.num_min: 10
+    # cluster.velocity.lpf_time_constant: 0.5
+    # cluster.edge_distance_max: 0.1
+    # cluster.human.hysteresis_age: 10
+
+    input.topic_names: ["/scan"]
+    input.point_cloud_num: 200000
+    input.base_frame_id: "map"
+    input.voxel_grid_unit: 0.00
+    input.visualize: true
+    input.local_coordinates: false
+    input.x_min: 0.
+    input.x_max: 100.
+    input.y_min: -50.
+    input.y_max: 50.
+    input.z_min: -5.0
+    input.z_max: 10.0

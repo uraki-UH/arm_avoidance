@@ -1,6 +1,37 @@
 #include "topo_fuzzy_viewer/services/ros2_parameter_manager.h"
 #include <rclcpp/rclcpp.hpp>
 
+namespace {
+
+constexpr const char* kUiInputTopicParam = "input.topic_name";
+constexpr const char* kRosInputTopicParam = "input.topic_names";
+constexpr const char* kDefaultInputTopic = "/topo_points";
+
+std::string resolveQueryParamName(const std::string& param_name) {
+    if (param_name == kUiInputTopicParam) {
+        return kRosInputTopicParam;
+    }
+    return param_name;
+}
+
+std::string resolveDisplayInputTopic(const rclcpp::Parameter& param) {
+    if (param.get_type() == rclcpp::ParameterType::PARAMETER_STRING_ARRAY) {
+        const auto topics = param.as_string_array();
+        if (!topics.empty()) {
+            return topics.front();
+        }
+        return kDefaultInputTopic;
+    }
+
+    if (param.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+        return param.as_string();
+    }
+
+    return kDefaultInputTopic;
+}
+
+} // namespace
+
 namespace ros2_bridge {
 
 ROS2ParameterManager::ROS2ParameterManager(const std::string& target_node)
@@ -21,7 +52,7 @@ ROS2ParameterManager::ROS2ParameterManager(const std::string& target_node)
         {"ds.all.num_max", "All Clusters", core::ParamType::INT, 10.0, 10000.0, 100.0, 1000.0},
         {"ds.unknown.num_max", "Unknown Objects", core::ParamType::INT, 10.0, 10000.0, 100.0, 500.0},
         {"ds.human.num_max", "Human Detection", core::ParamType::INT, 10.0, 1000.0, 10.0, 100.0},
-        {"input.topic_name", "Input Topic", core::ParamType::STRING, 0.0, 0.0, 0.0, "scan"}
+        {kUiInputTopicParam, "Input Topic", core::ParamType::STRING, 0.0, 0.0, 0.0, kDefaultInputTopic}
     };
     
     RCLCPP_INFO(param_node_->get_logger(), "ROS2ParameterManager initialized for node: %s", target_node_.c_str());
@@ -43,7 +74,7 @@ std::optional<core::NodeParameters> ROS2ParameterManager::getNodeParameters() {
     
     std::vector<std::string> param_names;
     for (const auto& p : managed_params_) {
-        param_names.push_back(p.name);
+        param_names.push_back(resolveQueryParamName(p.name));
     }
     
     try {
@@ -53,18 +84,15 @@ std::optional<core::NodeParameters> ROS2ParameterManager::getNodeParameters() {
             core::ParameterInfo info = managed_params_[i];
             const auto& param = params[i];
             
-            if (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+            if (managed_params_[i].name == kUiInputTopicParam) {
+                info.value = resolveDisplayInputTopic(param);
+            } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
                 info.value = param.as_double();
             } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
                 info.value = static_cast<double>(param.as_int());
             } else if (param.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
                 info.value = param.as_string();
             } else {
-                // Use default
-                info.value = std::get<double>(managed_params_[i].value); // Note: default might mismatch type if string, need care.
-                // Correction: Managed params default value variant needs to match type.
-                // The variant in ParamInfo default ctor supports string, but initialization above used double for string param.
-                // Let's fix loop to handle string defaults correctly if fallback is used.
                 if (managed_params_[i].type == core::ParamType::STRING) {
                     info.value = std::get<std::string>(managed_params_[i].value);
                 } else {
@@ -127,8 +155,26 @@ bool ROS2ParameterManager::setParameter(const std::string& param_name, const std
     }
 
     try {
+        const std::string actual_param_name = resolveQueryParamName(param_name);
+
+        if (actual_param_name == kRosInputTopicParam) {
+            std::vector<rclcpp::Parameter> params;
+            params.emplace_back(actual_param_name, std::vector<std::string>{value});
+
+            auto results = param_client_->set_parameters(params);
+
+            if (!results.empty() && results[0].successful) {
+                RCLCPP_INFO(param_node_->get_logger(), "Set %s = %s", param_name.c_str(), value.c_str());
+                return true;
+            }
+
+            std::string reason = results.empty() ? "unknown" : results[0].reason;
+            RCLCPP_WARN(param_node_->get_logger(), "Failed to set %s: %s", param_name.c_str(), reason.c_str());
+            return false;
+        }
+
         std::vector<rclcpp::Parameter> params;
-        params.push_back(rclcpp::Parameter(param_name, value));
+        params.push_back(rclcpp::Parameter(actual_param_name, value));
         
         auto results = param_client_->set_parameters(params);
         

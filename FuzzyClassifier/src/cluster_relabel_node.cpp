@@ -21,14 +21,6 @@ double clamp01(const double value)
   return std::clamp(value, 0.0, 1.0);
 }
 
-double normalized_ratio(const double value, const double scale)
-{
-  if (!std::isfinite(value) || !std::isfinite(scale) || scale <= 0.0 || value <= 0.0) {
-    return 0.0;
-  }
-  return value / (value + scale);
-}
-
 double cluster_speed_mps(const ais_gng_msgs::msg::TopologicalCluster & cluster)
 {
   const double vx = safe_double(cluster.velocity.x);
@@ -160,15 +152,6 @@ uint8_t relabel_from_config(
 
   const double speed = cluster_speed_mps(cluster);
   const double volume = cluster_volume_m3(cluster);
-  const double reliability = clamp01(safe_double(cluster.reliability));
-  const double match = clamp01(safe_double(cluster.match));
-  const double node_count = static_cast<double>(cluster.nodes.size());
-  const double speed_norm = normalized_ratio(speed, 1.0);
-  const double node_count_norm = normalized_ratio(
-    node_count,
-    static_cast<double>(std::max(config.min_nodes, 1)));
-  const double volume_norm = normalized_ratio(volume, 1.0);
-  const double inv_volume_norm = 1.0 - volume_norm;
 
   const double sx = std::abs(safe_double(cluster.scale.x));
   const double sy = std::abs(safe_double(cluster.scale.y));
@@ -587,7 +570,7 @@ private:
         ++changed;
       }
       if (set_reliability_from_score_) {
-        cluster.reliability = static_cast<float>(
+        cluster.label_reliability = static_cast<float>(
           std::clamp(std::max(human_score, car_score), 0.0, 1.0));
       }
     }

@@ -365,7 +365,7 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       out.normal.y = node_ref.status.ee_direction.y();
       out.normal.z = node_ref.status.ee_direction.z();
       out.label = pathLabelFromStatus(node_ref.status);
-      out.age = 0;
+      out.frame = 0;
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node_ref.id, published_index);

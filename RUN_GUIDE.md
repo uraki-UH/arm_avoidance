@@ -96,6 +96,14 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py
 ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
 
 
+## `/topo_points` を入力にして GNG を回す
+ros2 launch ais_gng ais_gng.launch.py \
+  backend:=cpu \
+  lidar:=topo_points.yaml
+
+`topo_points.yaml` のトップレベルキーは `ais_gng_node:` にしてください。ノード名と一致しないと YAML が読まれません。
+
+
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   use_voxel_collision:=true \gng_profile_names:=left_arm 
@@ -128,3 +136,7 @@ HTML起動
 python3 -m http.server 8000
 
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
+
+
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
+

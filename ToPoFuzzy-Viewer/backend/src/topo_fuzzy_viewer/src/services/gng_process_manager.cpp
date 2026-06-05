@@ -27,7 +27,8 @@ std::string GngProcessManager::buildCommandArgs(const GngParams& params) const {
     }
     
     // Base parameters (these override config file values)
-    oss << " -p input.topic_name:=" << params.inputTopic;
+    // ais_gng expects a string array for input.topic_names even when only one topic is used.
+    oss << " -p input.topic_names:=[\\\"" << params.inputTopic << "\\\"]";
     oss << " -p node.num_max:=" << params.maxNodes;
     oss << " -p node.learning_num:=" << params.learningNum;
     oss << " -p input.voxel_grid_unit:=" << params.voxelGridUnit;

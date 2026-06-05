@@ -1,0 +1,11 @@
+uint32 id
+uint8 label
+uint8 label_inferred
+float32 label_reliability
+geometry_msgs/Point32 pos
+geometry_msgs/Point32 scale
+geometry_msgs/Quaternion quat
+uint32 frame
+float32 match
+geometry_msgs/Point32 velocity
+uint16[] nodes

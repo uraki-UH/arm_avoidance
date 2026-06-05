@@ -375,11 +375,12 @@ VoxelGridNode::buildTopologicalVoxelSnapshot(const ais_gng_msgs::msg::Topologica
 
         const VoxelKey key = pointToVoxelKey(x, y, z);
         auto & voxel = current[key];
+        const uint32_t age = msg.frame_number >= node.frame ? msg.frame_number - node.frame : 0U;
 
         voxel.nodes.push_back(TopologicalNodeRecord{
             static_cast<uint32_t>(i),
             node.label,
-            node.age,
+            age,
             x,
             y,
             z
@@ -793,11 +794,12 @@ void VoxelGridNode::rebuildVoxelsFromLatestMessages()
 
             const VoxelKey key = pointToVoxelKey(x, y, z);
             auto & voxel = voxels_[key];
+            const uint32_t age = msg.frame_number >= node.frame ? msg.frame_number - node.frame : 0U;
 
             voxel.topological_nodes.push_back(TopologicalNodeRecord{
                 static_cast<uint32_t>(i),
                 node.label,
-                node.age,
+                age,
                 x,
                 y,
                 z
