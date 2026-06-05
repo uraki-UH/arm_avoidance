@@ -137,6 +137,46 @@ python3 -m http.server 8000
 
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
+## HTML から ROS2 topic に publish する最小構成
+### 必要なもの
+- `rosbridge_server`
+- ブラウザから読める `roslibjs`
+- HTML を `file://` ではなく HTTP 経由で開くためのローカルWebサーバ
+- `rosbridge_websocket` が待ち受ける `ws://localhost:9090`
+
+### このリポジトリでの前提
+- `Dockerfile` に `ros-humble-rosbridge-server` が入っています
+- `docker-compose.yaml` に `rosbridge` サービスがあります
+- そのため、通常は `docker compose up -d` で足ります
+
+### 素の ROS2 環境で入れる場合
+```bash
+sudo apt update
+sudo apt install ros-humble-rosbridge-server
+```
+
+### 起動手順
+```bash
+# 1) rosbridge を起動
+source /opt/ros/humble/setup.bash
+ros2 run rosbridge_server rosbridge_websocket --port 9090
+```
+
+```bash
+# 2) HTML を HTTP で配信
+cd /home/fuzzrobo/uraki_ws
+python3 -m http.server 8000
+```
+
+```text
+# 3) ブラウザで開く
+http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
+```
+
+### HTML 側の設定
+- `Publish to ROS2` を ON にする
+- `ROS topic` を `/topo_points` にする
+- `roslibjs` は CDN が失敗した場合に `libs/roslib.min.js` を順に試します
+
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
-
