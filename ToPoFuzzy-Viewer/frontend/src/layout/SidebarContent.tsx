@@ -274,7 +274,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     opacity: 1.0,
                                     normalColor: '#00ffff',
                                     velocityColor: '#ffb347',
-                                    normalScale: 0.15,
+                                    normalScale: 0.075,
                                     velocityScale: 0.25,
                                     emissiveIntensity: data.mode === 'static' ? 0.10 : 0.14,
                                 }}

@@ -282,7 +282,7 @@ function App() {
                         edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
-                        normalScale: 0.15,
+                        normalScale: 0.075,
                         velocityScale: 0.25,
                         emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     } : {
@@ -290,7 +290,7 @@ function App() {
                         edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
-                        normalScale: 0.15,
+                        normalScale: 0.075,
                         velocityScale: 0.25,
                         emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     })
@@ -398,7 +398,7 @@ function App() {
         showEdges: true,
         showClusterText: true,
         showNormals: true,
-        normalArrowLength: 0.15,
+        normalArrowLength: 0.075,
         normalArrowColor: '#00FFFF',
         nodeScale: 0.01,
         edgeWidth: 0.002,

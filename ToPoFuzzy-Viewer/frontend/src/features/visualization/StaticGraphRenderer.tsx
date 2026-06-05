@@ -74,7 +74,7 @@ export function StaticGraphRenderer({
     edgeColor = STATIC_GNG_DEFAULTS.edgeColor,
     showNormals = false,
     showVelocity = false,
-    normalScale = 0.15,
+    normalScale = 0.075,
     velocityScale = 0.25,
     normalColor = '#00ffff',
     velocityColor = '#ffb347',
