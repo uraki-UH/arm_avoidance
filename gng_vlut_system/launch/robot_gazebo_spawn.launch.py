@@ -60,13 +60,15 @@ def launch_setup(context, *args, **kwargs):
         f"resolved_{robot_name}.urdf"
     )
 
+    robot_description_topic = f"/{robot_name}/robot_description"
+
     return [
         # Spawn Entity in Gazebo
         Node(
             package="gazebo_ros",
             executable="spawn_entity.py",
             arguments=[
-                "-topic", "robot_description",
+                "-topic", robot_description_topic,
                 "-entity", robot_name,
                 "-x", "0", "-y", "0", "-z", "0"
             ],
@@ -76,7 +78,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         # We assume Gazebo is already running or started separately
         OpaqueFunction(function=launch_setup)
     ])

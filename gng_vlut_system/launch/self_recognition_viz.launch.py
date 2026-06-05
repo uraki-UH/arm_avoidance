@@ -192,9 +192,9 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("marker_frame_id", default_value="world"),
         DeclareLaunchArgument("joint_topic", default_value="joint_states"),

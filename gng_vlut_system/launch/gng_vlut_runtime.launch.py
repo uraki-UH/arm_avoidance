@@ -152,7 +152,7 @@ def generate_launch_description():
     
     return LaunchDescription([
         # --- 基本設定 ---
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("id", default_value=""),
         DeclareLaunchArgument("experiment_id", default_value=""),
         DeclareLaunchArgument("dir", default_value="gng_results"),

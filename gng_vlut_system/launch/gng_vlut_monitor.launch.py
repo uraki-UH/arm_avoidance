@@ -82,11 +82,11 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("id", default_value=""),
         DeclareLaunchArgument("experiment_id", default_value=""),
         DeclareLaunchArgument("dir", default_value="gng_results"),
-        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("data_directory", default_value=""),
         DeclareLaunchArgument("frame_id", default_value="base_link"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),

@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         # --- Arguments ---
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("mode", default_value="generic"),
         DeclareLaunchArgument("joint_state_topic", default_value="joint_states"),
         DeclareLaunchArgument("base_frame", default_value="base_link"),

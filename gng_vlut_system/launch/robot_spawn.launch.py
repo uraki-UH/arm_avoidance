@@ -119,7 +119,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
         OpaqueFunction(function=launch_setup)

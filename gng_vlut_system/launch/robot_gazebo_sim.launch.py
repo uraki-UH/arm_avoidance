@@ -11,16 +11,20 @@ def generate_launch_description():
     
     return LaunchDescription([
         # --- Arguments ---
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("experiment_id", default_value=""),
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
+        DeclareLaunchArgument("gui", default_value="true"),
         DeclareLaunchArgument("world", default_value=""), # Optional world file
 
         # 1. Start Gazebo Server and Client
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(gazebo_ros_share, "launch", "gazebo.launch.py")),
-            launch_arguments={"world": LaunchConfiguration("world")}.items()
+            launch_arguments={
+                "world": LaunchConfiguration("world"),
+                "gui": LaunchConfiguration("gui"),
+            }.items()
         ),
 
         # 2. Spawn Robot Model (URDF + Mesh Streaming)

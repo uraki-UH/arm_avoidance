@@ -99,12 +99,12 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
 - **Gazebo**でシミュレーションを行う場合:
   ```bash
   # Gazeboサーバーとロボットを起動
-  ros2 launch gng_vlut_system spawn_topoarm_gazebo.launch.py
-  
+  ros2 launch gng_vlut_system robot_gazebo_sim.launch.py robot_name:=ToPoDualArm
+
   # 別のターミナルでRVizを起動
   ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py
   ```
-  GazeboのGUIを表示したい場合は `gazebo_gui:=true` を追加します。
+  Docker内でGUIが不要なら `gui:=false` にできます。
 
 ### ToPoFuzzy-Viewerへのブリッジ
 

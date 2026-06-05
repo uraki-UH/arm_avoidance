@@ -9,7 +9,7 @@ def launch_setup(context, *args, **kwargs):
 
     robot_name = LaunchConfiguration("robot_name").perform(context).strip()
     if not robot_name:
-        robot_name = "topoarm"
+        robot_name = "ToPoDualArm"
 
     return [
         Node(
@@ -24,6 +24,6 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         OpaqueFunction(function=launch_setup),
     ])

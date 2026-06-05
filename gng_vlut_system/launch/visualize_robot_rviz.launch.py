@@ -12,7 +12,7 @@ def generate_launch_description():
     rviz_config_default = os.path.join(pkg_share, "config", "gng_safety.rviz")
 
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("robot_description_file", default_value=""),
         DeclareLaunchArgument("rviz_config", default_value=rviz_config_default),
 

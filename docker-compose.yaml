@@ -10,6 +10,9 @@ services:
     stdin_open: true          # 標準入力を開いたままにする
     ipc: host # ホストのIPC名前空間を使用
     environment:
+      - HOME=/root
+      - ROS_LOG_DIR=/tmp/roslog
+      - GAZEBO_HOME=/root/.gazebo
       - DISPLAY=${DISPLAY}             # ホストのディスプレイ番号をコンテナに渡す
       - QT_X11_NO_MITSHM=1           # Qtアプリケーションでのエラーを回避
       - XDG_RUNTIME_DIR=/tmp/runtime/  # Wayland互換性のための設定

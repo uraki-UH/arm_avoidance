@@ -92,7 +92,7 @@ def launch_setup(context, *args, **kwargs):
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
-    yaml_robot_name = "topoarm"
+    yaml_robot_name = "ToPoDualArm"
     yaml_robot_description_file = ""
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"
@@ -158,7 +158,7 @@ def launch_setup(context, *args, **kwargs):
 
     # 名前空間の決定（YAML優先、コマンドライン指定があればそちら）
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
-    if robot_name_default and robot_name_default != "topoarm_dual":
+    if robot_name_default and robot_name_default != "ToPoDualArm":
         robot_name = robot_name_default
     else:
         robot_name = yaml_robot_name
@@ -330,9 +330,9 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="topoarm_dual"),
+        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("dir", default_value="gng_results"),
-        DeclareLaunchArgument("id", default_value="topoarm"),
+        DeclareLaunchArgument("id", default_value="ToPoDualArm"),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),

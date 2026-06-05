@@ -9,9 +9,12 @@ ENV TZ=Asia/Tokyo
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # colconとrosdepのインストール
-RUN apt install -y python3-colcon-common-extensions python3-rosdep ros-dev-tools python3-pip zip vim \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-colcon-common-extensions python3-rosdep ros-dev-tools python3-pip zip vim \
     ros-humble-rosbag2-storage-mcap ros-humble-pcl-ros \
-    ros-humble-joint-state-publisher ros-humble-robot-state-publisher ros-humble-xacro
+    ros-humble-joint-state-publisher ros-humble-robot-state-publisher ros-humble-xacro \
+    ros-humble-gazebo-ros-pkgs \
+    && rm -rf /var/lib/apt/lists/*
 
 # Node.js / npm for the frontend dev server
 RUN mkdir -p /etc/apt/keyrings \
