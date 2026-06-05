@@ -128,12 +128,18 @@ export interface LayerSettings {
     showNodes: boolean;
     showEdges: boolean;
     showClusters: boolean;
+    showNormals?: boolean;
+    showVelocity?: boolean;
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
+    normalColor?: string;
+    velocityColor?: string;
     emissiveIntensity?: number;
     nodeScale?: number;
     edgeWidth?: number;
+    normalScale?: number;
+    velocityScale?: number;
     graphTransform?: Transform;
 }
 export interface RobotSettings {

@@ -269,6 +269,8 @@ function App() {
                     showNodes: true,
                     showEdges: !isStatic,
                     showClusters: false,
+                    showNormals: false,
+                    showVelocity: false,
                     opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {
                         position: [0, 0, 0],
@@ -278,10 +280,18 @@ function App() {
                     ...(isStatic ? {
                         nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
                         edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
+                        normalColor: '#00ffff',
+                        velocityColor: '#ffb347',
+                        normalScale: 0.15,
+                        velocityScale: 0.25,
                         emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     } : {
                         nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
                         edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
+                        normalColor: '#00ffff',
+                        velocityColor: '#ffb347',
+                        normalScale: 0.15,
+                        velocityScale: 0.25,
                         emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     })
                 };
@@ -994,6 +1004,12 @@ function App() {
                                 edgeEmissiveIntensity: settings.emissiveIntensity,
                                 nodeScale: settings.nodeScale ?? gngLayer.nodeScale,
                                 edgeWidth: settings.edgeWidth ?? gngLayer.edgeWidth,
+                                showNormals: settings.showNormals ?? gngLayer.showNormals,
+                                showVelocity: settings.showVelocity ?? false,
+                                normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
+                                velocityScale: settings.velocityScale ?? 0.25,
+                                normalColor: settings.normalColor ?? gngLayer.normalArrowColor,
+                                velocityColor: settings.velocityColor ?? '#ffb347',
                             };
                             return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} />

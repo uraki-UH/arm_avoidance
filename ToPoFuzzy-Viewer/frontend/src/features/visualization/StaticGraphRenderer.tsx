@@ -5,6 +5,7 @@ import { Billboard, Text } from '@react-three/drei';
 import { GraphData, Transform, LAYER_COLORS, LAYER_LABELS, STATIC_GNG_DEFAULTS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
+import { DirectionalArrow } from './utils/DirectionalArrow';
 
 const EMPTY_GRAPH: GraphData = {
     timestamp: 0,
@@ -25,8 +26,12 @@ interface GraphRendererProps {
     showEdges?: boolean;
     showClusters?: boolean;
     showClusterText?: boolean;
+    showNormals?: boolean;
+    showVelocity?: boolean;
     nodeScale?: number;
     edgeWidth?: number;
+    normalScale?: number;
+    velocityScale?: number;
     visibleLabels?: {
         0: boolean;
         1: boolean;
@@ -42,6 +47,8 @@ interface GraphRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
+    normalColor?: string;
+    velocityColor?: string;
     nodeEmissiveIntensity?: number;
     edgeEmissiveIntensity?: number;
     manualTransform?: Transform | null;
@@ -65,6 +72,12 @@ export function StaticGraphRenderer({
     tf = null,
     nodeColor = STATIC_GNG_DEFAULTS.nodeColor,
     edgeColor = STATIC_GNG_DEFAULTS.edgeColor,
+    showNormals = false,
+    showVelocity = false,
+    normalScale = 0.15,
+    velocityScale = 0.25,
+    normalColor = '#00ffff',
+    velocityColor = '#ffb347',
     nodeEmissiveIntensity = STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
     edgeEmissiveIntensity = STATIC_GNG_DEFAULTS.edgeEmissiveIntensity,
     manualTransform = null,
@@ -76,7 +89,7 @@ export function StaticGraphRenderer({
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, nodeScale, edgeWidth, opacity, tf, selectedClusterId, nodeColor, edgeColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, nodeScale, edgeWidth, normalScale, velocityScale, opacity, tf, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
 
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
@@ -249,6 +262,8 @@ export function StaticGraphRenderer({
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
+    const canMountNormals = showNormals && canMountNodes;
+    const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
         <>
@@ -275,6 +290,21 @@ export function StaticGraphRenderer({
                     renderOrder={9}
                 />
             )}
+
+            {canMountNormals && graph.nodes.map((node, index) => (
+                <DirectionalArrow
+                    key={`static-normal-${index}`}
+                    origin={[node.x, node.y, node.z]}
+                    direction={[node.nx, node.ny, node.nz]}
+                    lengthScale={normalScale}
+                    maxLength={0.35}
+                    color={normalColor}
+                    visible={showNormals}
+                    headLengthRatio={0.24}
+                    headWidthRatio={0.16}
+                    shaftWidth={0.006}
+                />
+            ))}
 
             {showClusters && graph.clusters
             .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
@@ -312,6 +342,20 @@ export function StaticGraphRenderer({
                                     {`${LAYER_LABELS[cluster.label] || 'obj'}\nR:${cluster.reliability.toFixed(2)}`}
                                 </Text>
                             </Billboard>
+                        )}
+
+                        {canMountVelocity && (
+                            <DirectionalArrow
+                                origin={cluster.pos}
+                                direction={cluster.velocity}
+                                lengthScale={velocityScale}
+                                maxLength={0.5}
+                                color={velocityColor}
+                                visible={showVelocity}
+                                headLengthRatio={0.28}
+                                headWidthRatio={0.18}
+                                shaftWidth={0.008}
+                            />
                         )}
                     </group>
                 );

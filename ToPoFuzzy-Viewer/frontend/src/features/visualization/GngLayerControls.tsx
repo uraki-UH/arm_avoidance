@@ -97,6 +97,20 @@ export function GngLayerControls({
                             onToggle={() => onUpdate({ showEdges: !settings.showEdges })}
                             className="col-span-3 w-[90%] justify-self-start"
                         />
+                        <CompactToggle
+                            icon={<Square size={12} />}
+                            label="Normals"
+                            isOn={settings.showNormals ?? false}
+                            onToggle={() => onUpdate({ showNormals: !(settings.showNormals ?? false) })}
+                            className="col-span-3 w-[90%] justify-self-start"
+                        />
+                        <CompactToggle
+                            icon={<Share2 size={12} />}
+                            label="Velocity"
+                            isOn={settings.showVelocity ?? false}
+                            onToggle={() => onUpdate({ showVelocity: !(settings.showVelocity ?? false) })}
+                            className="col-span-3 w-[90%] justify-self-start"
+                        />
                         {onOpenColorSettings && (
                             <button
                                 onClick={onOpenColorSettings}
