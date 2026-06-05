@@ -88,7 +88,23 @@ namespace converter {
         json nodes = json::array(), clusters = json::array();
         for (auto& n : msg->nodes) {
             const auto age = msg->frame_number >= n.frame ? msg->frame_number - n.frame : 0U;
-            nodes.push_back({{"x",n.pos.x},{"y",n.pos.y},{"z",n.pos.z},{"nx",n.normal.x},{"ny",n.normal.y},{"nz",n.normal.z},{"label",n.label},{"age",age}});
+            nodes.push_back({
+                {"x", n.pos.x},
+                {"y", n.pos.y},
+                {"z", n.pos.z},
+                {"nx", n.normal.x},
+                {"ny", n.normal.y},
+                {"nz", n.normal.z},
+                {"label", n.label},
+                {"age", age},
+                {"winnerPointCount", n.winner_point_count},
+                {"winnerPointMean", {n.winner_point_mean.x, n.winner_point_mean.y, n.winner_point_mean.z}},
+                {"winnerPointCovariance", {
+                    n.winner_point_covariance[0], n.winner_point_covariance[1], n.winner_point_covariance[2],
+                    n.winner_point_covariance[3], n.winner_point_covariance[4], n.winner_point_covariance[5],
+                    n.winner_point_covariance[6], n.winner_point_covariance[7], n.winner_point_covariance[8]
+                }}
+            });
         }
         for (auto& c : msg->clusters) {
             const auto age = msg->frame_number >= c.frame ? msg->frame_number - c.frame : 0U;

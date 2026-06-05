@@ -271,6 +271,7 @@ function App() {
                     showClusters: false,
                     showNormals: false,
                     showVelocity: false,
+                    showCovarianceEllipsoids: false,
                     opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {
                         position: [0, 0, 0],
@@ -282,16 +283,20 @@ function App() {
                         edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
+                        covarianceEllipsoidColor: '#aefeff',
                         normalScale: 0.075,
                         velocityScale: 0.25,
+                        covarianceEllipsoidScale: 2.0,
                         emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     } : {
                         nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
                         edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
+                        covarianceEllipsoidColor: '#aefeff',
                         normalScale: 0.075,
                         velocityScale: 0.25,
+                        covarianceEllipsoidScale: 2.0,
                         emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     })
                 };
@@ -1006,10 +1011,13 @@ function App() {
                                 edgeWidth: settings.edgeWidth ?? gngLayer.edgeWidth,
                                 showNormals: settings.showNormals ?? gngLayer.showNormals,
                                 showVelocity: settings.showVelocity ?? false,
+                                showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
                                 normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
                                 velocityScale: settings.velocityScale ?? 0.25,
+                                covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
                                 normalColor: settings.normalColor ?? gngLayer.normalArrowColor,
                                 velocityColor: settings.velocityColor ?? '#ffb347',
+                                covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
                             return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} />

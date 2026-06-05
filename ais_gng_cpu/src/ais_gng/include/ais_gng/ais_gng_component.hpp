@@ -66,7 +66,9 @@ class AiSGNGComponent : public rclcpp::Node {
     void semseg_cb(const PC2::SharedPtr msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
-        const std_msgs::msg::Header &msg);
+        const std_msgs::msg::Header &msg,
+        const float *transformed_pcl = nullptr,
+        const uint32_t transformed_pcl_num = 0);
     LiDAR_Config getBase2LidarFrame(const PC2::ConstSharedPtr msg);
     std::unique_ptr<PC2> mixPointCloud2Msg(const std_msgs::msg::Header &header,
         const PC2::SharedPtr &msg,

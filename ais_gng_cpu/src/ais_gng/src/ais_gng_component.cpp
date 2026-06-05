@@ -1,7 +1,111 @@
 #include <ais_gng/ais_gng_component.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+
 using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
+
+namespace {
+
+struct SequentialNodeStats {
+    uint32_t count = 0;
+    std::array<double, 3> mean{0.0, 0.0, 0.0};
+    std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+};
+
+void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<double, 3> &point) {
+    ++stats.count;
+    const double n = static_cast<double>(stats.count);
+
+    std::array<double, 3> delta{
+        point[0] - stats.mean[0],
+        point[1] - stats.mean[1],
+        point[2] - stats.mean[2],
+    };
+
+    stats.mean[0] += delta[0] / n;
+    stats.mean[1] += delta[1] / n;
+    stats.mean[2] += delta[2] / n;
+
+    std::array<double, 3> delta2{
+        point[0] - stats.mean[0],
+        point[1] - stats.mean[1],
+        point[2] - stats.mean[2],
+    };
+
+    stats.m2[0] += delta[0] * delta2[0];
+    stats.m2[1] += delta[0] * delta2[1];
+    stats.m2[2] += delta[0] * delta2[2];
+    stats.m2[3] += delta[1] * delta2[0];
+    stats.m2[4] += delta[1] * delta2[1];
+    stats.m2[5] += delta[1] * delta2[2];
+    stats.m2[6] += delta[2] * delta2[0];
+    stats.m2[7] += delta[2] * delta2[1];
+    stats.m2[8] += delta[2] * delta2[2];
+}
+
+std::vector<SequentialNodeStats> computeSequentialWinnerStats(
+    const TopologicalMap &map,
+    const float *transformed_pcl,
+    const uint32_t transformed_pcl_num) {
+    // Use the affine-transformed training points that GNG actually saw, and
+    // assign each point to the nearest node for an online mean/covariance.
+    std::vector<SequentialNodeStats> stats(map.node_num);
+    if (map.node_num == 0 || transformed_pcl == nullptr || transformed_pcl_num == 0) {
+        return stats;
+    }
+
+    for (uint32_t i = 0; i < transformed_pcl_num; ++i) {
+        const float *p = transformed_pcl + i * 3;
+        const std::array<double, 3> point{
+            static_cast<double>(p[0]),
+            static_cast<double>(p[1]),
+            static_cast<double>(p[2]),
+        };
+
+        uint32_t best_idx = 0;
+        double best_dist2 = std::numeric_limits<double>::max();
+        for (uint32_t node_idx = 0; node_idx < map.node_num; ++node_idx) {
+            const auto &node = map.nodes[node_idx];
+            const double dx = point[0] - static_cast<double>(node.pos.x);
+            const double dy = point[1] - static_cast<double>(node.pos.y);
+            const double dz = point[2] - static_cast<double>(node.pos.z);
+            const double dist2 = dx * dx + dy * dy + dz * dz;
+            if (dist2 < best_dist2) {
+                best_dist2 = dist2;
+                best_idx = node_idx;
+            }
+        }
+
+        updateSequentialNodeStats(stats[best_idx], point);
+    }
+
+    return stats;
+}
+
+void applySequentialWinnerStats(
+    ais_gng_msgs::msg::TopologicalMap &map_msg,
+    const std::vector<SequentialNodeStats> &stats) {
+    const std::size_t node_num = std::min(map_msg.nodes.size(), stats.size());
+    for (std::size_t i = 0; i < node_num; ++i) {
+        const auto &src = stats[i];
+        auto &dst = map_msg.nodes[i];
+        dst.winner_point_count = src.count;
+        dst.winner_point_mean.x = static_cast<float>(src.mean[0]);
+        dst.winner_point_mean.y = static_cast<float>(src.mean[1]);
+        dst.winner_point_mean.z = static_cast<float>(src.mean[2]);
+
+        const double denom = src.count > 1 ? static_cast<double>(src.count - 1) : 1.0;
+        for (std::size_t j = 0; j < 9; ++j) {
+            dst.winner_point_covariance[j] = static_cast<float>(src.m2[j] / denom);
+        }
+    }
+}
+
+}  // namespace
 
 AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ais_gng_node", options) {
     // Downsampling
@@ -304,7 +408,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     auto transformed_pcl = gng_getAffineTransformedInputPointCloud(&transformed_pcl_num); // アフィン変換後の点群
 
     // トポロジカルマップをROS2メッセージに変換
-    auto map_msg = makeTopologicalMapMsg(map, header);
+    auto map_msg = makeTopologicalMapMsg(map, header, transformed_pcl, transformed_pcl_num);
     
     // アフィン変換後の点群をROS2メッセージに変換
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
@@ -358,7 +462,9 @@ void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(
     const TopologicalMap &map,
-    const std_msgs::msg::Header &header) {
+    const std_msgs::msg::Header &header,
+    const float *transformed_pcl,
+    const uint32_t transformed_pcl_num) {
     auto topological_map_msg = std::make_unique<ais_gng_msgs::msg::TopologicalMap>();
     topological_map_msg->header = header;
     topological_map_msg->frame_number = map.frame_number;
@@ -410,6 +516,10 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         cluster_msg.nodes.assign(cluster.nodes, cluster.nodes + cluster.node_num);
         topological_map_msg->clusters.emplace_back(cluster_msg);
     }
+
+    applySequentialWinnerStats(
+        *topological_map_msg,
+        computeSequentialWinnerStats(map, transformed_pcl, transformed_pcl_num));
 
     return topological_map_msg;
 }

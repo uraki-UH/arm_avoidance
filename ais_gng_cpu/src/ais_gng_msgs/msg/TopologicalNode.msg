@@ -5,3 +5,6 @@ float32 rho
 uint8 label
 uint32 frame
 uint32[] inpcl_ids
+uint32 winner_point_count
+geometry_msgs/Point32 winner_point_mean
+float32[9] winner_point_covariance

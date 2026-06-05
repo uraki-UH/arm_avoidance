@@ -6,6 +6,7 @@ import { GraphData, Transform, LAYER_COLORS, LAYER_LABELS, DYNAMIC_GNG_DEFAULTS 
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 import { DirectionalArrow } from './utils/DirectionalArrow';
+import { updateEllipsoidInstances } from './utils/ellipsoid';
 
 const EMPTY_GRAPH: GraphData = {
     timestamp: 0,
@@ -28,10 +29,12 @@ interface GraphRendererProps {
     showClusterText?: boolean;
     showNormals?: boolean;
     showVelocity?: boolean;
+    showCovarianceEllipsoids?: boolean;
     nodeScale?: number;
     edgeWidth?: number;
     normalScale?: number;
     velocityScale?: number;
+    covarianceEllipsoidScale?: number;
     visibleLabels?: {
         0: boolean;
         1: boolean;
@@ -49,6 +52,7 @@ interface GraphRendererProps {
     edgeColor?: string;
     normalColor?: string;
     velocityColor?: string;
+    covarianceEllipsoidColor?: string;
     nodeEmissiveIntensity?: number;
     edgeEmissiveIntensity?: number;
     manualTransform?: Transform | null;
@@ -64,10 +68,12 @@ export function GraphRenderer({
     showClusterText = true,
     showNormals = false,
     showVelocity = false,
+    showCovarianceEllipsoids = false,
     nodeScale = 0.015,
     edgeWidth = 0.007,
     normalScale = 0.075,
     velocityScale = 0.25,
+    covarianceEllipsoidScale = 2.0,
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
@@ -78,6 +84,7 @@ export function GraphRenderer({
     edgeColor = '#08d408',
     normalColor = '#00ffff',
     velocityColor = '#ffb347',
+    covarianceEllipsoidColor = '#aefeff',
     nodeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
     edgeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.edgeEmissiveIntensity,
     manualTransform = null,
@@ -86,6 +93,7 @@ export function GraphRenderer({
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
+    const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
 
     const graph = data ?? EMPTY_GRAPH;
@@ -106,7 +114,32 @@ export function GraphRenderer({
     }, [graph.nodes]);
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, nodeScale, edgeWidth, normalScale, velocityScale, opacity, tf, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
+    useDemandUpdate([
+        graph,
+        visible,
+        showNodes,
+        showEdges,
+        showClusters,
+        showNormals,
+        showVelocity,
+        showCovarianceEllipsoids,
+        nodeScale,
+        edgeWidth,
+        normalScale,
+        velocityScale,
+        covarianceEllipsoidScale,
+        opacity,
+        tf,
+        selectedClusterId,
+        nodeColor,
+        edgeColor,
+        normalColor,
+        velocityColor,
+        covarianceEllipsoidColor,
+        nodeEmissiveIntensity,
+        edgeEmissiveIntensity,
+        transform,
+    ]);
 
     // --- TF-based Positioning ---
     useLayoutEffect(() => {
@@ -154,6 +187,19 @@ export function GraphRenderer({
     })), [opacity, nodeEmissiveIntensity, nodePalette]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
+    const ellipsoidGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
+    const ellipsoidMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: covarianceEllipsoidColor,
+        transparent: true,
+        opacity: Math.max(0.18, Math.min(0.6, opacity * 0.35)),
+        depthTest: true,
+        depthWrite: false,
+        emissive: new THREE.Color(covarianceEllipsoidColor),
+        emissiveIntensity: 0.8,
+        roughness: 0.35,
+        metalness: 0.0,
+        toneMapped: false,
+    }), [covarianceEllipsoidColor, opacity]);
     const edgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: edgeColor,
         emissive: new THREE.Color(edgeColor),
@@ -168,8 +214,25 @@ export function GraphRenderer({
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
+    const [ellipsoidCapacity, setEllipsoidCapacity] = useState(graph.nodes.length);
     const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
     const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
+    const [ellipsoidReadySignature, setEllipsoidReadySignature] = useState<string | null>(null);
+
+    const covarianceEllipsoids = useMemo(() => {
+        if (!showCovarianceEllipsoids) return [];
+        return graph.nodes
+            .filter((node) => (node.winnerPointCount ?? 0) > 1 && Array.isArray(node.winnerPointCovariance))
+            .map((node) => {
+                const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+                const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
+                return {
+                    center: (node.winnerPointMean ?? [node.x, node.y, node.z]) as [number, number, number],
+                    covariance: node.winnerPointCovariance as [number, number, number, number, number, number, number, number, number],
+                    color: covarianceEllipsoidColor || nodePalette[labelIndex] || '#7fd9ff',
+                };
+            });
+    }, [graph.nodes, showCovarianceEllipsoids, covarianceEllipsoidColor, nodePalette]);
 
     const nodeRenderSignature = useMemo(() => {
         return [
@@ -198,6 +261,18 @@ export function GraphRenderer({
     }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, opacity, edgeColor, edgeEmissiveIntensity, graph.timestamp]);
     const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
     const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
+    const ellipsoidRenderSignature = useMemo(() => {
+        return [
+            covarianceEllipsoids.length,
+            showCovarianceEllipsoids ? 1 : 0,
+            covarianceEllipsoidScale,
+            ellipsoidCapacity,
+            opacity,
+            covarianceEllipsoidColor,
+            graph.timestamp,
+        ].join(':');
+    }, [covarianceEllipsoids.length, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
+    const ellipsoidRenderReady = ellipsoidReadySignature === ellipsoidRenderSignature;
 
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
@@ -206,6 +281,10 @@ export function GraphRenderer({
     useEffect(() => {
         if (edgePairCount > edgeCapacity) setEdgeCapacity(edgePairCount);
     }, [edgePairCount, edgeCapacity]);
+
+    useEffect(() => {
+        if (covarianceEllipsoids.length > ellipsoidCapacity) setEllipsoidCapacity(covarianceEllipsoids.length);
+    }, [covarianceEllipsoids.length, ellipsoidCapacity]);
 
     // --- Node Instances ---
     useLayoutEffect(() => {
@@ -255,11 +334,33 @@ export function GraphRenderer({
         invalidate();
     }, [showEdges, invalidate]);
 
+    useLayoutEffect(() => {
+        if (!ellipsoidRef.current || !showCovarianceEllipsoids || covarianceEllipsoids.length === 0) return;
+        if (covarianceEllipsoids.length > ellipsoidCapacity) return;
+
+        updateEllipsoidInstances(ellipsoidRef.current, covarianceEllipsoids, {
+            defaultColor: covarianceEllipsoidColor,
+            sigmaMultiplier: covarianceEllipsoidScale,
+        });
+        setEllipsoidReadySignature(ellipsoidRenderSignature);
+        invalidate();
+    }, [covarianceEllipsoids, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, covarianceEllipsoidColor, ellipsoidRenderSignature, invalidate]);
+
+    useLayoutEffect(() => {
+        if (showCovarianceEllipsoids) return;
+        setEllipsoidReadySignature(null);
+        if (!ellipsoidRef.current) return;
+        ellipsoidRef.current.count = 0;
+        ellipsoidRef.current.instanceMatrix.needsUpdate = true;
+        invalidate();
+    }, [showCovarianceEllipsoids, invalidate]);
+
     if (!data || !visible) return null;
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
     const canMountNormals = showNormals && canMountNodes;
+    const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
     const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
@@ -285,6 +386,17 @@ export function GraphRenderer({
                     count={edgeRenderReady ? edgePairCount : 0}
                     frustumCulled={false}
                     renderOrder={9}
+                />
+            )}
+
+            {canMountCovarianceEllipsoids && (
+                <instancedMesh
+                    key={`cov-ellipsoids-${ellipsoidCapacity}`}
+                    ref={ellipsoidRef}
+                    args={[ellipsoidGeometry, ellipsoidMaterial, ellipsoidCapacity]}
+                    count={ellipsoidRenderReady ? covarianceEllipsoids.length : 0}
+                    frustumCulled={false}
+                    renderOrder={8}
                 />
             )}
 

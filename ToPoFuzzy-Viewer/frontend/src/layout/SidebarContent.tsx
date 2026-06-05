@@ -271,11 +271,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     showClusters: false,
                                     showNormals: false,
                                     showVelocity: false,
+                                    showCovarianceEllipsoids: false,
                                     opacity: 1.0,
                                     normalColor: '#00ffff',
                                     velocityColor: '#ffb347',
+                                    covarianceEllipsoidColor: '#aefeff',
                                     normalScale: 0.075,
                                     velocityScale: 0.25,
+                                    covarianceEllipsoidScale: 2.0,
                                     emissiveIntensity: data.mode === 'static' ? 0.10 : 0.14,
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}

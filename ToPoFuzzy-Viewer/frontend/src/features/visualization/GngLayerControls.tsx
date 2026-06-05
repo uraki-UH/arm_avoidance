@@ -105,6 +105,13 @@ export function GngLayerControls({
                             className="col-span-3 w-[90%] justify-self-start"
                         />
                         <CompactToggle
+                            icon={<Square size={12} />}
+                            label="Ellipses"
+                            isOn={settings.showCovarianceEllipsoids ?? false}
+                            onToggle={() => onUpdate({ showCovarianceEllipsoids: !(settings.showCovarianceEllipsoids ?? false) })}
+                            className="col-span-3 w-[90%] justify-self-start"
+                        />
+                        <CompactToggle
                             icon={<Share2 size={12} />}
                             label="Velocity"
                             isOn={settings.showVelocity ?? false}

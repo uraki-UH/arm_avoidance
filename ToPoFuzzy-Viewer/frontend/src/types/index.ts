@@ -90,6 +90,9 @@ export interface GraphNode {
     nz: number;
     label: number;
     age: number;
+    winnerPointCount?: number;
+    winnerPointMean?: [number, number, number];
+    winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
 }
 
 export interface GraphCluster {
@@ -130,16 +133,19 @@ export interface LayerSettings {
     showClusters: boolean;
     showNormals?: boolean;
     showVelocity?: boolean;
+    showCovarianceEllipsoids?: boolean;
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
     normalColor?: string;
     velocityColor?: string;
+    covarianceEllipsoidColor?: string;
     emissiveIntensity?: number;
     nodeScale?: number;
     edgeWidth?: number;
     normalScale?: number;
     velocityScale?: number;
+    covarianceEllipsoidScale?: number;
     graphTransform?: Transform;
 }
 export interface RobotSettings {
