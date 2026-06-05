@@ -122,3 +122,9 @@ ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=
 
 tf位置調整
  python3 test_tf_once_publisher.py   --world-frame world   --frame-id topoarm/base_link   --x 0.0   --y 0.5   --z -0.3 --yaw 1.5  --hold-seconds 1.0   --publish-hz 20
+
+
+HTML起動
+python3 -m http.server 8000
+
+http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
