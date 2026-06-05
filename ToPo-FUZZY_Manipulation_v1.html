@@ -4314,9 +4314,16 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     const btn = document.getElementById('rosPublishNow');
     if(btn){
       btn.addEventListener('click', ()=>{
-        const enabled = document.getElementById('rosPublishEnabled')?.checked;
+        let enabledEl = document.getElementById('rosPublishEnabled');
+        const enabled = enabledEl?.checked;
         const topic = document.getElementById('rosTopicName')?.value || '/topo_points';
-        if(!enabled){ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: publish disabled'; return; }
+        if(!enabled){
+          // auto-enable temporarily when user explicitly requests publish
+          if(enabledEl) enabledEl.checked = true;
+          const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: enabled by Publish Now — publishing...';
+        } else {
+          const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: publishing...';
+        }
         ensureRos();
         // prefer state.points if present
         const st = window.__topoState || window.state;
