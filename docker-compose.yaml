@@ -31,6 +31,7 @@ services:
     working_dir: /ros2_ws/src/ais_gng
     ports:
       - "9001:9001"
+      - "8000:8000"
     #command: "sh /ros2_ws/src/ais_gng/release.sh"
 
     #npm run devをdockerで実行する用
@@ -54,6 +55,22 @@ services:
       "
     ports:
       - "5173:5173"
+
+  rosbridge:
+    image: gng_cpu:latest
+    container_name: rosbridge_container_uraki
+    depends_on:
+      - gng_cpu
+    tty: false
+    stdin_open: false
+    volumes:
+      - .:/ros2_ws/src
+    environment:
+      - HOME=/root
+    ports:
+      - "9090:9090"
+    command: >
+      bash -lc "source /opt/ros/humble/setup.bash && ros2 run rosbridge_server rosbridge_websocket --port 9090"
 
   
 volumes:

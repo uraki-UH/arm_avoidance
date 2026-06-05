@@ -1070,6 +1070,10 @@ header .sub{
           <label class="topo-switch"><input id="rosPublishEnabled" type="checkbox"> Publish to ROS2</label>
           <input id="rosTopicName" type="text" value="/topo_points" style="flex:1;margin-left:8px" placeholder="ROS2 topic">
         </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <label class="topo-switch"><input id="rosAutoPublish" type="checkbox"> Auto Publish</label>
+          <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="rosAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
+        </div>
         <div class="grid2" style="margin-top:6px"><button id="rosPublishNow" class="primary">Publish Now to ROS2</button><span id="rosStatus" class="status" style="margin-left:8px">ROS: disconnected</span></div>
         <div id="topoStatus" class="status">Ready. GNGは物体点のみで学習し、table/outlierは表示のみ。長距離ブリッジedgeは生成しません。</div>
         <div class="note">Depth camera風点群、拡充オブジェクト、机デザインに加え、ファジィ把持実行時にオンラインIK軌道生成でマニピュレータを逐次移動します。GNG algorithmで標準GNGと細胞競合に基づく密度制御GNGを選択できます。GNG学習再生ボタンおよびViewer再生タブ内の各GNGアルゴリズムボタンは、押すたびに既存ノードを破棄し、2ノード初期状態からリアルタイム再生します。公式AiS-GNG製品版ではなく、把持位置推定器に内包したアルゴリズム検証用の軽量GNG実装です。</div>
@@ -4268,14 +4272,59 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
 (function(){
   const ROS_WS_URL = 'ws://localhost:9090';
   let ros = null;
+  let rosPublishAllowed = false;
+  // Ensure roslib is loaded; if not, try multiple sources (CDNs then local) and call callbacks
+  function loadRoslib(cb){
+    if(window.ROSLIB){ try{ cb(); }catch(e){ setTimeout(()=>cb(),0); } return; }
+    const sources = [
+      'https://static.robotwebtools.org/roslibjs/current/roslib.min.js',
+      'https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js',
+      'libs/roslib.min.js'
+    ];
+    let lastErr = null;
+    function tryNext(idx){
+      if(idx >= sources.length){ console.error('all roslib sources failed', lastErr); const st=document.getElementById('rosStatus'); if(st) st.textContent='ROS: roslib load error'; return; }
+      const url = sources[idx];
+      const s = document.createElement('script');
+      s.src = url;
+      s.async = true;
+      s.onload = ()=>{ console.log('roslib loaded from', url); try{ cb(); }catch(e){} };
+      s.onerror = (ev)=>{ console.warn('roslib load failed from', url, ev); lastErr = ev; // try next
+        // small delay before next try to avoid spamming
+        setTimeout(()=>tryNext(idx+1), 200);
+      };
+      document.head.appendChild(s);
+    }
+    tryNext(0);
+  }
+  let topoPubIntervalId = null;
+  function rosStatus(text){
+    const s=document.getElementById('rosStatus');
+    if(s) s.textContent=text;
+  }
+  function isRosPublishEnabled(){
+    return !!document.getElementById('rosPublishEnabled')?.checked;
+  }
+  function getCurrentTopoPoints(){
+    const st = window.__topoState || window.state;
+    if(!st) return null;
+    if(st.points && st.points.length) return st.points;
+    if(st.basePoints && st.basePoints.length) return st.basePoints;
+    if(st.nodes && st.nodes.length) return st.nodes.map(n=>({x:n.p[0],y:n.p[1],z:n.p[2]}));
+    return null;
+  }
   function ensureRos(){
     if(ros) return;
-    try{
-      ros = new ROSLIB.Ros({url:ROS_WS_URL});
-      ros.on('connection', ()=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: connected'; });
-      ros.on('close', ()=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: disconnected'; });
-      ros.on('error', ()=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: error'; });
-    }catch(e){ console.warn('ros init error',e); }
+    loadRoslib(()=>{
+      try{
+        if(ros) return;
+        if(!window.ROSLIB){ console.warn('ROSLIB still not available after load'); const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: roslib missing'; return; }
+        ros = new ROSLIB.Ros({url:ROS_WS_URL});
+        ros.on('connection', ()=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: connected'; });
+        ros.on('close', ()=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: disconnected'; });
+        ros.on('error', (e)=>{ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: error'; console.warn('ros error',e); });
+      }catch(e){ console.warn('ros init error',e); const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: init error'; }
+    });
   }
 
   function publishPointCloudToRos(points, topic='/topo_points', frame='map'){
@@ -4306,33 +4355,103 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       };
       const topicObj = new ROSLIB.Topic({ros, name:topic, messageType:'sensor_msgs/PointCloud2'});
       topicObj.publish(msg);
-      const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: published '+n+' pts';
+      rosStatus('ROS: published '+n+' pts');
     }catch(e){ console.error('publish error',e); const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: publish error'; }
   }
 
+  // Utility: return current ROS time object
+  function nowRosTime(){
+    const ms = Date.now();
+    return { secs: Math.floor(ms/1000), nsecs: (ms % 1000) * 1e6 };
+  }
+
+  // Build PointCloud2 message from various point representations
+  function buildPointCloudMsgFromPoints(points, frame='map'){
+    let floatArr;
+    if(points instanceof Float32Array) floatArr = points;
+    else if(Array.isArray(points) && typeof points[0] === 'number') floatArr = new Float32Array(points);
+    else if(Array.isArray(points) && points.length && typeof points[0] === 'object'){
+      floatArr = new Float32Array(points.length*3);
+      for(let i=0;i<points.length;i++){
+        floatArr[i*3]=points[i].x; floatArr[i*3+1]=points[i].y; floatArr[i*3+2]=points[i].z;
+      }
+    }else{
+      floatArr = new Float32Array([0,0,0]);
+    }
+    const n = Math.floor(floatArr.length/3);
+    return {
+      header:{stamp: nowRosTime(), frame_id: frame},
+      height:1,
+      width:n,
+      fields:[{name:'x',offset:0,datatype:7,count:1},{name:'y',offset:4,datatype:7,count:1},{name:'z',offset:8,datatype:7,count:1}],
+      is_bigendian:false,
+      point_step:12,
+      row_step:12*n,
+      data:Array.from(new Uint8Array(floatArr.buffer)),
+      is_dense:true
+    };
+  }
+
+  // Start periodic publish at hz (calls getPointsFn to obtain points)
+  function startPeriodicTopoPublish(getPointsFn, topic='/topo_points', frame='map', hz=1){
+    if(!ros) ensureRos();
+    if(!ros) return;
+    const topicObj = new ROSLIB.Topic({ros, name:topic, messageType:'sensor_msgs/PointCloud2'});
+    stopPeriodicTopoPublish();
+    topoPubIntervalId = setInterval(()=>{
+      try{
+        const pts = getPointsFn();
+        const msg = buildPointCloudMsgFromPoints(pts, frame);
+        topicObj.publish(msg);
+        rosStatus('ROS: published '+msg.width+' pts');
+      }catch(e){ console.error('periodic publish error', e); }
+    }, Math.round(1000/Math.max(0.1, hz)));
+  }
+
+  function stopPeriodicTopoPublish(){ if(topoPubIntervalId){ clearInterval(topoPubIntervalId); topoPubIntervalId=null; } }
+
   document.addEventListener('DOMContentLoaded', ()=>{
     const btn = document.getElementById('rosPublishNow');
+    const enabledEl = document.getElementById('rosPublishEnabled');
+    const autoChk = document.getElementById('rosAutoPublish');
+    const autoHz = document.getElementById('rosAutoHz');
+    const topicInput = document.getElementById('rosTopicName');
+
+    const syncRosPublishUi = ()=>{
+      rosPublishAllowed = isRosPublishEnabled();
+      if(!rosPublishAllowed){
+        stopPeriodicTopoPublish();
+        rosStatus('ROS: disabled');
+        return;
+      }
+      rosStatus(autoChk?.checked ? 'ROS: auto publishing...' : 'ROS: enabled');
+      ensureRos();
+      if(autoChk?.checked){
+        startPeriodicTopoPublish(
+          ()=> getCurrentTopoPoints() || [],
+          topicInput?.value || '/topo_points',
+          'map',
+          Number(autoHz?.value) || 1
+        );
+      }
+    };
+
+    if(enabledEl){
+      enabledEl.addEventListener('change', syncRosPublishUi);
+    }
+
     if(btn){
       btn.addEventListener('click', ()=>{
-        let enabledEl = document.getElementById('rosPublishEnabled');
-        const enabled = enabledEl?.checked;
+        const enabled = isRosPublishEnabled();
         const topic = document.getElementById('rosTopicName')?.value || '/topo_points';
         if(!enabled){
-          // auto-enable temporarily when user explicitly requests publish
-          if(enabledEl) enabledEl.checked = true;
-          const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: enabled by Publish Now — publishing...';
+          rosStatus('ROS: disabled');
+          return;
         } else {
-          const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: publishing...';
+          rosStatus('ROS: publishing...');
         }
         ensureRos();
-        // prefer state.points if present
-        const st = window.__topoState || window.state;
-        let pts = null;
-        if(st){
-          if(st.points && st.points.length) pts = st.points;
-          else if(st.basePoints && st.basePoints.length) pts = st.basePoints;
-          else if(st.nodes && st.nodes.length) pts = st.nodes.map(n=>({x:n.p[0],y:n.p[1],z:n.p[2]}));
-        }
+        const pts = getCurrentTopoPoints();
         if(!pts){ const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: no points'; return; }
         // publish
         if(typeof pts[0] === 'number'){
@@ -4342,6 +4461,55 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
           publishPointCloudToRos(pts, topic);
         }
       });
+      if(autoChk){
+        autoChk.addEventListener('change', ()=>{
+          if(!isRosPublishEnabled()){
+            autoChk.checked = false;
+            stopPeriodicTopoPublish();
+            rosStatus('ROS: disabled');
+            return;
+          }
+          if(autoChk.checked){
+            ensureRos();
+            startPeriodicTopoPublish(
+              ()=> getCurrentTopoPoints() || [],
+              topicInput?.value || '/topo_points',
+              'map',
+              Number(autoHz?.value) || 1
+            );
+          }else{
+            stopPeriodicTopoPublish();
+            rosStatus('ROS: enabled');
+          }
+        });
+      }
+      if(autoHz){
+        autoHz.addEventListener('change', ()=>{
+          if(isRosPublishEnabled() && autoChk && autoChk.checked){
+            stopPeriodicTopoPublish();
+            startPeriodicTopoPublish(
+              ()=> getCurrentTopoPoints() || [],
+              topicInput?.value || '/topo_points',
+              'map',
+              Number(autoHz.value) || 1
+            );
+          }
+        });
+      }
+      if(topicInput){
+        topicInput.addEventListener('change', ()=>{
+          if(isRosPublishEnabled() && autoChk && autoChk.checked){
+            stopPeriodicTopoPublish();
+            startPeriodicTopoPublish(
+              ()=> getCurrentTopoPoints() || [],
+              topicInput.value || '/topo_points',
+              'map',
+              Number(autoHz?.value) || 1
+            );
+          }
+        });
+      }
+      syncRosPublishUi();
     }
   });
 })();
