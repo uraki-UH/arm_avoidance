@@ -66,8 +66,8 @@ export function StaticGraphRenderer({
     showEdges = true,
     showClusters = true,
     showClusterText = true,
-    nodeScale = 0.015,
-    edgeWidth = 0.007,
+    nodeScale = 0.005,
+    edgeWidth = 0.003,
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
@@ -97,7 +97,7 @@ export function StaticGraphRenderer({
     const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, showCovarianceEllipsoids, nodeScale, edgeWidth, normalScale, velocityScale, covarianceEllipsoidScale, opacity, tf, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, covarianceEllipsoidColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, showCovarianceEllipsoids, nodeScale, edgeWidth, normalScale, velocityScale, covarianceEllipsoidScale, opacity, tf, visibleLabels, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, covarianceEllipsoidColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
 
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
@@ -111,10 +111,12 @@ export function StaticGraphRenderer({
         for (const node of graph.nodes) {
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-            buckets[labelIndex].push(node);
+            if (!visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5]) {
+                buckets[labelIndex].push(node);
+            }
         }
         return buckets;
-    }, [graph.nodes]);
+    }, [graph.nodes, visibleLabels]);
 
     // --- TF-based Positioning ---
     useLayoutEffect(() => {

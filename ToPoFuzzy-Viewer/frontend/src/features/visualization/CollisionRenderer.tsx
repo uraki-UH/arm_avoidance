@@ -48,7 +48,18 @@ function CollisionRenderer({
         obj.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
                 const mesh = child as THREE.Mesh;
-                mesh.material = collisionMaterial;
+                if (Array.isArray(mesh.material)) {
+                    mesh.material = mesh.material.map(() => collisionMaterial);
+                } else {
+                    mesh.material = collisionMaterial;
+                }
+                if (Array.isArray(mesh.material)) {
+                    mesh.material.forEach((material) => {
+                        material.needsUpdate = true;
+                    });
+                } else {
+                    mesh.material.needsUpdate = true;
+                }
                 mesh.visible = true;
                 mesh.castShadow = false;
                 mesh.receiveShadow = false;
@@ -59,10 +70,20 @@ function CollisionRenderer({
 
     useEffect(() => {
         if (!robot) return;
-        const retryDelays = [0, 80, 220, 520];
+        const retryDelays = [0, 80, 220, 520, 1200, 2400];
         const timers = retryDelays.map((delay) => window.setTimeout(() => applyCollisionMaterial(robot), delay));
         return () => {
             timers.forEach((timer) => window.clearTimeout(timer));
+        };
+    }, [robot, applyCollisionMaterial]);
+
+    useEffect(() => {
+        if (!robot) return;
+        const interval = window.setInterval(() => applyCollisionMaterial(robot), 600);
+        const timeout = window.setTimeout(() => window.clearInterval(interval), 5000);
+        return () => {
+            window.clearInterval(interval);
+            window.clearTimeout(timeout);
         };
     }, [robot, applyCollisionMaterial]);
 
@@ -74,6 +95,15 @@ function CollisionRenderer({
         urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
         urdfLoader.parseVisual = false;
         urdfLoader.parseCollision = true;
+        const defaultLoadMeshCb = urdfLoader.loadMeshCb.bind(urdfLoader);
+        urdfLoader.loadMeshCb = (path, manager, onComplete) => {
+            defaultLoadMeshCb(path, manager, (obj, err) => {
+                if (obj) {
+                    applyCollisionMaterial(obj);
+                }
+                onComplete(obj, err);
+            });
+        };
 
         try {
             const robotObj = urdfLoader.parse(data.urdf);

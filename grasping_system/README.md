@@ -41,4 +41,4 @@ For now, voxel indexing is treated as YAML-owned configuration.
 
 - no extra voxel-indexing header is written into saved LUT files,
 - both systems are expected to use the same YAML values at build/runtime,
-- and the shared `voxel_indexing_common` package exists only to keep the code-side contract aligned.
+- and the shared `voxel_idx` package exists only to keep the code-side contract aligned.

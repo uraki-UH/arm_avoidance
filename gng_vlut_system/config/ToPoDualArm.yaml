@@ -1,15 +1,14 @@
 /**:
   ros__parameters:
   
-    voxel_indexing:
+    voxel_idx_shift:
       x_shift: 42
       y_shift: 21
       z_shift: 0
       offset: 1000000
 
     robot_name: "ToPoDualArm"
-    robot_urdf_path: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
-    robot_description_file: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
+    urdf_path: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
     resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
     mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
 
@@ -85,7 +84,6 @@
     gng_params:
       lambda: 200
       max_node_num: 10000
-      num_samples: 1000000
       max_iterations: 1000000
       refine_iterations: 100000
       coord_edge_iterations: 100000
@@ -97,6 +95,13 @@
       n_best_candidates: 4
       ais_threshold: 10.0
       start_node_num: 2
+      min_x: -1.0
+      max_x: 1.0
+      min_y: -1.0
+      max_y: 1.0
+      min_z: -1.0
+      max_z: 1.0
+      max_attempts: 256
 
     # --- Bridge & Viewer Settings ---
     joint_state_topic: "joint_states"

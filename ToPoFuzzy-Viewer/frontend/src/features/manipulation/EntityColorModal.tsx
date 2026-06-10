@@ -18,10 +18,6 @@ interface EntityColorModalProps {
     entityType: ColorEntityType;
     settings: RobotSettings | VoxelSettings | LayerSettings | null;
     graphData?: GraphData | null;
-    graphSizeDefaults?: {
-        nodeScale: number;
-        edgeWidth: number;
-    };
     onClose: () => void;
     onUpdate: (updates: Record<string, unknown>) => void;
 }
@@ -33,7 +29,6 @@ export function EntityColorModal({
     entityType,
     settings,
     graphData,
-    graphSizeDefaults,
     onClose,
     onUpdate,
 }: EntityColorModalProps) {
@@ -46,10 +41,9 @@ export function EntityColorModal({
     const graphDefaultEmissive = isStaticGraph ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity;
 
     const robotSettings = settings as RobotSettings;
+    const robotUseUrdfColors = robotSettings.useUrdfColors ?? true;
     const voxelSettings = settings as VoxelSettings;
     const layerSettings = settings as LayerSettings;
-    const graphNodeScaleDefault = graphSizeDefaults?.nodeScale ?? 0.01;
-    const graphEdgeWidthDefault = graphSizeDefaults?.edgeWidth ?? 0.002;
 
     return (
         <div className="fixed inset-0 z-[9999]" onClick={onClose}>
@@ -79,6 +73,26 @@ export function EntityColorModal({
                 <div className="flex-1 overflow-y-auto bg-[#0c141d]/50 p-4">
                     {entityType === 'robot' && (
                         <div className="space-y-3">
+                            <div className="rounded-md border border-white/5 bg-black/15 p-2">
+                                <div className="mb-2 flex items-center justify-between">
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => onUpdate({ useUrdfColors: true })}
+                                        className={`entity-btn justify-center px-3 py-1 text-[10px] ${robotUseUrdfColors ? 'active-indigo' : ''}`}
+                                    >
+                                        URDF COLOR
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onUpdate({ useUrdfColors: false })}
+                                        className={`entity-btn justify-center px-3 py-1 text-[10px] ${!robotUseUrdfColors ? 'active-indigo' : ''}`}
+                                    >
+                                        CUSTOM COLOR
+                                    </button>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
@@ -87,9 +101,10 @@ export function EntityColorModal({
                                     <input
                                         type="color"
                                         value={robotSettings.color || '#87ceeb'}
+                                        disabled={robotUseUrdfColors}
                                         onChange={(e) => onUpdate({ color: e.target.value })}
                                         onInput={(e) => onUpdate({ color: (e.target as HTMLInputElement).value })}
-                                        className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                        className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-40"
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
@@ -174,6 +189,27 @@ export function EntityColorModal({
                                 </div>
                             </div>
 
+                            <div className="space-y-2 rounded-md border border-white/5 bg-black/15 p-2">
+                                <ControlSlider
+                                    label="Node Size"
+                                    value={layerSettings.nodeScale ?? 0.005}
+                                    min={0.003}
+                                    max={0.08}
+                                    step={0.001}
+                                    onChange={(v) => onUpdate({ nodeScale: v })}
+                                    formatValue={(v) => v.toFixed(3)}
+                                />
+                                <ControlSlider
+                                    label="Edge Width"
+                                    value={layerSettings.edgeWidth ?? 0.003}
+                                    min={0.001}
+                                    max={0.03}
+                                    step={0.001}
+                                    onChange={(v) => onUpdate({ edgeWidth: v })}
+                                    formatValue={(v) => v.toFixed(3)}
+                                />
+                            </div>
+
                             <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
@@ -217,24 +253,6 @@ export function EntityColorModal({
                                 step={0.01}
                                 onChange={(v) => onUpdate({ emissiveIntensity: v })}
                                 formatValue={(v) => `${v.toFixed(2)}x`}
-                            />
-                            <ControlSlider
-                                label="Node Size"
-                                value={layerSettings.nodeScale ?? graphNodeScaleDefault}
-                                min={0.001}
-                                max={0.1}
-                                step={0.001}
-                                onChange={(v) => onUpdate({ nodeScale: v })}
-                                formatValue={(v) => `${v.toFixed(3)}m`}
-                            />
-                            <ControlSlider
-                                label="Edge Width"
-                                value={layerSettings.edgeWidth ?? graphEdgeWidthDefault}
-                                min={0.0005}
-                                max={0.05}
-                                step={0.0005}
-                                onChange={(v) => onUpdate({ edgeWidth: v })}
-                                formatValue={(v) => `${v.toFixed(3)}m`}
                             />
                         </div>
                     )}

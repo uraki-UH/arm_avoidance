@@ -13,14 +13,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("rviz_config", default_value=rviz_config_default),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
-                "robot_description_file": LaunchConfiguration("robot_description_file"),
+                "urdf_path": LaunchConfiguration("urdf_path"),
             }.items()
         ),
 

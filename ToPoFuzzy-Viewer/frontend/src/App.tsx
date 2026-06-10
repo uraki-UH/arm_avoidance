@@ -269,6 +269,14 @@ function App() {
                     showNodes: true,
                     showEdges: !isStatic,
                     showClusters: false,
+                    visibleLabels: {
+                        0: true,
+                        1: true,
+                        2: true,
+                        3: true,
+                        4: true,
+                        5: true,
+                    },
                     showNormals: false,
                     showVelocity: false,
                     showCovarianceEllipsoids: false,
@@ -301,6 +309,19 @@ function App() {
                     })
                 };
                 changed = true;
+            } else if (!newSettings[tag].visibleLabels) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    visibleLabels: {
+                        0: true,
+                        1: true,
+                        2: true,
+                        3: true,
+                        4: true,
+                        5: true,
+                    },
+                };
+                changed = true;
             }
         });
 
@@ -317,6 +338,7 @@ function App() {
                 set: setRobotSettings,
                 defaults: {
                     visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
+                    useUrdfColors: true,
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
@@ -407,14 +429,6 @@ function App() {
         normalArrowColor: '#00FFFF',
         nodeScale: 0.01,
         edgeWidth: 0.002,
-        visibleLabels: {
-            0: true,
-            1: true,
-            2: true,
-            3: true,
-            4: true,
-            5: true,
-        },
     });
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
@@ -967,10 +981,10 @@ function App() {
                                 {
                                     data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
                                 {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
@@ -1021,7 +1035,7 @@ function App() {
                             };
                             return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} />
-                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={gngLayer.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
                         <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
@@ -1113,7 +1127,6 @@ function App() {
                             : layerSettings[colorContext.id] || null)
                     : null}
                 graphData={colorContext?.type === 'graph' ? (graphData[colorContext.id] || null) : null}
-                graphSizeDefaults={colorContext?.type === 'graph' ? { nodeScale: gngLayer.nodeScale, edgeWidth: gngLayer.edgeWidth } : undefined}
                 onClose={() => setColorContext(null)}
                 onUpdate={(updates) => {
                     if (!colorContext) return;

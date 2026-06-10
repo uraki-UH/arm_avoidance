@@ -47,7 +47,49 @@ std::filesystem::path resolveResourceRoot(const std::string &resource_root_dir,
   return {};
 }
 
-std::string materializeResolvedUrdf(const std::string &source_path) {
+std::filesystem::path resolveMeshRoot(const std::string &resource_root_dir,
+                                      const std::string &mesh_root_dir) {
+  if (!mesh_root_dir.empty()) {
+    return std::filesystem::path(robot_sim::common::stripUriScheme(mesh_root_dir));
+  }
+
+  const auto resource_root = resolveResourceRoot(resource_root_dir, mesh_root_dir);
+  if (!resource_root.empty()) {
+    return resource_root / "meshes";
+  }
+
+  return {};
+}
+
+std::string rewriteRelativeMeshUris(const std::string &urdf_text,
+                                    const std::filesystem::path &mesh_root) {
+  if (urdf_text.empty() || mesh_root.empty()) {
+    return urdf_text;
+  }
+
+  std::string rewritten = urdf_text;
+  const std::string prefix = "file://" + mesh_root.string() + "/";
+
+  const std::string double_quote_key = "filename=\"meshes/";
+  std::size_t pos = 0;
+  while ((pos = rewritten.find(double_quote_key, pos)) != std::string::npos) {
+    rewritten.replace(pos, double_quote_key.size(), "filename=\"" + prefix);
+    pos += prefix.size();
+  }
+
+  const std::string single_quote_key = "filename='meshes/";
+  pos = 0;
+  while ((pos = rewritten.find(single_quote_key, pos)) != std::string::npos) {
+    rewritten.replace(pos, single_quote_key.size(), "filename='" + prefix);
+    pos += prefix.size();
+  }
+
+  return rewritten;
+}
+
+std::string materializeResolvedUrdf(const std::string &source_path,
+                                    const std::string &resource_root_dir,
+                                    const std::string &mesh_root_dir) {
   std::ifstream ifs(source_path);
   if (!ifs) {
     throw std::runtime_error("Failed to open URDF file: " + source_path);
@@ -55,8 +97,9 @@ std::string materializeResolvedUrdf(const std::string &source_path) {
 
   std::ostringstream oss;
   oss << ifs.rdbuf();
-  const std::string rewritten =
-      robot_sim::common::resolvePackageUris(oss.str());
+  std::string rewritten = robot_sim::common::resolvePackageUris(oss.str());
+  rewritten = rewriteRelativeMeshUris(rewritten,
+                                      resolveMeshRoot(resource_root_dir, mesh_root_dir));
 
   static std::atomic<uint64_t> temp_counter{0};
   const uint64_t seq = temp_counter.fetch_add(1, std::memory_order_relaxed);
@@ -108,7 +151,7 @@ RobotModel loadRobotFromUrdf(const std::string &urdf_path,
     final_path = temp_urdf;
   }
 
-  final_path = materializeResolvedUrdf(final_path);
+  final_path = materializeResolvedUrdf(final_path, resource_root_dir, mesh_root_dir);
 
   // 1. Parse the URDF file using urdfdom
   urdf::ModelInterfaceSharedPtr urdf_model = urdf::parseURDFFile(final_path);

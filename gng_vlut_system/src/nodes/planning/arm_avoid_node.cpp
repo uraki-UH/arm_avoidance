@@ -61,7 +61,7 @@ public:
 
   explicit ArmAvoidNode(const rclcpp::NodeOptions &options)
       : Node("arm_avoid_node", options) {
-    declare_parameter<std::string>("robot_urdf_path",
+    declare_parameter<std::string>("urdf_path",
                                    "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     declare_parameter<std::string>("gng_model_path", "");
     declare_parameter<std::string>("root_link", "base_link");
@@ -107,7 +107,7 @@ public:
 private:
   void loadModelAndGraph() {
     const std::string resolved_urdf =
-        robot_sim::common::resolvePath(get_parameter("robot_urdf_path").as_string());
+        robot_sim::common::resolvePath(get_parameter("urdf_path").as_string());
     if (resolved_urdf.empty()) {
       throw std::runtime_error("Failed to resolve robot URDF path.");
     }

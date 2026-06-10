@@ -24,7 +24,7 @@ RobotDescriptionPlayer::RobotDescriptionPlayer(const rclcpp::NodeOptions & optio
   const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
 
   description_file_ = declare_parameter<std::string>(
-      "robot_description_file", pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro");
+      "urdf_path", pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro");
   resource_root_dir_ = declare_parameter<std::string>("resource_root_dir", "");
   mesh_root_dir_ = declare_parameter<std::string>("mesh_root_dir", "");
   topic_name_ = declare_parameter<std::string>("topic_name", "robot_description");

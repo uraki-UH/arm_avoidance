@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "voxel_indexing.hpp"
+#include "voxel_idx.hpp"
 
 namespace GNG
 {
@@ -17,7 +17,7 @@ namespace Analysis
  * @brief Shared voxel indexing wrapper for legacy GNG code.
  *
  * This keeps the existing API used across gng_vlut_system while delegating
- * the actual voxel id contract to voxel_indexing_common.
+ * the actual voxel id contract to voxel_idx
  */
 class IndexVoxelGrid
 {
@@ -41,7 +41,7 @@ public:
   long getFlatVoxelId(const Eigen::Vector3i &idx) const
   {
     const auto flat = schema_.pack(
-      voxel_indexing_common::VoxelIndex{idx.x(), idx.y(), idx.z()});
+      voxel_idx::VoxelIndex{idx.x(), idx.y(), idx.z()});
     return static_cast<long>(flat);
   }
 
@@ -56,18 +56,18 @@ public:
   int getZShift() const { return schema_.z_shift; }
   long getOffset() const { return static_cast<long>(schema_.offset); }
 
-  const voxel_indexing_common::VoxelIndexingSchema &schema() const noexcept
+  const voxel_idx::VoxelIndexingSchema &schema() const noexcept
   {
     return schema_;
   }
 
-  void setSchema(const voxel_indexing_common::VoxelIndexingSchema &schema)
+  void setSchema(const voxel_idx::VoxelIndexingSchema &schema)
   {
     schema_ = schema;
   }
 
 private:
-  voxel_indexing_common::VoxelIndexingSchema schema_;
+  voxel_idx::VoxelIndexingSchema schema_;
 
   // LUTとしての役割（将来的に使用）
   std::unordered_map<long, std::vector<int>> voxel_to_ids_;

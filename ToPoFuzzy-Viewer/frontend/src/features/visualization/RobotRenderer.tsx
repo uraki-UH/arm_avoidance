@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { RobotData, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
@@ -9,6 +10,7 @@ interface RobotRendererProps {
     data: RobotData;
     visible?: boolean;
     color?: string;
+    useUrdfColors?: boolean;
     emissiveIntensity?: number;
     opacity?: number;
     jointValuesOverride?: number[];
@@ -21,6 +23,7 @@ function RobotRenderer({
     data,
     visible = true,
     color = 'blue',
+    useUrdfColors = true,
     emissiveIntensity = 0.2,
     opacity = 0.8,
     jointValuesOverride = [],
@@ -29,13 +32,14 @@ function RobotRenderer({
 }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
-    const lastUrdfRef = useRef<string | null>(null);
+    const lastLoadSignatureRef = useRef<string | null>(null);
     const lastJointSignatureRef = useRef<string | null>(null);
+    const { invalidate } = useThree();
 
     const viewerPort = 9001;
 
     // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, emissiveIntensity, opacity, tf, jointValuesOverride]);
+    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride]);
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -47,47 +51,120 @@ function RobotRenderer({
         opacity,
     }), [color, emissiveIntensity, opacity]);
 
+    const applyMaterialTweaks = useCallback((material: THREE.Material | THREE.Material[]) => {
+        const applyOne = (m: THREE.Material) => {
+            const anyMaterial = m as THREE.Material & {
+                transparent?: boolean;
+                opacity?: number;
+                emissive?: THREE.Color;
+                color?: THREE.Color;
+            };
+
+            anyMaterial.transparent = opacity < 1;
+            anyMaterial.opacity = opacity;
+
+            if (anyMaterial.emissive && anyMaterial.color) {
+                anyMaterial.emissive.copy(anyMaterial.color).multiplyScalar(Math.max(0, emissiveIntensity));
+            }
+
+            anyMaterial.needsUpdate = true;
+        };
+
+        if (Array.isArray(material)) {
+            material.forEach(applyOne);
+        } else {
+            applyOne(material);
+        }
+    }, [emissiveIntensity, opacity]);
+
     const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
         if (!obj) return;
         obj.traverse((child) => {
             if ((child as THREE.Mesh).isMesh) {
                 const mesh = child as THREE.Mesh;
-                if (mesh.material !== robotMaterial) {
+                if (Array.isArray(mesh.material)) {
+                    mesh.material = mesh.material.map(() => robotMaterial);
+                } else if (mesh.material !== robotMaterial) {
                     mesh.material = robotMaterial;
-                    mesh.castShadow = false;
-                    mesh.receiveShadow = false;
-                    mesh.renderOrder = 10;
                 }
+                applyMaterialTweaks(mesh.material);
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
+                mesh.renderOrder = 10;
             }
         });
-    }, [robotMaterial]);
+    }, [applyMaterialTweaks, robotMaterial]);
+
+    const applyUrdfAppearanceTweaks = useCallback((obj: THREE.Object3D) => {
+        if (!obj) return;
+        obj.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+                const mesh = child as THREE.Mesh;
+                applyMaterialTweaks(mesh.material);
+                mesh.castShadow = false;
+                mesh.receiveShadow = false;
+                mesh.renderOrder = 10;
+            }
+        });
+    }, [applyMaterialTweaks]);
 
     useEffect(() => {
         if (!robot) return;
-        const retryDelays = [0, 60, 160, 360, 760];
-        const timers = retryDelays.map((delay) => window.setTimeout(() => applyRobotMaterial(robot), delay));
+        const retryDelays = [0, 60, 160, 360, 760, 1500, 2500];
+        const timers = retryDelays.map((delay) => window.setTimeout(() => {
+            if (!useUrdfColors) {
+                applyRobotMaterial(robot);
+            } else {
+                applyUrdfAppearanceTweaks(robot);
+            }
+            invalidate();
+        }, delay));
         return () => {
             timers.forEach((timer) => window.clearTimeout(timer));
         };
-    }, [robot, applyRobotMaterial]);
+    }, [robot, applyRobotMaterial, applyUrdfAppearanceTweaks, useUrdfColors, invalidate]);
+
+    useEffect(() => {
+        if (!robot) return;
+        if (useUrdfColors) {
+            applyUrdfAppearanceTweaks(robot);
+        } else {
+            applyRobotMaterial(robot);
+        }
+        invalidate();
+    }, [robot, useUrdfColors, opacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, invalidate]);
 
     // --- Load URDF ---
     useEffect(() => {
-        if (!data?.urdf || data.urdf === lastUrdfRef.current) return;
-        lastUrdfRef.current = data.urdf;
+        if (!data?.urdf) return;
+        const loadSignature = `${data.urdf}::${useUrdfColors ? 'urdf' : 'robot'}`;
+        if (loadSignature === lastLoadSignatureRef.current) return;
+        lastLoadSignatureRef.current = loadSignature;
 
         const urdfLoader = new URDFLoader();
         urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
+        const defaultLoadMeshCb = urdfLoader.loadMeshCb.bind(urdfLoader);
+        urdfLoader.loadMeshCb = (path, manager, onComplete) => {
+            defaultLoadMeshCb(path, manager, (obj, err) => {
+                if (obj && !useUrdfColors) {
+                    applyRobotMaterial(obj);
+                }
+                onComplete(obj, err);
+            });
+        };
 
         try {
             const robotObj = urdfLoader.parse(data.urdf);
-            applyRobotMaterial(robotObj);
+            if (!useUrdfColors) {
+                applyRobotMaterial(robotObj);
+            }
+            applyUrdfAppearanceTweaks(robotObj);
             setRobot(robotObj);
         } catch (err) {
             console.error("Failed to parse URDF:", err);
-            lastUrdfRef.current = null;
+            lastLoadSignatureRef.current = null;
         }
-    }, [data?.urdf, applyRobotMaterial, tag]);
+    }, [applyRobotMaterial, applyUrdfAppearanceTweaks, data?.urdf, tag, useUrdfColors]);
 
     // --- Update Joints ---
     useEffect(() => {

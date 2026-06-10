@@ -50,12 +50,12 @@ public:
         this->declare_parameter("gng_model_path", "");
         this->declare_parameter("vlut_path", "");
         this->declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
-        this->declare_parameter("dilation_radius", 1);
+        this->declare_parameter("dilation_radius", 0.05);
         this->declare_parameter("data_directory", "gng_results");
         this->declare_parameter("experiment_id", "standard_train");
         this->declare_parameter("gng_model_filename", "gng.bin");
         this->declare_parameter("vlut_filename", "vlut.bin");
-        this->declare_parameter("robot_urdf_path", "");
+        this->declare_parameter("urdf_path", "");
         this->declare_parameter("base_frame", ::robot_sim::common::Constants::DEFAULT_BASE_FRAME);
         this->declare_parameter("publish_hz", ::robot_sim::common::Constants::DEFAULT_UPDATE_HZ);
         this->declare_parameter("safety_margin", ::robot_sim::common::Constants::DEFAULT_SAFETY_MARGIN);

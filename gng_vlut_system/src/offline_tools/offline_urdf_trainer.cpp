@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory>
 #include <map>
+#include <limits>
 #include <sstream>
 #include <set>
 #include <string>
@@ -334,6 +335,22 @@ static JointSelectionSpec buildJointSelectionSpec(
   return spec;
 }
 
+static JointSelectionSpec buildIdentityJointSelectionSpec(
+    const kinematics::KinematicChain &chain) {
+  JointSelectionSpec spec;
+  for (int joint_idx = 0; joint_idx < chain.getNumJoints(); ++joint_idx) {
+    const int joint_dof = chain.getJointDOF(joint_idx);
+    if (joint_dof <= 0) {
+      continue;
+    }
+    spec.selected_joint_indices.push_back(joint_idx);
+    spec.selected_joint_names.push_back(chain.getJointName(joint_idx));
+    spec.selected_joint_index_set.insert(joint_idx);
+    spec.selected_dof += joint_dof;
+  }
+  return spec;
+}
+
 static std::vector<std::string> collectPathJointNames(
     const simulation::RobotModel &model, const std::string &root_link_name,
     const std::string &leaf_link_name) {
@@ -584,6 +601,34 @@ public:
                                    base_chain_->getJointValues());
   }
 
+  std::vector<double> sampleRandomJointValues() const override {
+    if (!base_chain_) {
+      return {};
+    }
+    std::vector<double> full_values;
+    base_chain_->sampleRandomJointValues(full_values);
+    return packSelectedJointValues(*base_chain_, selection_, full_values);
+  }
+
+  void sampleRandomJointValues(std::vector<double> &out_values) const override {
+    out_values = sampleRandomJointValues();
+  }
+
+  std::vector<double> sampleRandomJointValues(
+      const std::vector<int> &joint_indices) const override {
+    if (!base_chain_) {
+      return {};
+    }
+    std::vector<double> full_values;
+    base_chain_->sampleRandomJointValues(joint_indices, full_values);
+    return packSelectedJointValues(*base_chain_, selection_, full_values);
+  }
+
+  void sampleRandomJointValues(const std::vector<int> &joint_indices,
+                               std::vector<double> &out_values) const override {
+    out_values = sampleRandomJointValues(joint_indices);
+  }
+
   bool setJointValues(const std::vector<double> &values) override {
     if (!base_chain_) {
       return false;
@@ -702,64 +747,6 @@ public:
                        : Eigen::MatrixXd::Zero(0, 0);
   }
 
-  std::vector<double> sampleRandomJointValues() const override {
-    if (!base_chain_) {
-      return {};
-    }
-    return packSelectedJointValues(*base_chain_, selection_,
-                                   base_chain_->sampleRandomJointValues());
-  }
-
-  void sampleRandomJointValues(std::vector<double> &out_values) const override {
-    if (!base_chain_) {
-      out_values.clear();
-      return;
-    }
-    std::vector<double> full_values;
-    base_chain_->sampleRandomJointValues(full_values);
-    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
-  }
-
-  std::vector<double> sampleRandomJointValue(int joint_index) const override {
-    if (!base_chain_) {
-      return {};
-    }
-    return packSelectedJointValues(*base_chain_, selection_,
-                                   base_chain_->sampleRandomJointValue(joint_index));
-  }
-
-  void sampleRandomJointValue(int joint_index,
-                              std::vector<double> &out_values) const override {
-    if (!base_chain_) {
-      out_values.clear();
-      return;
-    }
-    std::vector<double> full_values;
-    base_chain_->sampleRandomJointValue(joint_index, full_values);
-    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
-  }
-
-  std::vector<double> sampleRandomJointValues(
-      const std::vector<int> &joint_indices) const override {
-    if (!base_chain_) {
-      return {};
-    }
-    return packSelectedJointValues(
-        *base_chain_, selection_,
-        base_chain_->sampleRandomJointValues(joint_indices));
-  }
-
-  void sampleRandomJointValues(const std::vector<int> &joint_indices,
-                               std::vector<double> &out_values) const override {
-    if (!base_chain_) {
-      out_values.clear();
-      return;
-    }
-    std::vector<double> full_values;
-    base_chain_->sampleRandomJointValues(joint_indices, full_values);
-    out_values = packSelectedJointValues(*base_chain_, selection_, full_values);
-  }
-
   bool isWithinLimits(const std::vector<double> &values) const override {
     if (!base_chain_) {
       return false;
@@ -780,6 +767,236 @@ public:
 private:
   kinematics::KinematicChain *base_chain_;
   JointSelectionSpec selection_;
+};
+
+struct TcpThresholdConfig {
+  double min_x = -std::numeric_limits<double>::infinity();
+  double max_x = std::numeric_limits<double>::infinity();
+  double min_y = -std::numeric_limits<double>::infinity();
+  double max_y = std::numeric_limits<double>::infinity();
+  double min_z = -std::numeric_limits<double>::infinity();
+  double max_z = std::numeric_limits<double>::infinity();
+  int max_attempts = 256;
+
+  bool contains(const Eigen::Vector3d &p) const {
+    return p.x() >= min_x && p.x() <= max_x && p.y() >= min_y &&
+           p.y() <= max_y && p.z() >= min_z && p.z() <= max_z;
+  }
+};
+
+class TcpThresholdAcceptedSampleKinematicChain
+    : public kinematics::KinematicChain {
+public:
+  TcpThresholdAcceptedSampleKinematicChain(
+      kinematics::KinematicChain *full_chain, JointSelectionSpec selection,
+      TcpThresholdConfig config)
+      : full_chain_(full_chain), selection_(std::move(selection)),
+        config_(std::move(config)) {}
+
+  int getTotalDOF() const override { return selection_.selected_dof; }
+
+  int getNumJoints() const override {
+    return full_chain_ ? full_chain_->getNumJoints() : 0;
+  }
+
+  std::size_t getArmCount() const override {
+    return full_chain_ ? full_chain_->getArmCount() : 0;
+  }
+
+  std::string getJointName(int joint_index) const override {
+    return full_chain_ ? full_chain_->getJointName(joint_index) : "";
+  }
+
+  int getJointDOF(int joint_index) const override {
+    return full_chain_ ? full_chain_->getJointDOF(joint_index) : 0;
+  }
+
+  std::vector<double> getJointValues() const override {
+    if (!full_chain_) {
+      return {};
+    }
+    return packSelectedJointValues(*full_chain_, selection_,
+                                   full_chain_->getJointValues());
+  }
+
+  std::vector<double> sampleRandomJointValues() const override {
+    if (!full_chain_) {
+      return {};
+    }
+    return sampleAcceptedJointValues([this]() {
+      std::vector<double> full_values;
+      full_chain_->sampleRandomJointValues(selection_.selected_joint_indices,
+                                           full_values);
+      return full_values;
+    });
+  }
+
+  void sampleRandomJointValues(std::vector<double> &out_values) const override {
+    out_values = sampleRandomJointValues();
+  }
+
+  std::vector<double> sampleRandomJointValues(
+      const std::vector<int> &joint_indices) const override {
+    if (!full_chain_) {
+      return {};
+    }
+    return sampleAcceptedJointValues([this, &joint_indices]() {
+      std::vector<double> full_values;
+      full_chain_->sampleRandomJointValues(joint_indices, full_values);
+      return full_values;
+    });
+  }
+
+  void sampleRandomJointValues(const std::vector<int> &joint_indices,
+                               std::vector<double> &out_values) const override {
+    out_values = sampleRandomJointValues(joint_indices);
+  }
+
+  bool setJointValues(const std::vector<double> &values) override {
+    if (!full_chain_) {
+      return false;
+    }
+    return full_chain_->setJointValues(
+        expandSelectedJointValues(*full_chain_, selection_, values));
+  }
+
+  void updateKinematics(const std::vector<double> &values) override {
+    if (!full_chain_) {
+      return;
+    }
+    full_chain_->updateKinematics(
+        expandSelectedJointValues(*full_chain_, selection_, values));
+  }
+
+  void forwardKinematicsAt(
+      const std::vector<double> &values,
+      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+          &out_positions,
+      std::vector<Eigen::Quaterniond,
+                  Eigen::aligned_allocator<Eigen::Quaterniond>>
+          &out_orientations) const override {
+    if (!full_chain_) {
+      out_positions.clear();
+      out_orientations.clear();
+      return;
+    }
+    full_chain_->forwardKinematicsAt(
+        expandSelectedJointValues(*full_chain_, selection_, values),
+        out_positions, out_orientations);
+  }
+
+  void forwardKinematicsAt(const std::vector<double> &values) override {
+    if (!full_chain_) {
+      return;
+    }
+    full_chain_->forwardKinematicsAt(
+        expandSelectedJointValues(*full_chain_, selection_, values));
+  }
+
+  const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &
+  getLinkPositions() const override {
+    static const std::vector<Eigen::Vector3d,
+                             Eigen::aligned_allocator<Eigen::Vector3d>>
+        empty;
+    return full_chain_ ? full_chain_->getLinkPositions() : empty;
+  }
+
+  const std::vector<Eigen::Quaterniond,
+                    Eigen::aligned_allocator<Eigen::Quaterniond>> &
+  getLinkOrientations() const override {
+    static const std::vector<Eigen::Quaterniond,
+                             Eigen::aligned_allocator<Eigen::Quaterniond>>
+        empty;
+    return full_chain_ ? full_chain_->getLinkOrientations() : empty;
+  }
+
+  Eigen::Vector3d getEEFPosition() const override {
+    return full_chain_ ? full_chain_->getEEFPosition()
+                       : Eigen::Vector3d::Zero();
+  }
+
+  Eigen::Quaterniond getEEFOrientation() const override {
+    return full_chain_ ? full_chain_->getEEFOrientation()
+                       : Eigen::Quaterniond::Identity();
+  }
+
+  Eigen::Vector3d getEEFPosition(std::size_t arm_index) const override {
+    return full_chain_ ? full_chain_->getEEFPosition(arm_index)
+                       : Eigen::Vector3d::Zero();
+  }
+
+  Eigen::Quaterniond getEEFOrientation(std::size_t arm_index) const override {
+    return full_chain_ ? full_chain_->getEEFOrientation(arm_index)
+                       : Eigen::Quaterniond::Identity();
+  }
+
+  void setBase(const Eigen::Vector3d &position,
+               const Eigen::Quaterniond &orientation =
+                   Eigen::Quaterniond::Identity()) override {
+    if (full_chain_) {
+      full_chain_->setBase(position, orientation);
+    }
+  }
+
+  void buildAllLinkTransforms(
+      const std::vector<Eigen::Vector3d,
+                        Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
+      const std::vector<Eigen::Quaterniond,
+                        Eigen::aligned_allocator<Eigen::Quaterniond>>
+          &orientations,
+      const std::map<std::string, std::pair<std::string, Eigen::Isometry3d>>
+          &fixed_link_info,
+      std::map<std::string, Eigen::Isometry3d> &link_transforms) const override {
+    if (full_chain_) {
+      full_chain_->buildAllLinkTransforms(positions, orientations,
+                                          fixed_link_info, link_transforms);
+    } else {
+      link_transforms.clear();
+    }
+  }
+
+  Eigen::MatrixXd calculateJacobianAt(
+      int target_joint_index, const std::vector<double> &values) const override {
+    if (!full_chain_) {
+      return Eigen::MatrixXd::Zero(0, 0);
+    }
+    return full_chain_->calculateJacobianAt(
+        target_joint_index,
+        expandSelectedJointValues(*full_chain_, selection_, values));
+  }
+
+private:
+  template <typename Fn>
+  std::vector<double> sampleAcceptedJointValues(Fn &&sample_fn) const {
+    std::vector<double> last_sample;
+    for (int attempt = 0; attempt < std::max(1, config_.max_attempts);
+         ++attempt) {
+      std::vector<double> full_values = sample_fn();
+      if (full_values.empty()) {
+        return full_values;
+      }
+      const std::vector<double> selected_values =
+          packSelectedJointValues(*full_chain_, selection_, full_values);
+      const std::vector<double> normalized_full_values =
+          expandSelectedJointValues(*full_chain_, selection_, selected_values);
+      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+          positions;
+      std::vector<Eigen::Quaterniond,
+                  Eigen::aligned_allocator<Eigen::Quaterniond>>
+          orientations;
+      full_chain_->forwardKinematicsAt(normalized_full_values, positions,
+                                       orientations);
+      if (!positions.empty() && config_.contains(positions.back())) {
+        return selected_values;
+      }
+      last_sample = selected_values;
+    }
+    return last_sample;
+  }
+
+  kinematics::KinematicChain *full_chain_;
+  JointSelectionSpec selection_;
+  TcpThresholdConfig config_;
 };
 
 static void writeInitialCollisionApprovalYaml(
@@ -809,6 +1026,41 @@ static void writeInitialCollisionApprovalYaml(
   for (const auto &pair : sorted_pairs) {
     ofs << "    - \"" << pair.first << "|" << pair.second << "\"\n";
   }
+}
+
+static void pruneNodesOutsideTcpThreshold(
+    GNG2 &gng, kinematics::KinematicChain *chain,
+    const TcpThresholdConfig &config, const std::string &label,
+    const rclcpp::Logger &logger) {
+  if (!chain) {
+    return;
+  }
+
+  std::vector<int> to_disable;
+  gng.forEachActive([&](int node_id,
+                        const GNG2::NodeType &node) {
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+        positions;
+    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>
+        orientations;
+    chain->forwardKinematicsAt(node.weight_angle.template cast<double>(),
+                               positions, orientations);
+    if (positions.empty() || !config.contains(positions.back())) {
+      to_disable.push_back(node_id);
+    }
+  });
+
+  if (to_disable.empty()) {
+    return;
+  }
+
+  for (int node_id : to_disable) {
+    gng.setNodeActive(node_id, false);
+  }
+  gng.removeInactiveElements();
+
+  RCLCPP_INFO(logger, "[GNG] Pruned %zu node(s) outside tcp threshold (%s).",
+              to_disable.size(), label.c_str());
 }
 
 static std::string vec3ToString(const Eigen::Vector3d &v, int prec = 3) {
@@ -1123,16 +1375,25 @@ public:
                 "--- Standalone URDF-based Unified GNG/VLUT Pipeline ---");
 
     // 0. Declare and Get Parameters
-    experiment_id_ = this->declare_parameter<std::string>("gng.experiment_id",
-                                                          "");
-    data_directory_ = robot_sim::common::resolveDataPath(
-        this->declare_parameter<std::string>("gng.data_directory", "gng_results"));
-    robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path",
-                                                            "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
-    gng_model_filename_ = this->declare_parameter<std::string>(
-        "gng.gng_model_filename", "gng.bin");
-    vlut_filename_ = this->declare_parameter<std::string>(
-        "gng.vlut_filename", "vlut.bin");
+    experiment_id_ = this->declare_parameter<std::string>("gng.experiment_id", "");
+    std::string data_directory_param =
+        this->declare_parameter<std::string>("gng.data_directory", "gng_results");
+    data_directory_ = robot_sim::common::resolveDataPath(data_directory_param);
+
+    robot_urdf_path_ = this->declare_parameter<std::string>("robot_urdf_path", "");
+    const std::string legacy_urdf_path =
+        this->declare_parameter<std::string>("urdf_path", "");
+    if (robot_urdf_path_.empty()) {
+      robot_urdf_path_ = legacy_urdf_path;
+    }
+    if (robot_urdf_path_.empty()) {
+      robot_urdf_path_ =
+          "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro";
+    }
+    resource_root_dir_ = this->declare_parameter<std::string>("resource_root_dir", "");
+    mesh_root_dir_ = this->declare_parameter<std::string>("mesh_root_dir", "");
+    gng_model_filename_ = this->declare_parameter<std::string>("gng.gng_model_filename", "gng.bin");
+    vlut_filename_ = this->declare_parameter<std::string>("gng.vlut_filename", "vlut.bin");
     ground_z_threshold_ =
         this->declare_parameter<double>("gng.ground_z_threshold", 0.0);
     enable_ground_collision_ = this->declare_parameter<bool>(
@@ -1258,10 +1519,27 @@ public:
         generate_initial_collision_approval_only_ || initial_collision_only_ ||
         this->get_parameter("generate_initial_collision_approval_only").as_bool();
 
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] gng.experiment_id=%s", experiment_id_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] gng.data_directory=%s", data_directory_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] robot_urdf_path=%s", robot_urdf_path_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] resource_root_dir=%s", resource_root_dir_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] mesh_root_dir=%s", mesh_root_dir_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] gng.profile_names=%s", gng_profile_names_.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[Params] gng.profile_name=%s", gng_profile_name_.c_str());
+
     // GNG Parameters (nested under gng_params)
     gng_params_.lambda = this->declare_parameter<int>("gng_params.lambda", 50);
     gng_params_.max_node_num =
         this->declare_parameter<int>("gng_params.max_node_num", 10000);
+    // Legacy compatibility only: on-the-fly training samples random joint
+    // states each iteration, so this value is not consumed by the current loop.
     gng_params_.num_samples =
         this->declare_parameter<int>("gng_params.num_samples", 1000000);
     gng_params_.max_iterations =
@@ -1302,6 +1580,26 @@ public:
         "gng_params.task_density_gain_min", 0.8);
     gng_params_.task_density_gain_max = this->declare_parameter<double>(
         "gng_params.task_density_gain_max", 1.0);
+    tcp_threshold_.min_x = this->declare_parameter<double>(
+        "gng_params.min_x",
+        -std::numeric_limits<double>::infinity());
+    tcp_threshold_.max_x = this->declare_parameter<double>(
+        "gng_params.max_x",
+        std::numeric_limits<double>::infinity());
+    tcp_threshold_.min_y = this->declare_parameter<double>(
+        "gng_params.min_y",
+        -std::numeric_limits<double>::infinity());
+    tcp_threshold_.max_y = this->declare_parameter<double>(
+        "gng_params.max_y",
+        std::numeric_limits<double>::infinity());
+    tcp_threshold_.min_z = this->declare_parameter<double>(
+        "gng_params.min_z",
+        -std::numeric_limits<double>::infinity());
+    tcp_threshold_.max_z = this->declare_parameter<double>(
+        "gng_params.max_z",
+        std::numeric_limits<double>::infinity());
+    tcp_threshold_.max_attempts = this->declare_parameter<int>(
+        "gng_params.max_attempts", 256);
 
     // Log parameters for verification
     RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
@@ -1335,6 +1633,15 @@ public:
     RCLCPP_INFO(this->get_logger(),
                 "  gng_params.task_density_gain_max: %f",
                 gng_params_.task_density_gain_max);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.num_samples: %d (legacy, unused by on-the-fly training)",
+                gng_params_.num_samples);
+    RCLCPP_INFO(this->get_logger(),
+                "  gng_params.tcp_threshold: x=[%f, %f] y=[%f, %f] z=[%f, %f] max_attempts=%d",
+                tcp_threshold_.min_x, tcp_threshold_.max_x,
+                tcp_threshold_.min_y, tcp_threshold_.max_y,
+                tcp_threshold_.min_z, tcp_threshold_.max_z,
+                tcp_threshold_.max_attempts);
     RCLCPP_INFO(this->get_logger(), "  vlut_only: %s",
                 vlut_only_ ? "true" : "false");
     RCLCPP_INFO(this->get_logger(), "  skip_collision_checks: %s",
@@ -1373,7 +1680,13 @@ public:
 
       RCLCPP_INFO(this->get_logger(), "[Robot] Loading from resolved path: %s",
                   resolved_path.c_str());
-      base_model_obj = simulation::loadRobotFromUrdf(resolved_path);
+      if (!resource_root_dir_.empty() || !mesh_root_dir_.empty()) {
+        RCLCPP_INFO(this->get_logger(),
+                    "[Robot] resource_root_dir=%s mesh_root_dir=%s",
+                    resource_root_dir_.c_str(), mesh_root_dir_.c_str());
+      }
+      base_model_obj = simulation::loadRobotFromUrdf(
+          resolved_path, resource_root_dir_, mesh_root_dir_);
       model = new simulation::RobotModel(base_model_obj);
     } catch (const std::exception &e) {
       RCLCPP_ERROR(this->get_logger(), "[Error] Robot setup failed: %s",
@@ -1464,6 +1777,7 @@ public:
                 resolved_path.c_str(), arm->getTotalDOF());
 
     std::shared_ptr<SelectedJointKinematicChain> gng_chain;
+    JointSelectionSpec gng_selection_spec;
     if (!combined_include_joint_names.empty() ||
         !combined_exclude_joint_names.empty()) {
       auto selection = buildJointSelectionSpec(
@@ -1479,6 +1793,10 @@ public:
                     declared_dof_sum, selection.selected_dof);
       }
       gng_dimension_ = selection.selected_dof;
+      gng_selection_spec = selection;
+      RCLCPP_INFO(this->get_logger(),
+                  "[GNG] Selected joints for learning: %s",
+                  joinCommaSeparated(selection.selected_joint_names).c_str());
       gng_chain = std::make_shared<SelectedJointKinematicChain>(arm.get(),
                                                                 std::move(selection));
       if (!combined_include_joint_names.empty()) {
@@ -1493,27 +1811,30 @@ public:
                   "[GNG] Selected learning DOF: %d", gng_dimension_);
     } else {
       gng_dimension_ = arm->getTotalDOF();
+      auto identity_selection = buildIdentityJointSelectionSpec(*arm);
+      gng_selection_spec = identity_selection;
+      gng_chain = std::make_shared<SelectedJointKinematicChain>(
+          arm.get(), std::move(identity_selection));
       RCLCPP_INFO(this->get_logger(),
                   "[GNG] No joint filter applied. Using full DOF: %d",
                   gng_dimension_);
     }
 
+    std::shared_ptr<kinematics::KinematicChain> gng_learning_chain =
+        std::make_shared<TcpThresholdAcceptedSampleKinematicChain>(
+            arm.get(), std::move(gng_selection_spec), tcp_threshold_);
+
     if (std::getenv("GNG_DEBUG_FK_SPAN") != nullptr) {
       RCLCPP_INFO(this->get_logger(),
                   "[Debug] Sampling a few FK points to verify workspace span...");
       for (int sample_idx = 0; sample_idx < 5; ++sample_idx) {
-        std::vector<double> q = gng_chain ? gng_chain->sampleRandomJointValues()
-                                          : arm->sampleRandomJointValues();
+        std::vector<double> q = gng_learning_chain->sampleRandomJointValues();
         std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
             positions;
         std::vector<Eigen::Quaterniond,
                     Eigen::aligned_allocator<Eigen::Quaterniond>>
             orientations;
-        if (gng_chain) {
-          gng_chain->forwardKinematicsAt(q, positions, orientations);
-        } else {
-          arm->forwardKinematicsAt(q, positions, orientations);
-        }
+        gng_learning_chain->forwardKinematicsAt(q, positions, orientations);
         Eigen::Vector3d eef = positions.empty() ? Eigen::Vector3d::Zero()
                                                 : positions.back();
         RCLCPP_INFO(this->get_logger(),
@@ -1716,9 +2037,7 @@ public:
       }
     }
 
-    kinematics::KinematicChain *gng_chain_ptr =
-        gng_chain ? static_cast<kinematics::KinematicChain *>(gng_chain.get())
-                  : arm.get();
+    kinematics::KinematicChain *gng_chain_ptr = gng_learning_chain.get();
 
     GNG2 gng(gng_dimension_, 3, gng_chain_ptr);
     gng.setCoordLayerCount(static_cast<int>(arm->getArmCount()));
@@ -1750,6 +2069,13 @@ public:
 
     // Define standard file paths
     std::string gng_file_path = (output_dir / gng_model_filename_).string();
+    RCLCPP_INFO(this->get_logger(),
+                "[SavePlan] output_dir=%s", output_dir.string().c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[SavePlan] gng_file_path=%s", gng_file_path.c_str());
+    RCLCPP_INFO(this->get_logger(),
+                "[SavePlan] stats_log_path=%s",
+                (output_dir / (experiment_id_ + "_distance_stats.dat")).string().c_str());
 
     // 4. Training Steps
     if (vlut_only_) {
@@ -1769,6 +2095,8 @@ public:
       RCLCPP_INFO(this->get_logger(), "[Step 1] Initial Exploration...");
       gng.setCollisionAware(false);
       gng.gngTrainOnTheFly(gng_params_.max_iterations);
+      pruneNodesOutsideTcpThreshold(gng, gng_chain_ptr, tcp_threshold_,
+                                    "after step 1", this->get_logger());
 
       if (!skip_collision_checks_) {
         RCLCPP_INFO(this->get_logger(), "[Step 2] Intermediate Filter...");
@@ -1782,6 +2110,8 @@ public:
                   "[Step 3] Refinement (Self-Collision Aware)...");
       gng.setCollisionAware(!skip_collision_checks_);
       gng.gngTrainOnTheFly(gng_params_.refine_iterations);
+      pruneNodesOutsideTcpThreshold(gng, gng_chain_ptr, tcp_threshold_,
+                                    "after step 3", this->get_logger());
 
       if (!skip_collision_checks_) {
         RCLCPP_INFO(this->get_logger(), "[Step 4] Final Verification...");
@@ -1790,6 +2120,8 @@ public:
         RCLCPP_INFO(this->get_logger(),
                     "[Step 4] Final Verification skipped (collision checks disabled)");
       }
+      pruneNodesOutsideTcpThreshold(gng, gng_chain_ptr, tcp_threshold_,
+                                    "before coord edges", this->get_logger());
       gng.refresh_coord_weights();
 
       RCLCPP_INFO(this->get_logger(),
@@ -1959,6 +2291,8 @@ public:
     // Save VLUT
 #ifdef USE_FCL
     std::string vlut_file_path = (output_dir_path / vlut_filename_).string();
+    RCLCPP_INFO(this->get_logger(),
+                "[SavePlan] vlut_file_path=%s", vlut_file_path.c_str());
     std::ofstream ofs(vlut_file_path, std::ios::binary);
     if (ofs) {
       // --- Add Self-Describing Header ---
@@ -2007,6 +2341,8 @@ private:
   std::string experiment_id_;
   std::string data_directory_;
   std::string robot_urdf_path_;
+  std::string resource_root_dir_;
+  std::string mesh_root_dir_;
   std::string gng_model_filename_;
   std::string vlut_filename_;
   double ground_z_threshold_;
@@ -2045,6 +2381,7 @@ private:
   bool generate_initial_collision_approval_only_ = false;
   bool vlut_only_ = false;
   bool use_voxel_collision_ = false;
+  TcpThresholdConfig tcp_threshold_;
   simulation::VoxelBallCollisionConfig collision_voxel_ball_config_;
 
   GNG::GngParameters gng_params_;

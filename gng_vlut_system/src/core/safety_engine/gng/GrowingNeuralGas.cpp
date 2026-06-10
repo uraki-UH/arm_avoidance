@@ -1523,6 +1523,10 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
         wa.setZero(angle_dimension);
       else
         wa.setZero();
+      kinematic_chain_->sampleRandomJointValues(random_joint_buffer_);
+      for (int j = 0; j < angle_dimension; ++j) {
+        wa(j) = static_cast<typename T_angle::Scalar>(random_joint_buffer_[j]);
+      }
       add_node(wa);
     }
   }

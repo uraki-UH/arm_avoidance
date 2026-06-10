@@ -131,6 +131,14 @@ export interface LayerSettings {
     showNodes: boolean;
     showEdges: boolean;
     showClusters: boolean;
+    visibleLabels?: {
+        0: boolean;
+        1: boolean;
+        2: boolean;
+        3: boolean;
+        4: boolean;
+        5: boolean;
+    };
     showNormals?: boolean;
     showVelocity?: boolean;
     showCovarianceEllipsoids?: boolean;
@@ -151,6 +159,7 @@ export interface LayerSettings {
 export interface RobotSettings {
     visible: boolean;
     color: string;
+    useUrdfColors?: boolean;
     showVisual: boolean;
     showCollision: boolean;
     collisionColor: string;
@@ -320,7 +329,7 @@ export const LAYER_COLORS = [
 ];
 
 export const LAYER_LABELS = [
-    "default", "safe", "collision", "danger", "unused", "other"
+    "DEFAULT", "SAFE_TERRAIN", "WALL", "UNKNOWN_OBJECT", "HUMAN", "CAR"
 ];
 
 export const STATIC_GNG_DEFAULTS = {

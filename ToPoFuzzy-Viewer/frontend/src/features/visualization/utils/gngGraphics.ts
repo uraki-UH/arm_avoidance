@@ -80,7 +80,7 @@ export function updateEdgeInstances(
     if (!mesh) return;
     const safeEdgeWidth = Number.isFinite(edgeWidth)
         ? Math.max(0.0005, Math.min(edgeWidth, 0.02))
-        : 0.007;
+        : 0.003;
     const edgePairCount = Math.floor(edges.length / 2);
     mesh.count = edgePairCount;
 

@@ -63,7 +63,7 @@ def launch_setup(context, *args, **kwargs):
     # --- YAMLから設定を自動抽出するロジック ---
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
     robot_name = robot_name_default
-    yaml_robot_description_file = ""
+    yaml_urdf_path = ""
     
     if params_file and os.path.exists(params_file):
         try:
@@ -95,9 +95,9 @@ def launch_setup(context, *args, **kwargs):
                         break
 
                 if isinstance(root_params, dict):
-                    candidate_robot_description = root_params.get('robot_description_file', root_params.get('robot_urdf_path', ''))
+                    candidate_robot_description = root_params.get('urdf_path', '')
                     if candidate_robot_description:
-                        yaml_robot_description_file = str(candidate_robot_description).strip()
+                        yaml_urdf_path = str(candidate_robot_description).strip()
         except Exception as e:
             print(f"Warning: Failed to parse YAML for robot_name: {e}")
 
@@ -108,15 +108,15 @@ def launch_setup(context, *args, **kwargs):
     if user_robot_name and user_robot_name != robot_name_default:
         robot_name = user_robot_name
 
-    robot_description_raw = LaunchConfiguration("robot_description_file").perform(context)
-    if not robot_description_raw and yaml_robot_description_file:
-        robot_description_raw = yaml_robot_description_file
-    robot_urdf = resolve_robot_description_path(pkg_share, robot_name, robot_description_raw)
+    urdf_path = LaunchConfiguration("urdf_path").perform(context)
+    if not urdf_path and yaml_urdf_path:
+        urdf_path = yaml_urdf_path
+    robot_urdf = resolve_robot_description_path(pkg_share, robot_name, urdf_path)
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     node_params = {}
     if robot_urdf:
-        node_params["robot_urdf_path"] = robot_urdf
+        node_params["urdf_path"] = robot_urdf
     
     # コマンドライン引数を辞書に追加（明示的に指定された場合のみ、適切な型でYAMLを上書きするようにする）
     def add_if_not_empty(name, config_name, type_func=None):
@@ -167,7 +167,7 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
                 "robot_name": robot_name,
-                "robot_description_file": robot_urdf,
+                "urdf_path": robot_urdf,
                 "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
             }.items()
         ),
@@ -193,7 +193,7 @@ def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("marker_frame_id", default_value="world"),

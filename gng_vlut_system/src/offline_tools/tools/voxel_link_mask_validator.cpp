@@ -82,13 +82,13 @@ public:
                                                 std::vector<std::string>{});
     declare_parameter<int>("max_print_voxels_per_link", 8);
     declare_parameter<std::string>("dump_path", "");
-    declare_parameter("voxel_indexing.x_shift",
+    declare_parameter("voxel_idx_shift.x_shift",
                       ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
-    declare_parameter("voxel_indexing.y_shift",
+    declare_parameter("voxel_idx_shift.y_shift",
                       ::robot_sim::common::Constants::DEFAULT_Y_SHIFT);
-    declare_parameter("voxel_indexing.z_shift",
+    declare_parameter("voxel_idx_shift.z_shift",
                       ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
-    declare_parameter("voxel_indexing.offset",
+    declare_parameter("voxel_idx_shift.offset",
                       ::robot_sim::common::Constants::DEFAULT_OFFSET);
   }
 
@@ -181,10 +181,10 @@ private:
     auto* grid = manager_.getIndexGrid();
     grid->setVoxelSize(get_parameter("voxel_size").as_double());
     grid->setIndexingParams(
-        get_parameter("voxel_indexing.x_shift").as_int(),
-        get_parameter("voxel_indexing.y_shift").as_int(),
-        get_parameter("voxel_indexing.z_shift").as_int(),
-        get_parameter("voxel_indexing.offset").as_int());
+        get_parameter("voxel_idx_shift.x_shift").as_int(),
+        get_parameter("voxel_idx_shift.y_shift").as_int(),
+        get_parameter("voxel_idx_shift.z_shift").as_int(),
+        get_parameter("voxel_idx_shift.offset").as_int());
 
     const double inflation = get_parameter("self_recognition.inflation").as_double();
     voxel_data_ = simulation::RobotVoxelizer::build(

@@ -55,9 +55,9 @@ def _setup_launch(context, *args, **kwargs):
     if not robot_name:
         robot_name = f"{source_robot_name}_sphere"
 
-    robot_description_file = LaunchConfiguration("robot_description_file").perform(context).strip()
-    if not robot_description_file:
-        robot_description_file = str(root_params.get("robot_description_file", root_params.get("robot_urdf_path", "")))
+    urdf_path = LaunchConfiguration("urdf_path").perform(context).strip()
+    if not urdf_path:
+        urdf_path = str(root_params.get("urdf_path", ""))
 
     resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip()
     if not resource_root_dir:
@@ -90,7 +90,7 @@ def _setup_launch(context, *args, **kwargs):
 
     node_parameters = {
         "robot_name": robot_name,
-        "robot_description_file": robot_description_file,
+        "urdf_path": urdf_path,
         "resource_root_dir": resource_root_dir,
         "mesh_root_dir": mesh_root_dir,
         "joint_state_topic": joint_state_topic,
@@ -122,7 +122,7 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("params_file", default_value=""),
             DeclareLaunchArgument("robot_name", default_value=""),
-            DeclareLaunchArgument("robot_description_file", default_value=""),
+            DeclareLaunchArgument("urdf_path", default_value=""),
             DeclareLaunchArgument("resource_root_dir", default_value=""),
             DeclareLaunchArgument("mesh_root_dir", default_value=""),
             DeclareLaunchArgument("joint_state_topic", default_value=""),

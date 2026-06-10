@@ -129,28 +129,45 @@ namespace converter {
     }
 }
 
-std::filesystem::path findLocalTopoarmDescriptionShare() {
-    const std::vector<std::filesystem::path> bases = {
-#ifdef PROJECT_SOURCE_DIR
-        std::filesystem::path(PROJECT_SOURCE_DIR),
-        std::filesystem::path(PROJECT_SOURCE_DIR).parent_path(),
-        std::filesystem::path(PROJECT_SOURCE_DIR).parent_path().parent_path(),
-#endif
-        std::filesystem::current_path(),
-        std::filesystem::current_path().parent_path(),
+std::filesystem::path findLocalPackageShare(const std::string& pkg_name) {
+    std::vector<std::filesystem::path> bases;
+    auto add_base = [&](std::filesystem::path base) {
+        if (base.empty()) return;
+        if (std::find(bases.begin(), bases.end(), base) == bases.end()) {
+            bases.push_back(std::move(base));
+        }
     };
 
-    const std::vector<std::filesystem::path> rel_candidates = {
-        std::filesystem::path("ToPoDualArm") / "topoarm_description",
-        std::filesystem::path("topoarm_description"),
-    };
+#ifdef PROJECT_SOURCE_DIR
+    {
+        std::filesystem::path cur(PROJECT_SOURCE_DIR);
+        for (int i = 0; i < 5 && !cur.empty(); ++i) {
+            add_base(cur);
+            const auto parent = cur.parent_path();
+            if (parent == cur) break;
+            cur = parent;
+        }
+    }
+#endif
+    {
+        std::filesystem::path cur = std::filesystem::current_path();
+        for (int i = 0; i < 5 && !cur.empty(); ++i) {
+            add_base(cur);
+            const auto parent = cur.parent_path();
+            if (parent == cur) break;
+            cur = parent;
+        }
+    }
 
     for (const auto& base : bases) {
-        if (base.empty()) continue;
-        for (const auto& rel : rel_candidates) {
-            const auto candidate = base / rel;
-            if (std::filesystem::exists(candidate / "meshes") &&
-                std::filesystem::exists(candidate / "urdf")) {
+        std::error_code ec;
+        if (!std::filesystem::exists(base, ec) || ec) continue;
+        std::filesystem::directory_options opts = std::filesystem::directory_options::skip_permission_denied;
+        for (std::filesystem::recursive_directory_iterator it(base, opts, ec), end; it != end && !ec; it.increment(ec)) {
+            if (!it->is_directory()) continue;
+            if (it->path().filename() != pkg_name) continue;
+            const auto candidate = it->path();
+            if (std::filesystem::exists(candidate / "meshes", ec) && !ec) {
                 return candidate;
             }
         }
@@ -323,27 +340,37 @@ private:
 
     class MeshServer {
     public:
-        void handle(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
+    void handle(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
             std::string url(req->getUrl()); res->writeHeader("Access-Control-Allow-Origin", "*");
             if (url.rfind("/meshes/", 0) == 0) {
                 std::string sub = url.substr(8); size_t slash = sub.find('/');
                 if (slash != std::string::npos) {
                     const std::string pkg = sub.substr(0, slash);
                     const std::string rel = sub.substr(slash + 1);
-                    std::filesystem::path path;
-                    try {
-                        path = std::filesystem::path(ament_index_cpp::get_package_share_directory(pkg)) / rel;
-                    } catch (...) {
-                        if (pkg == "topoarm_description") {
-                            const auto fallback = findLocalTopoarmDescriptionShare();
-                            if (!fallback.empty()) {
-                                path = fallback / rel;
-                            }
+                    auto tryServe = [&](const std::filesystem::path& root, const std::string& relative) -> bool {
+                        if (root.empty()) {
+                            return false;
                         }
-                    }
-                    if (!path.empty() && std::filesystem::exists(path) && !std::filesystem::is_directory(path)) {
+                        const std::filesystem::path path = root / relative;
+                        if (!std::filesystem::exists(path) || std::filesystem::is_directory(path)) {
+                            return false;
+                        }
                         std::ifstream f(path, std::ios::binary);
                         res->end(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()));
+                        return true;
+                    };
+
+                    std::filesystem::path share_root;
+                    try {
+                        share_root = ament_index_cpp::get_package_share_directory(pkg);
+                    } catch (...) {}
+
+                    if (tryServe(share_root, rel) || tryServe(share_root, std::string("meshes/") + rel)) {
+                        return;
+                    }
+
+                    const auto fallback = findLocalPackageShare(pkg);
+                    if (tryServe(fallback, rel) || tryServe(fallback, std::string("meshes/") + rel)) {
                         return;
                     }
                 }

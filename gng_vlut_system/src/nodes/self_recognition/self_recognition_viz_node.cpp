@@ -246,7 +246,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 : Node("self_recognition_viz_node", options) {
     
     // パラメータ：計算に必要な最小限の設定
-    declare_parameter("robot_urdf_path", "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
+    declare_parameter("urdf_path", "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     declare_parameter("joint_topic", "joint_states");
     declare_parameter("robot.voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
@@ -270,10 +270,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("robot.inflation", 0.0);
  
     // ボクセル展開パラメータの宣言
-    declare_parameter("voxel_indexing.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
-    declare_parameter("voxel_indexing.y_shift", ::robot_sim::common::Constants::DEFAULT_Y_SHIFT);
-    declare_parameter("voxel_indexing.z_shift", ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
-    declare_parameter("voxel_indexing.offset", ::robot_sim::common::Constants::DEFAULT_OFFSET);
+    declare_parameter("voxel_idx_shift.x_shift", ::robot_sim::common::Constants::DEFAULT_X_SHIFT);
+    declare_parameter("voxel_idx_shift.y_shift", ::robot_sim::common::Constants::DEFAULT_Y_SHIFT);
+    declare_parameter("voxel_idx_shift.z_shift", ::robot_sim::common::Constants::DEFAULT_Z_SHIFT);
+    declare_parameter("voxel_idx_shift.offset", ::robot_sim::common::Constants::DEFAULT_OFFSET);
     declare_parameter("target_frame_id", ""); // 空ならロボットのベースを使用
     declare_parameter("self_recognition.target_frame_id", "");
     declare_parameter("self_recognition.marker_frame_id", "");
@@ -282,7 +282,7 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("self_output_topic", "");
     declare_parameter("self_recognition.self_output_topic", "");
 
-    const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
+    const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     if (urdf_path.empty()) {
         RCLCPP_ERROR(get_logger(), "Failed to resolve URDF path: %s", urdf_rel.c_str());
@@ -414,10 +414,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     auto* grid = recognition_manager_->getIndexGrid();
     grid->setVoxelSize(voxel_size_param);
     grid->setIndexingParams(
-        get_parameter("voxel_indexing.x_shift").as_int(),
-        get_parameter("voxel_indexing.y_shift").as_int(),
-        get_parameter("voxel_indexing.z_shift").as_int(),
-        get_parameter("voxel_indexing.offset").as_int());
+        get_parameter("voxel_idx_shift.x_shift").as_int(),
+        get_parameter("voxel_idx_shift.y_shift").as_int(),
+        get_parameter("voxel_idx_shift.z_shift").as_int(),
+        get_parameter("voxel_idx_shift.offset").as_int());
 
     double hz = get_parameter("self_recognition.update_hz").as_double();
     if (hz <= 0.0) {
@@ -556,10 +556,10 @@ void SelfRecognitionVizNode::updateAndPublish() {
         mask_msg->header.frame_id = target_frame; 
         mask_msg->voxel_size = static_cast<float>(recognition_manager_->getVoxelSize());
         
-        mask_msg->x_shift = get_parameter("voxel_indexing.x_shift").as_int();
-        mask_msg->y_shift = get_parameter("voxel_indexing.y_shift").as_int();
-        mask_msg->z_shift = get_parameter("voxel_indexing.z_shift").as_int();
-        mask_msg->offset = get_parameter("voxel_indexing.offset").as_int();
+        mask_msg->x_shift = get_parameter("voxel_idx_shift.x_shift").as_int();
+        mask_msg->y_shift = get_parameter("voxel_idx_shift.y_shift").as_int();
+        mask_msg->z_shift = get_parameter("voxel_idx_shift.z_shift").as_int();
+        mask_msg->offset = get_parameter("voxel_idx_shift.offset").as_int();
         
         // 計算前にインデックスパラメータを同期
         recognition_manager_->getIndexGrid()->setIndexingParams(

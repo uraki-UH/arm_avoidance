@@ -30,7 +30,7 @@
   <depend>ament_index_cpp</depend>
   <depend>rclcpp_components</depend>
   <depend>tf2</depend>
-  <depend>voxel_indexing_common</depend>
+  <depend>voxel_idx</depend>
   <depend>grasping_system</depend>
   <depend>gng_control_msgs</depend>
   <exec_depend>launch</exec_depend>

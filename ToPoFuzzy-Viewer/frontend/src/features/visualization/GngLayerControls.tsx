@@ -1,5 +1,6 @@
 import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
+import { getStatusLabel, LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 
 export interface GngLayerState {
     visible: boolean;
@@ -12,14 +13,6 @@ export interface GngLayerState {
     normalArrowColor: string;
     nodeScale: number;
     edgeWidth: number;
-    visibleLabels: {
-        0: boolean;
-        1: boolean;
-        2: boolean;
-        3: boolean;
-        4: boolean;
-        5: boolean;
-    };
 }
 
 interface GngLayerControlsProps {
@@ -30,12 +23,11 @@ interface GngLayerControlsProps {
     onRemove: () => void;
     onOpenTransform?: () => void;
     onOpenColorSettings?: () => void;
+    onOpenLabelSettings?: () => void;
     nodeColorPreview?: string;
     edgeColorPreview?: string;
     hasTf?: boolean;
 }
-
-import { getStatusLabel, LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 
 export function GngLayerControls({
     tag,
@@ -45,10 +37,15 @@ export function GngLayerControls({
     onRemove,
     onOpenTransform,
     onOpenColorSettings,
+    onOpenLabelSettings,
     nodeColorPreview,
     edgeColorPreview,
     hasTf = false,
 }: GngLayerControlsProps) {
+    const visibleLabelCount = settings.visibleLabels
+        ? Object.values(settings.visibleLabels).filter(Boolean).length
+        : 6;
+
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
             <LayerItem
@@ -118,11 +115,25 @@ export function GngLayerControls({
                             onToggle={() => onUpdate({ showVelocity: !(settings.showVelocity ?? false) })}
                             className="col-span-3 w-[90%] justify-self-start"
                         />
+
+                        {onOpenLabelSettings && (
+                            <button
+                                onClick={onOpenLabelSettings}
+                                title="Graph labels"
+                                className="entity-btn col-span-4 min-w-0 flex items-center justify-between gap-2 px-2 py-1 text-[10px]"
+                            >
+                                <span className="truncate">Labels</span>
+                                <span className="rounded border border-white/10 bg-black/20 px-1.5 py-0 font-mono text-[10px] text-[var(--accent-strong)]">
+                                    {visibleLabelCount}/6
+                                </span>
+                            </button>
+                        )}
+
                         {onOpenColorSettings && (
                             <button
                                 onClick={onOpenColorSettings}
                                 title="Graph colors"
-                                className="entity-btn col-span-2 min-w-0 flex-col items-stretch justify-center gap-0.5 overflow-hidden px-1 py-0.5 text-[10px] leading-none"
+                                className="entity-btn col-span-4 min-w-0 flex-col items-stretch justify-center gap-0.5 overflow-hidden px-1 py-0.5 text-[10px] leading-none"
                             >
                                 <span className="flex items-center justify-between gap-1 rounded border border-white/10 bg-black/20 px-1.5 py-0">
                                     <span className="text-[9px] font-medium leading-none">Node</span>

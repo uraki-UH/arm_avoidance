@@ -11,6 +11,7 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
+find_package(gng_update_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Activity,
     Box,
@@ -26,6 +26,7 @@ import { GenericTransformPanel } from '../features/manipulation/GenericTransform
 // removed
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
+import { GngLabelModal } from '../features/visualization/GngLabelModal';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
 import { RosbagPlayer } from '../features/io/RosbagPlayer';
@@ -187,6 +188,7 @@ const ColorActionButton: React.FC<{
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
     const isLayerActionDisabled = props.isEditMode;
+    const [labelContext, setLabelContext] = useState<{ tag: string; title: string } | null>(null);
 
     const layersTab = (
         <div className="space-y-3">
@@ -269,6 +271,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     showNodes: true,
                                     showEdges: data.mode !== 'static',
                                     showClusters: false,
+                                    visibleLabels: {
+                                        0: true,
+                                        1: true,
+                                        2: true,
+                                        3: true,
+                                        4: true,
+                                        5: true,
+                                    },
                                     showNormals: false,
                                     showVelocity: false,
                                     showCovarianceEllipsoids: false,
@@ -282,13 +292,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     emissiveIntensity: data.mode === 'static' ? 0.10 : 0.14,
                                 }}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
-                                onRemove={() => props.onRemoveGngLayer(tag)}
-                                hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
-                                onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
-                                onOpenColorSettings={() => props.onOpenColorSettings('graph', tag, `Graph colors: ${tag}`)}
-                                nodeColorPreview={props.layerSettings[tag]?.nodeColor || (data.mode === 'static' ? '#1f8f3a' : '#7c8c66')}
-                                edgeColorPreview={props.layerSettings[tag]?.edgeColor || '#08d408'}
-                            />
+                            onRemove={() => props.onRemoveGngLayer(tag)}
+                            hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
+                            onOpenTransform={() => props.onOpenTransform('layer', tag, `Graph: ${tag}`)}
+                            onOpenLabelSettings={() => setLabelContext({ tag, title: `Graph labels: ${tag}` })}
+                            onOpenColorSettings={() => props.onOpenColorSettings('graph', tag, `Graph colors: ${tag}`)}
+                            nodeColorPreview={props.layerSettings[tag]?.nodeColor || (data.mode === 'static' ? '#1f8f3a' : '#7c8c66')}
+                            edgeColorPreview={props.layerSettings[tag]?.edgeColor || '#08d408'}
+                        />
                         ))}
 
                         {/* Unified Entity Layers */}
@@ -437,29 +448,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     />
                 </div>
             </CollapsibleSection>
-
-            {hasGngLayer && (
-                <CollapsibleSection title="Topology Display" icon={<Box size={16} />} defaultOpen={false}>
-                    <div className="surface-muted space-y-4 p-3">
-                        <ControlSlider
-                            label="Node Size"
-                            value={props.gngLayer.nodeScale}
-                            min={0.005}
-                            max={0.1}
-                            step={0.001}
-                            onChange={(val) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, nodeScale: val }))}
-                        />
-                        <ControlSlider
-                            label="Edge Width"
-                            value={props.gngLayer.edgeWidth}
-                            min={0.001}
-                            max={0.05}
-                            step={0.001}
-                            onChange={(val) => props.setGngLayer((prev: GngLayerState) => ({ ...prev, edgeWidth: val }))}
-                        />
-                    </div>
-                </CollapsibleSection>
-            )}
 
             <CollapsibleSection title="Heatmap" icon={<Eye size={16} />} defaultOpen={false}>
                 <HeatmapControls
@@ -698,13 +686,32 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     );
 
     return (
-        <Tabs
-            tabs={[
-                { id: 'layers', label: 'Data', icon: <Layers size={14} />, content: layersTab },
-                { id: 'display', label: 'View', icon: <Eye size={14} />, content: displayTab },
-                { id: 'edit', label: 'Edit', icon: <Move size={14} />, content: editTab },
-                { id: 'analysis', label: 'Analyze', icon: <Activity size={14} />, content: analysisTab },
-            ]}
-        />
+        <>
+            <Tabs
+                tabs={[
+                    { id: 'layers', label: 'Data', icon: <Layers size={14} />, content: layersTab },
+                    { id: 'display', label: 'View', icon: <Eye size={14} />, content: displayTab },
+                    { id: 'edit', label: 'Edit', icon: <Move size={14} />, content: editTab },
+                    { id: 'analysis', label: 'Analyze', icon: <Activity size={14} />, content: analysisTab },
+                ]}
+            />
+
+            {labelContext && props.graphData[labelContext.tag] && props.layerSettings[labelContext.tag] && (
+                <GngLabelModal
+                    open={true}
+                    title={labelContext.title}
+                    visibleLabels={props.layerSettings[labelContext.tag].visibleLabels || {
+                        0: true,
+                        1: true,
+                        2: true,
+                        3: true,
+                        4: true,
+                        5: true,
+                    }}
+                    onClose={() => setLabelContext(null)}
+                    onUpdate={(updates) => props.onUpdateLayerSettings(labelContext.tag, updates)}
+                />
+            )}
+        </>
     );
 };

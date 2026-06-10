@@ -67,7 +67,7 @@ def launch_setup(context, *args, **kwargs):
     # 明示的に指定された項目のみを上書き対象とする
     viewer_params = {}
     if robot_desc_default:
-        viewer_params["robot_description_file"] = robot_desc_default
+        viewer_params["urdf_path"] = robot_desc_default
     if resource_root:
         viewer_params["resource_root_dir"] = resource_root
     if mesh_root:

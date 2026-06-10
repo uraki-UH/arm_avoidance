@@ -68,7 +68,7 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
-    robot_urdf_raw = LaunchConfiguration("robot_description_file").perform(context)
+    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context)
     robot_urdf = resolve_package_uri(robot_urdf_raw) if robot_urdf_raw else robot_desc_default
 
     xacro_cmd = ["xacro ", robot_urdf]
@@ -108,7 +108,7 @@ def launch_setup(context, *args, **kwargs):
             name="robot_description_player",
             namespace=robot_name,
             parameters=[{
-                "robot_description_file": robot_urdf,
+                "urdf_path": robot_urdf,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
             }]
@@ -120,7 +120,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
-        DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
         OpaqueFunction(function=launch_setup)
     ])

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 #include <map>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -21,6 +22,56 @@ using json = nlohmann::json;
 
 namespace robot_sim::bridge {
 
+namespace {
+
+std::string detectLocalMeshPackageName(const std::string &source_path) {
+    std::filesystem::path current(source_path);
+    if (current.empty()) {
+        return "";
+    }
+
+    current = std::filesystem::absolute(current).parent_path();
+    while (!current.empty()) {
+        if (std::filesystem::exists(current / "meshes")) {
+            return current.filename().string();
+        }
+        const auto parent = current.parent_path();
+        if (parent == current) {
+            break;
+        }
+        current = parent;
+    }
+    return "";
+}
+
+std::string rewriteRelativeMeshUris(const std::string &urdf_text,
+                                    const std::string &package_name) {
+    if (urdf_text.empty() || package_name.empty()) {
+        return urdf_text;
+    }
+
+    std::string rewritten = urdf_text;
+    const std::string prefix = "package://" + package_name + "/";
+
+    const std::string double_quote_key = "filename=\"meshes/";
+    std::size_t pos = 0;
+    while ((pos = rewritten.find(double_quote_key, pos)) != std::string::npos) {
+        rewritten.replace(pos, double_quote_key.size(), "filename=\"" + prefix);
+        pos += prefix.size();
+    }
+
+    const std::string single_quote_key = "filename='meshes/";
+    pos = 0;
+    while ((pos = rewritten.find(single_quote_key, pos)) != std::string::npos) {
+        rewritten.replace(pos, single_quote_key.size(), "filename='" + prefix);
+        pos += prefix.size();
+    }
+
+    return rewritten;
+}
+
+} // namespace
+
 RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options)
 : Node("robot_viewer_bridge_node", options) {
     const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
@@ -32,7 +83,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
     }
 
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
-    const std::string robot_description_file = declare_parameter<std::string>("robot_description_file", default_urdf);
+    const std::string urdf_path = declare_parameter<std::string>("urdf_path", default_urdf);
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
@@ -53,7 +104,7 @@ RobotViewerBridgeNode::RobotViewerBridgeNode(const rclcpp::NodeOptions & options
         }
     }
 
-    const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
+    const std::string resolved_urdf_path = robot_sim::common::resolvePath(urdf_path);
     if (!loadRobotDescription(urdf_content_, resolved_urdf_path)) {
         throw std::runtime_error("Failed to load robot description: " + resolved_urdf_path);
     }
@@ -123,6 +174,7 @@ bool RobotViewerBridgeNode::loadRobotDescription(std::string& out_text, const st
         if (!ifs) return false;
         out_text = std::string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
     }
+    out_text = rewriteRelativeMeshUris(out_text, detectLocalMeshPackageName(source_path));
     return !out_text.empty();
 }
 

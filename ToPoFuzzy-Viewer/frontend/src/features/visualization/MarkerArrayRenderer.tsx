@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { DirectionalArrow } from './utils/DirectionalArrow';
 
 interface MarkerArrayRendererProps {
     tag: string;
@@ -260,10 +261,57 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     );
 }
 
+function ArrowMarker({ marker }: { marker: MarkerMessage }) {
+    const { color } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { position, direction, lengthScale } = useMemo(() => {
+        const pos = marker.pos || [0, 0, 0];
+        const quat = marker.quat || [0, 0, 0, 1];
+        const px = pos[0] ?? 0;
+        const py = pos[1] ?? 0;
+        const pz = pos[2] ?? 0;
+
+        const qx = quat[0] ?? 0;
+        const qy = quat[1] ?? 0;
+        const qz = quat[2] ?? 0;
+        const qw = quat[3] ?? 1;
+
+        const origin: [number, number, number] = [px, py, pz];
+        let dir = new THREE.Vector3(1, 0, 0);
+
+        if ((marker.points || []).length >= 2) {
+            const p0 = marker.points[0];
+            const p1 = marker.points[1];
+            dir = new THREE.Vector3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
+            origin[0] = p0[0];
+            origin[1] = p0[1];
+            origin[2] = p0[2];
+        } else {
+            const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
+            dir.applyQuaternion(quaternion);
+        }
+
+        const scale = Math.max(0.0001, marker.scale?.[0] || 0.15);
+        return { position: origin, direction: [dir.x, dir.y, dir.z] as [number, number, number], lengthScale: scale };
+    }, [marker.pos, marker.quat, marker.points, marker.scale]);
+
+    return (
+        <DirectionalArrow
+            origin={position}
+            direction={direction}
+            lengthScale={lengthScale}
+            color={color.getStyle()}
+            maxLength={Math.max(0.2, lengthScale * 1.5)}
+            shaftWidth={Math.max(0.005, lengthScale * 0.06)}
+        />
+    );
+}
+
 function renderMarker(marker: MarkerMessage) {
     if (isDeleteAll(marker)) return null;
 
     switch (marker.type) {
+    case 'arrow':
+        return <ArrowMarker key={`${marker.ns}:${marker.id}`} marker={marker} />;
     case 'cube':
     case 'sphere':
     case 'cylinder':

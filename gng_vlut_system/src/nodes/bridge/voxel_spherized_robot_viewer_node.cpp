@@ -89,7 +89,7 @@ public:
     }
 
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
-    const std::string robot_description_file = declare_parameter<std::string>("robot_description_file", default_urdf);
+    const std::string urdf_path = declare_parameter<std::string>("urdf_path", default_urdf);
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
@@ -118,7 +118,7 @@ public:
       }
     }
 
-    const std::string resolved_urdf_path = robot_sim::common::resolvePath(robot_description_file);
+    const std::string resolved_urdf_path = robot_sim::common::resolvePath(urdf_path);
     if (!loadRobotDescription(urdf_content_, resolved_urdf_path)) {
       throw std::runtime_error("Failed to load robot description: " + resolved_urdf_path);
     }

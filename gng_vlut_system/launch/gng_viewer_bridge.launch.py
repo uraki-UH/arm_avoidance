@@ -78,7 +78,7 @@ def launch_setup(context, *args, **kwargs):
     exp_id = LaunchConfiguration("id").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
     vlut_path = LaunchConfiguration("vlut_path").perform(context)
-    robot_description_file = LaunchConfiguration("robot_description_file").perform(context)
+    urdf_path = LaunchConfiguration("urdf_path").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     arm_leaf_link_names = LaunchConfiguration("arm_leaf_link_names").perform(context)
     gng_frame_id = LaunchConfiguration("gng_frame_id").perform(context)
@@ -88,12 +88,11 @@ def launch_setup(context, *args, **kwargs):
     topic_name = LaunchConfiguration("topic_name").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
-    robot_description_file = LaunchConfiguration("robot_description_file").perform(context)
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
     yaml_robot_name = "ToPoDualArm"
-    yaml_robot_description_file = ""
+    yaml_urdf_path = ""
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"
     yaml_resource_root_dir = ""
@@ -136,12 +135,9 @@ def launch_setup(context, *args, **kwargs):
                 vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
                 yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
                 yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
-                candidate_robot_description = root_ros_params.get(
-                    'robot_description_file',
-                    root_ros_params.get('robot_urdf_path', yaml_robot_description_file),
-                )
+                candidate_robot_description = root_ros_params.get('urdf_path', '')
                 if candidate_robot_description is not None:
-                    yaml_robot_description_file = str(candidate_robot_description).strip()
+                    yaml_urdf_path = str(candidate_robot_description).strip()
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
@@ -186,12 +182,12 @@ def launch_setup(context, *args, **kwargs):
         resource_root = os.path.join(pkg_share, "urdf")
         mesh_root = os.path.join(resource_root, "meshes", "topoarm")
 
-    if not robot_description_file and yaml_robot_description_file:
-        robot_description_file = yaml_robot_description_file
-    if not robot_description_file:
-        robot_description_file = robot_desc_default
+    if not urdf_path and yaml_urdf_path:
+        urdf_path = yaml_urdf_path
+    if not urdf_path:
+        urdf_path = robot_desc_default
     else:
-        robot_description_file = resolve_package_uri(robot_description_file)
+        urdf_path = resolve_package_uri(urdf_path)
 
     if yaml_resource_root_dir:
         resource_root = yaml_resource_root_dir
@@ -215,8 +211,8 @@ def launch_setup(context, *args, **kwargs):
     common_params = {}
     if robot_name:
         common_params["robot_name"] = robot_name
-    if robot_description_file:
-        common_params["robot_description_file"] = robot_description_file
+    if urdf_path:
+        common_params["urdf_path"] = urdf_path
     if arm_leaf_link_names:
         common_params["robot.arm_leaf_link_names"] = arm_leaf_link_names
     
@@ -264,7 +260,7 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": enable_joint_state_publisher,
-                "robot_description_file": robot_description_file,
+                "urdf_path": urdf_path,
             }.items()
         ),
 
@@ -306,7 +302,7 @@ def launch_setup(context, *args, **kwargs):
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
                     "danger_voxels_topic": "danger_voxels",
-                    "robot_description_file": robot_description_file,
+                    "urdf_path": urdf_path,
                 },
                 # 座標系などは指定がある場合のみ上書き
                 {k: v for k, v in {
@@ -332,12 +328,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("dir", default_value="gng_results"),
-        DeclareLaunchArgument("id", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("id", default_value=""),
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
-        DeclareLaunchArgument("robot_description_file", default_value=""),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value=""),
         DeclareLaunchArgument("arm_leaf_link_names", default_value=""),
         DeclareLaunchArgument("gng_frame_id", default_value=""),

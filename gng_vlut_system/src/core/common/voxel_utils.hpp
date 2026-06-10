@@ -1,7 +1,7 @@
 #pragma once
 
 #include "safety_engine/indexing/index_voxel_grid.hpp"
-#include "voxel_indexing.hpp"
+#include "voxel_idx.hpp"
 #include <Eigen/Dense>
 #include <vector>
 #include <algorithm>
@@ -17,7 +17,7 @@ class VoxelUtils {
 public:
   static Eigen::Vector3i worldToVoxel(const Eigen::Vector3f &pos,
                                       float voxel_size) {
-    const auto idx = voxel_indexing_common::VoxelIndexingSchema::worldToIndex(
+    const auto idx = voxel_idx::VoxelIndexingSchema::worldToIndex(
         static_cast<double>(pos.x()),
         static_cast<double>(pos.y()),
         static_cast<double>(pos.z()),
@@ -28,8 +28,8 @@ public:
   static Eigen::Vector3f voxelToWorld(const Eigen::Vector3i &idx,
                                       float voxel_size) {
     const auto center =
-        voxel_indexing_common::VoxelIndexingSchema::indexToWorldCenter(
-            voxel_indexing_common::VoxelIndex{idx.x(), idx.y(), idx.z()},
+        voxel_idx::VoxelIndexingSchema::indexToWorldCenter(
+            voxel_idx::VoxelIndex{idx.x(), idx.y(), idx.z()},
             static_cast<double>(voxel_size));
     return Eigen::Vector3f(
         static_cast<float>(center[0]),

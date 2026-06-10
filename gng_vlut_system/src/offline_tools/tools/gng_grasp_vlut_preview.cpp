@@ -1,4 +1,4 @@
-#include <grasping_system/rigid/rigid_grasp_vlut_builder.hpp>
+#include <rigid/rigid_grasp_vlut_builder.hpp>
 
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 

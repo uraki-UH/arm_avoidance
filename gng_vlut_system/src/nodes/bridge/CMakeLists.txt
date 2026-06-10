@@ -39,10 +39,10 @@ rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::
 add_executable(robot_viewer_bridge_node robot_viewer_bridge_node_main.cpp)
 target_link_libraries(robot_viewer_bridge_node robot_viewer_bridge_node_component)
 
-# 6. Self-Recognition Voxel Bridge
-add_executable(self_recognition_voxel_bridge_node self_recognition_voxel_bridge_node.cpp)
-target_link_libraries(self_recognition_voxel_bridge_node common_lib)
-ament_target_dependencies(self_recognition_voxel_bridge_node rclcpp rclcpp_components std_msgs voxel_msgs)
+# 6. Voxel to VLUT Bridge
+add_executable(voxel_to_vlut_bridge_node voxel_to_vlut_bridge_node.cpp)
+target_link_libraries(voxel_to_vlut_bridge_node common_lib)
+ament_target_dependencies(voxel_to_vlut_bridge_node rclcpp rclcpp_components std_msgs voxel_msgs)
 
 # Installation
 install(TARGETS
@@ -51,7 +51,7 @@ install(TARGETS
     topoarm_udp_bridge
     topofuzzy_bridge_node
     robot_viewer_bridge_node
-    self_recognition_voxel_bridge_node
+    voxel_to_vlut_bridge_node
     DESTINATION lib/${PROJECT_NAME}
 )
 

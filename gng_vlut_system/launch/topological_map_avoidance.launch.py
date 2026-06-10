@@ -32,7 +32,7 @@ def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     params_file = LaunchConfiguration("params_file").perform(context)
     gng_model_path = LaunchConfiguration("gng_model_path").perform(context)
-    robot_urdf = LaunchConfiguration("robot_urdf_path").perform(context)
+    urdf_path = LaunchConfiguration("urdf_path").perform(context)
     topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
     trajectory_topic = LaunchConfiguration("trajectory_topic").perform(context)
     candidate_trajectory_topic = LaunchConfiguration("candidate_trajectory_topic").perform(context)
@@ -57,8 +57,8 @@ def launch_setup(context, *args, **kwargs):
     right_arm_publish_hz = LaunchConfiguration("right_arm_publish_hz").perform(context)
 
     node_params = {}
-    if robot_urdf:
-        node_params["robot_urdf_path"] = robot_urdf
+    if urdf_path:
+        node_params["urdf_path"] = urdf_path
     if gng_model_path:
         node_params["gng_model_path"] = gng_model_path
     if topological_map_topic:
@@ -117,7 +117,7 @@ def launch_setup(context, *args, **kwargs):
                 namespace=robot_name,
                 output="screen",
                 parameters=[{
-                    "robot_urdf_path": robot_urdf or "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro",
+                    "urdf_path": urdf_path or "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro",
                     "root_link": "base_link",
                     "leaf_link": "right_end_effector_link",
                     "publish_hz": safe_float(right_arm_publish_hz, 20.0),
@@ -137,7 +137,7 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("params_file",
                               default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
-        DeclareLaunchArgument("robot_urdf_path",
+        DeclareLaunchArgument("urdf_path",
                               default_value="package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"),
         DeclareLaunchArgument("gng_model_path",
                               default_value=""),

@@ -6,12 +6,14 @@
 
 #include <fuzzrobo/libgng/api.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <unordered_map>
 #include <string>
 #include <vector>
 #include <iomanip>
 #include <sstream>
 
 #include "ais_gng_msgs/msg/topological_map.hpp"
+#include "gng_update_msgs/msg/topological_map_update.hpp"
 #include "ais_gng_msgs/msg/topological_node.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
@@ -36,6 +38,7 @@ class AiSGNGComponent : public rclcpp::Node {
     using PC2 = sensor_msgs::msg::PointCloud2;
 
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
+    rclcpp::Publisher<gng_update_msgs::msg::TopologicalMapUpdate>::SharedPtr topological_map_update_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;
@@ -55,6 +58,8 @@ class AiSGNGComponent : public rclcpp::Node {
     ClusterClassification cluster_classification_;
 
     bool initialized_ = false;
+    bool has_topological_map_snapshot_ = false;
+    std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> last_published_nodes_;
 
    public:
     AiSGNGComponent(const rclcpp::NodeOptions & options);
@@ -64,6 +69,7 @@ class AiSGNGComponent : public rclcpp::Node {
     rcl_interfaces::msg::SetParametersResult param_cb(const std::vector<rclcpp::Parameter> &params);
     void process_clouds(const std::vector<PC2::ConstSharedPtr>& msg);
     void semseg_cb(const PC2::SharedPtr msg);
+    void publishTopologicalMapUpdate(const ais_gng_msgs::msg::TopologicalMap &map_msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
         const std_msgs::msg::Header &msg,

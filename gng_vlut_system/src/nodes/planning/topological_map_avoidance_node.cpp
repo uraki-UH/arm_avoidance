@@ -160,7 +160,7 @@ public:
 
   explicit TopologicalMapAvoidanceNode(const rclcpp::NodeOptions &options)
       : Node("topological_map_avoidance_node", options) {
-    declare_parameter("robot_urdf_path",
+    declare_parameter("urdf_path",
                       "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
     declare_parameter("gng_model_path", "");
     declare_parameter("gng.data_directory", "");
@@ -190,7 +190,7 @@ public:
     declare_parameter("trial_seed", 0);
     declare_parameter("waypoint_tolerance", 0.05);
 
-    const std::string urdf_rel = get_parameter("robot_urdf_path").as_string();
+    const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     if (urdf_path.empty()) {
       throw std::runtime_error("Failed to resolve robot URDF path.");

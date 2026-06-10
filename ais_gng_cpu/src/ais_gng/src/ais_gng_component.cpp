@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 
 using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
@@ -15,6 +16,28 @@ struct SequentialNodeStats {
     std::array<double, 3> mean{0.0, 0.0, 0.0};
     std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 };
+
+bool nearlyEqual(float lhs, float rhs, float eps = 1e-6f) {
+    return std::fabs(lhs - rhs) <= eps;
+}
+
+bool nodeCoreEquals(
+    const ais_gng_msgs::msg::TopologicalNode &lhs,
+    const ais_gng_msgs::msg::TopologicalNode &rhs) {
+    if (lhs.id != rhs.id || lhs.label != rhs.label || lhs.frame != rhs.frame) {
+        return false;
+    }
+    if (!nearlyEqual(lhs.pos.x, rhs.pos.x) ||
+        !nearlyEqual(lhs.pos.y, rhs.pos.y) ||
+        !nearlyEqual(lhs.pos.z, rhs.pos.z) ||
+        !nearlyEqual(lhs.normal.x, rhs.normal.x) ||
+        !nearlyEqual(lhs.normal.y, rhs.normal.y) ||
+        !nearlyEqual(lhs.normal.z, rhs.normal.z) ||
+        !nearlyEqual(lhs.rho, rhs.rho)) {
+        return false;
+    }
+    return lhs.inpcl_ids == rhs.inpcl_ids;
+}
 
 void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<double, 3> &point) {
     ++stats.count;
@@ -114,6 +137,9 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         "topological_map",
         rclcpp::QoS(1).reliable().transient_local());
+    topological_map_update_pub_ = this->create_publisher<gng_update_msgs::msg::TopologicalMapUpdate>(
+        "topological_map_update",
+        rclcpp::QoS(10).reliable());
 
     // パラメーターを動的に変える関数をセット
     param_handle_ = this->add_on_set_parameters_callback(std::bind(&AiSGNGComponent::param_cb, this, _1));
@@ -126,7 +152,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.eta_s2", 0.008);                                 // 近傍ノードの学習係数(cpu)
     this->declare_parameter("node.eta_decay_rate", 1.0);                                 // 学習係数の減衰率(cpu)
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
-    this->declare_parameter("node.grid", 0.5);                                     // ノードのグリッドサイズ(m)(cpu/gpu)
+    this->declare_parameter("node.grid", 0.1);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
     this->declare_parameter("node.s1_age_max", std::vector<int>{6, 6, 6, 3});      // ノードの選択回数に基づく削除(cpu/gpu)
     this->declare_parameter("node.clusted_s1_age", std::vector<int>{20, 20, 6, 3});// クラスタ化されたノードの選択回数に基づく削除(cpu)
     this->declare_parameter("node.interval", std::vector<double>{});               // ノードの間隔(m)(cpu/gpu)
@@ -185,7 +211,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("input.topic_names", std::vector<std::string>{""});    // 入力点群のtopicの名前 (cpu/gpu)
     this->declare_parameter("input.point_cloud_num", 20000);                       // 入力点群数 (cpu/gpu)
     this->declare_parameter("input.base_frame_id", "map");                         // 入力点群の基準フレームID (cpu/gpu)
-    this->declare_parameter("input.voxel_grid_unit", 0.1);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
+    this->declare_parameter("input.voxel_grid_unit", 0.02);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
     this->declare_parameter("input.visualize", true);                              // 位置フィルタの可視化 (cpu/gpu)
     this->declare_parameter("input.local_coordinates", false);                     // ローカル座標系を使用するか (cpu/gpu)
     this->declare_parameter("input.x_min", -20.);                                  // 位置フィルタの最小 x (cpu/gpu)
@@ -422,6 +448,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     gng_setInferredClusterLabels(cluster_ids.data(), cluster_frames.data(), cluster_labels.data(), cluster_ids.size());
 
     // トポロジカルマップをPublish
+    publishTopologicalMapUpdate(*map_msg);
     topological_map_pub_->publish(std::move(map_msg));
 
     if(downsampling_.isTransformed()){
@@ -458,6 +485,45 @@ void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
     }
     gng_setInferredNodeLabels((NodeSemSeg*)result.data(), (uint32_t)result.size());
     // RCLCPP_INFO(this->get_logger(), "Received semseg result with %u points", (uint32_t)result.size());
+}
+
+void AiSGNGComponent::publishTopologicalMapUpdate(const ais_gng_msgs::msg::TopologicalMap &map_msg) {
+    std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> current_nodes;
+    current_nodes.reserve(map_msg.nodes.size());
+    for (const auto &node : map_msg.nodes) {
+        current_nodes.emplace(node.id, node);
+    }
+
+    if (!has_topological_map_snapshot_) {
+        last_published_nodes_ = std::move(current_nodes);
+        has_topological_map_snapshot_ = true;
+        return;
+    }
+
+    auto update_msg = std::make_unique<gng_update_msgs::msg::TopologicalMapUpdate>();
+    update_msg->header = map_msg.header;
+    update_msg->frame_number = map_msg.frame_number;
+    update_msg->revision = map_msg.frame_number;
+
+    for (const auto &[id, node] : current_nodes) {
+        auto it = last_published_nodes_.find(id);
+        if (it == last_published_nodes_.end() || !nodeCoreEquals(it->second, node)) {
+            update_msg->nodes.emplace_back(node);
+        }
+    }
+
+    for (const auto &[id, ignored] : last_published_nodes_) {
+        (void)ignored;
+        if (current_nodes.find(id) == current_nodes.end()) {
+            update_msg->removed_node_ids.push_back(id);
+        }
+    }
+
+    if (!update_msg->nodes.empty() || !update_msg->removed_node_ids.empty()) {
+        topological_map_update_pub_->publish(std::move(update_msg));
+    }
+
+    last_published_nodes_ = std::move(current_nodes);
 }
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(

@@ -69,8 +69,8 @@ export function GraphRenderer({
     showNormals = false,
     showVelocity = false,
     showCovarianceEllipsoids = false,
-    nodeScale = 0.015,
-    edgeWidth = 0.007,
+    nodeScale = 0.005,
+    edgeWidth = 0.003,
     normalScale = 0.075,
     velocityScale = 0.25,
     covarianceEllipsoidScale = 2.0,
@@ -108,10 +108,12 @@ export function GraphRenderer({
         for (const node of graph.nodes) {
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-            buckets[labelIndex].push(node);
+            if (!visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5]) {
+                buckets[labelIndex].push(node);
+            }
         }
         return buckets;
-    }, [graph.nodes]);
+    }, [graph.nodes, visibleLabels]);
 
     // Trigger re-render in demand mode for any visual changes
     useDemandUpdate([
@@ -130,6 +132,7 @@ export function GraphRenderer({
         covarianceEllipsoidScale,
         opacity,
         tf,
+        visibleLabels,
         selectedClusterId,
         nodeColor,
         edgeColor,

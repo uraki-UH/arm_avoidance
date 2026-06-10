@@ -37,11 +37,13 @@ def launch_setup(context, *args, **kwargs):
     vlut_only_value = (vlut_only.lower() == "true")
     overrides["vlut_only"] = vlut_only_value
     overrides["gng.vlut_only"] = vlut_only_value
-    use_voxel_collision_value = (use_voxel_collision.lower() == "true")
-    overrides["use_voxel_collision"] = use_voxel_collision_value
-    overrides["gng.use_voxel_collision"] = use_voxel_collision_value
-    skip_collision_checks_value = (skip_collision_checks.lower() == "true")
-    overrides["collision.skip_checks"] = skip_collision_checks_value
+    if use_voxel_collision != "":
+        use_voxel_collision_value = (use_voxel_collision.lower() == "true")
+        overrides["use_voxel_collision"] = use_voxel_collision_value
+        overrides["gng.use_voxel_collision"] = use_voxel_collision_value
+    if skip_collision_checks != "":
+        skip_collision_checks_value = (skip_collision_checks.lower() == "true")
+        overrides["collision.skip_checks"] = skip_collision_checks_value
     if voxel_padding:
         overrides["voxel_padding"] = float(voxel_padding)
     if initial_collision_only != "false":
@@ -105,11 +107,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "use_voxel_collision",
-            default_value="false",
+            default_value="",
         ),
         DeclareLaunchArgument(
             "skip_collision_checks",
-            default_value="true",
+            default_value="",
         ),
         DeclareLaunchArgument(
             "voxel_padding",

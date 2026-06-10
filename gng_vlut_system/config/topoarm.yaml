@@ -1,15 +1,14 @@
 /**:
   ros__parameters:
     # --- Global & System-wide Settings ---
-    voxel_indexing:
+    voxel_idx_shift:
       x_shift: 42
       y_shift: 21
       z_shift: 0
       offset: 1000000
 
     robot_name: "topoarm"
-    robot_urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
-    robot_description_file: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
+    urdf_path: "package://gng_vlut_system/urdf/topoarm_description/urdf/topoarm.urdf.xacro"
     resource_root_dir: "/ros2_ws/src/gng_vlut_system/urdf/topoarm_description"
     mesh_root_dir: "/ros2_ws/src/gng_vlut_system/urdf/topoarm_description/meshes"
 
@@ -43,7 +42,6 @@
     gng_params:
       lambda: 50
       max_node_num: 1000
-      num_samples: 100000
       max_iterations: 100000
       refine_iterations: 100000
       coord_edge_iterations: 200000
