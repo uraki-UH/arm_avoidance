@@ -50,4 +50,4 @@ ais_gng_node:
     input.y_max: 10.
     input.z_min: -1.
     input.z_max: 20.
-    input.topic_names: ["/topo_points"]
+    input.topic_names: ["/raw_points"]

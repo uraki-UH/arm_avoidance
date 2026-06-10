@@ -1082,6 +1082,14 @@ header .sub{
           <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="rawAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
         </div>
         <div class="grid2" style="margin-top:6px"><span id="rawRosStatus" class="status" style="margin-left:8px">ROS raw: disconnected</span></div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="topo-switch"><input id="handlePublishEnabled" type="checkbox"> Publish handle_points to ROS2</label>
+          <input id="handleTopicName" type="text" style="flex:1;margin-left:8px" placeholder="handle_points">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="handleAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
+        </div>
+        <div class="grid2" style="margin-top:6px"><span id="handleRosStatus" class="status" style="margin-left:8px">ROS handle: disconnected</span></div>
         <div id="topoStatus" class="status">Ready. GNGは物体点のみで学習し、table/outlierは表示のみ。長距離ブリッジedgeは生成しません。</div>
         <div class="note">Depth camera風点群、拡充オブジェクト、机デザインに加え、ファジィ把持実行時にオンラインIK軌道生成でマニピュレータを逐次移動します。GNG algorithmで標準GNGと細胞競合に基づく密度制御GNGを選択できます。GNG学習再生ボタンおよびViewer再生タブ内の各GNGアルゴリズムボタンは、押すたびに既存ノードを破棄し、2ノード初期状態からリアルタイム再生します。公式AiS-GNG製品版ではなく、把持位置推定器に内包したアルゴリズム検証用の軽量GNG実装です。</div>
       </div>
@@ -4322,6 +4330,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     if(st.nodes && st.nodes.length) return st.nodes.map(n=>({x:n.p[0],y:n.p[1],z:n.p[2]}));
     return null;
   }
+  function getCurrentHandlePoints(){
+    const st = window.__topoState || window.state;
+    if(!st) return null;
+    const pts = st.points && st.points.length ? st.points : (st.basePoints && st.basePoints.length ? st.basePoints : []);
+    if(!pts.length) return null;
+    return pts.filter(p => p && p.label === 'handle');
+  }
   function createPointCloudPublisher({
     enabledId,
     topicId,
@@ -4484,8 +4499,18 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       statusPrefix: 'ROS raw',
       getPointsFn: ()=> getCurrentRawPoints() || [],
     });
+    const handlePublisher = createPointCloudPublisher({
+      enabledId: 'handlePublishEnabled',
+      topicId: 'handleTopicName',
+      hzId: 'handleAutoHz',
+      statusId: 'handleRosStatus',
+      defaultTopic: 'handle_points',
+      statusPrefix: 'ROS handle',
+      getPointsFn: ()=> getCurrentHandlePoints() || [],
+    });
     topoPublisher.sync();
     rawPublisher.sync();
+    handlePublisher.sync();
   });
 })();
 </script>
