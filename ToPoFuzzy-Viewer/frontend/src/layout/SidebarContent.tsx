@@ -709,7 +709,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         5: true,
                     }}
                     onClose={() => setLabelContext(null)}
-                    onUpdate={(updates) => props.onUpdateLayerSettings(labelContext.tag, updates)}
+                    onUpdate={(updates: Partial<LayerSettings>) => props.onUpdateLayerSettings(labelContext.tag, updates)}
                 />
             )}
         </>
