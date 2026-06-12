@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <deque>
 #include <iomanip>
 #include <sstream>
 
@@ -49,6 +50,10 @@ class AiSGNGComponent : public rclcpp::Node {
     std::string base_frame_id_;
 
     std::vector<std::string> input_topic_names_;
+    uint32_t semantic_handle_label_value_ = 1;
+    double semantic_handle_ratio_threshold_ = 0.5;
+    std::size_t semantic_handle_history_size_ = 64;
+    std::vector<std::deque<uint8_t>> semantic_label_history_;
 
     // Add Plugin
     Downsampling downsampling_;
@@ -68,11 +73,13 @@ class AiSGNGComponent : public rclcpp::Node {
     void process_clouds(const std::vector<PC2::ConstSharedPtr>& msg);
     void semseg_cb(const PC2::SharedPtr msg);
     void publishTopologicalMapUpdate(const ais_gng_msgs::msg::TopologicalMap &map_msg);
+    void updateSemanticLabelHistory(ais_gng_msgs::msg::TopologicalMap &map_msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
         const std_msgs::msg::Header &msg,
         const float *transformed_pcl = nullptr,
-        const uint32_t transformed_pcl_num = 0);
+        const uint32_t transformed_pcl_num = 0,
+        const std::vector<uint8_t> *semantic_labels = nullptr);
     LiDAR_Config getBase2LidarFrame(const PC2::ConstSharedPtr msg);
     std::unique_ptr<PC2> mixPointCloud2Msg(const std_msgs::msg::Header &header,
         const PC2::SharedPtr &msg,

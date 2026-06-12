@@ -1090,6 +1090,19 @@ header .sub{
           <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="handleAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
         </div>
         <div class="grid2" style="margin-top:6px"><span id="handleRosStatus" class="status" style="margin-left:8px">ROS handle: disconnected</span></div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="topo-switch"><input id="semanticPublishEnabled" type="checkbox"> Publish semantic_points to ROS2</label>
+          <select id="semanticPublishSource" style="flex:1;margin-left:8px">
+            <option value="topo" selected>topo_points / all labeled points</option>
+            <option value="raw">raw_points / raw motion points</option>
+            <option value="handle">handle_points / handle only</option>
+          </select>
+        </div>
+        <div class="grid2" style="margin-top:6px">
+          <input id="semanticTopicName" type="text" style="flex:1;margin-left:8px" placeholder="semantic_points">
+          <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="semanticAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
+        </div>
+        <div class="grid2" style="margin-top:6px"><span id="semanticRosStatus" class="status" style="margin-left:8px">ROS semantic: disconnected</span></div>
         <div id="topoStatus" class="status">Ready. GNGは物体点のみで学習し、table/outlierは表示のみ。長距離ブリッジedgeは生成しません。</div>
         <div class="note">Depth camera風点群、拡充オブジェクト、机デザインに加え、ファジィ把持実行時にオンラインIK軌道生成でマニピュレータを逐次移動します。GNG algorithmで標準GNGと細胞競合に基づく密度制御GNGを選択できます。GNG学習再生ボタンおよびViewer再生タブ内の各GNGアルゴリズムボタンは、押すたびに既存ノードを破棄し、2ノード初期状態からリアルタイム再生します。公式AiS-GNG製品版ではなく、把持位置推定器に内包したアルゴリズム検証用の軽量GNG実装です。</div>
       </div>
@@ -4288,6 +4301,17 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   const ROS_WS_URL = 'ws://localhost:9090';
   const DEFAULT_TOPO_POINTS_TOPIC = '/topo_points';
   const DEFAULT_TOPO_POINTS_FRAME = 'map';
+  const SEMANTIC_LABELS = {
+    default: 0,
+    body: 0,
+    rim: 2,
+    cap: 3,
+    handle: 1,
+    table: 4,
+    floor: 4,
+    wall: 5,
+    outlier: 255,
+  };
   let ros = null;
   // Ensure roslib is loaded; if not, try multiple sources (CDNs then local) and call callbacks
   function loadRoslib(cb){
@@ -4337,6 +4361,15 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     if(!pts.length) return null;
     return pts.filter(p => p && p.label === 'handle');
   }
+  function getCurrentSemanticPoints(source='topo'){
+    if(source === 'raw') return getCurrentRawPoints();
+    if(source === 'handle') return getCurrentHandlePoints();
+    return getCurrentTopoPoints();
+  }
+  function semanticLabelValue(label){
+    const key = String(label || 'default').toLowerCase();
+    return Object.prototype.hasOwnProperty.call(SEMANTIC_LABELS, key) ? SEMANTIC_LABELS[key] : 0;
+  }
   function createPointCloudPublisher({
     enabledId,
     topicId,
@@ -4345,6 +4378,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     defaultTopic,
     statusPrefix,
     getPointsFn,
+    messageBuilder = (points)=>buildPointCloudMsgFromPoints(points, DEFAULT_TOPO_POINTS_FRAME),
   }){
     const enabledEl = document.getElementById(enabledId);
     const topicEl = document.getElementById(topicId);
@@ -4376,8 +4410,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       });
       intervalId = setInterval(()=>{
         try{
-          const msg = buildPointCloudMsgFromPoints(
-              getPointsFn(), DEFAULT_TOPO_POINTS_FRAME);
+          const msg = messageBuilder(getPointsFn() || []);
           topicObj.publish(msg);
           setStatus(`${statusPrefix}: published ${msg.width} pts`);
         }catch(e){
@@ -4454,27 +4487,74 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   }
 
   // Build PointCloud2 message from various point representations
-  function buildPointCloudMsgFromPoints(points, frame=DEFAULT_TOPO_POINTS_FRAME){
-    let floatArr;
-    if(points instanceof Float32Array) floatArr = points;
-    else if(Array.isArray(points) && typeof points[0] === 'number') floatArr = new Float32Array(points);
-    else if(Array.isArray(points) && points.length && typeof points[0] === 'object'){
-      floatArr = new Float32Array(points.length*3);
-      for(let i=0;i<points.length;i++){
-        floatArr[i*3]=points[i].x; floatArr[i*3+1]=points[i].y; floatArr[i*3+2]=points[i].z;
+  function normalizePointObjects(points){
+    if(points instanceof Float32Array){
+      const out = [];
+      for(let i=0;i+2<points.length;i+=3){
+        out.push({x:points[i], y:points[i+1], z:points[i+2], label:'default'});
       }
-    }else{
-      floatArr = new Float32Array([0,0,0]);
+      return out;
     }
-    const n = Math.floor(floatArr.length/3);
+    if(Array.isArray(points) && typeof points[0] === 'number'){
+      const out = [];
+      for(let i=0;i+2<points.length;i+=3){
+        out.push({x:points[i], y:points[i+1], z:points[i+2], label:'default'});
+      }
+      return out;
+    }
+    if(Array.isArray(points) && points.length && typeof points[0] === 'object'){
+      return points;
+    }
+    return [{x:0,y:0,z:0,label:'default'}];
+  }
+  function buildPointCloudMsgFromPoints(points, frame=DEFAULT_TOPO_POINTS_FRAME, options={}){
+    const includeSemanticLabel = !!options.includeSemanticLabel;
+    const pts = normalizePointObjects(points);
+    if(includeSemanticLabel){
+      const pointStep = 16;
+      const buffer = new ArrayBuffer(Math.max(1, pts.length) * pointStep);
+      const view = new DataView(buffer);
+      for(let i=0;i<pts.length;i++){
+        const base = i * pointStep;
+        view.setFloat32(base + 0, Number(pts[i].x) || 0, true);
+        view.setFloat32(base + 4, Number(pts[i].y) || 0, true);
+        view.setFloat32(base + 8, Number(pts[i].z) || 0, true);
+        view.setUint8(base + 12, semanticLabelValue(pts[i].semantic_label ?? pts[i].semantic ?? pts[i].label));
+        view.setUint8(base + 13, 0);
+        view.setUint8(base + 14, 0);
+        view.setUint8(base + 15, 0);
+      }
+      return {
+        header:{stamp: nowRosTime(), frame_id: frame},
+        height:1,
+        width:pts.length,
+        fields:[
+          {name:'x',offset:0,datatype:7,count:1},
+          {name:'y',offset:4,datatype:7,count:1},
+          {name:'z',offset:8,datatype:7,count:1},
+          {name:'semantic_label',offset:12,datatype:2,count:1},
+        ],
+        is_bigendian:false,
+        point_step:pointStep,
+        row_step:pointStep*pts.length,
+        data:Array.from(new Uint8Array(buffer)),
+        is_dense:true
+      };
+    }
+    const floatArr = new Float32Array(pts.length*3);
+    for(let i=0;i<pts.length;i++){
+      floatArr[i*3]=Number(pts[i].x) || 0;
+      floatArr[i*3+1]=Number(pts[i].y) || 0;
+      floatArr[i*3+2]=Number(pts[i].z) || 0;
+    }
     return {
       header:{stamp: nowRosTime(), frame_id: frame},
       height:1,
-      width:n,
+      width:pts.length,
       fields:[{name:'x',offset:0,datatype:7,count:1},{name:'y',offset:4,datatype:7,count:1},{name:'z',offset:8,datatype:7,count:1}],
       is_bigendian:false,
       point_step:12,
-      row_step:12*n,
+      row_step:12*pts.length,
       data:Array.from(new Uint8Array(floatArr.buffer)),
       is_dense:true
     };
@@ -4508,9 +4588,20 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       statusPrefix: 'ROS handle',
       getPointsFn: ()=> getCurrentHandlePoints() || [],
     });
+    const semanticPublisher = createPointCloudPublisher({
+      enabledId: 'semanticPublishEnabled',
+      topicId: 'semanticTopicName',
+      hzId: 'semanticAutoHz',
+      statusId: 'semanticRosStatus',
+      defaultTopic: 'semantic_points',
+      statusPrefix: 'ROS semantic',
+      getPointsFn: ()=> getCurrentSemanticPoints(document.getElementById('semanticPublishSource')?.value || 'topo') || [],
+      messageBuilder: (points)=>buildPointCloudMsgFromPoints(points, DEFAULT_TOPO_POINTS_FRAME, {includeSemanticLabel:true}),
+    });
     topoPublisher.sync();
     rawPublisher.sync();
     handlePublisher.sync();
+    semanticPublisher.sync();
   });
 })();
 </script>

@@ -1,4 +1,5 @@
 #include <ais_gng/ais_gng_component.hpp>
+#include <ais_gng/handle_label_utils.hpp>
 
 #include <algorithm>
 #include <array>
@@ -217,6 +218,14 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("input.y_max", 20.);                                   // 位置フィルタの最大 y (cpu/gpu)
     this->declare_parameter("input.z_min", -0.5);                                  // 位置フィルタの最小 z (cpu/gpu)
     this->declare_parameter("input.z_max", 3.0);                                   // 位置フィルタの最大 z (cpu/gpu)
+    this->declare_parameter("semantic.handle_label_value", 1);
+    this->declare_parameter("semantic.handle_ratio_threshold", 0.5);
+    this->declare_parameter("semantic.handle_history_size", 64);
+    semantic_handle_label_value_ = static_cast<uint32_t>(
+        std::max<int64_t>(0, this->get_parameter("semantic.handle_label_value").as_int()));
+    semantic_handle_ratio_threshold_ = this->get_parameter("semantic.handle_ratio_threshold").as_double();
+    semantic_handle_history_size_ = static_cast<std::size_t>(
+        std::max<int64_t>(1, this->get_parameter("semantic.handle_history_size").as_int()));
 
     // 初期化
     switch(gng_init()){
@@ -341,6 +350,16 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         if (name == "input.base_frame_id"){
             base_frame_id_ = p.as_string();
             success = true;
+        } else if (name == "semantic.handle_label_value") {
+            semantic_handle_label_value_ = static_cast<uint32_t>(std::max<int64_t>(0, p.as_int()));
+            success = true;
+        } else if (name == "semantic.handle_ratio_threshold") {
+            semantic_handle_ratio_threshold_ = std::clamp(p.as_double(), 0.0, 1.0);
+            success = true;
+        } else if (name == "semantic.handle_history_size") {
+            semantic_handle_history_size_ = static_cast<std::size_t>(
+                std::max<int64_t>(1, p.as_int()));
+            success = true;
         }else if (name == "input.topic_names") {
             input_topic_names_.clear();
             auto topic_names = p.as_string_array();
@@ -410,9 +429,16 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     auto start = std::chrono::steady_clock::now();
 
     // 入力点群のセット
+    std::vector<uint8_t> semantic_labels;
     for(auto &msg: clouds){
         auto lidar_config = getBase2LidarFrame(msg);
         gng_setPointCloud(msg->data.data(), msg->width * msg->height, &lidar_config);
+        auto cloud_semantics = handle_label::extractSemanticLabels(*msg, semantic_handle_label_value_);
+        const std::size_t point_count = static_cast<std::size_t>(msg->width) * static_cast<std::size_t>(msg->height);
+        if (cloud_semantics.size() != point_count) {
+            cloud_semantics.assign(point_count, ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
+        }
+        semantic_labels.insert(semantic_labels.end(), cloud_semantics.begin(), cloud_semantics.end());
     }
     auto &msg = clouds[0];
 
@@ -431,7 +457,8 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     auto transformed_pcl = gng_getAffineTransformedInputPointCloud(&transformed_pcl_num); // アフィン変換後の点群
 
     // トポロジカルマップをROS2メッセージに変換
-    auto map_msg = makeTopologicalMapMsg(map, header, transformed_pcl, transformed_pcl_num);
+    auto map_msg = makeTopologicalMapMsg(
+        map, header, transformed_pcl, transformed_pcl_num, &semantic_labels);
     
     // アフィン変換後の点群をROS2メッセージに変換
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
@@ -502,7 +529,8 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
     const TopologicalMap &map,
     const std_msgs::msg::Header &header,
     const float *transformed_pcl,
-    const uint32_t transformed_pcl_num) {
+    const uint32_t transformed_pcl_num,
+    const std::vector<uint8_t> *semantic_labels) {
     auto topological_map_msg = std::make_unique<ais_gng_msgs::msg::TopologicalMap>();
     topological_map_msg->header = header;
     topological_map_msg->frame_number = map.frame_number;
@@ -519,6 +547,8 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         node_msg.normal.z = node.normal.z;
         node_msg.rho = node.rho;
         node_msg.label = node.label;
+        node_msg.semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
+        node_msg.semantic_reliability = 0.0f;
         node_msg.frame = node.frame;
         if (node.inpcl_num > 0) {
             node_msg.inpcl_ids.resize(node.inpcl_num);
@@ -535,6 +565,8 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         cluster_msg.id = cluster.id;
         cluster_msg.label = cluster.label;
         cluster_msg.label_reliability = cluster.label_reliability;
+        cluster_msg.semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
+        cluster_msg.semantic_reliability = 0.0f;
         cluster_msg.pos.x = cluster.pos.x;
         cluster_msg.pos.y = cluster.pos.y;
         cluster_msg.pos.z = cluster.pos.z;
@@ -559,7 +591,74 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         *topological_map_msg,
         computeSequentialWinnerStats(map, transformed_pcl, transformed_pcl_num));
 
+    if (semantic_labels && !semantic_labels->empty()) {
+        handle_label::applySemanticLabelsToMap(
+            *topological_map_msg,
+            transformed_pcl,
+            transformed_pcl_num,
+            *semantic_labels,
+            semantic_handle_ratio_threshold_);
+    }
+    updateSemanticLabelHistory(*topological_map_msg);
+
     return topological_map_msg;
+}
+
+void AiSGNGComponent::updateSemanticLabelHistory(ais_gng_msgs::msg::TopologicalMap &map_msg) {
+    const std::size_t node_count = map_msg.nodes.size();
+    if (semantic_label_history_.size() != node_count) {
+        semantic_label_history_.clear();
+        semantic_label_history_.resize(node_count);
+    }
+    if (semantic_handle_history_size_ == 0) {
+        semantic_handle_history_size_ = 1;
+    }
+
+    std::vector<uint8_t> node_semantic_labels(node_count, ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
+    for (std::size_t i = 0; i < node_count; ++i) {
+        auto &hist = semantic_label_history_[i];
+        const uint8_t current = map_msg.nodes[i].semantic_label;
+        hist.push_back(current);
+        while (hist.size() > semantic_handle_history_size_) {
+            hist.pop_front();
+        }
+
+        std::size_t handle_count = 0;
+        for (const auto value : hist) {
+            if (value == ais_gng_msgs::msg::TopologicalMap::SEMANTIC_HANDLE) {
+                ++handle_count;
+            }
+        }
+        const double ratio = hist.empty()
+            ? 0.0
+            : static_cast<double>(handle_count) / static_cast<double>(hist.size());
+        const bool is_handle = ratio >= semantic_handle_ratio_threshold_ && handle_count > 0;
+        map_msg.nodes[i].semantic_label = is_handle
+            ? ais_gng_msgs::msg::TopologicalMap::SEMANTIC_HANDLE
+            : ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
+        map_msg.nodes[i].semantic_reliability = static_cast<float>(ratio);
+        node_semantic_labels[i] = map_msg.nodes[i].semantic_label;
+    }
+
+    for (auto &cluster : map_msg.clusters) {
+        std::size_t total = 0;
+        std::size_t handle = 0;
+        for (const auto node_id : cluster.nodes) {
+            if (node_id >= node_semantic_labels.size()) {
+                continue;
+            }
+            ++total;
+            if (node_semantic_labels[node_id] == ais_gng_msgs::msg::TopologicalMap::SEMANTIC_HANDLE) {
+                ++handle;
+            }
+        }
+        const double ratio = total == 0 ? 0.0 : static_cast<double>(handle) / static_cast<double>(total);
+        const bool is_handle = ratio >= semantic_handle_ratio_threshold_ && handle > 0;
+        cluster.semantic_label = is_handle
+            ? ais_gng_msgs::msg::TopologicalMap::SEMANTIC_HANDLE
+            : ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
+        cluster.semantic_reliability = static_cast<float>(ratio);
+    }
 }
 
 LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) {
