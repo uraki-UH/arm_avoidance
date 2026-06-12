@@ -13,7 +13,6 @@
 #include <sstream>
 
 #include "ais_gng_msgs/msg/topological_map.hpp"
-#include "gng_update_msgs/msg/topological_map_update.hpp"
 #include "ais_gng_msgs/msg/topological_node.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
@@ -38,7 +37,6 @@ class AiSGNGComponent : public rclcpp::Node {
     using PC2 = sensor_msgs::msg::PointCloud2;
 
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
-    rclcpp::Publisher<gng_update_msgs::msg::TopologicalMapUpdate>::SharedPtr topological_map_update_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;

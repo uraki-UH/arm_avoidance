@@ -137,9 +137,6 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         "topological_map",
         rclcpp::QoS(1).reliable().transient_local());
-    topological_map_update_pub_ = this->create_publisher<gng_update_msgs::msg::TopologicalMapUpdate>(
-        "topological_map_update",
-        rclcpp::QoS(10).reliable());
 
     // パラメーターを動的に変える関数をセット
     param_handle_ = this->add_on_set_parameters_callback(std::bind(&AiSGNGComponent::param_cb, this, _1));
@@ -499,31 +496,6 @@ void AiSGNGComponent::publishTopologicalMapUpdate(const ais_gng_msgs::msg::Topol
         has_topological_map_snapshot_ = true;
         return;
     }
-
-    auto update_msg = std::make_unique<gng_update_msgs::msg::TopologicalMapUpdate>();
-    update_msg->header = map_msg.header;
-    update_msg->frame_number = map_msg.frame_number;
-    update_msg->revision = map_msg.frame_number;
-
-    for (const auto &[id, node] : current_nodes) {
-        auto it = last_published_nodes_.find(id);
-        if (it == last_published_nodes_.end() || !nodeCoreEquals(it->second, node)) {
-            update_msg->nodes.emplace_back(node);
-        }
-    }
-
-    for (const auto &[id, ignored] : last_published_nodes_) {
-        (void)ignored;
-        if (current_nodes.find(id) == current_nodes.end()) {
-            update_msg->removed_node_ids.push_back(id);
-        }
-    }
-
-    if (!update_msg->nodes.empty() || !update_msg->removed_node_ids.empty()) {
-        topological_map_update_pub_->publish(std::move(update_msg));
-    }
-
-    last_published_nodes_ = std::move(current_nodes);
 }
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(

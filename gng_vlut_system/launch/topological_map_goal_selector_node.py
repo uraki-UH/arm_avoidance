@@ -16,7 +16,6 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
-from gng_update_msgs.msg import TopologicalMapUpdate
 
 try:
     from tf2_ros import Buffer, TransformException, TransformListener
@@ -99,7 +98,6 @@ class TopologicalMapGoalSelector(Node):
         super().__init__("topological_map_goal_selector_node")
 
         self.topological_map_topic = args.topological_map_topic
-        self.topological_map_update_topic = args.topological_map_update_topic
         self.output_topic = args.output_topic
         self.marker_topic = args.marker_topic
         self.candidate_count = max(1, int(args.candidate_count))
@@ -136,12 +134,6 @@ class TopologicalMapGoalSelector(Node):
             snapshot_qos = 10
 
         self.map_sub = self.create_subscription(TopologicalMap, self.topological_map_topic, self._on_map, snapshot_qos)
-        self.map_update_sub = self.create_subscription(
-            TopologicalMapUpdate,
-            self.topological_map_update_topic,
-            self._on_map_update,
-            10,
-        )
 
         self.pose_sub = None
         if self.target_pose_topic:
@@ -185,36 +177,9 @@ class TopologicalMapGoalSelector(Node):
             self.tf_buffer = Buffer()
             self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        self.get_logger().info(
-            f"selector ready: map={self.topological_map_topic}, update={self.topological_map_update_topic}, out={self.output_topic}, "
-            f"markers={self.marker_topic}, n={self.candidate_count}"
-        )
-
     def _on_map(self, msg: TopologicalMap) -> None:
         self.map_msg = msg
         self.map_revision = int(msg.frame_number)
-        self._maybe_publish()
-
-    def _on_map_update(self, msg: TopologicalMapUpdate) -> None:
-        if self.map_msg is None:
-            return
-        if int(msg.revision) < self.map_revision:
-            return
-
-        node_by_id = {int(node.id): idx for idx, node in enumerate(self.map_msg.nodes)}
-        removed_ids = {int(node_id) for node_id in msg.removed_node_ids}
-        if removed_ids:
-            self.map_msg.nodes = [node for node in self.map_msg.nodes if int(node.id) not in removed_ids]
-            node_by_id = {int(node.id): idx for idx, node in enumerate(self.map_msg.nodes)}
-
-        for node in msg.nodes:
-            node_id = int(node.id)
-            if node_id in node_by_id:
-                self.map_msg.nodes[node_by_id[node_id]] = copy.deepcopy(node)
-            else:
-                self.map_msg.nodes.append(copy.deepcopy(node))
-
-        self.map_revision = int(msg.revision)
         self._maybe_publish()
 
     def _on_pose(self, msg: PoseStamped) -> None:
@@ -434,7 +399,6 @@ class TopologicalMapGoalSelector(Node):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Select topological map nodes near a grasp target.")
     parser.add_argument("--topological-map-topic", default="/ToPoDualArm/topological_map_static")
-    parser.add_argument("--topological-map-update-topic", default="/ToPoDualArm/topological_map_update")
     parser.add_argument("--output-topic", default="/selected_topological_map")
     parser.add_argument("--marker-topic", default="/selected_topological_map_markers")
     parser.add_argument("--candidate-count", type=int, default=8)

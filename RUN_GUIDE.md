@@ -12,7 +12,7 @@ cd ~/uraki_ws
 
 docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
 
-docker compose --profile manual up --build frontend
+(docker compose --profile manual up --build frontend)
 docker compose --profile manual up  frontend
 
 ## 左腕をtopological_map_avoidanceで動かしつつ、右腕を適当に揺らす

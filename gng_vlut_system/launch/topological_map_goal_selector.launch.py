@@ -13,10 +13,6 @@ def generate_launch_description():
             "topological_map_topic",
             default_value="/ToPoDualArm/topological_map_static",
         ),
-        DeclareLaunchArgument(
-            "topological_map_update_topic",
-            default_value="/ToPoDualArm/topological_map_update",
-        ),
         DeclareLaunchArgument("output_topic", default_value="/selected_topological_map"),
         DeclareLaunchArgument(
             "marker_topic",
@@ -40,9 +36,7 @@ def generate_launch_description():
                 "python3",
                 script,
                 "--topological-map-topic",
-                LaunchConfiguration("topological_map_topic"),
-                "--topological-map-update-topic",
-                LaunchConfiguration("topological_map_update_topic"),
+                LaunchConfiguration("topological_map_topic"),"),
                 "--output-topic",
                 LaunchConfiguration("output_topic"),
                 "--marker-topic",
