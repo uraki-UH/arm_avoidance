@@ -200,6 +200,9 @@ export interface TransformData {
 
 export interface VoxelLayout {
     voxelSize: number;
+    originX?: number;
+    originY?: number;
+    originZ?: number;
     xShift: number;
     yShift: number;
     zShift: number;

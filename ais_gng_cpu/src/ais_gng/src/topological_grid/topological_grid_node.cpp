@@ -16,10 +16,18 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   grid_spec_.origin_x = this->declare_parameter<double>("origin_x", 0.0);
   grid_spec_.origin_y = this->declare_parameter<double>("origin_y", 0.0);
   grid_spec_.origin_z = this->declare_parameter<double>("origin_z", 0.0);
+  origin_shift_half_ = this->declare_parameter<bool>("origin_shift_half", false);
   x_shift_ = this->declare_parameter<int>("x_shift", 42);
   y_shift_ = this->declare_parameter<int>("y_shift", 21);
   z_shift_ = this->declare_parameter<int>("z_shift", 0);
   offset_ = this->declare_parameter<long>("offset", 1000000L);
+
+  if (origin_shift_half_) {
+    const double half = grid_spec_.cell_size * 0.5;
+    grid_spec_.origin_x = half;
+    grid_spec_.origin_y = half;
+    grid_spec_.origin_z = half;
+  }
 
   voxel_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
     output_topic_,
@@ -32,13 +40,14 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
 
   RCLCPP_INFO(
     this->get_logger(),
-    "TopologicalGridNode ready: input=%s output=%s grid_size=%.3f origin=(%.3f, %.3f, %.3f)",
+    "TopologicalGridNode ready: input=%s output=%s grid_size=%.3f origin=(%.3f, %.3f, %.3f) shifted=%s",
     input_topic_.c_str(),
     output_topic_.c_str(),
     grid_spec_.cell_size,
     grid_spec_.origin_x,
     grid_spec_.origin_y,
-    grid_spec_.origin_z);
+    grid_spec_.origin_z,
+    origin_shift_half_ ? "true" : "false");
 }
 
 void TopologicalGridNode::mapCallback(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg)
@@ -57,6 +66,9 @@ void TopologicalGridNode::publishResult(const ais_gng_msgs::msg::TopologicalMap 
   voxel_msg.header.frame_id = map.header.frame_id;
   voxel_msg.header.stamp = map.header.stamp;
   voxel_msg.voxel_size = static_cast<float>(grid_spec_.cell_size);
+  voxel_msg.origin_x = static_cast<float>(grid_spec_.origin_x);
+  voxel_msg.origin_y = static_cast<float>(grid_spec_.origin_y);
+  voxel_msg.origin_z = static_cast<float>(grid_spec_.origin_z);
   voxel_msg.x_shift = x_shift_;
   voxel_msg.y_shift = y_shift_;
   voxel_msg.z_shift = z_shift_;
@@ -77,6 +89,9 @@ void TopologicalGridNode::publishResult(const ais_gng_msgs::msg::TopologicalMap 
   oss << "\"node_count\":" << assignments.size() << ",";
   oss << "\"grid_size\":" << grid_spec_.cell_size << ",";
   oss << "\"voxel_size\":" << voxel_msg.voxel_size << ",";
+  oss << "\"origin_x\":" << voxel_msg.origin_x << ",";
+  oss << "\"origin_y\":" << voxel_msg.origin_y << ",";
+  oss << "\"origin_z\":" << voxel_msg.origin_z << ",";
   oss << "\"origin\":[" << grid_spec_.origin_x << "," << grid_spec_.origin_y << "," << grid_spec_.origin_z << "],";
   oss << "\"x_shift\":" << x_shift_ << ",";
   oss << "\"y_shift\":" << y_shift_ << ",";

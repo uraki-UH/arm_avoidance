@@ -29,6 +29,7 @@ private:
   std::string output_topic_;
   std::string summary_topic_;
   GridSpec grid_spec_;
+  bool origin_shift_half_ = false;
   int x_shift_ = 42;
   int y_shift_ = 21;
   int z_shift_ = 0;

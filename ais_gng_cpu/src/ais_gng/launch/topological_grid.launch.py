@@ -33,6 +33,10 @@ def generate_launch_description():
         "origin_z",
         default_value="0.0",
     )
+    origin_shift_half = DeclareLaunchArgument(
+        "origin_shift_half",
+        default_value="false",
+    )
     x_shift = DeclareLaunchArgument(
         "x_shift",
         default_value="42",
@@ -58,6 +62,7 @@ def generate_launch_description():
         origin_x,
         origin_y,
         origin_z,
+        origin_shift_half,
         x_shift,
         y_shift,
         z_shift,
@@ -73,6 +78,7 @@ def generate_launch_description():
                 "origin_x": LaunchConfiguration("origin_x"),
                 "origin_y": LaunchConfiguration("origin_y"),
                 "origin_z": LaunchConfiguration("origin_z"),
+                "origin_shift_half": LaunchConfiguration("origin_shift_half"),
                 "x_shift": LaunchConfiguration("x_shift"),
                 "y_shift": LaunchConfiguration("y_shift"),
                 "z_shift": LaunchConfiguration("z_shift"),

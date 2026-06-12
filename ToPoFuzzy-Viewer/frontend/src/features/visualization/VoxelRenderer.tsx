@@ -6,6 +6,9 @@ import { VoxelSettings, Transform } from '../../types';
 
 interface VoxelLayout {
     voxelSize: number;
+    originX?: number;
+    originY?: number;
+    originZ?: number;
     xShift: number;
     yShift: number;
     zShift: number;
@@ -68,6 +71,9 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         const zShift = BigInt(layout.zShift);
         const offset = BigInt(layout.offset);
         const mask = (1n << yShift) - 1n;
+        const originX = layout.originX ?? 0;
+        const originY = layout.originY ?? 0;
+        const originZ = layout.originZ ?? 0;
 
         return data.map(idStr => {
             const id = BigInt(idStr);
@@ -75,7 +81,11 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             const y = Number((id >> yShift) & mask) - Number(offset);
             const z = Number((id >> zShift) & mask) - Number(offset);
             // Voxel IDs represent grid cells, so render at the cell center.
-            return [(x + 0.5) * voxelSize, (y + 0.5) * voxelSize, (z + 0.5) * voxelSize];
+            return [
+                originX + (x + 0.5) * voxelSize,
+                originY + (y + 0.5) * voxelSize,
+                originZ + (z + 0.5) * voxelSize,
+            ];
         });
     }, [data, layout, voxelSize]);
 

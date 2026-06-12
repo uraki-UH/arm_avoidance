@@ -43,6 +43,18 @@ ros2 launch ais_gng topological_query.launch.py \
   max_euclidean_distance:=0.5 \
   max_hops:=-1
 
+## ダミー把持姿勢をPoseArrayで流す
+ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
+  frame_id:=world \
+  candidate_count:=6
+
+## グリッド所属を半セルずらしで出す
+ros2 launch ais_gng topological_grid.launch.py \
+  input_topic:=/topological_map \
+  output_topic:=/topological_grid_voxels_shifted \
+  grid_size:=0.5 \
+  origin_shift_half:=true
+
 ##　dynamixel handlerの起動
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
 
@@ -130,15 +142,13 @@ tf位置調整
  python3 test_tf_once_publisher.py   --world-frame world   --frame-id topoarm/base_link   --x 0.0   --y 0.5   --z -0.3 --yaw 1.5  --hold-seconds 1.0   --publish-hz 20
 
 
-
-python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.0   --y -0.4   --z 0.2 --yaw 0.5  --hold-seconds 1.0   --publish-hz 20
-
 初期位置
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.0   --y -0.0   --z 0.0 --yaw 0.0  --hold-seconds 1.0   --publish-hz 20
 
 実験用
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.25   --y 0.15   --z -0.1 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
+python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.4   --y 0.15   --z -0.3 --yaw 3.2  --hold
 
 HTML起動
 python3 -m http.server 8000

@@ -128,6 +128,9 @@ namespace converter {
         json ids = json::array(); for (auto id : msg->data) ids.push_back(std::to_string(id));
         return {{"type", "stream.voxel"}, {"tag", tag}, {"data", ids}, {"frameId", msg->header.frame_id},
                 {"layout", {{"voxelSize", std::round(msg->voxel_size * 10000.0) / 10000.0}, 
+                            {"originX", msg->origin_x},
+                            {"originY", msg->origin_y},
+                            {"originZ", msg->origin_z},
                             {"xShift", msg->x_shift}, {"yShift", msg->y_shift}, {"zShift", msg->z_shift}, {"offset", msg->offset}}}};
     }
 }
