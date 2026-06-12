@@ -6,6 +6,9 @@ interface GngLabelModalProps {
     open: boolean;
     title?: string;
     subtitle?: string;
+    visibleSemanticLabels: {
+        handle: boolean;
+    };
     visibleLabels: {
         0: boolean;
         1: boolean;
@@ -16,7 +19,10 @@ interface GngLabelModalProps {
     };
     onClose: () => void;
     onUpdate: (updates: {
-        visibleLabels: {
+        visibleSemanticLabels?: {
+            handle: boolean;
+        };
+        visibleLabels?: {
             0: boolean;
             1: boolean;
             2: boolean;
@@ -49,6 +55,7 @@ export function GngLabelModal({
     open,
     title = 'Visible Labels',
     subtitle = '',
+    visibleSemanticLabels,
     visibleLabels,
     onClose,
     onUpdate,
@@ -66,6 +73,14 @@ export function GngLabelModal({
             visibleLabels: {
                 ...visibleLabels,
                 [labelIndex]: !visibleLabels[labelIndex],
+            },
+        });
+    };
+    const toggleSemanticHandle = () => {
+        onUpdate({
+            visibleSemanticLabels: {
+                ...visibleSemanticLabels,
+                handle: !visibleSemanticLabels.handle,
             },
         });
     };
@@ -119,6 +134,19 @@ export function GngLabelModal({
                         </div>
 
                         <div className="space-y-2">
+                            <div className="mb-2 flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                                <span className="text-xs font-semibold text-[var(--text-primary)]">Semantic labels</span>
+                                <button
+                                    onClick={toggleSemanticHandle}
+                                    className={`rounded-md border px-3 py-1 text-[10px] font-semibold transition-colors ${
+                                        visibleSemanticLabels.handle
+                                            ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)] opacity-75 hover:bg-white/10'
+                                    }`}
+                                >
+                                    HANDLE {visibleSemanticLabels.handle ? 'ON' : 'OFF'}
+                                </button>
+                            </div>
                             {LAYER_LABELS.map((label, index) => {
                                 const labelIndex = index as 0 | 1 | 2 | 3 | 4 | 5;
                                 const isOn = visibleLabels[labelIndex];

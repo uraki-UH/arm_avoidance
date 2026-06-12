@@ -83,6 +83,8 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.ny !== b.ny ||
             a.nz !== b.nz ||
             a.label !== b.label ||
+            a.semanticLabel !== b.semanticLabel ||
+            a.semanticReliability !== b.semanticReliability ||
             a.age !== b.age ||
             a.winnerPointCount !== b.winnerPointCount
         ) {
@@ -130,6 +132,8 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.quat[3] !== b.quat[3] ||
             a.match !== b.match ||
             a.reliability !== b.reliability ||
+            a.semanticLabel !== b.semanticLabel ||
+            a.semanticReliability !== b.semanticReliability ||
             a.velocity[0] !== b.velocity[0] ||
             a.velocity[1] !== b.velocity[1] ||
             a.velocity[2] !== b.velocity[2] ||

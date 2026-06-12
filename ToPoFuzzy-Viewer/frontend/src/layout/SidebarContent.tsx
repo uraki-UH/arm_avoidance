@@ -700,6 +700,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                 <GngLabelModal
                     open={true}
                     title={labelContext.title}
+                    visibleSemanticLabels={props.layerSettings[labelContext.tag].visibleSemanticLabels || {
+                        handle: true,
+                    }}
                     visibleLabels={props.layerSettings[labelContext.tag].visibleLabels || {
                         0: true,
                         1: true,

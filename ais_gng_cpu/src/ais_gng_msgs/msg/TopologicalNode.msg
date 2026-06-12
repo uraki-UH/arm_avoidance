@@ -3,6 +3,8 @@ geometry_msgs/Point32 pos
 geometry_msgs/Point32 normal
 float32 rho
 uint8 label
+uint8 semantic_label
+float32 semantic_reliability
 uint32 frame
 uint32[] inpcl_ids
 uint32 winner_point_count

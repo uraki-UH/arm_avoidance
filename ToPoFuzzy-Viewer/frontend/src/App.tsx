@@ -269,6 +269,9 @@ function App() {
                     showNodes: true,
                     showEdges: !isStatic,
                     showClusters: false,
+                    visibleSemanticLabels: {
+                        handle: true,
+                    },
                     visibleLabels: {
                         0: true,
                         1: true,
@@ -319,6 +322,14 @@ function App() {
                         3: true,
                         4: true,
                         5: true,
+                    },
+                };
+                changed = true;
+            } else if (!newSettings[tag].visibleSemanticLabels) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    visibleSemanticLabels: {
+                        handle: true,
                     },
                 };
                 changed = true;
@@ -824,15 +835,24 @@ function App() {
         if (!foundCluster || !foundGraph) return;
 
         const nodeIdsSet = new Set(foundCluster.nodeIds);
-        const nodes = foundCluster.nodeIds.map((idx) => foundGraph!.nodes[idx]).filter((n) => n !== undefined);
+        const nodeById = new Map<number, GraphNode>();
+        foundGraph.nodes.forEach((node, index) => {
+            if (Number.isFinite(node.id)) {
+                nodeById.set(node.id as number, node);
+            }
+            nodeById.set(index, node);
+        });
+        const nodes = foundCluster.nodeIds
+            .map((nodeId) => nodeById.get(nodeId))
+            .filter((n): n is GraphNode => n !== undefined);
 
         const edges: { source: GraphNode; target: GraphNode }[] = [];
         for (let i = 0; i < foundGraph.edges.length; i += 2) {
             const srcIdx = foundGraph.edges[i];
             const dstIdx = foundGraph.edges[i + 1];
             if (nodeIdsSet.has(srcIdx) && nodeIdsSet.has(dstIdx)) {
-                const srcNode = foundGraph.nodes[srcIdx];
-                const dstNode = foundGraph.nodes[dstIdx];
+                const srcNode = nodeById.get(srcIdx);
+                const dstNode = nodeById.get(dstIdx);
                 if (srcNode && dstNode) {
                     edges.push({ source: srcNode, target: dstNode });
                 }
@@ -1026,6 +1046,7 @@ function App() {
                                 showNormals: settings.showNormals ?? gngLayer.showNormals,
                                 showVelocity: settings.showVelocity ?? false,
                                 showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
+                                visibleSemanticLabels: settings.visibleSemanticLabels,
                                 normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
                                 velocityScale: settings.velocityScale ?? 0.25,
                                 covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,

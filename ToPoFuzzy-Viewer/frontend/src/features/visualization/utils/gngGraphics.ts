@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GraphData, LAYER_COLORS } from '../../../types';
+import { GraphData, LAYER_COLORS, SEMANTIC_COLORS } from '../../../types';
 
 const tempMatrix = new THREE.Matrix4();
 const tempColor = new THREE.Color();
@@ -25,6 +25,23 @@ export function buildNodePalette(
     return LAYER_COLORS.map((color, index) => (index === 1 ? baseColor : color));
 }
 
+export function resolveGraphNodeColor(
+    node: GraphData['nodes'][number],
+    palette: string[],
+    fallbackIndex = 0,
+    useSemanticColors = true
+) {
+    const semanticIndex = Number.isFinite(node.semanticLabel) ? Math.trunc(node.semanticLabel as number) : 0;
+    if (useSemanticColors && semanticIndex > 0) {
+        const safeSemanticIndex = ((semanticIndex % SEMANTIC_COLORS.length) + SEMANTIC_COLORS.length) % SEMANTIC_COLORS.length;
+        return SEMANTIC_COLORS[safeSemanticIndex] ?? SEMANTIC_COLORS[0];
+    }
+
+    const labelValue = Number.isFinite(node.label) ? Math.trunc(node.label as number) : fallbackIndex;
+    const safeIndex = ((labelValue % palette.length) + palette.length) % palette.length;
+    return palette[safeIndex] ?? palette[0];
+}
+
 /**
  * Updates the instance matrices and colors for a GNG node InstancedMesh.
  */
@@ -37,12 +54,14 @@ export function updateNodeInstances(
         uniformColor?: string;
         palette?: string[];
         baseColor?: string;
+        useSemanticColors?: boolean;
     }
 ) {
     if (!mesh) return;
     const colorMode = options?.colorMode ?? 'label';
     const uniformColor = options?.uniformColor ?? LAYER_COLORS[1];
     const palette = buildNodePalette(options?.baseColor, options?.palette);
+    const useSemanticColors = options?.useSemanticColors ?? true;
     mesh.count = nodes.length;
 
     nodes.forEach((node, i) => {
@@ -54,9 +73,7 @@ export function updateNodeInstances(
         const colorHex = colorMode === 'uniform'
             ? uniformColor
             : (() => {
-                const labelValue = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
-                const safeIndex = ((labelValue % palette.length) + palette.length) % palette.length;
-                return palette[safeIndex] ?? palette[0];
+                return resolveGraphNodeColor(node, palette, i, useSemanticColors);
             })();
         tempColor.set(colorHex);
         mesh.setColorAt(i, tempColor);

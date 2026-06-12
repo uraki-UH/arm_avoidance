@@ -89,6 +89,7 @@ namespace converter {
         for (auto& n : msg->nodes) {
             const auto age = msg->frame_number >= n.frame ? msg->frame_number - n.frame : 0U;
             nodes.push_back({
+                {"id", n.id},
                 {"x", n.pos.x},
                 {"y", n.pos.y},
                 {"z", n.pos.z},
@@ -96,6 +97,8 @@ namespace converter {
                 {"ny", n.normal.y},
                 {"nz", n.normal.z},
                 {"label", n.label},
+                {"semanticLabel", n.semantic_label},
+                {"semanticReliability", n.semantic_reliability},
                 {"age", age},
                 {"winnerPointCount", n.winner_point_count},
                 {"winnerPointMean", {n.winner_point_mean.x, n.winner_point_mean.y, n.winner_point_mean.z}},
@@ -108,7 +111,7 @@ namespace converter {
         }
         for (auto& c : msg->clusters) {
             const auto age = msg->frame_number >= c.frame ? msg->frame_number - c.frame : 0U;
-            clusters.push_back({{"id",c.id},{"label",c.label},{"pos",{c.pos.x,c.pos.y,c.pos.z}},{"scale",{c.scale.x,c.scale.y,c.scale.z}},{"quat",{c.quat.x,c.quat.y,c.quat.z,c.quat.w}},{"match",c.match},{"reliability",c.label_reliability},{"velocity",{c.velocity.x,c.velocity.y,c.velocity.z}},{"nodeIds",c.nodes},{"age",age}});
+            clusters.push_back({{"id",c.id},{"label",c.label},{"semanticLabel",c.semantic_label},{"semanticReliability",c.semantic_reliability},{"pos",{c.pos.x,c.pos.y,c.pos.z}},{"scale",{c.scale.x,c.scale.y,c.scale.z}},{"quat",{c.quat.x,c.quat.y,c.quat.z,c.quat.w}},{"match",c.match},{"reliability",c.label_reliability},{"velocity",{c.velocity.x,c.velocity.y,c.velocity.z}},{"nodeIds",c.nodes},{"age",age}});
         }
         return {{"type", "stream.graph"}, {"tag", tag}, {"graph", {
             {"timestamp", msg->header.stamp.sec}, {"tag", tag}, {"mode", (tag.find("static") != std::string::npos ? "static" : "dynamic")},

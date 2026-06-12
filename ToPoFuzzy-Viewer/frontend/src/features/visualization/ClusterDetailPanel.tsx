@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef, memo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS, SEMANTIC_COLORS, SEMANTIC_LABELS } from '../../types';
 
 export interface ClusterSnapshot {
     cluster: GraphCluster;
@@ -80,6 +80,14 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
         () => LAYER_COLORS.map(color => new THREE.MeshBasicMaterial({ color })),
         []
     );
+    const nodeSemanticMaterials = useMemo(
+        () => SEMANTIC_COLORS.map(color => new THREE.MeshBasicMaterial({ color })),
+        []
+    );
+    const semanticLabelText = (semanticLabel?: number) => {
+        if (!Number.isFinite(semanticLabel) || (semanticLabel ?? 0) <= 0) return '';
+        return SEMANTIC_LABELS[(Math.trunc(semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
+    };
 
     const edgeGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 4), []);
     const edgeMaterial = useMemo(
@@ -181,9 +189,9 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                 className="flex shrink-0 cursor-grab items-center justify-between border-b border-white/10 bg-black/25 p-2 active:cursor-grabbing"
                 onMouseDown={handleMouseDown}
             >
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                    Cluster #{cluster.id} ({LAYER_LABELS[cluster.label]}) Details (Offline)
-                </h3>
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                    Cluster #{cluster.id} ({LAYER_LABELS[cluster.label]}{semanticLabelText(cluster.semanticLabel) ? ` / ${semanticLabelText(cluster.semanticLabel)}` : ''}) Details (Offline)
+                    </h3>
                 <button
                     onClick={onClose}
                     className="btn-secondary inline-flex h-7 w-7 items-center justify-center p-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -227,7 +235,11 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                                 key={i}
                                 position={[node.x, node.y, node.z]}
                                 geometry={nodeGeometry}
-                                material={nodeMaterials[node.label % nodeMaterials.length]}
+                                material={
+                                    Number.isFinite(node.semanticLabel) && (node.semanticLabel ?? 0) > 0
+                                        ? nodeSemanticMaterials[(node.semanticLabel ?? 0) % nodeSemanticMaterials.length]
+                                        : nodeMaterials[node.label % nodeMaterials.length]
+                                }
                             />
                         ))}
 
@@ -273,7 +285,9 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
             {/* Stats Footer */}
             <div className="grid shrink-0 grid-cols-2 gap-x-4 border-t border-white/10 bg-black/25 p-2 text-xs text-[var(--text-secondary)]">
                 <span>Reliability: {cluster.reliability.toFixed(3)}</span>
+                <span>Semantic: {semanticLabelText(cluster.semanticLabel) || 'NONE'}</span>
                 <span>Nodes: {clusterNodes.length}</span>
+                <span>Sem rel: {Number.isFinite(cluster.semanticReliability) ? cluster.semanticReliability!.toFixed(3) : '0.000'}</span>
                 <span>Pos: [{cluster.pos.map(v => v.toFixed(2)).join(',')}]</span>
 
             </div>

@@ -82,6 +82,7 @@ export interface HeatmapSettings {
 // --- Graph / GNG Types ---
 
 export interface GraphNode {
+    id?: number;
     x: number;
     y: number;
     z: number;
@@ -89,6 +90,8 @@ export interface GraphNode {
     ny: number;
     nz: number;
     label: number;
+    semanticLabel?: number;
+    semanticReliability?: number;
     age: number;
     winnerPointCount?: number;
     winnerPointMean?: [number, number, number];
@@ -98,6 +101,8 @@ export interface GraphNode {
 export interface GraphCluster {
     id: number;
     label: number;
+    semanticLabel?: number;
+    semanticReliability?: number;
     pos: [number, number, number];
     scale: [number, number, number];
     quat: [number, number, number, number];
@@ -131,6 +136,9 @@ export interface LayerSettings {
     showNodes: boolean;
     showEdges: boolean;
     showClusters: boolean;
+    visibleSemanticLabels?: {
+        handle: boolean;
+    };
     visibleLabels?: {
         0: boolean;
         1: boolean;
@@ -330,6 +338,14 @@ export const LAYER_COLORS = [
 
 export const LAYER_LABELS = [
     "DEFAULT", "SAFE_TERRAIN", "WALL", "UNKNOWN_OBJECT", "HUMAN", "CAR"
+];
+
+export const SEMANTIC_LABELS = [
+   "HANDLE"
+];
+
+export const SEMANTIC_COLORS = [
+    '#00d1ff',
 ];
 
 export const STATIC_GNG_DEFAULTS = {
