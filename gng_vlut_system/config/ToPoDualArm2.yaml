@@ -1,0 +1,130 @@
+/**:
+  ros__parameters:
+  
+    voxel_idx_shift:
+      x_shift: 42
+      y_shift: 21
+      z_shift: 0
+      offset: 1000000
+
+    robot_name: "ToPoDualArm"
+    urdf_path: "/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf"
+    resource_root_dir: "/ros2_ws/src/dual_arm_urdf"
+    mesh_root_dir: "/ros2_ws/src/dual_arm_urdf/meshes"
+
+    # --- GNG & Safety Settings ---
+    gng:
+      experiment_id: "ToPoDualArm3" #実験ID(結果の保存先ディレクトリ名)
+      data_directory: "/ros2_ws/src/gng_vlut_system/gng_results" #保存先ディレクトリまでのパス
+      gng_model_filename: "gng.bin"
+      vlut_filename: "vlut.bin"
+      profile_names: "left_arm"
+      ground_z_threshold: -10.0
+      spatial_map_resolution: 0.01
+      self_recognition_resolution: 0.01
+      arm_cache_resolution: 0.005
+      danger_threshold: 0.025
+      vlut_resolution: 0.02
+      sensing_resolution: 0.01
+      vlut_only: false #gngの結果だけ読み込みvlutの構築だけ実行
+      use_voxel_collision: true
+      # gng_profiles に列挙した profile は、未指定ならすべて使用
+      profiles:
+        right_arm:
+          root: "R_shoulder_mount"
+          eef: "R_tcp"
+          voxel_exclude:
+            - "base_link"
+            - "R_link1"
+          dof_exclude:
+            - "R_gripper_joint"
+            - "R_gripper_mimic"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
+          dof: 7
+
+        left_arm:
+          root: "L_shoulder_mount"
+          eef: "L_tcp"
+          voxel_exclude:
+            - "base_link"
+            - "L_link1"
+          dof_exclude:
+            - "waist_joint"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
+          dof: 7
+
+    # --- Robot Settings ---
+    robot:
+      eef_link_names: "L_tcp,R_tcp"
+      arm_leaf_link_names: "L_tcp,R_tcp"
+      voxel_size: 0.01
+      inflation: 0.0
+
+    collision:
+      enable_ground_collision: true
+      enable_self_collision: true
+      apply_environment_ignore_links: true
+      apply_self_collision_exclusion_pairs: true
+      voxel_ball:
+        voxel_size: 0.0025
+        voxel_padding: 0.0
+        max_spheres: 8
+        min_points_per_sphere: 5
+        min_gain_ratio: 0.15
+        refine_iterations: 2
+        containment_margin: 0.5
+        verbose: false
+      environment_ignore_links:
+        - "base_footprint"
+      #(隣接リンク同士は自動で衝突判定をしないように設定)
+      self_collision_exclusion_pairs:
+        - "L_finger_left|L_finger_right"
+        - "R_finger_left|R_finger_right"
+    
+    gng_params:
+      lambda: 200
+      max_node_num: 1000
+      max_iterations: 1000000
+      refine_iterations: 100000
+      coord_edge_iterations: 100000
+      learn_rate_s1: 0.08
+      learn_rate_s2: 0.008
+      max_edge_age: 2000
+      alpha: 0.5
+      beta: 0.0005
+      n_best_candidates: 4
+      ais_threshold: 10.0
+      start_node_num: 2
+
+      #tcpの位置のサンプリング範囲と最大試行回数
+      min_x: -0.1
+      max_x: 0.5
+      min_y: -1.0
+      max_y: 1.0
+      min_z: -1.0
+      max_z: 1.0
+      max_attempts: 256
+
+    # --- Bridge & Viewer Settings ---
+    joint_state_topic: "joint_states"
+    stream_topic: "/viewer/internal/stream/robot"
+    frame_id: "base_link"
+    source_frame_id: "base_link"
+    publish_hz: 30.0
+
+    # --- Self Recognition Settings ---
+    self_recognition:
+      resolution: 0.02
+      inflation: 0.0
+      update_hz: 30.0
+      root_link: "base_link"
+      target_frame_id: "base_link"
+      marker_frame_id: "base_link"
+      input_topic: "/camera/transformed_points"
+      output_topic: "/camera/self_filtered_points"
+      self_output_topic: "/camera/self_points"
+      mask_topic: "self_voxel"

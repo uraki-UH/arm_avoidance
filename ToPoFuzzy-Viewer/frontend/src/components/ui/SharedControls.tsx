@@ -14,7 +14,7 @@ export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility
         <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
                 <div className="mb-0.5 flex items-start gap-2">
-                    <button onClick={e => { e.stopPropagation(); if (!isActionDisabled) onToggleVisibility(); }} className={`h-6 w-6 inline-flex items-center justify-center rounded-md border ${visible ? 'border-[var(--accent-color)]/50 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'}`}>
+                    <button onClick={e => { e.stopPropagation(); !isActionDisabled && onToggleVisibility(); }} className={`h-6 w-6 inline-flex items-center justify-center rounded-md border ${visible ? 'border-[var(--accent-color)]/50 bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-white/10 bg-black/20 text-[var(--text-secondary)]'}`}>
                         {visible ? <Eye size={14} /> : <EyeOff size={14} />}
                     </button>
                     {onOpenTransform && <button onClick={e => { e.stopPropagation(); onOpenTransform(); }} className="h-6 w-6 inline-flex items-center justify-center rounded-md border border-white/10 bg-black/20 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><Move size={12} /></button>}
@@ -29,7 +29,7 @@ export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility
                 </div>
                 {children}
             </div>
-            <button onClick={e => { e.stopPropagation(); if (!isActionDisabled) onRemove(); }} className="btn-icon btn-icon-danger self-start mt-0.5"><Trash2 size={13} /></button>
+            <button onClick={e => { e.stopPropagation(); !isActionDisabled && onRemove(); }} className="btn-icon btn-icon-danger self-start mt-0.5"><Trash2 size={13} /></button>
         </div>
     );
     return headerOnly ? c : <div onClick={onSelect} className={`rounded-lg border px-2 py-1 mb-1 ${isSelected ? 'border-[var(--accent-color)]/70 bg-[var(--accent-soft)]' : 'border-white/10 bg-white/5 hover:bg-white/10'} ${isActionDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}>{c}</div>;

@@ -25,7 +25,7 @@ ais_gng_node:
     cluster.num_min: 10
     cluster.velocity.lpf_time_constant: 0.5
     cluster.plane.volume: 10.0
-    cluster.unknown.edge_distance_max: 0.1
+    cluster.unknown.edge_distance_max: 0.2
     cluster.other.edge_distance_max: 0.4
     cluster.human.radius: 0.6
     cluster.human.hysteresis_age: 5
