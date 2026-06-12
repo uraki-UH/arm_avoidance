@@ -19,23 +19,8 @@ endif()
 
 # visualizar
 ament_auto_add_executable(visualizar src/visualizar.cpp)
-
-# Pytorchを探す
-execute_process(
-    COMMAND python3 -c "import torch; print(torch.utils.cmake_prefix_path)"
-    OUTPUT_VARIABLE TORCH_CMAKE_PATH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE PYTHON_RESULT
-)
-# パスの取得が成功したかを確認
-if(PYTHON_RESULT EQUAL 0)
-    # 取得したパスを CMAKE_PREFIX_PATH に追加
-    message(STATUS "Automatically found PyTorch CMake path: ${TORCH_CMAKE_PATH}")
-    list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_PATH}")
-else()
-    message(FATAL_ERROR "Failed to find PyTorch CMake path using Python. Please check your Python environment or manually set CMAKE_PREFIX_PATH.")
-endif()
-find_package(Torch REQUIRED)
+ament_auto_add_executable(topological_query_node src/topological_query/topological_query_main.cpp src/topological_query/topological_query_node.cpp src/topological_query/topological_reachability.cpp)
+ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_main.cpp src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _gng_system_processor)
 if(_gng_system_processor STREQUAL "x86_64" OR _gng_system_processor STREQUAL "amd64")
@@ -53,16 +38,36 @@ endif()
 
 set(_available_gng_backends "")
 
+set(_torch_available OFF)
+execute_process(
+    COMMAND python3 -c "import torch; print(torch.utils.cmake_prefix_path)"
+    OUTPUT_VARIABLE TORCH_CMAKE_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE PYTHON_RESULT
+)
+if(PYTHON_RESULT EQUAL 0)
+    message(STATUS "Automatically found PyTorch CMake path: ${TORCH_CMAKE_PATH}")
+    list(APPEND CMAKE_PREFIX_PATH "${TORCH_CMAKE_PATH}")
+    find_package(Torch QUIET)
+    if(Torch_FOUND)
+        set(_torch_available ON)
+    else()
+        message(WARNING "PyTorch was imported, but CMake package could not be found. GNG backends will be skipped.")
+    endif()
+else()
+    message(WARNING "PyTorch is not available in this Python environment. GNG backends will be skipped, but utility nodes can still build.")
+endif()
+
 foreach(_backend IN ITEMS cpu gpu)
   set(_backend_lib "")
   if(EXISTS "${_gng_lib_dir}/libgng_${_backend}.so")
     set(_backend_lib "${_gng_lib_dir}/libgng_${_backend}.so")
   endif()
 
-  if(_backend_lib)
+  if(_backend_lib AND _torch_available)
     set(_library_target "ais_gng_component_${_backend}")
     set(_executable_name "ais_gng_${_backend}")
-    ament_auto_add_library(${_library_target} SHARED src/ais_gng_component.cpp src/handle_label_utils.cpp src/plugin/cluster_classification.cpp src/plugin/downsampling.cpp src/plugin/visualize_filter.cpp)
+ament_auto_add_library(${_library_target} SHARED src/ais_gng_component.cpp src/handle_label_utils.cpp src/topological_query/topological_reachability.cpp src/plugin/cluster_classification.cpp src/plugin/downsampling.cpp src/plugin/visualize_filter.cpp)
     target_include_directories(${_library_target} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libgng/include)
     target_link_libraries(${_library_target} "${_backend_lib}" ykpiv ${TORCH_LIBRARIES})
     target_compile_definitions(${_library_target} PRIVATE AIS_GNG_BACKEND_${_backend}=1)
@@ -72,13 +77,15 @@ foreach(_backend IN ITEMS cpu gpu)
       $<$<CONFIG:Debug>:-O0 -g -fno-omit-frame-pointer>
       $<$<CONFIG:Release>:-O3 -DNDEBUG>
     )
+  elseif(_backend_lib)
+    message(STATUS "ais_gng: skipping ${_backend} backend because PyTorch CMake package is unavailable")
   else()
     message(STATUS "ais_gng: skipping ${_backend} backend because libgng_${_backend}.so was not found in ${_gng_arch_dir}")
   endif()
 endforeach()
 
 if(_available_gng_backends STREQUAL "")
-  message(FATAL_ERROR "ais_gng: no libgng backend libraries were found under ${_gng_lib_dir}")
+  message(WARNING "ais_gng: no libgng backend components were built")
 endif()
 
 install(

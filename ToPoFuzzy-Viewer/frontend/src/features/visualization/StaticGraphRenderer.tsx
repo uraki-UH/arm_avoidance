@@ -141,7 +141,7 @@ export function StaticGraphRenderer({
             }
             const nextNode = {
                 ...node,
-                semanticLabel: semanticLabel > 0 ? semanticLabel : node.semanticLabel,
+                semanticLabel: semanticColorEnabled && semanticLabel > 0 ? semanticLabel : undefined,
             };
             if (semanticColorEnabled && semanticLabel > 0) {
                 buckets[labelIndex].semantic.push(nextNode);

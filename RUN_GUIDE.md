@@ -35,6 +35,14 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ( \topic_name:=/topological_map_static)
 
+## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する
+ros2 launch ais_gng topological_query.launch.py \
+  input_topic:=/topological_map/merged \
+  relation_mode:=graph_edges \
+  semantic_label:=1 \
+  max_euclidean_distance:=0.5 \
+  max_hops:=-1
+
 ##　dynamixel handlerの起動
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
 
@@ -194,3 +202,9 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
  ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py   robot_name:=ToPoDualArm   input_topic:=/topo_voxel_ids
 
+
+ボクセルにノードを所属させる
+ros2 launch ais_gng topological_grid.launch.py \
+  input_topic:=/topological_map \
+  output_topic:=/topological_grid_voxels \
+  grid_size:=0.05
