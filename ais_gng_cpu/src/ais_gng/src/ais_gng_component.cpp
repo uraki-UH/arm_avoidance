@@ -149,7 +149,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.eta_s2", 0.008);                                 // 近傍ノードの学習係数(cpu)
     this->declare_parameter("node.eta_decay_rate", 1.0);                                 // 学習係数の減衰率(cpu)
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
-    this->declare_parameter("node.grid", 0.1);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
+    this->declare_parameter("node.grid", 0.05);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
     this->declare_parameter("node.s1_age_max", std::vector<int>{6, 6, 6, 3});      // ノードの選択回数に基づく削除(cpu/gpu)
     this->declare_parameter("node.clusted_s1_age", std::vector<int>{20, 20, 6, 3});// クラスタ化されたノードの選択回数に基づく削除(cpu)
     this->declare_parameter("node.interval", std::vector<double>{});               // ノードの間隔(m)(cpu/gpu)
