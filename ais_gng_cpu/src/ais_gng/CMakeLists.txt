@@ -10,6 +10,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(voxel_msgs REQUIRED)
 ament_auto_find_build_dependencies()
 
 if(BUILD_TESTING)
@@ -19,8 +20,9 @@ endif()
 
 # visualizar
 ament_auto_add_executable(visualizar src/visualizar.cpp)
-ament_auto_add_executable(topological_query_node src/topological_query/topological_query_main.cpp src/topological_query/topological_query_node.cpp src/topological_query/topological_reachability.cpp)
-ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_main.cpp src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
+ament_auto_add_executable(topological_query_node src/topological_query/topological_query_node.cpp src/topological_query/topological_reachability.cpp)
+ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
+ament_target_dependencies(topological_grid_node voxel_msgs)
 
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _gng_system_processor)
 if(_gng_system_processor STREQUAL "x86_64" OR _gng_system_processor STREQUAL "amd64")

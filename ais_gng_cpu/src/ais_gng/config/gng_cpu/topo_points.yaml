@@ -51,6 +51,3 @@ ais_gng_node:
     input.z_min: -1.
     input.z_max: 20.
     input.topic_names: ["semantic_points"]
-    semantic.handle_label_value: 1
-    semantic.handle_ratio_threshold: 0.5
-    semantic.handle_history_size: 64

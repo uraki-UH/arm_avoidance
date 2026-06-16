@@ -1,6 +1,7 @@
 #include <ais_gng/topological_grid/topological_grid_node.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <sstream>
 
 namespace fuzzrobo::topological_grid
@@ -114,3 +115,12 @@ void TopologicalGridNode::publishResult(const ais_gng_msgs::msg::TopologicalMap 
 }
 
 }  // namespace fuzzrobo::topological_grid
+
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<fuzzrobo::topological_grid::TopologicalGridNode>();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
+  return 0;
+}

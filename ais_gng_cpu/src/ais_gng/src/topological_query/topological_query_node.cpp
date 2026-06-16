@@ -1,6 +1,7 @@
 #include <ais_gng/topological_query/topological_query_node.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 
 namespace fuzzrobo::topological_query
@@ -98,3 +99,12 @@ void TopologicalQueryNode::publishResult(
 }
 
 }  // namespace fuzzrobo::topological_query
+
+int main(int argc, char **argv)
+{
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<fuzzrobo::topological_query::TopologicalQueryNode>();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
+  return 0;
+}
