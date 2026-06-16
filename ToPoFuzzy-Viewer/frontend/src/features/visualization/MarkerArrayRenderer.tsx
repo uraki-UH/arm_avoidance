@@ -263,7 +263,7 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
 
 function ArrowMarker({ marker }: { marker: MarkerMessage }) {
     const { color } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, direction, lengthScale } = useMemo(() => {
+    const { position, direction, lengthScale, maxLength, shaftWidth } = useMemo(() => {
         const pos = marker.pos || [0, 0, 0];
         const quat = marker.quat || [0, 0, 0, 1];
         const px = pos[0] ?? 0;
@@ -285,13 +285,27 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             origin[0] = p0[0];
             origin[1] = p0[1];
             origin[2] = p0[2];
+            const length = dir.length();
+            return {
+                position: origin,
+                direction: [dir.x, dir.y, dir.z] as [number, number, number],
+                lengthScale: 1.0,
+                maxLength: Math.max(0.2, length * 1.5),
+                shaftWidth: Math.max(0.008, length * 0.08),
+            };
         } else {
             const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
             dir.applyQuaternion(quaternion);
         }
 
         const scale = Math.max(0.0001, marker.scale?.[0] || 0.15);
-        return { position: origin, direction: [dir.x, dir.y, dir.z] as [number, number, number], lengthScale: scale };
+        return {
+            position: origin,
+            direction: [dir.x, dir.y, dir.z] as [number, number, number],
+            lengthScale: scale,
+            maxLength: Math.max(0.2, scale * 1.5),
+            shaftWidth: Math.max(0.005, scale * 0.06),
+        };
     }, [marker.pos, marker.quat, marker.points, marker.scale]);
 
     return (
@@ -300,8 +314,8 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             direction={direction}
             lengthScale={lengthScale}
             color={color.getStyle()}
-            maxLength={Math.max(0.2, lengthScale * 1.5)}
-            shaftWidth={Math.max(0.005, lengthScale * 0.06)}
+            maxLength={maxLength}
+            shaftWidth={shaftWidth}
         />
     );
 }

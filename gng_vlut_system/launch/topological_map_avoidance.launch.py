@@ -44,6 +44,7 @@ def launch_setup(context, *args, **kwargs):
     trial_seed = LaunchConfiguration("trial_seed").perform(context)
     avoid_danger = LaunchConfiguration("avoid_danger").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
+    goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
     control_claim_priority = LaunchConfiguration("control_claim_priority").perform(context)
     control_claim_mode = LaunchConfiguration("control_claim_mode").perform(context)
@@ -83,6 +84,8 @@ def launch_setup(context, *args, **kwargs):
         node_params["avoid_danger"] = avoid_danger.lower() in ("1", "true", "yes", "on")
     if replan_on_path_collision:
         node_params["replan_on_path_collision"] = replan_on_path_collision.lower() in ("1", "true", "yes", "on")
+    if goal_candidate_ids_topic:
+        node_params["goal_candidate_ids_topic"] = goal_candidate_ids_topic
     if target_topic:
         node_params["target_topic"] = target_topic
     if control_claim_priority:
@@ -155,6 +158,7 @@ def generate_launch_description():
         DeclareLaunchArgument("trial_seed", default_value="0"),
         DeclareLaunchArgument("avoid_danger", default_value="true"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
+        DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("target_topic", default_value=""),
         DeclareLaunchArgument("control_claim_priority", default_value="10"),
         DeclareLaunchArgument("control_claim_mode", default_value="1"),

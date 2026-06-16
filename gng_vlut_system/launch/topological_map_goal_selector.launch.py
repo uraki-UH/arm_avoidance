@@ -31,12 +31,16 @@ def generate_launch_description():
             "target_score_topic",
             default_value="/grasp_pose_scores",
         ),
+        DeclareLaunchArgument(
+            "goal_candidate_ids_topic",
+            default_value="/selected_goal_candidate_ids",
+        ),
         ExecuteProcess(
             cmd=[
                 "python3",
                 script,
                 "--topological-map-topic",
-                LaunchConfiguration("topological_map_topic"),"),
+                LaunchConfiguration("topological_map_topic"),
                 "--output-topic",
                 LaunchConfiguration("output_topic"),
                 "--marker-topic",
@@ -53,6 +57,8 @@ def generate_launch_description():
                 LaunchConfiguration("target_pose_array_topic"),
                 "--target-score-topic",
                 LaunchConfiguration("target_score_topic"),
+                "--goal-candidate-ids-topic",
+                LaunchConfiguration("goal_candidate_ids_topic"),
             ],
             output="screen",
         ),

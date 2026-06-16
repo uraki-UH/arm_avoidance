@@ -4,6 +4,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +24,7 @@
 
 #include "common/voxel_utils.hpp"
 #include "common/grasp_pose_utils.hpp"
+#include "common/grasp_pose_marker_utils.hpp"
 #include "core/common/constants.hpp"
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
@@ -39,6 +41,7 @@ public:
     declare_parameter<std::string>("input_topic", "/topo_points");
     declare_parameter<std::string>("pose_topic", "/grasp_pose_candidates");
     declare_parameter<std::string>("score_topic", "/grasp_pose_scores");
+    declare_parameter<std::string>("marker_topic", "/grasp_pose_markers");
     declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<int>("x_shift", 42);
@@ -52,6 +55,7 @@ public:
     input_topic_ = get_parameter("input_topic").as_string();
     pose_topic_ = get_parameter("pose_topic").as_string();
     score_topic_ = get_parameter("score_topic").as_string();
+    marker_topic_ = get_parameter("marker_topic").as_string();
     target_frame_id_ = get_parameter("target_frame_id").as_string();
     codec_.setVoxelSize(get_parameter("voxel_size").as_double());
     codec_.setIndexingParams(
@@ -76,12 +80,14 @@ public:
       pose_topic_, rclcpp::QoS(1).reliable().transient_local());
     score_publisher_ = create_publisher<std_msgs::msg::Float32MultiArray>(
       score_topic_, rclcpp::QoS(1).reliable().transient_local());
+    marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+      marker_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     RCLCPP_INFO(
       get_logger(),
-      "GraspPoseCandidateProducerNode initialized. input=%s pose=%s score=%s target_frame=%s voxel_size=%.4f",
-      input_topic_.c_str(), pose_topic_.c_str(), score_topic_.c_str(), target_frame_id_.c_str(),
-      codec_.voxelSize());
+      "GraspPoseCandidateProducerNode initialized. input=%s pose=%s score=%s marker=%s target_frame=%s voxel_size=%.4f",
+      input_topic_.c_str(), pose_topic_.c_str(), score_topic_.c_str(), marker_topic_.c_str(),
+      target_frame_id_.c_str(), codec_.voxelSize());
   }
 
 private:
@@ -166,6 +172,7 @@ private:
 
     pose_publisher_->publish(pose_array);
     score_publisher_->publish(scores);
+    marker_publisher_->publish(robot_sim::common::grasp::buildPoseAxisMarkerArray(pose_array));
 
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
@@ -202,11 +209,15 @@ private:
 
     std_msgs::msg::Float32MultiArray scores;
     score_publisher_->publish(scores);
+
+    visualization_msgs::msg::MarkerArray markers;
+    marker_publisher_->publish(markers);
   }
 
   std::string input_topic_;
   std::string pose_topic_;
   std::string score_topic_;
+  std::string marker_topic_;
   std::string target_frame_id_;
   std::size_t max_candidates_ = 256;
   std::size_t min_points_per_voxel_ = 1;
@@ -218,6 +229,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_publisher_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
 };
 
 }  // namespace robot_sim::bridge

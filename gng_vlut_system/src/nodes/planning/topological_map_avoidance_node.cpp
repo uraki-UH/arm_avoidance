@@ -22,6 +22,8 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include <gng_control_msgs/msg/joint_control_claim.hpp>
+// Candidate goal ids from the target-pose selector.
+#include <std_msgs/msg/int32_multi_array.hpp>
 
 #include "common/resource_utils.hpp"
 #include "planner/RRT/ik_rrt_planner.hpp"
@@ -176,6 +178,7 @@ public:
     declare_parameter("control_claim_enabled", true);
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
+    declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids");
     declare_parameter("publish_hz", 20.0);
     declare_parameter("avoid_collisions", true);
     declare_parameter("avoid_danger", true);
@@ -350,6 +353,7 @@ public:
     const std::string joint_topic = get_parameter("joint_topic").as_string();
     const std::string topological_map_topic =
         get_parameter("topological_map_topic").as_string();
+    goal_candidate_ids_topic_ = get_parameter("goal_candidate_ids_topic").as_string();
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     target_topic_ = get_parameter("target_topic").as_string();
@@ -384,6 +388,19 @@ public:
           have_map_ = true;
           updateNodeStatusFromMapLocked(*msg);
         });
+
+    if (!goal_candidate_ids_topic_.empty()) {
+      goal_candidate_ids_sub_ = create_subscription<std_msgs::msg::Int32MultiArray>(
+          goal_candidate_ids_topic_, rclcpp::QoS(1).reliable().transient_local(),
+          [this](const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            latest_goal_candidate_ids_.clear();
+            latest_goal_candidate_ids_.reserve(msg->data.size());
+            for (const auto id : msg->data) {
+              latest_goal_candidate_ids_.push_back(static_cast<int>(id));
+            }
+          });
+    }
 
     trajectory_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
@@ -441,9 +458,9 @@ public:
         [this]() { this->publishTargetLocked(); });
 
     RCLCPP_INFO(get_logger(),
-                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s dof=%d trial_mode=%d",
+                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s goal_ids_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s dof=%d trial_mode=%d",
                 joint_topic.c_str(), topological_map_topic.c_str(),
-                target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
+                goal_candidate_ids_topic_.c_str(), target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
                 candidate_trajectory_topic_.c_str(),
                 dof, trial_mode_ ? 1 : 0);
     RCLCPP_INFO(get_logger(),
@@ -727,21 +744,33 @@ private:
               "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
               trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
-      } else if (start_node.status.is_colliding ||
-                 (start_node.status.is_danger && avoid_danger_)) {
-        if (!cached_safe_goal_ids_.empty()) {
+      } else {
+        const auto goal_candidates = selectedGoalCandidatesLocked();
+        if (!goal_candidates.empty()) {
           if (!latchTrajectoryFromCandidatesLocked(
-                  current_q, start_id, cached_safe_goal_ids_, false,
-                  "Avoidance", "Avoidance mode")) {
+                  current_q, start_id, goal_candidates, false,
+                  "GoalPlanning", "GoalPlanning")) {
             RCLCPP_WARN_THROTTLE(
                 get_logger(), *get_clock(), 5000,
-                "Avoidance mode: planner returned empty path start=%d safe_goals=%zu",
-                start_id, cached_safe_goal_ids_.size());
+                "GoalPlanning: planner returned empty path start=%d goal_candidates=%zu",
+                start_id, goal_candidates.size());
           }
-        } else {
-          RCLCPP_WARN_THROTTLE(
-              get_logger(), *get_clock(), 5000,
-              "Avoidance mode: no safe goal candidates available.");
+        } else if (start_node.status.is_colliding ||
+                   (start_node.status.is_danger && avoid_danger_)) {
+          if (!cached_safe_goal_ids_.empty()) {
+            if (!latchTrajectoryFromCandidatesLocked(
+                    current_q, start_id, cached_safe_goal_ids_, false,
+                    "Avoidance", "Avoidance mode")) {
+              RCLCPP_WARN_THROTTLE(
+                  get_logger(), *get_clock(), 5000,
+                  "Avoidance mode: planner returned empty path start=%d safe_goals=%zu",
+                  start_id, cached_safe_goal_ids_.size());
+            }
+          } else {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(), *get_clock(), 5000,
+                "Avoidance mode: no safe goal candidates available.");
+          }
         }
       }
     }
@@ -799,9 +828,11 @@ private:
   bool control_claim_enabled_ = true;
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
+  std::string goal_candidate_ids_topic_;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
+  rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr goal_candidate_ids_sub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr target_pub_;
   rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
@@ -815,6 +846,7 @@ private:
   bool have_map_ = false;
   Eigen::VectorXf last_target_q_;
   std::vector<int> cached_safe_goal_ids_;
+  std::vector<int> latest_goal_candidate_ids_;
   std::vector<int> active_goal_candidates_;
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
@@ -856,6 +888,30 @@ private:
     return topological_map_avoidance::collectNearestGoalCandidates(
         gng_, cached_safe_goal_ids_, trial_safe_only_, reference_coord,
         candidate_count);
+  }
+
+  std::vector<int> selectedGoalCandidatesLocked() const {
+    const std::vector<int> &source =
+        latest_goal_candidate_ids_.empty() ? cached_safe_goal_ids_ : latest_goal_candidate_ids_;
+    std::vector<int> out;
+    out.reserve(source.size());
+    for (int id : source) {
+      if (!gng_ || id < 0 || id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &node = gng_->nodeAt(id);
+      if (node.id == -1 || !node.status.active || !node.status.valid) {
+        continue;
+      }
+      if (node.status.is_colliding) {
+        continue;
+      }
+      if (avoid_danger_ && node.status.is_danger) {
+        continue;
+      }
+      out.push_back(id);
+    }
+    return out;
   }
 
   std::vector<int> collectNearestStartCandidatesLocked(const Eigen::VectorXf &reference_q,

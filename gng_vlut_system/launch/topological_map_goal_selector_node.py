@@ -12,6 +12,7 @@ import rclpy
 from rclpy.node import Node
 
 from geometry_msgs.msg import Point, PointStamped, PoseArray, PoseStamped
+from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -108,6 +109,7 @@ class TopologicalMapGoalSelector(Node):
         self.target_point_topic = args.target_point_topic
         self.target_pose_array_topic = args.target_pose_array_topic
         self.target_score_topic = args.target_score_topic
+        self.goal_candidate_ids_topic = args.goal_candidate_ids_topic
 
         self.map_msg: Optional[TopologicalMap] = None
         self.map_revision: int = -1
@@ -117,6 +119,7 @@ class TopologicalMapGoalSelector(Node):
 
         self.output_pub = self.create_publisher(TopologicalMap, self.output_topic, 10)
         self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
+        self.goal_candidate_ids_pub = self.create_publisher(Int32MultiArray, self.goal_candidate_ids_topic, 10)
 
         if (
             QoSProfile is not None
@@ -318,13 +321,14 @@ class TopologicalMapGoalSelector(Node):
         if resolved_target is None:
             return
 
-        selected_map, selected_indices = self._build_selected_map(self.map_msg, resolved_target)
+        selected_map, selected_indices, selected_ids = self._build_selected_map(self.map_msg, resolved_target)
         self.output_pub.publish(selected_map)
         self.marker_pub.publish(self._build_markers(selected_map, selected_indices))
+        self.goal_candidate_ids_pub.publish(Int32MultiArray(data=[int(node_id) for node_id in selected_ids]))
 
     def _build_selected_map(
         self, map_msg: TopologicalMap, target: TargetPose
-    ) -> Tuple[TopologicalMap, Dict[int, int]]:
+    ) -> Tuple[TopologicalMap, Dict[int, int], List[int]]:
         scored: List[Tuple[float, int]] = []
         target_dir = _normalize(_quat_to_axis_z(target.orientation)) if target.orientation else None
 
@@ -352,6 +356,7 @@ class TopologicalMapGoalSelector(Node):
         scored.sort(key=lambda item: item[0])
         selected_old_indices = [idx for _, idx in scored[: self.candidate_count]]
         selected_lookup = {old_idx: new_idx for new_idx, old_idx in enumerate(selected_old_indices)}
+        selected_ids = [int(map_msg.nodes[idx].id) for idx in selected_old_indices]
 
         out = TopologicalMap()
         out.header = copy.deepcopy(map_msg.header)
@@ -360,7 +365,7 @@ class TopologicalMapGoalSelector(Node):
         out.edges = []
         out.clusters = []
 
-        return out, selected_lookup
+        return out, selected_lookup, selected_ids
 
     def _build_markers(self, map_msg: TopologicalMap, selected_indices: Dict[int, int]) -> MarkerArray:
         _ = selected_indices
@@ -408,6 +413,7 @@ def main() -> None:
     parser.add_argument("--target-point-topic", default="")
     parser.add_argument("--target-pose-array-topic", default="/grasp_pose_candidates")
     parser.add_argument("--target-score-topic", default="/grasp_pose_scores")
+    parser.add_argument("--goal-candidate-ids-topic", default="/selected_goal_candidate_ids")
     args = parser.parse_args()
 
     rclpy.init()

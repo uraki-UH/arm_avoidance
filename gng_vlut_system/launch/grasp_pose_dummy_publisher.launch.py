@@ -8,6 +8,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("pose_topic", default_value="/grasp_pose_candidates"),
         DeclareLaunchArgument("score_topic", default_value="/grasp_pose_scores"),
+        DeclareLaunchArgument("marker_topic", default_value="/grasp_pose_markers"),
         DeclareLaunchArgument("frame_id", default_value="world"),
         DeclareLaunchArgument("publish_rate_hz", default_value="1.0"),
         DeclareLaunchArgument("candidate_count", default_value="6"),
@@ -26,6 +27,7 @@ def generate_launch_description():
             parameters=[{
                 "pose_topic": LaunchConfiguration("pose_topic"),
                 "score_topic": LaunchConfiguration("score_topic"),
+                "marker_topic": LaunchConfiguration("marker_topic"),
                 "frame_id": LaunchConfiguration("frame_id"),
                 "publish_rate_hz": LaunchConfiguration("publish_rate_hz"),
                 "candidate_count": LaunchConfiguration("candidate_count"),
