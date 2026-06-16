@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/grasp_pose_marker_utils.hpp"
+#include "common/grasp_pose_utils.hpp"
 
 namespace robot_sim::bridge
 {
@@ -84,26 +85,31 @@ private:
     scores.data.reserve(static_cast<std::size_t>(candidate_count_));
 
     const double yaw_base = base_yaw_deg_ * kPi / 180.0;
-    const double center_phase = (candidate_count_ > 1) ? (static_cast<double>(candidate_count_ - 1) * 0.5) : 0.0;
+    const double angle_offset = circle_angle_offset_deg_ * kPi / 180.0;
+    const double angle_step = candidate_count_ > 0 ? (2.0 * kPi / static_cast<double>(candidate_count_)) : 0.0;
 
     for (int i = 0; i < candidate_count_; ++i) {
-      const double t = static_cast<double>(i);
-      const double x = center_x_ + (t - center_phase) * spread_x_;
-      const double y = center_y_ + std::sin(t * 0.9) * spread_y_;
-      const double z = center_z_ + std::cos(t * 0.7) * spread_z_;
-      const double yaw = yaw_base + t * 0.35;
+      const double theta = angle_offset + static_cast<double>(i) * angle_step;
+      const double x = center_x_ + circle_radius_ * std::cos(theta);
+      const double y = center_y_ + circle_radius_ * std::sin(theta);
+      const double z = center_z_ + std::sin(theta * 0.5) * spread_z_;
+      const Eigen::Vector3d position(x, y, z);
+      const Eigen::Vector3d center(center_x_, center_y_, center_z_);
+      const Eigen::Vector3d inward = robot_sim::common::grasp::safeNormalize(center - position, Eigen::Vector3d::UnitX());
+      const Eigen::Quaterniond orientation = robot_sim::common::grasp::makeApproachOrientation(inward);
 
       geometry_msgs::msg::Pose pose;
-      pose.position.x = x;
-      pose.position.y = y;
-      pose.position.z = z;
-      pose.orientation.x = 0.0;
-      pose.orientation.y = 0.0;
-      pose.orientation.z = std::sin(yaw * 0.5);
-      pose.orientation.w = std::cos(yaw * 0.5);
+      pose.position.x = position.x();
+      pose.position.y = position.y();
+      pose.position.z = position.z();
+      pose.orientation.x = orientation.x();
+      pose.orientation.y = orientation.y();
+      pose.orientation.z = orientation.z();
+      pose.orientation.w = orientation.w();
 
       pose_array.poses.push_back(pose);
-      scores.data.push_back(static_cast<float>(1.0 - 0.08 * t));
+      const double radial_bias = 1.0 - std::abs(std::sin(theta));
+      scores.data.push_back(static_cast<float>(0.5 + 0.5 * radial_bias));
     }
 
     pose_pub_->publish(pose_array);
@@ -124,6 +130,8 @@ private:
   double spread_y_ = 0.05;
   double spread_z_ = 0.03;
   double base_yaw_deg_ = 0.0;
+  const double circle_radius_ = 0.30;
+  const double circle_angle_offset_deg_ = 0.0;
 
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_pub_;
