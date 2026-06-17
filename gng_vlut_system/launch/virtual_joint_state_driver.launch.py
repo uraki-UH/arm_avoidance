@@ -33,6 +33,7 @@ def safe_bool(value, default):
 
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
+    node_name = LaunchConfiguration("node_name").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
     state_topic = LaunchConfiguration("state_topic").perform(context)
     output_topic = LaunchConfiguration("output_topic").perform(context)
@@ -50,7 +51,7 @@ def launch_setup(context, *args, **kwargs):
         Node(
             package="gng_vlut_system",
             executable="virtual_joint_state_driver_node",
-            name="virtual_joint_state_driver_node",
+            name=node_name or "virtual_joint_state_driver_node",
             namespace=robot_name,
             output="screen",
             parameters=[{
@@ -70,6 +71,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("node_name", default_value="virtual_joint_state_driver_node"),
         DeclareLaunchArgument("target_topic", default_value="target_joint_states"),
         DeclareLaunchArgument("state_topic", default_value="joint_states"),
         DeclareLaunchArgument("output_topic", default_value="joint_states"),

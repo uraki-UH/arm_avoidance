@@ -1,4 +1,5 @@
 import os
+import yaml
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -25,7 +26,6 @@ def safe_int(value, default):
         return default
 
 
-
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
 
@@ -36,6 +36,7 @@ def launch_setup(context, *args, **kwargs):
     topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
     trajectory_topic = LaunchConfiguration("trajectory_topic").perform(context)
     candidate_trajectory_topic = LaunchConfiguration("candidate_trajectory_topic").perform(context)
+    joint_topic = LaunchConfiguration("joint_topic").perform(context)
     trial_mode = LaunchConfiguration("trial_mode").perform(context)
     trial_goal_interval_sec = LaunchConfiguration("trial_goal_interval_sec").perform(context)
     trial_safe_only = LaunchConfiguration("trial_safe_only").perform(context)
@@ -57,6 +58,36 @@ def launch_setup(context, *args, **kwargs):
     right_arm_search_max_m = LaunchConfiguration("right_arm_search_max_m").perform(context)
     right_arm_publish_hz = LaunchConfiguration("right_arm_publish_hz").perform(context)
 
+    def resolve_urdf_path(params_file_value: str, explicit_urdf_path: str) -> str:
+        if explicit_urdf_path:
+            return explicit_urdf_path
+        if params_file_value and os.path.exists(params_file_value):
+            try:
+                with open(params_file_value, "r", encoding="utf-8") as f:
+                    params_yaml = yaml.safe_load(f) or {}
+
+                def find_urdf_path(value):
+                    if not isinstance(value, dict):
+                        return None
+                    for key in ("urdf_path", "robot_urdf_path", "robot_description_file"):
+                        candidate = value.get(key)
+                        if candidate:
+                            return str(candidate).strip()
+                    for child in value.values():
+                        found = find_urdf_path(child)
+                        if found:
+                            return found
+                    return None
+
+                found = find_urdf_path(params_yaml)
+                if found:
+                    return found
+            except Exception:
+                pass
+        return "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
+
+    urdf_path = resolve_urdf_path(params_file, urdf_path)
+
     node_params = {}
     if urdf_path:
         node_params["urdf_path"] = urdf_path
@@ -68,6 +99,8 @@ def launch_setup(context, *args, **kwargs):
         node_params["trajectory_topic"] = trajectory_topic
     if candidate_trajectory_topic:
         node_params["candidate_trajectory_topic"] = candidate_trajectory_topic
+    if joint_topic:
+        node_params["joint_topic"] = joint_topic
     if trial_mode:
         node_params["trial_mode"] = trial_mode.lower() in ("1", "true", "yes", "on")
     if trial_goal_interval_sec:
@@ -146,6 +179,7 @@ def generate_launch_description():
                               default_value=""),
         DeclareLaunchArgument("topological_map_topic",
                               default_value="/ToPoDualArm/topological_map_static"),
+        DeclareLaunchArgument("joint_topic", default_value="/ToPoDualArm/joint_states"),
         DeclareLaunchArgument("trajectory_topic",
                               default_value="/ToPoDualArm/planned_topological_map"),
         DeclareLaunchArgument("candidate_trajectory_topic",

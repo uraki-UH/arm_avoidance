@@ -229,7 +229,11 @@ def launch_setup(context, *args, **kwargs):
         common_params["resource_root_dir"] = resource_root
     if mesh_root:
         common_params["mesh_root_dir"] = mesh_root
-    common_params["joint_state_topic"] = f"/{robot_name}/joint_states"
+    # Viewer 用の関節状態は制御系の /joint_states と分離する。
+    # ここが public /joint_states と混ざると、初期姿勢や GUI 由来の部分集合が
+    # そのまま制御系に流れ込んで不安定になる。
+    viewer_joint_state_topic = f"/{robot_name}/viewer_joint_states"
+    common_params["joint_state_topic"] = viewer_joint_state_topic
 
     # 内部ストリーム用のトピック名
     stream_topic = "/viewer/internal/stream/robot"
@@ -261,6 +265,7 @@ def launch_setup(context, *args, **kwargs):
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": enable_joint_state_publisher,
                 "urdf_path": urdf_path,
+                "joint_state_topic": viewer_joint_state_topic,
             }.items()
         ),
 
@@ -278,8 +283,8 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "robot_name": robot_name,
                 "target_topic": f"/{robot_name}/target_joint_states",
-                "state_topic": f"/{robot_name}/joint_states",
-                "output_topic": f"/{robot_name}/joint_states",
+                "state_topic": viewer_joint_state_topic,
+                "output_topic": viewer_joint_state_topic,
             }.items()
         ),
 

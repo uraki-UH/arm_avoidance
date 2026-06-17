@@ -54,6 +54,7 @@ def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
+    joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
     
     # Auto-detect robot description package
     robot_desc_default = pick_robot_description(robot_name, pkg_share)
@@ -82,9 +83,7 @@ def launch_setup(context, *args, **kwargs):
                 executable="joint_state_publisher",
                 namespace=robot_name,
                 parameters=[{"robot_description": ParameterValue(Command(xacro_cmd), value_type=str)}],
-                remappings=[
-                    ("joint_states", f"/{robot_name}/joint_states"),
-                ],
+                remappings=[("joint_states", joint_state_topic or f"/{robot_name}/joint_states")],
             )
         )
 
@@ -121,6 +120,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument("joint_state_topic", default_value=""),
         OpaqueFunction(function=launch_setup)
     ])
