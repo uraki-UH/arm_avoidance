@@ -391,7 +391,7 @@ public:
 
     if (!goal_candidate_ids_topic_.empty()) {
       goal_candidate_ids_sub_ = create_subscription<std_msgs::msg::Int32MultiArray>(
-          goal_candidate_ids_topic_, rclcpp::QoS(1).reliable().transient_local(),
+        goal_candidate_ids_topic_, rclcpp::QoS(1).reliable().transient_local(),
           [this](const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             latest_goal_candidate_ids_.clear();
@@ -399,6 +399,12 @@ public:
             for (const auto id : msg->data) {
               latest_goal_candidate_ids_.push_back(static_cast<int>(id));
             }
+            RCLCPP_INFO(
+                get_logger(),
+                "Received goal candidate ids: count=%zu first=%d topic=%s",
+                latest_goal_candidate_ids_.size(),
+                latest_goal_candidate_ids_.empty() ? -1 : latest_goal_candidate_ids_.front(),
+                goal_candidate_ids_topic_.c_str());
           });
     }
 
@@ -745,7 +751,7 @@ private:
               trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
       } else {
-        const auto goal_candidates = selectedGoalCandidatesLocked();
+        const auto goal_candidates = selectedGoalCandidatesLocked(start_id);
         if (!goal_candidates.empty()) {
           if (!latchTrajectoryFromCandidatesLocked(
                   current_q, start_id, goal_candidates, false,
@@ -756,7 +762,7 @@ private:
                 start_id, goal_candidates.size());
           }
         } else if (start_node.status.is_colliding ||
-                   (start_node.status.is_danger && avoid_danger_)) {
+                   (avoid_danger_ && start_node.status.is_danger)) {
           if (!cached_safe_goal_ids_.empty()) {
             if (!latchTrajectoryFromCandidatesLocked(
                     current_q, start_id, cached_safe_goal_ids_, false,
@@ -777,7 +783,9 @@ private:
 
     if (active_trajectory_valid_) {
       advanceLatchedTrajectoryLocked(current_q, start_id, target_q);
-    } else if (!trial_mode_ && !(start_node.status.is_colliding || start_node.status.is_danger)) {
+    } else if (!trial_mode_ &&
+               !(start_node.status.is_colliding ||
+                 (avoid_danger_ && start_node.status.is_danger))) {
       publishTrajectoryPathLocked({});
     }
 
@@ -890,12 +898,15 @@ private:
         candidate_count);
   }
 
-  std::vector<int> selectedGoalCandidatesLocked() const {
+  std::vector<int> selectedGoalCandidatesLocked(int start_id) const {
     const std::vector<int> &source =
         latest_goal_candidate_ids_.empty() ? cached_safe_goal_ids_ : latest_goal_candidate_ids_;
     std::vector<int> out;
     out.reserve(source.size());
     for (int id : source) {
+      if (id == start_id) {
+        continue;
+      }
       if (!gng_ || id < 0 || id >= static_cast<int>(gng_->getMaxNodeNum())) {
         continue;
       }
@@ -1139,7 +1150,8 @@ private:
 
           const auto &node = gng_->nodeAt(node_id);
           return node.id == -1 || !node.status.active || !node.status.valid ||
-                 node.status.is_colliding || node.status.is_danger;
+                 node.status.is_colliding ||
+                 (avoid_danger_ && node.status.is_danger);
         };
 
         const bool has_next = active_waypoint_index_ + 1 < active_node_path_.size();
@@ -1425,7 +1437,8 @@ private:
       }
       const auto &node = gng_->nodeAt(node_id);
       if (node.id == -1 || !node.status.active || !node.status.valid ||
-          node.status.is_colliding || node.status.is_danger) {
+          node.status.is_colliding ||
+          (avoid_danger_ && node.status.is_danger)) {
         return true;
       }
     }
@@ -1447,7 +1460,8 @@ private:
       }
       const auto &neighbor = gng_->nodeAt(neighbor_id);
       if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.valid ||
-          neighbor.status.is_colliding || neighbor.status.is_danger) {
+          neighbor.status.is_colliding ||
+          (avoid_danger_ && neighbor.status.is_danger)) {
         return true;
       }
     }

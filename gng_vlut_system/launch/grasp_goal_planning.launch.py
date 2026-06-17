@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -10,6 +11,12 @@ def generate_launch_description():
     )
     avoidance_launch = PathJoinSubstitution(
         [ThisLaunchFileDir(), "topological_map_avoidance.launch.py"]
+    )
+    static_world_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="grasp_goal_planning_world_tf",
+        arguments=["0", "0", "0", "0", "0", "0", "world", "ToPoDualArm/base_link"],
     )
 
     return LaunchDescription([
@@ -29,9 +36,9 @@ def generate_launch_description():
         DeclareLaunchArgument("candidate_trajectory_topic", default_value="/ToPoDualArm/candidate_topological_map"),
         DeclareLaunchArgument("publish_hz", default_value="20.0"),
         DeclareLaunchArgument("avoid_collisions", default_value="true"),
-        DeclareLaunchArgument("avoid_danger", default_value="true"),
+        DeclareLaunchArgument("avoid_danger", default_value="false"),
         DeclareLaunchArgument("strict_goal_collision_check", default_value="false"),
-        DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
+        DeclareLaunchArgument("replan_on_path_collision", default_value="false"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(selector_launch),
             launch_arguments={
@@ -63,4 +70,5 @@ def generate_launch_description():
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
             }.items(),
         ),
+        static_world_tf,
     ])

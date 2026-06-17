@@ -217,7 +217,11 @@ private:
         geometry_msgs::msg::TransformStamped tf_msg;
         bool used_latest_fallback = false;
         if (!lookupPointCloudTransform(source_frame, *msg, tf_msg, used_latest_fallback)) {
-          throw tf2::TransformException("lookup failed with both stamped and latest transforms");
+          RCLCPP_WARN_THROTTLE(
+            get_logger(), *get_clock(), 2000,
+            "TF lookup failed target='%s' source='%s'. Skipping voxelization for this cloud.",
+            target_frame_id_.c_str(), source_frame.c_str());
+          return;
         }
         const Eigen::Isometry3d T = tf2::transformToEigen(tf_msg.transform);
 
@@ -245,8 +249,9 @@ private:
     catch (const tf2::TransformException &ex) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "TF lookup failed target='%s' source='%s': %s. Publishing without extra transform.",
+        "TF lookup failed target='%s' source='%s': %s. Skipping voxelization for this cloud.",
         target_frame_id_.c_str(), source_frame.c_str(), ex.what());
+      return;
     }
     std::vector<Eigen::Vector3f> points;
     points.reserve(static_cast<size_t>(transformed_msg.width) * transformed_msg.height);

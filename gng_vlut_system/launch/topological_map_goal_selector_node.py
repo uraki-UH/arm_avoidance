@@ -94,6 +94,20 @@ def _copy_pose(point: Point, quat: Optional[Tuple[float, float, float, float]]) 
     return msg
 
 
+def _quat_multiply(
+    a: Tuple[float, float, float, float],
+    b: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+
+
 class TopologicalMapGoalSelector(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("topological_map_goal_selector_node")
@@ -110,6 +124,7 @@ class TopologicalMapGoalSelector(Node):
         self.target_pose_array_topic = args.target_pose_array_topic
         self.target_score_topic = args.target_score_topic
         self.goal_candidate_ids_topic = args.goal_candidate_ids_topic
+        self.allow_untransformed_target = bool(args.allow_untransformed_target)
 
         self.map_msg: Optional[TopologicalMap] = None
         self.map_revision: int = -1
@@ -119,7 +134,24 @@ class TopologicalMapGoalSelector(Node):
 
         self.output_pub = self.create_publisher(TopologicalMap, self.output_topic, 10)
         self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
-        self.goal_candidate_ids_pub = self.create_publisher(Int32MultiArray, self.goal_candidate_ids_topic, 10)
+        if (
+            QoSProfile is not None
+            and QoSHistoryPolicy is not None
+            and QoSReliabilityPolicy is not None
+            and QoSDurabilityPolicy is not None
+        ):
+            goal_ids_qos = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            )
+        else:
+            goal_ids_qos = 10
+
+        self.goal_candidate_ids_pub = self.create_publisher(
+            Int32MultiArray, self.goal_candidate_ids_topic, goal_ids_qos
+        )
 
         if (
             QoSProfile is not None
@@ -272,29 +304,7 @@ class TopologicalMapGoalSelector(Node):
             self.get_logger().warn(
                 f"failed to transform target from {source_frame} to {map_frame}: {ex}"
             )
-            return None
-
-        if do_transform_pose is not None and target.orientation is not None:
-            pose_msg = _copy_pose(
-                Point(x=target.position[0], y=target.position[1], z=target.position[2]),
-                target.orientation,
-            )
-            pose_msg.header.frame_id = source_frame
-            try:
-                transformed = do_transform_pose(pose_msg, transform)
-                return TargetPose(
-                    position=_point_xyz(transformed.pose.position),
-                    orientation=(
-                        float(transformed.pose.orientation.x),
-                        float(transformed.pose.orientation.y),
-                        float(transformed.pose.orientation.z),
-                        float(transformed.pose.orientation.w),
-                    ),
-                    frame_id=map_frame,
-                )
-            except Exception as ex:  # pragma: no cover - runtime dependency path
-                self.get_logger().warn(f"failed to transform pose target: {ex}")
-                return None
+            return target if self.allow_untransformed_target else None
 
         if do_transform_point is not None:
             point_msg = PointStamped()
@@ -302,16 +312,25 @@ class TopologicalMapGoalSelector(Node):
             point_msg.point.x, point_msg.point.y, point_msg.point.z = target.position
             try:
                 transformed = do_transform_point(point_msg, transform)
+                orientation = target.orientation
+                if orientation is not None:
+                    tf_rot = (
+                        float(transform.transform.rotation.x),
+                        float(transform.transform.rotation.y),
+                        float(transform.transform.rotation.z),
+                        float(transform.transform.rotation.w),
+                    )
+                    orientation = _quat_multiply(tf_rot, orientation)
                 return TargetPose(
                     position=_point_xyz(transformed.point),
-                    orientation=target.orientation,
+                    orientation=orientation,
                     frame_id=map_frame,
                 )
             except Exception as ex:  # pragma: no cover - runtime dependency path
                 self.get_logger().warn(f"failed to transform point target: {ex}")
-                return None
+                return target if self.allow_untransformed_target else None
 
-        return None
+        return target if self.allow_untransformed_target else None
 
     def _maybe_publish(self) -> None:
         if self.map_msg is None or self.latest_target is None:
@@ -418,6 +437,11 @@ def main() -> None:
     parser.add_argument("--target-pose-array-topic", default="/grasp_pose_candidates")
     parser.add_argument("--target-score-topic", default="/grasp_pose_scores")
     parser.add_argument("--goal-candidate-ids-topic", default="/selected_goal_candidate_ids")
+    parser.add_argument(
+        "--allow-untransformed-target",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     args = parser.parse_args()
 
     rclpy.init()

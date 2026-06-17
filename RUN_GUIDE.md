@@ -33,7 +33,6 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ## ロボットおよび対応する学習済みGNGの起動
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-( \topic_name:=/topological_map_static)
 
 ## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する
 ros2 launch ais_gng topological_query.launch.py \
@@ -95,6 +94,9 @@ ros2 run gng_vlut_system self_recognition_filter_node
 ## tf のダミー
 python3 test_tf_publisher.py　(--ros-args -p frame_id:=topoarm/base_link)
 
+固定の座標系を置きたい場合は、`test_tf_once_publisher.py` を起動したままにするか、
+ROS2 の `static_transform_publisher` を使うのが安全です。
+
 # joint_statesのダミー
 python3 dummy_joint_pub.py 
 (topoarmの場合)
@@ -146,9 +148,7 @@ tf位置調整
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.0   --y -0.0   --z 0.0 --yaw 0.0  --hold-seconds 1.0   --publish-hz 20
 
 実験用
-python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.25   --y 0.15   --z -0.1 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
-
-python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.4   --y 0.15   --z -0.3 --yaw 3.2  --hold
+python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
 HTML起動
 python3 -m http.server 8000
@@ -197,12 +197,16 @@ http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
-
-
 ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
   input_topic:=/topo_points \
   output_topic:=/topo_voxel_ids
 
+同じ座標系でそのまま通す場合は、`voxel_to_vlut_bridge` の `target_frame_id` は指定しません。
+このとき、入力 voxel の frame をそのまま使って再エンコードします。
+
+ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+  robot_name:=ToPoDualArm \
+  input_topic:=/topo_voxel_ids
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
@@ -210,7 +214,11 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
  ros2 launch gng_vlut_system grasp_pose_pipeline.launch.py 
 
 
- ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py   robot_name:=ToPoDualArm   input_topic:=/topo_voxel_ids
+  # world に寄せたい場合だけ明示する
+ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+  robot_name:=ToPoDualArm \
+  input_topic:=/topo_voxel_ids \
+  target_frame_id:=world
 
 
 ボクセルにノードを所属させる

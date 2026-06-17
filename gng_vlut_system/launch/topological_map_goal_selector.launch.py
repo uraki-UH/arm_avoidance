@@ -1,13 +1,75 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
 
 
-def generate_launch_description():
+def _truthy(value: str) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def launch_setup(context, *args, **kwargs):
     script = PathJoinSubstitution(
         [ThisLaunchFileDir(), "topological_map_goal_selector_node.py"]
-    )
+    ).perform(context)
 
+    topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
+    output_topic = LaunchConfiguration("output_topic").perform(context)
+    marker_topic = LaunchConfiguration("marker_topic").perform(context)
+    candidate_count = LaunchConfiguration("candidate_count").perform(context)
+    non_collision_only = LaunchConfiguration("non_collision_only").perform(context)
+    orientation_weight = LaunchConfiguration("orientation_weight").perform(context)
+    target_pose_topic = LaunchConfiguration("target_pose_topic").perform(context)
+    target_point_topic = LaunchConfiguration("target_point_topic").perform(context)
+    target_pose_array_topic = LaunchConfiguration("target_pose_array_topic").perform(context)
+    target_score_topic = LaunchConfiguration("target_score_topic").perform(context)
+    goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
+    allow_untransformed_target = LaunchConfiguration("allow_untransformed_target").perform(context)
+
+    cmd = [
+        "python3",
+        script,
+        "--topological-map-topic",
+        topological_map_topic,
+        "--output-topic",
+        output_topic,
+        "--marker-topic",
+        marker_topic,
+        "--candidate-count",
+        candidate_count,
+        "--orientation-weight",
+        orientation_weight,
+        "--target-pose-array-topic",
+        target_pose_array_topic,
+        "--target-score-topic",
+        target_score_topic,
+        "--goal-candidate-ids-topic",
+        goal_candidate_ids_topic,
+    ]
+
+    if _truthy(non_collision_only):
+        cmd.append("--non-collision-only")
+    else:
+        cmd.append("--no-non-collision-only")
+
+    if _truthy(allow_untransformed_target):
+        cmd.append("--allow-untransformed-target")
+    else:
+        cmd.append("--no-allow-untransformed-target")
+
+    if target_pose_topic.strip():
+        cmd.extend(["--target-pose-topic", target_pose_topic])
+    if target_point_topic.strip():
+        cmd.extend(["--target-point-topic", target_point_topic])
+
+    return [
+        ExecuteProcess(
+            cmd=cmd,
+            output="screen",
+        )
+    ]
+
+
+def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "topological_map_topic",
@@ -35,33 +97,6 @@ def generate_launch_description():
             "goal_candidate_ids_topic",
             default_value="/selected_goal_candidate_ids",
         ),
-        ExecuteProcess(
-            cmd=[
-                "python3",
-                script,
-                "--topological-map-topic",
-                LaunchConfiguration("topological_map_topic"),
-                "--output-topic",
-                LaunchConfiguration("output_topic"),
-                "--marker-topic",
-                LaunchConfiguration("marker_topic"),
-                "--candidate-count",
-                LaunchConfiguration("candidate_count"),
-                "--orientation-weight",
-                LaunchConfiguration("orientation_weight"),
-                "--non-collision-only",
-                LaunchConfiguration("non_collision_only"),
-                "--target-pose-topic",
-                LaunchConfiguration("target_pose_topic"),
-                "--target-point-topic",
-                LaunchConfiguration("target_point_topic"),
-                "--target-pose-array-topic",
-                LaunchConfiguration("target_pose_array_topic"),
-                "--target-score-topic",
-                LaunchConfiguration("target_score_topic"),
-                "--goal-candidate-ids-topic",
-                LaunchConfiguration("goal_candidate_ids_topic"),
-            ],
-            output="screen",
-        ),
+        DeclareLaunchArgument("allow_untransformed_target", default_value="true"),
+        OpaqueFunction(function=launch_setup),
     ])

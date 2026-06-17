@@ -158,9 +158,9 @@ private:
       } catch (const tf2::TransformException & ex) {
         RCLCPP_WARN_THROTTLE(
             get_logger(), *get_clock(), 2000,
-            "TF lookup failed for voxel baking: target='%s' source='%s' error=%s. Falling back to source frame.",
+            "TF lookup failed for voxel baking: target='%s' source='%s' error=%s. Skipping voxel baking for this message.",
             target_frame_id_.c_str(), source_frame.c_str(), ex.what());
-        source_to_target = Eigen::Isometry3d::Identity();
+        return;
       }
     }
 

@@ -3,12 +3,11 @@
 import argparse
 import math
 import sys
-import time
 
 import rclpy
 from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node
-from tf2_ros import TransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster
 
 
 def quaternion_from_rpy(roll: float, pitch: float, yaw: float) -> tuple[float, float, float, float]:
@@ -26,7 +25,7 @@ def quaternion_from_rpy(roll: float, pitch: float, yaw: float) -> tuple[float, f
     return qx, qy, qz, qw
 
 
-class OneShotTFPublisher(Node):
+class StaticTFPublisher(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("test_tf_once_publisher")
 
@@ -39,10 +38,8 @@ class OneShotTFPublisher(Node):
         self.pitch = args.pitch
         self.yaw = args.yaw
         self.child_is_prefixed = args.child_is_prefixed
-        self.hold_seconds = args.hold_seconds
-        self.publish_hz = args.publish_hz
 
-        self.br = TransformBroadcaster(self)
+        self.br = StaticTransformBroadcaster(self)
 
     def publish_once(self) -> None:
         child_frame_id = self.frame_id
@@ -63,20 +60,18 @@ class OneShotTFPublisher(Node):
         tf_msg.transform.rotation.z = qz
         tf_msg.transform.rotation.w = qw
 
-        end_time = time.time() + max(0.0, self.hold_seconds)
-        period = 1.0 / max(1.0, self.publish_hz)
-        while True:
-            tf_msg.header.stamp = self.get_clock().now().to_msg()
-            self.br.sendTransform(tf_msg)
-            rclpy.spin_once(self, timeout_sec=0.0)
-            if time.time() >= end_time:
-                break
-            time.sleep(period)
+        self.br.sendTransform(tf_msg)
+        self.get_logger().info(
+            f"Published static TF {self.world_frame} -> {child_frame_id}"
+        )
+
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.5)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Publish a TF update on /tf once or for a short duration."
+        description="Publish a static TF transform for a fixed coordinate relation."
     )
     parser.add_argument("--world-frame", default="world", help="Parent frame id")
     parser.add_argument("--frame-id", default="base_footprint", help="Child frame id")
@@ -86,8 +81,12 @@ def main() -> int:
     parser.add_argument("--roll", type=float, default=0.0, help="Rotation roll (rad)")
     parser.add_argument("--pitch", type=float, default=0.0, help="Rotation pitch (rad)")
     parser.add_argument("--yaw", type=float, default=0.0, help="Rotation yaw (rad)")
-    parser.add_argument("--hold-seconds", type=float, default=1.0, help="Keep publishing for this long")
-    parser.add_argument("--publish-hz", type=float, default=20.0, help="Repeat rate while holding")
+    parser.add_argument(
+        "--hold-seconds",
+        type=float,
+        default=0.0,
+        help="Retained for compatibility; the node stays alive until interrupted",
+    )
     parser.add_argument(
         "--child-is-prefixed",
         action="store_true",
@@ -96,11 +95,10 @@ def main() -> int:
     args = parser.parse_args()
 
     rclpy.init()
-    node = OneShotTFPublisher(args)
+    node = StaticTFPublisher(args)
 
     try:
         node.publish_once()
-        rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
         pass
     finally:

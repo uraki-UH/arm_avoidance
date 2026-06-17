@@ -37,7 +37,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "target_frame_id",
-            default_value="world",
+            default_value="",
         ),
         DeclareLaunchArgument(
             "danger_inflation",
