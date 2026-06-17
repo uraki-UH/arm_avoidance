@@ -37,7 +37,7 @@ except Exception:  # pragma: no cover - runtime fallback
     QoSReliabilityPolicy = None  # type: ignore[assignment]
 
 
-SAFE_LABEL = int(getattr(TopologicalNode, "SAFE_TERRAIN", 1))
+COLLISION_LABEL = int(getattr(TopologicalNode, "WALL", 2))
 
 
 @dataclass
@@ -70,7 +70,7 @@ def _quat_to_axis_z(quat: Sequence[float]) -> Tuple[float, float, float]:
 
 
 def _safe_label(label: int) -> bool:
-    return int(label) == SAFE_LABEL
+    return int(label) != COLLISION_LABEL
 
 
 def _copy_point(point: Point) -> Point:
@@ -102,7 +102,7 @@ class TopologicalMapGoalSelector(Node):
         self.output_topic = args.output_topic
         self.marker_topic = args.marker_topic
         self.candidate_count = max(1, int(args.candidate_count))
-        self.safe_only = bool(args.safe_only)
+        self.non_collision_only = bool(args.non_collision_only)
         self.orientation_weight = float(args.orientation_weight)
 
         self.target_pose_topic = args.target_pose_topic
@@ -333,7 +333,7 @@ class TopologicalMapGoalSelector(Node):
         target_dir = _normalize(_quat_to_axis_z(target.orientation)) if target.orientation else None
 
         for idx, node in enumerate(map_msg.nodes):
-            if self.safe_only and not _safe_label(node.label):
+            if self.non_collision_only and not _safe_label(node.label):
                 continue
             node_pos = (float(node.pos.x), float(node.pos.y), float(node.pos.z))
             dx = node_pos[0] - target.position[0]
@@ -407,7 +407,11 @@ def main() -> None:
     parser.add_argument("--output-topic", default="/selected_topological_map")
     parser.add_argument("--marker-topic", default="/selected_topological_map_markers")
     parser.add_argument("--candidate-count", type=int, default=8)
-    parser.add_argument("--safe-only", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--non-collision-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     parser.add_argument("--orientation-weight", type=float, default=0.25)
     parser.add_argument("--target-pose-topic", default="")
     parser.add_argument("--target-point-topic", default="")

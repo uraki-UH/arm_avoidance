@@ -28,12 +28,12 @@ public:
     declare_parameter<std::string>("frame_id", "world");
     declare_parameter<double>("publish_rate_hz", 1.0);
     declare_parameter<int>("candidate_count", 6);
-    declare_parameter<double>("center_x", 0.45);
+    declare_parameter<double>("center_x", 0.0);
     declare_parameter<double>("center_y", 0.0);
-    declare_parameter<double>("center_z", 0.35);
+    declare_parameter<double>("center_z", 0.15);
     declare_parameter<double>("spread_x", 0.05);
     declare_parameter<double>("spread_y", 0.05);
-    declare_parameter<double>("spread_z", 0.03);
+    declare_parameter<double>("spread_z", 0.0);
     declare_parameter<double>("base_yaw_deg", 0.0);
 
     pose_topic_ = get_parameter("pose_topic").as_string();
@@ -85,13 +85,12 @@ private:
     scores.data.reserve(static_cast<std::size_t>(candidate_count_));
 
     const double yaw_base = base_yaw_deg_ * kPi / 180.0;
-    const double angle_offset = circle_angle_offset_deg_ * kPi / 180.0;
     const double angle_step = candidate_count_ > 0 ? (2.0 * kPi / static_cast<double>(candidate_count_)) : 0.0;
 
     for (int i = 0; i < candidate_count_; ++i) {
-      const double theta = angle_offset + static_cast<double>(i) * angle_step;
-      const double x = center_x_ + circle_radius_ * std::cos(theta);
-      const double y = center_y_ + circle_radius_ * std::sin(theta);
+      const double theta = yaw_base + static_cast<double>(i) * angle_step;
+      const double x = center_x_ + spread_x_ * std::cos(theta);
+      const double y = center_y_ + spread_y_ * std::sin(theta);
       const double z = center_z_ + std::sin(theta * 0.5) * spread_z_;
       const Eigen::Vector3d position(x, y, z);
       const Eigen::Vector3d center(center_x_, center_y_, center_z_);
@@ -123,15 +122,13 @@ private:
   std::string frame_id_;
   double publish_rate_hz_ = 1.0;
   int candidate_count_ = 6;
-  double center_x_ = 0.45;
+  double center_x_ = 0.0;
   double center_y_ = 0.0;
-  double center_z_ = 0.35;
+  double center_z_ = 0.15;
   double spread_x_ = 0.05;
   double spread_y_ = 0.05;
-  double spread_z_ = 0.03;
+  double spread_z_ = 0.0;
   double base_yaw_deg_ = 0.0;
-  const double circle_radius_ = 0.30;
-  const double circle_angle_offset_deg_ = 0.0;
 
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_pub_;
