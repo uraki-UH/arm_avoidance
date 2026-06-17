@@ -150,6 +150,9 @@ python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm
 実験用
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
+
+python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
+
 HTML起動
 python3 -m http.server 8000
 
