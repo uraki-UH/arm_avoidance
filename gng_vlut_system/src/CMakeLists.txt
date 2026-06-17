@@ -8,9 +8,9 @@ include_directories(
 )
 
 # Standard ROS 2 Dependencies
-set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json fcl gng_control_msgs)
+set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json gng_control_msgs)
 # System libraries
-set(EXTRA_LIBS fcl ccd octomap octomath m OpenMP::OpenMP_CXX)
+set(EXTRA_LIBS m OpenMP::OpenMP_CXX)
 
 # --- 2. Core Libraries (STATIC) ---
 
@@ -54,11 +54,20 @@ add_library(collision_lib STATIC
     core/collision/self_collision_checker.cpp
     core/collision/voxel_grid.cpp
     core/collision/voxel_collision_checker.cpp
-    core/collision/fcl/fcl_collision_detector.cpp
 )
-add_definitions(-DUSE_FCL)
+if(USE_FCL)
+    target_sources(collision_lib PRIVATE core/collision/fcl/fcl_collision_detector.cpp)
+    add_definitions(-DUSE_FCL)
+    find_package(fcl REQUIRED)
+    find_package(ccd REQUIRED)
+    find_package(octomap REQUIRED)
+endif()
 target_link_libraries(collision_lib common_lib kinematics_lib robot_model_lib ${EXTRA_LIBS})
 ament_target_dependencies(collision_lib Eigen3 urdfdom)
+if(USE_FCL)
+    target_link_libraries(collision_lib fcl)
+    ament_target_dependencies(collision_lib fcl)
+endif()
 
 # Metrics (Old: status)
 add_library(metrics_lib STATIC 

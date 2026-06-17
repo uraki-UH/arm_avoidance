@@ -24,7 +24,6 @@
   <depend>urdfdom</depend>
   <depend>urdfdom_headers</depend>
   <depend>tinyxml2_vendor</depend>
-  <depend>fcl</depend>
   <depend>eigen</depend>
   <depend>nlohmann_json</depend>
   <depend>ament_index_cpp</depend>

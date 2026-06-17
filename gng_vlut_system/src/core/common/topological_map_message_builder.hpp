@@ -75,7 +75,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
       RCLCPP_WARN_THROTTLE(node.get_logger(), *node.get_clock(), 5000,
                            "topofuzzy_bridge: TF lookup failed from '%s' to '%s': %s",
                            source_frame_id.c_str(), frame_id.c_str(), ex.what());
-      source_to_target.setIdentity();
+      return msg;
     }
   }
 
@@ -182,7 +182,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
           frame_id, source_frame_id, tf2::TimePointZero);
       source_to_target = tf2::transformToEigen(ts.transform);
     } catch (const tf2::TransformException &) {
-      source_to_target.setIdentity();
+      return msg;
     }
   }
 

@@ -1546,7 +1546,9 @@ private:
       return;
     }
     trajectory_pub_->publish(
-        topological_map_avoidance::buildPathMessage(*this, gng_, {node_path}));
+        topological_map_avoidance::buildPathMessage(
+            *this, gng_, {node_path},
+            have_map_ ? latest_map_.header.frame_id : std::string{}));
   }
 
   void publishCandidateTrajectoryPathsLocked(
@@ -1555,7 +1557,9 @@ private:
       return;
     }
     candidate_trajectory_pub_->publish(
-        topological_map_avoidance::buildPathMessage(*this, gng_, candidate_paths));
+        topological_map_avoidance::buildPathMessage(
+            *this, gng_, candidate_paths,
+            have_map_ ? latest_map_.header.frame_id : std::string{}));
   }
 };
 

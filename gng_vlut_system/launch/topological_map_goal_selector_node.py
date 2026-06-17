@@ -304,7 +304,7 @@ class TopologicalMapGoalSelector(Node):
             self.get_logger().warn(
                 f"failed to transform target from {source_frame} to {map_frame}: {ex}"
             )
-            return target if self.allow_untransformed_target else None
+            return None
 
         if do_transform_point is not None:
             point_msg = PointStamped()
@@ -328,9 +328,9 @@ class TopologicalMapGoalSelector(Node):
                 )
             except Exception as ex:  # pragma: no cover - runtime dependency path
                 self.get_logger().warn(f"failed to transform point target: {ex}")
-                return target if self.allow_untransformed_target else None
+                return None
 
-        return target if self.allow_untransformed_target else None
+        return None
 
     def _maybe_publish(self) -> None:
         if self.map_msg is None or self.latest_target is None:

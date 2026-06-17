@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <unordered_map>
+#include <string>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -329,10 +330,11 @@ static inline bool buildTrialGoalBridge(
 
 static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
-    const std::vector<std::vector<int>> &paths) {
+    const std::vector<std::vector<int>> &paths,
+    const std::string &frame_id) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
-  msg.header.frame_id = "world";
+  msg.header.frame_id = frame_id.empty() ? "world" : frame_id;
   msg.frame_number = 0;
 
   if (!gng) {

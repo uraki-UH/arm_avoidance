@@ -110,9 +110,9 @@ private:
       } catch (const tf2::TransformException &ex) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
-          "TF lookup failed target='%s' source='%s': %s. Falling back to source frame.",
+          "TF lookup failed target='%s' source='%s': %s. Skipping grasp candidate publication.",
           target_frame_id_.c_str(), source_frame.c_str(), ex.what());
-        source_to_target = Eigen::Isometry3d::Identity();
+        return;
       }
     }
 
