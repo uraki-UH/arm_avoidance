@@ -1859,14 +1859,9 @@ private:
       const Eigen::MatrixXd Jpart =
           rotational && J.rows() >= 6 ? J.bottomRows(3) : J.topRows(3);
       out = Manipulability::calculateManipulabilityEllipsoid(Jpart);
-    } catch (const std::exception &e) {
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "Failed to calculate candidate manipulability: %s", e.what());
-    } catch (...) {
-      RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 5000,
-          "Failed to calculate candidate manipulability: unknown error");
+    } 
+    catch (const std::exception &e) {
+      return out;
     }
     return out;
   }

@@ -5,42 +5,36 @@ services:
       dockerfile: Dockerfile
     image: gng_cpu:latest
     privileged: true
-    container_name: gng_cpu_container_uraki
-    tty: true
-    stdin_open: true
-    ipc: host
-    network_mode: host
-
+    container_name: gng_cpu_container_uraki    
+    tty: true                 # 対話的なプロンプトを維持
+    stdin_open: true          # 標準入力を開いたままにする
+    ipc: host # ホストのIPC名前空間を使用
     environment:
       - HOME=/root
       - ROS_LOG_DIR=/tmp/roslog
       - GAZEBO_HOME=/root/.gazebo
-      - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1
-      - XDG_RUNTIME_DIR=/tmp/runtime/
-
+      - DISPLAY=${DISPLAY}             # ホストのディスプレイ番号をコンテナに渡す
+      - QT_X11_NO_MITSHM=1           # Qtアプリケーションでのエラーを回避
+      - XDG_RUNTIME_DIR=/tmp/runtime/  # Wayland互換性のための設定
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ${HOME}/.Xauthority:/root/.Xauthority:ro
-      - /dev:/dev
+      - /tmp/.X11-unix:/tmp/.X11-unix  # X11ソケットの共有
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro # X認証情報（ホストでxhostを実行済みの場合）
       - .:/ros2_ws/src
       - build_ros2_ws:/ros2_ws/build
       - install_ros2_ws:/ros2_ws/install
       - ros_ws_volume:/ros2_ws/install
       - ros_ws_build_volume:/ros2_ws/build
-      - ${HOME}/rosbag:/rosbag
-      - ${HOME}/datasets:/datasets
-
-    device_cgroup_rules:
-      - "c 81:* rmw"
-      - "c 189:* rmw"
-
+      - ~/rosbag:/rosbag
+      - ~/datasets:/datasets
+    devices:
+      - "/dev/usb/bus/:/dev/usb/bus/"
     working_dir: /ros2_ws/src/ais_gng
+    ports:
+      - "9001:9001"
+      - "8000:8000"
+    #command: "sh /ros2_ws/src/ais_gng/release.sh"
 
-    # network_mode: host を使うので ports は不要
-    # command: "sh /ros2_ws/src/ais_gng/release.sh"
-
-  # npm run devをdockerで実行する用
+    #npm run devをdockerで実行する用
   frontend:
     image: gng_cpu:latest
     profiles:
@@ -49,25 +43,18 @@ services:
       - gng_cpu
     tty: true
     stdin_open: true
-    network_mode: host
-
-    environment:
-      - HOME=/root
-      - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1
-
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
       - ${HOME}/.Xauthority:/root/.Xauthority:ro
       - .:/ros2_ws/src
       - topofuzzy_frontend_node_modules:/ros2_ws/src/ToPoFuzzy-Viewer/frontend/node_modules
-
     working_dir: /ros2_ws/src/ToPoFuzzy-Viewer/frontend
-
     command: >
       bash -lc "
       npm run dev -- --host 0.0.0.0 --port 5173
       "
+    ports:
+      - "5173:5173"
 
   rosbridge:
     image: gng_cpu:latest
@@ -76,20 +63,17 @@ services:
       - gng_cpu
     tty: false
     stdin_open: false
-    network_mode: host
-
     volumes:
       - .:/ros2_ws/src
-
     environment:
       - HOME=/root
-
+    ports:
+      - "9090:9090"
     command: >
       bash -lc "source /opt/ros/humble/setup.bash && ros2 run rosbridge_server rosbridge_websocket --port 9090"
 
+  
 volumes:
   ros_ws_volume:
   ros_ws_build_volume:
   topofuzzy_frontend_node_modules:
-  build_ros2_ws:
-  install_ros2_ws:

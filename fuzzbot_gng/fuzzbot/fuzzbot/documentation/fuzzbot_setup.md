@@ -107,7 +107,7 @@ $ cd ~/fuzzbot_ws && colcon build --symlink-install && . install/setup.bash
 
 Robotis社のDynamixelをROSから制御するために，DynamixelHandler-ros2をインストールします．
 ```
-$ cd ~/fuzzbot_ws/src
+$ cd ~/fuzzbot_ws/srcfrontend-1  | Browserslist: browsers data (caniuse-lite) 
 $ git clone --recursive https://github.com/ROBOTIS-JAPAN-GIT/DynamixelHandler-ros2.git
 $ cd ~/fuzzbot_ws && colcon build --symlink-install --packages-up-to dynamixel_handler
 $ source ~/fuzzbot_ws/install/setup.bash
