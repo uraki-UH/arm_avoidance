@@ -8,7 +8,6 @@ float32 semantic_reliability
 uint32 frame
 uint32[] inpcl_ids
 uint32 winner_point_count
-geometry_msgs/Point32 winner_point_mean
 float32[9] winner_point_covariance
 bool is_goal
 bool manip_valid

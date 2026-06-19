@@ -4,6 +4,8 @@
 *.VC.db
 *.vc.db
 
+tmp/
+
 
 install/
 log/

@@ -257,12 +257,12 @@ export function StaticGraphRenderer({
     const covarianceEllipsoids = useMemo(() => {
         if (!showCovarianceEllipsoids) return [];
         return graph.nodes
-            .filter((node) => (node.winnerPointCount ?? 0) > 1 && Array.isArray(node.winnerPointCovariance))
+            .filter((node) => (node.winnerPointCount ?? 0) > 0 && Array.isArray(node.winnerPointCovariance))
             .map((node) => {
                 const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
                 const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
                 return {
-                    center: (node.winnerPointMean ?? [node.x, node.y, node.z]) as [number, number, number],
+                    center: [node.x, node.y, node.z] as [number, number, number],
                     covariance: node.winnerPointCovariance as [number, number, number, number, number, number, number, number, number],
                     color: covarianceEllipsoidColor || nodePalette[labelIndex] || '#7fd9ff',
                 };

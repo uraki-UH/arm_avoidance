@@ -101,7 +101,6 @@ namespace converter {
                 {"semanticReliability", n.semantic_reliability},
                 {"age", age},
                 {"winnerPointCount", n.winner_point_count},
-                {"winnerPointMean", {n.winner_point_mean.x, n.winner_point_mean.y, n.winner_point_mean.z}},
                 {"winnerPointCovariance", {
                     n.winner_point_covariance[0], n.winner_point_covariance[1], n.winner_point_covariance[2],
                     n.winner_point_covariance[3], n.winner_point_covariance[4], n.winner_point_covariance[5],

@@ -137,12 +137,6 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             return true;
         }
 
-        const aMean = a.winnerPointMean || [0, 0, 0];
-        const bMean = b.winnerPointMean || [0, 0, 0];
-        if (aMean[0] !== bMean[0] || aMean[1] !== bMean[1] || aMean[2] !== bMean[2]) {
-            return true;
-        }
-
         const aCov = a.winnerPointCovariance || [0, 0, 0, 0, 0, 0, 0, 0, 0];
         const bCov = b.winnerPointCovariance || [0, 0, 0, 0, 0, 0, 0, 0, 0];
         for (let j = 0; j < aCov.length; j++) {

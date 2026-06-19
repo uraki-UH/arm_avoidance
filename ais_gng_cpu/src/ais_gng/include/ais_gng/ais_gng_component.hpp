@@ -7,6 +7,7 @@
 #include <fuzzrobo/libgng/api.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <unordered_map>
+#include <array>
 #include <string>
 #include <vector>
 #include <deque>
@@ -54,6 +55,11 @@ class AiSGNGComponent : public rclcpp::Node {
     double semantic_handle_ratio_threshold_ = 0.5;
     std::size_t semantic_handle_history_size_ = 64;
     std::vector<std::deque<uint8_t>> semantic_label_history_;
+    double node_eta_s1_ = 0.4;
+    double node_eta_s2_ = 0.008;
+    std::unordered_map<uint16_t, std::array<double, 3>> winner_point_means_;
+    std::unordered_map<uint16_t, std::array<double, 9>> winner_point_m2_;
+    std::unordered_map<uint16_t, uint32_t> winner_point_counts_;
 
     // Add Plugin
     Downsampling downsampling_;
@@ -77,8 +83,6 @@ class AiSGNGComponent : public rclcpp::Node {
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
         const std_msgs::msg::Header &msg,
-        const float *transformed_pcl = nullptr,
-        const uint32_t transformed_pcl_num = 0,
         const std::vector<uint8_t> *semantic_labels = nullptr);
     LiDAR_Config getBase2LidarFrame(const PC2::ConstSharedPtr msg);
     std::unique_ptr<PC2> mixPointCloud2Msg(const std_msgs::msg::Header &header,

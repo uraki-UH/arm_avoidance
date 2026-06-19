@@ -15,8 +15,6 @@ std::vector<uint8_t> extractSemanticLabels(
 
 void applySemanticLabelsToMap(
     ais_gng_msgs::msg::TopologicalMap &map_msg,
-    const float *transformed_pcl,
-    uint32_t transformed_pcl_num,
     const std::vector<uint8_t> &semantic_labels,
     double handle_ratio_threshold);
 

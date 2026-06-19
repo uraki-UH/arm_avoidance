@@ -98,9 +98,6 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera
 ## 点群の座標変換版トピック
 ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py 
 
-## realsenseにおけるGNG
-ros2 launch ais_gng camera_depth_points.launch.py target_frame_id:=world
-
 ## `/topo_points` を入力にして GNG を回す
 ros2 launch ais_gng ais_gng.launch.py \
   backend:=cpu \

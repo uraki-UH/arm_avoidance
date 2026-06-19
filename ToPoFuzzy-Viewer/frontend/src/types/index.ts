@@ -94,7 +94,6 @@ export interface GraphNode {
     semanticReliability?: number;
     age: number;
     winnerPointCount?: number;
-    winnerPointMean?: [number, number, number];
     winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
     isGoal?: boolean;
     manipValid?: boolean;

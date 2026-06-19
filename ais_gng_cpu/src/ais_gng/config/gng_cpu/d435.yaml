@@ -1,14 +1,14 @@
 ais_gng_node:
   ros__parameters:
-    node.num_max: 1000
-    node.learning_num: 3000
+    node.num_max: 10000
+    node.learning_num: 4000
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.edge_age_max: 100
     node.s1_reset_range: 0.01
-    node.s1_age: [6, 6, 12, 12] #[default, safe, wall, unknown]
-    node.clusted_s1_age: [20, 20, 24, 24] #[default, safe, wall, unknown]
+    node.s1_age: [6, 6, 6, 3] #[default, safe, wall, unknown]
+    node.clusted_s1_age: [20, 20, 6, 3] #[default, safe, wall, unknown]
     node.interval: [0.4, 0.2, 0.2, 0.025] #[default, safe, wall, unknown]
     node.static.age_min: 250 # 長期記憶の年齢
 

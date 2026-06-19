@@ -130,46 +130,6 @@ SemanticStats collectSemanticStatsFromNodePoints(
   }
   return stats;
 }
-
-std::vector<SemanticStats> collectSemanticStatsFromTransformedPoints(
-  const ais_gng_msgs::msg::TopologicalMap &map_msg,
-  const float *transformed_pcl,
-  uint32_t transformed_pcl_num,
-  const std::vector<uint8_t> &semantic_labels)
-{
-  std::vector<SemanticStats> stats(map_msg.nodes.size());
-  if (map_msg.nodes.empty() || transformed_pcl == nullptr || transformed_pcl_num == 0) {
-    return stats;
-  }
-
-  const std::size_t point_limit = std::min<std::size_t>(
-    static_cast<std::size_t>(transformed_pcl_num),
-    semantic_labels.size());
-  for (std::size_t i = 0; i < point_limit; ++i) {
-    const float *p = transformed_pcl + i * 3;
-    std::size_t best_idx = 0;
-    double best_dist2 = std::numeric_limits<double>::max();
-    for (std::size_t node_idx = 0; node_idx < map_msg.nodes.size(); ++node_idx) {
-      const auto &node = map_msg.nodes[node_idx];
-      const double dx = static_cast<double>(p[0]) - static_cast<double>(node.pos.x);
-      const double dy = static_cast<double>(p[1]) - static_cast<double>(node.pos.y);
-      const double dz = static_cast<double>(p[2]) - static_cast<double>(node.pos.z);
-      const double dist2 = dx * dx + dy * dy + dz * dz;
-      if (dist2 < best_dist2) {
-        best_dist2 = dist2;
-        best_idx = node_idx;
-      }
-    }
-
-    ++stats[best_idx].total;
-    if (semantic_labels[i] == ais_gng_msgs::msg::TopologicalMap::SEMANTIC_HANDLE) {
-      ++stats[best_idx].handle;
-    }
-  }
-
-  return stats;
-}
-
 }  // namespace
 
 std::vector<uint8_t> extractSemanticLabels(
@@ -197,23 +157,14 @@ std::vector<uint8_t> extractSemanticLabels(
 
 void applySemanticLabelsToMap(
   ais_gng_msgs::msg::TopologicalMap &map_msg,
-  const float *transformed_pcl,
-  uint32_t transformed_pcl_num,
   const std::vector<uint8_t> &semantic_labels,
   double handle_ratio_threshold)
 {
   std::vector<uint8_t> node_semantic_labels(
     map_msg.nodes.size(), ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
-  const auto point_stats = collectSemanticStatsFromTransformedPoints(
-    map_msg, transformed_pcl, transformed_pcl_num, semantic_labels);
 
   for (std::size_t i = 0; i < map_msg.nodes.size(); ++i) {
-    SemanticStats stats;
-    if (i < point_stats.size() && point_stats[i].total > 0) {
-      stats = point_stats[i];
-    } else {
-      stats = collectSemanticStatsFromNodePoints(map_msg.nodes[i], semantic_labels);
-    }
+    SemanticStats stats = collectSemanticStatsFromNodePoints(map_msg.nodes[i], semantic_labels);
     const bool is_handle = stats.total > 0 &&
       stats.ratio() >= handle_ratio_threshold &&
       stats.handle > 0;
