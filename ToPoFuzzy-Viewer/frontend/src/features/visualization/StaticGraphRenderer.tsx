@@ -47,6 +47,7 @@ interface GraphRendererProps {
     };
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
+    onManipSelect?: (node: GraphData['nodes'][number]) => void;
     enableClusterSelection?: boolean;
     opacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
@@ -73,6 +74,7 @@ export function StaticGraphRenderer({
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
+    onManipSelect,
     enableClusterSelection = true,
     opacity = STATIC_GNG_DEFAULTS.opacity,
     tf = null,
@@ -94,6 +96,7 @@ export function StaticGraphRenderer({
     manualTransform = null,
     visibleSemanticLabels,
 }: GraphRendererProps) {
+    const manipDisplayScale = 0.25;
     const { invalidate } = useThree();
     const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
@@ -275,6 +278,7 @@ export function StaticGraphRenderer({
                 const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
                 const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
                 return {
+                    node,
                     center: (node.manipCenter ?? [node.x, node.y, node.z]) as [number, number, number],
                     scale: node.manipScale as [number, number, number],
                     quaternion: node.manipOrientation as [number, number, number, number],
@@ -417,7 +421,7 @@ export function StaticGraphRenderer({
 
         updateEllipsoidInstances(manipEllipsoidRef.current, manipulabilityEllipsoids, {
             defaultColor: covarianceEllipsoidColor,
-            sigmaMultiplier: 1.0,
+            sigmaMultiplier: manipDisplayScale,
         });
         setManipEllipsoidReadySignature(manipEllipsoidRenderSignature);
         invalidate();
@@ -448,6 +452,12 @@ export function StaticGraphRenderer({
     const canMountNormals = showNormals && canMountNodes;
     const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
     const canMountManipEllipsoids = showManipulabilityEllipsoids && manipulabilityEllipsoids.length > 0 && manipEllipsoidCapacity >= manipulabilityEllipsoids.length;
+    const handleManipClick = (instanceId?: number) => {
+        if (instanceId === undefined || instanceId === null) return;
+        const picked = manipulabilityEllipsoids[instanceId];
+        if (!picked?.node || !onManipSelect) return;
+        onManipSelect(picked.node);
+    };
     const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
@@ -504,6 +514,10 @@ export function StaticGraphRenderer({
                     count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
                     frustumCulled={false}
                     renderOrder={7}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleManipClick(e.instanceId);
+                    }}
                 />
             )}
 

@@ -10,8 +10,18 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, This
 from launch_ros.actions import Node
 
 
+DEFAULT_INITIAL_JOINT_NAMES = ",".join([
+    "waist_joint", "neck_pan_joint", "neck_tilt_joint",
+    "L_joint1", "L_joint2", "L_joint3", "L_joint4", "L_joint5", "L_joint6", "L_joint7",
+    "L_gripper_joint", "L_gripper_mimic",
+    "R_joint1", "R_joint2", "R_joint3", "R_joint4", "R_joint5", "R_joint6", "R_joint7",
+    "R_gripper_joint", "R_gripper_mimic",
+])
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    robot_name = LaunchConfiguration("robot_name").perform(context).strip()
     params_file = LaunchConfiguration("params_file").perform(context)
     explicit_urdf_path = LaunchConfiguration("urdf_path").perform(context)
 
@@ -44,6 +54,7 @@ def launch_setup(context, *args, **kwargs):
         return "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
 
     resolved_urdf_path = resolve_urdf_path(params_file, explicit_urdf_path)
+    viewer_joint_state_topic = f"/{robot_name}/viewer_joint_states"
 
     selector_launch = PathJoinSubstitution(
         [ThisLaunchFileDir(), "topological_map_goal_selector.launch.py"]
@@ -55,9 +66,6 @@ def launch_setup(context, *args, **kwargs):
         [ThisLaunchFileDir(), "robot_spawn.launch.py"]
     )
     virtual_joint_state_driver_launch = PathJoinSubstitution(
-        [ThisLaunchFileDir(), "virtual_joint_state_driver.launch.py"]
-    )
-    joint_state_relay_launch = PathJoinSubstitution(
         [ThisLaunchFileDir(), "virtual_joint_state_driver.launch.py"]
     )
     static_world_tf = Node(
@@ -91,14 +99,14 @@ def launch_setup(context, *args, **kwargs):
                 "robot_name": LaunchConfiguration("robot_name"),
                 "urdf_path": resolved_urdf_path,
                 "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
-                "joint_state_topic": LaunchConfiguration("joint_topic"),
+                "joint_state_topic": viewer_joint_state_topic,
             }.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(avoidance_launch),
             launch_arguments={
                 "params_file": LaunchConfiguration("params_file"),
-                "joint_topic": LaunchConfiguration("planner_joint_topic"),
+                "joint_topic": LaunchConfiguration("joint_topic"),
                 "topological_map_topic": LaunchConfiguration("topological_map_topic"),
                 "trajectory_topic": LaunchConfiguration("trajectory_topic"),
                 "candidate_trajectory_topic": LaunchConfiguration("candidate_trajectory_topic"),
@@ -107,6 +115,7 @@ def launch_setup(context, *args, **kwargs):
                 "avoid_danger": LaunchConfiguration("avoid_danger"),
                 "strict_goal_collision_check": LaunchConfiguration("strict_goal_collision_check"),
                 "replan_on_path_collision": LaunchConfiguration("replan_on_path_collision"),
+                "allow_zero_initial_joint_state": LaunchConfiguration("allow_zero_initial_joint_state"),
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
             }.items(),
         ),
@@ -115,28 +124,15 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
                 "target_topic": "target_joint_states",
-                "state_topic": "/ToPoDualArm/joint_states",
-                "output_topic": LaunchConfiguration("planner_joint_topic"),
+                "state_topic": LaunchConfiguration("joint_topic"),
+                "output_topic": LaunchConfiguration("joint_topic"),
                 "publish_hz": LaunchConfiguration("virtual_joint_state_publish_hz"),
                 "max_joint_velocity": LaunchConfiguration("virtual_joint_state_max_joint_velocity"),
                 "position_tolerance": LaunchConfiguration("virtual_joint_state_position_tolerance"),
                 "use_wraparound": LaunchConfiguration("virtual_joint_state_use_wraparound"),
-                "hold_when_no_target": LaunchConfiguration("virtual_joint_state_hold_when_no_target"),
-            }.items(),
-        ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(joint_state_relay_launch),
-            launch_arguments={
-                "robot_name": LaunchConfiguration("robot_name"),
-                "node_name": "grasp_joint_state_relay_node",
-                "target_topic": LaunchConfiguration("planner_joint_topic"),
-                "state_topic": LaunchConfiguration("planner_joint_topic"),
-                "output_topic": "/ToPoDualArm/joint_states",
-                "publish_hz": LaunchConfiguration("public_joint_state_publish_hz"),
-                "max_joint_velocity": LaunchConfiguration("virtual_joint_state_max_joint_velocity"),
-                "position_tolerance": LaunchConfiguration("virtual_joint_state_position_tolerance"),
-                "use_wraparound": LaunchConfiguration("virtual_joint_state_use_wraparound"),
-                "hold_when_no_target": LaunchConfiguration("virtual_joint_state_hold_when_no_target"),
+                "hold_when_no_target": "false",
+                "ignore_state_after_first_target": "false",
+                "initial_joint_names_csv": LaunchConfiguration("initial_joint_names_csv"),
             }.items(),
         ),
         static_world_tf,
@@ -153,8 +149,7 @@ def generate_launch_description():
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
-        DeclareLaunchArgument("planner_joint_topic", default_value="/ToPoDualArm/grasp_joint_states"),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("candidate_count", default_value="8"),
         DeclareLaunchArgument("non_collision_only", default_value="true"),
         DeclareLaunchArgument("orientation_weight", default_value="0.25"),
@@ -163,6 +158,7 @@ def generate_launch_description():
         DeclareLaunchArgument("target_pose_array_topic", default_value="/grasp_pose_candidates"),
         DeclareLaunchArgument("target_score_topic", default_value="/grasp_pose_scores"),
         DeclareLaunchArgument("joint_topic", default_value="/ToPoDualArm/joint_states"),
+        DeclareLaunchArgument("initial_joint_names_csv", default_value=DEFAULT_INITIAL_JOINT_NAMES),
         DeclareLaunchArgument("trajectory_topic", default_value="/ToPoDualArm/planned_topological_map"),
         DeclareLaunchArgument("candidate_trajectory_topic", default_value="/ToPoDualArm/candidate_topological_map"),
         DeclareLaunchArgument("publish_hz", default_value="20.0"),
@@ -170,12 +166,11 @@ def generate_launch_description():
         DeclareLaunchArgument("avoid_danger", default_value="false"),
         DeclareLaunchArgument("strict_goal_collision_check", default_value="false"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="false"),
+        DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),
         DeclareLaunchArgument("virtual_joint_state_publish_hz", default_value="50.0"),
         DeclareLaunchArgument("virtual_joint_state_max_joint_velocity", default_value="0.6"),
         DeclareLaunchArgument("virtual_joint_state_position_tolerance", default_value="0.01"),
         DeclareLaunchArgument("virtual_joint_state_use_wraparound", default_value="true"),
-        DeclareLaunchArgument("virtual_joint_state_hold_when_no_target", default_value="true"),
-        DeclareLaunchArgument("public_joint_state_publish_hz", default_value="50.0"),
         DeclareLaunchArgument("publish_world_tf", default_value="false"),
         OpaqueFunction(function=launch_setup),
     ])

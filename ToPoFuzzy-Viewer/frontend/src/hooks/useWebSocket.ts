@@ -208,6 +208,9 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
     if ((prev.urdf || '') !== (next.urdf || '')) {
         return true;
     }
+    if ((prev.frameId || '') !== (next.frameId || '')) {
+        return true;
+    }
     if ((prev.opacity ?? 1) !== (next.opacity ?? 1)) {
         return true;
     }
@@ -232,6 +235,38 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
     }
     if ((prev.instances?.length || 0) !== (next.instances?.length || 0)) {
         return true;
+    }
+    if ((prev.linkNames?.length || 0) !== (next.linkNames?.length || 0)) {
+        return true;
+    }
+    for (let i = 0; i < (next.linkNames?.length || 0); i++) {
+        if (prev.linkNames?.[i] !== next.linkNames?.[i]) {
+            return true;
+        }
+    }
+    if ((prev.linkManipulabilities?.length || 0) !== (next.linkManipulabilities?.length || 0)) {
+        return true;
+    }
+    for (let i = 0; i < (next.linkManipulabilities?.length || 0); i++) {
+        const a = prev.linkManipulabilities?.[i];
+        const b = next.linkManipulabilities?.[i];
+        if (!a || !b) return true;
+        if (a.linkName !== b.linkName ||
+            a.manipValid !== b.manipValid ||
+            a.manipValue !== b.manipValue ||
+            a.manipConditionNumber !== b.manipConditionNumber ||
+            a.manipCenter?.[0] !== b.manipCenter?.[0] ||
+            a.manipCenter?.[1] !== b.manipCenter?.[1] ||
+            a.manipCenter?.[2] !== b.manipCenter?.[2] ||
+            a.manipScale?.[0] !== b.manipScale?.[0] ||
+            a.manipScale?.[1] !== b.manipScale?.[1] ||
+            a.manipScale?.[2] !== b.manipScale?.[2] ||
+            a.manipOrientation?.[0] !== b.manipOrientation?.[0] ||
+            a.manipOrientation?.[1] !== b.manipOrientation?.[1] ||
+            a.manipOrientation?.[2] !== b.manipOrientation?.[2] ||
+            a.manipOrientation?.[3] !== b.manipOrientation?.[3]) {
+            return true;
+        }
     }
     for (let i = 0; i < (next.instances?.length || 0); i++) {
         const a = prev.instances?.[i];

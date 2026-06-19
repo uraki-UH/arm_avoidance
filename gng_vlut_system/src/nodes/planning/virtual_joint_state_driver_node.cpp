@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <mutex>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,6 +32,18 @@ public:
     position_tolerance_ = std::max(1e-6, declare_parameter<double>("position_tolerance", 0.01));
     use_wraparound_ = declare_parameter<bool>("use_wraparound", true);
     hold_when_no_target_ = declare_parameter<bool>("hold_when_no_target", true);
+    ignore_state_after_first_target_ = declare_parameter<bool>("ignore_state_after_first_target", false);
+    const auto initial_joint_names_csv =
+        declare_parameter<std::string>("initial_joint_names_csv", "");
+    const auto initial_joint_names = splitCsv(initial_joint_names_csv);
+    if (!initial_joint_names.empty()) {
+      latest_state_.name = initial_joint_names;
+      latest_state_.position.assign(initial_joint_names.size(), 0.0);
+      latest_state_.velocity.assign(initial_joint_names.size(), 0.0);
+      latest_state_.effort.assign(initial_joint_names.size(), 0.0);
+      latest_state_.header.stamp = now();
+      have_state_ = true;
+    }
 
     target_sub_ = create_subscription<sensor_msgs::msg::JointState>(
       target_topic_, rclcpp::QoS(10).reliable(),
@@ -63,8 +76,13 @@ public:
       state_topic_, rclcpp::QoS(10).reliable(),
       [this](const sensor_msgs::msg::JointState::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (ignore_state_after_first_target_ && have_target_ && external_state_seeded_ &&
+            latest_state_.name.size() > latest_target_.name.size()) {
+          return;
+        }
         latest_state_ = *msg;
         have_state_ = true;
+        external_state_seeded_ = true;
       });
 
     state_pub_ = create_publisher<sensor_msgs::msg::JointState>(
@@ -76,12 +94,29 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "VirtualJointStateDriver ready. target=%s state_in=%s state_out=%s hz=%.1f max_vel=%.3f hold=%d wrap=%d",
+      "VirtualJointStateDriver ready. target=%s state_in=%s state_out=%s hz=%.1f max_vel=%.3f hold=%d wrap=%d ignore_state_after_target=%d",
       target_topic_.c_str(), state_topic_.c_str(), output_topic_.c_str(),
-      publish_hz_, max_joint_velocity_, hold_when_no_target_ ? 1 : 0, use_wraparound_ ? 1 : 0);
+      publish_hz_, max_joint_velocity_, hold_when_no_target_ ? 1 : 0,
+      use_wraparound_ ? 1 : 0, ignore_state_after_first_target_ ? 1 : 0);
   }
 
 private:
+  static std::vector<std::string> splitCsv(const std::string &csv)
+  {
+    std::vector<std::string> out;
+    std::stringstream ss(csv);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+      const auto begin = item.find_first_not_of(" \t\r\n");
+      if (begin == std::string::npos) {
+        continue;
+      }
+      const auto end = item.find_last_not_of(" \t\r\n");
+      out.push_back(item.substr(begin, end - begin + 1));
+    }
+    return out;
+  }
+
   static std::unordered_map<std::string, double> buildMap(
     const sensor_msgs::msg::JointState & msg)
   {
@@ -122,7 +157,7 @@ private:
       } else if (hold_when_no_target_) {
         target_msg = latest_state_;
       } else {
-        target_msg = latest_state_;
+        return;
       }
     }
 
@@ -193,11 +228,12 @@ private:
   std::string target_topic_;
   std::string state_topic_;
   std::string output_topic_;
-  double publish_hz_ = 50.0;
+  double publish_hz_ = 30.0;
   double max_joint_velocity_ = 0.6;
   double position_tolerance_ = 0.01;
   bool use_wraparound_ = true;
   bool hold_when_no_target_ = true;
+  bool ignore_state_after_first_target_ = false;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr target_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr state_sub_;
@@ -209,6 +245,7 @@ private:
   sensor_msgs::msg::JointState latest_state_;
   bool have_target_ = false;
   bool have_state_ = false;
+  bool external_state_seeded_ = false;
   std::size_t target_msg_count_ = 0;
 };
 

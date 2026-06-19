@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, SEMANTIC_COLORS } from '../../types';
+import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, SEMANTIC_COLORS } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 import { DirectionalArrow } from './utils/DirectionalArrow';
@@ -50,6 +50,7 @@ interface GraphRendererProps {
     };
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
+    onManipSelect?: (node: GraphNode) => void;
     enableClusterSelection?: boolean;
     opacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
@@ -84,6 +85,7 @@ export function GraphRenderer({
     visibleLabels,
     selectedClusterId = null,
     onClusterSelect,
+    onManipSelect,
     enableClusterSelection = true,
     opacity = 1.0,
     tf = null,
@@ -97,6 +99,7 @@ export function GraphRenderer({
     manualTransform = null,
     visibleSemanticLabels,
 }: GraphRendererProps) {
+    const manipDisplayScale = 0.25;
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
@@ -303,6 +306,7 @@ export function GraphRenderer({
                 const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
                 const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
                 return {
+                    node,
                     center: (node.manipCenter ?? [node.x, node.y, node.z]) as [number, number, number],
                     scale: node.manipScale as [number, number, number],
                     quaternion: node.manipOrientation as [number, number, number, number],
@@ -447,7 +451,7 @@ export function GraphRenderer({
 
         updateEllipsoidInstances(manipEllipsoidRef.current, manipulabilityEllipsoids, {
             defaultColor: covarianceEllipsoidColor,
-            sigmaMultiplier: 1.0,
+            sigmaMultiplier: manipDisplayScale,
         });
         setManipEllipsoidReadySignature(manipEllipsoidRenderSignature);
         invalidate();
@@ -478,6 +482,12 @@ export function GraphRenderer({
     const canMountNormals = showNormals && canMountNodes;
     const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
     const canMountManipEllipsoids = showManipulabilityEllipsoids && manipulabilityEllipsoids.length > 0 && manipEllipsoidCapacity >= manipulabilityEllipsoids.length;
+    const handleManipClick = (instanceId?: number) => {
+        if (instanceId === undefined || instanceId === null) return;
+        const picked = manipulabilityEllipsoids[instanceId];
+        if (!picked?.node || !onManipSelect) return;
+        onManipSelect(picked.node);
+    };
     const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
@@ -534,6 +544,10 @@ export function GraphRenderer({
                     count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
                     frustumCulled={false}
                     renderOrder={7}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleManipClick(e.instanceId);
+                    }}
                 />
             )}
 

@@ -185,6 +185,7 @@ export interface RobotSettings {
     opacity?: number;
     jointControlMode?: 'live' | 'manual';
     jointValues?: number[];
+    manipLinkName?: string;
     transform?: Transform;
 }
 
@@ -196,6 +197,16 @@ export interface RobotPoseInstance {
     orientations: [number, number, number, number][];
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
+    manipValid?: boolean;
+    manipValue?: number;
+    manipConditionNumber?: number;
+    manipCenter?: [number, number, number];
+    manipScale?: [number, number, number];
+    manipOrientation?: [number, number, number, number];
+}
+
+export interface RobotLinkManipulability {
+    linkName: string;
     manipValid?: boolean;
     manipValue?: number;
     manipConditionNumber?: number;
@@ -218,6 +229,8 @@ export interface RobotData {
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
     instances?: RobotPoseInstance[];
+    linkNames?: string[];
+    linkManipulabilities?: RobotLinkManipulability[];
     manipValid?: boolean;
     manipValue?: number;
     manipConditionNumber?: number;

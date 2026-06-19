@@ -12,6 +12,8 @@ interface RobotJointModalProps {
     onClose: () => void;
     onUpdate: (updates: { jointValues: number[] }) => void;
     onModeChange: (mode: 'live' | 'manual') => void;
+    selectedManipLink?: string;
+    onManipLinkChange?: (linkName: string) => void;
     onReset?: () => void;
 }
 
@@ -27,6 +29,8 @@ export function RobotJointModal({
     onClose,
     onUpdate,
     onModeChange,
+    selectedManipLink = '',
+    onManipLinkChange,
     onReset,
 }: RobotJointModalProps) {
     if (!open || !robotData) return null;
@@ -91,6 +95,34 @@ export function RobotJointModal({
                                 Manual
                             </button>
                         </div>
+                        {robotData.linkNames && robotData.linkNames.length > 0 && onManipLinkChange && (
+                            <div className="mt-2 flex items-center gap-2">
+                                <span className="min-w-16 text-[10px] uppercase tracking-wider text-gray-500">Link</span>
+                                <select
+                                    value={selectedManipLink || robotData.linkNames[robotData.linkNames.length - 1] || ''}
+                                    onChange={(e) => onManipLinkChange(e.target.value)}
+                                    className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-2 py-1 font-mono text-[10px] text-gray-200 outline-none"
+                                >
+                                    {robotData.linkNames.map((linkName) => (
+                                        <option key={linkName} value={linkName}>{linkName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {robotData.linkManipulabilities && robotData.linkManipulabilities.length > 0 && (
+                            <div className="mt-2 rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] text-gray-400">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="font-mono text-gray-500">Selected Manip</span>
+                                    <span className="font-mono text-gray-200">
+                                        {(() => {
+                                            const linkName = selectedManipLink || robotData.linkNames?.[robotData.linkNames.length - 1] || '';
+                                            const info = robotData.linkManipulabilities?.find((x) => x.linkName === linkName);
+                                            return info?.manipValue?.toFixed(3) ?? 'n/a';
+                                        })()}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="space-y-3">

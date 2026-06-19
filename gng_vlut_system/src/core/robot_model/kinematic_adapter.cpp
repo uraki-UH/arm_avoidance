@@ -468,22 +468,27 @@ Eigen::MatrixXd MultiArmKinematicAdapter::calculateJacobianAt(
     return Eigen::MatrixXd::Zero(6, getTotalDOF());
   }
 
-  const std::size_t arm_index = armIndexForPositionIndex(target_joint_index);
+  const int link_index = target_joint_index - 1;
+  const std::size_t arm_index = armIndexForLink(link_index);
   if (arm_index >= arms_.size()) {
     return Eigen::MatrixXd::Zero(6, getTotalDOF());
   }
 
-  const std::size_t position_offset = armPositionOffset(arm_index);
+  std::size_t link_offset = 0;
+  for (std::size_t i = 0; i < arm_index && i < arms_.size(); ++i) {
+    link_offset += static_cast<std::size_t>(arms_[i].chain.getNumJoints());
+  }
+
   const std::size_t dof_offset = armOffset(arm_index);
   const auto &arm = arms_[arm_index].chain;
 
   const std::size_t arm_positions = arm.getLinkPositions().size();
-  if (target_joint_index < static_cast<int>(position_offset) ||
-      target_joint_index >= static_cast<int>(position_offset + arm_positions)) {
+  const int local_target = link_index - static_cast<int>(link_offset) + 1;
+  if (local_target < 0 ||
+      local_target >= static_cast<int>(arm_positions)) {
     return Eigen::MatrixXd::Zero(6, getTotalDOF());
   }
 
-  const int local_target = target_joint_index - static_cast<int>(position_offset);
   const std::size_t arm_dof = static_cast<std::size_t>(arm.getTotalDOF());
 
   std::vector<double> full = getJointValues();

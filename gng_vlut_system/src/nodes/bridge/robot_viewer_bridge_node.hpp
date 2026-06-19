@@ -37,7 +37,8 @@ private:
         const std::string& type,
         const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>& positions,
         const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations,
-        bool include_urdf) const;
+        const std::vector<double>& chain_joint_values,
+        bool include_urdf);
     void publishCurrentState();
 
     simulation::RobotModel robot_model_;

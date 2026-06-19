@@ -280,7 +280,8 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     const std::string& type,
     const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>& positions,
     const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>>& orientations,
-    bool include_urdf) const {
+    const std::vector<double>& chain_joint_values,
+    bool include_urdf) {
     
     json robot;
     robot["timestamp"] = has_joint_state_ 
@@ -310,10 +311,36 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     auto& quat_arr = robot["orientations"] = json::array();
     for (const auto& q : orientations) quat_arr.push_back({q.x(), q.y(), q.z(), q.w()});
 
+    robot["linkNames"] = json::array();
+    robot["linkManipulabilities"] = json::array();
+    Eigen::Isometry3d base_tf = Eigen::Isometry3d::Identity();
+    Eigen::Quaterniond base_q = Eigen::Quaterniond::Identity();
+    if (!positions.empty() && !orientations.empty()) {
+        base_tf.translation() = positions.front();
+        base_q = orientations.front().normalized();
+        base_tf.linear() = base_q.toRotationMatrix();
+    }
+    if (chain_) {
+        const int link_count = chain_->getNumJoints();
+        chain_->updateKinematics(chain_joint_values);
+        for (int i = 0; i < link_count; ++i) {
+            const std::string link_name = chain_->getLinkName(i);
+            if (link_name.empty()) continue;
+            robot["linkNames"].push_back(link_name);
+            Eigen::Isometry3d link_tf = Eigen::Isometry3d::Identity();
+            if (!chain_->getLinkTransform(link_name, link_tf)) continue;
+            const Eigen::MatrixXd J = chain_->calculateJacobianAt(i + 1, chain_joint_values);
+            const Eigen::MatrixXd Jv = J.topRows(3);
+            auto link_manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
+            robot_sim::common::appendLinkManipulabilityJson(
+                robot["linkManipulabilities"], link_name, base_tf, link_tf, link_manip);
+        }
+    }
+
     Manipulability::ManipulabilityEllipsoid manip;
     if (chain_ && chain_->getTotalDOF() > 0) {
         const Eigen::MatrixXd J =
-            chain_->calculateJacobianAt(chain_->getNumJoints() + 1, current_joint_values_);
+            chain_->calculateJacobianAt(chain_->getNumJoints() + 1, chain_joint_values);
         const Eigen::MatrixXd Jv = J.topRows(3);
         manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
     }
@@ -322,8 +349,9 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     robot["manipConditionNumber"] = manip.condition_number;
     robot["isGoal"] = false;
     if (manip.valid) {
-        const Eigen::Vector3d center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
-        Eigen::Quaterniond q(manip.principal_directions);
+        const Eigen::Vector3d world_center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+        const Eigen::Vector3d center = base_q.conjugate() * (world_center - base_tf.translation());
+        Eigen::Quaterniond q = base_q.conjugate() * Eigen::Quaterniond(manip.principal_directions);
         q.normalize();
         robot["manipCenter"] = {center.x(), center.y(), center.z()};
         robot["manipScale"] = {manip.singular_values.x(), manip.singular_values.y(), manip.singular_values.z()};
@@ -348,8 +376,9 @@ void RobotViewerBridgeNode::publishCurrentState() {
     std::lock_guard<std::mutex> lock(state_mutex_);
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+    std::vector<double> chain_joint_values;
     if (chain_ && chain_->getTotalDOF() > 0) {
-        std::vector<double> chain_joint_values(chain_->getTotalDOF(), 0.0);
+        chain_joint_values.assign(chain_->getTotalDOF(), 0.0);
         for (const auto &[joint_name, chain_index] : chain_joint_name_to_active_index_) {
             auto it = joint_name_to_active_index_.find(joint_name);
             if (it != joint_name_to_active_index_.end() &&
@@ -363,14 +392,14 @@ void RobotViewerBridgeNode::publishCurrentState() {
 
     if (description_pub_->get_subscription_count() > 0 && first_publish_) {
         std_msgs::msg::String msg;
-        msg.data = buildRobotJsonLocked("stream.robot.description", positions, orientations, true);
+        msg.data = buildRobotJsonLocked("stream.robot.description", positions, orientations, chain_joint_values, true);
         description_pub_->publish(msg);
         first_publish_ = false;
     }
 
     if (pose_pub_->get_subscription_count() > 0) {
         std_msgs::msg::String msg;
-        msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, false);
+        msg.data = buildRobotJsonLocked("stream.robot.pose", positions, orientations, chain_joint_values, false);
         pose_pub_->publish(msg);
     }
 }

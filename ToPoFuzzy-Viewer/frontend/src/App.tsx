@@ -96,6 +96,7 @@ function useClippingPlanes() {
 }
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
+import { GraphNodeDetailPanel, GraphNodeDetailSnapshot } from './features/visualization/GraphNodeDetailPanel';
 import { type GngLayerState } from './features/visualization/GngLayerControls';
 import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
 import { RobotJointModal } from './features/manipulation/RobotJointModal';
@@ -201,7 +202,7 @@ function App() {
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
     const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string } | null>(null);
-    const [robotJointContext, setRobotJointContext] = useState<{ id: string, title: string } | null>(null);
+    const [robotJointContext, setRobotJointContext] = useState<{ id: string, title: string, selectedManipLink?: string } | null>(null);
     const [colorContext, setColorContext] = useState<ColorContext | null>(null);
 
     const viewerPort = import.meta.env.VITE_VIEWER_WS_PORT ?? '9001';
@@ -352,6 +353,7 @@ function App() {
                 defaults: {
                     visible: true, color: 'skyblue', showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
                     useUrdfColors: true,
+                    manipLinkName: '',
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
@@ -445,6 +447,7 @@ function App() {
     });
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
+    const [selectedManipSnapshot, setSelectedManipSnapshot] = useState<GraphNodeDetailSnapshot | null>(null);
 
     const [isEditMode, setIsEditMode] = useState(false);
     const [editLayerId, setEditLayerId] = useState<string | null>(null);
@@ -868,6 +871,16 @@ function App() {
         });
     };
 
+    const handleManipSelect = (graphTag: string, node: GraphNode) => {
+        const graph = graphData[graphTag];
+        if (!graph) return;
+        setSelectedManipSnapshot({
+            graphTag,
+            graph: JSON.parse(JSON.stringify(graph)),
+            node: JSON.parse(JSON.stringify(node)),
+        });
+    };
+
     const handleDraftRegionChange = (center: [number, number, number], size: [number, number, number]) => {
         setDraftRegion({ center, size });
     };
@@ -1003,10 +1016,10 @@ function App() {
                                 {
                                     data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
                                 {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
@@ -1059,17 +1072,18 @@ function App() {
                                 covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
                             return data.mode === 'static'
-                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} />
-                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} />
+                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
-                        <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
-                        <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
-                        <OrbitControls makeDefault />
-                    </Canvas>
-                    {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={() => setSelectedClusterSnapshot(null)} />}
-                </div>
-            </MainLayout>
+                    <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
+                    <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
+                    <OrbitControls makeDefault />
+                </Canvas>
+                {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={() => setSelectedClusterSnapshot(null)} />}
+                {selectedManipSnapshot && <GraphNodeDetailPanel snapshot={selectedManipSnapshot} onClose={() => setSelectedManipSnapshot(null)} />}
+            </div>
+        </MainLayout>
 
             <GenericTransformModal
                 open={!!transformContext}
@@ -1120,6 +1134,7 @@ function App() {
                 robotData={robotJointContext ? (robotData[robotJointContext.id] || null) : null}
                 controlMode={robotJointContext ? (robotSettings[robotJointContext.id]?.jointControlMode || 'live') : 'live'}
                 jointValues={robotJointContext ? (robotSettings[robotJointContext.id]?.jointValues || []) : []}
+                selectedManipLink={robotJointContext ? (robotJointContext.selectedManipLink || robotSettings[robotJointContext.id]?.manipLinkName || '') : ''}
                 onClose={() => setRobotJointContext(null)}
                 onUpdate={(updates) => {
                     if (!robotJointContext) return;
@@ -1129,9 +1144,13 @@ function App() {
                     if (!robotJointContext) return;
                     updateEntitySettings('robot', robotJointContext.id, { jointControlMode: mode });
                 }}
+                onManipLinkChange={(linkName) => {
+                    if (!robotJointContext) return;
+                    updateEntitySettings('robot', robotJointContext.id, { manipLinkName: linkName });
+                }}
                 onReset={() => {
                     if (!robotJointContext) return;
-                    updateEntitySettings('robot', robotJointContext.id, { jointValues: [], jointControlMode: 'live' });
+                    updateEntitySettings('robot', robotJointContext.id, { jointValues: [], jointControlMode: 'live', manipLinkName: '' });
                 }}
             />
 

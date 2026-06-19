@@ -45,6 +45,7 @@ def launch_setup(context, *args, **kwargs):
     trial_seed = LaunchConfiguration("trial_seed").perform(context)
     avoid_danger = LaunchConfiguration("avoid_danger").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
+    allow_zero_initial_joint_state = LaunchConfiguration("allow_zero_initial_joint_state").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
@@ -121,6 +122,10 @@ def launch_setup(context, *args, **kwargs):
         node_params["avoid_danger"] = avoid_danger.lower() in ("1", "true", "yes", "on")
     if replan_on_path_collision:
         node_params["replan_on_path_collision"] = replan_on_path_collision.lower() in ("1", "true", "yes", "on")
+    if allow_zero_initial_joint_state:
+        node_params["allow_zero_initial_joint_state"] = (
+            allow_zero_initial_joint_state.lower() in ("1", "true", "yes", "on")
+        )
     if goal_candidate_ids_topic:
         node_params["goal_candidate_ids_topic"] = goal_candidate_ids_topic
     if robot_base_frame:
@@ -198,6 +203,7 @@ def generate_launch_description():
         DeclareLaunchArgument("trial_seed", default_value="0"),
         DeclareLaunchArgument("avoid_danger", default_value="true"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
+        DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("target_topic", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value=""),

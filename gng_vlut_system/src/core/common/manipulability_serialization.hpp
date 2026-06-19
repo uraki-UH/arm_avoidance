@@ -90,4 +90,39 @@ inline nlohmann::json manipulabilityToJson(
   return out;
 }
 
+inline void appendLinkManipulabilityJson(
+    nlohmann::json &links_json, const std::string &link_name,
+    const Eigen::Isometry3d &base_tf,
+    const Eigen::Isometry3d &link_tf,
+    const Manipulability::ManipulabilityEllipsoid &ellipsoid) {
+  const Eigen::Vector3d world_center = link_tf.translation();
+  const Eigen::Quaterniond world_orientation = ellipsoid.valid
+      ? Eigen::Quaterniond(ellipsoid.principal_directions)
+      : Eigen::Quaterniond::Identity();
+
+  const Eigen::Quaterniond base_q(base_tf.rotation());
+  const Eigen::Quaterniond inv_base_q = base_q.conjugate();
+  const Eigen::Vector3d local_center = inv_base_q * (world_center - base_tf.translation());
+  Eigen::Quaterniond local_orientation = inv_base_q * world_orientation;
+  local_orientation.normalize();
+
+  nlohmann::json entry;
+  entry["linkName"] = link_name;
+  entry["manipValid"] = ellipsoid.valid;
+  entry["manipValue"] = ellipsoid.manipulability;
+  entry["manipConditionNumber"] = ellipsoid.condition_number;
+  entry["manipCenter"] = {local_center.x(), local_center.y(), local_center.z()};
+  if (ellipsoid.valid) {
+    entry["manipScale"] = {ellipsoid.singular_values.x(),
+                           ellipsoid.singular_values.y(),
+                           ellipsoid.singular_values.z()};
+    entry["manipOrientation"] = {local_orientation.x(), local_orientation.y(),
+                                 local_orientation.z(), local_orientation.w()};
+  } else {
+    entry["manipScale"] = {0.0, 0.0, 0.0};
+    entry["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
+  }
+  links_json.push_back(std::move(entry));
+}
+
 } // namespace robot_sim::common

@@ -231,6 +231,7 @@ static nlohmann::json buildRobotPayloadJson(
     const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
     const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
     double timestamp, double opacity,
+    const Eigen::Vector3d &manip_center,
     const Manipulability::ManipulabilityEllipsoid *manip = nullptr,
     bool is_goal = false) {
   nlohmann::json robot;
@@ -260,14 +261,13 @@ static nlohmann::json buildRobotPayloadJson(
   }
 
   if (manip && manip->valid) {
-    const Eigen::Vector3d center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
     Eigen::Quaterniond q(manip->principal_directions);
     q.normalize();
     robot["manipValid"] = true;
     robot["isGoal"] = is_goal;
     robot["manipValue"] = manip->manipulability;
     robot["manipConditionNumber"] = manip->condition_number;
-    robot["manipCenter"] = {center.x(), center.y(), center.z()};
+    robot["manipCenter"] = {manip_center.x(), manip_center.y(), manip_center.z()};
     robot["manipScale"] = {manip->singular_values.x(), manip->singular_values.y(), manip->singular_values.z()};
     robot["manipOrientation"] = {q.x(), q.y(), q.z(), q.w()};
   } else {
@@ -296,7 +296,8 @@ static std::string buildRobotStreamJson(
   root["tag"] = tag;
   root["robot"] = buildRobotPayloadJson(
       frame_id, urdf_content, joint_names, joint_values, positions, orientations,
-      timestamp, opacity);
+      timestamp, opacity,
+      positions.empty() ? Eigen::Vector3d::Zero() : positions.back());
   return root.dump();
 }
 
@@ -355,6 +356,7 @@ public:
     declare_parameter("avoid_danger", true);
     declare_parameter("strict_goal_collision_check", false);
     declare_parameter("replan_on_path_collision", true);
+    declare_parameter("allow_zero_initial_joint_state", true);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
@@ -528,6 +530,8 @@ public:
     planner_.setStrictGoalCollisionCheck(
         get_parameter("strict_goal_collision_check").as_bool());
     replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
+    allow_zero_initial_joint_state_ =
+        get_parameter("allow_zero_initial_joint_state").as_bool();
 
     trial_mode_ = get_parameter("trial_mode").as_bool();
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
@@ -803,7 +807,7 @@ private:
 
   void publishTargetLocked() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!gng_ || (!have_joint_state_ && !trial_mode_)) {
+    if (!gng_ || (!have_joint_state_ && !trial_mode_ && !allow_zero_initial_joint_state_)) {
       RCLCPP_INFO_THROTTLE(
           get_logger(), *get_clock(), 5000,
           "Waiting: gng=%d joint=%d map=%d (joint_topic=%s map_topic=%s trial_mode=%d)",
@@ -823,12 +827,15 @@ private:
       return;
     }
 
-    Eigen::VectorXf current_q = currentJointVectorLocked();
-    if (current_q.size() == 0) {
+    Eigen::VectorXf current_q;
+    if (!have_joint_state_) {
       current_q = Eigen::VectorXf::Zero(chain_->getTotalDOF());
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 5000,
-          "No joint_state received yet; using zero current_q fallback for trial execution.");
+          "No joint_state received yet; using zero current_q fallback until %s receives the first message.",
+          get_parameter("joint_topic").as_string().c_str());
+    } else {
+      current_q = currentJointVectorLocked();
     }
 
     const int start_id = findNearestActiveNodeLocked(current_q);
@@ -1056,6 +1063,7 @@ private:
   int control_claim_priority_ = 10;
   int control_claim_mode_ = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
   bool control_claim_enabled_ = true;
+  bool allow_zero_initial_joint_state_ = true;
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
   std::string goal_candidate_ids_topic_;
@@ -1845,12 +1853,14 @@ private:
         const Eigen::MatrixXd Jv = J.topRows(3);
         manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
       }
+      const Eigen::Vector3d manip_center =
+          positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
 
       const double timestamp = this->now().seconds();
       instance_payloads.push_back(buildRobotPayloadJson(
           robot_base_frame_, candidate_robot_urdf_content_, controlled_joint_names_,
           joint_values, positions, orientations, timestamp,
-          candidate_robot_preview_opacity_, &manip));
+          candidate_robot_preview_opacity_, manip_center, &manip));
     }
 
     if (instance_payloads.empty()) {
