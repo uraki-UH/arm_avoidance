@@ -16,6 +16,8 @@
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
+#include "core/common/manipulability_serialization.hpp"
+
 namespace robot_sim::safety::monitor_helpers {
 
 constexpr float kEps = 1e-6f;
@@ -69,6 +71,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
             : Eigen::Vector3f::UnitZ();
     out.normal = toPoint32(normal);
     out.label = viewerLabelFromStatus(node_data.status);
+    robot_sim::common::fillManipulabilityFields(out, node_data.status.manip_info);
     id_to_index.emplace(node_data.id, static_cast<uint16_t>(msg.nodes.size()));
     msg.nodes.push_back(std::move(out));
   }

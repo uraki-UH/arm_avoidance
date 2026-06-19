@@ -7,6 +7,8 @@
 #include <limits>
 #include <unordered_map>
 
+// #include "core/common/manipulability_serialization.hpp"
+
 using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
 
@@ -550,6 +552,9 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         node_msg.semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
         node_msg.semantic_reliability = 0.0f;
         node_msg.frame = node.frame;
+        // node_msg.is_goal = false;
+        // node_msg.manip_valid = false;
+        // node_msg.manip_orientation.w = 1.0;
         if (node.inpcl_num > 0) {
             node_msg.inpcl_ids.resize(node.inpcl_num);
             node_msg.inpcl_ids.assign(node.inpcl_ids, node.inpcl_ids + node.inpcl_num);

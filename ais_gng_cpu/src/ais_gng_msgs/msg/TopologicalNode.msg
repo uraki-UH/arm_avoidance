@@ -10,3 +10,10 @@ uint32[] inpcl_ids
 uint32 winner_point_count
 geometry_msgs/Point32 winner_point_mean
 float32[9] winner_point_covariance
+bool is_goal
+bool manip_valid
+float32 manip_value
+float32 manip_condition_number
+geometry_msgs/Point32 manip_center
+geometry_msgs/Vector3 manip_scale
+geometry_msgs/Quaternion manip_orientation

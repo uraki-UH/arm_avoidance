@@ -15,6 +15,8 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 
 #include "common/resource_utils.hpp"
+#include "core/common/manipulability_serialization.hpp"
+#include "core/metrics/manipulability.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "core/common/constants.hpp"
 
@@ -307,6 +309,30 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
 
     auto& quat_arr = robot["orientations"] = json::array();
     for (const auto& q : orientations) quat_arr.push_back({q.x(), q.y(), q.z(), q.w()});
+
+    Manipulability::ManipulabilityEllipsoid manip;
+    if (chain_ && chain_->getTotalDOF() > 0) {
+        const Eigen::MatrixXd J =
+            chain_->calculateJacobianAt(chain_->getNumJoints() + 1, current_joint_values_);
+        const Eigen::MatrixXd Jv = J.topRows(3);
+        manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
+    }
+    robot["manipValid"] = manip.valid;
+    robot["manipValue"] = manip.manipulability;
+    robot["manipConditionNumber"] = manip.condition_number;
+    robot["isGoal"] = false;
+    if (manip.valid) {
+        const Eigen::Vector3d center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+        Eigen::Quaterniond q(manip.principal_directions);
+        q.normalize();
+        robot["manipCenter"] = {center.x(), center.y(), center.z()};
+        robot["manipScale"] = {manip.singular_values.x(), manip.singular_values.y(), manip.singular_values.z()};
+        robot["manipOrientation"] = {q.x(), q.y(), q.z(), q.w()};
+    } else {
+        robot["manipCenter"] = {0.0, 0.0, 0.0};
+        robot["manipScale"] = {0.0, 0.0, 0.0};
+        robot["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
+    }
 
     json root;
     root["type"] = type;

@@ -41,6 +41,8 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/urdf_loader.hpp"
+#include "core/common/manipulability_serialization.hpp"
+#include "core/metrics/manipulability.hpp"
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 
 namespace {
@@ -228,7 +230,9 @@ static nlohmann::json buildRobotPayloadJson(
     const std::vector<double> &joint_values,
     const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
     const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
-    double timestamp, double opacity) {
+    double timestamp, double opacity,
+    const Manipulability::ManipulabilityEllipsoid *manip = nullptr,
+    bool is_goal = false) {
   nlohmann::json robot;
   robot["timestamp"] = timestamp;
   robot["frameId"] = frame_id;
@@ -253,6 +257,27 @@ static nlohmann::json buildRobotPayloadJson(
   if (!orientations.empty()) {
     robot["baseOrientation"] = {orientations.front().x(), orientations.front().y(),
                                 orientations.front().z(), orientations.front().w()};
+  }
+
+  if (manip && manip->valid) {
+    const Eigen::Vector3d center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+    Eigen::Quaterniond q(manip->principal_directions);
+    q.normalize();
+    robot["manipValid"] = true;
+    robot["isGoal"] = is_goal;
+    robot["manipValue"] = manip->manipulability;
+    robot["manipConditionNumber"] = manip->condition_number;
+    robot["manipCenter"] = {center.x(), center.y(), center.z()};
+    robot["manipScale"] = {manip->singular_values.x(), manip->singular_values.y(), manip->singular_values.z()};
+    robot["manipOrientation"] = {q.x(), q.y(), q.z(), q.w()};
+  } else {
+    robot["manipValid"] = false;
+    robot["isGoal"] = is_goal;
+    robot["manipValue"] = 0.0;
+    robot["manipConditionNumber"] = 0.0;
+    robot["manipCenter"] = {0.0, 0.0, 0.0};
+    robot["manipScale"] = {0.0, 0.0, 0.0};
+    robot["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
   }
 
   return robot;
@@ -1813,12 +1838,19 @@ private:
       if (chain_) {
         chain_->forwardKinematicsAt(fk_values, positions, orientations);
       }
+      Manipulability::ManipulabilityEllipsoid manip;
+      if (chain_) {
+        const Eigen::MatrixXd J =
+            chain_->calculateJacobianAt(chain_->getNumJoints() + 1, joint_values);
+        const Eigen::MatrixXd Jv = J.topRows(3);
+        manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
+      }
 
       const double timestamp = this->now().seconds();
       instance_payloads.push_back(buildRobotPayloadJson(
           robot_base_frame_, candidate_robot_urdf_content_, controlled_joint_names_,
           joint_values, positions, orientations, timestamp,
-          candidate_robot_preview_opacity_));
+          candidate_robot_preview_opacity_, &manip));
     }
 
     if (instance_payloads.empty()) {

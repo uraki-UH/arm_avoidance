@@ -106,7 +106,14 @@ namespace converter {
                     n.winner_point_covariance[0], n.winner_point_covariance[1], n.winner_point_covariance[2],
                     n.winner_point_covariance[3], n.winner_point_covariance[4], n.winner_point_covariance[5],
                     n.winner_point_covariance[6], n.winner_point_covariance[7], n.winner_point_covariance[8]
-                }}
+                }},
+                {"isGoal", n.is_goal},
+                {"manipValid", n.manip_valid},
+                {"manipValue", n.manip_value},
+                {"manipConditionNumber", n.manip_condition_number},
+                {"manipCenter", {n.manip_center.x, n.manip_center.y, n.manip_center.z}},
+                {"manipScale", {n.manip_scale.x, n.manip_scale.y, n.manip_scale.z}},
+                {"manipOrientation", {n.manip_orientation.x, n.manip_orientation.y, n.manip_orientation.z, n.manip_orientation.w}}
             });
         }
         for (auto& c : msg->clusters) {

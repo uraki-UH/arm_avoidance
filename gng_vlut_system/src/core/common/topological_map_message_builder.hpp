@@ -18,6 +18,8 @@
 #include <tf2/exceptions.h>
 #include <tf2_ros/buffer.h>
 
+#include "core/common/manipulability_serialization.hpp"
+
 namespace robot_sim::bridge::topofuzzy {
 
 constexpr float kDefaultEps = 1e-6f;
@@ -114,6 +116,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     }
     out.normal = toPoint32(transformed_normal);
     out.label = viewerLabelFromStatus(node_data.status);
+    robot_sim::common::fillManipulabilityFields(out, node_data.status.manip_info);
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);
@@ -218,6 +221,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     }
     out.normal = toPoint32(transformed_normal);
     out.label = viewerLabelFromStatus(node_data.status);
+    robot_sim::common::fillManipulabilityFields(out, node_data.status.manip_info);
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);

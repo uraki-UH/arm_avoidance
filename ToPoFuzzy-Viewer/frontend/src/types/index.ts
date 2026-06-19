@@ -96,6 +96,13 @@ export interface GraphNode {
     winnerPointCount?: number;
     winnerPointMean?: [number, number, number];
     winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
+    isGoal?: boolean;
+    manipValid?: boolean;
+    manipValue?: number;
+    manipConditionNumber?: number;
+    manipCenter?: [number, number, number];
+    manipScale?: [number, number, number];
+    manipOrientation?: [number, number, number, number];
 }
 
 export interface GraphCluster {
@@ -150,6 +157,8 @@ export interface LayerSettings {
     showNormals?: boolean;
     showVelocity?: boolean;
     showCovarianceEllipsoids?: boolean;
+    showManipulabilityEllipsoids?: boolean;
+    manipEllipsoidMode?: 'all' | 'goal';
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
@@ -170,6 +179,7 @@ export interface RobotSettings {
     useUrdfColors?: boolean;
     showVisual: boolean;
     showCollision: boolean;
+    showManipulabilityEllipsoid?: boolean;
     collisionColor: string;
     emissiveIntensity?: number;
     opacity?: number;
@@ -186,6 +196,12 @@ export interface RobotPoseInstance {
     orientations: [number, number, number, number][];
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
+    manipValid?: boolean;
+    manipValue?: number;
+    manipConditionNumber?: number;
+    manipCenter?: [number, number, number];
+    manipScale?: [number, number, number];
+    manipOrientation?: [number, number, number, number];
 }
 
 export interface RobotData {
@@ -202,6 +218,12 @@ export interface RobotData {
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
     instances?: RobotPoseInstance[];
+    manipValid?: boolean;
+    manipValue?: number;
+    manipConditionNumber?: number;
+    manipCenter?: [number, number, number];
+    manipScale?: [number, number, number];
+    manipOrientation?: [number, number, number, number];
 }
 
 export interface TransformData {

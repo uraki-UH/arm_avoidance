@@ -16,6 +16,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 
+#include "core/common/manipulability_serialization.hpp"
+
 namespace robot_sim::planning::arm_avoid {
 
 template <typename GNGType>
@@ -164,8 +166,10 @@ static inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     out.normal.z = n.status.ee_direction.z();
     out.rho = 0.0f;
     out.label = n.status.is_colliding ? 2 : (n.status.is_danger ? 3 : 1);
+    robot_sim::common::fillManipulabilityFields(out, n.status.manip_info);
     if (n.id == selected_id) {
       out.label = 1;
+      out.is_goal = true;
     }
     id_to_index[n.id] = static_cast<uint16_t>(msg.nodes.size());
     msg.nodes.push_back(std::move(out));

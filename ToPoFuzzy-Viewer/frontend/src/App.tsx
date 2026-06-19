@@ -283,6 +283,8 @@ function App() {
                     showNormals: false,
                     showVelocity: false,
                     showCovarianceEllipsoids: false,
+                    showManipulabilityEllipsoids: false,
+                    manipEllipsoidMode: 'all',
                     opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {
                         position: [0, 0, 0],
@@ -348,7 +350,7 @@ function App() {
                 data: robotData,
                 set: setRobotSettings,
                 defaults: {
-                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
+                    visible: true, color: 'skyblue', showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
                     useUrdfColors: true,
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
@@ -1001,10 +1003,10 @@ function App() {
                                 {
                                     data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} />}
                                 {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
@@ -1046,6 +1048,8 @@ function App() {
                                 showNormals: settings.showNormals ?? gngLayer.showNormals,
                                 showVelocity: settings.showVelocity ?? false,
                                 showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
+                                showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
+                                manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
                                 visibleSemanticLabels: settings.visibleSemanticLabels,
                                 normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
                                 velocityScale: settings.velocityScale ?? 0.25,

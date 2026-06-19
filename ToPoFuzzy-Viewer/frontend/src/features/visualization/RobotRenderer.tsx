@@ -16,6 +16,7 @@ interface RobotRendererProps {
     jointValuesOverride?: number[];
     tf?: { pos: number[]; quat: number[] } | null;
     manualTransform?: Transform;
+    showManipulabilityEllipsoid?: boolean;
 }
 
 function RobotInstanceRenderer({
@@ -29,6 +30,7 @@ function RobotInstanceRenderer({
     jointValuesOverride = [],
     tf = null,
     manualTransform,
+    showManipulabilityEllipsoid = false,
 }: RobotRendererProps) {
     const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
@@ -38,9 +40,20 @@ function RobotInstanceRenderer({
 
     const viewerPort = 9001;
     const effectiveOpacity = data.opacity ?? opacity;
+    const manipGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
+    const manipMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#6ce7ff'),
+        emissive: new THREE.Color('#6ce7ff'),
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: Math.max(0.15, Math.min(0.55, effectiveOpacity * 0.35)),
+        roughness: 0.35,
+        metalness: 0.0,
+        toneMapped: false,
+    }), [effectiveOpacity]);
 
     // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride]);
+    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride, showManipulabilityEllipsoid]);
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -214,6 +227,21 @@ function RobotInstanceRenderer({
                 scale={effectiveTransform.scale}
             >
                 {robot && <primitive key={tag} object={robot} />}
+                {showManipulabilityEllipsoid && data.manipValid && data.manipCenter && data.manipScale && data.manipOrientation && (
+                    <mesh
+                        geometry={manipGeometry}
+                        material={manipMaterial}
+                        position={data.manipCenter}
+                        quaternion={new THREE.Quaternion(
+                            data.manipOrientation[0],
+                            data.manipOrientation[1],
+                            data.manipOrientation[2],
+                            data.manipOrientation[3]
+                        )}
+                        scale={data.manipScale}
+                        frustumCulled={false}
+                    />
+                )}
             </group>
         </group>
     );
@@ -230,12 +258,13 @@ function RobotRenderer({
     jointValuesOverride = [],
     tf = null,
     manualTransform,
+    showManipulabilityEllipsoid = false,
 }: RobotRendererProps) {
     const outerGroupRef = useRef<THREE.Group>(null);
     const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
     const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
-    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform]);
+    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid]);
 
     useEffect(() => {
         if (!hasInstances || !outerGroupRef.current) return;
@@ -279,6 +308,7 @@ function RobotRenderer({
                                 jointValuesOverride={jointValuesOverride}
                                 tf={null}
                                 manualTransform={undefined}
+                                showManipulabilityEllipsoid={showManipulabilityEllipsoid}
                             />
                         );
                     })}
@@ -299,6 +329,7 @@ function RobotRenderer({
             jointValuesOverride={jointValuesOverride}
             tf={tf}
             manualTransform={manualTransform}
+            showManipulabilityEllipsoid={showManipulabilityEllipsoid}
         />
     );
 }

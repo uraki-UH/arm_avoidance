@@ -12,6 +12,8 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "core/common/manipulability_serialization.hpp"
+
 #include "planner/RRT/ik_rrt_planner.hpp"
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
@@ -368,6 +370,7 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       out.normal.z = node_ref.status.ee_direction.z();
       out.label = pathLabelFromStatus(node_ref.status);
       out.frame = 0;
+      robot_sim::common::fillManipulabilityFields(out, node_ref.status.manip_info);
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node_ref.id, published_index);
@@ -382,6 +385,12 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       }
       msg.edges.push_back(ia->second);
       msg.edges.push_back(ib->second);
+    }
+    if (!path.empty()) {
+      const auto goal_it = id_to_index.find(path.back());
+      if (goal_it != id_to_index.end()) {
+        msg.nodes[goal_it->second].is_goal = true;
+      }
     }
   }
   return msg;

@@ -16,9 +16,6 @@ const EMPTY_GRAPH: GraphData = {
     clusterLabels: []
 };
 
-// Removed isIdentityTransform
-
-
 interface GraphRendererProps {
     tag: string;
     data: GraphData | null;
@@ -30,6 +27,8 @@ interface GraphRendererProps {
     showNormals?: boolean;
     showVelocity?: boolean;
     showCovarianceEllipsoids?: boolean;
+    showManipulabilityEllipsoids?: boolean;
+    manipEllipsoidMode?: 'all' | 'goal';
     nodeScale?: number;
     edgeWidth?: number;
     normalScale?: number;
@@ -82,6 +81,8 @@ export function StaticGraphRenderer({
     showNormals = false,
     showVelocity = false,
     showCovarianceEllipsoids = false,
+    showManipulabilityEllipsoids = false,
+    manipEllipsoidMode = 'all',
     normalScale = 0.075,
     velocityScale = 0.25,
     covarianceEllipsoidScale = 2.0,
@@ -117,9 +118,10 @@ export function StaticGraphRenderer({
         return labels;
     }, [graph.clusters]);
     const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
+    const manipEllipsoidRef = useRef<THREE.InstancedMesh>(null);
 
     // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, showCovarianceEllipsoids, nodeScale, edgeWidth, normalScale, velocityScale, covarianceEllipsoidScale, opacity, tf, visibleLabels, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, covarianceEllipsoidColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
+    useDemandUpdate([graph, visible, showNodes, showEdges, showClusters, showNormals, showVelocity, showCovarianceEllipsoids, showManipulabilityEllipsoids, manipEllipsoidMode, nodeScale, edgeWidth, normalScale, velocityScale, covarianceEllipsoidScale, opacity, tf, visibleLabels, selectedClusterId, nodeColor, edgeColor, normalColor, velocityColor, covarianceEllipsoidColor, nodeEmissiveIntensity, edgeEmissiveIntensity, transform]);
 
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
@@ -243,9 +245,11 @@ export function StaticGraphRenderer({
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
     const [ellipsoidCapacity, setEllipsoidCapacity] = useState(graph.nodes.length);
+    const [manipEllipsoidCapacity, setManipEllipsoidCapacity] = useState(graph.nodes.length);
     const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
     const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
     const [ellipsoidReadySignature, setEllipsoidReadySignature] = useState<string | null>(null);
+    const [manipEllipsoidReadySignature, setManipEllipsoidReadySignature] = useState<string | null>(null);
 
     const covarianceEllipsoids = useMemo(() => {
         if (!showCovarianceEllipsoids) return [];
@@ -261,6 +265,23 @@ export function StaticGraphRenderer({
                 };
             });
     }, [graph.nodes, showCovarianceEllipsoids, covarianceEllipsoidColor, nodePalette]);
+
+    const manipulabilityEllipsoids = useMemo(() => {
+        if (!showManipulabilityEllipsoids) return [];
+        return graph.nodes
+            .filter((node) => node.manipValid && node.manipScale && node.manipOrientation)
+            .filter((node) => manipEllipsoidMode === 'all' || !!node.isGoal)
+            .map((node) => {
+                const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+                const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
+                return {
+                    center: (node.manipCenter ?? [node.x, node.y, node.z]) as [number, number, number],
+                    scale: node.manipScale as [number, number, number],
+                    quaternion: node.manipOrientation as [number, number, number, number],
+                    color: covarianceEllipsoidColor || nodePalette[labelIndex] || '#7fd9ff',
+                };
+            });
+    }, [graph.nodes, showManipulabilityEllipsoids, manipEllipsoidMode, covarianceEllipsoidColor, nodePalette]);
 
     const nodeRenderSignature = useMemo(() => {
         return [
@@ -301,6 +322,18 @@ export function StaticGraphRenderer({
         ].join(':');
     }, [covarianceEllipsoids.length, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
     const ellipsoidRenderReady = ellipsoidReadySignature === ellipsoidRenderSignature;
+    const manipEllipsoidRenderSignature = useMemo(() => {
+        return [
+            manipulabilityEllipsoids.length,
+            showManipulabilityEllipsoids ? 1 : 0,
+            manipEllipsoidMode,
+            manipEllipsoidCapacity,
+            opacity,
+            covarianceEllipsoidColor,
+            graph.timestamp,
+        ].join(':');
+    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
+    const manipEllipsoidRenderReady = manipEllipsoidReadySignature === manipEllipsoidRenderSignature;
 
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
@@ -313,6 +346,10 @@ export function StaticGraphRenderer({
     useEffect(() => {
         if (covarianceEllipsoids.length > ellipsoidCapacity) setEllipsoidCapacity(covarianceEllipsoids.length);
     }, [covarianceEllipsoids.length, ellipsoidCapacity]);
+
+    useEffect(() => {
+        if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) setManipEllipsoidCapacity(manipulabilityEllipsoids.length);
+    }, [manipulabilityEllipsoids.length, manipEllipsoidCapacity]);
 
     // --- Node Instances ---
     useLayoutEffect(() => {
@@ -375,6 +412,18 @@ export function StaticGraphRenderer({
     }, [covarianceEllipsoids, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, covarianceEllipsoidColor, ellipsoidRenderSignature, invalidate]);
 
     useLayoutEffect(() => {
+        if (!manipEllipsoidRef.current || !showManipulabilityEllipsoids || manipulabilityEllipsoids.length === 0) return;
+        if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) return;
+
+        updateEllipsoidInstances(manipEllipsoidRef.current, manipulabilityEllipsoids, {
+            defaultColor: covarianceEllipsoidColor,
+            sigmaMultiplier: 1.0,
+        });
+        setManipEllipsoidReadySignature(manipEllipsoidRenderSignature);
+        invalidate();
+    }, [manipulabilityEllipsoids, showManipulabilityEllipsoids, manipEllipsoidCapacity, covarianceEllipsoidColor, manipEllipsoidRenderSignature, invalidate]);
+
+    useLayoutEffect(() => {
         if (showCovarianceEllipsoids) return;
         setEllipsoidReadySignature(null);
         if (!ellipsoidRef.current) return;
@@ -383,12 +432,22 @@ export function StaticGraphRenderer({
         invalidate();
     }, [showCovarianceEllipsoids, invalidate]);
 
+    useLayoutEffect(() => {
+        if (showManipulabilityEllipsoids) return;
+        setManipEllipsoidReadySignature(null);
+        if (!manipEllipsoidRef.current) return;
+        manipEllipsoidRef.current.count = 0;
+        manipEllipsoidRef.current.instanceMatrix.needsUpdate = true;
+        invalidate();
+    }, [showManipulabilityEllipsoids, invalidate]);
+
     if (!data || !visible) return null;
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
     const canMountNormals = showNormals && canMountNodes;
     const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
+    const canMountManipEllipsoids = showManipulabilityEllipsoids && manipulabilityEllipsoids.length > 0 && manipEllipsoidCapacity >= manipulabilityEllipsoids.length;
     const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
@@ -435,6 +494,16 @@ export function StaticGraphRenderer({
                     count={ellipsoidRenderReady ? covarianceEllipsoids.length : 0}
                     frustumCulled={false}
                     renderOrder={8}
+                />
+            )}
+            {canMountManipEllipsoids && (
+                <instancedMesh
+                    key={`static-manip-ellipsoids-${manipEllipsoidCapacity}`}
+                    ref={manipEllipsoidRef}
+                    args={[ellipsoidGeometry, ellipsoidMaterial, manipEllipsoidCapacity]}
+                    count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
+                    frustumCulled={false}
+                    renderOrder={7}
                 />
             )}
 

@@ -282,6 +282,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     showNormals: false,
                                     showVelocity: false,
                                     showCovarianceEllipsoids: false,
+                                    showManipulabilityEllipsoids: false,
+                                    manipEllipsoidMode: 'all',
                                     opacity: 1.0,
                                     normalColor: '#00ffff',
                                     velocityColor: '#ffb347',
@@ -314,6 +316,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             </button>
                                             <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn px-3 py-1 text-[10px] ${s.showCollision ? 'active-orange' : ''}`}>
                                                 <Box size={12} /> Collision
+                                            </button>
+                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showManipulabilityEllipsoid: !s.showManipulabilityEllipsoid })} className={`entity-btn px-3 py-1 text-[10px] ${s.showManipulabilityEllipsoid ? 'active-indigo' : ''}`}>
+                                                <Box size={12} /> Manip
                                             </button>
                                             <ColorActionButton
                                                 title="Robot color"
