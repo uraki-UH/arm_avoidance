@@ -3,8 +3,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <array>
+#include <fstream>
 #include <limits>
 #include <filesystem>
+#include <iterator>
 #include <mutex>
 #include <memory>
 #include <random>
@@ -20,6 +24,8 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <nlohmann/json.hpp>
 
 #include <gng_control_msgs/msg/joint_control_claim.hpp>
 // Candidate goal ids from the target-pose selector.
@@ -140,6 +146,146 @@ static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
   return out;
 }
 
+static std::string detectLocalMeshPackageName(const std::string &source_path) {
+  std::filesystem::path current(source_path);
+  if (current.empty()) {
+    return "";
+  }
+
+  current = std::filesystem::absolute(current).parent_path();
+  while (!current.empty()) {
+    if (std::filesystem::exists(current / "meshes")) {
+      return current.filename().string();
+    }
+    const auto parent = current.parent_path();
+    if (parent == current) {
+      break;
+    }
+    current = parent;
+  }
+  return "";
+}
+
+static std::string rewriteRelativeMeshUris(
+    const std::string &urdf_text, const std::string &package_name) {
+  if (urdf_text.empty() || package_name.empty()) {
+    return urdf_text;
+  }
+
+  std::string rewritten = urdf_text;
+  const std::string prefix = "package://" + package_name + "/";
+
+  const std::string double_quote_key = "filename=\"meshes/";
+  std::size_t pos = 0;
+  while ((pos = rewritten.find(double_quote_key, pos)) != std::string::npos) {
+    rewritten.replace(pos, double_quote_key.size(), "filename=\"" + prefix);
+    pos += prefix.size();
+  }
+
+  const std::string single_quote_key = "filename='meshes/";
+  pos = 0;
+  while ((pos = rewritten.find(single_quote_key, pos)) != std::string::npos) {
+    rewritten.replace(pos, single_quote_key.size(), "filename='" + prefix);
+    pos += prefix.size();
+  }
+
+  return rewritten;
+}
+
+static bool loadRobotDescription(std::string &out_text,
+                                 const std::string &source_path) {
+  if (source_path.empty()) {
+    return false;
+  }
+
+  if (source_path.rfind(".xacro") != std::string::npos) {
+    std::array<char, 128> buffer{};
+    std::string result;
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(
+        popen(("xacro " + source_path).c_str(), "r"), pclose);
+    if (!pipe) {
+      return false;
+    }
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+      result += buffer.data();
+    }
+    out_text = result;
+  } else {
+    std::ifstream ifs(source_path);
+    if (!ifs) {
+      return false;
+    }
+    out_text = std::string((std::istreambuf_iterator<char>(ifs)),
+                           std::istreambuf_iterator<char>());
+  }
+  out_text = rewriteRelativeMeshUris(out_text, detectLocalMeshPackageName(source_path));
+  return !out_text.empty();
+}
+
+static nlohmann::json buildRobotPayloadJson(
+    const std::string &frame_id, const std::string &urdf_content,
+    const std::vector<std::string> &joint_names,
+    const std::vector<double> &joint_values,
+    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
+    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
+    double timestamp, double opacity) {
+  nlohmann::json robot;
+  robot["timestamp"] = timestamp;
+  robot["frameId"] = frame_id;
+  robot["urdf"] = urdf_content;
+  robot["jointNames"] = joint_names;
+  robot["jointValues"] = joint_values;
+  robot["opacity"] = opacity;
+
+  auto &pos_arr = robot["positions"] = nlohmann::json::array();
+  for (const auto &v : positions) {
+    pos_arr.push_back({v.x(), v.y(), v.z()});
+  }
+
+  auto &quat_arr = robot["orientations"] = nlohmann::json::array();
+  for (const auto &q : orientations) {
+    quat_arr.push_back({q.x(), q.y(), q.z(), q.w()});
+  }
+
+  if (!positions.empty()) {
+    robot["basePosition"] = {positions.front().x(), positions.front().y(), positions.front().z()};
+  }
+  if (!orientations.empty()) {
+    robot["baseOrientation"] = {orientations.front().x(), orientations.front().y(),
+                                orientations.front().z(), orientations.front().w()};
+  }
+
+  return robot;
+}
+
+static std::string buildRobotStreamJson(
+    const std::string &type, const std::string &tag,
+    const std::string &frame_id, const std::string &urdf_content,
+    const std::vector<std::string> &joint_names,
+    const std::vector<double> &joint_values,
+    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
+    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
+    double timestamp, double opacity) {
+  nlohmann::json root;
+  root["type"] = type;
+  root["tag"] = tag;
+  root["robot"] = buildRobotPayloadJson(
+      frame_id, urdf_content, joint_names, joint_values, positions, orientations,
+      timestamp, opacity);
+  return root.dump();
+}
+
+static std::string buildRobotStreamJsonWithInstances(
+    const std::string &type, const std::string &tag, const nlohmann::json &robot_payload,
+    const nlohmann::json &instances) {
+  nlohmann::json root;
+  root["type"] = type;
+  root["tag"] = tag;
+  root["robot"] = robot_payload;
+  root["robot"]["instances"] = instances;
+  return root.dump();
+}
+
 static double quaternionAngularErrorDeg(
     const Eigen::Quaterniond &a, const Eigen::Quaterniond &b) {
   Eigen::Quaterniond qa = a.normalized();
@@ -192,6 +338,9 @@ public:
     declare_parameter("trial_goal_candidate_count", 10);
     declare_parameter("trial_seed", 0);
     declare_parameter("waypoint_tolerance", 0.05);
+    declare_parameter("robot_base_frame", "");
+    declare_parameter("publish_candidate_robot_preview", true);
+    declare_parameter("candidate_robot_preview_opacity", 0.18);
 
     const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -201,6 +350,7 @@ public:
 
     auto model = std::make_shared<::simulation::RobotModel>(
         ::simulation::loadRobotFromUrdf(urdf_path));
+    robot_root_link_name_ = model->getRootLinkName();
 
     std::vector<::simulation::ArmConfig> arm_configs;
     const auto selected_profiles =
@@ -257,6 +407,27 @@ public:
     }
     if (!chain_) {
       throw std::runtime_error("Failed to build kinematic chain.");
+    }
+
+    auto resolveNamespacedFrame = [this](const std::string &link_name) {
+      std::string ns_raw = std::string(get_namespace());
+      if (!ns_raw.empty() && ns_raw.front() == '/') {
+        ns_raw.erase(ns_raw.begin());
+      }
+      if (ns_raw.empty()) {
+        return link_name;
+      }
+      if (link_name.empty()) {
+        return ns_raw;
+      }
+      return ns_raw + "/" + link_name;
+    };
+
+    if (robot_base_frame_.empty()) {
+      robot_base_frame_ = resolveNamespacedFrame(robot_root_link_name_);
+    }
+    if (robot_base_frame_.empty()) {
+      robot_base_frame_ = "base_link";
     }
 
     chain_joint_names_ = orderedJointNames(*chain_);
@@ -354,6 +525,16 @@ public:
     const std::string topological_map_topic =
         get_parameter("topological_map_topic").as_string();
     goal_candidate_ids_topic_ = get_parameter("goal_candidate_ids_topic").as_string();
+    robot_base_frame_ = get_parameter("robot_base_frame").as_string();
+    if (robot_base_frame_.empty()) {
+      const std::string ns_raw = std::string(get_namespace());
+      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
+      const std::string root_link = robot_root_link_name_.empty() ? std::string("base_link") : robot_root_link_name_;
+      robot_base_frame_ = ns.empty() ? root_link : (root_link.empty() ? ns : ns + "/" + root_link);
+    }
+    publish_candidate_robot_preview_ = get_parameter("publish_candidate_robot_preview").as_bool();
+    candidate_robot_preview_opacity_ = std::clamp(
+        get_parameter("candidate_robot_preview_opacity").as_double(), 0.0, 1.0);
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     target_topic_ = get_parameter("target_topic").as_string();
@@ -405,6 +586,9 @@ public:
                 latest_goal_candidate_ids_.size(),
                 latest_goal_candidate_ids_.empty() ? -1 : latest_goal_candidate_ids_.front(),
                 goal_candidate_ids_topic_.c_str());
+            if (publish_candidate_robot_preview_) {
+              publishCandidateRobotPreviewLocked();
+            }
           });
     }
 
@@ -412,6 +596,19 @@ public:
         trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
     candidate_trajectory_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         candidate_trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
+    candidate_robot_description_pub_ = create_publisher<std_msgs::msg::String>(
+        "/viewer/internal/stream/robot/description",
+        rclcpp::QoS(1).reliable().transient_local());
+    candidate_robot_pose_pub_ = create_publisher<std_msgs::msg::String>(
+        "/viewer/internal/stream/robot/pose",
+        rclcpp::QoS(1).reliable().transient_local());
+
+    if (!loadRobotDescription(candidate_robot_urdf_content_, urdf_path)) {
+      RCLCPP_WARN(
+          get_logger(),
+          "Failed to load robot description text for candidate robot preview: %s",
+          urdf_path.c_str());
+    }
 
     target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
         target_topic_, rclcpp::QoS(10).reliable());
@@ -845,6 +1042,8 @@ private:
   rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_description_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_pose_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   mutable std::mutex mutex_;
@@ -855,6 +1054,7 @@ private:
   Eigen::VectorXf last_target_q_;
   std::vector<int> cached_safe_goal_ids_;
   std::vector<int> latest_goal_candidate_ids_;
+  std::unordered_set<std::string> last_candidate_robot_tags_;
   std::vector<int> active_goal_candidates_;
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
@@ -876,6 +1076,11 @@ private:
   int active_goal_id_ = -1;
   double waypoint_tolerance_ = 0.05;
   bool replan_on_path_collision_ = true;
+  bool publish_candidate_robot_preview_ = true;
+  double candidate_robot_preview_opacity_ = 0.18;
+  std::string robot_base_frame_ = "base_link";
+  std::string robot_root_link_name_;
+  std::string candidate_robot_urdf_content_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trial_goal_advance_srv_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
@@ -1560,6 +1765,92 @@ private:
         topological_map_avoidance::buildPathMessage(
             *this, gng_, candidate_paths,
             have_map_ ? latest_map_.header.frame_id : std::string{}));
+  }
+
+  void publishCandidateRobotPreviewLocked() {
+    if (!publish_candidate_robot_preview_ || !gng_ ||
+        !candidate_robot_description_pub_ || !candidate_robot_pose_pub_ ||
+        candidate_robot_urdf_content_.empty()) {
+      return;
+    }
+
+    constexpr const char *kPreviewTag = "candidate_goal_preview";
+    std::unordered_set<std::string> next_tags;
+
+    nlohmann::json instance_payloads = nlohmann::json::array();
+    const std::size_t preview_count =
+        std::min<std::size_t>(8U, latest_goal_candidate_ids_.size());
+    for (std::size_t i = 0; i < preview_count; ++i) {
+      const int node_id = latest_goal_candidate_ids_[i];
+      if (node_id < 0 || node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &node = gng_->nodeAt(node_id);
+      if (node.id == -1 || !node.status.active || !node.status.valid) {
+        continue;
+      }
+
+      std::vector<double> joint_values;
+      joint_values.reserve(static_cast<std::size_t>(node.weight_angle.size()));
+      for (int j = 0; j < node.weight_angle.size(); ++j) {
+        joint_values.push_back(static_cast<double>(node.weight_angle[j]));
+      }
+
+      std::vector<double> fk_values = joint_values;
+      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+      std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+      if (chain_) {
+        chain_->forwardKinematicsAt(fk_values, positions, orientations);
+      }
+
+      const double timestamp = this->now().seconds();
+      instance_payloads.push_back(buildRobotPayloadJson(
+          robot_base_frame_, candidate_robot_urdf_content_, controlled_joint_names_,
+          joint_values, positions, orientations, timestamp,
+          candidate_robot_preview_opacity_));
+    }
+
+    if (instance_payloads.empty()) {
+      for (const auto &old_tag : last_candidate_robot_tags_) {
+        std_msgs::msg::String delete_msg;
+        delete_msg.data = nlohmann::json({
+            {"type", "stream.robot.delete"},
+            {"tag", old_tag},
+        }).dump();
+        candidate_robot_pose_pub_->publish(delete_msg);
+      }
+      last_candidate_robot_tags_.clear();
+      return;
+    }
+
+    next_tags.insert(kPreviewTag);
+
+    const auto &primary_robot = instance_payloads.front();
+    const std::string desc_json = buildRobotStreamJsonWithInstances(
+        "stream.robot.description", kPreviewTag, primary_robot, instance_payloads);
+    const std::string pose_json = buildRobotStreamJsonWithInstances(
+        "stream.robot.pose", kPreviewTag, primary_robot, instance_payloads);
+
+    std_msgs::msg::String desc_msg;
+    desc_msg.data = desc_json;
+    candidate_robot_description_pub_->publish(desc_msg);
+
+    std_msgs::msg::String pose_msg;
+    pose_msg.data = pose_json;
+    candidate_robot_pose_pub_->publish(pose_msg);
+
+    for (const auto &old_tag : last_candidate_robot_tags_) {
+      if (next_tags.find(old_tag) != next_tags.end()) {
+        continue;
+      }
+      std_msgs::msg::String delete_msg;
+      delete_msg.data = nlohmann::json({
+          {"type", "stream.robot.delete"},
+          {"tag", old_tag},
+      }).dump();
+      candidate_robot_pose_pub_->publish(delete_msg);
+    }
+    last_candidate_robot_tags_ = std::move(next_tags);
   }
 };
 

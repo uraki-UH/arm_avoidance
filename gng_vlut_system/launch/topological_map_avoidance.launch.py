@@ -47,6 +47,7 @@ def launch_setup(context, *args, **kwargs):
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
+    robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
     control_claim_priority = LaunchConfiguration("control_claim_priority").perform(context)
     control_claim_mode = LaunchConfiguration("control_claim_mode").perform(context)
     control_claim_enabled = LaunchConfiguration("control_claim_enabled").perform(context)
@@ -88,6 +89,9 @@ def launch_setup(context, *args, **kwargs):
 
     urdf_path = resolve_urdf_path(params_file, urdf_path)
 
+    if not robot_base_frame.strip():
+        robot_base_frame = f"{robot_name}/base_link"
+
     node_params = {}
     if urdf_path:
         node_params["urdf_path"] = urdf_path
@@ -119,6 +123,8 @@ def launch_setup(context, *args, **kwargs):
         node_params["replan_on_path_collision"] = replan_on_path_collision.lower() in ("1", "true", "yes", "on")
     if goal_candidate_ids_topic:
         node_params["goal_candidate_ids_topic"] = goal_candidate_ids_topic
+    if robot_base_frame:
+        node_params["robot_base_frame"] = robot_base_frame
     if target_topic:
         node_params["target_topic"] = target_topic
     if control_claim_priority:
@@ -194,6 +200,7 @@ def generate_launch_description():
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("target_topic", default_value=""),
+        DeclareLaunchArgument("robot_base_frame", default_value=""),
         DeclareLaunchArgument("control_claim_priority", default_value="10"),
         DeclareLaunchArgument("control_claim_mode", default_value="1"),
         DeclareLaunchArgument("control_claim_enabled", default_value="true"),

@@ -8,14 +8,14 @@
       offset: 1000000
 
     robot_name: "ToPoDualArm"
-    urdf_path: "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
-    resource_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description"
-    mesh_root_dir: "/ros2_ws/src/ToPoDualArm/topoarm_description/meshes"
+    urdf_path: "/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf"
+    resource_root_dir: "/ros2_ws/src/dual_arm_urdf"
+    mesh_root_dir: "/ros2_ws/src/dual_arm_urdf/meshes"
 
     # --- GNG & Safety Settings ---
     gng:
-      experiment_id: "ToPoDualArm"
-      data_directory: "/ros2_ws/src/gng_vlut_system/gng_results"
+      experiment_id: "ToPoDualArm3" #実験ID(結果の保存先ディレクトリ名)
+      data_directory: "/ros2_ws/src/gng_vlut_system/gng_results" #保存先ディレクトリまでのパス
       gng_model_filename: "gng.bin"
       vlut_filename: "vlut.bin"
       profile_names: "left_arm"
@@ -31,31 +31,36 @@
       # gng_profiles に列挙した profile は、未指定ならすべて使用
       profiles:
         right_arm:
-          root: "base_link"
-          eef: "right_end_effector_link"
+          root: "R_shoulder_mount"
+          eef: "R_tcp"
           voxel_exclude:
             - "base_link"
-            - "link1"
+            - "R_link1"
           dof_exclude:
-            - "right_gripper_left_joint"
-            - "right_gripper_right_joint"
+            - "R_gripper_joint"
+            - "R_gripper_mimic"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
           dof: 7
 
         left_arm:
-          root: "base_link"
-          eef: "left_end_effector_link"
+          root: "L_shoulder_mount"
+          eef: "L_tcp"
           voxel_exclude:
             - "base_link"
-            - "link1"
+            - "L_link1"
           dof_exclude:
-            - "left_gripper_left_joint"
-            - "left_gripper_right_joint"
+            - "waist_joint"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
+            - "L_gripper_joint"
+            - "L_gripper_mimic"
           dof: 7
 
     # --- Robot Settings ---
     robot:
-      eef_link_names: "left_end_effector_link,right_end_effector_link"
-      arm_leaf_link_names: "left_link8,right_link8"
+      eef_link_names: "L_tcp,R_tcp"
+      arm_leaf_link_names: "L_tcp,R_tcp"
       voxel_size: 0.01
       inflation: 0.0
 
@@ -74,16 +79,15 @@
         containment_margin: 0.5
         verbose: false
       environment_ignore_links:
-        - "pillar_link"
         - "base_footprint"
       #(隣接リンク同士は自動で衝突判定をしないように設定)
       self_collision_exclusion_pairs:
-        - "left_gripper_left_link|left_gripper_right_link"
-        - "right_gripper_left_link|right_gripper_right_link"
+        - "L_finger_left|L_finger_right"
+        - "R_finger_left|R_finger_right"
     
     gng_params:
       lambda: 200
-      max_node_num: 10000
+      max_node_num: 1000
       max_iterations: 1000000
       refine_iterations: 100000
       coord_edge_iterations: 100000
@@ -95,8 +99,10 @@
       n_best_candidates: 4
       ais_threshold: 10.0
       start_node_num: 2
-      min_x: -1.0
-      max_x: 1.0
+
+      #tcpの位置のサンプリング範囲と最大試行回数
+      min_x: -0.1
+      max_x: 0.5
       min_y: -1.0
       max_y: 1.0
       min_z: -1.0

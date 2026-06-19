@@ -178,17 +178,29 @@ export interface RobotSettings {
     transform?: Transform;
 }
 
-export interface RobotData {
-    timestamp: number;
-    frameId: string;
-    tag?: string;
-    urdf?: string;
+export interface RobotPoseInstance {
+    opacity?: number;
     jointNames: string[];
     jointValues: number[];
     positions: [number, number, number][];
     orientations: [number, number, number, number][];
     basePosition?: [number, number, number];
     baseOrientation?: [number, number, number, number];
+}
+
+export interface RobotData {
+    timestamp: number;
+    frameId: string;
+    tag?: string;
+    urdf?: string;
+    opacity?: number;
+    jointNames: string[];
+    jointValues: number[];
+    positions: [number, number, number][];
+    orientations: [number, number, number, number][];
+    basePosition?: [number, number, number];
+    baseOrientation?: [number, number, number, number];
+    instances?: RobotPoseInstance[];
 }
 
 export interface TransformData {

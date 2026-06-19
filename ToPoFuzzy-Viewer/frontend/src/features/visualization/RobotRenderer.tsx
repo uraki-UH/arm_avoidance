@@ -2,7 +2,7 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
-import { RobotData, Transform } from '../../types';
+import { RobotData, RobotPoseInstance, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface RobotRendererProps {
@@ -18,7 +18,7 @@ interface RobotRendererProps {
     manualTransform?: Transform;
 }
 
-function RobotRenderer({
+function RobotInstanceRenderer({
     tag,
     data,
     visible = true,
@@ -37,9 +37,10 @@ function RobotRenderer({
     const { invalidate } = useThree();
 
     const viewerPort = 9001;
+    const effectiveOpacity = data.opacity ?? opacity;
 
     // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride]);
+    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride]);
 
     // --- Memoize Robot Material ---
     const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
@@ -47,9 +48,9 @@ function RobotRenderer({
         emissive: new THREE.Color(color).multiplyScalar(Math.max(0, emissiveIntensity)),
         roughness: 0.7,
         metalness: 0.1,
-        transparent: opacity < 1,
-        opacity,
-    }), [color, emissiveIntensity, opacity]);
+        transparent: effectiveOpacity < 1,
+        opacity: effectiveOpacity,
+    }), [color, emissiveIntensity, effectiveOpacity]);
 
     const applyMaterialTweaks = useCallback((material: THREE.Material | THREE.Material[]) => {
         const applyOne = (m: THREE.Material) => {
@@ -60,8 +61,8 @@ function RobotRenderer({
                 color?: THREE.Color;
             };
 
-            anyMaterial.transparent = opacity < 1;
-            anyMaterial.opacity = opacity;
+            anyMaterial.transparent = effectiveOpacity < 1;
+            anyMaterial.opacity = effectiveOpacity;
 
             if (anyMaterial.emissive && anyMaterial.color) {
                 anyMaterial.emissive.copy(anyMaterial.color).multiplyScalar(Math.max(0, emissiveIntensity));
@@ -75,7 +76,7 @@ function RobotRenderer({
         } else {
             applyOne(material);
         }
-    }, [emissiveIntensity, opacity]);
+    }, [emissiveIntensity, effectiveOpacity]);
 
     const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
         if (!obj) return;
@@ -132,7 +133,7 @@ function RobotRenderer({
             applyRobotMaterial(robot);
         }
         invalidate();
-    }, [robot, useUrdfColors, opacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, invalidate]);
+    }, [robot, useUrdfColors, effectiveOpacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, invalidate]);
 
     // --- Load URDF ---
     useEffect(() => {
@@ -215,6 +216,88 @@ function RobotRenderer({
                 {robot && <primitive key={tag} object={robot} />}
             </group>
         </group>
+    );
+}
+
+function RobotRenderer({
+    tag,
+    data,
+    visible = true,
+    color = 'blue',
+    useUrdfColors = true,
+    emissiveIntensity = 0.2,
+    opacity = 0.8,
+    jointValuesOverride = [],
+    tf = null,
+    manualTransform,
+}: RobotRendererProps) {
+    const outerGroupRef = useRef<THREE.Group>(null);
+    const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
+    const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+
+    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform]);
+
+    useEffect(() => {
+        if (!hasInstances || !outerGroupRef.current) return;
+        if (tf) {
+            outerGroupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
+            outerGroupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
+        } else {
+            outerGroupRef.current.position.set(0, 0, 0);
+            outerGroupRef.current.quaternion.set(0, 0, 0, 1);
+        }
+    }, [hasInstances, tf]);
+
+    if (hasInstances) {
+        const instances = data.instances as RobotPoseInstance[];
+        return (
+            <group ref={outerGroupRef} name={tag} visible={visible}>
+                <group
+                    position={effectiveTransform.position}
+                    rotation={effectiveTransform.rotation}
+                    scale={effectiveTransform.scale}
+                >
+                    {instances.map((instance, index) => {
+                        const instanceData: RobotData = {
+                            ...data,
+                            ...instance,
+                            instances: undefined,
+                            opacity: instance.opacity ?? data.opacity ?? opacity,
+                        };
+                        return (
+                            <RobotInstanceRenderer
+                                key={`${tag}-${index}`}
+                                tag={`${tag}-${index}`}
+                                data={instanceData}
+                                visible={visible}
+                                color={color}
+                                useUrdfColors={useUrdfColors}
+                                emissiveIntensity={emissiveIntensity}
+                                opacity={instance.opacity ?? data.opacity ?? opacity}
+                                jointValuesOverride={jointValuesOverride}
+                                tf={null}
+                                manualTransform={undefined}
+                            />
+                        );
+                    })}
+                </group>
+            </group>
+        );
+    }
+
+    return (
+        <RobotInstanceRenderer
+            tag={tag}
+            data={data}
+            visible={visible}
+            color={color}
+            useUrdfColors={useUrdfColors}
+            emissiveIntensity={emissiveIntensity}
+            opacity={opacity}
+            jointValuesOverride={jointValuesOverride}
+            tf={tf}
+            manualTransform={manualTransform}
+        />
     );
 }
 

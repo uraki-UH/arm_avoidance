@@ -1,17 +1,12 @@
 # ToPoFuzzy-Viewer 実行ガイド
 
 ##　実行ガイド
-
-docker compose up --build
-docker compose down
-dokcer compose up -d
-
+cd uraki_ws
+docker compose down && docker compose up --build  && dokcer compose up -d
+docker compose exec gng_cpu bash
 ## frontendの起動
-
 cd ~/uraki_ws
-
 docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
-
 (docker compose --profile manual up --build frontend)
 docker compose --profile manual up  frontend
 
@@ -21,11 +16,6 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   trial_mode:=true \
   trial_safe_only:=true \
   right_arm_oscillation_enabled:=true \
-  trial_return_home:=true
-
-## docker の起動
-cd uraki_ws && docker compose up -d
-cd uraki_ws && docker compose exec gng_cpu bash
 
 ##  backendの起動
 ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
@@ -143,7 +133,6 @@ ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=
 tf位置調整
  python3 test_tf_once_publisher.py   --world-frame world   --frame-id topoarm/base_link   --x 0.0   --y 0.5   --z -0.3 --yaw 1.5  --hold-seconds 1.0   --publish-hz 20
 
-
 初期位置
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.0   --y -0.0   --z 0.0 --yaw 0.0  --hold-seconds 1.0   --publish-hz 20
 
@@ -172,7 +161,6 @@ http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
 ### 素の ROS2 環境で入れる場合
 ```bash
-sudo apt update
 sudo apt install ros-humble-rosbridge-server
 ```
 
@@ -185,7 +173,6 @@ ros2 run rosbridge_server rosbridge_websocket --port 9090
 
 ```bash
 # 2) HTML を HTTP で配信
-cd /home/fuzzrobo/uraki_ws
 python3 -m http.server 8000
 ```
 
@@ -214,7 +201,7 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
- ros2 launch gng_vlut_system grasp_pose_pipeline.launch.py 
+ (ros2 launch gng_vlut_system grasp_pose_pipeline.launch.py )
 
 
   # world に寄せたい場合だけ明示する

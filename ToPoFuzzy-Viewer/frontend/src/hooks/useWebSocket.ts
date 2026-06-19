@@ -5,6 +5,7 @@ import {
     MarkerArrayData,
     GraphData,
     RobotData,
+    RobotPoseInstance,
     TransformData,
     DataSource,
     RosbagInfo,
@@ -59,6 +60,51 @@ type QueuedRobotPoseUpdate = {
     tag: string;
     robot: RobotData;
 };
+
+function robotPoseInstanceHasChanged(prev: RobotPoseInstance, next: RobotPoseInstance): boolean {
+    if ((prev.opacity ?? 1) !== (next.opacity ?? 1)) {
+        return true;
+    }
+    if (prev.jointNames.length !== next.jointNames.length || prev.jointValues.length !== next.jointValues.length) {
+        return true;
+    }
+    for (let i = 0; i < next.jointNames.length; i++) {
+        if (prev.jointNames[i] !== next.jointNames[i]) {
+            return true;
+        }
+    }
+    for (let i = 0; i < next.jointValues.length; i++) {
+        if (prev.jointValues[i] !== next.jointValues[i]) {
+            return true;
+        }
+    }
+    if ((prev.positions?.length || 0) !== (next.positions?.length || 0)) {
+        return true;
+    }
+    if ((prev.orientations?.length || 0) !== (next.orientations?.length || 0)) {
+        return true;
+    }
+    const prevBasePos = prev.basePosition || [0, 0, 0];
+    const nextBasePos = next.basePosition || [0, 0, 0];
+    if (
+        prevBasePos[0] !== nextBasePos[0] ||
+        prevBasePos[1] !== nextBasePos[1] ||
+        prevBasePos[2] !== nextBasePos[2]
+    ) {
+        return true;
+    }
+    const prevBaseQuat = prev.baseOrientation || [0, 0, 0, 1];
+    const nextBaseQuat = next.baseOrientation || [0, 0, 0, 1];
+    if (
+        prevBaseQuat[0] !== nextBaseQuat[0] ||
+        prevBaseQuat[1] !== nextBaseQuat[1] ||
+        prevBaseQuat[2] !== nextBaseQuat[2] ||
+        prevBaseQuat[3] !== nextBaseQuat[3]
+    ) {
+        return true;
+    }
+    return false;
+}
 
 function graphHasChanged(prev: GraphData, next: GraphData): boolean {
     if (
@@ -162,6 +208,9 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
     if ((prev.urdf || '') !== (next.urdf || '')) {
         return true;
     }
+    if ((prev.opacity ?? 1) !== (next.opacity ?? 1)) {
+        return true;
+    }
     if (prev.jointNames.length !== next.jointNames.length || prev.jointValues.length !== next.jointValues.length) {
         return true;
     }
@@ -180,6 +229,16 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
     }
     if ((prev.orientations?.length || 0) !== (next.orientations?.length || 0)) {
         return true;
+    }
+    if ((prev.instances?.length || 0) !== (next.instances?.length || 0)) {
+        return true;
+    }
+    for (let i = 0; i < (next.instances?.length || 0); i++) {
+        const a = prev.instances?.[i];
+        const b = next.instances?.[i];
+        if (!a || !b || robotPoseInstanceHasChanged(a, b)) {
+            return true;
+        }
     }
     return false;
 }
