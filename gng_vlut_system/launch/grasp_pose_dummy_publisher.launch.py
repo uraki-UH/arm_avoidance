@@ -14,7 +14,7 @@ def generate_launch_description():
         DeclareLaunchArgument("candidate_count", default_value="1"),
         DeclareLaunchArgument("center_x", default_value="0.04"),
         DeclareLaunchArgument("center_y", default_value="0.0"),
-        DeclareLaunchArgument("center_z", default_value="0.23"),
+        DeclareLaunchArgument("center_z", default_value="0.13"),
         DeclareLaunchArgument("spread_x", default_value="0.05"),
         DeclareLaunchArgument("spread_y", default_value="0.05"),
         DeclareLaunchArgument("spread_z", default_value="0.0"),
