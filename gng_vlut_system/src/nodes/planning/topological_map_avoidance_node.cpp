@@ -12,9 +12,11 @@
 #include <mutex>
 #include <memory>
 #include <random>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -22,12 +24,15 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <nlohmann/json.hpp>
 
 #include <gng_control_msgs/msg/joint_control_claim.hpp>
+#include <gng_control_msgs/msg/grasp_candidate_metric.hpp>
+#include <gng_control_msgs/msg/grasp_candidate_metric_array.hpp>
 // Candidate goal ids from the target-pose selector.
 #include <std_msgs/msg/int32_multi_array.hpp>
 
@@ -350,6 +355,7 @@ public:
     declare_parameter("control_claim_enabled", true);
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
+    declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
     declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids");
     declare_parameter("publish_hz", 20.0);
     declare_parameter("avoid_collisions", true);
@@ -368,6 +374,7 @@ public:
     declare_parameter("robot_base_frame", "");
     declare_parameter("publish_candidate_robot_preview", true);
     declare_parameter("candidate_robot_preview_opacity", 0.18);
+    declare_parameter("metrics_max_joint_velocity", 0.6);
 
     const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -564,8 +571,11 @@ public:
     publish_candidate_robot_preview_ = get_parameter("publish_candidate_robot_preview").as_bool();
     candidate_robot_preview_opacity_ = std::clamp(
         get_parameter("candidate_robot_preview_opacity").as_double(), 0.0, 1.0);
+    metrics_max_joint_velocity_ =
+        std::max(1e-6, get_parameter("metrics_max_joint_velocity").as_double());
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
+    candidate_metrics_topic_ = get_parameter("candidate_metrics_topic").as_string();
     target_topic_ = get_parameter("target_topic").as_string();
     if (target_topic_.empty()) {
       const std::string ns_raw = std::string(get_namespace());
@@ -625,6 +635,9 @@ public:
         trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
     candidate_trajectory_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         candidate_trajectory_topic_, rclcpp::QoS(1).reliable().transient_local());
+    candidate_metrics_pub_ =
+        create_publisher<gng_control_msgs::msg::GraspCandidateMetricArray>(
+            candidate_metrics_topic_, rclcpp::QoS(1).reliable().transient_local());
     candidate_robot_description_pub_ = create_publisher<std_msgs::msg::String>(
         "/viewer/internal/stream/robot/description",
         rclcpp::QoS(1).reliable().transient_local());
@@ -690,10 +703,11 @@ public:
         [this]() { this->publishTargetLocked(); });
 
     RCLCPP_INFO(get_logger(),
-                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s goal_ids_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s dof=%d trial_mode=%d",
+                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s goal_ids_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s candidate_metrics_topic=%s dof=%d trial_mode=%d",
                 joint_topic.c_str(), topological_map_topic.c_str(),
                 goal_candidate_ids_topic_.c_str(), target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
                 candidate_trajectory_topic_.c_str(),
+                candidate_metrics_topic_.c_str(),
                 dof, trial_mode_ ? 1 : 0);
     RCLCPP_INFO(get_logger(),
                 "Waiting for inputs: joint_topic=%s topological_map_topic=%s",
@@ -1066,6 +1080,7 @@ private:
   bool allow_zero_initial_joint_state_ = true;
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
+  std::string candidate_metrics_topic_;
   std::string goal_candidate_ids_topic_;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
@@ -1075,6 +1090,7 @@ private:
   rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
+  rclcpp::Publisher<gng_control_msgs::msg::GraspCandidateMetricArray>::SharedPtr candidate_metrics_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_description_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_pose_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -1111,6 +1127,7 @@ private:
   bool replan_on_path_collision_ = true;
   bool publish_candidate_robot_preview_ = true;
   double candidate_robot_preview_opacity_ = 0.18;
+  double metrics_max_joint_velocity_ = 0.6;
   std::string robot_base_frame_ = "base_link";
   std::string robot_root_link_name_;
   std::string candidate_robot_urdf_content_;
@@ -1308,6 +1325,9 @@ private:
     }
 
     active_goal_id_ = reached_goal_id;
+    publishGraspCandidateMetricsLocked(
+        current_q, selected_start_id >= 0 ? selected_start_id : start_id,
+        goal_candidates, candidate_path_by_goal);
     active_bridge_valid_ = false;
     active_bridge_path_.clear();
     active_bridge_index_ = 0;
@@ -1782,6 +1802,249 @@ private:
     }
 
     publishEmptyCandidateTrajectoryLocked();
+  }
+
+  static float nanMetric() {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
+
+  sensor_msgs::msg::JointState buildJointStateFromQ(
+      const Eigen::VectorXf &q) const {
+    sensor_msgs::msg::JointState msg;
+    msg.header.stamp = now();
+    msg.name = controlled_joint_names_;
+    msg.position.resize(controlled_joint_names_.size(), 0.0);
+    msg.velocity.resize(controlled_joint_names_.size(), 0.0);
+    msg.effort.resize(controlled_joint_names_.size(), 0.0);
+    const std::size_t n = std::min<std::size_t>(
+        controlled_joint_names_.size(), static_cast<std::size_t>(q.size()));
+    for (std::size_t i = 0; i < n; ++i) {
+      msg.position[i] = static_cast<double>(q[static_cast<int>(i)]);
+    }
+    return msg;
+  }
+
+  geometry_msgs::msg::Pose buildPoseFromNode(
+      const GNGType::NodeType &node) const {
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = static_cast<double>(node.weight_coord.x());
+    pose.position.y = static_cast<double>(node.weight_coord.y());
+    pose.position.z = static_cast<double>(node.weight_coord.z());
+    pose.orientation.x = static_cast<double>(node.status.ee_orientation.x());
+    pose.orientation.y = static_cast<double>(node.status.ee_orientation.y());
+    pose.orientation.z = static_cast<double>(node.status.ee_orientation.z());
+    pose.orientation.w = static_cast<double>(node.status.ee_orientation.w());
+    return pose;
+  }
+
+  Manipulability::ManipulabilityEllipsoid calculateManipulabilityForQ(
+      const Eigen::VectorXf &q, bool rotational) const {
+    Manipulability::ManipulabilityEllipsoid out;
+    if (!chain_ || q.size() == 0) {
+      return out;
+    }
+
+    std::vector<double> joint_values;
+    joint_values.reserve(static_cast<std::size_t>(q.size()));
+    for (int i = 0; i < q.size(); ++i) {
+      joint_values.push_back(static_cast<double>(q[i]));
+    }
+
+    try {
+      const Eigen::MatrixXd J =
+          chain_->calculateJacobianAt(chain_->getNumJoints() + 1, joint_values);
+      if (J.rows() < 3) {
+        return out;
+      }
+      const Eigen::MatrixXd Jpart =
+          rotational && J.rows() >= 6 ? J.bottomRows(3) : J.topRows(3);
+      out = Manipulability::calculateManipulabilityEllipsoid(Jpart);
+    } catch (const std::exception &e) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "Failed to calculate candidate manipulability: %s", e.what());
+    } catch (...) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 5000,
+          "Failed to calculate candidate manipulability: unknown error");
+    }
+    return out;
+  }
+
+  std::vector<float> buildPathManipulability(
+      const std::vector<int> &path, bool rotational) const {
+    std::vector<float> values;
+    values.reserve(path.size());
+    if (!gng_) {
+      return values;
+    }
+    for (const int node_id : path) {
+      if (node_id < 0 ||
+          node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        values.push_back(nanMetric());
+        continue;
+      }
+      const auto &node = gng_->nodeAt(node_id);
+      if (node.id == -1 || node.weight_angle.size() == 0) {
+        values.push_back(nanMetric());
+        continue;
+      }
+      const auto manip =
+          calculateManipulabilityForQ(node.weight_angle, rotational);
+      values.push_back(manip.valid ? static_cast<float>(manip.manipulability)
+                                   : nanMetric());
+    }
+    return values;
+  }
+
+  std::pair<float, float> estimatePathEnergyAndDuration(
+      const Eigen::VectorXf &current_q, const std::vector<int> &path) const {
+    if (!gng_ || path.empty()) {
+      return {0.0f, 0.0f};
+    }
+
+    float energy = 0.0f;
+    float duration = 0.0f;
+    Eigen::VectorXf previous = current_q;
+
+    for (const int node_id : path) {
+      if (node_id < 0 ||
+          node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &node = gng_->nodeAt(node_id);
+      if (node.id == -1 || node.weight_angle.size() != previous.size()) {
+        continue;
+      }
+
+      const Eigen::VectorXf delta = node.weight_angle - previous;
+      energy += static_cast<float>(delta.squaredNorm());
+      duration += static_cast<float>(
+          delta.cwiseAbs().maxCoeff() / metrics_max_joint_velocity_);
+      previous = node.weight_angle;
+    }
+
+    return {energy, duration};
+  }
+
+  void publishGraspCandidateMetricsLocked(
+      const Eigen::VectorXf &current_q, int start_id,
+      const std::vector<int> &goal_candidates,
+      const std::unordered_map<int, std::vector<int>> &candidate_path_by_goal) {
+    if (!candidate_metrics_pub_ || !gng_) {
+      return;
+    }
+
+    gng_control_msgs::msg::GraspCandidateMetricArray out;
+    out.header.stamp = now();
+    out.header.frame_id =
+        have_map_ && !latest_map_.header.frame_id.empty()
+            ? latest_map_.header.frame_id
+            : robot_base_frame_;
+
+    std::string ns_raw = std::string(get_namespace());
+    if (!ns_raw.empty() && ns_raw.front() == '/') {
+      ns_raw.erase(ns_raw.begin());
+    }
+    out.robot_name = ns_raw;
+    out.base_frame = robot_base_frame_;
+    out.selected_goal_node_id = active_goal_id_;
+    out.candidates.reserve(goal_candidates.size());
+
+    for (std::size_t i = 0; i < goal_candidates.size(); ++i) {
+      const int goal_id = goal_candidates[i];
+      gng_control_msgs::msg::GraspCandidateMetric metric;
+      metric.candidate_id = static_cast<int32_t>(i);
+      metric.goal_node_id = goal_id;
+      metric.start_node_id = start_id;
+      metric.selected = goal_id == active_goal_id_;
+      metric.feasible = candidate_path_by_goal.find(goal_id) != candidate_path_by_goal.end();
+
+      metric.position_manipulability = nanMetric();
+      metric.rotation_manipulability = nanMetric();
+      metric.manipulability_condition_number = nanMetric();
+      metric.min_singular_value = nanMetric();
+      metric.joint_limit_margin_min = nanMetric();
+      metric.joint_limit_margin_mean = nanMetric();
+      metric.self_collision_margin = nanMetric();
+      metric.environment_collision_margin = nanMetric();
+      metric.gripper_width = nanMetric();
+      metric.grasp_region_score = nanMetric();
+      metric.estimated_energy = nanMetric();
+      metric.estimated_duration = nanMetric();
+
+      if (goal_id >= 0 &&
+          goal_id < static_cast<int>(gng_->getMaxNodeNum())) {
+        const auto &node = gng_->nodeAt(goal_id);
+        if (node.id != -1) {
+          metric.end_effector_pose = buildPoseFromNode(node);
+          metric.final_joint_state = buildJointStateFromQ(node.weight_angle);
+          metric.joint_limit_margin_min = node.status.joint_limit_score;
+          metric.joint_limit_margin_mean = node.status.joint_limit_score;
+
+          const auto position_manip =
+              node.status.manip_info.valid
+                  ? node.status.manip_info
+                  : calculateManipulabilityForQ(node.weight_angle, false);
+          const auto rotation_manip =
+              calculateManipulabilityForQ(node.weight_angle, true);
+
+          if (position_manip.valid) {
+            metric.position_manipulability =
+                static_cast<float>(position_manip.manipulability);
+            metric.manipulability_condition_number =
+                static_cast<float>(position_manip.condition_number);
+            metric.min_singular_value =
+                static_cast<float>(position_manip.min_singular_value);
+            metric.manipulability_singular_values = {
+                static_cast<float>(position_manip.singular_values.x()),
+                static_cast<float>(position_manip.singular_values.y()),
+                static_cast<float>(position_manip.singular_values.z())};
+          }
+          if (rotation_manip.valid) {
+            metric.rotation_manipulability =
+                static_cast<float>(rotation_manip.manipulability);
+          }
+
+          metric.metric_names = {
+              "joint_limit_score",
+              "collision_count",
+              "danger_count",
+              "is_colliding",
+              "is_danger",
+              "combined_score",
+              "dynamic_manipulability"};
+          metric.metric_values = {
+              node.status.joint_limit_score,
+              static_cast<float>(node.status.collision_count),
+              static_cast<float>(node.status.danger_count),
+              node.status.is_colliding ? 1.0f : 0.0f,
+              node.status.is_danger ? 1.0f : 0.0f,
+              node.status.combined_score,
+              node.status.dynamic_manipulability};
+        }
+      }
+
+      const auto path_it = candidate_path_by_goal.find(goal_id);
+      if (path_it != candidate_path_by_goal.end()) {
+        metric.path_node_ids.reserve(path_it->second.size());
+        for (const int node_id : path_it->second) {
+          metric.path_node_ids.push_back(static_cast<int32_t>(node_id));
+        }
+        metric.path_position_manipulability =
+            buildPathManipulability(path_it->second, false);
+        metric.path_rotation_manipulability =
+            buildPathManipulability(path_it->second, true);
+        const auto [energy, duration] =
+            estimatePathEnergyAndDuration(current_q, path_it->second);
+        metric.estimated_energy = energy;
+        metric.estimated_duration = duration;
+      }
+
+      out.candidates.push_back(std::move(metric));
+    }
+
+    candidate_metrics_pub_->publish(out);
   }
 
   void publishTrajectoryPathLocked(const std::vector<int> &node_path) {

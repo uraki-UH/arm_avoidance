@@ -1,0 +1,31 @@
+int32 candidate_id
+int32 goal_node_id
+int32 start_node_id
+bool selected
+bool feasible
+
+geometry_msgs/Pose end_effector_pose
+sensor_msgs/JointState final_joint_state
+
+float32 position_manipulability
+float32 rotation_manipulability
+float32 manipulability_condition_number
+float32 min_singular_value
+float32[] manipulability_singular_values
+
+float32 joint_limit_margin_min
+float32 joint_limit_margin_mean
+float32 self_collision_margin
+float32 environment_collision_margin
+
+float32 gripper_width
+float32 grasp_region_score
+
+int32[] path_node_ids
+float32[] path_position_manipulability
+float32[] path_rotation_manipulability
+float32 estimated_energy
+float32 estimated_duration
+
+string[] metric_names
+float32[] metric_values
