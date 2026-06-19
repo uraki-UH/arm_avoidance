@@ -9,7 +9,7 @@ const fmt = (id: string, type: string) => {
 
 interface ControlSliderProps { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; onPointerUp?: () => void; formatValue?: (v: number) => string; disabled?: boolean }
 
-export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility, onRemove, onOpenTransform, statusLabel, isSelected, onSelect, isActionDisabled, children, headerOnly }) => {
+export const LayerItem: React.FC<any> = ({ id, displayName, type, visible, onToggleVisibility, onRemove, onOpenTransform, statusLabel, isSelected, onSelect, isActionDisabled, children, headerOnly }) => {
     const c = (
         <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
@@ -22,8 +22,8 @@ export const LayerItem: React.FC<any> = ({ id, type, visible, onToggleVisibility
                         <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-50">
                             {statusLabel || (type === 'graph' ? 'GNG' : type.toUpperCase())}
                         </span>
-                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]" title={id}>
-                            {fmt(id, type)}
+                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]" title={displayName || id}>
+                            {displayName || fmt(id, type)}
                         </p>
                     </div>
                 </div>

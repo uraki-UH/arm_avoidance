@@ -359,7 +359,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = settings[tag] || {};
                                 return (
-                                    <LayerItem key={`${type}-${tag}`} id={tag} type={type as any} visible={s.visible !== false}
+                                    <LayerItem key={`${type}-${tag}`} id={tag} displayName={d.displayName} type={type as any} visible={s.visible !== false}
                                         onToggleVisibility={() => {
                                             const isVisible = s.visible !== false;
                                             props.onUpdateSettings(type as EntityType, tag, { visible: !isVisible });

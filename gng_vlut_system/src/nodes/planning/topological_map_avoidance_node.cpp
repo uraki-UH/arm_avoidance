@@ -1104,8 +1104,13 @@ private:
   }
 
   std::vector<int> selectedGoalCandidatesLocked(int start_id) const {
-    const std::vector<int> &source =
-        latest_goal_candidate_ids_.empty() ? cached_safe_goal_ids_ : latest_goal_candidate_ids_;
+    if (latest_goal_candidate_ids_.empty()) {
+      if (goal_candidate_ids_topic_.empty()) {
+        return cached_safe_goal_ids_;
+      }
+      return {};
+    }
+    const std::vector<int> &source = latest_goal_candidate_ids_;
     std::vector<int> out;
     out.reserve(source.size());
     for (int id : source) {
@@ -1774,7 +1779,13 @@ private:
       return;
     }
 
-    constexpr const char *kPreviewTag = "candidate_goal_preview";
+    std::string ns_raw = std::string(get_namespace());
+    if (!ns_raw.empty() && ns_raw.front() == '/') {
+      ns_raw.erase(ns_raw.begin());
+    }
+    const std::string preview_tag = "candidate_goal_preview";
+    const std::string preview_display_name =
+        ns_raw.empty() ? preview_tag : (ns_raw + "/" + preview_tag);
     std::unordered_set<std::string> next_tags;
 
     nlohmann::json instance_payloads = nlohmann::json::array();
@@ -1823,13 +1834,14 @@ private:
       return;
     }
 
-    next_tags.insert(kPreviewTag);
+    next_tags.insert(preview_tag);
 
-    const auto &primary_robot = instance_payloads.front();
+    auto primary_robot = instance_payloads.front();
+    primary_robot["displayName"] = preview_display_name;
     const std::string desc_json = buildRobotStreamJsonWithInstances(
-        "stream.robot.description", kPreviewTag, primary_robot, instance_payloads);
+        "stream.robot.description", preview_tag, primary_robot, instance_payloads);
     const std::string pose_json = buildRobotStreamJsonWithInstances(
-        "stream.robot.pose", kPreviewTag, primary_robot, instance_payloads);
+        "stream.robot.pose", preview_tag, primary_robot, instance_payloads);
 
     std_msgs::msg::String desc_msg;
     desc_msg.data = desc_json;

@@ -262,6 +262,8 @@ function RobotRenderer({
                             ...data,
                             ...instance,
                             instances: undefined,
+                            basePosition: [0, 0, 0],
+                            baseOrientation: [0, 0, 0, 1],
                             opacity: instance.opacity ?? data.opacity ?? opacity,
                         };
                         return (

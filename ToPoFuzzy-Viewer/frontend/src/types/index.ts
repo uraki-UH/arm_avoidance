@@ -192,6 +192,7 @@ export interface RobotData {
     timestamp: number;
     frameId: string;
     tag?: string;
+    displayName?: string;
     urdf?: string;
     opacity?: number;
     jointNames: string[];
