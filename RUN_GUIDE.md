@@ -213,3 +213,9 @@ ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   output_topic:=/topological_grid_voxels \
   grid_size:=0.05
+
+
+realsense
+ros2 launch realsense2_camera rs_launch.py \
+  align_depth.enable:=true \
+  pointcloud.enable:=true
