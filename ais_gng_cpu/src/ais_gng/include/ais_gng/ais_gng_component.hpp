@@ -35,6 +35,12 @@ using namespace std::chrono_literals;
 
 namespace fuzzrobo {
 
+struct SequentialNodeStats {
+    double count = 0.0;
+    std::array<double, 3> mean{0.0, 0.0, 0.0};
+    std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+};
+
 class AiSGNGComponent : public rclcpp::Node {
     using PC2 = sensor_msgs::msg::PointCloud2;
 
@@ -57,9 +63,9 @@ class AiSGNGComponent : public rclcpp::Node {
     std::vector<std::deque<uint8_t>> semantic_label_history_;
     double node_eta_s1_ = 0.4;
     double node_eta_s2_ = 0.008;
-    std::unordered_map<uint16_t, std::array<double, 3>> winner_point_means_;
-    std::unordered_map<uint16_t, std::array<double, 9>> winner_point_m2_;
-    std::unordered_map<uint16_t, uint32_t> winner_point_counts_;
+    double node_cov_decay_k_ = 1.5;
+    bool node_covariance_enabled_ = true;
+    std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
 
     // Add Plugin
     Downsampling downsampling_;

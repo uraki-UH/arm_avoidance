@@ -13,13 +13,6 @@ using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
 
 namespace {
-
-struct SequentialNodeStats {
-    uint32_t count = 0;
-    std::array<double, 3> mean{0.0, 0.0, 0.0};
-    std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-};
-
 std::array<double, 3> scaleResidualByEta(
     const std::array<double, 3> &residual,
     double eta_s1)
@@ -33,9 +26,105 @@ std::array<double, 3> scaleResidualByEta(
     };
 }
 
+double covarianceScale(const SequentialNodeStats &stats) {
+    if (stats.count <= 1.0) {
+        return 0.0;
+    }
+
+    const double denom = std::max(1.0, stats.count - 1.0);
+    const double var_x = std::max(0.0, stats.m2[0] / denom);
+    const double var_y = std::max(0.0, stats.m2[4] / denom);
+    const double var_z = std::max(0.0, stats.m2[8] / denom);
+    return std::sqrt((var_x + var_y + var_z) / 3.0);
+}
+
+double movementDecayFactor(
+    const std::array<double, 3> &residual,
+    const SequentialNodeStats &stats,
+    double k_motion,
+    double k_cov)
+{
+    const double norm = std::sqrt(
+        residual[0] * residual[0] +
+        residual[1] * residual[1] +
+        residual[2] * residual[2]);
+    const double cov = covarianceScale(stats);
+    const double motion_term = std::exp(-std::max(0.0, k_motion) * norm);
+    const double cov_term = std::exp(-std::max(0.0, k_cov) * cov);
+    return std::clamp(motion_term * cov_term, 0.15, 1.0);
+}
+
+bool seedNodeStatsFromNeighbors(
+    const TopologicalMap &map,
+    std::size_t node_idx,
+    SequentialNodeStats &stats)
+{
+    if (node_idx >= map.node_num || map.edges == nullptr || map.edge_num < 2) {
+        return false;
+    }
+
+    const auto &node = map.nodes[node_idx];
+    std::array<double, 3> sum_abs_diff{0.0, 0.0, 0.0};
+    std::size_t neighbor_count = 0;
+
+    for (uint32_t edge_idx = 0; edge_idx + 1 < map.edge_num; edge_idx += 2) {
+        const auto lhs = static_cast<std::size_t>(map.edges[edge_idx]);
+        const auto rhs = static_cast<std::size_t>(map.edges[edge_idx + 1]);
+        std::size_t neighbor_idx = std::numeric_limits<std::size_t>::max();
+
+        if (lhs == node_idx && rhs < map.node_num) {
+            neighbor_idx = rhs;
+        } else if (rhs == node_idx && lhs < map.node_num) {
+            neighbor_idx = lhs;
+        }
+
+        if (neighbor_idx == std::numeric_limits<std::size_t>::max()) {
+            continue;
+        }
+
+        const auto &neighbor = map.nodes[neighbor_idx];
+        sum_abs_diff[0] += std::fabs(static_cast<double>(neighbor.pos.x) - static_cast<double>(node.pos.x));
+        sum_abs_diff[1] += std::fabs(static_cast<double>(neighbor.pos.y) - static_cast<double>(node.pos.y));
+        sum_abs_diff[2] += std::fabs(static_cast<double>(neighbor.pos.z) - static_cast<double>(node.pos.z));
+        ++neighbor_count;
+    }
+
+    if (neighbor_count == 0) {
+        return false;
+    }
+
+    const double inv_neighbor_count = 1.0 / static_cast<double>(neighbor_count);
+    const double sigma_x = std::max(1e-4, 0.5 * sum_abs_diff[0] * inv_neighbor_count);
+    const double sigma_y = std::max(1e-4, 0.5 * sum_abs_diff[1] * inv_neighbor_count);
+    const double sigma_z = std::max(1e-4, 0.5 * sum_abs_diff[2] * inv_neighbor_count);
+
+    stats.count = 2.0;
+    stats.mean = {0.0, 0.0, 0.0};
+    stats.m2 = {
+        sigma_x * sigma_x, 0.0, 0.0,
+        0.0, sigma_y * sigma_y, 0.0,
+        0.0, 0.0, sigma_z * sigma_z,
+    };
+    return true;
+}
+
+void decaySequentialNodeStats(SequentialNodeStats &stats, double decay) {
+    const double d = std::clamp(decay, 0.15, 1.0);
+    stats.count *= d;
+    stats.m2[0] *= d;
+    stats.m2[1] *= d;
+    stats.m2[2] *= d;
+    stats.m2[3] *= d;
+    stats.m2[4] *= d;
+    stats.m2[5] *= d;
+    stats.m2[6] *= d;
+    stats.m2[7] *= d;
+    stats.m2[8] *= d;
+}
+
 void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<double, 3> &point) {
-    ++stats.count;
-    const double n = static_cast<double>(stats.count);
+    stats.count += 1.0;
+    const double n = stats.count;
 
     std::array<double, 3> delta{
         point[0] - stats.mean[0],
@@ -68,9 +157,8 @@ void accumulateNodeMotionStats(
     const TopologicalMap &map,
     const std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> &previous_nodes,
     double eta_s1,
-    std::unordered_map<uint16_t, uint32_t> &counts,
-    std::unordered_map<uint16_t, std::array<double, 3>> &means,
-    std::unordered_map<uint16_t, std::array<double, 9>> &m2) {
+    double cov_decay_k,
+    std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
     if (map.node_num == 0) {
         return;
     }
@@ -84,14 +172,21 @@ void accumulateNodeMotionStats(
         active_node_ids[node.id] = true;
         const auto prev_it = previous_nodes.find(node.id);
         if (prev_it == previous_nodes.end()) {
+            auto &node_stats = stats_by_node[node.id];
+            if (node_stats.count <= 0.0) {
+                seedNodeStatsFromNeighbors(map, node_idx, node_stats);
+            }
             continue;
         }
 
         const auto &prev = prev_it->second;
         if (prev.frame != node.frame) {
-            counts.erase(node.id);
-            means.erase(node.id);
-            m2.erase(node.id);
+            stats_by_node.erase(node.id);
+            auto &node_stats = stats_by_node[node.id];
+            if (seedNodeStatsFromNeighbors(map, node_idx, node_stats)) {
+                continue;
+            }
+            stats_by_node.erase(node.id);
             continue;
         }
 
@@ -100,26 +195,19 @@ void accumulateNodeMotionStats(
             static_cast<double>(node.pos.y) - static_cast<double>(prev.pos.y),
             static_cast<double>(node.pos.z) - static_cast<double>(prev.pos.z),
         };
+        auto &node_stats = stats_by_node[node.id];
+        if (node_stats.count <= 0.0) {
+            seedNodeStatsFromNeighbors(map, node_idx, node_stats);
+        }
+        const double decay = movementDecayFactor(residual, node_stats, cov_decay_k, cov_decay_k);
         const auto estimated_input_offset = scaleResidualByEta(residual, eta_s1);
-
-        auto &count = counts[node.id];
-        auto &mean = means[node.id];
-        auto &m2_values = m2[node.id];
-        SequentialNodeStats node_stats;
-        node_stats.count = count;
-        node_stats.mean = mean;
-        node_stats.m2 = m2_values;
+        decaySequentialNodeStats(node_stats, decay);
         updateSequentialNodeStats(node_stats, estimated_input_offset);
-        count = node_stats.count;
-        mean = node_stats.mean;
-        m2_values = node_stats.m2;
     }
 
-    for (auto it = counts.begin(); it != counts.end();) {
+    for (auto it = stats_by_node.begin(); it != stats_by_node.end();) {
         if (active_node_ids.find(it->first) == active_node_ids.end()) {
-            means.erase(it->first);
-            m2.erase(it->first);
-            it = counts.erase(it);
+            it = stats_by_node.erase(it);
         } else {
             ++it;
         }
@@ -129,28 +217,26 @@ void accumulateNodeMotionStats(
 void applySequentialWinnerStats(
     ais_gng_msgs::msg::TopologicalMap &map_msg,
     const TopologicalMap &map,
-    const std::unordered_map<uint16_t, uint32_t> &counts,
-    const std::unordered_map<uint16_t, std::array<double, 9>> &m2) {
+    const std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
     const std::size_t node_num = std::min(map_msg.nodes.size(), static_cast<std::size_t>(map.node_num));
     for (std::size_t i = 0; i < node_num; ++i) {
         const auto &map_node = map.nodes[i];
         auto &dst = map_msg.nodes[i];
-        const auto count_it = counts.find(map_node.id);
-        const auto m2_it = m2.find(map_node.id);
+        const auto stats_it = stats_by_node.find(map_node.id);
 
-        if (count_it == counts.end() || m2_it == m2.end()) {
+        if (stats_it == stats_by_node.end()) {
             dst.winner_point_count = 0;
             dst.winner_point_covariance.fill(0.0f);
             continue;
         }
 
-        const auto count = count_it->second;
-        const auto &m2_values = m2_it->second;
-        dst.winner_point_count = count;
+        const auto &stats = stats_it->second;
+        const double count = stats.count;
+        dst.winner_point_count = static_cast<uint32_t>(std::lround(std::max(0.0, count)));
 
         const double denom = count > 1 ? static_cast<double>(count - 1) : 1.0;
         for (std::size_t j = 0; j < 9; ++j) {
-            dst.winner_point_covariance[j] = static_cast<float>(m2_values[j] / denom);
+            dst.winner_point_covariance[j] = static_cast<float>(stats.m2[j] / denom);
         }
     }
 }
@@ -175,6 +261,8 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.eta_s1", 0.4);                                   // 第１近傍ノードの学習係数(cpu/gpu)
     this->declare_parameter("node.eta_s2", 0.008);                                 // 近傍ノードの学習係数(cpu)
     this->declare_parameter("node.eta_decay_rate", 1.0);                                 // 学習係数の減衰率(cpu)
+    this->declare_parameter("node.cov_decay_k", 1.5);                              // ノード移動量に応じた分散減衰係数
+    this->declare_parameter("node.covariance_enabled", true);                      // 共分散楕円の推定を有効にするか
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
     this->declare_parameter("node.grid", 0.05);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
     this->declare_parameter("node.s1_age_max", std::vector<int>{6, 6, 6, 3});      // ノードの選択回数に基づく削除(cpu/gpu)
@@ -388,6 +476,12 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             success = true;
         } else if (name == "node.eta_s1") {
             node_eta_s1_ = std::max(1e-6, p.as_double());
+            success = true;
+        } else if (name == "node.cov_decay_k") {
+            node_cov_decay_k_ = std::max(0.0, p.as_double());
+            success = true;
+        } else if (name == "node.covariance_enabled") {
+            node_covariance_enabled_ = p.as_bool();
             success = true;
         } else if (name == "input.topic_names") {
             input_topic_names_.clear();
@@ -614,18 +708,20 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         topological_map_msg->clusters.emplace_back(cluster_msg);
     }
 
-    accumulateNodeMotionStats(
-        map,
-        last_published_nodes_,
-        node_eta_s1_,
-        winner_point_counts_,
-        winner_point_means_,
-        winner_point_m2_);
-    applySequentialWinnerStats(
-        *topological_map_msg,
-        map,
-        winner_point_counts_,
-        winner_point_m2_);
+    if (node_covariance_enabled_) {
+        accumulateNodeMotionStats(
+            map,
+            last_published_nodes_,
+            node_eta_s1_,
+            node_cov_decay_k_,
+            winner_point_stats_);
+        applySequentialWinnerStats(
+            *topological_map_msg,
+            map,
+            winner_point_stats_);
+    } else {
+        winner_point_stats_.clear();
+    }
 
     if (semantic_labels && !semantic_labels->empty()) {
         handle_label::applySemanticLabelsToMap(
@@ -641,10 +737,12 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
     uint32_t max_winner_count = 0;
     float max_cov_abs = 0.0f;
     for (const auto &node : topological_map_msg->nodes) {
-        const auto count_it = winner_point_counts_.find(node.id);
-        if (count_it != winner_point_counts_.end()) {
-            total_samples += count_it->second;
-            max_samples = std::max<std::size_t>(max_samples, count_it->second);
+        const auto stats_it = winner_point_stats_.find(node.id);
+        if (node_covariance_enabled_ && stats_it != winner_point_stats_.end()) {
+            total_samples += static_cast<std::size_t>(std::lround(std::max(0.0, stats_it->second.count)));
+            max_samples = std::max<std::size_t>(
+                max_samples,
+                static_cast<std::size_t>(std::lround(std::max(0.0, stats_it->second.count))));
         }
         if (node.winner_point_count > 0) {
             ++nodes_with_winners;
