@@ -1,0 +1,7 @@
+topics:
+  - alias: graph
+    topic: /topological_map
+    kind: topological_map
+    role: graph
+    required: true
+    compact: true

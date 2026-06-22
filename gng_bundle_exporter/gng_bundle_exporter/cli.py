@@ -71,10 +71,10 @@ class TopicSpec:
     alias: str
     kind: str = "generic"
     role: str = "generic"
-    selector: str = "all"
     required: bool = False
     sample_every: int = 1
     max_messages: Optional[int] = None
+    compact: bool = False
 
     @staticmethod
     def from_dict(data: Dict[str, Any], index: int) -> "TopicSpec":
@@ -84,20 +84,20 @@ class TopicSpec:
         alias = str(data.get("alias", "")).strip() or topic.strip("/").replace("/", "__") or f"topic_{index}"
         kind = str(data.get("kind", "generic")).strip() or "generic"
         role = str(data.get("role", "generic")).strip() or "generic"
-        selector = str(data.get("selector", "all")).strip() or "all"
         required = bool(data.get("required", False))
         sample_every = max(1, int(data.get("sample_every", 1) or 1))
         max_messages_raw = data.get("max_messages")
         max_messages = None if max_messages_raw in (None, "", 0) else max(1, int(max_messages_raw))
+        compact = bool(data.get("compact", False))
         return TopicSpec(
             topic=topic,
             alias=alias,
             kind=kind,
             role=role,
-            selector=selector,
             required=required,
             sample_every=sample_every,
             max_messages=max_messages,
+            compact=compact,
         )
 
 
@@ -112,9 +112,6 @@ class TopicCapture:
         if topic_name not in self.resolved_topics:
             self.resolved_topics.append(topic_name)
         self.message_count += 1
-        if self.spec.selector == "latest":
-            self.messages[:] = [{"stamp_ns": stamp_ns, "topic": topic_name, "data": payload}]
-            return
         if (self.message_count - 1) % self.spec.sample_every != 0:
             return
         if self.spec.max_messages is not None and len(self.messages) >= self.spec.max_messages:
@@ -150,48 +147,49 @@ def _serialize_topological_node_core(node: Any) -> Dict[str, Any]:
         "nz": float(node.normal.z),
         "rho": float(node.rho),
         "label": int(node.label),
-        "semantic_label": int(node.semantic_label),
-        "semantic_reliability": float(node.semantic_reliability),
-        "age": int(node.age),
-        "frame": int(node.frame),
-        "inpcl_ids": [int(v) for v in node.inpcl_ids],
-        "winner_point_count": int(node.winner_point_count),
-        "winner_point_covariance": [float(v) for v in node.winner_point_covariance],
+        "semantic_label": int(getattr(node, "semantic_label", 0)),
+        "semantic_reliability": float(getattr(node, "semantic_reliability", 0.0)),
+        "age": int(getattr(node, "age", getattr(node, "frame", 0))),
+        "frame": int(getattr(node, "frame", 0)),
+        "inpcl_ids": [int(v) for v in getattr(node, "inpcl_ids", [])],
+        "winner_point_count": int(getattr(node, "winner_point_count", 0)),
+        "winner_point_covariance": [float(v) for v in getattr(node, "winner_point_covariance", [])],
     }
 
 
 def _serialize_topological_node_features(node: Any) -> Dict[str, Any]:
     return {
         "node_id": int(node.id),
-        "is_goal": bool(node.is_goal),
-        "manip_valid": bool(node.manip_valid),
-        "manip_value": float(node.manip_value),
-        "manip_condition_number": float(node.manip_condition_number),
+        "is_goal": bool(getattr(node, "is_goal", False)),
+        "manip_valid": bool(getattr(node, "manip_valid", False)),
+        "manip_value": float(getattr(node, "manip_value", 0.0)),
+        "manip_condition_number": float(getattr(node, "manip_condition_number", 0.0)),
         "manip_center": {
-            "x": float(node.manip_center.x),
-            "y": float(node.manip_center.y),
-            "z": float(node.manip_center.z),
+            "x": float(getattr(getattr(node, "manip_center", None), "x", 0.0)),
+            "y": float(getattr(getattr(node, "manip_center", None), "y", 0.0)),
+            "z": float(getattr(getattr(node, "manip_center", None), "z", 0.0)),
         },
         "manip_scale": {
-            "x": float(node.manip_scale.x),
-            "y": float(node.manip_scale.y),
-            "z": float(node.manip_scale.z),
+            "x": float(getattr(getattr(node, "manip_scale", None), "x", 0.0)),
+            "y": float(getattr(getattr(node, "manip_scale", None), "y", 0.0)),
+            "z": float(getattr(getattr(node, "manip_scale", None), "z", 0.0)),
         },
         "manip_orientation": {
-            "x": float(node.manip_orientation.x),
-            "y": float(node.manip_orientation.y),
-            "z": float(node.manip_orientation.z),
-            "w": float(node.manip_orientation.w),
+            "x": float(getattr(getattr(node, "manip_orientation", None), "x", 0.0)),
+            "y": float(getattr(getattr(node, "manip_orientation", None), "y", 0.0)),
+            "z": float(getattr(getattr(node, "manip_orientation", None), "z", 0.0)),
+            "w": float(getattr(getattr(node, "manip_orientation", None), "w", 1.0)),
         },
     }
 
 
-def _serialize_topological_map(msg: Any) -> Dict[str, Any]:
+def _serialize_topological_map(msg: Any, compact: bool = False) -> Dict[str, Any]:
     nodes = []
-    node_features = []
+    node_features = [] if not compact else None
     for node in msg.nodes:
         nodes.append(_serialize_topological_node_core(node))
-        node_features.append(_serialize_topological_node_features(node))
+        if node_features is not None:
+            node_features.append(_serialize_topological_node_features(node))
 
     edges: List[Dict[str, int]] = []
     edge_vals = list(msg.edges)
@@ -203,13 +201,13 @@ def _serialize_topological_map(msg: Any) -> Dict[str, Any]:
         edges.append({"a": min(a, b), "b": max(a, b)})
 
     clusters = []
-    cluster_features = []
+    cluster_features = [] if not compact else None
     for cluster in msg.clusters:
         clusters.append(
             {
                 "id": int(cluster.id),
                 "label": int(cluster.label),
-                "label_inferred": int(cluster.label_inferred),
+                "label_inferred": int(getattr(cluster, "label_inferred", 0)),
                 "x": float(cluster.pos.x),
                 "y": float(cluster.pos.y),
                 "z": float(cluster.pos.z),
@@ -220,35 +218,36 @@ def _serialize_topological_map(msg: Any) -> Dict[str, Any]:
                 "qy": float(cluster.quat.y),
                 "qz": float(cluster.quat.z),
                 "qw": float(cluster.quat.w),
-                "age": int(cluster.age),
+                "age": int(getattr(cluster, "age", getattr(cluster, "frame", 0))),
                 "match": float(cluster.match),
                 "vx": float(cluster.velocity.x),
                 "vy": float(cluster.velocity.y),
                 "vz": float(cluster.velocity.z),
-                "reliability": float(cluster.reliability),
-                "nodes": [int(v) for v in cluster.nodes],
+                "reliability": float(getattr(cluster, "reliability", getattr(cluster, "label_reliability", 0.0))),
+                "nodes": [int(v) for v in getattr(cluster, "nodes", [])],
             }
         )
-        cluster_features.append(
-            {
-                "cluster_id": int(cluster.id),
-                "has_velocity_observation": bool(cluster.has_velocity_observation),
-                "vel_cov_xx": float(cluster.vel_cov_xx),
-                "vel_cov_xy": float(cluster.vel_cov_xy),
-                "vel_cov_yy": float(cluster.vel_cov_yy),
-                "frame": int(cluster.frame),
-            }
-        )
+        if cluster_features is not None:
+            cluster_features.append(
+                {
+                    "cluster_id": int(cluster.id),
+                    "has_velocity_observation": bool(getattr(cluster, "has_velocity_observation", False)),
+                    "vel_cov_xx": float(getattr(cluster, "vel_cov_xx", 0.0)),
+                    "vel_cov_xy": float(getattr(cluster, "vel_cov_xy", 0.0)),
+                    "vel_cov_yy": float(getattr(cluster, "vel_cov_yy", 0.0)),
+                    "frame": int(getattr(cluster, "frame", getattr(cluster, "age", 0))),
+                }
+            )
 
     return {
         "topic_type": "ais_gng_msgs/msg/TopologicalMap",
         "frame_id": getattr(msg.header, "frame_id", ""),
         "frame_number": int(msg.frame_number),
         "nodes": nodes,
-        "node_features": node_features,
+        **({} if node_features is None else {"node_features": node_features}),
         "edges": edges,
         "clusters": clusters,
-        "cluster_features": cluster_features,
+        **({} if cluster_features is None else {"cluster_features": cluster_features}),
     }
 
 
@@ -337,7 +336,10 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
         msg_cls = get_message(topic_type)
         msg = deserialize_message(serialized, msg_cls)
         for capture in topic_to_specs[topic_name]:
-            payload = _serialize_message(msg, topic_type, capture.spec.kind)
+            if capture.spec.kind == "topological_map":
+                payload = _serialize_topological_map(msg, compact=capture.spec.compact)
+            else:
+                payload = _serialize_message(msg, topic_type, capture.spec.kind)
             capture.add(topic_name, payload, int(stamp_ns))
 
     topics_output: Dict[str, Any] = {}
@@ -351,7 +353,6 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
             "resolved_topics": capture.resolved_topics,
             "kind": capture.spec.kind,
             "role": capture.spec.role,
-            "selector": capture.spec.selector,
             "message_count": capture.message_count,
             "messages": capture.messages,
         }

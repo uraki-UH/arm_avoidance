@@ -28,19 +28,16 @@ topics:
     topic: /topological_map
     kind: topological_map
     role: graph
-    selector: latest
     required: true
   - alias: pointcloud
     topic: /topo_points
     kind: pointcloud2
     role: pointcloud
-    selector: all
     sample_every: 1
   - alias: metrics
     topic: /grasp_candidate_metrics
     kind: generic
     role: metrics
-    selector: all
 ```
 
 The exported `graph` bundle keeps GNG core nodes in `nodes`, while goal/manipulability fields are emitted separately in `node_features`.
