@@ -1,0 +1,8 @@
+uint16 node_id
+bool is_goal
+bool manip_valid
+float32 manip_value
+float32 manip_condition_number
+geometry_msgs/Point32 manip_center
+geometry_msgs/Vector3 manip_scale
+geometry_msgs/Quaternion manip_orientation

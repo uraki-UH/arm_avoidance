@@ -1,0 +1,20 @@
+topics:
+  - alias: graph
+    topic: /topological_map
+    kind: topological_map
+    role: graph
+    selector: latest
+    required: true
+
+  - alias: pointcloud
+    topic: /topo_points
+    kind: pointcloud2
+    role: pointcloud
+    selector: all
+    sample_every: 1
+
+  - alias: metrics
+    topic: /grasp_candidate_metrics
+    kind: generic
+    role: metrics
+    selector: all

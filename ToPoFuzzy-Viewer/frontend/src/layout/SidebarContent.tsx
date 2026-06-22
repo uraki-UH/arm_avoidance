@@ -308,6 +308,19 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         {[
                             { type: 'robot', data: props.robotData, settings: props.robotSettings, label: 'Source ID', hasTf: true, 
                               extra: (tag: string, s: any) => {
+                                const robot = props.robotData[tag];
+                                const hasManipulabilityData = Boolean(
+                                    robot &&
+                                    (
+                                        robot.manipValid !== undefined ||
+                                        robot.manipValue !== undefined ||
+                                        robot.manipConditionNumber !== undefined ||
+                                        robot.manipCenter !== undefined ||
+                                        robot.manipScale !== undefined ||
+                                        robot.manipOrientation !== undefined ||
+                                        (robot.linkManipulabilities?.length ?? 0) > 0
+                                    )
+                                );
                                 return (
                                     <div className="mt-2 space-y-2">
                                         <div className="grid grid-cols-[1.2fr_1.2fr_1.4fr_1.0fr] gap-1">
@@ -317,9 +330,11 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <button onClick={() => props.onUpdateSettings('robot', tag, { showCollision: !s.showCollision })} className={`entity-btn px-3 py-1 text-[10px] ${s.showCollision ? 'active-orange' : ''}`}>
                                                 <Box size={12} /> Collision
                                             </button>
-                                            <button onClick={() => props.onUpdateSettings('robot', tag, { showManipulabilityEllipsoid: !s.showManipulabilityEllipsoid })} className={`entity-btn px-3 py-1 text-[10px] ${s.showManipulabilityEllipsoid ? 'active-indigo' : ''}`}>
-                                                <Box size={12} /> Manip
-                                            </button>
+                                            {hasManipulabilityData && (
+                                                <button onClick={() => props.onUpdateSettings('robot', tag, { showManipulabilityEllipsoid: !s.showManipulabilityEllipsoid })} className={`entity-btn px-3 py-1 text-[10px] ${s.showManipulabilityEllipsoid ? 'active-indigo' : ''}`}>
+                                                    <Box size={12} /> Manip
+                                                </button>
+                                            )}
                                             <ColorActionButton
                                                 title="Robot color"
                                                 swatches={[

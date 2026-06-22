@@ -19,6 +19,7 @@
   <depend>tf2_eigen</depend>
   <depend>visualization_msgs</depend>
   <depend>ais_gng_msgs</depend>
+  <depend>ais_gng_feature_msgs</depend>
   <depend>voxel_msgs</depend>
   <depend>urdf</depend>
   <depend>urdfdom</depend>

@@ -7,6 +7,8 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <ais_gng_feature_msgs/msg/topological_node_feature.hpp>
+#include <ais_gng_feature_msgs/msg/topological_cluster_feature.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_msgs/msg/tf_message.hpp>
 #include <voxel_msgs/msg/voxel.hpp>
@@ -43,6 +45,8 @@ namespace topic_utils {
         for (const auto& t : types) {
             if (t.find("PointCloud2") != std::string::npos) return "pointcloud";
             if (t.find("TopologicalMap") != std::string::npos) return "topological_map";
+            if (t.find("TopologicalNodeFeature") != std::string::npos) return "topological_node_feature";
+            if (t.find("TopologicalClusterFeature") != std::string::npos) return "topological_cluster_feature";
             if (t.find("Marker") != std::string::npos) return "marker";
             if (t.find("Voxel") != std::string::npos) return "voxel";
         }
@@ -84,7 +88,39 @@ namespace converter {
         json markers = json::array(); for (auto& m : msg->markers) markers.push_back(marker_to_json(m));
         return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
     }
-    json to_json(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag) {
+    json to_json(const ais_gng_feature_msgs::msg::TopologicalNodeFeature& feature, const std::string& tag) {
+        return {
+            {"type", "stream.topological_node_feature"},
+            {"tag", tag},
+            {"feature", {
+                {"id", feature.node_id},
+                {"node_id", feature.node_id},
+                {"is_goal", feature.is_goal},
+                {"manip_valid", feature.manip_valid},
+                {"manip_value", feature.manip_value},
+                {"manip_condition_number", feature.manip_condition_number},
+                {"manip_center", {feature.manip_center.x, feature.manip_center.y, feature.manip_center.z}},
+                {"manip_scale", {feature.manip_scale.x, feature.manip_scale.y, feature.manip_scale.z}},
+                {"manip_orientation", {feature.manip_orientation.x, feature.manip_orientation.y, feature.manip_orientation.z, feature.manip_orientation.w}}
+            }}
+        };
+    }
+    json to_json(const ais_gng_feature_msgs::msg::TopologicalClusterFeature& feature, const std::string& tag) {
+        return {
+            {"type", "stream.topological_cluster_feature"},
+            {"tag", tag},
+            {"feature", {
+                {"id", feature.cluster_id},
+                {"cluster_id", feature.cluster_id},
+                {"has_velocity_observation", feature.has_velocity_observation},
+                {"vel_cov_xx", feature.vel_cov_xx},
+                {"vel_cov_xy", feature.vel_cov_xy},
+                {"vel_cov_yy", feature.vel_cov_yy}
+            }}
+        };
+    }
+    json to_json(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg, const std::string& tag,
+                 const std::vector<json>& node_features = {}, const std::vector<json>& cluster_features = {}) {
         json nodes = json::array(), clusters = json::array();
         for (auto& n : msg->nodes) {
             const auto age = msg->frame_number >= n.frame ? msg->frame_number - n.frame : 0U;
@@ -105,14 +141,7 @@ namespace converter {
                     n.winner_point_covariance[0], n.winner_point_covariance[1], n.winner_point_covariance[2],
                     n.winner_point_covariance[3], n.winner_point_covariance[4], n.winner_point_covariance[5],
                     n.winner_point_covariance[6], n.winner_point_covariance[7], n.winner_point_covariance[8]
-                }},
-                {"isGoal", n.is_goal},
-                {"manipValid", n.manip_valid},
-                {"manipValue", n.manip_value},
-                {"manipConditionNumber", n.manip_condition_number},
-                {"manipCenter", {n.manip_center.x, n.manip_center.y, n.manip_center.z}},
-                {"manipScale", {n.manip_scale.x, n.manip_scale.y, n.manip_scale.z}},
-                {"manipOrientation", {n.manip_orientation.x, n.manip_orientation.y, n.manip_orientation.z, n.manip_orientation.w}}
+                }}
             });
         }
         for (auto& c : msg->clusters) {
@@ -121,7 +150,8 @@ namespace converter {
         }
         return {{"type", "stream.graph"}, {"tag", tag}, {"graph", {
             {"timestamp", msg->header.stamp.sec}, {"tag", tag}, {"mode", (tag.find("static") != std::string::npos ? "static" : "dynamic")},
-            {"frameId", msg->header.frame_id}, {"nodes", nodes}, {"edges", msg->edges}, {"clusters", clusters}
+            {"frameId", msg->header.frame_id}, {"nodes", nodes}, {"edges", msg->edges}, {"clusters", clusters},
+            {"node_features", node_features}, {"cluster_features", cluster_features}
         }}};
     }
     json to_json(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
@@ -252,7 +282,43 @@ private:
                     activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(sid, 10, [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) { broadcastPointCloud(sid, utils::convertToProtocolMessage(utils::convertFromRosMsg(m)).serialize()); });
                 } else if (st == "topological_map") {
                     activeSubTypes_[sid] = "topological_map";
-                    activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
+                    activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
+                        std::vector<json> node_features;
+                        std::vector<json> cluster_features;
+                        {
+                            std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
+                            node_features.reserve(lastNodeFeaturePayloads_.size());
+                            for (const auto& [_, payload] : lastNodeFeaturePayloads_) {
+                                node_features.push_back(payload);
+                            }
+                        }
+                        {
+                            std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
+                            cluster_features.reserve(lastClusterFeaturePayloads_.size());
+                            for (const auto& [_, payload] : lastClusterFeaturePayloads_) {
+                                cluster_features.push_back(payload);
+                            }
+                        }
+                        broadcastText(converter::to_json(m, sid, node_features, cluster_features).dump());
+                    });
+                } else if (st == "topological_node_feature") {
+                    activeSubTypes_[sid] = "topological_node_feature";
+                    activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalNodeFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalNodeFeature::SharedPtr m) {
+                        {
+                            std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
+                            lastNodeFeaturePayloads_[sid] = converter::to_json(*m, sid);
+                        }
+                        broadcastText(converter::to_json(*m, sid).dump());
+                    });
+                } else if (st == "topological_cluster_feature") {
+                    activeSubTypes_[sid] = "topological_cluster_feature";
+                    activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalClusterFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalClusterFeature::SharedPtr m) {
+                        {
+                            std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
+                            lastClusterFeaturePayloads_[sid] = converter::to_json(*m, sid);
+                        }
+                        broadcastText(converter::to_json(*m, sid).dump());
+                    });
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";
                     activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
@@ -306,14 +372,33 @@ private:
         broadcastText(json({{"type", "stream.pointcloud.meta"}, {"tag", id}, {"topic", id}, {"active", false}, {"action", "remove"}}).dump());
         broadcastText(json({{"type", "stream.pointcloud.delete"}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.graph.delete"}, {"tag", id}, {"topic", id}}).dump());
+        broadcastText(json({{"type", "stream.topological_node_feature.delete"}, {"tag", id}, {"topic", id}}).dump());
+        broadcastText(json({{"type", "stream.topological_cluster_feature.delete"}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.marker_array.delete"}, {"tag", id}}).dump());
         // Clear any cached graph data for this topic
-        { std::lock_guard<std::mutex> l(graphMutex_); lastGraphPayloads_.erase(id); }
+        {
+            std::lock_guard<std::mutex> l(graphMutex_);
+            lastGraphPayloads_.erase(id);
+        }
+        {
+            std::lock_guard<std::mutex> l(nodeFeatureMutex_);
+            lastNodeFeaturePayloads_.erase(id);
+        }
+        {
+            std::lock_guard<std::mutex> l(clusterFeatureMutex_);
+            lastClusterFeaturePayloads_.erase(id);
+        }
     }
 
     void sendCurrentState(WebSocket* ws) {
-        std::lock_guard<std::mutex> l1(graphMutex_); std::lock_guard<std::mutex> l2(robotMutex_); std::lock_guard<std::mutex> l3(markerMutex_);
+        std::lock_guard<std::mutex> l1(graphMutex_);
+        std::lock_guard<std::mutex> l2(nodeFeatureMutex_);
+        std::lock_guard<std::mutex> l3(clusterFeatureMutex_);
+        std::lock_guard<std::mutex> l4(robotMutex_);
+        std::lock_guard<std::mutex> l5(markerMutex_);
         for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
+        for (auto& p : lastNodeFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
+        for (auto& p : lastClusterFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastMarkerPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
     }
@@ -396,8 +481,9 @@ private:
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
+    std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
     std::chrono::steady_clock::time_point lastTfTime_;
-    std::mutex connectionMutex_, graphMutex_, robotMutex_, markerMutex_;
+    std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_;
     std::vector<WebSocket*> connections_;
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;

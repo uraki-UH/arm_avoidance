@@ -45,6 +45,14 @@ export function GngLayerControls({
     const visibleLabelCount = settings.visibleLabels
         ? Object.values(settings.visibleLabels).filter(Boolean).length
         : 6;
+    const hasManipulabilityData = graphData.nodes.some((node) => (
+        node.manipValid !== undefined ||
+        node.manipValue !== undefined ||
+        node.manipConditionNumber !== undefined ||
+        node.manipCenter !== undefined ||
+        node.manipScale !== undefined ||
+        node.manipOrientation !== undefined
+    ));
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
@@ -108,13 +116,15 @@ export function GngLayerControls({
                             onToggle={() => onUpdate({ showCovarianceEllipsoids: !(settings.showCovarianceEllipsoids ?? false) })}
                             className="col-span-3 w-[90%] justify-self-start"
                         />
-                        <CompactToggle
-                            icon={<Square size={12} />}
-                            label="Manip"
-                            isOn={settings.showManipulabilityEllipsoids ?? false}
-                            onToggle={() => onUpdate({ showManipulabilityEllipsoids: !(settings.showManipulabilityEllipsoids ?? false) })}
-                            className="col-span-3 w-[90%] justify-self-start"
-                        />
+                        {hasManipulabilityData && (
+                            <CompactToggle
+                                icon={<Square size={12} />}
+                                label="Manip"
+                                isOn={settings.showManipulabilityEllipsoids ?? false}
+                                onToggle={() => onUpdate({ showManipulabilityEllipsoids: !(settings.showManipulabilityEllipsoids ?? false) })}
+                                className="col-span-3 w-[90%] justify-self-start"
+                            />
+                        )}
                         <CompactToggle
                             icon={<Share2 size={12} />}
                             label="Velocity"
@@ -123,7 +133,7 @@ export function GngLayerControls({
                             className="col-span-3 w-[90%] justify-self-start"
                         />
 
-                        {settings.showManipulabilityEllipsoids && (
+                        {hasManipulabilityData && settings.showManipulabilityEllipsoids && (
                             <div className="col-span-8 mt-1 flex items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] text-[var(--text-secondary)]">
                                 <span className="font-semibold uppercase tracking-wider">Mode</span>
                                 {(['all', 'goal'] as const).map((mode) => (

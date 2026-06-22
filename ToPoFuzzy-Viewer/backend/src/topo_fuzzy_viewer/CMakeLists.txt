@@ -20,6 +20,7 @@ find_package(tf2_ros REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
+find_package(ais_gng_feature_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
 find_package(voxel_msgs REQUIRED)#追加
 
@@ -45,6 +46,7 @@ set(ROS2_DEPENDENCIES_GRAPH
   pcl_conversions
   pcl_ros
   ais_gng_msgs
+  ais_gng_feature_msgs
   tf2_msgs
   voxel_msgs#追加
 )
@@ -101,6 +103,7 @@ add_executable(viewer_ws_gateway_node
 target_include_directories(viewer_ws_gateway_node PRIVATE
   ${uwebsockets_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${ais_gng_feature_msgs_INCLUDE_DIRS}
 )
 target_link_libraries(viewer_ws_gateway_node
   ${PCL_LIBRARIES}

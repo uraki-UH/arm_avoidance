@@ -1017,8 +1017,12 @@ header .sub{
           <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.10"></div>
           <div class="section-title">GNG Learning Mode</div>
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
+          <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option></select></div>
+          <div class="full"><label>GNG input file</label><input id="gngDataFile" type="file" accept=".json,.csv,.txt,.bag,.bag.json,.session.json,.points.json,.graph.json"></div>
+          <div class="full"><label>Point-cloud source</label><select id="pointCloudSource"><option value="synthetic_depth" selected>Synthetic / synthetic depth</option><option value="imported_frames">Imported frames / 取り込みデータ</option></select></div>
           <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
+          <div class="full"><button id="gngLoadDataBtn" class="primary" type="button">GNG入力を読み込む</button></div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
             <div><label>Motion duration [s]</label><input id="ikMotionDuration" type="range" min="0.2" max="6.0" step="0.1" value="2.0"><input id="ikMotionDurationNum" type="number" min="0.2" max="6.0" step="0.1" value="2.0"></div>
             <div><label>IK replanning interval [ms]</label><input id="ikReplanMs" type="range" min="33" max="1000" step="1" value="100"><input id="ikReplanMsNum" type="number" min="33" max="1000" step="1" value="100"></div>
@@ -1241,7 +1245,8 @@ const state={
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
-  graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055
+  graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
+  importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null
 };
 window.__topoState=state;
 
@@ -1654,16 +1659,180 @@ function transformPoint(p,t){
 function updateMovingPoints(){const pts=state.basePoints.map(p=>transformPoint(p,state.time)).filter(Boolean);state.points=v312ApplyDepthCameraVisibility(pts,state.time||0);}
 function gngMode(){const el=$('gngLearningMode');return el?el.value:'online'}
 function gngAlgorithm(){const el=$('gngAlgorithm');return el?el.value:'standard'}
+function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
 function gngIsDensityAlgorithm(alg){return alg==='density_gng_t'||alg==='cell_density'}
 function gngUsesTriangulationAlgorithm(alg){return alg==='gng_t'||alg==='density_gng_t'}
 function gngAlgorithmLabel(){const a=gngAlgorithm();return a==='density_gng_t'?'Density-Control GNG-T':a==='gng_t'?'GNG-T':'GNG'}
+function isGraphOnlyMode(){return gngDataSourceMode()==='graph_only'}
+function setGngDataSourceMode(mode){
+  state.dataSourceMode=mode==='graph_only'?'graph_only':'pointcloud_to_gng';
+  const el=$('gngDataSourceMode');
+  if(el)el.value=state.dataSourceMode;
+  updateGngDataSourceUi();
+}
+function updateGngDataSourceUi(){
+  const graphOnly=isGraphOnlyMode();
+  const fileEl=$('gngDataFile');
+  const pointSourceEl=$('pointCloudSource');
+  const samplesEl=$('gngSamplesPerFrame');
+  const modeEl=$('gngLearningMode');
+  const algButtons=[...document.querySelectorAll('[data-gng-algorithm-buttons] button')];
+  if(fileEl)fileEl.disabled=false;
+  if(pointSourceEl)pointSourceEl.disabled=graphOnly;
+  if(samplesEl)samplesEl.disabled=graphOnly;
+  if(modeEl)modeEl.disabled=graphOnly;
+  algButtons.forEach(btn=>{btn.disabled=graphOnly;btn.title=graphOnly?'Graph-only mode':btn.title;});
+  const btn=$('gngBtn');
+  if(btn){
+    btn.textContent=graphOnly?'既存GNGを読み込む':'GNG学習を実行';
+    btn.classList.toggle('go', !graphOnly);
+    btn.classList.toggle('primary', graphOnly);
+  }
+  const status=$('topoStatus');
+  if(status){
+    status.textContent=graphOnly
+      ?'Graph-only mode: load an existing GNG session or graph JSON, then inspect/candidate-pick in HTML.'
+      :'Pointcloud-to-GNG mode: generate/load points, then learn/update the GNG graph.';
+  }
+}
+function normalizeGraphNode(node, idx){
+  if(!node||typeof node!=='object') return null;
+  const x=+node.x, y=+node.y, z=+node.z;
+  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
+  return {
+    x,y,z,
+    label:node.label||'gng',
+    err:Number.isFinite(+node.err)?+node.err:0,
+    win:Number.isFinite(+node.win)?+node.win:0,
+    util:Number.isFinite(+node.util)?+node.util:0,
+    densityClass:Number.isFinite(+node.densityClass)?+node.densityClass:pointDensityClass(node),
+    targetEdgeLength:Number.isFinite(+node.targetEdgeLength)?+node.targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass(node))),
+    id:node.id??idx
+  };
+}
+function normalizeGraphEdge(edge, fallbackIndex){
+  if(!edge||typeof edge!=='object') return null;
+  const a=Number.isFinite(+edge.a)?+edge.a:Number.isFinite(+edge.source)?+edge.source:null;
+  const b=Number.isFinite(+edge.b)?+edge.b:Number.isFinite(+edge.target)?+edge.target:null;
+  if(a==null||b==null||a===b) return null;
+  return {a:Math.min(a,b),b:Math.max(a,b),age:Number.isFinite(+edge.age)?+edge.age:0,id:edge.id??fallbackIndex};
+}
+function normalizeNodeFeatures(features){
+  const out=new Map();
+  const add=(item)=>{
+    if(!item||typeof item!=='object') return;
+    const id=Number.isFinite(+item.id)?+item.id:Number.isFinite(+item.node_id)?+item.node_id:null;
+    if(id==null) return;
+    out.set(id,{
+      id,
+      is_goal:!!item.is_goal,
+      manip_valid:!!item.manip_valid,
+      manip_value:Number.isFinite(+item.manip_value)?+item.manip_value:0,
+      manip_condition_number:Number.isFinite(+item.manip_condition_number)?+item.manip_condition_number:0,
+      manip_center:item.manip_center&&typeof item.manip_center==='object'?{x:+item.manip_center.x||0,y:+item.manip_center.y||0,z:+item.manip_center.z||0}:{x:0,y:0,z:0},
+      manip_scale:item.manip_scale&&typeof item.manip_scale==='object'?{x:+item.manip_scale.x||0,y:+item.manip_scale.y||0,z:+item.manip_scale.z||0}:{x:0,y:0,z:0},
+      manip_orientation:item.manip_orientation&&typeof item.manip_orientation==='object'?{x:+item.manip_orientation.x||0,y:+item.manip_orientation.y||0,z:+item.manip_orientation.z||0,w:Number.isFinite(+item.manip_orientation.w)?+item.manip_orientation.w:1}:{x:0,y:0,z:0,w:1},
+    });
+  };
+  if(Array.isArray(features)){
+    features.forEach(add);
+  }else if(features&&typeof features==='object'){
+    for(const [k,item] of Object.entries(features)){
+      if(item&&typeof item==='object'&&!Number.isFinite(+item.id)&&!Number.isFinite(+item.node_id)) item.id = Number.isFinite(+k) ? +k : item.id;
+      add(item);
+    }
+  }
+  return out;
+}
+function normalizeClusterFeatures(features){
+  const out=new Map();
+  const add=(item)=>{
+    if(!item||typeof item!=='object') return;
+    const id=Number.isFinite(+item.cluster_id)?+item.cluster_id:Number.isFinite(+item.id)?+item.id:null;
+    if(id==null) return;
+    out.set(id,{
+      cluster_id:id,
+      has_velocity_observation:!!item.has_velocity_observation,
+      vel_cov_xx:Number.isFinite(+item.vel_cov_xx)?+item.vel_cov_xx:0,
+      vel_cov_xy:Number.isFinite(+item.vel_cov_xy)?+item.vel_cov_xy:0,
+      vel_cov_yy:Number.isFinite(+item.vel_cov_yy)?+item.vel_cov_yy:0,
+      frame:Number.isFinite(+item.frame)?+item.frame:0,
+    });
+  };
+  if(Array.isArray(features)){
+    features.forEach(add);
+  }else if(features&&typeof features==='object'){
+    for(const [k,item] of Object.entries(features)){
+      if(item&&typeof item==='object'&&!Number.isFinite(+item.cluster_id)&&!Number.isFinite(+item.id)) item.cluster_id = Number.isFinite(+k) ? +k : item.cluster_id;
+      add(item);
+    }
+  }
+  return out;
+}
+function loadImportedGraphSession(session){
+  if(!session||typeof session!=='object') return false;
+  const nodeFeaturesById=normalizeNodeFeatures(session.node_features??session.nodeFeatures??session.graph?.node_features??session.graph?.nodeFeatures??null);
+  const clusterFeaturesById=normalizeClusterFeatures(session.cluster_features??session.clusterFeatures??session.graph?.cluster_features??session.graph?.clusterFeatures??null);
+  const nodes=(Array.isArray(session.nodes)?session.nodes:[]).map((n,i)=>normalizeGraphNode(n,i)).filter(Boolean);
+  const edges=(Array.isArray(session.edges)?session.edges:[]).map((e,i)=>normalizeGraphEdge(e,i)).filter(Boolean);
+  if(nodes.length<2) return false;
+  state.nodes=nodes;
+  state.edges=edges;
+  state.faces=Array.isArray(session.faces)?session.faces.slice():[];
+  state.nodeStats=Array.isArray(session.node_attributes)?session.node_attributes.slice():Array.isArray(session.nodeStats)?session.nodeStats.slice():[];
+  state.nodeClusters=Array.isArray(session.node_clusters)?session.node_clusters.slice():Array.isArray(session.nodeClusters)?session.nodeClusters.slice():[];
+  state.nodeFeaturesById=nodeFeaturesById;
+  state.clusterFeaturesById=clusterFeaturesById;
+  state.points=Array.isArray(session.points)?session.points.map((p,i)=>({x:+p.x,y:+p.y,z:+p.z,label:p.label||'body',id:p.id??i})).filter(p=>[p.x,p.y,p.z].every(Number.isFinite)):state.points;
+  state.importedGraphSession=session;
+  state.gng={
+    nodes:state.nodes,
+    edges:new Map(state.edges.map(e=>[key(e.a,e.b),{...e}])),
+    triangles:new Map(),
+    rng:rng(1),
+    iter:Number.isFinite(+session.iter)?+session.iter:0,
+    mode:'graph_only',
+    variant:session.variant||gngAlgorithm(),
+    trainingPoints:null,
+    backend:session.backend||'loaded graph'
+  };
+  state.gngTick=Number.isFinite(+session.gngTick)?+session.gngTick:0;
+  state.best=session.best||null;
+  state.candidates=Array.isArray(session.candidates)?session.candidates.slice():[];
+  state.nodeStats=state.nodeStats.length?state.nodeStats:state.nodes.map(n=>({label:n.label||'gng'}));
+  return true;
+}
+function tryParseImportedAnalysisText(txt){
+  const raw=String(txt||'').trim();
+  if(!raw) return null;
+  try{
+    const parsed=JSON.parse(raw);
+    if(Array.isArray(parsed)){
+      if(parsed.length && parsed[0] && typeof parsed[0]==='object' && ('x' in parsed[0] || 'points' in parsed[0])) return {points:parsed};
+    }
+    if(parsed && typeof parsed==='object'){
+      if(Array.isArray(parsed.nodes) || Array.isArray(parsed.edges) || Array.isArray(parsed.points) || Array.isArray(parsed.frames)){
+        return parsed;
+      }
+      if(parsed.session && typeof parsed.session==='object') return parsed.session;
+    }
+  }catch(_e){}
+  return null;
+}
 const GNG_ALGORITHMS=[
   {value:'standard',label:'GNG実行',short:'GNG'},
   {value:'gng_t',label:'GNG-T実行',short:'GNG-T'},
   {value:'density_gng_t',label:'密度制御GNG-T実行',short:'density-GNG-T'}
 ];
 function setGngAlgorithmValue(alg){const el=$('gngAlgorithm');if(el)el.value=alg;}
-function runGngAlgorithmFromViewer(alg){setGngAlgorithmValue(alg);restartGngReplayFromZero();updateHud();const s=$('topoStatus');if(s)s.textContent=`${gngAlgorithmLabel()} realtime started. samples/frame=${currentGngBatchSize()}`;}
+function runGngAlgorithmFromViewer(alg){
+  if(isGraphOnlyMode()){
+    const s=$('topoStatus');
+    if(s)s.textContent='Graph-only mode: algorithm playback is disabled. Switch to Point cloud -> GNG to run learning.';
+    return;
+  }
+  setGngAlgorithmValue(alg);restartGngReplayFromZero();updateHud();const s=$('topoStatus');if(s)s.textContent=`${gngAlgorithmLabel()} realtime started. samples/frame=${currentGngBatchSize()}`;
+}
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
     box.innerHTML=GNG_ALGORITHMS.map(a=>`<button type="button" data-gng-alg-run="${a.value}"> ${a.label}</button>`).join('');
@@ -1696,7 +1865,11 @@ function targetEdgeLengthForNode(n,stat){
   return targetEdgeLengthForLabel(densityClassLabel(n&&n.densityClass));
 }
 function configuredPointPeriodMs(){const hz=Math.max(0.001,+($('motionHz')?.value||12)),spd=Math.max(0.001,+($('playbackSpeed')?.value||1));return 1000/(hz*spd)}
-function currentGngBatchSize(){const el=$('gngSamplesPerFrame');return Math.max(1,Math.min(500,Math.floor(+(el&&el.value)||200)))}
+function currentGngBatchSize(){
+  if(isGraphOnlyMode()) return 0;
+  const el=$('gngSamplesPerFrame');
+  return Math.max(1,Math.min(500,Math.floor(+(el&&el.value)||200)));
+}
 function fmtMs(v){return Number.isFinite(v)?v.toFixed(v<100?1:0):'--'}
 function viewerTimingText(){
   const pCfg=configuredPointPeriodMs();
@@ -1896,7 +2069,7 @@ function generate(){
   else if(type==='watering_pitcher') raw=generateWateringPitcher(n,noise,seed);
   else raw=generateMug(n,noise,seed);
   raw=addTabletopScene(raw,seed);
-  state.basePoints=applyDefects(raw,seed).map((p,i)=>({...p,id:i}));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
+  state.basePoints=applyDefects(raw,seed).map((p,i)=>({...p,id:i}));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
   updateMetrics();renderAll();
   const tableDesign=$('tableDesign')?$('tableDesign').value:'rect';
   $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
@@ -1904,6 +2077,14 @@ function generate(){
 function bbox(points){if(!points.length)return null;let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;for(const p of points){if(p.label==='outlier'||p.label==='table')continue;minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);minZ=Math.min(minZ,p.z);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);maxZ=Math.max(maxZ,p.z)}return{minX,minY,minZ,maxX,maxY,maxZ,cx:(minX+maxX)/2,cy:(minY+maxY)/2,cz:(minZ+maxZ)/2,sx:maxX-minX,sy:maxY-minY,sz:maxZ-minZ}}
 function nearest(nodes,p){let a=-1,b=-1,da=Infinity,db=Infinity;for(let i=0;i<nodes.length;i++){let d=dist2(p,nodes[i]);if(d<da){db=da;b=a;da=d;a=i}else if(d<db){db=d;b=i}}return[a,b,da,db]}
 function initGng(){
+  if(isGraphOnlyMode()){
+    if(state.importedGraphSession){
+      loadImportedGraphSession(state.importedGraphSession);
+      return;
+    }
+    state.gng=null;state.nodes=[];state.edges=[];
+    return;
+  }
   if(!state.points.length)generate();
   const mode=gngMode(),variant=gngAlgorithm();
   const seed=((+$('seed').value||1)+7+(mode==='offline'?3001:0)+(gngIsDensityAlgorithm(variant)?7001:0))>>>0;
@@ -1940,6 +2121,7 @@ function getGngWasmExports(){
   }
 }
 function runGngWasmAccelerated(){
+  if(isGraphOnlyMode()) return false;
   const ex=getGngWasmExports();
   if(!ex||!ex.memory||!ex.gng_run)return false;
   const mode=gngMode(),variant=gngAlgorithm();
@@ -2065,7 +2247,7 @@ function densityCompetitionPruneJs(g,maxNodes){
     if(gngNodeDegree(g,i)<=1&&(g.nodes[i].win||0)<meanWin*.035&&(g.nodes[i].err||0)<meanErr*.35){removeGngNode(g,i);removed++;i--;}
   }
 }
-function resetGngRunState(){state.gngPlaying=false;state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
+function resetGngRunState(){state.gngPlaying=false;state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
 function gngStep(batch,opts={}){
   if(!state.gng) initGng();
   const g=state.gng;
@@ -2120,6 +2302,24 @@ function gngStep(batch,opts={}){
   if(opts.updateMetrics!==false)updateMetrics();else updateCoreMetricsOnly();
 }
 function runGng(){
+  if(isGraphOnlyMode()){
+    const ok=state.importedGraphSession?loadImportedGraphSession(state.importedGraphSession):state.nodes.length>=2;
+    if(!ok){
+      $('topoStatus').textContent='Graph-only mode failed: load a graph/session JSON first.';
+      updateGngDataSourceUi();
+      return;
+    }
+    sanitizeGngGraph();
+    updateTopoSemantics();
+    updateMetrics();
+    updateHud();
+    renderAll();
+    const dt='0.0';
+    const ntrain=(state.points||[]).length;
+    $('topoStatus').textContent=`Graph-only session ready. backend=${state.gng&&state.gng.backend?state.gng.backend:'loaded graph'}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms.`;
+    updateGngDataSourceUi();
+    return;
+  }
   if(!state.points.length)generate();
   resetGngRunState();
   const started=performance.now();
@@ -3747,7 +3947,7 @@ function updateObjectIdentifier(){
 
 function updateMetrics(){$('mPoints').textContent=state.points.length;$('mNodes').textContent=state.nodes.length;$('mEdges').textContent=state.edges.length;$('mObject').textContent=state.points.length?labelOf(state.sample).split('/')[0].trim():'-';updateObjectIdentifier();updateTopoUi()}
 function showTask(t){$('taskObject').classList.toggle('active',t==='object');$('taskGrasp').classList.toggle('active',t==='grasp');$('btnObject').classList.toggle('active',t==='object');$('btnGrasp').classList.toggle('active',t==='grasp');$('btnObject').setAttribute('aria-pressed',t==='object'?'true':'false');$('btnGrasp').setAttribute('aria-pressed',t==='grasp'?'true':'false');if(t==='object')updateObjectIdentifier();setTimeout(renderAll,40)}
-function saveJson(){const data={version:'v310_gngt_density_runtime_and_angle15_v1',sample:state.sample,frame:state.frame,defects:{hole_ratio:+$('holeRatio').value,missing_ratio:+$('missingRatio').value,outlier_ratio:+$('outlierRatio').value,hole_radius:+$('holeRadius').value},tabletop:{mode:$('tableMode')?$('tableMode').value:'off',size_m:$('tableSize')?+$('tableSize').value:0,height_m:$('tableHeight')?+$('tableHeight').value:0,density:$('tableDensity')?+$('tableDensity').value:0},motion:{pattern:$('motionPattern').value,amplitude:+$('motionAmp').value,hz:+$('motionHz').value},visualization:{viewer_mode:viewerMode(),point_color_mode:pointColorMode(),heatmap_axis:heatmapAxis(),heatmap_range_mode:$('heatmapRangeMode')?$('heatmapRangeMode').value:'auto',heatmap_min_m:+($('heatmapMin')?.value||0),heatmap_max_m:+($('heatmapMax')?.value||0),point_size:+($('pointSize')?.value||1.2),face_opacity:+($('faceOpacity')?.value||0.045),face_opacity_cap:+($('faceOpacityCap')?.value||0.06),face_local_overdraw_cap:+($('faceLayerCap')?.value||2),face_overdraw_grid_px:+($('faceTilePx')?.value||34)},gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),cell_competition_radius:+($('densityCompRadius')?.value||0.018),density_prune_interval:+($('densityPruneInterval')?.value||250),target_edge_lengths_m:densityTargetEdgeLengths(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},points:state.points,nodes:state.nodes,edges:state.edges,triangles:state.gng&&state.gng.triangles?[...state.gng.triangles.values()]:[],faces:state.faces,node_attributes:state.nodeStats,node_clusters:state.nodeClusters,fuzzy_rules:{grasp:ensureFuzzyModel(),node_label:state.nodeLabelModel,cluster:state.clusterModel},best_pose:poseObj(state.best),ik_solution:state.ikSolution?ikSolutionObj(state.ikSolution):null,candidates:state.candidates.map(poseObj)};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`topo_fuzzy_grasp_${state.sample}_v310_gngt_density_runtime_and_angle15_v1.json`;a.click();URL.revokeObjectURL(a.href)}
+function saveJson(){const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];const clusterFeatures=state.clusterFeaturesById?[...state.clusterFeaturesById.values()]:[];const data={version:'v312_gng_sidecar_bundle_v1',sample:state.sample,frame:state.frame,data_source_mode:state.dataSourceMode,gng_input_mode:gngDataSourceMode(),defects:{hole_ratio:+$('holeRatio').value,missing_ratio:+$('missingRatio').value,outlier_ratio:+$('outlierRatio').value,hole_radius:+$('holeRadius').value},tabletop:{mode:$('tableMode')?$('tableMode').value:'off',size_m:$('tableSize')?+$('tableSize').value:0,height_m:$('tableHeight')?+$('tableHeight').value:0,density:$('tableDensity')?+$('tableDensity').value:0},motion:{pattern:$('motionPattern').value,amplitude:+$('motionAmp').value,hz:+$('motionHz').value},visualization:{viewer_mode:viewerMode(),point_color_mode:pointColorMode(),heatmap_axis:heatmapAxis(),heatmap_range_mode:$('heatmapRangeMode')?$('heatmapRangeMode').value:'auto',heatmap_min_m:+($('heatmapMin')?.value||0),heatmap_max_m:+($('heatmapMax')?.value||0),point_size:+($('pointSize')?.value||1.2),face_opacity:+($('faceOpacity')?.value||0.045),face_opacity_cap:+($('faceOpacityCap')?.value||0.06),face_local_overdraw_cap:+($('faceLayerCap')?.value||2),face_overdraw_grid_px:+($('faceTilePx')?.value||34)},gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),cell_competition_radius:+($('densityCompRadius')?.value||0.018),density_prune_interval:+($('densityPruneInterval')?.value||250),target_edge_lengths_m:densityTargetEdgeLengths(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},points:state.points,nodes:state.nodes,edges:state.edges,triangles:state.gng&&state.gng.triangles?[...state.gng.triangles.values()]:[],faces:state.faces,node_attributes:state.nodeStats,node_clusters:state.nodeClusters,node_features:nodeFeatures,cluster_features:clusterFeatures,fuzzy_rules:{grasp:ensureFuzzyModel(),node_label:state.nodeLabelModel,cluster:state.clusterModel},best_pose:poseObj(state.best),ik_solution:state.ikSolution?ikSolutionObj(state.ikSolution):null,candidates:state.candidates.map(poseObj),imported_graph_session:state.importedGraphSession};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`topo_fuzzy_grasp_${state.sample}_v312_gng_sidecar_bundle_v1.json`;a.click();URL.revokeObjectURL(a.href)}
 function pointerSnapshot(){return [...state.pointers.values()].map(p=>({x:p.x,y:p.y}))}
 function bindView(id){
   const c=$(id);
@@ -3869,8 +4069,57 @@ function v312ParsePointCloudText(txt){
   }
   return[pts];
 }
-function v312SetupPointCloudFileLoader(){
-  const el=$('pointCloudFile');
+function v312ParseGngInputText(txt){
+  const trimmed=String(txt||'').trim();
+  if(!trimmed) return null;
+  try{
+    const obj=JSON.parse(trimmed);
+    if(obj && typeof obj==='object'){
+      if(Array.isArray(obj.nodes) || Array.isArray(obj.edges)){
+        return {kind:'graph',payload:obj};
+      }
+      if(Array.isArray(obj.frames) || Array.isArray(obj.points) || Array.isArray(obj.point_clouds)){
+        return {kind:'pointcloud',payload:obj};
+      }
+      if(obj.session && typeof obj.session==='object'){
+        return v312ParseGngInputText(JSON.stringify(obj.session));
+      }
+    }
+  }catch(_e){}
+  return {kind:'pointcloud',payload:trimmed};
+}
+function v312LoadPointcloudFrames(frames){
+  state.importedPointFrames=frames;
+  if($('pointCloudSource'))$('pointCloudSource').value='imported_frames';
+  state.dataSourceMode='pointcloud_to_gng';
+  if($('gngDataSourceMode'))$('gngDataSourceMode').value=state.dataSourceMode;
+  if(state.importedPointFrames&&state.importedPointFrames.length){
+    state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));
+    state.points=state.basePoints.map(p=>({...p}));
+    state.importedGraphSession=null;
+    resetGngRunState();
+    updateHud();
+    updateGngDataSourceUi();
+    renderAll();
+    $('topoStatus').textContent='Imported point-cloud frames loaded: '+state.importedPointFrames.length+' frame(s). JSON/CSV points are used as depth-camera style dataset.';
+    return true;
+  }
+  return false;
+}
+function v312LoadGraphSession(session){
+  state.dataSourceMode='graph_only';
+  if($('gngDataSourceMode'))$('gngDataSourceMode').value=state.dataSourceMode;
+  const ok=loadImportedGraphSession(session);
+  if(ok){
+    updateHud();
+    updateGngDataSourceUi();
+    renderAll();
+    $('topoStatus').textContent='Graph-only session loaded: nodes='+state.nodes.length+', edges='+state.edges.length+'. Existing GNG data is ready for inspection.';
+  }
+  return ok;
+}
+function v312SetupGngInputFileLoader(){
+  const el=$('gngDataFile')||$('pointCloudFile');
   if(!el||el.dataset.boundV312)return;
   el.dataset.boundV312='1';
   el.addEventListener('change',async()=>{
@@ -3878,15 +4127,24 @@ function v312SetupPointCloudFileLoader(){
     if(!f)return;
     const txt=await f.text();
     try{
-      state.importedPointFrames=v312ParsePointCloudText(txt);
-      if($('pointCloudSource'))$('pointCloudSource').value='imported_frames';
-      if(state.importedPointFrames&&state.importedPointFrames.length){
-        state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));
-        state.points=state.basePoints.map(p=>({...p}));
-        resetGngRunState();
-        updateHud();
-        renderAll();
-        $('topoStatus').textContent='Imported point-cloud frames loaded: '+state.importedPointFrames.length+' frame(s). JSON/CSV points are used as depth-camera style dataset.';
+      const parsed=v312ParseGngInputText(txt);
+      if(!parsed){
+        $('topoStatus').textContent='GNG input file load failed: empty file.';
+        return;
+      }
+      if(parsed.kind==='graph'){
+        if(!v312LoadGraphSession(parsed.payload)){
+          $('topoStatus').textContent='Graph-only session load failed: nodes/edges could not be normalized.';
+        }
+        return;
+      }
+      if(parsed.kind==='pointcloud' && parsed.payload && typeof parsed.payload==='object' && !Array.isArray(parsed.payload)){
+        const frames=Array.isArray(parsed.payload.frames)?parsed.payload.frames:(Array.isArray(parsed.payload.points)?[parsed.payload.points]:null);
+        if(frames && v312LoadPointcloudFrames(frames)) return;
+      }
+      const frames=v312ParsePointCloudText(txt);
+      if(!v312LoadPointcloudFrames(frames)){
+        $('topoStatus').textContent='Point-cloud file load failed: parsed frames were empty.';
       }
     }catch(e){
       $('topoStatus').textContent='Point-cloud file load failed: '+(e&&e.message?e.message:e);
@@ -4166,11 +4424,25 @@ function renderLiveMfEditor(){const box=$('fuzzyLiveMfEditor');if(box)box.innerH
 function updateRuleJson(){const el=$('fuzzyRuleJson');if(el)el.value=JSON.stringify(ensureFuzzyModel(),null,2)}
 function renderFuzzyDebug(){const b=state.best,box=$('fuzzyRuleDebug');if(!box)return;if(!b||!b.ruleResult){box.textContent='No inference yet.';return}box.textContent=(b.ruleResult.fired||[]).map(r=>`${r.id} ${r.name||''} -> ${r.output}  strength=${r.strength} activation=${r.activation}\n  `+(r.conditions||[]).map(c=>`${c.connector} ${c.feature} is ${c.not?'NOT ':''}${c.label}: ${c.mu}`).join('\n  ')).join('\n\n')||'No rules fired.'}
 function bindFuzzyEditor(){if(!$('explicitFuzzyRulePanel'))return;ensureFuzzyModel();renderFuzzyEditor();$('fuzzyFeatureSelector').addEventListener('change',e=>{if(e.target.dataset.fzFeature){ensureFuzzyModel().features[e.target.dataset.fzFeature].enabled=e.target.checked;refreshFuzzyFeatureSelects();renderRuleList();renderRuleConfirm();updateRuleJson()}});['fzAndMethod','fzOrMethod','fzImplication','fzAggregation','fzDefuzz','fzFallback'].forEach(id=>$(id).onchange=()=>{const m=ensureFuzzyModel().methods;m.and=$('fzAndMethod').value;m.or=$('fzOrMethod').value;m.implication=$('fzImplication').value;m.aggregation=$('fzAggregation').value;m.defuzz=$('fzDefuzz').value;m.fallback=$('fzFallback').value;updateRuleJson()});$('fzMfFeature').onchange=()=>renderMfList();$('fzAddMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim()||'Label';model.features[f].labels[name]={shape:$('fzMfShape').value,params:['A','B','C','D'].map(k=>clamp(+$('fzMf'+k).value||0,0,1))};renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim();if(name)delete model.features[f].labels[name];renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddOutBtn').onclick=()=>{const name=$('fzOutLabel').value.trim()||'Output';ensureFuzzyModel().outputs[name]={value:clamp(+$('fzOutValue').value||0,0,100),meaning:$('fzOutMeaning').value};renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteOutBtn').onclick=()=>{delete ensureFuzzyModel().outputs[$('fzOutLabel').value.trim()];renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddRuleBtn').onclick=()=>{const model=ensureFuzzyModel(),f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false),labs=Object.keys((model.features[f.key]||{}).labels||{}),outs=Object.keys(model.outputs);model.rules.push({id:'R'+(model.rules.length+1),active:true,name:'new rule',conditions:[{feature:f.key,label:labs[0]||'High',connector:'AND'}],output:outs[0]||'Medium',weight:1});renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzApplyRulesBtn').onclick=()=>{updateRuleJson();estimate();$('fuzzyEditorStatus').textContent='Applied editable IF-THEN rule base to current grasp estimation.'};$('fzResetRulesBtn').onclick=()=>{state.fuzzyModel=defaultFuzzyModel();state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Default fuzzy rule base restored.'};$('fzExportRulesBtn').onclick=updateRuleJson;$('fzImportRulesBtn').onclick=()=>{try{state.fuzzyModel=JSON.parse($('fuzzyRuleJson').value);state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Rule JSON imported.'}catch(e){$('fuzzyEditorStatus').textContent='JSON import failed: '+e.message}};$('fzRefreshConfirmBtn').onclick=()=>{renderRuleConfirm();updateRuleJson()};$('fzDownloadRulesBtn').onclick=()=>{updateRuleJson();const blob=new Blob([$('fuzzyRuleJson').value],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='topofuzzy_grasp_ifthen_rules_v287.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
+function bindDataModeControls(){
+  if($('gngDataSourceMode')&&!$('gngDataSourceMode').dataset.bound){
+    $('gngDataSourceMode').dataset.bound='1';
+    $('gngDataSourceMode').onchange=()=>{setGngDataSourceMode($('gngDataSourceMode').value);updateHud();renderAll();};
+  }
+  if($('gngLoadDataBtn')&&!$('gngLoadDataBtn').dataset.bound){
+    $('gngLoadDataBtn').dataset.bound='1';
+    $('gngLoadDataBtn').onclick=()=>{const fileEl=$('gngDataFile')||$('pointCloudFile');if(fileEl)fileEl.click();};
+  }
+}
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGng;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
+if($('gngDataSourceMode'))$('gngDataSourceMode').addEventListener('change',()=>{setGngDataSourceMode($('gngDataSourceMode').value);updateMetrics();updateHud();renderAll();});
+if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{if($('pointCloudSource').value==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='Point-cloud source switched to imported frames.';}else{$('topoStatus').textContent='Point-cloud source switched to synthetic depth.';}});
+bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern','playbackSpeed'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
-setupTopologyStyleControls();v314SyncIkMotionControls();v312SetupPointCloudFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
-document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id).addEventListener('input',()=>{resetGngRunState();updateMetrics();updateHud();renderAll();updateGngAlgorithmButtonStates();$('topoStatus').textContent=`GNG setting changed: mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. 次回ボタン押下で2ノードから再実行します。`;}));
+setupTopologyStyleControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
+document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));
 
 function setupFixedHeaderV276(){
   const root=document.documentElement;

@@ -11,6 +11,7 @@ import {
     EntityType,
     PointCloudData,
     HeatmapSettings,
+    GraphData,
     GraphNode,
     EditRegion,
     LayerSettings,
@@ -118,6 +119,24 @@ interface EditJobStatus {
     progress: number;
     stage: string;
     error?: string;
+}
+
+function nodeHasManipulabilityData(node?: GraphNode | null): boolean {
+    return Boolean(
+        node &&
+        (
+            node.manipValid !== undefined ||
+            node.manipValue !== undefined ||
+            node.manipConditionNumber !== undefined ||
+            node.manipCenter !== undefined ||
+            node.manipScale !== undefined ||
+            node.manipOrientation !== undefined
+        )
+    );
+}
+
+function graphHasManipulabilityData(graph?: GraphData | null): boolean {
+    return Boolean(graph?.nodes.some((node) => nodeHasManipulabilityData(node)));
 }
 
 type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: string };
@@ -264,6 +283,7 @@ function App() {
 
         Object.keys(graphData).forEach(tag => {
             const isStatic = graphData[tag]?.mode === 'static';
+            const hasManipulabilityData = graphHasManipulabilityData(graphData[tag]);
             if (!newSettings[tag]) {
                 newSettings[tag] = {
                     visible: true,
@@ -334,6 +354,12 @@ function App() {
                     visibleSemanticLabels: {
                         handle: true,
                     },
+                };
+                changed = true;
+            } else if (!hasManipulabilityData && newSettings[tag].showManipulabilityEllipsoids) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    showManipulabilityEllipsoids: false,
                 };
                 changed = true;
             }
@@ -873,7 +899,7 @@ function App() {
 
     const handleManipSelect = (graphTag: string, node: GraphNode) => {
         const graph = graphData[graphTag];
-        if (!graph) return;
+        if (!graph || !nodeHasManipulabilityData(node)) return;
         setSelectedManipSnapshot({
             graphTag,
             graph: JSON.parse(JSON.stringify(graph)),

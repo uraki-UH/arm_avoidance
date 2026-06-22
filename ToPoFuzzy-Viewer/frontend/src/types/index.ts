@@ -116,6 +116,10 @@ export interface GraphCluster {
     reliability: number;
     velocity: [number, number, number];
     nodeIds: number[];  // IDs of nodes belonging to this cluster
+    hasVelocityObservation?: boolean;
+    velCovXx?: number;
+    velCovXy?: number;
+    velCovYy?: number;
 }
 
 export type GraphMode = 'static' | 'dynamic';

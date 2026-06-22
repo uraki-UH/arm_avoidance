@@ -10,7 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "core/metrics/manipulability.hpp"
-#include <ais_gng_msgs/msg/topological_node.hpp>
+#include <ais_gng_feature_msgs/msg/topological_node_feature.hpp>
 
 namespace robot_sim::common {
 
@@ -47,7 +47,7 @@ inline geometry_msgs::msg::Quaternion toQuaternion(
 }
 
 inline void fillManipulabilityFields(
-    ais_gng_msgs::msg::TopologicalNode &node_msg,
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
     const Manipulability::ManipulabilityEllipsoid &ellipsoid,
     bool is_goal = false) {
   node_msg.is_goal = is_goal;

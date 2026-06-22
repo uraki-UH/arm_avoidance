@@ -61,6 +61,58 @@ type QueuedRobotPoseUpdate = {
     robot: RobotData;
 };
 
+type GraphStreamPayload = GraphData & {
+    node_features?: Array<Record<string, unknown>>;
+    cluster_features?: Array<Record<string, unknown>>;
+};
+
+function mergeGraphFeatures(graph: GraphStreamPayload): GraphData {
+    const nodeFeatureById = new Map<number, Record<string, unknown>>();
+    for (const feature of graph.node_features || []) {
+        const rawId = feature.node_id ?? feature.id;
+        const nodeId = typeof rawId === 'number' ? rawId : Number(rawId);
+        if (!Number.isFinite(nodeId)) continue;
+        nodeFeatureById.set(nodeId, feature);
+    }
+
+    const clusterFeatureById = new Map<number, Record<string, unknown>>();
+    for (const feature of graph.cluster_features || []) {
+        const rawId = feature.cluster_id ?? feature.id;
+        const clusterId = typeof rawId === 'number' ? rawId : Number(rawId);
+        if (!Number.isFinite(clusterId)) continue;
+        clusterFeatureById.set(clusterId, feature);
+    }
+
+    return {
+        ...graph,
+        nodes: graph.nodes.map((node) => {
+            const feature = nodeFeatureById.get(Number(node.id));
+            if (!feature) return node;
+            return {
+                ...node,
+                isGoal: feature.is_goal as boolean | undefined,
+                manipValid: feature.manip_valid as boolean | undefined,
+                manipValue: feature.manip_value as number | undefined,
+                manipConditionNumber: feature.manip_condition_number as number | undefined,
+                manipCenter: feature.manip_center as [number, number, number] | undefined,
+                manipScale: feature.manip_scale as [number, number, number] | undefined,
+                manipOrientation: feature.manip_orientation as [number, number, number, number] | undefined,
+            };
+        }),
+        clusters: graph.clusters.map((cluster) => {
+            const feature = clusterFeatureById.get(Number(cluster.id));
+            if (!feature) return cluster;
+            return {
+                ...cluster,
+                hasVelocityObservation: feature.has_velocity_observation as boolean | undefined,
+                velCovXx: feature.vel_cov_xx as number | undefined,
+                velCovXy: feature.vel_cov_xy as number | undefined,
+                velCovYy: feature.vel_cov_yy as number | undefined,
+            } as GraphData['clusters'][number];
+        }),
+    };
+}
+
 function robotPoseInstanceHasChanged(prev: RobotPoseInstance, next: RobotPoseInstance): boolean {
     if ((prev.opacity ?? 1) !== (next.opacity ?? 1)) {
         return true;
@@ -132,7 +184,21 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.semanticLabel !== b.semanticLabel ||
             a.semanticReliability !== b.semanticReliability ||
             a.age !== b.age ||
-            a.winnerPointCount !== b.winnerPointCount
+            a.winnerPointCount !== b.winnerPointCount ||
+            a.isGoal !== b.isGoal ||
+            a.manipValid !== b.manipValid ||
+            a.manipValue !== b.manipValue ||
+            a.manipConditionNumber !== b.manipConditionNumber ||
+            a.manipCenter?.[0] !== b.manipCenter?.[0] ||
+            a.manipCenter?.[1] !== b.manipCenter?.[1] ||
+            a.manipCenter?.[2] !== b.manipCenter?.[2] ||
+            a.manipScale?.[0] !== b.manipScale?.[0] ||
+            a.manipScale?.[1] !== b.manipScale?.[1] ||
+            a.manipScale?.[2] !== b.manipScale?.[2] ||
+            a.manipOrientation?.[0] !== b.manipOrientation?.[0] ||
+            a.manipOrientation?.[1] !== b.manipOrientation?.[1] ||
+            a.manipOrientation?.[2] !== b.manipOrientation?.[2] ||
+            a.manipOrientation?.[3] !== b.manipOrientation?.[3]
         ) {
             return true;
         }
@@ -177,7 +243,11 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.velocity[0] !== b.velocity[0] ||
             a.velocity[1] !== b.velocity[1] ||
             a.velocity[2] !== b.velocity[2] ||
-            a.nodeIds.length !== b.nodeIds.length
+            a.nodeIds.length !== b.nodeIds.length ||
+            a.hasVelocityObservation !== b.hasVelocityObservation ||
+            a.velCovXx !== b.velCovXx ||
+            a.velCovXy !== b.velCovXy ||
+            a.velCovYy !== b.velCovYy
         ) {
             return true;
         }
@@ -626,9 +696,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.graph': (p) => {
                             if (!p.graph) return;
+                            const mergedGraph = mergeGraphFeatures(p.graph as GraphStreamPayload);
                             pendingGraphUpdatesRef.current.set(tag, {
                                 tag,
-                                graph: p.graph as GraphData,
+                                graph: mergedGraph,
                             });
                             scheduleStreamFlush();
                         },

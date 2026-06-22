@@ -32,6 +32,7 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
+find_package(ais_gng_feature_msgs REQUIRED)
 find_package(voxel_msgs REQUIRED)#追加
 find_package(rclcpp_components REQUIRED)
 find_package(urdf REQUIRED)
@@ -85,6 +86,7 @@ include_directories(${_rmw_include_dirs})
 include_directories(${voxel_idx_INCLUDE_DIRS})
 include_directories(${grasping_system_INCLUDE_DIRS})
 include_directories(${gng_control_msgs_INCLUDE_DIRS})
+include_directories(${ais_gng_feature_msgs_INCLUDE_DIRS})
 
 # Standard definitions
 add_definitions(-DPROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

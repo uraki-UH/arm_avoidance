@@ -10,6 +10,7 @@
 #include <Eigen/Dense>
 
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <ais_gng_feature_msgs/msg/topological_node_feature.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "core/common/manipulability_serialization.hpp"
@@ -333,7 +334,8 @@ static inline bool buildTrialGoalBridge(
 static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
     const std::vector<std::vector<int>> &paths,
-    const std::string &frame_id) {
+    const std::string &frame_id,
+    std::vector<ais_gng_feature_msgs::msg::TopologicalNodeFeature> *node_features = nullptr) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
   msg.header.frame_id = frame_id.empty() ? "world" : frame_id;
@@ -370,7 +372,13 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       out.normal.z = node_ref.status.ee_direction.z();
       out.label = pathLabelFromStatus(node_ref.status);
       out.frame = 0;
-      robot_sim::common::fillManipulabilityFields(out, node_ref.status.manip_info);
+      if (node_features) {
+        ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
+        feature.node_id = static_cast<uint16_t>(node_ref.id);
+        feature.is_goal = (!path.empty() && node_ref.id == path.back());
+        robot_sim::common::fillManipulabilityFields(feature, node_ref.status.manip_info);
+        node_features->push_back(std::move(feature));
+      }
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node_ref.id, published_index);
@@ -385,12 +393,6 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       }
       msg.edges.push_back(ia->second);
       msg.edges.push_back(ib->second);
-    }
-    if (!path.empty()) {
-      const auto goal_it = id_to_index.find(path.back());
-      if (goal_it != id_to_index.end()) {
-        msg.nodes[goal_it->second].is_goal = true;
-      }
     }
   }
   return msg;

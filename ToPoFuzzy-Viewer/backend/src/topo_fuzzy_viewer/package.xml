@@ -20,6 +20,7 @@
   <depend>pcl_conversions</depend>
   <depend>pcl_ros</depend>
   <depend>ais_gng_msgs</depend>
+  <depend>ais_gng_feature_msgs</depend>
   <depend>tf2_msgs</depend>
   <!-- voxelmsgs -->
   <depend>voxel_msgs</depend>

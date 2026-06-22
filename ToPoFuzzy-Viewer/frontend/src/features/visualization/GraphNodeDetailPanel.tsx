@@ -61,6 +61,15 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
         return SEMANTIC_LABELS[(Math.trunc(node.semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
     }, [node.semanticLabel]);
 
+    const hasManipulabilityData = useMemo(() => (
+        node.manipValid !== undefined ||
+        node.manipValue !== undefined ||
+        node.manipConditionNumber !== undefined ||
+        node.manipCenter !== undefined ||
+        node.manipScale !== undefined ||
+        node.manipOrientation !== undefined
+    ), [node.manipConditionNumber, node.manipCenter, node.manipOrientation, node.manipScale, node.manipValid, node.manipValue]);
+
     return (
         <div
             className="surface-panel absolute z-50 flex w-[420px] flex-col overflow-hidden"
@@ -103,14 +112,18 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
                         <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Goal</div>
                         <div className="mt-1 font-semibold">{node.isGoal ? 'yes' : 'no'}</div>
                     </div>
-                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                        <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Manip</div>
-                        <div className="mt-1 font-mono">{node.manipValue?.toFixed(4) ?? 'n/a'}</div>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                        <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Cond</div>
-                        <div className="mt-1 font-mono">{node.manipConditionNumber?.toFixed(4) ?? 'n/a'}</div>
-                    </div>
+                    {hasManipulabilityData && (
+                        <>
+                            <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                                <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Manip</div>
+                                <div className="mt-1 font-mono">{node.manipValue?.toFixed(4) ?? 'n/a'}</div>
+                            </div>
+                            <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                                <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Cond</div>
+                                <div className="mt-1 font-mono">{node.manipConditionNumber?.toFixed(4) ?? 'n/a'}</div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 <div className="rounded-md border border-white/10 bg-black/20 p-2 font-mono text-[10px] leading-5 text-[var(--text-secondary)]">
@@ -120,7 +133,7 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
                     <div>timestamp: {graph.timestamp}</div>
                 </div>
 
-                {node.manipCenter && (
+                {hasManipulabilityData && node.manipCenter && (
                     <div className="rounded-md border border-white/10 bg-black/20 p-2 font-mono text-[10px] leading-5 text-[var(--text-secondary)]">
                         <div>manip center: [{node.manipCenter.map((v) => v.toFixed(4)).join(', ')}]</div>
                         <div>manip scale: [{node.manipScale?.map((v) => v.toFixed(4)).join(', ') ?? 'n/a'}]</div>

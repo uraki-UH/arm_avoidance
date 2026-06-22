@@ -1,0 +1,5 @@
+uint32 cluster_id
+bool has_velocity_observation
+float32 vel_cov_xx
+float32 vel_cov_xy
+float32 vel_cov_yy
