@@ -11,6 +11,7 @@ ais_gng_node:
     node.clusted_s1_age: [20, 20, 6, 3] #[default, safe, wall, unknown]
     node.interval: [0.4, 0.2, 0.2, 0.025] #[default, safe, wall, unknown]
     node.static.age_min: 250 # 長期記憶の年齢
+    node.covariance_enabled: false
 
     ds.transformed: true
     ds.range_max: 0.2

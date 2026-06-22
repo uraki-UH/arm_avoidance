@@ -55,6 +55,7 @@ class AiSGNGComponent : public rclcpp::Node {
     std::shared_ptr<void> sync_keeper_;
 
     std::string base_frame_id_;
+    bool local_coordinates_{false};
 
     std::vector<std::string> input_topic_names_;
     uint32_t semantic_handle_label_value_{};

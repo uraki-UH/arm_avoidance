@@ -464,6 +464,9 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         if (name == "input.base_frame_id"){
             base_frame_id_ = p.as_string();
             success = true;
+        } else if (name == "input.local_coordinates") {
+            local_coordinates_ = p.as_bool();
+            success = true;
         } else if (name == "semantic.handle_label_value") {
             semantic_handle_label_value_ = static_cast<uint32_t>(std::max<int64_t>(0, p.as_int()));
             success = true;
@@ -567,7 +570,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
     // 出力のヘッダー
     std_msgs::msg::Header header;
-    header.frame_id = base_frame_id_.empty() ? msg->header.frame_id : base_frame_id_;
+    header.frame_id = (local_coordinates_ || base_frame_id_.empty())
+        ? msg->header.frame_id
+        : base_frame_id_;
     header.stamp = msg->header.stamp;
 
     // GNGの実行
@@ -613,7 +618,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     // debug log
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    RCLCPP_INFO(this->get_logger(), "Processing time: %ld ms", duration.count());
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Processing time: %ld ms", duration.count());
 }
 
 void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
@@ -752,8 +757,10 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
             }
         }
     }
-    RCLCPP_INFO(
+    RCLCPP_DEBUG_THROTTLE(
         this->get_logger(),
+        *this->get_clock(),
+        5000,
         "motion stats: nodes=%zu total_samples=%zu max_samples=%zu winners=%zu max_count=%u max_cov_abs=%.6f",
         topological_map_msg->nodes.size(),
         total_samples,
@@ -834,7 +841,7 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     lidar_config.quat.z = 0;
     lidar_config.quat.w = 1;
     lidar_config.point_step = msg->point_step;
-    if(base_frame_id_.empty() || base_frame_id_ == msg->header.frame_id){
+    if(local_coordinates_ || base_frame_id_.empty() || base_frame_id_ == msg->header.frame_id){
         return lidar_config;
     }
     try {
@@ -850,8 +857,9 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
         lidar_config.quat.z = q.z;
         lidar_config.quat.w = q.w;
     } catch (const tf2::TransformException &ex) {
-        RCLCPP_ERROR(
-            this->get_logger(), "Could not transform %s to %s: %s",
+        RCLCPP_WARN_THROTTLE(
+            this->get_logger(), *this->get_clock(), 5000,
+            "Could not transform %s to %s: %s",
             base_frame_id_.c_str(), msg->header.frame_id.c_str(), ex.what());
     }
     return lidar_config;
