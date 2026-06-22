@@ -43,7 +43,6 @@ def safe_int(value, default):
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
-    # robot_name は後続のロジックで決定
     params_file = LaunchConfiguration("params_file").perform(context)
     data_dir = LaunchConfiguration("dir").perform(context)
     exp_id = LaunchConfiguration("id").perform(context)
@@ -62,7 +61,7 @@ def launch_setup(context, *args, **kwargs):
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
-    yaml_robot_name = "ToPoDualArm"
+    yaml_robot_name = ""
     yaml_urdf_path = ""
     gng_model_filename = "gng.bin"
     vlut_filename = "vlut.bin"

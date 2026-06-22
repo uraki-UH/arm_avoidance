@@ -3,8 +3,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -69,32 +67,14 @@ std::vector<std::string> collectAllLinkNames(const simulation::RobotModel &model
   return links;
 }
 
-std::string defaultRobotDescriptionFile(const std::string &robot_name) {
-  const std::string robot_desc_pkg =
-      ament_index_cpp::get_package_share_directory(robot_name + "_description");
-  const std::string primary = robot_desc_pkg + "/urdf/" + robot_name + ".urdf.xacro";
-  if (std::filesystem::exists(primary)) {
-    return primary;
-  }
-
-  const std::string secondary =
-      robot_desc_pkg + "/urdf/" + robot_name + "_pro_normal.urdf.xacro";
-  if (std::filesystem::exists(secondary)) {
-    return secondary;
-  }
-
-  throw std::runtime_error("No URDF/Xacro found for robot_name='" + robot_name + "'");
-}
-
 } // namespace
 
 class VoxelSpherizedRobotViewerNode : public rclcpp::Node {
 public:
   explicit VoxelSpherizedRobotViewerNode(const rclcpp::NodeOptions &options)
   : Node("voxel_spherized_robot_viewer_node", options) {
-    robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
-    const std::string default_urdf = defaultRobotDescriptionFile(robot_name_);
-    const std::string urdf_path = declare_parameter<std::string>("urdf_path", default_urdf);
+    robot_name_ = declare_parameter<std::string>("robot_name", "");
+    const std::string urdf_path = declare_parameter<std::string>("urdf_path", "");
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");
     const std::string end_effector_name = declare_parameter<std::string>("end_effector_name", "");
@@ -121,6 +101,12 @@ public:
       if (!frame_id_.empty() && frame_id_ != "world" && frame_id_[0] != '/') {
         frame_id_ = ns + "/" + frame_id_;
       }
+    }
+
+    if (urdf_path.empty()) {
+      throw std::runtime_error(
+          "No robot description path was provided. "
+          "Set urdf_path in the params file or pass urdf_path explicitly.");
     }
 
     const std::string resolved_urdf_path = robot_sim::common::resolvePath(urdf_path);
