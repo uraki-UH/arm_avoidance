@@ -339,8 +339,7 @@ public:
 
   explicit TopologicalMapAvoidanceNode(const rclcpp::NodeOptions &options)
       : Node("topological_map_avoidance_node", options) {
-    declare_parameter("urdf_path",
-                      "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
+    declare_parameter("urdf_path", "");
     declare_parameter("gng_model_path", "");
     declare_parameter("gng.data_directory", "");
     declare_parameter("gng.experiment_id", "");

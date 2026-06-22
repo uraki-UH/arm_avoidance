@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -17,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <stdexcept>
 
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -67,13 +69,21 @@ std::vector<std::string> collectAllLinkNames(const simulation::RobotModel &model
   return links;
 }
 
-std::string defaultRobotDescriptionFile() {
-  const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-  try {
-    return ament_index_cpp::get_package_share_directory("topoarm_description") + "/urdf/topo_dual_arm.urdf.xacro";
-  } catch (...) {
-    return pkg_share + "/urdf/topoarm_description/urdf/topo_dual_arm.urdf.xacro";
+std::string defaultRobotDescriptionFile(const std::string &robot_name) {
+  const std::string robot_desc_pkg =
+      ament_index_cpp::get_package_share_directory(robot_name + "_description");
+  const std::string primary = robot_desc_pkg + "/urdf/" + robot_name + ".urdf.xacro";
+  if (std::filesystem::exists(primary)) {
+    return primary;
   }
+
+  const std::string secondary =
+      robot_desc_pkg + "/urdf/" + robot_name + "_pro_normal.urdf.xacro";
+  if (std::filesystem::exists(secondary)) {
+    return secondary;
+  }
+
+  throw std::runtime_error("No URDF/Xacro found for robot_name='" + robot_name + "'");
 }
 
 } // namespace
@@ -82,15 +92,8 @@ class VoxelSpherizedRobotViewerNode : public rclcpp::Node {
 public:
   explicit VoxelSpherizedRobotViewerNode(const rclcpp::NodeOptions &options)
   : Node("voxel_spherized_robot_viewer_node", options) {
-    const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-    std::string default_urdf;
-    try {
-      default_urdf = ament_index_cpp::get_package_share_directory("topoarm_description") + "/urdf/topo_dual_arm.urdf.xacro";
-    } catch (...) {
-      default_urdf = pkg_share + "/urdf/topoarm_description/urdf/topo_dual_arm.urdf.xacro";
-    }
-
     robot_name_ = declare_parameter<std::string>("robot_name", "topoarm");
+    const std::string default_urdf = defaultRobotDescriptionFile(robot_name_);
     const std::string urdf_path = declare_parameter<std::string>("urdf_path", default_urdf);
     const std::string resource_root_dir = declare_parameter<std::string>("resource_root_dir", "");
     const std::string mesh_root_dir = declare_parameter<std::string>("mesh_root_dir", "");

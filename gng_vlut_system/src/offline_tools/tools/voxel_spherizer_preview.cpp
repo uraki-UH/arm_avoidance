@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "common/resource_utils.hpp"
@@ -43,23 +42,13 @@ std::vector<std::string> collectAllLinkNames(const simulation::RobotModel &model
   return names;
 }
 
-std::string defaultRobotDescriptionFile() {
-  const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-  try {
-    return ament_index_cpp::get_package_share_directory("topoarm_description") +
-           "/urdf/topo_dual_arm.urdf.xacro";
-  } catch (...) {
-    return pkg_share + "/urdf/topoarm_description/urdf/topo_dual_arm.urdf.xacro";
-  }
-}
-
 } // namespace
 
 class VoxelSpherizerPreviewNode : public rclcpp::Node {
 public:
   explicit VoxelSpherizerPreviewNode(const rclcpp::NodeOptions &options)
       : Node("voxel_spherizer_preview", options) {
-    declare_parameter<std::string>("robot_description_file", defaultRobotDescriptionFile());
+    declare_parameter<std::string>("robot_description_file", "");
     declare_parameter<std::string>("resource_root_dir", "");
     declare_parameter<std::string>("mesh_root_dir", "");
     declare_parameter<std::string>("voxel_link_names", "");

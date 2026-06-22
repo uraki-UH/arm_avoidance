@@ -57,14 +57,14 @@ class AiSGNGComponent : public rclcpp::Node {
     std::string base_frame_id_;
 
     std::vector<std::string> input_topic_names_;
-    uint32_t semantic_handle_label_value_ = 1;
-    double semantic_handle_ratio_threshold_ = 0.5;
-    std::size_t semantic_handle_history_size_ = 64;
+    uint32_t semantic_handle_label_value_{};
+    double semantic_handle_ratio_threshold_{};
+    std::size_t semantic_handle_history_size_{};
     std::vector<std::deque<uint8_t>> semantic_label_history_;
-    double node_eta_s1_ = 0.4;
-    double node_eta_s2_ = 0.008;
-    double node_cov_decay_k_ = 1.5;
-    bool node_covariance_enabled_ = true;
+    double node_eta_s1_{};
+    double node_eta_s2_{};
+    double node_cov_decay_k_{};
+    bool node_covariance_enabled_{};
     std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
 
     // Add Plugin

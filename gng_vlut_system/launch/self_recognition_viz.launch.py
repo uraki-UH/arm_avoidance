@@ -25,28 +25,6 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
-def resolve_robot_description_path(robot_name: str, raw_path: str) -> str:
-    if raw_path:
-        resolved = resolve_package_uri(raw_path)
-        if os.path.exists(resolved):
-            return resolved
-        raise FileNotFoundError(f"Robot description file does not exist: {resolved}")
-
-    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-    candidates = [
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
-    ]
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate
-
-    raise FileNotFoundError(
-        f"No URDF/Xacro found for robot_name='{robot_name}'. "
-        f"Checked: {', '.join(candidates)}"
-    )
-
-
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
@@ -102,7 +80,14 @@ def launch_setup(context, *args, **kwargs):
     urdf_path = LaunchConfiguration("urdf_path").perform(context)
     if not urdf_path and yaml_urdf_path:
         urdf_path = yaml_urdf_path
-    robot_urdf = resolve_robot_description_path(robot_name, urdf_path)
+    if not urdf_path:
+        raise FileNotFoundError(
+            "No robot description path was provided. "
+            "Set urdf_path in the params file or pass urdf_path explicitly."
+        )
+    robot_urdf = resolve_package_uri(urdf_path)
+    if not os.path.exists(robot_urdf):
+        raise FileNotFoundError(f"Robot description file does not exist: {robot_urdf}")
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     node_params = {}

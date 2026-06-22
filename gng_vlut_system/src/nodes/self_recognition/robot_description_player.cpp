@@ -21,10 +21,7 @@ namespace self_recognition {
 
 RobotDescriptionPlayer::RobotDescriptionPlayer(const rclcpp::NodeOptions & options)
 : Node("robot_description_player", options) {
-  const std::string pkg_share = ament_index_cpp::get_package_share_directory("gng_vlut_system");
-
-  description_file_ = declare_parameter<std::string>(
-      "urdf_path", pkg_share + "/urdf/topoarm_robot_model/urdf/topoarm.urdf.xacro");
+  description_file_ = declare_parameter<std::string>("urdf_path", "");
   resource_root_dir_ = declare_parameter<std::string>("resource_root_dir", "");
   mesh_root_dir_ = declare_parameter<std::string>("mesh_root_dir", "");
   topic_name_ = declare_parameter<std::string>("topic_name", "robot_description");

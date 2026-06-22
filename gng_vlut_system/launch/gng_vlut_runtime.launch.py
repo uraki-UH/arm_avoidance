@@ -7,10 +7,30 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+def resolve_package_uri(raw_path: str) -> str:
+    if not raw_path.startswith("package://"):
+        return raw_path
+
+    pkg_and_path = raw_path[len("package://"):]
+    pkg_name, _, rel_path = pkg_and_path.partition("/")
+    if not pkg_name or not rel_path:
+        return raw_path
+
+    try:
+        pkg_share = get_package_share_directory(pkg_name)
+    except Exception:
+        return raw_path
+    return os.path.join(pkg_share, rel_path)
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
     robot_name = LaunchConfiguration("robot_name").perform(context)
+    urdf_path = LaunchConfiguration("urdf_path").perform(context)
+    yaml_urdf_path = ""
+    yaml_resource_root_dir = ""
+    yaml_mesh_root_dir = ""
     experiment_id = LaunchConfiguration("id").perform(context)
     if not experiment_id:
         experiment_id = LaunchConfiguration("experiment_id").perform(context)
@@ -28,6 +48,20 @@ def launch_setup(context, *args, **kwargs):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
                 params_yaml = yaml.safe_load(f) or {}
+            root_params = {}
+            for root_key in ('/**', 'ros__parameters'):
+                candidate = params_yaml.get(root_key, {})
+                if isinstance(candidate, dict) and 'ros__parameters' in candidate:
+                    candidate = candidate.get('ros__parameters', {})
+                if isinstance(candidate, dict):
+                    root_params = candidate
+                    break
+            if isinstance(root_params, dict):
+                candidate_urdf = root_params.get("urdf_path", "")
+                if candidate_urdf:
+                    yaml_urdf_path = str(candidate_urdf).strip()
+                yaml_resource_root_dir = root_params.get("resource_root_dir", yaml_resource_root_dir)
+                yaml_mesh_root_dir = root_params.get("mesh_root_dir", yaml_mesh_root_dir)
             for node_key in ("offline_urdf_trainer", "gng_safety"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
                 if ros_params:
@@ -50,25 +84,24 @@ def launch_setup(context, *args, **kwargs):
     vlut_path = os.path.join(data_dir, experiment_id, vlut_filename)
     enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
 
-    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-    candidate = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro")
-    if not os.path.exists(candidate):
-        candidate = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
-    if not os.path.exists(candidate):
+    if not urdf_path and yaml_urdf_path:
+        urdf_path = yaml_urdf_path
+    if not urdf_path:
         raise FileNotFoundError(
-            f"No URDF/Xacro found for robot_name='{robot_name}'. "
-            f"Checked: {os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}.urdf.xacro')}, "
-            f"{os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}_pro_normal.urdf.xacro')}"
+            "No robot description path was provided. "
+            "Set urdf_path in the params file or pass urdf_path explicitly."
         )
-    robot_desc_default = candidate
-    resource_root = robot_desc_pkg
-    mesh_root = os.path.join(robot_desc_pkg, "meshes")
+    urdf_path = resolve_package_uri(urdf_path)
+    if not os.path.exists(urdf_path):
+        raise FileNotFoundError(f"Robot description file does not exist: {urdf_path}")
+    resource_root = LaunchConfiguration("resource_root_dir").perform(context).strip() or yaml_resource_root_dir
+    mesh_root = LaunchConfiguration("mesh_root_dir").perform(context).strip() or yaml_mesh_root_dir
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     # 明示的に指定された項目のみを上書き対象とする
     viewer_params = {}
-    if robot_desc_default:
-        viewer_params["urdf_path"] = robot_desc_default
+    if urdf_path:
+        viewer_params["urdf_path"] = urdf_path
     if resource_root:
         viewer_params["resource_root_dir"] = resource_root
     if mesh_root:
@@ -87,6 +120,9 @@ def launch_setup(context, *args, **kwargs):
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
                 launch_arguments={
                     "robot_name": LaunchConfiguration("robot_name"),
+                    "urdf_path": LaunchConfiguration("urdf_path"),
+                    "resource_root_dir": LaunchConfiguration("resource_root_dir"),
+                    "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
                     "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
                 }.items()
             ),
@@ -159,6 +195,9 @@ def generate_launch_description():
         DeclareLaunchArgument("dir", default_value="gng_results"),
         DeclareLaunchArgument("data_directory", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "gng_safety_params.yaml")),
+        DeclareLaunchArgument("urdf_path", default_value=""),
+        DeclareLaunchArgument("resource_root_dir", default_value=""),
+        DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("base_frame", default_value="base_link"),
         DeclareLaunchArgument("tag", default_value="dynamic"),
         DeclareLaunchArgument("mode", default_value="dynamic"),

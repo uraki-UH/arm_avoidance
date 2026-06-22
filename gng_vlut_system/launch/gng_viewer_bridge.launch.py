@@ -24,24 +24,6 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
-def resolve_robot_description(robot_name: str) -> tuple[str, str, str]:
-    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-    candidates = [
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
-    ]
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate, robot_desc_pkg, os.path.join(robot_desc_pkg, "meshes")
-
-    raise FileNotFoundError(
-        f"No URDF/Xacro found for robot_name='{robot_name}'. "
-        f"Checked: {', '.join(candidates)}"
-    )
-
-
-
-
 def safe_float(value, default):
     try:
         if value is None or value == "":
@@ -157,25 +139,22 @@ def launch_setup(context, *args, **kwargs):
     # package share 配下の相対ディレクトリとして扱い直す。
     if data_dir and os.path.isabs(data_dir) and not os.path.exists(data_dir):
         data_dir = os.path.basename(data_dir) or data_dir
-    
-    robot_desc_default, resource_root, mesh_root = resolve_robot_description(robot_name)
-
     if not urdf_path and yaml_urdf_path:
         urdf_path = yaml_urdf_path
     if not urdf_path:
-        urdf_path = robot_desc_default
-    else:
-        urdf_path = resolve_package_uri(urdf_path)
+        raise FileNotFoundError(
+            "No robot description path was provided. "
+            "Set urdf_path in the params file or pass urdf_path explicitly."
+        )
+    urdf_path = resolve_package_uri(urdf_path)
     if not os.path.exists(urdf_path):
         raise FileNotFoundError(
             f"Robot description file does not exist: {urdf_path}. "
             "Pass urdf_path explicitly or install the matching description package."
         )
 
-    if yaml_resource_root_dir:
-        resource_root = yaml_resource_root_dir
-    if yaml_mesh_root_dir:
-        mesh_root = yaml_mesh_root_dir
+    resource_root = yaml_resource_root_dir
+    mesh_root = yaml_mesh_root_dir
 
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
@@ -248,6 +227,8 @@ def launch_setup(context, *args, **kwargs):
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": enable_joint_state_publisher,
                 "urdf_path": urdf_path,
+                "resource_root_dir": resource_root,
+                "mesh_root_dir": mesh_root,
                 "joint_state_topic": viewer_joint_state_topic,
             }.items()
         ),

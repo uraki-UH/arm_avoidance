@@ -64,8 +64,7 @@ class VoxelLinkMaskValidator : public rclcpp::Node {
 public:
   explicit VoxelLinkMaskValidator(const rclcpp::NodeOptions &options)
       : Node("voxel_link_mask_validator", options) {
-    declare_parameter("robot_urdf_path",
-                      "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
+    declare_parameter("robot_urdf_path", "");
     declare_parameter<double>("voxel_size",
                               ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<double>("self_recognition.inflation", 0.02);

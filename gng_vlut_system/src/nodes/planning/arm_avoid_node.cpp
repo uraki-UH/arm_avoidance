@@ -61,8 +61,7 @@ public:
 
   explicit ArmAvoidNode(const rclcpp::NodeOptions &options)
       : Node("arm_avoid_node", options) {
-    declare_parameter<std::string>("urdf_path",
-                                   "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro");
+    declare_parameter<std::string>("urdf_path", "");
     declare_parameter<std::string>("gng_model_path", "");
     declare_parameter<std::string>("root_link", "base_link");
     declare_parameter<std::string>("leaf_link", "right_end_effector_link");

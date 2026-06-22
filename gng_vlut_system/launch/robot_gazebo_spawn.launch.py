@@ -5,18 +5,34 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+
+def resolve_package_uri(raw_path: str) -> str:
+    if not raw_path.startswith("package://"):
+        return raw_path
+
+    pkg_and_path = raw_path[len("package://"):]
+    pkg_name, _, rel_path = pkg_and_path.partition("/")
+    if not pkg_name or not rel_path:
+        return raw_path
+
+    try:
+        pkg_share = get_package_share_directory(pkg_name)
+    except Exception:
+        return raw_path
+    return os.path.join(pkg_share, rel_path)
+
+
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
-    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-    robot_desc_default = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro")
-    if not os.path.exists(robot_desc_default):
-        robot_desc_default = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
-    if not os.path.exists(robot_desc_default):
+    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context)
+    if not robot_urdf_raw:
         raise FileNotFoundError(
-            f"No URDF/Xacro found for robot_name='{robot_name}'. "
-            f"Checked: {os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}.urdf.xacro')}, "
-            f"{os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}_pro_normal.urdf.xacro')}"
+            "No robot description path was provided. "
+            "Set urdf_path in the params file or pass urdf_path explicitly."
         )
+    robot_urdf = resolve_package_uri(robot_urdf_raw)
+    if not os.path.exists(robot_urdf):
+        raise FileNotFoundError(f"Robot description file does not exist: {robot_urdf}")
 
     robot_description_topic = f"/{robot_name}/robot_description"
 
@@ -37,6 +53,7 @@ def launch_setup(context, *args, **kwargs):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         # We assume Gazebo is already running or started separately
         OpaqueFunction(function=launch_setup)
     ])

@@ -38,36 +38,6 @@ inline std::filesystem::path deriveResourceRootFromMeshRoot(
 
 inline std::filesystem::path findLocalPackageShareFallback(
     const std::string &pkg_name) {
-  if (pkg_name != "topoarm_description") {
-    return {};
-  }
-
-  std::vector<std::filesystem::path> bases;
-#ifdef PROJECT_SOURCE_DIR
-  bases.emplace_back(PROJECT_SOURCE_DIR);
-  if (std::filesystem::exists(PROJECT_SOURCE_DIR)) {
-    bases.emplace_back(std::filesystem::path(PROJECT_SOURCE_DIR).parent_path());
-    bases.emplace_back(std::filesystem::path(PROJECT_SOURCE_DIR).parent_path().parent_path());
-  }
-#endif
-  bases.emplace_back(std::filesystem::current_path());
-  bases.emplace_back(std::filesystem::current_path().parent_path());
-
-  const std::vector<std::filesystem::path> rel_candidates = {
-      std::filesystem::path("ToPoDualArm") / "topoarm_description",
-      std::filesystem::path("topoarm_description"),
-      std::filesystem::path("gng_vlut_system") / "urdf" / "topoarm_description",
-  };
-
-  for (const auto &base : bases) {
-    if (base.empty()) continue;
-    for (const auto &rel : rel_candidates) {
-      auto candidate = base / rel;
-      if (std::filesystem::exists(candidate)) {
-        return candidate;
-      }
-    }
-  }
   return {};
 }
 

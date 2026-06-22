@@ -222,6 +222,6 @@ ros2 launch realsense2_camera rs_launch.py \
 
 
   gazeboに召喚
-  ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
-  robot_name:=ToPoDualArm \
-  gui:=true
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+robot_name:=ToPoDualArm \
+gui:=true

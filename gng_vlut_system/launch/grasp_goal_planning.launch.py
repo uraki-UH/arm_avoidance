@@ -51,7 +51,10 @@ def launch_setup(context, *args, **kwargs):
                     return found
             except Exception:
                 pass
-        return "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
+        raise FileNotFoundError(
+            "No robot description path was provided. "
+            "Pass urdf_path explicitly or add urdf_path to the params file."
+        )
 
     resolved_urdf_path = resolve_urdf_path(params_file, explicit_urdf_path)
     viewer_joint_state_topic = f"/{robot_name}/viewer_joint_states"
@@ -72,7 +75,7 @@ def launch_setup(context, *args, **kwargs):
         package="tf2_ros",
         executable="static_transform_publisher",
         name="grasp_goal_planning_world_tf",
-        arguments=["0", "0", "0", "0", "0", "0", "world", "ToPoDualArm/base_link"],
+        arguments=["0", "0", "0", "0", "0", "0", "world", f"{robot_name}/base_link"],
         condition=IfCondition(LaunchConfiguration("publish_world_tf")),
     )
 

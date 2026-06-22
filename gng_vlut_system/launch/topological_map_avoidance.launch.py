@@ -87,7 +87,10 @@ def launch_setup(context, *args, **kwargs):
                     return found
             except Exception:
                 pass
-        return "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"
+        raise FileNotFoundError(
+            "No robot description path was provided. "
+            "Pass urdf_path explicitly or add urdf_path to the params file."
+        )
 
     urdf_path = resolve_urdf_path(params_file, urdf_path)
 
@@ -167,7 +170,7 @@ def launch_setup(context, *args, **kwargs):
                 namespace=robot_name,
                 output="screen",
                 parameters=[{
-                    "urdf_path": urdf_path or "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro",
+                    "urdf_path": urdf_path,
                     "root_link": "base_link",
                     "leaf_link": "right_end_effector_link",
                     "publish_hz": safe_float(right_arm_publish_hz, 20.0),
@@ -187,8 +190,7 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("params_file",
                               default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
-        DeclareLaunchArgument("urdf_path",
-                              default_value="package://topoarm_description/urdf/topo_dual_arm.urdf.xacro"),
+        DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("gng_model_path",
                               default_value=""),
         DeclareLaunchArgument("topological_map_topic",

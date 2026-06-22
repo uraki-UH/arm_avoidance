@@ -23,36 +23,26 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
-def resolve_robot_description(robot_name: str) -> tuple[str, str, str]:
-    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-    candidates = [
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
-        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
-    ]
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate, robot_desc_pkg, os.path.join(robot_desc_pkg, "meshes")
-
-    raise FileNotFoundError(
-        f"No URDF/Xacro found for robot_name='{robot_name}'. "
-        f"Checked: {', '.join(candidates)}"
-    )
-
-
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
     joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
-
-    robot_desc_default, resource_root, mesh_root = resolve_robot_description(robot_name)
+    resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip()
+    mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip()
 
     robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context)
-    robot_urdf = resolve_package_uri(robot_urdf_raw) if robot_urdf_raw else robot_desc_default
+    if not robot_urdf_raw:
+        raise FileNotFoundError(
+            "No robot description path was provided. "
+            "Set urdf_path in the params file or pass urdf_path explicitly."
+        )
+
+    robot_urdf = resolve_package_uri(robot_urdf_raw)
     if not os.path.exists(robot_urdf):
         raise FileNotFoundError(
             f"Robot description file does not exist: {robot_urdf}. "
-            "Pass urdf_path explicitly or install the matching description package."
+            "Pass a valid urdf_path or install the matching package."
         )
 
     xacro_cmd = ["xacro ", robot_urdf]
@@ -91,8 +81,8 @@ def launch_setup(context, *args, **kwargs):
             namespace=robot_name,
             parameters=[{
                 "urdf_path": robot_urdf,
-                "resource_root_dir": resource_root,
-                "mesh_root_dir": mesh_root,
+                "resource_root_dir": resource_root_dir,
+                "mesh_root_dir": mesh_root_dir,
             }]
         )
     ])
@@ -103,6 +93,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),
+        DeclareLaunchArgument("resource_root_dir", default_value=""),
+        DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("joint_state_topic", default_value=""),
         OpaqueFunction(function=launch_setup)

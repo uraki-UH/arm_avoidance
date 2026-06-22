@@ -12,6 +12,9 @@ def generate_launch_description():
     return LaunchDescription([
         # --- Arguments ---
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("urdf_path", default_value=""),
+        DeclareLaunchArgument("resource_root_dir", default_value=""),
+        DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("experiment_id", default_value=""),
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
@@ -30,13 +33,21 @@ def generate_launch_description():
         # 2. Spawn Robot Model (URDF + Mesh Streaming)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
-            launch_arguments={"robot_name": LaunchConfiguration("robot_name")}.items()
+            launch_arguments={
+                "robot_name": LaunchConfiguration("robot_name"),
+                "urdf_path": LaunchConfiguration("urdf_path"),
+                "resource_root_dir": LaunchConfiguration("resource_root_dir"),
+                "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
+            }.items()
         ),
 
         # 3. Spawn Robot Entity into Gazebo
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_gazebo_spawn.launch.py")),
-            launch_arguments={"robot_name": LaunchConfiguration("robot_name")}.items()
+            launch_arguments={
+                "robot_name": LaunchConfiguration("robot_name"),
+                "urdf_path": LaunchConfiguration("urdf_path"),
+            }.items()
         ),
 
         # 4. Start GNG/VLUT Monitor

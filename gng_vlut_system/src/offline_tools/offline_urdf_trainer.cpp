@@ -1387,8 +1387,8 @@ public:
       robot_urdf_path_ = legacy_urdf_path;
     }
     if (robot_urdf_path_.empty()) {
-      robot_urdf_path_ =
-          "package://topoarm_description/urdf/topo_dual_arm.urdf.xacro";
+      throw std::runtime_error(
+          "robot_urdf_path or urdf_path must be provided for offline URDF training");
     }
     resource_root_dir_ = this->declare_parameter<std::string>("resource_root_dir", "");
     mesh_root_dir_ = this->declare_parameter<std::string>("mesh_root_dir", "");
