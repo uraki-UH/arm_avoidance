@@ -1,6 +1,6 @@
 import os
 import yaml
-from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -50,18 +50,19 @@ def launch_setup(context, *args, **kwargs):
     vlut_path = os.path.join(data_dir, experiment_id, vlut_filename)
     enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
 
-    try:
-        robot_desc_pkg = get_package_share_directory("topoarm_description")
-        candidate = os.path.join(robot_desc_pkg, "urdf", "topo_dual_arm.urdf.xacro")
-        if not os.path.exists(candidate):
-            candidate = os.path.join(robot_desc_pkg, "urdf", "topoarm.urdf.xacro")
-        robot_desc_default = candidate if os.path.exists(candidate) else ""
-        resource_root = robot_desc_pkg
-        mesh_root = os.path.join(robot_desc_pkg, "meshes")
-    except PackageNotFoundError:
-        robot_desc_default = os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm.urdf.xacro")
-        resource_root = os.path.join(pkg_share, "urdf")
-        mesh_root = os.path.join(resource_root, "meshes", "topoarm")
+    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
+    candidate = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro")
+    if not os.path.exists(candidate):
+        candidate = os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro")
+    if not os.path.exists(candidate):
+        raise FileNotFoundError(
+            f"No URDF/Xacro found for robot_name='{robot_name}'. "
+            f"Checked: {os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}.urdf.xacro')}, "
+            f"{os.path.join(robot_desc_pkg, 'urdf', f'{robot_name}_pro_normal.urdf.xacro')}"
+        )
+    robot_desc_default = candidate
+    resource_root = robot_desc_pkg
+    mesh_root = os.path.join(robot_desc_pkg, "meshes")
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     # 明示的に指定された項目のみを上書き対象とする

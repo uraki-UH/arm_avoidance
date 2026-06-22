@@ -25,35 +25,26 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
-def resolve_robot_description_path(pkg_share: str, robot_name: str, raw_path: str) -> str:
+def resolve_robot_description_path(robot_name: str, raw_path: str) -> str:
     if raw_path:
         resolved = resolve_package_uri(raw_path)
-        return resolved if os.path.exists(resolved) else raw_path
+        if os.path.exists(resolved):
+            return resolved
+        raise FileNotFoundError(f"Robot description file does not exist: {resolved}")
 
-    candidates = []
-    try:
-        topoarm_pkg = get_package_share_directory("topoarm_description")
-        candidates.extend([
-            os.path.join(topoarm_pkg, "urdf", "topo_dual_arm.urdf.xacro"),
-            os.path.join(topoarm_pkg, "urdf", "topoarm.urdf.xacro"),
-        ])
-    except Exception:
-        pass
-
-    try:
-        robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
-        candidates.extend([
-            os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
-            os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
-        ])
-    except Exception:
-        pass
-
-    candidates.append(os.path.join(pkg_share, "urdf", "topoarm_description", "urdf", "topoarm_dual.urdf.xacro"))
+    robot_desc_pkg = get_package_share_directory(f"{robot_name}_description")
+    candidates = [
+        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}.urdf.xacro"),
+        os.path.join(robot_desc_pkg, "urdf", f"{robot_name}_pro_normal.urdf.xacro"),
+    ]
     for candidate in candidates:
-        if candidate and os.path.exists(candidate):
+        if os.path.exists(candidate):
             return candidate
-    return candidates[-1]
+
+    raise FileNotFoundError(
+        f"No URDF/Xacro found for robot_name='{robot_name}'. "
+        f"Checked: {', '.join(candidates)}"
+    )
 
 
 def launch_setup(context, *args, **kwargs):
@@ -111,7 +102,7 @@ def launch_setup(context, *args, **kwargs):
     urdf_path = LaunchConfiguration("urdf_path").perform(context)
     if not urdf_path and yaml_urdf_path:
         urdf_path = yaml_urdf_path
-    robot_urdf = resolve_robot_description_path(pkg_share, robot_name, urdf_path)
+    robot_urdf = resolve_robot_description_path(robot_name, urdf_path)
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     node_params = {}
