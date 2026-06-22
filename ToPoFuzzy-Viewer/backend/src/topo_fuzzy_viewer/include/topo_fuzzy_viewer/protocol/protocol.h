@@ -3,6 +3,8 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 
 namespace pcd_protocol {
 
@@ -14,6 +16,7 @@ constexpr uint8_t MASK_NORMALS = 0x08;
 
 constexpr uint32_t PROTOCOL_VERSION = 1;
 constexpr uint32_t MAGIC = 0x50434458; // "PCDX"
+constexpr size_t MAX_SERIALIZED_PAYLOAD_BYTES = 64ULL * 1024ULL * 1024ULL;
 
 #pragma pack(push, 1)
 struct ProtocolHeader {
@@ -46,12 +49,33 @@ public:
     }
     
     std::vector<uint8_t> serialize() const {
-        uint32_t payloadSize = positions_.size() * sizeof(float);
+        const size_t expectedPointCount = static_cast<size_t>(pointCount_);
+        const size_t expectedPositionCount = expectedPointCount * 3;
+        if (positions_.size() != expectedPositionCount) {
+            throw std::invalid_argument("PointCloudMessage positions size does not match pointCount");
+        }
+        if ((dataMask_ & MASK_RGB) && colors_.size() != expectedPositionCount) {
+            throw std::invalid_argument("PointCloudMessage colors size does not match pointCount");
+        }
+        if ((dataMask_ & MASK_INTENSITY) && intensities_.size() != expectedPointCount) {
+            throw std::invalid_argument("PointCloudMessage intensities size does not match pointCount");
+        }
+
+        size_t payloadSize = positions_.size() * sizeof(float);
         if (dataMask_ & MASK_RGB) {
             payloadSize += colors_.size() * sizeof(uint8_t);
         }
         if (dataMask_ & MASK_INTENSITY) {
             payloadSize += intensities_.size() * sizeof(float);
+        }
+        if (dataMask_ & MASK_NORMALS) {
+            throw std::invalid_argument("PointCloudMessage normals are not supported by this serializer");
+        }
+        if (payloadSize > MAX_SERIALIZED_PAYLOAD_BYTES) {
+            throw std::length_error("PointCloudMessage payload exceeds safe serialization limit");
+        }
+        if (payloadSize > std::numeric_limits<uint32_t>::max()) {
+            throw std::length_error("PointCloudMessage payload exceeds header capacity");
         }
         
         std::vector<uint8_t> buffer(sizeof(ProtocolHeader) + payloadSize);
@@ -63,7 +87,7 @@ public:
         header.pointCount = pointCount_;
         header.dataMask = dataMask_;
         header.reserved[0] = header.reserved[1] = header.reserved[2] = 0;
-        header.payloadSize = payloadSize;
+        header.payloadSize = static_cast<uint32_t>(payloadSize);
         
         std::memcpy(buffer.data(), &header, sizeof(ProtocolHeader));
         

@@ -5,6 +5,7 @@ export const MASK_NORMALS = 0x08;
 
 export const PROTOCOL_VERSION = 1;
 export const MAGIC = 0x50434458; // "PCDX"
+const MAX_SERIALIZED_PAYLOAD_BYTES = 64 * 1024 * 1024;
 
 export interface ProtocolHeader {
     magic: number;
@@ -45,12 +46,45 @@ export function deserializePointCloud(buffer: ArrayBuffer): DeserializedPointClo
         throw new Error(`Unsupported protocol version: ${header.version}`);
     }
 
+    const supportedMask = MASK_XYZ | MASK_RGB | MASK_INTENSITY | MASK_NORMALS;
+    if ((header.dataMask & ~supportedMask) !== 0) {
+        throw new Error(`Unsupported data mask: 0x${header.dataMask.toString(16)}`);
+    }
+
+    const expectedPayloadSize =
+        header.pointCount * 3 * 4 +
+        ((header.dataMask & MASK_RGB) ? header.pointCount * 3 : 0) +
+        ((header.dataMask & MASK_INTENSITY) ? header.pointCount * 4 : 0) +
+        ((header.dataMask & MASK_NORMALS) ? header.pointCount * 3 * 4 : 0);
+
+    if (expectedPayloadSize !== header.payloadSize) {
+        throw new Error(
+            `Invalid payload size: expected ${expectedPayloadSize}, got ${header.payloadSize}`
+        );
+    }
+
+    if (header.payloadSize > MAX_SERIALIZED_PAYLOAD_BYTES) {
+        throw new Error(`Point cloud payload exceeds safe limit: ${header.payloadSize} bytes`);
+    }
+
+    if (buffer.byteLength < 20 + header.payloadSize) {
+        throw new Error(
+            `Truncated point cloud payload: expected ${20 + header.payloadSize} bytes, got ${buffer.byteLength}`
+        );
+    }
+
     offset = 20; // Header size
 
     // Read positions (always present)
     const positionsByteLength = header.pointCount * 3 * 4; // 3 floats per point
     const positions = new Float32Array(buffer, offset, header.pointCount * 3);
     offset += positionsByteLength;
+
+    for (let i = 0; i < positions.length; i++) {
+        if (!Number.isFinite(positions[i])) {
+            throw new Error(`Invalid point coordinates: non-finite value at index ${i}`);
+        }
+    }
 
     const result: DeserializedPointCloud = {
         pointCount: header.pointCount,

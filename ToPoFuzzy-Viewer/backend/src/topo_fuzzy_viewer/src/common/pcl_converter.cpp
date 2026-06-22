@@ -4,6 +4,14 @@
 
 namespace utils {
 
+namespace {
+
+inline bool isFinitePoint(float x, float y, float z) {
+    return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+}
+
+} // namespace
+
 // =============================================================================
 // ROS2 PointCloud2 Conversion
 // =============================================================================
@@ -33,7 +41,7 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::fromROSMsg(*msg, *cloud);
         for (const auto& point : cloud->points) {
-            if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+            if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
@@ -46,7 +54,7 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         pcl::PointCloud<pcl::PointXYZI>::Ptr icloud(new pcl::PointCloud<pcl::PointXYZI>);
         pcl::fromROSMsg(*msg, *icloud);
         for (const auto& point : icloud->points) {
-            if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+            if (isFinitePoint(point.x, point.y, point.z)) {
                 result.intensities.push_back(point.intensity);
             }
         }
@@ -55,7 +63,7 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
         pcl::fromROSMsg(*msg, *cloud);
         for (const auto& point : cloud->points) {
-            if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+            if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
@@ -67,7 +75,7 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::fromROSMsg(*msg, *cloud);
         for (const auto& point : cloud->points) {
-            if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+            if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
@@ -81,7 +89,7 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*msg, *cloud);
         for (const auto& point : cloud->points) {
-            if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+            if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
@@ -156,7 +164,7 @@ PointCloudData convertFromPclCloud(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr&
     result.colors.reserve(cloud->size() * 3);
     
     for (const auto& point : cloud->points) {
-        if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+        if (isFinitePoint(point.x, point.y, point.z)) {
             result.positions.push_back(point.x);
             result.positions.push_back(point.y);
             result.positions.push_back(point.z);
@@ -179,7 +187,7 @@ PointCloudData convertFromPclCloud(const pcl::PointCloud<pcl::PointXYZI>::Ptr& c
     result.intensities.reserve(cloud->size());
     
     for (const auto& point : cloud->points) {
-        if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+        if (isFinitePoint(point.x, point.y, point.z)) {
             result.positions.push_back(point.x);
             result.positions.push_back(point.y);
             result.positions.push_back(point.z);
@@ -199,7 +207,7 @@ PointCloudData convertFromPclCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cl
     result.positions.reserve(cloud->size() * 3);
     
     for (const auto& point : cloud->points) {
-        if (!std::isnan(point.x) && !std::isnan(point.y) && !std::isnan(point.z)) {
+        if (isFinitePoint(point.x, point.y, point.z)) {
             result.positions.push_back(point.x);
             result.positions.push_back(point.y);
             result.positions.push_back(point.z);

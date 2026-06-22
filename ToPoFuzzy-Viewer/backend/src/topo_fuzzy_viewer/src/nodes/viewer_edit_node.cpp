@@ -108,6 +108,10 @@ bool pointInRegion(const float x, const float y, const float z, const EditRegion
            z >= region.min[2] && z <= region.max[2];
 }
 
+bool isFinitePoint(const float x, const float y, const float z) {
+    return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+}
+
 } // namespace
 
 class ViewerEditNode : public rclcpp::Node {
@@ -607,6 +611,10 @@ private:
                 z = static_cast<float>(transformed.z());
             }
 
+            if (!isFinitePoint(x, y, z)) {
+                continue;
+            }
+
             bool inDeleteRegion = false;
             for (const auto& region : session.regions) {
                 if (pointInRegion(x, y, z, region)) {
@@ -622,6 +630,10 @@ private:
             const float ty = r10 * x + r11 * y + r12 * z + userTransform.position[1];
             const float tz = r20 * x + r21 * y + r22 * z + userTransform.position[2];
 
+            if (!isFinitePoint(tx, ty, tz)) {
+                continue;
+            }
+
             outPositions.push_back(tx);
             outPositions.push_back(ty);
             outPositions.push_back(tz);
@@ -636,6 +648,11 @@ private:
                 const int progress = 20 + static_cast<int>((static_cast<double>(i) / std::max<uint32_t>(1, pointCount)) * 70.0);
                 publishJobProgress(jobId, session.sessionId, progress, "processing");
             }
+        }
+
+        if (outPositions.empty()) {
+            publishJobFailed(jobId, session.sessionId, "NO_VALID_POINTS", "All points were filtered out or transformed into invalid values");
+            return;
         }
 
         publishJobProgress(jobId, session.sessionId, 92, "publishing");
