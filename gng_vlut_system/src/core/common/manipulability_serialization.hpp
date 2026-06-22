@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/point32.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
 #include <nlohmann/json.hpp>
@@ -27,6 +29,38 @@ inline geometry_msgs::msg::Vector3 toVector3(const Eigen::Vector3d &v) {
   out.x = v.x();
   out.y = v.y();
   out.z = v.z();
+  return out;
+}
+
+inline geometry_msgs::msg::Pose toPose(const Eigen::Vector3f &position,
+                                       const Eigen::Quaternionf &orientation) {
+  geometry_msgs::msg::Pose pose;
+  pose.position.x = static_cast<double>(position.x());
+  pose.position.y = static_cast<double>(position.y());
+  pose.position.z = static_cast<double>(position.z());
+  pose.orientation.x = static_cast<double>(orientation.x());
+  pose.orientation.y = static_cast<double>(orientation.y());
+  pose.orientation.z = static_cast<double>(orientation.z());
+  pose.orientation.w = static_cast<double>(orientation.w());
+  return pose;
+}
+
+inline std::vector<float> toFloat32Vector(const Eigen::VectorXf &values) {
+  std::vector<float> out;
+  out.reserve(static_cast<std::size_t>(values.size()));
+  for (int i = 0; i < values.size(); ++i) {
+    out.push_back(values[i]);
+  }
+  return out;
+}
+
+inline std::vector<geometry_msgs::msg::Point32> toPoint32Vector(
+    const std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f>> &values) {
+  std::vector<geometry_msgs::msg::Point32> out;
+  out.reserve(values.size());
+  for (const auto &v : values) {
+    out.push_back(toPoint32(v));
+  }
   return out;
 }
 
@@ -66,6 +100,22 @@ inline void fillManipulabilityFields(
   node_msg.manip_center = toPoint32(ellipsoid.center);
   node_msg.manip_scale = toVector3(ellipsoid.singular_values);
   node_msg.manip_orientation = toQuaternion(ellipsoid.principal_directions);
+}
+
+template <typename AngleVector, typename JointPositionsVector>
+inline void fillNodeKinematicsFields(
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
+    const AngleVector &weight_angle,
+    const JointPositionsVector &joint_positions,
+    const Eigen::Vector3f &eef_position,
+    const Eigen::Quaternionf &eef_orientation) {
+  node_msg.weight_angle.clear();
+  node_msg.weight_angle.reserve(static_cast<std::size_t>(weight_angle.size()));
+  for (int i = 0; i < weight_angle.size(); ++i) {
+    node_msg.weight_angle.push_back(static_cast<float>(weight_angle[i]));
+  }
+  node_msg.ee_pose = toPose(eef_position, eef_orientation);
+  node_msg.joint_positions = toPoint32Vector(joint_positions);
 }
 
 inline nlohmann::json manipulabilityToJson(

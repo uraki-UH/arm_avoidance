@@ -139,8 +139,7 @@ static inline std::optional<int> findSafeNodeBfs(const GNGPtr &gng,
 
 template <typename GNGPtr>
 static inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
-    rclcpp::Node &node, const GNGPtr &gng, int selected_id,
-    std::vector<ais_gng_feature_msgs::msg::TopologicalNodeFeature> *node_features = nullptr) {
+    rclcpp::Node &node, const GNGPtr &gng, int selected_id) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
   msg.header.frame_id = node.get_parameter("root_link").as_string();
@@ -168,14 +167,16 @@ static inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     out.normal.z = n.status.ee_direction.z();
     out.rho = 0.0f;
     out.label = n.status.is_colliding ? 2 : (n.status.is_danger ? 3 : 1);
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
+    feature.node_id = static_cast<uint16_t>(n.id);
+    feature.is_goal = (n.id == selected_id);
+    robot_sim::common::fillManipulabilityFields(feature, n.status.manip_info, feature.is_goal);
+    robot_sim::common::fillNodeKinematicsFields(
+        feature, n.weight_angle, n.status.joint_positions, n.weight_coord,
+        n.status.ee_orientation);
+    msg.node_features.push_back(std::move(feature));
     if (n.id == selected_id) {
       out.label = 1;
-      if (node_features) {
-        ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
-        feature.node_id = static_cast<uint16_t>(n.id);
-        feature.is_goal = true;
-        node_features->push_back(std::move(feature));
-      }
     }
     id_to_index[n.id] = static_cast<uint16_t>(msg.nodes.size());
     msg.nodes.push_back(std::move(out));

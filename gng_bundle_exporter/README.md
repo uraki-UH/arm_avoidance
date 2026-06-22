@@ -29,6 +29,10 @@ topics:
     kind: topological_map
     role: graph
     required: true
+  - alias: candidate_graph
+    topic: /ToPoDualArm/candidate_topological_map
+    kind: topological_map
+    role: candidate_graph
   - alias: pointcloud
     topic: /topo_points
     kind: pointcloud2

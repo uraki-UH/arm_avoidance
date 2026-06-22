@@ -158,8 +158,17 @@ def _serialize_topological_node_core(node: Any) -> Dict[str, Any]:
 
 
 def _serialize_topological_node_features(node: Any) -> Dict[str, Any]:
+    ee_pose = getattr(node, "ee_pose", None)
+    joint_positions = []
+    for p in getattr(node, "joint_positions", []) or []:
+        joint_positions.append({
+            "x": float(getattr(p, "x", 0.0)),
+            "y": float(getattr(p, "y", 0.0)),
+            "z": float(getattr(p, "z", 0.0)),
+        })
+    node_id = int(getattr(node, "node_id", getattr(node, "id", 0)))
     return {
-        "node_id": int(node.id),
+        "node_id": node_id,
         "is_goal": bool(getattr(node, "is_goal", False)),
         "manip_valid": bool(getattr(node, "manip_valid", False)),
         "manip_value": float(getattr(node, "manip_value", 0.0)),
@@ -180,16 +189,28 @@ def _serialize_topological_node_features(node: Any) -> Dict[str, Any]:
             "z": float(getattr(getattr(node, "manip_orientation", None), "z", 0.0)),
             "w": float(getattr(getattr(node, "manip_orientation", None), "w", 1.0)),
         },
+        "weight_angle": [float(v) for v in getattr(node, "weight_angle", [])],
+        "ee_pose": {
+            "position": {
+                "x": float(getattr(getattr(ee_pose, "position", None), "x", 0.0)),
+                "y": float(getattr(getattr(ee_pose, "position", None), "y", 0.0)),
+                "z": float(getattr(getattr(ee_pose, "position", None), "z", 0.0)),
+            },
+            "orientation": {
+                "x": float(getattr(getattr(ee_pose, "orientation", None), "x", 0.0)),
+                "y": float(getattr(getattr(ee_pose, "orientation", None), "y", 0.0)),
+                "z": float(getattr(getattr(ee_pose, "orientation", None), "z", 0.0)),
+                "w": float(getattr(getattr(ee_pose, "orientation", None), "w", 1.0)),
+            },
+        },
+        "joint_positions": joint_positions,
     }
 
 
 def _serialize_topological_map(msg: Any, compact: bool = False) -> Dict[str, Any]:
     nodes = []
-    node_features = [] if not compact else None
     for node in msg.nodes:
         nodes.append(_serialize_topological_node_core(node))
-        if node_features is not None:
-            node_features.append(_serialize_topological_node_features(node))
 
     edges: List[Dict[str, int]] = []
     edge_vals = list(msg.edges)
@@ -238,6 +259,13 @@ def _serialize_topological_map(msg: Any, compact: bool = False) -> Dict[str, Any
                     "frame": int(getattr(cluster, "frame", getattr(cluster, "age", 0))),
                 }
             )
+
+    node_features = None
+    if not compact:
+        if hasattr(msg, "node_features") and getattr(msg, "node_features", None):
+            node_features = [_serialize_topological_node_features(node) for node in msg.node_features]
+        else:
+            node_features = [_serialize_topological_node_features(node) for node in msg.nodes]
 
     return {
         "topic_type": "ais_gng_msgs/msg/TopologicalMap",
@@ -344,6 +372,7 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
 
     topics_output: Dict[str, Any] = {}
     graph_bundle: Optional[Dict[str, Any]] = None
+    candidate_graph_bundle: Optional[Dict[str, Any]] = None
     pointcloud_frames: Optional[List[List[Dict[str, Any]]]] = None
     metrics_bundle: Dict[str, Any] = {}
 
@@ -363,6 +392,13 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
                 graph_bundle = dict(graph_bundle)
                 graph_bundle["topic"] = capture.spec.topic
                 graph_bundle["alias"] = alias
+        elif capture.spec.role == "candidate_graph" and capture.messages:
+            latest = capture.messages[-1]["data"]
+            if isinstance(latest, dict) and "nodes" in latest and "edges" in latest:
+                candidate_graph_bundle = latest
+                candidate_graph_bundle = dict(candidate_graph_bundle)
+                candidate_graph_bundle["topic"] = capture.spec.topic
+                candidate_graph_bundle["alias"] = alias
         elif capture.spec.role == "pointcloud" and capture.messages:
             frames = []
             for item in capture.messages:
@@ -392,6 +428,12 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
             out["clusters"] = graph_bundle.get("clusters", [])
         if graph_bundle.get("cluster_features") is not None:
             out["cluster_features"] = graph_bundle.get("cluster_features", [])
+    if candidate_graph_bundle:
+        out["candidate_graph"] = candidate_graph_bundle
+        out["candidate_nodes"] = candidate_graph_bundle.get("nodes", [])
+        if candidate_graph_bundle.get("node_features") is not None:
+            out["candidate_node_features"] = candidate_graph_bundle.get("node_features", [])
+        out["candidate_edges"] = candidate_graph_bundle.get("edges", [])
     if pointcloud_frames is not None:
         out["frames"] = pointcloud_frames
     if metrics_bundle:

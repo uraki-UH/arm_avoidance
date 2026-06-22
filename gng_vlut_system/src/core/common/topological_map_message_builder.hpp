@@ -59,8 +59,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
     const std::shared_ptr<tf2_ros::Buffer> &tf_buffer,
     const std::string &frame_id, const std::string &source_frame_id,
-    int edge_mode, float eps = kDefaultEps,
-    std::vector<ais_gng_feature_msgs::msg::TopologicalNodeFeature> *node_features = nullptr) {
+    int edge_mode, float eps = kDefaultEps) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
   msg.header.frame_id = frame_id;
@@ -119,12 +118,13 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     }
     out.normal = toPoint32(transformed_normal);
     out.label = viewerLabelFromStatus(node_data.status);
-    if (node_features) {
-      ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
-      feature.node_id = static_cast<uint16_t>(node_data.id);
-      robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
-      node_features->push_back(std::move(feature));
-    }
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
+    feature.node_id = static_cast<uint16_t>(node_data.id);
+    robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
+    robot_sim::common::fillNodeKinematicsFields(
+        feature, node_data.weight_angle, node_data.status.joint_positions,
+        node_data.weight_coord, node_data.status.ee_orientation);
+    msg.node_features.push_back(std::move(feature));
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);
@@ -176,8 +176,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
     const std::shared_ptr<tf2_ros::Buffer> &tf_buffer, int layer,
     const std::string &frame_id, const std::string &source_frame_id,
-    float eps = kDefaultEps,
-    std::vector<ais_gng_feature_msgs::msg::TopologicalNodeFeature> *node_features = nullptr) {
+    float eps = kDefaultEps) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
   msg.header.frame_id = frame_id;
@@ -230,12 +229,13 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     }
     out.normal = toPoint32(transformed_normal);
     out.label = viewerLabelFromStatus(node_data.status);
-    if (node_features) {
-      ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
-      feature.node_id = static_cast<uint16_t>(node_data.id);
-      robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
-      node_features->push_back(std::move(feature));
-    }
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
+    feature.node_id = static_cast<uint16_t>(node_data.id);
+    robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
+    robot_sim::common::fillNodeKinematicsFields(
+        feature, node_data.weight_angle, node_data.status.joint_positions,
+        node_data.weight_coords[layer], node_data.status.ee_orientation);
+    msg.node_features.push_back(std::move(feature));
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);

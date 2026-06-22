@@ -334,8 +334,7 @@ static inline bool buildTrialGoalBridge(
 static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
     const std::vector<std::vector<int>> &paths,
-    const std::string &frame_id,
-    std::vector<ais_gng_feature_msgs::msg::TopologicalNodeFeature> *node_features = nullptr) {
+    const std::string &frame_id) {
   ais_gng_msgs::msg::TopologicalMap msg;
   msg.header.stamp = node.now();
   msg.header.frame_id = frame_id.empty() ? "world" : frame_id;
@@ -372,13 +371,14 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       out.normal.z = node_ref.status.ee_direction.z();
       out.label = pathLabelFromStatus(node_ref.status);
       out.frame = 0;
-      if (node_features) {
-        ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
-        feature.node_id = static_cast<uint16_t>(node_ref.id);
-        feature.is_goal = (!path.empty() && node_ref.id == path.back());
-        robot_sim::common::fillManipulabilityFields(feature, node_ref.status.manip_info);
-        node_features->push_back(std::move(feature));
-      }
+      ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
+      feature.node_id = static_cast<uint16_t>(node_ref.id);
+      feature.is_goal = (!path.empty() && node_ref.id == path.back());
+      robot_sim::common::fillManipulabilityFields(feature, node_ref.status.manip_info, feature.is_goal);
+      robot_sim::common::fillNodeKinematicsFields(
+          feature, node_ref.weight_angle, node_ref.status.joint_positions,
+          node_ref.weight_coord, node_ref.status.ee_orientation);
+      msg.node_features.push_back(std::move(feature));
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
       id_to_index.emplace(node_ref.id, published_index);
