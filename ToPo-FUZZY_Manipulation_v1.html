@@ -1044,7 +1044,7 @@ header .sub{
           <input id="gngWasmFile" type="file" class="hide" multiple accept=".js,.wasm,application/javascript,application/wasm,text/javascript">
           <div class="full">
             <button id="gngLoadWasmBtn" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" type="button" style="margin-left:8px">WASMでGNG実行</button>
+            <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
             <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNGロジック部分の差し替え. `gng_wasm_core.js` と `gng_wasm_core.wasm` を選択して差し替えできます。</div>
           </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
@@ -2711,7 +2711,7 @@ function runGngWasmAccelerated(){
   const wasmStatus=$('gngWasmStatus');
   if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, input=${wasmInputMode}, points=${pts.length}, mode=${mode}, alg=${variant}`;
   if(pts.length<2)return false;
-  const maxNodes=Math.min(+$('gngMaxNodes').value||400,ex.gng_max_nodes());
+  const maxNodes=+$('gngMaxNodes').value||400;
   const iters=+$('gngIters').value||12000;
   const lambda=Math.max(1,+$('gngLambda').value||100);
   const maxAge=+$('gngMaxAge').value||80;
@@ -2722,15 +2722,20 @@ function runGngWasmAccelerated(){
   const pruneInterval=Math.max(10,+($('densityPruneInterval')?.value||250));
   try{
     if(wasmMode==='direct'){
+      const directMaxNodes=typeof ex.gng_max_nodes==='function'?Math.min(maxNodes,ex.gng_max_nodes()):maxNodes;
+      const maxPoints=typeof ex.gng_max_points==='function'?ex.gng_max_points():Infinity;
       if(gngIsDensityAlgorithm(variant)&&!ex.gng_run_cell_density)return false;
-      if(pts.length>ex.gng_max_points()){
-        console.warn('GNG C++/WASM point cap exceeded. Falling back to JavaScript GNG.',pts.length,ex.gng_max_points());
+      if(pts.length>maxPoints){
+        console.warn('GNG C++/WASM point cap exceeded. Falling back to JavaScript GNG.',pts.length,maxPoints);
         return false;
       }
       const f32=new Float32Array(ex.memory.buffer);
       const i32=new Int32Array(ex.memory.buffer);
-      const px=ex.gng_points_x()>>2, py=ex.gng_points_y()>>2, pz=ex.gng_points_z()>>2;
-      const pcl=ex.gng_points_cls?(ex.gng_points_cls()>>2):null;
+      const px=typeof ex.gng_points_x==='function'?(ex.gng_points_x()>>2):-1;
+      const py=typeof ex.gng_points_y==='function'?(ex.gng_points_y()>>2):-1;
+      const pz=typeof ex.gng_points_z==='function'?(ex.gng_points_z()>>2):-1;
+      const pcl=typeof ex.gng_points_cls==='function'?(ex.gng_points_cls()>>2):null;
+      if(px<0||py<0||pz<0) return false;
       for(let i=0;i<pts.length;i++){
         const p=pts[i];
         f32[px+i]=p.x; f32[py+i]=p.y; f32[pz+i]=p.z;
@@ -2738,8 +2743,8 @@ function runGngWasmAccelerated(){
       }
       const targets=densityTargetEdgeLengths();
       const ok=gngIsDensityAlgorithm(variant)
-        ? ex.gng_run_cell_density(pts.length,maxNodes,iters,lambda,maxAge,eb,en,seed,compRadius,pruneInterval,targets.floor,targets.wall,targets.unknown)
-        : ex.gng_run(pts.length,maxNodes,iters,lambda,maxAge,eb,en,seed);
+        ? ex.gng_run_cell_density(pts.length,directMaxNodes,iters,lambda,maxAge,eb,en,seed,compRadius,pruneInterval,targets.floor,targets.wall,targets.unknown)
+        : ex.gng_run(pts.length,directMaxNodes,iters,lambda,maxAge,eb,en,seed);
       if(ok!==1)return false;
       const nCount=ex.gng_node_count(), eCount=ex.gng_edge_count();
       const nx=ex.gng_nodes_x()>>2, ny=ex.gng_nodes_y()>>2, nz=ex.gng_nodes_z()>>2, ne=ex.gng_nodes_err()>>2;
@@ -5137,6 +5142,8 @@ function bindDataModeControls(){
       const status=$('gngWasmStatus');
       if(status) status.textContent=`Running GNG with WASM input source: ${state.gngWasmInputSource}`;
       runGng();
+      setGngPlaying(true);
+      if(status) status.textContent=`WASM GNG running: input=${state.gngWasmInputSource}, playback=on`;
       updateMetrics();
       updateHud();
       renderAll();
