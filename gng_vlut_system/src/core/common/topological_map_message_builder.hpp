@@ -124,7 +124,6 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     robot_sim::common::fillNodeKinematicsFields(
         feature, node_data.weight_angle, node_data.status.joint_positions,
         node_data.weight_coord, node_data.status.ee_orientation);
-    msg.node_features.push_back(std::move(feature));
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);
@@ -235,7 +234,6 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     robot_sim::common::fillNodeKinematicsFields(
         feature, node_data.weight_angle, node_data.status.joint_positions,
         node_data.weight_coords[layer], node_data.status.ee_orientation);
-    msg.node_features.push_back(std::move(feature));
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
     id_to_index.emplace(node_data.id, published_index);

@@ -16,7 +16,9 @@
 
 namespace robot_sim::common {
 
-inline geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3d &v) {
+template <typename Derived>
+inline geometry_msgs::msg::Point32 toPoint32(
+    const Eigen::MatrixBase<Derived> &v) {
   geometry_msgs::msg::Point32 p;
   p.x = static_cast<float>(v.x());
   p.y = static_cast<float>(v.y());
@@ -24,11 +26,13 @@ inline geometry_msgs::msg::Point32 toPoint32(const Eigen::Vector3d &v) {
   return p;
 }
 
-inline geometry_msgs::msg::Vector3 toVector3(const Eigen::Vector3d &v) {
+template <typename Derived>
+inline geometry_msgs::msg::Vector3 toVector3(
+    const Eigen::MatrixBase<Derived> &v) {
   geometry_msgs::msg::Vector3 out;
-  out.x = v.x();
-  out.y = v.y();
-  out.z = v.z();
+  out.x = static_cast<double>(v.x());
+  out.y = static_cast<double>(v.y());
+  out.z = static_cast<double>(v.z());
   return out;
 }
 
@@ -54,8 +58,9 @@ inline std::vector<float> toFloat32Vector(const Eigen::VectorXf &values) {
   return out;
 }
 
+template <typename JointPositionsVector>
 inline std::vector<geometry_msgs::msg::Point32> toPoint32Vector(
-    const std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f>> &values) {
+    const JointPositionsVector &values) {
   std::vector<geometry_msgs::msg::Point32> out;
   out.reserve(values.size());
   for (const auto &v : values) {

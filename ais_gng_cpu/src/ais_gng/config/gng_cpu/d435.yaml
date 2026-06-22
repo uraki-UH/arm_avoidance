@@ -7,6 +7,7 @@ ais_gng_node:
     node.eta_s2: 0.008
     node.edge_age_max: 100
     node.s1_reset_range: 0.01
+    node.grid: 0.2
     node.s1_age: [6, 6, 6, 3] #[default, safe, wall, unknown]
     node.clusted_s1_age: [20, 20, 6, 3] #[default, safe, wall, unknown]
     node.interval: [0.4, 0.2, 0.2, 0.025] #[default, safe, wall, unknown]

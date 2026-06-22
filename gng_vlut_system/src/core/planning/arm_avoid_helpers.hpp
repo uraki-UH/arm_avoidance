@@ -174,7 +174,6 @@ static inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     robot_sim::common::fillNodeKinematicsFields(
         feature, n.weight_angle, n.status.joint_positions, n.weight_coord,
         n.status.ee_orientation);
-    msg.node_features.push_back(std::move(feature));
     if (n.id == selected_id) {
       out.label = 1;
     }

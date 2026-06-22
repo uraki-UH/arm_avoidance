@@ -78,7 +78,6 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     robot_sim::common::fillNodeKinematicsFields(
         feature, node_data.weight_angle, node_data.status.joint_positions,
         node_data.weight_coord, node_data.status.ee_orientation);
-    msg.node_features.push_back(std::move(feature));
     id_to_index.emplace(node_data.id, static_cast<uint16_t>(msg.nodes.size()));
     msg.nodes.push_back(std::move(out));
   }
