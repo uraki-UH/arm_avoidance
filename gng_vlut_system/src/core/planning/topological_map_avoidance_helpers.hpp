@@ -11,7 +11,11 @@
 
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_feature_msgs/msg/topological_node_feature.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <gng_control_msgs/msg/grasp_candidate_metric.hpp>
+#include <gng_control_msgs/msg/grasp_candidate_metric_array.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 #include "core/common/manipulability_serialization.hpp"
 
@@ -20,6 +24,8 @@
 #include "planner/RRT/state_validity_checker.hpp"
 #include "planning/gng_dijkstra_planner.hpp"
 #include "planning/joint_linf_cost.hpp"
+#include "core/kinematics/kinematic_chain.hpp"
+#include "core/metrics/manipulability.hpp"
 #include "safety_engine/gng/GrowingNeuralGas.hpp"
 
 namespace robot_sim::planning::topological_map_avoidance {
@@ -36,6 +42,244 @@ static inline uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
     return 3;
   }
   return 1;
+}
+
+static inline float nanMetric() {
+  return std::numeric_limits<float>::quiet_NaN();
+}
+
+static inline sensor_msgs::msg::JointState buildJointStateFromQ(
+    const Eigen::VectorXf &q, const std::vector<std::string> &joint_names,
+    const rclcpp::Time &stamp) {
+  sensor_msgs::msg::JointState msg;
+  msg.header.stamp = stamp;
+  msg.name = joint_names;
+  msg.position.resize(joint_names.size(), 0.0);
+  msg.velocity.resize(joint_names.size(), 0.0);
+  msg.effort.resize(joint_names.size(), 0.0);
+  const std::size_t n = std::min<std::size_t>(
+      joint_names.size(), static_cast<std::size_t>(q.size()));
+  for (std::size_t i = 0; i < n; ++i) {
+    msg.position[i] = static_cast<double>(q[static_cast<int>(i)]);
+  }
+  return msg;
+}
+
+template <typename NodeType>
+static inline geometry_msgs::msg::Pose buildPoseFromNode(const NodeType &node) {
+  geometry_msgs::msg::Pose pose;
+  pose.position.x = static_cast<double>(node.weight_coord.x());
+  pose.position.y = static_cast<double>(node.weight_coord.y());
+  pose.position.z = static_cast<double>(node.weight_coord.z());
+  pose.orientation.x = static_cast<double>(node.status.ee_orientation.x());
+  pose.orientation.y = static_cast<double>(node.status.ee_orientation.y());
+  pose.orientation.z = static_cast<double>(node.status.ee_orientation.z());
+  pose.orientation.w = static_cast<double>(node.status.ee_orientation.w());
+  return pose;
+}
+
+static inline Manipulability::ManipulabilityEllipsoid calculateManipulabilityForQ(
+    const std::shared_ptr<::kinematics::KinematicChain> &chain,
+    const Eigen::VectorXf &q, bool rotational) {
+  Manipulability::ManipulabilityEllipsoid out;
+  if (!chain || q.size() == 0) {
+    return out;
+  }
+
+  std::vector<double> joint_values;
+  joint_values.reserve(static_cast<std::size_t>(q.size()));
+  for (int i = 0; i < q.size(); ++i) {
+    joint_values.push_back(static_cast<double>(q[i]));
+  }
+
+  try {
+    const Eigen::MatrixXd jacobian =
+        chain->calculateJacobianAt(chain->getNumJoints() + 1, joint_values);
+    if (jacobian.rows() < 3) {
+      return out;
+    }
+    const Eigen::MatrixXd jacobian_part =
+        rotational && jacobian.rows() >= 6 ? jacobian.bottomRows(3) : jacobian.topRows(3);
+    out = Manipulability::calculateManipulabilityEllipsoid(jacobian_part);
+  } catch (const std::exception &) {
+    return out;
+  }
+  return out;
+}
+
+static inline std::vector<float> buildPathManipulability(
+    const std::shared_ptr<GNGType> &gng,
+    const std::shared_ptr<::kinematics::KinematicChain> &chain,
+    const std::vector<int> &path, bool rotational) {
+  std::vector<float> values;
+  values.reserve(path.size());
+  if (!gng) {
+    return values;
+  }
+  for (const int node_id : path) {
+    if (node_id < 0 || node_id >= static_cast<int>(gng->getMaxNodeNum())) {
+      values.push_back(nanMetric());
+      continue;
+    }
+    const auto &node = gng->nodeAt(node_id);
+    if (node.id == -1 || node.weight_angle.size() == 0) {
+      values.push_back(nanMetric());
+      continue;
+    }
+    const auto manip = calculateManipulabilityForQ(chain, node.weight_angle, rotational);
+    values.push_back(manip.valid ? static_cast<float>(manip.manipulability)
+                                 : nanMetric());
+  }
+  return values;
+}
+
+static inline std::pair<float, float> estimatePathEnergyAndDuration(
+    const std::shared_ptr<GNGType> &gng, const Eigen::VectorXf &current_q,
+    const std::vector<int> &path, double max_joint_velocity) {
+  if (!gng || path.empty()) {
+    return {0.0f, 0.0f};
+  }
+
+  float energy = 0.0f;
+  float duration = 0.0f;
+  Eigen::VectorXf previous = current_q;
+  const double clamped_velocity = std::max(1e-6, max_joint_velocity);
+
+  for (const int node_id : path) {
+    if (node_id < 0 || node_id >= static_cast<int>(gng->getMaxNodeNum())) {
+      continue;
+    }
+    const auto &node = gng->nodeAt(node_id);
+    if (node.id == -1 || node.weight_angle.size() != previous.size()) {
+      continue;
+    }
+
+    const Eigen::VectorXf delta = node.weight_angle - previous;
+    energy += static_cast<float>(delta.squaredNorm());
+    duration += static_cast<float>(delta.cwiseAbs().maxCoeff() / clamped_velocity);
+    previous = node.weight_angle;
+  }
+
+  return {energy, duration};
+}
+
+static inline gng_control_msgs::msg::GraspCandidateMetricArray
+buildGraspCandidateMetricArray(
+    const rclcpp::Time &stamp, const std::string &frame_id,
+    const std::string &robot_name, const std::string &base_frame,
+    int selected_goal_node_id, const Eigen::VectorXf &current_q, int start_id,
+    const std::vector<int> &goal_candidates,
+    const std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
+    const std::shared_ptr<GNGType> &gng,
+    const std::shared_ptr<::kinematics::KinematicChain> &chain,
+    const std::vector<std::string> &controlled_joint_names,
+    double max_joint_velocity) {
+  gng_control_msgs::msg::GraspCandidateMetricArray out;
+  out.header.stamp = stamp;
+  out.header.frame_id = frame_id;
+  out.robot_name = robot_name;
+  out.base_frame = base_frame;
+  out.selected_goal_node_id = selected_goal_node_id;
+  out.candidates.reserve(goal_candidates.size());
+
+  if (!gng) {
+    return out;
+  }
+
+  for (std::size_t i = 0; i < goal_candidates.size(); ++i) {
+    const int goal_id = goal_candidates[i];
+    gng_control_msgs::msg::GraspCandidateMetric metric;
+    metric.candidate_id = static_cast<int32_t>(i);
+    metric.goal_node_id = goal_id;
+    metric.start_node_id = start_id;
+    metric.selected = goal_id == selected_goal_node_id;
+    metric.feasible = candidate_path_by_goal.find(goal_id) != candidate_path_by_goal.end();
+
+    metric.position_manipulability = nanMetric();
+    metric.rotation_manipulability = nanMetric();
+    metric.manipulability_condition_number = nanMetric();
+    metric.min_singular_value = nanMetric();
+    metric.joint_limit_margin_min = nanMetric();
+    metric.joint_limit_margin_mean = nanMetric();
+    metric.self_collision_margin = nanMetric();
+    metric.environment_collision_margin = nanMetric();
+    metric.gripper_width = nanMetric();
+    metric.grasp_region_score = nanMetric();
+    metric.estimated_energy = nanMetric();
+    metric.estimated_duration = nanMetric();
+
+    if (goal_id >= 0 && goal_id < static_cast<int>(gng->getMaxNodeNum())) {
+      const auto &node = gng->nodeAt(goal_id);
+      if (node.id != -1) {
+        metric.end_effector_pose = buildPoseFromNode(node);
+        metric.final_joint_state =
+            buildJointStateFromQ(node.weight_angle, controlled_joint_names, stamp);
+        metric.joint_limit_margin_min = node.status.joint_limit_score;
+        metric.joint_limit_margin_mean = node.status.joint_limit_score;
+
+        const auto position_manip =
+            node.status.manip_info.valid
+                ? node.status.manip_info
+                : calculateManipulabilityForQ(chain, node.weight_angle, false);
+        const auto rotation_manip =
+            calculateManipulabilityForQ(chain, node.weight_angle, true);
+
+        if (position_manip.valid) {
+          metric.position_manipulability =
+              static_cast<float>(position_manip.manipulability);
+          metric.manipulability_condition_number =
+              static_cast<float>(position_manip.condition_number);
+          metric.min_singular_value =
+              static_cast<float>(position_manip.min_singular_value);
+          metric.manipulability_singular_values = {
+              static_cast<float>(position_manip.singular_values.x()),
+              static_cast<float>(position_manip.singular_values.y()),
+              static_cast<float>(position_manip.singular_values.z())};
+        }
+        if (rotation_manip.valid) {
+          metric.rotation_manipulability =
+              static_cast<float>(rotation_manip.manipulability);
+        }
+
+        metric.metric_names = {
+            "joint_limit_score",
+            "collision_count",
+            "danger_count",
+            "is_colliding",
+            "is_danger",
+            "combined_score",
+            "dynamic_manipulability"};
+        metric.metric_values = {
+            node.status.joint_limit_score,
+            static_cast<float>(node.status.collision_count),
+            static_cast<float>(node.status.danger_count),
+            node.status.is_colliding ? 1.0f : 0.0f,
+            node.status.is_danger ? 1.0f : 0.0f,
+            node.status.combined_score,
+            node.status.dynamic_manipulability};
+      }
+    }
+
+    const auto path_it = candidate_path_by_goal.find(goal_id);
+    if (path_it != candidate_path_by_goal.end()) {
+      metric.path_node_ids.reserve(path_it->second.size());
+      for (const int node_id : path_it->second) {
+        metric.path_node_ids.push_back(static_cast<int32_t>(node_id));
+      }
+      metric.path_position_manipulability =
+          buildPathManipulability(gng, chain, path_it->second, false);
+      metric.path_rotation_manipulability =
+          buildPathManipulability(gng, chain, path_it->second, true);
+      const auto [energy, duration] =
+          estimatePathEnergyAndDuration(gng, current_q, path_it->second, max_joint_velocity);
+      metric.estimated_energy = energy;
+      metric.estimated_duration = duration;
+    }
+
+    out.candidates.push_back(std::move(metric));
+  }
+
+  return out;
 }
 
 static inline std::vector<Eigen::VectorXf>

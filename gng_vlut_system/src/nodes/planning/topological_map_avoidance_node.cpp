@@ -41,6 +41,7 @@
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
 #include "planning/gng_dijkstra_planner.hpp"
+#include "planning/robot_stream_payload.hpp"
 #include "planning/topological_map_avoidance_helpers.hpp"
 #include "planning/joint_linf_cost.hpp"
 #include "robot_model/kinematic_adapter.hpp"
@@ -151,179 +152,6 @@ static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
     out[static_cast<std::size_t>(i)] = static_cast<double>(q[i]);
   }
   return out;
-}
-
-static std::string detectLocalMeshPackageName(const std::string &source_path) {
-  std::filesystem::path current(source_path);
-  if (current.empty()) {
-    return "";
-  }
-
-  current = std::filesystem::absolute(current).parent_path();
-  while (!current.empty()) {
-    if (std::filesystem::exists(current / "meshes")) {
-      return current.filename().string();
-    }
-    const auto parent = current.parent_path();
-    if (parent == current) {
-      break;
-    }
-    current = parent;
-  }
-  return "";
-}
-
-static std::string rewriteRelativeMeshUris(
-    const std::string &urdf_text, const std::string &package_name) {
-  if (urdf_text.empty() || package_name.empty()) {
-    return urdf_text;
-  }
-
-  std::string rewritten = urdf_text;
-  const std::string prefix = "package://" + package_name + "/";
-
-  const std::string double_quote_key = "filename=\"meshes/";
-  std::size_t pos = 0;
-  while ((pos = rewritten.find(double_quote_key, pos)) != std::string::npos) {
-    rewritten.replace(pos, double_quote_key.size(), "filename=\"" + prefix);
-    pos += prefix.size();
-  }
-
-  const std::string single_quote_key = "filename='meshes/";
-  pos = 0;
-  while ((pos = rewritten.find(single_quote_key, pos)) != std::string::npos) {
-    rewritten.replace(pos, single_quote_key.size(), "filename='" + prefix);
-    pos += prefix.size();
-  }
-
-  return rewritten;
-}
-
-static bool loadRobotDescription(std::string &out_text,
-                                 const std::string &source_path) {
-  if (source_path.empty()) {
-    return false;
-  }
-
-  if (source_path.rfind(".xacro") != std::string::npos) {
-    std::array<char, 128> buffer{};
-    std::string result;
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(
-        popen(("xacro " + source_path).c_str(), "r"), pclose);
-    if (!pipe) {
-      return false;
-    }
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-      result += buffer.data();
-    }
-    out_text = result;
-  } else {
-    std::ifstream ifs(source_path);
-    if (!ifs) {
-      return false;
-    }
-    out_text = std::string((std::istreambuf_iterator<char>(ifs)),
-                           std::istreambuf_iterator<char>());
-  }
-  out_text = rewriteRelativeMeshUris(out_text, detectLocalMeshPackageName(source_path));
-  return !out_text.empty();
-}
-
-static nlohmann::json buildRobotPayloadJson(
-    const std::string &frame_id, const std::string &urdf_content,
-    const std::vector<std::string> &joint_names,
-    const std::vector<double> &joint_values,
-    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
-    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
-    double timestamp, double opacity,
-    const Eigen::Vector3d &manip_center,
-    const Manipulability::ManipulabilityEllipsoid *manip = nullptr,
-    bool is_goal = false) {
-  nlohmann::json robot;
-  robot["timestamp"] = timestamp;
-  robot["frameId"] = frame_id;
-  robot["urdf"] = urdf_content;
-  robot["jointNames"] = joint_names;
-  robot["jointValues"] = joint_values;
-  robot["opacity"] = opacity;
-
-  auto &pos_arr = robot["positions"] = nlohmann::json::array();
-  for (const auto &v : positions) {
-    pos_arr.push_back({v.x(), v.y(), v.z()});
-  }
-
-  auto &quat_arr = robot["orientations"] = nlohmann::json::array();
-  for (const auto &q : orientations) {
-    quat_arr.push_back({q.x(), q.y(), q.z(), q.w()});
-  }
-
-  if (!positions.empty()) {
-    robot["basePosition"] = {positions.front().x(), positions.front().y(), positions.front().z()};
-  }
-  if (!orientations.empty()) {
-    robot["baseOrientation"] = {orientations.front().x(), orientations.front().y(),
-                                orientations.front().z(), orientations.front().w()};
-  }
-
-  if (manip && manip->valid) {
-    Eigen::Quaterniond q(manip->principal_directions);
-    q.normalize();
-    robot["manipValid"] = true;
-    robot["isGoal"] = is_goal;
-    robot["manipValue"] = manip->manipulability;
-    robot["manipConditionNumber"] = manip->condition_number;
-    robot["manipCenter"] = {manip_center.x(), manip_center.y(), manip_center.z()};
-    robot["manipScale"] = {manip->singular_values.x(), manip->singular_values.y(), manip->singular_values.z()};
-    robot["manipOrientation"] = {q.x(), q.y(), q.z(), q.w()};
-  } else {
-    robot["manipValid"] = false;
-    robot["isGoal"] = is_goal;
-    robot["manipValue"] = 0.0;
-    robot["manipConditionNumber"] = 0.0;
-    robot["manipCenter"] = {0.0, 0.0, 0.0};
-    robot["manipScale"] = {0.0, 0.0, 0.0};
-    robot["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
-  }
-
-  return robot;
-}
-
-static std::string buildRobotStreamJson(
-    const std::string &type, const std::string &tag,
-    const std::string &frame_id, const std::string &urdf_content,
-    const std::vector<std::string> &joint_names,
-    const std::vector<double> &joint_values,
-    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
-    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
-    double timestamp, double opacity) {
-  nlohmann::json root;
-  root["type"] = type;
-  root["tag"] = tag;
-  root["robot"] = buildRobotPayloadJson(
-      frame_id, urdf_content, joint_names, joint_values, positions, orientations,
-      timestamp, opacity,
-      positions.empty() ? Eigen::Vector3d::Zero() : positions.back());
-  return root.dump();
-}
-
-static std::string buildRobotStreamJsonWithInstances(
-    const std::string &type, const std::string &tag, const nlohmann::json &robot_payload,
-    const nlohmann::json &instances) {
-  nlohmann::json root;
-  root["type"] = type;
-  root["tag"] = tag;
-  root["robot"] = robot_payload;
-  root["robot"]["instances"] = instances;
-  return root.dump();
-}
-
-static double quaternionAngularErrorDeg(
-    const Eigen::Quaterniond &a, const Eigen::Quaterniond &b) {
-  Eigen::Quaterniond qa = a.normalized();
-  Eigen::Quaterniond qb = b.normalized();
-  double dot = std::abs(qa.dot(qb));
-  dot = std::min(1.0, std::max(-1.0, dot));
-  return 2.0 * std::acos(dot) * 180.0 / M_PI;
 }
 
 } // namespace
@@ -1803,124 +1631,6 @@ private:
     publishEmptyCandidateTrajectoryLocked();
   }
 
-  static float nanMetric() {
-    return std::numeric_limits<float>::quiet_NaN();
-  }
-
-  sensor_msgs::msg::JointState buildJointStateFromQ(
-      const Eigen::VectorXf &q) const {
-    sensor_msgs::msg::JointState msg;
-    msg.header.stamp = now();
-    msg.name = controlled_joint_names_;
-    msg.position.resize(controlled_joint_names_.size(), 0.0);
-    msg.velocity.resize(controlled_joint_names_.size(), 0.0);
-    msg.effort.resize(controlled_joint_names_.size(), 0.0);
-    const std::size_t n = std::min<std::size_t>(
-        controlled_joint_names_.size(), static_cast<std::size_t>(q.size()));
-    for (std::size_t i = 0; i < n; ++i) {
-      msg.position[i] = static_cast<double>(q[static_cast<int>(i)]);
-    }
-    return msg;
-  }
-
-  geometry_msgs::msg::Pose buildPoseFromNode(
-      const GNGType::NodeType &node) const {
-    geometry_msgs::msg::Pose pose;
-    pose.position.x = static_cast<double>(node.weight_coord.x());
-    pose.position.y = static_cast<double>(node.weight_coord.y());
-    pose.position.z = static_cast<double>(node.weight_coord.z());
-    pose.orientation.x = static_cast<double>(node.status.ee_orientation.x());
-    pose.orientation.y = static_cast<double>(node.status.ee_orientation.y());
-    pose.orientation.z = static_cast<double>(node.status.ee_orientation.z());
-    pose.orientation.w = static_cast<double>(node.status.ee_orientation.w());
-    return pose;
-  }
-
-  Manipulability::ManipulabilityEllipsoid calculateManipulabilityForQ(
-      const Eigen::VectorXf &q, bool rotational) const {
-    Manipulability::ManipulabilityEllipsoid out;
-    if (!chain_ || q.size() == 0) {
-      return out;
-    }
-
-    std::vector<double> joint_values;
-    joint_values.reserve(static_cast<std::size_t>(q.size()));
-    for (int i = 0; i < q.size(); ++i) {
-      joint_values.push_back(static_cast<double>(q[i]));
-    }
-
-    try {
-      const Eigen::MatrixXd J =
-          chain_->calculateJacobianAt(chain_->getNumJoints() + 1, joint_values);
-      if (J.rows() < 3) {
-        return out;
-      }
-      const Eigen::MatrixXd Jpart =
-          rotational && J.rows() >= 6 ? J.bottomRows(3) : J.topRows(3);
-      out = Manipulability::calculateManipulabilityEllipsoid(Jpart);
-    } 
-    catch (const std::exception &e) {
-      return out;
-    }
-    return out;
-  }
-
-  std::vector<float> buildPathManipulability(
-      const std::vector<int> &path, bool rotational) const {
-    std::vector<float> values;
-    values.reserve(path.size());
-    if (!gng_) {
-      return values;
-    }
-    for (const int node_id : path) {
-      if (node_id < 0 ||
-          node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-        values.push_back(nanMetric());
-        continue;
-      }
-      const auto &node = gng_->nodeAt(node_id);
-      if (node.id == -1 || node.weight_angle.size() == 0) {
-        values.push_back(nanMetric());
-        continue;
-      }
-      const auto manip =
-          calculateManipulabilityForQ(node.weight_angle, rotational);
-      values.push_back(manip.valid ? static_cast<float>(manip.manipulability)
-                                   : nanMetric());
-    }
-    return values;
-  }
-
-  std::pair<float, float> estimatePathEnergyAndDuration(
-      const Eigen::VectorXf &current_q, const std::vector<int> &path) const {
-    if (!gng_ || path.empty()) {
-      return {0.0f, 0.0f};
-    }
-
-    float energy = 0.0f;
-    float duration = 0.0f;
-    Eigen::VectorXf previous = current_q;
-
-    for (const int node_id : path) {
-      if (node_id < 0 ||
-          node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-        continue;
-      }
-      const auto &node = gng_->nodeAt(node_id);
-      if (node.id == -1 || node.weight_angle.size() != previous.size()) {
-        continue;
-      }
-
-      const Eigen::VectorXf delta = node.weight_angle - previous;
-      energy += static_cast<float>(delta.squaredNorm());
-      duration += static_cast<float>(
-          delta.cwiseAbs().maxCoeff() / metrics_max_joint_velocity_);
-      previous = node.weight_angle;
-    }
-
-    return {energy, duration};
-  }
-
   void publishGraspCandidateMetricsLocked(
       const Eigen::VectorXf &current_q, int start_id,
       const std::vector<int> &goal_candidates,
@@ -1929,9 +1639,7 @@ private:
       return;
     }
 
-    gng_control_msgs::msg::GraspCandidateMetricArray out;
-    out.header.stamp = now();
-    out.header.frame_id =
+    const std::string frame_id =
         have_map_ && !latest_map_.header.frame_id.empty()
             ? latest_map_.header.frame_id
             : robot_base_frame_;
@@ -1940,104 +1648,10 @@ private:
     if (!ns_raw.empty() && ns_raw.front() == '/') {
       ns_raw.erase(ns_raw.begin());
     }
-    out.robot_name = ns_raw;
-    out.base_frame = robot_base_frame_;
-    out.selected_goal_node_id = active_goal_id_;
-    out.candidates.reserve(goal_candidates.size());
-
-    for (std::size_t i = 0; i < goal_candidates.size(); ++i) {
-      const int goal_id = goal_candidates[i];
-      gng_control_msgs::msg::GraspCandidateMetric metric;
-      metric.candidate_id = static_cast<int32_t>(i);
-      metric.goal_node_id = goal_id;
-      metric.start_node_id = start_id;
-      metric.selected = goal_id == active_goal_id_;
-      metric.feasible = candidate_path_by_goal.find(goal_id) != candidate_path_by_goal.end();
-
-      metric.position_manipulability = nanMetric();
-      metric.rotation_manipulability = nanMetric();
-      metric.manipulability_condition_number = nanMetric();
-      metric.min_singular_value = nanMetric();
-      metric.joint_limit_margin_min = nanMetric();
-      metric.joint_limit_margin_mean = nanMetric();
-      metric.self_collision_margin = nanMetric();
-      metric.environment_collision_margin = nanMetric();
-      metric.gripper_width = nanMetric();
-      metric.grasp_region_score = nanMetric();
-      metric.estimated_energy = nanMetric();
-      metric.estimated_duration = nanMetric();
-
-      if (goal_id >= 0 &&
-          goal_id < static_cast<int>(gng_->getMaxNodeNum())) {
-        const auto &node = gng_->nodeAt(goal_id);
-        if (node.id != -1) {
-          metric.end_effector_pose = buildPoseFromNode(node);
-          metric.final_joint_state = buildJointStateFromQ(node.weight_angle);
-          metric.joint_limit_margin_min = node.status.joint_limit_score;
-          metric.joint_limit_margin_mean = node.status.joint_limit_score;
-
-          const auto position_manip =
-              node.status.manip_info.valid
-                  ? node.status.manip_info
-                  : calculateManipulabilityForQ(node.weight_angle, false);
-          const auto rotation_manip =
-              calculateManipulabilityForQ(node.weight_angle, true);
-
-          if (position_manip.valid) {
-            metric.position_manipulability =
-                static_cast<float>(position_manip.manipulability);
-            metric.manipulability_condition_number =
-                static_cast<float>(position_manip.condition_number);
-            metric.min_singular_value =
-                static_cast<float>(position_manip.min_singular_value);
-            metric.manipulability_singular_values = {
-                static_cast<float>(position_manip.singular_values.x()),
-                static_cast<float>(position_manip.singular_values.y()),
-                static_cast<float>(position_manip.singular_values.z())};
-          }
-          if (rotation_manip.valid) {
-            metric.rotation_manipulability =
-                static_cast<float>(rotation_manip.manipulability);
-          }
-
-          metric.metric_names = {
-              "joint_limit_score",
-              "collision_count",
-              "danger_count",
-              "is_colliding",
-              "is_danger",
-              "combined_score",
-              "dynamic_manipulability"};
-          metric.metric_values = {
-              node.status.joint_limit_score,
-              static_cast<float>(node.status.collision_count),
-              static_cast<float>(node.status.danger_count),
-              node.status.is_colliding ? 1.0f : 0.0f,
-              node.status.is_danger ? 1.0f : 0.0f,
-              node.status.combined_score,
-              node.status.dynamic_manipulability};
-        }
-      }
-
-      const auto path_it = candidate_path_by_goal.find(goal_id);
-      if (path_it != candidate_path_by_goal.end()) {
-        metric.path_node_ids.reserve(path_it->second.size());
-        for (const int node_id : path_it->second) {
-          metric.path_node_ids.push_back(static_cast<int32_t>(node_id));
-        }
-        metric.path_position_manipulability =
-            buildPathManipulability(path_it->second, false);
-        metric.path_rotation_manipulability =
-            buildPathManipulability(path_it->second, true);
-        const auto [energy, duration] =
-            estimatePathEnergyAndDuration(current_q, path_it->second);
-        metric.estimated_energy = energy;
-        metric.estimated_duration = duration;
-      }
-
-      out.candidates.push_back(std::move(metric));
-    }
-
+    const auto out = topological_map_avoidance::buildGraspCandidateMetricArray(
+        now(), frame_id, ns_raw, robot_base_frame_, active_goal_id_, current_q,
+        start_id, goal_candidates, candidate_path_by_goal, gng_, chain_,
+        controlled_joint_names_, metrics_max_joint_velocity_);
     candidate_metrics_pub_->publish(out);
   }
 
@@ -2069,58 +1683,14 @@ private:
       return;
     }
 
-    std::string ns_raw = std::string(get_namespace());
-    if (!ns_raw.empty() && ns_raw.front() == '/') {
-      ns_raw.erase(ns_raw.begin());
-    }
-    const std::string preview_tag = "candidate_goal_preview";
-    const std::string preview_display_name =
-        ns_raw.empty() ? preview_tag : (ns_raw + "/" + preview_tag);
     std::unordered_set<std::string> next_tags;
+    const auto preview_payload = buildCandidateRobotPreviewPayload(
+        std::string(get_namespace()), robot_base_frame_,
+        candidate_robot_urdf_content_, controlled_joint_names_,
+        latest_goal_candidate_ids_, gng_, chain_,
+        candidate_robot_preview_opacity_, this->now().seconds());
 
-    nlohmann::json instance_payloads = nlohmann::json::array();
-    const std::size_t preview_count =
-        std::min<std::size_t>(8U, latest_goal_candidate_ids_.size());
-    for (std::size_t i = 0; i < preview_count; ++i) {
-      const int node_id = latest_goal_candidate_ids_[i];
-      if (node_id < 0 || node_id >= static_cast<int>(gng_->getMaxNodeNum())) {
-        continue;
-      }
-      const auto &node = gng_->nodeAt(node_id);
-      if (node.id == -1 || !node.status.active || !node.status.valid) {
-        continue;
-      }
-
-      std::vector<double> joint_values;
-      joint_values.reserve(static_cast<std::size_t>(node.weight_angle.size()));
-      for (int j = 0; j < node.weight_angle.size(); ++j) {
-        joint_values.push_back(static_cast<double>(node.weight_angle[j]));
-      }
-
-      std::vector<double> fk_values = joint_values;
-      std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
-      std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
-      if (chain_) {
-        chain_->forwardKinematicsAt(fk_values, positions, orientations);
-      }
-      Manipulability::ManipulabilityEllipsoid manip;
-      if (chain_) {
-        const Eigen::MatrixXd J =
-            chain_->calculateJacobianAt(chain_->getNumJoints() + 1, joint_values);
-        const Eigen::MatrixXd Jv = J.topRows(3);
-        manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
-      }
-      const Eigen::Vector3d manip_center =
-          positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
-
-      const double timestamp = this->now().seconds();
-      instance_payloads.push_back(buildRobotPayloadJson(
-          robot_base_frame_, candidate_robot_urdf_content_, controlled_joint_names_,
-          joint_values, positions, orientations, timestamp,
-          candidate_robot_preview_opacity_, manip_center, &manip));
-    }
-
-    if (instance_payloads.empty()) {
+    if (!preview_payload) {
       for (const auto &old_tag : last_candidate_robot_tags_) {
         std_msgs::msg::String delete_msg;
         delete_msg.data = nlohmann::json({
@@ -2133,21 +1703,14 @@ private:
       return;
     }
 
-    next_tags.insert(preview_tag);
-
-    auto primary_robot = instance_payloads.front();
-    primary_robot["displayName"] = preview_display_name;
-    const std::string desc_json = buildRobotStreamJsonWithInstances(
-        "stream.robot.description", preview_tag, primary_robot, instance_payloads);
-    const std::string pose_json = buildRobotStreamJsonWithInstances(
-        "stream.robot.pose", preview_tag, primary_robot, instance_payloads);
+    next_tags.insert(preview_payload->tag);
 
     std_msgs::msg::String desc_msg;
-    desc_msg.data = desc_json;
+    desc_msg.data = preview_payload->description_json;
     candidate_robot_description_pub_->publish(desc_msg);
 
     std_msgs::msg::String pose_msg;
-    pose_msg.data = pose_json;
+    pose_msg.data = preview_payload->pose_json;
     candidate_robot_pose_pub_->publish(pose_msg);
 
     for (const auto &old_tag : last_candidate_robot_tags_) {
