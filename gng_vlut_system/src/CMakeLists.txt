@@ -34,7 +34,7 @@ target_link_libraries(robot_model_lib common_lib kinematics_lib)
 ament_target_dependencies(robot_model_lib urdf urdfdom urdfdom_headers Eigen3)
 
 # Safety Engine (Old: safety_engine)
-add_library(safety_engine STATIC core/safety_engine/gng/GrowingNeuralGas.cpp)
+add_library(safety_engine STATIC core/gng/GrowingNeuralGas.cpp)
 target_link_libraries(safety_engine common_lib kinematics_lib)
 ament_target_dependencies(safety_engine Eigen3)
 

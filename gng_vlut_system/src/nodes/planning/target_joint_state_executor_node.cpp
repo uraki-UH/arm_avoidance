@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "core/kinematics/utility.hpp"
+#include "core/kinematics/kinematics.hpp"
 
 namespace robot_sim::planning
 {

@@ -13,7 +13,7 @@
 // - 順運動学モデルやGNG生成プロセスのデバッグに利用する。
 //
 #include "common/config_manager.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include <iostream>

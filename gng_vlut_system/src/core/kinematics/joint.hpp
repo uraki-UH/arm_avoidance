@@ -1,7 +1,6 @@
 // joint.hpp
 #pragma once
 
-#include "utility.hpp"
 #include <Eigen/Geometry>
 #include <iostream>
 

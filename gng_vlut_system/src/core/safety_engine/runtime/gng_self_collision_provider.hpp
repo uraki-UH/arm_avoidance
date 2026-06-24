@@ -1,7 +1,7 @@
 #pragma once
 
 #include "safety_engine/vlut/iself_collision_checker.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include <Eigen/Dense>
 

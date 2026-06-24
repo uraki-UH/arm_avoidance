@@ -37,6 +37,7 @@
 #include <std_msgs/msg/int32_multi_array.hpp>
 
 #include "common/resource_utils.hpp"
+#include "common/trajectory.hpp"
 #include "planner/RRT/ik_rrt_planner.hpp"
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
@@ -49,9 +50,11 @@
 #include "robot_model/urdf_loader.hpp"
 #include "core/common/manipulability_serialization.hpp"
 #include "core/metrics/manipulability.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 
 namespace {
+
+using robot_sim::common::TrajectoryState;
 
 static std::vector<std::string> collectTerminalLeafLinks(
     const ::simulation::RobotModel &model) {
@@ -919,36 +922,6 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr trial_goal_advance_srv_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
   std::mt19937 rng_;
-
-  struct TrajectoryState {
-    bool update_requested = true;
-    bool valid = false;
-    std::vector<Eigen::VectorXf> bridge_path;
-    std::size_t bridge_index = 0;
-    bool bridge_valid = false;
-    std::vector<Eigen::VectorXf> goal_bridge_path;
-    std::size_t goal_bridge_index = 0;
-    bool goal_bridge_valid = false;
-    std::vector<int> node_path;
-    std::size_t waypoint_index = 0;
-    int goal_id = -1;
-    std::vector<int> goal_candidates;
-
-    void clear(bool keep_goal_id = false) {
-      valid = false;
-      bridge_valid = false;
-      bridge_path.clear();
-      bridge_index = 0;
-      goal_bridge_valid = false;
-      goal_bridge_path.clear();
-      goal_bridge_index = 0;
-      node_path.clear();
-      waypoint_index = 0;
-      if (!keep_goal_id) {
-        goal_id = -1;
-      }
-    }
-  };
 
   TrajectoryState trajectory_;
 

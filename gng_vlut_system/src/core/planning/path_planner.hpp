@@ -1,6 +1,6 @@
 #pragma once
 
-#include "safety_engine/gng/GrowingNeuralGas.hpp" // For GNG::GrowingNeuralGas and GNG::NeuronNode
+#include "gng/GrowingNeuralGas.hpp" // For GNG::GrowingNeuralGas and GNG::NeuronNode
 #include "planning/cost_evaluator.hpp" // For ICostEvaluator
 #include <memory>                      // For std::shared_ptr
 #include <vector>

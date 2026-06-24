@@ -12,7 +12,7 @@
 
 #include <Eigen/Geometry>
 
-#include "common/grasp_pose_marker_utils.hpp"
+#include "common/grasp_pose_utils.hpp"
 
 namespace robot_sim::bridge
 {

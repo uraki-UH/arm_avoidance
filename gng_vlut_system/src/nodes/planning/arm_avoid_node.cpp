@@ -25,7 +25,7 @@
 #include "planning/arm_avoid_helpers.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/urdf_loader.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 
 namespace {
 

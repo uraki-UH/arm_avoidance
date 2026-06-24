@@ -4,7 +4,7 @@
 #include <string>
 
 #include "core/common/constants.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/dense_spatial_index.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
 #include "safety_engine/vlut/voxel_processor.hpp"

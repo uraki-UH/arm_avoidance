@@ -18,7 +18,7 @@
 
 #include "common/resource_utils.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "core/safety_engine/runtime/safety_system_loader.hpp"
 #include "metrics/graph_topology_analyzer.hpp"
 #include "core/common/constants.hpp"

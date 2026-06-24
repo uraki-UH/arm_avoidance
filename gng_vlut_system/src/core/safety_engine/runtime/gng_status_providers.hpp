@@ -1,8 +1,8 @@
 #pragma once
 
-#include "safety_engine/gng/node_status.hpp"
+#include "gng/node_status.hpp"
 
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include <Eigen/Dense>
 #include <Eigen/SVD>

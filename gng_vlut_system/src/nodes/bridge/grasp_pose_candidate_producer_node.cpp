@@ -24,7 +24,6 @@
 
 #include "common/voxel_utils.hpp"
 #include "common/grasp_pose_utils.hpp"
-#include "common/grasp_pose_marker_utils.hpp"
 #include "core/common/constants.hpp"
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 

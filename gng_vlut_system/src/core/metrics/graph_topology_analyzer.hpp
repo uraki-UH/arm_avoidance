@@ -1,4 +1,4 @@
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include <queue>
 #include <vector>
 

@@ -1,7 +1,7 @@
 #include "GrowingNeuralGas.hpp"
 #include "collision/geometric_self_collision_checker.hpp"
 #include "collision/voxel_collision_checker.hpp"
-#include "../vlut/iself_collision_checker.hpp"
+#include "safety_engine/vlut/iself_collision_checker.hpp"
 #include "common/resource_utils.hpp"
 #include <Eigen/Core>
 #include <algorithm>

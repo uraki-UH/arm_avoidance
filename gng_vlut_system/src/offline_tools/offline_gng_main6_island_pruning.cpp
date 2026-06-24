@@ -1,7 +1,7 @@
 #include <iostream>
 
 #include "rclcpp/rclcpp.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"

@@ -6,7 +6,7 @@
 #include <cmath>
 
 #include "../indexing/ispatial_index.hpp"
-#include "../gng/node_status.hpp"
+#include "../../gng/node_status.hpp"
 
 namespace robot_sim {
 namespace analysis {

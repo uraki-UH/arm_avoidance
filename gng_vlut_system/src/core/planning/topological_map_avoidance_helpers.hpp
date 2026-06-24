@@ -28,7 +28,7 @@
 #include "planning/joint_linf_cost.hpp"
 #include "core/kinematics/kinematic_chain.hpp"
 #include "core/metrics/manipulability.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 
 namespace robot_sim::planning::topological_map_avoidance {
 

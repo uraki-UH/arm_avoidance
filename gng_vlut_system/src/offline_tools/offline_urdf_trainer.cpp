@@ -30,7 +30,7 @@
 #include "robot_model/voxel_ball_collision_model.hpp"
 #include "robot_model/voxel_ball_collision_config.hpp"
 #include "robot_model/urdf_loader.hpp"
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 #include "safety_engine/runtime/gng_geometric_self_collision_provider.hpp"
 #include "safety_engine/runtime/gng_status_providers.hpp"

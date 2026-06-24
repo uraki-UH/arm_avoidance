@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "safety_engine/gng/node_status.hpp"
+#include "gng/node_status.hpp"
 #include "safety_engine/indexing/dense_spatial_index.hpp"
 #include "safety_engine/vlut/safety_vlut_mapper.hpp"
 #include <Eigen/Dense>

@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 
 namespace robot_sim {
 namespace simulation {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "safety_engine/gng/GrowingNeuralGas.hpp"
+#include "gng/GrowingNeuralGas.hpp"
 #include "safety_engine/indexing/ispatial_index.hpp"
 
 #include <vector>
