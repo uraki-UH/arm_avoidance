@@ -9,6 +9,7 @@ topics:
     topic: /ToPoDualArm/candidate_topological_map
     kind: topological_map
     role: candidate_graph
+    compact: true
     sample_every: 1
 
   - alias: pointcloud

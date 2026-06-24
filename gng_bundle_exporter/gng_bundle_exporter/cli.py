@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import fnmatch
 import json
 from dataclasses import dataclass, field
@@ -21,12 +22,45 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _now_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+
 def _load_yaml(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise ValueError(f"Config root must be a mapping: {path}")
     return data
+
+
+def _package_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _default_results_dir() -> Path:
+    return _package_root() / "results"
+
+
+def _ensure_unique_output_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    stem = path.stem
+    suffix = path.suffix
+    if stem.endswith(".json") and suffix == ".gz":
+        stem = stem[:-5]
+    parent = path.parent
+    for i in range(1, 1000):
+        candidate = parent / f"{stem}_{_now_stamp()}_{i:02d}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise FileExistsError(f"could not find a free filename for {path}")
+
+
+def _default_output_path(bag_path: Path, use_gzip: bool) -> Path:
+    bag_name = bag_path.name.rstrip("/") or "bag"
+    suffix = ".json.gz" if use_gzip else ".json"
+    return _default_results_dir() / f"{bag_name}_bundle_{_now_stamp()}{suffix}"
 
 
 def _infer_storage_id(bag_path: Path) -> str:
@@ -157,17 +191,10 @@ def _serialize_topological_node_core(node: Any) -> Dict[str, Any]:
     }
 
 
-def _serialize_topological_node_features(node: Any) -> Dict[str, Any]:
+def _serialize_topological_node_features(node: Any, include_joint_positions: bool = True) -> Dict[str, Any]:
     ee_pose = getattr(node, "ee_pose", None)
-    joint_positions = []
-    for p in getattr(node, "joint_positions", []) or []:
-        joint_positions.append({
-            "x": float(getattr(p, "x", 0.0)),
-            "y": float(getattr(p, "y", 0.0)),
-            "z": float(getattr(p, "z", 0.0)),
-        })
     node_id = int(getattr(node, "node_id", getattr(node, "id", 0)))
-    return {
+    out = {
         "node_id": node_id,
         "is_goal": bool(getattr(node, "is_goal", False)),
         "manip_valid": bool(getattr(node, "manip_valid", False)),
@@ -203,8 +230,17 @@ def _serialize_topological_node_features(node: Any) -> Dict[str, Any]:
                 "w": float(getattr(getattr(ee_pose, "orientation", None), "w", 1.0)),
             },
         },
-        "joint_positions": joint_positions,
     }
+    if include_joint_positions:
+        joint_positions = []
+        for p in getattr(node, "joint_positions", []) or []:
+            joint_positions.append({
+                "x": float(getattr(p, "x", 0.0)),
+                "y": float(getattr(p, "y", 0.0)),
+                "z": float(getattr(p, "z", 0.0)),
+            })
+        out["joint_positions"] = joint_positions
+    return out
 
 
 def _serialize_topological_map(msg: Any, compact: bool = False) -> Dict[str, Any]:
@@ -263,9 +299,9 @@ def _serialize_topological_map(msg: Any, compact: bool = False) -> Dict[str, Any
     node_features = None
     if not compact:
         if hasattr(msg, "node_features") and getattr(msg, "node_features", None):
-            node_features = [_serialize_topological_node_features(node) for node in msg.node_features]
+            node_features = [_serialize_topological_node_features(node, include_joint_positions=not compact) for node in msg.node_features]
         else:
-            node_features = [_serialize_topological_node_features(node) for node in msg.nodes]
+            node_features = [_serialize_topological_node_features(node, include_joint_positions=not compact) for node in msg.nodes]
 
     return {
         "topic_type": "ais_gng_msgs/msg/TopologicalMap",
@@ -373,7 +409,6 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
     topics_output: Dict[str, Any] = {}
     graph_bundle: Optional[Dict[str, Any]] = None
     candidate_graph_bundle: Optional[Dict[str, Any]] = None
-    pointcloud_frames: Optional[List[List[Dict[str, Any]]]] = None
     metrics_bundle: Dict[str, Any] = {}
 
     for alias, capture in captures.items():
@@ -399,13 +434,6 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
                 candidate_graph_bundle = dict(candidate_graph_bundle)
                 candidate_graph_bundle["topic"] = capture.spec.topic
                 candidate_graph_bundle["alias"] = alias
-        elif capture.spec.role == "pointcloud" and capture.messages:
-            frames = []
-            for item in capture.messages:
-                data = item["data"]
-                if isinstance(data, list):
-                    frames.extend(data)
-            pointcloud_frames = frames
         elif capture.spec.role == "metrics":
             metrics_bundle[alias] = capture.messages
 
@@ -420,22 +448,8 @@ def _export_bundle(bag_path: Path, spec_dicts: Sequence[Dict[str, Any]]) -> Dict
     }
     if graph_bundle:
         out["graph"] = graph_bundle
-        out["nodes"] = graph_bundle.get("nodes", [])
-        if graph_bundle.get("node_features") is not None:
-            out["node_features"] = graph_bundle.get("node_features", [])
-        out["edges"] = graph_bundle.get("edges", [])
-        if graph_bundle.get("clusters") is not None:
-            out["clusters"] = graph_bundle.get("clusters", [])
-        if graph_bundle.get("cluster_features") is not None:
-            out["cluster_features"] = graph_bundle.get("cluster_features", [])
     if candidate_graph_bundle:
         out["candidate_graph"] = candidate_graph_bundle
-        out["candidate_nodes"] = candidate_graph_bundle.get("nodes", [])
-        if candidate_graph_bundle.get("node_features") is not None:
-            out["candidate_node_features"] = candidate_graph_bundle.get("node_features", [])
-        out["candidate_edges"] = candidate_graph_bundle.get("edges", [])
-    if pointcloud_frames is not None:
-        out["frames"] = pointcloud_frames
     if metrics_bundle:
         out["metrics"] = metrics_bundle
     return out
@@ -461,14 +475,35 @@ def cmd_list(args: argparse.Namespace) -> int:
 def cmd_export(args: argparse.Namespace) -> int:
     bag_path = Path(args.bag).expanduser()
     config_path = Path(args.config).expanduser()
-    output_path = Path(args.output).expanduser()
     config = _load_yaml(config_path)
     topics = _load_topic_specs(config)
     bundle = _export_bundle(bag_path, topics)
+    output_arg = getattr(args, "output", None)
+    use_gzip = bool(args.gzip)
+    if output_arg:
+        output_path = Path(output_arg).expanduser()
+        if output_path.suffix.lower() == ".gz":
+            use_gzip = True
+    else:
+        output_path = _default_output_path(bag_path, use_gzip=True)
+        use_gzip = True
+    if output_path.suffix.lower() == ".gz":
+        use_gzip = True
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(bundle, f, ensure_ascii=False, indent=2 if args.pretty else None)
-        f.write("\n")
+    output_path = _ensure_unique_output_path(output_path)
+    if use_gzip:
+        payload = json.dumps(
+            bundle,
+            ensure_ascii=False,
+            indent=2 if args.pretty else None,
+            separators=None if args.pretty else (",", ":"),
+        ).encode("utf-8")
+        with gzip.open(output_path, "wb", compresslevel=9) as f:
+            f.write(payload)
+    else:
+        with output_path.open("w", encoding="utf-8") as f:
+            json.dump(bundle, f, ensure_ascii=False, indent=2 if args.pretty else None, separators=None if args.pretty else (",", ":"))
+            f.write("\n")
     print(f"Wrote {output_path}")
     return 0
 
@@ -484,8 +519,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_export = sub.add_parser("export", help="Export selected topics to JSON")
     p_export.add_argument("--bag", required=True, help="Bag directory or bag file")
     p_export.add_argument("--config", required=True, help="YAML config that defines selected topics")
-    p_export.add_argument("--output", required=True, help="Output JSON path")
+    p_export.add_argument("--output", help="Output JSON path. If omitted, write into gng_bundle_exporter/results/")
     p_export.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
+    p_export.add_argument("--gzip", action="store_true", help="Write gzip-compressed JSON")
     p_export.set_defaults(func=cmd_export)
 
     return parser

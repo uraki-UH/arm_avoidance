@@ -16,9 +16,15 @@ Export selected topics:
 ros2 run gng_bundle_exporter gng-bundle-export export \
   --bag /path/to/bag \
   --config config/export_topics.yaml \
-  --output out/topo_bundle.json \
   --pretty
 ```
+
+If `--output` is omitted, the exporter writes into
+`gng_bundle_exporter/results/` with a timestamped filename. Existing files are
+never overwritten; name collisions get a new suffix.
+
+Use `--gzip` or a `.gz` output path for compressed export. The HTML viewer can
+open both plain JSON and gzip-compressed JSON bundles.
 
 Example config:
 
@@ -33,6 +39,7 @@ topics:
     topic: /ToPoDualArm/candidate_topological_map
     kind: topological_map
     role: candidate_graph
+    compact: true
   - alias: pointcloud
     topic: /topo_points
     kind: pointcloud2
@@ -45,3 +52,4 @@ topics:
 ```
 
 The exported `graph` bundle keeps GNG core nodes in `nodes`, while goal/manipulability fields are emitted separately in `node_features`.
+Set `compact: true` on a topological map topic to drop per-node `joint_positions` and keep the export smaller.

@@ -1724,6 +1724,20 @@ function updateGngDataSourceUi(){
   }
 }
 function normalizeGraphNode(node, idx){
+  if(Array.isArray(node)){
+    const x=+node[0], y=+node[1], z=+node[2];
+    if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
+    return {
+      x,y,z,
+      label:node[3]||'gng',
+      err:Number.isFinite(+node[4])?+node[4]:0,
+      win:Number.isFinite(+node[5])?+node[5]:0,
+      util:Number.isFinite(+node[6])?+node[6]:0,
+      densityClass:Number.isFinite(+node[7])?+node[7]:pointDensityClass({x,y,z,label:node[3]}),
+      targetEdgeLength:Number.isFinite(+node[8])?+node[8]:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass({x,y,z,label:node[3]}))),
+      id:Number.isFinite(+node[9])?+node[9]:idx
+    };
+  }
   if(!node||typeof node!=='object') return null;
   const x=+node.x, y=+node.y, z=+node.z;
   if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
@@ -1739,11 +1753,28 @@ function normalizeGraphNode(node, idx){
   };
 }
 function normalizeGraphEdge(edge, fallbackIndex){
+  if(Array.isArray(edge)){
+    const a=Number.isFinite(+edge[0])?+edge[0]:null;
+    const b=Number.isFinite(+edge[1])?+edge[1]:null;
+    if(a==null||b==null||a===b) return null;
+    return {a:Math.min(a,b),b:Math.max(a,b),age:Number.isFinite(+edge[2])?+edge[2]:0,id:Number.isFinite(+edge[3])?+edge[3]:fallbackIndex};
+  }
   if(!edge||typeof edge!=='object') return null;
   const a=Number.isFinite(+edge.a)?+edge.a:Number.isFinite(+edge.source)?+edge.source:null;
   const b=Number.isFinite(+edge.b)?+edge.b:Number.isFinite(+edge.target)?+edge.target:null;
   if(a==null||b==null||a===b) return null;
   return {a:Math.min(a,b),b:Math.max(a,b),age:Number.isFinite(+edge.age)?+edge.age:0,id:edge.id??fallbackIndex};
+}
+function normalizeImportedPoint(point, idx){
+  if(Array.isArray(point)){
+    const x=+point[0], y=+point[1], z=+point[2];
+    if(![x,y,z].every(Number.isFinite)) return null;
+    return {x,y,z,label:point[3]||'body',id:Number.isFinite(+point[4])?+point[4]:idx};
+  }
+  if(!point||typeof point!=='object') return null;
+  const x=+point.x, y=+point.y, z=+point.z;
+  if(![x,y,z].every(Number.isFinite)) return null;
+  return {x,y,z,label:point.label||'body',id:point.id??idx};
 }
 function v312NormalizeAliasText(value){
   return String(value||'').trim();
@@ -2110,9 +2141,35 @@ function v312ResolveGraphBundlePayload(bundle, preferredAlias){
 function normalizeNodeFeatures(features){
   const out=new Map();
   const add=(item)=>{
+    if(Array.isArray(item)){
+      const id=Number.isFinite(+item[0])?+item[0]:null;
+      if(id==null) return;
+      const wa=Array.isArray(item[15])?item[15].map(v=>+v||0):[];
+      const ep=Array.isArray(item[16])&&item[16].length>=7?{
+        position:{x:+item[16][0]||0,y:+item[16][1]||0,z:+item[16][2]||0},
+        orientation:{x:+item[16][3]||0,y:+item[16][4]||0,z:+item[16][5]||0,w:Number.isFinite(+item[16][6])?+item[16][6]:1}
+      }:null;
+      out.set(id,{
+        id,
+        is_goal:!!item[1],
+        manip_valid:!!item[2],
+        manip_value:Number.isFinite(+item[3])?+item[3]:0,
+        manip_condition_number:Number.isFinite(+item[4])?+item[4]:0,
+        manip_center:{x:+item[5]||0,y:+item[6]||0,z:+item[7]||0},
+        manip_scale:{x:+item[8]||0,y:+item[9]||0,z:+item[10]||0},
+        manip_orientation:{x:+item[11]||0,y:+item[12]||0,z:+item[13]||0,w:Number.isFinite(+item[14])?+item[14]:1},
+        weight_angle:wa,
+        ee_pose:ep,
+      });
+      return;
+    }
     if(!item||typeof item!=='object') return;
     const id=Number.isFinite(+item.id)?+item.id:Number.isFinite(+item.node_id)?+item.node_id:null;
     if(id==null) return;
+    const eePose=item.ee_pose&&typeof item.ee_pose==='object'?{
+      position:item.ee_pose.position&&typeof item.ee_pose.position==='object'?{x:+item.ee_pose.position.x||0,y:+item.ee_pose.position.y||0,z:+item.ee_pose.position.z||0}:{x:0,y:0,z:0},
+      orientation:item.ee_pose.orientation&&typeof item.ee_pose.orientation==='object'?{x:+item.ee_pose.orientation.x||0,y:+item.ee_pose.orientation.y||0,z:+item.ee_pose.orientation.z||0,w:Number.isFinite(+item.ee_pose.orientation.w)?+item.ee_pose.orientation.w:1}:{x:0,y:0,z:0,w:1}
+    }:null;
     out.set(id,{
       id,
       is_goal:!!item.is_goal,
@@ -2122,6 +2179,8 @@ function normalizeNodeFeatures(features){
       manip_center:item.manip_center&&typeof item.manip_center==='object'?{x:+item.manip_center.x||0,y:+item.manip_center.y||0,z:+item.manip_center.z||0}:{x:0,y:0,z:0},
       manip_scale:item.manip_scale&&typeof item.manip_scale==='object'?{x:+item.manip_scale.x||0,y:+item.manip_scale.y||0,z:+item.manip_scale.z||0}:{x:0,y:0,z:0},
       manip_orientation:item.manip_orientation&&typeof item.manip_orientation==='object'?{x:+item.manip_orientation.x||0,y:+item.manip_orientation.y||0,z:+item.manip_orientation.z||0,w:Number.isFinite(+item.manip_orientation.w)?+item.manip_orientation.w:1}:{x:0,y:0,z:0,w:1},
+      weight_angle:Array.isArray(item.weight_angle)?item.weight_angle.map(v=>+v||0):[],
+      ee_pose:eePose,
     });
   };
   if(Array.isArray(features)){
@@ -2173,7 +2232,7 @@ function loadImportedGraphSession(session){
   state.nodeClusters=Array.isArray(session.node_clusters)?session.node_clusters.slice():Array.isArray(session.nodeClusters)?session.nodeClusters.slice():[];
   state.nodeFeaturesById=nodeFeaturesById;
   state.clusterFeaturesById=clusterFeaturesById;
-  state.points=Array.isArray(session.points)?session.points.map((p,i)=>({x:+p.x,y:+p.y,z:+p.z,label:p.label||'body',id:p.id??i})).filter(p=>[p.x,p.y,p.z].every(Number.isFinite)):state.points;
+  state.points=Array.isArray(session.points)?session.points.map((p,i)=>normalizeImportedPoint(p,i)).filter(Boolean):state.points;
   state.importedGraphSession=session;
   state.gng={
     nodes:state.nodes,
@@ -4583,7 +4642,74 @@ function updateObjectIdentifier(){
 
 function updateMetrics(){$('mPoints').textContent=state.points.length;$('mNodes').textContent=state.nodes.length;$('mEdges').textContent=state.edges.length;$('mObject').textContent=state.points.length?labelOf(state.sample).split('/')[0].trim():'-';updateObjectIdentifier();updateTopoUi()}
 function showTask(t){$('taskObject').classList.toggle('active',t==='object');$('taskGrasp').classList.toggle('active',t==='grasp');$('btnObject').classList.toggle('active',t==='object');$('btnGrasp').classList.toggle('active',t==='grasp');$('btnObject').setAttribute('aria-pressed',t==='object'?'true':'false');$('btnGrasp').setAttribute('aria-pressed',t==='grasp'?'true':'false');if(t==='object')updateObjectIdentifier();setTimeout(renderAll,40)}
-function saveJson(){const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];const clusterFeatures=state.clusterFeaturesById?[...state.clusterFeaturesById.values()]:[];const data={version:'v312_gng_sidecar_bundle_v1',sample:state.sample,frame:state.frame,data_source_mode:state.dataSourceMode,gng_input_mode:gngDataSourceMode(),defects:{hole_ratio:+$('holeRatio').value,missing_ratio:+$('missingRatio').value,outlier_ratio:+$('outlierRatio').value,hole_radius:+$('holeRadius').value},tabletop:{mode:$('tableMode')?$('tableMode').value:'off',size_m:$('tableSize')?+$('tableSize').value:0,height_m:$('tableHeight')?+$('tableHeight').value:0,density:$('tableDensity')?+$('tableDensity').value:0},motion:{pattern:$('motionPattern').value,amplitude:+$('motionAmp').value,hz:+$('motionHz').value},visualization:{viewer_mode:viewerMode(),point_color_mode:pointColorMode(),heatmap_axis:heatmapAxis(),heatmap_range_mode:$('heatmapRangeMode')?$('heatmapRangeMode').value:'auto',heatmap_min_m:+($('heatmapMin')?.value||0),heatmap_max_m:+($('heatmapMax')?.value||0),point_size:+($('pointSize')?.value||1.2),face_opacity:+($('faceOpacity')?.value||0.045),face_opacity_cap:+($('faceOpacityCap')?.value||0.06),face_local_overdraw_cap:+($('faceLayerCap')?.value||2),face_overdraw_grid_px:+($('faceTilePx')?.value||34)},gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),cell_competition_radius:+($('densityCompRadius')?.value||0.018),density_prune_interval:+($('densityPruneInterval')?.value||250),target_edge_lengths_m:densityTargetEdgeLengths(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},points:state.points,nodes:state.nodes,edges:state.edges,triangles:state.gng&&state.gng.triangles?[...state.gng.triangles.values()]:[],faces:state.faces,node_attributes:state.nodeStats,node_clusters:state.nodeClusters,node_features:nodeFeatures,cluster_features:clusterFeatures,fuzzy_rules:{grasp:ensureFuzzyModel(),node_label:state.nodeLabelModel,cluster:state.clusterModel},best_pose:poseObj(state.best),ik_solution:state.ikSolution?ikSolutionObj(state.ikSolution):null,candidates:state.candidates.map(poseObj),imported_graph_session:state.importedGraphSession};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`topo_fuzzy_grasp_${state.sample}_v312_gng_sidecar_bundle_v1.json`;a.click();URL.revokeObjectURL(a.href)}
+async function saveJson(){
+  const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];
+  const clusterFeatures=state.clusterFeaturesById?[...state.clusterFeaturesById.values()]:[];
+  const compactPoints=(state.points||[]).map((p,i)=>[+p.x||0,+p.y||0,+p.z||0,p.label||'body',p.id??i]);
+  const compactNodes=(state.nodes||[]).map((n,i)=>[+n.x||0,+n.y||0,+n.z||0,n.label||'gng',+n.err||0,+n.win||0,+n.util||0,+n.densityClass||0,+n.targetEdgeLength||0,n.id??i]);
+  const compactEdges=(state.edges||[]).map((e,i)=>[e.a,e.b,+e.age||0,e.id??i]);
+  const compactNodeFeatures=nodeFeatures.map((f)=>[
+    f.id??f.node_id??0,
+    f.is_goal?1:0,
+    f.manip_valid?1:0,
+    +f.manip_value||0,
+    +f.manip_condition_number||0,
+    +f.manip_center?.x||0,+f.manip_center?.y||0,+f.manip_center?.z||0,
+    +f.manip_scale?.x||0,+f.manip_scale?.y||0,+f.manip_scale?.z||0,
+    +f.manip_orientation?.x||0,+f.manip_orientation?.y||0,+f.manip_orientation?.z||0,+f.manip_orientation?.w||1,
+    Array.isArray(f.weight_angle)?f.weight_angle.map(v=>+v||0):[],
+    f.ee_pose&&typeof f.ee_pose==='object'?[
+      +f.ee_pose.position?.x||0,+f.ee_pose.position?.y||0,+f.ee_pose.position?.z||0,
+      +f.ee_pose.orientation?.x||0,+f.ee_pose.orientation?.y||0,+f.ee_pose.orientation?.z||0,+f.ee_pose.orientation?.w||1,
+    ]:null
+  ]);
+  const data={
+    version:'v312_gng_sidecar_bundle_v1',
+    sample:state.sample,
+    frame:state.frame,
+    data_source_mode:state.dataSourceMode,
+    gng_input_mode:gngDataSourceMode(),
+    defects:{hole_ratio:+$('holeRatio').value,missing_ratio:+$('missingRatio').value,outlier_ratio:+$('outlierRatio').value,hole_radius:+$('holeRadius').value},
+    tabletop:{mode:$('tableMode')?$('tableMode').value:'off',size_m:$('tableSize')?+$('tableSize').value:0,height_m:$('tableHeight')?+$('tableHeight').value:0,density:$('tableDensity')?+$('tableDensity').value:0},
+    motion:{pattern:$('motionPattern').value,amplitude:+$('motionAmp').value,hz:+$('motionHz').value},
+    visualization:{viewer_mode:viewerMode(),point_color_mode:pointColorMode(),heatmap_axis:heatmapAxis(),heatmap_range_mode:$('heatmapRangeMode')?$('heatmapRangeMode').value:'auto',heatmap_min_m:+($('heatmapMin')?.value||0),heatmap_max_m:+($('heatmapMax')?.value||0),point_size:+($('pointSize')?.value||1.2),face_opacity:+($('faceOpacity')?.value||0.045),face_opacity_cap:+($('faceOpacityCap')?.value||0.06),face_local_overdraw_cap:+($('faceLayerCap')?.value||2),face_overdraw_grid_px:+($('faceTilePx')?.value||34)},
+    gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),cell_competition_radius:+($('densityCompRadius')?.value||0.018),density_prune_interval:+($('densityPruneInterval')?.value||250),target_edge_lengths_m:densityTargetEdgeLengths(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},
+    points:compactPoints,
+    nodes:compactNodes,
+    edges:compactEdges,
+    triangles:state.gng&&state.gng.triangles?[...state.gng.triangles.values()]:[],
+    faces:state.faces,
+    node_attributes:state.nodeStats,
+    node_clusters:state.nodeClusters,
+    node_features:compactNodeFeatures,
+    cluster_features:clusterFeatures,
+    fuzzy_rules:{grasp:ensureFuzzyModel(),node_label:state.nodeLabelModel,cluster:state.clusterModel},
+    best_pose:poseObj(state.best),
+    ik_solution:state.ikSolution?ikSolutionObj(state.ikSolution):null,
+    candidates:state.candidates.map(poseObj),
+    imported_graph_session:state.importedGraphSession
+  };
+  const text=JSON.stringify(data);
+  let blob,downloadName;
+  if(typeof CompressionStream==='function'){
+    try{
+      const stream=new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+      blob=await new Response(stream).blob();
+      downloadName=`topo_fuzzy_grasp_${state.sample}_v312_gng_sidecar_bundle_v1.json.gz`;
+    }catch(_e){
+      blob=new Blob([text],{type:'application/json'});
+      downloadName=`topo_fuzzy_grasp_${state.sample}_v312_gng_sidecar_bundle_v1.json`;
+    }
+  }else{
+    blob=new Blob([text],{type:'application/json'});
+    downloadName=`topo_fuzzy_grasp_${state.sample}_v312_gng_sidecar_bundle_v1.json`;
+  }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=downloadName;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 function pointerSnapshot(){return [...state.pointers.values()].map(p=>({x:p.x,y:p.y}))}
 function bindView(id){
   const c=$(id);
@@ -4705,6 +4831,19 @@ function v312ParsePointCloudText(txt){
   }
   return[pts];
 }
+async function v312ReadImportedFileText(file){
+  const buffer=await file.arrayBuffer();
+  const bytes=new Uint8Array(buffer);
+  const isGzip=(file.name||'').toLowerCase().endsWith('.gz') || (bytes.length>=2 && bytes[0]===0x1f && bytes[1]===0x8b);
+  if(isGzip){
+    if(typeof DecompressionStream!=='function'){
+      throw new Error('gzip compressed files are not supported in this browser');
+    }
+    const stream=new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(stream).text();
+  }
+  return new TextDecoder().decode(buffer);
+}
 function v312ParseGngInputText(txt){
   const trimmed=String(txt||'').trim();
   if(!trimmed) return null;
@@ -4783,7 +4922,7 @@ function v312SetupGngInputFileLoader(){
     }
     v312SetGngSelectedFileName(f.name);
     v312SetGngLoadStatus(`読み込み中: ${f.name}`);
-    const txt=await f.text();
+    const txt=await v312ReadImportedFileText(f);
     try{
       const parsed=v312ParseGngInputText(txt);
       if(!parsed){
