@@ -11,8 +11,8 @@ topics:
     role: pointcloud
     sample_every: 1
 
-  - alias: segmented
-    topic: /scan/segmented
-    kind: pointcloud2
-    role: pointcloud
-    sample_every: 1
+  # - alias: segmented
+  #   topic: /scan/segmented
+  #   kind: pointcloud2
+  #   role: pointcloud
+  #   sample_every: 1

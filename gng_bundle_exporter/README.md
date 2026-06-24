@@ -25,6 +25,7 @@ never overwritten; name collisions get a new suffix.
 
 Use `--gzip` or a `.gz` output path for compressed export. The HTML viewer can
 open both plain JSON and gzip-compressed JSON bundles.
+The current bundle format is row-based: each topic has a `schema` and `rows`.
 
 Example config:
 

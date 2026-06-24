@@ -80,6 +80,6 @@ WORKDIR /ros2_ws/src/ToPoFuzzy-Viewer/frontend
 COPY ToPoFuzzy-Viewer/frontend/package*.json /ros2_ws/src/ToPoFuzzy-Viewer/frontend/
 RUN npm ci
 
-WORKDIR /ros2_ws/src/ais_gng
+WORKDIR /ros2_ws/src
 
 CMD ["/bin/bash"]

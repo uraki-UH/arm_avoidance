@@ -1725,17 +1725,26 @@ function updateGngDataSourceUi(){
 }
 function normalizeGraphNode(node, idx){
   if(Array.isArray(node)){
-    const x=+node[0], y=+node[1], z=+node[2];
+    const id=Number.isFinite(+node[0])?+node[0]:idx;
+    const x=+node[1], y=+node[2], z=+node[3];
     if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
     return {
       x,y,z,
-      label:node[3]||'gng',
-      err:Number.isFinite(+node[4])?+node[4]:0,
-      win:Number.isFinite(+node[5])?+node[5]:0,
-      util:Number.isFinite(+node[6])?+node[6]:0,
-      densityClass:Number.isFinite(+node[7])?+node[7]:pointDensityClass({x,y,z,label:node[3]}),
-      targetEdgeLength:Number.isFinite(+node[8])?+node[8]:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass({x,y,z,label:node[3]}))),
-      id:Number.isFinite(+node[9])?+node[9]:idx
+      nx:Number.isFinite(+node[4])?+node[4]:0,
+      ny:Number.isFinite(+node[5])?+node[5]:0,
+      nz:Number.isFinite(+node[6])?+node[6]:0,
+      rho:Number.isFinite(+node[7])?+node[7]:0,
+      label:node[8]||'gng',
+      semantic_label:Number.isFinite(+node[9])?+node[9]:0,
+      semantic_reliability:Number.isFinite(+node[10])?+node[10]:0,
+      age:Number.isFinite(+node[11])?+node[11]:0,
+      frame:Number.isFinite(+node[12])?+node[12]:0,
+      inpcl_ids:Array.isArray(node[13])?node[13].map(v=>+v||0):[],
+      winner_point_count:Number.isFinite(+node[14])?+node[14]:0,
+      winner_point_covariance:Array.isArray(node[15])?node[15].map(v=>+v||0):[],
+      densityClass:Number.isFinite(+node[8])?pointDensityClass({x,y,z,label:node[8]}):pointDensityClass({x,y,z,label:'gng'}),
+      targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass({x,y,z,label:node[8]||'gng'}))),
+      id
     };
   }
   if(!node||typeof node!=='object') return null;
@@ -1808,9 +1817,8 @@ function v312UpdateBundleSelectionStatus(){
 }
 function v312NormalizeTopicMessages(entry){
   if(!entry||typeof entry!=='object') return [];
+  if(Array.isArray(entry.rows)) return entry.rows;
   if(Array.isArray(entry.messages)) return entry.messages;
-  if(Array.isArray(entry.items)) return entry.items;
-  if(Array.isArray(entry.data)) return entry.data;
   return [];
 }
 function v312ResolveBundleTopics(bundle){
@@ -1836,7 +1844,7 @@ function v312GetBundleTopicEntries(bundle){
     topic:v312NormalizeAliasText(entry&&entry.topic?entry.topic:entry&&entry.resolved_topic?entry.resolved_topic:alias),
     kind:v312NormalizeAliasText(entry&&entry.kind||'generic'),
     role:v312NormalizeAliasText(entry&&entry.role||'generic'),
-    message_count:Number.isFinite(+entry?.message_count)?+entry.message_count:v312NormalizeTopicMessages(entry).length,
+    message_count:Number.isFinite(+entry?.row_count)?+entry.row_count:v312NormalizeTopicMessages(entry).length,
     selected:state.bundleTopicSelection[v312NormalizeAliasText(entry&&entry.alias?entry.alias:alias)] ?? true
   }));
 }
@@ -1854,12 +1862,6 @@ function v312ResolveBundleGraphEntry(bundle){
     const [alias, entry]=Object.entries(topics)[0]||[];
     if(entry) return {alias,entry};
   }
-  if(bundle && typeof bundle==='object' && bundle.graph && typeof bundle.graph==='object'){
-    return {alias:'graph',entry:{alias:'graph',topic:'graph',role:'graph',kind:'topological_map',messages:[bundle.graph]}};
-  }
-  if(bundle && typeof bundle==='object' && (Array.isArray(bundle.nodes) || Array.isArray(bundle.edges))){
-    return {alias:'graph',entry:{alias:'graph',topic:'graph',role:'graph',kind:'topological_map',messages:[bundle]}};
-  }
   return null;
 }
 function v312ExtractBundleGraphMessages(bundle){
@@ -1867,19 +1869,40 @@ function v312ExtractBundleGraphMessages(bundle){
   if(!resolved) return null;
   const messages=v312NormalizeTopicMessages(resolved.entry);
   if(!messages.length) return null;
+  const schema=Array.isArray(resolved.entry.schema)?resolved.entry.schema:[];
   return {
     alias:resolved.alias,
     topic:resolved.entry.topic||resolved.alias,
-    messageCount:Number.isFinite(+resolved.entry.message_count)?+resolved.entry.message_count:messages.length,
-    messages:messages.map((msg)=>({
-      stamp_ns:Number.isFinite(+msg?.stamp_ns)?+msg.stamp_ns:Number.isFinite(+msg?.stamp)?+msg.stamp:0,
-      data:msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg,
+    messageCount:Number.isFinite(+resolved.entry.row_count)?+resolved.entry.row_count:messages.length,
+    schema,
+    messages:messages.map((row)=>({
+      stamp_ns:Array.isArray(row)?(Number.isFinite(+row[0])?+row[0]:0):Number.isFinite(+row?.stamp_ns)?+row.stamp_ns:Number.isFinite(+row?.stamp)?+row.stamp:0,
+      schema,
+      data:Array.isArray(row)?row:row&&typeof row==='object'&&'data' in row ? row.data : row,
     })).filter((msg)=>msg.data).sort((a,b)=>(a.stamp_ns||0)-(b.stamp_ns||0)),
   };
 }
 function v312LoadBundleGraphMessage(msg, opts={}){
-  const payload=msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
+  const payload=Array.isArray(msg)?msg[1]:msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
   if(!payload || typeof payload!=='object') return false;
+  if(Array.isArray(payload)){
+    const schema=Array.isArray(msg&&msg.schema)?msg.schema:[];
+    const obj={};
+    for(let i=0;i<schema.length&&i<payload.length;i++){
+      obj[schema[i]]=payload[i];
+    }
+    if(Array.isArray(payload) && schema.length){
+      return v312LoadGraphSession({
+        frame_id:obj.frame_id||'',
+        frame_number:Number.isFinite(+obj.frame_number)?+obj.frame_number:0,
+        nodes:Array.isArray(obj.nodes)?obj.nodes:[],
+        edges:Array.isArray(obj.edges)?obj.edges:[],
+        clusters:Array.isArray(obj.clusters)?obj.clusters:[],
+        node_features:obj.node_features,
+        cluster_features:obj.cluster_features,
+      },opts);
+    }
+  }
   return v312LoadGraphSession(payload,opts);
 }
 function v312StopBundleFlow(opts={}){
@@ -2105,13 +2128,14 @@ function v312ResolveGraphBundlePayload(bundle, preferredAlias){
     if(entry){
       if(entry.role==='graph' || entry.kind==='topological_map'){
         if(Array.isArray(entry.messages) && entry.messages.length){
-          return entry.messages[entry.messages.length-1].data || entry.messages[entry.messages.length-1];
+          const last=entry.messages[entry.messages.length-1];
+          return Array.isArray(last)?last[1]:last.data || last;
         }
       }
       if(entry.role==='pointcloud' || entry.kind==='pointcloud2'){
         const frames=[];
         for(const msg of entry.messages||[]){
-          const payload=msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
+          const payload=Array.isArray(msg)?msg[1]:msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
           const extracted=v312ExtractFramesFromPayload(payload);
           if(extracted&&extracted.length) frames.push(...extracted);
         }
@@ -2124,12 +2148,13 @@ function v312ResolveGraphBundlePayload(bundle, preferredAlias){
   const inferredEntry=v312ResolveSelectedTopicEntry(bundle, '');
   if(inferredEntry){
     if((inferredEntry.role==='graph' || inferredEntry.kind==='topological_map') && Array.isArray(inferredEntry.messages) && inferredEntry.messages.length){
-      return inferredEntry.messages[inferredEntry.messages.length-1].data || inferredEntry.messages[inferredEntry.messages.length-1];
+      const last=inferredEntry.messages[inferredEntry.messages.length-1];
+      return Array.isArray(last)?last[1]:last.data || last;
     }
     if(inferredEntry.role==='pointcloud' || inferredEntry.kind==='pointcloud2'){
       const frames=[];
       for(const msg of inferredEntry.messages||[]){
-        const payload=msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
+        const payload=Array.isArray(msg)?msg[1]:msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
         const extracted=v312ExtractFramesFromPayload(payload);
         if(extracted&&extracted.length) frames.push(...extracted);
       }
