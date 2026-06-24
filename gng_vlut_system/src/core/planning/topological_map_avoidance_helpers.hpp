@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <random>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -464,6 +466,129 @@ static inline std::vector<int> collectNearestStartCandidates(
     candidates.push_back(dist_candidates[static_cast<std::size_t>(i)].id);
   }
   return candidates;
+}
+
+static inline bool goalCoordinateReached(
+    const std::shared_ptr<::kinematics::KinematicChain> &chain,
+    bool goal_coord_valid, const Eigen::Vector3f &goal_coord,
+    const Eigen::VectorXf &current_q, double waypoint_tolerance) {
+  if (!goal_coord_valid || !chain) {
+    return false;
+  }
+
+  std::vector<double> current_fk_q;
+  current_fk_q.reserve(static_cast<std::size_t>(current_q.size()));
+  for (int i = 0; i < current_q.size(); ++i) {
+    current_fk_q.push_back(static_cast<double>(current_q[i]));
+  }
+
+  std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+  std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+  chain->forwardKinematicsAt(current_fk_q, positions, orientations);
+  if (positions.empty()) {
+    return false;
+  }
+
+  const Eigen::Vector3d current_eef_pos = positions.back();
+  const Eigen::Vector3d goal_pos = goal_coord.cast<double>();
+  const double pos_err = (current_eef_pos - goal_pos).norm();
+  return pos_err <= waypoint_tolerance;
+}
+
+static inline int pickRandomGoal(
+    const std::shared_ptr<GNGType> &gng,
+    const std::vector<int> &cached_safe_goal_ids,
+    bool trial_safe_only, int start_id, std::mt19937 &rng) {
+  std::vector<int> candidates;
+  if (trial_safe_only && !cached_safe_goal_ids.empty()) {
+    candidates = cached_safe_goal_ids;
+  } else if (gng) {
+    candidates.reserve(gng->getMaxNodeNum());
+    gng->forEachActiveValid([&](int id, const auto &node) {
+      (void)node;
+      candidates.push_back(id);
+    });
+  }
+
+  candidates.erase(
+      std::remove(candidates.begin(), candidates.end(), start_id),
+      candidates.end());
+  if (candidates.empty()) {
+    return -1;
+  }
+
+  std::uniform_int_distribution<std::size_t> dist(0, candidates.size() - 1);
+  return candidates[dist(rng)];
+}
+
+static inline std::optional<Eigen::Vector3f> selectTrialGoalCoord(
+    const std::shared_ptr<GNGType> &gng,
+    bool trial_return_home, bool return_home_phase,
+    bool trial_safe_only, int start_id,
+    const std::vector<int> &cached_safe_goal_ids,
+    Eigen::Vector3f &home_coord, bool &home_coord_valid,
+    std::mt19937 &rng) {
+  if (!gng) {
+    return std::nullopt;
+  }
+
+  if (trial_return_home && return_home_phase) {
+    if (!home_coord_valid) {
+      if (start_id < 0 || start_id >= static_cast<int>(gng->getMaxNodeNum())) {
+        return std::nullopt;
+      }
+      const auto &start_node = gng->nodeAt(start_id);
+      if (start_node.id == -1) {
+        return std::nullopt;
+      }
+      home_coord = start_node.weight_coord;
+      home_coord_valid = true;
+    }
+    return home_coord;
+  }
+
+  const int random_goal_id = pickRandomGoal(
+      gng, cached_safe_goal_ids, trial_safe_only, start_id, rng);
+  if (random_goal_id < 0 || random_goal_id >= static_cast<int>(gng->getMaxNodeNum())) {
+    return std::nullopt;
+  }
+  const auto &goal_node = gng->nodeAt(random_goal_id);
+  if (goal_node.id == -1) {
+    return std::nullopt;
+  }
+  return goal_node.weight_coord;
+}
+
+struct WaypointSafetyLookahead {
+  int next_node_id = -1;
+  int next_next_node_id = -1;
+  bool next_unsafe = false;
+  bool next_next_unsafe = false;
+};
+
+static inline bool isUnsafeNode(
+    const std::shared_ptr<GNGType> &gng, int node_id, bool avoid_danger) {
+  if (!gng || node_id < 0 || node_id >= static_cast<int>(gng->getMaxNodeNum())) {
+    return true;
+  }
+
+  const auto &node = gng->nodeAt(node_id);
+  return node.id == -1 || !node.status.active || !node.status.valid ||
+         node.status.is_colliding || (avoid_danger && node.status.is_danger);
+}
+
+static inline WaypointSafetyLookahead inspectWaypointSafetyLookahead(
+    const std::shared_ptr<GNGType> &gng, const std::vector<int> &node_path,
+    std::size_t waypoint_index, bool avoid_danger) {
+  WaypointSafetyLookahead out;
+  const bool has_next = waypoint_index + 1 < node_path.size();
+  const bool has_next_next = waypoint_index + 2 < node_path.size();
+  out.next_node_id = has_next ? node_path[waypoint_index + 1] : -1;
+  out.next_next_node_id = has_next_next ? node_path[waypoint_index + 2] : -1;
+  out.next_unsafe = has_next && isUnsafeNode(gng, out.next_node_id, avoid_danger);
+  out.next_next_unsafe =
+      has_next_next && isUnsafeNode(gng, out.next_next_node_id, avoid_danger);
+  return out;
 }
 
 static inline std::pair<int, std::vector<int>> planFromStartCandidates(
