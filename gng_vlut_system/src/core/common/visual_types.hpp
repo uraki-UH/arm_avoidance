@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <vector>
 
 namespace simulation {
 
@@ -17,7 +16,7 @@ struct VisualNode {
     bool is_active_surface = false;
     bool active = true;
     bool is_collision = false;
-    bool is_hazard = false;
+    bool is_danger = false;
     bool is_influence = false;
     bool is_path = false;
     bool is_mainland = true;
