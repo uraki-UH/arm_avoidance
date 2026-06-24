@@ -51,13 +51,9 @@ public:
                  const GNG::NeuronNode<T_angle, T_coord> &v) override {
     float distance = (v.weight_angle - u.weight_angle).norm();
 
-    if (v.status.joint_positions.empty() || u.status.joint_positions.empty()) {
-      return distance;
-    }
-
     // エンドエフェクタ（末端リンク）の移動方向をワークスペースで評価
-    Eigen::Vector3f pos_u = u.status.joint_positions.back();
-    Eigen::Vector3f pos_v = v.status.joint_positions.back();
+    Eigen::Vector3f pos_u = u.weight_coord.template cast<float>();
+    Eigen::Vector3f pos_v = v.weight_coord.template cast<float>();
     Eigen::Vector3f dir = (pos_v - pos_u).normalized();
 
     // v の可操作性楕円体における、dir 方向の半径を評価

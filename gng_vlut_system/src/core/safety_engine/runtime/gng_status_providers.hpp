@@ -52,12 +52,6 @@ public:
                                        static_cast<int>(orientations.size()) - 1);
     node.status.ee_direction =
         (orientations[ee_index] * Eigen::Vector3d::UnitX()).cast<float>();
-
-    // 全関節位置を保存 (プランニング時の方向評価用)
-    node.status.joint_positions.clear();
-    for (const auto &p : pts) {
-      node.status.joint_positions.push_back(p.cast<float>());
-    }
   }
 };
 

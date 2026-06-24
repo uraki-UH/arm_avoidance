@@ -122,7 +122,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     feature.node_id = static_cast<uint16_t>(node_data.id);
     robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
     robot_sim::common::fillNodeKinematicsFields(
-        feature, node_data.weight_angle, node_data.status.joint_positions,
+        feature, node_data.weight_angle,
         node_data.weight_coord, node_data.status.ee_orientation);
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
@@ -232,7 +232,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     feature.node_id = static_cast<uint16_t>(node_data.id);
     robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
     robot_sim::common::fillNodeKinematicsFields(
-        feature, node_data.weight_angle, node_data.status.joint_positions,
+        feature, node_data.weight_angle,
         node_data.weight_coords[layer], node_data.status.ee_orientation);
 
     const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());

@@ -172,7 +172,7 @@ static inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     feature.is_goal = (n.id == selected_id);
     robot_sim::common::fillManipulabilityFields(feature, n.status.manip_info, feature.is_goal);
     robot_sim::common::fillNodeKinematicsFields(
-        feature, n.weight_angle, n.status.joint_positions, n.weight_coord,
+        feature, n.weight_angle, n.weight_coord,
         n.status.ee_orientation);
     if (n.id == selected_id) {
       out.label = 1;

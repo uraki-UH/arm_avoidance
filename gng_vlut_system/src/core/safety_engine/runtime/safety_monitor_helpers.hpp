@@ -76,7 +76,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     feature.node_id = static_cast<uint16_t>(node_data.id);
     robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
     robot_sim::common::fillNodeKinematicsFields(
-        feature, node_data.weight_angle, node_data.status.joint_positions,
+        feature, node_data.weight_angle,
         node_data.weight_coord, node_data.status.ee_orientation);
     id_to_index.emplace(node_data.id, static_cast<uint16_t>(msg.nodes.size()));
     msg.nodes.push_back(std::move(out));

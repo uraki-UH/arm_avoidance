@@ -253,29 +253,11 @@ def _serialize_topological_node_features(node: Any, include_joint_positions: boo
             },
         },
     }
-    if include_joint_positions:
-        joint_positions = []
-        for p in getattr(node, "joint_positions", []) or []:
-            joint_positions.append({
-                "x": float(getattr(p, "x", 0.0)),
-                "y": float(getattr(p, "y", 0.0)),
-                "z": float(getattr(p, "z", 0.0)),
-            })
-        out["joint_positions"] = joint_positions
     return out
 
 
 def _serialize_topological_node_features_compact(node: Any, include_joint_positions: bool = True) -> List[Any]:
     ee_pose = getattr(node, "ee_pose", None)
-    joint_positions: Optional[List[List[float]]] = None
-    if include_joint_positions:
-        joint_positions = []
-        for p in getattr(node, "joint_positions", []) or []:
-            joint_positions.append([
-                float(getattr(p, "x", 0.0)),
-                float(getattr(p, "y", 0.0)),
-                float(getattr(p, "z", 0.0)),
-            ])
     return [
         int(getattr(node, "node_id", getattr(node, "id", 0))),
         1 if getattr(node, "is_goal", False) else 0,
@@ -302,7 +284,7 @@ def _serialize_topological_node_features_compact(node: Any, include_joint_positi
             float(getattr(getattr(ee_pose, "orientation", None), "z", 0.0)),
             float(getattr(getattr(ee_pose, "orientation", None), "w", 1.0)),
         ],
-        joint_positions,
+        None,
     ]
 
 

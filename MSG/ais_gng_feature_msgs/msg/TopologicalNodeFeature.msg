@@ -8,4 +8,3 @@ geometry_msgs/Vector3 manip_scale
 geometry_msgs/Quaternion manip_orientation
 float32[] weight_angle
 geometry_msgs/Pose ee_pose
-geometry_msgs/Point32[] joint_positions

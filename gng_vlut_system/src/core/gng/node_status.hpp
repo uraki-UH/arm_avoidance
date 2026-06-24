@@ -62,7 +62,6 @@ struct Status {
   Manipulability::ManipulabilityEllipsoid dynamic_manip_info;
 
   // --- その他 ---
-  std::vector<Eigen::Vector3f> joint_positions;    // 全関節位置
   std::unordered_map<std::string, float> metadata; // 汎用メタデータ
 
   Status() {

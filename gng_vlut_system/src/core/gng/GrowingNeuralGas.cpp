@@ -434,10 +434,6 @@ void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
         node.status.ee_direction =
             (eef_orientation * Eigen::Vector3d::UnitX()).template cast<float>();
         node.status.ee_orientation = eef_orientation.template cast<float>();
-        node.status.joint_positions.clear();
-        for (const auto &p : pts) {
-          node.status.joint_positions.push_back(p.template cast<float>());
-        }
       }
 
       if (node.weight_coords.size() <
@@ -1140,7 +1136,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
   std::ofstream ofs(resolved_path, std::ios::binary);
   if (!ofs)
     return false;
-  uint32_t version = 6; // Version 6: Added multi-layer coord support
+  uint32_t version = 7; // Version 7: Removed redundant joint_positions
   ofs.write((char *)&version, sizeof(version));
   ofs.write((char *)&coord_layer_count_, sizeof(coord_layer_count_));
 
@@ -1191,11 +1187,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
       ofs.write((char *)&nodes[i].status.manip_info.valid, sizeof(bool));
       ofs.write((char *)&nodes[i].status.dynamic_manipulability, sizeof(float));
 
-      int jp_size = (int)nodes[i].status.joint_positions.size();
-      ofs.write((char *)&jp_size, sizeof(int));
-      for (const auto &v : nodes[i].status.joint_positions) {
-        GrowingNeuralGas_Internal::write_eigen(ofs, v);
-      }
+      // joint_positions is removed in version 7
     }
   }
 
@@ -1305,7 +1297,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   uint32_t version;
   ifs.read((char *)&version, sizeof(version));
   if (version != 1 && version != 2 && version != 3 && version != 4 &&
-      version != 5 && version != 6) {
+      version != 5 && version != 6 && version != 7) {
     std::cerr << "Error: Unsupported GNG file version: " << version
               << " (hex: 0x" << std::hex << version << std::dec << ")" << std::endl;
     return false;
@@ -1381,13 +1373,14 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
       ifs.read((char *)&nodes[id].status.dynamic_manipulability, sizeof(float));
     }
 
-    int jp_size = 0;
-    ifs.read((char *)&jp_size, sizeof(int));
-    if (jp_size > 0) {
-      nodes[id].status.joint_positions.resize(jp_size);
-      for (int i = 0; i < jp_size; ++i) {
-        GrowingNeuralGas_Internal::read_eigen(
-            ifs, nodes[id].status.joint_positions[i]);
+    if (version < 7) {
+      int jp_size = 0;
+      ifs.read((char *)&jp_size, sizeof(int));
+      if (jp_size > 0) {
+        for (int i = 0; i < jp_size; ++i) {
+          Eigen::Vector3f dummy_vec;
+          GrowingNeuralGas_Internal::read_eigen(ifs, dummy_vec);
+        }
       }
     }
   }

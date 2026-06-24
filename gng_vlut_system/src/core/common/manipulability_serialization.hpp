@@ -107,11 +107,10 @@ inline void fillManipulabilityFields(
   node_msg.manip_orientation = toQuaternion(ellipsoid.principal_directions);
 }
 
-template <typename AngleVector, typename JointPositionsVector>
+template <typename AngleVector>
 inline void fillNodeKinematicsFields(
     ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
     const AngleVector &weight_angle,
-    const JointPositionsVector &joint_positions,
     const Eigen::Vector3f &eef_position,
     const Eigen::Quaternionf &eef_orientation) {
   node_msg.weight_angle.clear();
@@ -120,7 +119,6 @@ inline void fillNodeKinematicsFields(
     node_msg.weight_angle.push_back(static_cast<float>(weight_angle[i]));
   }
   node_msg.ee_pose = toPose(eef_position, eef_orientation);
-  node_msg.joint_positions = toPoint32Vector(joint_positions);
 }
 
 inline nlohmann::json manipulabilityToJson(

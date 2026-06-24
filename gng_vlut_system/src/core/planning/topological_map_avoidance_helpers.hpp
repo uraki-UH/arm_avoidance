@@ -745,7 +745,7 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       feature.is_goal = (!path.empty() && node_ref.id == path.back());
       robot_sim::common::fillManipulabilityFields(feature, node_ref.status.manip_info, feature.is_goal);
       robot_sim::common::fillNodeKinematicsFields(
-          feature, node_ref.weight_angle, node_ref.status.joint_positions,
+          feature, node_ref.weight_angle,
           node_ref.weight_coord, node_ref.status.ee_orientation);
 
       const uint16_t published_index = static_cast<uint16_t>(msg.nodes.size());
