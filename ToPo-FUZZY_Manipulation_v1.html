@@ -54,7 +54,8 @@ h1{margin:0;color:#00ff00;font-size:25px;line-height:1.15;text-shadow:none}
   position:static;width:auto;height:100%;max-height:100%;max-width:100%;
 }
 .header-logo-frame.company{order:1}
-.header-logo-frame.fuzz,.header-fuzz-logo{order:2;display:inline-flex;visibility:visible;opacity:1;width:auto;height:auto;min-width:0;max-width:36vw;margin:0;padding:0;overflow:visible}
+.header-logo-frame.fuzz{order:2;display:inline-flex;visibility:visible;opacity:1;width:auto;height:44px;min-width:0;max-width:36vw;margin:0;padding:0;overflow:visible}
+.header-fuzz-logo{order:2;display:inline-block;visibility:visible;opacity:1;width:auto;height:100%;max-height:100%;min-width:0;max-width:100%;margin:0;padding:0;object-fit:contain}
 
 /* ── Task switchbar ── */
 .task-switchbar{
@@ -425,7 +426,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .fuzzy-mf-row{grid-template-columns:1fr}
   .fuzzy-output-row2{grid-template-columns:1fr}
 }
-@media(max-width:1080px){
+@media(max-width:600px){
   .workspace{grid-template-columns:1fr}
   .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .grid2{grid-template-columns:1fr}
@@ -598,7 +599,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 </section>
 
 <section id="taskGrasp" class="task active">
-  <div class="mode-note" style="margin:14px 14px 0;padding:10px 12px;border:1px solid rgba(0,255,0,.32);border-radius:12px;background:rgba(2,6,23,.48);color:#00ff00;font-size:12px;line-height:1.55">トポロジカルマッピングは独立TASKではなく、このファジィ把持位置推定器の内部処理として実行します。</div>
 <div class="workspace">
     <aside class="panel">
       <h2>Internal Topological Mapping / GNG</h2>
@@ -722,7 +722,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="full"><label>Region growing threshold</label><div class="control-pair"><input id="regionGrowThreshold" type="range" min="0.1" max="0.95" step="0.01" value="0.68"><input id="regionGrowThresholdNum" type="number" min="0.1" max="0.95" step="0.01" value="0.68"></div></div>
             </div>
           </details>
-        </div>
         <div class="grid2" style="margin-top:12px"><button id="genBtn" class="primary">サンプル点群を生成</button><button id="gngBtn" class="go">GNG学習を実行</button></div>
         <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" class="primary">3D点群リアルタイム再生</button><button id="gngPlayBtn" class="go">GNG学習再生</button></div>
         <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" class="go">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
