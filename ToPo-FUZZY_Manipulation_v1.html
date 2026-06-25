@@ -894,6 +894,7 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
 'use strict';
 const $=id=>document.getElementById(id);
 const TAU=Math.PI*2;
+function reportGngRuntimeError(context,err){console.warn('[GNG error]',context,err);}
 const state={
   basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
@@ -2030,7 +2031,8 @@ function runGngAlgorithmFromViewer(alg){
     if(s)s.textContent='Graph-only mode: algorithm playback is disabled. Switch to Point cloud -> GNG to run learning.';
     return;
   }
-  setGngAlgorithmValue(alg);restartGngReplayFromZero();updateHud();const s=$('topoStatus');if(s)s.textContent=`${gngAlgorithmLabel()} realtime started. samples/frame=${currentGngBatchSize()}`;
+  setGngAlgorithmValue(alg);
+  runGngAnimated();
 }
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
@@ -2151,7 +2153,7 @@ function gngShouldDeleteEdge(g,e,maxAge){
 }
 function setGngEdge(g,a,b,age=0){
   if(!g||a<0||b<0||a===b||!g.nodes[a]||!g.nodes[b])return false;
-  if(!gAllowEdgeCreate(g,g.nodes[a],g.nodes[b]))return false;
+  if(!gngAllowEdgeCreate(g,g.nodes[a],g.nodes[b]))return false;
   const edge={a:Math.min(a,b),b:Math.max(a,b),age};
   g.edges.set(key(edge.a,edge.b),edge);
   addGngTTrianglesForEdge(g,edge.a,edge.b);
@@ -2796,6 +2798,56 @@ function runGng(){
   const dt=(performance.now()-started).toFixed(1);
   const backend=state.gng&&state.gng.backend?state.gng.backend:(usedWasm?'C++/WASM':'JavaScript fallback');
   $('topoStatus').textContent=`${mode} ${alg} complete. backend=${backend}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms. 1フレームあたり学習点数=${currentGngBatchSize()}。`;
+}
+function stopGngAnimated(){
+  if(state._gngAnimRaf){cancelAnimationFrame(state._gngAnimRaf);state._gngAnimRaf=null;}
+}
+function runGngAnimated(){
+  if(isGraphOnlyMode()){runGng();return;}
+  if(!state.points.length)generate();
+  stopGngAnimated();
+  resetGngRunState();
+  initGng();
+  if(!state.gng){$('topoStatus').textContent='GNG学習失敗: 有効点群が不足しています。';return;}
+  state.gng.backend='JavaScript replay (animated)';
+  state.gngPlaying=true;
+  const totalIters=+$('gngIters').value||12000;
+  const batch=currentGngBatchSize();
+  const started=performance.now();
+  renderAll();updateHud();
+  function tick(){
+    try{
+      if(!state.gngPlaying){
+        state._gngAnimRaf=requestAnimationFrame(tick);
+        return;
+      }
+      if(!state.gng||state.gng.iter>=totalIters){
+        state._gngAnimRaf=null;
+        state.gngPlaying=false;
+        sanitizeGngGraph();
+        if(state.gng&&gngUsesTriangulationAlgorithm(state.gng.variant)){rebuildGngTTriangles(state.gng);detectGngFaces();}
+        updateTopoSemantics();updateMetrics();updateHud();renderAll();
+        const dt=(performance.now()-started).toFixed(1);
+        $('topoStatus').textContent=`GNG animated complete. nodes=${state.nodes.length}, edges=${state.edges.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms.`;
+        return;
+      }
+      const step=Math.min(batch,totalIters-state.gng.iter);
+      gngStep(step,{updateSemantics:false,updateMetrics:false});
+      if(state.gng&&state.gng.iter%1200<step)updateTopoSemantics();
+      sanitizeGngGraph();
+      updateCoreMetricsOnly();updateHud();renderAll();
+      $('topoStatus').textContent=`GNG learning... iterations=${state.gng.iter}/${totalIters}, nodes=${state.nodes.length}, edges=${state.edges.length}`;
+    }catch(e){
+      console.error('GNG animated tick error:',e);
+      state._gngAnimRaf=null;
+      state.gngPlaying=false;
+      updateHud();
+      $('topoStatus').textContent='GNG animated error: '+(e&&e.message?e.message:e);
+      return;
+    }
+    state._gngAnimRaf=requestAnimationFrame(tick);
+  }
+  state._gngAnimRaf=requestAnimationFrame(tick);
 }
 /* v298: fuzzy grasp candidate generation from topological map only */
 function topologyGraspNodesForFuzzy(){
@@ -4746,6 +4798,7 @@ function v301ApplyReplayVisualMotion(dt){
   return;
 }
 function v301SetPointPlaying(v){
+  const wasGngPlaying=state.gngPlaying;
   state.pointPlaying=!!v;
   state.perf.lastPointNow=null;
   state.perf.lastPointScan=null;
@@ -4756,6 +4809,8 @@ function v301SetPointPlaying(v){
     if(pat) pat.value='vibration';
     if(amp && (+amp.value||0)<=0) amp.value='0.0012';
     $('topoStatus').textContent='3D再生中: 点群データ自体をリアルタイムに微小振動させています。Raw Noise値は変更しません。';
+  }else{
+    if(wasGngPlaying) state.gngPlaying=false;
   }
   updateHud();
   renderAll();
@@ -4792,13 +4847,18 @@ function restartGngReplayFromZero(){
 }
 function setGngPlaying(v){
   if(v){
+    if(state._gngAnimRaf){
+      state.gngPlaying=true;
+      updateHud();
+      return;
+    }
     if(state.gng){
       state.gngPlaying=true;
       updateHud();
       renderAll();
       return;
     }
-    restartGngReplayFromZero();
+    runGngAnimated();
     return;
   }
   state.gngPlaying=false;
@@ -4835,7 +4895,7 @@ function loop(now){
     changed=true;
   }
 
-  if(state.gngPlaying){
+  if(state.gngPlaying&&!state._gngAnimRaf){
     try{
       const t0=performance.now();
       const batch=currentGngBatchSize();
@@ -5061,7 +5121,7 @@ function bindDataModeControls(){
     });
   }
 }
-$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGng;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{if($('pointCloudSource').value==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='Point-cloud source switched to imported frames.';}else{$('topoStatus').textContent='Point-cloud source switched to synthetic depth.';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
