@@ -5,44 +5,180 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ToPo-FUZZY Manipulation v1</title>
 <style>
-:root{--bg:#020617;--panel:#0f172a;--panel2:#111827;--line:#334155;--text:#e5e7eb;--muted:#94a3b8;--lime:#00ff00;--cyan:#38bdf8;--pink:#f472b6;--amber:#f59e0b;--red:#ef4444}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:linear-gradient(180deg,#020617,#07111f);color:var(--text);font-family:Arial,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;overflow-x:hidden}
-header{position:sticky;top:0;z-index:1000;background:rgba(2,6,23,.97);border-bottom:1px solid rgba(148,163,184,.22);padding:12px 16px;box-shadow:0 8px 26px rgba(0,0,0,.32)}
-h1{margin:0;color:#00ff00;font-size:25px;line-height:1.15;text-shadow:none}.sub{margin-top:5px;color:var(--muted);font-size:13px;line-height:1.45}.taskbar{position:sticky;top:73px;z-index:900;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(2,6,23,.95);border-bottom:1px solid rgba(148,163,184,.18);padding:10px 16px;backdrop-filter:blur(8px)}
-.taskbar b{color:var(--muted);font-size:12px;letter-spacing:.08em}.taskbar button{width:auto;min-width:190px;border-radius:999px;border:1px solid rgba(148,163,184,.28);background:#1e293b;color:var(--text);padding:10px 16px;font-weight:900;cursor:pointer}.taskbar button.active{border-color:#00ff00;background:#2f5f1f;box-shadow:none}
-.task{display:none;padding:14px}.task.active{display:block}.workspace{display:grid;grid-template-columns:minmax(330px,430px) minmax(0,1fr);gap:14px}.panel{background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.20);border-radius:16px;box-shadow:0 12px 26px rgba(0,0,0,.36);overflow:hidden}.panel h2{margin:0;padding:14px 16px 8px;color:#00ff00;font-size:18px}.panel h3{margin:0;padding:14px 16px 8px;color:#bfdbfe;font-size:15px}.body{padding:0 16px 16px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}.full{grid-column:1/-1}label{display:block;color:#93c5fd;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px}input,select,button,textarea{width:100%;border:1px solid rgba(148,163,184,.26);background:#1e293b;color:var(--text);border-radius:10px;padding:9px 10px;font-size:13px}input[type=range]{padding:0}button{cursor:pointer;font-weight:900}.go{background:#2f5f1f;border-color:#00ff00;color:#f8fafc}.warn{background:#3b2f1a;border-color:#f59e0b;color:#f8fafc}.primary{background:#1e3a5f;border-color:#38bdf8;color:#f8fafc}
-.status{margin-top:10px;border:1px solid rgba(0,255,0,.28);background:rgba(2,6,23,.56);border-radius:12px;color:#00ff00;padding:9px 10px;font-size:12px;line-height:1.55;white-space:pre-wrap}.note{color:var(--muted);font-size:12px;line-height:1.55;margin-top:10px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}.metric{background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:12px;min-width:0}.metric .t{color:var(--muted);font-size:11px;text-transform:uppercase}.metric .v{font-size:22px;font-weight:950;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.canvaswrap{position:relative}canvas.viewer{display:block;width:100%;height:min(68vh,720px);min-height:430px;background:radial-gradient(circle at top,rgba(56,189,248,.10),transparent 32%),#020617;border:1px solid rgba(148,163,184,.22);border-radius:14px;touch-action:none;cursor:grab}.overlay{position:absolute;left:14px;top:12px;max-width:min(620px,calc(100% - 28px));max-height:42%;overflow:auto;background:rgba(2,6,23,.70);border:1px solid rgba(148,163,184,.24);border-radius:10px;color:#dbeafe;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;white-space:pre-wrap}.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1;font-size:12px}.chip{display:inline-flex;gap:5px;align-items:center}.chip i{display:inline-block;width:18px;height:4px;border-radius:99px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.candidate{border:1px solid rgba(148,163,184,.20);background:rgba(2,6,23,.45);border-radius:12px;padding:10px;margin-top:8px}.candidate.best{border-color:#00ff00;box-shadow:none}.candidate b{color:#00ff00}.candidate small{color:#94a3b8}.barrow{display:grid;grid-template-columns:130px 1fr 48px;gap:8px;align-items:center;margin:7px 0;font-size:12px}.bar{height:16px;background:rgba(148,163,184,.18);border-radius:99px;overflow:hidden}.fill{height:100%;width:0%;background:#00ff00}textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;resize:vertical;background:#020617}.hide{display:none!important}
-@media(max-width:1080px){.workspace{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}canvas.viewer{height:58vh}}
-@media(max-width:760px){header{padding:10px 12px}h1{font-size:20px}.sub{font-size:11px}.taskbar{top:72px;padding:8px;gap:6px}.taskbar b{flex:1 1 100%}.taskbar button{flex:1 1 100%;min-width:0}.task{padding:8px}.controls{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}canvas.viewer{height:54vh;min-height:330px}.barrow{grid-template-columns:92px 1fr 42px}}
+:root{
+  --bg:#020617;--panel:#0f172a;--panel2:#111827;--line:#334155;
+  --text:#e5e7eb;--muted:#94a3b8;--lime:#00ff00;--cyan:#38bdf8;
+  --pink:#f472b6;--amber:#f59e0b;--red:#ef4444;
+  --v277HeaderH:112px;--v277TaskbarH:54px;
+}
 
-/* v238: mapping-like visibility + 3D Neocognitron style playback HUD */
-.canvaswrap{overflow:hidden;}
-.mapping-view-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+/* ── Base ── */
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(var(--v277HeaderH) + var(--v277TaskbarH) + 16px)}
+html,body{margin:0;min-height:100%;background:linear-gradient(180deg,#020617,#07111f);color:var(--text);font-family:Arial,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;overflow-x:hidden}
+body{padding-top:calc(var(--v277HeaderH) + var(--v277TaskbarH) + 10px)}
+
+/* ── Header ── */
+header{
+  position:fixed;top:0;left:0;right:0;width:100%;
+  z-index:6000;overflow:visible;max-height:none;min-height:0;
+  padding:10px 16px 10px;
+  background:rgba(2,6,23,.985);
+  border-bottom:1px solid rgba(148,163,184,.22);
+  box-shadow:0 10px 26px rgba(0,0,0,.36);
+}
+.app-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px;overflow:visible}
+.app-title-wrap{min-width:0;overflow:visible}
+.app-title-wrap h1{margin:0 0 4px;font-size:28px;line-height:1.12;color:#00ff00;text-shadow:none}
+.app-title-wrap .sub{color:#94a3b8;font-size:14px;line-height:1.45;margin:0;max-width:1180px;display:block;overflow:visible}
+h1{margin:0;color:#00ff00;font-size:25px;line-height:1.15;text-shadow:none}
+.sub{margin-top:5px;color:var(--muted);font-size:13px;line-height:1.45}
+
+/* ── Header logos ── */
+.header-logo-row{
+  display:flex;align-items:center;justify-content:flex-end;
+  gap:12px;flex-wrap:nowrap;overflow:visible;
+  min-width:max-content;padding:6px 0 10px;line-height:normal;
+}
+.header-logo-frame{display:inline-flex;align-items:center;justify-content:center;overflow:visible;background:transparent;line-height:0;flex:0 1 auto}
+.header-logo-frame.company{height:44px;max-width:54vw}
+.header-logo-frame.fuzz{height:44px;max-width:32vw}
+.header-company-logo,.header-fuzz-logo{
+  display:block;visibility:visible;opacity:1;
+  object-fit:contain;object-position:center center;
+  overflow:visible;clip-path:none;transform:none;
+  background:transparent;border-radius:0;
+  border:0;padding:0;margin:0;
+}
+.header-logo-frame .header-company-logo,.header-logo-frame .header-fuzz-logo{
+  position:static;width:auto;height:100%;max-height:100%;max-width:100%;
+}
+.header-logo-frame.company{order:1}
+.header-logo-frame.fuzz,.header-fuzz-logo{order:2;display:inline-flex;visibility:visible;opacity:1;width:auto;height:auto;min-width:0;max-width:36vw;margin:0;padding:0;overflow:visible}
+
+/* ── Task switchbar ── */
+.task-switchbar{
+  position:fixed;top:var(--v277HeaderH);left:0;right:0;width:100%;
+  z-index:5900;overflow:visible;
+  display:flex;align-items:center;gap:10px;padding:10px 16px;
+  background:rgba(2,6,23,.975);
+  border-bottom:1px solid rgba(148,163,184,.20);
+  backdrop-filter:blur(10px);box-shadow:0 12px 24px rgba(0,0,0,.20);
+}
+.task-switchbar .task-label{color:#94a3b8;font-size:12px;font-weight:800;letter-spacing:.35px;text-transform:uppercase;margin-right:2px}
+.task-switchbar button{
+  width:auto;min-width:190px;border-radius:999px;padding:10px 18px;
+  background:#1e293b;border:1px solid rgba(148,163,184,.28);
+  color:#e5e7eb;font-weight:900;cursor:pointer;
+}
+.task-switchbar button.active,.task-switchbar button[aria-pressed="true"]{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
+
+/* ── Taskbar (legacy) ── */
+.taskbar{position:sticky;top:73px;z-index:900;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(2,6,23,.95);border-bottom:1px solid rgba(148,163,184,.18);padding:10px 16px;backdrop-filter:blur(8px)}
+.taskbar b{color:var(--muted);font-size:12px;letter-spacing:.08em}
+.taskbar button{width:auto;min-width:190px;border-radius:999px;border:1px solid rgba(148,163,184,.28);background:#1e293b;color:var(--text);padding:10px 16px;font-weight:900;cursor:pointer}
+.taskbar button.active{border-color:#00ff00;background:#2f5f1f;box-shadow:none}
+
+/* ── Task panels ── */
+.task{display:none;padding:14px}.task.active{display:block}
+.workspace{display:grid;grid-template-columns:minmax(330px,430px) minmax(0,1fr);gap:14px}
+.panel{background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.20);border-radius:16px;box-shadow:0 12px 26px rgba(0,0,0,.36);overflow:hidden}
+.panel h2{margin:0;padding:14px 16px 8px;color:#00ff00;font-size:18px}
+.panel h3{margin:0;padding:14px 16px 8px;color:#bfdbfe;font-size:15px}
+.body{padding:0 16px 16px}
+
+/* ── Controls ── */
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.full{grid-column:1/-1}
+.controls .section-title{grid-column:1/-1;color:#00ff00;font-weight:950;font-size:12px;border-top:1px solid rgba(148,163,184,.18);padding-top:10px;margin-top:2px}
+label{display:block;color:#93c5fd;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px}
+input,select,button,textarea{width:100%;border:1px solid rgba(148,163,184,.26);background:#1e293b;color:var(--text);border-radius:10px;padding:9px 10px;font-size:13px}
+input[type=range]{padding:0}
+button{cursor:pointer;font-weight:900}
+.go{background:#2f5f1f;border-color:#00ff00;color:#f8fafc;box-shadow:none}
+.warn{background:#3b2f1a;border-color:#f59e0b;color:#f8fafc}
+.primary{background:#1e3a5f;border-color:#38bdf8;color:#f8fafc}
+.hide{display:none!important}
+.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini-grid input[type="number"]{margin-top:6px}
+.control-pair{display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:center}
+.control-pair input[type=range]{width:100%;min-width:0}
+.control-pair input[type=number],.color-code-input{font-family:Consolas,Menlo,monospace;font-size:12px;text-transform:uppercase}
+.color-pair{display:grid;grid-template-columns:56px minmax(0,1fr);gap:8px;align-items:center}
+.color-pair input[type=color]{height:40px;padding:3px}
+
+/* ── Status / readout ── */
+.status{margin-top:10px;border:1px solid rgba(0,255,0,.45);background:rgba(2,6,23,.56);border-radius:12px;color:#00ff00;padding:9px 10px;font-size:12px;line-height:1.55;white-space:pre-wrap}
+.note{color:var(--muted);font-size:12px;line-height:1.55;margin-top:10px}
+
+/* ── Metrics ── */
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.metric{background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.18);border-radius:14px;padding:12px;min-width:0}
+.metric .t{color:var(--muted);font-size:11px;text-transform:uppercase}
+.metric .v{font-size:22px;font-weight:950;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── Canvas / viewer ── */
+.canvaswrap{position:relative;overflow:hidden;isolation:isolate}
+canvas.viewer{
+  display:block;position:relative;z-index:1;pointer-events:auto;
+  width:100%;height:min(68vh,720px);min-height:430px;
+  background:radial-gradient(circle at top,rgba(56,189,248,.10),transparent 32%),#020617;
+  border:1px solid rgba(148,163,184,.22);border-radius:14px;touch-action:none;cursor:grab;
+}
+.overlay{position:absolute;left:14px;top:12px;max-width:min(620px,calc(100% - 28px));max-height:42%;overflow:auto;background:rgba(2,6,23,.70);border:1px solid rgba(148,163,184,.24);border-radius:10px;color:#dbeafe;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;white-space:pre-wrap}
+.legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1;font-size:12px}
+.chip{display:inline-flex;gap:5px;align-items:center}
+.chip i{display:inline-block;width:18px;height:4px;border-radius:99px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* ── Candidates ── */
+.candidate{border:1px solid rgba(148,163,184,.20);background:rgba(2,6,23,.45);border-radius:12px;padding:10px;margin-top:8px}
+.candidate.best{border-color:#00ff00;box-shadow:none}
+.candidate b{color:#00ff00}
+.candidate small{color:#94a3b8}
+.barrow{display:grid;grid-template-columns:130px 1fr 48px;gap:8px;align-items:center;margin:7px 0;font-size:12px}
+.bar{height:16px;background:rgba(148,163,184,.18);border-radius:99px;overflow:hidden}
+.fill{height:100%;width:0%;background:#00ff00}
+textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;resize:vertical;background:#020617}
+
+/* ── Neo HUD ── */
 .neo-hud{
-  position:absolute;left:14px;bottom:14px;z-index:12;
+  position:absolute;left:14px;bottom:14px;z-index:75;
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:9px 10px;border-radius:14px;
   background:rgba(2,6,23,.74);border:1px solid rgba(0,255,0,.45);
-  box-shadow:0 12px 28px rgba(0,0,0,.32);
-  backdrop-filter:blur(6px);
+  box-shadow:none;backdrop-filter:blur(6px);pointer-events:auto;touch-action:manipulation;
 }
 .neo-hud button{
   width:auto;min-width:98px;border-radius:999px;padding:8px 12px;
-  border:1px solid rgba(0,255,0,.62);color:#00ff00;
-  background:#13251a;
+  border:1px solid rgba(0,255,0,.62);color:#00ff00;background:#13251a;
   font-weight:950;font-size:12px;letter-spacing:.02em;
+  pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,255,0,.18);
 }
-.neo-hud button.running{
-  color:#fff;border-color:#00ff00;
-  box-shadow:none;
-}
-.gng-algorithm-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.gng-algorithm-buttons button{min-width:138px}
-.gng-algorithm-buttons button.active{border-color:#00ff00;background:#2f5f1f;color:#fff}
-.neo-led{width:9px;height:9px;border-radius:999px;background:#475569;box-shadow:none;}
+.neo-hud button.running{color:#fff;border-color:#00ff00;box-shadow:none}
+.neo-hud .neo-readout{font:900 12px/1.35 Consolas,Menlo,monospace;color:#00ff00;min-width:172px}
+.neo-hud .neo-readout span{color:#93c5fd}
+.neo-led{width:9px;height:9px;border-radius:999px;background:#475569;box-shadow:none}
 .neo-led.on{background:#00ff00;box-shadow:none}
-.neo-hud .neo-readout{font:900 12px/1.35 Consolas,Menlo,monospace;color:#00ff00;min-width:172px;}
-.neo-hud .neo-readout span{color:#93c5fd;}
+
+/* ── View tools ── */
+.view-tools{
+  position:absolute;right:14px;top:12px;z-index:78;
+  display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;
+  max-width:min(360px,calc(100% - 28px));
+  padding:6px;border-radius:14px;background:rgba(2,6,23,.62);
+  border:1px solid rgba(56,189,248,.24);backdrop-filter:blur(6px);
+  pointer-events:auto;touch-action:manipulation;
+}
+.view-tools button{
+  width:auto;min-width:58px;padding:6px 9px;border-radius:999px;
+  border:1px solid rgba(148,163,184,.28);background:rgba(30,41,59,.90);
+  color:#dbeafe;font-size:11px;font-weight:950;line-height:1.15;
+  pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,255,0,.18);
+}
+.view-tools button.active{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
+
+/* ── Viewer corner note ── */
 .viewer-corner-note{
   position:absolute;right:14px;bottom:14px;z-index:10;
   padding:8px 10px;border-radius:12px;background:rgba(2,6,23,.62);
@@ -50,216 +186,169 @@ h1{margin:0;color:#00ff00;font-size:25px;line-height:1.15;text-shadow:none}.sub{
   font:800 11px/1.35 Consolas,Menlo,monospace;text-align:right;pointer-events:none;
 }
 
-.view-tools{
-  position:absolute;right:14px;top:12px;z-index:15;
-  display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;
-  max-width:min(360px,calc(100% - 28px));
-  padding:6px;border-radius:14px;background:rgba(2,6,23,.62);
-  border:1px solid rgba(56,189,248,.24);backdrop-filter:blur(6px);
+/* ── Viewer tabs ── */
+.viewer-tabs{
+  position:absolute;left:12px;top:10px;z-index:420;
+  display:flex;gap:5px;flex-wrap:wrap;
+  padding:5px;border-radius:999px;
+  background:rgba(2,6,23,.44);border:1px solid rgba(148,163,184,.20);
+  backdrop-filter:blur(5px);pointer-events:auto;touch-action:manipulation;
 }
-.view-tools button{
-  width:auto;min-width:58px;padding:6px 9px;border-radius:999px;
-  border:1px solid rgba(148,163,184,.28);background:rgba(30,41,59,.90);
-  color:#dbeafe;font-size:11px;font-weight:950;line-height:1.15;
+.viewer-tabs button{
+  width:auto;min-width:54px;padding:6px 8px;border-radius:999px;
+  border:1px solid rgba(148,163,184,.26);background:rgba(30,41,59,.78);
+  color:#cbd5e1;font-size:10px;font-weight:950;line-height:1.1;
+  pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,255,0,.18);
 }
-.view-tools button.active{
-  color:#fff;border-color:#00ff00;background:#2f5f1f;
-  box-shadow:none;
+.viewer-tabs button.active{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
+
+/* ── Collapsible viewer panels ── */
+.canvaswrap:not(.info-open) [data-view-panel="info"],
+.canvaswrap:not(.play-open) [data-view-panel="play"],
+.canvaswrap:not(.tools-open) [data-view-panel="tools"],
+.canvaswrap:not(.layers-open) [data-view-panel="layers"]{display:none!important}
+.canvaswrap.info-open .overlay{top:52px;max-height:36%}
+.canvaswrap.info-open .viewer-timing-panel{top:auto;left:14px;bottom:14px;min-width:230px}
+.canvaswrap.info-open .viewer-corner-note{right:14px;bottom:14px}
+.canvaswrap.play-open .neo-hud{left:12px;right:auto;top:52px;bottom:auto;max-width:min(720px,calc(100% - 24px))}
+.canvaswrap.play-open .viewer-fuzzy-ik-panel{display:grid!important;left:12px;right:auto;top:150px;bottom:auto;width:min(280px,calc(100% - 24px));max-width:none;border-radius:14px;padding:7px}
+.canvaswrap.tools-open .view-tools{top:52px;right:12px}
+.canvaswrap.layers-open .viewer-layer-panel{display:grid!important;top:52px;left:12px;z-index:410}
+
+/* ── Viewer timing panel ── */
+.viewer-timing-panel{
+  position:absolute;left:14px;top:calc(42% + 20px);z-index:11;
+  min-width:260px;max-width:min(520px,calc(100% - 28px));
+  padding:8px 10px;border-radius:12px;
+  background:rgba(2,6,23,.68);border:1px solid rgba(0,255,0,.34);
+  color:#00ff00;font:900 11px/1.45 Consolas,Menlo,monospace;
+  pointer-events:none;white-space:pre-wrap;backdrop-filter:blur(5px);
 }
-.controls .section-title{
-  grid-column:1/-1;color:#00ff00;font-weight:950;font-size:12px;
-  border-top:1px solid rgba(148,163,184,.18);padding-top:10px;margin-top:2px;
+.viewer-timing-panel span{color:#93c5fd}
+
+/* ── Viewer layer panel ── */
+.viewer-layer-panel{
+  position:absolute;left:12px;top:52px;z-index:76;
+  display:grid;gap:7px;min-width:180px;max-width:min(280px,calc(100% - 24px));
+  padding:9px;border-radius:14px;
+  background:rgba(2,6,23,.84);border:1px solid rgba(56,189,248,.38);
+  backdrop-filter:blur(6px);color:#e5e7eb;font-size:12px;pointer-events:auto;
 }
-@media(max-width:760px){
-  .neo-hud{left:8px;right:8px;bottom:8px;padding:8px;gap:6px;}
-  .neo-hud button{flex:1 1 46%;min-width:0;font-size:11px;padding:8px 6px;}
-  .neo-hud .neo-readout{flex:1 1 100%;font-size:11px;min-width:0;}
-  .viewer-corner-note{right:8px;bottom:104px;font-size:10px;}
-  .view-tools{right:8px;top:8px;max-width:calc(100% - 16px);gap:5px;padding:5px;}
-  .view-tools button{min-width:50px;font-size:10px;padding:6px 7px;}
+.viewer-layer-panel .layer-title{color:#93c5fd;font-size:11px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+.viewer-layer-panel label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;font-size:12px;font-weight:850;text-transform:none;letter-spacing:0;cursor:pointer}
+.viewer-layer-panel input{width:auto!important;accent-color:#00ff00}
+.viewer-layer-panel .layer-note{color:#94a3b8;font-size:10px;line-height:1.35}
+
+/* ── Fuzzy IK panel ── */
+.viewer-fuzzy-ik-panel{
+  position:absolute;right:14px;bottom:14px;z-index:77;
+  display:flex;align-items:center;gap:5px;flex-wrap:wrap;
+  padding:4px;border-radius:999px;
+  background:rgba(2,6,23,.72);border:1px solid rgba(0,255,0,.52);
+  pointer-events:auto;touch-action:manipulation;
+  max-width:190px;
+}
+.viewer-fuzzy-ik-panel button{
+  width:auto;min-width:0;min-height:0;height:30px;padding:0 12px;border-radius:999px;
+  border:1px solid rgba(0,255,0,.78);background:rgba(22,101,52,.88);
+  color:#fff;font-weight:900;font-size:11px;line-height:1;
+  letter-spacing:0;white-space:nowrap;cursor:pointer;pointer-events:auto;touch-action:manipulation;
+}
+.viewer-fuzzy-ik-panel button.running{background:rgba(146,64,14,.92);border-color:#f59e0b}
+.viewer-fuzzy-ik-readout{display:none}
+.viewer-fuzzy-ik-panel.show-readout{border-radius:12px;display:grid;width:260px;max-width:calc(100% - 24px);padding:6px}
+.viewer-fuzzy-ik-panel.show-readout .viewer-fuzzy-ik-readout{
+  display:block;white-space:pre-wrap;
+  font:800 10px/1.25 Consolas,Menlo,monospace;color:#bbf7d0;
+  background:rgba(2,6,23,.62);border:1px solid rgba(148,163,184,.20);
+  border-radius:8px;padding:5px;max-height:74px;overflow:auto;
 }
 
+/* ── GNG algorithm buttons ── */
+.gng-algorithm-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gng-algorithm-buttons button{
+  min-width:138px;pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,255,0,.18);
+}
+.gng-algorithm-buttons button.active{border-color:#00ff00;background:#2f5f1f;color:#fff}
 
+/* ── Unified viewer modebar ── */
+.unified-viewer-modebar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:rgba(2,6,23,.42)}
+.unified-viewer-modebar .mode-caption{color:#94a3b8;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-right:2px}
+.unified-viewer-modebar button{width:auto;min-width:150px;border-radius:999px;padding:8px 12px;border:1px solid rgba(148,163,184,.28);background:#1e293b;color:#e5e7eb;font-size:12px;font-weight:950}
+.unified-viewer-modebar button.active{border-color:#00ff00;background:#2f5f1f;color:#fff}
+.unified-hidden-legacy-viewer{display:none!important}
+.mapping-view-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
-/* v236: restore latest ToPo-FUZZY Analyzer header/logo/TASK UI while keeping the clean grasp task router. */
-:root{
-  --fixedHeaderH:0px;
-  --taskSwitchbarH:0px;
-}
-body{
-  padding-top:0 !important;
-}
-header{
-  position:sticky !important;
-  top:0 !important;
-  left:0 !important;
-  right:0 !important;
-  width:100% !important;
-  z-index:3000 !important;
-  background:rgba(2,6,23,.98) !important;
-  border-bottom:1px solid rgba(148,163,184,.22) !important;
-  box-shadow:0 10px 26px rgba(0,0,0,.36) !important;
-  padding:12px 16px !important;
-  overflow:visible !important;
-  max-height:none !important;
-}
-.app-header{
-  display:grid !important;
-  grid-template-columns:1fr auto !important;
-  gap:14px !important;
-  align-items:center !important;
-  max-width:none !important;
-}
-.app-title-wrap h1{
-  margin:0 0 4px !important;
-  font-size:28px !important;
-  line-height:1.12 !important;
-  color:#00ff00 !important;
-  text-shadow:none !important;
-}
-.app-title-wrap .sub{
-  color:#94a3b8 !important;
-  font-size:13px !important;
-  line-height:1.45 !important;
-  margin:0 !important;
-}
-.header-logo-row{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:flex-end !important;
-  gap:10px !important;
-  flex-wrap:wrap !important;
-  min-width:0 !important;
-  overflow:visible !important;
-}
-.header-company-logo,
-.header-fuzz-logo{
-  display:block !important;
-  box-sizing:border-box !important;
-  object-fit:contain !important;
-  object-position:center center !important;
-  padding:0 !important;
-  margin:0 !important;
-  border:0 !important;
-  background:transparent !important;
-  border-radius:0 !important;
-  max-height:none !important;
-  overflow:visible !important;
-  flex:0 0 auto !important;
-}
-.header-company-logo{
-  width:250px !important;
-  height:auto !important;
-  max-width:34vw !important;
-}
-.header-fuzz-logo{
-  width:118px !important;
-  height:auto !important;
-  max-width:18vw !important;
-}
-.task-switchbar{
-  position:sticky !important;
-  top:0 !important;
-  z-index:2500 !important;
-  display:flex !important;
-  align-items:center !important;
-  gap:10px !important;
-  padding:10px 16px !important;
-  background:rgba(2,6,23,.97) !important;
-  border-bottom:1px solid rgba(148,163,184,.20) !important;
-  backdrop-filter:blur(10px) !important;
-  box-shadow:0 12px 24px rgba(0,0,0,.20) !important;
-}
-.task-switchbar .task-label{
-  color:#94a3b8 !important;
-  font-size:12px !important;
-  font-weight:800 !important;
-  letter-spacing:.35px !important;
-  text-transform:uppercase !important;
-  margin-right:2px !important;
-}
-.task-switchbar button{
-  width:auto !important;
-  min-width:190px !important;
-  border-radius:999px !important;
-  padding:10px 18px !important;
-  background:#1e293b !important;
-  border:1px solid rgba(148,163,184,.28) !important;
-  color:#e5e7eb !important;
-  font-weight:900 !important;
-  cursor:pointer !important;
-}
-.task-switchbar button.active,
-.task-switchbar button[aria-pressed="true"]{
-  color:#fff !important;
-  border-color:#00ff00 !important;
-  background:#2f5f1f !important;
-  box-shadow:none !important;
-}
-@media(max-width:900px){
-  .app-header{grid-template-columns:1fr !important;align-items:start !important;}
-  .header-logo-row{justify-content:flex-start !important;margin-top:5px !important;}
-  .app-title-wrap h1{font-size:23px !important;}
-  .header-company-logo{width:225px !important;max-width:58vw !important;}
-  .header-fuzz-logo{width:102px !important;max-width:27vw !important;}
-}
-@media(max-width:760px){
-  header{padding:8px 12px 10px !important;}
-  .app-title-wrap h1{font-size:20px !important;line-height:1.12 !important;}
-  .app-title-wrap .sub{font-size:10px !important;line-height:1.22 !important;max-height:28px !important;overflow:hidden !important;}
-  .header-logo-row{gap:7px !important;margin-top:5px !important;}
-  .header-company-logo{width:218px !important;max-width:59vw !important;}
-  .header-fuzz-logo{width:96px !important;max-width:27vw !important;}
-  .task-switchbar{padding:8px !important;gap:6px !important;flex-wrap:wrap !important;}
-  .task-switchbar .task-label{flex:1 1 100% !important;}
-  .task-switchbar button{flex:1 1 48% !important;min-width:0 !important;font-size:12px !important;padding:9px 8px !important;}
-}
+/* ── Heatmap ── */
+.heatmap-legend{display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:11px;margin-top:6px}
+.heatbar{height:10px;min-width:130px;border-radius:999px;border:1px solid rgba(148,163,184,.28);background:linear-gradient(90deg,#2563eb,#06b6d4,#84cc16,#f59e0b,#ef4444)}
+.heatmap-range-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 
-
-/* v245: keep the two-logo header visible. */
-.header-logo-row{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:wrap!important;overflow:visible!important;}
-.header-company-logo,.header-fuzz-logo{display:block!important;visibility:visible!important;opacity:1!important;object-fit:contain!important;}
-.header-fuzz-logo{min-width:86px!important;}
-
-/* v245: flat yellow-green UI, no neon glow, natural GNG nodes */
-h1,.app-title-wrap h1{color:#00ff00!important;text-shadow:none!important;}
-.taskbar button.active,.task-switchbar button.active{background:#2f5f1f!important;border-color:#00ff00!important;box-shadow:none!important;}
-button.go,.go{background:#2f5f1f!important;border-color:#00ff00!important;box-shadow:none!important;color:#f8fafc!important;}
-.neo-hud,.candidate.best{box-shadow:none!important;}
-.neo-led.on{background:#00ff00!important;box-shadow:none!important;}
-.status{border-color:rgba(0,255,0,.45)!important;color:#00ff00!important;}
-.pfc-title,.foi-rule-title{color:#00ff00!important;text-shadow:none!important;}
-
-/* v253: ToPoArm URDF-based gripper proxy visualization */
-.gripper-legend-chip i{background:#9ca3af!important}
-#viewGrasp{background:#020617}
-.gripper-note{color:#cbd5e1;font-size:12px;line-height:1.55;margin-top:8px}
-
-
-/* v253: paired slider/number controls and explicit color-code fields */
-.control-pair{display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:center}
-.control-pair input[type=range]{width:100%;min-width:0}
-.control-pair input[type=number],.color-code-input{font-family:Consolas,Menlo,monospace;font-size:12px;text-transform:uppercase}
-.color-pair{display:grid;grid-template-columns:56px minmax(0,1fr);gap:8px;align-items:center}
-.color-pair input[type=color]{height:40px;padding:3px}
-
-
-/* v253: explicit fuzzy IF-THEN rule editor */
+/* ── Fuzzy rule editor ── */
 .fuzzy-rule-panel{grid-column:1/-1;border-color:rgba(147,197,253,.34);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
-.fuzzy-rule-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:12px}.fuzzy-rule-title{color:#00ff00;font-size:22px;font-weight:900;line-height:1.2}.fuzzy-rule-desc{color:#cbd5e1;font-size:12px;line-height:1.6;margin-top:4px}.fuzzy-rule-status{min-width:250px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
-.fuzzy-editor-grid{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(520px,1.18fr);gap:14px;align-items:start}.fuzzy-editor-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.36);padding:12px;min-width:0}.fuzzy-editor-card.full{grid-column:1/-1}.fuzzy-editor-card h3{margin:0 0 10px;padding:0;color:#00ff00;font-size:16px}.fuzzy-editor-note{color:#cbd5e1;font-size:12px;line-height:1.55;margin:4px 0 10px}
-.fuzzy-method-grid,.fuzzy-mf-form,.fuzzy-output-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}.fuzzy-param-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;padding:10px;border:1px solid rgba(148,163,184,.18);border-radius:12px;background:rgba(15,23,42,.58)}.fuzzy-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}.fuzzy-actions button{width:100%}
-.fuzzy-chip-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.fuzzy-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.72);padding:5px 9px;color:#e5e7eb;font-size:11px;font-weight:800}.fuzzy-chip b{color:#93c5fd}
-.fuzzy-mf-table,.fuzzy-output-table{display:grid;gap:8px;margin-top:10px}.fuzzy-mf-row,.fuzzy-output-row2{display:grid;grid-template-columns:minmax(100px,1fr) 90px minmax(160px,1.4fr) auto;gap:8px;align-items:center;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}.fuzzy-output-row2{grid-template-columns:minmax(120px,1fr) 90px auto}
-.fuzzy-rule-list{display:grid;gap:10px}.fuzzy-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(15,23,42,.78);padding:10px}.fuzzy-rule-card.inactive{opacity:.58}.fuzzy-rule-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;margin-bottom:8px}.fuzzy-rule-card-title{color:#00ff00;font-weight:900;font-size:13px}.fuzzy-cond-grid{display:grid;grid-template-columns:80px 1fr 1fr 64px 60px;gap:8px;align-items:end;margin:6px 0}.fuzzy-rule-output-grid{display:grid;grid-template-columns:1fr 100px 110px;gap:8px;align-items:end;margin-top:8px}
-.fuzzy-json{width:100%;min-height:160px;font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;background:#020617;border:1px solid rgba(148,163,184,.28);border-radius:10px;padding:10px}.fuzzy-confirm-table{display:grid;gap:8px;margin-top:10px}.fuzzy-confirm-row{display:grid;grid-template-columns:70px minmax(0,1fr) 60px minmax(150px,.35fr) 70px;gap:8px;align-items:center;padding:9px 10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);font-size:12px}.fuzzy-confirm-head{color:#93c5fd;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}.fuzzy-if-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.fuzzy-if-chip{display:inline-flex;gap:5px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.8);padding:4px 8px;font-size:11px}.fuzzy-if-chip .var{color:#93c5fd;font-weight:900}.fuzzy-if-chip .lbl{color:#fff;font-weight:900}.fuzzy-if-chip .not{color:#fca5a5;font-weight:900}.fuzzy-connector{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.1em}.fuzzy-rule-debug{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:180px;overflow:auto}.fuzzy-small{font-size:11px;color:#94a3b8;line-height:1.45}
-@media(max-width:1100px){.fuzzy-editor-grid{grid-template-columns:1fr}.fuzzy-rule-head{grid-template-columns:1fr}.fuzzy-rule-status{min-width:0}.fuzzy-cond-grid{grid-template-columns:1fr 1fr}.fuzzy-rule-card-head{grid-template-columns:1fr 1fr}.fuzzy-confirm-row{grid-template-columns:1fr}.fuzzy-mf-row{grid-template-columns:1fr}.fuzzy-output-row2{grid-template-columns:1fr}}
+.fuzzy-rule-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:12px}
+.fuzzy-rule-title{color:#00ff00;font-size:22px;font-weight:900;line-height:1.2}
+.fuzzy-rule-desc{color:#cbd5e1;font-size:12px;line-height:1.6;margin-top:4px}
+.fuzzy-rule-status{min-width:250px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
+.fuzzy-editor-grid{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(520px,1.18fr);gap:14px;align-items:start}
+.fuzzy-editor-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.36);padding:12px;min-width:0}
+.fuzzy-editor-card.full{grid-column:1/-1}
+.fuzzy-editor-card h3{margin:0 0 10px;padding:0;color:#00ff00;font-size:16px}
+.fuzzy-editor-note{color:#cbd5e1;font-size:12px;line-height:1.55;margin:4px 0 10px}
+.fuzzy-method-grid,.fuzzy-mf-form,.fuzzy-output-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
+.fuzzy-param-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;padding:10px;border:1px solid rgba(148,163,184,.18);border-radius:12px;background:rgba(15,23,42,.58)}
+.fuzzy-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
+.fuzzy-actions button{width:100%}
+.fuzzy-chip-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.fuzzy-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.72);padding:5px 9px;color:#e5e7eb;font-size:11px;font-weight:800}
+.fuzzy-chip b{color:#93c5fd}
+.fuzzy-mf-table,.fuzzy-output-table{display:grid;gap:8px;margin-top:10px}
+.fuzzy-mf-row,.fuzzy-output-row2{display:grid;grid-template-columns:minmax(100px,1fr) 90px minmax(160px,1.4fr) auto;gap:8px;align-items:center;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}
+.fuzzy-output-row2{grid-template-columns:minmax(120px,1fr) 90px auto}
+.fuzzy-rule-list{display:grid;gap:10px}
+.fuzzy-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(15,23,42,.78);padding:10px}
+.fuzzy-rule-card.inactive{opacity:.58}
+.fuzzy-rule-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;margin-bottom:8px}
+.fuzzy-rule-card-title{color:#00ff00;font-weight:900;font-size:13px}
+.fuzzy-cond-grid{display:grid;grid-template-columns:80px 1fr 1fr 64px 60px;gap:8px;align-items:end;margin:6px 0}
+.fuzzy-rule-output-grid{display:grid;grid-template-columns:1fr 100px 110px;gap:8px;align-items:end;margin-top:8px}
+.fuzzy-json{width:100%;min-height:160px;font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;background:#020617;border:1px solid rgba(148,163,184,.28);border-radius:10px;padding:10px}
+.fuzzy-confirm-table{display:grid;gap:8px;margin-top:10px}
+.fuzzy-confirm-row{display:grid;grid-template-columns:70px minmax(0,1fr) 60px minmax(150px,.35fr) 70px;gap:8px;align-items:center;padding:9px 10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);font-size:12px}
+.fuzzy-confirm-head{color:#93c5fd;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+.fuzzy-if-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fuzzy-if-chip{display:inline-flex;gap:5px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.8);padding:4px 8px;font-size:11px}
+.fuzzy-if-chip .var{color:#93c5fd;font-weight:900}
+.fuzzy-if-chip .lbl{color:#fff;font-weight:900}
+.fuzzy-if-chip .not{color:#fca5a5;font-weight:900}
+.fuzzy-connector{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.1em}
+.fuzzy-rule-debug{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:180px;overflow:auto}
+.fuzzy-small{font-size:11px;color:#94a3b8;line-height:1.45}
+#fuzzyLiveMfEditor{display:none!important}
 
-/* v260: Rules Confirmation live MF editor */
-.fuzzy-if-chip.editable-mf{cursor:pointer;user-select:none;transition:border-color .12s,background .12s,transform .12s}
+/* ── Fuzzy inline MF editor ── */
+.fuzzy-if-chip.editable-mf{cursor:pointer;user-select:none;transition:border-color .12s,background .12s,transform .12s;position:relative;align-items:flex-start;flex-wrap:wrap;max-width:100%}
 .fuzzy-if-chip.editable-mf:hover{border-color:#00ff00;background:rgba(47,95,31,.64);transform:translateY(-1px)}
-.fuzzy-if-chip.editable-mf.selected{border-color:#00ff00;background:rgba(47,95,31,.86);box-shadow:0 0 0 2px rgba(0,255,0,.18) inset}
-.fuzzy-confirm-mf-svg{display:block;width:158px;height:38px;margin-top:5px;border-radius:8px;background:rgba(2,6,23,.58);border:1px solid rgba(148,163,184,.22);pointer-events:none}
+.fuzzy-if-chip.editable-mf.selected{border-color:#00ff00;background:rgba(47,95,31,.72);box-shadow:0 0 0 1px rgba(0,255,0,.28) inset}
+.fuzzy-condition-block{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;min-width:0;vertical-align:top}
+.fuzzy-condition-block.selected{flex:1 1 100%;width:100%}
+.fuzzy-condition-block .fuzzy-if-chip{max-width:100%;overflow:hidden}
+.fuzzy-condition-block.selected .fuzzy-if-chip{border-radius:12px!important;background:rgba(30,41,59,.92)!important;box-shadow:0 0 0 1px rgba(0,255,0,.28) inset!important}
+.fuzzy-condition-block.selected .fuzzy-inline-mf-editor{width:100%;min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;border-radius:14px;background:rgba(2,6,23,.78)}
+.fuzzy-confirm-mf-svg{display:block;width:min(260px,100%);height:82px;overflow:hidden;border-radius:8px;margin-top:5px;background:rgba(2,6,23,.58);border:1px solid rgba(148,163,184,.22);pointer-events:none}
+.fuzzy-inline-mf-editor{flex:1 1 100%;width:100%;min-width:min(560px,100%);margin-top:8px;border:1px solid rgba(0,255,0,.34);border-radius:14px;background:rgba(2,6,23,.68);padding:10px;cursor:default}
+.fuzzy-inline-mf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-bottom:8px}
+.fuzzy-inline-mf-title{color:#00ff00;font-size:13px;font-weight:950;line-height:1.25}
+.fuzzy-inline-mf-meta{font-family:Consolas,Menlo,monospace;color:#bfdbfe;font-size:10px;white-space:pre-wrap;line-height:1.35;text-align:right}
+.fuzzy-inline-mf-grid{display:grid;grid-template-columns:minmax(180px,.38fr) minmax(280px,1fr);gap:10px;align-items:start}
+.fuzzy-inline-mf-preview{border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}
+.fuzzy-inline-mf-preview svg{width:100%;height:92px;border-radius:10px;background:rgba(2,6,23,.68)}
+.fuzzy-inline-mf-controls{display:grid;gap:8px}
+.fuzzy-inline-mf-shape-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center}
+.fuzzy-inline-mf-param-row{display:grid;grid-template-columns:58px minmax(0,1fr) 82px;gap:8px;align-items:center}
+.fuzzy-inline-mf-param-row label,.fuzzy-inline-mf-shape-row label{margin:0;color:#93c5fd;font-size:10px;font-weight:950}
+.fuzzy-inline-mf-param-row input[type=range]{min-width:0}
+.fuzzy-inline-mf-param-row input[type=number]{font-family:Consolas,Menlo,monospace;font-size:11px;padding:7px 8px}
 .fuzzy-live-editor{margin:12px 0 10px;border:1px solid rgba(0,255,0,.34);border-radius:14px;background:rgba(2,6,23,.38);padding:12px}
 .fuzzy-live-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px}
 .fuzzy-live-title{font-size:15px;font-weight:950;color:#00ff00;line-height:1.3}
@@ -274,664 +363,144 @@ button.go,.go{background:#2f5f1f!important;border-color:#00ff00!important;box-sh
 .fuzzy-live-param-row input[type=number]{font-family:Consolas,Menlo,monospace;font-size:12px}
 .fuzzy-live-shape-row{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px;align-items:center;margin-bottom:8px}
 .fuzzy-live-empty{color:#94a3b8;font-size:12px;line-height:1.6}
-@media(max-width:900px){.fuzzy-live-grid{grid-template-columns:1fr}.fuzzy-live-param-row{grid-template-columns:1fr}.fuzzy-confirm-mf-svg{width:100%;max-width:220px}}
 
-
-/* v259: timing HUD and label-wise target-edge cell-competition density-control GNG */
-/* v260: live membership-function editing from Rules Confirmation diagrams */
-
-/* v262: point-cloud rendering controls and heatmap legend */
-.heatmap-legend{display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:11px;margin-top:6px}
-.heatbar{height:10px;min-width:130px;border-radius:999px;border:1px solid rgba(148,163,184,.28);background:linear-gradient(90deg,#2563eb,#06b6d4,#84cc16,#f59e0b,#ef4444)}
-.heatmap-range-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-
-/* v261: natural weak-perspective projection and collapsible viewer tabs */
-/* v253: topological faces, normals, and editable node/cluster fuzzy rules */
-.topo-extra-panel{grid-column:1/-1;border-color:rgba(148,163,184,.32);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
-.topo-extra-panel h2{color:#00ff00}.topo-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.topo-switch{display:flex;align-items:center;gap:8px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(2,6,23,.42);padding:8px;color:#e5e7eb;font-size:12px;font-weight:800}.topo-switch input{width:auto!important}.topo-color-row{display:grid;grid-template-columns:1fr 96px;gap:8px;align-items:end}.topo-rule-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.topo-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.42);padding:12px;min-width:0}.topo-rule-card h3{margin:0 0 8px;color:#00ff00;font-size:15px}.topo-rule-json{width:100%;min-height:220px;font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;background:#020617;border:1px solid rgba(148,163,184,.28);border-radius:10px;padding:10px}.topo-confirm{display:grid;gap:8px;margin-top:10px}.topo-confirm-row{display:grid;grid-template-columns:80px minmax(0,1fr) 56px minmax(120px,.35fr);gap:8px;align-items:center;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);padding:9px 10px;font-size:12px}.topo-mf-chip{display:inline-grid;grid-template-columns:1fr;gap:3px;min-width:128px;max-width:158px;border:1px solid rgba(148,163,184,.28);border-radius:10px;background:rgba(30,41,59,.78);padding:5px 7px}.topo-mf-chip b{font-size:10px;color:#93c5fd}.topo-mf-chip span{font-size:11px;color:#fff;font-weight:900}.topo-mf-svg{width:100%;height:34px;border-radius:6px;background:rgba(2,6,23,.58)}.topo-and{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.08em}.node-label-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.node-label-legend .chip i{width:16px;height:10px;border-radius:2px}.topo-stats{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:160px;overflow:auto;border:1px solid rgba(148,163,184,.18);border-radius:10px;background:rgba(2,6,23,.44);padding:8px;margin-top:8px}.bundle-topic-list{display:grid;gap:6px;padding:8px 10px;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(2,6,23,.34);font-size:11px;line-height:1.45}.bundle-topic-list .bundle-topic-head{color:#00ff00;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.bundle-topic-list label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;text-transform:none;letter-spacing:0;font-size:11px;font-weight:700}.bundle-topic-list input[type=checkbox]{width:auto!important;flex:0 0 auto}.bundle-topic-meta{color:#94a3b8;font-family:Consolas,Menlo,monospace;font-size:10px;white-space:nowrap}
-@media(max-width:900px){.topo-rule-two{grid-template-columns:1fr}.topo-confirm-row{grid-template-columns:1fr}.topo-color-row{grid-template-columns:1fr}.topo-mf-chip{max-width:none}}
-
-
-/* v259: always-visible viewer timing monitor */
-.viewer-timing-panel{
-  position:absolute;left:14px;top:calc(42% + 20px);z-index:11;
-  min-width:260px;max-width:min(520px,calc(100% - 28px));
-  padding:8px 10px;border-radius:12px;
-  background:rgba(2,6,23,.68);border:1px solid rgba(0,255,0,.34);
-  color:#00ff00;font:900 11px/1.45 Consolas,Menlo,monospace;
-  pointer-events:none;white-space:pre-wrap;backdrop-filter:blur(5px);
-}
-.viewer-timing-panel span{color:#93c5fd}
-@media(max-width:760px){.viewer-timing-panel{left:8px;right:8px;top:auto;bottom:154px;min-width:0;font-size:10px}}
-
-/* v261: viewer overlays are closed by default and opened by small tabs. */
-.viewer-tabs{
-  position:absolute;left:12px;top:10px;z-index:30;
-  display:flex;gap:5px;flex-wrap:wrap;
-  padding:5px;border-radius:999px;
-  background:rgba(2,6,23,.44);border:1px solid rgba(148,163,184,.20);
-  backdrop-filter:blur(5px);
-}
-.viewer-tabs button{
-  width:auto;min-width:54px;padding:6px 8px;border-radius:999px;
-  border:1px solid rgba(148,163,184,.26);background:rgba(30,41,59,.78);
-  color:#cbd5e1;font-size:10px;font-weight:950;line-height:1.1;
-}
-.viewer-tabs button.active{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
-.canvaswrap:not(.info-open) [data-view-panel="info"],
-.canvaswrap:not(.play-open) [data-view-panel="play"],
-.canvaswrap:not(.tools-open) [data-view-panel="tools"]{display:none!important}
-.canvaswrap.info-open .overlay{top:52px;max-height:36%}
-.canvaswrap.info-open .viewer-timing-panel{top:auto;left:14px;bottom:14px;min-width:230px}
-.canvaswrap.play-open .neo-hud{bottom:14px;left:14px;right:auto;max-width:min(640px,calc(100% - 28px))}
-.canvaswrap.tools-open .view-tools{top:52px;right:12px}
-.canvaswrap.info-open .viewer-corner-note{right:14px;bottom:14px}
-@media(max-width:760px){
-  .viewer-tabs{left:8px;top:8px;padding:4px;gap:4px}
-  .viewer-tabs button{min-width:48px;font-size:10px;padding:6px 7px}
-  .canvaswrap.info-open .overlay{top:48px;max-height:34%}
-  .canvaswrap.info-open .viewer-timing-panel{left:8px;right:8px;bottom:8px;font-size:10px}
-  .canvaswrap.play-open .neo-hud{left:8px;right:8px;bottom:8px;max-width:none}
-  .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
-}
-
-
-
-/* v264: single unified Viewer with Mapping / Grasp mode switch */
-.unified-viewer-modebar{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;
-  padding:8px;border:1px solid rgba(148,163,184,.22);border-radius:14px;
-  background:rgba(2,6,23,.42);
-}
-.unified-viewer-modebar .mode-caption{color:#94a3b8;font-size:11px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-right:2px}
-.unified-viewer-modebar button{
-  width:auto;min-width:150px;border-radius:999px;padding:8px 12px;
-  border:1px solid rgba(148,163,184,.28);background:#1e293b;color:#e5e7eb;
-  font-size:12px;font-weight:950;
-}
-.unified-viewer-modebar button.active{border-color:#00ff00;background:#2f5f1f;color:#fff}
-.unified-hidden-legacy-viewer{display:none!important}
-@media(max-width:760px){.unified-viewer-modebar button{flex:1 1 100%;min-width:0}}
-
-
-
-/* v264: inline MF editing directly inside Rules Confirmation. */
-#fuzzyLiveMfEditor{display:none!important}
-.fuzzy-if-chip.editable-mf{cursor:pointer;position:relative;align-items:flex-start;flex-wrap:wrap;max-width:100%}
-.fuzzy-if-chip.editable-mf.selected{border-color:#00ff00;background:rgba(47,95,31,.72);box-shadow:0 0 0 1px rgba(0,255,0,.28) inset}
-.fuzzy-inline-mf-editor{flex:1 1 100%;width:100%;min-width:min(560px,100%);margin-top:8px;border:1px solid rgba(0,255,0,.34);border-radius:14px;background:rgba(2,6,23,.68);padding:10px;cursor:default}
-.fuzzy-inline-mf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-bottom:8px}
-.fuzzy-inline-mf-title{color:#00ff00;font-size:13px;font-weight:950;line-height:1.25}
-.fuzzy-inline-mf-meta{font-family:Consolas,Menlo,monospace;color:#bfdbfe;font-size:10px;white-space:pre-wrap;line-height:1.35;text-align:right}
-.fuzzy-inline-mf-grid{display:grid;grid-template-columns:minmax(180px,.38fr) minmax(280px,1fr);gap:10px;align-items:start}
-.fuzzy-inline-mf-preview{border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}
-.fuzzy-inline-mf-preview svg{width:100%;height:92px;border-radius:10px;background:rgba(2,6,23,.68)}
-.fuzzy-inline-mf-controls{display:grid;gap:8px}
-.fuzzy-inline-mf-shape-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center}
-.fuzzy-inline-mf-param-row{display:grid;grid-template-columns:58px minmax(0,1fr) 82px;gap:8px;align-items:center}
-.fuzzy-inline-mf-param-row label,.fuzzy-inline-mf-shape-row label{margin:0;color:#93c5fd;font-size:10px;font-weight:950}
-.fuzzy-inline-mf-param-row input[type=range]{min-width:0}
-.fuzzy-inline-mf-param-row input[type=number]{font-family:Consolas,Menlo,monospace;font-size:11px;padding:7px 8px}
-@media(max-width:900px){.fuzzy-inline-mf-editor{min-width:0}.fuzzy-inline-mf-head,.fuzzy-inline-mf-grid{grid-template-columns:1fr}.fuzzy-inline-mf-meta{text-align:left}.fuzzy-inline-mf-param-row,.fuzzy-inline-mf-shape-row{grid-template-columns:1fr}}
-
-
-/* v265: remove oversized selected-pill background from inline MF editor and add readable MF axes. */
-/* v277: raw point count restored to 3000; raw point drawing size default is half. */
-.fuzzy-condition-block{
-  display:inline-flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:6px;
-  max-width:100%;
-  min-width:0;
-  vertical-align:top;
-}
-.fuzzy-condition-block.selected{
-  flex:1 1 100%;
-  width:100%;
-}
-.fuzzy-condition-block .fuzzy-if-chip{
-  max-width:100%;
-  overflow:hidden;
-}
-.fuzzy-condition-block.selected .fuzzy-if-chip{
-  border-radius:12px!important;
-  background:rgba(30,41,59,.92)!important;
-  box-shadow:0 0 0 1px rgba(0,255,0,.28) inset!important;
-}
-.fuzzy-condition-block.selected .fuzzy-inline-mf-editor{
-  width:100%;
-  min-width:0;
-  max-width:100%;
-  box-sizing:border-box;
-  overflow:hidden;
-  border-radius:14px;
-  background:rgba(2,6,23,.78);
-}
-.fuzzy-confirm-mf-svg{
-  width:min(260px,100%)!important;
-  height:82px!important;
-  overflow:hidden!important;
-  border-radius:8px;
-}
-.fuzzy-inline-mf-preview svg{
-  height:152px!important;
-  overflow:hidden!important;
-}
-.fuzzy-mf-axis-svg text{
-  font-family:Consolas,Menlo,monospace;
-  fill:#cbd5e1;
-  font-size:5px;
-  paint-order:stroke;
-  stroke:#020617;
-  stroke-width:.9px;
-}
+/* ── MF axis SVG ── */
+.fuzzy-mf-axis-svg text{font-family:Consolas,Menlo,monospace;fill:#cbd5e1;font-size:5px;paint-order:stroke;stroke:#020617;stroke-width:.9px}
 .fuzzy-mf-axis-svg .axis-title{fill:#00ff00;font-weight:900;font-size:5.5px}
 .fuzzy-mf-axis-svg .axis-label{fill:#93c5fd;font-weight:800;font-size:5px}
 .fuzzy-mf-axis-svg .axis-grid{stroke:rgba(148,163,184,.22);stroke-width:.45}
 .fuzzy-mf-axis-svg .axis-line{stroke:rgba(203,213,225,.64);stroke-width:.75}
 .fuzzy-mf-axis-svg .axis-tick{stroke:rgba(203,213,225,.58);stroke-width:.7}
+.fuzzy-confirm-mf-svg,.editable-mf,.fuzzy-condition-block{pointer-events:auto;cursor:pointer}
+.fuzzy-confirm-mf-svg{touch-action:manipulation}
+.fuzzy-if-chip.editable-mf{user-select:none;-webkit-tap-highlight-color:rgba(0,255,0,.22)}
+
+/* ── Topo panels ── */
+.topo-extra-panel{grid-column:1/-1;border-color:rgba(148,163,184,.32);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
+.topo-extra-panel h2{color:#00ff00}
+.topo-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.topo-switch{display:flex;align-items:center;gap:8px;border:1px solid rgba(148,163,184,.22);border-radius:10px;background:rgba(2,6,23,.42);padding:8px;color:#e5e7eb;font-size:12px;font-weight:800}
+.topo-switch input{width:auto!important}
+.topo-color-row{display:grid;grid-template-columns:1fr 96px;gap:8px;align-items:end}
+.topo-rule-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.topo-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.42);padding:12px;min-width:0}
+.topo-rule-card h3{margin:0 0 8px;color:#00ff00;font-size:15px}
+.topo-rule-json{width:100%;min-height:220px;font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;background:#020617;border:1px solid rgba(148,163,184,.28);border-radius:10px;padding:10px}
+.topo-confirm{display:grid;gap:8px;margin-top:10px}
+.topo-confirm-row{display:grid;grid-template-columns:80px minmax(0,1fr) 56px minmax(120px,.35fr);gap:8px;align-items:center;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);padding:9px 10px;font-size:12px}
+.topo-mf-chip{display:inline-grid;grid-template-columns:1fr;gap:3px;min-width:128px;max-width:158px;border:1px solid rgba(148,163,184,.28);border-radius:10px;background:rgba(30,41,59,.78);padding:5px 7px}
+.topo-mf-chip b{font-size:10px;color:#93c5fd}
+.topo-mf-chip span{font-size:11px;color:#fff;font-weight:900}
+.topo-mf-svg{width:100%;height:34px;border-radius:6px;background:rgba(2,6,23,.58)}
+.topo-and{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.08em}
+.node-label-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.node-label-legend .chip i{width:16px;height:10px;border-radius:2px}
+.topo-stats{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:160px;overflow:auto;border:1px solid rgba(148,163,184,.18);border-radius:10px;background:rgba(2,6,23,.44);padding:8px;margin-top:8px}
+.bundle-topic-list{display:grid;gap:6px;padding:8px 10px;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(2,6,23,.34);font-size:11px;line-height:1.45}
+.bundle-topic-list .bundle-topic-head{color:#00ff00;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.bundle-topic-list label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;text-transform:none;letter-spacing:0;font-size:11px;font-weight:700}
+.bundle-topic-list input[type=checkbox]{width:auto!important;flex:0 0 auto}
+.bundle-topic-meta{color:#94a3b8;font-family:Consolas,Menlo,monospace;font-size:10px;white-space:nowrap}
+
+/* ── Gripper / grasp ── */
+.gripper-legend-chip i{background:#9ca3af}
+#viewGrasp{background:#020617}
+.gripper-note{color:#cbd5e1;font-size:12px;line-height:1.55;margin-top:8px}
+
+/* ── Misc ── */
+.pfc-title,.foi-rule-title,.mode-note{color:#00ff00;text-shadow:none}
+.readout{color:var(--muted);font-size:12px;line-height:1.55}
+
+/* ── Collapsible 3D viewer panels (v1 patch) ── */
+.canvaswrap:not(.layers-open) [data-view-panel="layers"]{display:none!important}
+
+/* ── Responsive ── */
+@media(max-width:1100px){
+  .fuzzy-editor-grid{grid-template-columns:1fr}
+  .fuzzy-rule-head{grid-template-columns:1fr}
+  .fuzzy-rule-status{min-width:0}
+  .fuzzy-cond-grid{grid-template-columns:1fr 1fr}
+  .fuzzy-rule-card-head{grid-template-columns:1fr 1fr}
+  .fuzzy-confirm-row{grid-template-columns:1fr}
+  .fuzzy-mf-row{grid-template-columns:1fr}
+  .fuzzy-output-row2{grid-template-columns:1fr}
+}
+@media(max-width:1080px){
+  .workspace{grid-template-columns:1fr}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid2{grid-template-columns:1fr}
+  canvas.viewer{height:58vh}
+}
+@media(max-width:900px){
+  .app-header{grid-template-columns:1fr;align-items:start;gap:8px}
+  .header-logo-row{justify-content:flex-start;gap:10px;min-width:0}
+  .header-logo-frame.company,.header-logo-frame.fuzz{height:36px}
+  .header-logo-frame.company{max-width:55vw}
+  .header-logo-frame.fuzz{max-width:33vw}
+  .header-company-logo{width:238px;max-width:58vw;max-height:64px}
+  .header-fuzz-logo{width:106px;max-width:27vw;max-height:64px}
+  .topo-rule-two{grid-template-columns:1fr}
+  .topo-confirm-row{grid-template-columns:1fr}
+  .topo-color-row{grid-template-columns:1fr}
+  .topo-mf-chip{max-width:none}
+  .fuzzy-live-grid{grid-template-columns:1fr}
+  .fuzzy-live-param-row{grid-template-columns:1fr}
+  .fuzzy-confirm-mf-svg{width:100%;max-width:220px}
+  .unified-viewer-modebar button{flex:1 1 100%;min-width:0}
+}
 @media(max-width:760px){
+  header{padding:8px 10px}
+  .app-title-wrap h1{font-size:19px;line-height:1.12}
+  .app-title-wrap .sub{font-size:10px;line-height:1.25;max-height:none;overflow:visible}
+  .header-logo-row{gap:8px;flex-wrap:nowrap;padding:4px 0 7px;min-height:40px}
+  .header-logo-frame.company,.header-logo-frame.fuzz{height:32px}
+  .header-logo-frame.company{max-width:52vw}
+  .header-logo-frame.fuzz{max-width:31vw}
+  .header-company-logo{width:210px;max-width:58vw;max-height:58px}
+  .header-fuzz-logo{width:94px;max-width:25vw;max-height:58px;min-width:74px}
+  .task-switchbar{padding:7px 8px;gap:6px;flex-wrap:wrap}
+  .task-switchbar .task-label{flex:1 1 100%}
+  .task-switchbar button{flex:1 1 48%;min-width:0;font-size:12px;padding:9px 8px}
+  .taskbar{top:72px;padding:8px;gap:6px}
+  .taskbar b{flex:1 1 100%}
+  .taskbar button{flex:1 1 100%;min-width:0}
+  h1{font-size:20px}
+  .sub{font-size:11px}
+  .task{padding:8px}
+  .controls{grid-template-columns:1fr}
+  .metrics{grid-template-columns:1fr}
+  canvas.viewer{height:54vh;min-height:330px}
+  .barrow{grid-template-columns:92px 1fr 42px}
+  .neo-hud{left:8px;right:8px;bottom:8px;padding:8px;gap:6px}
+  .neo-hud button{flex:1 1 46%;min-width:0;font-size:11px;padding:8px 6px}
+  .neo-hud .neo-readout{flex:1 1 100%;font-size:11px;min-width:0}
+  .viewer-corner-note{right:8px;bottom:104px;font-size:10px}
+  .view-tools{right:8px;top:8px;max-width:calc(100% - 16px);gap:5px;padding:5px}
+  .view-tools button{min-width:50px;font-size:10px;padding:6px 7px}
+  .viewer-tabs{left:8px;top:8px;padding:4px;gap:4px}
+  .viewer-tabs button{min-width:48px;font-size:10px;padding:6px 7px}
+  .viewer-timing-panel{left:8px;right:8px;top:auto;bottom:154px;min-width:0;font-size:10px}
+  .viewer-layer-panel{left:8px;top:48px;min-width:160px;font-size:11px}
+  .viewer-fuzzy-ik-panel{right:8px;top:8px;left:auto;bottom:auto;max-width:150px;padding:3px}
+  .viewer-fuzzy-ik-panel button{height:28px;padding:0 8px;font-size:10px}
+  .viewer-fuzzy-ik-panel.show-readout{width:220px;max-width:calc(100% - 16px)}
+  .canvaswrap.info-open .overlay{top:48px;max-height:34%}
+  .canvaswrap.info-open .viewer-timing-panel{left:8px;right:8px;bottom:8px;font-size:10px}
+  .canvaswrap.play-open .neo-hud{left:8px;right:8px;top:48px;bottom:auto;max-width:none}
+  .canvaswrap.play-open .viewer-fuzzy-ik-panel{left:8px;right:8px;top:160px;bottom:auto;width:auto}
+  .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
+  .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
   .fuzzy-confirm-mf-svg{width:100%!important;height:78px!important}
   .fuzzy-inline-mf-preview svg{height:138px!important}
+  .fuzzy-inline-mf-editor{min-width:0}
+  .fuzzy-inline-mf-head,.fuzzy-inline-mf-grid{grid-template-columns:1fr}
+  .fuzzy-inline-mf-meta{text-align:left}
+  .fuzzy-inline-mf-param-row,.fuzzy-inline-mf-shape-row{grid-template-columns:1fr}
+  .mini-grid{grid-template-columns:1fr}
 }
-
-
-
-/* v277: fixed, non-cropping header/logo and pure RGB green accent text */
-/* v277: face rendering has a local opacity ceiling to avoid saturated stacked surface patches. */
-
-:root{
-  --lime:#00ff00 !important;
-  --v277HeaderH:112px;
-  --v277TaskbarH:54px;
-}
-html{scroll-padding-top:calc(var(--v277HeaderH) + var(--v277TaskbarH) + 16px) !important;}
-body{
-  padding-top:calc(var(--v277HeaderH) + var(--v277TaskbarH) + 10px) !important;
-}
-header{
-  position:fixed !important;
-  top:0 !important;
-  left:0 !important;
-  right:0 !important;
-  width:100% !important;
-  z-index:6000 !important;
-  overflow:visible !important;
-  max-height:none !important;
-  min-height:0 !important;
-  padding:10px 16px !important;
-  background:rgba(2,6,23,.985) !important;
-}
-.app-header{
-  display:grid !important;
-  grid-template-columns:minmax(0,1fr) auto !important;
-  align-items:center !important;
-  gap:16px !important;
-  overflow:visible !important;
-}
-.app-title-wrap{min-width:0 !important;overflow:visible !important;}
-.header-logo-row{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:flex-end !important;
-  gap:12px !important;
-  flex-wrap:nowrap !important;
-  overflow:visible !important;
-  min-width:max-content !important;
-}
-.header-company-logo,
-.header-fuzz-logo{
-  display:block !important;
-  visibility:visible !important;
-  opacity:1 !important;
-  object-fit:contain !important;
-  object-position:center center !important;
-  overflow:visible !important;
-  max-height:78px !important;
-  min-height:0 !important;
-  clip-path:none !important;
-}
-.header-company-logo{width:260px !important;height:auto !important;max-width:32vw !important;}
-.header-fuzz-logo{width:122px !important;height:auto !important;max-width:16vw !important;min-width:86px !important;}
-.task-switchbar{
-  position:fixed !important;
-  top:var(--v277HeaderH) !important;
-  left:0 !important;
-  right:0 !important;
-  width:100% !important;
-  z-index:5900 !important;
-  overflow:visible !important;
-  background:rgba(2,6,23,.975) !important;
-}
-h1,.app-title-wrap h1,.panel h2,.fuzzy-rule-title,.fuzzy-editor-card h3,.fuzzy-rule-card-title,.topo-extra-panel h2,.topo-rule-card h3,.mode-note,.status,.candidate b,.neo-hud .neo-readout,.controls .section-title{color:#00ff00 !important;}
-.taskbar button.active,.task-switchbar button.active,.task-switchbar button[aria-pressed="true"],button.go,.go,.view-tools button.active{border-color:#00ff00 !important;}
-.fill,.neo-led.on{background:#00ff00 !important;}
-@media(max-width:900px){
-  .app-header{grid-template-columns:1fr !important;align-items:start !important;gap:8px !important;}
-  .header-logo-row{justify-content:flex-start !important;gap:10px !important;min-width:0 !important;}
-  .header-company-logo{width:238px !important;max-width:58vw !important;max-height:64px !important;}
-  .header-fuzz-logo{width:106px !important;max-width:27vw !important;max-height:64px !important;}
-}
-@media(max-width:760px){
-  header{padding:8px 10px !important;}
-  .app-title-wrap h1{font-size:19px !important;line-height:1.12 !important;}
-  .app-title-wrap .sub{font-size:10px !important;line-height:1.25 !important;max-height:none !important;overflow:visible !important;}
-  .header-logo-row{gap:8px !important;flex-wrap:nowrap !important;}
-  .header-company-logo{width:210px !important;max-width:58vw !important;max-height:58px !important;}
-  .header-fuzz-logo{width:94px !important;max-width:25vw !important;max-height:58px !important;min-width:74px !important;}
-  .task-switchbar{padding:7px 8px !important;gap:6px !important;flex-wrap:wrap !important;}
-}
-
-
-
-/* v277: restore functional v270 viewer/GNG base; authentic-logo display fix by CSS only. */
-.header-logo-row{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:flex-start!important;
-  gap:14px!important;
-  flex-wrap:wrap!important;
-  overflow:visible!important;
-  padding:4px 0 8px!important;
-  line-height:0!important;
-}
-.header-company-logo,
-.header-fuzz-logo{
-  display:block!important;
-  visibility:visible!important;
-  opacity:1!important;
-  height:42px!important;
-  width:auto!important;
-  max-width:calc(50vw - 24px)!important;
-  max-height:none!important;
-  object-fit:contain!important;
-  object-position:center center!important;
-  overflow:visible!important;
-  clip-path:none!important;
-  transform:none!important;
-  border-radius:0!important;
-  flex:0 1 auto!important;
-}
-.header-company-logo{order:1!important;}
-.header-fuzz-logo{order:2!important;background:transparent!important;}
-.canvaswrap{isolation:isolate!important;}
-canvas.viewer{position:relative!important;z-index:1!important;pointer-events:auto!important;}
-.viewer-tabs{z-index:80!important;pointer-events:auto!important;touch-action:manipulation!important;}
-.neo-hud{z-index:75!important;pointer-events:auto!important;touch-action:manipulation!important;}
-.view-tools{z-index:78!important;pointer-events:auto!important;touch-action:manipulation!important;}
-.viewer-tabs button,.neo-hud button,.view-tools button,.gng-algorithm-buttons button{pointer-events:auto!important;touch-action:manipulation!important;-webkit-tap-highlight-color:rgba(0,255,0,.18)!important;}
-@media(max-width:760px){
-  .header-logo-row{gap:8px!important;padding:4px 0 7px!important;}
-  .header-company-logo,.header-fuzz-logo{height:34px!important;max-width:calc(50vw - 18px)!important;}
-}
-
-
-
-/* v277: boot repair, logo unclipping, and viewer interaction hardening */
-.header-logo-row{overflow:visible!important;align-items:center!important;min-height:48px!important;padding-top:4px!important;padding-bottom:4px!important;}
-.header-company-logo,.header-fuzz-logo{display:block!important;visibility:visible!important;opacity:1!important;object-fit:contain!important;object-position:center center!important;clip-path:none!important;overflow:visible!important;background:transparent!important;}
-.header-company-logo{height:42px!important;width:auto!important;max-height:none!important;max-width:54vw!important;}
-.header-fuzz-logo{height:42px!important;width:auto!important;max-height:none!important;max-width:30vw!important;min-width:0!important;}
-canvas.viewer{display:block!important;min-height:430px!important;touch-action:none!important;}
-.canvaswrap{position:relative!important;}
-.viewer-tabs,.neo-hud,.view-tools,.gng-algorithm-buttons{z-index:120!important;pointer-events:auto!important;}
-.viewer-tabs button,.neo-hud button,.view-tools button,.gng-algorithm-buttons button{pointer-events:auto!important;touch-action:manipulation!important;}
-@media(max-width:760px){.header-logo-row{min-height:40px!important}.header-company-logo,.header-fuzz-logo{height:32px!important}.header-company-logo{max-width:52vw!important}.header-fuzz-logo{max-width:31vw!important}canvas.viewer{min-height:360px!important}}
-
-
-/* v278: restore authentic uncropped FuzzRoBo PNG from earlier asset and make Rule Confirmation MF diagrams clickable again. */
-.header-logo-row{align-items:center!important;gap:14px!important;overflow:visible!important;padding:6px 0 10px!important;line-height:normal!important;}
-.header-logo-frame{display:inline-flex!important;align-items:center!important;justify-content:center!important;overflow:visible!important;background:transparent!important;line-height:0!important;flex:0 1 auto!important;}
-.header-logo-frame.company{height:44px!important;max-width:54vw!important;}
-.header-logo-frame.fuzz{height:44px!important;max-width:32vw!important;}
-.header-logo-frame .header-company-logo,.header-logo-frame .header-fuzz-logo{position:static!important;display:block!important;width:auto!important;height:100%!important;max-height:100%!important;max-width:100%!important;object-fit:contain!important;object-position:center center!important;clip-path:none!important;overflow:visible!important;transform:none!important;}
-.header-logo-frame.fuzz .header-fuzz-logo{padding:0!important;margin:0!important;background:transparent!important;}
-.fuzzy-confirm-mf-svg,.editable-mf,.fuzzy-condition-block{pointer-events:auto!important;cursor:pointer!important;}
-.fuzzy-confirm-mf-svg{touch-action:manipulation!important;}
-.fuzzy-if-chip.editable-mf{user-select:none!important;-webkit-tap-highlight-color:rgba(0,255,0,.22)!important;}
-@media(max-width:760px){.header-logo-frame.company,.header-logo-frame.fuzz{height:36px!important}.header-logo-frame.company{max-width:55vw!important}.header-logo-frame.fuzz{max-width:33vw!important}.fuzzy-confirm-mf-svg{min-height:74px!important}}
-
-
-
-/* v280 note: official FuzzRoBo logo is now supplied, so keep the second logo visible. */
-.header-logo-frame.fuzz,
-.header-fuzz-logo{display:inline-flex!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;min-width:0!important;max-width:36vw!important;margin:0!important;padding:0!important;overflow:visible!important;}
-.header-logo-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:0!important;overflow:visible!important;min-height:46px!important;}
-.header-logo-frame.company{display:inline-flex!important;align-items:center!important;justify-content:center!important;height:44px!important;max-width:92vw!important;overflow:visible!important;}
-.header-logo-frame.company .header-company-logo,.header-company-logo{display:block!important;height:44px!important;width:auto!important;max-width:92vw!important;object-fit:contain!important;object-position:left center!important;clip-path:none!important;overflow:visible!important;}
-@media(max-width:760px){.header-logo-row{min-height:38px!important}.header-logo-frame.company{height:36px!important;max-width:94vw!important}.header-logo-frame.company .header-company-logo,.header-company-logo{height:36px!important;max-width:94vw!important}}
-
-
-/* v283: semantic topology-aware grasp scoring, collision-free fuzzy reject, and evidence visualization */
-.collision-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(239,68,68,.38);background:rgba(127,29,29,.28);color:#fecaca;border-radius:999px;padding:3px 8px;margin:5px 0;font-size:11px;font-weight:900}
-.collision-badge.safe{border-color:rgba(0,255,0,.35);background:rgba(0,255,0,.10);color:#bbf7d0}
-
-/* v283: semantic topology evidence for grasp candidates */
-.semantic-badges{display:flex;flex-wrap:wrap;gap:5px;margin:7px 0 4px}
-.semantic-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.72);padding:3px 8px;font-size:11px;font-weight:900;color:#e5e7eb}
-.semantic-chip.safe{border-color:rgba(0,255,0,.42);background:rgba(0,255,0,.10);color:#bbf7d0}
-.semantic-chip.unknown{border-color:rgba(245,158,11,.42);background:rgba(245,158,11,.12);color:#fde68a}
-.semantic-chip.wall{border-color:rgba(239,68,68,.46);background:rgba(127,29,29,.24);color:#fecaca}
-.semantic-chip.default{border-color:rgba(148,163,184,.30);background:rgba(71,85,105,.22);color:#cbd5e1}
-.semantic-chip.reject{border-color:rgba(239,68,68,.52);background:rgba(127,29,29,.32);color:#fecaca}
-.semantic-chip.pass{border-color:rgba(0,255,0,.42);background:rgba(0,255,0,.12);color:#bbf7d0}
-
-/* v282: restore official FuzzRoBo logo, keep company and FuzzRoBo logos at equal height, preserve aspect ratio. */
-.header-logo-row{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:12px!important;flex-wrap:wrap!important;overflow:visible!important;min-height:50px!important;padding:6px 0 10px!important;}
-.header-logo-frame.company,.header-logo-frame.fuzz{display:inline-flex!important;align-items:center!important;justify-content:center!important;overflow:visible!important;background:transparent!important;line-height:0!important;flex:0 1 auto!important;height:44px!important;}
-.header-logo-frame.company{max-width:58vw!important;}
-.header-logo-frame.fuzz{max-width:36vw!important;}
-.header-logo-frame.company .header-company-logo,.header-company-logo,.header-logo-frame.fuzz .header-fuzz-logo,.header-fuzz-logo{display:block!important;visibility:visible!important;opacity:1!important;width:auto!important;height:100%!important;max-height:100%!important;max-width:100%!important;object-fit:contain!important;object-position:left center!important;clip-path:none!important;overflow:visible!important;transform:none!important;background:transparent!important;padding:0!important;margin:0!important;}
-@media(max-width:760px){.header-logo-row{gap:10px!important;min-height:42px!important}.header-logo-frame.company,.header-logo-frame.fuzz{height:36px!important}.header-logo-frame.company{max-width:58vw!important}.header-logo-frame.fuzz{max-width:34vw!important}}
-
-
-/* v284: normal vectors are drawn with about 1.5x stronger visibility.
-   Previous default opacity 0.72 x 1.5 = 1.08, capped to Canvas alpha 1.00. */
-
-
-/* v291: 3D Viewer one-shot exact fuzzy grasp + 7DOF IK button */
-.viewer-fuzzy-ik-panel{
-  position:absolute;
-  right:14px;
-  top:108px;
-  z-index:140;
-  display:grid;
-  gap:8px;
-  width:min(330px,calc(100% - 28px));
-  padding:10px;
-  border-radius:16px;
-  background:rgba(2,6,23,.76);
-  border:1px solid rgba(0,255,0,.42);
-  backdrop-filter:blur(6px);
-  box-shadow:0 12px 26px rgba(0,0,0,.30);
-}
-.viewer-fuzzy-ik-panel button{
-  width:100%;
-  min-height:44px;
-  border-radius:999px;
-  border:1px solid rgba(0,255,0,.78);
-  background:#2f5f1f;
-  color:#fff;
-  font-weight:950;
-  font-size:13px;
-  letter-spacing:.02em;
-  cursor:pointer;
-}
-.viewer-fuzzy-ik-panel button.running{
-  background:#3b2f1a;
-  border-color:#f59e0b;
-}
-.viewer-fuzzy-ik-readout{
-  display:block;
-  white-space:pre-wrap;
-  font:900 11px/1.45 Consolas,Menlo,monospace;
-  color:#bbf7d0;
-  background:rgba(2,6,23,.48);
-  border:1px solid rgba(148,163,184,.22);
-  border-radius:12px;
-  padding:8px;
-  max-height:160px;
-  overflow:auto;
-}
-@media(max-width:760px){
-  .viewer-fuzzy-ik-panel{
-    left:8px;
-    right:8px;
-    top:auto;
-    bottom:8px;
-    width:auto;
-    padding:8px;
-  }
-  .viewer-fuzzy-ik-panel button{min-height:46px;font-size:12px}
-  .viewer-fuzzy-ik-readout{font-size:10px;max-height:120px}
-}
-
-
-/* v292: actual in-viewer fuzzy grasp execution button */
-.viewer-fuzzy-ik-panel{
-  position:absolute;
-  left:14px;
-  right:auto;
-  top:64px;
-  z-index:260;
-  display:grid;
-  gap:7px;
-  width:min(360px,calc(100% - 28px));
-  padding:9px;
-  border-radius:16px;
-  background:rgba(2,6,23,.78);
-  border:1.5px solid rgba(0,255,0,.70);
-  backdrop-filter:blur(6px);
-  box-shadow:0 12px 26px rgba(0,0,0,.34);
-  pointer-events:auto;
-}
-.viewer-fuzzy-ik-panel button{
-  width:100%;
-  min-height:46px;
-  border-radius:999px;
-  border:1.5px solid rgba(0,255,0,.92);
-  background:linear-gradient(180deg,rgba(34,197,94,.95),rgba(22,101,52,.96));
-  color:#fff;
-  font-weight:950;
-  font-size:14px;
-  letter-spacing:.02em;
-  cursor:pointer;
-}
-.viewer-fuzzy-ik-panel button.running{
-  background:linear-gradient(180deg,rgba(245,158,11,.95),rgba(120,53,15,.96));
-  border-color:#f59e0b;
-}
-.viewer-fuzzy-ik-readout{
-  white-space:pre-wrap;
-  font:900 10.5px/1.35 Consolas,Menlo,monospace;
-  color:#bbf7d0;
-  background:rgba(2,6,23,.54);
-  border:1px solid rgba(148,163,184,.22);
-  border-radius:11px;
-  padding:7px;
-  max-height:92px;
-  overflow:auto;
-}
-@media(max-width:760px){
-  .viewer-fuzzy-ik-panel{
-    left:10px;
-    right:10px;
-    top:74px;
-    bottom:auto;
-    width:auto;
-    padding:8px;
-  }
-  .viewer-fuzzy-ik-panel button{min-height:48px;font-size:13px}
-  .viewer-fuzzy-ik-readout{font-size:10px;max-height:74px}
-}
-
-
-/* v293: compact non-blocking in-viewer fuzzy grasp button */
-.viewer-fuzzy-ik-panel{
-  position:absolute!important;
-  left:auto!important;
-  right:12px!important;
-  top:12px!important;
-  bottom:auto!important;
-  z-index:310!important;
-  display:flex!important;
-  align-items:center!important;
-  gap:6px!important;
-  width:auto!important;
-  min-width:0!important;
-  max-width:210px!important;
-  padding:4px!important;
-  border-radius:999px!important;
-  background:rgba(2,6,23,.50)!important;
-  border:1px solid rgba(0,255,0,.55)!important;
-  box-shadow:0 4px 12px rgba(0,0,0,.22)!important;
-  backdrop-filter:blur(4px)!important;
-  pointer-events:auto!important;
-}
-.viewer-fuzzy-ik-panel button{
-  width:auto!important;
-  min-width:0!important;
-  min-height:0!important;
-  height:30px!important;
-  padding:0 10px!important;
-  border-radius:999px!important;
-  border:1px solid rgba(0,255,0,.78)!important;
-  background:rgba(22,101,52,.88)!important;
-  color:#fff!important;
-  font-weight:900!important;
-  font-size:11px!important;
-  line-height:1!important;
-  letter-spacing:0!important;
-  white-space:nowrap!important;
-  cursor:pointer!important;
-}
-.viewer-fuzzy-ik-panel button.running{
-  background:rgba(146,64,14,.92)!important;
-  border-color:#f59e0b!important;
-}
-.viewer-fuzzy-ik-readout{
-  display:none!important;
-}
-.viewer-fuzzy-ik-panel.show-readout{
-  border-radius:12px!important;
-  display:grid!important;
-  width:260px!important;
-  max-width:calc(100% - 24px)!important;
-  padding:6px!important;
-}
-.viewer-fuzzy-ik-panel.show-readout .viewer-fuzzy-ik-readout{
-  display:block!important;
-  white-space:pre-wrap!important;
-  font:800 10px/1.25 Consolas,Menlo,monospace!important;
-  color:#bbf7d0!important;
-  background:rgba(2,6,23,.62)!important;
-  border:1px solid rgba(148,163,184,.20)!important;
-  border-radius:8px!important;
-  padding:5px!important;
-  max-height:74px!important;
-  overflow:auto!important;
-}
-@media(max-width:760px){
-  .viewer-fuzzy-ik-panel{
-    right:8px!important;
-    top:8px!important;
-    left:auto!important;
-    bottom:auto!important;
-    max-width:178px!important;
-    padding:3px!important;
-  }
-  .viewer-fuzzy-ik-panel button{
-    height:28px!important;
-    padding:0 8px!important;
-    font-size:10px!important;
-  }
-  .viewer-fuzzy-ik-panel.show-readout{
-    width:220px!important;
-    max-width:calc(100% - 16px)!important;
-  }
-}
-
-
-/* v294: exact requested non-emoji viewer button label */
-.viewer-fuzzy-ik-panel button{
-  height:30px!important;
-  padding:0 12px!important;
-  font-size:11px!important;
-  white-space:nowrap!important;
-}
-.viewer-fuzzy-ik-panel{
-  max-width:190px!important;
-}
-@media(max-width:760px){
-  .viewer-fuzzy-ik-panel{
-    max-width:150px!important;
-  }
-  .viewer-fuzzy-ik-panel button{
-    height:28px!important;
-    padding:0 8px!important;
-    font-size:10px!important;
-  }
-}
-
-
-/* v295: fixed short header area */
-header{
-  padding-bottom:10px!important;
-}
-header .sub{
-  max-width:1180px!important;
-  line-height:1.45!important;
-  font-size:14px!important;
-  display:block!important;
-  overflow:visible!important;
-}
-@media(max-width:760px){
-  header{
-    padding-top:10px!important;
-    padding-bottom:8px!important;
-  }
-  header h1{
-    font-size:28px!important;
-    line-height:1.1!important;
-    margin-bottom:8px!important;
-  }
-  header .sub{
-    font-size:13px!important;
-    line-height:1.35!important;
-    max-height:3.0em!important;
-    overflow:hidden!important;
-  }
-}
-
-
-/* v309: topological cluster BBox overlay control layout */
-.mini-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-}
-.mini-grid input[type="number"]{
-  margin-top:6px;
-}
-@media(max-width:760px){
-  .mini-grid{grid-template-columns:1fr;}
-}
-
-
-/* v1 patch: collapsible visibility layer panel for the unified 3D Viewer. */
-.canvaswrap:not(.layers-open) [data-view-panel="layers"]{display:none!important}
-.canvaswrap.layers-open .viewer-layer-panel{top:52px;left:12px}
-.viewer-layer-panel{
-  position:absolute;left:12px;top:52px;z-index:76;
-  display:grid;gap:7px;min-width:180px;max-width:min(280px,calc(100% - 24px));
-  padding:9px;border-radius:14px;background:rgba(2,6,23,.72);
-  border:1px solid rgba(56,189,248,.28);backdrop-filter:blur(6px);
-  color:#e5e7eb;font-size:12px;pointer-events:auto;
-}
-.viewer-layer-panel .layer-title{color:#93c5fd;font-size:11px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
-.viewer-layer-panel label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;font-size:12px;font-weight:850;text-transform:none;letter-spacing:0}
-.viewer-layer-panel input{width:auto!important}
-.viewer-layer-panel .layer-note{color:#94a3b8;font-size:10px;line-height:1.35}
-@media(max-width:760px){.canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px}.viewer-layer-panel{left:8px;top:48px;min-width:160px;font-size:11px}}
-
-
-/* v1.1 repair: robust collapsible 3D Viewer panels and calmer topology overlays. */
-.canvaswrap:not(.info-open) [data-view-panel="info"],
-.canvaswrap:not(.play-open) [data-view-panel="play"],
-.canvaswrap:not(.tools-open) [data-view-panel="tools"],
-.canvaswrap:not(.layers-open) [data-view-panel="layers"]{display:none!important;}
-.viewer-tabs{z-index:420!important;pointer-events:auto!important;}
-.canvaswrap.play-open .neo-hud{left:12px!important;right:auto!important;top:52px!important;bottom:auto!important;max-width:min(720px,calc(100% - 24px))!important;}
-.canvaswrap.play-open .viewer-fuzzy-ik-panel{display:grid!important;left:12px!important;right:auto!important;top:150px!important;bottom:auto!important;width:min(280px,calc(100% - 24px))!important;max-width:none!important;border-radius:14px!important;padding:7px!important;}
-.canvaswrap.layers-open .viewer-layer-panel{display:grid!important;z-index:410!important;}
-.viewer-layer-panel{background:rgba(2,6,23,.84)!important;border-color:rgba(56,189,248,.38)!important;}
-.viewer-layer-panel label{cursor:pointer!important;}
-.viewer-layer-panel input{accent-color:#00ff00;}
-@media(max-width:760px){.canvaswrap.play-open .neo-hud{left:8px!important;right:8px!important;top:48px!important;max-width:none!important}.canvaswrap.play-open .viewer-fuzzy-ik-panel{left:8px!important;right:8px!important;top:160px!important;width:auto!important}.canvaswrap.layers-open .viewer-layer-panel{top:48px!important;left:8px!important;right:8px!important;max-width:none!important;}}
 
 </style>
-<script src="https://static.robotwebtools.org/roslibjs/current/roslib.min.js"></script>
+<script src="libs/roslib.min.js"></script>
 </head>
 <body>
 <header>
@@ -1030,10 +599,10 @@ header .sub{
             </div>
             <div id="gngBundleTopicList" class="bundle-topic-list"></div>
           </div>
-          <input id="gngDataFile" type="file" class="hide" accept=".json,.csv,.txt,.bag,.bag.json,.session.json,.points.json,.graph.json">
+          <input id="gngDataFile" type="file" class="hide" accept=".json, .json.gz">
           <div class="full">
-            <button id="gngLoadDataBtn" class="primary" type="button">ROS bag由来JSONを読み込む</button>
-            <div class="readout" style="margin-top:6px">ファイル内の ROS bag 由来 JSON 形式を自動判定します。</div>
+            <button id="gngLoadDataBtn" class="primary" type="button">ROS bagJSONを読み込む</button>
+            <div class="readout" style="margin-top:6px">ファイル内の ROS bag JSON の形式を判定します。</div>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
@@ -1400,8 +969,14 @@ function v297SetFastGngDefaults(){
 function labelOf(t){const m={mug:'カップ / Mug',teacup:'ティーカップ / Teacup',beer_mug:'ビアジョッキ / Beer mug',measuring_cup:'計量カップ / Measuring cup',milk_jug:'ミルクジャグ / Milk jug',pitcher:'ピッチャー / Pitcher',watering_can:'じょうろ / Watering can',detergent:'洗剤ボトル / Detergent bottle',kettle:'ケトル / Kettle',spray:'スプレーボトル / Spray bottle',saucepan:'片手鍋 / Saucepan',basket:'バスケット / Basket',canister:'キャニスタ / Canister',carafe:'カラフェ / Carafe'};return m[t]||String(t||'-')}
 function pushNoisy(pts,p,noise,r){pts.push(addNoise({x:p.x,y:p.y,z:p.z,label:p.label||'body'},noise,r))}
 function generateLoopHandle(pts,count,noise,r,opt={}){
-  const attachX=opt.attachX??0.056, outerX=opt.outerX??0.088, centerY=opt.centerY??0, centerZ=opt.centerZ??0.105;
-  const rz=opt.rz??0.058, tubeR=opt.tubeR??0.0055, widthY=opt.widthY??0.011, arc=opt.arc??1.84;
+  const attachX=opt.attachX !== undefined ? opt.attachX : 0.056;
+  const outerX=opt.outerX !== undefined ? opt.outerX : 0.088;
+  const centerY=opt.centerY !== undefined ? opt.centerY : 0;
+  const centerZ=opt.centerZ !== undefined ? opt.centerZ : 0.105;
+  const rz=opt.rz !== undefined ? opt.rz : 0.058;
+  const tubeR=opt.tubeR !== undefined ? opt.tubeR : 0.0055;
+  const widthY=opt.widthY !== undefined ? opt.widthY : 0.011;
+  const arc=opt.arc !== undefined ? opt.arc : 1.84;
   for(let i=0;i<count;i++){
     const t=(r()-.5)*Math.PI*arc;
     const ph=r()*TAU;
@@ -1423,7 +998,12 @@ function generateLoopHandle(pts,count,noise,r,opt={}){
   }
 }
 function generateTopHandle(pts,count,noise,r,opt={}){
-  const centerX=opt.centerX??0, centerY=opt.centerY??0, centerZ=opt.centerZ??0.16, spanX=opt.spanX??0.055, riseZ=opt.riseZ??0.06, tubeR=opt.tubeR??0.005;
+  const centerX=opt.centerX !== undefined ? opt.centerX : 0;
+  const centerY=opt.centerY !== undefined ? opt.centerY : 0;
+  const centerZ=opt.centerZ !== undefined ? opt.centerZ : 0.16;
+  const spanX=opt.spanX !== undefined ? opt.spanX : 0.055;
+  const riseZ=opt.riseZ !== undefined ? opt.riseZ : 0.06;
+  const tubeR=opt.tubeR !== undefined ? opt.tubeR : 0.005;
   for(let i=0;i<count;i++){
     const t=(r()-.5)*Math.PI;
     const ph=r()*TAU;
@@ -1437,7 +1017,11 @@ function generateTopHandle(pts,count,noise,r,opt={}){
   }
 }
 function generateSpout(pts,count,noise,r,opt={}){
-  const x0=opt.x0??-0.04, x1=opt.x1??-0.09, z0=opt.z0??0.16, z1=opt.z1??0.19, wy=opt.widthY??0.022;
+  const x0=opt.x0 !== undefined ? opt.x0 : -0.04;
+  const x1=opt.x1 !== undefined ? opt.x1 : -0.09;
+  const z0=opt.z0 !== undefined ? opt.z0 : 0.16;
+  const z1=opt.z1 !== undefined ? opt.z1 : 0.19;
+  const wy=opt.widthY !== undefined ? opt.widthY : 0.022;
   for(let i=0;i<count;i++){
     const t=r();
     const x=x0 + (x1-x0)*t + (r()-.5)*0.005;
@@ -1446,150 +1030,219 @@ function generateSpout(pts,count,noise,r,opt={}){
     pushNoisy(pts,{x,y,z,label:'rim'},noise,r);
   }
 }
-function generateMug(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.66), handleN=n-bodyN;
-  for(let i=0;i<bodyN;i++){
-    let z=r()*0.188; let th=r()*TAU; let rad=0.054+(r()-.5)*0.004;
-    if(r()<.18){z=0.188+(r()-.5)*0.003; rad=0.053+r()*0.006}
-    pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.172?'rim':'body'},noise,r);
+// ── 共通ボディジェネレータ ──────────────────────────────────────
+function genCylinderBody(pts,n,noise,r,o){
+  // o: {height, rad, radMod:'sin'|'linear'|'taper'|'flare', modAmt, scaleY, rimFrac, rimH}
+  const h=o.h || o.height, baseRad=o.rad, mod=o.radMod||'none', amt=o.modAmt||0;
+  const sy=o.scaleY||1, rimFrac=o.rimFrac||0.18, rimH=o.rimH??h*0.915;
+  for(let i=0;i<n;i++){
+    const z=r()*h; const th=r()*TAU;
+    let rad=baseRad+(r()-.5)*0.004;
+    if(mod==='sin')   rad+=amt*Math.sin(Math.PI*z/h);
+    if(mod==='linear')rad+=amt*(z/h);
+    if(mod==='taper') rad+=amt*(1-z/h);
+    if(mod==='flare') rad+=amt*(z/h);           // alias
+    if(r()<rimFrac){const rz=rimH+(r()-.5)*0.003; pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*sy)*Math.sin(th),z:rz,label:'rim'},noise,r); continue;}
+    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*sy)*Math.sin(th),z,label:z>rimH?'rim':'body'},noise,r);
   }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.056,outerX:0.091,centerZ:0.103,rz:0.057,tubeR:0.0058,widthY:0.011,arc:1.80});
-  return pts;
 }
-function generateTeacup(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.68), handleN=n-bodyN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.078; const th=r()*TAU; const flare=0.060+0.018*(z/0.078); const rad=flare+(r()-.5)*0.004;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.066?'rim':'body'},noise,r);
+function genBoxBody(pts,n,noise,r,o){
+  // o: {w,d,h, round}   w=x, d=y, h=z  half-extents
+  const hw=o.w/2, hd=o.d/2, hh=o.h, round=o.round||0;
+  for(let i=0;i<n;i++){
+    let face=Math.floor(r()*6), x=(r()-.5)*o.w, y=(r()-.5)*o.d, z=r()*hh;
+    if(face===0)x=-hw; if(face===1)x=hw;
+    if(face===2)y=-hd; if(face===3)y=hd;
+    if(face===4)z=0;   if(face===5)z=hh;
+    if(round){const rv=round*Math.sin(Math.PI*z/hh);x+=Math.sign(x||1)*rv*r()*.35;y+=Math.sign(y||1)*rv*r()*.35;}
+    pushNoisy(pts,{x,y,z,label:'body'},noise,r);
   }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.070,outerX:0.096,centerZ:0.045,rz:0.028,tubeR:0.0048,widthY:0.009,arc:1.72});
-  return pts;
 }
-function generateBeerMug(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.63), handleN=n-bodyN;
-  for(let i=0;i<bodyN;i++){
-    let z=r()*0.205; let th=r()*TAU; let rad=0.060+(r()-.5)*0.004;
-    if(r()<.16){z=0.205+(r()-.5)*0.003; rad=0.058+r()*0.006}
-    pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.188?'rim':'body'},noise,r);
+function genSphereBody(pts,n,noise,r,o){
+  // o: {rad, centerZ, rimH}
+  const cz=o.centerZ, rad=o.rad, rimH=o.rimH??cz*1.64;
+  for(let i=0;i<n;i++){
+    const z=r()*cz*2, zn=(z-cz)/cz;
+    const rv=rad*Math.sqrt(Math.max(0,1-zn*zn))+(r()-.5)*0.0035, th=r()*TAU;
+    pushNoisy(pts,{x:rv*Math.cos(th),y:rv*Math.sin(th),z,label:z>rimH?'rim':'body'},noise,r);
   }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.062,outerX:0.101,centerZ:0.105,rz:0.066,tubeR:0.0068,widthY:0.012,arc:1.92});
-  return pts;
 }
-function generateMeasuringCup(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.62), handleN=Math.floor(n*.24), spoutN=n-bodyN-handleN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.108; const th=r()*TAU; const rad=0.058+0.010*(z/0.108)+(r()-.5)*0.004;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.094?'rim':'body'},noise,r);
+function genFlatBody(pts,n,noise,r,o){
+  // o: {rad, scaleY, depth, rimRad}
+  const rad=o.rad, sy=o.scaleY||1, depth=o.depth||0.055, rimRad=o.rimRad??rad*0.88;
+  for(let i=0;i<n;i++){
+    const th=r()*TAU, rv=Math.sqrt(r())*rad;
+    const z=depth*(rv/rad)*(rv/rad)+0.004*(r()-.5);
+    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z,label:rv>rimRad?'rim':'body'},noise,r);
   }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.071,outerX:0.099,centerZ:0.060,rz:0.034,tubeR:0.0050,widthY:0.010,arc:1.68});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.058,x1:-0.090,z0:0.090,z1:0.110,widthY:0.020});
-  return pts;
 }
-function generateMilkJug(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.64), handleN=Math.floor(n*.24), capN=n-bodyN-handleN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.185; const th=r()*TAU; const rad=0.047+0.015*Math.sin(Math.PI*z/0.185)+(r()-.5)*0.004;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.86)*Math.sin(th),z,label:z>.165?'rim':'body'},noise,r);
+function genCap(pts,n,noise,r,o){
+  // o: {rad, z0, dz}
+  for(let i=0;i<n;i++){
+    const th=r()*TAU, rv=o.rad*r(), z=o.z0+r()*o.dz;
+    pushNoisy(pts,{x:rv*Math.cos(th),y:rv*Math.sin(th),z,label:'cap'},noise,r);
   }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.056,outerX:0.092,centerZ:0.112,rz:0.050,tubeR:0.0052,widthY:0.010,arc:1.62});
-  for(let i=0;i<capN;i++){
-    const th=r()*TAU, rad=0.018+0.010*r(), z=0.188+r()*0.028; pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)
-  }
-  return pts;
 }
-function generateDetergent(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.68),handleN=Math.floor(n*.22),capN=n-bodyN-handleN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.10,y=(r()-.5)*0.065,z=r()*0.24;if(face===0)x=-0.05;if(face===1)x=0.05;if(face===2)y=-0.032;if(face===3)y=0.032;if(face===4)z=0;if(face===5)z=0.24;let round=0.010*Math.sin(Math.PI*z/0.24);x+=Math.sign(x||1)*round*r()*.35;y+=Math.sign(y||1)*round*r()*.35;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.052,outerX:0.093,centerZ:0.142,rz:0.060,tubeR:0.0055,widthY:0.009,arc:1.55});for(let i=0;i<capN;i++){let th=r()*TAU,z=.245+r()*0.045,rad=.025;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
-function generatePitcher(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.60),handleN=Math.floor(n*.28),spoutN=n-bodyN-handleN;for(let i=0;i<bodyN;i++){let z=r()*0.23;let th=r()*TAU;let rad=0.052+0.021*Math.sin(Math.PI*z/0.23)+(r()-.5)*.005;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.205?'rim':'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.060,outerX:0.103,centerZ:0.122,rz:0.070,tubeR:0.0062,widthY:0.012,arc:1.76});generateSpout(pts,spoutN,noise,r,{x0:-0.036,x1:-0.086,z0:0.182,z1:0.212,widthY:0.030});return pts}
-function generateWateringCan(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.52), topHandleN=Math.floor(n*.18), sideHandleN=Math.floor(n*.12), spoutN=Math.floor(n*.12), capN=n-bodyN-topHandleN-sideHandleN-spoutN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.16; const th=r()*TAU; const rad=0.070+0.010*Math.sin(Math.PI*z/0.16)+(r()-.5)*0.005;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.88)*Math.sin(th),z,label:z>.145?'rim':'body'},noise,r);
+
+// ── オブジェクト定義テーブル ──────────────────────────────────
+// fracs: [body, loopHandle?, topHandle?, spout?, cap?]  合計1.0
+const OBJ_DEFS = {
+  mug:{
+    body:{type:'cyl',h:.188,rad:.054,rimH:.172},
+    fracs:{body:.66,loop:.34},
+    loop:{attachX:.056,outerX:.091,centerZ:.103,rz:.057,tubeR:.0058,widthY:.011,arc:1.80}
+  },
+  teacup:{
+    body:{type:'cyl',h:.078,rad:.060,radMod:'flare',modAmt:.018,rimH:.066},
+    fracs:{body:.68,loop:.32},
+    loop:{attachX:.070,outerX:.096,centerZ:.045,rz:.028,tubeR:.0048,widthY:.009,arc:1.72}
+  },
+  beer_mug:{
+    body:{type:'cyl',h:.205,rad:.060,rimH:.188},
+    fracs:{body:.63,loop:.37},
+    loop:{attachX:.062,outerX:.101,centerZ:.105,rz:.066,tubeR:.0068,widthY:.012,arc:1.92}
+  },
+  bucket:{
+    body:{type:'cyl',h:.165,rad:.050,radMod:'taper',modAmt:-.014,scaleY:.92,rimH:.145},
+    fracs:{body:.72,loop:.28},
+    loop:{attachX:.044,outerX:.050,centerZ:.125,rz:.095,tubeR:.0048,widthY:.005,arc:2.38}
+  },
+  milk_jug:{
+    body:{type:'cyl',h:.185,rad:.047,radMod:'sin',modAmt:.015,scaleY:.86,rimH:.165},
+    fracs:{body:.64,loop:.24,cap:.12},
+    loop:{attachX:.056,outerX:.092,centerZ:.112,rz:.050,tubeR:.0052,widthY:.010,arc:1.62},
+    cap:{rad:.028,z0:.188,dz:.028}
+  },
+  canister:{
+    body:{type:'cyl',h:.16,rad:.045,rimH:.145},
+    fracs:{body:.82,cap:.18},
+    cap:{rad:.036,z0:.165,dz:.028}
+  },
+  measuring_cup:{
+    body:{type:'cyl',h:.108,rad:.058,radMod:'linear',modAmt:.010,rimH:.094},
+    fracs:{body:.62,loop:.24,spout:.14},
+    loop:{attachX:.071,outerX:.099,centerZ:.060,rz:.034,tubeR:.0050,widthY:.010,arc:1.68},
+    spout:{x0:-.058,x1:-.090,z0:.090,z1:.110,widthY:.020}
+  },
+  carafe:{
+    body:{type:'cyl',h:.205,rad:.040,radMod:'sin',modAmt:.010,scaleY:.82,rimH:.182},  // +linear baked-in
+    fracs:{body:.64,loop:.22,spout:.14},
+    loop:{attachX:.052,outerX:.091,centerZ:.120,rz:.066,tubeR:.0052,widthY:.010,arc:1.70},
+    spout:{x0:-.035,x1:-.080,z0:.176,z1:.205,widthY:.022}
+  },
+  pitcher:{
+    body:{type:'cyl',h:.23,rad:.052,radMod:'sin',modAmt:.021,rimH:.205},
+    fracs:{body:.60,loop:.28,spout:.12},
+    loop:{attachX:.060,outerX:.103,centerZ:.122,rz:.070,tubeR:.0062,widthY:.012,arc:1.76},
+    spout:{x0:-.036,x1:-.086,z0:.182,z1:.212,widthY:.030}
+  },
+  watering_pitcher:{
+    body:{type:'cyl',h:.195,rad:.041,radMod:'sin',modAmt:.014,scaleY:.88,rimH:.172},
+    fracs:{body:.56,loop:.18,spout:.26},
+    loop:{attachX:.050,outerX:.089,centerZ:.115,rz:.070,tubeR:.0050,widthY:.010,arc:1.70},
+    spout:{x0:-.030,x1:-.145,z0:.122,z1:.190,widthY:.012}
+  },
+  coffee_pot:{
+    body:{type:'cyl',h:.215,rad:.028,radMod:'sin',modAmt:.012,scaleY:.80,rimH:.192},  // +linear
+    fracs:{body:.58,loop:.20,spout:.14,cap:.08},
+    loop:{attachX:.046,outerX:.084,centerZ:.118,rz:.072,tubeR:.0046,widthY:.009,arc:1.72},
+    spout:{x0:-.024,x1:-.110,z0:.100,z1:.205,widthY:.012},
+    cap:{rad:.026,z0:.208,dz:.018}
+  },
+  kettle:{
+    body:{type:'cyl',h:.18,rad:.052,radMod:'sin',modAmt:.018,rimH:.16},
+    fracs:{body:.54,top:.22,spout:.12,cap:.12},
+    top:{centerX:0,centerZ:.120,spanX:.044,riseZ:.058,tubeR:.0055},
+    spout:{x0:-.050,x1:-.108,z0:.100,z1:.140,widthY:.026},
+    cap:{rad:.032,z0:.184,dz:.016}
+  },
+  watering_can:{
+    body:{type:'cyl',h:.16,rad:.070,radMod:'sin',modAmt:.010,scaleY:.88,rimH:.145},
+    fracs:{body:.52,top:.18,loop:.12,spout:.12,cap:.06},
+    top:{centerX:0,centerZ:.145,spanX:.050,riseZ:.045,tubeR:.0055},
+    loop:{attachX:.070,outerX:.100,centerZ:.090,rz:.040,tubeR:.0048,widthY:.010,arc:1.45},
+    spout:{x0:-.070,x1:-.145,z0:.115,z1:.155,widthY:.028},
+    cap:{rad:.018,z0:.165,dz:.020}
+  },
+  teapot:{
+    body:{type:'sphere',rad:.034,centerZ:.072,rimH:.118},
+    fracs:{body:.54,loop:.20,spout:.16,cap:.10},
+    loop:{attachX:.050,outerX:.093,centerZ:.082,rz:.050,tubeR:.0048,widthY:.009,arc:1.70},
+    spout:{x0:-.038,x1:-.102,z0:.076,z1:.102,widthY:.020},
+    cap:{rad:.031,z0:.122,dz:.020}
+  },
+  saucepan:{
+    body:{type:'flat',rad:.075,depth:.055,rimRad:.067},
+    fracs:{body:.72,sideHandle:.28},
+  },
+  frying_pan:{
+    body:{type:'flat',rad:.068,scaleY:.92,depth:.016,rimRad:.060},
+    fracs:{body:.68,sideHandle:.32},
+  },
+};
+
+// ── ディスパッチャ ────────────────────────────────────────────
+function generateObject(key, n, noise, seed){
+  const def=OBJ_DEFS[key];
+  if(!def) return [];
+  const r=rng(seed), pts=[];
+  const f=def.fracs;
+  const bodyN  =Math.floor(n*(f.body||0));
+  const loopN  =Math.floor(n*(f.loop||0));
+  const topN   =Math.floor(n*(f.top||0));
+  const spoutN =Math.floor(n*(f.spout||0));
+  const capN   =n-bodyN-loopN-topN-spoutN;  // 残り全部
+
+  // body
+  const b=def.body;
+  if(b.type==='cyl')    genCylinderBody(pts,bodyN,noise,r,b);
+  else if(b.type==='sphere') genSphereBody(pts,bodyN,noise,r,b);
+  else if(b.type==='flat')   genFlatBody(pts,bodyN,noise,r,b);
+
+  // handles & spout
+  if(loopN>0) generateLoopHandle(pts,loopN,noise,r,def.loop);
+  if(topN>0)  generateTopHandle(pts,topN,noise,r,def.top);
+  if(spoutN>0)generateSpout(pts,spoutN,noise,r,def.spout);
+
+  // sideHandle (saucepan / frying_pan: 直棒ハンドル)
+  if(f.sideHandle){
+    const hn=Math.floor(n*f.sideHandle);
+    const sh=def.sideHandle||{x0:.070,x1:.185,yw:.020,zc:.028,zv:.012};
+    for(let i=0;i<hn;i++){
+      const t=r(),x=sh.x0+t*(sh.x1-sh.x0),y=(r()-.5)*(sh.yw||.020),z=(sh.zc||.028)+(r()-.5)*(sh.zv||.012);
+      pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
+    }
   }
-  generateTopHandle(pts,topHandleN,noise,r,{centerX:0.0,centerZ:0.145,spanX:0.050,riseZ:0.045,tubeR:0.0055});
-  generateLoopHandle(pts,sideHandleN,noise,r,{attachX:0.070,outerX:0.100,centerZ:0.090,rz:0.040,tubeR:0.0048,widthY:0.010,arc:1.45});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.070,x1:-0.145,z0:0.115,z1:0.155,widthY:0.028});
-  for(let i=0;i<capN;i++){const th=r()*TAU, rad=0.018*r(), z=0.165+r()*0.020; pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}
-  return pts;
-}
-function generateKettle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.54),handleN=Math.floor(n*.22),spoutN=Math.floor(n*.12),lidN=n-bodyN-handleN-spoutN;for(let i=0;i<bodyN;i++){let z=r()*0.18;let th=r()*TAU;let rad=0.052+0.018*Math.sin(Math.PI*z/0.18)+(r()-.5)*0.005;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.16?'rim':'body'},noise,r)}generateTopHandle(pts,handleN,noise,r,{centerX:0.0,centerZ:0.120,spanX:0.044,riseZ:0.058,tubeR:0.0055});generateSpout(pts,spoutN,noise,r,{x0:-0.050,x1:-0.108,z0:0.100,z1:0.140,widthY:0.026});for(let i=0;i<lidN;i++){let th=r()*TAU,rad=0.032*r(),z=.184+r()*.016;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
-function generateSprayBottle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),headN=Math.floor(n*.15),handleN=n-bodyN-headN;for(let i=0;i<bodyN;i++){let z=r()*0.23,th=r()*TAU,radx=0.035+(r()-.5)*.004,rady=0.026+(r()-.5)*.003;pushNoisy(pts,{x:radx*Math.cos(th),y:rady*Math.sin(th),z,label:'body'},noise,r)}for(let i=0;i<headN;i++){let x=(r()-.5)*.055,y=(r()-.5)*.036,z=.225+r()*.055;if(r()<.45){x=-.02-r()*.06;y=(r()-.5)*.018;z=.252+r()*.025}pushNoisy(pts,{x,y,z,label:'cap'},noise,r)}for(let i=0;i<handleN;i++){let t=r(),x=.028+r()*.030,y=(r()-.5)*.018,z=.105+t*.120; if(r()<.45){x=.050+r()*.028;z=.125+r()*.065}pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
-function generateSaucepan(n,noise,seed){const r=rng(seed),pts=[];const panN=Math.floor(n*.72),handleN=n-panN;for(let i=0;i<panN;i++){let z=r()*0.055,th=r()*TAU,rad=0.075+(r()-.5)*0.006;if(r()<.24){z=.055+(r()-.5)*.004;rad=0.072+r()*.010}pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.05?'rim':'body'},noise,r)}for(let i=0;i<handleN;i++){let x=0.082+r()*0.145,y=(r()-.5)*0.020,z=0.028+(r()-.5)*0.012;pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
-function generateBasket(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let x=(r()-.5)*.14,y=(r()-.5)*.095,z=r()*.095;let f=Math.floor(r()*5);if(f===0)x=-.07;if(f===1)x=.07;if(f===2)y=-.048;if(f===3)y=.048;if(f===4)z=.095;pushNoisy(pts,{x,y,z,label:z>.085?'rim':'body'},noise,r)}for(let i=0;i<handleN;i++){let side=r()<.5?-1:1,t=(r()-.5)*Math.PI*1.15,cx=side*.077,cy=0,cz=.070,Rz=.052,Ry=.042,tube=.007*(.8+r()*.4),ph=r()*TAU;pushNoisy(pts,{x:cx+tube*Math.cos(ph),y:cy+Ry*Math.sin(t)+tube*Math.sin(ph)*.7,z:cz+Rz*Math.cos(t)+tube*Math.sin(ph)*.5,label:'handle'},noise,r)}return pts}
-function generateCanister(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.82),capN=n-bodyN;for(let i=0;i<bodyN;i++){let z=r()*0.16,th=r()*TAU,rad=0.045+(r()-.5)*.004;if(r()<.15){z=.158+(r()-.5)*.005;rad=.044+r()*.006}pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:z>.145?'rim':'body'},noise,r)}for(let i=0;i<capN;i++){let th=r()*TAU,rad=.036*r(),z=.165+r()*.028;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
-function generateCarafe(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.64), handleN=Math.floor(n*.22), spoutN=n-bodyN-handleN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.205; const th=r()*TAU; const rad=0.040+0.010*Math.sin(Math.PI*z/0.205)+0.020*(z/0.205)+(r()-.5)*0.004;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.82)*Math.sin(th),z,label:z>.182?'rim':'body'},noise,r);
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.052,outerX:0.091,centerZ:0.120,rz:0.066,tubeR:0.0052,widthY:0.010,arc:1.70});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.035,x1:-0.080,z0:0.176,z1:0.205,widthY:0.022});
+
+  // cap
+  if(capN>0 && def.cap) genCap(pts,capN,noise,r,def.cap);
+
   return pts;
 }
 
-function generateBucket(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.72), handleN=n-bodyN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.165; const th=r()*TAU; const taper=0.050-0.014*(z/0.165); const rad=taper+(r()-.5)*0.003;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.92)*Math.sin(th),z,label:z>.145?'rim':'body'},noise,r);
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.044,outerX:0.050,centerZ:0.125,rz:0.095,tubeR:0.0048,widthY:0.005,arc:2.38});
-  return pts;
-}
-function generateTeapot(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.54), handleN=Math.floor(n*.20), spoutN=Math.floor(n*.16), lidN=n-bodyN-handleN-spoutN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.145; const zn=(z-0.072)/0.072; const rad=0.030+0.034*Math.sqrt(Math.max(0,1-zn*zn))+(r()-.5)*0.0035; const th=r()*TAU;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:(z>.118?'rim':'body')},noise,r);
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.050,outerX:0.093,centerZ:0.082,rz:0.050,tubeR:0.0048,widthY:0.009,arc:1.70});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.038,x1:-0.102,z0:0.076,z1:0.102,widthY:0.020});
-  for(let i=0;i<lidN;i++){const th=r()*TAU,rad=0.010+0.021*r(),z=0.122+0.020*r();pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}
-  return pts;
-}
-function generateCoffeePot(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.58), handleN=Math.floor(n*.20), spoutN=Math.floor(n*.14), capN=n-bodyN-handleN-spoutN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.215; const th=r()*TAU; const rad=0.028+0.012*Math.sin(Math.PI*z/0.215)+0.026*(z/0.215)+(r()-.5)*0.003;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.80)*Math.sin(th),z,label:z>.192?'rim':'body'},noise,r);
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.046,outerX:0.084,centerZ:0.118,rz:0.072,tubeR:0.0046,widthY:0.009,arc:1.72});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.024,x1:-0.110,z0:0.100,z1:0.205,widthY:0.012});
-  for(let i=0;i<capN;i++){const th=r()*TAU,rad=0.008+0.018*r(),z=0.208+0.018*r();pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}
-  return pts;
-}
-function generateFryingPan(n,noise,seed){
-  const r=rng(seed),pts=[]; const panN=Math.floor(n*.68), handleN=n-panN;
-  for(let i=0;i<panN;i++){
-    const th=r()*TAU; const rad=Math.sqrt(r())*0.068; const z=0.016*(rad/0.068)*(rad/0.068)+0.004*(r()-.5);
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.92)*Math.sin(th),z,label:(rad>0.060?'rim':'body')},noise,r);
-  }
-  for(let i=0;i<handleN;i++){
-    const t=r(); const x=0.070+0.115*t; const y=(r()-.5)*0.016; const z=0.010+0.006*(1-t)+0.003*(r()-.5);
-    pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
-  }
-  return pts;
-}
-function generateToolbox(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.74), handleN=n-bodyN;
-  for(let i=0;i<bodyN;i++){
-    let face=Math.floor(r()*6),x=(r()-.5)*0.12,y=(r()-.5)*0.070,z=r()*0.090;
-    if(face===0)x=-0.060;if(face===1)x=0.060;if(face===2)y=-0.035;if(face===3)y=0.035;if(face===4)z=0;if(face===5)z=0.090;
-    pushNoisy(pts,{x,y,z,label:'body'},noise,r)
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.0,outerX:0.0,centerZ:0.118,rz:0.028,tubeR:0.0048,widthY:0.046,arc:3.14159,axis:'x'});
-  return pts;
-}
-function generateWateringPitcher(n,noise,seed){
-  const r=rng(seed),pts=[]; const bodyN=Math.floor(n*.56), handleN=Math.floor(n*.18), spoutN=n-bodyN-handleN;
-  for(let i=0;i<bodyN;i++){
-    const z=r()*0.195; const th=r()*TAU; const rad=0.041+0.014*Math.sin(Math.PI*z/0.195)+(r()-.5)*0.003;
-    pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*0.88)*Math.sin(th),z,label:z>.172?'rim':'body'},noise,r);
-  }
-  generateLoopHandle(pts,handleN,noise,r,{attachX:0.050,outerX:0.089,centerZ:0.115,rz:0.070,tubeR:0.0050,widthY:0.010,arc:1.70});
-  generateSpout(pts,spoutN,noise,r,{x0:-0.030,x1:-0.145,z0:0.122,z1:0.190,widthY:0.012});
-  return pts;
-}
+// ── 特殊形状オブジェクト（独自ボディロジックのため個別実装） ──
+function generateDetergent(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.68),handleN=Math.floor(n*.22),capN=n-bodyN-handleN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.10,y=(r()-.5)*0.065,z=r()*0.24;if(face===0)x=-0.05;if(face===1)x=0.05;if(face===2)y=-0.032;if(face===3)y=0.032;if(face===4)z=0;if(face===5)z=0.24;let round=0.010*Math.sin(Math.PI*z/0.24);x+=Math.sign(x||1)*round*r()*.35;y+=Math.sign(y||1)*round*r()*.35;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.052,outerX:0.093,centerZ:0.142,rz:0.060,tubeR:0.0055,widthY:0.009,arc:1.55});for(let i=0;i<capN;i++){let th=r()*TAU,z=.245+r()*0.045,rad=.025;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
+function generateSprayBottle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),headN=Math.floor(n*.15),handleN=n-bodyN-headN;for(let i=0;i<bodyN;i++){let z=r()*0.23,th=r()*TAU,radx=0.035+(r()-.5)*.004,rady=0.026+(r()-.5)*.003;pushNoisy(pts,{x:radx*Math.cos(th),y:rady*Math.sin(th),z,label:'body'},noise,r)}for(let i=0;i<headN;i++){let x=(r()-.5)*.055,y=(r()-.5)*.036,z=.225+r()*.055;if(r()<.45){x=-.02-r()*.06;y=(r()-.5)*.018;z=.252+r()*.025}pushNoisy(pts,{x,y,z,label:'cap'},noise,r)}for(let i=0;i<handleN;i++){let t=r(),x=.028+r()*.030,y=(r()-.5)*.018,z=.105+t*.120; if(r()<.45){x=.050+r()*.028;z=.125+r()*.065}pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
+function generateBasket(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let x=(r()-.5)*.14,y=(r()-.5)*.095,z=r()*.095;let f=Math.floor(r()*5);if(f===0)x=-.07;if(f===1)x=.07;if(f===2)y=-.048;if(f===3)y=.048;if(f===4)z=.095;pushNoisy(pts,{x,y,z,label:z>.085?'rim':'body'},noise,r)}for(let i=0;i<handleN;i++){let side=r()<.5?-1:1,t=(r()-.5)*Math.PI*1.15,cx=side*.077,cy=0,cz=.070,Rz=.052,Ry=.042,tube=.007*(.8+r()*.4),ph=r()*TAU;pushNoisy(pts,{x:cx+tube*Math.cos(ph),y:cy+Ry*Math.sin(t)+tube*Math.sin(ph)*.7,z:cz+Rz*Math.cos(t)+tube*Math.sin(ph)*.5,label:'handle'},noise,r)}return pts}
+function generateToolbox(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.74),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.12,y=(r()-.5)*0.070,z=r()*0.090;if(face===0)x=-0.060;if(face===1)x=0.060;if(face===2)y=-0.035;if(face===3)y=0.035;if(face===4)z=0;if(face===5)z=0.090;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.0,outerX:0.0,centerZ:0.118,rz:0.028,tubeR:0.0048,widthY:0.046,arc:3.14159,axis:'x'});return pts}
+
+// ── ラッパー: 既存コードの generate* 関数名を維持 ──
+function generateMug(n,noise,seed){return generateObject('mug',n,noise,seed)}
+function generateTeacup(n,noise,seed){return generateObject('teacup',n,noise,seed)}
+function generateBeerMug(n,noise,seed){return generateObject('beer_mug',n,noise,seed)}
+function generateMeasuringCup(n,noise,seed){return generateObject('measuring_cup',n,noise,seed)}
+function generateMilkJug(n,noise,seed){return generateObject('milk_jug',n,noise,seed)}
+function generatePitcher(n,noise,seed){return generateObject('pitcher',n,noise,seed)}
+function generateWateringCan(n,noise,seed){return generateObject('watering_can',n,noise,seed)}
+function generateKettle(n,noise,seed){return generateObject('kettle',n,noise,seed)}
+function generateSaucepan(n,noise,seed){return generateObject('saucepan',n,noise,seed)}
+function generateCanister(n,noise,seed){return generateObject('canister',n,noise,seed)}
+function generateCarafe(n,noise,seed){return generateObject('carafe',n,noise,seed)}
+function generateBucket(n,noise,seed){return generateObject('bucket',n,noise,seed)}
+function generateTeapot(n,noise,seed){return generateObject('teapot',n,noise,seed)}
+function generateCoffeePot(n,noise,seed){return generateObject('coffee_pot',n,noise,seed)}
+function generateFryingPan(n,noise,seed){return generateObject('frying_pan',n,noise,seed)}
+function generateWateringPitcher(n,noise,seed){return generateObject('watering_pitcher',n,noise,seed)}
 function addTabletopScene(raw,seed){
   const mode=$('tableMode')?$('tableMode').value:'off';
   if(mode==='off')return raw;
