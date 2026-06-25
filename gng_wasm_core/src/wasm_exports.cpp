@@ -23,6 +23,11 @@ std::vector<gng_wasm_core::Point3f> &points_buffer() {
   return points;
 }
 
+std::vector<std::uint8_t> &labels_buffer() {
+  static std::vector<std::uint8_t> labels;
+  return labels;
+}
+
 std::string &json_buffer() {
   static std::string json;
   return json;
@@ -52,14 +57,13 @@ GNG_EXPORT void gng_wasm_destroy(void *) {
 GNG_EXPORT void gng_wasm_reset() {
   kernel().reset();
   points_buffer().clear();
+  labels_buffer().clear();
   json_buffer().clear();
 }
 
 GNG_EXPORT void gng_wasm_set_config(const GngWasmConfig *config) {
-  if (!config) {
-    return;
-  }
-  gng_wasm_core::Config cfg;
+  if (!config) return;
+  gng_wasm_core::Config cfg = kernel().config();
   cfg.max_nodes = config->max_nodes;
   cfg.iterations = config->iterations;
   cfg.lambda = config->lambda;
@@ -68,6 +72,10 @@ GNG_EXPORT void gng_wasm_set_config(const GngWasmConfig *config) {
   cfg.en = config->en;
   cfg.seed = config->seed;
   kernel().set_config(cfg);
+}
+
+GNG_EXPORT std::int32_t gng_wasm_set_parameter(const char *name, std::uint32_t index, float value) {
+  return kernel().set_parameter(name, index, value) ? 1 : 0;
 }
 
 GNG_EXPORT void gng_wasm_set_points(const float *xyz, std::uint32_t point_count) {
@@ -85,6 +93,17 @@ GNG_EXPORT void gng_wasm_set_points(const float *xyz, std::uint32_t point_count)
   kernel().set_points(buffer);
 }
 
+GNG_EXPORT void gng_wasm_set_point_labels(const std::uint8_t *label_data, std::uint32_t count) {
+  auto &buf = labels_buffer();
+  buf.clear();
+  if (!label_data || count == 0) {
+    kernel().set_point_labels(buf);
+    return;
+  }
+  buf.assign(label_data, label_data + count);
+  kernel().set_point_labels(buf);
+}
+
 GNG_EXPORT std::int32_t gng_wasm_run() {
   return kernel().run() ? 1 : 0;
 }
@@ -96,9 +115,7 @@ GNG_EXPORT std::uint32_t gng_wasm_get_graph_json_size() {
 
 GNG_EXPORT std::uint32_t gng_wasm_write_graph_json(char *dst, std::uint32_t capacity) {
   json_buffer() = kernel().to_json();
-  if (!dst || capacity == 0) {
-    return 0;
-  }
+  if (!dst || capacity == 0) return 0;
   const std::size_t size = json_buffer().size();
   const std::size_t copy_size = size < (capacity - 1) ? size : (capacity - 1);
   std::memcpy(dst, json_buffer().data(), copy_size);
@@ -112,6 +129,10 @@ GNG_EXPORT std::uint32_t gng_wasm_node_count() {
 
 GNG_EXPORT std::uint32_t gng_wasm_edge_count() {
   return static_cast<std::uint32_t>(kernel().edges().size());
+}
+
+GNG_EXPORT std::uint32_t gng_wasm_cluster_count() {
+  return static_cast<std::uint32_t>(kernel().clusters().size());
 }
 
 GNG_EXPORT std::uint32_t gng_wasm_iteration() {

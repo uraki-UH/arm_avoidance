@@ -94,9 +94,13 @@ function mergeGraphFeatures(graph: GraphStreamPayload): GraphData {
                 manipValid: feature.manip_valid as boolean | undefined,
                 manipValue: feature.manip_value as number | undefined,
                 manipConditionNumber: feature.manip_condition_number as number | undefined,
-                manipCenter: feature.manip_center as [number, number, number] | undefined,
                 manipScale: feature.manip_scale as [number, number, number] | undefined,
                 manipOrientation: feature.manip_orientation as [number, number, number, number] | undefined,
+                rotationalManipValid: feature.rotational_manip_valid as boolean | undefined,
+                rotationalManipValue: feature.rotational_manip_value as number | undefined,
+                rotationalManipConditionNumber: feature.rotational_manip_condition_number as number | undefined,
+                rotationalManipScale: feature.rotational_manip_scale as [number, number, number] | undefined,
+                rotationalManipOrientation: feature.rotational_manip_orientation as [number, number, number, number] | undefined,
             };
         }),
         clusters: graph.clusters.map((cluster) => {
@@ -189,16 +193,23 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.manipValid !== b.manipValid ||
             a.manipValue !== b.manipValue ||
             a.manipConditionNumber !== b.manipConditionNumber ||
-            a.manipCenter?.[0] !== b.manipCenter?.[0] ||
-            a.manipCenter?.[1] !== b.manipCenter?.[1] ||
-            a.manipCenter?.[2] !== b.manipCenter?.[2] ||
             a.manipScale?.[0] !== b.manipScale?.[0] ||
             a.manipScale?.[1] !== b.manipScale?.[1] ||
             a.manipScale?.[2] !== b.manipScale?.[2] ||
             a.manipOrientation?.[0] !== b.manipOrientation?.[0] ||
             a.manipOrientation?.[1] !== b.manipOrientation?.[1] ||
             a.manipOrientation?.[2] !== b.manipOrientation?.[2] ||
-            a.manipOrientation?.[3] !== b.manipOrientation?.[3]
+            a.manipOrientation?.[3] !== b.manipOrientation?.[3] ||
+            a.rotationalManipValid !== b.rotationalManipValid ||
+            a.rotationalManipValue !== b.rotationalManipValue ||
+            a.rotationalManipConditionNumber !== b.rotationalManipConditionNumber ||
+            a.rotationalManipScale?.[0] !== b.rotationalManipScale?.[0] ||
+            a.rotationalManipScale?.[1] !== b.rotationalManipScale?.[1] ||
+            a.rotationalManipScale?.[2] !== b.rotationalManipScale?.[2] ||
+            a.rotationalManipOrientation?.[0] !== b.rotationalManipOrientation?.[0] ||
+            a.rotationalManipOrientation?.[1] !== b.rotationalManipOrientation?.[1] ||
+            a.rotationalManipOrientation?.[2] !== b.rotationalManipOrientation?.[2] ||
+            a.rotationalManipOrientation?.[3] !== b.rotationalManipOrientation?.[3]
         ) {
             return true;
         }
@@ -328,7 +339,17 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
             a.manipOrientation?.[0] !== b.manipOrientation?.[0] ||
             a.manipOrientation?.[1] !== b.manipOrientation?.[1] ||
             a.manipOrientation?.[2] !== b.manipOrientation?.[2] ||
-            a.manipOrientation?.[3] !== b.manipOrientation?.[3]) {
+            a.manipOrientation?.[3] !== b.manipOrientation?.[3] ||
+            a.rotationalManipValid !== b.rotationalManipValid ||
+            a.rotationalManipValue !== b.rotationalManipValue ||
+            a.rotationalManipConditionNumber !== b.rotationalManipConditionNumber ||
+            a.rotationalManipScale?.[0] !== b.rotationalManipScale?.[0] ||
+            a.rotationalManipScale?.[1] !== b.rotationalManipScale?.[1] ||
+            a.rotationalManipScale?.[2] !== b.rotationalManipScale?.[2] ||
+            a.rotationalManipOrientation?.[0] !== b.rotationalManipOrientation?.[0] ||
+            a.rotationalManipOrientation?.[1] !== b.rotationalManipOrientation?.[1] ||
+            a.rotationalManipOrientation?.[2] !== b.rotationalManipOrientation?.[2] ||
+            a.rotationalManipOrientation?.[3] !== b.rotationalManipOrientation?.[3]) {
             return true;
         }
     }
@@ -343,6 +364,7 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
 }
 
 interface UseWebSocketReturn {
+    sources: DataSource[];
     pointClouds: Record<string, PointCloudData>;
     markerData: Record<string, MarkerArrayData>;
     graphData: Record<string, GraphData>;
@@ -404,6 +426,7 @@ interface UseWebSocketReturn {
 }
 
 export function useWebSocket(url: string): UseWebSocketReturn {
+    const [sources, setSources] = useState<DataSource[]>([]);
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
     const [markerData, setMarkerData] = useState<Record<string, MarkerArrayData>>({});
     const [graphData, setGraphData] = useState<Record<string, GraphData>>({});
@@ -647,6 +670,14 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 try {
                     const payload = JSON.parse(event.data);
 
+                    if (payload && payload.id === 'sync_sources' && payload.ok === true) {
+                        const newSources = payload.result?.sources;
+                        if (Array.isArray(newSources)) {
+                            setSources(newSources);
+                        }
+                        return;
+                    }
+
                     // Handle RPC responses
                     if (payload && typeof payload.id === 'string' && pendingRequestsRef.current.has(payload.id)) {
                         const pending = pendingRequestsRef.current.get(payload.id)!;
@@ -773,6 +804,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
             socket.onclose = () => {
                 setIsConnected(false);
+                setSources([]);
                 pendingTopicQueueRef.current = [];
                 pendingGraphUpdatesRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
@@ -867,6 +899,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const getSources = useCallback(async (): Promise<DataSource[]> => {
         const result = await sendRpc<{ sources: DataSource[] }>('sources.list');
+        setSources(result.sources);
         return result.sources;
     }, [sendRpc]);
 
@@ -1021,6 +1054,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }, [sendRpc]);
 
     return {
+        sources,
         pointClouds,
         markerData,
         graphData,

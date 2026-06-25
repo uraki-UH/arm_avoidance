@@ -76,6 +76,7 @@ services:
       - gng_cpu
     tty: false
     stdin_open: false
+    ipc: host
     network_mode: host
 
     volumes:

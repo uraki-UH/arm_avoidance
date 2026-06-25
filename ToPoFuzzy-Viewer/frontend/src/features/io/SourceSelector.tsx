@@ -3,6 +3,7 @@ import { DataSource, GngStatus, GngParams, GngConfigInfo } from '../../hooks/use
 
 interface SourceSelectorProps {
     isConnected: boolean;
+    sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
     unsubscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
@@ -15,6 +16,7 @@ interface SourceSelectorProps {
 
 export function SourceSelector({
     isConnected,
+    sources,
     getSources,
     subscribeSource,
     unsubscribeSource,
@@ -24,7 +26,6 @@ export function SourceSelector({
     listGngConfigs,
     onSourceToggled
 }: SourceSelectorProps) {
-    const [sources, setSources] = useState<DataSource[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [processingSource, setProcessingSource] = useState<string | null>(null);
@@ -38,8 +39,7 @@ export function SourceSelector({
         setIsLoading(true);
         setError(null);
         try {
-            const newSources = await getSources();
-            setSources(newSources);
+            await getSources();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to get sources');
         } finally {
@@ -82,7 +82,6 @@ export function SourceSelector({
             return () => clearInterval(interval);
         }
 
-        setSources([]);
         setGngStatus({ isRunning: false });
         setConfigs([]);
     }, [isConnected, refreshSources, refreshGngStatus, refreshConfigs]);

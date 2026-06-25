@@ -1136,7 +1136,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
   std::ofstream ofs(resolved_path, std::ios::binary);
   if (!ofs)
     return false;
-  uint32_t version = 7; // Version 7: Removed redundant joint_positions
+  uint32_t version = 8; // Version 8: Added rotational manipulability
   ofs.write((char *)&version, sizeof(version));
   ofs.write((char *)&coord_layer_count_, sizeof(coord_layer_count_));
 
@@ -1186,6 +1186,10 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
       ofs.write((char *)&nodes[i].status.combined_score, sizeof(float));
       ofs.write((char *)&nodes[i].status.manip_info.valid, sizeof(bool));
       ofs.write((char *)&nodes[i].status.dynamic_manipulability, sizeof(float));
+
+      // Rotational manipulability (Version 8+)
+      ofs.write((char *)&nodes[i].status.rotational_manip_info.manipulability, sizeof(float));
+      ofs.write((char *)&nodes[i].status.rotational_manip_info.valid, sizeof(bool));
 
       // joint_positions is removed in version 7
     }
@@ -1297,7 +1301,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   uint32_t version;
   ifs.read((char *)&version, sizeof(version));
   if (version != 1 && version != 2 && version != 3 && version != 4 &&
-      version != 5 && version != 6 && version != 7) {
+      version != 5 && version != 6 && version != 7 && version != 8) {
     std::cerr << "Error: Unsupported GNG file version: " << version
               << " (hex: 0x" << std::hex << version << std::dec << ")" << std::endl;
     return false;
@@ -1371,6 +1375,14 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
       ifs.read((char *)&nodes[id].status.combined_score, sizeof(float));
       ifs.read((char *)&nodes[id].status.manip_info.valid, sizeof(bool));
       ifs.read((char *)&nodes[id].status.dynamic_manipulability, sizeof(float));
+    }
+
+    if (version >= 8) {
+      ifs.read((char *)&nodes[id].status.rotational_manip_info.manipulability, sizeof(float));
+      ifs.read((char *)&nodes[id].status.rotational_manip_info.valid, sizeof(bool));
+    } else {
+      nodes[id].status.rotational_manip_info.valid = false;
+      nodes[id].status.rotational_manip_info.manipulability = 0.0;
     }
 
     if (version < 7) {

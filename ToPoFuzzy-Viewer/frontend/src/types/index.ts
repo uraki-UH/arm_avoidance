@@ -99,9 +99,13 @@ export interface GraphNode {
     manipValid?: boolean;
     manipValue?: number;
     manipConditionNumber?: number;
-    manipCenter?: [number, number, number];
     manipScale?: [number, number, number];
     manipOrientation?: [number, number, number, number];
+    rotationalManipValid?: boolean;
+    rotationalManipValue?: number;
+    rotationalManipConditionNumber?: number;
+    rotationalManipScale?: [number, number, number];
+    rotationalManipOrientation?: [number, number, number, number];
 }
 
 export interface GraphCluster {
@@ -162,6 +166,7 @@ export interface LayerSettings {
     showCovarianceEllipsoids?: boolean;
     showManipulabilityEllipsoids?: boolean;
     manipEllipsoidMode?: 'all' | 'goal';
+    manipEllipsoidType?: 'translational' | 'rotational' | 'both';
     opacity: number;
     nodeColor?: string;
     edgeColor?: string;
@@ -183,6 +188,7 @@ export interface RobotSettings {
     showVisual: boolean;
     showCollision: boolean;
     showManipulabilityEllipsoid?: boolean;
+    manipEllipsoidType?: 'translational' | 'rotational' | 'both';
     collisionColor: string;
     emissiveIntensity?: number;
     opacity?: number;
@@ -206,6 +212,11 @@ export interface RobotPoseInstance {
     manipCenter?: [number, number, number];
     manipScale?: [number, number, number];
     manipOrientation?: [number, number, number, number];
+    rotationalManipValid?: boolean;
+    rotationalManipValue?: number;
+    rotationalManipConditionNumber?: number;
+    rotationalManipScale?: [number, number, number];
+    rotationalManipOrientation?: [number, number, number, number];
 }
 
 export interface RobotLinkManipulability {
@@ -216,6 +227,11 @@ export interface RobotLinkManipulability {
     manipCenter?: [number, number, number];
     manipScale?: [number, number, number];
     manipOrientation?: [number, number, number, number];
+    rotationalManipValid?: boolean;
+    rotationalManipValue?: number;
+    rotationalManipConditionNumber?: number;
+    rotationalManipScale?: [number, number, number];
+    rotationalManipOrientation?: [number, number, number, number];
 }
 
 export interface RobotData {
@@ -240,6 +256,11 @@ export interface RobotData {
     manipCenter?: [number, number, number];
     manipScale?: [number, number, number];
     manipOrientation?: [number, number, number, number];
+    rotationalManipValid?: boolean;
+    rotationalManipValue?: number;
+    rotationalManipConditionNumber?: number;
+    rotationalManipScale?: [number, number, number];
+    rotationalManipOrientation?: [number, number, number, number];
 }
 
 export interface TransformData {

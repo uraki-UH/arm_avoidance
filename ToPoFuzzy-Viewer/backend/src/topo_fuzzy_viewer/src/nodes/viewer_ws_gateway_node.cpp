@@ -99,9 +99,13 @@ namespace converter {
                 {"manip_valid", feature.manip_valid},
                 {"manip_value", feature.manip_value},
                 {"manip_condition_number", feature.manip_condition_number},
-                {"manip_center", {feature.manip_center.x, feature.manip_center.y, feature.manip_center.z}},
                 {"manip_scale", {feature.manip_scale.x, feature.manip_scale.y, feature.manip_scale.z}},
-                {"manip_orientation", {feature.manip_orientation.x, feature.manip_orientation.y, feature.manip_orientation.z, feature.manip_orientation.w}}
+                {"manip_orientation", {feature.manip_orientation.x, feature.manip_orientation.y, feature.manip_orientation.z, feature.manip_orientation.w}},
+                {"rotational_manip_valid", feature.rotational_manip_valid},
+                {"rotational_manip_value", feature.rotational_manip_value},
+                {"rotational_manip_condition_number", feature.rotational_manip_condition_number},
+                {"rotational_manip_scale", {feature.rotational_manip_scale.x, feature.rotational_manip_scale.y, feature.rotational_manip_scale.z}},
+                {"rotational_manip_orientation", {feature.rotational_manip_orientation.x, feature.rotational_manip_orientation.y, feature.rotational_manip_orientation.z, feature.rotational_manip_orientation.w}}
             }}
         };
     }
@@ -418,13 +422,30 @@ private:
         robotPoseSub_ = create_subscription<std_msgs::msg::String>(base + "/pose", rclcpp::QoS(1).best_effort(), [this](const std_msgs::msg::String::SharedPtr m) { handleRobotData(m, false); });
         jobEventSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kEditJobEvents, 100, [this](const std_msgs::msg::String::SharedPtr m) { broadcastText(m->data); });
     }
-    void unsubscribeStreamingTopics() { robotDescSub_.reset(); robotPoseSub_.reset(); jobEventSub_.reset(); }
+    void unsubscribeStreamingTopics() {
+        robotDescSub_.reset();
+        robotPoseSub_.reset();
+        jobEventSub_.reset();
+        activeDynamicSubs_.clear();
+        activeSubTypes_.clear();
+        lastGraphPayloads_.clear();
+        lastNodeFeaturePayloads_.clear();
+        lastClusterFeaturePayloads_.clear();
+    }
     void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc) {
         if (msg->data.empty()) return;
         if (is_desc) { json j = json::parse(msg->data, nullptr, false); if (!j.is_discarded()) { std::lock_guard<std::mutex> lock(robotMutex_); lastRobotDescriptions_[j.value("tag", "default")] = msg->data; } }
         broadcastText(msg->data);
     }
-    void checkLiveness() { if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) { std::lock_guard<std::mutex> lock(robotMutex_); for (auto const& [tag, _] : lastRobotDescriptions_) broadcastText(json({{"type", "stream.robot.delete"}, {"tag", tag}}).dump()); lastRobotDescriptions_.clear(); } }
+    void checkLiveness() {
+        if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) {
+            std::lock_guard<std::mutex> lock(robotMutex_);
+            for (auto const& [tag, _] : lastRobotDescriptions_) {
+                broadcastText(json({{"type", "stream.robot.delete"}, {"tag", tag}}).dump());
+            }
+            lastRobotDescriptions_.clear();
+        }
+    }
 
     class UnifiedRpc {
     public:

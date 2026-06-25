@@ -23,6 +23,11 @@
 #include "metrics/graph_topology_analyzer.hpp"
 #include "core/common/constants.hpp"
 #include "core/common/topological_map_message_builder.hpp"
+#include "robot_model/urdf_loader.hpp"
+#include "robot_model/robot_model.hpp"
+#include "robot_model/kinematic_adapter.hpp"
+#include "kinematics/kinematic_chain.hpp"
+#include "metrics/manipulability.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -71,6 +76,9 @@ public:
     declare_parameter("gng.vlut_filename", "vlut.bin");
     declare_parameter("topic_name", "topological_map");
 
+    declare_parameter("urdf_path", "");
+    declare_parameter("robot.arm_leaf_link_names", "");
+
     const std::string gng_path =
         resolveResultPath(get_parameter("gng_model_path").as_string(), false);
     const std::string vlut_path =
@@ -84,6 +92,8 @@ public:
       throw std::runtime_error(
           "topofuzzy_bridge: failed to load safety context");
     }
+
+    calculateManipulabilityEllipsoidsDynamically();
 
     const int coord_layer_count = context_->gng->getCoordLayerCount();
     RCLCPP_INFO(get_logger(),
@@ -389,6 +399,61 @@ private:
       if (layer_pubs_[i]) {
         layer_pubs_[i]->publish(buildLayerGraphMessage(static_cast<int>(i)));
       }
+    }
+  }
+
+  void calculateManipulabilityEllipsoidsDynamically() {
+    std::string urdf_path_raw = get_parameter("urdf_path").as_string();
+    std::string leaf_link = get_parameter("robot.arm_leaf_link_names").as_string();
+
+    if (urdf_path_raw.empty() || leaf_link.empty()) {
+      RCLCPP_WARN(get_logger(), "topofuzzy_bridge: urdf_path or arm_leaf_link_names parameter is empty. Dynamic manipulability calculation skipped.");
+      return;
+    }
+
+    std::string urdf_file = robot_sim::common::resolvePath(urdf_path_raw);
+    if (!std::filesystem::exists(urdf_file)) {
+      RCLCPP_WARN(get_logger(), "topofuzzy_bridge: URDF file does not exist: %s. Skip dynamic manipulability calculation.", urdf_file.c_str());
+      return;
+    }
+
+    try {
+      auto model_obj = simulation::loadRobotFromUrdf(urdf_file);
+      simulation::RobotModel model(model_obj);
+      kinematics::KinematicChain arm = simulation::createKinematicChainFromModel(model, leaf_link);
+      arm.setBase(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+
+      RCLCPP_INFO(get_logger(), "topofuzzy_bridge: Dynamically calculating manipulability ellipsoids for GNG nodes (DOF=%d, leaf=%s)",
+                  arm.getTotalDOF(), leaf_link.c_str());
+
+      auto &gng = *context_->gng;
+      size_t count = 0;
+      for (size_t i = 0; i < gng.getNodes().size(); ++i) {
+        auto &node = gng.getNodes()[i];
+        if (node.id == -1) continue;
+
+        // Calculate FK & Jacobian
+        std::vector<double> joints(node.weight_angle.size());
+        for (int j = 0; j < node.weight_angle.size(); ++j) {
+          joints[j] = node.weight_angle(j);
+        }
+
+        Eigen::MatrixXd J = arm.calculateJacobianAt(arm.getNumJoints() + 1, joints);
+        Eigen::MatrixXd Jv = J.topRows(3);
+        Eigen::MatrixXd Jr = J.bottomRows(3);
+
+        node.status.manip_info = Manipulability::calculateManipulabilityEllipsoid(Jv, Manipulability::KINEMATIC);
+        node.status.rotational_manip_info = Manipulability::calculateManipulabilityEllipsoid(Jr, Manipulability::KINEMATIC);
+
+        // Update other metrics
+        node.status.min_singular_value = (float)node.status.manip_info.singular_values.minCoeff();
+        node.status.combined_score = node.status.min_singular_value * node.status.joint_limit_score;
+
+        count++;
+      }
+      RCLCPP_INFO(get_logger(), "topofuzzy_bridge: Finished dynamic calculation for %zu GNG nodes.", count);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(get_logger(), "topofuzzy_bridge: Error in dynamic manipulability calculation: %s", e.what());
     }
   }
 

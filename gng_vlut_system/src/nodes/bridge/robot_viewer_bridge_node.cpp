@@ -330,18 +330,23 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
             if (!chain_->getLinkTransform(link_name, link_tf)) continue;
             const Eigen::MatrixXd J = chain_->calculateJacobianAt(i + 1, chain_joint_values);
             const Eigen::MatrixXd Jv = J.topRows(3);
+            const Eigen::MatrixXd Jr = J.bottomRows(3);
             auto link_manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
+            auto link_rot_manip = Manipulability::calculateManipulabilityEllipsoid(Jr);
             robot_sim::common::appendLinkManipulabilityJson(
-                robot["linkManipulabilities"], link_name, base_tf, link_tf, link_manip);
+                robot["linkManipulabilities"], link_name, base_tf, link_tf, link_manip, link_rot_manip);
         }
     }
 
     Manipulability::ManipulabilityEllipsoid manip;
+    Manipulability::ManipulabilityEllipsoid rot_manip;
     if (chain_ && chain_->getTotalDOF() > 0) {
         const Eigen::MatrixXd J =
             chain_->calculateJacobianAt(chain_->getNumJoints() + 1, chain_joint_values);
         const Eigen::MatrixXd Jv = J.topRows(3);
+        const Eigen::MatrixXd Jr = J.bottomRows(3);
         manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
+        rot_manip = Manipulability::calculateManipulabilityEllipsoid(Jr);
     }
     robot["manipValid"] = manip.valid;
     robot["manipValue"] = manip.manipulability;
@@ -359,6 +364,23 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
         robot["manipCenter"] = {0.0, 0.0, 0.0};
         robot["manipScale"] = {0.0, 0.0, 0.0};
         robot["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
+    }
+
+    robot["rotationalManipValid"] = rot_manip.valid;
+    robot["rotationalManipValue"] = rot_manip.manipulability;
+    robot["rotationalManipConditionNumber"] = rot_manip.condition_number;
+    if (rot_manip.valid) {
+        const Eigen::Vector3d world_center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+        const Eigen::Vector3d center = base_q.conjugate() * (world_center - base_tf.translation());
+        Eigen::Quaterniond q_rot = base_q.conjugate() * Eigen::Quaterniond(rot_manip.principal_directions);
+        q_rot.normalize();
+        robot["rotationalManipCenter"] = {center.x(), center.y(), center.z()};
+        robot["rotationalManipScale"] = {rot_manip.singular_values.x(), rot_manip.singular_values.y(), rot_manip.singular_values.z()};
+        robot["rotationalManipOrientation"] = {q_rot.x(), q_rot.y(), q_rot.z(), q_rot.w()};
+    } else {
+        robot["rotationalManipCenter"] = {0.0, 0.0, 0.0};
+        robot["rotationalManipScale"] = {0.0, 0.0, 0.0};
+        robot["rotationalManipOrientation"] = {0.0, 0.0, 0.0, 1.0};
     }
 
     json root;

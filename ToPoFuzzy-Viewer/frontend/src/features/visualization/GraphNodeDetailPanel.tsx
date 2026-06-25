@@ -65,10 +65,9 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
         node.manipValid !== undefined ||
         node.manipValue !== undefined ||
         node.manipConditionNumber !== undefined ||
-        node.manipCenter !== undefined ||
         node.manipScale !== undefined ||
         node.manipOrientation !== undefined
-    ), [node.manipConditionNumber, node.manipCenter, node.manipOrientation, node.manipScale, node.manipValid, node.manipValue]);
+    ), [node.manipConditionNumber, node.manipOrientation, node.manipScale, node.manipValid, node.manipValue]);
 
     return (
         <div
@@ -133,10 +132,12 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
                     <div>timestamp: {graph.timestamp}</div>
                 </div>
 
-                {hasManipulabilityData && node.manipCenter && (
+                {hasManipulabilityData && (
                     <div className="rounded-md border border-white/10 bg-black/20 p-2 font-mono text-[10px] leading-5 text-[var(--text-secondary)]">
-                        <div>manip center: [{node.manipCenter.map((v) => v.toFixed(4)).join(', ')}]</div>
                         <div>manip scale: [{node.manipScale?.map((v) => v.toFixed(4)).join(', ') ?? 'n/a'}]</div>
+                        {node.rotationalManipValid && (
+                            <div>rotational scale: [{node.rotationalManipScale?.map((v) => v.toFixed(4)).join(', ') ?? 'n/a'}]</div>
+                        )}
                     </div>
                 )}
             </div>

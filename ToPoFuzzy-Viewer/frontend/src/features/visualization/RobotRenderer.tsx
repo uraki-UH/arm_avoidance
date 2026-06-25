@@ -17,6 +17,7 @@ interface RobotRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     manualTransform?: Transform;
     showManipulabilityEllipsoid?: boolean;
+    manipEllipsoidType?: 'translational' | 'rotational' | 'both';
     manipLinkName?: string;
     onManipClick?: (linkName: string) => void;
 }
@@ -33,6 +34,7 @@ function RobotInstanceRenderer({
     tf = null,
     manualTransform,
     showManipulabilityEllipsoid = false,
+    manipEllipsoidType = 'translational',
     manipLinkName = '',
     onManipClick,
 }: RobotRendererProps) {
@@ -46,9 +48,9 @@ function RobotInstanceRenderer({
     const viewerPort = 9001;
     const effectiveOpacity = data.opacity ?? opacity;
     const manipGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
-    const manipMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: new THREE.Color('#6ce7ff'),
-        emissive: new THREE.Color('#6ce7ff'),
+    const translationalMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#7fd9ff'),
+        emissive: new THREE.Color('#7fd9ff'),
         emissiveIntensity: 0.35,
         transparent: true,
         opacity: Math.max(0.15, Math.min(0.55, effectiveOpacity * 0.35)),
@@ -56,52 +58,80 @@ function RobotInstanceRenderer({
         metalness: 0.0,
         toneMapped: false,
     }), [effectiveOpacity]);
+
+    const rotationalMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: new THREE.Color('#ff7f50'),
+        emissive: new THREE.Color('#ff7f50'),
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: Math.max(0.15, Math.min(0.55, effectiveOpacity * 0.35)),
+        roughness: 0.35,
+        metalness: 0.0,
+        toneMapped: false,
+    }), [effectiveOpacity]);
+
     const selectedManipLinkName = useMemo(() => {
         return manipLinkName || data.linkNames?.[data.linkNames.length - 1] || data.linkManipulabilities?.[data.linkManipulabilities.length - 1]?.linkName || '';
     }, [data.linkManipulabilities, data.linkNames, manipLinkName]);
 
-    const selectedManipTransform = useMemo(() => {
+    const selectedManipInfo = useMemo(() => {
         if (!showManipulabilityEllipsoid) return null;
         const fromLinks = selectedManipLinkName
             ? data.linkManipulabilities?.find((entry) => entry.linkName === selectedManipLinkName)
             : undefined;
-        return {
-            manipValid: fromLinks?.manipValid ?? data.manipValid,
-            manipCenter: fromLinks?.manipCenter || data.manipCenter,
-            manipScale: fromLinks?.manipScale || data.manipScale,
-            manipOrientation: fromLinks?.manipOrientation || data.manipOrientation,
-        };
+
+        const transValid = fromLinks?.manipValid ?? data.manipValid;
+        const rotValid = fromLinks?.rotationalManipValid ?? data.rotationalManipValid;
+
+        const trans = transValid ? {
+            valid: true,
+            center: fromLinks?.manipCenter || data.manipCenter || [0, 0, 0],
+            scale: fromLinks?.manipScale || data.manipScale,
+            orientation: fromLinks?.manipOrientation || data.manipOrientation || [0, 0, 0, 1],
+            material: translationalMaterial,
+            key: `trans-${selectedManipLinkName}-${(fromLinks?.manipScale || data.manipScale)?.join(',')}`,
+        } : null;
+
+        const rot = rotValid ? {
+            valid: true,
+            center: fromLinks?.manipCenter || data.manipCenter || [0, 0, 0],
+            scale: fromLinks?.rotationalManipScale || data.rotationalManipScale,
+            orientation: fromLinks?.rotationalManipOrientation || data.rotationalManipOrientation || [0, 0, 0, 1],
+            material: rotationalMaterial,
+            key: `rot-${selectedManipLinkName}-${(fromLinks?.rotationalManipScale || data.rotationalManipScale)?.join(',')}`,
+        } : null;
+
+        const type = manipEllipsoidType ?? 'translational';
+        const list: Array<{
+            key: string;
+            center: [number, number, number];
+            scale: [number, number, number];
+            orientation: [number, number, number, number];
+            material: THREE.Material;
+        }> = [];
+
+        if ((type === 'translational' || type === 'both') && trans && trans.scale) {
+            list.push(trans as any);
+        }
+        if ((type === 'rotational' || type === 'both') && rot && rot.scale) {
+            list.push(rot as any);
+        }
+        return list;
     }, [
         data.linkManipulabilities,
-        data.linkNames,
         data.manipCenter,
         data.manipOrientation,
         data.manipScale,
         data.manipValid,
+        data.rotationalManipOrientation,
+        data.rotationalManipScale,
+        data.rotationalManipValid,
+        manipEllipsoidType,
         selectedManipLinkName,
         showManipulabilityEllipsoid,
+        translationalMaterial,
+        rotationalMaterial,
     ]);
-
-    const selectedManipInfo = useMemo(() => {
-        if (!showManipulabilityEllipsoid) return null;
-        return selectedManipTransform?.manipValid ? selectedManipTransform : null;
-    }, [selectedManipTransform, showManipulabilityEllipsoid]);
-
-    const selectedManipMeshKey = useMemo(() => {
-        if (!selectedManipInfo?.manipValid || !selectedManipInfo.manipScale) {
-            return `manip:${selectedManipLinkName}:invalid`;
-        }
-        const c = selectedManipInfo.manipCenter || [0, 0, 0];
-        const s = selectedManipInfo.manipScale;
-        const q = selectedManipInfo.manipOrientation || [0, 0, 0, 1];
-        return [
-            'manip',
-            selectedManipLinkName,
-            c.map((v) => v.toFixed(4)).join(','),
-            s.map((v) => v.toFixed(4)).join(','),
-            q.map((v) => v.toFixed(4)).join(','),
-        ].join('|');
-    }, [selectedManipInfo, selectedManipLinkName]);
 
     const selectedManipFrame = useMemo(() => {
         if (!robot || !selectedManipLinkName) return null;
@@ -284,20 +314,21 @@ function RobotInstanceRenderer({
                 scale={effectiveTransform.scale}
             >
                 {robot && <primitive key={tag} object={robot} />}
-                {showManipulabilityEllipsoid && selectedManipInfo?.manipValid && selectedManipInfo.manipScale && (
-                    selectedManipFrame
+                {showManipulabilityEllipsoid && selectedManipInfo && selectedManipInfo.map((info) => {
+                    const scaleVec: [number, number, number] = [
+                        info.scale[0] * manipDisplayScale,
+                        info.scale[1] * manipDisplayScale,
+                        info.scale[2] * manipDisplayScale,
+                    ];
+                    return selectedManipFrame
                         ? createPortal(
                             <mesh
-                                key={selectedManipMeshKey}
+                                key={info.key}
                                 geometry={manipGeometry}
-                                material={manipMaterial}
+                                material={info.material}
                                 position={[0, 0, 0]}
                                 quaternion={[0, 0, 0, 1]}
-                                scale={[
-                                    selectedManipInfo.manipScale[0] * manipDisplayScale,
-                                    selectedManipInfo.manipScale[1] * manipDisplayScale,
-                                    selectedManipInfo.manipScale[2] * manipDisplayScale,
-                                ]}
+                                scale={scaleVec}
                                 frustumCulled={false}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -308,29 +339,25 @@ function RobotInstanceRenderer({
                         )
                         : (
                             <mesh
-                                key={selectedManipMeshKey}
+                                key={info.key}
                                 geometry={manipGeometry}
-                                material={manipMaterial}
-                                position={selectedManipInfo.manipCenter || [0, 0, 0]}
+                                material={info.material}
+                                position={info.center || [0, 0, 0]}
                                 quaternion={new THREE.Quaternion(
-                                    selectedManipInfo.manipOrientation?.[0] ?? 0,
-                                    selectedManipInfo.manipOrientation?.[1] ?? 0,
-                                    selectedManipInfo.manipOrientation?.[2] ?? 0,
-                                    selectedManipInfo.manipOrientation?.[3] ?? 1
+                                    info.orientation?.[0] ?? 0,
+                                    info.orientation?.[1] ?? 0,
+                                    info.orientation?.[2] ?? 0,
+                                    info.orientation?.[3] ?? 1
                                 )}
-                                scale={[
-                                    selectedManipInfo.manipScale[0] * manipDisplayScale,
-                                    selectedManipInfo.manipScale[1] * manipDisplayScale,
-                                    selectedManipInfo.manipScale[2] * manipDisplayScale,
-                                ]}
+                                scale={scaleVec}
                                 frustumCulled={false}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onManipClick?.(selectedManipLinkName);
                                 }}
                             />
-                        )
-                )}
+                        );
+                })}
             </group>
         </group>
     );
@@ -348,6 +375,7 @@ function RobotRenderer({
     tf = null,
     manualTransform,
     showManipulabilityEllipsoid = false,
+    manipEllipsoidType = 'translational',
     manipLinkName = '',
     onManipClick,
 }: RobotRendererProps) {
@@ -355,7 +383,7 @@ function RobotRenderer({
     const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
     const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
-    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid]);
+    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType]);
 
     useEffect(() => {
         if (!hasInstances || !outerGroupRef.current) return;
@@ -400,6 +428,7 @@ function RobotRenderer({
                                 tf={null}
                                 manualTransform={undefined}
                                 showManipulabilityEllipsoid={showManipulabilityEllipsoid}
+                                manipEllipsoidType={manipEllipsoidType}
                                 manipLinkName={manipLinkName}
                                 onManipClick={onManipClick}
                             />
@@ -423,6 +452,7 @@ function RobotRenderer({
             tf={tf}
             manualTransform={manualTransform}
             showManipulabilityEllipsoid={showManipulabilityEllipsoid}
+            manipEllipsoidType={manipEllipsoidType}
             manipLinkName={manipLinkName}
             onManipClick={onManipClick}
         />

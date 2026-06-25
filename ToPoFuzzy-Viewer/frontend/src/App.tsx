@@ -128,7 +128,6 @@ function nodeHasManipulabilityData(node?: GraphNode | null): boolean {
             node.manipValid !== undefined ||
             node.manipValue !== undefined ||
             node.manipConditionNumber !== undefined ||
-            node.manipCenter !== undefined ||
             node.manipScale !== undefined ||
             node.manipOrientation !== undefined
         )
@@ -239,6 +238,7 @@ function App() {
         connect,
         disconnect,
         deleteGraphLayer,
+        sources,
         getSources,
         subscribeSource,
         unsubscribeSource,
@@ -306,6 +306,7 @@ function App() {
                     showCovarianceEllipsoids: false,
                     showManipulabilityEllipsoids: false,
                     manipEllipsoidMode: 'all',
+                    manipEllipsoidType: 'translational',
                     opacity: STATIC_GNG_DEFAULTS.opacity,
                     graphTransform: {
                         position: [0, 0, 0],
@@ -380,6 +381,7 @@ function App() {
                     visible: true, color: 'skyblue', showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, collisionColor: '#ff9f1c', opacity: 0.8, jointControlMode: 'live',
                     useUrdfColors: true,
                     manipLinkName: '',
+                    manipEllipsoidType: 'translational',
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
@@ -922,6 +924,7 @@ function App() {
                             connect={connect}
                             disconnect={disconnect}
                             wsError={wsError}
+                            sources={sources}
                             getSources={getSources}
                             subscribeSource={subscribeSource}
                             unsubscribeSource={unsubscribeSource}
@@ -1042,10 +1045,10 @@ function App() {
                                 {
                                     data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipEllipsoidType={s.manipEllipsoidType || 'translational'} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
                                 {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
@@ -1089,6 +1092,7 @@ function App() {
                                 showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
                                 showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
                                 manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
+                                manipEllipsoidType: settings.manipEllipsoidType ?? 'translational',
                                 visibleSemanticLabels: settings.visibleSemanticLabels,
                                 normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
                                 velocityScale: settings.velocityScale ?? 0.25,

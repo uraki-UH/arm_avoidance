@@ -49,7 +49,6 @@ export function GngLayerControls({
         node.manipValid !== undefined ||
         node.manipValue !== undefined ||
         node.manipConditionNumber !== undefined ||
-        node.manipCenter !== undefined ||
         node.manipScale !== undefined ||
         node.manipOrientation !== undefined
     ));
@@ -134,17 +133,31 @@ export function GngLayerControls({
                         />
 
                         {hasManipulabilityData && settings.showManipulabilityEllipsoids && (
-                            <div className="col-span-8 mt-1 flex items-center gap-2 rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] text-[var(--text-secondary)]">
-                                <span className="font-semibold uppercase tracking-wider">Mode</span>
-                                {(['all', 'goal'] as const).map((mode) => (
-                                    <button
-                                        key={mode}
-                                        onClick={() => onUpdate({ manipEllipsoidMode: mode })}
-                                        className={`rounded px-2 py-0.5 font-mono ${((settings.manipEllipsoidMode ?? 'all') === mode) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'bg-white/5 text-[var(--text-secondary)]'}`}
-                                    >
-                                        {mode}
-                                    </button>
-                                ))}
+                            <div className="col-span-8 mt-1 flex flex-col gap-1.5 rounded-md border border-white/5 bg-black/20 px-2 py-1.5 text-[10px] text-[var(--text-secondary)]">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold uppercase tracking-wider min-w-[32px]">Mode</span>
+                                    {(['all', 'goal'] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => onUpdate({ manipEllipsoidMode: mode })}
+                                            className={`rounded px-2 py-0.5 font-mono ${((settings.manipEllipsoidMode ?? 'all') === mode) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'bg-white/5 text-[var(--text-secondary)]'}`}
+                                        >
+                                            {mode}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold uppercase tracking-wider min-w-[32px]">Type</span>
+                                    {(['translational', 'rotational', 'both'] as const).map((type) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => onUpdate({ manipEllipsoidType: type })}
+                                            className={`rounded px-2 py-0.5 font-mono ${((settings.manipEllipsoidType ?? 'translational') === type) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'bg-white/5 text-[var(--text-secondary)]'}`}
+                                        >
+                                            {type}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                         )}
 

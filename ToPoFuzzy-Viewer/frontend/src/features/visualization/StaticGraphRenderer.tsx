@@ -29,6 +29,7 @@ interface GraphRendererProps {
     showCovarianceEllipsoids?: boolean;
     showManipulabilityEllipsoids?: boolean;
     manipEllipsoidMode?: 'all' | 'goal';
+    manipEllipsoidType?: 'translational' | 'rotational' | 'both';
     nodeScale?: number;
     edgeWidth?: number;
     normalScale?: number;
@@ -85,6 +86,7 @@ export function StaticGraphRenderer({
     showCovarianceEllipsoids = false,
     showManipulabilityEllipsoids = false,
     manipEllipsoidMode = 'all',
+    manipEllipsoidType = 'translational',
     normalScale = 0.075,
     velocityScale = 0.25,
     covarianceEllipsoidScale = 2.0,
@@ -271,21 +273,44 @@ export function StaticGraphRenderer({
 
     const manipulabilityEllipsoids = useMemo(() => {
         if (!showManipulabilityEllipsoids) return [];
-        return graph.nodes
-            .filter((node) => node.manipValid && node.manipScale && node.manipOrientation)
+        const type = manipEllipsoidType ?? 'translational';
+        const list: Array<{
+            node: any;
+            center: [number, number, number];
+            scale: [number, number, number];
+            quaternion: [number, number, number, number];
+            color: string;
+        }> = [];
+
+        graph.nodes
             .filter((node) => manipEllipsoidMode === 'all' || !!node.isGoal)
-            .map((node) => {
+            .forEach((node) => {
                 const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
                 const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-                return {
-                    node,
-                    center: (node.manipCenter ?? [node.x, node.y, node.z]) as [number, number, number],
-                    scale: node.manipScale as [number, number, number],
-                    quaternion: node.manipOrientation as [number, number, number, number],
-                    color: covarianceEllipsoidColor || nodePalette[labelIndex] || '#7fd9ff',
-                };
+                const baseColor = covarianceEllipsoidColor || nodePalette[labelIndex] || '#7fd9ff';
+
+                if ((type === 'translational' || type === 'both') && node.manipValid && node.manipScale && node.manipOrientation) {
+                    list.push({
+                        node,
+                        center: [node.x, node.y, node.z] as [number, number, number],
+                        scale: node.manipScale as [number, number, number],
+                        quaternion: node.manipOrientation as [number, number, number, number],
+                        color: baseColor,
+                    });
+                }
+
+                if ((type === 'rotational' || type === 'both') && node.rotationalManipValid && node.rotationalManipScale && node.rotationalManipOrientation) {
+                    list.push({
+                        node,
+                        center: [node.x, node.y, node.z] as [number, number, number],
+                        scale: node.rotationalManipScale as [number, number, number],
+                        quaternion: node.rotationalManipOrientation as [number, number, number, number],
+                        color: '#ff7f50', // coral for rotational
+                    });
+                }
             });
-    }, [graph.nodes, showManipulabilityEllipsoids, manipEllipsoidMode, covarianceEllipsoidColor, nodePalette]);
+        return list;
+    }, [graph.nodes, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType, covarianceEllipsoidColor, nodePalette]);
 
     const nodeRenderSignature = useMemo(() => {
         return [
@@ -331,12 +356,13 @@ export function StaticGraphRenderer({
             manipulabilityEllipsoids.length,
             showManipulabilityEllipsoids ? 1 : 0,
             manipEllipsoidMode,
+            manipEllipsoidType,
             manipEllipsoidCapacity,
             opacity,
             covarianceEllipsoidColor,
             graph.timestamp,
         ].join(':');
-    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
+    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType, manipEllipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
     const manipEllipsoidRenderReady = manipEllipsoidReadySignature === manipEllipsoidRenderSignature;
 
     useEffect(() => {

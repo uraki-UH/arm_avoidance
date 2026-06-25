@@ -64,6 +64,7 @@ interface SidebarContentProps {
     disconnect: () => void;
     wsError: string | null;
 
+    sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
     unsubscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
@@ -224,6 +225,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     )}
                     <SourceSelector
                         isConnected={props.isConnected}
+                        sources={props.sources}
                         getSources={props.getSources}
                         subscribeSource={props.subscribeSource}
                         unsubscribeSource={props.unsubscribeSource}
@@ -350,6 +352,22 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 Joint
                                             </button>
                                         </div>
+                                        {hasManipulabilityData && s.showManipulabilityEllipsoid && (
+                                            <div className="flex items-center gap-1.5 rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] text-[var(--text-secondary)] mt-1 justify-between">
+                                                <span className="font-semibold uppercase tracking-wider text-[9px] opacity-70">Manip Type</span>
+                                                <div className="flex gap-1">
+                                                    {(['translational', 'rotational', 'both'] as const).map((type) => (
+                                                        <button
+                                                            key={type}
+                                                            onClick={() => props.onUpdateSettings('robot', tag, { manipEllipsoidType: type })}
+                                                            className={`rounded px-1.5 py-0.5 font-mono text-[9px] leading-tight ${((s.manipEllipsoidType ?? 'translational') === type) ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'bg-white/5 text-[var(--text-secondary)]'}`}
+                                                        >
+                                                            {type === 'translational' ? 'trans' : type === 'rotational' ? 'rot' : 'both'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 );
                               }},

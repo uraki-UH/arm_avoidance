@@ -222,11 +222,6 @@ def _serialize_topological_node_features(node: Any, include_joint_positions: boo
         "manip_valid": bool(getattr(node, "manip_valid", False)),
         "manip_value": float(getattr(node, "manip_value", 0.0)),
         "manip_condition_number": float(getattr(node, "manip_condition_number", 0.0)),
-        "manip_center": {
-            "x": float(getattr(getattr(node, "manip_center", None), "x", 0.0)),
-            "y": float(getattr(getattr(node, "manip_center", None), "y", 0.0)),
-            "z": float(getattr(getattr(node, "manip_center", None), "z", 0.0)),
-        },
         "manip_scale": {
             "x": float(getattr(getattr(node, "manip_scale", None), "x", 0.0)),
             "y": float(getattr(getattr(node, "manip_scale", None), "y", 0.0)),
@@ -252,6 +247,20 @@ def _serialize_topological_node_features(node: Any, include_joint_positions: boo
                 "w": float(getattr(getattr(ee_pose, "orientation", None), "w", 1.0)),
             },
         },
+        "rotational_manip_valid": bool(getattr(node, "rotational_manip_valid", False)),
+        "rotational_manip_value": float(getattr(node, "rotational_manip_value", 0.0)),
+        "rotational_manip_condition_number": float(getattr(node, "rotational_manip_condition_number", 0.0)),
+        "rotational_manip_scale": {
+            "x": float(getattr(getattr(node, "rotational_manip_scale", None), "x", 0.0)),
+            "y": float(getattr(getattr(node, "rotational_manip_scale", None), "y", 0.0)),
+            "z": float(getattr(getattr(node, "rotational_manip_scale", None), "z", 0.0)),
+        },
+        "rotational_manip_orientation": {
+            "x": float(getattr(getattr(node, "rotational_manip_orientation", None), "x", 0.0)),
+            "y": float(getattr(getattr(node, "rotational_manip_orientation", None), "y", 0.0)),
+            "z": float(getattr(getattr(node, "rotational_manip_orientation", None), "z", 0.0)),
+            "w": float(getattr(getattr(node, "rotational_manip_orientation", None), "w", 1.0)),
+        },
     }
     return out
 
@@ -264,9 +273,6 @@ def _serialize_topological_node_features_compact(node: Any, include_joint_positi
         1 if getattr(node, "manip_valid", False) else 0,
         float(getattr(node, "manip_value", 0.0)),
         float(getattr(node, "manip_condition_number", 0.0)),
-        float(getattr(getattr(node, "manip_center", None), "x", 0.0)),
-        float(getattr(getattr(node, "manip_center", None), "y", 0.0)),
-        float(getattr(getattr(node, "manip_center", None), "z", 0.0)),
         float(getattr(getattr(node, "manip_scale", None), "x", 0.0)),
         float(getattr(getattr(node, "manip_scale", None), "y", 0.0)),
         float(getattr(getattr(node, "manip_scale", None), "z", 0.0)),
@@ -285,6 +291,16 @@ def _serialize_topological_node_features_compact(node: Any, include_joint_positi
             float(getattr(getattr(ee_pose, "orientation", None), "w", 1.0)),
         ],
         None,
+        1 if getattr(node, "rotational_manip_valid", False) else 0,
+        float(getattr(node, "rotational_manip_value", 0.0)),
+        float(getattr(node, "rotational_manip_condition_number", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_scale", None), "x", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_scale", None), "y", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_scale", None), "z", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_orientation", None), "x", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_orientation", None), "y", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_orientation", None), "z", 0.0)),
+        float(getattr(getattr(node, "rotational_manip_orientation", None), "w", 1.0)),
     ]
 
 

@@ -51,6 +51,11 @@ RUN mkdir -p /etc/apt/keyrings \
  && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
 
+# Emscripten (WASM build for gng_wasm_core)
+RUN cd /opt && git clone https://github.com/emscripten-core/emsdk.git \
+ && cd emsdk && ./emsdk install latest && ./emsdk activate latest
+ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
+
 # PyTorch CPU only
 RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 

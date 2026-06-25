@@ -2804,6 +2804,7 @@ function stopGngAnimated(){
 }
 function runGngAnimated(){
   if(isGraphOnlyMode()){runGng();return;}
+  if(!state.pointPlaying){runGng();return;}
   if(!state.points.length)generate();
   stopGngAnimated();
   resetGngRunState();

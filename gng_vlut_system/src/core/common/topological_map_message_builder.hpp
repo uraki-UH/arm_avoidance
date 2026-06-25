@@ -121,6 +121,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildGraphMessage(
     ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
     feature.node_id = static_cast<uint16_t>(node_data.id);
     robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
+    robot_sim::common::fillRotationalManipulabilityFields(feature, node_data.status.rotational_manip_info);
     robot_sim::common::fillNodeKinematicsFields(
         feature, node_data.weight_angle,
         node_data.weight_coord, node_data.status.ee_orientation);
@@ -231,6 +232,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildLayerGraphMessage(
     ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
     feature.node_id = static_cast<uint16_t>(node_data.id);
     robot_sim::common::fillManipulabilityFields(feature, node_data.status.manip_info);
+    robot_sim::common::fillRotationalManipulabilityFields(feature, node_data.status.rotational_manip_info);
     robot_sim::common::fillNodeKinematicsFields(
         feature, node_data.weight_angle,
         node_data.weight_coords[layer], node_data.status.ee_orientation);

@@ -86,10 +86,13 @@ public:
     Eigen::MatrixXd J =
         chain_->calculateJacobianAt(chain_->getNumJoints() + 1, joints);
     Eigen::MatrixXd Jv = J.topRows(3);
+    Eigen::MatrixXd Jr = J.bottomRows(3);
 
     // 2. 楕円体の計算
     node.status.manip_info = Manipulability::calculateManipulabilityEllipsoid(
         Jv, Manipulability::KINEMATIC);
+    node.status.rotational_manip_info = Manipulability::calculateManipulabilityEllipsoid(
+        Jr, Manipulability::KINEMATIC);
 
     // 互換性用フィールドの更新
     node.status.min_singular_value =

@@ -95,16 +95,32 @@ inline void fillManipulabilityFields(
   node_msg.manip_condition_number =
       static_cast<float>(ellipsoid.condition_number);
   if (!ellipsoid.valid) {
-    node_msg.manip_center = geometry_msgs::msg::Point32();
     node_msg.manip_scale = geometry_msgs::msg::Vector3();
     node_msg.manip_orientation = geometry_msgs::msg::Quaternion();
     node_msg.manip_orientation.w = 1.0;
     return;
   }
 
-  node_msg.manip_center = toPoint32(ellipsoid.center);
   node_msg.manip_scale = toVector3(ellipsoid.singular_values);
   node_msg.manip_orientation = toQuaternion(ellipsoid.principal_directions);
+}
+
+inline void fillRotationalManipulabilityFields(
+    ais_gng_feature_msgs::msg::TopologicalNodeFeature &node_msg,
+    const Manipulability::ManipulabilityEllipsoid &ellipsoid) {
+  node_msg.rotational_manip_valid = ellipsoid.valid;
+  node_msg.rotational_manip_value = static_cast<float>(ellipsoid.manipulability);
+  node_msg.rotational_manip_condition_number =
+      static_cast<float>(ellipsoid.condition_number);
+  if (!ellipsoid.valid) {
+    node_msg.rotational_manip_scale = geometry_msgs::msg::Vector3();
+    node_msg.rotational_manip_orientation = geometry_msgs::msg::Quaternion();
+    node_msg.rotational_manip_orientation.w = 1.0;
+    return;
+  }
+
+  node_msg.rotational_manip_scale = toVector3(ellipsoid.singular_values);
+  node_msg.rotational_manip_orientation = toQuaternion(ellipsoid.principal_directions);
 }
 
 template <typename AngleVector>
@@ -147,10 +163,14 @@ inline void appendLinkManipulabilityJson(
     nlohmann::json &links_json, const std::string &link_name,
     const Eigen::Isometry3d &base_tf,
     const Eigen::Isometry3d &link_tf,
-    const Manipulability::ManipulabilityEllipsoid &ellipsoid) {
+    const Manipulability::ManipulabilityEllipsoid &ellipsoid,
+    const Manipulability::ManipulabilityEllipsoid &rot_ellipsoid) {
   const Eigen::Vector3d world_center = link_tf.translation();
   const Eigen::Quaterniond world_orientation = ellipsoid.valid
       ? Eigen::Quaterniond(ellipsoid.principal_directions)
+      : Eigen::Quaterniond::Identity();
+  const Eigen::Quaterniond world_rot_orientation = rot_ellipsoid.valid
+      ? Eigen::Quaterniond(rot_ellipsoid.principal_directions)
       : Eigen::Quaterniond::Identity();
 
   const Eigen::Quaterniond base_q(base_tf.rotation());
@@ -158,6 +178,8 @@ inline void appendLinkManipulabilityJson(
   const Eigen::Vector3d local_center = inv_base_q * (world_center - base_tf.translation());
   Eigen::Quaterniond local_orientation = inv_base_q * world_orientation;
   local_orientation.normalize();
+  Eigen::Quaterniond local_rot_orientation = inv_base_q * world_rot_orientation;
+  local_rot_orientation.normalize();
 
   nlohmann::json entry;
   entry["linkName"] = link_name;
@@ -175,6 +197,23 @@ inline void appendLinkManipulabilityJson(
     entry["manipScale"] = {0.0, 0.0, 0.0};
     entry["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
   }
+
+  // Rotational manipulability
+  entry["rotationalManipValid"] = rot_ellipsoid.valid;
+  entry["rotationalManipValue"] = rot_ellipsoid.manipulability;
+  entry["rotationalManipConditionNumber"] = rot_ellipsoid.condition_number;
+  entry["rotationalManipCenter"] = {local_center.x(), local_center.y(), local_center.z()};
+  if (rot_ellipsoid.valid) {
+    entry["rotationalManipScale"] = {rot_ellipsoid.singular_values.x(),
+                                     rot_ellipsoid.singular_values.y(),
+                                     rot_ellipsoid.singular_values.z()};
+    entry["rotationalManipOrientation"] = {local_rot_orientation.x(), local_rot_orientation.y(),
+                                           local_rot_orientation.z(), local_rot_orientation.w()};
+  } else {
+    entry["rotationalManipScale"] = {0.0, 0.0, 0.0};
+    entry["rotationalManipOrientation"] = {0.0, 0.0, 0.0, 1.0};
+  }
+
   links_json.push_back(std::move(entry));
 }
 

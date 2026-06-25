@@ -61,12 +61,16 @@ struct Status {
   // 動的可操作性
   Manipulability::ManipulabilityEllipsoid dynamic_manip_info;
 
+  // 回転可操作性
+  Manipulability::ManipulabilityEllipsoid rotational_manip_info;
+
   // --- その他 ---
   std::unordered_map<std::string, float> metadata; // 汎用メタデータ
 
   Status() {
     manip_info.valid = false;
     dynamic_manip_info.valid = false;
+    rotational_manip_info.valid = false;
   }
 };
 

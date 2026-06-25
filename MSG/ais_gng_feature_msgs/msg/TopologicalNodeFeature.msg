@@ -3,8 +3,13 @@ bool is_goal
 bool manip_valid
 float32 manip_value
 float32 manip_condition_number
-geometry_msgs/Point32 manip_center
 geometry_msgs/Vector3 manip_scale
 geometry_msgs/Quaternion manip_orientation
 float32[] weight_angle
 geometry_msgs/Pose ee_pose
+bool rotational_manip_valid
+float32 rotational_manip_value
+float32 rotational_manip_condition_number
+geometry_msgs/Vector3 rotational_manip_scale
+geometry_msgs/Quaternion rotational_manip_orientation
+
