@@ -501,24 +501,14 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 
 /* ── GNG Learning Params Toggle ── */
 .gng-params-toggle {
-  margin-top: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.20);
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(30, 41, 59, 0.35);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: border-color 0.2s, box-shadow 0.2s;
   grid-column: 1 / -1;
-}
-.gng-params-toggle:hover {
-  border-color: rgba(0, 255, 0, 0.4);
-  box-shadow: 0 4px 16px rgba(0, 255, 0, 0.08);
+  margin-top: 8px;
 }
 .gng-params-summary {
-  padding: 11px 14px;
-  background: rgba(30, 41, 59, 0.75);
-  color: #93c5fd;
-  font-weight: 900;
+  padding: 10px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  color: #00ff00;
+  font-weight: 950;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: .03em;
@@ -528,29 +518,18 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   justify-content: space-between;
   align-items: center;
   outline: none;
-  border-bottom: 1px solid transparent;
-  transition: background-color 0.2s, border-color 0.2s;
 }
 .gng-params-summary::-webkit-details-marker {
   display: none;
 }
 .gng-params-summary:hover {
-  background: rgba(30, 41, 59, 0.9);
   color: #ffffff;
-}
-.gng-params-toggle[open] .gng-params-summary {
-  border-color: rgba(148, 163, 184, 0.20);
-  background: rgba(15, 23, 42, 0.6);
-}
-.gng-params-toggle[open] {
-  border-color: rgba(148, 163, 184, 0.35);
 }
 .gng-params-inner-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 12px;
-  padding: 14px 14px;
-  background: rgba(15, 23, 42, 0.45);
+  padding: 8px 0 0 0;
 }
 .gng-params-toggle .toggle-icon {
   font-size: 9px;
@@ -5211,6 +5190,15 @@ function installV290ViewerFuzzyIk(){
 }
 
 document.querySelectorAll('#showRawPoints,#showGngNodes,#showGngEdges,#showTopoClusters,#showTopoFaces,#showTopoNormals').forEach(el=>el.addEventListener('input',()=>renderAll()));
+
+// トグルの外をクリックしたら閉じる処理
+document.addEventListener('click',(e)=>{
+  document.querySelectorAll('.gng-params-toggle').forEach((details)=>{
+    if(details.open && !details.contains(e.target)){
+      details.removeAttribute('open');
+    }
+  });
+});
 
 loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();v303SetReplayMicroVibrationDefaults();generate();runGng();estimate();updateObjectIdentifier();installV290ViewerFuzzyIk();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
