@@ -53,52 +53,40 @@ struct Cluster {
 };
 
 struct Config {
-  // node.*
-  std::uint32_t max_nodes = 400;
-  std::uint32_t iterations = 12000;
-  std::uint32_t learning_num = 5;
-  float unknown_learning_rate = 0.8f;
-  float eb = 0.05f;            // node.eta_s1
-  float en = 0.006f;           // node.eta_s2
+  std::uint32_t max_nodes = 0;
+  std::uint32_t iterations = 0;
+  std::uint32_t learning_num = 0;
+  float unknown_learning_rate = 1.0f;
+  float eb = 0;
+  float en = 0;
   float eta_decay_rate = 1.0f;
-  float s1_reset_range = 0.1f;
-  float grid = 0.05f;
-  int s1_age_max[LABEL_NUM] = {6, 6, 6, 3, 6, 6};
-  int clustered_s1_age[LABEL_NUM] = {20, 20, 6, 3, 20, 20};
-  float interval[LABEL_NUM] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+  float s1_reset_range = 0;
+  float grid = 0;
+  int s1_age_max[LABEL_NUM] = {};
+  int clustered_s1_age[LABEL_NUM] = {};
+  float interval[LABEL_NUM] = {};
   int static_age_min = -1;
   bool covariance_enabled = false;
-
-  // edge.*
   std::uint32_t max_edges = 300000;
-  std::uint32_t max_age = 80;
-
-  // label.fuzzy.*
-  float fuzzy_unknown = 0.6f;
-  float fuzzy_min = 0.5f;
-  float fuzzy_lpf_time_constant = 0.5f;
-
-  // cluster.*
+  std::uint32_t max_age = 0;
+  float fuzzy_unknown = 0;
+  float fuzzy_min = 0;
+  float fuzzy_lpf_time_constant = 0;
   std::uint32_t cluster_num_max = 100;
-  std::uint32_t cluster_node_num_min = 10;
-  float cluster_velocity_lpf = 0.5f;
-  float cluster_plane_volume = 10.0f;
-  float cluster_unknown_edge_dist_max = 0.2f;
-  float cluster_other_edge_dist_max = 0.4f;
-  float cluster_human_radius = 0.6f;
-  int cluster_human_hysteresis_age = 5;
-  int cluster_human_confirmation_age = 5;
-
-  // ds.*
-  float ds_range_max = 0.2f;
-  std::uint32_t ds_all_num_max = 4000;
-  std::uint32_t ds_unknown_num_max = 2000;
-  std::uint32_t ds_human_num_max = 3000;
-
-  // seed
+  std::uint32_t cluster_node_num_min = 1;
+  float cluster_velocity_lpf = 0;
+  float cluster_plane_volume = 0;
+  float cluster_unknown_edge_dist_max = 1e9f;
+  float cluster_other_edge_dist_max = 1e9f;
+  float cluster_human_radius = 0;
+  int cluster_human_hysteresis_age = 0;
+  int cluster_human_confirmation_age = 0;
+  float ds_range_max = 0;
+  std::uint32_t ds_all_num_max = 0;
+  std::uint32_t ds_unknown_num_max = 0;
+  std::uint32_t ds_human_num_max = 0;
   std::uint32_t seed = 1;
-  // lambda (node insertion interval)
-  std::uint32_t lambda = 100;
+  std::uint32_t lambda = 0;
 };
 
 class GngKernel {
