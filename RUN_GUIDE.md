@@ -24,7 +24,7 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する
+## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する (今の所未使用)
 ros2 launch ais_gng topological_query.launch.py \
   input_topic:=/topological_map/merged \
   relation_mode:=graph_edges \
@@ -44,9 +44,8 @@ ros2 launch ais_gng topological_grid.launch.py \
   grid_size:=0.5 \
   origin_shift_half:=true
 
-##　dynamixel handlerの起動
+##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
-
 USB の番号が変わる環境では、こちらのラッパーの方が安定します。
 ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 
@@ -65,16 +64,6 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
-
-必要に応じて
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/setup.bash 
-
-echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc
-echo 'source /ros2_ws/install/setup.bash' >> ~/.bashrc
-
-alias sh='source /opt/ros/humble/setup.bash'
-alias sw='source /ros2_ws/install/setup.bash'
 
 ## 自己認識ボクセル内外の点群に分けてパブリッシュ
 ros2 run gng_vlut_system self_recognition_filter_node
@@ -221,7 +210,22 @@ ros2 launch realsense2_camera rs_launch.py \
   pointcloud.enable:=true
 
 
-  gazeboに召喚
+gazeboに召喚
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
 robot_name:=ToPoDualArm \
 gui:=true
+
+
+
+
+
+
+必要に応じて
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/setup.bash 
+
+echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc
+echo 'source /ros2_ws/install/setup.bash' >> ~/.bashrc
+
+alias sh='source /opt/ros/humble/setup.bash'
+alias sw='source /ros2_ws/install/setup.bash'

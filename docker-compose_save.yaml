@@ -16,6 +16,7 @@ services:
       - DISPLAY=${DISPLAY}             # ホストのディスプレイ番号をコンテナに渡す
       - QT_X11_NO_MITSHM=1           # Qtアプリケーションでのエラーを回避
       - XDG_RUNTIME_DIR=/tmp/runtime/  # Wayland互換性のための設定
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} # ROS_DOMAIN_IDを環境変数から取得、なければ0を使用
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix  # X11ソケットの共有
       - ${HOME}/.Xauthority:/root/.Xauthority:ro # X認証情報（ホストでxhostを実行済みの場合）
@@ -67,6 +68,7 @@ services:
       - .:/ros2_ws/src
     environment:
       - HOME=/root
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
     ports:
       - "9090:9090"
     command: >
