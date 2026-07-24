@@ -35,7 +35,7 @@ ros2 launch ais_gng topological_query.launch.py \
 ## ダミー把持姿勢をPoseArrayで流す
 ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
   frame_id:=world \
-  candidate_count:=6
+  candidate_count:=1
 
 ## グリッド所属を半セルずらしで出す
 ros2 launch ais_gng topological_grid.launch.py \
