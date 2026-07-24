@@ -784,13 +784,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
         <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" class="primary">3D点群リアルタイム再生</button><button id="gngPlayBtn" class="go">GNG学習再生</button></div>
         <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" class="go">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
         <div class="grid2" style="margin-top:8px">
-          <label class="topo-switch"><input id="rosPublishEnabled" type="checkbox"> Publish to ROS2</label>
-          <input id="rosTopicName" type="text" style="flex:1;margin-left:8px" placeholder="ROS2 topic">
+          <button id="rosBridgeStartBtn" class="go">ROS2 ブリッジの起動</button>
+          <span id="rosBridgeStatus" class="status">ROS bridge: disconnected</span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-          <label style="display:inline-flex;align-items:center;gap:6px;color:#93c5fd;font-size:11px;margin-left:6px">Hz<input id="rosAutoHz" type="number" value="1" min="0.1" step="0.1" style="width:80px;margin-left:6px"></label>
-        </div>
-        <div class="grid2" style="margin-top:6px"><span id="rosStatus" class="status" style="margin-left:8px">ROS: disconnected</span></div>
         <div class="grid2" style="margin-top:8px">
           <label class="topo-switch"><input id="rawPublishEnabled" type="checkbox"> Publish raw_points to ROS2</label>
           <input id="rawTopicName" type="text" style="flex:1;margin-left:8px" placeholder="raw_points">
@@ -5541,6 +5537,10 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     outlier: 255,
   };
   let ros = null;
+  function setRosBridgeStatus(text){
+    const el = document.getElementById('rosBridgeStatus');
+    if(el) el.textContent = text;
+  }
   // Ensure roslib is loaded; if not, try multiple sources (CDNs then local) and call callbacks
   function loadRoslib(cb){
     if(window.ROSLIB){ try{ cb(); }catch(e){ setTimeout(()=>cb(),0); } return; }
@@ -5551,7 +5551,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     ];
     let lastErr = null;
     function tryNext(idx){
-      if(idx >= sources.length){ console.error('all roslib sources failed', lastErr); const st=document.getElementById('rosStatus'); if(st) st.textContent='ROS: roslib load error'; return; }
+      if(idx >= sources.length){ console.error('all roslib sources failed', lastErr); setRosBridgeStatus('ROS bridge: roslib load error'); return; }
       const url = sources[idx];
       const s = document.createElement('script');
       s.src = url;
@@ -5695,16 +5695,18 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     loadRoslib(()=>{
       try{
         if(ros) return;
-        if(!window.ROSLIB){ console.warn('ROSLIB still not available after load'); const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: roslib missing'; return; }
+        if(!window.ROSLIB){ console.warn('ROSLIB still not available after load'); setRosBridgeStatus('ROS bridge: roslib missing'); return; }
         ros = new ROSLIB.Ros({url:ROS_WS_URL});
         ros.on('connection', ()=>{
+          setRosBridgeStatus('ROS bridge: connected');
           rosPublishers.forEach(p=>p.onConnection());
         });
         ros.on('close', ()=>{
+          setRosBridgeStatus('ROS bridge: disconnected');
           rosPublishers.forEach(p=>p.onClose());
         });
-        ros.on('error', (e)=>{ rosPublishers.forEach(p=>p.onError()); console.warn('ros error',e); });
-      }catch(e){ console.warn('ros init error',e); const s=document.getElementById('rosStatus'); if(s) s.textContent='ROS: init error'; }
+        ros.on('error', (e)=>{ setRosBridgeStatus('ROS bridge: error'); rosPublishers.forEach(p=>p.onError()); console.warn('ros error',e); });
+      }catch(e){ console.warn('ros init error',e); setRosBridgeStatus('ROS bridge: init error'); }
     });
   }
 
@@ -5789,6 +5791,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   }
 
   document.addEventListener('DOMContentLoaded', ()=>{
+    const bridgeBtn = document.getElementById('rosBridgeStartBtn');
+    if(bridgeBtn){
+      bridgeBtn.addEventListener('click', ()=>{
+        setRosBridgeStatus(ros && ros.isConnected ? 'ROS bridge: connected' : 'ROS bridge: starting...');
+        ensureRos();
+      });
+    }
     const topoPublisher = createPointCloudPublisher({
       enabledId: 'rosPublishEnabled',
       topicId: 'rosTopicName',
