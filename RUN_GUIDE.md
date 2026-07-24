@@ -37,6 +37,11 @@ ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
   frame_id:=world \
   candidate_count:=1
 
+## 把持候補姿勢、軌道、動く
+ros2 launch gng_vlut_system grasp_goal_planning.launch.py 
+params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+
 ## グリッド所属を半セルずらしで出す
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
@@ -64,6 +69,7 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
+  (  output_voxel_size:=0.02)
 
 ## 自己認識ボクセル内外の点群に分けてパブリッシュ
 ros2 run gng_vlut_system self_recognition_filter_node
@@ -99,19 +105,12 @@ ros2 launch ais_gng ais_gng.launch.py \
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
 
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
-  robot_name:=ToPoDualArm \
-  input_topic:=/ToPoDualArm/left_arm_voxel \
-  danger_inflation:=0.02 \
-  output_voxel_size:=0.02
-
 ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 
-ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true
+ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true ( trial_return_home:=true
+)
 
-
-ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true   trial_return_home:=true
 
 
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=20.0
@@ -136,17 +135,13 @@ ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
 このとき、入力 voxel の frame をそのまま使って再エンコードします。
 
 ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
-  robot_name:=ToPoDualArm \
-  input_topic:=/topo_voxel_ids
+  robot_name:=ToPoDualArm \   
+  input_topic:=/topo_voxel_ids \  
+  danger_inflation:=0.06
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
-  # world に寄せたい場合だけ明示する
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
-  robot_name:=ToPoDualArm \
-  input_topic:=/topo_voxel_ids \
-  target_frame_id:=world
 
 
 ボクセルにノードを所属させる
