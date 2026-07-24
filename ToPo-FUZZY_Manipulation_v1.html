@@ -1592,8 +1592,6 @@ function v312SetGngLoadStatus(text){
   const el=$('gngLoadDataStatus');
   const msg=String(text||'');
   if(el) el.textContent=msg;
-  const topo=$('topoStatus');
-  if(topo) topo.textContent=msg;
 }
 function v312SetGngSelectedFileName(name){
   const el=$('gngSelectedFileName');
@@ -5859,55 +5857,58 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       toggle.addEventListener('change', sync);
       sync();
     };
-    bindRosTopicPanel('topoPublishEnabled', 'topoPublishDetail');
-    bindRosTopicPanel('rawPublishEnabled', 'rawPublishDetail');
-    bindRosTopicPanel('handlePublishEnabled', 'handlePublishDetail');
-    bindRosTopicPanel('semanticPublishEnabled', 'semanticPublishDetail');
-    const topoPublisher = createPointCloudPublisher({
-      enabledId: 'topoPublishEnabled',
-      topicId: 'topoTopicName',
-      hzId: 'topoAutoHz',
-      hzNumId: 'topoAutoHzNum',
-      statusId: 'topoRosStatus',
-      defaultTopic: DEFAULT_TOPO_POINTS_TOPIC,
-      statusPrefix: 'ROS topo',
-      getPointsFn: ()=> getCurrentTopoPoints() || [],
+    const rosPublishersConfig = [
+      {
+        enabledId: 'topoPublishEnabled',
+        detailId: 'topoPublishDetail',
+        topicId: 'topoTopicName',
+        hzId: 'topoAutoHz',
+        hzNumId: 'topoAutoHzNum',
+        statusId: 'topoRosStatus',
+        defaultTopic: DEFAULT_TOPO_POINTS_TOPIC,
+        statusPrefix: 'ROS topo',
+        getPointsFn: ()=> getCurrentTopoPoints() || [],
+      },
+      {
+        enabledId: 'rawPublishEnabled',
+        detailId: 'rawPublishDetail',
+        topicId: 'rawTopicName',
+        hzId: 'rawAutoHz',
+        hzNumId: 'rawAutoHzNum',
+        statusId: 'rawRosStatus',
+        defaultTopic: 'raw_points',
+        statusPrefix: 'ROS raw',
+        getPointsFn: ()=> getCurrentRawPoints() || [],
+      },
+      {
+        enabledId: 'handlePublishEnabled',
+        detailId: 'handlePublishDetail',
+        topicId: 'handleTopicName',
+        hzId: 'handleAutoHz',
+        hzNumId: 'handleAutoHzNum',
+        statusId: 'handleRosStatus',
+        defaultTopic: 'handle_points',
+        statusPrefix: 'ROS handle',
+        getPointsFn: ()=> getCurrentHandlePoints() || [],
+      },
+      {
+        enabledId: 'semanticPublishEnabled',
+        detailId: 'semanticPublishDetail',
+        topicId: 'semanticTopicName',
+        hzId: 'semanticAutoHz',
+        hzNumId: 'semanticAutoHzNum',
+        statusId: 'semanticRosStatus',
+        defaultTopic: 'semantic_points',
+        statusPrefix: 'ROS semantic',
+        getPointsFn: ()=> getCurrentSemanticPoints() || [],
+        messageBuilder: (points)=>buildPointCloudMsgFromPoints(points, DEFAULT_TOPO_POINTS_FRAME, {includeSemanticLabel:true}),
+      },
+    ];
+    const rosPublishers = rosPublishersConfig.map((config)=>{
+      bindRosTopicPanel(config.enabledId, config.detailId);
+      return createPointCloudPublisher(config);
     });
-    const rawPublisher = createPointCloudPublisher({
-      enabledId: 'rawPublishEnabled',
-      topicId: 'rawTopicName',
-      hzId: 'rawAutoHz',
-      hzNumId: 'rawAutoHzNum',
-      statusId: 'rawRosStatus',
-      defaultTopic: 'raw_points',
-      statusPrefix: 'ROS raw',
-      getPointsFn: ()=> getCurrentRawPoints() || [],
-    });
-    const handlePublisher = createPointCloudPublisher({
-      enabledId: 'handlePublishEnabled',
-      topicId: 'handleTopicName',
-      hzId: 'handleAutoHz',
-      hzNumId: 'handleAutoHzNum',
-      statusId: 'handleRosStatus',
-      defaultTopic: 'handle_points',
-      statusPrefix: 'ROS handle',
-      getPointsFn: ()=> getCurrentHandlePoints() || [],
-    });
-    const semanticPublisher = createPointCloudPublisher({
-      enabledId: 'semanticPublishEnabled',
-      topicId: 'semanticTopicName',
-      hzId: 'semanticAutoHz',
-      hzNumId: 'semanticAutoHzNum',
-      statusId: 'semanticRosStatus',
-      defaultTopic: 'semantic_points',
-      statusPrefix: 'ROS semantic',
-      getPointsFn: ()=> getCurrentSemanticPoints() || [],
-      messageBuilder: (points)=>buildPointCloudMsgFromPoints(points, DEFAULT_TOPO_POINTS_FRAME, {includeSemanticLabel:true}),
-    });
-    topoPublisher.sync();
-    rawPublisher.sync();
-    handlePublisher.sync();
-    semanticPublisher.sync();
+    rosPublishers.forEach((publisher)=>publisher.sync());
   });
 })();
 </script>
