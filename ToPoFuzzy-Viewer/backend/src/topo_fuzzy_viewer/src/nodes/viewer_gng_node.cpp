@@ -51,6 +51,10 @@ private:
             return;
         }
 
+        // Only handle gng.* methods; silently ignore everything else so other
+        // nodes subscribed to the same RPC topic can respond without conflict.
+        if (method.rfind("gng.", 0) != 0) return;
+
         if (method == "gng.listConfigs") {
             handleListConfigs(id);
             return;

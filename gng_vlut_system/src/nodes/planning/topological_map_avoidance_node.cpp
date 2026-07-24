@@ -205,6 +205,13 @@ public:
     declare_parameter("publish_candidate_robot_preview", true);
     declare_parameter("candidate_robot_preview_opacity", 0.18);
     declare_parameter("metrics_max_joint_velocity", 0.6);
+    // ゴール姿勢スコアリング
+    // score = ホップ数 + 0.5*関節距離
+    //       + goal_rot_manip_weight  * log(回転可操作性 条件数)  ← 手首ねじれ抑制
+    //       - goal_joint_limit_weight * 関節限界余裕[0,1]         ← 関節限界回避
+    // 0 に設定すると無効化（旧動作）
+    declare_parameter("goal_rot_manip_weight", 1.0);   // 条件数 log スケール; 1.0=約3〜5ホップ相当のペナルティ
+    declare_parameter("goal_joint_limit_weight", 0.5); // 余裕[0,1] への重み; 0.5=最大0.5ホップ相当のボーナス
 
     const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
@@ -403,6 +410,10 @@ public:
         get_parameter("candidate_robot_preview_opacity").as_double(), 0.0, 1.0);
     metrics_max_joint_velocity_ =
         std::max(1e-6, get_parameter("metrics_max_joint_velocity").as_double());
+    goal_rot_manip_weight_ =
+        static_cast<float>(std::max(0.0, get_parameter("goal_rot_manip_weight").as_double()));
+    goal_joint_limit_weight_ =
+        static_cast<float>(std::max(0.0, get_parameter("goal_joint_limit_weight").as_double()));
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     candidate_metrics_topic_ = get_parameter("candidate_metrics_topic").as_string();
@@ -915,6 +926,8 @@ private:
   bool publish_candidate_robot_preview_ = true;
   double candidate_robot_preview_opacity_ = 0.18;
   double metrics_max_joint_velocity_ = 0.6;
+  float goal_rot_manip_weight_ = 1.0f;
+  float goal_joint_limit_weight_ = 0.5f;
   std::string robot_base_frame_ = "base_link";
   std::string robot_root_link_name_;
   std::string candidate_robot_urdf_content_;
@@ -1067,7 +1080,8 @@ private:
       std::vector<std::vector<int>> &candidate_paths) {
     return topological_map_avoidance::planFromStartCandidates(
         gng_, planner_, current_q, start_candidates, goal_candidates,
-        selected_start_id, candidate_path_by_goal, candidate_paths);
+        selected_start_id, candidate_path_by_goal, candidate_paths,
+        goal_rot_manip_weight_, goal_joint_limit_weight_);
   }
 
   bool latchTrajectoryFromCandidatesLocked(

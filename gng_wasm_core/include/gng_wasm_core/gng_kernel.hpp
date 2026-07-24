@@ -33,6 +33,7 @@ struct Node {
   std::uint32_t win_count = 0;
   std::uint8_t label = LABEL_DEFAULT;
   std::uint32_t frame = 0;
+  std::uint32_t frames_since_win = 0;  // s1_age カウンタ
   float fuzzy_memberships[LABEL_NUM] = {};
 };
 
@@ -97,6 +98,11 @@ public:
   void set_points(const std::vector<Point3f> &points);
   void set_point_labels(const std::vector<std::uint8_t> &labels);
   bool run();
+  bool exec(std::uint32_t steps);
+  void prune_isolated_nodes_public() { prune_isolated_nodes(); }
+  void update_normals_public() { update_normals(); }
+  void assign_fuzzy_labels_public() { assign_fuzzy_labels(); }
+  void build_clusters_public() { build_clusters(); }
 
   const std::vector<Node> &nodes() const;
   const std::vector<Edge> &edges() const;

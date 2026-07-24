@@ -108,6 +108,18 @@ GNG_EXPORT std::int32_t gng_wasm_run() {
   return kernel().run() ? 1 : 0;
 }
 
+GNG_EXPORT std::int32_t gng_wasm_exec(std::uint32_t steps) {
+  return kernel().exec(steps) ? 1 : 0;
+}
+
+GNG_EXPORT void gng_wasm_update_graph() {
+  auto &k = kernel();
+  k.prune_isolated_nodes_public();
+  k.update_normals_public();
+  k.assign_fuzzy_labels_public();
+  k.build_clusters_public();
+}
+
 GNG_EXPORT std::uint32_t gng_wasm_get_graph_json_size() {
   json_buffer() = kernel().to_json();
   return static_cast<std::uint32_t>(json_buffer().size() + 1);

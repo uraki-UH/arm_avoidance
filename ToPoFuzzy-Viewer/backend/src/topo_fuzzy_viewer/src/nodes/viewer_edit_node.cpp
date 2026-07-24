@@ -169,6 +169,7 @@ private:
             return;
         }
 
+        if (method.rfind("edit.", 0) != 0) return;
         if (method == "edit.openSession") {
             handleOpenSession(id, params);
             return;

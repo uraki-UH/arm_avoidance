@@ -182,7 +182,7 @@ http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 - `Publish to ROS2` を ON にする
 - `roslibjs` は CDN が失敗した場合に `libs/roslib.min.js` を順に試します
 
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
 
 ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
   input_topic:=/topo_points \

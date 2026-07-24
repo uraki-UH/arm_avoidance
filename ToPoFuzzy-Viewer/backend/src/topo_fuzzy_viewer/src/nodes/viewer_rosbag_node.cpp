@@ -48,6 +48,8 @@ private:
             return;
         }
 
+        if (method.rfind("rosbag.", 0) != 0) return;
+
         if (method == "rosbag.list") {
             handleRosbagList(id);
             return;

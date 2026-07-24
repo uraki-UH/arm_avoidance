@@ -31,6 +31,9 @@ bool GngKernel::set_parameter(const char *name, std::uint32_t index, float value
 
   if (std::strcmp(name, "node.num_max") == 0) { config_.max_nodes = static_cast<std::uint32_t>(value); return true; }
   if (std::strcmp(name, "node.learning_num") == 0) { config_.learning_num = static_cast<std::uint32_t>(value); return true; }
+  if (std::strcmp(name, "iterations") == 0) { config_.iterations = static_cast<std::uint32_t>(value); return true; }
+  if (std::strcmp(name, "lambda") == 0) { config_.lambda = static_cast<std::uint32_t>(value); return true; }
+  if (std::strcmp(name, "seed") == 0) { config_.seed = static_cast<std::uint32_t>(value); return true; }
   if (std::strcmp(name, "node.unknown_learning_rate") == 0) { config_.unknown_learning_rate = value; return true; }
   if (std::strcmp(name, "node.eta_s1") == 0) { config_.eb = value; return true; }
   if (std::strcmp(name, "node.eta_s2") == 0) { config_.en = value; return true; }
@@ -143,16 +146,6 @@ void GngKernel::add_edge(std::size_t a, std::size_t b) {
   const std::size_t lo = std::min(a, b);
   const std::size_t hi = std::max(a, b);
 
-  // interval check: reject if nodes are too close for their labels
-  const auto la = nodes_[lo].label;
-  const auto lb = nodes_[hi].label;
-  const float min_interval = std::min(
-      la < LABEL_NUM ? config_.interval[la] : 0.0f,
-      lb < LABEL_NUM ? config_.interval[lb] : 0.0f);
-  if (min_interval > 0.0f && distance2(nodes_[lo].pos, nodes_[hi].pos) < min_interval * min_interval) {
-    return;
-  }
-
   for (auto &edge : edges_) {
     if (edge.a == lo && edge.b == hi) {
       edge.age = 0;
@@ -231,6 +224,15 @@ void GngKernel::insert_node() {
   Node r;
   r.id = next_node_id_++;
   r.pos = midpoint(nodes_[q].pos, nodes_[f].pos);
+
+  // interval check: skip if new node is too close to any existing node
+  const auto new_label = nodes_[q].label;
+  const float min_interval = new_label < LABEL_NUM ? config_.interval[new_label] : 0.0f;
+  if (min_interval > 0.0f) {
+    for (const auto &nd : nodes_) {
+      if (distance2(r.pos, nd.pos) < min_interval * min_interval) return;
+    }
+  }
   r.error = 0.5f * (nodes_[q].error + nodes_[f].error);
   r.utility = 0.5f * (nodes_[q].utility + nodes_[f].utility);
   r.win_count = 0;
@@ -535,6 +537,112 @@ bool GngKernel::run() {
   update_normals();
   assign_fuzzy_labels();
   build_clusters();
+
+  return nodes_.size() >= 2;
+}
+
+bool GngKernel::exec(std::uint32_t steps) {
+  if (points_.size() < 2) return false;
+
+  if (nodes_.size() < 2) {
+    const std::size_t a = pick_point_index();
+    std::size_t b = pick_point_index();
+    if (a == b) b = (b + 1) % points_.size();
+    nodes_.clear(); edges_.clear();
+    Node na; na.id = next_node_id_++; na.pos = points_[a]; na.frame = frame_;
+    Node nb; nb.id = next_node_id_++; nb.pos = points_[b]; nb.frame = frame_;
+    if (!point_labels_.empty()) {
+      na.label = a < point_labels_.size() ? point_labels_[a] : LABEL_DEFAULT;
+      nb.label = b < point_labels_.size() ? point_labels_[b] : LABEL_DEFAULT;
+    }
+    nodes_.push_back(na);
+    nodes_.push_back(nb);
+    add_edge(0, 1);
+  }
+
+  for (std::uint32_t k = 0; k < steps; ++k, ++iter_) {
+    const std::size_t pi = pick_point_index();
+    const Point3f &p = points_[pi];
+    const std::uint8_t point_label = (!point_labels_.empty() && pi < point_labels_.size())
+        ? point_labels_[pi] : LABEL_DEFAULT;
+
+    const auto [s1, s2] = nearest_nodes(p);
+    if (s1 < 0 || s2 < 0) continue;
+
+    auto &winner = nodes_[static_cast<std::size_t>(s1)];
+    const float dx = p.x - winner.pos.x;
+    const float dy = p.y - winner.pos.y;
+    const float dz = p.z - winner.pos.z;
+    const float dist = std::sqrt(std::max(kEps, dx*dx + dy*dy + dz*dz));
+
+    winner.error += dist;
+    winner.win_count += 1;
+    winner.frames_since_win = 0;  // reset s1_age counter on win
+    const auto &runner_up = nodes_[static_cast<std::size_t>(s2)];
+    winner.utility += std::max(0.0f, std::sqrt(std::max(kEps, distance2(p, runner_up.pos))) - dist);
+
+    float lr_scale = (point_label == LABEL_UNKNOWN) ? config_.unknown_learning_rate : 1.0f;
+    winner.pos.x += config_.eb * lr_scale * dx;
+    winner.pos.y += config_.eb * lr_scale * dy;
+    winner.pos.z += config_.eb * lr_scale * dz;
+
+    age_edges_from(static_cast<std::size_t>(s1));
+    for (const auto &edge : edges_) {
+      std::size_t ni = nodes_.size();
+      if (edge.a == static_cast<std::size_t>(s1)) ni = edge.b;
+      else if (edge.b == static_cast<std::size_t>(s1)) ni = edge.a;
+      if (ni >= nodes_.size()) continue;
+      nodes_[ni].pos.x += config_.en * lr_scale * (p.x - nodes_[ni].pos.x);
+      nodes_[ni].pos.y += config_.en * lr_scale * (p.y - nodes_[ni].pos.y);
+      nodes_[ni].pos.z += config_.en * lr_scale * (p.z - nodes_[ni].pos.z);
+    }
+
+    add_edge(static_cast<std::size_t>(s1), static_cast<std::size_t>(s2));
+    prune_old_edges();
+
+    if (config_.lambda > 0 && (iter_ + 1) % config_.lambda == 0 && nodes_.size() < config_.max_nodes) {
+      insert_node();
+    }
+    decay_errors();
+  }
+
+  frame_++;
+
+  // s1_age pruning: remove nodes that haven't won in s1_age exec() calls
+  {
+    std::vector<bool> won(nodes_.size(), false);
+    // We already ran the inner loop above; we need to know who won.
+    // Re-scan: instead, use frames_since_win counter incremented here.
+    for (std::size_t i = nodes_.size(); i-- > 0;) {
+      auto &nd = nodes_[i];
+      if (nd.win_count > 0 && nd.frames_since_win == 0) {
+        // already reset inside inner loop — do nothing
+      }
+      // Increment frames_since_win for nodes that didn't win this exec()
+      // (win_count is total, we track via frames_since_win)
+      nd.frames_since_win++;
+      const int age_max = nd.label < LABEL_NUM ? config_.s1_age_max[nd.label] : config_.s1_age_max[0];
+      if (age_max > 0 && static_cast<int>(nd.frames_since_win) > age_max && nodes_.size() > 2) {
+        // static memory: keep old nodes
+        if (config_.static_age_min < 0 || static_cast<int>(frame_ - nd.frame) < config_.static_age_min) {
+          const std::size_t last = nodes_.size() - 1;
+          if (i != last) {
+            nodes_[i] = nodes_[last];
+            for (auto &e : edges_) {
+              if (e.a == static_cast<std::uint32_t>(last)) e.a = static_cast<std::uint32_t>(i);
+              if (e.b == static_cast<std::uint32_t>(last)) e.b = static_cast<std::uint32_t>(i);
+              if (e.a > e.b) std::swap(e.a, e.b);
+            }
+          }
+          nodes_.pop_back();
+          // clean up edges referencing removed index
+          edges_.erase(std::remove_if(edges_.begin(), edges_.end(),
+            [i](const Edge &e){ return e.a == static_cast<std::uint32_t>(i) || e.b == static_cast<std::uint32_t>(i); }),
+            edges_.end());
+        }
+      }
+    }
+  }
 
   return nodes_.size() >= 2;
 }

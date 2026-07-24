@@ -107,6 +107,7 @@ import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
 import { calculateBounds } from './utils/bounds';
 import { EditAabbTool } from './features/manipulation/EditAabbTool';
+import { WebGLErrorBoundary } from './components/WebGLErrorBoundary';
 
 interface DraftRegion {
     center: [number, number, number];
@@ -272,6 +273,15 @@ function App() {
 
     const clipping = useClippingPlanes();
     const zoneMonitor = useZoneMonitor();
+
+    // Stable gl config: must not change between renders or r3f recreates the WebGL renderer.
+    const canvasGl = useMemo(() => ({
+        localClippingEnabled: false,
+        clippingPlanes: clipping.getThreePlanes(),
+        powerPreference: 'default' as const,
+        antialias: true,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), []);
 
     // Multi-layer GNG settings
     const [layerSettings, setLayerSettings] = useState<Record<string, LayerSettings>>({});
@@ -1007,14 +1017,15 @@ function App() {
                 }
             >
                 <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
+                    <WebGLErrorBoundary>
                     <Canvas
                         frameloop="demand"
                         camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
-                        gl={{
-                            localClippingEnabled: false,
-                            clippingPlanes: clipping.getThreePlanes(),
-                            powerPreference: 'high-performance',
-                            antialias: true,
+                        gl={canvasGl}
+                        onCreated={({ gl }) => {
+                            if (import.meta.hot) {
+                                import.meta.hot.dispose(() => gl.dispose());
+                            }
                         }}
                     >
                         <ambientLight intensity={0.3} />
@@ -1110,6 +1121,7 @@ function App() {
                     <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                     <OrbitControls makeDefault />
                 </Canvas>
+                    </WebGLErrorBoundary>
                 {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={() => setSelectedClusterSnapshot(null)} />}
                 {selectedManipSnapshot && <GraphNodeDetailPanel snapshot={selectedManipSnapshot} onClose={() => setSelectedManipSnapshot(null)} />}
             </div>

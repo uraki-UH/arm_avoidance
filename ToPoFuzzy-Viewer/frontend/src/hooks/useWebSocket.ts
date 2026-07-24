@@ -24,6 +24,13 @@ import {
 } from '../types';
 import { generateUUID } from '../utils/uuid';
 
+/** Returns true for errors that are expected on component unmount (RPC cancelled). */
+const isUnmountCancellation = (e: unknown): boolean =>
+    e instanceof Error && (
+        e.message === 'WebSocket hook disposed' ||
+        e.message === 'WebSocket not connected'
+    );
+
 export type {
     DataSource,
     RosbagInfo,
@@ -437,6 +444,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [ws, setWs] = useState<WebSocket | null>(null);
+    const wsRef = useRef<WebSocket | null>(null);
+    wsRef.current = ws;
 
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
@@ -797,8 +806,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }
             };
 
-            socket.onerror = (e) => {
-                console.error('WebSocket Error:', e);
+            socket.onerror = () => {
                 setError('WebSocket connection error');
             };
 
@@ -829,7 +837,6 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }
                 
                 reconnectTimerRef.current = window.setTimeout(() => {
-                    console.log('Attempting to reconnect WebSocket...');
                     connect();
                 }, delay);
             };
@@ -850,6 +857,9 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     useEffect(() => {
         return () => {
+            // Use wsRef so this cleanup only runs on unmount, not on every ws change.
+            // Previously ws in the dep array caused cleanup (= flushPendingWithError) to
+            // fire on every reconnect, rejecting in-flight RPCs with "WebSocket hook disposed".
             intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
             pendingGraphUpdatesRef.current.clear();
@@ -859,11 +869,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 window.cancelAnimationFrame(flushScheduledRef.current);
                 flushScheduledRef.current = null;
             }
-            if (ws) {
-                ws.close();
+            if (wsRef.current) {
+                wsRef.current.close();
             }
         };
-    }, [flushPendingWithError, ws]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [flushPendingWithError]);
 
     const sendRpc = useCallback(
         <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs = 10000): Promise<T> => {
@@ -923,7 +934,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             const result = await sendRpc<{ bags: RosbagInfo[] }>('rosbag.list');
             return result.bags || [];
         } catch (rpcError) {
-            console.error('Failed to list rosbags:', rpcError);
+            if (!isUnmountCancellation(rpcError)) console.error('Failed to list rosbags:', rpcError);
             return [];
         }
     }, [sendRpc]);
@@ -945,7 +956,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             const result = await sendRpc<{ files: PointCloudFileInfo[] }>('files.list');
             return result.files || [];
         } catch (rpcError) {
-            console.error('Failed to list files:', rpcError);
+            if (!isUnmountCancellation(rpcError)) console.error('Failed to list files:', rpcError);
             return [];
         }
     }, [sendRpc]);
@@ -966,7 +977,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         try {
             return await sendRpc<GngStatus>('gng.status');
         } catch (rpcError) {
-            console.error('Failed to get gng status:', rpcError);
+            if (!isUnmountCancellation(rpcError)) console.error('Failed to get gng status:', rpcError);
             return { isRunning: false };
         }
     }, [sendRpc]);
@@ -976,7 +987,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             const result = await sendRpc<{ configs: GngConfigInfo[] }>('gng.listConfigs');
             return result.configs || [];
         } catch (rpcError) {
-            console.error('Failed to list gng configs:', rpcError);
+            if (!isUnmountCancellation(rpcError)) console.error('Failed to list gng configs:', rpcError);
             return [];
         }
     }, [sendRpc]);
@@ -1004,7 +1015,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         try {
             return await sendRpc<ContinuousPublishStatus>('publish.status');
         } catch (rpcError) {
-            console.error('Failed to get continuous publish status:', rpcError);
+            if (!isUnmountCancellation(rpcError)) console.error('Failed to get continuous publish status:', rpcError);
             return { isPublishing: false, topic: '', rateHz: 0, pointCount: 0 };
         }
     }, [sendRpc]);

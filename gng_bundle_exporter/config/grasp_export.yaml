@@ -1,0 +1,27 @@
+topics:
+  - alias: graph
+    topic: /topological_map
+    kind: topological_map
+    role: graph
+    required: false
+
+  - alias: pointcloud
+    topic: /topo_points
+    kind: pointcloud2
+    role: pointcloud
+    sample_every: 1
+
+  - alias: grasp_poses
+    topic: /grasp_pose_candidates
+    kind: generic
+    role: grasp_poses
+
+  - alias: grasp_scores
+    topic: /grasp_pose_scores
+    kind: generic
+    role: grasp_scores
+
+  - alias: metrics
+    topic: /ToPoDualArm/grasp_candidate_metrics
+    kind: generic
+    role: metrics

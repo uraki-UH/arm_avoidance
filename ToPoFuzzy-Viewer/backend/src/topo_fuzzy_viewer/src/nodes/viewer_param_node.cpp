@@ -41,6 +41,7 @@ private:
             return;
         }
 
+        if (method.rfind("params.", 0) != 0) return;
         if (method == "params.get") {
             handleGet(id);
             return;

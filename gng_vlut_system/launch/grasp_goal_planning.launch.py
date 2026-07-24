@@ -117,6 +117,8 @@ def launch_setup(context, *args, **kwargs):
                 "publish_hz": LaunchConfiguration("publish_hz"),
                 "avoid_collisions": LaunchConfiguration("avoid_collisions"),
                 "avoid_danger": LaunchConfiguration("avoid_danger"),
+                "goal_rot_manip_weight": LaunchConfiguration("goal_rot_manip_weight"),
+                "goal_joint_limit_weight": LaunchConfiguration("goal_joint_limit_weight"),
                 "strict_goal_collision_check": LaunchConfiguration("strict_goal_collision_check"),
                 "replan_on_path_collision": LaunchConfiguration("replan_on_path_collision"),
                 "allow_zero_initial_joint_state": LaunchConfiguration("allow_zero_initial_joint_state"),
@@ -167,8 +169,20 @@ def generate_launch_description():
         DeclareLaunchArgument("candidate_trajectory_topic", default_value="/ToPoDualArm/candidate_topological_map"),
         DeclareLaunchArgument("candidate_metrics_topic", default_value="/ToPoDualArm/grasp_candidate_metrics"),
         DeclareLaunchArgument("publish_hz", default_value="20.0"),
-        DeclareLaunchArgument("avoid_collisions", default_value="true"),
-        DeclareLaunchArgument("avoid_danger", default_value="false"),
+        DeclareLaunchArgument("avoid_collisions", default_value="true",
+                              description="衝突ノードを経路から除外するか"),
+        DeclareLaunchArgument("avoid_danger", default_value="false",
+                              description="危険ノード（障害物近傍）を経路から除外するか"),
+        # --- ゴール姿勢スコアリング ---
+        # ゴールノードの選択スコア = ホップ数 + 0.5*関節距離
+        #                          + goal_rot_manip_weight * log(回転可操作性 条件数)
+        #                          - goal_joint_limit_weight * 関節限界余裕 [0,1]
+        # 回転可操作性 条件数: 1=理想(等方)、大きいほど手首特異点に近い
+        # goal_rot_manip_weight=0 で無効化（旧動作に戻る）
+        DeclareLaunchArgument("goal_rot_manip_weight", default_value="1.0",
+                              description="ゴール姿勢の回転可操作性ペナルティ重み。大きいほど手首ねじれ姿勢が選ばれにくくなる"),
+        DeclareLaunchArgument("goal_joint_limit_weight", default_value="0.5",
+                              description="ゴール姿勢の関節限界余裕ボーナス重み。大きいほど関節限界から遠い姿勢が優先される"),
         DeclareLaunchArgument("strict_goal_collision_check", default_value="false"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="false"),
         DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),

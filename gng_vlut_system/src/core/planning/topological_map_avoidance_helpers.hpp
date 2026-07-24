@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -596,7 +597,9 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
     const Eigen::VectorXf &current_q, const std::vector<int> &start_candidates,
     const std::vector<int> &goal_candidates, int &selected_start_id,
     std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
-    std::vector<std::vector<int>> &candidate_paths) {
+    std::vector<std::vector<int>> &candidate_paths,
+    float goal_rot_manip_weight = 0.0f,
+    float goal_joint_limit_weight = 0.0f) {
   selected_start_id = -1;
   candidate_path_by_goal.clear();
   candidate_paths.clear();
@@ -629,7 +632,27 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
                              static_cast<int>(current_q.size()));
     const float start_dist =
         (start_node.weight_angle.head(dim) - current_q.head(dim)).norm();
-    const float score = static_cast<float>(node_path.size()) + 0.5f * start_dist;
+    float score = static_cast<float>(node_path.size()) + 0.5f * start_dist;
+
+    // Rotational manipulability penalty at goal: high condition number = near wrist singularity.
+    // log scale keeps penalty comparable to path length (log(1)=0, log(10)≈2.3, log(100)≈4.6).
+    if (goal_rot_manip_weight > 0.0f &&
+        reached_goal_id >= 0 && reached_goal_id < static_cast<int>(gng->getMaxNodeNum())) {
+      const auto &goal_node = gng->nodeAt(reached_goal_id);
+      const auto &rot = goal_node.status.rotational_manip_info;
+      if (rot.valid && rot.manipulability > 1e-8) {
+        const float cond = std::max(1.0f, static_cast<float>(rot.condition_number));
+        score += goal_rot_manip_weight * std::log(cond);
+      } else {
+        score += goal_rot_manip_weight * std::log(100.0f); // max penalty for invalid/singular
+      }
+      // Joint limit margin bonus: higher margin = more slack = lower score
+      if (goal_joint_limit_weight > 0.0f) {
+        const float margin = std::clamp(goal_node.status.joint_limit_score, 0.0f, 1.0f);
+        score -= goal_joint_limit_weight * margin;
+      }
+    }
+
     if (score < best_score) {
       best_score = score;
       best_goal_id = reached_goal_id;

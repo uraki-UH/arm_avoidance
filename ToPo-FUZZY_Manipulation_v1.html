@@ -633,7 +633,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="section-title">GNG Learning Mode</div>
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
-          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><option value="wasm">GNG-WASM / Emscripten</option></select></div>
+          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><!-- <option value="wasm">GNG-WASM / Emscripten</option> FROZEN --></select></div>
           <div class="full"><label>Point-cloud source</label><select id="pointCloudSource"><option value="synthetic_depth" selected>Synthetic / synthetic depth</option><option value="imported_frames">Imported frames / 取り込みデータ</option></select></div>
           <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
           <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
@@ -646,17 +646,19 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <input id="gngDataFile" type="file" class="hide" accept=".json, .json.gz">
           <div class="full">
             <button id="gngLoadDataBtn" class="primary" type="button">ROS bag JSON(json.gz)を読み込む</button>
+            <button id="gngClearDataBtn" class="warn" type="button" style="display:none">JSONを破棄</button>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
           </div>
-          <input id="gngWasmFile" type="file" class="hide" multiple accept=".js,.wasm,application/javascript,application/wasm,text/javascript">
+          <!-- FROZEN: WASM GNG UI suspended — libgng source unavailable
+          <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
           <div class="full">
             <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
             <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
-            <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNGロジック部分の差し替え. `gng_wasm_core.js` と `gng_wasm_core.wasm` を選択して差し替えできます。</div>
+            <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNGロジック差し替え用。gng_wasm_core/dist/ の `gng_wasm_core.js` を選択（WASM内蔵済み単一ファイル）。</div>
           </div>
           <details id="wasmParamsSection" class="full gng-params-toggle" style="display:none">
             <summary class="gng-params-summary">
@@ -666,7 +668,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <div class="gng-params-inner-grid">
               <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">node.* / ノード設定</div>
               <div><label>node.num_max</label><input id="wasmMaxNodes" type="number" min="30" max="65534" step="10" value="10000"></div>
-              <div><label>node.learning_num</label><input id="wasmLearningNum" type="number" min="1" max="10000" step="1" value="4000"></div>
+              <div><label>node.learning_num (1フレームあたり学習回数)</label><input id="wasmLearningNum" type="number" min="1" max="10000" step="1" value="400"></div>
               <div><label>node.eta_s1 (εb)</label><input id="wasmEb" type="number" min="0.001" max="1.0" step="0.001" value="0.08"></div>
               <div><label>node.eta_s2 (εn)</label><input id="wasmEn" type="number" min="0.001" max="0.1" step="0.001" value="0.008"></div>
               <div><label>node.unknown_learning_rate</label><input id="wasmUnknownLR" type="number" min="0.1" max="2.0" step="0.05" value="0.8"></div>
@@ -674,8 +676,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>node.grid (m)</label><input id="wasmGrid" type="number" min="0.01" max="1.0" step="0.01" value="0.2"></div>
               <div><label>node.static.age_min</label><input id="wasmStaticAgeMin" type="number" min="-1" max="10000" step="1" value="250"></div>
               <div><label>edge.age_max</label><input id="wasmMaxAge" type="number" min="20" max="1000" step="5" value="100"></div>
-              <div><label>iterations</label><input id="wasmIters" type="number" min="500" max="50000" step="500" value="12000"></div>
-              <div><label>λ (insertion interval)</label><input id="wasmLambda" type="number" min="1" max="1000" step="1" value="100"></div>
+              <div><label>λ (node insertion interval)</label><input id="wasmLambda" type="number" min="1" max="1000" step="1" value="100"></div>
               <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.s1_age [default, safe, wall, unknown]</label></div>
               <div><label>default</label><input id="wasmS1Age0" type="number" min="1" max="100" step="1" value="6"></div>
               <div><label>safe</label><input id="wasmS1Age1" type="number" min="1" max="100" step="1" value="6"></div>
@@ -686,11 +687,11 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>safe</label><input id="wasmClustS1Age1" type="number" min="1" max="100" step="1" value="20"></div>
               <div><label>wall</label><input id="wasmClustS1Age2" type="number" min="1" max="100" step="1" value="6"></div>
               <div><label>unknown</label><input id="wasmClustS1Age3" type="number" min="1" max="100" step="1" value="3"></div>
-              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.interval [default, safe, wall, unknown] (m)</label></div>
-              <div><label>default</label><input id="wasmInterval0" type="number" min="0" max="2.0" step="0.01" value="0.4"></div>
-              <div><label>safe</label><input id="wasmInterval1" type="number" min="0" max="2.0" step="0.01" value="0.2"></div>
-              <div><label>wall</label><input id="wasmInterval2" type="number" min="0" max="2.0" step="0.01" value="0.2"></div>
-              <div><label>unknown</label><input id="wasmInterval3" type="number" min="0" max="2.0" step="0.001" value="0.025"></div>
+              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.interval [default, safe, wall, unknown] (m) ※実環境値: 0.4/0.2/0.2/0.025, シミュ: 0推奨</label></div>
+              <div><label>default</label><input id="wasmInterval0" type="number" min="0" max="2.0" step="0.001" value="0"></div>
+              <div><label>safe</label><input id="wasmInterval1" type="number" min="0" max="2.0" step="0.001" value="0"></div>
+              <div><label>wall</label><input id="wasmInterval2" type="number" min="0" max="2.0" step="0.001" value="0"></div>
+              <div><label>unknown</label><input id="wasmInterval3" type="number" min="0" max="2.0" step="0.001" value="0"></div>
               <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-top:1px solid rgba(148,163,184,.18);padding-top:6px;margin-top:4px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">label.fuzzy.* / ファジィラベル</div>
               <div><label>label.fuzzy.unknown</label><input id="wasmFuzzyUnknown" type="number" min="0" max="1.0" step="0.05" value="0.6"></div>
               <div><label>label.fuzzy.min</label><input id="wasmFuzzyMin" type="number" min="0" max="1.0" step="0.05" value="0.5"></div>
@@ -711,6 +712,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>ds.human.num_max</label><input id="wasmDsHumanNumMax" type="number" min="100" max="50000" step="100" value="3000"></div>
             </div>
           </details>
+          END FROZEN WASM UI -->
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
             <div><label>Motion duration [s]</label><input id="ikMotionDuration" type="range" min="0.2" max="6.0" step="0.1" value="2.0"><input id="ikMotionDurationNum" type="number" min="0.2" max="6.0" step="0.1" value="2.0"></div>
             <div><label>IK replanning interval [ms]</label><input id="ikReplanMs" type="range" min="33" max="1000" step="1" value="100"><input id="ikReplanMsNum" type="number" min="33" max="1000" step="1" value="100"></div>
@@ -956,7 +958,7 @@ const state={
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
-  importedBundle:null,bundleTopicSelection:{},
+  importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
   bundleFlow:null,
   gngWasmInputSource:'visible_points',
   gngWasmFileUrls:null
@@ -1599,6 +1601,150 @@ function v312NormalizeTopicMessages(entry){
   if(Array.isArray(entry.messages)) return entry.messages;
   return [];
 }
+function v312ExtractGraspPosesFromBundle(bundle){
+  state.graspPoseCandidates=[];
+  if(!bundle) return;
+  const topics=v312ResolveBundleTopics(bundle);
+  if(!topics) return;
+
+  // Try metrics role first (most complete data)
+  const metricsEntry=Object.values(topics).find(e=>e&&(e.role==='metrics'));
+  const posesEntry=Object.values(topics).find(e=>e&&(e.role==='grasp_poses'));
+  const scoresEntry=Object.values(topics).find(e=>e&&(e.role==='grasp_scores'));
+
+  if(metricsEntry && Array.isArray(metricsEntry.rows) && metricsEntry.rows.length){
+    // Use latest message from metrics topic
+    const [,data]=metricsEntry.rows[metricsEntry.rows.length-1];
+    const candidates=data&&data.candidates?data.candidates:(data&&data.data?data.data:[]);
+    if(candidates.length){
+      const maxScore=Math.max(...candidates.map(c=>c.grasp_region_score||c.position_manipulability||0))||1;
+      state.graspPoseCandidates=candidates.map((c,i)=>{
+        const p=c.end_effector_pose&&c.end_effector_pose.position?c.end_effector_pose.position:{};
+        const o=c.end_effector_pose&&c.end_effector_pose.orientation?c.end_effector_pose.orientation:{};
+        const rawScore=c.grasp_region_score??c.position_manipulability??0;
+        return {
+          x:+p.x||0, y:+p.y||0, z:+p.z||0,
+          qx:+o.x||0, qy:+o.y||0, qz:+o.z||0, qw:o.w!=null?+o.w:1,
+          score:rawScore/maxScore,
+          selected:!!(c.selected),
+          candidateId:c.candidate_id??i,
+          manipulability:c.position_manipulability??null,
+          graspScore:c.grasp_region_score??null,
+          feasible:c.feasible!==false,
+        };
+      });
+      return;
+    }
+  }
+
+  // Fallback: use grasp_poses + grasp_scores topics
+  if(posesEntry && Array.isArray(posesEntry.rows) && posesEntry.rows.length){
+    const [,data]=posesEntry.rows[posesEntry.rows.length-1];
+    const poses=data&&data.poses?data.poses:[];
+    let scores=[];
+    if(scoresEntry && Array.isArray(scoresEntry.rows) && scoresEntry.rows.length){
+      const [,sd]=scoresEntry.rows[scoresEntry.rows.length-1];
+      scores=sd&&sd.data?sd.data:[];
+    }
+    const maxScore=scores.length?Math.max(...scores)||1:1;
+    state.graspPoseCandidates=poses.map((p,i)=>({
+      x:+p.position.x||0, y:+p.position.y||0, z:+p.position.z||0,
+      qx:+p.orientation.x||0, qy:+p.orientation.y||0, qz:+p.orientation.z||0, qw:p.orientation.w!=null?+p.orientation.w:1,
+      score:scores[i]!=null?scores[i]/maxScore:0.5,
+      selected:i===0, candidateId:i, feasible:true,
+    }));
+  }
+}
+
+function drawGraspPoseCandidates(ctx, canvas){
+  const cands=state.graspPoseCandidates;
+  if(!cands||!cands.length) return;
+
+  // quaternion → rotation matrix (column-major, xyz axes)
+  function quatToAxes(qx,qy,qz,qw){
+    const x2=qx+qx,y2=qy+qy,z2=qz+qz;
+    const xx=qx*x2,xy=qx*y2,xz=qx*z2;
+    const yy=qy*y2,yz=qy*z2,zz=qz*z2;
+    const wx=qw*x2,wy=qw*y2,wz=qw*z2;
+    return {
+      ax:{x:1-(yy+zz), y:xy+wz,   z:xz-wy},  // X axis
+      ay:{x:xy-wz,     y:1-(xx+zz),z:yz+wx},  // Y axis
+      az:{x:xz+wy,     y:yz-wx,    z:1-(xx+yy)} // Z axis
+    };
+  }
+
+  const axisLen=0.035;
+  for(let i=0;i<cands.length;i++){
+    const c=cands[i];
+    const base=project({x:c.x,y:c.y,z:c.z},canvas);
+    const score=c.score??0.5;
+    const isBest=c.selected||i===0;
+
+    // Score color: red(0) → yellow(0.5) → green(1)
+    const r=Math.round(clamp(2*(1-score),0,1)*255);
+    const g=Math.round(clamp(2*score,0,1)*255);
+    const col=`rgb(${r},${g},0)`;
+
+    // Draw sphere
+    const radius=isBest?7:5;
+    ctx.save();
+    ctx.globalAlpha=isBest?1.0:0.75;
+    ctx.beginPath();
+    ctx.arc(base.x,base.y,radius,0,Math.PI*2);
+    ctx.fillStyle=col;
+    ctx.fill();
+    if(isBest){ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();}
+    ctx.restore();
+
+    // Draw coordinate axes with arrowheads
+    const {ax,ay,az}=quatToAxes(c.qx,c.qy,c.qz,c.qw);
+    // Z(blue)=approach longer, X(red)/Y(green) shorter
+    const axes=[
+      {dir:ax,color:'#ff5555',len:axisLen*0.7,width:isBest?1.5:1},
+      {dir:ay,color:'#55ff55',len:axisLen*0.7,width:isBest?1.5:1},
+      {dir:az,color:'#4499ff',len:axisLen*1.4,width:isBest?3:2},  // approach arrow
+    ];
+    ctx.save();
+    ctx.globalAlpha=isBest?0.95:0.65;
+    for(const {dir,color,len,width} of axes){
+      const tx=c.x+dir.x*len, ty=c.y+dir.y*len, tz=c.z+dir.z*len;
+      const tip=project({x:tx,y:ty,z:tz},canvas);
+      const dx=tip.x-base.x, dy=tip.y-base.y;
+      const dist=Math.sqrt(dx*dx+dy*dy)||1;
+      const ux=dx/dist, uy=dy/dist;
+
+      // shaft
+      ctx.strokeStyle=color;
+      ctx.lineWidth=width;
+      ctx.beginPath();
+      ctx.moveTo(base.x,base.y);
+      ctx.lineTo(tip.x,tip.y);
+      ctx.stroke();
+
+      // arrowhead
+      const hw=width*2.5+2, hl=width*4+4;
+      ctx.fillStyle=color;
+      ctx.beginPath();
+      ctx.moveTo(tip.x+ux*hl, tip.y+uy*hl);
+      ctx.lineTo(tip.x-uy*hw, tip.y+ux*hw);
+      ctx.lineTo(tip.x+uy*hw, tip.y-ux*hw);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Label best
+    if(isBest){
+      ctx.save();
+      ctx.globalAlpha=0.95;
+      ctx.font='bold 11px monospace';
+      ctx.fillStyle='#fff';
+      ctx.fillText(`BEST #${c.candidateId} s=${(score*100).toFixed(0)}%`,base.x+9,base.y-5);
+      ctx.restore();
+    }
+  }
+}
+
 function v312ResolveBundleTopics(bundle){
   if(!bundle||typeof bundle!=='object') return null;
   if(bundle.topics && typeof bundle.topics==='object' && !Array.isArray(bundle.topics)) return bundle.topics;
@@ -2075,7 +2221,7 @@ const GNG_ALGORITHMS=[
   {value:'standard',label:'GNG実行',short:'GNG'},
   {value:'gng_t',label:'GNG-T実行',short:'GNG-T'},
   {value:'density_gng_t',label:'密度制御GNG-T実行',short:'density-GNG-T'},
-  {value:'wasm',label:'GNG-WASM実行',short:'GNG-WASM'}
+  // {value:'wasm',label:'GNG-WASM実行',short:'GNG-WASM'} // FROZEN: libgng source unavailable
 ];
 function setGngAlgorithmValue(alg){const el=$('gngAlgorithm');if(el)el.value=alg;}
 function runGngAlgorithmFromViewer(alg){
@@ -2085,97 +2231,106 @@ function runGngAlgorithmFromViewer(alg){
     return;
   }
   setGngAlgorithmValue(alg);
-  if(alg==='wasm'){runGngWasmFull();return;}
+  // if(alg==='wasm'){runGngWasmFull();return;} // FROZEN
   runGngAnimated();
 }
+/* FROZEN: WASM GNG implementation suspended — libgng source unavailable for WASM compilation.
 function wasmSetParam(ex,name,index,value){
   try{
-    const nameLen=ex.lengthBytesUTF8(name)+1;
-    const namePtr=ex._malloc(nameLen);
-    ex.stringToUTF8(name,namePtr,nameLen);
-    ex.ccall('gng_wasm_set_parameter','number',['number','number','number'],[namePtr,index,value]);
-    ex._free(namePtr);
-  }catch(e){}
+    const len=ex.lengthBytesUTF8(name)+1;
+    const ptr=ex._malloc(len);
+    ex.stringToUTF8(name,ptr,len);
+    const r=ex.ccall('gng_wasm_set_parameter','number',['number','number','number'],[ptr,index,value]);
+    ex._free(ptr);
+    if(!r) console.warn('wasmSetParam: unrecognized param:',name);
+  }catch(e){console.error('wasmSetParam failed:',name,e);}
 }
-function runGngWasmFull(){
+function runGngWasmFull_FROZEN(){
   const ex=getGngWasmExports();
   const wasmMode=ex?v312WasmMode(ex):null;
   if(wasmMode!=='emscripten'){
-    $('topoStatus').textContent='GNG-WASM: Emscripten WASM が読み込まれていません。gng_wasm_core.js/.wasm ファイルを選択してください。';
+    $('topoStatus').textContent='GNG-WASM: Emscripten WASM が読み込まれていません。gng_wasm_core.js ファイルを選択してください。';
     return;
   }
   if(!state.points.length)generate();
   stopGngAnimated();
   resetGngRunState();
-  const mode=gngMode();
-  const pts=mode==='offline'?buildOfflineBatchDataset():v305GngTrainingPoints(state.points);
-  if(pts.length<2){$('topoStatus').textContent='GNG-WASM: 有効点群が不足しています。';return;}
   const w=(id,fb)=>{const el=$(id);return el?+el.value:fb;};
   const maxNodes=w('wasmMaxNodes',10000);
-  const iters=w('wasmIters',12000);
+  const learningNum=Math.max(1,w('wasmLearningNum',400));
   const lambda=Math.max(1,w('wasmLambda',100));
   const maxAge=w('wasmMaxAge',100);
   const eb=w('wasmEb',0.08);
   const en=w('wasmEn',0.008);
   const seed=((+$('seed').value||1)+7)>>>0;
-  const started=performance.now();
-  $('topoStatus').textContent='GNG-WASM: 実行中...';
+  $('topoStatus').textContent='GNG-WASM: 初期化中...';
   try{
     ex.ccall('gng_wasm_reset',null,[],[]);
-    const cfgBytes=v312BuildWasmConfigBytes(maxNodes,iters,lambda,maxAge,eb,en,seed);
-    ex.ccall('gng_wasm_set_config',null,['array'],[cfgBytes]);
     const sp=(n,i,v)=>wasmSetParam(ex,n,i,v);
-    sp('node.num_max',0,maxNodes);
-    sp('node.eta_s1',0,eb);
-    sp('node.eta_s2',0,en);
-    sp('edge.age_max',0,maxAge);
-    sp('node.learning_num',0,w('wasmLearningNum',4000));
+    sp('node.num_max',0,maxNodes); sp('lambda',0,lambda);
+    sp('node.eta_s1',0,eb); sp('node.eta_s2',0,en);
+    sp('edge.age_max',0,maxAge); sp('seed',0,seed);
     sp('node.unknown_learning_rate',0,w('wasmUnknownLR',0.8));
     sp('node.s1_reset_range',0,w('wasmS1ResetRange',0.01));
     sp('node.grid',0,w('wasmGrid',0.2));
     sp('node.static.age_min',0,w('wasmStaticAgeMin',250));
     sp('node.s1_age',0,w('wasmS1Age0',6));sp('node.s1_age',1,w('wasmS1Age1',6));sp('node.s1_age',2,w('wasmS1Age2',6));sp('node.s1_age',3,w('wasmS1Age3',3));
     sp('node.clusted_s1_age',0,w('wasmClustS1Age0',20));sp('node.clusted_s1_age',1,w('wasmClustS1Age1',20));sp('node.clusted_s1_age',2,w('wasmClustS1Age2',6));sp('node.clusted_s1_age',3,w('wasmClustS1Age3',3));
-    sp('node.interval',0,w('wasmInterval0',0.4));sp('node.interval',1,w('wasmInterval1',0.2));sp('node.interval',2,w('wasmInterval2',0.2));sp('node.interval',3,w('wasmInterval3',0.025));
-    sp('label.fuzzy.unknown',0,w('wasmFuzzyUnknown',0.6));
-    sp('label.fuzzy.min',0,w('wasmFuzzyMin',0.5));
-    sp('label.fuzzy.lpf_time_constant',0,w('wasmFuzzyLpf',0.5));
-    sp('cluster.num_min',0,w('wasmClusterNumMin',10));
-    sp('cluster.velocity.lpf_time_constant',0,w('wasmClusterVelLpf',0.5));
-    sp('cluster.plane.volume',0,w('wasmClusterPlaneVol',10));
-    sp('cluster.unknown.edge_distance_max',0,w('wasmClusterUnkEdgeDist',0.1));
-    sp('cluster.other.edge_distance_max',0,w('wasmClusterOtherEdgeDist',0.4));
-    sp('cluster.human.radius',0,w('wasmClusterHumanRadius',0.6));
-    sp('cluster.human.hysteresis_age',0,w('wasmClusterHumanHyst',5));
-    sp('cluster.human.confirmation_age',0,w('wasmClusterHumanConf',5));
+    sp('node.interval',0,w('wasmInterval0',0));sp('node.interval',1,w('wasmInterval1',0));sp('node.interval',2,w('wasmInterval2',0));sp('node.interval',3,w('wasmInterval3',0));
+    sp('label.fuzzy.unknown',0,w('wasmFuzzyUnknown',0.6)); sp('label.fuzzy.min',0,w('wasmFuzzyMin',0.5)); sp('label.fuzzy.lpf_time_constant',0,w('wasmFuzzyLpf',0.5));
+    sp('cluster.num_min',0,w('wasmClusterNumMin',10)); sp('cluster.unknown.edge_distance_max',0,w('wasmClusterUnkEdgeDist',0.1)); sp('cluster.other.edge_distance_max',0,w('wasmClusterOtherEdgeDist',0.4));
     sp('ds.range_max',0,w('wasmDsRangeMax',0.2));
-    sp('ds.all.num_max',0,w('wasmDsAllNumMax',4000));
-    sp('ds.unknown.num_max',0,w('wasmDsUnkNumMax',2000));
-    sp('ds.human.num_max',0,w('wasmDsHumanNumMax',3000));
-    const flat=new Float32Array(pts.length*3);
-    for(let i=0;i<pts.length;i++){flat[i*3]=pts[i].x;flat[i*3+1]=pts[i].y;flat[i*3+2]=pts[i].z;}
-    const pointsBytes=new Uint8Array(flat.buffer);
-    ex.ccall('gng_wasm_set_points',null,['array','number'],[pointsBytes,pts.length]);
-    const ok=ex.ccall('gng_wasm_run','number',[],[]);
-    if(ok!==1){$('topoStatus').textContent='GNG-WASM: 実行失敗。';return;}
-    const jsonSize=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
-    const jsonText=v312ReadWasmJson(ex,jsonSize);
-    if(!jsonText){$('topoStatus').textContent='GNG-WASM: JSON結果の読み取り失敗。';return;}
-    const parsed=JSON.parse(jsonText);
-    state.nodes=(parsed.nodes||[]).map(n=>({x:+n.x||0,y:+n.y||0,z:+n.z||0,label:'gng',err:+n.error||0,win:+n.wins||0,util:+n.utility||0,semantic:n.label!=null?['default','safe','wall','unknown','human','car'][n.label]:'default',normal:n.nx!=null?{x:n.nx,y:n.ny,z:n.nz}:null,rho:n.rho||1}));
-    const edgeMap=new Map();
-    state.edges=(parsed.edges||[]).map(e=>{const edge={a:Math.min(+e.a||0,+e.b||0),b:Math.max(+e.a||0,+e.b||0),age:+e.age||0};edgeMap.set(key(edge.a,edge.b),{...edge});return edge;});
-    state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||0,mode,variant:'standard',trainingPoints:mode==='offline'?pts:null,backend:'Emscripten GNG-WASM'};
-    sanitizeGngGraph();
-    updateTopoSemantics();updateMetrics();updateHud();renderAll();
-    const dt=(performance.now()-started).toFixed(1);
-    const clusterCount=parsed.clusters?parsed.clusters.length:0;
-    $('topoStatus').textContent=`GNG-WASM complete. nodes=${state.nodes.length}, edges=${state.edges.length}, clusters=${clusterCount}, iter=${parsed.iterations||0}, time=${dt} ms.`;
+    state.gngPlaying=true;
+    updateHud(); renderAll();
+    $('topoStatus').textContent=`GNG-WASM: 開始。毎フレーム ${learningNum} 回学習 (lambda=${lambda}, maxNodes=${maxNodes})`;
+    function wasmReadJson(){
+      try{
+        const sz=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
+        const ptr=ex._malloc(sz);
+        ex.ccall('gng_wasm_write_graph_json','number',['number','number'],[ptr,sz]);
+        const text=ex.UTF8ToString(ptr);
+        ex._free(ptr);
+        return text?JSON.parse(text):null;
+      }catch(e){console.warn('wasmReadJson error:',e);return null;}
+    }
+    let wasmFrame=0;
+    function wasmTick(){
+      if(!state._gngAnimRaf) return;
+      state._gngAnimRaf=requestAnimationFrame(wasmTick);
+      if(!state.gngPlaying) return;
+      try{
+        const pts2=gngMode()==='offline'?buildOfflineBatchDataset():v305GngTrainingPoints(state.points);
+        if(pts2.length>=2){
+          const flat=new Float32Array(pts2.length*3);
+          for(let i=0;i<pts2.length;i++){flat[i*3]=pts2[i].x;flat[i*3+1]=pts2[i].y;flat[i*3+2]=pts2[i].z;}
+          ex.ccall('gng_wasm_set_points',null,['array','number'],[new Uint8Array(flat.buffer),pts2.length]);
+          ex.ccall('gng_wasm_exec','number',['number'],[learningNum]);
+        }
+        wasmFrame++;
+        if(wasmFrame%30===0) ex.ccall('gng_wasm_update_graph',null,[],[]);
+        const parsed=wasmReadJson();
+        if(parsed){
+          state.nodes=(parsed.nodes||[]).map(n=>({x:+n.x||0,y:+n.y||0,z:+n.z||0,label:'gng',err:+n.error||0,win:+n.wins||0,util:+n.utility||0,semantic:n.label!=null?['default','safe','wall','unknown','human','car'][n.label]:'default',normal:n.nx!=null?{x:n.nx,y:n.ny,z:n.nz}:null,rho:n.rho||1}));
+          const edgeMap=new Map();
+          state.edges=(parsed.edges||[]).map(e=>{const edge={a:Math.min(+e.a||0,+e.b||0),b:Math.max(+e.a||0,+e.b||0),age:+e.age||0};edgeMap.set(key(edge.a,edge.b),{...edge});return edge;});
+          const iter=ex.ccall('gng_wasm_iteration','number',[],[]);
+          state.gng={nodes:state.nodes,edges:edgeMap,rng:null,iter,mode:gngMode(),variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM'};
+        }
+        updateCoreMetricsOnly();updateHud();renderAll();
+        $('topoStatus').textContent=`GNG-WASM running. nodes=${state.nodes.length}, edges=${state.edges.length}, total_iters=${ex.ccall('gng_wasm_iteration','number',[],[])}`;
+      }catch(e){
+        console.error('GNG-WASM tick error:',e);
+        $('topoStatus').textContent='GNG-WASM tick error: '+(e&&e.message?e.message:e);
+      }
+    }
+    state._gngAnimRaf=requestAnimationFrame(wasmTick);
   }catch(e){
-    console.error('GNG-WASM execution failed.',e);
-    $('topoStatus').textContent='GNG-WASM error: '+(e&&e.message?e.message:e);
+    console.error('GNG-WASM init failed.',e);
+    state.gngPlaying=false; updateHud();
+    $('topoStatus').textContent='GNG-WASM init error: '+(e&&e.message?e.message:e);
   }
-}
+} // end FROZEN */
+function runGngWasmFull(){$('topoStatus').textContent='GNG-WASM: 凍結中 (libgngソース未公開のため)。';}
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
     box.innerHTML=GNG_ALGORITHMS.map(a=>`<button type="button" data-gng-alg-run="${a.value}"> ${a.label}</button>`).join('');
@@ -2535,121 +2690,54 @@ function v312ReadWasmJson(ex, jsonSize){
 }
 function v312ReleaseGngWasmFileUrls(){
   if(state.gngWasmFileUrls){
-    const {jsUrl, wasmUrl}=state.gngWasmFileUrls;
+    const {jsUrl,wasmUrl}=state.gngWasmFileUrls;
     if(jsUrl) URL.revokeObjectURL(jsUrl);
     if(wasmUrl) URL.revokeObjectURL(wasmUrl);
   }
   state.gngWasmFileUrls=null;
+  GNG_WASM_EXPORTS=null;
 }
 async function v312LoadGngWasmFromFiles(fileList){
   const files=Array.from(fileList||[]);
-  const jsFile=files.find(f=>/\.js$/i.test(f.name));
-  const wasmFile=files.find(f=>/\.wasm$/i.test(f.name));
-  if(!jsFile || !wasmFile){
+  const jsFile=Array.from(files||[]).find(f=>/\.js$/i.test(f.name));
+  if(!jsFile){
     const status=$('gngWasmStatus');
-    if(status) status.textContent='`.js` と `.wasm` の両方を選んでください。';
+    if(status) status.textContent='gng_wasm_core.js を選択してください（WASM内蔵済み単一ファイル）。';
     return false;
   }
   try{
     v312ReleaseGngWasmFileUrls();
-    const jsUrl=URL.createObjectURL(jsFile);
-    const wasmUrl=URL.createObjectURL(wasmFile);
-    const wasmBytes=await wasmFile.arrayBuffer();
-    let wasmMemory=null;
-    const heapp=()=>new Uint8Array(wasmMemory?.buffer||new ArrayBuffer(0));
-    const imports={a:{
-      a:()=>{throw new Error('GNG WASM aborted.')},
-      d:()=>{throw new Error('GNG WASM aborted.')},
-      e:(requestedSize)=>{
-        if(!wasmMemory) return 0;
-        const currentBytes=wasmMemory.buffer.byteLength;
-        const want=Math.max(currentBytes,requestedSize|0);
-        const pages=Math.ceil((want-currentBytes)/65536);
-        if(pages<=0) return 1;
-        try{ wasmMemory.grow(pages); return 1; }catch{return 0;}
-      },
-      b:(__environ,environ_buf)=>{void __environ; void environ_buf; return 0;},
-      c:(penviron_count,penviron_buf_size)=>{
-        if(wasmMemory){
-          const view=new DataView(wasmMemory.buffer);
-          if(penviron_count) view.setUint32(penviron_count,0,true);
-          if(penviron_buf_size) view.setUint32(penviron_buf_size,0,true);
-        }
-        return 0;
-      },
-    }};
-    const {instance}=await WebAssembly.instantiate(wasmBytes,imports);
-    wasmMemory=instance.exports.f;
-    const api={
-      kind:'emscripten',
-      memory:wasmMemory,
-      stackSave:()=>instance.exports.u(),
-      stackAlloc:(sz)=>instance.exports.t(sz|0),
-      stackRestore:(ptr)=>instance.exports.s(ptr|0),
-      ccall(name,returnType,argTypes,args){
-        void returnType; void argTypes;
-        switch(name){
-          case 'gng_wasm_reset':
-            return instance.exports.j();
-          case 'gng_wasm_set_config':{
-            const cfg=Array.isArray(args)?args[0]:args;
-            const bytes=cfg instanceof Uint8Array?cfg:new Uint8Array(cfg||[]);
-            const save=api.stackSave();
-            try{
-              const ptr=api.stackAlloc(bytes.length||28);
-              heapp().set(bytes,ptr);
-              return instance.exports.k(ptr);
-            }finally{ api.stackRestore(save); }
-          }
-          case 'gng_wasm_set_points':{
-            const bytes=Array.isArray(args)?args[0]:args;
-            const count=Array.isArray(args)?args[1]:0;
-            const u8=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
-            const save=api.stackSave();
-            try{
-              const ptr=api.stackAlloc(u8.length||4);
-              heapp().set(u8,ptr);
-              return instance.exports.l(ptr,count|0);
-            }finally{ api.stackRestore(save); }
-          }
-          case 'gng_wasm_run':
-            return instance.exports.m();
-          case 'gng_wasm_get_graph_json_size':
-            return instance.exports.n();
-          case 'gng_wasm_write_graph_json':{
-            const ptr=Array.isArray(args)?args[0]:0;
-            const cap=Array.isArray(args)?args[1]:0;
-            return instance.exports.o(ptr|0,cap|0);
-          }
-          case 'gng_wasm_node_count':
-            return instance.exports.p();
-          case 'gng_wasm_edge_count':
-            return instance.exports.q();
-          case 'gng_wasm_iteration':
-            return instance.exports.r();
-          default:
-            throw new Error(`Unsupported wasm call: ${name}`);
-        }
-      },
-      cwrap(name,returnType,argTypes){ return (...args)=>api.ccall(name,returnType,argTypes,args); },
-    };
-    Object.defineProperty(api,'HEAPU8',{get:()=>new Uint8Array(wasmMemory.buffer)});
-    Object.defineProperty(api,'HEAP32',{get:()=>new Int32Array(wasmMemory.buffer)});
-    Object.defineProperty(api,'HEAPF32',{get:()=>new Float32Array(wasmMemory.buffer)});
-    GNG_WASM_EXPORTS=api;
-    state.gngWasmFileUrls={jsUrl, wasmUrl};
     const status=$('gngWasmStatus');
-    if(status) status.textContent=`Loaded: ${jsFile.name} + ${wasmFile.name}`;
-    const sec=$('wasmParamsSection');
-    if(sec) sec.style.display='';
+    if(status) status.textContent=`読み込み中: ${jsFile.name}...`;
+    const jsText=await jsFile.text();
+    const jsUrl=URL.createObjectURL(new Blob([jsText],{type:'application/javascript'}));
+    state.gngWasmFileUrls={jsUrl,wasmUrl:null};
+    const mod=await new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src=jsUrl;
+      script.onload=async()=>{
+        try{
+          if(typeof GngWasmCore==='function'){
+            resolve(await GngWasmCore());
+          }else{
+            reject(new Error(`GngWasmCore not found (typeof=${typeof GngWasmCore})`));
+          }
+        }catch(e){reject(e);}
+      };
+      script.onerror=e=>reject(new Error('script fetch/parse error'));
+      document.head.appendChild(script);
+      setTimeout(()=>reject(new Error('WASM load timeout (15s)')),15000);
+    });
+    GNG_WASM_EXPORTS=mod;
+    if(status) status.textContent=`Loaded: ${jsFile.name}`;
+    const sec=$('wasmParamsSection');if(sec) sec.style.display='';
     return true;
   }catch(e){
     console.warn('Failed to load GNG WASM from file selection.', e);
     v312ReleaseGngWasmFileUrls();
     const status=$('gngWasmStatus');
     if(status) status.textContent=`WASM load failed: ${e.message}`;
-    const sec=$('wasmParamsSection');
-    if(sec) sec.style.display='none';
+    const sec=$('wasmParamsSection');if(sec) sec.style.display='none';
     return false;
   }
 }
@@ -2663,7 +2751,7 @@ function runGngWasmAccelerated(){
   const pts=mode==='offline'
     ? buildOfflineBatchDataset()
     : v312GetGngWasmInputPoints();
-  const wasmStatus=$('gngWasmStatus');
+  const wasmStatus=$('topoStatus');
   if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, input=${wasmInputMode}, points=${pts.length}, mode=${mode}, alg=${variant}`;
   if(pts.length<2)return false;
   const maxNodes=+$('gngMaxNodes').value||400;
@@ -3864,6 +3952,7 @@ function render(canvasId,withGrasp){
   drawTopologicalClusterBBoxes(ctx,c);
   drawTopoNormals(ctx,c);
   drawViewAxisWidget(ctx,c);
+  if((state.graspPoseCandidates||[]).length) drawGraspPoseCandidates(ctx,c);
   if(withGrasp){drawGrasp(ctx,c,state.best||state.candidates[0]||null)}
 }
 
@@ -4832,7 +4921,7 @@ function v312LoadPointcloudFrames(frames, opts={}){
     updateGngDataSourceUi();
     renderAll();
     $('topoStatus').textContent='Imported point-cloud frames loaded: '+state.importedPointFrames.length+' frame(s). JSON/CSV points are used as depth-camera style dataset.';
-    v312SetGngLoadStatus(`読み込み完了: point cloud JSON / ${state.importedPointFrames.length} frame(s)`);
+    const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';v312SetGngLoadStatus(`読み込み完了: point cloud JSON / ${state.importedPointFrames.length} frame(s)`);
     return true;
   }
   v312SetGngLoadStatus('point cloud JSON の読み込みに失敗しました。');
@@ -4852,7 +4941,7 @@ function v312LoadGraphSession(session, opts={}){
     updateGngDataSourceUi();
     renderAll();
     $('topoStatus').textContent='Graph-only session loaded: nodes='+state.nodes.length+', edges='+state.edges.length+'. Existing GNG data is ready for inspection.';
-    v312SetGngLoadStatus(`読み込み完了: graph-only JSON / nodes=${state.nodes.length}, edges=${state.edges.length}`);
+    const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';v312SetGngLoadStatus(`読み込み完了: graph-only JSON / nodes=${state.nodes.length}, edges=${state.edges.length}`);
   }
   if(!ok) v312SetGngLoadStatus('graph-only JSON の読み込みに失敗しました。');
   return ok;
@@ -4889,8 +4978,12 @@ function v312SetupGngInputFileLoader(){
         state.importedBundle=parsed.payload;
         v312SetBundleTopicSelectionDefaults(parsed.payload);
         v312RenderBundleTopicList(parsed.payload);
+        v312ExtractGraspPosesFromBundle(parsed.payload);
         const entries=v312GetBundleTopicEntries(parsed.payload);
-        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}. 再生で flow を開始します。`);
+        const poseCount=(state.graspPoseCandidates||[]).length;
+        const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';
+        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}. 再生で flow を開始します。`);
+        if(poseCount) renderAll();
         return;
       }
       if(parsed.kind==='pointcloud' && parsed.payload && typeof parsed.payload==='object' && !Array.isArray(parsed.payload)){
@@ -5224,25 +5317,33 @@ function bindDataModeControls(){
       }
     };
   }
-  if($('gngLoadWasmBtn')&&!$('gngLoadWasmBtn').dataset.bound){
+  /* FROZEN: if($('gngLoadWasmBtn')&&!$('gngLoadWasmBtn').dataset.bound){
     $('gngLoadWasmBtn').dataset.bound='1';
     $('gngLoadWasmBtn').onclick=()=>{const fileEl=$('gngWasmFile');if(fileEl)fileEl.click();};
-  }
-  if($('gngRunWasmGngBtn')&&!$('gngRunWasmGngBtn').dataset.bound){
-    $('gngRunWasmGngBtn').dataset.bound='1';
-    $('gngRunWasmGngBtn').onclick=()=>{
-      setViewerMode('mapping');
-      state.gngWasmInputSource=$('gngWasmInputSource')?.value||state.gngWasmInputSource||'visible_points';
-      const status=$('gngWasmStatus');
-      if(status) status.textContent=`Running GNG with WASM input source: ${state.gngWasmInputSource}`;
-      runGng();
-      setGngPlaying(true);
-      if(status) status.textContent=`WASM GNG running: input=${state.gngWasmInputSource}, playback=on`;
-      updateMetrics();
-      updateHud();
-      renderAll();
+  } */
+  if($('gngClearDataBtn')&&!$('gngClearDataBtn').dataset.bound){
+    $('gngClearDataBtn').dataset.bound='1';
+    $('gngClearDataBtn').onclick=()=>{
+      if(state.bundleFlow&&state.bundleFlow.active) v312StopBundleFlow({reset:true});
+      state.importedBundle=null;
+      state.importedPointFrames=null;
+      state.importedGraphSession=null;
+      state.bundleTopicSelection={};
+      state.graspPoseCandidates=[];
+      resetGngRunState();
+      generate();
+      updateGngDataSourceUi();
+      const status=$('gngLoadDataStatus');if(status) status.textContent='未読み込みです。';
+      const fname=$('gngSelectedFileName');if(fname) fname.textContent='選択ファイル: なし';
+      v312SetGngLoadStatus('JSONが読み込まれていません。');
+      $('gngClearDataBtn').style.display='none';
+      renderAll();updateHud();
     };
   }
+  /* FROZEN: if($('gngRunWasmGngBtn')&&!$('gngRunWasmGngBtn').dataset.bound){
+    $('gngRunWasmGngBtn').dataset.bound='1';
+    $('gngRunWasmGngBtn').onclick=()=>runGngWasmFull();
+  } */
   if($('gngBundleToggleAllBtn')&&!$('gngBundleToggleAllBtn').dataset.bound){
     $('gngBundleToggleAllBtn').dataset.bound='1';
     $('gngBundleToggleAllBtn').onclick=()=>{
@@ -5256,7 +5357,7 @@ function bindDataModeControls(){
       v312SetGngLoadStatus(shouldSelect ? 'bundle topic を全選択しました。' : 'bundle topic を全解除しました。');
     };
   }
-  if($('gngWasmFile')&&!$('gngWasmFile').dataset.bound){
+  /* FROZEN: if($('gngWasmFile')&&!$('gngWasmFile').dataset.bound){
     $('gngWasmFile').dataset.bound='1';
     $('gngWasmFile').addEventListener('change',async()=>{
       const fileEl=$('gngWasmFile');
@@ -5264,7 +5365,7 @@ function bindDataModeControls(){
         await v312LoadGngWasmFromFiles(fileEl.files);
       }
     });
-  }
+  } */
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));

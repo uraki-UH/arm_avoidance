@@ -45,6 +45,8 @@ def launch_setup(context, *args, **kwargs):
     trial_auto_advance_goal = LaunchConfiguration("trial_auto_advance_goal").perform(context)
     trial_seed = LaunchConfiguration("trial_seed").perform(context)
     avoid_danger = LaunchConfiguration("avoid_danger").perform(context)
+    goal_rot_manip_weight = LaunchConfiguration("goal_rot_manip_weight").perform(context)
+    goal_joint_limit_weight = LaunchConfiguration("goal_joint_limit_weight").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
     allow_zero_initial_joint_state = LaunchConfiguration("allow_zero_initial_joint_state").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
@@ -126,6 +128,10 @@ def launch_setup(context, *args, **kwargs):
         node_params["trial_seed"] = safe_int(trial_seed, 0)
     if avoid_danger:
         node_params["avoid_danger"] = avoid_danger.lower() in ("1", "true", "yes", "on")
+    if goal_rot_manip_weight:
+        node_params["goal_rot_manip_weight"] = safe_float(goal_rot_manip_weight, 1.0)
+    if goal_joint_limit_weight:
+        node_params["goal_joint_limit_weight"] = safe_float(goal_joint_limit_weight, 0.5)
     if replan_on_path_collision:
         node_params["replan_on_path_collision"] = replan_on_path_collision.lower() in ("1", "true", "yes", "on")
     if allow_zero_initial_joint_state:
@@ -208,7 +214,18 @@ def generate_launch_description():
         DeclareLaunchArgument("trial_return_home", default_value="false"),
         DeclareLaunchArgument("trial_auto_advance_goal", default_value="false"),
         DeclareLaunchArgument("trial_seed", default_value="0"),
-        DeclareLaunchArgument("avoid_danger", default_value="true"),
+        DeclareLaunchArgument("avoid_danger", default_value="true",
+                              description="危険ノード（障害物近傍）を経路から除外するか"),
+        # --- ゴール姿勢スコアリング ---
+        # ゴールノードの選択スコア = ホップ数 + 0.5*関節距離
+        #                          + goal_rot_manip_weight * log(回転可操作性 条件数)
+        #                          - goal_joint_limit_weight * 関節限界余裕 [0,1]
+        # 回転可操作性 条件数: 1=理想(等方)、大きいほど手首特異点に近い
+        # goal_rot_manip_weight=0 で無効化（旧動作に戻る）
+        DeclareLaunchArgument("goal_rot_manip_weight", default_value="1.0",
+                              description="ゴール姿勢の回転可操作性ペナルティ重み。大きいほど手首ねじれ姿勢が選ばれにくくなる"),
+        DeclareLaunchArgument("goal_joint_limit_weight", default_value="0.5",
+                              description="ゴール姿勢の関節限界余裕ボーナス重み。大きいほど関節限界から遠い姿勢が優先される"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
         DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),

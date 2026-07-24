@@ -52,6 +52,7 @@ private:
             return;
         }
 
+        if (method.rfind("files.", 0) != 0) return;
         if (method == "files.list") {
             handleFilesList(id);
             return;
