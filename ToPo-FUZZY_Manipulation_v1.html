@@ -954,7 +954,7 @@ const state={
   basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
-  perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
+  perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
@@ -5040,6 +5040,7 @@ function v301SetPointPlaying(v){
   state.pointPlaying=!!v;
   state.perf.lastPointNow=null;
   state.perf.lastPointScan=null;
+  state.perf.lastPointMotionScan=null;
   if(state.pointPlaying && (!state.points || !state.points.length)) generate();
   if(state.pointPlaying){
     const pat=$('motionPattern');
@@ -5128,9 +5129,12 @@ function loop(now){
     }
     if(($('motionPattern')?.value||'none')==='none') $('motionPattern').value='vibration';
     if((+$('motionAmp')?.value||0)<=0) $('motionAmp').value='0.00008';
-    updateMovingPoints();
-    if(($('motionPattern')?.value||'vibration')==='vibration') v311RealtimeVibratePoints();
-    changed=true;
+    if(state.perf.lastPointMotionScan==null||scanIdx!==state.perf.lastPointMotionScan){
+      state.perf.lastPointMotionScan=scanIdx;
+      updateMovingPoints();
+      if(($('motionPattern')?.value||'vibration')==='vibration') v311RealtimeVibratePoints();
+      changed=true;
+    }
   }
 
   if(state.gngPlaying&&!state._gngAnimRaf){
