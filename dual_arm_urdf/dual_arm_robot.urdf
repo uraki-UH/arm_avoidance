@@ -2,7 +2,7 @@
 <robot name="dual_arm_robot">
 
   <material name="black">  <color rgba="0.24 0.24 0.24 1.0"/></material>
-  <material name="green">  <color rgba="0.05 0.65 0.25 1.0"/></material>
+  <material name="green">  <color rgba="0.0 1.00 0.0 1.0"/></material>
   <material name="gray">   <color rgba="0.55 0.55 0.55 1.0"/></material>
   <material name="silver"> <color rgba="0.80 0.80 0.82 1.0"/></material>
   <material name="orange"> <color rgba="0.95 0.55 0.10 1.0"/></material>
