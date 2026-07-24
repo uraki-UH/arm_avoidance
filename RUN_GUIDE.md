@@ -38,11 +38,12 @@ ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
   candidate_count:=1
 
 ## 把持候補姿勢、軌道、動く
-ros2 launch gng_vlut_system grasp_goal_planning.launch.py 
-params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  enable_motion:=false
 
 
-## グリッド所属を半セルずらしで出す
+## グリッド所属を半セルずらしで出す（未使用）
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   output_topic:=/topological_grid_voxels_shifted \
