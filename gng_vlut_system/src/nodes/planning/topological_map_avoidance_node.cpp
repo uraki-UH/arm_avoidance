@@ -25,6 +25,7 @@
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -186,14 +187,17 @@ public:
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
+    declare_parameter("current_ee_pose_topic", "");
     declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids");
     declare_parameter("publish_hz", 20.0);
     declare_parameter("avoid_collisions", true);
     declare_parameter("avoid_danger", true);
+    declare_parameter("allow_danger_goal", true);
     declare_parameter("strict_goal_collision_check", false);
     declare_parameter("replan_on_path_collision", true);
     declare_parameter("allow_zero_initial_joint_state", true);
     declare_parameter("publish_target_joint_states", true);
+    declare_parameter("allow_safe_goal_fallback", true);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
@@ -371,12 +375,14 @@ public:
         std::make_shared<CostType>(1000.0f));
     planner_.setAvoidCollisions(get_parameter("avoid_collisions").as_bool());
     avoid_danger_ = get_parameter("avoid_danger").as_bool();
+    allow_danger_goal_ = get_parameter("allow_danger_goal").as_bool();
     planner_.setAvoidDanger(avoid_danger_);
     planner_.setStrictGoalCollisionCheck(
         get_parameter("strict_goal_collision_check").as_bool());
     replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
     allow_zero_initial_joint_state_ =
         get_parameter("allow_zero_initial_joint_state").as_bool();
+    allow_safe_goal_fallback_ = get_parameter("allow_safe_goal_fallback").as_bool();
 
     trial_mode_ = get_parameter("trial_mode").as_bool();
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
@@ -418,6 +424,12 @@ public:
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     candidate_metrics_topic_ = get_parameter("candidate_metrics_topic").as_string();
+    current_ee_pose_topic_ = get_parameter("current_ee_pose_topic").as_string();
+    if (current_ee_pose_topic_.empty()) {
+      const std::string ns_raw = std::string(get_namespace());
+      const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
+      current_ee_pose_topic_ = "/" + ns + "/current_ee_pose";
+    }
     target_topic_ = get_parameter("target_topic").as_string();
     if (target_topic_.empty()) {
       const std::string ns_raw = std::string(get_namespace());
@@ -482,6 +494,8 @@ public:
     candidate_metrics_pub_ =
         create_publisher<gng_control_msgs::msg::GraspCandidateMetricArray>(
             candidate_metrics_topic_, rclcpp::QoS(1).reliable().transient_local());
+    current_ee_pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
+        current_ee_pose_topic_, rclcpp::QoS(1).reliable().transient_local());
     candidate_robot_description_pub_ = create_publisher<std_msgs::msg::String>(
         "/viewer/internal/stream/robot/description",
         rclcpp::QoS(1).reliable().transient_local());
@@ -819,8 +833,9 @@ private:
                 "GoalPlanning: planner returned empty path start=%d goal_candidates=%zu",
                 start_id, goal_candidates.size());
           }
-        } else if (start_node.status.is_colliding ||
-                   (avoid_danger_ && start_node.status.is_danger)) {
+        } else if (allow_safe_goal_fallback_ &&
+                   (start_node.status.is_colliding ||
+                    (avoid_danger_ && start_node.status.is_danger))) {
           if (!cached_safe_goal_ids_.empty()) {
             if (!latchTrajectoryFromCandidatesLocked(
                     current_q, start_id, cached_safe_goal_ids_, false,
@@ -871,6 +886,7 @@ private:
     if (target_pub_) {
       target_pub_->publish(out);
     }
+    publishCurrentEefPoseLocked(current_q);
 
     gng_control_msgs::msg::JointControlClaim claim;
     claim.command_topic = target_topic_;
@@ -895,9 +911,11 @@ private:
   int control_claim_mode_ = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
   bool control_claim_enabled_ = true;
   bool allow_zero_initial_joint_state_ = true;
+  bool allow_safe_goal_fallback_ = true;
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
   std::string candidate_metrics_topic_;
+  std::string current_ee_pose_topic_;
   std::string goal_candidate_ids_topic_;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
@@ -908,6 +926,7 @@ private:
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
   rclcpp::Publisher<gng_control_msgs::msg::GraspCandidateMetricArray>::SharedPtr candidate_metrics_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr current_ee_pose_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_description_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_pose_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -918,6 +937,9 @@ private:
   bool have_joint_state_ = false;
   bool have_map_ = false;
   Eigen::VectorXf last_target_q_;
+  Eigen::VectorXf last_candidate_current_q_;
+  std::vector<std::vector<int>> last_candidate_paths_;
+  bool have_last_candidate_publish_ = false;
   std::vector<int> cached_safe_goal_ids_;
   std::vector<int> latest_goal_candidate_ids_;
   std::unordered_set<std::string> last_candidate_robot_tags_;
@@ -928,6 +950,7 @@ private:
   bool trial_auto_advance_goal_ = false;
   int trial_goal_candidate_count_ = 10;
   bool avoid_danger_ = true;
+  bool allow_danger_goal_ = true;
   double waypoint_tolerance_ = 0.05;
   bool replan_on_path_collision_ = true;
   bool publish_candidate_robot_preview_ = true;
@@ -958,8 +981,8 @@ private:
   std::vector<int> collectNearestGoalCandidatesLocked(const Eigen::Vector3f &reference_coord,
                                                       int candidate_count) const {
     return topological_map_avoidance::collectNearestGoalCandidates(
-        gng_, cached_safe_goal_ids_, trial_safe_only_, reference_coord,
-        candidate_count);
+        gng_, cached_safe_goal_ids_, trial_safe_only_, allow_danger_goal_,
+        reference_coord, candidate_count);
   }
 
   std::vector<int> selectedGoalCandidatesLocked(int start_id) const {
@@ -986,7 +1009,7 @@ private:
       if (node.status.is_colliding) {
         continue;
       }
-      if (avoid_danger_ && node.status.is_danger) {
+      if (avoid_danger_ && node.status.is_danger && !allow_danger_goal_) {
         continue;
       }
       out.push_back(id);
@@ -1088,6 +1111,7 @@ private:
     return topological_map_avoidance::planFromStartCandidates(
         gng_, planner_, current_q, start_candidates, goal_candidates,
         selected_start_id, candidate_path_by_goal, candidate_paths,
+        allow_danger_goal_,
         goal_rot_manip_weight_, goal_joint_limit_weight_);
   }
 
@@ -1117,10 +1141,6 @@ private:
         current_q, start_candidates_or_fallback, goal_candidates,
         selected_start_id, candidate_path_by_goal, candidate_paths);
 
-    if (candidate_trajectory_pub_) {
-      publishCandidateTrajectoryPathsLocked(candidate_paths);
-    }
-
     trajectory_.goal_id = reached_goal_id;
     publishGraspCandidateMetricsLocked(
         current_q, selected_start_id >= 0 ? selected_start_id : start_id,
@@ -1134,6 +1154,7 @@ private:
 
     if (trajectory_.goal_id < 0) {
       trajectory_.node_path.clear();
+      trajectory_.update_requested = false;
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 5000,
           "%s: planner returned empty path start=%d goals=%zu",
@@ -1146,6 +1167,10 @@ private:
       trajectory_.node_path = it->second;
     } else {
       trajectory_.node_path = node_path;
+    }
+
+    if (candidate_trajectory_pub_ && !candidate_paths.empty()) {
+      publishCandidateTrajectoryPathsLocked(current_q, candidate_paths);
     }
 
     if (build_goal_bridge && trial_goal_coord_valid_ && !trajectory_.node_path.empty()) {
@@ -1537,10 +1562,67 @@ private:
     if (!candidate_trajectory_pub_ || !gng_) {
       return;
     }
+    if (have_last_candidate_publish_ && last_candidate_current_q_.size() == 0 &&
+        last_candidate_paths_ == candidate_paths) {
+      return;
+    }
+    last_candidate_current_q_.resize(0);
+    last_candidate_paths_ = candidate_paths;
+    have_last_candidate_publish_ = true;
     candidate_trajectory_pub_->publish(
         topological_map_avoidance::buildPathMessage(
             *this, gng_, candidate_paths,
             have_map_ ? latest_map_.header.frame_id : std::string{}));
+  }
+
+  void publishCandidateTrajectoryPathsLocked(
+      const Eigen::VectorXf &current_q,
+      const std::vector<std::vector<int>> &candidate_paths) {
+    if (!candidate_trajectory_pub_ || !gng_) {
+      return;
+    }
+    if (have_last_candidate_publish_ &&
+        last_candidate_current_q_.size() == current_q.size() &&
+        last_candidate_paths_ == candidate_paths &&
+        (current_q.size() == 0 ||
+         std::equal(last_candidate_current_q_.data(),
+                    last_candidate_current_q_.data() + last_candidate_current_q_.size(),
+                    current_q.data()))) {
+      return;
+    }
+    last_candidate_current_q_ = current_q;
+    last_candidate_paths_ = candidate_paths;
+    have_last_candidate_publish_ = true;
+    candidate_trajectory_pub_->publish(
+        topological_map_avoidance::buildPathMessageWithCurrentPose(
+            *this, gng_, current_q, chain_, candidate_paths,
+            have_map_ ? latest_map_.header.frame_id : std::string{}));
+  }
+
+  void publishCurrentEefPoseLocked(const Eigen::VectorXf &current_q) {
+    if (!current_ee_pose_pub_ || !chain_) {
+      return;
+    }
+
+    const auto current_fk_q = eigenToStdVector(current_q);
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+    std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+    chain_->forwardKinematicsAt(current_fk_q, positions, orientations);
+    if (positions.empty() || orientations.empty()) {
+      return;
+    }
+
+    geometry_msgs::msg::PoseStamped pose_msg;
+    pose_msg.header.stamp = now();
+    pose_msg.header.frame_id = robot_base_frame_;
+    pose_msg.pose.position.x = positions.back().x();
+    pose_msg.pose.position.y = positions.back().y();
+    pose_msg.pose.position.z = positions.back().z();
+    pose_msg.pose.orientation.x = orientations.back().x();
+    pose_msg.pose.orientation.y = orientations.back().y();
+    pose_msg.pose.orientation.z = orientations.back().z();
+    pose_msg.pose.orientation.w = orientations.back().w();
+    current_ee_pose_pub_->publish(pose_msg);
   }
 
   void publishCandidateRobotPreviewLocked() {

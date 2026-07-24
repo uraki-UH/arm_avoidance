@@ -213,7 +213,7 @@ public:
    */
   std::pair<int, std::vector<int>>
   planToAnyNode(int start_id, const std::vector<int> &candidate_goal_ids,
-                const T_GNG &gng) {
+                const T_GNG &gng, bool allow_danger_goal = true) {
     if (!evaluator_)
       return {-1, {}};
 
@@ -285,7 +285,7 @@ public:
             if (strict_goal_collision_check_)
               continue;
           }
-          if (avoid_danger_ && v_danger) {
+          if (avoid_danger_ && v_danger && !(allow_danger_goal && is_goal[neighbor_id])) {
             continue;
           }
 
@@ -306,7 +306,8 @@ public:
             if (gng.nodeAt(nv_id).status.is_colliding) {
               safety_penalty += 2.0f;
             }
-            if (avoid_danger_ && gng.nodeAt(nv_id).status.is_danger) {
+            if (avoid_danger_ && gng.nodeAt(nv_id).status.is_danger &&
+                !(allow_danger_goal && is_goal[nv_id])) {
               safety_penalty += 1.0f;
             }
           }

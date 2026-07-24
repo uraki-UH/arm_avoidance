@@ -123,6 +123,7 @@ def launch_setup(context, *args, **kwargs):
                 "publish_hz": LaunchConfiguration("publish_hz"),
                 "avoid_collisions": LaunchConfiguration("avoid_collisions"),
                 "avoid_danger": LaunchConfiguration("avoid_danger"),
+                "allow_danger_goal": LaunchConfiguration("allow_danger_goal"),
                 "goal_rot_manip_weight": LaunchConfiguration("goal_rot_manip_weight"),
                 "goal_joint_limit_weight": LaunchConfiguration("goal_joint_limit_weight"),
                 "strict_goal_collision_check": LaunchConfiguration("strict_goal_collision_check"),
@@ -131,6 +132,7 @@ def launch_setup(context, *args, **kwargs):
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
                 "control_claim_enabled": "true" if motion_enabled else "false",
                 "publish_target_joint_states": "true" if motion_enabled else "false",
+                "allow_safe_goal_fallback": "true" if motion_enabled else "false",
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -183,8 +185,10 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_hz", default_value="20.0"),
         DeclareLaunchArgument("avoid_collisions", default_value="true",
                               description="衝突ノードを経路から除外するか"),
-        DeclareLaunchArgument("avoid_danger", default_value="false",
+        DeclareLaunchArgument("avoid_danger", default_value="true",
                               description="危険ノード（障害物近傍）を経路から除外するか"),
+        DeclareLaunchArgument("allow_danger_goal", default_value="true",
+                              description="危険ノードでも最終ゴールとしては許可するか"),
         # --- ゴール姿勢スコアリング ---
         # ゴールノードの選択スコア = ホップ数 + 0.5*関節距離
         #                          + goal_rot_manip_weight * log(回転可操作性 条件数)

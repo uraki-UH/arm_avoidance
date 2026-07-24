@@ -156,6 +156,7 @@ class TopologicalMapGoalSelector(Node):
         self.goal_candidate_ids_pub = self.create_publisher(
             Int32MultiArray, self.goal_candidate_ids_topic, goal_ids_qos
         )
+        self.goal_candidate_ids_pub.publish(Int32MultiArray(data=[]))
 
         if (
             QoSProfile is not None
@@ -392,8 +393,9 @@ class TopologicalMapGoalSelector(Node):
             if self.manipulability_weight > 0.0:
                 feature = self.latest_node_features.get(int(node.id))
                 if feature is not None:
-                    if getattr(feature, "rotational_manip_valid", False):
-                        cond = max(1.0, float(feature.rotational_manip_condition_number))
+                    if getattr(feature, "manip_valid", False):
+                        cond_raw = float(getattr(feature, "manip_condition_number", 0.0))
+                        cond = max(1.0, cond_raw) if math.isfinite(cond_raw) else 100.0
                         score += self.manipulability_weight * math.log(cond)
                     else:
                         score += self.manipulability_weight * math.log(100.0)

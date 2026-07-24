@@ -376,8 +376,8 @@ private:
 
 static inline std::vector<int> collectNearestGoalCandidates(
     const std::shared_ptr<GNGType> &gng, const std::vector<int> &cached_safe_goal_ids,
-    bool trial_safe_only, const Eigen::Vector3f &reference_coord,
-    int candidate_count) {
+    bool trial_safe_only, bool allow_danger_goal,
+    const Eigen::Vector3f &reference_coord, int candidate_count) {
   std::vector<int> candidates;
   if (!gng) {
     return candidates;
@@ -397,7 +397,7 @@ static inline std::vector<int> collectNearestGoalCandidates(
     if (!node.status.active || !node.status.valid) {
       return;
     }
-    if (node.status.is_colliding || node.status.is_danger) {
+    if (node.status.is_colliding || (node.status.is_danger && !allow_danger_goal)) {
       return;
     }
     const int dim = std::min(static_cast<int>(node.weight_coord.size()), 3);
@@ -598,6 +598,7 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
     const std::vector<int> &goal_candidates, int &selected_start_id,
     std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
     std::vector<std::vector<int>> &candidate_paths,
+    bool allow_danger_goal,
     float goal_rot_manip_weight = 0.0f,
     float goal_joint_limit_weight = 0.0f) {
   selected_start_id = -1;
@@ -621,7 +622,8 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
       continue;
     }
 
-    auto [reached_goal_id, node_path] = planner.planToAnyNode(start_id, goal_candidates, *gng);
+    auto [reached_goal_id, node_path] =
+        planner.planToAnyNode(start_id, goal_candidates, *gng, allow_danger_goal);
     if (node_path.empty() || reached_goal_id < 0) {
       continue;
     }
@@ -679,7 +681,8 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
       continue;
     }
     auto [reached_goal_id, path] =
-        planner.planToAnyNode(selected_start_id, std::vector<int>{goal_id}, *gng);
+        planner.planToAnyNode(selected_start_id, std::vector<int>{goal_id}, *gng,
+                              allow_danger_goal);
     if (reached_goal_id >= 0 && !path.empty()) {
       candidate_path_by_goal.emplace(reached_goal_id, path);
       candidate_paths.push_back(std::move(path));
@@ -785,6 +788,82 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       msg.edges.push_back(ia->second);
       msg.edges.push_back(ib->second);
     }
+  }
+  return msg;
+}
+
+template <typename GNGType>
+static inline ais_gng_msgs::msg::TopologicalMap buildPathMessageWithCurrentPose(
+    rclcpp::Node &node, const std::shared_ptr<GNGType> &gng,
+    const Eigen::VectorXf &current_q,
+    const std::shared_ptr<::kinematics::KinematicChain> &chain,
+    const std::vector<std::vector<int>> &paths,
+    const std::string &frame_id) {
+  auto msg = buildPathMessage(node, gng, paths, frame_id);
+  if (!gng || !chain || current_q.size() == 0) {
+    return msg;
+  }
+
+  std::vector<double> joint_values;
+  joint_values.reserve(static_cast<std::size_t>(current_q.size()));
+  for (int i = 0; i < current_q.size(); ++i) {
+    joint_values.push_back(static_cast<double>(current_q[i]));
+  }
+
+  std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
+  std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
+  try {
+    chain->forwardKinematicsAt(joint_values, positions, orientations);
+  } catch (const std::exception &) {
+    return msg;
+  }
+  if (positions.empty() || orientations.empty()) {
+    return msg;
+  }
+
+  constexpr uint16_t kCurrentPoseNodeId = std::numeric_limits<uint16_t>::max();
+  const auto virtual_it = std::find_if(
+      msg.nodes.begin(), msg.nodes.end(),
+      [](const ais_gng_msgs::msg::TopologicalNode &node_msg) {
+        return node_msg.id == kCurrentPoseNodeId;
+      });
+  if (virtual_it == msg.nodes.end()) {
+    ais_gng_msgs::msg::TopologicalNode current_node;
+    current_node.id = kCurrentPoseNodeId;
+    current_node.pos.x = positions.back().x();
+    current_node.pos.y = positions.back().y();
+    current_node.pos.z = positions.back().z();
+    const Eigen::Vector3d forward = orientations.back() * Eigen::Vector3d::UnitZ();
+    current_node.normal.x = forward.x();
+    current_node.normal.y = forward.y();
+    current_node.normal.z = forward.z();
+    current_node.label = 1;
+    current_node.rho = 0.0f;
+    current_node.semantic_label = 0;
+    current_node.semantic_reliability = 0.0f;
+    current_node.frame = 0;
+    current_node.winner_point_count = 0;
+    msg.nodes.insert(msg.nodes.begin(), current_node);
+    for (std::size_t i = 0; i < msg.edges.size(); ++i) {
+      msg.edges[i] = static_cast<uint16_t>(msg.edges[i] + 1);
+    }
+  }
+
+  for (const auto &path : paths) {
+    if (path.empty()) {
+      continue;
+    }
+    const auto first_idx = std::find_if(
+        msg.nodes.begin(), msg.nodes.end(),
+        [&](const ais_gng_msgs::msg::TopologicalNode &node_msg) {
+          return !path.empty() && node_msg.id == static_cast<uint16_t>(path.front());
+        });
+    if (first_idx == msg.nodes.end()) {
+      continue;
+    }
+    const auto first_index = static_cast<uint16_t>(std::distance(msg.nodes.begin(), first_idx));
+    msg.edges.push_back(0);
+    msg.edges.push_back(first_index);
   }
   return msg;
 }
