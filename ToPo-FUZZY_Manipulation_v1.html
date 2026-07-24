@@ -2380,7 +2380,12 @@ function viewerTimingText(){
   const targetLine=gngIsDensityAlgorithm(gngAlgorithm())?`Target L floor=${t.floor.toFixed(3)} wall=${t.wall.toFixed(3)} unknown=${t.unknown.toFixed(3)} m`:'';
   return [pLine,gLine,targetLine].filter(Boolean).join('\n');
 }
-function updateViewerTimingPanels(){const txt=viewerTimingText();['topoTimingPanel','graspTimingPanel'].forEach(id=>{const el=$(id);if(el)el.innerHTML=txt;});}
+function updateViewerTimingPanels(){
+  const txt=viewerTimingText();
+  if(state._lastViewerTimingText===txt) return;
+  state._lastViewerTimingText=txt;
+  ['topoTimingPanel','graspTimingPanel'].forEach(id=>{const el=$(id);if(el)el.innerHTML=txt;});
+}
 
 
 /* v305: stable object-surface GNG.
@@ -5182,7 +5187,9 @@ function loop(now){
   }else{
     updateViewerTimingPanels();
   }
-  requestAnimationFrame(loop)
+  const active=!!(state.pointPlaying||state.gngPlaying||(state.bundleFlow&&state.bundleFlow.active)||state.ikMotion);
+  if(active) requestAnimationFrame(loop);
+  else setTimeout(()=>requestAnimationFrame(loop), 250);
 }
 
 function renderFuzzyEditor(){const model=ensureFuzzyModel();const featureBox=$('fuzzyFeatureSelector');if(!featureBox)return;featureBox.innerHTML='';FUZZY_FEATURES.forEach(f=>{const fd=model.features[f.key];const lab=document.createElement('label');lab.className='fuzzy-chip';lab.innerHTML=`<input type="checkbox" ${fd&&fd.enabled!==false?'checked':''} data-fz-feature="${f.key}"><b>${f.key}</b> ${f.name}`;featureBox.appendChild(lab)});$('fzAndMethod').value=model.methods.and;$('fzOrMethod').value=model.methods.or;$('fzImplication').value=model.methods.implication;$('fzAggregation').value=model.methods.aggregation;$('fzDefuzz').value=model.methods.defuzz;$('fzFallback').value=model.methods.fallback;refreshFuzzyFeatureSelects();renderMfList();renderOutputList();renderRuleList();renderRuleConfirm();renderLiveMfEditor();updateRuleJson()}
