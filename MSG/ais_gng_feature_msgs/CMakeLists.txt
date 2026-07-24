@@ -12,6 +12,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TopologicalNodeFeature.msg"
+  "msg/TopologicalNodeFeatureArray.msg"
   "msg/TopologicalClusterFeature.msg"
   DEPENDENCIES geometry_msgs std_msgs
 )

@@ -7,6 +7,7 @@
 #include <ais_gng_msgs/msg/topological_cluster.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/msg/topological_node.hpp>
+#include <ais_gng_feature_msgs/msg/topological_node_feature_array.hpp>
 #include <geometry_msgs/msg/point32.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <tf2/exceptions.h>
@@ -70,6 +71,7 @@ public:
     declare_parameter("source_frame_id", "world");
     declare_parameter("occupied_voxels_topic", "occupied_voxels");
     declare_parameter("danger_voxels_topic", "danger_voxels");
+    declare_parameter("node_feature_topic", "topological_node_features");
     declare_parameter("gng.data_directory", "gng_results");
     declare_parameter("gng.experiment_id", "standard_train");
     declare_parameter("gng.gng_model_filename", "gng.bin");
@@ -160,6 +162,9 @@ public:
     const std::string topic_name = get_parameter("topic_name").as_string();
     topological_map_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         topic_name, rclcpp::QoS(1).reliable().transient_local());
+    const std::string node_feature_topic = get_parameter("node_feature_topic").as_string();
+    node_feature_pub_ = create_publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
+        node_feature_topic, rclcpp::QoS(1).reliable().transient_local());
 
     const int layer_count = context_->gng->getCoordLayerCount();
     if (layer_count > 1) {
@@ -395,6 +400,10 @@ private:
       return;
     }
     topological_map_pub_->publish(buildGraphMessage());
+    if (node_feature_pub_) {
+      node_feature_pub_->publish(robot_sim::bridge::topofuzzy::buildNodeFeatureArray(
+          *this, context_->gng, frame_id_));
+    }
     for (size_t i = 0; i < layer_pubs_.size(); ++i) {
       if (layer_pubs_[i]) {
         layer_pubs_[i]->publish(buildLayerGraphMessage(static_cast<int>(i)));
@@ -467,6 +476,8 @@ private:
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_relative_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
       topological_map_pub_;
+  rclcpp::Publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>::SharedPtr
+      node_feature_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 

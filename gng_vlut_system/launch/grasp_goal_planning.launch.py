@@ -24,6 +24,10 @@ def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context).strip()
     params_file = LaunchConfiguration("params_file").perform(context)
     explicit_urdf_path = LaunchConfiguration("urdf_path").perform(context)
+    enable_motion = LaunchConfiguration("enable_motion").perform(context)
+    node_feature_topic = f"/{robot_name}/topological_node_features"
+    manipulability_weight = LaunchConfiguration("manipulability_weight").perform(context)
+    motion_enabled = enable_motion.strip().lower() in ("1", "true", "yes", "on")
 
     def resolve_urdf_path(params_file_value: str, explicit_urdf_path_value: str) -> str:
         if explicit_urdf_path_value:
@@ -94,6 +98,8 @@ def launch_setup(context, *args, **kwargs):
                 "target_pose_array_topic": LaunchConfiguration("target_pose_array_topic"),
                 "target_score_topic": LaunchConfiguration("target_score_topic"),
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
+                "node_feature_topic": node_feature_topic,
+                "manipulability_weight": manipulability_weight,
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -123,10 +129,13 @@ def launch_setup(context, *args, **kwargs):
                 "replan_on_path_collision": LaunchConfiguration("replan_on_path_collision"),
                 "allow_zero_initial_joint_state": LaunchConfiguration("allow_zero_initial_joint_state"),
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
+                "control_claim_enabled": "true" if motion_enabled else "false",
+                "publish_target_joint_states": "true" if motion_enabled else "false",
             }.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(virtual_joint_state_driver_launch),
+            condition=IfCondition(LaunchConfiguration("enable_motion")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
                 "target_topic": "target_joint_states",
@@ -156,6 +165,7 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument("enable_motion", default_value="true"),
         DeclareLaunchArgument("candidate_count", default_value="8"),
         DeclareLaunchArgument("non_collision_only", default_value="true"),
         DeclareLaunchArgument("orientation_weight", default_value="0.25"),
@@ -163,6 +173,8 @@ def generate_launch_description():
         DeclareLaunchArgument("target_point_topic", default_value=""),
         DeclareLaunchArgument("target_pose_array_topic", default_value="/grasp_pose_candidates"),
         DeclareLaunchArgument("target_score_topic", default_value="/grasp_pose_scores"),
+        DeclareLaunchArgument("node_feature_topic", default_value="/ToPoDualArm/topological_node_features"),
+        DeclareLaunchArgument("manipulability_weight", default_value="0.25"),
         DeclareLaunchArgument("joint_topic", default_value="/ToPoDualArm/joint_states"),
         DeclareLaunchArgument("initial_joint_names_csv", default_value=DEFAULT_INITIAL_JOINT_NAMES),
         DeclareLaunchArgument("trajectory_topic", default_value="/ToPoDualArm/planned_topological_map"),

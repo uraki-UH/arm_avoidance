@@ -41,6 +41,12 @@ namespace topic_utils {
         if (t == "/parameter_events" || t == "/rosout") return true; // Hide system topics
         return false; 
     }
+    bool isBrowsableSourceType(const std::string& type) {
+        return type == "pointcloud" ||
+               type == "topological_map" ||
+               type == "marker" ||
+               type == "voxel";
+    }
     std::string detectType(const std::vector<std::string>& types) {
         for (const auto& t : types) {
             if (t.find("PointCloud2") != std::string::npos) return "pointcloud";
@@ -256,6 +262,7 @@ private:
         for (auto const& [topic, types] : topics) {
             if (topic_utils::isInternal(topic)) continue;
             std::string st = topic_utils::detectType(types); if (st.empty()) continue;
+            if (!topic_utils::isBrowsableSourceType(st)) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
         }
         ws->send(viewer_internal::makeOkResponse(id, {{"sources", sources}}), uWS::OpCode::TEXT);
@@ -266,6 +273,7 @@ private:
         for (auto const& [topic, types] : topics) {
             if (topic_utils::isInternal(topic)) continue;
             std::string st = topic_utils::detectType(types); if (st.empty()) continue;
+            if (!topic_utils::isBrowsableSourceType(st)) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
         }
         broadcastText(viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}));
@@ -281,6 +289,12 @@ private:
             auto topics = get_topic_names_and_types();
             if (topics.count(sid)) {
                 std::string st = topic_utils::detectType(topics[sid]);
+                if (!topic_utils::isBrowsableSourceType(st)) {
+                    broadcastText(viewer_internal::makeErrorResponse(
+                        id, "UNSUPPORTED_SOURCE_TYPE",
+                        "This source type is metadata-only and is not exposed as a scene layer"));
+                    return;
+                }
                 if (st == "pointcloud") {
                     activeSubTypes_[sid] = "pointcloud";
                     activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(sid, 10, [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) { broadcastPointCloud(sid, utils::convertToProtocolMessage(utils::convertFromRosMsg(m)).serialize()); });

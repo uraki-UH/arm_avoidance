@@ -8,7 +8,7 @@ include_directories(
 )
 
 # Standard ROS 2 Dependencies
-set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs voxel_msgs ament_index_cpp nlohmann_json gng_control_msgs)
+set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs ais_gng_msgs ais_gng_feature_msgs voxel_msgs ament_index_cpp nlohmann_json gng_control_msgs)
 # System libraries
 set(EXTRA_LIBS m OpenMP::OpenMP_CXX)
 

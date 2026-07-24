@@ -49,6 +49,7 @@ def launch_setup(context, *args, **kwargs):
     goal_joint_limit_weight = LaunchConfiguration("goal_joint_limit_weight").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
     allow_zero_initial_joint_state = LaunchConfiguration("allow_zero_initial_joint_state").perform(context)
+    publish_target_joint_states = LaunchConfiguration("publish_target_joint_states").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
     target_topic = LaunchConfiguration("target_topic").perform(context)
     robot_base_frame = LaunchConfiguration("robot_base_frame").perform(context)
@@ -137,6 +138,10 @@ def launch_setup(context, *args, **kwargs):
     if allow_zero_initial_joint_state:
         node_params["allow_zero_initial_joint_state"] = (
             allow_zero_initial_joint_state.lower() in ("1", "true", "yes", "on")
+        )
+    if publish_target_joint_states:
+        node_params["publish_target_joint_states"] = (
+            publish_target_joint_states.lower() in ("1", "true", "yes", "on")
         )
     if goal_candidate_ids_topic:
         node_params["goal_candidate_ids_topic"] = goal_candidate_ids_topic
@@ -234,6 +239,7 @@ def generate_launch_description():
         DeclareLaunchArgument("control_claim_priority", default_value="10"),
         DeclareLaunchArgument("control_claim_mode", default_value="1"),
         DeclareLaunchArgument("control_claim_enabled", default_value="true"),
+        DeclareLaunchArgument("publish_target_joint_states", default_value="true"),
         DeclareLaunchArgument("right_arm_oscillation_enabled", default_value="false"),
         DeclareLaunchArgument("right_arm_wobble_amp_m", default_value="0.03"),
         DeclareLaunchArgument("right_arm_wobble_period_sec", default_value="6.0"),

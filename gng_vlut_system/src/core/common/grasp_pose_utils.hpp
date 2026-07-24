@@ -167,16 +167,20 @@ inline std::vector<Candidate> buildSimpleCandidates(
       }
     }
 
-    const double density_score = static_cast<double>(stats.count) / count_span;
-    const double boundary_score = 1.0 - static_cast<double>(occupied_neighbors) / 6.0;
-    const double height_score = (center.z() - min_z) / z_span;
-    const double radial_score = (center - centroid).norm() / radius_span;
-    const double score = std::clamp(
-      0.45 * density_score +
-      0.25 * boundary_score +
-      0.20 * height_score +
-      0.10 * radial_score,
-      0.0, 1.0);
+    // stats.count は「この voxel に落ちた入力点の数」。
+    // occupied_neighbors は「6近傍のうち埋まっている voxel の数」。
+    // 旧ヒューリスティックは一旦停止する。
+    // const double density_score = static_cast<double>(stats.count) / count_span;
+    // const double boundary_score = 1.0 - static_cast<double>(occupied_neighbors) / 6.0;
+    // const double height_score = (center.z() - min_z) / z_span;
+    // const double radial_score = (center - centroid).norm() / radius_span;
+    // const double score = std::clamp(
+    //   0.45 * density_score +
+    //   0.25 * boundary_score +
+    //   0.20 * height_score +
+    //   0.10 * radial_score,
+    //   0.0, 1.0);
+    const double score = 0.0;
 
     candidates.push_back(Candidate{
       vid,

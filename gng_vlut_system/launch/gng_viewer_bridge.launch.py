@@ -56,6 +56,7 @@ def launch_setup(context, *args, **kwargs):
     publish_hz_str = LaunchConfiguration("publish_hz").perform(context)
     publish_hz = safe_float(publish_hz_str, 30.0)
     topic_name = LaunchConfiguration("topic_name").perform(context)
+    node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
 
@@ -266,6 +267,7 @@ def launch_setup(context, *args, **kwargs):
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
                     "topic_name": topic_name,
+                    "node_feature_topic": node_feature_topic,
                     "edge_mode": safe_int(edge_mode, 1),
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
@@ -308,6 +310,7 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_source_frame_id", default_value=""),
         DeclareLaunchArgument("publish_hz", default_value=""),
         DeclareLaunchArgument("topic_name", default_value="topological_map_static"),
+        DeclareLaunchArgument("node_feature_topic", default_value="topological_node_features"),
         DeclareLaunchArgument("edge_mode", default_value=""),
         OpaqueFunction(function=launch_setup)
     ])

@@ -193,6 +193,7 @@ public:
     declare_parameter("strict_goal_collision_check", false);
     declare_parameter("replan_on_path_collision", true);
     declare_parameter("allow_zero_initial_joint_state", true);
+    declare_parameter("publish_target_joint_states", true);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
@@ -432,6 +433,8 @@ public:
     control_claim_priority_ = get_parameter("control_claim_priority").as_int();
     control_claim_mode_ = get_parameter("control_claim_mode").as_int();
     control_claim_enabled_ = get_parameter("control_claim_enabled").as_bool();
+    const bool publish_target_joint_states =
+        get_parameter("publish_target_joint_states").as_bool();
 
     joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
         joint_topic, rclcpp::QoS(10).reliable(),
@@ -493,8 +496,10 @@ public:
           urdf_path.c_str());
     }
 
-    target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
-        target_topic_, rclcpp::QoS(10).reliable());
+    if (publish_target_joint_states) {
+      target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+          target_topic_, rclcpp::QoS(10).reliable());
+    }
 
     control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
         control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
@@ -863,7 +868,9 @@ private:
     }
     out.velocity.resize(controlled_joint_names_.size(), 0.0);
     out.effort.resize(controlled_joint_names_.size(), 0.0);
-    target_pub_->publish(out);
+    if (target_pub_) {
+      target_pub_->publish(out);
+    }
 
     gng_control_msgs::msg::JointControlClaim claim;
     claim.command_topic = target_topic_;

@@ -23,6 +23,8 @@ def launch_setup(context, *args, **kwargs):
     target_pose_array_topic = LaunchConfiguration("target_pose_array_topic").perform(context)
     target_score_topic = LaunchConfiguration("target_score_topic").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
+    node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
+    manipulability_weight = LaunchConfiguration("manipulability_weight").perform(context)
     allow_untransformed_target = LaunchConfiguration("allow_untransformed_target").perform(context)
 
     cmd = [
@@ -45,6 +47,11 @@ def launch_setup(context, *args, **kwargs):
         "--goal-candidate-ids-topic",
         goal_candidate_ids_topic,
     ]
+
+    if node_feature_topic.strip():
+        cmd.extend(["--node-feature-topic", node_feature_topic])
+    if manipulability_weight.strip():
+        cmd.extend(["--manipulability-weight", manipulability_weight])
 
     if _truthy(non_collision_only):
         cmd.append("--non-collision-only")
@@ -97,6 +104,11 @@ def generate_launch_description():
             "goal_candidate_ids_topic",
             default_value="/selected_goal_candidate_ids",
         ),
+        DeclareLaunchArgument(
+            "node_feature_topic",
+            default_value="/ToPoDualArm/topological_node_features",
+        ),
+        DeclareLaunchArgument("manipulability_weight", default_value="0.25"),
         DeclareLaunchArgument("allow_untransformed_target", default_value="true"),
         OpaqueFunction(function=launch_setup),
     ])

@@ -17,6 +17,7 @@ from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
+from ais_gng_feature_msgs.msg import TopologicalNodeFeature, TopologicalNodeFeatureArray
 
 try:
     from tf2_ros import Buffer, TransformException, TransformListener
@@ -124,6 +125,8 @@ class TopologicalMapGoalSelector(Node):
         self.target_pose_array_topic = args.target_pose_array_topic
         self.target_score_topic = args.target_score_topic
         self.goal_candidate_ids_topic = args.goal_candidate_ids_topic
+        self.node_feature_topic = args.node_feature_topic
+        self.manipulability_weight = float(args.manipulability_weight)
         self.allow_untransformed_target = bool(args.allow_untransformed_target)
 
         self.map_msg: Optional[TopologicalMap] = None
@@ -131,6 +134,7 @@ class TopologicalMapGoalSelector(Node):
         self.latest_target: Optional[TargetPose] = None
         self.latest_pose_array: Optional[PoseArray] = None
         self.latest_pose_scores: Optional[Float32MultiArray] = None
+        self.latest_node_features: Dict[int, TopologicalNodeFeature] = {}
 
         self.output_pub = self.create_publisher(TopologicalMap, self.output_topic, 10)
         self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
@@ -206,6 +210,15 @@ class TopologicalMapGoalSelector(Node):
                 10,
             )
 
+        self.node_feature_sub = None
+        if self.node_feature_topic:
+            self.node_feature_sub = self.create_subscription(
+                TopologicalNodeFeatureArray,
+                self.node_feature_topic,
+                self._on_node_feature_array,
+                10,
+            )
+
         self.tf_buffer = None
         self.tf_listener = None
         if Buffer is not None and TransformListener is not None:
@@ -233,6 +246,12 @@ class TopologicalMapGoalSelector(Node):
     def _on_pose_scores(self, msg: Float32MultiArray) -> None:
         self.latest_pose_scores = msg
         self._update_target_from_pose_array()
+        self._maybe_publish()
+
+    def _on_node_feature_array(self, msg: TopologicalNodeFeatureArray) -> None:
+        self.latest_node_features = {
+            int(feature.node_id): feature for feature in msg.features
+        }
         self._maybe_publish()
 
     def _update_target_from_pose_array(self) -> None:
@@ -370,6 +389,15 @@ class TopologicalMapGoalSelector(Node):
                     )
                     score += self.orientation_weight * (1.0 - alignment)
 
+            if self.manipulability_weight > 0.0:
+                feature = self.latest_node_features.get(int(node.id))
+                if feature is not None:
+                    if getattr(feature, "rotational_manip_valid", False):
+                        cond = max(1.0, float(feature.rotational_manip_condition_number))
+                        score += self.manipulability_weight * math.log(cond)
+                    else:
+                        score += self.manipulability_weight * math.log(100.0)
+
             scored.append((score, idx))
 
         scored.sort(key=lambda item: item[0])
@@ -437,6 +465,8 @@ def main() -> None:
     parser.add_argument("--target-pose-array-topic", default="/grasp_pose_candidates")
     parser.add_argument("--target-score-topic", default="/grasp_pose_scores")
     parser.add_argument("--goal-candidate-ids-topic", default="/selected_goal_candidate_ids")
+    parser.add_argument("--node-feature-topic", default="/ToPoDualArm/topological_node_features")
+    parser.add_argument("--manipulability-weight", type=float, default=0.25)
     parser.add_argument(
         "--allow-untransformed-target",
         action=argparse.BooleanOptionalAction,
