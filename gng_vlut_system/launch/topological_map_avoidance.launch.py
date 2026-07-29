@@ -58,13 +58,6 @@ def launch_setup(context, *args, **kwargs):
     control_claim_priority = LaunchConfiguration("control_claim_priority").perform(context)
     control_claim_mode = LaunchConfiguration("control_claim_mode").perform(context)
     control_claim_enabled = LaunchConfiguration("control_claim_enabled").perform(context)
-    right_arm_oscillation_enabled = LaunchConfiguration("right_arm_oscillation_enabled").perform(context)
-    right_arm_wobble_amp_m = LaunchConfiguration("right_arm_wobble_amp_m").perform(context)
-    right_arm_wobble_period_sec = LaunchConfiguration("right_arm_wobble_period_sec").perform(context)
-    right_arm_wobble_z_scale = LaunchConfiguration("right_arm_wobble_z_scale").perform(context)
-    right_arm_search_step_m = LaunchConfiguration("right_arm_search_step_m").perform(context)
-    right_arm_search_max_m = LaunchConfiguration("right_arm_search_max_m").perform(context)
-    right_arm_publish_hz = LaunchConfiguration("right_arm_publish_hz").perform(context)
 
     def resolve_urdf_path(params_file_value: str, explicit_urdf_path: str) -> str:
         if explicit_urdf_path:
@@ -180,27 +173,6 @@ def launch_setup(context, *args, **kwargs):
         )
     ]
 
-    if right_arm_oscillation_enabled and right_arm_oscillation_enabled.lower() in ("1", "true", "yes", "on"):
-        nodes.append(
-            Node(
-                package="gng_vlut_system",
-                executable="right_arm_oscillator_node",
-                name="right_arm_oscillator_node",
-                namespace=robot_name,
-                output="screen",
-                parameters=[{
-                    "urdf_path": urdf_path,
-                    "root_link": "base_link",
-                    "leaf_link": "right_end_effector_link",
-                    "publish_hz": safe_float(right_arm_publish_hz, 20.0),
-                    "wobble_amp_m": safe_float(right_arm_wobble_amp_m, 0.03),
-                    "wobble_period_sec": safe_float(right_arm_wobble_period_sec, 6.0),
-                    "wobble_z_scale": safe_float(right_arm_wobble_z_scale, 0.6),
-                    "search_step_m": safe_float(right_arm_search_step_m, 0.02),
-                    "search_max_m": safe_float(right_arm_search_max_m, 0.60),
-                }],
-            )
-        )
     return nodes
 
 def generate_launch_description():
@@ -251,12 +223,5 @@ def generate_launch_description():
         DeclareLaunchArgument("control_claim_enabled", default_value="true"),
         DeclareLaunchArgument("publish_target_joint_states", default_value="true"),
         DeclareLaunchArgument("allow_safe_goal_fallback", default_value="true"),
-        DeclareLaunchArgument("right_arm_oscillation_enabled", default_value="false"),
-        DeclareLaunchArgument("right_arm_wobble_amp_m", default_value="0.03"),
-        DeclareLaunchArgument("right_arm_wobble_period_sec", default_value="6.0"),
-        DeclareLaunchArgument("right_arm_wobble_z_scale", default_value="0.6"),
-        DeclareLaunchArgument("right_arm_search_step_m", default_value="0.02"),
-        DeclareLaunchArgument("right_arm_search_max_m", default_value="0.60"),
-        DeclareLaunchArgument("right_arm_publish_hz", default_value="20.0"),
         OpaqueFunction(function=launch_setup),
     ])

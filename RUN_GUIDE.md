@@ -7,15 +7,14 @@ docker compose exec gng_cpu bash
 ## frontendの起動
 cd ~/uraki_ws
 docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
-(docker compose --profile manual up --build frontend)
+
 docker compose --profile manual up  frontend
 
-## 左腕をtopological_map_avoidanceで動かしつつ、右腕を適当に揺らす
+## 左腕をtopological_map_avoidanceで動かす
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   trial_mode:=true \
-  trial_safe_only:=true \
-  right_arm_oscillation_enabled:=true \
+  trial_safe_only:=true
 
 ##  backendの起動
 ros2 launch topo_fuzzy_viewer viewer_stack.launch.py

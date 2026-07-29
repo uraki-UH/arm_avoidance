@@ -395,7 +395,10 @@ static inline std::vector<int> collectNearestGoalCandidates(
     if (!node.status.active || !node.status.valid) {
       return;
     }
-    if (node.status.is_colliding || (node.status.is_danger && !allow_danger_goal)) {
+    if (node.status.is_colliding) {
+      return;
+    }
+    if (!trial_safe_only && node.status.is_danger && !allow_danger_goal) {
       return;
     }
     const int dim = std::min(static_cast<int>(node.weight_coord.size()), 3);

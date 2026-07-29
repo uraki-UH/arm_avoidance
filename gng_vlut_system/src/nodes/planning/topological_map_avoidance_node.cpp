@@ -361,7 +361,7 @@ public:
     cached_safe_goal_ids_.reserve(gng_->getMaxNodeNum());
     for (const auto &node : gng_->getNodes()) {
       if (node.id != -1 && node.status.active && node.status.valid &&
-          !node.status.is_colliding && !node.status.is_danger) {
+          !node.status.is_colliding) {
         cached_safe_goal_ids_.push_back(node.id);
       }
     }
@@ -676,7 +676,7 @@ private:
       }
       node.status.active = true;
 
-      if (!node.status.is_colliding && !node.status.is_danger) {
+      if (!node.status.is_colliding) {
         cached_safe_goal_ids_.push_back(id);
       }
     }
@@ -822,7 +822,7 @@ private:
         } else {
           RCLCPP_WARN_THROTTLE(
               get_logger(), *get_clock(), 5000,
-              "Trial mode: no selectable goal found (safe_only=%d safe_count=%zu).",
+              "Trial mode: no selectable goal found (collision_free_only=%d collision_free_count=%zu).",
               trial_safe_only_ ? 1 : 0, cached_safe_goal_ids_.size());
         }
       } else {
