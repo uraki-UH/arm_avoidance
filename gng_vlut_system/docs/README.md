@@ -5,6 +5,7 @@
 ## 主な文書
 
 - [TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)
+- [TASK_CANDIDATES.md](./TASK_CANDIDATES.md)
 - [RELEASE_NOTE_TEMPLATE.md](./RELEASE_NOTE_TEMPLATE.md)
 - [releases/2026-07-29_documentation_workflow.md](./releases/2026-07-29_documentation_workflow.md)
 

@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { useThree } from '@react-three/fiber';
+import { createPortal, useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { RobotData, RobotPoseInstance, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
@@ -74,11 +74,17 @@ function RobotInstanceRenderer({
         return manipLinkName || data.linkNames?.[data.linkNames.length - 1] || data.linkManipulabilities?.[data.linkManipulabilities.length - 1]?.linkName || '';
     }, [data.linkManipulabilities, data.linkNames, manipLinkName]);
 
+    const selectedManipFrame = useMemo(() => {
+        if (!robot || !selectedManipLinkName) return null;
+        return robot.links?.[selectedManipLinkName] || robot.getFrame?.(selectedManipLinkName) || null;
+    }, [robot, selectedManipLinkName]);
+
     const selectedManipInfo = useMemo(() => {
         if (!showManipulabilityEllipsoid) return null;
         const fromLinks = selectedManipLinkName
             ? data.linkManipulabilities?.find((entry) => entry.linkName === selectedManipLinkName)
             : undefined;
+        if (manipLinkName && !fromLinks) return [];
 
         const transValid = fromLinks?.manipValid ?? data.manipValid;
         const rotValid = fromLinks?.rotationalManipValid ?? data.rotationalManipValid;
@@ -89,15 +95,17 @@ function RobotInstanceRenderer({
             scale: fromLinks?.manipScale || data.manipScale,
             orientation: fromLinks?.manipOrientation || data.manipOrientation || [0, 0, 0, 1],
             material: translationalMaterial,
+            linkAnchored: Boolean(fromLinks),
             key: `trans-${selectedManipLinkName}-${(fromLinks?.manipScale || data.manipScale)?.join(',')}`,
         } : null;
 
         const rot = rotValid ? {
             valid: true,
-            center: fromLinks?.manipCenter || data.manipCenter || [0, 0, 0],
+            center: fromLinks?.rotationalManipCenter || data.rotationalManipCenter || fromLinks?.manipCenter || data.manipCenter || [0, 0, 0],
             scale: fromLinks?.rotationalManipScale || data.rotationalManipScale,
             orientation: fromLinks?.rotationalManipOrientation || data.rotationalManipOrientation || [0, 0, 0, 1],
             material: rotationalMaterial,
+            linkAnchored: Boolean(fromLinks),
             key: `rot-${selectedManipLinkName}-${(fromLinks?.rotationalManipScale || data.rotationalManipScale)?.join(',')}`,
         } : null;
 
@@ -108,6 +116,7 @@ function RobotInstanceRenderer({
             scale: [number, number, number];
             orientation: [number, number, number, number];
             material: THREE.Material;
+            linkAnchored: boolean;
         }> = [];
 
         if ((type === 'translational' || type === 'both') && trans && trans.scale) {
@@ -124,8 +133,10 @@ function RobotInstanceRenderer({
         data.manipScale,
         data.manipValid,
         data.rotationalManipOrientation,
+        data.rotationalManipCenter,
         data.rotationalManipScale,
         data.rotationalManipValid,
+        manipLinkName,
         manipEllipsoidType,
         selectedManipLinkName,
         showManipulabilityEllipsoid,
@@ -314,12 +325,12 @@ function RobotInstanceRenderer({
                         info.scale[1] * manipDisplayScale,
                         info.scale[2] * manipDisplayScale,
                     ];
-                    return (
+                    const mesh = (
                         <mesh
                             key={info.key}
                             geometry={manipGeometry}
                             material={info.material}
-                            position={info.center || [0, 0, 0]}
+                            position={info.linkAnchored ? [0, 0, 0] : info.center}
                             quaternion={new THREE.Quaternion(
                                 info.orientation?.[0] ?? 0,
                                 info.orientation?.[1] ?? 0,
@@ -334,6 +345,9 @@ function RobotInstanceRenderer({
                             }}
                         />
                     );
+                    return info.linkAnchored && selectedManipFrame
+                        ? createPortal(mesh, selectedManipFrame)
+                        : mesh;
                 })}
             </group>
         </group>

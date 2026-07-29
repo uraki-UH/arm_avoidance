@@ -1189,11 +1189,23 @@ function App() {
                 }}
                 onManipLinkChange={(linkName) => {
                     if (!robotJointContext) return;
-                    updateEntitySettings('robot', robotJointContext.id, { manipLinkName: linkName });
+                    const robotId = robotJointContext.id;
+                    updateEntitySettings('robot', robotId, { manipLinkName: linkName });
+                    setRobotJointContext((current) => (
+                        current?.id === robotId
+                            ? { ...current, selectedManipLink: linkName }
+                            : current
+                    ));
                 }}
                 onReset={() => {
                     if (!robotJointContext) return;
-                    updateEntitySettings('robot', robotJointContext.id, { jointValues: [], jointControlMode: 'live', manipLinkName: '' });
+                    const robotId = robotJointContext.id;
+                    updateEntitySettings('robot', robotId, { jointValues: [], jointControlMode: 'live', manipLinkName: '' });
+                    setRobotJointContext((current) => (
+                        current?.id === robotId
+                            ? { ...current, selectedManipLink: '' }
+                            : current
+                    ));
                 }}
             />
 

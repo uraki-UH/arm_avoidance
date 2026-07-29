@@ -161,11 +161,9 @@ inline nlohmann::json manipulabilityToJson(
 
 inline void appendLinkManipulabilityJson(
     nlohmann::json &links_json, const std::string &link_name,
-    const Eigen::Isometry3d &base_tf,
     const Eigen::Isometry3d &link_tf,
     const Manipulability::ManipulabilityEllipsoid &ellipsoid,
     const Manipulability::ManipulabilityEllipsoid &rot_ellipsoid) {
-  const Eigen::Vector3d world_center = link_tf.translation();
   const Eigen::Quaterniond world_orientation = ellipsoid.valid
       ? Eigen::Quaterniond(ellipsoid.principal_directions)
       : Eigen::Quaterniond::Identity();
@@ -173,12 +171,11 @@ inline void appendLinkManipulabilityJson(
       ? Eigen::Quaterniond(rot_ellipsoid.principal_directions)
       : Eigen::Quaterniond::Identity();
 
-  const Eigen::Quaterniond base_q(base_tf.rotation());
-  const Eigen::Quaterniond inv_base_q = base_q.conjugate();
-  const Eigen::Vector3d local_center = inv_base_q * (world_center - base_tf.translation());
-  Eigen::Quaterniond local_orientation = inv_base_q * world_orientation;
+  const Eigen::Quaterniond link_q(link_tf.rotation());
+  const Eigen::Quaterniond inv_link_q = link_q.conjugate();
+  Eigen::Quaterniond local_orientation = inv_link_q * world_orientation;
   local_orientation.normalize();
-  Eigen::Quaterniond local_rot_orientation = inv_base_q * world_rot_orientation;
+  Eigen::Quaterniond local_rot_orientation = inv_link_q * world_rot_orientation;
   local_rot_orientation.normalize();
 
   nlohmann::json entry;
@@ -186,7 +183,7 @@ inline void appendLinkManipulabilityJson(
   entry["manipValid"] = ellipsoid.valid;
   entry["manipValue"] = ellipsoid.manipulability;
   entry["manipConditionNumber"] = ellipsoid.condition_number;
-  entry["manipCenter"] = {local_center.x(), local_center.y(), local_center.z()};
+  entry["manipCenter"] = {0.0, 0.0, 0.0};
   if (ellipsoid.valid) {
     entry["manipScale"] = {ellipsoid.singular_values.x(),
                            ellipsoid.singular_values.y(),
@@ -202,7 +199,7 @@ inline void appendLinkManipulabilityJson(
   entry["rotationalManipValid"] = rot_ellipsoid.valid;
   entry["rotationalManipValue"] = rot_ellipsoid.manipulability;
   entry["rotationalManipConditionNumber"] = rot_ellipsoid.condition_number;
-  entry["rotationalManipCenter"] = {local_center.x(), local_center.y(), local_center.z()};
+  entry["rotationalManipCenter"] = {0.0, 0.0, 0.0};
   if (rot_ellipsoid.valid) {
     entry["rotationalManipScale"] = {rot_ellipsoid.singular_values.x(),
                                      rot_ellipsoid.singular_values.y(),

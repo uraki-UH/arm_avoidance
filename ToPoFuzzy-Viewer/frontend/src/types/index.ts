@@ -215,6 +215,7 @@ export interface RobotPoseInstance {
     rotationalManipValid?: boolean;
     rotationalManipValue?: number;
     rotationalManipConditionNumber?: number;
+    rotationalManipCenter?: [number, number, number];
     rotationalManipScale?: [number, number, number];
     rotationalManipOrientation?: [number, number, number, number];
 }
@@ -230,6 +231,7 @@ export interface RobotLinkManipulability {
     rotationalManipValid?: boolean;
     rotationalManipValue?: number;
     rotationalManipConditionNumber?: number;
+    rotationalManipCenter?: [number, number, number];
     rotationalManipScale?: [number, number, number];
     rotationalManipOrientation?: [number, number, number, number];
 }
@@ -259,6 +261,7 @@ export interface RobotData {
     rotationalManipValid?: boolean;
     rotationalManipValue?: number;
     rotationalManipConditionNumber?: number;
+    rotationalManipCenter?: [number, number, number];
     rotationalManipScale?: [number, number, number];
     rotationalManipOrientation?: [number, number, number, number];
 }

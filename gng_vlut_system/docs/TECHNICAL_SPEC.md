@@ -218,11 +218,48 @@ flowchart TD
 候補ロボットプレビューの見た目は ToPoFuzzy Viewer 側で制御する。
 ROS 側はプレビューの送信有無だけを制御し、見た目の指定は送らない。
 
-## 9. 変更時に更新すべき項目
+## 9. リンク別可操作性の Viewer 表示
+
+`robot_viewer_bridge_node` は、受信した `joint_states` を表示用 URDF と可操作性計算用の内部チェーンへ反映する。
+マルチアームでは `waist_joint` のような共有関節が各腕の内部チェーンに存在するため、1 つの関節名を複数の内部 DOF 添字へ対応させる。
+
+| 変数 | 型 | 用途 |
+|---|---|---|
+| `joint_name_to_active_index_` | `unordered_map<string, size_t>` | 受信 JointState の関節名から表示用値への対応 |
+| `chain_joint_name_to_active_indices_` | `unordered_map<string, vector<size_t>>` | 関節名から全内部チェーン DOF 添字への対応 |
+| `chain_joint_values` | `vector<double>` | 左右各腕と共有関節を含む内部 FK/Jacobian 入力 |
+| `linkManipulabilities` | JSON array | リンク名、評価値、リンク相対楕円姿勢 |
+| `manipCenter` | vec3 | リンク別データではリンク原点 `[0, 0, 0]` |
+| `manipOrientation` | quaternion | 対象リンク相対の並進可操作性楕円姿勢 |
+| `rotationalManipCenter` | vec3 | リンク別データではリンク原点 `[0, 0, 0]` |
+| `rotationalManipOrientation` | quaternion | 対象リンク相対の回転可操作性楕円姿勢 |
+
+```mermaid
+flowchart TD
+    A[joint_states] --> B[joint_name_to_active_index_]
+    B --> C[chain_joint_name_to_active_indices_]
+    C --> D[左右の共有関節を含む chain_joint_values]
+    D --> E[MultiArm FK]
+    D --> F[link Jacobian]
+    E --> G[link transform]
+    F --> H[manipulability ellipsoid]
+    G --> I[world orientation から link-local orientation へ変換]
+    H --> I
+    I --> J[linkManipulabilities JSON]
+    J --> K[Viewer の対象 URDF link]
+    K --> L[link 原点へ楕円を描画]
+```
+
+Viewer のリンク別楕円は対象 URDF リンクの子として描画する。
+そのため中心は FK 由来の別座標を再配置せず、選択リンクの原点と常に一致する。
+手動関節表示ではリンクへの追従を維持するが、Jacobian と楕円スケールはブラウザ側で再計算せず、最後に受信した ROS 評価値を使用する。
+
+## 10. 変更時に更新すべき項目
 
 1. launch 引数の追加・削除
 2. topic 名の変更
 3. service 名の変更
-4. message field の増減
+4. message field の追加・削除
 5. no-motion / fallback / trial 分岐の追加
 6. publish 周期や既定値の変更
+7. 評価指標の意味づけや可視化ルールの変更

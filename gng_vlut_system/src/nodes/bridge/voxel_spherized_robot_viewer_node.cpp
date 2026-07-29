@@ -27,8 +27,6 @@
 
 #include "core/common/constants.hpp"
 #include "common/resource_utils.hpp"
-#include "core/common/manipulability_serialization.hpp"
-#include "core/metrics/manipulability.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/robot_voxelizer.hpp"
@@ -229,16 +227,19 @@ private:
   }
 
   void buildChainJointIndexMap() {
-    chain_joint_names_.clear();
-    chain_joint_name_to_active_index_.clear();
+    chain_joint_name_to_active_indices_.clear();
     if (!chain_) return;
-    const int total_dof = chain_->getTotalDOF();
-    chain_joint_names_.reserve(static_cast<std::size_t>(std::max(0, total_dof)));
-    for (int i = 0; i < total_dof; ++i) {
+    std::size_t dof_index = 0;
+    for (int i = 0; i < chain_->getNumJoints(); ++i) {
+      const int joint_dof = chain_->getJointDOF(i);
       const std::string joint_name = chain_->getJointName(i);
-      if (joint_name.empty()) continue;
-      chain_joint_name_to_active_index_[joint_name] = chain_joint_names_.size();
-      chain_joint_names_.push_back(joint_name);
+      if (joint_dof <= 0) continue;
+      if (joint_name.empty()) {
+        dof_index += static_cast<std::size_t>(joint_dof);
+        continue;
+      }
+      chain_joint_name_to_active_indices_[joint_name].push_back(dof_index);
+      dof_index += static_cast<std::size_t>(joint_dof);
     }
   }
 
@@ -301,30 +302,6 @@ private:
     auto &quat_arr = robot["orientations"] = json::array();
     for (const auto &q : orientations) quat_arr.push_back({q.x(), q.y(), q.z(), q.w()});
 
-    Manipulability::ManipulabilityEllipsoid manip;
-    if (chain_ && chain_->getTotalDOF() > 0) {
-      const Eigen::MatrixXd J =
-          chain_->calculateJacobianAt(chain_->getNumJoints() + 1, current_joint_values_);
-      const Eigen::MatrixXd Jv = J.topRows(3);
-      manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
-    }
-    robot["manipValid"] = manip.valid;
-    robot["manipValue"] = manip.manipulability;
-    robot["manipConditionNumber"] = manip.condition_number;
-    robot["isGoal"] = false;
-    if (manip.valid) {
-      const Eigen::Vector3d center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
-      Eigen::Quaterniond q(manip.principal_directions);
-      q.normalize();
-      robot["manipCenter"] = {center.x(), center.y(), center.z()};
-      robot["manipScale"] = {manip.singular_values.x(), manip.singular_values.y(), manip.singular_values.z()};
-      robot["manipOrientation"] = {q.x(), q.y(), q.z(), q.w()};
-    } else {
-      robot["manipCenter"] = {0.0, 0.0, 0.0};
-      robot["manipScale"] = {0.0, 0.0, 0.0};
-      robot["manipOrientation"] = {0.0, 0.0, 0.0, 1.0};
-    }
-
     json root;
     root["type"] = type;
     root["tag"] = robot_name_;
@@ -340,12 +317,15 @@ private:
     std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> orientations;
     if (chain_ && chain_->getTotalDOF() > 0) {
       std::vector<double> chain_joint_values(chain_->getTotalDOF(), 0.0);
-      for (const auto &[joint_name, chain_index] : chain_joint_name_to_active_index_) {
+      for (const auto &[joint_name, chain_indices] : chain_joint_name_to_active_indices_) {
         auto it = joint_name_to_active_index_.find(joint_name);
         if (it != joint_name_to_active_index_.end() &&
-            it->second < current_joint_values_.size() &&
-            chain_index < chain_joint_values.size()) {
-          chain_joint_values[chain_index] = current_joint_values_[it->second];
+            it->second < current_joint_values_.size()) {
+          for (const std::size_t chain_index : chain_indices) {
+            if (chain_index < chain_joint_values.size()) {
+              chain_joint_values[chain_index] = current_joint_values_[it->second];
+            }
+          }
         }
       }
       chain_->forwardKinematicsAt(chain_joint_values, positions, orientations);
@@ -374,8 +354,7 @@ private:
   std::vector<std::string> active_joint_names_;
   std::unordered_map<std::string, size_t> joint_name_to_active_index_;
   std::vector<double> current_joint_values_;
-  std::vector<std::string> chain_joint_names_;
-  std::unordered_map<std::string, size_t> chain_joint_name_to_active_index_;
+  std::unordered_map<std::string, std::vector<size_t>> chain_joint_name_to_active_indices_;
   builtin_interfaces::msg::Time last_joint_state_stamp_;
   bool has_joint_state_ = false;
   std::string urdf_content_;
