@@ -152,7 +152,6 @@ flowchart TD
 | `max_joint_velocity` | float | `0.6` | 追従速度 |
 | `position_tolerance` | float | `0.01` | 到達判定閾値 |
 | `use_wraparound` | bool | `true` | wraparound 補正 |
-| `hold_when_no_target` | bool | `true` | target 無しで維持するか |
 | `ignore_state_after_first_target` | bool | `false` | 初回 target 後の state 上書き抑制 |
 | `initial_joint_names_csv` | csv | 空 | 初期 joint 名列 |
 

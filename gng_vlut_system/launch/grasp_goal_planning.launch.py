@@ -147,7 +147,6 @@ def launch_setup(context, *args, **kwargs):
                 "max_joint_velocity": LaunchConfiguration("virtual_joint_state_max_joint_velocity"),
                 "position_tolerance": LaunchConfiguration("virtual_joint_state_position_tolerance"),
                 "use_wraparound": LaunchConfiguration("virtual_joint_state_use_wraparound"),
-                "hold_when_no_target": "false",
                 "ignore_state_after_first_target": "false",
                 "initial_joint_names_csv": LaunchConfiguration("initial_joint_names_csv"),
             }.items(),
