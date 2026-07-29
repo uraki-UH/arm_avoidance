@@ -3,6 +3,7 @@
 #include <ais_gng/plugin/downsampling.hpp>
 #include <ais_gng/plugin/visualize_filter.hpp>
 #include <ais_gng/plugin/cluster_classification.hpp>
+#include <ais_gng/point_selection.hpp>
 
 #include <fuzzrobo/libgng/api.h>
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -56,6 +57,8 @@ class AiSGNGComponent : public rclcpp::Node {
 
     std::string base_frame_id_;
     bool local_coordinates_{false};
+    uint32_t input_point_cloud_num_{20000};
+    PointSamplingMode input_sampling_mode_{PointSamplingMode::Head};
 
     std::vector<std::string> input_topic_names_;
     uint32_t semantic_handle_label_value_{};
@@ -90,7 +93,8 @@ class AiSGNGComponent : public rclcpp::Node {
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,
         const std_msgs::msg::Header &msg,
-        const std::vector<uint8_t> *semantic_labels = nullptr);
+        const std::vector<uint8_t> *semantic_labels = nullptr,
+        const std::vector<uint32_t> *source_point_indices = nullptr);
     LiDAR_Config getBase2LidarFrame(const PC2::ConstSharedPtr msg);
     std::unique_ptr<PC2> mixPointCloud2Msg(const std_msgs::msg::Header &header,
         const PC2::SharedPtr &msg,

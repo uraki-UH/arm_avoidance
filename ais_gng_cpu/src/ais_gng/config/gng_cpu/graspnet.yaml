@@ -40,6 +40,7 @@ ais_gng_node:
     classify.threshold: 0.7
 
     input.point_cloud_num: 100000
+    input.sampling_mode: "uniform"
     input.base_frame_id: "map"
     input.voxel_grid_unit: 0.02
     input.visualize: true

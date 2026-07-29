@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <unordered_map>
 
 // #include "core/common/manipulability_serialization.hpp"
@@ -13,6 +14,43 @@ using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
 
 namespace {
+PC2::SharedPtr makeSelectedPointCloud(
+    const PC2 &source,
+    const std::vector<uint32_t> &source_indices)
+{
+    auto selected = std::make_shared<PC2>();
+    selected->header = source.header;
+    selected->height = 1;
+    selected->width = static_cast<uint32_t>(source_indices.size());
+    selected->fields = source.fields;
+    selected->is_bigendian = source.is_bigendian;
+    selected->point_step = source.point_step;
+    selected->row_step = selected->point_step * selected->width;
+    selected->is_dense = source.is_dense;
+    selected->data.resize(static_cast<std::size_t>(selected->row_step));
+
+    for (std::size_t i = 0; i < source_indices.size(); ++i) {
+        const uint32_t source_index = source_indices[i];
+        const uint32_t row = source.width == 0 ? 0 : source_index / source.width;
+        const uint32_t column = source.width == 0 ? source_index : source_index % source.width;
+        const std::size_t source_offset =
+            static_cast<std::size_t>(row) * source.row_step +
+            static_cast<std::size_t>(column) * source.point_step;
+        const std::size_t destination_offset = i * selected->point_step;
+        if (source_offset + source.point_step > source.data.size()) {
+            selected->data.clear();
+            selected->width = 0;
+            selected->row_step = 0;
+            return selected;
+        }
+        std::copy_n(
+            source.data.begin() + source_offset,
+            source.point_step,
+            selected->data.begin() + destination_offset);
+    }
+    return selected;
+}
+
 std::array<double, 3> scaleResidualByEta(
     const std::array<double, 3> &residual,
     double eta_s1)
@@ -321,7 +359,22 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 
     // 入力点群関連
     this->declare_parameter("input.topic_names", std::vector<std::string>{""});    // 入力点群のtopicの名前 (cpu/gpu)
-    this->declare_parameter("input.point_cloud_num", 20000);                       // 入力点群数 (cpu/gpu)
+    const auto input_point_cloud_num =
+        this->declare_parameter<int64_t>("input.point_cloud_num", 20000);           // 入力点群数 (cpu/gpu)
+    if (input_point_cloud_num <= 0 ||
+        input_point_cloud_num > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+        throw std::invalid_argument(
+            "input.point_cloud_num must be in uint32 range and greater than zero");
+    }
+    input_point_cloud_num_ = static_cast<uint32_t>(input_point_cloud_num);
+    const auto sampling_mode = this->declare_parameter<std::string>(
+        "input.sampling_mode", "head");
+    const auto parsed_sampling_mode = parsePointSamplingMode(sampling_mode);
+    if (!parsed_sampling_mode) {
+        throw std::invalid_argument(
+            "input.sampling_mode must be either 'head' or 'uniform'");
+    }
+    input_sampling_mode_ = *parsed_sampling_mode;
     this->declare_parameter("input.base_frame_id", "map");                         // 入力点群の基準フレームID (cpu/gpu)
     this->declare_parameter("input.voxel_grid_unit", 0.02);                         // ボクセルグリッドのサイズ(m) (cpu/gpu)
     this->declare_parameter("input.visualize", true);                              // 位置フィルタの可視化 (cpu/gpu)
@@ -493,6 +546,25 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
                 input_topic_names_.emplace_back(topic_name);
             }
             success = true;
+        } else if (name == "input.point_cloud_num") {
+            const auto point_cloud_num = p.as_int();
+            if (point_cloud_num <= 0 ||
+                point_cloud_num > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+                result.successful = false;
+                result.reason = "input.point_cloud_num must be in uint32 range and greater than zero";
+                return result;
+            }
+            input_point_cloud_num_ = static_cast<uint32_t>(point_cloud_num);
+            success = true;
+        } else if (name == "input.sampling_mode") {
+            const auto mode = parsePointSamplingMode(p.as_string());
+            if (!mode) {
+                result.successful = false;
+                result.reason = "input.sampling_mode must be either 'head' or 'uniform'";
+                return result;
+            }
+            input_sampling_mode_ = *mode;
+            success = true;
         }
         
         if(flt_array.size() > 0){
@@ -549,22 +621,70 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
 
 void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clouds) {
     // 初期化されていない
-    if(!initialized_){
+    if(!initialized_ || clouds.empty()){
         return;
     }
     auto start = std::chrono::steady_clock::now();
 
     // 入力点群のセット
     std::vector<uint8_t> semantic_labels;
+    std::vector<uint32_t> source_point_indices;
+    PC2::ConstSharedPtr gng_input_msg;
     for(auto &msg: clouds){
-        auto lidar_config = getBase2LidarFrame(msg);
-        gng_setPointCloud(msg->data.data(), msg->width * msg->height, &lidar_config);
+        const uint64_t raw_point_count =
+            static_cast<uint64_t>(msg->width) * static_cast<uint64_t>(msg->height);
+        const uint32_t point_count = static_cast<uint32_t>(std::min<uint64_t>(
+            raw_point_count, std::numeric_limits<uint32_t>::max()));
+        const std::size_t semantic_offset = semantic_labels.size();
         auto cloud_semantics = handle_label::extractSemanticLabels(*msg, semantic_handle_label_value_);
-        const std::size_t point_count = static_cast<std::size_t>(msg->width) * static_cast<std::size_t>(msg->height);
         if (cloud_semantics.size() != point_count) {
             cloud_semantics.assign(point_count, ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
         }
         semantic_labels.insert(semantic_labels.end(), cloud_semantics.begin(), cloud_semantics.end());
+
+        const bool requires_repacking =
+            input_sampling_mode_ == PointSamplingMode::Uniform &&
+            point_count > input_point_cloud_num_;
+        const auto selected_indices = requires_repacking
+            ? selectPointIndices(point_count, input_point_cloud_num_, input_sampling_mode_)
+            : std::vector<uint32_t>{};
+        gng_input_msg = requires_repacking
+            ? makeSelectedPointCloud(*msg, selected_indices)
+            : msg;
+        if (gng_input_msg->width == 0 && point_count > 0) {
+            RCLCPP_WARN_THROTTLE(
+                this->get_logger(), *this->get_clock(), 5000,
+                "Failed to repack sampled point cloud; skipping frame");
+            return;
+        }
+
+        source_point_indices.clear();
+        if (requires_repacking) {
+            source_point_indices.reserve(selected_indices.size());
+            for (const uint32_t index : selected_indices) {
+                source_point_indices.push_back(
+                    static_cast<uint32_t>(semantic_offset + index));
+            }
+        } else if (semantic_offset != 0) {
+            const uint32_t selected_count = std::min(point_count, input_point_cloud_num_);
+            source_point_indices.reserve(selected_count);
+            for (uint32_t index = 0; index < selected_count; ++index) {
+                source_point_indices.push_back(
+                    static_cast<uint32_t>(semantic_offset + index));
+            }
+        }
+
+        auto lidar_config = getBase2LidarFrame(gng_input_msg);
+        gng_setPointCloud(
+            gng_input_msg->data.data(),
+            gng_input_msg->width * gng_input_msg->height,
+            &lidar_config);
+        if (requires_repacking) {
+            RCLCPP_DEBUG_THROTTLE(
+                this->get_logger(), *this->get_clock(), 5000,
+                "Uniformly sampled GNG input from %u to %u points",
+                point_count, gng_input_msg->width * gng_input_msg->height);
+        }
     }
     auto &msg = clouds[0];
 
@@ -586,7 +706,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
     // トポロジカルマップをROS2メッセージに変換
     auto map_msg = makeTopologicalMapMsg(
-        map, header, &semantic_labels);
+        map, header, &semantic_labels, &source_point_indices);
     
     // アフィン変換後の点群をROS2メッセージに変換
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
@@ -606,7 +726,8 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     if(downsampling_.isTransformed()){
         downsampling_.publish<std::unique_ptr<sensor_msgs::msg::PointCloud2>>(transformed_msg, label, label_num, header); // 変換後の点群をPublish
     }else{
-        downsampling_.publish<sensor_msgs::msg::PointCloud2::ConstSharedPtr>(msg, label, label_num, msg->header); // 変換前の点群をPublish
+        downsampling_.publish<sensor_msgs::msg::PointCloud2::ConstSharedPtr>(
+            gng_input_msg, label, label_num, gng_input_msg->header); // 変換前の点群をPublish
     }
 
     // アフィン変換後の点群をPublish
@@ -653,7 +774,8 @@ void AiSGNGComponent::publishTopologicalMapUpdate(const ais_gng_msgs::msg::Topol
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(
     const TopologicalMap &map,
     const std_msgs::msg::Header &header,
-    const std::vector<uint8_t> *semantic_labels) {
+    const std::vector<uint8_t> *semantic_labels,
+    const std::vector<uint32_t> *source_point_indices) {
     auto topological_map_msg = std::make_unique<ais_gng_msgs::msg::TopologicalMap>();
     topological_map_msg->header = header;
     topological_map_msg->frame_number = map.frame_number;
@@ -677,8 +799,15 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         // node_msg.manip_valid = false;
         // node_msg.manip_orientation.w = 1.0;
         if (node.inpcl_num > 0) {
-            node_msg.inpcl_ids.resize(node.inpcl_num);
-            node_msg.inpcl_ids.assign(node.inpcl_ids, node.inpcl_ids + node.inpcl_num);
+            node_msg.inpcl_ids.reserve(node.inpcl_num);
+            for (uint32_t point_index = 0; point_index < node.inpcl_num; ++point_index) {
+                const uint32_t input_id = node.inpcl_ids[point_index];
+                if (source_point_indices && input_id < source_point_indices->size()) {
+                    node_msg.inpcl_ids.push_back((*source_point_indices)[input_id]);
+                } else {
+                    node_msg.inpcl_ids.push_back(input_id);
+                }
+            }
         }
         topological_map_msg->nodes.emplace_back(node_msg);
     }
