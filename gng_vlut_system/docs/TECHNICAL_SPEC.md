@@ -60,7 +60,7 @@ flowchart TD
 | `non_collision_only` | bool | `true` | 衝突ノードを候補から除外 |
 | `orientation_weight` | float | `0.0` | 向き一致度の重み |
 | `target_pose_topic` | topic | 空 | 単一目標姿勢入力 |
-| `target_point_topic` | topic | 空 | 単一目標点入力 |
+| `target_point_topic` | topic | 空 | 単一目標位置入力 |
 | `target_pose_array_topic` | topic | `/grasp_pose_candidates` | 目標姿勢配列入力 |
 | `target_score_topic` | topic | `/grasp_pose_scores` | 目標姿勢のスコア配列 |
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
@@ -98,7 +98,7 @@ flowchart TD
 | `non_collision_only` | bool | `true` | 衝突ノードを除外 |
 | `orientation_weight` | float | `0.25` | 姿勢整合重み |
 | `target_pose_topic` | topic | 空 | 単一目標姿勢 |
-| `target_point_topic` | topic | 空 | 単一目標点 |
+| `target_point_topic` | topic | 空 | 単一目標位置 |
 | `target_pose_array_topic` | topic | `/grasp_pose_candidates` | 候補姿勢群 |
 | `target_score_topic` | topic | `/grasp_pose_scores` | 姿勢スコア群 |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 選定ノード ID の出力 |
@@ -139,8 +139,7 @@ flowchart TD
 | `control_claim_mode` | int | `1` | control claim モード |
 | `control_claim_enabled` | bool | `true` | claim publish 有効化 |
 | `current_ee_pose_topic` | topic | `/ToPoDualArm/current_ee_pose` | 現在 EE pose 出力 |
-| `publish_candidate_robot_preview` | bool | `true` | viewer 向けロボットプレビュー |
-| `candidate_robot_preview_opacity` | float | `0.18` | プレビュー透明度 |
+| `publish_candidate_robot_preview` | bool | `true` | viewer 向けロボットプレビューの publish 有無 |
 | `metrics_max_joint_velocity` | float | `0.6` | 評価時間の見積もり用速度 |
 
 ### 3.4 `virtual_joint_state_driver.launch.py` の引数
@@ -216,7 +215,12 @@ flowchart TD
 
 このモードでは、候補ノード群・候補軌道・評価指標の生成は維持しつつ、実際の関節更新を止める。
 
-## 8. 変更時に更新すべき項目
+## 8. viewer 側に委ねる見た目
+
+候補ロボットプレビューの見た目は ToPoFuzzy Viewer 側で制御する。
+ROS 側はプレビューの送信有無だけを制御し、見た目の指定は送らない。
+
+## 9. 変更時に更新すべき項目
 
 1. launch 引数の追加・削除
 2. topic 名の変更
@@ -224,4 +228,3 @@ flowchart TD
 4. message field の増減
 5. no-motion / fallback / trial 分岐の追加
 6. publish 周期や既定値の変更
-

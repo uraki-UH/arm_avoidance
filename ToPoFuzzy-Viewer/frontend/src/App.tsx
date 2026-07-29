@@ -414,6 +414,7 @@ function App() {
                     if (!next[tag]) {
                         next[tag] = {
                             ...defaults,
+                            ...(data === robotData && tag.includes('candidate_goal_preview') ? { opacity: 0.18 } : {}),
                         };
                         changed = true;
                     }
@@ -1056,7 +1057,7 @@ function App() {
                                 {
                                     data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? 0.8} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipEllipsoidType={s.manipEllipsoidType || 'translational'} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? (tag.includes('candidate_goal_preview') ? 0.18 : 0.8)} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipEllipsoidType={s.manipEllipsoidType || 'translational'} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
                                 {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 0.8, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
                                 ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }

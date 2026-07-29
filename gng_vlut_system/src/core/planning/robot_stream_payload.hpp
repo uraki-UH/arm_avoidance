@@ -103,7 +103,7 @@ inline nlohmann::json buildRobotPayloadJson(
     const std::vector<double> &joint_values,
     const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
     const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
-    double timestamp, double opacity,
+    double timestamp,
     const Eigen::Vector3d &manip_center,
     const Manipulability::ManipulabilityEllipsoid *manip = nullptr,
     bool is_goal = false) {
@@ -113,7 +113,6 @@ inline nlohmann::json buildRobotPayloadJson(
   robot["urdf"] = urdf_content;
   robot["jointNames"] = joint_names;
   robot["jointValues"] = joint_values;
-  robot["opacity"] = opacity;
 
   auto &pos_arr = robot["positions"] = nlohmann::json::array();
   for (const auto &v : positions) {
@@ -160,24 +159,6 @@ inline nlohmann::json buildRobotPayloadJson(
   return robot;
 }
 
-inline std::string buildRobotStreamJson(
-    const std::string &type, const std::string &tag,
-    const std::string &frame_id, const std::string &urdf_content,
-    const std::vector<std::string> &joint_names,
-    const std::vector<double> &joint_values,
-    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &positions,
-    const std::vector<Eigen::Quaterniond, Eigen::aligned_allocator<Eigen::Quaterniond>> &orientations,
-    double timestamp, double opacity) {
-  nlohmann::json root;
-  root["type"] = type;
-  root["tag"] = tag;
-  root["robot"] = buildRobotPayloadJson(
-      frame_id, urdf_content, joint_names, joint_values, positions, orientations,
-      timestamp, opacity,
-      positions.empty() ? Eigen::Vector3d::Zero() : positions.back());
-  return root.dump();
-}
-
 inline std::string buildRobotStreamJsonWithInstances(
     const std::string &type, const std::string &tag,
     const nlohmann::json &robot_payload,
@@ -214,7 +195,6 @@ inline std::optional<CandidateRobotPreviewPayload> buildCandidateRobotPreviewPay
     const std::vector<int> &goal_candidate_ids,
     const std::shared_ptr<GNGType> &gng,
     const std::shared_ptr<::kinematics::KinematicChain> &chain,
-    double opacity,
     double timestamp) {
   if (!gng || !chain || urdf_content.empty()) {
     return std::nullopt;
@@ -263,8 +243,7 @@ inline std::optional<CandidateRobotPreviewPayload> buildCandidateRobotPreviewPay
 
     instance_payloads.push_back(buildRobotPayloadJson(
         robot_base_frame, urdf_content, controlled_joint_names,
-        joint_values, positions, orientations, timestamp, opacity,
-        manip_center, &manip));
+        joint_values, positions, orientations, timestamp, manip_center, &manip));
   }
 
   if (instance_payloads.empty()) {

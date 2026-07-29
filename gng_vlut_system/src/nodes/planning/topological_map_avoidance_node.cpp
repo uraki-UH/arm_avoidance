@@ -208,7 +208,6 @@ public:
     declare_parameter("waypoint_tolerance", 0.05);
     declare_parameter("robot_base_frame", "");
     declare_parameter("publish_candidate_robot_preview", true);
-    declare_parameter("candidate_robot_preview_opacity", 0.18);
     declare_parameter("metrics_max_joint_velocity", 0.6);
     // ゴール姿勢スコアリング
     // score = ホップ数 + 0.5*関節距離
@@ -413,8 +412,6 @@ public:
       robot_base_frame_ = ns.empty() ? root_link : (root_link.empty() ? ns : ns + "/" + root_link);
     }
     publish_candidate_robot_preview_ = get_parameter("publish_candidate_robot_preview").as_bool();
-    candidate_robot_preview_opacity_ = std::clamp(
-        get_parameter("candidate_robot_preview_opacity").as_double(), 0.0, 1.0);
     metrics_max_joint_velocity_ =
         std::max(1e-6, get_parameter("metrics_max_joint_velocity").as_double());
     goal_rot_manip_weight_ =
@@ -954,7 +951,6 @@ private:
   double waypoint_tolerance_ = 0.05;
   bool replan_on_path_collision_ = true;
   bool publish_candidate_robot_preview_ = true;
-  double candidate_robot_preview_opacity_ = 0.18;
   double metrics_max_joint_velocity_ = 0.6;
   float goal_rot_manip_weight_ = 1.0f;
   float goal_joint_limit_weight_ = 0.5f;
@@ -1636,8 +1632,7 @@ private:
     const auto preview_payload = buildCandidateRobotPreviewPayload(
         std::string(get_namespace()), robot_base_frame_,
         candidate_robot_urdf_content_, controlled_joint_names_,
-        latest_goal_candidate_ids_, gng_, chain_,
-        candidate_robot_preview_opacity_, this->now().seconds());
+        latest_goal_candidate_ids_, gng_, chain_, this->now().seconds());
 
     if (!preview_payload) {
       for (const auto &old_tag : last_candidate_robot_tags_) {
