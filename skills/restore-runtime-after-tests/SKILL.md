@@ -1,43 +1,43 @@
 ---
 name: restore-runtime-after-tests
-description: Use in /home/fuzzrobo/uraki_ws whenever running Docker, ROS 2 launch/node/topic/service, simulator, dev-server, or other runtime tests. Snapshot the relevant pre-test runtime state, bound and track spawned work, clean it up on every exit path, and verify that no test process, ROS node, container, daemon, or listener remains unless the user explicitly asks to keep it running.
+description: `~/uraki_ws` で Docker、ROS 2 の launch / node / topic / service、シミュレータ、dev-server、その他の実行テストを行うときに使う。テスト前の状態を記録し、起動したものを追跡して、あらゆる終了経路で片付け、ユーザーが明示的に残すよう依頼した場合を除いて、テストプロセス、ROS ノード、コンテナ、デーモン、リスナーが残っていないことを確認する。
 ---
 
-# Restore Runtime After Tests
+# テスト後の実行環境復元
 
-Treat restoration of the pre-test runtime state as part of test completion, not as optional cleanup.
+テスト前の実行状態を元に戻すことを、任意の後片付けではなくテスト完了の一部として扱う。
 
-## Required Workflow
+## 必須手順
 
-1. Record the relevant baseline before starting:
-   - target container existence and running state
-   - relevant host and container processes, including PID, PPID, and command
-   - relevant ROS nodes or ports only when the test can affect them
-   - whether the ROS 2 daemon was already running
-2. Run the test with a finite timeout and retain ownership information:
-   - use a unique marker, PID, process group, container ID, or exec session
-   - prefer graceful `SIGINT`, followed by bounded `SIGTERM` and `SIGKILL` only if required
-   - wait for every tool execution session to finish or explicitly terminate it
-3. Execute cleanup after success, failure, timeout, or interruption:
-   - stop only the process group and descendants created by the test
-   - stop and remove only temporary containers created by the test
-   - restore a pre-existing stopped container if the test started it
-   - stop the ROS 2 daemon if the test caused it to start and it was absent before
-   - remove only temporary files, sockets, and listeners created by the test
-4. Compare the post-test state with the baseline:
-   - no new test process or descendant remains
-   - container running states match
-   - relevant ROS nodes and listeners match after discovery has settled
-5. Report the cleanup result. Do not claim the test is complete when restoration was not verified.
+1. 開始前に、関連するベースラインを記録する。
+   - 対象コンテナの存在と起動状態
+   - 関連するホスト側とコンテナ側のプロセス。PID、PPID、コマンドも含める
+   - テストの影響を受ける場合だけ、関連する ROS ノードやポート
+   - ROS 2 デーモンが既に起動していたかどうか
+2. 有限のタイムアウトつきでテストを実行し、所有情報を残す。
+   - 一意のマーカー、PID、プロセスグループ、コンテナ ID、exec セッションを使う
+   - まず穏当な `SIGINT`、必要な場合だけ上限つきの `SIGTERM` と `SIGKILL` を使う
+   - すべてのツール実行セッションが終わるまで待つか、明示的に終了させる
+3. 成功、失敗、タイムアウト、中断のいずれでも後片付けを実行する。
+   - テストが起動したプロセスグループと子孫だけを止める
+   - テストが作成した一時コンテナだけを止めて削除する
+   - テストが起動した既存の停止コンテナは元に戻す
+   - テストのせいで ROS 2 デーモンが起動し、事前には止まっていたなら止める
+   - テストが作成した一時ファイル、ソケット、リスナーだけを削除する
+4. テスト後の状態をベースラインと比較する。
+   - 新しいテストプロセスや子孫が残っていない
+   - コンテナの起動状態が一致している
+   - 関連する ROS ノードとリスナーが、検出が落ち着いたあとで一致している
+5. 後片付けの結果を報告する。復元を確認していないのに、テスト完了とは言わない。
 
-## Safety Rules
+## 安全ルール
 
-- Never use broad cleanup such as unscoped `pkill -f`, `killall`, or stopping all ROS nodes.
-- Never terminate or restart a process or container that existed before the test merely because its name matches.
-- Do not leave a launch process running to preserve logs; capture its output and clean it up.
-- A failed test still requires the same cleanup and verification.
-- If exact restoration is impossible, state what remains and continue cleanup until resolved or user action is required.
+- 範囲指定のない `pkill -f`、`killall`、全 ROS ノード停止のような広すぎる片付けはしない。
+- 名前が一致するだけで、テスト前から存在したプロセスやコンテナを止めたり再起動したりしない。
+- ログ保持のために launch プロセスを残しっぱなしにしない。出力を取得して片付ける。
+- テストが失敗しても、同じ片付けと確認が必要。
+- 完全な復元が無理なら、何が残っているかを伝え、解決するかユーザー判断が必要になるまで片付けを続ける。
 
-## Explicit Exception
+## 明示的な例外
 
-Keep a process running only when the user explicitly asks for a persistent server, launch, or interactive test. State what was intentionally left running and how it differs from the baseline.
+永続サーバー、launch、対話的テストをユーザーが明示的に求めた場合にだけ、プロセスを残す。その場合は、何を意図的に残したかと、ベースラインとの違いを明記する。

@@ -1,34 +1,34 @@
 ---
 name: preserve-user-edits
-description: Use when editing existing workspace files that may contain manual user changes; preserve the current on-disk content and never restore older model-generated content unless the user explicitly asks for that rollback.
+description: 手作業の変更が入っている可能性のある既存ワークスペースファイルを編集するときに使う。現在ディスク上の内容を尊重し、ユーザーが明示的に巻き戻しを求めた場合を除いて、古いモデル生成内容を戻さない。
 ---
 
-# Preserve User Edits
+# ユーザー編集の保持
 
-## Core rule
+## 基本ルール
 
-When editing an existing file, treat the current file on disk as the source of truth.
+既存ファイルを編集するときは、今ディスク上にある内容を正とみなす。
 
-Do not:
+してはいけないこと:
 
-- restore a prior version just because it matches an earlier assistant state
-- reapply text from memory over user edits
-- overwrite sections that the user has manually changed unless the user asked for that exact replacement
+- 以前のアシスタント状態に合うというだけで、過去版を戻す
+- ユーザーの編集の上から、記憶している文を再適用する
+- ユーザーがその置き換えを明示的に求めていない限り、手で変わった部分を書き換える
 
-## Required workflow
+## 必須手順
 
-1. Read the current file contents first.
-2. Compare against the latest diff or visible working tree state when available.
-3. Preserve any user-added or user-modified lines.
-4. Make the smallest patch that satisfies the request.
-5. If the current file already diverges from the version you expected, continue from the current file instead of "fixing" it back.
+1. まず現在のファイル内容を読む。
+2. 可能なら最新の差分や見えている作業ツリー状態と照合する。
+3. ユーザーが追加・修正した行を残す。
+4. 要望を満たす最小限の差分だけ当てる。
+5. 想定していた版とすでに違っていても、"直す" のではなく今のファイルから続ける。
 
-## If conflict appears
+## 衝突が起きたら
 
-If a requested edit would destroy a user change or would require guessing which version to keep, stop and report the conflict instead of silently reverting anything.
+依頼された編集がユーザー変更を壊す、またはどちらの版を残すべきか推測が必要になるなら、黙って戻さず止まって衝突を報告する。
 
-## Typical trigger cases
+## 典型的な適用場面
 
-- markdown or text files the user may hand-edit
-- docs that are being iterated on in the same workspace
-- any file where a later assistant turn must append to the latest user-edited state
+- ユーザーが手で編集する可能性のある markdown やテキストファイル
+- 同じワークスペースで繰り返し更新される文書
+- 後続のアシスタントが、最新のユーザー編集状態に追記しなければならないファイル

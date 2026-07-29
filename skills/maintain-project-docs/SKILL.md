@@ -1,22 +1,32 @@
 ---
 name: maintain-project-docs
-description: Use in /home/fuzzrobo/uraki_ws when implementation or investigation creates deferred work, establishes a gng_vlut_system specification, or changes documented behavior; update only the relevant task candidate, technical specification, or release note while preserving current user edits.
+description: `~/uraki_ws` で、実装や調査によって保留タスクが生まれたとき、次にやる順番つきの作業が決まったとき、`gng_vlut_system` の仕様を固めるとき、または文書化された挙動が変わったときに使う。更新対象は、関連するタスクリスト、タスク候補、技術仕様、リリースノートのいずれかに絞り、ユーザーの編集を尊重して最小差分で直す。
 ---
 
-# Maintain Project Docs
+# プロジェクト文書の維持
 
-Keep project documentation aligned with the work without loading or rewriting unrelated documents.
+作業内容に合わせてプロジェクト文書を整える。関係のない文書は読み込まず、書き換えもしない。
 
-## Workflow
+## 作業手順
 
-1. Use `rg` to locate the relevant heading or symbol before reading a document.
-2. Read the current on-disk target file immediately before editing it.
-3. Preserve manual edits and make the smallest applicable patch.
-4. Route the update:
-   - Unimplemented or unsettled work: append one concise item to `gng_vlut_system/docs/TASK_CANDIDATES.md`.
-   - Implemented and stable behavior: update only the affected variables, topics, or flow in `gng_vlut_system/docs/TECHNICAL_SPEC.md`.
-   - Code or configuration behavior changed: add one entry under `gng_vlut_system/docs/releases/` using `RELEASE_NOTE_TEMPLATE.md`.
-5. When a candidate is implemented, remove only that completed candidate after its stable behavior is documented.
-6. Review the final diff and never restore text that the user removed or rewrote.
+1. 文書を読む前に、`rg` で該当見出しや記号を先に探す。
+2. 編集直前に、対象ファイルの現状を必ず読み直す。
+3. 手作業で入った変更を守り、最小限の差分だけ当てる。
+4. 更新先は次のとおり分ける。
+   - 次にユーザーが実行する順序つきの確定作業: `gng_vlut_system/docs/TASK_LIST.md`
+   - まだ実装方針が固まっていない作業: `gng_vlut_system/docs/TASK_CANDIDATES.md`
+   - 実装済みで安定した挙動: `gng_vlut_system/docs/TECHNICAL_SPEC.md`
+   - コードや設定の挙動が変わった: `gng_vlut_system/docs/releases/` に `RELEASE_NOTE_TEMPLATE.md` を使って 1 件追加する
+5. 候補が実装済みになったら、仕様やリリースノートを先に整えたうえで、その候補だけを削除する。
+6. 最終差分を見直し、ユーザーが消した文や書き換えた文を戻さない。
 
-Do not create documentation churn for investigation-only work unless it identifies a concrete deferred task.
+## `TASK_LIST.md` は手作業で管理する
+
+ユーザーは `gng_vlut_system/docs/TASK_LIST.md` を自由に直接編集する。追加、並べ替え、削除はこの作業フローの外でもいつでも行われる。ここでは `[[preserve-user-edits]]` の考え方をこのファイルに適用する。
+
+- 現在ディスク上にある内容を正とみなし、想定より少なくても並び順が変わっていても、そのまま受け入れる。
+- ユーザーが消した項目は、前回の作業で追加したものでも戻さない。
+- 項目を削除するのは、実装確認と、それに対応する `TECHNICAL_SPEC.md` またはリリースノート更新が済んだ後だけにする。
+- 作業途中でそのタスクが再び未確定になったら、消さずに `TASK_CANDIDATES.md` へ戻す。
+
+調査だけの作業では、具体的な保留タスクが見つからない限り、文書を増やしすぎない。
