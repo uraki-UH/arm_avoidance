@@ -8,6 +8,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/EvaluationMetrics.msg"
   "msg/GraspCandidateMetric.msg"
   "msg/GraspCandidateMetricArray.msg"
   "msg/JointControlClaim.msg"

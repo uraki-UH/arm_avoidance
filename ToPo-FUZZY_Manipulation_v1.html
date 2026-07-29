@@ -411,6 +411,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .bundle-topic-list label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;text-transform:none;letter-spacing:0;font-size:11px;font-weight:700}
 .bundle-topic-list input[type=checkbox]{width:auto!important;flex:0 0 auto}
 .bundle-topic-meta{color:#94a3b8;font-family:Consolas,Menlo,monospace;font-size:10px;white-space:nowrap}
+.evaluation-metric-status{border-color:rgba(56,189,248,.38);color:#bfdbfe}
+.evaluation-metric-status b{color:#00ff00}
 
 /* ── Gripper / grasp ── */
 .gripper-legend-chip i{background:#9ca3af}
@@ -658,6 +660,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <button id="gngClearDataBtn" class="warn" type="button" style="display:none">JSONを破棄</button>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
+            <div id="evaluationMetricStatus" class="status evaluation-metric-status" style="margin-top:6px">評価指標: 未受信</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
@@ -989,6 +992,7 @@ const state={
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
   importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
+  evaluationMetrics:{schemas:{},samples:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0},
   bundleFlow:null,
   gngWasmInputSource:'visible_points',
   gngWasmFileUrls:null
@@ -1629,6 +1633,151 @@ function v312NormalizeTopicMessages(entry){
   if(Array.isArray(entry.messages)) return entry.messages;
   return [];
 }
+function v320EvaluationMetricKey(msg){
+  return [
+    msg&&msg.profile_name ? msg.profile_name : 'default',
+    msg&&msg.schema_id ? msg.schema_id : 'default',
+    msg&&msg.scope_type ? msg.scope_type : 'default',
+    msg&&msg.source_topic ? msg.source_topic : 'default'
+  ].join('::');
+}
+function v320NormalizeMetricValue(value){
+  if(!value||typeof value!=='object') return null;
+  const type=value.value_type;
+  if(type===2 || type==='bool') return !!value.bool_value;
+  if(type===1 || type==='int') return Number.isFinite(+value.int_value)?+value.int_value:null;
+  if(type===3 || type==='string') return value.string_value ?? '';
+  if(type===4 || type==='float_array') return Array.isArray(value.float_array_value) ? value.float_array_value.map(v=>+v||0) : [];
+  return Number.isFinite(+value.float_value)?+value.float_value:null;
+}
+function v320MetricTypeName(type){
+  if(type===1 || type==='int') return 'int';
+  if(type===2 || type==='bool') return 'bool';
+  if(type===3 || type==='string') return 'string';
+  if(type===4 || type==='float_array') return 'float_array';
+  return 'float';
+}
+function v320MetricValueFromFlat(msg, index){
+  const type=(msg.sample_metric_value_types||[])[index] ?? 0;
+  const arrOffsets=msg.sample_float_array_offsets||[];
+  const arrBegin=arrOffsets[index] ?? 0;
+  const arrEnd=arrOffsets[index+1] ?? arrBegin;
+  return {
+    metric_id:(msg.sample_metric_ids||[])[index] || '',
+    valid:(msg.sample_metric_valid||[])[index] !== false,
+    value_type:type,
+    float_value:+((msg.sample_float_values||[])[index] ?? 0),
+    int_value:+((msg.sample_int_values||[])[index] ?? 0),
+    bool_value:!!((msg.sample_bool_values||[])[index]),
+    string_value:(msg.sample_string_values||[])[index] || '',
+    float_array_value:(msg.sample_float_array_values||[]).slice(arrBegin, arrEnd),
+  };
+}
+function v320StoreEvaluationMetrics(msg, source='live'){
+  if(!msg||typeof msg!=='object'||!Array.isArray(msg.metric_ids)) return false;
+  const schema={
+    header:msg.header,
+    profile_name:msg.profile_name,
+    schema_id:msg.schema_id,
+    schema_revision:msg.schema_revision,
+    scope_type:msg.scope_type,
+    source_topic:msg.source_topic,
+    metrics:(msg.metric_ids||[]).map((metric_id,i)=>({
+      metric_id,
+      label:(msg.labels||[])[i] || metric_id,
+      unit:(msg.units||[])[i] || '',
+      value_type:v320MetricTypeName((msg.value_types||[])[i] ?? 0),
+      scope_type:(msg.metric_scope_types||[])[i] || msg.scope_type || '',
+      group_name:(msg.group_names||[])[i] || '',
+      description:(msg.descriptions||[])[i] || '',
+      visible:(msg.visible||[])[i] !== false,
+      enabled:(msg.enabled||[])[i] !== false,
+      default_weight:+((msg.default_weights||[])[i] ?? 0),
+    })),
+  };
+  const offsets=msg.sample_metric_offsets||[];
+  const samples=(msg.sample_scope_ids||[]).map((scope_id,i)=>{
+    const begin=offsets[i] ?? 0;
+    const end=offsets[i+1] ?? begin;
+    const metrics=[];
+    for(let mi=begin; mi<end; mi++) metrics.push(v320MetricValueFromFlat(msg,mi));
+    return {
+      header:msg.header,
+      profile_name:msg.profile_name,
+      schema_id:msg.schema_id,
+      schema_revision:msg.schema_revision,
+      scope_type:msg.scope_type,
+      scope_id,
+      source_topic:msg.source_topic,
+      metrics,
+    };
+  });
+  v320StoreEvaluationMetricSchema(schema,source);
+  v320StoreEvaluationMetricSampleArray({...schema,samples},source);
+  return true;
+}
+function v320StoreEvaluationMetricSchema(msg, source='live'){
+  if(!msg||typeof msg!=='object'||!Array.isArray(msg.metrics)) return false;
+  const key=v320EvaluationMetricKey(msg);
+  state.evaluationMetrics.schemas[key]={...msg,source};
+  state.evaluationMetrics.lastSchemaKey=key;
+  state.evaluationMetrics.receivedSchemas++;
+  v320UpdateEvaluationMetricStatus();
+  return true;
+}
+function v320StoreEvaluationMetricSampleArray(msg, source='live'){
+  if(!msg||typeof msg!=='object') return false;
+  const samples=Array.isArray(msg.samples) ? msg.samples : (Array.isArray(msg.metrics) ? [msg] : []);
+  if(!samples.length) return false;
+  const key=v320EvaluationMetricKey(msg);
+  const normalized=samples.map(sample=>({
+    ...sample,
+    metrics_by_id:Object.fromEntries((sample.metrics||[]).map(v=>[v.metric_id,v320NormalizeMetricValue(v)]))
+  }));
+  state.evaluationMetrics.samples[key]={...msg,samples:normalized,source};
+  state.evaluationMetrics.lastSampleKey=key;
+  state.evaluationMetrics.receivedSamples += normalized.length;
+  v320UpdateEvaluationMetricStatus();
+  return true;
+}
+function v320UpdateEvaluationMetricStatus(){
+  const el=$('evaluationMetricStatus');
+  if(!el) return;
+  const schemaCount=Object.keys(state.evaluationMetrics.schemas||{}).length;
+  const sampleGroups=Object.keys(state.evaluationMetrics.samples||{}).length;
+  const sampleCount=Object.values(state.evaluationMetrics.samples||{}).reduce((sum,group)=>sum+(group.samples?.length||0),0);
+  const schemaKey=state.evaluationMetrics.lastSchemaKey||'-';
+  const sampleKey=state.evaluationMetrics.lastSampleKey||'-';
+  el.innerHTML=`評価指標: <b>schema ${schemaCount}</b>, <b>sample ${sampleCount}</b> / groups ${sampleGroups}<br>schema=${schemaKey}<br>sample=${sampleKey}`;
+}
+function v320ExtractEvaluationMetricsFromBundle(bundle){
+  const topics=v312ResolveBundleTopics(bundle);
+  if(!topics) return {schemas:0,samples:0};
+  let schemas=0,samples=0;
+  for(const [alias,entry] of Object.entries(topics)){
+    const role=String(entry&&entry.role||'').toLowerCase();
+    const topic=String(entry&&entry.topic||entry&&entry.resolved_topic||alias||'').toLowerCase();
+    const looksBundle=role.includes('evaluation_metrics') || topic.endsWith('/evaluation_metrics') || topic.includes('/evaluation_metrics');
+    const looksSchema=role.includes('evaluation_metric_schema') || topic.endsWith('/evaluation_metrics/schema') || topic.includes('/evaluation_metrics/schema');
+    const looksSample=role.includes('evaluation_metric_sample') || topic.endsWith('/evaluation_metrics/sample') || topic.includes('/evaluation_metrics/sample');
+    if(!looksBundle && !looksSchema && !looksSample) continue;
+    for(const row of v312NormalizeTopicMessages(entry)){
+      const data=Array.isArray(row)?row[1]:row&&typeof row==='object'&&'data' in row?row.data:row;
+      if(looksBundle && v320StoreEvaluationMetrics(data,'bundle')){ schemas++; samples++; continue; }
+      if(looksSchema && v320StoreEvaluationMetricSchema(data,'bundle')) schemas++;
+      if(looksSample && v320StoreEvaluationMetricSampleArray(data,'bundle')) samples++;
+    }
+  }
+  v320UpdateEvaluationMetricStatus();
+  return {schemas,samples};
+}
+window.__topoEvaluationMetricApi={
+  storeMetrics:msg=>v320StoreEvaluationMetrics(msg,'ros'),
+  storeSchema:msg=>v320StoreEvaluationMetricSchema(msg,'ros'),
+  storeSampleArray:msg=>v320StoreEvaluationMetricSampleArray(msg,'ros'),
+  updateStatus:v320UpdateEvaluationMetricStatus,
+  getState:()=>state.evaluationMetrics
+};
 function v312ExtractGraspPosesFromBundle(bundle){
   state.graspPoseCandidates=[];
   if(!bundle) return;
@@ -5012,10 +5161,12 @@ function v312SetupGngInputFileLoader(){
         v312SetBundleTopicSelectionDefaults(parsed.payload);
         v312RenderBundleTopicList(parsed.payload);
         v312ExtractGraspPosesFromBundle(parsed.payload);
+        const metricInfo=v320ExtractEvaluationMetricsFromBundle(parsed.payload);
         const entries=v312GetBundleTopicEntries(parsed.payload);
         const poseCount=(state.graspPoseCandidates||[]).length;
         const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';
-        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}. 再生で flow を開始します。`);
+        const metricText=(metricInfo.schemas||metricInfo.samples)?`, eval schema=${metricInfo.schemas}, eval sample=${metricInfo.samples}`:'';
+        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}${metricText}. 再生で flow を開始します。`);
         if(poseCount) renderAll();
         return;
       }
@@ -5369,6 +5520,8 @@ function bindDataModeControls(){
       state.importedGraphSession=null;
       state.bundleTopicSelection={};
       state.graspPoseCandidates=[];
+      state.evaluationMetrics={schemas:{},samples:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0};
+      v320UpdateEvaluationMetricStatus();
       resetGngRunState();
       generate();
       updateGngDataSourceUi();
@@ -5595,6 +5748,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     tryNext(0);
   }
   const rosPublishers = [];
+  const rosSubscribers = [];
   function getCurrentTopoPoints(){
     const st = window.__topoState || window.state;
     if(!st) return null;
@@ -5738,6 +5892,40 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     rosPublishers.push({onConnection, onClose, onError});
     return {sync, stop};
   }
+  function createRosTopicSubscriber({topic,messageType,statusPrefix,onMessage}){
+    let topicObj = null;
+    const setStatus = (text)=>{
+      const el = document.getElementById('evaluationMetricStatus');
+      if(el && statusPrefix) el.textContent = text;
+    };
+    const stop = ()=>{
+      if(topicObj){
+        try{ topicObj.unsubscribe(); }catch(_e){}
+        topicObj = null;
+      }
+    };
+    const start = ()=>{
+      if(!ros || !ros.isConnected){
+        setStatus(`${statusPrefix}: waiting for connection`);
+        return false;
+      }
+      stop();
+      topicObj = new ROSLIB.Topic({ros,name:topic,messageType});
+      topicObj.subscribe((msg)=>{
+        try{
+          onMessage(msg);
+        }catch(e){
+          console.warn(`${statusPrefix} subscribe error`, e);
+        }
+      });
+      return true;
+    };
+    const onConnection = ()=>start();
+    const onClose = ()=>{ stop(); setStatus(`${statusPrefix}: disconnected`); };
+    const onError = ()=>setStatus(`${statusPrefix}: error`);
+    rosSubscribers.push({onConnection,onClose,onError,stop});
+    return {start,stop};
+  }
   function ensureRos(){
     if(ros) return;
     loadRoslib(()=>{
@@ -5748,12 +5936,14 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         ros.on('connection', ()=>{
           setRosBridgeStatus('ROS bridge: connected');
           rosPublishers.forEach(p=>p.onConnection());
+          rosSubscribers.forEach(s=>s.onConnection());
         });
         ros.on('close', ()=>{
           setRosBridgeStatus('ROS bridge: disconnected');
           rosPublishers.forEach(p=>p.onClose());
+          rosSubscribers.forEach(s=>s.onClose());
         });
-        ros.on('error', (e)=>{ setRosBridgeStatus('ROS bridge: error'); rosPublishers.forEach(p=>p.onError()); console.warn('ros error',e); });
+        ros.on('error', (e)=>{ setRosBridgeStatus('ROS bridge: error'); rosPublishers.forEach(p=>p.onError()); rosSubscribers.forEach(s=>s.onError()); console.warn('ros error',e); });
       }catch(e){ console.warn('ros init error',e); setRosBridgeStatus('ROS bridge: init error'); }
     });
   }
@@ -5904,6 +6094,14 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         messageBuilder: (points)=>buildPointCloudMsgFromPoints(points, DEFAULT_TOPO_POINTS_FRAME, {includeSemanticLabel:true}),
       },
     ];
+    [
+      {
+        topic:'/evaluation_metrics',
+        messageType:'gng_control_msgs/EvaluationMetrics',
+        statusPrefix:'評価指標',
+        onMessage:(msg)=>window.__topoEvaluationMetricApi?.storeMetrics(msg),
+      },
+    ].forEach(createRosTopicSubscriber);
     const rosPublishers = rosPublishersConfig.map((config)=>{
       bindRosTopicPanel(config.enabledId, config.detailId);
       return createPointCloudPublisher(config);

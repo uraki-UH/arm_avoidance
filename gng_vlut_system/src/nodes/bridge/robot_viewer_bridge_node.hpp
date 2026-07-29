@@ -51,8 +51,7 @@ private:
     std::vector<std::string> active_joint_names_;
     std::unordered_map<std::string, size_t> joint_name_to_active_index_;
     std::vector<double> current_joint_values_;
-    std::vector<std::string> chain_joint_names_;
-    std::unordered_map<std::string, size_t> chain_joint_name_to_active_index_;
+    std::unordered_map<std::string, std::vector<size_t>> chain_joint_name_to_active_indices_;
     builtin_interfaces::msg::Time last_joint_state_stamp_;
     bool has_joint_state_ = false;
     std::string urdf_content_;

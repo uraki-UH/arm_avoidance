@@ -228,21 +228,24 @@ void RobotViewerBridgeNode::buildJointIndexMap() {
 }
 
 void RobotViewerBridgeNode::buildChainJointIndexMap() {
-    chain_joint_names_.clear();
-    chain_joint_name_to_active_index_.clear();
+    chain_joint_name_to_active_indices_.clear();
     if (!chain_) {
         return;
     }
 
-    const int total_dof = chain_->getTotalDOF();
-    chain_joint_names_.reserve(static_cast<std::size_t>(std::max(0, total_dof)));
-    for (int i = 0; i < total_dof; ++i) {
+    std::size_t dof_index = 0;
+    for (int i = 0; i < chain_->getNumJoints(); ++i) {
+        const int joint_dof = chain_->getJointDOF(i);
         const std::string joint_name = chain_->getJointName(i);
-        if (joint_name.empty()) {
+        if (joint_dof <= 0) {
             continue;
         }
-        chain_joint_name_to_active_index_[joint_name] = chain_joint_names_.size();
-        chain_joint_names_.push_back(joint_name);
+        if (joint_name.empty()) {
+            dof_index += static_cast<std::size_t>(joint_dof);
+            continue;
+        }
+        chain_joint_name_to_active_indices_[joint_name].push_back(dof_index);
+        dof_index += static_cast<std::size_t>(joint_dof);
     }
 }
 
@@ -334,7 +337,7 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
             auto link_manip = Manipulability::calculateManipulabilityEllipsoid(Jv);
             auto link_rot_manip = Manipulability::calculateManipulabilityEllipsoid(Jr);
             robot_sim::common::appendLinkManipulabilityJson(
-                robot["linkManipulabilities"], link_name, base_tf, link_tf, link_manip, link_rot_manip);
+                robot["linkManipulabilities"], link_name, link_tf, link_manip, link_rot_manip);
         }
     }
 
@@ -353,7 +356,9 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     robot["manipConditionNumber"] = manip.condition_number;
     robot["isGoal"] = false;
     if (manip.valid) {
-        const Eigen::Vector3d world_center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+        const Eigen::Vector3d world_center =
+            chain_ ? chain_->getEEFPosition() :
+            (positions.empty() ? Eigen::Vector3d::Zero() : positions.back());
         const Eigen::Vector3d center = base_q.conjugate() * (world_center - base_tf.translation());
         Eigen::Quaterniond q = base_q.conjugate() * Eigen::Quaterniond(manip.principal_directions);
         q.normalize();
@@ -370,7 +375,9 @@ std::string RobotViewerBridgeNode::buildRobotJsonLocked(
     robot["rotationalManipValue"] = rot_manip.manipulability;
     robot["rotationalManipConditionNumber"] = rot_manip.condition_number;
     if (rot_manip.valid) {
-        const Eigen::Vector3d world_center = positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
+        const Eigen::Vector3d world_center =
+            chain_ ? chain_->getEEFPosition() :
+            (positions.empty() ? Eigen::Vector3d::Zero() : positions.back());
         const Eigen::Vector3d center = base_q.conjugate() * (world_center - base_tf.translation());
         Eigen::Quaterniond q_rot = base_q.conjugate() * Eigen::Quaterniond(rot_manip.principal_directions);
         q_rot.normalize();
@@ -400,12 +407,15 @@ void RobotViewerBridgeNode::publishCurrentState() {
     std::vector<double> chain_joint_values;
     if (chain_ && chain_->getTotalDOF() > 0) {
         chain_joint_values.assign(chain_->getTotalDOF(), 0.0);
-        for (const auto &[joint_name, chain_index] : chain_joint_name_to_active_index_) {
+        for (const auto &[joint_name, chain_indices] : chain_joint_name_to_active_indices_) {
             auto it = joint_name_to_active_index_.find(joint_name);
             if (it != joint_name_to_active_index_.end() &&
-                it->second < current_joint_values_.size() &&
-                chain_index < chain_joint_values.size()) {
-                chain_joint_values[chain_index] = current_joint_values_[it->second];
+                it->second < current_joint_values_.size()) {
+                for (const std::size_t chain_index : chain_indices) {
+                    if (chain_index < chain_joint_values.size()) {
+                        chain_joint_values[chain_index] = current_joint_values_[it->second];
+                    }
+                }
             }
         }
         chain_->forwardKinematicsAt(chain_joint_values, positions, orientations);

@@ -25,3 +25,8 @@ topics:
     topic: /ToPoDualArm/grasp_candidate_metrics
     kind: generic
     role: metrics
+
+  - alias: evaluation_metrics
+    topic: /evaluation_metrics
+    kind: generic
+    role: evaluation_metrics

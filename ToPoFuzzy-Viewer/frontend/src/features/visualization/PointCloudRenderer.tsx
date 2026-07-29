@@ -14,6 +14,23 @@ interface PointCloudRendererProps {
     onTransformChange?: (position: [number, number, number], rotation: [number, number, number], scale: [number, number, number]) => void;
 }
 
+function configureSrgbVertexColors(material: THREE.PointsMaterial) {
+    material.toneMapped = false;
+    material.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <color_vertex>',
+            `#include <color_vertex>
+#ifdef USE_COLOR
+    vec3 srgbVertexColor = vColor;
+    vec3 linearLow = srgbVertexColor / 12.92;
+    vec3 linearHigh = pow((srgbVertexColor + 0.055) / 1.055, vec3(2.4));
+    vColor = mix(linearLow, linearHigh, step(vec3(0.04045), srgbVertexColor));
+#endif`
+        );
+    };
+    material.customProgramCacheKey = () => 'pointcloud-srgb-vertex-colors-v1';
+}
+
 export function PointCloudRenderer({
     data,
     heatmapSettings,
@@ -96,7 +113,7 @@ export function PointCloudRenderer({
             const isSimple = heatmapSettings?.mode === 'simple';
             const simpleColor = heatmapSettings?.simpleColor || '#ffffff';
 
-            return new THREE.PointsMaterial({
+            const pointsMaterial = new THREE.PointsMaterial({
                 size: pointSize,
                 vertexColors: !isSimple,
                 color: isSimple ? new THREE.Color(simpleColor) : new THREE.Color('#ffffff'),
@@ -106,6 +123,10 @@ export function PointCloudRenderer({
                 depthWrite: !isTransparent,
                 depthTest: true,
             });
+            if (!isSimple) {
+                configureSrgbVertexColors(pointsMaterial);
+            }
+            return pointsMaterial;
         }
     }, [heatmapSettings, data.opacity]);
 

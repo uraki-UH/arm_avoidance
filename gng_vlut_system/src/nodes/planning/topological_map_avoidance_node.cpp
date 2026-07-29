@@ -46,6 +46,7 @@
 #include "planning/robot_stream_payload.hpp"
 #include "planning/topological_map_avoidance_helpers.hpp"
 #include "planning/joint_linf_cost.hpp"
+#include "core/common/evaluation_metric_serialization.hpp"
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_model.hpp"
 #include "robot_model/urdf_loader.hpp"
@@ -187,6 +188,7 @@ public:
     declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
+    declare_parameter("evaluation_metrics_topic", "/evaluation_metrics");
     declare_parameter("current_ee_pose_topic", "");
     declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids");
     declare_parameter("publish_hz", 20.0);
@@ -421,6 +423,7 @@ public:
     trajectory_topic_ = get_parameter("trajectory_topic").as_string();
     candidate_trajectory_topic_ = get_parameter("candidate_trajectory_topic").as_string();
     candidate_metrics_topic_ = get_parameter("candidate_metrics_topic").as_string();
+    evaluation_metrics_topic_ = get_parameter("evaluation_metrics_topic").as_string();
     current_ee_pose_topic_ = get_parameter("current_ee_pose_topic").as_string();
     if (current_ee_pose_topic_.empty()) {
       const std::string ns_raw = std::string(get_namespace());
@@ -491,6 +494,9 @@ public:
     candidate_metrics_pub_ =
         create_publisher<gng_control_msgs::msg::GraspCandidateMetricArray>(
             candidate_metrics_topic_, rclcpp::QoS(1).reliable().transient_local());
+    evaluation_metrics_pub_ =
+        create_publisher<gng_control_msgs::msg::EvaluationMetrics>(
+            evaluation_metrics_topic_, rclcpp::QoS(1).reliable().transient_local());
     current_ee_pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
         current_ee_pose_topic_, rclcpp::QoS(1).reliable().transient_local());
     candidate_robot_description_pub_ = create_publisher<std_msgs::msg::String>(
@@ -912,6 +918,7 @@ private:
   std::string trajectory_topic_;
   std::string candidate_trajectory_topic_;
   std::string candidate_metrics_topic_;
+  std::string evaluation_metrics_topic_;
   std::string current_ee_pose_topic_;
   std::string goal_candidate_ids_topic_;
 
@@ -923,6 +930,7 @@ private:
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr trajectory_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_trajectory_pub_;
   rclcpp::Publisher<gng_control_msgs::msg::GraspCandidateMetricArray>::SharedPtr candidate_metrics_pub_;
+  rclcpp::Publisher<gng_control_msgs::msg::EvaluationMetrics>::SharedPtr evaluation_metrics_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr current_ee_pose_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_description_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_robot_pose_pub_;
@@ -1541,6 +1549,17 @@ private:
         start_id, goal_candidates, candidate_path_by_goal, gng_, chain_,
         controlled_joint_names_, metrics_max_joint_velocity_);
     candidate_metrics_pub_->publish(out);
+
+    if (evaluation_metrics_pub_ && !evaluation_metrics_topic_.empty()) {
+      const std::string profile_name = get_parameter("gng.profile_names").as_string();
+      constexpr const char *kSchemaId = "grasp_candidate_metrics";
+      constexpr uint32_t kSchemaRevision = 1;
+      const auto stamp = now();
+      const auto metrics = robot_sim::common::buildCandidateEvaluationMetrics(
+          stamp, profile_name, "candidate", candidate_metrics_topic_, out,
+          kSchemaId, kSchemaRevision);
+      evaluation_metrics_pub_->publish(metrics);
+    }
   }
 
   void publishTrajectoryPathLocked(const std::vector<int> &node_path) {

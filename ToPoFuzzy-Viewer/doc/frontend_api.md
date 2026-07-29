@@ -38,7 +38,7 @@ The main application component that orchestrates:
 ## Features
 
 ### Visualization
-- **PointCloudRenderer.tsx**: Renders point cloud data using Three.js points. Supports different visualization modes (RGB, Height Heatmap, etc.).
+- **PointCloudRenderer.tsx**: Renders point cloud data using Three.js points. Supports different visualization modes (RGB, Height Heatmap, etc.). RGB vertex colors are interpreted as sRGB, converted to the linear working space in the vertex shader, and rendered without tone mapping.
 - **GraphRenderer.tsx**: Renders the GNG (Growing Neural Gas) topological graph, including nodes, edges, and clusters.
 - **GngLayerControls.tsx**: Controls for the GNG layer, including visibility toggles for graph elements, clusters, normals, and label filtering.
 - **HeatmapControls.tsx**: UI controls for configuring heatmap color schemes and value ranges.
