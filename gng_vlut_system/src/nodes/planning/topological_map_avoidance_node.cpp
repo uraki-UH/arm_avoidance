@@ -1553,7 +1553,7 @@ private:
     if (evaluation_metrics_pub_ && !evaluation_metrics_topic_.empty()) {
       const std::string profile_name = get_parameter("gng.profile_names").as_string();
       constexpr const char *kSchemaId = "grasp_candidate_metrics";
-      constexpr uint32_t kSchemaRevision = 4;
+      constexpr uint32_t kSchemaRevision = 5;
       const auto stamp = now();
       const auto metrics = robot_sim::common::buildCandidateEvaluationMetrics(
           stamp, profile_name, "candidate", candidate_metrics_topic_, out,

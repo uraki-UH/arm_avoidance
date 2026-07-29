@@ -52,10 +52,9 @@ struct Status {
   // 静的（運動学的）可操作性
   Manipulability::ManipulabilityEllipsoid manip_info;
 
-  // 以前の ManipulabilityInfo にあった追加スコア（互換性のため）
+  // 以前の ManipulabilityInfo にあった追加指標
   float min_singular_value = 0.0f;
   float joint_limit_score = 1.0f;
-  float combined_score = 0.0f;
   float dynamic_manipulability = 0.0f;
 
   // 動的可操作性

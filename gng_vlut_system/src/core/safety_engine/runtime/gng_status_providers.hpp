@@ -94,11 +94,8 @@ public:
     node.status.rotational_manip_info = Manipulability::calculateManipulabilityEllipsoid(
         Jr, Manipulability::KINEMATIC);
 
-    // 互換性用フィールドの更新
     node.status.min_singular_value =
         (float)node.status.manip_info.singular_values.minCoeff();
-    node.status.combined_score =
-        node.status.min_singular_value * node.status.joint_limit_score;
   }
 };
 

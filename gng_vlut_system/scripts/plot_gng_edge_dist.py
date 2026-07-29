@@ -54,7 +54,8 @@ def main():
             manipulability = struct.unpack('f', f.read(4))[0]
             min_singular_value = struct.unpack('f', f.read(4))[0]
             joint_limit_score = struct.unpack('f', f.read(4))[0]
-            combined_score = struct.unpack('f', f.read(4))[0]
+            if 4 <= version <= 8:
+                f.read(4)  # Removed legacy field
             manip_valid = struct.unpack('?', f.read(1))[0]
             dynamic_manipulability = struct.unpack('f', f.read(4))[0]
             

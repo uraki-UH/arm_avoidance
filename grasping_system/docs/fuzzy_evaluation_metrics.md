@@ -64,7 +64,6 @@
 - `joint_limit_score` (関節範囲余裕スコア: $[0, 1]$)
 - `collision_count` / `danger_count` (周辺GNG空間での衝突・危険検出カウント)
 - `is_colliding` / `is_danger` (衝突/危険フラグ。1.0で該当、0.0で非該当)
-- `combined_score` (GNG内部で計算された統合スコア)
 - `dynamic_manipulability` (動的マニピュラビリティ)
 
 ---

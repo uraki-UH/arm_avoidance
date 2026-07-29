@@ -30,7 +30,7 @@ namespace GNG {
  */
 template <typename T_angle, typename T_coord> class GrowingNeuralGas {
 public:
-  uint32_t version = 6; // Version 6: Added multi-layer coord support
+  uint32_t version = 9; // Version 9: Removed one obsolete status float
   using UpdateTrigger = GNG::UpdateTrigger;
   using NodeType = NeuronNode<T_angle, T_coord>;
   using ManipulabilityCallback =

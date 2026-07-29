@@ -454,9 +454,7 @@ private:
         node.status.manip_info = Manipulability::calculateManipulabilityEllipsoid(Jv, Manipulability::KINEMATIC);
         node.status.rotational_manip_info = Manipulability::calculateManipulabilityEllipsoid(Jr, Manipulability::KINEMATIC);
 
-        // Update other metrics
         node.status.min_singular_value = (float)node.status.manip_info.singular_values.minCoeff();
-        node.status.combined_score = node.status.min_singular_value * node.status.joint_limit_score;
 
         count++;
       }

@@ -250,7 +250,6 @@ buildGraspCandidateMetricArray(
             "danger_count",
             "is_colliding",
             "is_danger",
-            "combined_score",
             "dynamic_manipulability"};
         metric.metric_values = {
             node.status.joint_limit_score,
@@ -258,7 +257,6 @@ buildGraspCandidateMetricArray(
             static_cast<float>(node.status.danger_count),
             node.status.is_colliding ? 1.0f : 0.0f,
             node.status.is_danger ? 1.0f : 0.0f,
-            node.status.combined_score,
             node.status.dynamic_manipulability};
       }
     }

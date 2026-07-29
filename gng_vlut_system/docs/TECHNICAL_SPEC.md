@@ -317,6 +317,7 @@ Viewer のリンク別楕円は対象 URDF リンクの子として描画する�
 | スカラー値 | `sample_metric_scalar_values[i]`が`sample_metric_ids[i]`のスカラー値 |
 | 配列境界 | `sample_metric_array_offsets[i:i+2]`が評価指標slot `i`の配列範囲 |
 | 配列値 | `sample_metric_array_values`へ全配列型評価値を連結 |
+| 除外済み旧指標 | `combined_score`は構成要素と重複するため内部状態・候補metric・評価出力から削除 |
 
 `feasible=false`の候補は`/evaluation_metrics`へsampleを生成せず、`feasible`自体も評価指標にしない。
 診断用の`/grasp_candidate_metrics`には到達不能候補を含む全候補を維持する。

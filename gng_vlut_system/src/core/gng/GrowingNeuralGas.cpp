@@ -1136,7 +1136,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
   std::ofstream ofs(resolved_path, std::ios::binary);
   if (!ofs)
     return false;
-  uint32_t version = 8; // Version 8: Added rotational manipulability
+  uint32_t version = 9; // Version 9: Removed one obsolete status float
   ofs.write((char *)&version, sizeof(version));
   ofs.write((char *)&coord_layer_count_, sizeof(coord_layer_count_));
 
@@ -1183,7 +1183,6 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
                 sizeof(float));
       ofs.write((char *)&nodes[i].status.min_singular_value, sizeof(float));
       ofs.write((char *)&nodes[i].status.joint_limit_score, sizeof(float));
-      ofs.write((char *)&nodes[i].status.combined_score, sizeof(float));
       ofs.write((char *)&nodes[i].status.manip_info.valid, sizeof(bool));
       ofs.write((char *)&nodes[i].status.dynamic_manipulability, sizeof(float));
 
@@ -1301,7 +1300,8 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   uint32_t version;
   ifs.read((char *)&version, sizeof(version));
   if (version != 1 && version != 2 && version != 3 && version != 4 &&
-      version != 5 && version != 6 && version != 7 && version != 8) {
+      version != 5 && version != 6 && version != 7 && version != 8 &&
+      version != 9) {
     std::cerr << "Error: Unsupported GNG file version: " << version
               << " (hex: 0x" << std::hex << version << std::dec << ")" << std::endl;
     return false;
@@ -1372,7 +1372,10 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
                sizeof(float));
       ifs.read((char *)&nodes[id].status.min_singular_value, sizeof(float));
       ifs.read((char *)&nodes[id].status.joint_limit_score, sizeof(float));
-      ifs.read((char *)&nodes[id].status.combined_score, sizeof(float));
+      if (version <= 8) {
+        float discarded_legacy_score = 0.0f;
+        ifs.read((char *)&discarded_legacy_score, sizeof(float));
+      }
       ifs.read((char *)&nodes[id].status.manip_info.valid, sizeof(bool));
       ifs.read((char *)&nodes[id].status.dynamic_manipulability, sizeof(float));
     }
