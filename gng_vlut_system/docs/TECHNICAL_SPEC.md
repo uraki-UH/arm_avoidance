@@ -139,14 +139,13 @@ flowchart TD
 | `control_claim_mode` | int | `1` | control claim モード |
 | `control_claim_enabled` | bool | `true` | claim publish 有効化 |
 | `current_ee_pose_topic` | topic | `/ToPoDualArm/current_ee_pose` | 現在 EE pose 出力 |
-| `publish_candidate_robot_preview` | bool | `true` | viewer 向けロボットプレビューの publish 有無 |
 | `metrics_max_joint_velocity` | float | `0.6` | 評価時間の見積もり用速度 |
 
 ### 3.4 `virtual_joint_state_driver.launch.py` の引数
 
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
-| `target_topic` | topic | `target_joint_states` | 目標関節入力 |
+| `target_topic` | topic | `target_joint_states` | 目標関節角度入力 |
 | `state_topic` | topic | `joint_states` | 現在状態入力 |
 | `output_topic` | topic | `joint_states` | 出力 joint_states |
 | `publish_hz` | float | `50.0` | 更新周期 |
