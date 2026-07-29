@@ -28,12 +28,13 @@ string[] sample_scope_ids
 uint32[] sample_metric_offsets
 string[] sample_metric_ids
 bool[] sample_metric_valid
-uint8[] sample_metric_value_types
-float64[] sample_float_values
+float64[] sample_metric_scalar_values
 int64[] sample_int_values
 bool[] sample_bool_values
 string[] sample_string_values
 
-# Float-array values are also flattened.
-uint32[] sample_float_array_offsets
-float64[] sample_float_array_values
+# Array boundaries for each sample_metric_ids slot.
+# sample_metric_array_offsets length is sample_metric_ids.length + 1.
+# Slot i uses sample_metric_array_values[offsets[i]:offsets[i + 1]].
+uint32[] sample_metric_array_offsets
+float64[] sample_metric_array_values

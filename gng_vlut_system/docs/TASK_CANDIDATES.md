@@ -24,6 +24,20 @@
 - `pose_id` と `goal_node_id` の対応は、後段で総合評価しやすい形式へ整理する。
 - 同じ GNG ノードが複数の把持候補から参照される前提で、逆引き情報も保持できるようにする。
 
+### 関節 wraparound の関節種別対応
+
+- 全関節共通の `use_wraparound` と `virtual_joint_state_use_wraparound` は廃止する。
+- URDF で `continuous` の関節だけ角度差を `[-pi, pi]` に正規化し、制限付き `revolute` 関節には適用しない。
+- `virtual_joint_state_driver_node` と `target_joint_state_executor_node` の判定を共通化する。
+- ToPoDualArm は `continuous` 関節を持たないため、現状の wraparound 対象は 0 関節とする。
+- `continuous` の `+179/-179` 度と制限付き `revolute` の `+2.5/-2.5` rad をテストする。
+
+### 単体 HTML の URDF visual mesh 描画
+
+- `ToPo-FUZZY_Manipulation_v1.html` の主目的は評価指標・把持候補・軌道再生の検証とし、ロボット描画品質の改善は後回しにする。
+- topo fuzzy viewer と同等の描画が必要になった場合は、Three.js / URDFLoader / STLLoader 相当と URDF・mesh 資産を HTML 内へ埋め込む方式を検討する。
+- 軽量スケルトン表示のような代替描画へ置き換えるのではなく、URDF visual mesh と material 色を正しく使う方針を候補として残す。
+
 ### 今後の記入ルール
 
 - このファイルは手で更新する。

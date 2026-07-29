@@ -76,29 +76,9 @@ inline void appendFloatValue(gng_control_msgs::msg::EvaluationMetrics &out,
                              bool valid = true) {
   out.sample_metric_ids.push_back(metric_id);
   out.sample_metric_valid.push_back(valid);
-  out.sample_metric_value_types.push_back(
-      gng_control_msgs::msg::EvaluationMetrics::VALUE_FLOAT);
-  out.sample_float_values.push_back(static_cast<double>(value));
-  out.sample_int_values.push_back(0);
-  out.sample_bool_values.push_back(false);
-  out.sample_string_values.emplace_back();
-  out.sample_float_array_offsets.push_back(
-      static_cast<uint32_t>(out.sample_float_array_values.size()));
-}
-
-inline void appendBoolValue(gng_control_msgs::msg::EvaluationMetrics &out,
-                            const std::string &metric_id, bool value,
-                            bool valid = true) {
-  out.sample_metric_ids.push_back(metric_id);
-  out.sample_metric_valid.push_back(valid);
-  out.sample_metric_value_types.push_back(
-      gng_control_msgs::msg::EvaluationMetrics::VALUE_BOOL);
-  out.sample_float_values.push_back(value ? 1.0 : 0.0);
-  out.sample_int_values.push_back(value ? 1 : 0);
-  out.sample_bool_values.push_back(value);
-  out.sample_string_values.emplace_back();
-  out.sample_float_array_offsets.push_back(
-      static_cast<uint32_t>(out.sample_float_array_values.size()));
+  out.sample_metric_scalar_values.push_back(static_cast<double>(value));
+  out.sample_metric_array_offsets.push_back(
+      static_cast<uint32_t>(out.sample_metric_array_values.size()));
 }
 
 inline void appendFloatArrayValue(gng_control_msgs::msg::EvaluationMetrics &out,
@@ -107,16 +87,11 @@ inline void appendFloatArrayValue(gng_control_msgs::msg::EvaluationMetrics &out,
                                   bool valid = true) {
   out.sample_metric_ids.push_back(metric_id);
   out.sample_metric_valid.push_back(valid);
-  out.sample_metric_value_types.push_back(
-      gng_control_msgs::msg::EvaluationMetrics::VALUE_FLOAT_ARRAY);
-  out.sample_float_values.push_back(0.0);
-  out.sample_int_values.push_back(0);
-  out.sample_bool_values.push_back(false);
-  out.sample_string_values.emplace_back();
-  out.sample_float_array_offsets.push_back(
-      static_cast<uint32_t>(out.sample_float_array_values.size()));
+  out.sample_metric_scalar_values.push_back(0.0);
+  out.sample_metric_array_offsets.push_back(
+      static_cast<uint32_t>(out.sample_metric_array_values.size()));
   for (float value : values) {
-    out.sample_float_array_values.push_back(static_cast<double>(value));
+    out.sample_metric_array_values.push_back(static_cast<double>(value));
   }
 }
 
@@ -141,8 +116,6 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
     defs.emplace(def.metric_id, def);
   };
 
-  add_def(detail::makeMetricDefinition("selected", "Selected", "bool", scope_type, "candidate"));
-  add_def(detail::makeMetricDefinition("feasible", "Feasible", "bool", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("position_manipulability", "Position manipulability", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("rotation_manipulability", "Rotation manipulability", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("manipulability_condition_number", "Manipulability condition number", "float", scope_type, "candidate"));
@@ -159,9 +132,12 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
   add_def(detail::makeMetricDefinition("path_rotation_manipulability", "Path rotation manipulability", "float_array", scope_type, "candidate"));
 
   for (const auto &candidate : candidates.candidates) {
+    if (!candidate.feasible) {
+      continue;
+    }
     for (std::size_t i = 0; i < candidate.metric_names.size(); ++i) {
       const std::string &metric_id = candidate.metric_names[i];
-      if (metric_id.empty() || defs.count(metric_id)) {
+      if (metric_id.empty() || metric_id == "selected" || defs.count(metric_id)) {
         continue;
       }
       add_def(detail::makeMetricDefinition(metric_id, metric_id, "float",
@@ -184,10 +160,11 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
   out.sample_metric_offsets.reserve(candidates.candidates.size() + 1);
   out.sample_metric_offsets.push_back(0);
   for (const auto &candidate : candidates.candidates) {
+    if (!candidate.feasible) {
+      continue;
+    }
     out.sample_scope_ids.push_back(std::to_string(candidate.goal_node_id));
 
-    detail::appendBoolValue(out, "selected", candidate.selected);
-    detail::appendBoolValue(out, "feasible", candidate.feasible);
     detail::appendFloatValue(out, "position_manipulability", candidate.position_manipulability, std::isfinite(candidate.position_manipulability));
     detail::appendFloatValue(out, "rotation_manipulability", candidate.rotation_manipulability, std::isfinite(candidate.rotation_manipulability));
     detail::appendFloatValue(out, "manipulability_condition_number", candidate.manipulability_condition_number, std::isfinite(candidate.manipulability_condition_number));
@@ -208,7 +185,7 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
         continue;
       }
       const std::string &metric_id = candidate.metric_names[i];
-      if (metric_id.empty()) {
+      if (metric_id.empty() || metric_id == "selected") {
         continue;
       }
       detail::appendFloatValue(out, metric_id, candidate.metric_values[i],
@@ -218,8 +195,8 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
     out.sample_metric_offsets.push_back(
         static_cast<uint32_t>(out.sample_metric_ids.size()));
   }
-  out.sample_float_array_offsets.push_back(
-      static_cast<uint32_t>(out.sample_float_array_values.size()));
+  out.sample_metric_array_offsets.push_back(
+      static_cast<uint32_t>(out.sample_metric_array_values.size()));
 
   return out;
 }

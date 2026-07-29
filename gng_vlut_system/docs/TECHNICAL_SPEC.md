@@ -218,7 +218,49 @@ flowchart TD
 候補ロボットプレビューの見た目は ToPoFuzzy Viewer 側で制御する。
 ROS 側はプレビューの送信有無だけを制御し、見た目の指定は送らない。
 
-## 9. リンク別可操作性の Viewer 表示
+## 9. AiS-GNG 入力点群の選択
+
+### 9.1 パラメータ
+
+| 変数 | 型 | デフォルト | 用途 |
+|---|---:|---|---|
+| `input.point_cloud_num` | int | `20000` | GNG に渡す1フレーム当たりの最大点数 |
+| `input.sampling_mode` | string | `head` | 上限超過時の選択方式。`head` または `uniform` |
+
+`graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform` を使用する。
+
+### 9.2 選択方式
+
+- `head`: 従来どおり点列の先頭から最大 `input.point_cloud_num` 点を使用する。
+- `uniform`: 点数上限を超えた場合、点列全体を同数の区間に分け、各区間の中央に相当する点を選ぶ。
+- 入力点数が上限以下なら、どちらの方式でも全点をそのまま使用する。
+
+`uniform` の選択元インデックスは、入力点数を `N`、選択点数を `M`、選択順を `i` として次式で求める。
+
+```text
+source_index(i) = floor(((2 * i + 1) * N) / (2 * M))
+```
+
+### 9.3 データフロー
+
+```mermaid
+flowchart TD
+    A[PointCloud2] --> B{point count > input.point_cloud_num}
+    B -- no --> C[全点を GNG へ入力]
+    B -- yes / head --> D[先頭 M 点を GNG へ入力]
+    B -- yes / uniform --> E[点列全域から M 点を等間隔抽出]
+    E --> F[抽出点を contiguous PointCloud2 に再パック]
+    F --> G[GNG voxel filter / learning]
+    C --> G
+    D --> G
+    G --> H[TopologicalMap]
+    E --> I[抽出IDから元点群IDへの対応表]
+    I --> H
+```
+
+`uniform` では XYZ 以外の point field も点単位でコピーする。GNG 内部の `inpcl_ids` は publish 前に元点群のインデックスへ戻すため、semantic label の参照関係を維持する。`ds.transformed=false` の downsampling 出力は、抽出時には再パック後の点群を参照する。
+
+## 10. リンク別可操作性の Viewer 表示
 
 `robot_viewer_bridge_node` は、受信した `joint_states` を表示用 URDF と可操作性計算用の内部チェーンへ反映する。
 マルチアームでは `waist_joint` のような共有関節が各腕の内部チェーンに存在するため、1 つの関節名を複数の内部 DOF 添字へ対応させる。
@@ -254,7 +296,57 @@ Viewer のリンク別楕円は対象 URDF リンクの子として描画する�
 そのため中心は FK 由来の別座標を再配置せず、選択リンクの原点と常に一致する。
 手動関節表示ではリンクへの追従を維持するが、Jacobian と楕円スケールはブラウザ側で再計算せず、最後に受信した ROS 評価値を使用する。
 
-## 10. 変更時に更新すべき項目
+## 11. Viewer の把持推定評価指標選択
+
+`ToPo-FUZZY_Manipulation_v1.html` は、ROS topic または rosbag bundle JSON から受信した
+`EvaluationMetrics` schema を把持推定ファジィルールエディタへ反映する。
+
+| 項目 | 仕様 |
+|---|---|
+| 指標名 | `metric_id` を内部識別子、`label` を表示名として使用 |
+| 入力特徴量名 | `evaluation.<metric_id>` |
+| 初期状態 | schema の `enabled` を使用 |
+| 対応型 | float、int、bool、float array |
+| 非対応型 | string。名前は表示するがチェックボックスは無効 |
+| float array | 有効要素の平均をスカラー値として使用 |
+| 正規化 | 同じ指標の受信sample範囲を0〜1へ正規化 |
+| 除外項目 | `selected`。ROS側の選択結果であり、HTML側の評価入力には含めない |
+| sample対象 | 現在姿勢から候補経路を生成できた`feasible=true`の候補だけ |
+| 未使用型配列 | `sample_int_values`、`sample_bool_values`、`sample_string_values`は空配列 |
+| sample型 | `sample_metric_ids[i]`とschemaの`metric_ids/value_types`から解決。sampleごとの型配列は持たない |
+| スカラー値 | `sample_metric_scalar_values[i]`が`sample_metric_ids[i]`のスカラー値 |
+| 配列境界 | `sample_metric_array_offsets[i:i+2]`が評価指標slot `i`の配列範囲 |
+| 配列値 | `sample_metric_array_values`へ全配列型評価値を連結 |
+
+`feasible=false`の候補は`/evaluation_metrics`へsampleを生成せず、`feasible`自体も評価指標にしない。
+診断用の`/grasp_candidate_metrics`には到達不能候補を含む全候補を維持する。
+
+ライブROSでは「ROS2 ブリッジの起動」ボタンでrosbridgeへ接続し、`/evaluation_metrics`を購読する。
+受信した指標定義は「3. 把持推定評価指標」へ追加し、有効な指標は既定のMembership Functionとともに
+「4. 言語ラベル / Membership Function」の入力候補へ追加する。切断後にボタンを再度押した場合は
+WebSocketへ再接続して購読を張り直す。rosbridge接続だけでは評価値は生成されないため、
+`/evaluation_metrics`のPublisherが別途動作している必要がある。
+rosbridgeコンテナはgng_cpuと同じ`ros_ws_volume`と`ros_ws_build_volume`を
+`/ros2_ws/install`と`/ros2_ws/build`へmountし、
+workspaceの`setup.bash`をsourceしてから起動する。これにより`gng_control_msgs`などの
+workspace内カスタムメッセージをWebSocketへ変換できる。
+
+チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
+MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
+`enabled=false` とし、MF入力候補から除外してファジィ推論でもその条件をスキップする。
+
+```mermaid
+flowchart TD
+    A[ROS EvaluationMetrics] --> C[schema metric definitions]
+    B[rosbag bundle JSON] --> C
+    C --> D[把持推定評価指標チェックボックス]
+    D -- ON --> E[evaluation.metric_id をMF入力へ追加]
+    D -- OFF --> F[feature enabled=false]
+    E --> G[ルール条件とMembership Function編集]
+    F --> H[該当ルール条件を推論時にスキップ]
+```
+
+## 12. 変更時に更新すべき項目
 
 1. launch 引数の追加・削除
 2. topic 名の変更

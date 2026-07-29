@@ -905,7 +905,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 <div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
-</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" type="button" class="go">ファジィ把持推定</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" type="button" class="go">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
@@ -1034,7 +1034,7 @@ const state={
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
-  graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
+  graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,robotTrajectory:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
   robotGl:{layers:new Map(),unavailable:false,lastError:''},
   useFixedBase:true,fixedBasePose:{x:0.25,y:0,z:NaN,roll:0,pitch:0,yaw:0},
@@ -1706,13 +1706,14 @@ function v320MetricTypeName(type){
   if(type===4 || type==='float_array') return 'float_array';
   return 'float';
 }
-function v320MetricValueFromFlat(msg, index){
-  const type=(msg.sample_metric_value_types||[])[index] ?? 0;
+function v320MetricValueFromFlat(msg, index, metricTypes){
+  const metricId=(msg.sample_metric_ids||[])[index] || '';
+  const type=metricTypes.get(metricId) ?? 0;
   const arrOffsets=msg.sample_metric_array_offsets||[];
   const arrBegin=arrOffsets[index] ?? 0;
   const arrEnd=arrOffsets[index+1] ?? arrBegin;
   return {
-    metric_id:(msg.sample_metric_ids||[])[index] || '',
+    metric_id:metricId,
     valid:(msg.sample_metric_valid||[])[index] !== false,
     value_type:type,
     float_value:+((msg.sample_metric_scalar_values||[])[index] ?? 0),
@@ -1724,6 +1725,10 @@ function v320MetricValueFromFlat(msg, index){
 }
 function v320StoreEvaluationMetrics(msg, source='live'){
   if(!msg||typeof msg!=='object'||!Array.isArray(msg.metric_ids)) return false;
+  const metricTypes=new Map((msg.metric_ids||[]).map((metricId,i)=>[
+    metricId,
+    (msg.value_types||[])[i] ?? 0
+  ]));
   const schema={
     header:msg.header,
     profile_name:msg.profile_name,
@@ -1749,7 +1754,7 @@ function v320StoreEvaluationMetrics(msg, source='live'){
     const begin=offsets[i] ?? 0;
     const end=offsets[i+1] ?? begin;
     const metrics=[];
-    for(let mi=begin; mi<end; mi++) metrics.push(v320MetricValueFromFlat(msg,mi));
+    for(let mi=begin; mi<end; mi++) metrics.push(v320MetricValueFromFlat(msg,mi,metricTypes));
     return {
       header:msg.header,
       profile_name:msg.profile_name,
@@ -3647,7 +3652,7 @@ function candidateRejectReason(c,hand){
   return '';
 }
 function evaluateFuzzyRules(c){const model=ensureFuzzyModel(),methods=model.methods||{};const outputs={};const fired=[];for(const r of model.rules||[]){if(!r.active||!r.conditions||!r.conditions.length)continue;let strength=null,condDbg=[];for(const cd of r.conditions){const fd=model.features[cd.feature];if(!fd||fd.enabled===false)continue;let mu=mfEval(featureValue(c,cd.feature),fd.labels&&fd.labels[cd.label]);if(cd.not)mu=1-mu;condDbg.push({feature:cd.feature,label:cd.label,not:!!cd.not,mu:+mu.toFixed(3),connector:cd.connector||'AND'});if(strength===null)strength=mu;else strength=(cd.connector==='OR')?snorm(strength,mu,methods.or):tnorm(strength,mu,methods.and)}if(strength===null)continue;let activation=imply(clamp(strength,0,1),clamp(+r.weight||1,0,1),methods.implication);outputs[r.output]=aggregateOutput(outputs[r.output]||0,activation,methods.aggregation);fired.push({id:r.id,name:r.name,output:r.output,weight:+r.weight||1,strength:+strength.toFixed(3),activation:+activation.toFixed(3),conditions:condDbg})}const pairs=Object.entries(outputs).map(([k,a])=>({label:k,act:a,value:(model.outputs[k]||{}).value??0})).filter(x=>x.act>0);let score;if(!pairs.length){score=methods.fallback==='zero'?0:classicScore(c)}else if(methods.defuzz==='max_membership'){pairs.sort((a,b)=>b.act-a.act);score=pairs[0].value}else{let num=0,den=0;for(const p of pairs){num+=p.act*p.value;den+=p.act}score=den?num/den:0}return{score:clamp(score,0,100),fired,outputs:pairs}}
-function estimate(){state.graspRenderMode='estimate';state.ikSolution=null;state.ikTarget=null;updateIkStatus('IK target cleared by grasp estimation.');if(!state.points.length)generate();if(!state.nodes.length)runGng();const hand=+$('handAperture').value,clear=+$('clearance').value,depth=+$('contactDepth').value,minH=+$('minHeight').value,maxH=+$('maxHeight').value,pref=$('approachPref').value;const valid=topologyGraspNodesForFuzzy();const all=bbox(valid),handle=topologyHandleBBox(valid,all),rim=topologyRimBBox(valid,all);let candidates=[],rejected=[];function add(c){c.requiredWidth=c.width+2*clear;c.apertureCheck=apertureFeasibility(c,hand);c.apertureFit=c.apertureCheck.ok?clamp(1-Math.max(0,c.requiredWidth-(hand-clear))/(Math.max(clear,0.001))*0.10,0.92,1):0;c.depthFit=clamp(c.depth/(depth||.001),0,1);c.heightFit=(c.z>=minH&&c.z<=maxH)?1:Math.max(0,1-Math.min(Math.abs(c.z-minH),Math.abs(c.z-maxH))/.08);c.density=featureDensity(c);applySemanticGraspFeatures(c);c.preference=(pref==='auto'||pref===c.approach||pref===c.kind)?1:(pref==='side'&&c.approach==='side'?.75:.45);optimizeGraspCollision(c);c.collisionFree=clamp(c.collisionFit??1,0,1);c.rejectReason=candidateRejectReason(c,hand);const fr=evaluateFuzzyRules(c);c.ruleResult=fr;c.classicScore=classicScore(c);c.rawFuzzyScore=fr.score;c.score=c.rejectReason?0:clamp(fr.score-(c.semanticPenalty||0)-(c.collisionPenalty||0)*.20,0,100);if(c.rejectReason)rejected.push(c);else candidates.push(c)}
+function estimate(){state.graspRenderMode='estimate';state.ikSolution=null;state.ikTarget=null;state.ikMotion=null;if(state.robotTrajectory)state.robotTrajectory.active=false;updateIkStatus('IK target cleared by grasp estimation.');if(!state.points.length)generate();if(!state.nodes.length)runGng();const hand=+$('handAperture').value,clear=+$('clearance').value,depth=+$('contactDepth').value,minH=+$('minHeight').value,maxH=+$('maxHeight').value,pref=$('approachPref').value;const valid=topologyGraspNodesForFuzzy();const all=bbox(valid),handle=topologyHandleBBox(valid,all),rim=topologyRimBBox(valid,all);let candidates=[],rejected=[];function add(c){c.requiredWidth=c.width+2*clear;c.apertureCheck=apertureFeasibility(c,hand);c.apertureFit=c.apertureCheck.ok?clamp(1-Math.max(0,c.requiredWidth-(hand-clear))/(Math.max(clear,0.001))*0.10,0.92,1):0;c.depthFit=clamp(c.depth/(depth||.001),0,1);c.heightFit=(c.z>=minH&&c.z<=maxH)?1:Math.max(0,1-Math.min(Math.abs(c.z-minH),Math.abs(c.z-maxH))/.08);c.density=featureDensity(c);applySemanticGraspFeatures(c);c.preference=(pref==='auto'||pref===c.approach||pref===c.kind)?1:(pref==='side'&&c.approach==='side'?.75:.45);optimizeGraspCollision(c);c.collisionFree=clamp(c.collisionFit??1,0,1);c.rejectReason=candidateRejectReason(c,hand);const fr=evaluateFuzzyRules(c);c.ruleResult=fr;c.classicScore=classicScore(c);c.rawFuzzyScore=fr.score;c.score=c.rejectReason?0:clamp(fr.score-(c.semanticPenalty||0)-(c.collisionPenalty||0)*.20,0,100);if(c.rejectReason)rejected.push(c);else candidates.push(c)}
 if(handle){add({kind:'handle',type:'handle loop grasp',approach:'handle',x:handle.cx,y:handle.cy,z:handle.cz,yaw:0,pitch:0,width:Math.min(handle.sy,handle.sz),depth:Math.max(handle.sy,handle.sz),handleFit:1,b:handle,explain:'GNGトポロジカルマップから抽出した側方突出クラスタを対象。raw点群ではなくトポロジカルノードのみをファジィ推論入力に使用。'});add({kind:'handle',type:'handle side pinch',approach:'side',x:handle.cx,y:handle.cy,z:handle.cz,yaw:90,pitch:0,width:handle.sx,depth:handle.sz,handleFit:.86,b:handle,explain:'GNGトポロジカルマップ上の側方突出領域をピンチ。safe/unknown支持が弱い場合は候補を自動減点。'});}add({kind:'body',type:'whole object side-X',approach:'side',x:all.cx,y:all.cy,z:clamp(all.cz,minH,maxH),yaw:0,pitch:0,width:all.sy,depth:all.sx,handleFit:.35,b:all,explain:'物体全体をY幅方向から把持。safe面/unknown物体表面を優先し、wall優勢ならReject側へ倒す。'});add({kind:'body',type:'whole object side-Y',approach:'side',x:all.cx,y:all.cy,z:clamp(all.cz,minH,maxH),yaw:90,pitch:0,width:all.sx,depth:all.sy,handleFit:.35,b:all,explain:'物体全体をX幅方向から把持。トポロジー密度だけでなくsemantic label比率を採点。'});if(rim){add({kind:'top',type:'top rim grasp',approach:'top',x:rim.cx,y:rim.cy,z:rim.cz,yaw:0,pitch:-90,width:Math.min(rim.sx,rim.sy),depth:Math.max(rim.sx,rim.sy),handleFit:.25,b:rim,explain:'上縁/キャップ周辺を上方から把持。unknown物体表面として妥当ならHighへ上げる。'});}const topB={...all,minZ:Math.max(all.minZ,all.maxZ-.05),cz:all.maxZ-.025,sz:.05};add({kind:'top',type:'top body pinch',approach:'top',x:all.cx,y:all.cy,z:all.maxZ-.025,yaw:45,pitch:-90,width:Math.min(all.sx,all.sy),depth:Math.max(all.sx,all.sy),handleFit:.2,b:topB,explain:'上部胴体へのトップピンチ。safe/unknown面候補として成立するかを明示。'});
 candidates.sort((a,b)=>(b.semanticFilterPass-a.semanticFilterPass)||(b.score-a.score));state.rejectedCandidates=rejected;state.candidates=candidates.slice(0,+$('candidateN').value);state.best=state.candidates[0]||null;updateGraspUi();renderFuzzyDebug();renderAll();showTask('grasp');if(state.best)runTopoIkSolve();else updateIkStatus('IK skipped: all grasp poses rejected by aperture/collision hard constraints.');}
 function poseObj(c){if(!c)return{};const base=topoArmBasePose();return{object_sample:state.sample,frame:state.frame,grasp_type:c.type,score:+c.score.toFixed(2),pose:{x:+c.x.toFixed(4),y:+c.y.toFixed(4),z:+c.z.toFixed(4),yaw_deg:+c.yaw.toFixed(1),pitch_deg:+c.pitch.toFixed(1),approach:c.approach,avoidance_shift_m:+(c.avoidanceShift||0).toFixed(4)},robot_base:{enabled:!!state.useFixedBase,x:+base.x.toFixed(4),y:+base.y.toFixed(4),z:+base.z.toFixed(4),roll_deg:+radToDeg(base.roll).toFixed(1),pitch_deg:+radToDeg(base.pitch).toFixed(1),yaw_deg:+radToDeg(base.yawZ).toFixed(1)},hand:{model:'FuzzRoBo ToPoArm STL mesh' ,urdf_source:'fuzzrobo/topoarm topoarm_description/urdf/_topoarm.urdf.xacro',stl_source:'fuzzrobo/topoarm topoarm_description/meshes/topoarm/*.stl',required_aperture_m:+c.requiredWidth.toFixed(4),actual_opening_m:+((c.apertureCheck&&c.apertureCheck.opening)||c.requiredWidth).toFixed(4),max_aperture_m:+(+$('handAperture').value).toFixed(4),aperture_margin_m:+((c.apertureCheck&&c.apertureCheck.margin)||0).toFixed(4),clearance_m:+(+$('clearance').value).toFixed(4),urdf_left_joint_origin_m:[-0.0005,0.021,0.0898],urdf_right_joint_origin_m:[-0.0005,-0.021,0.0898],urdf_end_effector_origin_m:[-0.0005,0,0.1341],finger_length_m:+(+$('fingerLength').value||0).toFixed(4),finger_thickness_m:+(+$('fingerThickness').value||0).toFixed(4),finger_height_m:+(+$('fingerHeight').value||0).toFixed(4)},topology_evidence:{semantic_filter_pass:!!c.semanticFilterPass,semantic_reason:c.semanticExplain||'',semantic_support:+(c.semanticSupport||0).toFixed(3),counts:(c.semanticEvidence&&c.semanticEvidence.counts)||{},safe:+(c.topologySafe||0).toFixed(3),unknown:+(c.topologyUnknown||0).toFixed(3),wall:+(c.topologyWall||0).toFixed(3),default:+(c.topologyDefault||0).toFixed(3)},fuzzy_scores:{aperture_fit:+c.apertureFit.toFixed(3),contact_depth:+c.depthFit.toFixed(3),handle_likeness:+c.handleFit.toFixed(3),topological_density:+c.density.toFixed(3),topology_safe:+(c.topologySafe||0).toFixed(3),topology_unknown:+(c.topologyUnknown||0).toFixed(3),topology_wall:+(c.topologyWall||0).toFixed(3),topology_default:+(c.topologyDefault||0).toFixed(3),height_fit:+c.heightFit.toFixed(3),approach_preference:+c.preference.toFixed(3),collision_free:+(c.collisionFree??c.collisionFit??1).toFixed(3)},fuzzy_inference:{engine:'v289 hard-collision-reject exact-aperture fuzzy rule base + expanded grasping dataset',classic_weighted_score:+(c.classicScore||0).toFixed(2),raw_fuzzy_score:+(c.rawFuzzyScore??c.score).toFixed(2),semantic_penalty:+(c.semanticPenalty||0).toFixed(2),collision_penalty:+(c.collisionPenalty||0).toFixed(2),collision_points:(c.collision&&c.collision.collisions)||0,collision_nodes:(c.collision&&c.collision.nodeCollisions)||0,rules_fired:(c.ruleResult&&c.ruleResult.fired||[]).slice(0,20),output_activations:(c.ruleResult&&c.ruleResult.outputs||[]).map(o=>({label:o.label,activation:+o.act.toFixed(3),singleton:o.value}))}}}
@@ -3868,9 +3873,150 @@ function v314OnlineReplanIkIfNeeded(){
   return state.ikMotion;
 }
 
+/* v322: rosbag-ready trajectory framework.  The current demo uses a generated
+   target IK solution; later rosbag candidates can be converted into the same
+   targetSol shape and fed to v322StartRobotTrajectory(). */
+function v322CloneJointValues(values){
+  if(Array.isArray(values))return values.slice();
+  if(values&&typeof values==='object')return {...values};
+  return [];
+}
+function v322InitialJointValuesForTarget(targetSol){
+  if(Array.isArray(targetSol?.joints)){
+    return new Array(Math.max(6,targetSol.joints.length)).fill(0);
+  }
+  if(state.robotUrdfRobot)return defaultRobotJointValues(state.robotUrdfRobot);
+  return [0,0,0,0,0,0];
+}
+function v322InterpolateJointValues(start,target,u){
+  const s=u*u*(3-2*u);
+  if(Array.isArray(target)||Array.isArray(start)){
+    const n=Math.max((start||[]).length,(target||[]).length,6);
+    return Array.from({length:n},(_,i)=>(+(start&&start[i])||0)+((+(target&&target[i])||0)- (+(start&&start[i])||0))*s);
+  }
+  const keys=new Set([...Object.keys(start||{}),...Object.keys(target||{})]);
+  const out={};
+  keys.forEach(k=>{out[k]=(+start[k]||0)+((+target[k]||0)-(+start[k]||0))*s;});
+  return out;
+}
+function v322JointDistance(start,target){
+  if(Array.isArray(target)||Array.isArray(start))return v314JointDistance(start,target);
+  const keys=new Set([...Object.keys(start||{}),...Object.keys(target||{})]);
+  let sum=0;
+  keys.forEach(k=>{const d=(+target[k]||0)-(+start[k]||0);sum+=d*d;});
+  return Math.sqrt(sum);
+}
+function v322SolutionFromTrajectory(plan,u){
+  const joints=v322InterpolateJointValues(plan.startJoints,plan.targetJoints,u);
+  const s=u*u*(3-2*u);
+  const base={
+    x:plan.startBase.x+(plan.targetBase.x-plan.startBase.x)*s,
+    y:plan.startBase.y+(plan.targetBase.y-plan.startBase.y)*s,
+    z:plan.startBase.z+(plan.targetBase.z-plan.startBase.z)*s,
+    roll:plan.startBase.roll+(plan.targetBase.roll-plan.startBase.roll)*s,
+    pitch:plan.startBase.pitch+(plan.targetBase.pitch-plan.startBase.pitch)*s,
+    yaw:plan.startBase.yaw+(plan.targetBase.yaw-plan.startBase.yaw)*s
+  };
+  base.yawZ=base.yaw;
+  const opening=plan.startOpening+(plan.targetOpening-plan.startOpening)*s;
+  let frames=null,targetFrame=null;
+  if(state.robotUrdfRobot&&!Array.isArray(joints)){
+    frames=computeRobotLinkFrames(state.robotUrdfRobot,joints,base);
+    targetFrame=frames[plan.targetSol.targetLink]||frames[plan.targetSol.target?.linkName]||frames[state.robotUrdfRobot.targetLinkName]||frames[state.robotUrdfRobot.rootLinkName];
+  }else{
+    const arr=Array.isArray(joints)?joints:[0,0,0,0,0,0];
+    frames=computeTopoArmFramesFromJoints(base,arr,opening);
+    targetFrame=frames.ee||frames.link7;
+  }
+  return{
+    ...plan.targetSol,
+    joints,
+    base,
+    frames,
+    targetFrame,
+    opening,
+    status:u>=1?'trajectory complete':'trajectory executing',
+    motionProgress:u,
+    trajectorySource:plan.source||'dummy'
+  };
+}
+function v322StartRobotTrajectory(targetSol,opts={}){
+  if(!targetSol||!targetSol.joints)return null;
+  const startJoints=v322CloneJointValues(opts.startJoints||v322InitialJointValuesForTarget(targetSol));
+  const targetJoints=v322CloneJointValues(targetSol.joints);
+  const startBase=topoArmBasePose(opts.startBase);
+  const targetBase=topoArmBasePose(targetSol.base);
+  const startOpening=Number.isFinite(+opts.startOpening)?+opts.startOpening:0.035;
+  const targetOpening=Number.isFinite(+targetSol.opening)?+targetSol.opening:((state.best&&state.best.apertureCheck&&state.best.apertureCheck.opening)||state.best?.requiredWidth||+$('handAperture')?.value||0.095);
+  const requested=(+($('ikMotionDuration')?.value||2.0))*1000;
+  const auto=Math.max(500,Math.min(7000,700+v322JointDistance(startJoints,targetJoints)*700));
+  const duration=Math.max(requested,auto);
+  state.ikMotion=null;
+  state.robotTrajectory={
+    active:true,
+    source:opts.source||'dummy',
+    startTime:performance.now(),
+    duration,
+    startJoints,
+    targetJoints,
+    startBase,
+    targetBase,
+    startOpening,
+    targetOpening,
+    targetSol:{...targetSol}
+  };
+  state.graspRenderMode='ik';
+  state.ikSolution=v322SolutionFromTrajectory(state.robotTrajectory,0);
+  if(typeof setViewerMode==='function')setViewerMode('grasp');
+  else{state.viewerMode='grasp';renderAll();}
+  return state.robotTrajectory;
+}
+function v322StopRobotTrajectory(){
+  if(state.robotTrajectory)state.robotTrajectory.active=false;
+  const el=$('viewerRobotTfResult');
+  if(el)el.textContent='軌道停止: stopped\n次の把持推定/ダミー軌道生成を待機中';
+  renderAll();
+}
+function v322UpdateRobotTrajectory(now){
+  const plan=state.robotTrajectory;
+  if(!plan||!plan.active)return false;
+  const u=Math.max(0,Math.min(1,(now-plan.startTime)/Math.max(1,plan.duration)));
+  state.ikSolution=v322SolutionFromTrajectory(plan,u);
+  state.graspRenderMode='ik';
+  const el=$('viewerRobotTfResult');
+  if(el)el.textContent=`${plan.source==='dummy'?'ダミー軌道':'rosbag軌道'}: ${u>=1?'完了':'再生中'}\nprogress=${(u*100).toFixed(0)}%\ntarget=${state.ikSolution.targetLink||state.ikSolution.target?.linkName||'-'}\nstatus=${state.ikSolution.status}`;
+  if(u>=1)plan.active=false;
+  return true;
+}
+function runViewerRobotTfDummyTrajectory(){
+  const btn=$('viewerRobotTfDummyTrajBtn');
+  try{
+    if(btn){btn.classList.add('running');btn.textContent='生成中';}
+    updateViewerRobotTfResult('ダミー軌道: 計算中');
+    if(!state.best||!state.ikSolution)estimate();
+    let targetSol=state.ikSolution;
+    if(!targetSol||!targetSol.joints){
+      const target=graspPoseToIkTarget(state.best||state.candidates[0]||defaultTopoArmGraspPose());
+      targetSol=solveRobotIk(target);
+      state.ikTarget=target;
+    }
+    if(!targetSol||!targetSol.joints)throw new Error('trajectory target IK solution is unavailable');
+    v322StartRobotTrajectory(targetSol,{source:'dummy'});
+    const jointCount=Array.isArray(targetSol.joints)?targetSol.joints.length:Object.keys(targetSol.joints||{}).length;
+    const el=$('viewerRobotTfResult');
+    if(el)el.textContent=`ダミー軌道: 生成完了\n初期姿勢 -> 把持IK目標\njoints=${jointCount}\nduration=${(state.robotTrajectory.duration/1000).toFixed(2)}s`;
+  }catch(e){
+    updateViewerRobotTfResult('ダミー軌道',e);
+    console.error(e);
+  }finally{
+    if(btn){btn.classList.remove('running');btn.textContent='ダミー軌道生成/再生';}
+  }
+}
+
 function clearTopoIkSolve(){
   state.ikSolution=null;
   state.ikTarget=null;
+  if(state.robotTrajectory)state.robotTrajectory.active=false;
   state.graspRenderMode='estimate';
   if($('graspStatus'))$('graspStatus').textContent='IK solution cleared; returning to grasp estimate view.';
   if($('poseJson'))$('poseJson').value=JSON.stringify(poseObj(state.best),null,2);
@@ -6643,6 +6789,7 @@ function loop(now){
   }
 
   if(v314UpdateIkMotion(now)) changed=true;
+  if(v322UpdateRobotTrajectory(now)) changed=true;
 
   const tri=state.gngPlaying && state.gng && gngUsesTriangulationAlgorithm(state.gng.variant);
   const renderDue=!state.gngPlaying || tri || (state._v298Frame%3===0);
@@ -6654,7 +6801,7 @@ function loop(now){
   }else{
     updateViewerTimingPanels();
   }
-  const active=!!(state.pointPlaying||state.gngPlaying||(state.bundleFlow&&state.bundleFlow.active)||state.ikMotion);
+  const active=!!(state.pointPlaying||state.gngPlaying||(state.bundleFlow&&state.bundleFlow.active)||state.ikMotion||(state.robotTrajectory&&state.robotTrajectory.active));
   if(active) requestAnimationFrame(loop);
   else setTimeout(()=>requestAnimationFrame(loop), 250);
 }
@@ -7072,6 +7219,16 @@ function installViewerRobotTfEstimateButtons(){
     fuzzyBtn.dataset.boundRobotTfFuzzy='1';
     fuzzyBtn.addEventListener('click',runViewerFuzzyGraspIk);
   }
+  const dummyTrajBtn=$('viewerRobotTfDummyTrajBtn');
+  if(dummyTrajBtn&&!dummyTrajBtn.dataset.boundRobotTfDummyTraj){
+    dummyTrajBtn.dataset.boundRobotTfDummyTraj='1';
+    dummyTrajBtn.addEventListener('click',runViewerRobotTfDummyTrajectory);
+  }
+  const stopTrajBtn=$('viewerRobotTfStopTrajBtn');
+  if(stopTrajBtn&&!stopTrajBtn.dataset.boundRobotTfStopTraj){
+    stopTrajBtn.dataset.boundRobotTfStopTraj='1';
+    stopTrajBtn.addEventListener('click',v322StopRobotTrajectory);
+  }
 }
 
 document.querySelectorAll('#showRawPoints,#showGngNodes,#showGngEdges,#showTopoClusters,#showTopoFaces,#showTopoNormals').forEach(el=>el.addEventListener('input',()=>renderAll()));
@@ -7107,12 +7264,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     outlier: 255,
   };
   let ros = null;
+  let rosConnecting = false;
   function setRosBridgeStatus(text){
     const el = document.getElementById('rosBridgeStatus');
     if(el) el.textContent = text;
   }
   // Ensure roslib is loaded; if not, try multiple sources (CDNs then local) and call callbacks
-  function loadRoslib(cb){
+  function loadRoslib(cb, onError){
     if(window.ROSLIB){ try{ cb(); }catch(e){ setTimeout(()=>cb(),0); } return; }
     const sources = [
       'https://static.robotwebtools.org/roslibjs/current/roslib.min.js',
@@ -7121,7 +7279,12 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     ];
     let lastErr = null;
     function tryNext(idx){
-      if(idx >= sources.length){ console.error('all roslib sources failed', lastErr); setRosBridgeStatus('ROS bridge: roslib load error'); return; }
+      if(idx >= sources.length){
+        console.error('all roslib sources failed', lastErr);
+        setRosBridgeStatus('ROS bridge: roslib load error');
+        if(onError) onError(lastErr);
+        return;
+      }
       const url = sources[idx];
       const s = document.createElement('script');
       s.src = url;
@@ -7315,24 +7478,51 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     return {start,stop};
   }
   function ensureRos(){
-    if(ros) return;
+    if(ros && ros.isConnected){
+      setRosBridgeStatus('ROS bridge: connected');
+      rosSubscribers.forEach(s=>s.onConnection());
+      return;
+    }
+    if(rosConnecting) return;
+    rosConnecting = true;
     loadRoslib(()=>{
       try{
-        if(ros) return;
-        if(!window.ROSLIB){ console.warn('ROSLIB still not available after load'); setRosBridgeStatus('ROS bridge: roslib missing'); return; }
-        ros = new ROSLIB.Ros({url:ROS_WS_URL});
-        ros.on('connection', ()=>{
-          setRosBridgeStatus('ROS bridge: connected');
-          rosPublishers.forEach(p=>p.onConnection());
-          rosSubscribers.forEach(s=>s.onConnection());
-        });
-        ros.on('close', ()=>{
-          setRosBridgeStatus('ROS bridge: disconnected');
-          rosPublishers.forEach(p=>p.onClose());
-          rosSubscribers.forEach(s=>s.onClose());
-        });
-        ros.on('error', (e)=>{ setRosBridgeStatus('ROS bridge: error'); rosPublishers.forEach(p=>p.onError()); rosSubscribers.forEach(s=>s.onError()); console.warn('ros error',e); });
-      }catch(e){ console.warn('ros init error',e); setRosBridgeStatus('ROS bridge: init error'); }
+        if(!window.ROSLIB){
+          rosConnecting = false;
+          console.warn('ROSLIB still not available after load');
+          setRosBridgeStatus('ROS bridge: roslib missing');
+          return;
+        }
+        if(!ros){
+          ros = new ROSLIB.Ros();
+          ros.on('connection', ()=>{
+            rosConnecting = false;
+            setRosBridgeStatus('ROS bridge: connected');
+            rosPublishers.forEach(p=>p.onConnection());
+            rosSubscribers.forEach(s=>s.onConnection());
+          });
+          ros.on('close', ()=>{
+            rosConnecting = false;
+            setRosBridgeStatus('ROS bridge: disconnected');
+            rosPublishers.forEach(p=>p.onClose());
+            rosSubscribers.forEach(s=>s.onClose());
+          });
+          ros.on('error', (e)=>{
+            rosConnecting = false;
+            setRosBridgeStatus('ROS bridge: error');
+            rosPublishers.forEach(p=>p.onError());
+            rosSubscribers.forEach(s=>s.onError());
+            console.warn('ros error',e);
+          });
+        }
+        ros.connect(ROS_WS_URL);
+      }catch(e){
+        rosConnecting = false;
+        console.warn('ros init error',e);
+        setRosBridgeStatus('ROS bridge: init error');
+      }
+    }, ()=>{
+      rosConnecting = false;
     });
   }
 
