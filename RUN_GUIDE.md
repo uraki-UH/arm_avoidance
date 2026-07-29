@@ -119,7 +119,7 @@ ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=
 実験
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
-python3 test_tf_python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.0   --y -0.0   --z 0.0 --yaw 0.0  --hold-seconds 1.0   --publishpublisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
+python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 
 HTML起動
 python3 -m http.server 8000

@@ -24,6 +24,16 @@ ament_auto_add_executable(topological_query_node src/topological_query/topologic
 ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
 ament_target_dependencies(topological_grid_node voxel_msgs)
 
+set(_gng_component_sources
+  src/ais_gng_component.cpp
+  src/handle_label_utils.cpp
+  src/point_selection.cpp
+  src/topological_query/topological_reachability.cpp
+  src/plugin/cluster_classification.cpp
+  src/plugin/downsampling.cpp
+  src/plugin/visualize_filter.cpp
+)
+
 string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _gng_system_processor)
 if(_gng_system_processor STREQUAL "x86_64" OR _gng_system_processor STREQUAL "amd64")
   set(_gng_arch_dir "lib_x86_64")
@@ -69,7 +79,7 @@ foreach(_backend IN ITEMS cpu gpu)
   if(_backend_lib AND _torch_available)
     set(_library_target "ais_gng_component_${_backend}")
     set(_executable_name "ais_gng_${_backend}")
-ament_auto_add_library(${_library_target} SHARED src/ais_gng_component.cpp src/handle_label_utils.cpp src/topological_query/topological_reachability.cpp src/plugin/cluster_classification.cpp src/plugin/downsampling.cpp src/plugin/visualize_filter.cpp)
+    ament_auto_add_library(${_library_target} SHARED ${_gng_component_sources})
     target_include_directories(${_library_target} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libgng/include)
     target_link_libraries(${_library_target} "${_backend_lib}" ykpiv ${TORCH_LIBRARIES})
     target_compile_definitions(${_library_target} PRIVATE AIS_GNG_BACKEND_${_backend}=1)

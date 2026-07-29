@@ -135,6 +135,11 @@ canvas.viewer{
   background:radial-gradient(circle at top,rgba(56,189,248,.10),transparent 32%),#020617;
   border:1px solid rgba(148,163,184,.22);border-radius:14px;touch-action:none;cursor:grab;
 }
+.robot-webgl-layer{
+  position:absolute;inset:0;z-index:2;pointer-events:none;
+  width:100%;height:min(68vh,720px);min-height:430px;
+  border:1px solid transparent;border-radius:14px;
+}
 .overlay{position:absolute;left:14px;top:12px;max-width:min(620px,calc(100% - 28px));max-height:42%;overflow:auto;background:rgba(2,6,23,.70);border:1px solid rgba(148,163,184,.24);border-radius:10px;color:#dbeafe;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;white-space:pre-wrap}
 .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1;font-size:12px}
 .chip{display:inline-flex;gap:5px;align-items:center}
@@ -216,7 +221,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .canvaswrap:not(.info-open) [data-view-panel="info"],
 .canvaswrap:not(.play-open) [data-view-panel="play"],
 .canvaswrap:not(.tools-open) [data-view-panel="tools"],
-.canvaswrap:not(.layers-open) [data-view-panel="layers"]{display:none!important}
+.canvaswrap:not(.layers-open) [data-view-panel="layers"],
+.canvaswrap:not(.robot-open) [data-view-panel="robot"]{display:none!important}
 .canvaswrap.info-open .overlay{top:52px;max-height:36%}
 .canvaswrap.info-open .viewer-timing-panel{top:auto;left:14px;bottom:14px;min-width:230px}
 .canvaswrap.info-open .viewer-corner-note{right:14px;bottom:14px}
@@ -224,6 +230,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .canvaswrap.play-open .viewer-fuzzy-ik-panel{display:grid!important;left:12px;right:auto;top:150px;bottom:auto;width:min(280px,calc(100% - 24px));max-width:none;border-radius:14px;padding:7px}
 .canvaswrap.tools-open .view-tools{top:52px;right:12px}
 .canvaswrap.layers-open .viewer-layer-panel{display:grid!important;top:52px;left:12px;z-index:410}
+.canvaswrap.robot-open .viewer-robot-tf-panel{display:grid!important;top:52px;right:12px;z-index:411}
 
 /* ── Viewer timing panel ── */
 .viewer-timing-panel{
@@ -248,6 +255,23 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .viewer-layer-panel label{display:flex;align-items:center;gap:8px;margin:0;color:#e5e7eb;font-size:12px;font-weight:850;text-transform:none;letter-spacing:0;cursor:pointer}
 .viewer-layer-panel input{width:auto!important;accent-color:#00ff00}
 .viewer-layer-panel .layer-note{color:#94a3b8;font-size:10px;line-height:1.35}
+
+/* ── Viewer robot TF panel ── */
+.viewer-robot-tf-panel{
+  position:absolute;right:12px;top:52px;z-index:76;
+  display:grid;gap:8px;width:min(420px,calc(100% - 24px));
+  padding:10px;border-radius:14px;
+  background:rgba(2,6,23,.88);border:1px solid rgba(0,255,0,.40);
+  backdrop-filter:blur(7px);color:#e5e7eb;font-size:12px;pointer-events:auto;
+}
+.viewer-robot-tf-panel .layer-title{color:#bbf7d0;font-size:11px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+.viewer-robot-tf-panel label{font-size:10px;margin:0;color:#93c5fd}
+.viewer-robot-tf-panel .topo-switch{display:flex;align-items:center;gap:8px;color:#e5e7eb;font-size:12px;font-weight:850;text-transform:none;letter-spacing:0}
+.viewer-robot-tf-panel .topo-switch input{width:auto!important;accent-color:#00ff00}
+.viewer-robot-tf-panel .mini-grid{grid-template-columns:1fr 1fr}
+.viewer-robot-tf-panel .control-pair{grid-template-columns:minmax(0,1fr) 76px;gap:7px}
+.viewer-robot-tf-panel .readout{font:800 10px/1.35 Consolas,Menlo,monospace;color:#bbf7d0;background:rgba(2,6,23,.55);border:1px solid rgba(148,163,184,.22);border-radius:9px;padding:7px}
+.viewer-robot-tf-panel button{height:34px;padding:0 10px;border-radius:999px;border-color:rgba(0,255,0,.55);background:#13251a;color:#f8fafc;font-size:11px}
 
 /* ── Fuzzy IK panel ── */
 .viewer-fuzzy-ik-panel{
@@ -331,6 +355,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-if-chip .var{color:#93c5fd;font-weight:900}
 .fuzzy-if-chip .lbl{color:#fff;font-weight:900}
 .fuzzy-if-chip .not{color:#fca5a5;font-weight:900}
+.fuzzy-if-chip.inactive{opacity:.45}
 .fuzzy-connector{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.1em}
 .fuzzy-rule-debug{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:180px;overflow:auto}
 .fuzzy-small{font-size:11px;color:#94a3b8;line-height:1.45}
@@ -413,6 +438,11 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .bundle-topic-meta{color:#94a3b8;font-family:Consolas,Menlo,monospace;font-size:10px;white-space:nowrap}
 .evaluation-metric-status{border-color:rgba(56,189,248,.38);color:#bfdbfe}
 .evaluation-metric-status b{color:#00ff00}
+.evaluation-metric-selector{align-content:start;min-height:38px}
+.evaluation-metric-selector .fuzzy-chip{max-width:100%;white-space:normal}
+.evaluation-metric-selector .fuzzy-chip.inactive{opacity:.55}
+.evaluation-metric-selector .fuzzy-chip.unsupported{opacity:.42}
+.evaluation-metric-selector .metric-meta{color:#94a3b8;font-family:Consolas,Menlo,monospace;font-size:10px}
 
 /* ── Gripper / grasp ── */
 .gripper-legend-chip i{background:#9ca3af}
@@ -482,6 +512,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .controls{grid-template-columns:1fr}
   .metrics{grid-template-columns:1fr}
   canvas.viewer{height:54vh;min-height:330px}
+  .robot-webgl-layer{height:54vh;min-height:330px}
   .barrow{grid-template-columns:92px 1fr 42px}
   .neo-hud{left:8px;right:8px;bottom:8px;padding:8px;gap:6px}
   .neo-hud button{flex:1 1 46%;min-width:0;font-size:11px;padding:8px 6px}
@@ -493,6 +524,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .viewer-tabs button{min-width:48px;font-size:10px;padding:6px 7px}
   .viewer-timing-panel{left:8px;right:8px;top:auto;bottom:154px;min-width:0;font-size:10px}
   .viewer-layer-panel{left:8px;top:48px;min-width:160px;font-size:11px}
+  .viewer-robot-tf-panel{left:8px;right:8px;width:auto;top:48px}
+  .viewer-robot-tf-panel .mini-grid{grid-template-columns:1fr}
   .viewer-fuzzy-ik-panel{right:8px;top:8px;left:auto;bottom:auto;max-width:150px;padding:3px}
   .viewer-fuzzy-ik-panel button{height:28px;padding:0 8px;font-size:10px}
   .viewer-fuzzy-ik-panel.show-readout{width:220px;max-width:calc(100% - 16px)}
@@ -502,6 +535,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .canvaswrap.play-open .viewer-fuzzy-ik-panel{left:8px;right:8px;top:160px;bottom:auto;width:auto}
   .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
   .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
+  .canvaswrap.robot-open .viewer-robot-tf-panel{top:48px;left:8px;right:8px;max-width:none}
   .fuzzy-confirm-mf-svg{width:100%!important;height:78px!important}
   .fuzzy-inline-mf-preview svg{height:138px!important}
   .fuzzy-inline-mf-editor{min-width:0}
@@ -861,10 +895,17 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
         <div class="metric"><div class="t">Edges</div><div id="mEdges" class="v">0</div></div>
         <div class="metric"><div class="t">Object</div><div id="mObject" class="v">-</div></div>
       </div>
-      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div class="viewer-fuzzy-ik-panel" data-v292-viewer-fuzzy-grasp-button data-view-panel="play">
+      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div><div class="viewer-fuzzy-ik-panel" data-v292-viewer-fuzzy-grasp-button data-view-panel="play">
   <button id="viewerFuzzyIkBtn" type="button">ファジィ把持実行</button>
   <div id="viewerFuzzyIkReadout" class="viewer-fuzzy-ik-readout">Ready: grasp + IK</div>
-</div><div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+</div><div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
+<div><label>X [m]</label><div class="control-pair"><input id="viewerBaseTfX" type="range" min="-1.0" max="1.0" step="0.005" value="0.25"><input id="viewerBaseTfXNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.25"></div></div>
+<div><label>Y [m]</label><div class="control-pair"><input id="viewerBaseTfY" type="range" min="-1.0" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfYNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.00"></div></div>
+<div><label>Z [m]</label><div class="control-pair"><input id="viewerBaseTfZ" type="range" min="-0.5" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfZNum" type="number" min="-0.5" max="1.0" step="0.005" value="0.00"></div></div>
+<div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
+<div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
+<div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" type="button" class="go">ファジィ把持推定</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
@@ -879,6 +920,9 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="backg
           <div><label>URDF palm thickness [m]</label><input id="fingerThickness" type="number" min="0.004" max="0.04" step="0.002" value="0.012"></div>
           <div><label>URDF palm length [m]</label><input id="fingerLength" type="number" min="0.025" max="0.18" step="0.005" value="0.090"></div>
           <div><label>URDF palm height [m]</label><input id="fingerHeight" type="number" min="0.015" max="0.12" step="0.005" value="0.045"></div>
+          <div><label>URDF source</label><input id="robotUrdfSource" type="text" value="dual_arm_urdf/dual_arm_robot.urdf" spellcheck="false"></div>
+          <div><label>Target link hint</label><input id="robotUrdfTargetHint" type="text" placeholder="auto" spellcheck="false"></div>
+          <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="robotUrdfLoadBtn" type="button">Load URDF</button><div id="robotUrdfStatus" class="readout" style="flex:1 1 320px">URDF not loaded</div></div>
           <div><label>Gripper display</label><select id="gripperDisplay"><option value="solid">ToPoArm STL gripper</option><option value="wire">ToPoArm STL wire</option><option value="simple">simple grasp marker</option><option value="off">off</option></select></div>
           <div><label>Collision check</label><select id="collisionCheck"><option value="on" selected>on / 点群・GNG衝突回避</option><option value="off">off</option></select></div>
           <div><label>Hard reject collisions</label><select id="collisionHardReject"><option value="on" selected>on / 干渉姿勢を候補除外</option><option value="off">off / 減点のみ</option></select></div>
@@ -924,14 +968,15 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
               <div><label>Fallback</label><select id="fzFallback"><option value="classic">Classic weighted score</option><option value="zero">Zero score</option></select></div>
             </div></div>
             <div class="fuzzy-editor-card"><h3>2. 入力特徴量の選択</h3><div id="fuzzyFeatureSelector" class="fuzzy-chip-list"></div><div class="fuzzy-small">選択した特徴量だけがルール条件の候補に出ます。特徴量値は各候補把持姿勢ごとに0〜1へ正規化して評価します。</div></div>
-            <div class="fuzzy-editor-card"><h3>3. 言語ラベル / Membership Function</h3><div class="fuzzy-mf-form">
+            <div class="fuzzy-editor-card"><h3>3. 把持推定評価指標</h3><div id="fuzzyEvaluationMetricSelector" class="fuzzy-chip-list evaluation-metric-selector"><span class="fuzzy-small">評価指標は未受信です。</span></div><div class="fuzzy-small">ROS / rosbagから認識した指標を選択すると、Membership Functionの入力候補として有効になります。</div></div>
+            <div class="fuzzy-editor-card"><h3>4. 言語ラベル / Membership Function</h3><div class="fuzzy-mf-form">
               <div><label>Input feature</label><select id="fzMfFeature"></select></div><div><label>Label name</label><input id="fzMfLabel" type="text" value="High"></div><div><label>MF shape</label><select id="fzMfShape"><option value="triangular">三角型 / triangular</option><option value="gaussian">ガウス型 / Gaussian</option><option value="trapezoid">台形型 / trapezoid</option><option value="rbf">ラジアル基底関数型 / RBF</option></select></div>
               <div class="fuzzy-param-grid"><div><label>a</label><input id="fzMfA" type="number" min="0" max="1" step="0.01" value="0.55"></div><div><label>b / center</label><input id="fzMfB" type="number" min="0" max="1" step="0.01" value="0.78"></div><div><label>c / sigma</label><input id="fzMfC" type="number" min="0" max="1" step="0.01" value="1.00"></div><div><label>d / radius</label><input id="fzMfD" type="number" min="0" max="1" step="0.01" value="1.00"></div></div>
             </div><div class="fuzzy-actions"><button id="fzAddMfBtn" class="primary">ラベル追加 / 更新</button><button id="fzDeleteMfBtn" class="warn">選択ラベル削除</button></div><div id="fuzzyMfList" class="fuzzy-mf-table"></div></div>
-            <div class="fuzzy-editor-card"><h3>4. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" class="primary">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
-            <div class="fuzzy-editor-card full"><h3>5. ルール構造エディタ</h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" class="primary">ルール追加</button><button id="fzApplyRulesBtn" class="go">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn">JSONへ書き出し</button><button id="fzImportRulesBtn">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
-            <div class="fuzzy-editor-card full"><h3>6. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" class="primary">確認画面を更新</button><button id="fzDownloadRulesBtn">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
-            <div class="fuzzy-editor-card full"><h3>7. 現在の候補に対するルール発火状況</h3><div id="fuzzyRuleDebug" class="fuzzy-rule-debug">No inference yet.</div></div>
+            <div class="fuzzy-editor-card"><h3>5. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" class="primary">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
+            <div class="fuzzy-editor-card full"><h3>6. ルール構造エディタ</h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" class="primary">ルール追加</button><button id="fzApplyRulesBtn" class="go">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn">JSONへ書き出し</button><button id="fzImportRulesBtn">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
+            <div class="fuzzy-editor-card full"><h3>7. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" class="primary">確認画面を更新</button><button id="fzDownloadRulesBtn">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
+            <div class="fuzzy-editor-card full"><h3>8. 現在の候補に対するルール発火状況</h3><div id="fuzzyRuleDebug" class="fuzzy-rule-debug">No inference yet.</div></div>
           </div>
         </div>
       </div>
@@ -990,9 +1035,12 @@ const state={
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
+  robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
+  robotGl:{layers:new Map(),unavailable:false,lastError:''},
+  useFixedBase:true,fixedBasePose:{x:0.25,y:0,z:NaN,roll:0,pitch:0,yaw:0},
   importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
   importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
-  evaluationMetrics:{schemas:{},samples:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0},
+  evaluationMetrics:{schemas:{},samples:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0},
   bundleFlow:null,
   gngWasmInputSource:'visible_points',
   gngWasmFileUrls:null
@@ -1643,6 +1691,7 @@ function v320EvaluationMetricKey(msg){
 }
 function v320NormalizeMetricValue(value){
   if(!value||typeof value!=='object') return null;
+  if(value.valid===false) return null;
   const type=value.value_type;
   if(type===2 || type==='bool') return !!value.bool_value;
   if(type===1 || type==='int') return Number.isFinite(+value.int_value)?+value.int_value:null;
@@ -1659,18 +1708,18 @@ function v320MetricTypeName(type){
 }
 function v320MetricValueFromFlat(msg, index){
   const type=(msg.sample_metric_value_types||[])[index] ?? 0;
-  const arrOffsets=msg.sample_float_array_offsets||[];
+  const arrOffsets=msg.sample_metric_array_offsets||[];
   const arrBegin=arrOffsets[index] ?? 0;
   const arrEnd=arrOffsets[index+1] ?? arrBegin;
   return {
     metric_id:(msg.sample_metric_ids||[])[index] || '',
     valid:(msg.sample_metric_valid||[])[index] !== false,
     value_type:type,
-    float_value:+((msg.sample_float_values||[])[index] ?? 0),
+    float_value:+((msg.sample_metric_scalar_values||[])[index] ?? 0),
     int_value:+((msg.sample_int_values||[])[index] ?? 0),
     bool_value:!!((msg.sample_bool_values||[])[index]),
     string_value:(msg.sample_string_values||[])[index] || '',
-    float_array_value:(msg.sample_float_array_values||[]).slice(arrBegin, arrEnd),
+    float_array_value:(msg.sample_metric_array_values||[]).slice(arrBegin, arrEnd),
   };
 }
 function v320StoreEvaluationMetrics(msg, source='live'){
@@ -1723,6 +1772,7 @@ function v320StoreEvaluationMetricSchema(msg, source='live'){
   state.evaluationMetrics.lastSchemaKey=key;
   state.evaluationMetrics.receivedSchemas++;
   v320UpdateEvaluationMetricStatus();
+  v321SyncEvaluationMetricFeatures();
   return true;
 }
 function v320StoreEvaluationMetricSampleArray(msg, source='live'){
@@ -1805,6 +1855,7 @@ function v312ExtractGraspPosesFromBundle(bundle){
           score:rawScore/maxScore,
           selected:!!(c.selected),
           candidateId:c.candidate_id??i,
+          goalNodeId:c.goal_node_id??null,
           manipulability:c.position_manipulability??null,
           graspScore:c.grasp_region_score??null,
           feasible:c.feasible!==false,
@@ -3359,6 +3410,147 @@ const FUZZY_FEATURES=[
 {key:'height_fit',name:'高さ適合度 / height fit',prop:'heightFit'},
 {key:'approach_preference',name:'アプローチ選好 / approach preference',prop:'preference'},
 {key:'collision_free',name:'衝突自由度 / collision free',prop:'collisionFree'}];
+const EVALUATION_FEATURE_PREFIX='evaluation.';
+function v321EvaluationFeatureKey(metricId){return EVALUATION_FEATURE_PREFIX+String(metricId||'').trim()}
+function v321MetricSupported(def){return def&&def.value_type!=='string'}
+function v321DefaultMetricLabels(){
+  return {
+    Low:{shape:'trapezoid',params:[0,0,.22,.42]},
+    Medium:{shape:'triangular',params:[.25,.5,.75]},
+    High:{shape:'trapezoid',params:[.58,.78,1,1]}
+  };
+}
+function v321EvaluationMetricDefinitions(){
+  const found=new Map();
+  Object.values(state.evaluationMetrics.schemas||{}).forEach(schema=>{
+    (schema.metrics||[]).forEach(def=>{
+      const metricId=String(def&&def.metric_id||'').trim();
+      if(!metricId||found.has(metricId)||def.visible===false)return;
+      found.set(metricId,{...def,metric_id:metricId,label:def.label||metricId,value_type:v320MetricTypeName(def.value_type)});
+    });
+  });
+  return [...found.values()].sort((a,b)=>(a.group_name||'').localeCompare(b.group_name||'')||a.metric_id.localeCompare(b.metric_id));
+}
+function fuzzyFeatureDefinitions(){
+  const defs=FUZZY_FEATURES.map(f=>({...f}));
+  const known=new Set(defs.map(f=>f.key));
+  const model=ensureFuzzyModel();
+  Object.entries(model.features||{}).forEach(([key,feature])=>{
+    const metric=feature&&feature.evaluationMetric;
+    if(!metric||known.has(key))return;
+    defs.push({key,name:metric.label||metric.metric_id||key,evaluationMetric:metric});
+    known.add(key);
+  });
+  return defs;
+}
+function v321RenderEvaluationMetricSelector(){
+  const box=$('fuzzyEvaluationMetricSelector');
+  if(!box)return;
+  const defs=v321EvaluationMetricDefinitions();
+  box.innerHTML='';
+  if(!defs.length){
+    const empty=document.createElement('span');
+    empty.className='fuzzy-small';
+    empty.textContent='評価指標は未受信です。';
+    box.appendChild(empty);
+    return;
+  }
+  const model=ensureFuzzyModel();
+  defs.forEach(def=>{
+    const key=v321EvaluationFeatureKey(def.metric_id);
+    const supported=v321MetricSupported(def);
+    const enabled=supported&&model.features[key]&&model.features[key].enabled!==false;
+    const label=document.createElement('label');
+    label.className='fuzzy-chip'+(enabled?'':' inactive')+(supported?'':' unsupported');
+    if(def.description)label.title=def.description;
+    const checkbox=document.createElement('input');
+    checkbox.type='checkbox';
+    checkbox.checked=!!enabled;
+    checkbox.disabled=!supported;
+    checkbox.dataset.fzEvaluationFeature=key;
+    checkbox.dataset.metricId=def.metric_id;
+    const title=document.createElement('b');
+    title.textContent=def.label||def.metric_id;
+    const meta=document.createElement('span');
+    meta.className='metric-meta';
+    meta.textContent=`${def.metric_id} [${def.value_type}${def.unit?`, ${def.unit}`:''}]`;
+    label.append(checkbox,title,meta);
+    box.appendChild(label);
+  });
+}
+function v321SyncEvaluationMetricFeatures(refreshEditor=true){
+  const defs=v321EvaluationMetricDefinitions();
+  const enabled=state.evaluationMetrics.metricEnabled||(state.evaluationMetrics.metricEnabled={});
+  const model=ensureFuzzyModel();
+  const activeKeys=new Set();
+  defs.forEach(def=>{
+    const key=v321EvaluationFeatureKey(def.metric_id);
+    activeKeys.add(key);
+    const supported=v321MetricSupported(def);
+    if(!Object.prototype.hasOwnProperty.call(enabled,def.metric_id))enabled[def.metric_id]=supported&&def.enabled!==false;
+    if(!model.features[key])model.features[key]={enabled:!!enabled[def.metric_id],labels:v321DefaultMetricLabels()};
+    model.features[key].enabled=supported&&!!enabled[def.metric_id];
+    model.features[key].evaluationMetric={
+      metric_id:def.metric_id,
+      label:def.label||def.metric_id,
+      unit:def.unit||'',
+      value_type:def.value_type,
+      scope_type:def.scope_type||''
+    };
+  });
+  Object.entries(model.features||{}).forEach(([key,feature])=>{
+    if(feature&&feature.evaluationMetric&&!activeKeys.has(key))feature.enabled=false;
+  });
+  const signature=JSON.stringify(defs.map(def=>[def.metric_id,def.label,def.unit,def.value_type,def.enabled!==false]));
+  const changed=state.evaluationMetrics.selectorSignature!==signature;
+  state.evaluationMetrics.selectorSignature=signature;
+  if(changed)v321RenderEvaluationMetricSelector();
+  v321BindEvaluationMetricSelector();
+  if(refreshEditor&&changed&&$('fzMfFeature')){
+    refreshFuzzyFeatureSelects();
+    renderMfList();
+    renderRuleList();
+    renderRuleConfirm();
+    updateRuleJson();
+  }
+}
+function v321MetricScalar(value){
+  if(value===null||value===undefined)return null;
+  if(Array.isArray(value)){
+    const values=value.map(Number).filter(Number.isFinite);
+    return values.length?values.reduce((sum,v)=>sum+v,0)/values.length:null;
+  }
+  if(typeof value==='boolean')return value?1:0;
+  const number=Number(value);
+  return Number.isFinite(number)?number:null;
+}
+function v321EvaluationFeatureValue(candidate,metricId){
+  const direct=candidate&&candidate.evaluationMetrics&&candidate.evaluationMetrics[metricId];
+  let raw=v321MetricScalar(direct);
+  const scopeIds=[
+    candidate&&candidate.goalNodeId,
+    candidate&&candidate.goal_node_id,
+    candidate&&candidate.candidateId,
+    candidate&&candidate.candidate_id
+  ].filter(v=>v!==undefined&&v!==null).map(String);
+  const groups=Object.values(state.evaluationMetrics.samples||{});
+  if(raw===null){
+    for(let gi=groups.length-1;gi>=0&&raw===null;gi--){
+      const sample=(groups[gi].samples||[]).find(item=>scopeIds.includes(String(item.scope_id)));
+      if(sample)raw=v321MetricScalar(sample.metrics_by_id&&sample.metrics_by_id[metricId]);
+    }
+  }
+  if(raw===null)return 0;
+  const values=[];
+  groups.forEach(group=>(group.samples||[]).forEach(sample=>{
+    const value=v321MetricScalar(sample.metrics_by_id&&sample.metrics_by_id[metricId]);
+    if(value!==null)values.push(value);
+  }));
+  if(!values.length)return clamp(raw,0,1);
+  const min=Math.min(...values),max=Math.max(...values);
+  if(max-min<1e-12)return raw>=0&&raw<=1?raw:.5;
+  return clamp((raw-min)/(max-min),0,1);
+}
 function defaultFuzzyModel(){const common={Low:{shape:'trapezoid',params:[0,0,.22,.42]},Medium:{shape:'triangular',params:[.25,.5,.75]},High:{shape:'trapezoid',params:[.58,.78,1,1]}};const features={};FUZZY_FEATURES.forEach(f=>{features[f.key]={enabled:true,labels:JSON.parse(JSON.stringify(common))}});features.handle_likeness.labels.Handle={shape:'gaussian',params:[1,.16,0,0]};features.topological_density.labels.Dense={shape:'rbf',params:[.92,.18,0,0]};features.collision_free.labels.Clean={shape:'trapezoid',params:[.82,.94,1,1]};return{methods:{and:'min',or:'max',implication:'mamdani_min',aggregation:'max',defuzz:'weighted_average',fallback:'classic'},features,outputs:{Reject:{value:5,meaning:'不可'},Low:{value:28,meaning:'低い'},Medium:{value:55,meaning:'中程度'},High:{value:78,meaning:'推奨'},VeryHigh:{value:96,meaning:'強く推奨'}},rules:[
 {id:'R1',active:true,name:'semantic safe handle high confidence',conditions:[{feature:'handle_likeness',label:'High',connector:'AND'},{feature:'aperture_fit',label:'High',connector:'AND'},{feature:'contact_depth',label:'High',connector:'AND'},{feature:'topological_density',label:'High',connector:'AND'},{feature:'topology_safe',label:'High',connector:'AND'},{feature:'collision_free',label:'High',connector:'AND'}],output:'VeryHigh',weight:1.0},
 {id:'R2',active:true,name:'unknown object surface acceptable grasp',conditions:[{feature:'topology_unknown',label:'High',connector:'AND'},{feature:'aperture_fit',label:'High',connector:'AND'},{feature:'contact_depth',label:'Medium',connector:'AND'},{feature:'collision_free',label:'High',connector:'AND'}],output:'High',weight:.88},
@@ -3436,7 +3628,7 @@ function tnorm(a,b,m){if(m==='product')return a*b;if(m==='lukasiewicz')return Ma
 function snorm(a,b,m){if(m==='prob_or')return a+b-a*b;if(m==='bounded_sum')return Math.min(1,a+b);return Math.max(a,b)}
 function imply(f,w,m){if(m==='larsen_product')return f*w;if(m==='godel')return f<=w?1:w;return Math.min(f,w)}
 function aggregateOutput(prev,val,m){if(m==='sum_clipped')return Math.min(1,prev+val);if(m==='prob_or')return prev+val-prev*val;return Math.max(prev,val)}
-function featureValue(c,key){const f=FUZZY_FEATURES.find(x=>x.key===key);return f?clamp(+c[f.prop]||0,0,1):0}
+function featureValue(c,key){const f=FUZZY_FEATURES.find(x=>x.key===key);if(f)return clamp(+c[f.prop]||0,0,1);const fd=ensureFuzzyModel().features[key];return fd&&fd.evaluationMetric?v321EvaluationFeatureValue(c,fd.evaluationMetric.metric_id):0}
 function apertureFeasibility(c,hand){
   const req=+(c.requiredWidth||0);
   const max=+(hand||safeNumInput('handAperture',0.095));
@@ -3458,7 +3650,7 @@ function evaluateFuzzyRules(c){const model=ensureFuzzyModel(),methods=model.meth
 function estimate(){state.graspRenderMode='estimate';state.ikSolution=null;state.ikTarget=null;updateIkStatus('IK target cleared by grasp estimation.');if(!state.points.length)generate();if(!state.nodes.length)runGng();const hand=+$('handAperture').value,clear=+$('clearance').value,depth=+$('contactDepth').value,minH=+$('minHeight').value,maxH=+$('maxHeight').value,pref=$('approachPref').value;const valid=topologyGraspNodesForFuzzy();const all=bbox(valid),handle=topologyHandleBBox(valid,all),rim=topologyRimBBox(valid,all);let candidates=[],rejected=[];function add(c){c.requiredWidth=c.width+2*clear;c.apertureCheck=apertureFeasibility(c,hand);c.apertureFit=c.apertureCheck.ok?clamp(1-Math.max(0,c.requiredWidth-(hand-clear))/(Math.max(clear,0.001))*0.10,0.92,1):0;c.depthFit=clamp(c.depth/(depth||.001),0,1);c.heightFit=(c.z>=minH&&c.z<=maxH)?1:Math.max(0,1-Math.min(Math.abs(c.z-minH),Math.abs(c.z-maxH))/.08);c.density=featureDensity(c);applySemanticGraspFeatures(c);c.preference=(pref==='auto'||pref===c.approach||pref===c.kind)?1:(pref==='side'&&c.approach==='side'?.75:.45);optimizeGraspCollision(c);c.collisionFree=clamp(c.collisionFit??1,0,1);c.rejectReason=candidateRejectReason(c,hand);const fr=evaluateFuzzyRules(c);c.ruleResult=fr;c.classicScore=classicScore(c);c.rawFuzzyScore=fr.score;c.score=c.rejectReason?0:clamp(fr.score-(c.semanticPenalty||0)-(c.collisionPenalty||0)*.20,0,100);if(c.rejectReason)rejected.push(c);else candidates.push(c)}
 if(handle){add({kind:'handle',type:'handle loop grasp',approach:'handle',x:handle.cx,y:handle.cy,z:handle.cz,yaw:0,pitch:0,width:Math.min(handle.sy,handle.sz),depth:Math.max(handle.sy,handle.sz),handleFit:1,b:handle,explain:'GNGトポロジカルマップから抽出した側方突出クラスタを対象。raw点群ではなくトポロジカルノードのみをファジィ推論入力に使用。'});add({kind:'handle',type:'handle side pinch',approach:'side',x:handle.cx,y:handle.cy,z:handle.cz,yaw:90,pitch:0,width:handle.sx,depth:handle.sz,handleFit:.86,b:handle,explain:'GNGトポロジカルマップ上の側方突出領域をピンチ。safe/unknown支持が弱い場合は候補を自動減点。'});}add({kind:'body',type:'whole object side-X',approach:'side',x:all.cx,y:all.cy,z:clamp(all.cz,minH,maxH),yaw:0,pitch:0,width:all.sy,depth:all.sx,handleFit:.35,b:all,explain:'物体全体をY幅方向から把持。safe面/unknown物体表面を優先し、wall優勢ならReject側へ倒す。'});add({kind:'body',type:'whole object side-Y',approach:'side',x:all.cx,y:all.cy,z:clamp(all.cz,minH,maxH),yaw:90,pitch:0,width:all.sx,depth:all.sy,handleFit:.35,b:all,explain:'物体全体をX幅方向から把持。トポロジー密度だけでなくsemantic label比率を採点。'});if(rim){add({kind:'top',type:'top rim grasp',approach:'top',x:rim.cx,y:rim.cy,z:rim.cz,yaw:0,pitch:-90,width:Math.min(rim.sx,rim.sy),depth:Math.max(rim.sx,rim.sy),handleFit:.25,b:rim,explain:'上縁/キャップ周辺を上方から把持。unknown物体表面として妥当ならHighへ上げる。'});}const topB={...all,minZ:Math.max(all.minZ,all.maxZ-.05),cz:all.maxZ-.025,sz:.05};add({kind:'top',type:'top body pinch',approach:'top',x:all.cx,y:all.cy,z:all.maxZ-.025,yaw:45,pitch:-90,width:Math.min(all.sx,all.sy),depth:Math.max(all.sx,all.sy),handleFit:.2,b:topB,explain:'上部胴体へのトップピンチ。safe/unknown面候補として成立するかを明示。'});
 candidates.sort((a,b)=>(b.semanticFilterPass-a.semanticFilterPass)||(b.score-a.score));state.rejectedCandidates=rejected;state.candidates=candidates.slice(0,+$('candidateN').value);state.best=state.candidates[0]||null;updateGraspUi();renderFuzzyDebug();renderAll();showTask('grasp');if(state.best)runTopoIkSolve();else updateIkStatus('IK skipped: all grasp poses rejected by aperture/collision hard constraints.');}
-function poseObj(c){if(!c)return{};return{object_sample:state.sample,frame:state.frame,grasp_type:c.type,score:+c.score.toFixed(2),pose:{x:+c.x.toFixed(4),y:+c.y.toFixed(4),z:+c.z.toFixed(4),yaw_deg:+c.yaw.toFixed(1),pitch_deg:+c.pitch.toFixed(1),approach:c.approach,avoidance_shift_m:+(c.avoidanceShift||0).toFixed(4)},hand:{model:'FuzzRoBo ToPoArm STL mesh' ,urdf_source:'fuzzrobo/topoarm topoarm_description/urdf/_topoarm.urdf.xacro',stl_source:'fuzzrobo/topoarm topoarm_description/meshes/topoarm/*.stl',required_aperture_m:+c.requiredWidth.toFixed(4),actual_opening_m:+((c.apertureCheck&&c.apertureCheck.opening)||c.requiredWidth).toFixed(4),max_aperture_m:+(+$('handAperture').value).toFixed(4),aperture_margin_m:+((c.apertureCheck&&c.apertureCheck.margin)||0).toFixed(4),clearance_m:+(+$('clearance').value).toFixed(4),urdf_left_joint_origin_m:[-0.0005,0.021,0.0898],urdf_right_joint_origin_m:[-0.0005,-0.021,0.0898],urdf_end_effector_origin_m:[-0.0005,0,0.1341],finger_length_m:+(+$('fingerLength').value||0).toFixed(4),finger_thickness_m:+(+$('fingerThickness').value||0).toFixed(4),finger_height_m:+(+$('fingerHeight').value||0).toFixed(4)},topology_evidence:{semantic_filter_pass:!!c.semanticFilterPass,semantic_reason:c.semanticExplain||'',semantic_support:+(c.semanticSupport||0).toFixed(3),counts:(c.semanticEvidence&&c.semanticEvidence.counts)||{},safe:+(c.topologySafe||0).toFixed(3),unknown:+(c.topologyUnknown||0).toFixed(3),wall:+(c.topologyWall||0).toFixed(3),default:+(c.topologyDefault||0).toFixed(3)},fuzzy_scores:{aperture_fit:+c.apertureFit.toFixed(3),contact_depth:+c.depthFit.toFixed(3),handle_likeness:+c.handleFit.toFixed(3),topological_density:+c.density.toFixed(3),topology_safe:+(c.topologySafe||0).toFixed(3),topology_unknown:+(c.topologyUnknown||0).toFixed(3),topology_wall:+(c.topologyWall||0).toFixed(3),topology_default:+(c.topologyDefault||0).toFixed(3),height_fit:+c.heightFit.toFixed(3),approach_preference:+c.preference.toFixed(3),collision_free:+(c.collisionFree??c.collisionFit??1).toFixed(3)},fuzzy_inference:{engine:'v289 hard-collision-reject exact-aperture fuzzy rule base + expanded grasping dataset',classic_weighted_score:+(c.classicScore||0).toFixed(2),raw_fuzzy_score:+(c.rawFuzzyScore??c.score).toFixed(2),semantic_penalty:+(c.semanticPenalty||0).toFixed(2),collision_penalty:+(c.collisionPenalty||0).toFixed(2),collision_points:(c.collision&&c.collision.collisions)||0,collision_nodes:(c.collision&&c.collision.nodeCollisions)||0,rules_fired:(c.ruleResult&&c.ruleResult.fired||[]).slice(0,20),output_activations:(c.ruleResult&&c.ruleResult.outputs||[]).map(o=>({label:o.label,activation:+o.act.toFixed(3),singleton:o.value}))}}}
+function poseObj(c){if(!c)return{};const base=topoArmBasePose();return{object_sample:state.sample,frame:state.frame,grasp_type:c.type,score:+c.score.toFixed(2),pose:{x:+c.x.toFixed(4),y:+c.y.toFixed(4),z:+c.z.toFixed(4),yaw_deg:+c.yaw.toFixed(1),pitch_deg:+c.pitch.toFixed(1),approach:c.approach,avoidance_shift_m:+(c.avoidanceShift||0).toFixed(4)},robot_base:{enabled:!!state.useFixedBase,x:+base.x.toFixed(4),y:+base.y.toFixed(4),z:+base.z.toFixed(4),roll_deg:+radToDeg(base.roll).toFixed(1),pitch_deg:+radToDeg(base.pitch).toFixed(1),yaw_deg:+radToDeg(base.yawZ).toFixed(1)},hand:{model:'FuzzRoBo ToPoArm STL mesh' ,urdf_source:'fuzzrobo/topoarm topoarm_description/urdf/_topoarm.urdf.xacro',stl_source:'fuzzrobo/topoarm topoarm_description/meshes/topoarm/*.stl',required_aperture_m:+c.requiredWidth.toFixed(4),actual_opening_m:+((c.apertureCheck&&c.apertureCheck.opening)||c.requiredWidth).toFixed(4),max_aperture_m:+(+$('handAperture').value).toFixed(4),aperture_margin_m:+((c.apertureCheck&&c.apertureCheck.margin)||0).toFixed(4),clearance_m:+(+$('clearance').value).toFixed(4),urdf_left_joint_origin_m:[-0.0005,0.021,0.0898],urdf_right_joint_origin_m:[-0.0005,-0.021,0.0898],urdf_end_effector_origin_m:[-0.0005,0,0.1341],finger_length_m:+(+$('fingerLength').value||0).toFixed(4),finger_thickness_m:+(+$('fingerThickness').value||0).toFixed(4),finger_height_m:+(+$('fingerHeight').value||0).toFixed(4)},topology_evidence:{semantic_filter_pass:!!c.semanticFilterPass,semantic_reason:c.semanticExplain||'',semantic_support:+(c.semanticSupport||0).toFixed(3),counts:(c.semanticEvidence&&c.semanticEvidence.counts)||{},safe:+(c.topologySafe||0).toFixed(3),unknown:+(c.topologyUnknown||0).toFixed(3),wall:+(c.topologyWall||0).toFixed(3),default:+(c.topologyDefault||0).toFixed(3)},fuzzy_scores:{aperture_fit:+c.apertureFit.toFixed(3),contact_depth:+c.depthFit.toFixed(3),handle_likeness:+c.handleFit.toFixed(3),topological_density:+c.density.toFixed(3),topology_safe:+(c.topologySafe||0).toFixed(3),topology_unknown:+(c.topologyUnknown||0).toFixed(3),topology_wall:+(c.topologyWall||0).toFixed(3),topology_default:+(c.topologyDefault||0).toFixed(3),height_fit:+c.heightFit.toFixed(3),approach_preference:+c.preference.toFixed(3),collision_free:+(c.collisionFree??c.collisionFit??1).toFixed(3)},fuzzy_inference:{engine:'v289 hard-collision-reject exact-aperture fuzzy rule base + expanded grasping dataset',classic_weighted_score:+(c.classicScore||0).toFixed(2),raw_fuzzy_score:+(c.rawFuzzyScore??c.score).toFixed(2),semantic_penalty:+(c.semanticPenalty||0).toFixed(2),collision_penalty:+(c.collisionPenalty||0).toFixed(2),collision_points:(c.collision&&c.collision.collisions)||0,collision_nodes:(c.collision&&c.collision.nodeCollisions)||0,rules_fired:(c.ruleResult&&c.ruleResult.fired||[]).slice(0,20),output_activations:(c.ruleResult&&c.ruleResult.outputs||[]).map(o=>({label:o.label,activation:+o.act.toFixed(3),singleton:o.value}))}}}
 function readIkTargetInput(){
   return graspPoseToIkTarget(state.best||state.candidates[0]||defaultTopoArmGraspPose());
 }
@@ -3487,7 +3679,7 @@ function runTopoIkSolve(){
   for(let i=0;i<candidates.length;i++){
     const cand=candidates[i];
     const target=graspPoseToIkTarget(cand);
-    const sol=solveTopoArmIk(target);
+    const sol=solveRobotIk(target);
     if(sol&&sol.success){
       chosenSol=sol;
       chosenCandidate=cand;
@@ -3505,7 +3697,7 @@ function runTopoIkSolve(){
     state.graspRenderMode='estimate';
     const skipMsg=skippedTypes.length?`\nスキップ: ${skippedTypes.join(', ')}`:'';
     updateIkStatus(`IK: 全${candidates.length}候補が固定ベースから到達不可です。${skipMsg}`);
-    if($('graspStatus'))$('graspStatus').textContent=`IK: 全候補が固定ベース(base=(${TOPOARM_BASE_POSE.x.toFixed(3)}, ${TOPOARM_BASE_POSE.y.toFixed(3)}))から到達不可。候補スコア上位から再推定するか把持パラメータを調整してください。`;
+    if($('graspStatus'))$('graspStatus').textContent=`IK: 全候補が固定ベース(base=${topoArmBasePoseString(topoArmBasePose())})から到達不可。候補スコア上位から再推定するか把持パラメータを調整してください。`;
     if($('poseJson'))$('poseJson').value=JSON.stringify(poseObj(state.best),null,2);
     renderAll();
     return null;
@@ -3529,10 +3721,19 @@ function runTopoIkSolve(){
   };
   state.graspRenderMode='ik';
   const skipNote=skippedCount?` (${skippedCount}候補スキップ済み: IK到達不可)`:' (1位候補)';
-  v314StartIkMotion(chosenSol,chosenCandidate);
+  if(Array.isArray(chosenSol.joints)&&chosenSol.frames?.link7&&chosenSol.frames?.ee){
+    v314StartIkMotion(chosenSol,chosenCandidate);
+  }else{
+    state.ikMotion=null;
+  }
   if($('poseJson'))$('poseJson').value=JSON.stringify(ikSolutionObj(chosenSol),null,2);
-  if($('graspStatus'))$('graspStatus').textContent=`IK motion started${skipNote}: fixed base=(${chosenSol.base.x.toFixed(3)}, ${chosenSol.base.y.toFixed(3)}), link7 target=(${chosenSol.frames.link7.origin.x.toFixed(3)}, ${chosenSol.frames.link7.origin.y.toFixed(3)}, ${chosenSol.frames.link7.origin.z.toFixed(3)}), success=YES`;
-  updateIkStatus(`IK motion generating online${skipNote}. 固定ベース base=(${chosenSol.base.x.toFixed(3)}, ${chosenSol.base.y.toFixed(3)}), target ee_err=${chosenSol.eeErr.toFixed(3)}m.`+(skippedCount?`\n到達不可スキップ: ${skippedTypes.join(' / ')}`:''));
+  const targetFrame=chosenSol.targetFrame||chosenSol.frames?.link7||chosenSol.frames?.ee;
+  const targetOrigin=targetFrame?.origin||state.ikTarget.pos;
+  const err=Number.isFinite(chosenSol.eeErr)?chosenSol.eeErr:(Number.isFinite(chosenSol.posErr)?chosenSol.posErr:0);
+  const targetLabel=chosenSol.targetLink||'link7';
+  const motionText=Array.isArray(chosenSol.joints)?'IK motion started':'IK solved';
+  if($('graspStatus'))$('graspStatus').textContent=`${motionText}${skipNote}: fixed base=${topoArmBasePoseString(chosenSol.base)}, ${targetLabel}=(${targetOrigin.x.toFixed(3)}, ${targetOrigin.y.toFixed(3)}, ${targetOrigin.z.toFixed(3)}), success=YES`;
+  updateIkStatus(`${motionText}${skipNote}. 固定ベース base=${topoArmBasePoseString(chosenSol.base)}, target err=${err.toFixed(3)}m.`+(skippedCount?`\n到達不可スキップ: ${skippedTypes.join(' / ')}`:''));
   renderAll();
   return chosenSol;
 }
@@ -3554,6 +3755,7 @@ function v314JointDistance(a,b){
   return Math.sqrt(s);
 }
 function v314CurrentBase(){
+  if(state.useFixedBase)return topoArmBasePose();
   if(state.ikMotion&&state.ikMotion.currentBase)return {...state.ikMotion.currentBase};
   if(state.ikSolution&&state.ikSolution.base)return {...state.ikSolution.base};
   return topoArmBasePose();
@@ -3572,8 +3774,11 @@ function v314MakeInterpolatedSolution(m,u){
     x:m.startBase.x+(m.targetBase.x-m.startBase.x)*s,
     y:m.startBase.y+(m.targetBase.y-m.startBase.y)*s,
     z:m.startBase.z+(m.targetBase.z-m.startBase.z)*s,
-    yawZ:m.startBase.yawZ+(m.targetBase.yawZ-m.startBase.yawZ)*s
+    roll:m.startBase.roll+(m.targetBase.roll-m.startBase.roll)*s,
+    pitch:m.startBase.pitch+(m.targetBase.pitch-m.startBase.pitch)*s,
+    yaw:m.startBase.yaw+(m.targetBase.yaw-m.startBase.yaw)*s
   };
+  base.yawZ=base.yaw;
   const frames=computeTopoArmFramesFromJoints(base,joints,opening);
   const target=m.targetSol.target||state.ikTarget||{};
   const pos=target.pos||{x:m.targetSol.x||0,y:m.targetSol.y||0,z:m.targetSol.z||0};
@@ -3655,7 +3860,7 @@ function v314OnlineReplanIkIfNeeded(){
   const interval=+($('ikReplanMs')?.value||100);
   if(state.ikMotion&&state.ikMotion.active&&now-(state.ikMotion.lastPlanTime||0)<interval)return state.ikMotion;
   const target=graspPoseToIkTarget(state.best);
-  const sol=solveTopoArmIk(target);
+  const sol=solveRobotIk(target);
   if(sol&&sol.success){
     state.ikTarget=target;
     v314StartIkMotion(sol,state.best);
@@ -3674,17 +3879,27 @@ function clearTopoIkSolve(){
 }
 function ikSolutionObj(sol){
   if(!sol)return{};
+  const jointPayload=Array.isArray(sol.joints)
+    ? sol.joints.map(v=>+v.toFixed(4))
+    : Object.fromEntries(Object.entries(sol.joints||{}).map(([k,v])=>[k,+((+v||0).toFixed(4))]));
+  const framePoint=frame=>{
+    const o=frame?.origin;
+    return o?{x:+o.x.toFixed(4),y:+o.y.toFixed(4),z:+o.z.toFixed(4)}:null;
+  };
+  const targetFrame=sol.targetFrame||sol.frames?.[sol.targetLink]||sol.frames?.link7||sol.frames?.ee;
   return{
     target:sol.target,
-    base:{x:+sol.base.x.toFixed(4),y:+sol.base.y.toFixed(4),z:+sol.base.z.toFixed(4),yawZ:+sol.base.yawZ.toFixed(4)},
-    joints:(sol.joints||[]).map(v=>+v.toFixed(4)),
+    base:{x:+sol.base.x.toFixed(4),y:+sol.base.y.toFixed(4),z:+sol.base.z.toFixed(4),roll:+sol.base.roll.toFixed(4),pitch:+sol.base.pitch.toFixed(4),yaw:+sol.base.yaw.toFixed(4),yawZ:+sol.base.yawZ.toFixed(4)},
+    joints:jointPayload,
+    target_link:sol.targetLink||sol.target?.linkName||'',
     score:+(sol.score||0).toFixed(2),
     success:!!sol.success,
-    error:{link7:+(sol.link7Err||0).toFixed(4),ee:+(sol.eeErr||0).toFixed(4),dir:+(sol.dirErr||0).toFixed(4),base_shift:+(sol.baseShift||0).toFixed(4)},
+    error:{link7:+(sol.link7Err||0).toFixed(4),ee:+(sol.eeErr||sol.posErr||0).toFixed(4),dir:+(sol.dirErr||0).toFixed(4),base_shift:+(sol.baseShift||0).toFixed(4)},
     frames:{
-      link1:{x:+sol.frames.link1.origin.x.toFixed(4),y:+sol.frames.link1.origin.y.toFixed(4),z:+sol.frames.link1.origin.z.toFixed(4)},
-      link7:{x:+sol.frames.link7.origin.x.toFixed(4),y:+sol.frames.link7.origin.y.toFixed(4),z:+sol.frames.link7.origin.z.toFixed(4)},
-      ee:{x:+sol.frames.ee.origin.x.toFixed(4),y:+sol.frames.ee.origin.y.toFixed(4),z:+sol.frames.ee.origin.z.toFixed(4)}
+      link1:framePoint(sol.frames?.link1),
+      link7:framePoint(sol.frames?.link7),
+      ee:framePoint(sol.frames?.ee),
+      target:framePoint(targetFrame)
     }
   };
 }
@@ -3698,7 +3913,7 @@ function project(p,canvas){
   const cp=Math.cos(pitch),sp=Math.sin(pitch),cy=Math.cos(yaw),sy=Math.sin(yaw);
   const focusZ=0.09;
   const x=p.x,y=p.y,z=p.z-focusZ;
-  const sxw=cy*x-sy*y;
+  const sxw=sy*y-cy*x;
   const depthBase=sy*x+cy*y;
   const screenUp=cp*z-sp*depthBase;
   const depth=sp*z+cp*depthBase;
@@ -3945,6 +4160,115 @@ function loadEmbeddedRules(){const el=document.getElementById('embedded-fuzzy-ru
 
 function resetView(){state.rot={x:0.58,y:0.78};state.zoom=2.35;state.pan={x:0,y:0};renderAll();}
 function setViewTool(tool){state.viewTool=tool;document.querySelectorAll('[data-view-tools] button[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));}
+function viewerPanelClass(panel){
+  if(panel==='info')return'info-open';
+  if(panel==='play')return'play-open';
+  if(panel==='layers')return'layers-open';
+  if(panel==='robot')return'robot-open';
+  return'tools-open';
+}
+function closeViewerPopup(wrap){
+  if(!wrap)return;
+  ['info-open','play-open','tools-open','layers-open','robot-open'].forEach(c=>wrap.classList.remove(c));
+  const tabs=wrap.querySelector('[data-view-tabs]');
+  if(tabs)tabs.querySelectorAll('[data-panel-toggle]').forEach(b=>b.classList.remove('active'));
+}
+function viewerPopupCanDragFrom(target){
+  return !target.closest('button,input,select,textarea,label,a,[data-view-tabs],[data-view-tools],.control-pair,.gng-algorithm-buttons');
+}
+function suppressNextViewerOutsideClick(){
+  setupViewerTabs._suppressOutsideClickOnce=true;
+}
+function viewerOutsideClickShouldClose(e){
+  if(setupViewerTabs._suppressOutsideClickOnce){
+    setupViewerTabs._suppressOutsideClickOnce=false;
+    return false;
+  }
+  if(e.defaultPrevented)return false;
+  if(e.target.closest('[data-view-tabs],[data-view-panel]'))return false;
+  return !e.target.closest('button,[role="button"],input,select,textarea,label,a,summary,details');
+}
+function viewerPopupClampOffset(panel,dx,dy){
+  const wrap=panel.closest('.canvaswrap');
+  const wr=wrap?wrap.getBoundingClientRect():{width:window.innerWidth,height:window.innerHeight};
+  const pr=panel.getBoundingClientRect();
+  const maxX=Math.max(0,wr.width-pr.width-8);
+  const maxY=Math.max(0,wr.height-pr.height-8);
+  return{x:clamp(dx,-maxX,maxX),y:clamp(dy,-maxY,maxY)};
+}
+function viewerPopupApplyDrag(panel,offset){
+  panel.dataset.dragX=String(offset.x);
+  panel.dataset.dragY=String(offset.y);
+  panel.style.transform=`translate(${offset.x}px, ${offset.y}px)`;
+}
+function setupViewerGlobalLongPressSuppressor(){
+  if(setupViewerGlobalLongPressSuppressor._bound)return;
+  setupViewerGlobalLongPressSuppressor._bound=true;
+  let holdTimer=null;
+  let activePointer=null;
+  const clearHold=()=>{
+    clearTimeout(holdTimer);
+    holdTimer=null;
+    activePointer=null;
+  };
+  document.addEventListener('pointerdown',e=>{
+    if(e.button!==undefined&&e.button!==0)return;
+    clearHold();
+    activePointer=e.pointerId;
+    holdTimer=setTimeout(()=>{
+      if(activePointer===e.pointerId)suppressNextViewerOutsideClick();
+    },260);
+  },true);
+  ['pointerup','pointercancel','pointerleave'].forEach(type=>{
+    document.addEventListener(type,e=>{
+      if(activePointer===e.pointerId)clearHold();
+    },true);
+  });
+}
+function setupViewerPopupDragging(){
+  document.querySelectorAll('[data-view-panel]').forEach(panel=>{
+    if(panel.dataset.popupDragBound)return;
+    panel.dataset.popupDragBound='1';
+    panel.classList.add('viewer-popup-draggable');
+    panel.addEventListener('pointerdown',e=>{
+      if(e.button!==undefined&&e.button!==0)return;
+      if(!viewerPopupCanDragFrom(e.target))return;
+      const holdDelay=e.pointerType==='mouse'?0:260;
+      const startX=e.clientX,startY=e.clientY;
+      const baseX=+(panel.dataset.dragX||0),baseY=+(panel.dataset.dragY||0);
+      let dragging=false;
+      let holdTimer=null;
+      const startDrag=()=>{
+        dragging=true;
+        suppressNextViewerOutsideClick();
+        panel.classList.add('viewer-popup-dragging');
+        try{panel.setPointerCapture(e.pointerId);}catch(_e){}
+      };
+      const move=ev=>{
+        const moved=Math.hypot(ev.clientX-startX,ev.clientY-startY);
+        if(!dragging&&holdDelay===0&&moved>2)startDrag();
+        if(!dragging)return;
+        ev.preventDefault();
+        viewerPopupApplyDrag(panel,viewerPopupClampOffset(panel,baseX+ev.clientX-startX,baseY+ev.clientY-startY));
+      };
+      const up=ev=>{
+        clearTimeout(holdTimer);
+        if(dragging){
+          suppressNextViewerOutsideClick();
+          if(ev&&ev.cancelable)ev.preventDefault();
+        }
+        panel.classList.remove('viewer-popup-dragging');
+        panel.removeEventListener('pointermove',move);
+        panel.removeEventListener('pointerup',up);
+        panel.removeEventListener('pointercancel',up);
+      };
+      holdTimer=setTimeout(startDrag,holdDelay);
+      panel.addEventListener('pointermove',move);
+      panel.addEventListener('pointerup',up,{once:true});
+      panel.addEventListener('pointercancel',up,{once:true});
+    });
+  });
+}
 function setupViewerTabs(){
   document.querySelectorAll('.canvaswrap').forEach(wrap=>{
     const tabs=wrap.querySelector('[data-view-tabs]');
@@ -3952,15 +4276,30 @@ function setupViewerTabs(){
     tabs.querySelectorAll('[data-panel-toggle]').forEach(btn=>{
       btn.addEventListener('click',e=>{
         e.preventDefault();
+        e.stopPropagation();
         const panel=btn.dataset.panelToggle;
-        const cls=panel==='info'?'info-open':panel==='play'?'play-open':panel==='layers'?'layers-open':'tools-open';
+        const cls=viewerPanelClass(panel);
         const willOpen=!wrap.classList.contains(cls);
-        ['info-open','play-open','tools-open','layers-open'].forEach(c=>wrap.classList.remove(c));
+        closeViewerPopup(wrap);
         if(willOpen)wrap.classList.add(cls);
         tabs.querySelectorAll('[data-panel-toggle]').forEach(b=>b.classList.toggle('active',b===btn&&willOpen));
+        if(panel==='robot'&&willOpen)v315SyncFixedBaseUi();
       });
     });
   });
+  setupViewerGlobalLongPressSuppressor();
+  setupViewerPopupDragging();
+  if(!setupViewerTabs._outsideBound){
+    setupViewerTabs._outsideBound=true;
+    document.addEventListener('click',e=>{
+      if(!viewerOutsideClickShouldClose(e))return;
+      document.querySelectorAll('.canvaswrap').forEach(wrap=>{
+        const active=wrap.classList.contains('info-open')||wrap.classList.contains('play-open')||wrap.classList.contains('tools-open')||wrap.classList.contains('layers-open')||wrap.classList.contains('robot-open');
+        if(!active)return;
+        closeViewerPopup(wrap);
+      });
+    });
+  }
 }
 
 
@@ -4100,6 +4439,7 @@ function viewerLayerVisible(id,defaultValue=true){
 
 function render(canvasId,withGrasp){
   const c=$(canvasId),ctx=c.getContext('2d');
+  clearRobotWebglLayer(c);
   ctx.clearRect(0,0,c.width,c.height);
   let grad=ctx.createRadialGradient(c.width*.45,c.height*.15,10,c.width*.50,c.height*.50,c.width*.75);
   grad.addColorStop(0,'#0b1b33');grad.addColorStop(.55,'#06101f');grad.addColorStop(1,'#020617');
@@ -4186,37 +4526,731 @@ const TOPOARM_URDF_GRIPPER={
   ee_z:0.1341
 };
 const TOPOARM_GRIPPER_LIFT_Z=0.018;
+const ROBOT_URDF_DEFAULT_SOURCE='dual_arm_urdf/dual_arm_robot.urdf';
+function directChildElements(node,tagName){return Array.from(node?.children||[]).filter(el=>el.tagName===tagName)}
+function firstChildElement(node,tagName){return directChildElements(node,tagName)[0]||null}
+function parseUrdfFloat(v,def=0){const n=+v;return Number.isFinite(n)?n:def}
+function parseUrdfVec3Text(text,def={x:0,y:0,z:0}){
+  if(!text)return {...def};
+  const nums=text.trim().split(/[\s,]+/).map(v=>+v);
+  return{
+    x:Number.isFinite(nums[0])?nums[0]:def.x||0,
+    y:Number.isFinite(nums[1])?nums[1]:def.y||0,
+    z:Number.isFinite(nums[2])?nums[2]:def.z||0
+  };
+}
+function rgbToHex255(r,g,b){
+  const to=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
+function parseUrdfColorNode(colorNode){
+  const rgbaText=colorNode?.getAttribute('rgba');
+  if(!rgbaText)return null;
+  const rgba=rgbaText.trim().split(/[\s,]+/).map(v=>+v);
+  if(rgba.length<3||!rgba.slice(0,3).every(Number.isFinite))return null;
+  return{
+    color:rgbToHex255(clamp(rgba[0],0,1)*255,clamp(rgba[1],0,1)*255,clamp(rgba[2],0,1)*255),
+    alpha:Number.isFinite(rgba[3])?clamp(rgba[3],0,1):1
+  };
+}
+function parseUrdfMaterialLibrary(robotNode){
+  const materials=new Map();
+  for(const materialNode of directChildElements(robotNode,'material')){
+    const name=materialNode.getAttribute('name')||'';
+    if(!name)continue;
+    const parsed=parseUrdfColorNode(firstChildElement(materialNode,'color'));
+    if(parsed)materials.set(name,{name,...parsed});
+  }
+  return materials;
+}
+function parseUrdfOrigin(node){
+  return{
+    xyz:parseUrdfVec3Text(node?.getAttribute('xyz'),{x:0,y:0,z:0}),
+    rpy:parseUrdfVec3Text(node?.getAttribute('rpy'),{x:0,y:0,z:0})
+  };
+}
+function parseUrdfLimit(node){
+  if(!node)return null;
+  const lower=node.getAttribute('lower');
+  const upper=node.getAttribute('upper');
+  const effort=node.getAttribute('effort');
+  const velocity=node.getAttribute('velocity');
+  return{
+    lower:Number.isFinite(+lower)?+lower:null,
+    upper:Number.isFinite(+upper)?+upper:null,
+    effort:Number.isFinite(+effort)?+effort:null,
+    velocity:Number.isFinite(+velocity)?+velocity:null
+  };
+}
+function parseUrdfLinkVisuals(linkNode,materialLibrary=new Map()){
+  const visuals=[];
+  for(const visualNode of directChildElements(linkNode,'visual')){
+    const geometryNode=firstChildElement(visualNode,'geometry');
+    const meshNode=geometryNode?firstChildElement(geometryNode,'mesh'):null;
+    const boxNode=geometryNode?firstChildElement(geometryNode,'box'):null;
+    const cylinderNode=geometryNode?firstChildElement(geometryNode,'cylinder'):null;
+    const sphereNode=geometryNode?firstChildElement(geometryNode,'sphere'):null;
+    const materialNode=firstChildElement(visualNode,'material');
+    const colorNode=materialNode?firstChildElement(materialNode,'color'):null;
+    const materialName=materialNode?.getAttribute('name')||'';
+    const referencedMaterial=materialName?materialLibrary.get(materialName):null;
+    const inlineMaterial=parseUrdfColorNode(colorNode);
+    const visual={
+      name:visualNode.getAttribute('name')||'',
+      origin:parseUrdfOrigin(firstChildElement(visualNode,'origin')),
+      geometry:{type:'none'},
+      material:{
+        name:materialName,
+        color:inlineMaterial?.color||referencedMaterial?.color||'#9ca3af',
+        alpha:inlineMaterial?.alpha??referencedMaterial?.alpha??1
+      }
+    };
+    if(meshNode){
+      visual.geometry={type:'mesh',mesh:meshNode.getAttribute('filename')||'',scale:parseUrdfVec3Text(meshNode.getAttribute('scale'),{x:1,y:1,z:1})};
+    }else if(boxNode){
+      visual.geometry={type:'box',size:parseUrdfVec3Text(boxNode.getAttribute('size'),{x:0.05,y:0.05,z:0.05})};
+    }else if(cylinderNode){
+      visual.geometry={type:'cylinder',radius:parseUrdfFloat(cylinderNode.getAttribute('radius'),0.02),length:parseUrdfFloat(cylinderNode.getAttribute('length'),0.05)};
+    }else if(sphereNode){
+      visual.geometry={type:'sphere',radius:parseUrdfFloat(sphereNode.getAttribute('radius'),0.02)};
+    }
+    visuals.push(visual);
+  }
+  return visuals;
+}
+function parseUrdfRobotText(urdfText,sourceUrl){
+  const xml=new DOMParser().parseFromString(urdfText,'application/xml');
+  if(xml.querySelector('parsererror'))throw new Error('URDF XML parse error');
+  const robotNode=xml.querySelector('robot');
+  if(!robotNode)throw new Error('No <robot> element in URDF');
+  const materialLibrary=parseUrdfMaterialLibrary(robotNode);
+  const robot={
+    name:robotNode.getAttribute('name')||'robot',
+    sourceUrl:new URL(sourceUrl,document.baseURI).href,
+    links:new Map(),
+    joints:new Map(),
+    childJointsByParent:new Map(),
+    parentJointByChild:new Map(),
+    rootLinkName:'',
+    targetLinkName:'',
+    baseLinkName:'',
+    sideLinkNames:{left:'',right:''},
+    linkOrder:[],
+    jointOrder:[],
+    materialLibrary,
+    loadedMeshCache:new Map()
+  };
+  for(const linkNode of directChildElements(robotNode,'link')){
+    const name=linkNode.getAttribute('name')||'';
+    if(!name)continue;
+    robot.links.set(name,{
+      name,
+      visuals:parseUrdfLinkVisuals(linkNode,materialLibrary),
+      childJoints:[],
+      parentJoint:null
+    });
+  }
+  for(const jointNode of directChildElements(robotNode,'joint')){
+    const name=jointNode.getAttribute('name')||'';
+    const type=jointNode.getAttribute('type')||'fixed';
+    if(!name)continue;
+    const parent=firstChildElement(jointNode,'parent')?.getAttribute('link')||'';
+    const child=firstChildElement(jointNode,'child')?.getAttribute('link')||'';
+    const origin=parseUrdfOrigin(firstChildElement(jointNode,'origin'));
+    const axis=parseUrdfVec3Text(firstChildElement(jointNode,'axis')?.getAttribute('xyz'),{x:0,y:0,z:1});
+    const joint={
+      name,type,parent,child,origin,axis,
+      limit:parseUrdfLimit(firstChildElement(jointNode,'limit')),
+      mimic: firstChildElement(jointNode,'mimic')
+        ? {
+            joint:firstChildElement(jointNode,'mimic').getAttribute('joint')||'',
+            multiplier:parseUrdfFloat(firstChildElement(jointNode,'mimic').getAttribute('multiplier'),1),
+            offset:parseUrdfFloat(firstChildElement(jointNode,'mimic').getAttribute('offset'),0)
+          }
+        : null
+    };
+    robot.joints.set(name,joint);
+    robot.jointOrder.push(name);
+    if(parent){
+      const list=robot.childJointsByParent.get(parent)||[];
+      list.push(joint);
+      robot.childJointsByParent.set(parent,list);
+    }
+    if(child && robot.links.has(child)){
+      robot.links.get(child).parentJoint=joint;
+    }
+    if(child)robot.parentJointByChild.set(child,joint);
+  }
+  const roots=[...robot.links.values()].filter(link=>!robot.parentJointByChild.has(link.name)).map(link=>link.name);
+  robot.rootLinkName=roots[0]||[...robot.links.keys()][0]||'';
+  robot.baseLinkName=robot.rootLinkName;
+  const preferredTargets=[robot.targetLinkName,'tcp','tool0','ee','end_effector','gripper_base'];
+  robot.targetLinkName=selectRobotTargetLink(robot,preferredTargets);
+  const armTcpLinks=robotArmTcpLinksFromUrdf(robot);
+  robot.sideLinkNames.left=armTcpLinks.find(item=>item.side==='L')?.name||'';
+  robot.sideLinkNames.right=armTcpLinks.find(item=>item.side==='R')?.name||'';
+  robot.linkOrder=buildRobotLinkOrder(robot,robot.rootLinkName);
+  return robot;
+}
+function buildRobotLinkOrder(robot,rootLinkName){
+  const order=[];
+  const visit=(name,depth)=>{
+    const link=robot.links.get(name);
+    if(!link)return;
+    link.depth=depth;
+    order.push(name);
+    for(const joint of robot.childJointsByParent.get(name)||[]){
+      visit(joint.child,depth+1);
+    }
+  };
+  visit(rootLinkName,0);
+  for(const name of robot.links.keys()){
+    if(!order.includes(name))order.push(name);
+  }
+  return order;
+}
+function selectRobotTargetLink(robot,preferredTokens=[]){
+  const names=[...robot.links.keys()];
+  if(!names.length)return '';
+  let best=names[0];
+  let bestScore=-Infinity;
+  for(const name of names){
+    const lower=name.toLowerCase();
+    let score=0;
+    if(robot.childJointsByParent.get(name)?.length===0)score+=20;
+    if(/tcp|tool0|tool|ee|end[_-]?eff|tip/.test(lower))score+=100;
+    if(/gripper.*base|wrist.*tip|hand.*tip/.test(lower))score+=70;
+    if(lower.includes('camera'))score-=50;
+    if(lower.includes('footprint'))score-=40;
+    for(const token of preferredTokens){
+      if(!token)continue;
+      const t=String(token).toLowerCase();
+      if(lower===t)score+=120;
+      else if(lower.includes(t))score+=80;
+    }
+    if(score>bestScore){bestScore=score;best=name;}
+  }
+  return best;
+}
+function findRobotLinkByExactName(robot,names){
+  for(const wanted of names){
+    for(const name of robot.links.keys()){
+      if(name.toLowerCase()===wanted.toLowerCase())return name;
+    }
+  }
+  return '';
+}
+function robotArmTcpLinksFromUrdf(robot){
+  const links=[];
+  for(const name of robot?.links?.keys?.()||[]){
+    const m=String(name).match(/^(L|R)_(tcp|tool0|ee|end[_-]?effector)$/i);
+    if(m)links.push({side:m[1].toUpperCase(),name});
+  }
+  links.sort((a,b)=>a.side.localeCompare(b.side)||a.name.localeCompare(b.name));
+  return links;
+}
+function selectRobotTargetLinkForIk(robot,target,basePose){
+  const explicit=findRobotLinkByExactName(robot,[target?.linkName,state.robotUrdfTargetLink].filter(Boolean));
+  if(explicit)return explicit;
+  const side=String(target?.side||target?.arm||target?.hand||'').trim().toUpperCase();
+  if(side.startsWith('L')){
+    const left=robot.sideLinkNames?.left||robotArmTcpLinksFromUrdf(robot).find(item=>item.side==='L')?.name||'';
+    if(left)return left;
+  }
+  if(side.startsWith('R')){
+    const right=robot.sideLinkNames?.right||robotArmTcpLinksFromUrdf(robot).find(item=>item.side==='R')?.name||'';
+    if(right)return right;
+  }
+  return robot.targetLinkName||selectRobotTargetLink(robot);
+}
+function resolveRobotMeshUrl(sourceUrl,filename){
+  if(!filename)return '';
+  if(/^https?:\/\//.test(filename)||/^file:\/\//.test(filename)||/^data:/.test(filename))return filename;
+  if(filename.startsWith('package://'))return filename;
+  try{
+    return new URL(filename,new URL(sourceUrl,document.baseURI)).href;
+  }catch(e){
+    return filename;
+  }
+}
+function jointValueFromMap(joint,values){
+  if(!joint)return 0;
+  if(joint.mimic && values && Object.prototype.hasOwnProperty.call(values,joint.mimic.joint)){
+    return (values[joint.mimic.joint]||0)*joint.mimic.multiplier + joint.mimic.offset;
+  }
+  if(Array.isArray(values)){
+    const idx=values._indexMap?.get(joint.name);
+    if(Number.isFinite(idx))return +values[idx]||0;
+  }
+  if(values && Object.prototype.hasOwnProperty.call(values,joint.name))return +values[joint.name]||0;
+  if(values && Object.prototype.hasOwnProperty.call(values,joint.child))return +values[joint.child]||0;
+  return 0;
+}
+function urdfApplyPose(frame,origin){
+  let f=frame;
+  const xyz=origin?.xyz||{x:0,y:0,z:0};
+  const rpy=origin?.rpy||{x:0,y:0,z:0};
+  if(Number.isFinite(xyz.x)||Number.isFinite(xyz.y)||Number.isFinite(xyz.z)){
+    f=frameTranslateLocal(f,xyz.x||0,xyz.y||0,xyz.z||0);
+  }
+  if(Number.isFinite(rpy.x)&&Math.abs(rpy.x)>1e-12)f=frameRotateLocal(f,{x:1,y:0,z:0},rpy.x);
+  if(Number.isFinite(rpy.y)&&Math.abs(rpy.y)>1e-12)f=frameRotateLocal(f,{x:0,y:1,z:0},rpy.y);
+  if(Number.isFinite(rpy.z)&&Math.abs(rpy.z)>1e-12)f=frameRotateLocal(f,{x:0,y:0,z:1},rpy.z);
+  return f;
+}
+function urdfMeshVisualFrame(frame,visual){
+  const scale=visual?.geometry?.scale||{x:1,y:1,z:1};
+  const importedScale=0.001;
+  return makeFrame(
+    frame.origin,
+    vscale(frame.x,(Number.isFinite(+scale.x)?+scale.x:1)/importedScale),
+    vscale(frame.y,(Number.isFinite(+scale.y)?+scale.y:1)/importedScale),
+    vscale(frame.z,(Number.isFinite(+scale.z)?+scale.z:1)/importedScale)
+  );
+}
+function computeRobotLinkFrames(robot,jointValues,basePose){
+  const baseFrame=topoArmBaseFrame(basePose);
+  const frames={};
+  const visit=(linkName,parentFrame)=>{
+    const link=robot.links.get(linkName);
+    if(!link)return;
+    const frame=cloneFrame(parentFrame);
+    frames[linkName]=frame;
+    for(const joint of robot.childJointsByParent.get(linkName)||[]){
+      let childFrame=urdfApplyPose(frame,joint.origin);
+      const q=jointValueFromMap(joint,jointValues);
+      if(joint.type==='revolute'||joint.type==='continuous'){
+        childFrame=frameRotateLocal(childFrame,normalizeTopoVec(joint.axis,{x:0,y:0,z:1}),q);
+      }else if(joint.type==='prismatic'){
+        const ax=normalizeTopoVec(joint.axis,{x:0,y:0,z:1});
+        childFrame=frameTranslateLocal(childFrame,ax.x*q,ax.y*q,ax.z*q);
+      }
+      visit(joint.child,childFrame);
+    }
+  };
+  if(robot.rootLinkName)visit(robot.rootLinkName,baseFrame);
+  return frames;
+}
+function collectRobotChain(robot,targetLinkName){
+  const chain=[];
+  let cur=targetLinkName;
+  const seen=new Set();
+  while(cur && !seen.has(cur)){
+    seen.add(cur);
+    const joint=robot.parentJointByChild.get(cur);
+    if(!joint)break;
+    chain.unshift(joint);
+    cur=joint.parent;
+    if(cur===robot.rootLinkName)break;
+  }
+  return chain;
+}
+function defaultRobotJointValues(robot){
+  const values={};
+  for(const joint of robot.joints.values()){
+    if(joint.type==='prismatic' && joint.limit && Number.isFinite(joint.limit.lower) && Number.isFinite(joint.limit.upper)){
+      values[joint.name]=clamp((joint.limit.lower+joint.limit.upper)/2,joint.limit.lower,joint.limit.upper);
+    }else{
+      values[joint.name]=0;
+    }
+  }
+  return values;
+}
+function robotJointArrayFromMap(robot,values){
+  const chain=collectRobotChain(robot,robot.targetLinkName);
+  const joints=chain.filter(j=>j.type!=='fixed');
+  const arr=joints.map(j=>jointValueFromMap(j,values));
+  arr._indexMap=new Map(joints.map((j,i)=>[j.name,i]));
+  return{joints,arr};
+}
+function normalizeJointLimits(joint){
+  if(joint.type==='prismatic'){
+    const lower=joint.limit&&Number.isFinite(joint.limit.lower)?joint.limit.lower:-0.04;
+    const upper=joint.limit&&Number.isFinite(joint.limit.upper)?joint.limit.upper:0.04;
+    return [lower,upper];
+  }
+  return [-Math.PI,Math.PI];
+}
+function evaluateRobotIkCandidate(robot,chain,jointValues,target,basePose){
+  const frames=computeRobotLinkFrames(robot,jointValues,basePose);
+  const targetFrame=frames[target.linkName]||frames[robot.targetLinkName]||frames[robot.rootLinkName];
+  const pos=target.pos||{x:0,y:0,z:0};
+  const dir=normalizeTopoVec(target.dir||{x:0,y:1,z:0},{x:0,y:1,z:0});
+  const linkDir=normalizeTopoVec(targetFrame?.z,{x:0,y:1,z:0});
+  const posErr=distance(targetFrame?.origin||{x:0,y:0,z:0},pos);
+  const dirErr=1-clamp(vdot(linkDir,dir),-1,1);
+  const reg=chain.reduce((sum,j)=>sum+Math.pow(+jointValueFromMap(j,jointValues)||0,2),0);
+  const error=posErr*posErr*1200+dirErr*dirErr*120+reg*0.005;
+  return{error,frames,targetFrame,posErr,dirErr,reg};
+}
+function solveGenericRobotIk(robot,target){
+  const pos={x:+(target?.pos?.x ?? target?.x ?? 0),y:+(target?.pos?.y ?? target?.y ?? 0),z:+(target?.pos?.z ?? target?.z ?? 0)};
+  const dir=normalizeTopoVec(target?.dir||{x:0,y:1,z:0},{x:0,y:1,z:0});
+  const base0=clampTopoBase(topoArmBasePose());
+  const targetLink=selectRobotTargetLinkForIk(robot,{...target,pos},base0);
+  const chain=collectRobotChain(robot,targetLink).filter(j=>j.type!=='fixed');
+  const seeds=[
+    defaultRobotJointValues(robot),
+    Object.fromEntries(chain.map((j,i)=>[j.name,0])),
+    Object.fromEntries(chain.map((j,i)=>[j.name,(i%2===0?1:-1)*0.2])),
+    Object.fromEntries(chain.map((j,i)=>[j.name,(i%2===0?-1:1)*0.35]))
+  ];
+  let best=null;
+  for(const seed of seeds){
+    let joints={...defaultRobotJointValues(robot),...seed};
+    for(const joint of chain){
+      const [lower,upper]=normalizeJointLimits(joint);
+      joints[joint.name]=clamp(+joints[joint.name]||0,lower,upper);
+    }
+    let cur=evaluateRobotIkCandidate(robot,chain,joints,{pos,dir,linkName:targetLink},base0);
+    cur.joints={...joints};
+    cur.base={...base0};
+    let step=0.7;
+    for(let stage=0;stage<6;stage++){
+      for(let iter=0;iter<14;iter++){
+        let improved=false;
+        for(const joint of chain){
+          const [lower,upper]=normalizeJointLimits(joint);
+          let local=cur;
+          for(const sign of [-1,1]){
+            const trial={...joints};
+            trial[joint.name]=clamp((+trial[joint.name]||0)+sign*step,lower,upper);
+            const ev=evaluateRobotIkCandidate(robot,chain,trial,{pos,dir,linkName:targetLink},base0);
+            if(ev.error<local.error-1e-9){local=ev;local.joints={...trial};local.base={...base0};}
+          }
+          if(local!==cur){
+            joints={...local.joints};
+            cur=local;
+            improved=true;
+          }
+        }
+        if(!improved)break;
+      }
+      step*=0.45;
+    }
+    if(!best||cur.error<best.error){
+      best={...cur,joints:cur.joints,base:{...base0},target:{pos,dir,linkName:targetLink},targetLink};
+    }
+  }
+  best.success=best.posErr<0.03&&best.dirErr<0.15;
+  best.score=Math.max(0,100-Math.min(100,best.error*0.03));
+  return best;
+}
+function drawGenericUrdfVisual(ctx,c,frame,visual,wire){
+  const color=visual.material?.color||'#9ca3af';
+  const geom=visual.geometry||{};
+  const visFrame=urdfApplyPose(frame,visual.origin);
+  if(geom.type==='mesh'&&visual.mesh){
+    const meshFrame=urdfMeshVisualFrame(visFrame,visual);
+    drawStlMesh(ctx,c,visual.mesh,meshFrame.origin,meshFrame,color,wire);
+    return;
+  }
+  if(geom.type==='box'){
+    drawPrism(ctx,c,visFrame.origin,[visFrame.x,visFrame.y,visFrame.z],{x:geom.size.x/2,y:geom.size.y/2,z:geom.size.z/2},color,wire);
+    return;
+  }
+  if(geom.type==='cylinder'){
+    drawPrism(ctx,c,visFrame.origin,[visFrame.x,visFrame.y,visFrame.z],{x:geom.radius,y:geom.radius,z:geom.length/2},color,wire);
+    return;
+  }
+  if(geom.type==='sphere'){
+    drawPrism(ctx,c,visFrame.origin,[visFrame.x,visFrame.y,visFrame.z],{x:geom.radius,y:geom.radius,z:geom.radius},color,wire);
+  }
+}
+function ensureRobotGlLayer(hostCanvas){
+  if(!hostCanvas||!hostCanvas.parentElement||state.robotGl.unavailable)return null;
+  let canvas=hostCanvas.parentElement.querySelector(`canvas.robot-webgl-layer[data-host="${hostCanvas.id}"]`);
+  if(!canvas){
+    canvas=document.createElement('canvas');
+    canvas.className='robot-webgl-layer';
+    canvas.dataset.host=hostCanvas.id;
+    hostCanvas.insertAdjacentElement('afterend',canvas);
+  }
+  if(canvas.width!==hostCanvas.width)canvas.width=hostCanvas.width;
+  if(canvas.height!==hostCanvas.height)canvas.height=hostCanvas.height;
+  let layer=state.robotGl.layers.get(hostCanvas.id);
+  if(layer&&layer.canvas===canvas)return layer;
+  const gl=canvas.getContext('webgl',{alpha:true,antialias:true,preserveDrawingBuffer:false});
+  if(!gl){
+    state.robotGl.unavailable=true;
+    state.robotGl.lastError='WebGL unavailable';
+    return null;
+  }
+  layer={canvas,gl,program:null,attribs:{},uniforms:{},meshBuffers:new WeakMap()};
+  state.robotGl.layers.set(hostCanvas.id,layer);
+  return layer;
+}
+function compileRobotGlShader(gl,type,src){
+  const shader=gl.createShader(type);
+  gl.shaderSource(shader,src);
+  gl.compileShader(shader);
+  if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){
+    throw new Error(gl.getShaderInfoLog(shader)||'WebGL shader compile failed');
+  }
+  return shader;
+}
+function ensureRobotGlProgram(layer){
+  if(layer.program)return layer.program;
+  const gl=layer.gl;
+  const vs=compileRobotGlShader(gl,gl.VERTEX_SHADER,`
+attribute vec3 aPos;
+attribute vec3 aNormal;
+uniform vec3 uOrigin;
+uniform vec3 uX;
+uniform vec3 uY;
+uniform vec3 uZ;
+uniform vec2 uSize;
+uniform vec2 uPan;
+uniform vec2 uRot;
+uniform float uZoom;
+varying float vLight;
+void main(){
+  vec3 world=uOrigin+uX*aPos.x+uY*aPos.y+uZ*aPos.z;
+  float cp=cos(uRot.x),sp=sin(uRot.x),cy=cos(uRot.y),sy=sin(uRot.y);
+  float z=world.z-0.09;
+  float sxw=sy*world.y-cy*world.x;
+  float depthBase=sy*world.x+cy*world.y;
+  float screenUp=cp*z-sp*depthBase;
+  float depth=sp*z+cp*depthBase;
+  float denom=clamp(1.0+depth*0.16,0.82,1.22);
+  float sc=min(uSize.x,uSize.y)*uZoom/denom;
+  float sx=uSize.x*0.5+uPan.x+sxw*sc;
+  float sy2=uSize.y*0.5+uPan.y-screenUp*sc;
+  vec3 wn=normalize(uX*aNormal.x+uY*aNormal.y+uZ*aNormal.z);
+  vLight=clamp(dot(wn,normalize(vec3(-0.35,-0.45,0.82))),-0.55,0.95);
+  gl_Position=vec4(sx/uSize.x*2.0-1.0,1.0-sy2/uSize.y*2.0,clamp(0.35-depth*0.18,-0.95,0.95),1.0);
+}`);
+  const fs=compileRobotGlShader(gl,gl.FRAGMENT_SHADER,`
+precision mediump float;
+uniform vec4 uColor;
+varying float vLight;
+void main(){
+  float shade=clamp(0.82+vLight*0.28,0.35,1.08);
+  gl_FragColor=vec4(uColor.rgb*shade,uColor.a);
+}`);
+  const program=gl.createProgram();
+  gl.attachShader(program,vs);
+  gl.attachShader(program,fs);
+  gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS)){
+    throw new Error(gl.getProgramInfoLog(program)||'WebGL program link failed');
+  }
+  layer.program=program;
+  layer.attribs.aPos=gl.getAttribLocation(program,'aPos');
+  layer.attribs.aNormal=gl.getAttribLocation(program,'aNormal');
+  ['uOrigin','uX','uY','uZ','uSize','uPan','uRot','uZoom','uColor'].forEach(name=>{layer.uniforms[name]=gl.getUniformLocation(program,name);});
+  return program;
+}
+function clearRobotWebglLayer(hostCanvas){
+  const layer=state.robotGl.layers.get(hostCanvas&&hostCanvas.id);
+  if(!layer)return;
+  const gl=layer.gl;
+  if(layer.canvas.width!==hostCanvas.width)layer.canvas.width=hostCanvas.width;
+  if(layer.canvas.height!==hostCanvas.height)layer.canvas.height=hostCanvas.height;
+  gl.viewport(0,0,layer.canvas.width,layer.canvas.height);
+  gl.clearColor(0,0,0,0);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+}
+function robotGlMeshBuffers(layer,mesh){
+  if(!mesh||!mesh.tris||!mesh.tris.length)return null;
+  const cached=layer.meshBuffers.get(mesh);
+  if(cached)return cached;
+  const gl=layer.gl;
+  const pos=new Float32Array(mesh.tris.length*9);
+  const normal=new Float32Array(mesh.tris.length*9);
+  let pi=0,ni=0;
+  for(const tri of mesh.tris){
+    const n=tri.n||{x:0,y:0,z:1};
+    for(const v of tri.v){
+      pos[pi++]=v.x;pos[pi++]=v.y;pos[pi++]=v.z;
+      normal[ni++]=n.x;normal[ni++]=n.y;normal[ni++]=n.z;
+    }
+  }
+  const posBuffer=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,posBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
+  const normalBuffer=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER,normal,gl.STATIC_DRAW);
+  const buffers={posBuffer,normalBuffer,count:mesh.tris.length*3};
+  layer.meshBuffers.set(mesh,buffers);
+  return buffers;
+}
+function hexToGlColor(hex,alpha){
+  const c=hexToRgb(hex);
+  return[c.r/255,c.g/255,c.b/255,alpha];
+}
+function drawRobotWebglMesh(layer,mesh,frame,color,alpha){
+  const gl=layer.gl;
+  const buffers=robotGlMeshBuffers(layer,mesh);
+  if(!buffers)return;
+  gl.uniform3f(layer.uniforms.uOrigin,frame.origin.x,frame.origin.y,frame.origin.z);
+  gl.uniform3f(layer.uniforms.uX,frame.x.x,frame.x.y,frame.x.z);
+  gl.uniform3f(layer.uniforms.uY,frame.y.x,frame.y.y,frame.y.z);
+  gl.uniform3f(layer.uniforms.uZ,frame.z.x,frame.z.y,frame.z.z);
+  const rgba=hexToGlColor(color,alpha);
+  gl.uniform4f(layer.uniforms.uColor,rgba[0],rgba[1],rgba[2],rgba[3]);
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffers.posBuffer);
+  gl.enableVertexAttribArray(layer.attribs.aPos);
+  gl.vertexAttribPointer(layer.attribs.aPos,3,gl.FLOAT,false,0,0);
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffers.normalBuffer);
+  gl.enableVertexAttribArray(layer.attribs.aNormal);
+  gl.vertexAttribPointer(layer.attribs.aNormal,3,gl.FLOAT,false,0,0);
+  gl.drawArrays(gl.TRIANGLES,0,buffers.count);
+}
+function renderRobotWebglLayer(hostCanvas,robot,frames,mode){
+  const layer=ensureRobotGlLayer(hostCanvas);
+  if(!layer)return false;
+  try{
+    const gl=layer.gl;
+    ensureRobotGlProgram(layer);
+    clearRobotWebglLayer(hostCanvas);
+    gl.viewport(0,0,layer.canvas.width,layer.canvas.height);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(layer.program);
+    gl.uniform2f(layer.uniforms.uSize,hostCanvas.width,hostCanvas.height);
+    gl.uniform2f(layer.uniforms.uPan,state.pan.x,state.pan.y);
+    gl.uniform2f(layer.uniforms.uRot,state.rot.x,state.rot.y);
+    gl.uniform1f(layer.uniforms.uZoom,state.zoom);
+    const alpha=mode==='wire'?0.34:0.92;
+    for(const linkName of robot.linkOrder){
+      const link=robot.links.get(linkName);
+      const frame=frames[linkName];
+      if(!link||!frame)continue;
+      for(const visual of link.visuals){
+        if(visual.geometry?.type!=='mesh'||!visual.mesh)continue;
+        const visFrame=urdfApplyPose(frame,visual.origin);
+        drawRobotWebglMesh(layer,visual.mesh,urdfMeshVisualFrame(visFrame,visual),visual.material?.color||'#9ca3af',alpha*(visual.material?.alpha??1));
+      }
+    }
+    return true;
+  }catch(e){
+    state.robotGl.lastError=String(e&&e.message?e.message:e);
+    console.warn('Robot WebGL render failed; falling back to Canvas STL.',e);
+    return false;
+  }
+}
+function drawRobotSideLabels(ctx,c,robot,frames){
+  const labels=robotArmTcpLinksFromUrdf(robot).map(item=>[
+    item.name,
+    item.name,
+    item.side==='L'?'#22c55e':'#38bdf8'
+  ]);
+  ctx.save();
+  ctx.font='bold 11px Arial';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  for(const [label,linkName,color] of labels){
+    const frame=frames[linkName];
+    if(!frame)continue;
+    const p=project(frame.origin,c);
+    ctx.fillStyle='rgba(2,6,23,.78)';
+    const labelText=label||linkName;
+    const w=Math.max(34,ctx.measureText(labelText).width+10);
+    ctx.fillRect(p.x-w/2,p.y-9,w,18);
+    ctx.strokeStyle=color;
+    ctx.lineWidth=1.4;
+    ctx.strokeRect(p.x-w/2,p.y-9,w,18);
+    ctx.fillStyle=color;
+    ctx.fillText(labelText,p.x,p.y+.5);
+  }
+  ctx.restore();
+}
+function drawGenericRobotModel(ctx,c,g,mode){
+  const robot=state.robotUrdfRobot;
+  if(!robot||!robot.loaded)return false;
+  const wire=mode==='wire';
+  let preview=g||null;
+  if(preview && !preview.joints){
+    if(preview._urdfPreviewSolution){
+      preview=preview._urdfPreviewSolution;
+    }else if(Number.isFinite(preview.x)||Number.isFinite(preview.y)||Number.isFinite(preview.z)||preview.pos){
+      try{
+        preview._urdfPreviewSolution=solveGenericRobotIk(robot,graspPoseToIkTarget(preview));
+        preview=preview._urdfPreviewSolution||preview;
+      }catch(e){
+        preview=preview;
+      }
+    }
+  }
+  const jointValues= preview&&preview.joints ? preview.joints : defaultRobotJointValues(robot);
+  const frames=computeRobotLinkFrames(robot,jointValues,topoArmBasePose(g?.base));
+  const webglOk=renderRobotWebglLayer(c,robot,frames,mode);
+  if(!webglOk){
+    for(const linkName of robot.linkOrder){
+      const link=robot.links.get(linkName);
+      const frame=frames[linkName];
+      if(!link||!frame)continue;
+      for(const visual of link.visuals){
+        drawGenericUrdfVisual(ctx,c,frame,visual,wire);
+      }
+    }
+  }
+  const displayTargetLink=preview?.targetLink||preview?.target?.linkName||robot.targetLinkName;
+  const targetFrame=frames[displayTargetLink]||frames[robot.targetLinkName]||frames[robot.rootLinkName];
+  if(targetFrame)drawEeCube(ctx,c,targetFrame.origin,targetFrame,wire);
+  drawRobotSideLabels(ctx,c,robot,frames);
+  const p=project(targetFrame?.origin||frames[robot.rootLinkName]?.origin||{x:0,y:0,z:0},c);
+  ctx.save();
+  ctx.fillStyle='#e5e7eb';
+  ctx.font='bold 13px Arial';
+  ctx.fillText(`${robot.name} / URDF auto solver`,p.x+12,p.y-12);
+  ctx.fillStyle='#cbd5e1';
+  ctx.font='11px Arial';
+  ctx.fillText(`root=${robot.rootLinkName} target=${displayTargetLink}`,p.x+12,p.y+4);
+  ctx.restore();
+  if(g?.target)drawIkTargetMarker(ctx,c,g.target);
+  return true;
+}
 const TOPOARM_BASE_POSE={
   x:0.25,
   y:0.0,
   zOffset:0.0,
-  yawZ:Math.PI/2
+  roll:0,
+  pitch:0,
+  yaw:0
 };
+function topoArmBasePoseString(base){
+  const p=topoArmBasePose(base);
+  return `x=${p.x.toFixed(3)} y=${p.y.toFixed(3)} z=${p.z.toFixed(3)} roll=${(p.roll*180/Math.PI).toFixed(1)}° pitch=${(p.pitch*180/Math.PI).toFixed(1)}° yaw=${(p.yawZ*180/Math.PI).toFixed(1)}°`;
+}
 function topoArmBasePose(base){
   const tableZ=(+$('tableHeight')?.value)||0;
   // If a fixed base pose is enabled in state, prefer it over provided/base defaults
   if(state?.useFixedBase && state.fixedBasePose){
     const fb = state.fixedBasePose;
+    const yaw=Number.isFinite(fb?.yaw)?fb.yaw:Number.isFinite(fb?.yawZ)?fb.yawZ:TOPOARM_BASE_POSE.yaw;
     return{
       x:Number.isFinite(fb?.x)?fb.x:TOPOARM_BASE_POSE.x,
       y:Number.isFinite(fb?.y)?fb.y:TOPOARM_BASE_POSE.y,
       z:Number.isFinite(fb?.z)?fb.z:tableZ+TOPOARM_BASE_POSE.zOffset,
-      yawZ:Number.isFinite(fb?.yawZ)?fb.yawZ:TOPOARM_BASE_POSE.yawZ
+      roll:Number.isFinite(fb?.roll)?fb.roll:TOPOARM_BASE_POSE.roll,
+      pitch:Number.isFinite(fb?.pitch)?fb.pitch:TOPOARM_BASE_POSE.pitch,
+      yaw,
+      yawZ:yaw
     };
   }
+  const yaw=Number.isFinite(base?.yaw)?base.yaw:Number.isFinite(base?.yawZ)?base.yawZ:TOPOARM_BASE_POSE.yaw;
   return{
     x:Number.isFinite(base?.x)?base.x:TOPOARM_BASE_POSE.x,
     y:Number.isFinite(base?.y)?base.y:TOPOARM_BASE_POSE.y,
     z:Number.isFinite(base?.z)?base.z:tableZ+TOPOARM_BASE_POSE.zOffset,
-    yawZ:Number.isFinite(base?.yawZ)?base.yawZ:TOPOARM_BASE_POSE.yawZ
+    roll:Number.isFinite(base?.roll)?base.roll:TOPOARM_BASE_POSE.roll,
+    pitch:Number.isFinite(base?.pitch)?base.pitch:TOPOARM_BASE_POSE.pitch,
+    yaw,
+    yawZ:yaw
   };
 }
 function topoArmBaseFrame(base){
   const pose=topoArmBasePose(base);
-  return rotateFrameAroundWorldZ(
-    makeFrame({x:pose.x,y:pose.y,z:pose.z},{x:1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:0,z:1}),
-    pose.yawZ
-  );
+  let frame=makeFrame({x:pose.x,y:pose.y,z:pose.z},{x:1,y:0,z:0},{x:0,y:1,z:0},{x:0,y:0,z:1});
+  if(Number.isFinite(pose.roll)&&Math.abs(pose.roll)>1e-12)frame=rotateFrameAroundWorldX(frame,pose.roll);
+  if(Number.isFinite(pose.pitch)&&Math.abs(pose.pitch)>1e-12)frame=rotateFrameAroundWorldY(frame,pose.pitch);
+  if(Number.isFinite(pose.yawZ)&&Math.abs(pose.yawZ)>1e-12)frame=rotateFrameAroundWorldZ(frame,pose.yawZ);
+  return frame;
 }
 function liftGraspPose(g){
   return {...g,z:(g?.z||0)+TOPOARM_GRIPPER_LIFT_Z};
@@ -4233,11 +5267,15 @@ function clampTopoJoints(q){
 }
 function clampTopoBase(base){
   const tableZ=(+$('tableHeight')?.value)||0;
+  const yaw=Number.isFinite(base?.yaw)?base.yaw:Number.isFinite(base?.yawZ)?base.yawZ:TOPOARM_BASE_POSE.yaw;
   return{
     x:clamp(Number.isFinite(base?.x)?base.x:TOPOARM_BASE_POSE.x,-0.55,0.55),
     y:clamp(Number.isFinite(base?.y)?base.y:TOPOARM_BASE_POSE.y,-0.75,0.25),
-    z:Number.isFinite(base?.z)?base.z:tableZ+TOPOARM_BASE_POSE.zOffset,
-    yawZ:Number.isFinite(base?.yawZ)?base.yawZ:TOPOARM_BASE_POSE.yawZ
+    z:clamp(Number.isFinite(base?.z)?base.z:tableZ+TOPOARM_BASE_POSE.zOffset,-0.5,1.0),
+    roll:clamp(Number.isFinite(base?.roll)?base.roll:TOPOARM_BASE_POSE.roll,-Math.PI,Math.PI),
+    pitch:clamp(Number.isFinite(base?.pitch)?base.pitch:TOPOARM_BASE_POSE.pitch,-Math.PI,Math.PI),
+    yaw:clamp(yaw,-Math.PI,Math.PI),
+    yawZ:clamp(yaw,-Math.PI,Math.PI)
   };
 }
 function defaultTopoIkSeed(targetDir){
@@ -4339,6 +5377,10 @@ function solveTopoArmIk(target){
   best.success=best.link7Err<0.02&&best.eeErr<0.02&&best.dirErr<0.12;
   best.score=Math.max(0,100-Math.min(100,best.error*0.03));
   return best;
+}
+function solveRobotIk(target){
+  if(state.robotUrdfRobot)return solveGenericRobotIk(state.robotUrdfRobot,target);
+  return solveTopoArmIk(target);
 }
 function drawIkTargetMarker(ctx,c,target){
   if(!target)return;
@@ -4458,18 +5500,6 @@ function drawProxyGripper(ctx,c,g){
   ctx.restore();
 }
 
-// topoarm_stl_file
-const TOPOARM_STL_FILES={
-  link1:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link1.stl',
-  link2:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link2.stl',
-  link3:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link3.stl',
-  link4:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link4.stl',
-  link5:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link5.stl',
-  link6:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link6.stl',
-  link7:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/link7.stl',
-  left:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/gripper_left_palm.stl',
-  right:'https://raw.githubusercontent.com/fuzzrobo/topoarm/main/topoarm_description/meshes/topoarm/gripper_right_palm.stl'
-};
 function parseStlMesh(buffer){
   const dv=new DataView(buffer);
   const expectedCount=dv.byteLength>=84?dv.getUint32(80,true):0;
@@ -4481,41 +5511,105 @@ function parseStlMesh(buffer){
       const n={x:dv.getFloat32(off,true),y:dv.getFloat32(off+4,true),z:dv.getFloat32(off+8,true)}; off+=12;
       const v=[];
       for(let k=0;k<3;k++){v.push({x:dv.getFloat32(off,true)*0.001,y:dv.getFloat32(off+4,true)*0.001,z:dv.getFloat32(off+8,true)*0.001});off+=12;}
-      off+=2; tris.push({v,n});
+      off+=2;
+      const c={x:(v[0].x+v[1].x+v[2].x)/3,y:(v[0].y+v[1].y+v[2].y)/3,z:(v[0].z+v[1].z+v[2].z)/3};
+      const ln=Math.hypot(n.x,n.y,n.z)||1;
+      tris.push({v,n:{x:n.x/ln,y:n.y/ln,z:n.z/ln},c});
     }
   }else{
     const txt=new TextDecoder().decode(buffer);
     const re=/vertex\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)/g;
     let m,verts=[];
     while((m=re.exec(txt)))verts.push({x:+m[1]*0.001,y:+m[2]*0.001,z:+m[3]*0.001});
-    for(let i=0;i+2<verts.length;i+=3)tris.push({v:[verts[i],verts[i+1],verts[i+2]],n:{x:0,y:0,z:1}});
+    for(let i=0;i+2<verts.length;i+=3){
+      const v=[verts[i],verts[i+1],verts[i+2]];
+      tris.push({
+        v,
+        n:{x:0,y:0,z:1},
+        c:{x:(v[0].x+v[1].x+v[2].x)/3,y:(v[0].y+v[1].y+v[2].y)/3,z:(v[0].z+v[1].z+v[2].z)/3}
+      });
+    }
   }
   let min={x:Infinity,y:Infinity,z:Infinity},max={x:-Infinity,y:-Infinity,z:-Infinity};
   for(const t of tris)for(const p of t.v){min.x=Math.min(min.x,p.x);min.y=Math.min(min.y,p.y);min.z=Math.min(min.z,p.z);max.x=Math.max(max.x,p.x);max.y=Math.max(max.y,p.y);max.z=Math.max(max.z,p.z)}
   // Keep mobile canvas responsive by using a deterministic stride when meshes are dense.
-  const maxTris=2600;
+  const maxTris=1600;
   const stride=Math.max(1,Math.ceil(tris.length/maxTris));
   const drawn=stride===1?tris:tris.filter((_,i)=>i%stride===0);
   return{tris:drawn,total:tris.length,drawn:drawn.length,min,max};
 }
 async function loadTopoArmStlMeshes(){
-  if(state.stlStatus==='ready'||state.stlStatus==='loading')return;
+  const sourceUrlRaw=state.robotUrdfSource||ROBOT_URDF_DEFAULT_SOURCE;
+  const sourceUrl=new URL(sourceUrlRaw,document.baseURI).href;
+  const cacheKey=sourceUrl;
+  if(state.robotMeshCache[cacheKey]){
+    state.robotUrdfRobot=state.robotMeshCache[cacheKey];
+    state.robotUrdfSource=sourceUrlRaw;
+    state.robotUrdfRobot.targetLinkName=selectRobotTargetLink(state.robotUrdfRobot,[state.robotUrdfTargetLink,state.robotUrdfRobot.targetLinkName]);
+    state.robotUrdfTargetLink=state.robotUrdfRobot.targetLinkName||'';
+    state.robotUrdfBaseLink=state.robotUrdfRobot.rootLinkName||'';
+    state.robotUrdfLoadError='';
+    state.stlStatus='ready';
+    state.stlError='';
+    renderAll();
+    return state.robotUrdfRobot;
+  }
+  if(state.stlStatus==='loading')return null;
   state.stlStatus='loading';state.stlError='';renderAll();
   try{
-    const entries=await Promise.all(Object.entries(TOPOARM_STL_FILES).map(async([name,url])=>{
-      const res=await fetch(url,{cache:'force-cache'});
-      if(!res.ok)throw new Error(`${name}: HTTP ${res.status}`);
-      return[name,parseStlMesh(await res.arrayBuffer())];
-    }));
-    state.stlMeshes=Object.fromEntries(entries);
+    const res=await fetch(sourceUrl,{cache:'force-cache'});
+    if(!res.ok)throw new Error(`URDF HTTP ${res.status}`);
+    const urdfText=await res.text();
+    const robot=parseUrdfRobotText(urdfText,sourceUrl);
+    const meshUrlCache=new Map();
+    const meshLoads=[];
+    for(const link of robot.links.values()){
+      for(const visual of link.visuals){
+        if(visual.geometry?.type!=='mesh'||!visual.geometry.mesh)continue;
+        const meshUrl=resolveRobotMeshUrl(sourceUrl,visual.geometry.mesh);
+        visual.meshUrl=meshUrl;
+        if(!meshUrlCache.has(meshUrl)){
+          meshUrlCache.set(meshUrl,fetch(meshUrl,{cache:'force-cache'}).then(async meshRes=>{
+            if(!meshRes.ok)throw new Error(`${meshUrl}: HTTP ${meshRes.status}`);
+            return parseStlMesh(await meshRes.arrayBuffer());
+          }));
+        }
+        meshLoads.push(meshUrlCache.get(meshUrl).then(mesh=>{visual.mesh=mesh;}));
+      }
+    }
+    await Promise.all(meshLoads);
+    robot.loaded=true;
+    robot.sourceUrl=sourceUrl;
+    robot.targetLinkName=selectRobotTargetLink(robot,[state.robotUrdfTargetLink,robot.targetLinkName]);
+    robot.baseLinkName=robot.baseLinkName||robot.rootLinkName;
+    state.robotUrdfRobot=robot;
+    state.robotUrdfSource=sourceUrlRaw;
+    state.robotUrdfTargetLink=robot.targetLinkName||'';
+    state.robotUrdfBaseLink=robot.rootLinkName||'';
+    state.robotUrdfLoadError='';
+    state.robotMeshCache[cacheKey]=robot;
     state.stlStatus='ready';
+    state.stlError='';
   }catch(e){
-    state.stlStatus='fallback';state.stlError=String(e&&e.message?e.message:e);
+    state.robotUrdfRobot=null;
+    state.robotUrdfLoadError=String(e&&e.message?e.message:e);
+    state.stlStatus='fallback';
+    state.stlError=state.robotUrdfLoadError;
   }
   renderAll();
+  return state.robotUrdfRobot;
 }
 function worldFromLocal(local,origin,axes){
   return vcombo(origin,[[axes.x,local.x],[axes.y,local.y],[axes.z,local.z]]);
+}
+function worldDirFromLocal(localDir,axes){
+  const v={
+    x:axes.x.x*localDir.x+axes.y.x*localDir.y+axes.z.x*localDir.z,
+    y:axes.x.y*localDir.x+axes.y.y*localDir.y+axes.z.y*localDir.z,
+    z:axes.x.z*localDir.x+axes.y.z*localDir.y+axes.z.z*localDir.z
+  };
+  const l=Math.hypot(v.x,v.y,v.z)||1;
+  return{x:v.x/l,y:v.y/l,z:v.z/l};
 }
 function normalFromTri(a,b,c){
   const ux=b.x-a.x,uy=b.y-a.y,uz=b.z-a.z;
@@ -4525,14 +5619,22 @@ function normalFromTri(a,b,c){
 }
 function drawStlMesh(ctx,c,mesh,origin,axes,color,wire){
   if(!mesh||!mesh.tris||!mesh.tris.length)return;
-  const light={x:-0.35,y:-0.45,z:0.82};
   const faces=[];
-  for(const tri of mesh.tris){
+  const meshCenter=project(origin,c);
+  const dist=Math.max(0.2,meshCenter.d||1);
+  const budget=wire
+    ? clamp(Math.round(1000/(0.7+dist*0.7)),120,700)
+    : clamp(Math.round(1400/(0.7+dist*0.8)),160,900);
+  const stride=Math.max(1,Math.ceil(mesh.tris.length/budget));
+  const light={x:-0.35,y:-0.45,z:0.82};
+  for(let i=0;i<mesh.tris.length;i+=stride){
+    const tri=mesh.tris[i];
     const w=tri.v.map(p=>worldFromLocal(p,origin,axes));
     const p=w.map(q=>project(q,c));
-    const d=(p[0].d+p[1].d+p[2].d)/3;
-    const n=normalFromTri(w[0],w[1],w[2]);
-    const lit=clamp(n.x*light.x+n.y*light.y+n.z*light.z,-.55,.95);
+    const d=tri.c ? project(worldFromLocal(tri.c,origin,axes),c).d : (p[0].d+p[1].d+p[2].d)/3;
+    const n=tri.n||normalFromTri(w[0],w[1],w[2]);
+    const wn=worldDirFromLocal(n,axes);
+    const lit=clamp(wn.x*light.x+wn.y*light.y+wn.z*light.z,-.55,.95);
     faces.push({p,d,lit});
   }
   faces.sort((a,b)=>a.d-b.d);
@@ -4580,6 +5682,15 @@ function rotateFrameAroundWorldX(frame,angle){
     rotateVecAroundAxis(frame.x,xAxis,angle),
     rotateVecAroundAxis(frame.y,xAxis,angle),
     rotateVecAroundAxis(frame.z,xAxis,angle)
+  );
+}
+function rotateFrameAroundWorldY(frame,angle){
+  const yAxis={x:0,y:1,z:0};
+  return makeFrame(
+    frame.origin,
+    rotateVecAroundAxis(frame.x,yAxis,angle),
+    rotateVecAroundAxis(frame.y,yAxis,angle),
+    rotateVecAroundAxis(frame.z,yAxis,angle)
   );
 }
 function rotateFrameAroundWorldZ(frame,angle){
@@ -4631,7 +5742,13 @@ function computeTopoArmFrames(g,opening){
   out.center={x:gp.x,y:gp.y,z:gp.z};
   return out;
 }
-
+const DUAL_ARM_URDF_TOOL_OFFSET=0.1755;
+const DUAL_ARM_URDF_GRIPPER={
+  base_center_gap:0.03672,
+  q_min:0.0,
+  q_max:0.037,
+  ee_offset:DUAL_ARM_URDF_TOOL_OFFSET
+};
 // v282: official FuzzRoBo logo restored, equal-height logos, and GNG max nodes default raised to 3000.
 // This is a browser-side approximation: ToPoArm STL is represented by oriented
 // bounding boxes around link7, left palm and right palm, then point cloud/GNG
@@ -4767,6 +5884,10 @@ function drawTopoArmStlGripper(ctx,c,g,mode){
   ctx.restore();
   return true;
 }
+function drawRobotStlGripper(ctx,c,g,mode){
+  if(state.robotUrdfRobot)return drawGenericRobotModel(ctx,c,g,mode);
+  return drawTopoArmStlGripper(ctx,c,g,mode);
+}
 function drawSemanticEvidence(ctx,c,g){
   if(!g||!g.semanticEvidence)return;
   const ev=g.semanticEvidence.nodes||[];
@@ -4784,6 +5905,15 @@ function drawSemanticEvidence(ctx,c,g){
   ctx.fillText(`${g.semanticFilterPass?'SAFE/UNKNOWN PRIORITY':'SEMANTIC REJECT'}  S:${Math.round((g.topologySafe||0)*100)} U:${Math.round((g.topologyUnknown||0)*100)} W:${Math.round((g.topologyWall||0)*100)}`,center.x+14,center.y+20);
   ctx.restore();
 }
+function displayIkSolutionWithCurrentBase(sol){
+  if(!sol)return sol;
+  const base=topoArmBasePose(sol.base);
+  const opening=Number.isFinite(sol.opening)?sol.opening:(Number.isFinite(state.currentIkOpening)?state.currentIkOpening:0.055);
+  if(Array.isArray(sol.joints)){
+    return {...sol,base,frames:computeTopoArmFramesFromJoints(base,sol.joints,opening),opening};
+  }
+  return {...sol,base};
+}
 
 function drawGrasp(ctx,c,g){
   g=g||defaultTopoArmGraspPose();
@@ -4794,15 +5924,17 @@ function drawGrasp(ctx,c,g){
     return;
   }
   if(state.graspRenderMode==='ik'&&state.ikSolution&&state.ikSolution.frames){
-    const sol=state.ikSolution;
-    const ok=drawTopoArmFramesPose(ctx,c,sol.frames,mode,{title:'IK solution / link7 pose',subtitle:`fixed base=(${sol.base.x.toFixed(3)}, ${sol.base.y.toFixed(3)})  link7 err=${sol.link7Err.toFixed(3)} m  ee err=${sol.eeErr.toFixed(3)} m`,target:state.ikTarget,labelPoint:sol.frames.ee.origin});
+    const sol=displayIkSolutionWithCurrentBase(state.ikSolution);
+    const ok=state.robotUrdfRobot
+      ?drawGenericRobotModel(ctx,c,sol,mode)
+      :drawTopoArmFramesPose(ctx,c,sol.frames,mode,{title:'IK solution / link7 pose',subtitle:`fixed base=(${topoArmBasePoseString(sol.base)})  link7 err=${(sol.link7Err||0).toFixed(3)} m  ee err=${(sol.eeErr||0).toFixed(3)} m`,target:state.ikTarget,labelPoint:sol.frames.ee.origin});
     if(!ok){drawProxyGripper(ctx,c,sol)}
     drawCollisionBoxes(ctx,c,sol);
     drawSemanticEvidence(ctx,c,liftGraspPose(sol));
     return;
   }
   if(mode==='simple'){drawSimpleGraspMarker(ctx,c,g);return;}
-  const ok=drawTopoArmStlGripper(ctx,c,g,mode);
+  const ok=drawRobotStlGripper(ctx,c,g,mode);
   if(!ok){drawProxyGripper(ctx,c,g);}
   drawCollisionBoxes(ctx,c,g);
   drawSemanticEvidence(ctx,c,liftGraspPose(g));
@@ -4826,6 +5958,12 @@ function updateUnifiedViewerModeUi(){
   if($('unifiedViewerTitle'))$('unifiedViewerTitle').textContent=isGrasp?'Unified 3D Viewer — Grasp Pose':'Unified 3D Viewer — Mapping / GNG';
   if($('unifiedViewerBadge'))$('unifiedViewerBadge').textContent=isGrasp?'Grasp mode':'Mapping mode';
 }
+function robotRenderStatusText(){
+  if(!state.robotUrdfRobot)return state.stlStatus;
+  if(state.robotGl.unavailable)return `Canvas fallback (${state.robotGl.lastError||'WebGL unavailable'})`;
+  const layer=state.robotGl.layers.get('viewTopo');
+  return layer?'WebGL robot layer':'WebGL ready';
+}
 function renderAll(){const mode=viewerMode();render('viewTopo',mode==='grasp');$('topoOverlay').textContent=state.points.length?`Viewer: ${viewerMode()==='grasp'?'Grasp / 把持姿勢':'Mapping / 点群・GNG'}
 ${labelOf(state.sample)}
 points=${state.points.length}, GNG nodes=${state.nodes.length}, edges=${state.edges.length}
@@ -4835,7 +5973,7 @@ GNG mode: ${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / alg=${g
 Point color: ${pointColorMode()==='heatmap'?`heatmap / axis=${heatmapAxis()}`:'semantic label'}
 Timing: point Δt=${fmtMs(configuredPointPeriodMs())} ms, GNG Δt=${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'} ms
 Target edge: floor=${densityTargetEdgeLengths().floor.toFixed(3)} m, wall=${densityTargetEdgeLengths().wall.toFixed(3)} m, unknown=${densityTargetEdgeLengths().unknown.toFixed(3)} m
-STL mesh: ${state.stlStatus}${state.stlError?` (${state.stlError})`:''}
+Robot render: ${robotRenderStatusText()}${state.stlError?` (${state.stlError})`:''}
 Drag: orbit / Shift or Pan mode: translate / Wheel or pinch: zoom`:'No point cloud yet.';updateViewerTimingPanels();}
 
 function objectScores(){
@@ -5290,6 +6428,156 @@ function setGngPlaying(v){
 }
 function updateHud(){const ptxt=state.pointPlaying?'3D停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
 function syncNumberPair(rangeId,numId,cb){const r=$(rangeId),n=$(numId);if(!r||!n)return;const applyFromRange=()=>{n.value=r.value;if(cb)cb();};const applyFromNumber=()=>{let v=clamp(+n.value||+r.value,+r.min,+r.max);r.value=v;n.value=v;if(cb)cb();};r.addEventListener('input',applyFromRange);n.addEventListener('input',applyFromNumber);applyFromRange();}
+function degToRad(v){return (+v||0)*Math.PI/180}
+function radToDeg(v){return (+v||0)*180/Math.PI}
+const V315_FIXED_BASE_STORAGE_KEY='topofuzzy.fixed_base_pose.v2';
+function v315ReadFixedBaseUi(prefix='baseTf'){
+  const base=state.fixedBasePose||{};
+  const id=name=>prefix+name;
+  return clampTopoBase({
+    x:+($(id('XNum'))?.value ?? $(id('X'))?.value ?? base.x ?? TOPOARM_BASE_POSE.x),
+    y:+($(id('YNum'))?.value ?? $(id('Y'))?.value ?? base.y ?? TOPOARM_BASE_POSE.y),
+    z:+($(id('ZNum'))?.value ?? $(id('Z'))?.value ?? base.z ?? TOPOARM_BASE_POSE.zOffset),
+    roll:degToRad($(id('RollNum'))?.value ?? $(id('Roll'))?.value ?? radToDeg(base.roll ?? TOPOARM_BASE_POSE.roll)),
+    pitch:degToRad($(id('PitchNum'))?.value ?? $(id('Pitch'))?.value ?? radToDeg(base.pitch ?? TOPOARM_BASE_POSE.pitch)),
+    yaw:degToRad($(id('YawNum'))?.value ?? $(id('Yaw'))?.value ?? radToDeg(base.yaw ?? base.yawZ ?? TOPOARM_BASE_POSE.yaw))
+  });
+}
+function v315LoadFixedBaseState(){
+  try{
+    const raw=window.localStorage?.getItem(V315_FIXED_BASE_STORAGE_KEY);
+    if(!raw)return false;
+    const data=JSON.parse(raw);
+    if(data&&typeof data==='object'){
+      state.useFixedBase=true;
+      state.fixedBasePose=clampTopoBase(data.pose||data.fixedBasePose||data||{});
+      return true;
+    }
+  }catch(e){console.warn('Failed to load fixed base state',e);}
+  return false;
+}
+function v315SaveFixedBaseState(){
+  try{
+    const payload={
+      enabled:true,
+      pose:clampTopoBase(state.fixedBasePose||v315ReadFixedBaseUi())
+    };
+    window.localStorage?.setItem(V315_FIXED_BASE_STORAGE_KEY,JSON.stringify(payload));
+  }catch(e){console.warn('Failed to save fixed base state',e);}
+}
+function v315SyncFixedBaseUi(){
+  const pose=clampTopoBase(state.fixedBasePose||topoArmBasePose());
+  const set=(id,v)=>{const el=$(id);if(el)el.value=String(v);};
+  const syncPrefix=prefix=>{
+    set(prefix+'X',pose.x.toFixed(3));set(prefix+'XNum',pose.x.toFixed(3));
+    set(prefix+'Y',pose.y.toFixed(3));set(prefix+'YNum',pose.y.toFixed(3));
+    set(prefix+'Z',pose.z.toFixed(3));set(prefix+'ZNum',pose.z.toFixed(3));
+    set(prefix+'Roll',radToDeg(pose.roll).toFixed(1));set(prefix+'RollNum',radToDeg(pose.roll).toFixed(1));
+    set(prefix+'Pitch',radToDeg(pose.pitch).toFixed(1));set(prefix+'PitchNum',radToDeg(pose.pitch).toFixed(1));
+    set(prefix+'Yaw',radToDeg(pose.yaw??pose.yawZ).toFixed(1));set(prefix+'YawNum',radToDeg(pose.yaw??pose.yawZ).toFixed(1));
+  };
+  syncPrefix('baseTf');
+  syncPrefix('viewerBaseTf');
+  const text=`applied / ${topoArmBasePoseString(pose)}`;
+  ['baseTfStatus','viewerBaseTfStatus'].forEach(id=>{const status=$(id);if(status)status.textContent=text;});
+}
+let v315FixedBaseSyncing=false;
+function v315ApplyFixedBaseFromUi(opts={}){
+  const prefix=opts.sourcePrefix||'baseTf';
+  state.useFixedBase=true;
+  state.fixedBasePose=v315ReadFixedBaseUi(prefix);
+  v315SaveFixedBaseState();
+  if(v315FixedBaseSyncing||opts.render===false){
+    v315SyncFixedBaseUi();
+    return state.fixedBasePose;
+  }
+  v315SyncFixedBaseUi();
+  if(viewerMode()==='grasp' || state.graspRenderMode==='ik' || state.graspRenderMode==='estimate') renderAll();
+  return state.fixedBasePose;
+}
+function v315UpdateRobotModelUi(){
+  const sourceEl=$('robotUrdfSource');
+  const hintEl=$('robotUrdfTargetHint');
+  if(sourceEl && !sourceEl.value.trim())sourceEl.value=state.robotUrdfSource||ROBOT_URDF_DEFAULT_SOURCE;
+  if(hintEl && !hintEl.value.trim())hintEl.value=state.robotUrdfTargetLink||'';
+  const status=$('robotUrdfStatus');
+  if(status){
+    const robot=state.robotUrdfRobot;
+    status.textContent=state.robotUrdfLoadError
+      ? `URDF load failed: ${state.robotUrdfLoadError}`
+      : robot
+        ? `loaded: ${robot.name} / root=${robot.rootLinkName} / target=${robot.targetLinkName} / L=${robot.sideLinkNames?.left||'-'} / R=${robot.sideLinkNames?.right||'-'} / source=${state.robotUrdfSource||ROBOT_URDF_DEFAULT_SOURCE}`
+        : `URDF ready: ${state.robotUrdfSource||ROBOT_URDF_DEFAULT_SOURCE}`;
+  }
+}
+async function v315ApplyRobotModelFromUi(opts={}){
+  const sourceEl=$('robotUrdfSource');
+  const hintEl=$('robotUrdfTargetHint');
+  state.robotUrdfSource=sourceEl?.value?.trim()||ROBOT_URDF_DEFAULT_SOURCE;
+  state.robotUrdfTargetLink=hintEl?.value?.trim()||'';
+  v315UpdateRobotModelUi();
+  await loadTopoArmStlMeshes();
+  if(opts.render!==false)renderAll();
+  return state.robotUrdfSource;
+}
+function syncFixedBaseControls(){
+  if(syncFixedBaseControls._bound)return;
+  syncFixedBaseControls._bound=true;
+  const loaded=v315LoadFixedBaseState();
+  if(!loaded){
+    state.fixedBasePose=clampTopoBase(v315ReadFixedBaseUi());
+    state.useFixedBase=true;
+  }
+  v315SyncFixedBaseUi();
+  v315FixedBaseSyncing=true;
+  const bindPrefix=prefix=>{
+    syncNumberPair(prefix+'X',prefix+'XNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+    syncNumberPair(prefix+'Y',prefix+'YNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+    syncNumberPair(prefix+'Z',prefix+'ZNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+    syncNumberPair(prefix+'Roll',prefix+'RollNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+    syncNumberPair(prefix+'Pitch',prefix+'PitchNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+    syncNumberPair(prefix+'Yaw',prefix+'YawNum',()=>v315ApplyFixedBaseFromUi({sourcePrefix:prefix}));
+  };
+  bindPrefix('baseTf');
+  bindPrefix('viewerBaseTf');
+  const resetFixedBase=()=>{
+      const zDefault=clampTopoBase({}).z;
+      state.fixedBasePose=clampTopoBase({x:TOPOARM_BASE_POSE.x,y:TOPOARM_BASE_POSE.y,z:zDefault,roll:TOPOARM_BASE_POSE.roll,pitch:TOPOARM_BASE_POSE.pitch,yaw:TOPOARM_BASE_POSE.yaw});
+      state.useFixedBase=true;
+      v315SyncFixedBaseUi();
+      v315SaveFixedBaseState();
+      renderAll();
+  };
+  ['baseTfResetBtn','viewerBaseTfResetBtn'].forEach(id=>{
+    const reset=$(id);
+    if(reset&&!reset.dataset.boundV315){
+      reset.dataset.boundV315='1';
+      reset.addEventListener('click',resetFixedBase);
+    }
+  });
+  v315FixedBaseSyncing=false;
+  v315SaveFixedBaseState();
+}
+function syncRobotControls(){
+  if(syncRobotControls._bound)return;
+  syncRobotControls._bound=true;
+  const sourceEl=$('robotUrdfSource');
+  const hintEl=$('robotUrdfTargetHint');
+  if(sourceEl&&!sourceEl.dataset.boundV315Robot){
+    sourceEl.dataset.boundV315Robot='1';
+    sourceEl.addEventListener('change',()=>v315ApplyRobotModelFromUi());
+  }
+  if(hintEl&&!hintEl.dataset.boundV315Robot){
+    hintEl.dataset.boundV315Robot='1';
+    hintEl.addEventListener('change',()=>v315ApplyRobotModelFromUi());
+  }
+  const loadBtn=$('robotUrdfLoadBtn');
+  if(loadBtn&&!loadBtn.dataset.boundV315Robot){
+    loadBtn.dataset.boundV315Robot='1';
+    loadBtn.addEventListener('click',()=>v315ApplyRobotModelFromUi());
+  }
+  v315UpdateRobotModelUi();
+}
 function syncColorPair(colorId,textId,cb){const c=$(colorId),t=$(textId);if(!c||!t)return;const norm=v=>/^#[0-9a-fA-F]{6}$/.test(v)?v.toUpperCase():null;c.addEventListener('input',()=>{t.value=c.value.toUpperCase();if(cb)cb();});t.addEventListener('input',()=>{const v=norm(t.value.trim());if(v){c.value=v;if(cb)cb();}});t.value=c.value.toUpperCase();}
 function setupTopologyStyleControls(){const redraw=()=>{updateLegendColors();renderAll();};syncColorPair('gngEdgeColor','gngEdgeColorCode',redraw);syncColorPair('gngNodeColor','gngNodeColorCode',redraw);syncColorPair('faceColor','faceColorCode',redraw);syncColorPair('normalColor','normalColorCode',redraw);syncColorPair('labelColorSafe','labelColorSafeCode',redraw);syncColorPair('labelColorWall','labelColorWallCode',redraw);syncColorPair('labelColorUnknown','labelColorUnknownCode',redraw);syncColorPair('labelColorDefault','labelColorDefaultCode',redraw);syncNumberPair('faceOpacity','faceOpacityNum',redraw);syncNumberPair('faceOpacityCap','faceOpacityCapNum',redraw);syncNumberPair('faceLayerCap','faceLayerCapNum',redraw);syncNumberPair('faceTilePx','faceTilePxNum',redraw);syncNumberPair('normalLength','normalLengthNum',redraw);syncNumberPair('normalWidth','normalWidthNum',redraw);syncNumberPair('normalOpacity','normalOpacityNum',redraw);syncNumberPair('regionGrowThreshold','regionGrowThresholdNum',()=>{updateTopoSemantics();renderAll();});syncNumberPair('gngEdgeWidth','gngEdgeWidthNum',redraw);syncNumberPair('gngEdgeOpacity','gngEdgeOpacityNum',redraw);syncNumberPair('gngNodeSize','gngNodeSizeNum',redraw);syncNumberPair('gngNodeOpacity','gngNodeOpacityNum',redraw);updateLegendColors();['faceDrawEnabled','normalDrawEnabled'].forEach(id=>{if($(id))$(id).addEventListener('change',redraw)});updateLabelLegend();}
 
@@ -5371,18 +6659,18 @@ function loop(now){
   else setTimeout(()=>requestAnimationFrame(loop), 250);
 }
 
-function renderFuzzyEditor(){const model=ensureFuzzyModel();const featureBox=$('fuzzyFeatureSelector');if(!featureBox)return;featureBox.innerHTML='';FUZZY_FEATURES.forEach(f=>{const fd=model.features[f.key];const lab=document.createElement('label');lab.className='fuzzy-chip';lab.innerHTML=`<input type="checkbox" ${fd&&fd.enabled!==false?'checked':''} data-fz-feature="${f.key}"><b>${f.key}</b> ${f.name}`;featureBox.appendChild(lab)});$('fzAndMethod').value=model.methods.and;$('fzOrMethod').value=model.methods.or;$('fzImplication').value=model.methods.implication;$('fzAggregation').value=model.methods.aggregation;$('fzDefuzz').value=model.methods.defuzz;$('fzFallback').value=model.methods.fallback;refreshFuzzyFeatureSelects();renderMfList();renderOutputList();renderRuleList();renderRuleConfirm();renderLiveMfEditor();updateRuleJson()}
-function refreshFuzzyFeatureSelects(){const model=ensureFuzzyModel();const opts=FUZZY_FEATURES.filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${f.key}">${f.key} — ${f.name}</option>`).join('');if($('fzMfFeature'))$('fzMfFeature').innerHTML=opts}
+function renderFuzzyEditor(){const model=ensureFuzzyModel();v321SyncEvaluationMetricFeatures(false);const featureBox=$('fuzzyFeatureSelector');if(!featureBox)return;featureBox.innerHTML='';FUZZY_FEATURES.forEach(f=>{const fd=model.features[f.key];const lab=document.createElement('label');lab.className='fuzzy-chip';lab.innerHTML=`<input type="checkbox" ${fd&&fd.enabled!==false?'checked':''} data-fz-feature="${f.key}"><b>${f.key}</b> ${f.name}`;featureBox.appendChild(lab)});$('fzAndMethod').value=model.methods.and;$('fzOrMethod').value=model.methods.or;$('fzImplication').value=model.methods.implication;$('fzAggregation').value=model.methods.aggregation;$('fzDefuzz').value=model.methods.defuzz;$('fzFallback').value=model.methods.fallback;refreshFuzzyFeatureSelects();renderMfList();renderOutputList();renderRuleList();renderRuleConfirm();renderLiveMfEditor();updateRuleJson()}
+function refreshFuzzyFeatureSelects(){const model=ensureFuzzyModel(),select=$('fzMfFeature');if(!select)return;const current=select.value;select.innerHTML=fuzzyFeatureDefinitions().filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${htmlEscape(f.key)}">${htmlEscape(f.key)} — ${htmlEscape(f.name)}</option>`).join('');if([...select.options].some(option=>option.value===current))select.value=current}
 function renderMfList(){const model=ensureFuzzyModel(),box=$('fuzzyMfList');if(!box)return;const fkey=$('fzMfFeature').value||FUZZY_FEATURES[0].key;if(!$('fzMfFeature').value)$('fzMfFeature').value=fkey;const fd=model.features[fkey]||{labels:{}};box.innerHTML='';Object.entries(fd.labels||{}).forEach(([name,mf])=>{const row=document.createElement('div');row.className='fuzzy-mf-row';row.innerHTML=`<b>${name}</b><span>${mf.shape}</span><code>${(mf.params||[]).map(v=>(+v).toFixed(2)).join(', ')}</code><button data-mf-edit="${name}">編集</button>`;box.appendChild(row)});box.querySelectorAll('[data-mf-edit]').forEach(btn=>btn.onclick=()=>{const name=btn.dataset.mfEdit,mf=fd.labels[name];$('fzMfLabel').value=name;$('fzMfShape').value=mf.shape;['A','B','C','D'].forEach((k,i)=>{$('fzMf'+k).value=(mf.params||[])[i]??0})})}
 function renderOutputList(){const model=ensureFuzzyModel(),box=$('fuzzyOutputList');if(!box)return;box.innerHTML='';Object.entries(model.outputs||{}).forEach(([name,o])=>{const row=document.createElement('div');row.className='fuzzy-output-row2';row.innerHTML=`<b>${name}</b><span>${o.value}</span><button data-out-edit="${name}">編集</button>`;box.appendChild(row)});box.querySelectorAll('[data-out-edit]').forEach(btn=>btn.onclick=()=>{const name=btn.dataset.outEdit,o=model.outputs[name];$('fzOutLabel').value=name;$('fzOutValue').value=o.value;$('fzOutMeaning').value=o.meaning||''})}
-function condEditorHtml(rule,ci,cond){const model=ensureFuzzyModel();const fopts=FUZZY_FEATURES.filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${f.key}" ${cond.feature===f.key?'selected':''}>${f.key}</option>`).join('');const labels=Object.keys((model.features[cond.feature]||{}).labels||{});const lopts=labels.map(l=>`<option value="${l}" ${cond.label===l?'selected':''}>${l}</option>`).join('');return `<div class="fuzzy-cond-grid" data-cond-index="${ci}"><div><label>connector</label><select data-cond-field="connector"><option value="AND" ${cond.connector!=='OR'?'selected':''}>AND</option><option value="OR" ${cond.connector==='OR'?'selected':''}>OR</option></select></div><div><label>input</label><select data-cond-field="feature">${fopts}</select></div><div><label>label</label><select data-cond-field="label">${lopts}</select></div><div><label>NOT</label><select data-cond-field="not"><option value="0" ${!cond.not?'selected':''}>no</option><option value="1" ${cond.not?'selected':''}>yes</option></select></div><button data-cond-delete="${ci}">削除</button></div>`}
+function condEditorHtml(rule,ci,cond){const model=ensureFuzzyModel(),current=model.features[cond.feature];let fopts=fuzzyFeatureDefinitions().filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${htmlEscape(f.key)}" ${cond.feature===f.key?'selected':''}>${htmlEscape(f.key)}</option>`).join('');if(current&&current.enabled===false)fopts=`<option value="${htmlEscape(cond.feature)}" selected disabled>${htmlEscape(cond.feature)} (OFF)</option>`+fopts;const labels=Object.keys((current||{}).labels||{});const lopts=labels.map(l=>`<option value="${htmlEscape(l)}" ${cond.label===l?'selected':''}>${htmlEscape(l)}</option>`).join('');return `<div class="fuzzy-cond-grid" data-cond-index="${ci}"><div><label>connector</label><select data-cond-field="connector"><option value="AND" ${cond.connector!=='OR'?'selected':''}>AND</option><option value="OR" ${cond.connector==='OR'?'selected':''}>OR</option></select></div><div><label>input</label><select data-cond-field="feature">${fopts}</select></div><div><label>label</label><select data-cond-field="label">${lopts}</select></div><div><label>NOT</label><select data-cond-field="not"><option value="0" ${!cond.not?'selected':''}>no</option><option value="1" ${cond.not?'selected':''}>yes</option></select></div><button data-cond-delete="${ci}">削除</button></div>`}
 function renderRuleList(){const model=ensureFuzzyModel(),box=$('fuzzyRuleList');if(!box)return;box.innerHTML='';const outOpts=Object.keys(model.outputs||{}).map(o=>`<option value="${o}">${o}</option>`).join('');model.rules.forEach((r,ri)=>{const card=document.createElement('div');card.className='fuzzy-rule-card '+(!r.active?'inactive':'');card.dataset.ruleIndex=ri;card.innerHTML=`<div class="fuzzy-rule-card-head"><input data-rule-field="active" type="checkbox" ${r.active?'checked':''}><input data-rule-field="name" value="${r.name||r.id}"><button data-rule-dup="${ri}">複製</button><button data-rule-del="${ri}">削除</button></div><div class="fuzzy-rule-card-title">${r.id}: IF</div><div class="rule-conds">${(r.conditions||[]).map((c,i)=>condEditorHtml(r,i,c)).join('')}</div><div class="fuzzy-actions"><button data-rule-addcond="${ri}">条件追加</button></div><div class="fuzzy-rule-output-grid"><div><label>THEN output</label><select data-rule-field="output">${outOpts}</select></div><div><label>weight</label><input data-rule-field="weight" type="number" min="0" max="1" step="0.05" value="${r.weight??1}"></div><div><label>rule id</label><input data-rule-field="id" value="${r.id}"></div></div>`;box.appendChild(card);card.querySelector('[data-rule-field="output"]').value=r.output});box.querySelectorAll('.fuzzy-rule-card').forEach(card=>{const ri=+card.dataset.ruleIndex;card.querySelectorAll('[data-rule-field]').forEach(el=>{el.onchange=()=>{const r=model.rules[ri];const f=el.dataset.ruleField;if(f==='active')r.active=el.checked;else if(f==='weight')r.weight=clamp(+el.value||0,0,1);else r[f]=el.value;renderRuleList();renderRuleConfirm();updateRuleJson()}});card.querySelectorAll('[data-cond-field]').forEach(el=>{el.onchange=()=>{const ci=+el.closest('[data-cond-index]').dataset.condIndex;const cond=model.rules[ri].conditions[ci];const f=el.dataset.condField;cond[f]=f==='not'?el.value==='1':el.value;if(f==='feature'){const labs=Object.keys((model.features[cond.feature]||{}).labels||{});cond.label=labs[0]||''}renderRuleList();renderRuleConfirm();updateRuleJson()}})});box.querySelectorAll('[data-rule-addcond]').forEach(b=>b.onclick=()=>{const r=model.rules[+b.dataset.ruleAddcond];const f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false);const labs=Object.keys((model.features[f.key]||{}).labels||{});r.conditions.push({feature:f.key,label:labs[0]||'High',connector:'AND'});renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-cond-delete]').forEach(b=>b.onclick=()=>{const card=b.closest('.fuzzy-rule-card'),ri=+card.dataset.ruleIndex;model.rules[ri].conditions.splice(+b.dataset.condDelete,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-del]').forEach(b=>b.onclick=()=>{model.rules.splice(+b.dataset.ruleDel,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-dup]').forEach(b=>b.onclick=()=>{const src=JSON.parse(JSON.stringify(model.rules[+b.dataset.ruleDup]));src.id='R'+(model.rules.length+1);src.name=(src.name||'rule')+' copy';model.rules.splice(+b.dataset.ruleDup+1,0,src);renderRuleList();renderRuleConfirm();updateRuleJson()})}
 function ruleMfAt(ruleIndex,condIndex){
   const model=ensureFuzzyModel();
   const r=model.rules&&model.rules[ruleIndex];
   const c=r&&r.conditions&&r.conditions[condIndex];
   const fd=c&&model.features[c.feature];
-  const mf=fd&&fd.labels&&fd.labels[c.label];
+  const mf=fd&&fd.enabled!==false&&fd.labels&&fd.labels[c.label];
   return mf?{model,rule:r,cond:c,mf,feature:c.feature,label:c.label,ruleIndex,condIndex}:null;
 }
 function selectedRuleMf(){const sel=state.liveMfSel;if(!sel)return null;return ruleMfAt(sel.ruleIndex,sel.condIndex)}
@@ -5404,12 +6692,13 @@ function renderRuleConfirm(){
   model.rules.forEach((r,ri)=>{
     const row=document.createElement('div');row.className='fuzzy-confirm-row';
     const chips=(r.conditions||[]).map((c,ci)=>{
-      const mf=model.features[c.feature]&&model.features[c.feature].labels&&model.features[c.feature].labels[c.label];
-      const selected=state.liveMfSel&&state.liveMfSel.ruleIndex===ri&&state.liveMfSel.condIndex===ci;
+      const fd=model.features[c.feature],active=fd&&fd.enabled!==false;
+      const mf=active&&fd.labels&&fd.labels[c.label];
+      const selected=active&&state.liveMfSel&&state.liveMfSel.ruleIndex===ri&&state.liveMfSel.condIndex===ci;
       const svg=mf?mfSvg(mf,{className:'fuzzy-confirm-mf-svg fuzzy-mf-axis-svg',data:{rule:ri,cond:ci},axes:true,feature:c.feature,label:c.label}):'';
       const editor=(selected&&mf)?inlineRuleMfEditorHtml(ruleMfAt(ri,ci)):'';
       const connector=ci?`<span class="fuzzy-connector">${htmlEscape(c.connector||'AND')}</span>`:'';
-      return `${connector}<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1"><div class="fuzzy-if-chip editable-mf ${selected?'selected':''}" data-rule-index="${ri}" data-cond-index="${ci}" title="クリックして条件部ファジィ集合をその場で編集"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span>${svg}</div>${editor}</div>`;
+      return `${connector}<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1"><div class="fuzzy-if-chip editable-mf ${selected?'selected':''} ${active?'':'inactive'}" data-rule-index="${ri}" data-cond-index="${ci}" title="${active?'クリックして条件部ファジィ集合をその場で編集':'評価指標がOFFのため推論から除外'}"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${active?'':'<span class="not">OFF</span>'}${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span>${svg}</div>${editor}</div>`;
     }).join('');
     row.innerHTML=`<div class="fuzzy-confirm-head">${r.active?'ON':'OFF'} ${htmlEscape(r.id)}</div><div class="fuzzy-if-chips">${chips}</div><div class="fuzzy-confirm-head">THEN</div><div><b>${htmlEscape(r.output)}</b> <span class="fuzzy-small">w=${(+r.weight||0).toFixed(2)}</span></div><div class="fuzzy-small">${htmlEscape(r.name||'')}</div>`;
     box.appendChild(row);
@@ -5482,6 +6771,28 @@ function scheduleLiveMfRealtime(){if(state.liveMfRaf)cancelAnimationFrame(state.
 function renderLiveMfEditor(){const box=$('fuzzyLiveMfEditor');if(box)box.innerHTML=''}
 function updateRuleJson(){const el=$('fuzzyRuleJson');if(el)el.value=JSON.stringify(ensureFuzzyModel(),null,2)}
 function renderFuzzyDebug(){const b=state.best,box=$('fuzzyRuleDebug');if(!box)return;if(!b||!b.ruleResult){box.textContent='No inference yet.';return}box.textContent=(b.ruleResult.fired||[]).map(r=>`${r.id} ${r.name||''} -> ${r.output}  strength=${r.strength} activation=${r.activation}\n  `+(r.conditions||[]).map(c=>`${c.connector} ${c.feature} is ${c.not?'NOT ':''}${c.label}: ${c.mu}`).join('\n  ')).join('\n\n')||'No rules fired.'}
+function v321BindEvaluationMetricSelector(){
+  const box=$('fuzzyEvaluationMetricSelector');
+  if(!box||box.dataset.bound)return;
+  box.dataset.bound='1';
+  box.addEventListener('change',event=>{
+    const input=event.target.closest('[data-fz-evaluation-feature]');
+    if(!input)return;
+    const key=input.dataset.fzEvaluationFeature;
+    const metricId=input.dataset.metricId;
+    const model=ensureFuzzyModel();
+    if(!model.features[key])return;
+    state.evaluationMetrics.metricEnabled[metricId]=input.checked;
+    model.features[key].enabled=input.checked;
+    v321RenderEvaluationMetricSelector();
+    refreshFuzzyFeatureSelects();
+    renderMfList();
+    renderRuleList();
+    renderRuleConfirm();
+    updateRuleJson();
+    if($('fuzzyEditorStatus'))$('fuzzyEditorStatus').textContent=`Evaluation metric ${metricId}: ${input.checked?'ON':'OFF'}`;
+  });
+}
 function bindFuzzyEditor(){if(!$('explicitFuzzyRulePanel'))return;ensureFuzzyModel();renderFuzzyEditor();$('fuzzyFeatureSelector').addEventListener('change',e=>{if(e.target.dataset.fzFeature){ensureFuzzyModel().features[e.target.dataset.fzFeature].enabled=e.target.checked;refreshFuzzyFeatureSelects();renderRuleList();renderRuleConfirm();updateRuleJson()}});['fzAndMethod','fzOrMethod','fzImplication','fzAggregation','fzDefuzz','fzFallback'].forEach(id=>$(id).onchange=()=>{const m=ensureFuzzyModel().methods;m.and=$('fzAndMethod').value;m.or=$('fzOrMethod').value;m.implication=$('fzImplication').value;m.aggregation=$('fzAggregation').value;m.defuzz=$('fzDefuzz').value;m.fallback=$('fzFallback').value;updateRuleJson()});$('fzMfFeature').onchange=()=>renderMfList();$('fzAddMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim()||'Label';model.features[f].labels[name]={shape:$('fzMfShape').value,params:['A','B','C','D'].map(k=>clamp(+$('fzMf'+k).value||0,0,1))};renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim();if(name)delete model.features[f].labels[name];renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddOutBtn').onclick=()=>{const name=$('fzOutLabel').value.trim()||'Output';ensureFuzzyModel().outputs[name]={value:clamp(+$('fzOutValue').value||0,0,100),meaning:$('fzOutMeaning').value};renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteOutBtn').onclick=()=>{delete ensureFuzzyModel().outputs[$('fzOutLabel').value.trim()];renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddRuleBtn').onclick=()=>{const model=ensureFuzzyModel(),f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false),labs=Object.keys((model.features[f.key]||{}).labels||{}),outs=Object.keys(model.outputs);model.rules.push({id:'R'+(model.rules.length+1),active:true,name:'new rule',conditions:[{feature:f.key,label:labs[0]||'High',connector:'AND'}],output:outs[0]||'Medium',weight:1});renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzApplyRulesBtn').onclick=()=>{updateRuleJson();estimate();$('fuzzyEditorStatus').textContent='Applied editable IF-THEN rule base to current grasp estimation.'};$('fzResetRulesBtn').onclick=()=>{state.fuzzyModel=defaultFuzzyModel();state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Default fuzzy rule base restored.'};$('fzExportRulesBtn').onclick=updateRuleJson;$('fzImportRulesBtn').onclick=()=>{try{state.fuzzyModel=JSON.parse($('fuzzyRuleJson').value);state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Rule JSON imported.'}catch(e){$('fuzzyEditorStatus').textContent='JSON import failed: '+e.message}};$('fzRefreshConfirmBtn').onclick=()=>{renderRuleConfirm();updateRuleJson()};$('fzDownloadRulesBtn').onclick=()=>{updateRuleJson();const blob=new Blob([$('fuzzyRuleJson').value],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='topofuzzy_grasp_ifthen_rules_v287.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
 function bindDataModeControls(){
   const openGngDataFilePicker=(label)=>{const fileEl=$('gngDataFile')||$('pointCloudFile');if(fileEl){v312SetGngLoadStatus(label||'ファイル選択を開いています...');fileEl.value='';fileEl.click();}};
@@ -5520,8 +6831,9 @@ function bindDataModeControls(){
       state.importedGraphSession=null;
       state.bundleTopicSelection={};
       state.graspPoseCandidates=[];
-      state.evaluationMetrics={schemas:{},samples:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0};
+      state.evaluationMetrics={schemas:{},samples:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0};
       v320UpdateEvaluationMetricStatus();
+      v321SyncEvaluationMetricFeatures();
       resetGngRunState();
       generate();
       updateGngDataSourceUi();
@@ -5566,7 +6878,7 @@ $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask
   bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern','playbackSpeed'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
-setupTopologyStyleControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
+setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
 document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));
 
 function setupFixedHeaderV276(){
@@ -5592,6 +6904,7 @@ function setupFixedHeaderV276(){
 }
 
 setupFixedHeaderV276();
+window.addEventListener('beforeunload',()=>{try{v315SaveFixedBaseState();}catch(e){}});
 
 /* v291: Viewer one-shot exact fuzzy grasp pose + 7DOF IK */
 function v290SevenDofFromState(){
@@ -5650,12 +6963,52 @@ function v290UpdateViewerIkHud(){
     }catch(e){}
   }
 }
+function viewerRobotTfResultText(label){
+  const b=state.best||null;
+  const sol=state.ikSolution||null;
+  const feasible=(state.candidates||[]).length;
+  const rejected=(state.rejectedCandidates||[]).length;
+  const fmt=(v,d=3)=>Number.isFinite(+v)?(+v).toFixed(d):'-';
+  if(!b){
+    return `${label}: 候補なし\nfeasible=${feasible}, rejected=${rejected}\ncollision/aperture/semantic条件を確認してください。`;
+  }
+  const lines=[
+    `${label}: DONE`,
+    `feasible=${feasible}, rejected=${rejected}`,
+    `best=${b.type||'-'} score=${fmt(b.score,1)} collisionFree=${fmt(b.collisionFree??1,2)}`,
+    `pose=(${fmt(b.x)}, ${fmt(b.y)}, ${fmt(b.z)}) yaw=${fmt(b.yaw,1)} pitch=${fmt(b.pitch,1)}`
+  ];
+  if(sol){
+    const target=sol.targetLink?` target=${sol.targetLink}`:'';
+    const err=sol.eeErr!=null?` ee_err=${fmt(sol.eeErr)}m`:(sol.posErr!=null?` pos_err=${fmt(sol.posErr)}m`:'');
+    lines.push(`IK=${sol.status||sol.message||sol.result||'solved/updated'}${target}${err}`);
+  }else{
+    lines.push('IK=未解決 / 到達不可または通常把持推定のみ');
+  }
+  return lines.join('\n');
+}
+function updateViewerRobotTfResult(label, error){
+  const el=$('viewerRobotTfResult');
+  if(!el)return;
+  if(error){
+    el.textContent=`${label}: ERROR\n${error&&error.message?error.message:String(error)}`;
+    return;
+  }
+  if(String(label).includes('計算中')){
+    el.textContent=`${label}...\npoint cloud / GNG / grasp候補 / IKを更新中`;
+    return;
+  }
+  el.textContent=viewerRobotTfResultText(label);
+}
 function runViewerFuzzyGraspIk(){
   const btn=$('viewerFuzzyIkBtn');
+  const robotBtn=$('viewerRobotTfFuzzyEstimateBtn');
   const out=$('viewerFuzzyIkReadout');
   try{
     if(btn){btn.classList.add('running');btn.textContent='計算中';}
+    if(robotBtn){robotBtn.classList.add('running');robotBtn.textContent='計算中';}
     if(out)out.textContent='Running pipeline...\n1) point cloud\n2) GNG\n3) fuzzy grasp\n4) 7DOF IK';
+    updateViewerRobotTfResult('ファジィ把持推定: 計算中');
     if(!state.points || !state.points.length) generate();
     if(!state.nodes || !state.nodes.length) runGng();
     estimate();
@@ -5666,15 +7019,19 @@ function runViewerFuzzyGraspIk(){
       if(typeof setUnifiedViewerMode==='function') setUnifiedViewerMode('grasp');
       else state.viewerMode='grasp';
       v290UpdateViewerIkHud();
+      updateViewerRobotTfResult('ファジィ把持推定');
       renderAll();
     }else{
       if(out)out.textContent='衝突なし把持候補が見つかりませんでした。';
+      updateViewerRobotTfResult('ファジィ把持推定');
     }
   }catch(e){
     if(out)out.textContent='ERROR: '+(e&&e.message?e.message:String(e));
+    updateViewerRobotTfResult('ファジィ把持推定',e);
     console.error(e);
   }finally{
     if(btn){btn.classList.remove('running');btn.textContent='ファジィ把持実行';}
+    if(robotBtn){robotBtn.classList.remove('running');robotBtn.textContent='ファジィ把持推定';}
   }
 }
 function installV290ViewerFuzzyIk(){
@@ -5684,6 +7041,37 @@ function installV290ViewerFuzzyIk(){
     btn.addEventListener('click',runViewerFuzzyGraspIk);
   }
   const panel=$('viewerFuzzyIkReadout')?.closest('.viewer-fuzzy-ik-panel'); if(panel)panel.classList.remove('show-readout');
+}
+function runViewerRobotTfGraspEstimate(){
+  const btn=$('viewerRobotTfEstimateBtn');
+  try{
+    if(btn){btn.classList.add('running');btn.textContent='計算中';}
+    updateViewerRobotTfResult('把持推定: 計算中');
+    estimate();
+    state.graspRenderMode='estimate';
+    if(typeof setUnifiedViewerMode==='function')setUnifiedViewerMode('grasp');
+    else if(typeof setViewerMode==='function')setViewerMode('grasp');
+    else state.viewerMode='grasp';
+    updateViewerRobotTfResult('把持推定');
+    renderAll();
+  }catch(e){
+    updateViewerRobotTfResult('把持推定',e);
+    console.error(e);
+  }finally{
+    if(btn){btn.classList.remove('running');btn.textContent='把持推定';}
+  }
+}
+function installViewerRobotTfEstimateButtons(){
+  const estimateBtn=$('viewerRobotTfEstimateBtn');
+  if(estimateBtn&&!estimateBtn.dataset.boundRobotTfEstimate){
+    estimateBtn.dataset.boundRobotTfEstimate='1';
+    estimateBtn.addEventListener('click',runViewerRobotTfGraspEstimate);
+  }
+  const fuzzyBtn=$('viewerRobotTfFuzzyEstimateBtn');
+  if(fuzzyBtn&&!fuzzyBtn.dataset.boundRobotTfFuzzy){
+    fuzzyBtn.dataset.boundRobotTfFuzzy='1';
+    fuzzyBtn.addEventListener('click',runViewerFuzzyGraspIk);
+  }
 }
 
 document.querySelectorAll('#showRawPoints,#showGngNodes,#showGngEdges,#showTopoClusters,#showTopoFaces,#showTopoNormals').forEach(el=>el.addEventListener('input',()=>renderAll()));
@@ -5697,7 +7085,7 @@ document.addEventListener('click',(e)=>{
   });
 });
 
-loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();v303SetReplayMicroVibrationDefaults();generate();runGng();estimate();updateObjectIdentifier();installV290ViewerFuzzyIk();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
+loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();runGng();estimate();updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
 </script>
 
