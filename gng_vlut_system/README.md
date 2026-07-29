@@ -3,6 +3,12 @@
 このプロジェクトは、Growing Neural Gas (GNG) アルゴリズムを用いたロボットアームの軌道計画および自己干渉回避システムです。
 角度空間と座標空間のデュアルスペース学習、および幾何学的な自己干渉判定を特徴としています。
 
+## 詳細仕様
+
+- [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md)
+- [docs/RELEASE_NOTE_TEMPLATE.md](docs/RELEASE_NOTE_TEMPLATE.md)
+- [docs/releases/](docs/releases/)
+
 ## 依存ライブラリ (Dependencies)
 
 - **Eigen3**: 解析計算、ベクトル・行列演算に使用。

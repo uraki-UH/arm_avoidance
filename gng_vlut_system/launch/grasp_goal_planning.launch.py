@@ -170,7 +170,7 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_motion", default_value="true"),
         DeclareLaunchArgument("candidate_count", default_value="8"),
         DeclareLaunchArgument("non_collision_only", default_value="true"),
-        DeclareLaunchArgument("orientation_weight", default_value="0.25"),
+        DeclareLaunchArgument("orientation_weight", default_value="0.0"),
         DeclareLaunchArgument("target_pose_topic", default_value=""),
         DeclareLaunchArgument("target_point_topic", default_value=""),
         DeclareLaunchArgument("target_pose_array_topic", default_value="/grasp_pose_candidates"),

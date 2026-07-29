@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { createPortal, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { RobotData, RobotPoseInstance, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
@@ -132,12 +132,6 @@ function RobotInstanceRenderer({
         translationalMaterial,
         rotationalMaterial,
     ]);
-
-    const selectedManipFrame = useMemo(() => {
-        if (!robot || !selectedManipLinkName) return null;
-        const frame = robot.getFrame?.(selectedManipLinkName) || robot.links?.[selectedManipLinkName] || null;
-        return frame ?? null;
-    }, [robot, selectedManipLinkName]);
 
     // Trigger re-render in demand mode
     useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride, showManipulabilityEllipsoid, manipLinkName]);
@@ -320,43 +314,26 @@ function RobotInstanceRenderer({
                         info.scale[1] * manipDisplayScale,
                         info.scale[2] * manipDisplayScale,
                     ];
-                    return selectedManipFrame
-                        ? createPortal(
-                            <mesh
-                                key={info.key}
-                                geometry={manipGeometry}
-                                material={info.material}
-                                position={[0, 0, 0]}
-                                quaternion={[0, 0, 0, 1]}
-                                scale={scaleVec}
-                                frustumCulled={false}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onManipClick?.(selectedManipLinkName);
-                                }}
-                            />,
-                            selectedManipFrame
-                        )
-                        : (
-                            <mesh
-                                key={info.key}
-                                geometry={manipGeometry}
-                                material={info.material}
-                                position={info.center || [0, 0, 0]}
-                                quaternion={new THREE.Quaternion(
-                                    info.orientation?.[0] ?? 0,
-                                    info.orientation?.[1] ?? 0,
-                                    info.orientation?.[2] ?? 0,
-                                    info.orientation?.[3] ?? 1
-                                )}
-                                scale={scaleVec}
-                                frustumCulled={false}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onManipClick?.(selectedManipLinkName);
-                                }}
-                            />
-                        );
+                    return (
+                        <mesh
+                            key={info.key}
+                            geometry={manipGeometry}
+                            material={info.material}
+                            position={info.center || [0, 0, 0]}
+                            quaternion={new THREE.Quaternion(
+                                info.orientation?.[0] ?? 0,
+                                info.orientation?.[1] ?? 0,
+                                info.orientation?.[2] ?? 0,
+                                info.orientation?.[3] ?? 1
+                            )}
+                            scale={scaleVec}
+                            frustumCulled={false}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onManipClick?.(selectedManipLinkName);
+                            }}
+                        />
+                    );
                 })}
             </group>
         </group>
