@@ -7,8 +7,11 @@
 - [TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)
 - [TASK_LIST.md](./TASK_LIST.md)
 - [TASK_CANDIDATES.md](./TASK_CANDIDATES.md)
+- [RELATED_WORK.md](./RELATED_WORK.md)
+- [IDEA_NOTES.md](./IDEA_NOTES.md)
 - [RELEASE_NOTE_TEMPLATE.md](./RELEASE_NOTE_TEMPLATE.md)
 - [releases/2026-07-29_documentation_workflow.md](./releases/2026-07-29_documentation_workflow.md)
+- [designs/2026-08-03_graph_coarsening_visualization.md](./designs/2026-08-03_graph_coarsening_visualization.md)
 
 ## 運用ルール
 
@@ -18,3 +21,5 @@
 4. 仕様変更が入ったら、まず `releases/` に 1 件のリリースノートを追加する。
 5. 仕様書の変数一覧、トピック一覧、フローチャートは実装と一致させる。
 6. 変更の影響が launch 引数、topic、service、message field に及ぶ場合は、必ず仕様書も更新する。
+7. 先行研究を調べたら `RELATED_WORK.md` に「手法 / 本プロジェクトとの差分 / 引用する場面」で追記する。
+8. 着想レベルで流用できる技術は `IDEA_NOTES.md` に 1 件ずつ短く登録する。
