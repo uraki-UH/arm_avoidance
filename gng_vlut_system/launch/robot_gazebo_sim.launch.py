@@ -12,6 +12,7 @@ def generate_launch_description():
     return LaunchDescription([
         # --- Arguments ---
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
@@ -35,6 +36,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
+                "params_file": LaunchConfiguration("params_file"),
                 "urdf_path": LaunchConfiguration("urdf_path"),
                 "resource_root_dir": LaunchConfiguration("resource_root_dir"),
                 "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
@@ -46,6 +48,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_gazebo_spawn.launch.py")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
+                "params_file": LaunchConfiguration("params_file"),
                 "urdf_path": LaunchConfiguration("urdf_path"),
             }.items()
         ),
@@ -56,6 +59,7 @@ def generate_launch_description():
             condition=None, # We'll use the argument inside or a condition here
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
+                "params_file": LaunchConfiguration("params_file"),
                 "experiment_id": LaunchConfiguration("experiment_id"),
                 "enable_safety_monitor": LaunchConfiguration("enable_safety_monitor"),
                 "safety_margin": LaunchConfiguration("safety_margin"),

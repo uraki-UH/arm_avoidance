@@ -47,8 +47,8 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 - 最終自己衝突除去: 0ノード
 - `gng.bin`: 5,268,947 bytes
 - `vlut.bin`: 45,167,604 bytes
-- 可視化GNG: 500ノード、2,332エッジ、空割当0
-- `visualization_gng_layer_0.bin`: 69,892 bytes
+- 可視化GNG: 500ノード、2,504縮約エッジ、1連結成分、孤立0、空割当0
+- `visualization_gng_layer_0.bin`: 71,268 bytes
 
 ## Verification
 
@@ -56,4 +56,5 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 - `visualization_gng_trainer`が10,801元ノードを重複・欠落なく再読込検証。
 - 隔離ROS domainの`topofuzzy_bridge_node`で元GNG容量11,000、有効ノード10,801、
   可視化GNG 500ノード/2,332エッジを読み込み、可視化topicを実受信。
+  2,504縮約エッジ版は保存後再読込と連結性を検証済みで、bridge実受信は未実施。
 - テスト後に既存コンテナ、ROS launch、ROS daemonが開始前と同じ状態であることを確認。

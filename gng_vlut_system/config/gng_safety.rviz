@@ -34,26 +34,38 @@ Visualization Manager:
         Durability Policy: Volatile
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: SelfMask
       Namespaces:
-        self_voxels: true
+        self_voxels: false
       Topic:
         Value: /self_mask_viz
         Depth: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
         Durability Policy: Volatile
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/RobotModel
-      Enabled: true
+      Enabled: false
       Name: RobotModel
       Description Source: Topic
       Description Topic:
-        Value: /robot_description
-      TF Prefix: ""
+        Value: /ToPoDualArm/rviz_robot_description
+      TF Prefix: ToPoDualArm/
       Visual Enabled: true
       Collision Enabled: false
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: RobotVisualMarkers
+      Namespaces:
+        ToPoDualArm_visual_mesh: true
+      Topic:
+        Value: /ToPoDualArm/rviz_robot_visual_markers
+        Depth: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
       Value: true
   Enabled: true
   Global Options:
@@ -70,11 +82,11 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 4
+      Distance: 1.2
       Focal Point:
         X: 0
         Y: 0
-        Z: 0
+        Z: 0.25
       Name: Current View
       Near Clip Distance: 0.01
       Pitch: 0.785398

@@ -115,6 +115,10 @@
     frame_id: "base_link"
     source_frame_id: "base_link"
     publish_hz: 30.0
+    visualization_gng:
+      enabled: true
+      path_prefix: ""
+      topic_prefix: "topological_map_visualization"
 
     # --- Self Recognition Settings ---
     self_recognition:

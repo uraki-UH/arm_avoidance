@@ -51,6 +51,11 @@ static inline float nanMetric() {
   return std::numeric_limits<float>::quiet_NaN();
 }
 
+static inline bool isFiniteVector3(const Eigen::Vector3d &value) {
+  return std::isfinite(value.x()) && std::isfinite(value.y()) &&
+         std::isfinite(value.z());
+}
+
 static inline sensor_msgs::msg::JointState buildJointStateFromQ(
     const Eigen::VectorXf &q, const std::vector<std::string> &joint_names,
     const rclcpp::Time &stamp) {
@@ -806,7 +811,11 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessageWithCurrentPose(
   std::vector<double> joint_values;
   joint_values.reserve(static_cast<std::size_t>(current_q.size()));
   for (int i = 0; i < current_q.size(); ++i) {
-    joint_values.push_back(static_cast<double>(current_q[i]));
+    const double value = static_cast<double>(current_q[i]);
+    if (!std::isfinite(value)) {
+      return msg;
+    }
+    joint_values.push_back(value);
   }
 
   std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> positions;
@@ -819,6 +828,11 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessageWithCurrentPose(
   if (positions.empty() || orientations.empty()) {
     return msg;
   }
+  const Eigen::Vector3d current_position = positions.back();
+  const Eigen::Vector3d forward = orientations.back() * Eigen::Vector3d::UnitZ();
+  if (!isFiniteVector3(current_position) || !isFiniteVector3(forward)) {
+    return msg;
+  }
 
   constexpr uint16_t kCurrentPoseNodeId = std::numeric_limits<uint16_t>::max();
   const auto virtual_it = std::find_if(
@@ -829,14 +843,13 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessageWithCurrentPose(
   if (virtual_it == msg.nodes.end()) {
     ais_gng_msgs::msg::TopologicalNode current_node;
     current_node.id = kCurrentPoseNodeId;
-    current_node.pos.x = positions.back().x();
-    current_node.pos.y = positions.back().y();
-    current_node.pos.z = positions.back().z();
-    const Eigen::Vector3d forward = orientations.back() * Eigen::Vector3d::UnitZ();
+    current_node.pos.x = current_position.x();
+    current_node.pos.y = current_position.y();
+    current_node.pos.z = current_position.z();
     current_node.normal.x = forward.x();
     current_node.normal.y = forward.y();
     current_node.normal.z = forward.z();
-    current_node.label = 1;
+    current_node.label = 0;
     current_node.rho = 0.0f;
     current_node.semantic_label = 0;
     current_node.semantic_reliability = 0.0f;

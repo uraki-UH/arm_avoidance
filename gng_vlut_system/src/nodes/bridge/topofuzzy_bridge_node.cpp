@@ -29,6 +29,7 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include "metrics/manipulability.hpp"
+#include "visualization/visualization_gng.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -77,6 +78,10 @@ public:
     declare_parameter("gng.gng_model_filename", "gng.bin");
     declare_parameter("gng.vlut_filename", "vlut.bin");
     declare_parameter("topic_name", "topological_map");
+    declare_parameter("visualization_gng.enabled", false);
+    declare_parameter("visualization_gng.path_prefix", "");
+    declare_parameter("visualization_gng.topic_prefix",
+                      "topological_map_visualization");
 
     declare_parameter("urdf_path", "");
     declare_parameter("robot.arm_leaf_link_names", "");
@@ -173,6 +178,7 @@ public:
             topic_name + "_layer_" + std::to_string(i), rclcpp::QoS(1).reliable().transient_local()));
       }
     }
+    initializeVisualizationGng(gng_path, layer_count);
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
@@ -389,6 +395,65 @@ private:
         frame_id_, source_frame_id_);
   }
 
+  void initializeVisualizationGng(const std::string &gng_path,
+                                  int layer_count) {
+    if (!get_parameter("visualization_gng.enabled").as_bool()) {
+      return;
+    }
+
+    std::string path_prefix =
+        get_parameter("visualization_gng.path_prefix").as_string();
+    if (path_prefix.empty()) {
+      path_prefix =
+          (std::filesystem::path(gng_path).parent_path() / "visualization_gng")
+              .string();
+    } else if (!std::filesystem::path(path_prefix).is_absolute()) {
+      path_prefix = robot_sim::common::resolvePath(path_prefix);
+    }
+    const std::string topic_prefix =
+        get_parameter("visualization_gng.topic_prefix").as_string();
+
+    for (int layer = 0; layer < layer_count; ++layer) {
+      const auto path = robot_sim::visualization::visualizationGngLayerPath(
+          path_prefix, static_cast<std::uint32_t>(layer));
+      robot_sim::visualization::VisualizationGngModel model;
+      std::string error;
+      if (!model.load(path, &error)) {
+        RCLCPP_WARN(get_logger(), "Visualization GNG layer %d skipped: %s",
+                    layer, error.c_str());
+        continue;
+      }
+      const auto source_points =
+          robot_sim::visualization::collectVisualizationGngSourcePoints(
+              *context_->gng, layer);
+      const std::uint64_t source_signature =
+          robot_sim::visualization::computeVisualizationGngSourceSignature(
+              source_points);
+      if (model.coord_layer != static_cast<std::uint32_t>(layer) ||
+          model.source_signature != source_signature) {
+        RCLCPP_WARN(
+            get_logger(),
+            "Visualization GNG layer %d skipped because it does not match %s",
+            layer, gng_path.c_str());
+        continue;
+      }
+
+      VisualizationLayer visual_layer;
+      visual_layer.layer = layer;
+      visual_layer.model = std::move(model);
+      visual_layer.publisher =
+          create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+              topic_prefix + "_layer_" + std::to_string(layer),
+              rclcpp::QoS(1).reliable().transient_local());
+      RCLCPP_INFO(get_logger(),
+                  "Loaded visualization GNG layer %d: nodes=%zu edges=%zu "
+                  "topic=%s_layer_%d",
+                  layer, visual_layer.model.nodes.size(),
+                  visual_layer.model.edges.size(), topic_prefix.c_str(), layer);
+      visualization_layers_.push_back(std::move(visual_layer));
+    }
+  }
+
   void publishGraph() {
     std::lock_guard<std::mutex> lock(update_mutex_);
     publishGraphLocked();
@@ -408,6 +473,15 @@ private:
       if (layer_pubs_[i]) {
         layer_pubs_[i]->publish(buildLayerGraphMessage(static_cast<int>(i)));
       }
+    }
+    for (auto &visual_layer : visualization_layers_) {
+      if (!visual_layer.publisher) {
+        continue;
+      }
+      visual_layer.publisher->publish(
+          robot_sim::bridge::topofuzzy::buildVisualizationGngMessage(
+              *this, context_->gng, visual_layer.model, tf_buffer_, frame_id_,
+              source_frame_id_));
     }
   }
 
@@ -465,6 +539,12 @@ private:
   }
 
 private:
+  struct VisualizationLayer {
+    int layer = 0;
+    robot_sim::visualization::VisualizationGngModel model;
+    rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher;
+  };
+
   std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
   robot_sim::analysis::GraphTopologyAnalyzer topology_analyzer_;
 
@@ -477,6 +557,7 @@ private:
   rclcpp::Publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>::SharedPtr
       node_feature_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
+  std::vector<VisualizationLayer> visualization_layers_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   std::mutex update_mutex_;

@@ -8,6 +8,7 @@
 
 - 軌道なしで空pathをpublishする分岐が、現在姿勢を持たない `buildPathMessage()` を使っていた。
 - `planned_topological_map` のpublish経路を `buildPathMessageWithCurrentPose()` に統一した。
+- 現在姿勢のFK結果がNaN/infの場合は仮想ノードを追加しない。
 
 ## Behavior Impact
 
@@ -27,3 +28,4 @@
 ## Risk / Notes
 
 - 現在EE poseノードは `id=65535` の仮想ノードとして表現する。
+- 仮想現在姿勢ノードはsafe terrainではないため、`label=0` とする。

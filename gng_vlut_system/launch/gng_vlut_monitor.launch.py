@@ -8,6 +8,10 @@ from launch_ros.actions import Node
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    enable_safety_monitor = LaunchConfiguration("enable_safety_monitor").perform(context).lower() in ("true", "1", "yes", "on")
+    if not enable_safety_monitor:
+        return []
+
     params_file = LaunchConfiguration("params_file").perform(context)
     robot_name = LaunchConfiguration("robot_name").perform(context)
     experiment_id = LaunchConfiguration("id").perform(context)
@@ -88,6 +92,7 @@ def generate_launch_description():
         DeclareLaunchArgument("dir", default_value="gng_results"),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("data_directory", default_value=""),
+        DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("frame_id", default_value="base_link"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
         DeclareLaunchArgument("tag", default_value="dynamic"),

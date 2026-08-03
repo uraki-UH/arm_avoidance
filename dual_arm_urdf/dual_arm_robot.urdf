@@ -13,7 +13,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/base_link.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -34,7 +34,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/torso_link.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -57,7 +57,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/neck_pan_link.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -80,7 +80,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/neck_tilt_link.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -103,7 +103,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/camera_link.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="gray"/>
+      <material name="gray"><color rgba="0.55 0.55 0.55 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -138,7 +138,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link1.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -161,7 +161,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link2.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -184,7 +184,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link3.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -207,7 +207,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link4.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -230,7 +230,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link5.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -253,7 +253,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link6.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -276,7 +276,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_link7.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -299,7 +299,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_gripper_base.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="silver"/>
+      <material name="silver"><color rgba="0.80 0.80 0.82 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -320,7 +320,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_finger_left.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -343,7 +343,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/L_finger_right.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -381,7 +381,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link1.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -404,7 +404,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link2.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -427,7 +427,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link3.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -450,7 +450,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link4.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -473,7 +473,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link5.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -496,7 +496,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link6.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -519,7 +519,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_link7.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="black"/>
+      <material name="black"><color rgba="0.24 0.24 0.24 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -542,7 +542,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_gripper_base.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="silver"/>
+      <material name="silver"><color rgba="0.80 0.80 0.82 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -563,7 +563,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_finger_left.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -586,7 +586,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry><mesh filename="meshes/R_finger_right.stl" scale="0.001 0.001 0.001"/></geometry>
-      <material name="green"/>
+      <material name="green"><color rgba="0.0 1.00 0.0 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="0 0 0"/>

@@ -38,6 +38,12 @@ add_library(safety_engine STATIC core/gng/GrowingNeuralGas.cpp)
 target_link_libraries(safety_engine common_lib kinematics_lib)
 ament_target_dependencies(safety_engine Eigen3)
 
+# Visualization-only 3D GNG and compact persistence format
+add_library(visualization_gng_lib STATIC
+    core/visualization/visualization_gng.cpp
+)
+ament_target_dependencies(visualization_gng_lib Eigen3)
+
 # Safety Engine Offline (For training)
 add_library(safety_engine_offline STATIC 
     core/safety_engine/runtime/influence_management.cpp
@@ -83,7 +89,7 @@ target_link_libraries(analysis_lib safety_engine common_lib kinematics_lib)
 ament_target_dependencies(analysis_lib Eigen3)
 
 # Collection of all core libs
-set(LIBS_ALL_CORE common_lib kinematics_lib robot_model_lib safety_engine collision_lib metrics_lib analysis_lib safety_engine_offline)
+set(LIBS_ALL_CORE common_lib kinematics_lib robot_model_lib safety_engine visualization_gng_lib collision_lib metrics_lib analysis_lib safety_engine_offline)
 
 # --- 3. ROS 2 Nodes ---
 # Basic Nodes
@@ -101,6 +107,7 @@ add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_ro
 add_executable(voxel_to_vlut_bridge_node nodes/bridge/voxel_to_vlut_bridge_node.cpp)
 # Grouped Nodes
 add_executable(robot_description_player_node nodes/self_recognition/robot_description_player.cpp)
+add_executable(rviz_robot_visual_marker_node nodes/self_recognition/rviz_robot_visual_marker_node.cpp)
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
@@ -111,12 +118,13 @@ add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_stat
 
 # Offline tools
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
+add_executable(visualization_gng_trainer offline_tools/visualization_gng_trainer.cpp)
 
 # Offline validation tools
 add_subdirectory(offline_tools/tools)
 
 # Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node pointcloud_voxel_bridge_node voxel_topic_merger_node grasp_pose_candidate_producer_node grasp_pose_marker_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node voxel_to_vlut_bridge_node safety_monitor_node robot_description_player_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node arm_avoid_node target_joint_state_executor_node virtual_joint_state_driver_node offline_urdf_trainer)
+set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node pointcloud_voxel_bridge_node voxel_topic_merger_node grasp_pose_candidate_producer_node grasp_pose_marker_bridge_node robot_viewer_bridge_node voxel_spherized_robot_viewer_node voxel_to_vlut_bridge_node safety_monitor_node robot_description_player_node rviz_robot_visual_marker_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node arm_avoid_node target_joint_state_executor_node virtual_joint_state_driver_node offline_urdf_trainer visualization_gng_trainer)
 set(NODES ${NODES} grasp_pose_dummy_publisher_node)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})

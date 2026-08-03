@@ -389,7 +389,7 @@ flowchart TD
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
 | `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
 | `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
-| 可視化GNGエッジ | 可視化GNG | 3次元GNGが学習した位相 |
+| 可視化GNGエッジ | 元姿勢GNGから縮約 | coord-space edgeを可視化ノード間へ写像した位相 |
 
 ### 13.2 学習変数
 
@@ -405,11 +405,14 @@ flowchart TD
 | `error_decay` | 0.0005 | 反復ごとの誤差減衰率 |
 | `seed` | 42 | 決定論的サンプリング用乱数seed |
 | `coord_layer` | layerごと | 使用した`weight_coords`の添字 |
-| `source_signature` | 自動計算 | 元ノードIDと3次元座標のFNV-1a照合値 |
+| `source_signature` | 自動計算 | 元ノードID、3次元座標、coord-space edgeのFNV-1a照合値 |
 
 学習後は、各可視化ノードへ未割当の元ノードを最近傍順で1個ずつ先に割り当て、
 残りを最近傍可視化ノードへ割り当てる。これにより全可視化ノードが1個以上の
 `source_node_ids`を持ち、各元ノードIDはちょうど1回だけ格納される。
+その後、元coord-space edgeの両端を`source_node_ids`の所属先へ写像する。
+両端が同じ可視化ノードへ縮約された自己ループと、同じ可視化ノード間の重複edgeは保存しない。
+3次元GNGが学習中に作るedgeはノード配置の学習にだけ使い、binへは保存しない。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
@@ -419,7 +422,9 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 
 `--output-prefix`省略時は、入力binと同じディレクトリへ
 `visualization_gng_layer_<layer>.bin`を生成する。ToPoDualArm3の現モデルは
-coord layerが1つで、941元ノードから500可視化ノード、840エッジを生成する。
+coord layerが1つで、941元ノードから500可視化ノード、2,295エッジを生成する。
+ToPoDualArm10000は10,801元ノードから500可視化ノード、2,504エッジを生成する。
+どちらも1連結成分、孤立ノード0である。
 
 941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
 別の実験IDと学習規模だけをlaunch引数で指定する。
@@ -458,7 +463,9 @@ x86_64 little-endianであり、異なるendian間の互換性はversion 1では
 | 10 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
 
 読み込み時はmagic、version、配列上限、エッジindex、末尾余剰データを検証する。
-さらにブリッジが`source_signature`を現在の元GNGと照合し、古い組み合わせは配信しない。
+さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、coord-space edgeと
+照合し、古い組み合わせは配信しない。edgeを含むsignature schemaは2で、bin形式自体は
+version 1のままである。
 
 ### 13.4 ROSパラメータとトピック
 
@@ -481,12 +488,14 @@ safeがなくdangerだけ存在するならdanger、それ以外はcollidingと�
 ```mermaid
 flowchart TD
     A[元gng.bin] --> B[activeな元ノードを列挙]
-    B --> C[layer別 weight_coordsを3次元sample化]
+    B --> C[layer別 weight_coordsとcoord edgeを収集]
     C --> D[3次元GNGを学習]
     D --> E[全元ノードIDを最近傍visual nodeへ割当]
-    E --> F[source signatureを計算]
-    F --> G[visualization_gng_layer_n.bin]
-    G --> H[保存直後に再読込して件数とsignatureを検証]
+    E --> F[元coord edgeをvisual node間へ縮約]
+    F --> G[自己loopと重複edgeを除去]
+    G --> H[node 座標 edgeのsource signatureを計算]
+    H --> I[visualization_gng_layer_n.bin]
+    I --> J[保存直後に再読込して所属 edge 連結性を検証]
 ```
 
 ```mermaid

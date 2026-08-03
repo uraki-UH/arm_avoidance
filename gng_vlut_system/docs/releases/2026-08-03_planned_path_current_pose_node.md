@@ -8,6 +8,7 @@
 
 - 確定経路の可視化がGNG上のstart nodeから始まり、現在姿勢ノードを含んでいなかった。
 - active trajectory publishでは `buildPathMessageWithCurrentPose()` を使い、現在EE poseから経路先頭ノードへのedgeを追加する。
+- 現在姿勢のFK結果がNaN/infの場合は仮想ノードを追加しない。
 
 ## Behavior Impact
 
@@ -28,3 +29,4 @@
 ## Risk / Notes
 
 - 仮想現在姿勢ノードのIDは既存実装の `65535` を使う。
+- 仮想現在姿勢ノードはsafe terrainではないため、`label=0` とする。

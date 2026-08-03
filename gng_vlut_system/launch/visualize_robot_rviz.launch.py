@@ -13,15 +13,58 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
+        DeclareLaunchArgument("resource_root_dir", default_value=""),
+        DeclareLaunchArgument("mesh_root_dir", default_value=""),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
+        DeclareLaunchArgument("joint_state_topic", default_value=""),
+        DeclareLaunchArgument("robot_description_topic", default_value="rviz_robot_description"),
+        DeclareLaunchArgument("use_preview_pose", default_value="true"),
+        DeclareLaunchArgument("fixed_frame", default_value="world"),
+        DeclareLaunchArgument("robot_base_frame", default_value="ToPoDualArm/base_footprint"),
         DeclareLaunchArgument("rviz_config", default_value=rviz_config_default),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
+                "params_file": LaunchConfiguration("params_file"),
                 "urdf_path": LaunchConfiguration("urdf_path"),
+                "resource_root_dir": LaunchConfiguration("resource_root_dir"),
+                "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
+                "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
+                "joint_state_topic": LaunchConfiguration("joint_state_topic"),
+                "robot_description_topic": LaunchConfiguration("robot_description_topic"),
+                "use_preview_pose": LaunchConfiguration("use_preview_pose"),
             }.items()
+        ),
+
+        Node(
+            package="tf2_ros",
+            executable="static_transform_publisher",
+            name="robot_world_tf_publisher",
+            arguments=[
+                "0", "0", "0",
+                "0", "0", "0",
+                LaunchConfiguration("fixed_frame"),
+                LaunchConfiguration("robot_base_frame"),
+            ],
+        ),
+
+        Node(
+            package="gng_vlut_system",
+            executable="rviz_robot_visual_marker_node",
+            name="rviz_robot_visual_marker_node",
+            namespace=LaunchConfiguration("robot_name"),
+            parameters=[{
+                "robot_name": LaunchConfiguration("robot_name"),
+                "urdf_path": LaunchConfiguration("urdf_path"),
+                "resource_root_dir": LaunchConfiguration("resource_root_dir"),
+                "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
+                "topic_name": "rviz_robot_visual_markers",
+                "robot_description_topic": LaunchConfiguration("robot_description_topic"),
+            }],
         ),
 
         Node(

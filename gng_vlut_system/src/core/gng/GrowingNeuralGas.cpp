@@ -1282,6 +1282,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
 
 template <typename T_angle, typename T_coord>
 bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
+  static constexpr std::size_t kMaxLoadableNodes = 1000000;
   std::string resolved_path = robot_sim::common::resolvePath(filename);
   std::ifstream ifs(resolved_path, std::ios::binary);
   if (!ifs)
@@ -1317,15 +1318,53 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
 
   int node_count = 0;
   ifs.read((char *)&node_count, sizeof(node_count));
+  if (!ifs || node_count < 0 ||
+      static_cast<std::size_t>(node_count) > kMaxLoadableNodes) {
+    std::cerr << "Error: Invalid GNG node count: " << node_count << std::endl;
+    return false;
+  }
 
+  const auto ensure_node_capacity = [this](std::size_t required) {
+    if (required <= nodes.size()) {
+      return true;
+    }
+    if (required > kMaxLoadableNodes) {
+      return false;
+    }
+
+    const std::size_t old_size = nodes.size();
+    const std::size_t doubled = std::max<std::size_t>(1, old_size * 2);
+    const std::size_t new_size =
+        std::min(kMaxLoadableNodes, std::max(required, doubled));
+    nodes.resize(new_size);
+    edges_angle.resize(new_size);
+    edges_coord.resize(new_size);
+    edges_angle_per_node.resize(new_size);
+    edges_coord_per_node.resize(new_size);
+    for (auto &layer_edges : edges_coord_per_layer_) {
+      layer_edges.resize(new_size);
+    }
+    for (auto &layer_neighbors : edges_coord_per_layer_nodes_) {
+      layer_neighbors.resize(new_size);
+    }
+    for (std::size_t i = old_size; i < new_size; ++i) {
+      nodes[i].id = -1;
+      nodes[i].status.active = false;
+    }
+    return true;
+  };
+
+  std::size_t loaded_node_index_limit = 0;
   for (int k = 0; k < node_count; ++k) {
     int id;
     ifs.read((char *)&id, sizeof(int));
-    if (id < 0 || (size_t)id >= nodes.size()) {
-      // Should ideally skip appropriate bytes, but format is complex.
-      // We assume valid IDs in this pipeline.
-      continue;
+    if (!ifs || id < 0 ||
+        !ensure_node_capacity(static_cast<std::size_t>(id) + 1)) {
+      std::cerr << "Error: Invalid GNG node id: " << id << std::endl;
+      return false;
     }
+    loaded_node_index_limit = std::max(
+        loaded_node_index_limit, static_cast<std::size_t>(id) + 1);
     nodes[id].id = id;
     ifs.read((char *)&nodes[id].error_angle, sizeof(float));
     float dummy;
@@ -1477,6 +1516,21 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     }
   }
 
+  if (loaded_node_index_limit > 0 &&
+      loaded_node_index_limit < nodes.size()) {
+    nodes.resize(loaded_node_index_limit);
+    edges_angle.resize(loaded_node_index_limit);
+    edges_coord.resize(loaded_node_index_limit);
+    edges_angle_per_node.resize(loaded_node_index_limit);
+    edges_coord_per_node.resize(loaded_node_index_limit);
+    for (auto &layer_edges : edges_coord_per_layer_) {
+      layer_edges.resize(loaded_node_index_limit);
+    }
+    for (auto &layer_neighbors : edges_coord_per_layer_nodes_) {
+      layer_neighbors.resize(loaded_node_index_limit);
+    }
+  }
+
   // Make addable indices correct and rebuild active_indices_
   while (!addable_node_indicies.empty())
     addable_node_indicies.pop();
@@ -1503,6 +1557,7 @@ void GrowingNeuralGas<T_angle, T_coord>::setParams(
 
   if (resize_needed) {
     nodes.assign(params_.max_node_num, NeuronNode<T_angle, T_coord>());
+    active_indices_.clear();
     while (!addable_node_indicies.empty())
       addable_node_indicies.pop();
     for (int i = 0; i < (int)nodes.size(); ++i) {

@@ -1,4 +1,5 @@
 import os
+import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -22,9 +23,29 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
+def load_root_params(params_file: str) -> dict:
+    if not params_file or not os.path.exists(params_file):
+        return {}
+    try:
+        with open(params_file, "r", encoding="utf-8") as f:
+            params_yaml = yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+    for root_key in ("/**", "ros__parameters"):
+        candidate = params_yaml.get(root_key, {})
+        if isinstance(candidate, dict) and "ros__parameters" in candidate:
+            candidate = candidate.get("ros__parameters", {})
+        if isinstance(candidate, dict):
+            return candidate
+    return {}
+
+
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
-    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context)
+    params_file = LaunchConfiguration("params_file").perform(context).strip()
+    root_params = load_root_params(params_file)
+    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context) or str(root_params.get("urdf_path", "")).strip()
     if not robot_urdf_raw:
         raise FileNotFoundError(
             "No robot description path was provided. "
@@ -51,8 +72,10 @@ def launch_setup(context, *args, **kwargs):
     ]
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         # We assume Gazebo is already running or started separately
         OpaqueFunction(function=launch_setup)

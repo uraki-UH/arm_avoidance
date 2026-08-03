@@ -74,6 +74,9 @@ bool RobotDescriptionPlayer::loadDescription(std::string &out_text) const {
   }
 
   out_text = robot_sim::common::resolvePackageUris(out_text);
+  out_text = robot_sim::common::rewriteRelativeMeshUris(
+      out_text, resource_root_dir_, mesh_root_dir_);
+  out_text = robot_sim::common::inlineReferencedMaterialColors(out_text);
   return !out_text.empty();
 }
 

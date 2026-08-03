@@ -1,4 +1,5 @@
 import os
+import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -23,15 +24,38 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
+def load_root_params(params_file: str) -> dict:
+    if not params_file or not os.path.exists(params_file):
+        return {}
+    try:
+        with open(params_file, "r", encoding="utf-8") as f:
+            params_yaml = yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+    for root_key in ("/**", "ros__parameters"):
+        candidate = params_yaml.get(root_key, {})
+        if isinstance(candidate, dict) and "ros__parameters" in candidate:
+            candidate = candidate.get("ros__parameters", {})
+        if isinstance(candidate, dict):
+            return candidate
+    return {}
+
+
 def launch_setup(context, *args, **kwargs):
-    pkg_share = get_package_share_directory("gng_vlut_system")
     robot_name = LaunchConfiguration("robot_name").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
     joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
-    resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip()
-    mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip()
+    robot_description_topic = LaunchConfiguration("robot_description_topic").perform(context).strip() or "robot_description"
+    if not robot_description_topic.startswith("/"):
+        robot_description_topic = f"/{robot_name}/{robot_description_topic}"
+    use_preview_pose = LaunchConfiguration("use_preview_pose").perform(context).lower() in ("true", "1", "yes", "on")
+    params_file = LaunchConfiguration("params_file").perform(context).strip()
+    root_params = load_root_params(params_file)
+    resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip() or str(root_params.get("resource_root_dir", "")).strip()
+    mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip() or str(root_params.get("mesh_root_dir", "")).strip()
 
-    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context)
+    robot_urdf_raw = LaunchConfiguration("urdf_path").perform(context) or str(root_params.get("urdf_path", "")).strip()
     if not robot_urdf_raw:
         raise FileNotFoundError(
             "No robot description path was provided. "
@@ -50,13 +74,34 @@ def launch_setup(context, *args, **kwargs):
     nodes = []
 
     if enable_joint_state_publisher:
+        joint_state_params = {
+            "robot_description": ParameterValue(Command(xacro_cmd), value_type=str),
+        }
+        if use_preview_pose:
+            joint_state_params.update({
+                "zeros.L_joint1": 0.35,
+                "zeros.L_joint2": 0.45,
+                "zeros.L_joint3": -0.35,
+                "zeros.L_joint4": 0.75,
+                "zeros.L_joint6": 0.45,
+                "zeros.R_joint1": 0.35,
+                "zeros.R_joint2": -0.45,
+                "zeros.R_joint3": 0.35,
+                "zeros.R_joint4": 0.75,
+                "zeros.R_joint6": 0.45,
+                "zeros.L_gripper_joint": 0.018,
+                "zeros.R_gripper_joint": 0.018,
+            })
         nodes.append(
             Node(
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
                 namespace=robot_name,
-                parameters=[{"robot_description": ParameterValue(Command(xacro_cmd), value_type=str)}],
-                remappings=[("joint_states", joint_state_topic or f"/{robot_name}/joint_states")],
+                parameters=[joint_state_params],
+                remappings=[
+                    ("joint_states", joint_state_topic or f"/{robot_name}/joint_states"),
+                    ("robot_description", robot_description_topic),
+                ],
             )
         )
 
@@ -83,6 +128,7 @@ def launch_setup(context, *args, **kwargs):
                 "urdf_path": robot_urdf,
                 "resource_root_dir": resource_root_dir,
                 "mesh_root_dir": mesh_root_dir,
+                "topic_name": robot_description_topic,
             }]
         )
     ])
@@ -90,12 +136,16 @@ def launch_setup(context, *args, **kwargs):
     return nodes
 
 def generate_launch_description():
+    pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
+        DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("joint_state_topic", default_value=""),
+        DeclareLaunchArgument("robot_description_topic", default_value="robot_description"),
+        DeclareLaunchArgument("use_preview_pose", default_value="false"),
         OpaqueFunction(function=launch_setup)
     ])
