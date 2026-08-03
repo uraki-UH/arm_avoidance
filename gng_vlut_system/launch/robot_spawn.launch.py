@@ -49,7 +49,6 @@ def launch_setup(context, *args, **kwargs):
     robot_description_topic = LaunchConfiguration("robot_description_topic").perform(context).strip() or "robot_description"
     if not robot_description_topic.startswith("/"):
         robot_description_topic = f"/{robot_name}/{robot_description_topic}"
-    use_preview_pose = LaunchConfiguration("use_preview_pose").perform(context).lower() in ("true", "1", "yes", "on")
     params_file = LaunchConfiguration("params_file").perform(context).strip()
     root_params = load_root_params(params_file)
     resource_root_dir = LaunchConfiguration("resource_root_dir").perform(context).strip() or str(root_params.get("resource_root_dir", "")).strip()
@@ -77,21 +76,6 @@ def launch_setup(context, *args, **kwargs):
         joint_state_params = {
             "robot_description": ParameterValue(Command(xacro_cmd), value_type=str),
         }
-        if use_preview_pose:
-            joint_state_params.update({
-                "zeros.L_joint1": 0.35,
-                "zeros.L_joint2": 0.45,
-                "zeros.L_joint3": -0.35,
-                "zeros.L_joint4": 0.75,
-                "zeros.L_joint6": 0.45,
-                "zeros.R_joint1": 0.35,
-                "zeros.R_joint2": -0.45,
-                "zeros.R_joint3": 0.35,
-                "zeros.R_joint4": 0.75,
-                "zeros.R_joint6": 0.45,
-                "zeros.L_gripper_joint": 0.018,
-                "zeros.R_gripper_joint": 0.018,
-            })
         nodes.append(
             Node(
                 package="joint_state_publisher",
@@ -115,6 +99,7 @@ def launch_setup(context, *args, **kwargs):
                 "frame_prefix": robot_name + "/"
             }],
             remappings=[
+                ("joint_states", joint_state_topic or f"/{robot_name}/joint_states"),
                 ("tf", "/tf"),
                 ("tf_static", "/tf_static"),
             ]
@@ -146,6 +131,5 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
         DeclareLaunchArgument("joint_state_topic", default_value=""),
         DeclareLaunchArgument("robot_description_topic", default_value="robot_description"),
-        DeclareLaunchArgument("use_preview_pose", default_value="false"),
         OpaqueFunction(function=launch_setup)
     ])

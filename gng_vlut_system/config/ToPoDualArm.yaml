@@ -119,6 +119,10 @@
       enabled: true
       path_prefix: ""
       topic_prefix: "topological_map_visualization"
+      trajectory_input_topic: "planned_topological_map"
+      trajectory_topic_prefix: "planned_topological_map_visualization"
+      candidate_trajectory_input_topic: "candidate_topological_map"
+      candidate_trajectory_topic_prefix: "candidate_topological_map_visualization"
 
     # --- Self Recognition Settings ---
     self_recognition:

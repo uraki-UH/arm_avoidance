@@ -82,6 +82,14 @@ public:
     declare_parameter("visualization_gng.path_prefix", "");
     declare_parameter("visualization_gng.topic_prefix",
                       "topological_map_visualization");
+    declare_parameter("visualization_gng.trajectory_input_topic",
+                      "planned_topological_map");
+    declare_parameter("visualization_gng.trajectory_topic_prefix",
+                      "planned_topological_map_visualization");
+    declare_parameter("visualization_gng.candidate_trajectory_input_topic",
+                      "candidate_topological_map");
+    declare_parameter("visualization_gng.candidate_trajectory_topic_prefix",
+                      "candidate_topological_map_visualization");
 
     declare_parameter("urdf_path", "");
     declare_parameter("robot.arm_leaf_link_names", "");
@@ -179,6 +187,7 @@ public:
       }
     }
     initializeVisualizationGng(gng_path, layer_count);
+    initializeVisualizationTrajectoryBridge();
 
     publish_timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz_)),
@@ -412,6 +421,11 @@ private:
     }
     const std::string topic_prefix =
         get_parameter("visualization_gng.topic_prefix").as_string();
+    const std::string trajectory_topic_prefix =
+        get_parameter("visualization_gng.trajectory_topic_prefix").as_string();
+    const std::string candidate_trajectory_topic_prefix =
+        get_parameter("visualization_gng.candidate_trajectory_topic_prefix")
+            .as_string();
 
     for (int layer = 0; layer < layer_count; ++layer) {
       const auto path = robot_sim::visualization::visualizationGngLayerPath(
@@ -441,16 +455,101 @@ private:
       VisualizationLayer visual_layer;
       visual_layer.layer = layer;
       visual_layer.model = std::move(model);
+      visual_layer.source_to_visual.assign(context_->gng->getNodes().size(),
+                                           -1);
+      std::size_t mapped_source_count = 0;
+      for (std::size_t visual_index = 0;
+           visual_index < visual_layer.model.nodes.size(); ++visual_index) {
+        for (const int source_id :
+             visual_layer.model.nodes[visual_index].source_node_ids) {
+          if (source_id < 0 ||
+              static_cast<std::size_t>(source_id) >=
+                  visual_layer.source_to_visual.size()) {
+            continue;
+          }
+          auto &mapped =
+              visual_layer.source_to_visual[static_cast<std::size_t>(source_id)];
+          if (mapped < 0) {
+            mapped = static_cast<std::int32_t>(visual_index);
+            ++mapped_source_count;
+          } else if (mapped != static_cast<std::int32_t>(visual_index)) {
+            RCLCPP_WARN(get_logger(),
+                        "Visualization GNG layer %d source node %d has "
+                        "multiple visual memberships",
+                        layer, source_id);
+          }
+        }
+      }
       visual_layer.publisher =
           create_publisher<ais_gng_msgs::msg::TopologicalMap>(
               topic_prefix + "_layer_" + std::to_string(layer),
               rclcpp::QoS(1).reliable().transient_local());
+      if (!trajectory_topic_prefix.empty()) {
+        visual_layer.trajectory_publisher =
+            create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+                trajectory_topic_prefix + "_layer_" + std::to_string(layer),
+                rclcpp::QoS(1).reliable().transient_local());
+      }
+      if (!candidate_trajectory_topic_prefix.empty()) {
+        visual_layer.candidate_trajectory_publisher =
+            create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+                candidate_trajectory_topic_prefix + "_layer_" +
+                    std::to_string(layer),
+                rclcpp::QoS(1).reliable().transient_local());
+      }
       RCLCPP_INFO(get_logger(),
                   "Loaded visualization GNG layer %d: nodes=%zu edges=%zu "
-                  "topic=%s_layer_%d",
+                  "mapped_sources=%zu topic=%s_layer_%d",
                   layer, visual_layer.model.nodes.size(),
-                  visual_layer.model.edges.size(), topic_prefix.c_str(), layer);
+                  visual_layer.model.edges.size(), mapped_source_count,
+                  topic_prefix.c_str(), layer);
       visualization_layers_.push_back(std::move(visual_layer));
+    }
+  }
+
+  void initializeVisualizationTrajectoryBridge() {
+    if (visualization_layers_.empty()) {
+      return;
+    }
+    const auto qos = rclcpp::QoS(1).reliable().transient_local();
+    const std::string trajectory_input =
+        get_parameter("visualization_gng.trajectory_input_topic").as_string();
+    if (!trajectory_input.empty()) {
+      visualization_trajectory_sub_ =
+          create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+              trajectory_input, qos,
+              [this](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                publishVisualizationTrajectory(*msg, false);
+              });
+    }
+    const std::string candidate_input =
+        get_parameter("visualization_gng.candidate_trajectory_input_topic")
+            .as_string();
+    if (!candidate_input.empty()) {
+      visualization_candidate_trajectory_sub_ =
+          create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+              candidate_input, qos,
+              [this](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                publishVisualizationTrajectory(*msg, true);
+              });
+    }
+  }
+
+  void publishVisualizationTrajectory(
+      const ais_gng_msgs::msg::TopologicalMap &source_path,
+      bool candidate) {
+    std::lock_guard<std::mutex> lock(update_mutex_);
+    for (auto &visual_layer : visualization_layers_) {
+      const auto &publisher = candidate
+                                  ? visual_layer.candidate_trajectory_publisher
+                                  : visual_layer.trajectory_publisher;
+      if (!publisher || !visual_layer.cached_graph_valid) {
+        continue;
+      }
+      publisher->publish(
+          robot_sim::bridge::topofuzzy::buildVisualizationPathMessage(
+              source_path, visual_layer.cached_graph,
+              visual_layer.source_to_visual));
     }
   }
 
@@ -478,10 +577,14 @@ private:
       if (!visual_layer.publisher) {
         continue;
       }
-      visual_layer.publisher->publish(
+      auto message =
           robot_sim::bridge::topofuzzy::buildVisualizationGngMessage(
               *this, context_->gng, visual_layer.model, tf_buffer_, frame_id_,
-              source_frame_id_));
+              source_frame_id_);
+      visual_layer.cached_graph_valid =
+          message.nodes.size() == visual_layer.model.nodes.size();
+      visual_layer.cached_graph = message;
+      visual_layer.publisher->publish(std::move(message));
     }
   }
 
@@ -542,7 +645,14 @@ private:
   struct VisualizationLayer {
     int layer = 0;
     robot_sim::visualization::VisualizationGngModel model;
+    std::vector<std::int32_t> source_to_visual;
+    ais_gng_msgs::msg::TopologicalMap cached_graph;
+    bool cached_graph_valid = false;
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher;
+    rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
+        trajectory_publisher;
+    rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
+        candidate_trajectory_publisher;
   };
 
   std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;
@@ -558,6 +668,10 @@ private:
       node_feature_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
   std::vector<VisualizationLayer> visualization_layers_;
+  rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
+      visualization_trajectory_sub_;
+  rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
+      visualization_candidate_trajectory_sub_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   std::mutex update_mutex_;

@@ -56,6 +56,93 @@ inline uint8_t viewerLabelFromStatus(const GNG::Status &status) {
   return 1;
 }
 
+inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
+    const ais_gng_msgs::msg::TopologicalMap &source_path,
+    const ais_gng_msgs::msg::TopologicalMap &visualization_graph,
+    const std::vector<std::int32_t> &source_to_visual) {
+  ais_gng_msgs::msg::TopologicalMap out;
+  out.header = visualization_graph.header;
+  out.header.stamp = source_path.header.stamp;
+  out.frame_number = source_path.frame_number;
+
+  const bool source_frame_matches =
+      source_path.header.frame_id.empty() ||
+      source_path.header.frame_id == visualization_graph.header.frame_id;
+  std::vector<std::int32_t> input_to_output(source_path.nodes.size(), -1);
+  std::vector<std::int32_t> visual_to_output(visualization_graph.nodes.size(),
+                                              -1);
+  constexpr std::uint16_t kCurrentPoseNodeId =
+      std::numeric_limits<std::uint16_t>::max();
+  std::int32_t current_pose_output = -1;
+
+  out.nodes.reserve(source_path.nodes.size());
+  for (std::size_t input_index = 0; input_index < source_path.nodes.size();
+       ++input_index) {
+    const auto &source_node = source_path.nodes[input_index];
+    if (source_node.id == kCurrentPoseNodeId) {
+      if (!source_frame_matches) {
+        continue;
+      }
+      if (current_pose_output < 0) {
+        current_pose_output = static_cast<std::int32_t>(out.nodes.size());
+        out.nodes.push_back(source_node);
+      }
+      input_to_output[input_index] = current_pose_output;
+      continue;
+    }
+
+    const std::size_t source_id = source_node.id;
+    if (source_id >= source_to_visual.size()) {
+      continue;
+    }
+    const std::int32_t visual_id = source_to_visual[source_id];
+    if (visual_id < 0 ||
+        static_cast<std::size_t>(visual_id) >= visualization_graph.nodes.size()) {
+      continue;
+    }
+
+    auto &output_index =
+        visual_to_output[static_cast<std::size_t>(visual_id)];
+    if (output_index < 0) {
+      output_index = static_cast<std::int32_t>(out.nodes.size());
+      out.nodes.push_back(
+          visualization_graph.nodes[static_cast<std::size_t>(visual_id)]);
+    }
+    input_to_output[input_index] = output_index;
+  }
+
+  std::unordered_set<std::uint64_t> seen_edges;
+  out.edges.reserve(source_path.edges.size());
+  for (std::size_t edge_index = 0; edge_index + 1 < source_path.edges.size();
+       edge_index += 2) {
+    const std::size_t source_index = source_path.edges[edge_index];
+    const std::size_t target_index = source_path.edges[edge_index + 1];
+    if (source_index >= input_to_output.size() ||
+        target_index >= input_to_output.size()) {
+      continue;
+    }
+    const std::int32_t mapped_source = input_to_output[source_index];
+    const std::int32_t mapped_target = input_to_output[target_index];
+    if (mapped_source < 0 || mapped_target < 0 ||
+        mapped_source == mapped_target) {
+      continue;
+    }
+
+    const std::uint32_t lo = static_cast<std::uint32_t>(
+        std::min(mapped_source, mapped_target));
+    const std::uint32_t hi = static_cast<std::uint32_t>(
+        std::max(mapped_source, mapped_target));
+    const std::uint64_t edge_key =
+        (static_cast<std::uint64_t>(lo) << 32U) | hi;
+    if (!seen_edges.insert(edge_key).second) {
+      continue;
+    }
+    out.edges.push_back(static_cast<std::uint16_t>(mapped_source));
+    out.edges.push_back(static_cast<std::uint16_t>(mapped_target));
+  }
+  return out;
+}
+
 template <typename GNGType>
 inline ais_gng_msgs::msg::TopologicalMap buildVisualizationGngMessage(
     rclcpp::Node &node, const std::shared_ptr<GNGType> &source_gng,

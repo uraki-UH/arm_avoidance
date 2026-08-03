@@ -474,11 +474,34 @@ version 1のままである。
 | `visualization_gng.enabled` | `false` | 可視化GNGの読み込みと配信 |
 | `visualization_gng.path_prefix` | 空 | 空なら元`gng.bin`と同じ場所の`visualization_gng` |
 | `visualization_gng.topic_prefix` | `topological_map_visualization` | layer suffixを付けるtopic接頭辞 |
+| `visualization_gng.trajectory_input_topic` | `planned_topological_map` | 元GNG IDで表された実行軌道入力 |
+| `visualization_gng.trajectory_topic_prefix` | `planned_topological_map_visualization` | 可視化ノード軌道の出力接頭辞 |
+| `visualization_gng.candidate_trajectory_input_topic` | `candidate_topological_map` | 元GNG IDで表された候補軌道入力 |
+| `visualization_gng.candidate_trajectory_topic_prefix` | `candidate_topological_map_visualization` | 可視化候補軌道の出力接頭辞 |
 
 `ToPoDualArm.yaml`では有効化済みで、現在の出力は
 `/ToPoDualArm/topological_map_visualization_layer_0`、型は
 `ais_gng_msgs/msg/TopologicalMap`である。既存の
 `/ToPoDualArm/topological_map_static`とlayer topicは変更しない。
+
+bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
+`source_node_id -> visual_node_id`逆引き配列を`O(n)`で1回だけ構築する。
+元軌道topicを受信した後は各元ノードを`O(1)`で引き、ノード列とedge列を1回走査する。
+単一路径長を`L`とすると変換は`O(L)`であり、FKと最近傍探索は実行しない。
+
+ToPoDualArmの追加出力は次のとおりで、いずれも
+`ais_gng_msgs/msg/TopologicalMap`である。
+
+| 入力 | layer 0出力 |
+|---|---|
+| `/ToPoDualArm/planned_topological_map` | `/ToPoDualArm/planned_topological_map_visualization_layer_0` |
+| `/ToPoDualArm/candidate_topological_map` | `/ToPoDualArm/candidate_topological_map_visualization_layer_0` |
+
+複数の元ノードが同じ可視化ノードへ対応する場合は1ノードへ統合し、自己loopと
+重複edgeを除去する。ID `65535`の現在姿勢仮想ノードは入力と可視化graphのframeが
+一致するときだけ位置を保持して出力する。空入力は空の可視化軌道として配信する。
+この変換は元軌道ノードの所属先を直接つなぐ段階であり、angle edgeのFK補間に基づく
+中間可視化ノード列の事前展開はまだ行わない。
 
 状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
 safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
@@ -503,8 +526,12 @@ flowchart TD
     A[topofuzzy_bridge起動] --> B[元GNGとvisualization binを読込]
     B --> C{layerとsignature一致?}
     C -- no --> D[警告してそのlayerを配信しない]
-    C -- yes --> E[元ノードStatusをbest-wins集約]
-    E --> F[TopologicalMapを生成]
-    F --> G[topological_map_visualization_layer_n]
-    H[occupied/danger voxel更新] --> E
+    C -- yes --> E[source IDからvisual IDへの逆引きをO nで構築]
+    E --> F[元ノードStatusをbest-wins集約]
+    F --> G[TopologicalMapを生成]
+    G --> H[topological_map_visualization_layer_n]
+    I[occupied/danger voxel更新] --> F
+    J[planned/candidate topological map] --> K[各source IDをO 1でvisual IDへ変換]
+    K --> L[自己loopと重複edgeを除去]
+    L --> M[visualization trajectory layer_n]
 ```

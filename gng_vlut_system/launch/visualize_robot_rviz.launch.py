@@ -17,10 +17,9 @@ def generate_launch_description():
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="true"),
-        DeclareLaunchArgument("joint_state_topic", default_value=""),
+        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument("joint_state_topic", default_value="viewer_joint_states"),
         DeclareLaunchArgument("robot_description_topic", default_value="rviz_robot_description"),
-        DeclareLaunchArgument("use_preview_pose", default_value="true"),
         DeclareLaunchArgument("fixed_frame", default_value="world"),
         DeclareLaunchArgument("robot_base_frame", default_value="ToPoDualArm/base_footprint"),
         DeclareLaunchArgument("rviz_config", default_value=rviz_config_default),
@@ -36,7 +35,6 @@ def generate_launch_description():
                 "enable_joint_state_publisher": LaunchConfiguration("enable_joint_state_publisher"),
                 "joint_state_topic": LaunchConfiguration("joint_state_topic"),
                 "robot_description_topic": LaunchConfiguration("robot_description_topic"),
-                "use_preview_pose": LaunchConfiguration("use_preview_pose"),
             }.items()
         ),
 
