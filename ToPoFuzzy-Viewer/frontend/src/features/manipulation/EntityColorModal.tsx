@@ -6,7 +6,9 @@ import {
     LayerSettings,
     RobotSettings,
     STATIC_GNG_DEFAULTS,
+    TRAJECTORY_GNG_DEFAULTS,
     VoxelSettings,
+    isTrajectoryGraphTag,
 } from '../../types';
 
 type ColorEntityType = 'robot' | 'voxel' | 'graph';
@@ -35,9 +37,15 @@ export function EntityColorModal({
     if (!open || !settings) return null;
 
     const isStaticGraph = entityType === 'graph' && graphData?.mode === 'static';
-    const graphDefaultColor = isStaticGraph ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor;
-    const graphDefaultEdgeColor = isStaticGraph ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor;
-    const graphDefaultOpacity = isStaticGraph ? STATIC_GNG_DEFAULTS.opacity : 1.0;
+    const isTrajectoryGraph = entityType === 'graph' && isTrajectoryGraphTag(graphData?.tag || '');
+    const graphDefaultColor = isTrajectoryGraph
+        ? TRAJECTORY_GNG_DEFAULTS.nodeColor
+        : isStaticGraph ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor;
+    const graphDefaultEdgeColor = isTrajectoryGraph
+        ? TRAJECTORY_GNG_DEFAULTS.edgeColor
+        : isStaticGraph ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor;
+    const graphDefaultNodeOpacity = isStaticGraph ? STATIC_GNG_DEFAULTS.nodeOpacity : DYNAMIC_GNG_DEFAULTS.nodeOpacity;
+    const graphDefaultEdgeOpacity = isStaticGraph ? STATIC_GNG_DEFAULTS.edgeOpacity : DYNAMIC_GNG_DEFAULTS.edgeOpacity;
     const graphDefaultEmissive = isStaticGraph ? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity : DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity;
 
     const robotSettings = settings as RobotSettings;
@@ -203,7 +211,7 @@ export function EntityColorModal({
                                     label="Edge Width"
                                     value={layerSettings.edgeWidth ?? 0.003}
                                     min={0.001}
-                                    max={0.03}
+                                    max={0.06}
                                     step={0.001}
                                     onChange={(v) => onUpdate({ edgeWidth: v })}
                                     formatValue={(v) => v.toFixed(3)}
@@ -237,12 +245,21 @@ export function EntityColorModal({
                                 </div>
                             </div>
                             <ControlSlider
-                                label="Opacity"
-                                value={layerSettings.opacity ?? graphDefaultOpacity}
+                                label="Node Opacity"
+                                value={layerSettings.nodeOpacity ?? graphDefaultNodeOpacity}
                                 min={0}
                                 max={1}
                                 step={0.01}
-                                onChange={(v) => onUpdate({ opacity: v })}
+                                onChange={(v) => onUpdate({ nodeOpacity: v })}
+                                formatValue={(v) => `${Math.round(v * 100)}%`}
+                            />
+                            <ControlSlider
+                                label="Edge Opacity"
+                                value={layerSettings.edgeOpacity ?? graphDefaultEdgeOpacity}
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                onChange={(v) => onUpdate({ edgeOpacity: v })}
                                 formatValue={(v) => `${Math.round(v * 100)}%`}
                             />
                             <ControlSlider

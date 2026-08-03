@@ -39,6 +39,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -455,8 +456,12 @@ private:
       VisualizationLayer visual_layer;
       visual_layer.layer = layer;
       visual_layer.model = std::move(model);
-      visual_layer.source_to_visual.assign(context_->gng->getNodes().size(),
-                                           -1);
+      int max_source_node_id = -1;
+      for (const auto &source_node : context_->gng->getNodes()) {
+        max_source_node_id = std::max(max_source_node_id, source_node.id);
+      }
+      visual_layer.source_to_visual.assign(
+          static_cast<std::size_t>(max_source_node_id + 1), -1);
       std::size_t mapped_source_count = 0;
       for (std::size_t visual_index = 0;
            visual_index < visual_layer.model.nodes.size(); ++visual_index) {
@@ -553,6 +558,17 @@ private:
       const ais_gng_msgs::msg::TopologicalMap &source_path,
       bool candidate) {
     std::lock_guard<std::mutex> lock(update_mutex_);
+    if (candidate) {
+      latest_visualization_candidate_trajectory_ = source_path;
+    } else {
+      latest_visualization_trajectory_ = source_path;
+    }
+    publishVisualizationTrajectoryLocked(source_path, candidate);
+  }
+
+  void publishVisualizationTrajectoryLocked(
+      const ais_gng_msgs::msg::TopologicalMap &source_path,
+      bool candidate) {
     for (auto &visual_layer : visualization_layers_) {
       const auto &publisher = candidate
                                   ? visual_layer.candidate_trajectory_publisher
@@ -600,6 +616,14 @@ private:
           message.nodes.size() == visual_layer.model.nodes.size();
       visual_layer.cached_graph = message;
       visual_layer.publisher->publish(std::move(message));
+    }
+    if (latest_visualization_trajectory_) {
+      publishVisualizationTrajectoryLocked(
+          *latest_visualization_trajectory_, false);
+    }
+    if (latest_visualization_candidate_trajectory_) {
+      publishVisualizationTrajectoryLocked(
+          *latest_visualization_candidate_trajectory_, true);
     }
   }
 
@@ -688,6 +712,10 @@ private:
       visualization_trajectory_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
       visualization_candidate_trajectory_sub_;
+  std::optional<ais_gng_msgs::msg::TopologicalMap>
+      latest_visualization_trajectory_;
+  std::optional<ais_gng_msgs::msg::TopologicalMap>
+      latest_visualization_candidate_trajectory_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   std::mutex update_mutex_;

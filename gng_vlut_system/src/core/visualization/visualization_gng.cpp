@@ -16,7 +16,7 @@ namespace {
 constexpr std::array<char, 8> kMagic = {'V', 'I', 'Z', 'G', 'N', 'G', '2', '\0'};
 constexpr std::uint32_t kVersion = 2;
 constexpr std::uint32_t kMaxSerializedItems = 10000000;
-constexpr std::uint32_t kSourceSignatureSchema = 3;
+constexpr std::uint32_t kSourceSignatureSchema = 4;
 
 struct TrainingNode {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
@@ -530,36 +530,7 @@ VisualizationGngModel trainVisualizationGng(
         {training_nodes[static_cast<std::size_t>(i)].position, {}});
   }
 
-  std::vector<bool> source_assigned(source_points.size(), false);
-  for (auto &visual_node : model.nodes) {
-    std::size_t nearest_source = source_points.size();
-    float nearest_distance = std::numeric_limits<float>::infinity();
-    for (std::size_t source_index = 0; source_index < source_points.size();
-         ++source_index) {
-      if (source_assigned[source_index]) {
-        continue;
-      }
-      const float distance =
-          (visual_node.position - source_points[source_index].position)
-              .squaredNorm();
-      if (distance < nearest_distance) {
-        nearest_source = source_index;
-        nearest_distance = distance;
-      }
-    }
-    if (nearest_source < source_points.size()) {
-      visual_node.source_node_ids.push_back(
-          source_points[nearest_source].source_node_id);
-      source_assigned[nearest_source] = true;
-    }
-  }
-
-  for (std::size_t source_index = 0; source_index < source_points.size();
-       ++source_index) {
-    if (source_assigned[source_index]) {
-      continue;
-    }
-    const auto &source = source_points[source_index];
+  for (const auto &source : source_points) {
     int nearest = -1;
     float nearest_distance = std::numeric_limits<float>::infinity();
     for (int i = 0; i < static_cast<int>(model.nodes.size()); ++i) {
@@ -574,6 +545,34 @@ VisualizationGngModel trainVisualizationGng(
     if (nearest >= 0) {
       model.nodes[static_cast<std::size_t>(nearest)].source_node_ids.push_back(
           source.source_node_id);
+    }
+  }
+
+  model.nodes.erase(
+      std::remove_if(model.nodes.begin(), model.nodes.end(),
+                     [](const auto &node) {
+                       return node.source_node_ids.empty();
+                     }),
+      model.nodes.end());
+
+  std::unordered_map<int, Eigen::Vector3f> source_position_by_id;
+  source_position_by_id.reserve(source_points.size());
+  for (const auto &source : source_points) {
+    source_position_by_id.emplace(source.source_node_id, source.position);
+  }
+  for (auto &visual_node : model.nodes) {
+    Eigen::Vector3f centroid = Eigen::Vector3f::Zero();
+    std::size_t member_count = 0;
+    for (const int source_id : visual_node.source_node_ids) {
+      const auto source_it = source_position_by_id.find(source_id);
+      if (source_it == source_position_by_id.end()) {
+        continue;
+      }
+      centroid += source_it->second;
+      ++member_count;
+    }
+    if (member_count > 0) {
+      visual_node.position = centroid / static_cast<float>(member_count);
     }
   }
 

@@ -67,6 +67,11 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
         DeclareLaunchArgument("spawn_z", default_value="0.5"),
+        DeclareLaunchArgument("static_model", default_value="false"),
+        DeclareLaunchArgument("follow_tf_frame", default_value=""),
+        DeclareLaunchArgument("follow_tf_reference_frame", default_value="world"),
+        DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
+        DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
         DeclareLaunchArgument("gui", default_value="true"),
         DeclareLaunchArgument(
             "world",
@@ -94,7 +99,6 @@ def generate_launch_description():
                 "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
                 "spawn_z": LaunchConfiguration("spawn_z"),
                 "resource_root_dir": LaunchConfiguration("resource_root_dir"),
-                "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
             }.items()
         ),
 
@@ -111,7 +115,6 @@ def generate_launch_description():
         # 4. Start GNG/VLUT Monitor
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gng_vlut_monitor.launch.py")),
-            condition=None, # We'll use the argument inside or a condition here
             launch_arguments={
                 "robot_name": LaunchConfiguration("robot_name"),
                 "params_file": LaunchConfiguration("params_file"),

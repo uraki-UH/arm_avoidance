@@ -17,6 +17,8 @@ import {
     LayerSettings,
     STATIC_GNG_DEFAULTS,
     DYNAMIC_GNG_DEFAULTS,
+    TRAJECTORY_GNG_DEFAULTS,
+    isTrajectoryGraphTag,
     ClippingPlane,
     ClippingAxis
 } from './types';
@@ -293,7 +295,16 @@ function App() {
 
         Object.keys(graphData).forEach(tag => {
             const isStatic = graphData[tag]?.mode === 'static';
+            const isTrajectory = isTrajectoryGraphTag(tag);
             const hasManipulabilityData = graphHasManipulabilityData(graphData[tag]);
+            const previousNodeColor = isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor;
+            const previousEdgeColor = isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor;
+            const migrateNodeColor = isTrajectory && (
+                !newSettings[tag]?.nodeColor || newSettings[tag].nodeColor === previousNodeColor
+            );
+            const migrateEdgeColor = isTrajectory && (
+                !newSettings[tag]?.edgeColor || newSettings[tag].edgeColor === previousEdgeColor
+            );
             if (!newSettings[tag]) {
                 newSettings[tag] = {
                     visible: true,
@@ -317,15 +328,16 @@ function App() {
                     showManipulabilityEllipsoids: false,
                     manipEllipsoidMode: 'all',
                     manipEllipsoidType: 'translational',
-                    opacity: STATIC_GNG_DEFAULTS.opacity,
+                    nodeOpacity: STATIC_GNG_DEFAULTS.nodeOpacity,
+                    edgeOpacity: STATIC_GNG_DEFAULTS.edgeOpacity,
                     graphTransform: {
                         position: [0, 0, 0],
                         rotation: [0, 0, 0],
                         scale: [1, 1, 1],
                     },
                     ...(isStatic ? {
-                        nodeColor: STATIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: STATIC_GNG_DEFAULTS.edgeColor,
+                        nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : STATIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : STATIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
                         covarianceEllipsoidColor: '#aefeff',
@@ -334,8 +346,8 @@ function App() {
                         covarianceEllipsoidScale: 2.0,
                         emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     } : {
-                        nodeColor: DYNAMIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: DYNAMIC_GNG_DEFAULTS.edgeColor,
+                        nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
+                        edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
                         normalColor: '#00ffff',
                         velocityColor: '#ffb347',
                         covarianceEllipsoidColor: '#aefeff',
@@ -344,6 +356,17 @@ function App() {
                         covarianceEllipsoidScale: 2.0,
                         emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
                     })
+                };
+                changed = true;
+            } else if (migrateNodeColor || migrateEdgeColor) {
+                newSettings[tag] = {
+                    ...newSettings[tag],
+                    nodeColor: migrateNodeColor
+                        ? TRAJECTORY_GNG_DEFAULTS.nodeColor
+                        : newSettings[tag].nodeColor,
+                    edgeColor: migrateEdgeColor
+                        ? TRAJECTORY_GNG_DEFAULTS.edgeColor
+                        : newSettings[tag].edgeColor,
                 };
                 changed = true;
             } else if (!newSettings[tag].visibleLabels) {
@@ -1090,7 +1113,8 @@ function App() {
                                 tag,
                                 data,
                                 visible: true,
-                                opacity: settings.opacity,
+                                nodeOpacity: settings.nodeOpacity,
+                                edgeOpacity: settings.edgeOpacity,
                                 tf,
                                 manualTransform: settings.graphTransform,
                                 nodeColor: settings.nodeColor,

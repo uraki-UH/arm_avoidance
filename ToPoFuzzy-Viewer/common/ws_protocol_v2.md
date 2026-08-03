@@ -38,7 +38,7 @@
 
 ### Graph Stream
 ```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [], "edges": [], "clusters": [] } }
+{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false }], "edges": [], "clusters": [] } }
 ```
 
 ### Edit Job Progress

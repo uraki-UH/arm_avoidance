@@ -385,7 +385,7 @@ flowchart TD
 
 | データ | 所有元 | 用途 |
 |---|---|---|
-| `VisualizationGngNode::position` | 可視化GNG | 3次元描画位置 |
+| `VisualizationGngNode::position` | 可視化GNG | 所属する元手先位置の重心 |
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
 | `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
 | `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
@@ -410,9 +410,10 @@ flowchart TD
 | `max_joint_step` | 0.05 rad | 元angle edgeをFK補間するときの1区間あたり最大関節差 |
 | `max_samples_per_edge` | 256 | 元angle edge 1本あたりの補間サンプル上限 |
 
-学習後は、各可視化ノードへ未割当の元ノードを最近傍順で1個ずつ先に割り当て、
-残りを最近傍可視化ノードへ割り当てる。これにより全可視化ノードが1個以上の
-`source_node_ids`を持ち、各元ノードIDはちょうど1回だけ格納される。
+学習後は、全元ノードを`weight_coords[layer]`の3次元距離だけで最近傍可視化ノードへ
+割り当てる。未所属の可視化ノードは除去し、残った各可視化ノードの位置を所属する
+元ノードの`weight_coords[layer]`の重心へ置き直す。遠い元ノードを空ノードへ強制割当
+しない。各元ノードIDはちょうど1回だけ`source_node_ids`へ格納される。
 その後、元angle-space edgeの両端にある`weight_angle`を線形補間し、各補間姿勢を
 URDFのFKで`weight_coords[layer]`と同じ手先位置へ変換する。補間位置に最も近い
 可視化ノードを3次元位置だけで選び、連続する同一IDを除去する。両端は必ず
@@ -432,8 +433,8 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 
 `--output-prefix`省略時は、入力binと同じディレクトリへ
 `visualization_gng_layer_<layer>.bin`を生成する。ToPoDualArm3の現モデルは
-coord layerが1つで、941元ノードから500可視化ノード、3,108遷移エッジを生成する。
-ToPoDualArm10000は10,801元ノードから500可視化ノード、3,187遷移エッジを生成する。
+coord layerが1つで、941元ノードから475可視化ノード、2,904遷移エッジを生成する。
+ToPoDualArm10000は10,801元ノードから500可視化ノード、3,251遷移エッジを生成する。
 どちらも1連結成分、孤立ノード0である。
 
 941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
@@ -480,7 +481,7 @@ x86_64 little-endianであり、異なるendian間の互換性はversion 2では
 経路両端の可視化ノードIDは`source_node_ids`から復元できるため重複保存しない。
 さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、関節角、
 coord-space edge、angle-space edgeと照合し、古い組み合わせは配信しない。
-signature schemaは3である。version 1との読み込み互換性は持たないため、元GNGごとに
+signature schemaは4である。version 1との読み込み互換性は持たないため、元GNGごとに
 `visualization_gng_trainer`で再生成する。
 
 ### 13.4 ROSパラメータとトピック
@@ -522,6 +523,22 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 出力できる。現在の`TopologicalMap`は同じ可視化ノードへの再訪を1ノードへ統合するため、
 描画用のedge集合は保持するが、厳密な時間順序は保持しない。
 
+候補軌道の各元目標ノードは`ais_gng_msgs/msg/TopologicalNode.is_goal=true`で明示する。
+可視化候補軌道では目標を集約ノードへ置換せず、入力と可視化graphのframeが一致する
+場合に元ノードの座標、法線、状態labelを保持した仮想終端として追加する。仮想目標IDは
+`65534`から降順に割り当てる。Viewerはedgeの入出次数から目標を推測せず、`is_goal`だけで
+紫色表示を決める。候補軌道上の集約ノードは、対応する入力経路のlabelを
+collision、danger、safeの順に保守的に保持し、静的graphのbest-wins集約で上書きしない。
+Viewerでは`planned_topological_map`と`candidate_topological_map`を軌道レイヤーとして扱い、
+safeノードを青`#3b82f6`、edgeを青`#2563eb`で初期表示する。dangerの黄、collisionの赤、
+候補目標の紫は変更しない。旧既定の緑色を保持している軌道レイヤーだけ青へ移行し、
+ユーザーが色設定で変更した値は維持する。
+
+bridgeは最新の実行軌道と候補軌道を保持する。起動直後に静的可視化graphのキャッシュが
+完成する前に軌道を受信しても破棄せず、キャッシュ完成後に再変換して配信する。
+`source_node_id -> visual_node_id`逆引き配列は元ノード数ではなく最大元ノードIDから確保し、
+欠番を含む疎なIDを切り捨てない。
+
 状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
 safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
 
@@ -532,14 +549,15 @@ flowchart TD
     A[元gng.bin] --> B[activeな元ノードを列挙]
     B --> C[layer別 weight_coords weight_angle angle edgeを収集]
     C --> D[3次元GNGを学習]
-    D --> E[全元ノードIDを最近傍visual nodeへ割当]
-    E --> F[元angle edgeの関節角を事前補間]
-    F --> G[URDF FKでlayer別手先位置を計算]
-    G --> H[最近傍visual nodeの順序付き列へ変換]
-    H --> I[直接でない列だけcompact override保存]
-    I --> J[node 座標 関節角 両edgeのsignatureを計算]
-    J --> K[visualization_gng_layer_n.bin]
-    K --> L[保存直後に再読込して所属 edge 遷移列を検証]
+    D --> E[全元ノードIDを位置最近傍visual nodeへ割当]
+    E --> F[空visual nodeを除去し所属位置の重心へ更新]
+    F --> G[元angle edgeの関節角を事前補間]
+    G --> H[URDF FKでlayer別手先位置を計算]
+    H --> I[最近傍visual nodeの順序付き列へ変換]
+    I --> J[直接でない列だけcompact override保存]
+    J --> K[node 座標 関節角 両edgeのsignatureを計算]
+    K --> L[visualization_gng_layer_n.bin]
+    L --> M[保存直後に再読込して所属 edge 遷移列を検証]
 ```
 
 ```mermaid
@@ -557,3 +575,18 @@ flowchart TD
     L --> M[自己loopと重複edgeを除去]
     M --> N[visualization trajectory layer_n]
 ```
+
+## 14. 姿勢VLUTのリンク収録範囲
+
+`offline_urdf_trainer`は各GNGノードの`weight_angle`からURDF FKを行い、profileの
+rootからEEFまでのリンクと、EEFを取り付けた親リンクから分岐する終端部品を
+`vlut_resolution`でボクセル化する。TCPがグリッパ本体の子で、指がTCPの兄弟リンクに
+なるURDFでも、左右指をVLUT対象から落とさない。
+
+直列KinematicChainに含まれない分岐リンクの姿勢は、URDF joint treeを親から補完する。
+GNG対象外の関節は既定値0を使い、mimic jointは参照関節値、倍率、offsetから復元する。
+profileの`voxel_exclude`はこの自動収録後にも適用する。
+
+`ToPoDualArm10000`の`left_arm` profileでは`L_link1`を設定どおり除外し、
+`L_link2`から`L_link7`、`L_gripper_base`、`L_finger_left`、`L_finger_right`を収録する。
+`L_shoulder_mount`と`L_tcp`はcollision geometryを持たないため関係レコードを生成しない。

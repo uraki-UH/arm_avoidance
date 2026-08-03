@@ -167,7 +167,8 @@ export interface LayerSettings {
     showManipulabilityEllipsoids?: boolean;
     manipEllipsoidMode?: 'all' | 'goal';
     manipEllipsoidType?: 'translational' | 'rotational' | 'both';
-    opacity: number;
+    nodeOpacity: number;
+    edgeOpacity: number;
     nodeColor?: string;
     edgeColor?: string;
     normalColor?: string;
@@ -429,7 +430,8 @@ export const SEMANTIC_COLORS = [
 export const STATIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
-    opacity: 0.25,
+    nodeOpacity: 0.3,
+    edgeOpacity: 0.3,
     nodeEmissiveIntensity: 1.00,
     edgeEmissiveIntensity: 1.00,
 } as const;
@@ -437,9 +439,21 @@ export const STATIC_GNG_DEFAULTS = {
 export const DYNAMIC_GNG_DEFAULTS = {
     nodeColor: '#1f8f3a',
     edgeColor: '#08d408',
+    nodeOpacity: 1.0,
+    edgeOpacity: 1.0,
     nodeEmissiveIntensity: 1.00,
     edgeEmissiveIntensity: 1.00,
 } as const;
+
+export const TRAJECTORY_GNG_DEFAULTS = {
+    nodeColor: '#25c3eb',
+    edgeColor: '#25c3eb',
+} as const;
+
+export function isTrajectoryGraphTag(tag: string): boolean {
+    return tag.includes('planned_topological_map') ||
+        tag.includes('candidate_topological_map');
+}
 
 export type ClippingAxis = 'x' | 'y' | 'z' | 'none';
 

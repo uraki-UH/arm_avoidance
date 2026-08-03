@@ -113,10 +113,6 @@ private:
 
     std::vector<std::vector<long>> computeLinkVoxelMasks() const;
     const std::vector<std::vector<long>>& getCachedLinkVoxelMasks() const;
-    void augmentBranchLinkTransforms(std::map<std::string, Eigen::Isometry3d>& link_tfs) const;
-    Eigen::Isometry3d computeJointMotionTransform(const simulation::JointProperties& joint,
-                                                  double joint_value) const;
-    double getJointValueHint(const std::string& joint_name) const;
 
     bool checkSelfCollision();
     bool checkEnvironmentCollision();

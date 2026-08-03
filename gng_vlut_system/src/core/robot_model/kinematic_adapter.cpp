@@ -8,6 +8,50 @@
 
 namespace simulation {
 
+void completeMissingBranchLinkTransforms(
+    const RobotModel &model,
+    const std::map<std::string, double> &joint_value_hints,
+    std::map<std::string, Eigen::Isometry3d> &link_transforms) {
+  const auto joint_value = [&](const std::string &name) {
+    const auto it = joint_value_hints.find(name);
+    return it == joint_value_hints.end() ? 0.0 : it->second;
+  };
+  const auto joint_motion = [](const JointProperties &joint, double value) {
+    Eigen::Isometry3d motion = Eigen::Isometry3d::Identity();
+    if (joint.type == kinematics::JointType::Revolute) {
+      motion.rotate(Eigen::AngleAxisd(value, joint.axis.normalized()));
+    } else if (joint.type == kinematics::JointType::Prismatic) {
+      motion.translate(joint.axis.normalized() * value);
+    }
+    return motion;
+  };
+
+  bool changed = true;
+  std::size_t iteration = 0;
+  while (changed && iteration++ < model.getJoints().size() + 1) {
+    changed = false;
+    for (const auto &[name, joint] : model.getJoints()) {
+      (void)name;
+      if (link_transforms.count(joint.child_link) > 0) {
+        continue;
+      }
+      const auto parent = link_transforms.find(joint.parent_link);
+      if (parent == link_transforms.end()) {
+        continue;
+      }
+
+      double value = joint_value(joint.name);
+      if (joint.has_mimic) {
+        value = joint_value(joint.mimic_joint_name) * joint.mimic_multiplier +
+                joint.mimic_offset;
+      }
+      link_transforms[joint.child_link] =
+          parent->second * joint.origin * joint_motion(joint, value);
+      changed = true;
+    }
+  }
+}
+
 kinematics::KinematicChain
 createKinematicChainFromModel(const RobotModel &model,
                               const std::string &end_effector_name,

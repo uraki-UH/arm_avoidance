@@ -56,6 +56,10 @@ import {
     VoxelData,
     VoxelSettings,
     EntityType,
+    STATIC_GNG_DEFAULTS,
+    DYNAMIC_GNG_DEFAULTS,
+    TRAJECTORY_GNG_DEFAULTS,
+    isTrajectoryGraphTag,
 } from '../types';
 
 interface SidebarContentProps {
@@ -286,7 +290,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     showCovarianceEllipsoids: false,
                                     showManipulabilityEllipsoids: false,
                                     manipEllipsoidMode: 'all',
-                                    opacity: 1.0,
+                                    nodeOpacity: data.mode === 'static' ? STATIC_GNG_DEFAULTS.nodeOpacity : DYNAMIC_GNG_DEFAULTS.nodeOpacity,
+                                    edgeOpacity: data.mode === 'static' ? STATIC_GNG_DEFAULTS.edgeOpacity : DYNAMIC_GNG_DEFAULTS.edgeOpacity,
+                                    nodeColor: isTrajectoryGraphTag(tag)
+                                        ? TRAJECTORY_GNG_DEFAULTS.nodeColor
+                                        : data.mode === 'static' ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
+                                    edgeColor: isTrajectoryGraphTag(tag)
+                                        ? TRAJECTORY_GNG_DEFAULTS.edgeColor
+                                        : data.mode === 'static' ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
                                     normalColor: '#00ffff',
                                     velocityColor: '#ffb347',
                                     covarianceEllipsoidColor: '#aefeff',

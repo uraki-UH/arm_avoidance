@@ -460,13 +460,20 @@ static std::vector<std::string> collectDescendantLinkNames(
 }
 
 static std::vector<std::string> collectBranchDescendantLinkNames(
-    const simulation::RobotModel &model, const std::string &branch_root_link_name) {
+    const simulation::RobotModel &model, const std::string &terminal_link_name) {
   std::unordered_map<std::string, std::vector<std::string>> children_by_parent;
+  std::string branch_root_link_name;
   for (const auto &[joint_name, joint_props] : model.getJoints()) {
     (void)joint_name;
     children_by_parent[joint_props.parent_link].push_back(joint_props.child_link);
+    if (joint_props.child_link == terminal_link_name) {
+      branch_root_link_name = joint_props.parent_link;
+    }
   }
 
+  if (branch_root_link_name.empty()) {
+    return {};
+  }
   const auto child_it = children_by_parent.find(branch_root_link_name);
   if (child_it == children_by_parent.end() || child_it->second.size() < 2) {
     return {};
@@ -2210,6 +2217,8 @@ public:
       arm->buildAllLinkTransforms(
           positions, orientations, base_model_obj.getFixedLinkInfo(),
           link_transforms);
+      simulation::completeMissingBranchLinkTransforms(
+          base_model_obj, {}, link_transforms);
 
       for (const auto &voxel_pair : link_voxel_clouds) {
         const std::string &link_name = voxel_pair.first;

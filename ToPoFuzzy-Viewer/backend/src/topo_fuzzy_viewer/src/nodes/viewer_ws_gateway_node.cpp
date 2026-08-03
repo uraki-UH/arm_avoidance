@@ -146,6 +146,7 @@ namespace converter {
                 {"label", n.label},
                 {"semanticLabel", n.semantic_label},
                 {"semanticReliability", n.semantic_reliability},
+                {"isGoal", n.is_goal},
                 {"age", age},
                 {"winnerPointCount", n.winner_point_count},
                 {"winnerPointCovariance", {

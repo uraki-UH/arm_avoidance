@@ -3,9 +3,10 @@
 #include "kinematics/kinematic_chain.hpp"
 #include "robot_model/robot_model.hpp"
 
+#include <map>
 #include <memory>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace simulation {
 
@@ -50,6 +51,11 @@ createMultiArmKinematicChainFromModels(
     const std::vector<std::string> &prefixes = {},
     const Eigen::Vector3d &base_position = Eigen::Vector3d::Zero(),
     const std::string &root_link_name = "");
+
+void completeMissingBranchLinkTransforms(
+    const RobotModel &model,
+    const std::map<std::string, double> &joint_value_hints,
+    std::map<std::string, Eigen::Isometry3d> &link_transforms);
 
 /**
  * @brief Multi-arm adapter that exposes several independent KinematicChain

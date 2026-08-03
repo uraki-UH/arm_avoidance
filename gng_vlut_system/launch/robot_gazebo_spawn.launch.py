@@ -66,7 +66,7 @@ def gazebo_material_name(rgba: str) -> str | None:
     )
 
 
-def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str) -> str:
+def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str, static_model: bool) -> str:
     with open(robot_urdf, "r", encoding="utf-8") as f:
         urdf_text = f.read()
 
@@ -80,6 +80,10 @@ def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str) -> str:
     )
 
     root = ET.fromstring(urdf_text)
+    if static_model:
+        gazebo = ET.SubElement(root, "gazebo")
+        ET.SubElement(gazebo, "static").text = "true"
+
     joints = root.findall("joint")
     fixed_children = {
         joint.find("child").get("link")
@@ -130,6 +134,11 @@ def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str) -> str:
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     spawn_z = LaunchConfiguration("spawn_z").perform(context)
+    follow_tf_frame = LaunchConfiguration("follow_tf_frame").perform(context).strip()
+    follow_tf_reference_frame = LaunchConfiguration("follow_tf_reference_frame").perform(context).strip() or "world"
+    follow_tf_update_hz = float(LaunchConfiguration("follow_tf_update_hz").perform(context))
+    follow_tf_service_name = LaunchConfiguration("follow_tf_service_name").perform(context).strip() or "/gazebo/set_entity_state"
+    static_model = LaunchConfiguration("static_model").perform(context).lower() in ("true", "1", "yes", "on")
     mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip()
     params_file = LaunchConfiguration("params_file").perform(context).strip()
     root_params = load_root_params(params_file)
@@ -144,7 +153,10 @@ def launch_setup(context, *args, **kwargs):
         raise FileNotFoundError(f"Robot description file does not exist: {robot_urdf}")
 
     mesh_root_dir = mesh_root_dir or str(root_params.get("mesh_root_dir", "")).strip()
-    gazebo_urdf = write_gazebo_urdf(robot_urdf, mesh_root_dir)
+    static_model = static_model or str(root_params.get("static_model", "")).lower() in ("true", "1", "yes", "on")
+    if follow_tf_frame:
+        static_model = False
+    gazebo_urdf = write_gazebo_urdf(robot_urdf, mesh_root_dir, static_model)
 
     def cleanup_gazebo_urdf(_context, *unused_args, **unused_kwargs):
         try:
@@ -163,12 +175,29 @@ def launch_setup(context, *args, **kwargs):
         ],
         output="screen",
     )
-    return [
+    nodes = [
         spawn_node,
         RegisterEventHandler(
             OnProcessExit(target_action=spawn_node, on_exit=[OpaqueFunction(function=cleanup_gazebo_urdf)])
         ),
     ]
+    if follow_tf_frame:
+        nodes.append(
+            Node(
+                package="gng_vlut_system",
+                executable="gazebo_entity_tf_follower_node",
+                name="gazebo_entity_tf_follower_node",
+                parameters=[{
+                    "entity_name": robot_name,
+                    "source_frame": follow_tf_frame,
+                    "reference_frame": follow_tf_reference_frame,
+                    "service_name": follow_tf_service_name,
+                    "update_hz": follow_tf_update_hz,
+                }],
+                output="screen",
+            )
+        )
+    return nodes
 
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
@@ -178,6 +207,11 @@ def generate_launch_description():
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("spawn_z", default_value="0.5"),
+        DeclareLaunchArgument("static_model", default_value="false"),
+        DeclareLaunchArgument("follow_tf_frame", default_value=""),
+        DeclareLaunchArgument("follow_tf_reference_frame", default_value="world"),
+        DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
+        DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
         # We assume Gazebo is already running or started separately
         OpaqueFunction(function=launch_setup)
     ])

@@ -5,6 +5,7 @@ float32 rho
 uint8 label
 uint8 semantic_label
 float32 semantic_reliability
+bool is_goal
 uint32 frame
 uint32[] inpcl_ids
 uint32 winner_point_count

@@ -1,5 +1,6 @@
 #include "collision/voxel_collision_checker.hpp"
 #include "common/voxel_utils.hpp"
+#include "robot_model/kinematic_adapter.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 #include <algorithm>
 
@@ -44,7 +45,7 @@ void VoxelCollisionChecker::updateBodyPoses(
     auto fixed_info = model_.getFixedLinkInfo();
     chain_.buildAllLinkTransforms(positions, orientations, fixed_info, link_tfs);
 
-    augmentBranchLinkTransforms(link_tfs);
+    completeMissingBranchLinkTransforms(model_, joint_value_hints_, link_tfs);
 
     const auto& link_data = manager_.getLinkVoxelDataList();
     current_tfs_.clear();
@@ -70,64 +71,6 @@ void VoxelCollisionChecker::addCollisionExclusion(const std::string& link1, cons
 
 void VoxelCollisionChecker::addEnvironmentIgnoreLink(const std::string& link_name) {
     environment_ignore_links_.insert(link_name);
-}
-
-double VoxelCollisionChecker::getJointValueHint(const std::string& joint_name) const {
-    auto it = joint_value_hints_.find(joint_name);
-    if (it == joint_value_hints_.end()) {
-        return 0.0;
-    }
-    return it->second;
-}
-
-Eigen::Isometry3d VoxelCollisionChecker::computeJointMotionTransform(
-    const simulation::JointProperties& joint, double joint_value) const {
-    Eigen::Isometry3d motion = Eigen::Isometry3d::Identity();
-    switch (joint.type) {
-    case kinematics::JointType::Revolute:
-      motion.rotate(Eigen::AngleAxisd(joint_value, joint.axis.normalized()));
-      break;
-    case kinematics::JointType::Prismatic:
-      motion.translate(joint.axis.normalized() * joint_value);
-      break;
-    default:
-      break;
-    }
-    return motion;
-}
-
-void VoxelCollisionChecker::augmentBranchLinkTransforms(
-    std::map<std::string, Eigen::Isometry3d>& link_tfs) const {
-    bool changed = true;
-    const auto& joints = model_.getJoints();
-    std::size_t iter = 0;
-    while (changed && iter < joints.size() + 1) {
-        changed = false;
-        ++iter;
-        for (const auto& [joint_name, joint] : joints) {
-            (void)joint_name;
-            if (link_tfs.count(joint.child_link) > 0) {
-                continue;
-            }
-            auto parent_it = link_tfs.find(joint.parent_link);
-            if (parent_it == link_tfs.end()) {
-                continue;
-            }
-
-            double joint_value = 0.0;
-            if (joint.has_mimic) {
-                const double source_value = getJointValueHint(joint.mimic_joint_name);
-                joint_value = source_value * joint.mimic_multiplier + joint.mimic_offset;
-            } else {
-                joint_value = getJointValueHint(joint.name);
-            }
-
-            link_tfs[joint.child_link] =
-                parent_it->second * joint.origin *
-                computeJointMotionTransform(joint, joint_value);
-            changed = true;
-        }
-    }
 }
 
 std::vector<std::vector<long>> VoxelCollisionChecker::getLinkVoxelMasks() const {

@@ -14,7 +14,7 @@
 
     # --- GNG & Safety Settings ---
     gng:
-      experiment_id: "ToPoDualArm3" #実験ID(結果の保存先ディレクトリ名)
+      experiment_id: "ToPoDualArm10000" #実験ID(結果の保存先ディレクトリ名)
       data_directory: "/ros2_ws/src/gng_vlut_system/gng_results" #保存先ディレクトリまでのパス
       gng_model_filename: "gng.bin"
       vlut_filename: "vlut.bin"

@@ -756,7 +756,12 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       if (node_ref.id == -1) {
         continue;
       }
-      if (id_to_index.find(node_ref.id) != id_to_index.end()) {
+      const bool is_goal = node_ref.id == path.back();
+      const auto existing = id_to_index.find(node_ref.id);
+      if (existing != id_to_index.end()) {
+        if (is_goal) {
+          msg.nodes[existing->second].is_goal = true;
+        }
         continue;
       }
 
@@ -769,6 +774,7 @@ static inline ais_gng_msgs::msg::TopologicalMap buildPathMessage(
       out.normal.y = node_ref.status.ee_direction.y();
       out.normal.z = node_ref.status.ee_direction.z();
       out.label = pathLabelFromStatus(node_ref.status);
+      out.is_goal = is_goal;
       out.frame = 0;
       ais_gng_feature_msgs::msg::TopologicalNodeFeature feature;
       feature.node_id = static_cast<uint16_t>(node_ref.id);

@@ -162,6 +162,21 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   robot_name:=ToPoDualArm \
   gui:=true
 
+## Gazeboで接地固定したい場合
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  static_model:=true
+
+## GazeboでTF追従させたい場合
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  follow_tf_frame:=ToPoDualArm/base_footprint \
+  follow_tf_reference_frame:=world
+
 
 
 

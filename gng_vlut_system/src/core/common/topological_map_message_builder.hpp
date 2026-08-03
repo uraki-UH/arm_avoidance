@@ -56,6 +56,23 @@ inline uint8_t viewerLabelFromStatus(const GNG::Status &status) {
   return 1;
 }
 
+inline int pathLabelSeverity(uint8_t label) {
+  if (label == 2) {
+    return 3;
+  }
+  if (label == 3) {
+    return 2;
+  }
+  return label == 1 ? 1 : 0;
+}
+
+inline void preserveMoreSeverePathLabel(
+    ais_gng_msgs::msg::TopologicalNode &node, uint8_t label) {
+  if (pathLabelSeverity(label) > pathLabelSeverity(node.label)) {
+    node.label = label;
+  }
+}
+
 inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
     const ais_gng_msgs::msg::TopologicalMap &source_path,
     const ais_gng_msgs::msg::TopologicalMap &visualization_graph,
@@ -77,6 +94,8 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
   constexpr std::uint16_t kCurrentPoseNodeId =
       std::numeric_limits<std::uint16_t>::max();
   std::int32_t current_pose_output = -1;
+  std::uint16_t next_goal_node_id = kCurrentPoseNodeId - 1;
+  std::unordered_map<std::uint16_t, std::int32_t> goal_to_output;
 
   const auto ensure_visual_node =
       [&out, &visualization_graph, &visual_to_output](std::uint32_t visual_id) {
@@ -107,6 +126,26 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
       continue;
     }
 
+    if (source_node.is_goal && source_frame_matches) {
+      const auto goal_it = goal_to_output.find(source_node.id);
+      if (goal_it != goal_to_output.end()) {
+        input_to_output[input_index] = goal_it->second;
+        continue;
+      }
+      if (next_goal_node_id <= visualization_graph.nodes.size()) {
+        continue;
+      }
+      auto goal_node = source_node;
+      goal_node.id = next_goal_node_id--;
+      goal_node.is_goal = true;
+      const std::int32_t output_index =
+          static_cast<std::int32_t>(out.nodes.size());
+      out.nodes.push_back(std::move(goal_node));
+      goal_to_output.emplace(source_node.id, output_index);
+      input_to_output[input_index] = output_index;
+      continue;
+    }
+
     const std::size_t source_id = source_node.id;
     if (source_id >= source_to_visual.size()) {
       continue;
@@ -119,6 +158,12 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
 
     input_to_output[input_index] =
         ensure_visual_node(static_cast<std::uint32_t>(visual_id));
+    if (input_to_output[input_index] >= 0) {
+      auto &output_node =
+          out.nodes[static_cast<std::size_t>(input_to_output[input_index])];
+      output_node.is_goal = output_node.is_goal || source_node.is_goal;
+      preserveMoreSeverePathLabel(output_node, source_node.label);
+    }
   }
 
   std::unordered_set<std::uint64_t> seen_edges;
@@ -195,8 +240,20 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
          ++path_index) {
       const std::size_t oriented_index =
           forward ? path_begin + path_index : path_end - 1 - path_index;
-      const std::int32_t current = ensure_visual_node(
-          visualization_model.transition_path_nodes[oriented_index]);
+      std::int32_t current = -1;
+      if (path_index == 0) {
+        current = mapped_source;
+      } else if (path_index + 1 == transition.path_size) {
+        current = mapped_target;
+      } else {
+        current = ensure_visual_node(
+            visualization_model.transition_path_nodes[oriented_index]);
+      }
+      if (current >= 0) {
+        auto &output_node = out.nodes[static_cast<std::size_t>(current)];
+        preserveMoreSeverePathLabel(output_node, source_node.label);
+        preserveMoreSeverePathLabel(output_node, target_node.label);
+      }
       if (previous >= 0) {
         append_edge(previous, current);
       }

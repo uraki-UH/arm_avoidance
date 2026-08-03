@@ -16,6 +16,8 @@ const EMPTY_GRAPH: GraphData = {
     clusterLabels: []
 };
 
+const CANDIDATE_GOAL_COLOR = '#a855f7';
+
 // removed
 
 
@@ -53,7 +55,8 @@ interface GraphRendererProps {
     onClusterSelect?: (clusterId: number | null) => void;
     onManipSelect?: (node: GraphNode) => void;
     enableClusterSelection?: boolean;
-    opacity?: number;
+    nodeOpacity?: number;
+    edgeOpacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
@@ -89,7 +92,8 @@ export function GraphRenderer({
     onClusterSelect,
     onManipSelect,
     enableClusterSelection = true,
-    opacity = 1.0,
+    nodeOpacity = DYNAMIC_GNG_DEFAULTS.nodeOpacity,
+    edgeOpacity = DYNAMIC_GNG_DEFAULTS.edgeOpacity,
     tf = null,
     nodeColor = '#81c720',
     edgeColor = '#08d408',
@@ -105,6 +109,7 @@ export function GraphRenderer({
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
+    const goalNodeMeshRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
     const manipEllipsoidRef = useRef<THREE.InstancedMesh>(null);
@@ -115,6 +120,20 @@ export function GraphRenderer({
     const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
     const semanticColorEnabled = visibleSemanticLabels?.handle ?? true;
+    const isCandidateTrajectory = tag.includes('candidate_topological_map');
+    const goalNodes = useMemo(() => {
+        if (!isCandidateTrajectory) return [];
+        return graph.nodes.filter((node) => {
+            if (!node.isGoal) return false;
+            const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+            const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
+            return !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
+        });
+    }, [graph.nodes, isCandidateTrajectory, visibleLabels]);
+    const goalNodeSignature = useMemo(
+        () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
+        [goalNodes]
+    );
     const semanticLabelText = (semanticLabel?: number) => {
         if (!Number.isFinite(semanticLabel) || (semanticLabel ?? 0) <= 0) return '';
         return SEMANTIC_LABELS[(Math.trunc(semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
@@ -138,6 +157,7 @@ export function GraphRenderer({
             semantic: [] as GraphData['nodes'],
         }));
         graph.nodes.forEach((node, nodeIndex) => {
+            if (isCandidateTrajectory && node.isGoal) return;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             const semanticLabel = Number.isFinite(node.semanticLabel)
@@ -157,7 +177,7 @@ export function GraphRenderer({
             }
         });
         return buckets;
-    }, [graph.nodes, graph.clusters, nodeSemanticLabels, visibleLabels, semanticColorEnabled]);
+    }, [graph.nodes, graph.clusters, nodeSemanticLabels, visibleLabels, semanticColorEnabled, isCandidateTrajectory]);
 
     // Trigger re-render in demand mode for any visual changes
     useDemandUpdate([
@@ -176,7 +196,8 @@ export function GraphRenderer({
         normalScale,
         velocityScale,
         covarianceEllipsoidScale,
-        opacity,
+        nodeOpacity,
+        edgeOpacity,
         tf,
         visibleLabels,
         visibleSemanticLabels,
@@ -228,33 +249,45 @@ export function GraphRenderer({
         color,
         emissive: new THREE.Color(color),
         emissiveIntensity: nodeEmissiveIntensity,
-        transparent: opacity < 1,
-        opacity,
+        transparent: nodeOpacity < 1,
+        opacity: nodeOpacity,
         depthTest: false,
         depthWrite: false,
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    })), [nodePalette, opacity, nodeEmissiveIntensity]);
+    })), [nodePalette, nodeOpacity, nodeEmissiveIntensity]);
     const semanticMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: SEMANTIC_COLORS[0] ?? '#00d1ff',
         emissive: new THREE.Color(SEMANTIC_COLORS[0] ?? '#00d1ff'),
         emissiveIntensity: nodeEmissiveIntensity,
-        transparent: opacity < 1,
-        opacity,
+        transparent: nodeOpacity < 1,
+        opacity: nodeOpacity,
         depthTest: false,
         depthWrite: false,
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    }), [opacity, nodeEmissiveIntensity]);
+    }), [nodeOpacity, nodeEmissiveIntensity]);
+    const goalNodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: new THREE.Color(CANDIDATE_GOAL_COLOR),
+        emissiveIntensity: nodeEmissiveIntensity,
+        transparent: nodeOpacity < 1,
+        opacity: nodeOpacity,
+        depthTest: false,
+        depthWrite: false,
+        roughness: 0.85,
+        metalness: 0.0,
+        toneMapped: false,
+    }), [nodeOpacity, nodeEmissiveIntensity]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const ellipsoidGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
     const ellipsoidMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: covarianceEllipsoidColor,
         transparent: true,
-        opacity: Math.max(0.18, Math.min(0.6, opacity * 0.35)),
+        opacity: Math.max(0.18, Math.min(0.6, nodeOpacity * 0.35)),
         depthTest: true,
         depthWrite: false,
         emissive: new THREE.Color(covarianceEllipsoidColor),
@@ -262,17 +295,17 @@ export function GraphRenderer({
         roughness: 0.35,
         metalness: 0.0,
         toneMapped: false,
-    }), [covarianceEllipsoidColor, opacity]);
+    }), [covarianceEllipsoidColor, nodeOpacity]);
     const edgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: edgeColor,
         emissive: new THREE.Color(edgeColor),
         emissiveIntensity: edgeEmissiveIntensity,
-        transparent: true,
-        opacity: opacity,
+        transparent: edgeOpacity < 1,
+        opacity: edgeOpacity,
         depthTest: false,
         depthWrite: false,
         toneMapped: false,
-    }), [opacity, edgeColor, edgeEmissiveIntensity]);
+    }), [edgeOpacity, edgeColor, edgeEmissiveIntensity]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -346,13 +379,14 @@ export function GraphRenderer({
             showNodes ? 1 : 0,
             nodeScale,
             nodeCapacity,
-            opacity,
+            nodeOpacity,
             nodeColor,
             nodeEmissiveIntensity,
             graph.timestamp,
             semanticColorEnabled ? 1 : 0,
+            goalNodeSignature,
         ].join(':');
-    }, [graph.nodes.length, showNodes, nodeScale, nodeCapacity, opacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, semanticColorEnabled]);
+    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, semanticColorEnabled]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
@@ -360,12 +394,12 @@ export function GraphRenderer({
             showEdges ? 1 : 0,
             edgeWidth,
             edgeCapacity,
-            opacity,
+            edgeOpacity,
             edgeColor,
             edgeEmissiveIntensity,
             graph.timestamp,
         ].join(':');
-    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, opacity, edgeColor, edgeEmissiveIntensity, graph.timestamp]);
+    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, edgeOpacity, edgeColor, edgeEmissiveIntensity, graph.timestamp]);
     const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
     const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
     const ellipsoidRenderSignature = useMemo(() => {
@@ -374,11 +408,11 @@ export function GraphRenderer({
             showCovarianceEllipsoids ? 1 : 0,
             covarianceEllipsoidScale,
             ellipsoidCapacity,
-            opacity,
+            nodeOpacity,
             covarianceEllipsoidColor,
             graph.timestamp,
         ].join(':');
-    }, [covarianceEllipsoids.length, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
+    }, [covarianceEllipsoids.length, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, nodeOpacity, covarianceEllipsoidColor, graph.timestamp]);
     const ellipsoidRenderReady = ellipsoidReadySignature === ellipsoidRenderSignature;
     const manipEllipsoidRenderSignature = useMemo(() => {
         return [
@@ -387,11 +421,11 @@ export function GraphRenderer({
             manipEllipsoidMode,
             manipEllipsoidType,
             manipEllipsoidCapacity,
-            opacity,
+            nodeOpacity,
             covarianceEllipsoidColor,
             graph.timestamp,
         ].join(':');
-    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType, manipEllipsoidCapacity, opacity, covarianceEllipsoidColor, graph.timestamp]);
+    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType, manipEllipsoidCapacity, nodeOpacity, covarianceEllipsoidColor, graph.timestamp]);
     const manipEllipsoidRenderReady = manipEllipsoidReadySignature === manipEllipsoidRenderSignature;
 
     useEffect(() => {
@@ -425,9 +459,15 @@ export function GraphRenderer({
                 updateNodeInstances(semanticMesh, bucket.semantic, nodeScale);
             }
         });
+        if (goalNodeMeshRef.current) {
+            updateNodeInstances(goalNodeMeshRef.current, goalNodes, nodeScale, {
+                colorMode: 'uniform',
+                uniformColor: CANDIDATE_GOAL_COLOR,
+            });
+        }
         setNodeReadySignature(nodeRenderSignature);
         invalidate();
-    }, [graph.nodes, nodeBuckets, showNodes, nodeScale, nodeCapacity, nodeRenderSignature, invalidate, semanticColorEnabled]);
+    }, [graph.nodes, nodeBuckets, goalNodes, showNodes, nodeScale, nodeCapacity, nodeRenderSignature, invalidate, semanticColorEnabled]);
 
     useLayoutEffect(() => {
         if (showNodes) return;
@@ -437,6 +477,10 @@ export function GraphRenderer({
             mesh.count = 0;
             mesh.instanceMatrix.needsUpdate = true;
         });
+        if (goalNodeMeshRef.current) {
+            goalNodeMeshRef.current.count = 0;
+            goalNodeMeshRef.current.instanceMatrix.needsUpdate = true;
+        }
         invalidate();
     }, [showNodes, invalidate]);
 
@@ -541,6 +585,17 @@ export function GraphRenderer({
                 </group>
             ))}
 
+            {canMountNodes && goalNodes.length > 0 && (
+                <instancedMesh
+                    key={`candidate-goals-${nodeCapacity}`}
+                    ref={goalNodeMeshRef}
+                    args={[nodeSphereGeometry, goalNodeMaterial, nodeCapacity]}
+                    count={nodeRenderReady ? goalNodes.length : 0}
+                    frustumCulled={false}
+                    renderOrder={12}
+                />
+            )}
+
             {canMountEdges && (
                 <instancedMesh
                     key={`edges-${edgeCapacity}`}
@@ -617,7 +672,7 @@ export function GraphRenderer({
                             <meshBasicMaterial
                                 color={color}
                                 transparent
-                                opacity={isSelected ? 0.1 : 0.3 * opacity}
+                                opacity={isSelected ? 0.1 : 0.3 * nodeOpacity}
                                 depthWrite={false}
                                 side={THREE.DoubleSide}
                             />
