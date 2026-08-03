@@ -32,9 +32,9 @@
 | :--- | :--- | :--- | :--- | :--- |
 | `position_manipulability` | `float32` | $[0, \infty)$ | なし | 並進方向のマニピュラビリティ（ヤコビアンの操作楕円体体積比例値）。高いほど特異姿勢から遠く、手先位置の制御自由度が高い。 |
 | `rotation_manipulability` | `float32` | $[0, \infty)$ | なし | 回転方向のマニピュラビリティ。高いほど手先の向きを自由に変更可能。 |
-| `manipulability_condition_number`| `float32` | $[1, \infty)$ | なし | 並進ヤコビアンの条件数（最大特異値 / 最小特異値）。1に近いほど全方向に等方的に動きやすく、値が大きいほど特定方向へしか動けない特異状態に近い。 |
-| `min_singular_value` | `float32` | $[0, \infty)$ | なし | ヤコビアンの最小特異値。0に近づくほど、その軸方向への運動制限（特異姿勢）を意味する。 |
-| `manipulability_singular_values` | `float32[]` | 各要素 $[0, \infty)$ | なし | 並進方向における特異値の配列（3要素）。 |
+
+`manipulability_condition_number`、`min_singular_value`、`manipulability_singular_values` は
+可操作性楕円体などの基礎データから派生できるため、`/evaluation_metrics` の固定schemaには含めない。
 
 ### 2.4 安全マージン
 | 変数名 | 型 | 値の想定範囲 | 単位 | 説明 |
@@ -61,9 +61,6 @@
 
 ### 2.7 ノード付帯特徴量（拡張用）
 `metric_names` および `metric_values` 配列にペアとして格納される、個別ノードが保持する統計評価値です。
-- `joint_limit_score` (関節範囲余裕スコア: $[0, 1]$)
-- `collision_count` / `danger_count` (周辺GNG空間での衝突・危険検出カウント)
-- `is_colliding` / `is_danger` (衝突/危険フラグ。1.0で該当、0.0で非該当)
 - `dynamic_manipulability` (動的マニピュラビリティ)
 
 ---

@@ -15,7 +15,7 @@
 
 - `GraspCandidateMetric` は flat なまま維持する。
 - 可操作性は `position` / `rotation` / `dynamic` の 3 系統へ分ける候補を残す。
-- `condition_number` だけでなく、`manipulability`、`min_singular_value`、`valid` も同じ粒度で保持する。
+- `condition_number`、`min_singular_value`、`singular_values` のような派生・中間量は固定metricとして増やさず、必要なら楕円体パラメータを基本表現に寄せる。
 - 経路候補については `path_cost` のような単一コストへ早期圧縮せず、経由ノード ID 列と関節角度列を優先して保持する。
 
 ### 候補ポーズと GNG ノードの関係

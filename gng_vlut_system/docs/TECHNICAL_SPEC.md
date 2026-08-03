@@ -329,6 +329,10 @@ Viewer のリンク別楕円は対象 URDF リンクの子として描画する�
 | 配列値 | `sample_metric_array_values`へ全配列型評価値を連結 |
 | 除外済み旧指標 | `combined_score`は構成要素と重複するため内部状態・候補metric・評価出力から削除 |
 
+可操作性の `manipulability_condition_number`、`min_singular_value`、`manipulability_singular_values` は
+可操作性楕円体などの基礎データから派生できるため、`/evaluation_metrics` の固定schemaには含めない。
+診断用の`/grasp_candidate_metrics`では互換性のため既存フィールドを維持する。
+
 `feasible=false`の候補は`/evaluation_metrics`へsampleを生成せず、`feasible`自体も評価指標にしない。
 診断用の`/grasp_candidate_metrics`には到達不能候補を含む全候補を維持する。
 
