@@ -218,6 +218,16 @@ flowchart TD
 候補ロボットプレビューの見た目は ToPoFuzzy Viewer 側で制御する。
 ROS 側はプレビューの送信有無だけを制御し、見た目の指定は送らない。
 
+### 8.1 URDF プレビューの初期ロード
+
+- `stream.robot.description` のトップレベル `robot.urdf` にだけ URDF 本文を格納する。
+- `robot.instances[]` はトップレベルの URDF を共有し、各候補の関節値・FK結果・可操作性だけを保持する。
+- `stream.robot.pose` は先に受信した description の URDF を Viewer 側で維持するため、URDF 本文を再送しない。
+- ToPoFuzzy Viewer は同一 URL のメッシュを1回だけ読み込み・解析し、候補間では geometry を共有する。候補固有の透過度や色が干渉しないよう、Object3D 階層と material は候補ごとに複製する。
+- メッシュ到着後の外観反映は到着したオブジェクトだけに行い、タイマーによるロボット全体の反復走査は行わない。
+- Viewer のメッシュ配信は package 解決結果とファイル内容をキャッシュする。ファイル内容は更新時刻とサイズが変わった場合に読み直す。
+- メッシュHTTP応答は `Cache-Control: no-store` とし、ページリロード時はFrontendのgeometryとブラウザ内のSTL応答を破棄して再取得する。backend内部のファイルキャッシュは維持する。
+
 ## 9. AiS-GNG 入力点群の選択
 
 ### 9.1 パラメータ

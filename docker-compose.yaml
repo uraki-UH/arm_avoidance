@@ -36,7 +36,7 @@ services:
       - "c 81:* rmw"
       - "c 189:* rmw"
 
-    working_dir: /ros2_ws/src/ais_gng
+    working_dir: /ros2_ws/src
 
     # network_mode: host を使うので ports は不要
     # command: "sh /ros2_ws/src/ais_gng/release.sh"
@@ -82,13 +82,19 @@ services:
 
     volumes:
       - .:/ros2_ws/src
+      - ros_ws_build_volume:/ros2_ws/build
+      - ros_ws_volume:/ros2_ws/install
 
     environment:
       - HOME=/root
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
 
     command: >
-      bash -lc "source /opt/ros/humble/setup.bash && ros2 run rosbridge_server rosbridge_websocket --port 9090"
+      bash -lc "
+      source /opt/ros/humble/setup.bash &&
+      if [ -f /ros2_ws/install/setup.bash ]; then source /ros2_ws/install/setup.bash; fi &&
+      ros2 run rosbridge_server rosbridge_websocket --port 9090
+      "
 
 volumes:
   ros_ws_volume:

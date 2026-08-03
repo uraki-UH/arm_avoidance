@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -209,6 +210,7 @@ inline std::optional<CandidateRobotPreviewPayload> buildCandidateRobotPreviewPay
       ns_raw.empty() ? preview_tag : (ns_raw + "/" + preview_tag);
 
   nlohmann::json instance_payloads = nlohmann::json::array();
+  nlohmann::json primary_robot;
   const std::size_t preview_count =
       std::min<std::size_t>(8U, goal_candidate_ids.size());
   for (std::size_t i = 0; i < preview_count; ++i) {
@@ -241,24 +243,30 @@ inline std::optional<CandidateRobotPreviewPayload> buildCandidateRobotPreviewPay
     const Eigen::Vector3d manip_center =
         positions.empty() ? Eigen::Vector3d::Zero() : positions.back();
 
-    instance_payloads.push_back(buildRobotPayloadJson(
+    auto instance_payload = buildRobotPayloadJson(
         robot_base_frame, urdf_content, controlled_joint_names,
-        joint_values, positions, orientations, timestamp, manip_center, &manip));
+        joint_values, positions, orientations, timestamp, manip_center, &manip);
+    if (instance_payloads.empty()) {
+      primary_robot = instance_payload;
+    }
+    instance_payload.erase("urdf");
+    instance_payloads.push_back(std::move(instance_payload));
   }
 
   if (instance_payloads.empty()) {
     return std::nullopt;
   }
 
-  auto primary_robot = instance_payloads.front();
   primary_robot["displayName"] = preview_display_name;
+  auto pose_robot = primary_robot;
+  pose_robot.erase("urdf");
 
   CandidateRobotPreviewPayload payload;
   payload.tag = preview_tag;
   payload.description_json = buildRobotStreamJsonWithInstances(
       "stream.robot.description", preview_tag, primary_robot, instance_payloads);
   payload.pose_json = buildRobotStreamJsonWithInstances(
-      "stream.robot.pose", preview_tag, primary_robot, instance_payloads);
+      "stream.robot.pose", preview_tag, pose_robot, instance_payloads);
   return payload;
 }
 

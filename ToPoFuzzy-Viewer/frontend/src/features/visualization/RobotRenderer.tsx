@@ -22,6 +22,54 @@ interface RobotRendererProps {
     onManipClick?: (linkName: string) => void;
 }
 
+type MeshLoadFunction = URDFLoader['loadMeshCb'];
+
+const meshObjectCache = new Map<string, Promise<THREE.Object3D>>();
+
+function cloneMeshObject(source: THREE.Object3D): THREE.Object3D {
+    const clone = source.clone(true);
+    clone.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            mesh.material = Array.isArray(mesh.material)
+                ? mesh.material.map((material) => material.clone())
+                : mesh.material.clone();
+        }
+    });
+    return clone;
+}
+
+function loadCachedMesh(
+    path: string,
+    manager: THREE.LoadingManager,
+    loadMesh: MeshLoadFunction,
+    onComplete: Parameters<MeshLoadFunction>[2],
+): void {
+    let pending = meshObjectCache.get(path);
+    if (!pending) {
+        pending = new Promise<THREE.Object3D>((resolve, reject) => {
+            loadMesh(path, manager, (obj, err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(obj);
+                }
+            });
+        });
+        meshObjectCache.set(path, pending);
+    }
+
+    pending.then(
+        (source) => onComplete(cloneMeshObject(source)),
+        (err: Error) => {
+            if (meshObjectCache.get(path) === pending) {
+                meshObjectCache.delete(path);
+            }
+            onComplete(new THREE.Object3D(), err);
+        },
+    );
+}
+
 function RobotInstanceRenderer({
     tag,
     data,
@@ -43,6 +91,8 @@ function RobotInstanceRenderer({
     const [robot, setRobot] = useState<any>(null);
     const lastLoadSignatureRef = useRef<string | null>(null);
     const lastJointSignatureRef = useRef<string | null>(null);
+    const invalidateFrameRef = useRef<number | null>(null);
+    const mountedRef = useRef(true);
     const { invalidate } = useThree();
 
     const viewerPort = 9001;
@@ -214,21 +264,29 @@ function RobotInstanceRenderer({
         });
     }, [applyMaterialTweaks]);
 
-    useEffect(() => {
-        if (!robot) return;
-        const retryDelays = [0, 60, 160, 360, 760, 1500, 2500];
-        const timers = retryDelays.map((delay) => window.setTimeout(() => {
-            if (!useUrdfColors) {
-                applyRobotMaterial(robot);
-            } else {
-                applyUrdfAppearanceTweaks(robot);
-            }
+    const applyCurrentAppearanceRef = useRef<(obj: THREE.Object3D) => void>(() => undefined);
+    applyCurrentAppearanceRef.current = useUrdfColors
+        ? applyUrdfAppearanceTweaks
+        : applyRobotMaterial;
+
+    const scheduleInvalidate = useCallback(() => {
+        if (!mountedRef.current || invalidateFrameRef.current !== null) return;
+        invalidateFrameRef.current = window.requestAnimationFrame(() => {
+            invalidateFrameRef.current = null;
             invalidate();
-        }, delay));
+        });
+    }, [invalidate]);
+
+    useEffect(() => {
+        mountedRef.current = true;
         return () => {
-            timers.forEach((timer) => window.clearTimeout(timer));
+            mountedRef.current = false;
+            if (invalidateFrameRef.current !== null) {
+                window.cancelAnimationFrame(invalidateFrameRef.current);
+                invalidateFrameRef.current = null;
+            }
         };
-    }, [robot, applyRobotMaterial, applyUrdfAppearanceTweaks, useUrdfColors, invalidate]);
+    }, []);
 
     useEffect(() => {
         if (!robot) return;
@@ -237,8 +295,8 @@ function RobotInstanceRenderer({
         } else {
             applyRobotMaterial(robot);
         }
-        invalidate();
-    }, [robot, useUrdfColors, effectiveOpacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, invalidate]);
+        scheduleInvalidate();
+    }, [robot, useUrdfColors, effectiveOpacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, scheduleInvalidate]);
 
     // --- Load URDF ---
     useEffect(() => {
@@ -251,26 +309,24 @@ function RobotInstanceRenderer({
         urdfLoader.packages = (pkg) => `http://${window.location.hostname}:${viewerPort}/meshes/${pkg}`;
         const defaultLoadMeshCb = urdfLoader.loadMeshCb.bind(urdfLoader);
         urdfLoader.loadMeshCb = (path, manager, onComplete) => {
-            defaultLoadMeshCb(path, manager, (obj, err) => {
-                if (obj && !useUrdfColors) {
-                    applyRobotMaterial(obj);
-                }
+            loadCachedMesh(path, manager, defaultLoadMeshCb, (obj, err) => {
                 onComplete(obj, err);
+                if (!err && obj) {
+                    applyCurrentAppearanceRef.current(obj);
+                    scheduleInvalidate();
+                }
             });
         };
 
         try {
             const robotObj = urdfLoader.parse(data.urdf);
-            if (!useUrdfColors) {
-                applyRobotMaterial(robotObj);
-            }
-            applyUrdfAppearanceTweaks(robotObj);
+            applyCurrentAppearanceRef.current(robotObj);
             setRobot(robotObj);
         } catch (err) {
             console.error("Failed to parse URDF:", err);
             lastLoadSignatureRef.current = null;
         }
-    }, [applyRobotMaterial, applyUrdfAppearanceTweaks, data?.urdf, tag, useUrdfColors]);
+    }, [data?.urdf, scheduleInvalidate, tag, useUrdfColors]);
 
     // --- Update Joints ---
     useEffect(() => {

@@ -7675,7 +7675,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     [
       {
         topic:'/evaluation_metrics',
-        messageType:'gng_control_msgs/EvaluationMetrics',
+        messageType:'gng_control_msgs/msg/EvaluationMetrics',
         statusPrefix:'評価指標',
         onMessage:(msg)=>window.__topoEvaluationMetricApi?.storeMetrics(msg),
       },

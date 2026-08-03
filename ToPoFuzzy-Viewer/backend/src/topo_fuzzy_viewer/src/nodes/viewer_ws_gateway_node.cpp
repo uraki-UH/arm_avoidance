@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -472,7 +473,7 @@ private:
 
     class MeshServer {
     public:
-    void handle(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
+        void handle(uWS::HttpResponse<false>* res, uWS::HttpRequest* req) {
             std::string url(req->getUrl()); res->writeHeader("Access-Control-Allow-Origin", "*");
             if (url.rfind("/meshes/", 0) == 0) {
                 std::string sub = url.substr(8); size_t slash = sub.find('/');
@@ -484,31 +485,86 @@ private:
                             return false;
                         }
                         const std::filesystem::path path = root / relative;
-                        if (!std::filesystem::exists(path) || std::filesystem::is_directory(path)) {
+                        const auto data = readFile(path);
+                        if (!data) {
                             return false;
                         }
-                        std::ifstream f(path, std::ios::binary);
-                        res->end(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()));
+                        res->writeHeader("Content-Type", "application/octet-stream");
+                        res->writeHeader("Cache-Control", "no-store");
+                        res->end(*data);
                         return true;
                     };
 
-                    std::filesystem::path share_root;
-                    try {
-                        share_root = ament_index_cpp::get_package_share_directory(pkg);
-                    } catch (...) {}
-
+                    const auto& share_root = packageShareRoot(pkg);
                     if (tryServe(share_root, rel) || tryServe(share_root, std::string("meshes/") + rel)) {
                         return;
                     }
 
-                    const auto fallback = findLocalPackageShare(pkg);
-                    if (tryServe(fallback, rel) || tryServe(fallback, std::string("meshes/") + rel)) {
+                    const auto& fallback_root = localPackageRoot(pkg);
+                    if (tryServe(fallback_root, rel) || tryServe(fallback_root, std::string("meshes/") + rel)) {
                         return;
                     }
                 }
             }
             res->writeStatus("404 Not Found")->end("Not found");
         }
+
+    private:
+        struct CachedFile {
+            std::filesystem::file_time_type modified;
+            std::uintmax_t size = 0;
+            std::shared_ptr<const std::string> data;
+        };
+
+        const std::filesystem::path& packageShareRoot(const std::string& pkg) {
+            const auto cached = packageShareRoots_.find(pkg);
+            if (cached != packageShareRoots_.end()) {
+                return cached->second;
+            }
+
+            std::filesystem::path root;
+            try {
+                root = ament_index_cpp::get_package_share_directory(pkg);
+            } catch (...) {}
+            return packageShareRoots_.emplace(pkg, std::move(root)).first->second;
+        }
+
+        const std::filesystem::path& localPackageRoot(const std::string& pkg) {
+            const auto cached = localPackageRoots_.find(pkg);
+            if (cached != localPackageRoots_.end()) {
+                return cached->second;
+            }
+            return localPackageRoots_.emplace(pkg, findLocalPackageShare(pkg)).first->second;
+        }
+
+        std::shared_ptr<const std::string> readFile(const std::filesystem::path& path) {
+            std::error_code ec;
+            if (!std::filesystem::exists(path, ec) || ec || std::filesystem::is_directory(path, ec) || ec) {
+                return {};
+            }
+
+            const auto modified = std::filesystem::last_write_time(path, ec);
+            if (ec) return {};
+            const auto size = std::filesystem::file_size(path, ec);
+            if (ec) return {};
+
+            const std::string key = path.string();
+            const auto cached = files_.find(key);
+            if (cached != files_.end() && cached->second.modified == modified && cached->second.size == size) {
+                return cached->second.data;
+            }
+
+            std::ifstream file(path, std::ios::binary);
+            if (!file) return {};
+            auto data = std::make_shared<const std::string>(
+                std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            files_[key] = CachedFile{modified, size, data};
+            return data;
+        }
+
+        std::unordered_map<std::string, std::filesystem::path> packageShareRoots_;
+        std::unordered_map<std::string, std::filesystem::path> localPackageRoots_;
+        std::unordered_map<std::string, CachedFile> files_;
     } meshServer_;
 
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rpcRequestPub_;
