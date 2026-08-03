@@ -45,6 +45,27 @@ def load_root_params(params_file: str) -> dict:
     return {}
 
 
+def gazebo_material_name(rgba: str) -> str | None:
+    try:
+        red, green, blue, _ = (float(value) for value in rgba.split())
+    except ValueError:
+        return None
+
+    palette = {
+        "Gazebo/Black": (0.0, 0.0, 0.0),
+        "Gazebo/DarkGrey": (0.175, 0.175, 0.175),
+        "Gazebo/Grey": (0.7, 0.7, 0.7),
+        "Gazebo/White": (1.0, 1.0, 1.0),
+        "Gazebo/Red": (1.0, 0.0, 0.0),
+        "Gazebo/Green": (0.0, 1.0, 0.0),
+        "Gazebo/Blue": (0.0, 0.0, 1.0),
+    }
+    return min(
+        palette,
+        key=lambda name: sum((value - target) ** 2 for value, target in zip((red, green, blue), palette[name])),
+    )
+
+
 def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str) -> str:
     with open(robot_urdf, "r", encoding="utf-8") as f:
         urdf_text = f.read()
@@ -89,6 +110,13 @@ def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str) -> str:
                 iyz="0",
                 izz="1e-6",
             )
+
+        color = link.find("./visual/material/color")
+        rgba = color.get("rgba") if color is not None else None
+        material_name = gazebo_material_name(rgba) if rgba else None
+        if material_name:
+            gazebo = ET.SubElement(root, "gazebo", reference=link.get("name"))
+            ET.SubElement(gazebo, "material").text = material_name
 
     urdf_text = ET.tostring(root, encoding="unicode")
 
