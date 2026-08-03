@@ -10,12 +10,6 @@ docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend 
 
 docker compose --profile manual up  frontend
 
-## 左腕をtopological_map_avoidanceで動かす
-ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  trial_mode:=true \
-  trial_safe_only:=true
-
 ##  backendの起動
 ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 
@@ -23,13 +17,9 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する (今の所未使用)
-ros2 launch ais_gng topological_query.launch.py \
-  input_topic:=/topological_map/merged \
-  relation_mode:=graph_edges \
-  semantic_label:=1 \
-  max_euclidean_distance:=0.5 \
-  max_hops:=-1
+## ロボットを座標変換
+python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
+
 
 ## ダミー把持姿勢をPoseArrayで流す
 ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
@@ -41,6 +31,39 @@ ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   enable_motion:=false
 
+
+## HTML起動
+python3 -m http.server 8000
+http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
+
+## AISGNG実行
+
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
+
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
+
+## 点群から占有ボクセルに変換
+ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
+  input_topic:=/topo_points \
+  output_topic:=/topo_voxel_ids
+
+##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
+  ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+  robot_name:=ToPoDualArm \   
+  input_topic:=/topo_voxel_ids \  
+  danger_inflation:=0.08
+
+
+
+==============================================================
+
+## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する (今の所未使用)
+ros2 launch ais_gng topological_query.launch.py \
+  input_topic:=/topological_map/merged \
+  relation_mode:=graph_edges \
+  semantic_label:=1 \
+  max_euclidean_distance:=0.5 \
+  max_hops:=-1
 
 ## グリッド所属を半セルずらしで出す（未使用）
 ros2 launch ais_gng topological_grid.launch.py \
@@ -69,18 +92,13 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
-  (  output_voxel_size:=0.02)
+  (output_voxel_size:=0.02)
 
 ## 自己認識ボクセル内外の点群に分けてパブリッシュ
 ros2 run gng_vlut_system self_recognition_filter_node
   # self-recognition voxel内の点群: /self_recognition_points
   # self-recognition voxel外の点群: /self_filtered_points
 
-## tf のダミー
-python3 test_tf_publisher.py　(--ros-args -p frame_id:=topoarm/base_link)
-
-固定の座標系を置きたい場合は、`test_tf_once_publisher.py` を起動したままにするか、
-ROS2 の `static_transform_publisher` を使うのが安全です。
 
 # joint_statesのダミー
 python3 dummy_joint_pub.py 
@@ -92,11 +110,6 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera
 
 ## 点群の座標変換版トピック
 ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py 
-
-## `/topo_points` を入力にして GNG を回す
-ros2 launch ais_gng ais_gng.launch.py \
-  backend:=cpu \
-  lidar:=topo_points.yaml
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -111,33 +124,15 @@ ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml   trial_mode:=true   trial_safe_only:=true ( trial_return_home:=true
 )
 
-
-
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=20.0
 
-実験
+
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
-python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
-
-HTML起動
-python3 -m http.server 8000
-http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
-
-
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
-
-ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
-  input_topic:=/topo_points \
-  output_topic:=/topo_voxel_ids
 
 同じ座標系でそのまま通す場合は、`voxel_to_vlut_bridge` の `target_frame_id` は指定しません。
 このとき、入力 voxel の frame をそのまま使って再エンコードします。
 
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
-  robot_name:=ToPoDualArm \   
-  input_topic:=/topo_voxel_ids \  
-  danger_inflation:=0.06
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
@@ -192,12 +187,10 @@ sudo apt install ros-humble-rosbridge-server
 ### 起動手順
 ```bash
 # 1) rosbridge を起動
-source /opt/ros/humble/setup.bash
 ros2 run rosbridge_server rosbridge_websocket --port 9090
 ```
 
 ```bash
-# 2) HTML を HTTP で配信
 python3 -m http.server 8000
 ```
 
@@ -205,3 +198,13 @@ python3 -m http.server 8000
 # 3) ブラウザで開く
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 ```
+
+
+## 左腕をtopological_map_avoidanceで動かす
+ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  trial_mode:=true \
+  trial_safe_only:=true
+
+
+ROS2 の `static_transform_publisher` を使うのが安全です。
