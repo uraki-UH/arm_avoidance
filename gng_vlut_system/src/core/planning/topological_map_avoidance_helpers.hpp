@@ -600,68 +600,10 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
 
   float best_score = std::numeric_limits<float>::max();
   int best_goal_id = -1;
+  int best_start_id = -1;
   std::vector<int> best_path;
 
-  for (int start_id : start_candidates) {
-    if (start_id < 0 || start_id >= static_cast<int>(gng->getMaxNodeNum())) {
-      continue;
-    }
-    const auto &start_node = gng->nodeAt(start_id);
-    if (start_node.id == -1 || !start_node.status.active || !start_node.status.self_collision_free) {
-      continue;
-    }
-
-    auto [reached_goal_id, node_path] =
-        planner.planToAnyNode(start_id, goal_candidates, *gng, allow_danger_goal);
-    if (node_path.empty() || reached_goal_id < 0) {
-      continue;
-    }
-
-    candidate_path_by_goal.emplace(reached_goal_id, node_path);
-
-    const int dim = std::min(static_cast<int>(start_node.weight_angle.size()),
-                             static_cast<int>(current_q.size()));
-    const float start_dist =
-        (start_node.weight_angle.head(dim) - current_q.head(dim)).norm();
-    float score = static_cast<float>(node_path.size()) + 0.5f * start_dist;
-
-    // Rotational manipulability penalty at goal: high condition number = near wrist singularity.
-    // log scale keeps penalty comparable to path length (log(1)=0, log(10)≈2.3, log(100)≈4.6).
-    if (goal_rot_manip_weight > 0.0f &&
-        reached_goal_id >= 0 && reached_goal_id < static_cast<int>(gng->getMaxNodeNum())) {
-      const auto &goal_node = gng->nodeAt(reached_goal_id);
-      const auto &rot = goal_node.status.rotational_manip_info;
-      if (rot.valid && rot.manipulability > 1e-8) {
-        const float cond = std::max(1.0f, static_cast<float>(rot.condition_number));
-        score += goal_rot_manip_weight * std::log(cond);
-      } else {
-        score += goal_rot_manip_weight * std::log(100.0f); // max penalty for invalid/singular
-      }
-      // Joint limit margin bonus: higher margin = more slack = lower score
-      if (goal_joint_limit_weight > 0.0f) {
-        const float margin = std::clamp(goal_node.status.joint_limit_score, 0.0f, 1.0f);
-        score -= goal_joint_limit_weight * margin;
-      }
-    }
-
-    if (score < best_score) {
-      best_score = score;
-      best_goal_id = reached_goal_id;
-      best_path = node_path;
-      selected_start_id = start_id;
-    }
-  }
-
-  if (best_goal_id < 0) {
-    return {-1, {}};
-  }
-
-  candidate_path_by_goal[best_goal_id] = best_path;
-
   for (int goal_id : goal_candidates) {
-    if (goal_id == best_goal_id) {
-      continue;
-    }
     if (goal_id < 0 || goal_id >= static_cast<int>(gng->getMaxNodeNum())) {
       continue;
     }
@@ -669,15 +611,83 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
     if (goal_node.id == -1 || !goal_node.status.active || !goal_node.status.self_collision_free) {
       continue;
     }
-    auto [reached_goal_id, path] =
-        planner.planToAnyNode(selected_start_id, std::vector<int>{goal_id}, *gng,
-                              allow_danger_goal);
-    if (reached_goal_id >= 0 && !path.empty()) {
-      candidate_path_by_goal.emplace(reached_goal_id, path);
-      candidate_paths.push_back(std::move(path));
+
+    float goal_best_score = std::numeric_limits<float>::max();
+    int goal_best_start_id = -1;
+    int goal_reached_id = -1;
+    std::vector<int> goal_best_path;
+
+    for (int start_id : start_candidates) {
+      if (start_id < 0 || start_id >= static_cast<int>(gng->getMaxNodeNum())) {
+        continue;
+      }
+      const auto &start_node = gng->nodeAt(start_id);
+      if (start_node.id == -1 || !start_node.status.active ||
+          !start_node.status.self_collision_free) {
+        continue;
+      }
+
+      auto [reached_goal_id, node_path] =
+          planner.planToAnyNode(start_id, std::vector<int>{goal_id}, *gng,
+                                allow_danger_goal);
+      if (node_path.empty() || reached_goal_id < 0) {
+        continue;
+      }
+
+      const int dim = std::min(static_cast<int>(start_node.weight_angle.size()),
+                               static_cast<int>(current_q.size()));
+      const float start_dist =
+          (start_node.weight_angle.head(dim) - current_q.head(dim)).norm();
+      float score = static_cast<float>(node_path.size()) + 0.5f * start_dist;
+
+      // Rotational manipulability penalty at goal: high condition number = near wrist singularity.
+      // log scale keeps penalty comparable to path length (log(1)=0, log(10)≈2.3, log(100)≈4.6).
+      if (goal_rot_manip_weight > 0.0f &&
+          reached_goal_id >= 0 && reached_goal_id < static_cast<int>(gng->getMaxNodeNum())) {
+        const auto &reached_goal_node = gng->nodeAt(reached_goal_id);
+        const auto &rot = reached_goal_node.status.rotational_manip_info;
+        if (rot.valid && rot.manipulability > 1e-8) {
+          const float cond = std::max(1.0f, static_cast<float>(rot.condition_number));
+          score += goal_rot_manip_weight * std::log(cond);
+        } else {
+          score += goal_rot_manip_weight * std::log(100.0f); // max penalty for invalid/singular
+        }
+        // Joint limit margin bonus: higher margin = more slack = lower score
+        if (goal_joint_limit_weight > 0.0f) {
+          const float margin =
+              std::clamp(reached_goal_node.status.joint_limit_score, 0.0f, 1.0f);
+          score -= goal_joint_limit_weight * margin;
+        }
+      }
+
+      if (score < goal_best_score) {
+        goal_best_score = score;
+        goal_best_start_id = start_id;
+        goal_reached_id = reached_goal_id;
+        goal_best_path = std::move(node_path);
+      }
+    }
+
+    if (goal_reached_id < 0 || goal_best_path.empty()) {
+      continue;
+    }
+
+    candidate_path_by_goal[goal_reached_id] = goal_best_path;
+    candidate_paths.push_back(goal_best_path);
+
+    if (goal_best_score < best_score) {
+      best_score = goal_best_score;
+      best_goal_id = goal_reached_id;
+      best_start_id = goal_best_start_id;
+      best_path = std::move(goal_best_path);
     }
   }
 
+  if (best_goal_id < 0) {
+    return {-1, {}};
+  }
+
+  selected_start_id = best_start_id;
   return {best_goal_id, best_path};
 }
 

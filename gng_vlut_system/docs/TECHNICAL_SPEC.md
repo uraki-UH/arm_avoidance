@@ -164,8 +164,8 @@ flowchart TD
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
 | `/grasp_pose_candidates` | `geometry_msgs/PoseArray` | 候補姿勢群 |
 | `/grasp_pose_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
-| `/ToPoDualArm/planned_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路 |
-| `/ToPoDualArm/candidate_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含める |
+| `/ToPoDualArm/planned_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
+| `/ToPoDualArm/candidate_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
 | `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標 |
 | `/ToPoDualArm/current_ee_pose` | `geometry_msgs/PoseStamped` | 現在 EE pose |
 | `target_joint_states` | `sensor_msgs/JointState` | 目標関節値 |
@@ -370,3 +370,132 @@ flowchart TD
 5. no-motion / fallback / trial 分岐の追加
 6. publish 周期や既定値の変更
 7. 評価指標の意味づけや可視化ルールの変更
+
+## 13. 可視化専用3次元GNG
+
+### 13.1 目的とデータ所有
+
+姿勢GNGのノードをそのまま描くと、異なる関節姿勢が同じ手先位置付近に重なり、
+状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerにある
+`weight_coords[layer]`だけを3次元サンプルとして別のGNGを事前学習し、描画点数を減らす。
+
+可視化GNGは関節姿勢を新規生成しない。各可視化ノードの`source_node_ids`が
+元姿勢GNGのノードを参照し、`weight_angle`、可操作性、衝突状態などは元GNGだけが保持する。
+したがって、関節角配列を可視化binへ重複保存しない。
+
+| データ | 所有元 | 用途 |
+|---|---|---|
+| `VisualizationGngNode::position` | 可視化GNG | 3次元描画位置 |
+| `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
+| `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
+| `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
+| 可視化GNGエッジ | 可視化GNG | 3次元GNGが学習した位相 |
+
+### 13.2 学習変数
+
+| 変数 | 既定値 | 意味 |
+|---|---:|---|
+| `target_nodes` | 500 | 可視化GNGの目標ノード数。元ノード数以下へ制限 |
+| `iterations` | 200000 | 3次元サンプルの学習反復数 |
+| `insertion_interval` | 200 | 誤差最大ノード間へ新ノードを追加する間隔 |
+| `max_edge_age` | 200 | 使用されないエッジを削除する年齢上限 |
+| `winner_learning_rate` | 0.05 | 最近傍ノードの学習率 |
+| `neighbor_learning_rate` | 0.005 | 最近傍ノードに接続する隣接ノードの学習率 |
+| `split_error_scale` | 0.5 | ノード追加時の誤差縮小率 |
+| `error_decay` | 0.0005 | 反復ごとの誤差減衰率 |
+| `seed` | 42 | 決定論的サンプリング用乱数seed |
+| `coord_layer` | layerごと | 使用した`weight_coords`の添字 |
+| `source_signature` | 自動計算 | 元ノードIDと3次元座標のFNV-1a照合値 |
+
+学習後は、各可視化ノードへ未割当の元ノードを最近傍順で1個ずつ先に割り当て、
+残りを最近傍可視化ノードへ割り当てる。これにより全可視化ノードが1個以上の
+`source_node_ids`を持ち、各元ノードIDはちょうど1回だけ格納される。
+
+```bash
+ros2 run gng_vlut_system visualization_gng_trainer \
+  --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm3/gng.bin \
+  --target-nodes 500 --iterations 200000 --seed 42
+```
+
+`--output-prefix`省略時は、入力binと同じディレクトリへ
+`visualization_gng_layer_<layer>.bin`を生成する。ToPoDualArm3の現モデルは
+coord layerが1つで、941元ノードから500可視化ノード、840エッジを生成する。
+
+941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
+別の実験IDと学習規模だけをlaunch引数で指定する。
+
+```bash
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  experiment_id:=ToPoDualArm10000 \
+  max_node_num:=11000 \
+  max_iterations:=2200000 \
+  refine_iterations:=600000
+```
+
+`lambda=200`では約201反復ごとに標準ノード追加を試みる。TCP範囲外および自己衝突
+ノードを途中で除去するため、一時上限を11,000にしてrefinementで空き枠を補充し、
+保存時の有効ノード数を約10,000へ合わせる。厳密な10,000は保証しない。出力先は
+`gng_results/ToPoDualArm10000/`で、既存の`ToPoDualArm3/`は変更しない。
+現環境での生成結果は10,801有効元ノードである。
+
+### 13.3 bin形式 version 1
+
+固定長整数とfloatはnative binary表現で保存する。現在の対象環境は
+x86_64 little-endianであり、異なるendian間の互換性はversion 1では保証しない。
+
+| 順序 | 型 | 内容 |
+|---:|---|---|
+| 1 | `char[8]` | magic `VIZGNG1\0` |
+| 2 | `uint32` | format version |
+| 3 | `uint32` | coord layer |
+| 4 | `uint64` | source signature |
+| 5 | `uint32` | node count |
+| 6 | `uint32` | edge count |
+| 7 | nodeごと `float32[3]` | 3次元位置 |
+| 8 | nodeごと `uint32` | 対応する元ノードID数 |
+| 9 | nodeごと `int32[]` | 元ノードID列 |
+| 10 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
+
+読み込み時はmagic、version、配列上限、エッジindex、末尾余剰データを検証する。
+さらにブリッジが`source_signature`を現在の元GNGと照合し、古い組み合わせは配信しない。
+
+### 13.4 ROSパラメータとトピック
+
+| パラメータ | 既定値 | 意味 |
+|---|---|---|
+| `visualization_gng.enabled` | `false` | 可視化GNGの読み込みと配信 |
+| `visualization_gng.path_prefix` | 空 | 空なら元`gng.bin`と同じ場所の`visualization_gng` |
+| `visualization_gng.topic_prefix` | `topological_map_visualization` | layer suffixを付けるtopic接頭辞 |
+
+`ToPoDualArm.yaml`では有効化済みで、現在の出力は
+`/ToPoDualArm/topological_map_visualization_layer_0`、型は
+`ais_gng_msgs/msg/TopologicalMap`である。既存の
+`/ToPoDualArm/topological_map_static`とlayer topicは変更しない。
+
+状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
+safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
+
+### 13.5 フロー
+
+```mermaid
+flowchart TD
+    A[元gng.bin] --> B[activeな元ノードを列挙]
+    B --> C[layer別 weight_coordsを3次元sample化]
+    C --> D[3次元GNGを学習]
+    D --> E[全元ノードIDを最近傍visual nodeへ割当]
+    E --> F[source signatureを計算]
+    F --> G[visualization_gng_layer_n.bin]
+    G --> H[保存直後に再読込して件数とsignatureを検証]
+```
+
+```mermaid
+flowchart TD
+    A[topofuzzy_bridge起動] --> B[元GNGとvisualization binを読込]
+    B --> C{layerとsignature一致?}
+    C -- no --> D[警告してそのlayerを配信しない]
+    C -- yes --> E[元ノードStatusをbest-wins集約]
+    E --> F[TopologicalMapを生成]
+    F --> G[topological_map_visualization_layer_n]
+    H[occupied/danger voxel更新] --> E
+```

@@ -866,7 +866,7 @@ private:
     } else if (!trial_mode_ &&
                !(start_node.status.is_colliding ||
                  (avoid_danger_ && start_node.status.is_danger))) {
-      publishTrajectoryPathLocked({});
+      publishTrajectoryPathLocked(current_q, {});
     }
 
     sensor_msgs::msg::JointState out;
@@ -1280,7 +1280,7 @@ private:
       return false;
     }
 
-    publishTrajectoryPathLocked(trajectory_.node_path);
+    publishTrajectoryPathLocked(current_q, trajectory_.node_path);
     if (trajectory_.waypoint_index < trajectory_.node_path.size()) {
       const int target_node_id = trajectory_.node_path[trajectory_.waypoint_index];
       if (target_node_id >= 0 &&
@@ -1566,13 +1566,14 @@ private:
     }
   }
 
-  void publishTrajectoryPathLocked(const std::vector<int> &node_path) {
+  void publishTrajectoryPathLocked(const Eigen::VectorXf &current_q,
+                                   const std::vector<int> &node_path) {
     if (!trajectory_pub_ || !gng_) {
       return;
     }
     trajectory_pub_->publish(
-        topological_map_avoidance::buildPathMessage(
-            *this, gng_, {node_path},
+        topological_map_avoidance::buildPathMessageWithCurrentPose(
+            *this, gng_, current_q, chain_, {node_path},
             have_map_ ? latest_map_.header.frame_id : std::string{}));
   }
 

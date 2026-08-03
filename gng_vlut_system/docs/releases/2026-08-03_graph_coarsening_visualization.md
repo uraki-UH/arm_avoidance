@@ -1,10 +1,14 @@
 # 設計書案 - エフェクティビティマップのグラフ縮約可視化
 
 - 作成: 2026-08-03
-- 状態: **案**(未承認・未実装)
+- 状態: **置換済み**(この文書のunion-find縮約は未実装)
 - 関連: [TASK_LIST.md](../TASK_LIST.md) デモ可視化 A〜E / [TASK_CANDIDATES.md](../TASK_CANDIDATES.md) 階層構造
+- 置換先: [2026-08-03_visualization_gng.md](2026-08-03_visualization_gng.md)
 
 ---
+
+> 2026-08-03: 3次元座標だけを入力とする可視化専用GNG方式へ変更した。
+> 以下は比較用に残す旧設計であり、coordエッジのunion-find縮約やマージ列は実装していない。
 
 ## 1. 目的
 
