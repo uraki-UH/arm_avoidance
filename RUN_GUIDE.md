@@ -101,7 +101,6 @@ ros2 run gng_vlut_system self_recognition_filter_node
 
 
 # joint_statesのダミー
-python3 dummy_joint_pub.py 
 (topoarmの場合)
 python3 dummy_joint_pub.py --robot topoarm
 

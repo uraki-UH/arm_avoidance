@@ -25,6 +25,9 @@ def launch_setup(context, *args, **kwargs):
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
     use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
+    max_node_num = LaunchConfiguration("max_node_num").perform(context)
+    max_iterations = LaunchConfiguration("max_iterations").perform(context)
+    refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
 
     # 上書き用パラメータの準備
     overrides = {}
@@ -65,6 +68,12 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng.profile_names"] = gng_profile_names
     use_task_density_bias_value = (use_task_density_bias.lower() == "true")
     overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
+    if max_node_num:
+        overrides["gng_params.max_node_num"] = int(max_node_num)
+    if max_iterations:
+        overrides["gng_params.max_iterations"] = int(max_iterations)
+    if refine_iterations:
+        overrides["gng_params.refine_iterations"] = int(refine_iterations)
 
     return [
         # オフラインURDFトレーナーノード (デュアルアーム用)
@@ -139,11 +148,23 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "gng_profile_names",
-            default_value="left_arm,right_arm",
+            default_value="",
         ),
         DeclareLaunchArgument(
             "use_task_density_bias",
             default_value="false",
+        ),
+        DeclareLaunchArgument(
+            "max_node_num",
+            default_value="",
+        ),
+        DeclareLaunchArgument(
+            "max_iterations",
+            default_value="",
+        ),
+        DeclareLaunchArgument(
+            "refine_iterations",
+            default_value="",
         ),
         OpaqueFunction(function=launch_setup)
     ])
