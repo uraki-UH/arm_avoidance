@@ -59,7 +59,10 @@ inline uint8_t viewerLabelFromStatus(const GNG::Status &status) {
 inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
     const ais_gng_msgs::msg::TopologicalMap &source_path,
     const ais_gng_msgs::msg::TopologicalMap &visualization_graph,
-    const std::vector<std::int32_t> &source_to_visual) {
+    const std::vector<std::int32_t> &source_to_visual,
+    const robot_sim::visualization::VisualizationGngModel &visualization_model,
+    const std::unordered_map<std::uint64_t, std::size_t>
+        &transition_path_index) {
   ais_gng_msgs::msg::TopologicalMap out;
   out.header = visualization_graph.header;
   out.header.stamp = source_path.header.stamp;
@@ -74,6 +77,19 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
   constexpr std::uint16_t kCurrentPoseNodeId =
       std::numeric_limits<std::uint16_t>::max();
   std::int32_t current_pose_output = -1;
+
+  const auto ensure_visual_node =
+      [&out, &visualization_graph, &visual_to_output](std::uint32_t visual_id) {
+        if (visual_id >= visualization_graph.nodes.size()) {
+          return std::int32_t{-1};
+        }
+        auto &output_index = visual_to_output[visual_id];
+        if (output_index < 0) {
+          output_index = static_cast<std::int32_t>(out.nodes.size());
+          out.nodes.push_back(visualization_graph.nodes[visual_id]);
+        }
+        return output_index;
+      };
 
   out.nodes.reserve(source_path.nodes.size());
   for (std::size_t input_index = 0; input_index < source_path.nodes.size();
@@ -101,18 +117,29 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
       continue;
     }
 
-    auto &output_index =
-        visual_to_output[static_cast<std::size_t>(visual_id)];
-    if (output_index < 0) {
-      output_index = static_cast<std::int32_t>(out.nodes.size());
-      out.nodes.push_back(
-          visualization_graph.nodes[static_cast<std::size_t>(visual_id)]);
-    }
-    input_to_output[input_index] = output_index;
+    input_to_output[input_index] =
+        ensure_visual_node(static_cast<std::uint32_t>(visual_id));
   }
 
   std::unordered_set<std::uint64_t> seen_edges;
-  out.edges.reserve(source_path.edges.size());
+  const auto append_edge = [&out, &seen_edges](std::int32_t source,
+                                               std::int32_t target) {
+    if (source < 0 || target < 0 || source == target) {
+      return;
+    }
+    const std::uint32_t lo =
+        static_cast<std::uint32_t>(std::min(source, target));
+    const std::uint32_t hi =
+        static_cast<std::uint32_t>(std::max(source, target));
+    const std::uint64_t edge_key =
+        (static_cast<std::uint64_t>(lo) << 32U) | hi;
+    if (seen_edges.insert(edge_key).second) {
+      out.edges.push_back(static_cast<std::uint16_t>(source));
+      out.edges.push_back(static_cast<std::uint16_t>(target));
+    }
+  };
+
+  out.edges.reserve(source_path.edges.size() * 2);
   for (std::size_t edge_index = 0; edge_index + 1 < source_path.edges.size();
        edge_index += 2) {
     const std::size_t source_index = source_path.edges[edge_index];
@@ -123,22 +150,58 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
     }
     const std::int32_t mapped_source = input_to_output[source_index];
     const std::int32_t mapped_target = input_to_output[target_index];
-    if (mapped_source < 0 || mapped_target < 0 ||
-        mapped_source == mapped_target) {
+    if (mapped_source < 0 || mapped_target < 0) {
       continue;
     }
 
-    const std::uint32_t lo = static_cast<std::uint32_t>(
-        std::min(mapped_source, mapped_target));
-    const std::uint32_t hi = static_cast<std::uint32_t>(
-        std::max(mapped_source, mapped_target));
-    const std::uint64_t edge_key =
-        (static_cast<std::uint64_t>(lo) << 32U) | hi;
-    if (!seen_edges.insert(edge_key).second) {
+    const auto &source_node = source_path.nodes[source_index];
+    const auto &target_node = source_path.nodes[target_index];
+    if (source_node.id == kCurrentPoseNodeId ||
+        target_node.id == kCurrentPoseNodeId) {
+      append_edge(mapped_source, mapped_target);
       continue;
     }
-    out.edges.push_back(static_cast<std::uint16_t>(mapped_source));
-    out.edges.push_back(static_cast<std::uint16_t>(mapped_target));
+
+    const auto transition_it = transition_path_index.find(
+        robot_sim::visualization::visualizationGngSourceEdgeKey(
+            source_node.id, target_node.id));
+    if (transition_it == transition_path_index.end() ||
+        transition_it->second >= visualization_model.transition_paths.size()) {
+      append_edge(mapped_source, mapped_target);
+      continue;
+    }
+    const auto &transition =
+        visualization_model.transition_paths[transition_it->second];
+    const bool forward =
+        source_node.id == transition.source_node_id &&
+        target_node.id == transition.target_node_id;
+    const bool reverse =
+        source_node.id == transition.target_node_id &&
+        target_node.id == transition.source_node_id;
+    if (!forward && !reverse) {
+      append_edge(mapped_source, mapped_target);
+      continue;
+    }
+
+    std::int32_t previous = -1;
+    const std::size_t path_begin = transition.path_offset;
+    const std::size_t path_end = path_begin + transition.path_size;
+    if (transition.path_size < 2 ||
+        path_end > visualization_model.transition_path_nodes.size()) {
+      append_edge(mapped_source, mapped_target);
+      continue;
+    }
+    for (std::size_t path_index = 0; path_index < transition.path_size;
+         ++path_index) {
+      const std::size_t oriented_index =
+          forward ? path_begin + path_index : path_end - 1 - path_index;
+      const std::int32_t current = ensure_visual_node(
+          visualization_model.transition_path_nodes[oriented_index]);
+      if (previous >= 0) {
+        append_edge(previous, current);
+      }
+      previous = current;
+    }
   }
   return out;
 }

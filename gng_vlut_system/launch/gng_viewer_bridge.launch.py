@@ -226,6 +226,7 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "robot_name": robot_name,
                 "enable_joint_state_publisher": enable_joint_state_publisher,
+                "publish_initial_joint_state": "true",
                 "urdf_path": urdf_path,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,

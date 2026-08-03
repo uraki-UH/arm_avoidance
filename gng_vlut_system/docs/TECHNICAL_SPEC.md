@@ -389,7 +389,8 @@ flowchart TD
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
 | `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
 | `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
-| 可視化GNGエッジ | 元姿勢GNGから縮約 | coord-space edgeを可視化ノード間へ写像した位相 |
+| 可視化GNGエッジ | 事前計算 | angle-space edgeのFK補間列を可視化ノード間へ写像した遷移可能性 |
+| `transition_paths` | 可視化GNG | 直接接続では表せない元angle edgeごとの順序付き可視化ノード列 |
 
 ### 13.2 学習変数
 
@@ -405,25 +406,34 @@ flowchart TD
 | `error_decay` | 0.0005 | 反復ごとの誤差減衰率 |
 | `seed` | 42 | 決定論的サンプリング用乱数seed |
 | `coord_layer` | layerごと | 使用した`weight_coords`の添字 |
-| `source_signature` | 自動計算 | 元ノードID、3次元座標、coord-space edgeのFNV-1a照合値 |
+| `source_signature` | 自動計算 | 元ノードID、座標、関節角、coord/angle edgeのFNV-1a照合値 |
+| `max_joint_step` | 0.05 rad | 元angle edgeをFK補間するときの1区間あたり最大関節差 |
+| `max_samples_per_edge` | 256 | 元angle edge 1本あたりの補間サンプル上限 |
 
 学習後は、各可視化ノードへ未割当の元ノードを最近傍順で1個ずつ先に割り当て、
 残りを最近傍可視化ノードへ割り当てる。これにより全可視化ノードが1個以上の
 `source_node_ids`を持ち、各元ノードIDはちょうど1回だけ格納される。
-その後、元coord-space edgeの両端を`source_node_ids`の所属先へ写像する。
-両端が同じ可視化ノードへ縮約された自己ループと、同じ可視化ノード間の重複edgeは保存しない。
+その後、元angle-space edgeの両端にある`weight_angle`を線形補間し、各補間姿勢を
+URDFのFKで`weight_coords[layer]`と同じ手先位置へ変換する。補間位置に最も近い
+可視化ノードを3次元位置だけで選び、連続する同一IDを除去する。両端は必ず
+`source_node_ids`の所属先とし、生成した順序付き列の隣接関係を静的可視化edgeに使う。
+直接の所属先2点だけで表せる元edgeは経路表へ保存せず、3点以上になるedgeだけを
+`transition_paths`へ保存する。
 3次元GNGが学習中に作るedgeはノード配置の学習にだけ使い、binへは保存しない。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
   --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm3/gng.bin \
-  --target-nodes 500 --iterations 200000 --seed 42
+  --target-nodes 500 --iterations 200000 --seed 42 \
+  --interpolation-joint-step 0.05 \
+  --ros-args \
+  --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
 `--output-prefix`省略時は、入力binと同じディレクトリへ
 `visualization_gng_layer_<layer>.bin`を生成する。ToPoDualArm3の現モデルは
-coord layerが1つで、941元ノードから500可視化ノード、2,295エッジを生成する。
-ToPoDualArm10000は10,801元ノードから500可視化ノード、2,504エッジを生成する。
+coord layerが1つで、941元ノードから500可視化ノード、3,108遷移エッジを生成する。
+ToPoDualArm10000は10,801元ノードから500可視化ノード、3,187遷移エッジを生成する。
 どちらも1連結成分、孤立ノード0である。
 
 941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
@@ -444,28 +454,34 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 `gng_results/ToPoDualArm10000/`で、既存の`ToPoDualArm3/`は変更しない。
 現環境での生成結果は10,801有効元ノードである。
 
-### 13.3 bin形式 version 1
+### 13.3 bin形式 version 2
 
 固定長整数とfloatはnative binary表現で保存する。現在の対象環境は
-x86_64 little-endianであり、異なるendian間の互換性はversion 1では保証しない。
+x86_64 little-endianであり、異なるendian間の互換性はversion 2では保証しない。
 
 | 順序 | 型 | 内容 |
 |---:|---|---|
-| 1 | `char[8]` | magic `VIZGNG1\0` |
+| 1 | `char[8]` | magic `VIZGNG2\0` |
 | 2 | `uint32` | format version |
 | 3 | `uint32` | coord layer |
 | 4 | `uint64` | source signature |
 | 5 | `uint32` | node count |
 | 6 | `uint32` | edge count |
-| 7 | nodeごと `float32[3]` | 3次元位置 |
-| 8 | nodeごと `uint32` | 対応する元ノードID数 |
-| 9 | nodeごと `int32[]` | 元ノードID列 |
-| 10 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
+| 7 | `uint32` | transition override count |
+| 8 | nodeごと `float32[3]` | 3次元位置 |
+| 9 | nodeごと `uint32` | 対応する元ノードID数 |
+| 10 | nodeごと `int32[]` | 元ノードID列 |
+| 11 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
+| 12 | overrideごと `int32[2]` | 昇順の元angle edge両端ID |
+| 13 | overrideごと `uint16` | 中間可視化ノード数 |
+| 14 | overrideごと `uint16[]` | 順序付き中間可視化ノードID |
 
 読み込み時はmagic、version、配列上限、エッジindex、末尾余剰データを検証する。
-さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、coord-space edgeと
-照合し、古い組み合わせは配信しない。edgeを含むsignature schemaは2で、bin形式自体は
-version 1のままである。
+経路両端の可視化ノードIDは`source_node_ids`から復元できるため重複保存しない。
+さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、関節角、
+coord-space edge、angle-space edgeと照合し、古い組み合わせは配信しない。
+signature schemaは3である。version 1との読み込み互換性は持たないため、元GNGごとに
+`visualization_gng_trainer`で再生成する。
 
 ### 13.4 ROSパラメータとトピック
 
@@ -486,8 +502,10 @@ version 1のままである。
 
 bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
 `source_node_id -> visual_node_id`逆引き配列を`O(n)`で1回だけ構築する。
-元軌道topicを受信した後は各元ノードを`O(1)`で引き、ノード列とedge列を1回走査する。
-単一路径長を`L`とすると変換は`O(L)`であり、FKと最近傍探索は実行しない。
+さらに保存対象になった元edgeから`transition_paths`へのhash表を構築する。
+元軌道topicを受信した後は各元ノードと元edgeを`O(1)`で引き、保存済み列を向きに
+合わせて連結する。入力edge数を`L`、展開後の可視化ノード数を`K`とすると変換は
+`O(L + K)`であり、FKと最近傍探索は実行しない。
 
 ToPoDualArmの追加出力は次のとおりで、いずれも
 `ais_gng_msgs/msg/TopologicalMap`である。
@@ -500,8 +518,9 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 複数の元ノードが同じ可視化ノードへ対応する場合は1ノードへ統合し、自己loopと
 重複edgeを除去する。ID `65535`の現在姿勢仮想ノードは入力と可視化graphのframeが
 一致するときだけ位置を保持して出力する。空入力は空の可視化軌道として配信する。
-この変換は元軌道ノードの所属先を直接つなぐ段階であり、angle edgeのFK補間に基づく
-中間可視化ノード列の事前展開はまだ行わない。
+保存済みのangle edge補間列に中間ノードがあれば、入力元軌道より多いノードとedgeを
+出力できる。現在の`TopologicalMap`は同じ可視化ノードへの再訪を1ノードへ統合するため、
+描画用のedge集合は保持するが、厳密な時間順序は保持しない。
 
 状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
 safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
@@ -511,14 +530,16 @@ safeがなくdangerだけ存在するならdanger、それ以外はcollidingと�
 ```mermaid
 flowchart TD
     A[元gng.bin] --> B[activeな元ノードを列挙]
-    B --> C[layer別 weight_coordsとcoord edgeを収集]
+    B --> C[layer別 weight_coords weight_angle angle edgeを収集]
     C --> D[3次元GNGを学習]
     D --> E[全元ノードIDを最近傍visual nodeへ割当]
-    E --> F[元coord edgeをvisual node間へ縮約]
-    F --> G[自己loopと重複edgeを除去]
-    G --> H[node 座標 edgeのsource signatureを計算]
-    H --> I[visualization_gng_layer_n.bin]
-    I --> J[保存直後に再読込して所属 edge 連結性を検証]
+    E --> F[元angle edgeの関節角を事前補間]
+    F --> G[URDF FKでlayer別手先位置を計算]
+    G --> H[最近傍visual nodeの順序付き列へ変換]
+    H --> I[直接でない列だけcompact override保存]
+    I --> J[node 座標 関節角 両edgeのsignatureを計算]
+    J --> K[visualization_gng_layer_n.bin]
+    K --> L[保存直後に再読込して所属 edge 遷移列を検証]
 ```
 
 ```mermaid
@@ -526,12 +547,13 @@ flowchart TD
     A[topofuzzy_bridge起動] --> B[元GNGとvisualization binを読込]
     B --> C{layerとsignature一致?}
     C -- no --> D[警告してそのlayerを配信しない]
-    C -- yes --> E[source IDからvisual IDへの逆引きをO nで構築]
+    C -- yes --> E[source ID逆引きとedge path hashを構築]
     E --> F[元ノードStatusをbest-wins集約]
     F --> G[TopologicalMapを生成]
     G --> H[topological_map_visualization_layer_n]
     I[occupied/danger voxel更新] --> F
-    J[planned/candidate topological map] --> K[各source IDをO 1でvisual IDへ変換]
-    K --> L[自己loopと重複edgeを除去]
-    L --> M[visualization trajectory layer_n]
+    J[planned/candidate topological map] --> K[各source edgeをO 1で保存列へ変換]
+    K --> L[保存済み中間visual nodeを展開]
+    L --> M[自己loopと重複edgeを除去]
+    M --> N[visualization trajectory layer_n]
 ```

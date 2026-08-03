@@ -4,14 +4,21 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
 #include <Eigen/Core>
+#include <rclcpp/rclcpp.hpp>
 
+#include "common/resource_utils.hpp"
 #include "gng/GrowingNeuralGas.hpp"
+#include "robot_model/kinematic_adapter.hpp"
+#include "robot_model/urdf_loader.hpp"
 #include "visualization/visualization_gng.hpp"
 
 namespace {
@@ -22,13 +29,59 @@ struct Options {
   std::filesystem::path input;
   std::filesystem::path output_prefix;
   robot_sim::visualization::VisualizationGngTrainingParams training;
+  robot_sim::visualization::VisualizationGngInterpolationParams interpolation;
   int layer = -1;
+};
+
+struct FkContext {
+  std::unique_ptr<kinematics::KinematicChain> chain;
+  std::vector<std::pair<std::size_t, int>> selected_dofs;
+  int selected_dof_count = 0;
+
+  Eigen::Vector3f position(const Eigen::VectorXf &selected_values,
+                           std::uint32_t layer) {
+    if (!chain || selected_values.size() != selected_dof_count ||
+        layer >= chain->getArmCount()) {
+      throw std::runtime_error("FK input does not match the selected GNG joints");
+    }
+    std::vector<double> full_values(
+        static_cast<std::size_t>(chain->getTotalDOF()), 0.0);
+    std::size_t selected_cursor = 0;
+    for (const auto &[full_offset, dof] : selected_dofs) {
+      for (int d = 0; d < dof; ++d) {
+        full_values[full_offset + static_cast<std::size_t>(d)] =
+            selected_values[static_cast<int>(selected_cursor++)];
+      }
+    }
+    chain->updateKinematics(full_values);
+    return chain->getEEFPosition(layer).cast<float>();
+  }
 };
 
 struct GraphStats {
   std::size_t connected_components = 0;
   std::size_t isolated_nodes = 0;
 };
+
+bool transitionsEqual(
+    const robot_sim::visualization::VisualizationGngModel &lhs,
+    const robot_sim::visualization::VisualizationGngModel &rhs) {
+  if (lhs.transition_paths.size() != rhs.transition_paths.size() ||
+      lhs.transition_path_nodes != rhs.transition_path_nodes) {
+    return false;
+  }
+  for (std::size_t i = 0; i < lhs.transition_paths.size(); ++i) {
+    const auto &lhs_path = lhs.transition_paths[i];
+    const auto &rhs_path = rhs.transition_paths[i];
+    if (lhs_path.source_node_id != rhs_path.source_node_id ||
+        lhs_path.target_node_id != rhs_path.target_node_id ||
+        lhs_path.path_offset != rhs_path.path_offset ||
+        lhs_path.path_size != rhs_path.path_size) {
+      return false;
+    }
+  }
+  return true;
+}
 
 GraphStats computeGraphStats(
     std::size_t node_count,
@@ -72,7 +125,10 @@ void printUsage(const char *program) {
       << " --input <gng.bin> [--output-prefix <path>]"
          " [--target-nodes <n>] [--iterations <n>]"
          " [--insertion-interval <n>] [--max-edge-age <n>]"
-         " [--seed <n>] [--layer <n>]\n";
+         " [--seed <n>] [--layer <n>]"
+         " [--interpolation-joint-step <rad>]"
+         " [--max-interpolation-samples <n>]"
+         " --ros-args --params-file <robot.yaml>\n";
 }
 
 int parseInt(const std::string &value, const std::string &name) {
@@ -96,18 +152,27 @@ std::uint32_t parseUint32(const std::string &value,
   return static_cast<std::uint32_t>(parsed);
 }
 
-Options parseOptions(int argc, char **argv) {
+float parseFloat(const std::string &value, const std::string &name) {
+  std::size_t consumed = 0;
+  const float parsed = std::stof(value, &consumed);
+  if (consumed != value.size() || !std::isfinite(parsed)) {
+    throw std::invalid_argument("invalid " + name + ": " + value);
+  }
+  return parsed;
+}
+
+Options parseOptions(const std::vector<std::string> &arguments) {
   Options options;
-  for (int i = 1; i < argc; ++i) {
-    const std::string argument = argv[i];
+  for (std::size_t i = 1; i < arguments.size(); ++i) {
+    const std::string &argument = arguments[i];
     if (argument == "--help" || argument == "-h") {
-      printUsage(argv[0]);
+      printUsage(arguments[0].c_str());
       std::exit(0);
     }
-    if (i + 1 >= argc) {
+    if (i + 1 >= arguments.size()) {
       throw std::invalid_argument("missing value for " + argument);
     }
-    const std::string value = argv[++i];
+    const std::string &value = arguments[++i];
     if (argument == "--input") {
       options.input = value;
     } else if (argument == "--output-prefix") {
@@ -124,6 +189,10 @@ Options parseOptions(int argc, char **argv) {
       options.training.seed = parseUint32(value, argument);
     } else if (argument == "--layer") {
       options.layer = parseInt(value, argument);
+    } else if (argument == "--interpolation-joint-step") {
+      options.interpolation.max_joint_step = parseFloat(value, argument);
+    } else if (argument == "--max-interpolation-samples") {
+      options.interpolation.max_samples_per_edge = parseInt(value, argument);
     } else {
       throw std::invalid_argument("unknown argument: " + argument);
     }
@@ -139,16 +208,170 @@ Options parseOptions(int argc, char **argv) {
       options.training.max_edge_age < 1 || options.layer < -1) {
     throw std::invalid_argument("numeric options are outside the valid range");
   }
+  if (options.interpolation.max_joint_step <= 0.0f ||
+      options.interpolation.max_samples_per_edge < 2) {
+    throw std::invalid_argument(
+        "interpolation options are outside the valid range");
+  }
   return options;
 }
 
-void trainLayer(const SourceGng &source, const Options &options, int layer) {
+std::vector<std::string> splitCommaSeparated(const std::string &text) {
+  std::vector<std::string> values;
+  std::stringstream stream(text);
+  std::string value;
+  while (std::getline(stream, value, ',')) {
+    const auto begin = value.find_first_not_of(" \t");
+    if (begin == std::string::npos) {
+      continue;
+    }
+    const auto end = value.find_last_not_of(" \t");
+    values.push_back(value.substr(begin, end - begin + 1));
+  }
+  return values;
+}
+
+std::vector<std::string> getStringList(const rclcpp::Node &node,
+                                       const std::string &name) {
+  if (!node.has_parameter(name)) {
+    return {};
+  }
+  const auto parameter = node.get_parameter(name);
+  if (parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING_ARRAY) {
+    return parameter.as_string_array();
+  }
+  if (parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING) {
+    return splitCommaSeparated(parameter.as_string());
+  }
+  return {};
+}
+
+std::string getString(const rclcpp::Node &node, const std::string &name) {
+  if (!node.has_parameter(name)) {
+    return {};
+  }
+  const auto parameter = node.get_parameter(name);
+  return parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING
+             ? parameter.as_string()
+             : std::string{};
+}
+
+void appendUnique(std::vector<std::string> &target,
+                  const std::vector<std::string> &values) {
+  std::unordered_set<std::string> existing(target.begin(), target.end());
+  for (const auto &value : values) {
+    if (existing.insert(value).second) {
+      target.push_back(value);
+    }
+  }
+}
+
+FkContext buildFkContext(const rclcpp::Node &node) {
+  std::string urdf_path = getString(node, "urdf_path");
+  if (urdf_path.empty()) {
+    urdf_path = getString(node, "robot_urdf_path");
+  }
+  urdf_path = robot_sim::common::resolvePath(urdf_path);
+  if (urdf_path.empty() || !std::filesystem::exists(urdf_path)) {
+    throw std::runtime_error(
+        "urdf_path is required to precompute transition interpolation");
+  }
+  const auto model = simulation::loadRobotFromUrdf(
+      urdf_path, getString(node, "resource_root_dir"),
+      getString(node, "mesh_root_dir"));
+
+  auto profile_names = getStringList(node, "gng.profile_names");
+  if (profile_names.empty()) {
+    profile_names = getStringList(node, "gng.profile_name");
+  }
+  if (profile_names.empty()) {
+    throw std::runtime_error("gng.profile_names is required for FK setup");
+  }
+
+  std::vector<simulation::ArmConfig> arm_configs;
+  std::vector<std::string> include_joint_names;
+  std::vector<std::string> exclude_joint_names;
+  for (const auto &profile_name : profile_names) {
+    const std::string prefix = "gng.profiles." + profile_name + ".";
+    auto leaf_names = splitCommaSeparated(getString(node, prefix + "eef"));
+    if (leaf_names.empty()) {
+      leaf_names =
+          splitCommaSeparated(getString(node, prefix + "eef_link_names"));
+    }
+    if (leaf_names.empty()) {
+      leaf_names = splitCommaSeparated(
+          getString(node, prefix + "arm_leaf_link_names"));
+    }
+    if (leaf_names.empty()) {
+      throw std::runtime_error("profile " + profile_name +
+                               " does not define an end-effector link");
+    }
+    const std::string root = getString(node, prefix + "root");
+    for (const auto &leaf : leaf_names) {
+      arm_configs.push_back({root, leaf, ""});
+    }
+    appendUnique(include_joint_names,
+                 getStringList(node, prefix + "include_joint_names"));
+    appendUnique(exclude_joint_names,
+                 getStringList(node, prefix + "exclude_joint_names"));
+    appendUnique(exclude_joint_names,
+                 getStringList(node, prefix + "dof_exclude"));
+    appendUnique(exclude_joint_names,
+                 getStringList(node, prefix + "dof_exclude_joint_names"));
+  }
+  appendUnique(include_joint_names,
+               getStringList(node, "gng.include_joint_names"));
+  appendUnique(exclude_joint_names,
+               getStringList(node, "gng.exclude_joint_names"));
+  appendUnique(exclude_joint_names,
+               getStringList(node, "gng.dof_exclude_joint_names"));
+
+  FkContext context;
+  context.chain = simulation::createMultiArmKinematicChain(model, arm_configs);
+  const std::unordered_set<std::string> include_set(include_joint_names.begin(),
+                                                    include_joint_names.end());
+  const std::unordered_set<std::string> exclude_set(exclude_joint_names.begin(),
+                                                    exclude_joint_names.end());
+  std::size_t full_offset = 0;
+  for (int joint = 0; joint < context.chain->getNumJoints(); ++joint) {
+    const int dof = context.chain->getJointDOF(joint);
+    if (dof <= 0) {
+      continue;
+    }
+    const std::string name = context.chain->getJointName(joint);
+    const bool included = include_set.empty() || include_set.count(name) > 0;
+    if (included && exclude_set.count(name) == 0) {
+      context.selected_dofs.emplace_back(full_offset, dof);
+      context.selected_dof_count += dof;
+    }
+    full_offset += static_cast<std::size_t>(dof);
+  }
+  if (context.selected_dof_count <= 0) {
+    throw std::runtime_error("FK joint selection is empty");
+  }
+  return context;
+}
+
+void trainLayer(const SourceGng &source, const Options &options, int layer,
+                FkContext &fk_context) {
   const auto source_points =
       robot_sim::visualization::collectVisualizationGngSourcePoints(source,
                                                                     layer);
   const auto started = std::chrono::steady_clock::now();
-  const auto model = robot_sim::visualization::trainVisualizationGng(
+  auto model = robot_sim::visualization::trainVisualizationGng(
       source_points, static_cast<std::uint32_t>(layer), options.training);
+  if (source_points.empty() ||
+      source_points.front().weight_angle.size() !=
+          fk_context.selected_dof_count) {
+    throw std::runtime_error(
+        "source GNG angle dimension does not match the selected FK joints");
+  }
+  robot_sim::visualization::precomputeVisualizationGngTransitionPaths(
+      source_points, model,
+      [&fk_context](const Eigen::VectorXf &angle, std::uint32_t coord_layer) {
+        return fk_context.position(angle, coord_layer);
+      },
+      options.interpolation);
   const auto elapsed = std::chrono::duration<double>(
       std::chrono::steady_clock::now() - started);
   const auto output = robot_sim::visualization::visualizationGngLayerPath(
@@ -175,13 +398,11 @@ void trainLayer(const SourceGng &source, const Options &options, int layer) {
   for (const auto &source_point : source_points) {
     expected_source_ids.insert(source_point.source_node_id);
   }
-  const auto expected_edges =
-      robot_sim::visualization::contractVisualizationGngEdges(source_points,
-                                                               loaded.nodes);
   if (loaded.source_signature != model.source_signature ||
       loaded.coord_layer != model.coord_layer ||
       loaded.nodes.size() != model.nodes.size() ||
-      loaded.edges != model.edges || loaded.edges != expected_edges ||
+      loaded.edges != model.edges ||
+      !transitionsEqual(loaded, model) ||
       empty_node_count != 0 || mapped_source_count != source_points.size() ||
       mapped_source_ids.size() != mapped_source_count ||
       mapped_source_ids != expected_source_ids) {
@@ -193,6 +414,7 @@ void trainLayer(const SourceGng &source, const Options &options, int layer) {
   std::cout << "layer=" << layer << " source_nodes=" << source_points.size()
             << " visual_nodes=" << loaded.nodes.size()
             << " visual_edges=" << loaded.edges.size()
+            << " transition_overrides=" << loaded.transition_paths.size()
             << " empty_nodes=" << empty_node_count
             << " connected_components=" << graph_stats.connected_components
             << " isolated_nodes=" << graph_stats.isolated_nodes
@@ -203,9 +425,16 @@ void trainLayer(const SourceGng &source, const Options &options, int layer) {
 }  // namespace
 
 int main(int argc, char **argv) {
+  rclcpp::init(argc, argv);
   try {
-    const Options options = parseOptions(argc, argv);
-    SourceGng source(7, 3, nullptr);
+    const auto non_ros_arguments = rclcpp::remove_ros_arguments(argc, argv);
+    const Options options = parseOptions(non_ros_arguments);
+    const auto node = std::make_shared<rclcpp::Node>(
+        "visualization_gng_trainer", rclcpp::NodeOptions()
+                                             .allow_undeclared_parameters(true)
+                                             .automatically_declare_parameters_from_overrides(true));
+    auto fk_context = buildFkContext(*node);
+    SourceGng source(fk_context.selected_dof_count, 3, nullptr);
     if (!source.load(options.input.string())) {
       throw std::runtime_error("failed to load source GNG: " +
                                options.input.string());
@@ -216,16 +445,18 @@ int main(int argc, char **argv) {
       throw std::invalid_argument("requested layer does not exist");
     }
     if (options.layer >= 0) {
-      trainLayer(source, options, options.layer);
+      trainLayer(source, options, options.layer, fk_context);
     } else {
       for (int layer = 0; layer < layer_count; ++layer) {
-        trainLayer(source, options, layer);
+        trainLayer(source, options, layer, fk_context);
       }
     }
+    rclcpp::shutdown();
     return 0;
   } catch (const std::exception &error) {
     std::cerr << "visualization_gng_trainer: " << error.what() << '\n';
     printUsage(argv[0]);
+    rclcpp::shutdown();
     return 1;
   }
 }

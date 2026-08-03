@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +15,8 @@ namespace robot_sim::visualization {
 struct VisualizationGngSourcePoint {
   int source_node_id = -1;
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::VectorXf weight_angle;
+  std::vector<int> angle_neighbor_source_node_ids;
   std::vector<int> coord_neighbor_source_node_ids;
 };
 
@@ -21,6 +24,27 @@ struct VisualizationGngNode {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
   std::vector<int> source_node_ids;
 };
+
+struct VisualizationGngTransitionPath {
+  int source_node_id = -1;
+  int target_node_id = -1;
+  std::uint32_t path_offset = 0;
+  std::uint16_t path_size = 0;
+};
+
+struct VisualizationGngInterpolationParams {
+  float max_joint_step = 0.05f;
+  int max_samples_per_edge = 256;
+};
+
+inline std::uint64_t visualizationGngSourceEdgeKey(int source_node_id,
+                                                   int target_node_id) {
+  const std::uint32_t source = static_cast<std::uint32_t>(
+      std::min(source_node_id, target_node_id));
+  const std::uint32_t target = static_cast<std::uint32_t>(
+      std::max(source_node_id, target_node_id));
+  return (static_cast<std::uint64_t>(source) << 32U) | target;
+}
 
 struct VisualizationGngTrainingParams {
   int target_nodes = 500;
@@ -39,6 +63,8 @@ struct VisualizationGngModel {
   std::uint64_t source_signature = 0;
   std::vector<VisualizationGngNode> nodes;
   std::vector<std::pair<std::uint32_t, std::uint32_t>> edges;
+  std::vector<VisualizationGngTransitionPath> transition_paths;
+  std::vector<std::uint16_t> transition_path_nodes;
 
   bool save(const std::filesystem::path &path, std::string *error = nullptr) const;
   bool load(const std::filesystem::path &path, std::string *error = nullptr);
@@ -54,6 +80,14 @@ std::vector<std::pair<std::uint32_t, std::uint32_t>>
 contractVisualizationGngEdges(
     const std::vector<VisualizationGngSourcePoint> &source_points,
     const std::vector<VisualizationGngNode> &visual_nodes);
+
+using VisualizationGngFkFunction = std::function<Eigen::Vector3f(
+    const Eigen::VectorXf &, std::uint32_t coord_layer)>;
+
+void precomputeVisualizationGngTransitionPaths(
+    const std::vector<VisualizationGngSourcePoint> &source_points,
+    VisualizationGngModel &model, const VisualizationGngFkFunction &fk,
+    const VisualizationGngInterpolationParams &params = {});
 
 VisualizationGngModel trainVisualizationGng(
     std::vector<VisualizationGngSourcePoint> source_points,
@@ -82,11 +116,19 @@ std::vector<VisualizationGngSourcePoint> collectVisualizationGngSourcePoints(
     if (!position.allFinite()) {
       continue;
     }
-    auto neighbors = gng.getNeighborsCoord(node.id, coord_layer);
-    std::sort(neighbors.begin(), neighbors.end());
-    neighbors.erase(std::unique(neighbors.begin(), neighbors.end()),
-                    neighbors.end());
-    points.push_back({node.id, position, std::move(neighbors)});
+    auto angle_neighbors = gng.getNeighborsAngle(node.id);
+    std::sort(angle_neighbors.begin(), angle_neighbors.end());
+    angle_neighbors.erase(
+        std::unique(angle_neighbors.begin(), angle_neighbors.end()),
+        angle_neighbors.end());
+    auto coord_neighbors = gng.getNeighborsCoord(node.id, coord_layer);
+    std::sort(coord_neighbors.begin(), coord_neighbors.end());
+    coord_neighbors.erase(
+        std::unique(coord_neighbors.begin(), coord_neighbors.end()),
+        coord_neighbors.end());
+    points.push_back({node.id, position, node.weight_angle.template cast<float>(),
+                      std::move(angle_neighbors),
+                      std::move(coord_neighbors)});
   }
   return points;
 }

@@ -480,6 +480,18 @@ private:
           }
         }
       }
+      visual_layer.transition_path_index.reserve(
+          visual_layer.model.transition_paths.size());
+      for (std::size_t transition_index = 0;
+           transition_index < visual_layer.model.transition_paths.size();
+           ++transition_index) {
+        const auto &transition =
+            visual_layer.model.transition_paths[transition_index];
+        visual_layer.transition_path_index.emplace(
+            robot_sim::visualization::visualizationGngSourceEdgeKey(
+                transition.source_node_id, transition.target_node_id),
+            transition_index);
+      }
       visual_layer.publisher =
           create_publisher<ais_gng_msgs::msg::TopologicalMap>(
               topic_prefix + "_layer_" + std::to_string(layer),
@@ -499,9 +511,11 @@ private:
       }
       RCLCPP_INFO(get_logger(),
                   "Loaded visualization GNG layer %d: nodes=%zu edges=%zu "
-                  "mapped_sources=%zu topic=%s_layer_%d",
+                  "mapped_sources=%zu transition_overrides=%zu "
+                  "topic=%s_layer_%d",
                   layer, visual_layer.model.nodes.size(),
                   visual_layer.model.edges.size(), mapped_source_count,
+                  visual_layer.model.transition_paths.size(),
                   topic_prefix.c_str(), layer);
       visualization_layers_.push_back(std::move(visual_layer));
     }
@@ -549,7 +563,8 @@ private:
       publisher->publish(
           robot_sim::bridge::topofuzzy::buildVisualizationPathMessage(
               source_path, visual_layer.cached_graph,
-              visual_layer.source_to_visual));
+              visual_layer.source_to_visual, visual_layer.model,
+              visual_layer.transition_path_index));
     }
   }
 
@@ -646,6 +661,7 @@ private:
     int layer = 0;
     robot_sim::visualization::VisualizationGngModel model;
     std::vector<std::int32_t> source_to_visual;
+    std::unordered_map<std::uint64_t, std::size_t> transition_path_index;
     ais_gng_msgs::msg::TopologicalMap cached_graph;
     bool cached_graph_valid = false;
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher;

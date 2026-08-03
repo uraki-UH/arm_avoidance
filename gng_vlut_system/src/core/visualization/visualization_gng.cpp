@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <random>
@@ -12,10 +13,10 @@
 namespace robot_sim::visualization {
 namespace {
 
-constexpr std::array<char, 8> kMagic = {'V', 'I', 'Z', 'G', 'N', 'G', '1', '\0'};
-constexpr std::uint32_t kVersion = 1;
+constexpr std::array<char, 8> kMagic = {'V', 'I', 'Z', 'G', 'N', 'G', '2', '\0'};
+constexpr std::uint32_t kVersion = 2;
 constexpr std::uint32_t kMaxSerializedItems = 10000000;
-constexpr std::uint32_t kSourceSignatureSchema = 2;
+constexpr std::uint32_t kSourceSignatureSchema = 3;
 
 struct TrainingNode {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
@@ -176,6 +177,30 @@ std::vector<std::pair<int, int>> collectSourceEdges(
   return edges;
 }
 
+std::vector<std::pair<int, int>> collectSourceAngleEdges(
+    const std::vector<VisualizationGngSourcePoint> &source_points) {
+  std::unordered_set<int> source_ids;
+  source_ids.reserve(source_points.size());
+  for (const auto &point : source_points) {
+    source_ids.insert(point.source_node_id);
+  }
+
+  std::vector<std::pair<int, int>> edges;
+  for (const auto &point : source_points) {
+    for (const int neighbor : point.angle_neighbor_source_node_ids) {
+      if (neighbor == point.source_node_id ||
+          source_ids.find(neighbor) == source_ids.end()) {
+        continue;
+      }
+      edges.emplace_back(std::min(point.source_node_id, neighbor),
+                         std::max(point.source_node_id, neighbor));
+    }
+  }
+  std::sort(edges.begin(), edges.end());
+  edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+  return edges;
+}
+
 }  // namespace
 
 std::filesystem::path visualizationGngLayerPath(
@@ -207,11 +232,23 @@ std::uint64_t computeVisualizationGngSourceSignature(
   for (const auto *point : sorted) {
     append(&point->source_node_id, sizeof(point->source_node_id));
     append(point->position.data(), 3 * sizeof(float));
+    const std::uint32_t angle_size =
+        static_cast<std::uint32_t>(point->weight_angle.size());
+    append(&angle_size, sizeof(angle_size));
+    append(point->weight_angle.data(),
+           static_cast<std::size_t>(angle_size) * sizeof(float));
   }
   const auto edges = collectSourceEdges(source_points);
   const std::uint64_t edge_count = edges.size();
   append(&edge_count, sizeof(edge_count));
   for (const auto &[source, target] : edges) {
+    append(&source, sizeof(source));
+    append(&target, sizeof(target));
+  }
+  const auto angle_edges = collectSourceAngleEdges(source_points);
+  const std::uint64_t angle_edge_count = angle_edges.size();
+  append(&angle_edge_count, sizeof(angle_edge_count));
+  for (const auto &[source, target] : angle_edges) {
     append(&source, sizeof(source));
     append(&target, sizeof(target));
   }
@@ -253,6 +290,128 @@ contractVisualizationGngEdges(
   contracted.erase(std::unique(contracted.begin(), contracted.end()),
                    contracted.end());
   return contracted;
+}
+
+void precomputeVisualizationGngTransitionPaths(
+    const std::vector<VisualizationGngSourcePoint> &source_points,
+    VisualizationGngModel &model, const VisualizationGngFkFunction &fk,
+    const VisualizationGngInterpolationParams &params) {
+  if (!fk || params.max_joint_step <= 0.0f ||
+      params.max_samples_per_edge < 2 || model.nodes.empty()) {
+    throw std::invalid_argument(
+        "invalid visualization GNG interpolation configuration");
+  }
+  if (model.nodes.size() > std::numeric_limits<std::uint16_t>::max()) {
+    throw std::overflow_error(
+        "visualization GNG exceeds uint16 transition node capacity");
+  }
+
+  std::unordered_map<int, const VisualizationGngSourcePoint *> source_by_id;
+  source_by_id.reserve(source_points.size());
+  for (const auto &point : source_points) {
+    source_by_id.emplace(point.source_node_id, &point);
+  }
+
+  std::unordered_map<int, std::uint32_t> source_to_visual;
+  source_to_visual.reserve(source_points.size());
+  for (std::uint32_t visual_id = 0; visual_id < model.nodes.size(); ++visual_id) {
+    for (const int source_id : model.nodes[visual_id].source_node_ids) {
+      source_to_visual.emplace(source_id, visual_id);
+    }
+  }
+
+  const auto nearest_visual = [&model](const Eigen::Vector3f &position) {
+    std::uint32_t nearest = 0;
+    float nearest_distance = std::numeric_limits<float>::infinity();
+    for (std::uint32_t visual_id = 0; visual_id < model.nodes.size();
+         ++visual_id) {
+      const float distance =
+          (model.nodes[visual_id].position - position).squaredNorm();
+      if (distance < nearest_distance) {
+        nearest = visual_id;
+        nearest_distance = distance;
+      }
+    }
+    return nearest;
+  };
+
+  std::vector<VisualizationGngTransitionPath> transition_paths;
+  std::vector<std::uint16_t> transition_path_nodes;
+  std::vector<std::pair<std::uint32_t, std::uint32_t>> visual_edges;
+  for (const auto &[source_id, target_id] :
+       collectSourceAngleEdges(source_points)) {
+    const auto source_it = source_by_id.find(source_id);
+    const auto target_it = source_by_id.find(target_id);
+    const auto source_visual_it = source_to_visual.find(source_id);
+    const auto target_visual_it = source_to_visual.find(target_id);
+    if (source_it == source_by_id.end() || target_it == source_by_id.end() ||
+        source_visual_it == source_to_visual.end() ||
+        target_visual_it == source_to_visual.end()) {
+      continue;
+    }
+    const auto &source_angle = source_it->second->weight_angle;
+    const auto &target_angle = target_it->second->weight_angle;
+    if (source_angle.size() == 0 || source_angle.size() != target_angle.size() ||
+        !source_angle.allFinite() || !target_angle.allFinite()) {
+      continue;
+    }
+
+    const float max_delta =
+        (target_angle - source_angle).cwiseAbs().maxCoeff();
+    const int segment_count = std::clamp(
+        static_cast<int>(std::ceil(max_delta / params.max_joint_step)), 1,
+        params.max_samples_per_edge - 1);
+    std::vector<std::uint32_t> path;
+    path.reserve(static_cast<std::size_t>(segment_count + 1));
+    const auto append_node = [&path](std::uint32_t visual_id) {
+      if (path.empty() || path.back() != visual_id) {
+        path.push_back(visual_id);
+      }
+    };
+    append_node(source_visual_it->second);
+    for (int segment = 1; segment < segment_count; ++segment) {
+      const float ratio =
+          static_cast<float>(segment) / static_cast<float>(segment_count);
+      const Eigen::VectorXf angle =
+          source_angle + ratio * (target_angle - source_angle);
+      const Eigen::Vector3f position = fk(angle, model.coord_layer);
+      if (position.allFinite()) {
+        append_node(nearest_visual(position));
+      }
+    }
+    append_node(target_visual_it->second);
+
+    for (std::size_t i = 1; i < path.size(); ++i) {
+      visual_edges.emplace_back(std::min(path[i - 1], path[i]),
+                                std::max(path[i - 1], path[i]));
+    }
+    const bool is_direct =
+        path.size() <= 2 && path.front() == source_visual_it->second &&
+        path.back() == target_visual_it->second;
+    if (!is_direct) {
+      if (path.size() > std::numeric_limits<std::uint16_t>::max() ||
+          transition_path_nodes.size() + path.size() >
+              std::numeric_limits<std::uint32_t>::max()) {
+        throw std::overflow_error(
+            "visualization GNG transition path capacity exceeded");
+      }
+      const std::uint32_t path_offset =
+          static_cast<std::uint32_t>(transition_path_nodes.size());
+      for (const std::uint32_t visual_node_id : path) {
+        transition_path_nodes.push_back(
+            static_cast<std::uint16_t>(visual_node_id));
+      }
+      transition_paths.push_back(
+          {source_id, target_id, path_offset,
+           static_cast<std::uint16_t>(path.size())});
+    }
+  }
+  std::sort(visual_edges.begin(), visual_edges.end());
+  visual_edges.erase(std::unique(visual_edges.begin(), visual_edges.end()),
+                     visual_edges.end());
+  model.edges = std::move(visual_edges);
+  model.transition_paths = std::move(transition_paths);
+  model.transition_path_nodes = std::move(transition_path_nodes);
 }
 
 VisualizationGngModel trainVisualizationGng(
@@ -425,6 +584,10 @@ VisualizationGngModel trainVisualizationGng(
 
 bool VisualizationGngModel::save(const std::filesystem::path &path,
                                  std::string *error) const {
+  if (nodes.size() > std::numeric_limits<std::uint16_t>::max()) {
+    setError(error, "visualization GNG exceeds uint16 node capacity");
+    return false;
+  }
   std::error_code ec;
   if (!path.parent_path().empty()) {
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -443,9 +606,12 @@ bool VisualizationGngModel::save(const std::filesystem::path &path,
   stream.write(kMagic.data(), static_cast<std::streamsize>(kMagic.size()));
   const std::uint32_t node_count = static_cast<std::uint32_t>(nodes.size());
   const std::uint32_t edge_count = static_cast<std::uint32_t>(edges.size());
+  const std::uint32_t transition_count =
+      static_cast<std::uint32_t>(transition_paths.size());
   if (!writeValue(stream, kVersion) || !writeValue(stream, coord_layer) ||
       !writeValue(stream, source_signature) || !writeValue(stream, node_count) ||
-      !writeValue(stream, edge_count)) {
+      !writeValue(stream, edge_count) ||
+      !writeValue(stream, transition_count)) {
     setError(error, "failed to write visualization GNG header");
     return false;
   }
@@ -471,6 +637,35 @@ bool VisualizationGngModel::save(const std::filesystem::path &path,
     if (!writeValue(stream, source) || !writeValue(stream, target)) {
       setError(error, "failed to write visualization GNG edge");
       return false;
+    }
+  }
+  for (const auto &transition : transition_paths) {
+    const std::int32_t source = transition.source_node_id;
+    const std::int32_t target = transition.target_node_id;
+    const std::size_t path_begin = transition.path_offset;
+    const std::size_t path_end = path_begin + transition.path_size;
+    if (transition.path_size < 3 || path_end > transition_path_nodes.size()) {
+      setError(error, "invalid visualization GNG transition path size");
+      return false;
+    }
+    const std::uint16_t intermediate_count = static_cast<std::uint16_t>(
+        transition.path_size - 2);
+    if (!writeValue(stream, source) || !writeValue(stream, target) ||
+        !writeValue(stream, intermediate_count)) {
+      setError(error, "failed to write visualization GNG transition");
+      return false;
+    }
+    for (std::size_t path_index = path_begin + 1;
+         path_index + 1 < path_end; ++path_index) {
+      const auto visual_node_id = transition_path_nodes[path_index];
+      if (visual_node_id >= nodes.size()) {
+        setError(error, "invalid visualization GNG transition node");
+        return false;
+      }
+      if (!writeValue(stream, visual_node_id)) {
+        setError(error, "failed to write visualization GNG transition path");
+        return false;
+      }
     }
   }
   stream.close();
@@ -504,11 +699,14 @@ bool VisualizationGngModel::load(const std::filesystem::path &path,
   std::uint32_t version = 0;
   std::uint32_t node_count = 0;
   std::uint32_t edge_count = 0;
+  std::uint32_t transition_count = 0;
   if (!stream || magic != kMagic || !readValue(stream, version) ||
       version != kVersion || !readValue(stream, coord_layer) ||
       !readValue(stream, source_signature) || !readValue(stream, node_count) ||
-      !readValue(stream, edge_count) || node_count > kMaxSerializedItems ||
-      edge_count > kMaxSerializedItems) {
+      !readValue(stream, edge_count) || !readValue(stream, transition_count) ||
+      node_count > std::numeric_limits<std::uint16_t>::max() ||
+      node_count > kMaxSerializedItems || edge_count > kMaxSerializedItems ||
+      transition_count > kMaxSerializedItems) {
     setError(error, "invalid visualization GNG header: " + path.string());
     return false;
   }
@@ -546,6 +744,50 @@ bool VisualizationGngModel::load(const std::filesystem::path &path,
     }
     loaded_edges.emplace_back(source, target);
   }
+  std::vector<VisualizationGngTransitionPath> loaded_transitions;
+  loaded_transitions.reserve(transition_count);
+  std::vector<std::uint16_t> loaded_transition_path_nodes;
+  std::unordered_map<int, std::uint32_t> source_to_visual;
+  for (std::uint32_t visual_id = 0; visual_id < loaded_nodes.size();
+       ++visual_id) {
+    for (const int source_id : loaded_nodes[visual_id].source_node_ids) {
+      source_to_visual.emplace(source_id, visual_id);
+    }
+  }
+  for (std::uint32_t i = 0; i < transition_count; ++i) {
+    std::int32_t source = -1;
+    std::int32_t target = -1;
+    std::uint16_t intermediate_count = 0;
+    if (!readValue(stream, source) || !readValue(stream, target) ||
+        !readValue(stream, intermediate_count) || source < 0 || target < 0 ||
+        source >= target || intermediate_count == 0 ||
+        intermediate_count > std::numeric_limits<std::uint16_t>::max() - 2 ||
+        source_to_visual.find(source) == source_to_visual.end() ||
+        source_to_visual.find(target) == source_to_visual.end()) {
+      setError(error, "invalid visualization GNG transition data");
+      return false;
+    }
+    VisualizationGngTransitionPath transition;
+    transition.source_node_id = source;
+    transition.target_node_id = target;
+    transition.path_offset =
+        static_cast<std::uint32_t>(loaded_transition_path_nodes.size());
+    transition.path_size = static_cast<std::uint16_t>(intermediate_count + 2);
+    loaded_transition_path_nodes.push_back(
+        static_cast<std::uint16_t>(source_to_visual[source]));
+    for (std::uint32_t path_index = 0; path_index < intermediate_count;
+         ++path_index) {
+      std::uint16_t visual_node_id = 0;
+      if (!readValue(stream, visual_node_id) || visual_node_id >= node_count) {
+        setError(error, "invalid visualization GNG transition path");
+        return false;
+      }
+      loaded_transition_path_nodes.push_back(visual_node_id);
+    }
+    loaded_transition_path_nodes.push_back(
+        static_cast<std::uint16_t>(source_to_visual[target]));
+    loaded_transitions.push_back(std::move(transition));
+  }
   if (stream.peek() != std::ifstream::traits_type::eof()) {
     setError(error, "unexpected trailing data in visualization GNG");
     return false;
@@ -553,6 +795,8 @@ bool VisualizationGngModel::load(const std::filesystem::path &path,
 
   nodes = std::move(loaded_nodes);
   edges = std::move(loaded_edges);
+  transition_paths = std::move(loaded_transitions);
+  transition_path_nodes = std::move(loaded_transition_path_nodes);
   return true;
 }
 
