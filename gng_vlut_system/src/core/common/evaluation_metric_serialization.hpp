@@ -118,8 +118,6 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
 
   add_def(detail::makeMetricDefinition("position_manipulability", "Position manipulability", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("rotation_manipulability", "Rotation manipulability", "float", scope_type, "candidate"));
-  add_def(detail::makeMetricDefinition("manipulability_condition_number", "Manipulability condition number", "float", scope_type, "candidate"));
-  add_def(detail::makeMetricDefinition("min_singular_value", "Min singular value", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("joint_limit_margin_min", "Joint limit margin min", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("joint_limit_margin_mean", "Joint limit margin mean", "float", scope_type, "candidate"));
   add_def(detail::makeMetricDefinition("self_collision_margin", "Self collision margin", "float", scope_type, "candidate"));
@@ -167,8 +165,6 @@ inline gng_control_msgs::msg::EvaluationMetrics buildCandidateEvaluationMetrics(
 
     detail::appendFloatValue(out, "position_manipulability", candidate.position_manipulability, std::isfinite(candidate.position_manipulability));
     detail::appendFloatValue(out, "rotation_manipulability", candidate.rotation_manipulability, std::isfinite(candidate.rotation_manipulability));
-    detail::appendFloatValue(out, "manipulability_condition_number", candidate.manipulability_condition_number, std::isfinite(candidate.manipulability_condition_number));
-    detail::appendFloatValue(out, "min_singular_value", candidate.min_singular_value, std::isfinite(candidate.min_singular_value));
     detail::appendFloatValue(out, "joint_limit_margin_min", candidate.joint_limit_margin_min, std::isfinite(candidate.joint_limit_margin_min));
     detail::appendFloatValue(out, "joint_limit_margin_mean", candidate.joint_limit_margin_mean, std::isfinite(candidate.joint_limit_margin_mean));
     detail::appendFloatValue(out, "self_collision_margin", candidate.self_collision_margin, std::isfinite(candidate.self_collision_margin));

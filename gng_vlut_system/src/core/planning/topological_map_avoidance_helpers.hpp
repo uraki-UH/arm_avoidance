@@ -244,20 +244,8 @@ buildGraspCandidateMetricArray(
               static_cast<float>(rotation_manip.manipulability);
         }
 
-        metric.metric_names = {
-            "joint_limit_score",
-            "collision_count",
-            "danger_count",
-            "is_colliding",
-            "is_danger",
-            "dynamic_manipulability"};
-        metric.metric_values = {
-            node.status.joint_limit_score,
-            static_cast<float>(node.status.collision_count),
-            static_cast<float>(node.status.danger_count),
-            node.status.is_colliding ? 1.0f : 0.0f,
-            node.status.is_danger ? 1.0f : 0.0f,
-            node.status.dynamic_manipulability};
+        metric.metric_names = {"dynamic_manipulability"};
+        metric.metric_values = {node.status.dynamic_manipulability};
       }
     }
 
