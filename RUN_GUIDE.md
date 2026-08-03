@@ -2,7 +2,7 @@
 
 ##　実行ガイド
 cd uraki_ws
-docker compose down && docker compose up --build  && dokcer compose up -d
+docker compose down && docker compose up --build  && docker compose up -d
 docker compose exec gng_cpu bash
 ## frontendの起動
 cd ~/uraki_ws
@@ -16,6 +16,11 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ## ロボットおよび対応する学習済みGNGの起動
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+## RVizでロボットを表示
+ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm
 
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
@@ -44,11 +49,11 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ## 点群から占有ボクセルに変換
 ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
-  input_topic:=/topo_points \
+  input_topic:=/semantic_points \
   output_topic:=/topo_voxel_ids
 
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
-  ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   robot_name:=ToPoDualArm \   
   input_topic:=/topo_voxel_ids \  
   danger_inflation:=0.08
@@ -151,10 +156,11 @@ ros2 launch realsense2_camera rs_launch.py \
   pointcloud.enable:=true
 
 
-gazeboに召喚
+## Gazeboに召喚
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
-robot_name:=ToPoDualArm \
-gui:=true
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true
 
 
 
