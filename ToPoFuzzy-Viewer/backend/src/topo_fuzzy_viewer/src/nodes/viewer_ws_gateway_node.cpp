@@ -265,6 +265,7 @@ private:
             if (topic_utils::isInternal(topic)) continue;
             std::string st = topic_utils::detectType(types); if (st.empty()) continue;
             if (!topic_utils::isBrowsableSourceType(st)) continue;
+            if (count_publishers(topic) == 0) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
         }
         ws->send(viewer_internal::makeOkResponse(id, {{"sources", sources}}), uWS::OpCode::TEXT);
@@ -276,6 +277,7 @@ private:
             if (topic_utils::isInternal(topic)) continue;
             std::string st = topic_utils::detectType(types); if (st.empty()) continue;
             if (!topic_utils::isBrowsableSourceType(st)) continue;
+            if (count_publishers(topic) == 0) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
         }
         broadcastText(viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}));
@@ -295,6 +297,12 @@ private:
                     broadcastText(viewer_internal::makeErrorResponse(
                         id, "UNSUPPORTED_SOURCE_TYPE",
                         "This source type is metadata-only and is not exposed as a scene layer"));
+                    return;
+                }
+                if (count_publishers(sid) == 0) {
+                    broadcastText(viewer_internal::makeErrorResponse(
+                        id, "SOURCE_HAS_NO_PUBLISHER",
+                        "This topic currently has no publisher"));
                     return;
                 }
                 if (st == "pointcloud") {

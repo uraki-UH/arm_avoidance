@@ -501,18 +501,21 @@ private:
           create_publisher<ais_gng_msgs::msg::TopologicalMap>(
               topic_prefix + "_layer_" + std::to_string(layer),
               rclcpp::QoS(1).reliable().transient_local());
+      // Trajectory/candidate publishers are created lazily (see
+      // publishVisualizationTrajectory) once real data actually arrives on
+      // the corresponding input topic, instead of unconditionally at
+      // startup. Otherwise they sit advertised-but-empty forever whenever no
+      // planner/candidate-producer is running, which makes them
+      // indistinguishable from real, populated layers to any topic
+      // introspection based purely on "does a publisher exist".
       if (!trajectory_topic_prefix.empty()) {
-        visual_layer.trajectory_publisher =
-            create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-                trajectory_topic_prefix + "_layer_" + std::to_string(layer),
-                rclcpp::QoS(1).reliable().transient_local());
+        visual_layer.trajectory_topic_name =
+            trajectory_topic_prefix + "_layer_" + std::to_string(layer);
       }
       if (!candidate_trajectory_topic_prefix.empty()) {
-        visual_layer.candidate_trajectory_publisher =
-            create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-                candidate_trajectory_topic_prefix + "_layer_" +
-                    std::to_string(layer),
-                rclcpp::QoS(1).reliable().transient_local());
+        visual_layer.candidate_trajectory_topic_name =
+            candidate_trajectory_topic_prefix + "_layer_" +
+            std::to_string(layer);
       }
       RCLCPP_INFO(get_logger(),
                   "Loaded visualization GNG layer %d: nodes=%zu edges=%zu "
@@ -562,6 +565,17 @@ private:
       latest_visualization_candidate_trajectory_ = source_path;
     } else {
       latest_visualization_trajectory_ = source_path;
+    }
+    for (auto &visual_layer : visualization_layers_) {
+      auto &publisher = candidate ? visual_layer.candidate_trajectory_publisher
+                                  : visual_layer.trajectory_publisher;
+      const auto &topic_name = candidate
+                                    ? visual_layer.candidate_trajectory_topic_name
+                                    : visual_layer.trajectory_topic_name;
+      if (!publisher && !topic_name.empty()) {
+        publisher = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+            topic_name, rclcpp::QoS(1).reliable().transient_local());
+      }
     }
     publishVisualizationTrajectoryLocked(source_path, candidate);
   }
@@ -693,6 +707,8 @@ private:
         trajectory_publisher;
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
         candidate_trajectory_publisher;
+    std::string trajectory_topic_name;
+    std::string candidate_trajectory_topic_name;
   };
 
   std::shared_ptr<robot_sim::analysis::SafetySystemContext> context_;

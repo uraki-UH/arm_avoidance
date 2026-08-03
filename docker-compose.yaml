@@ -22,7 +22,8 @@ services:
 
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ${HOME}/.Xauthority:/root/.Xauthority:ro
+      # Wayland/GDM sessions keep the live X11 cookie outside ~/.Xauthority.
+      - ${XAUTHORITY:-${HOME}/.Xauthority}:/root/.Xauthority:ro
       - /dev:/dev
       - .:/ros2_ws/src
       - build_ros2_ws:/ros2_ws/build

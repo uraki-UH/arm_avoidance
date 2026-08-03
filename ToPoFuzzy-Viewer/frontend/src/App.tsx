@@ -1050,6 +1050,16 @@ function App() {
                             if (import.meta.hot) {
                                 import.meta.hot.dispose(() => gl.dispose());
                             }
+                            // Diagnostics only — do NOT auto-retry here, see WebGLErrorBoundary.
+                            gl.domElement.addEventListener('webglcontextlost', (e) => {
+                                console.error('[WebGL] context lost', {
+                                    time: new Date().toISOString(),
+                                    statusMessage: (e as WebGLContextEvent).statusMessage,
+                                });
+                            });
+                            gl.domElement.addEventListener('webglcontextrestored', () => {
+                                console.warn('[WebGL] context restored event fired (not expected to recover automatically)', new Date().toISOString());
+                            });
                         }}
                     >
                         <ambientLight intensity={0.3} />

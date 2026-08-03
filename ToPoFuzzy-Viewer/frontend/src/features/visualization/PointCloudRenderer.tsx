@@ -46,31 +46,75 @@ export function PointCloudRenderer({
     // Trigger re-render in demand mode
     useDemandUpdate([data, heatmapSettings, selected, transformMode]);
 
-    const geometry = useMemo(() => {
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.BufferAttribute(data.points, 3));
-
-        if (data.colors) {
-            geom.setAttribute('color', new THREE.BufferAttribute(data.colors, 3));
-        } else {
-            const colors = new Float32Array(data.count * 3).fill(1);
-            geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        }
-
-        if (data.intensities) {
-            geom.setAttribute('intensity', new THREE.BufferAttribute(data.intensities, 1));
-        } else {
-            const intensities = new Float32Array(data.count).fill(0);
-            geom.setAttribute('intensity', new THREE.BufferAttribute(intensities, 1));
-        }
-
-        geom.computeBoundingSphere();
-        return geom;
-    }, [data]);
+    // Geometry is created once and its GPU buffers are reused across streaming
+    // updates (updated in place / grown as needed) instead of being disposed
+    // and recreated on every incoming frame. Repeatedly allocating/freeing
+    // large GPU buffers at ~10Hz puts heavy pressure on the GPU driver and was
+    // a contributor to WebGL context loss under sustained streaming.
+    const geometry = useMemo(() => new THREE.BufferGeometry(), []);
+    const capacityRef = useRef(0);
+    const hasColorRef = useRef<boolean | null>(null);
+    const hasIntensityRef = useRef<boolean | null>(null);
 
     useEffect(() => {
         return () => { geometry.dispose(); };
     }, [geometry]);
+
+    useEffect(() => {
+        // Hidden layers still receive streamed updates from the parent; skip
+        // the GPU upload entirely while not visible instead of churning
+        // buffers for something that isn't drawn. The geometry will catch up
+        // on the next update once the layer is shown again.
+        if (data.visible === false) return;
+
+        const needsColor = !!data.colors;
+        const needsIntensity = !!data.intensities;
+        const structureChanged = needsColor !== hasColorRef.current || needsIntensity !== hasIntensityRef.current;
+
+        if (data.count > capacityRef.current || structureChanged) {
+            // Grow with headroom so we don't reallocate on every small increase.
+            const capacity = Math.max(data.count, Math.ceil(capacityRef.current * 1.5));
+
+            const positions = new Float32Array(capacity * 3);
+            positions.set(data.points);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const colors = new Float32Array(capacity * 3).fill(1);
+            if (data.colors) colors.set(data.colors);
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const intensities = new Float32Array(capacity);
+            if (data.intensities) intensities.set(data.intensities);
+            geometry.setAttribute('intensity', new THREE.BufferAttribute(intensities, 1));
+
+            capacityRef.current = capacity;
+            hasColorRef.current = needsColor;
+            hasIntensityRef.current = needsIntensity;
+        } else {
+            const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
+            (positionAttr.array as Float32Array).set(data.points);
+            positionAttr.needsUpdate = true;
+
+            const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
+            if (data.colors) {
+                (colorAttr.array as Float32Array).set(data.colors);
+            } else {
+                (colorAttr.array as Float32Array).fill(1, 0, data.count * 3);
+            }
+            colorAttr.needsUpdate = true;
+
+            const intensityAttr = geometry.getAttribute('intensity') as THREE.BufferAttribute;
+            if (data.intensities) {
+                (intensityAttr.array as Float32Array).set(data.intensities);
+            } else {
+                (intensityAttr.array as Float32Array).fill(0, 0, data.count);
+            }
+            intensityAttr.needsUpdate = true;
+        }
+
+        geometry.setDrawRange(0, data.count);
+        geometry.computeBoundingSphere();
+    }, [data, geometry]);
 
     const material = useMemo(() => {
         const pointSize = heatmapSettings?.pointSize || 0.02;

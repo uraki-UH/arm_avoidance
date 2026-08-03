@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, SEMANTIC_COLORS } from '../../types';
+import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, SEMANTIC_COLORS, isTrajectoryGraphTag } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 import { DirectionalArrow } from './utils/DirectionalArrow';
@@ -120,16 +120,16 @@ export function GraphRenderer({
     const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
     const semanticColorEnabled = visibleSemanticLabels?.handle ?? true;
-    const isCandidateTrajectory = tag.includes('candidate_topological_map');
+    const isTrajectoryGraph = isTrajectoryGraphTag(tag);
     const goalNodes = useMemo(() => {
-        if (!isCandidateTrajectory) return [];
+        if (!isTrajectoryGraph) return [];
         return graph.nodes.filter((node) => {
             if (!node.isGoal) return false;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             return !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
         });
-    }, [graph.nodes, isCandidateTrajectory, visibleLabels]);
+    }, [graph.nodes, isTrajectoryGraph, visibleLabels]);
     const goalNodeSignature = useMemo(
         () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
         [goalNodes]
@@ -157,7 +157,7 @@ export function GraphRenderer({
             semantic: [] as GraphData['nodes'],
         }));
         graph.nodes.forEach((node, nodeIndex) => {
-            if (isCandidateTrajectory && node.isGoal) return;
+            if (isTrajectoryGraph && node.isGoal) return;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             const semanticLabel = Number.isFinite(node.semanticLabel)
@@ -177,7 +177,7 @@ export function GraphRenderer({
             }
         });
         return buckets;
-    }, [graph.nodes, graph.clusters, nodeSemanticLabels, visibleLabels, semanticColorEnabled, isCandidateTrajectory]);
+    }, [graph.nodes, graph.clusters, nodeSemanticLabels, visibleLabels, semanticColorEnabled, isTrajectoryGraph]);
 
     // Trigger re-render in demand mode for any visual changes
     useDemandUpdate([
@@ -270,7 +270,7 @@ export function GraphRenderer({
         toneMapped: false,
     }), [nodeOpacity, nodeEmissiveIntensity]);
     const goalNodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: '#ffffff',
+        color: CANDIDATE_GOAL_COLOR,
         emissive: new THREE.Color(CANDIDATE_GOAL_COLOR),
         emissiveIntensity: nodeEmissiveIntensity,
         transparent: nodeOpacity < 1,
