@@ -3478,7 +3478,7 @@ function v321RenderEvaluationMetricSelector(){
     title.textContent=def.label||def.metric_id;
     const meta=document.createElement('span');
     meta.className='metric-meta';
-    meta.textContent=`${def.metric_id} [${def.value_type}${def.unit?`, ${def.unit}`:''}]`;
+    meta.textContent=`[${def.value_type}${def.unit?`, ${def.unit}`:''}]`;
     label.append(checkbox,title,meta);
     box.appendChild(label);
   });
