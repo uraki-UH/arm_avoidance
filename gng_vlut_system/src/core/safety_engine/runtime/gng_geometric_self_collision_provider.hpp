@@ -42,7 +42,7 @@ public:
     bool is_colliding = checker_->checkCollision();
 
     // 4. 反映
-    node.status.valid = !is_colliding;
+    node.status.self_collision_free = !is_colliding;
     node.status.is_colliding = is_colliding;
   }
 

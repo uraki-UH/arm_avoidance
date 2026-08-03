@@ -75,7 +75,7 @@ static inline bool isSafeNode(const GNGPtr &gng, int node_id) {
     return false;
   }
   const auto &node = gng->nodeAt(node_id);
-  return node.id != -1 && node.status.active && node.status.valid &&
+  return node.id != -1 && node.status.active && node.status.self_collision_free &&
          !node.status.is_colliding && !node.status.is_danger;
 }
 
@@ -91,7 +91,7 @@ static inline bool hasAllSafeNeighbors(const GNGPtr &gng, int node_id) {
       return false;
     }
     const auto &neighbor = gng->nodeAt(neighbor_id);
-    if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.valid ||
+    if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.self_collision_free ||
         neighbor.status.is_colliding || neighbor.status.is_danger) {
       return false;
     }

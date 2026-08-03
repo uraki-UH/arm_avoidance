@@ -360,7 +360,7 @@ public:
     cached_safe_goal_ids_.clear();
     cached_safe_goal_ids_.reserve(gng_->getMaxNodeNum());
     for (const auto &node : gng_->getNodes()) {
-      if (node.id != -1 && node.status.active && node.status.valid &&
+      if (node.id != -1 && node.status.active && node.status.self_collision_free &&
           !node.status.is_colliding) {
         cached_safe_goal_ids_.push_back(node.id);
       }
@@ -651,25 +651,29 @@ private:
         continue;
       }
 
+      // FIXME: self_collision_free は静的な自己干渉の判定結果であり、環境障害物の
+      // ラベルで書き換えるべきではない。障害物が消えたときに true へ戻してしまうため、
+      // 元々自己干渉していたノードが安全と誤判定される。挙動が変わる修正のため
+      // 別途対応する。詳細は TASK_CANDIDATES.md を参照。
       switch (n.label) {
       case 2: // collision
         node.status.is_colliding = true;
         node.status.is_danger = false;
-        node.status.valid = false;
+        node.status.self_collision_free = false;
         node.status.collision_count = 1;
         node.status.danger_count = 0;
         break;
       case 3: // danger
         node.status.is_colliding = false;
         node.status.is_danger = true;
-        node.status.valid = true;
+        node.status.self_collision_free = true;
         node.status.collision_count = 0;
         node.status.danger_count = 1;
         break;
       default:
         node.status.is_colliding = false;
         node.status.is_danger = false;
-        node.status.valid = true;
+        node.status.self_collision_free = true;
         node.status.collision_count = 0;
         node.status.danger_count = 0;
         break;
@@ -1007,7 +1011,7 @@ private:
         continue;
       }
       const auto &node = gng_->nodeAt(id);
-      if (node.id == -1 || !node.status.active || !node.status.valid) {
+      if (node.id == -1 || !node.status.active || !node.status.self_collision_free) {
         continue;
       }
       if (node.status.is_colliding) {
@@ -1433,7 +1437,7 @@ private:
         return true;
       }
       const auto &node = gng_->nodeAt(node_id);
-      if (node.id == -1 || !node.status.active || !node.status.valid ||
+      if (node.id == -1 || !node.status.active || !node.status.self_collision_free ||
           node.status.is_colliding ||
           (avoid_danger_ && node.status.is_danger)) {
         return true;
@@ -1448,7 +1452,7 @@ private:
       return false;
     }
     const auto &node = gng_->nodeAt(node_id);
-    if (node.id == -1 || !node.status.active || !node.status.valid) {
+    if (node.id == -1 || !node.status.active || !node.status.self_collision_free) {
       return true;
     }
     for (int neighbor_id : gng_->getNeighborsAngle(node_id)) {
@@ -1456,7 +1460,7 @@ private:
         return true;
       }
       const auto &neighbor = gng_->nodeAt(neighbor_id);
-      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.valid ||
+      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.self_collision_free ||
           neighbor.status.is_colliding ||
           (avoid_danger_ && neighbor.status.is_danger)) {
         return true;

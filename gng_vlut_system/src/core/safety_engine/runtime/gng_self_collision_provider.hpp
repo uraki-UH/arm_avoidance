@@ -50,7 +50,7 @@ public:
     bool is_colliding = checker_->checkCollision();
 
     // 4. ノードのステータスに反映
-    node.status.valid = !is_colliding;
+    node.status.self_collision_free = !is_colliding;
 
     // 外部デバッグ用にメタデータにも記録（オプション）
     node.status.metadata["self_collision"] = is_colliding ? 1.0f : 0.0f;

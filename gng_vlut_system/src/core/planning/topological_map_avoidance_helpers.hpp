@@ -325,7 +325,7 @@ public:
     int nearest_id = -1;
     float min_dist = std::numeric_limits<float>::max();
     gng_->forEachActiveValid([&](int id, const auto &node) {
-      if (node.id == -1 || !node.status.active || !node.status.valid) {
+      if (node.id == -1 || !node.status.active || !node.status.self_collision_free) {
         return;
       }
       if (node.status.is_colliding || (avoid_danger_ && node.status.is_danger)) {
@@ -354,14 +354,14 @@ public:
         return false;
       }
       const auto &neighbor = gng_->nodeAt(neighbor_id);
-      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.valid ||
+      if (neighbor.id == -1 || !neighbor.status.active || !neighbor.status.self_collision_free ||
           neighbor.status.is_colliding ||
           (avoid_danger_ && neighbor.status.is_danger)) {
         return false;
       }
     }
 
-    return node.id != -1 && node.status.active && node.status.valid &&
+    return node.id != -1 && node.status.active && node.status.self_collision_free &&
            !node.status.is_colliding &&
            (!avoid_danger_ || !node.status.is_danger);
   }
@@ -392,7 +392,7 @@ static inline std::vector<int> collectNearestGoalCandidates(
     if (id < 0) {
       return;
     }
-    if (!node.status.active || !node.status.valid) {
+    if (!node.status.active || !node.status.self_collision_free) {
       return;
     }
     if (node.status.is_colliding) {
@@ -575,7 +575,7 @@ static inline bool isUnsafeNode(
   }
 
   const auto &node = gng->nodeAt(node_id);
-  return node.id == -1 || !node.status.active || !node.status.valid ||
+  return node.id == -1 || !node.status.active || !node.status.self_collision_free ||
          node.status.is_colliding || (avoid_danger && node.status.is_danger);
 }
 
@@ -619,7 +619,7 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
       continue;
     }
     const auto &start_node = gng->nodeAt(start_id);
-    if (start_node.id == -1 || !start_node.status.active || !start_node.status.valid) {
+    if (start_node.id == -1 || !start_node.status.active || !start_node.status.self_collision_free) {
       continue;
     }
 
@@ -678,7 +678,7 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
       continue;
     }
     const auto &goal_node = gng->nodeAt(goal_id);
-    if (goal_node.id == -1 || !goal_node.status.active || !goal_node.status.valid) {
+    if (goal_node.id == -1 || !goal_node.status.active || !goal_node.status.self_collision_free) {
       continue;
     }
     auto [reached_goal_id, path] =

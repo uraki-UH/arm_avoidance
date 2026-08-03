@@ -169,7 +169,7 @@ public:
           node.status.is_mainland = false;
       }
 
-      if (node.status.valid) {
+      if (node.status.self_collision_free) {
           stats.active_count++;
           if (node.status.is_mainland) {
               stats.mainland_count++;

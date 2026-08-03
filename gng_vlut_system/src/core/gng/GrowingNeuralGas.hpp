@@ -151,7 +151,7 @@ public:
   template <typename Fn> void forEachActiveValid(Fn &&fn) {
     for (int i : active_indices_) {
       auto &n = nodes[i];
-      if (n.status.valid)
+      if (n.status.self_collision_free)
         fn(i, n);
     }
   }
@@ -160,7 +160,7 @@ public:
   template <typename Fn> void forEachActiveValid(Fn &&fn) const {
     for (int i : active_indices_) {
       const auto &n = nodes[i];
-      if (n.status.valid)
+      if (n.status.self_collision_free)
         fn(i, n);
     }
   }

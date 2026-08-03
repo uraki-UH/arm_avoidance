@@ -134,7 +134,7 @@ public:
         const auto &v = gng.nodeAt(neighbor_id);
 
         // 有効かつ活性なノードのみを探索対象にする
-        if (!v.status.valid || !v.status.active)
+        if (!v.status.self_collision_free || !v.status.active)
           continue;
 
         // [衝突回避] ノード安全性判定 (衝突しているノードは遮断)
@@ -267,7 +267,7 @@ public:
 
       for (int neighbor_id : gng.getNeighborsAngle(current.id)) {
         const auto &v = gng.nodeAt(neighbor_id);
-        if (!v.status.valid || !v.status.active)
+        if (!v.status.self_collision_free || !v.status.active)
           continue;
 
         if (avoid_collisions_) {
@@ -395,7 +395,7 @@ public:
     for (int id : candidates) {
         if (id < 0 || (size_t)id >= gng.getMaxNodeNum()) continue;
         const auto &node = gng.nodeAt(id);
-        if (!node.status.valid || !node.status.active) continue;
+        if (!node.status.self_collision_free || !node.status.active) continue;
 
         float d = (node.weight_angle.head(dim) - posture).norm();
         if (d < min_dist) {

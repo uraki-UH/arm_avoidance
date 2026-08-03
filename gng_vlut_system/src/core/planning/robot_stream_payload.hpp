@@ -217,7 +217,7 @@ inline std::optional<CandidateRobotPreviewPayload> buildCandidateRobotPreviewPay
       continue;
     }
     const auto &node = gng->nodeAt(node_id);
-    if (node.id == -1 || !node.status.active || !node.status.valid) {
+    if (node.id == -1 || !node.status.active || !node.status.self_collision_free) {
       continue;
     }
 

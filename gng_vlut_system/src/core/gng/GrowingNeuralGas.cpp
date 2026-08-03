@@ -1168,8 +1168,8 @@ bool GrowingNeuralGas<T_angle, T_coord>::save(const std::string &filename) {
       ofs.write((char *)&nodes[i].status.is_surface, sizeof(bool));
       bool is_active_surface = nodes[i].status.is_active_surface;
       ofs.write((char *)&is_active_surface, sizeof(bool));
-      bool valid = nodes[i].status.valid;
-      ofs.write((char *)&valid, sizeof(bool));
+      bool self_collision_free = nodes[i].status.self_collision_free;
+      ofs.write((char *)&self_collision_free, sizeof(bool));
       bool active = nodes[i].status.active;
       ofs.write((char *)&active, sizeof(bool));
       bool is_boundary = nodes[i].status.is_boundary;
@@ -1357,7 +1357,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
     ifs.read((char *)&b_tmp, sizeof(bool));
     nodes[id].status.is_active_surface = b_tmp;
     ifs.read((char *)&b_tmp, sizeof(bool));
-    nodes[id].status.valid = b_tmp;
+    nodes[id].status.self_collision_free = b_tmp;
     ifs.read((char *)&b_tmp, sizeof(bool));
     nodes[id].status.active = b_tmp;
     if (version >= 5) {

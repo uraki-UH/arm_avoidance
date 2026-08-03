@@ -344,7 +344,7 @@ private:
         active_indices, max_nodes,
         [&](int idx) {
           const auto &node = gng.nodeAt(idx);
-          return node.id != -1 && node.status.valid && node.status.active;
+          return node.id != -1 && node.status.self_collision_free && node.status.active;
         },
         [&](int idx) -> const std::vector<int> & {
           return (mode == 0) ? gng.getNeighborsAngle(idx)
