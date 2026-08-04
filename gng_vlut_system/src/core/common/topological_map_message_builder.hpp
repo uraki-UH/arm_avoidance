@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -66,11 +67,35 @@ inline int pathLabelSeverity(uint8_t label) {
   return label == 1 ? 1 : 0;
 }
 
-inline void preserveMoreSeverePathLabel(
-    ais_gng_msgs::msg::TopologicalNode &node, uint8_t label) {
-  if (pathLabelSeverity(label) > pathLabelSeverity(node.label)) {
-    node.label = label;
+// A path visualization node is the aggregation of many raw path samples
+// that fall in the same cluster. Picking the single worst label among them
+// (old behavior) means one brief "danger" sample anywhere in a cluster
+// paints the whole cluster yellow, so most clusters end up yellow on any
+// realistic path. Tallying votes and taking the majority label reflects
+// the cluster's actual dominant state instead.
+inline void castPathLabelVote(std::array<int, 4> &votes, uint8_t label) {
+  if (label < votes.size()) {
+    ++votes[label];
   }
+}
+
+inline uint8_t majorityPathLabel(const std::array<int, 4> &votes,
+                                 uint8_t fallback) {
+  int best_index = -1;
+  int best_votes = 0;
+  for (int label = 0; label < static_cast<int>(votes.size()); ++label) {
+    if (votes[label] <= 0) {
+      continue;
+    }
+    if (votes[label] > best_votes ||
+        (votes[label] == best_votes && best_index >= 0 &&
+         pathLabelSeverity(static_cast<uint8_t>(label)) >
+             pathLabelSeverity(static_cast<uint8_t>(best_index)))) {
+      best_votes = votes[label];
+      best_index = label;
+    }
+  }
+  return best_index >= 0 ? static_cast<uint8_t>(best_index) : fallback;
 }
 
 inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
@@ -96,9 +121,14 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
   std::int32_t current_pose_output = -1;
   std::uint16_t next_goal_node_id = kCurrentPoseNodeId - 1;
   std::unordered_map<std::uint16_t, std::int32_t> goal_to_output;
+  // Per-output-node label vote tally, kept in sync with out.nodes (index i
+  // holds the votes for out.nodes[i]). Finalized into out.nodes[i].label
+  // after all path samples have been folded in; see majorityPathLabel.
+  std::vector<std::array<int, 4>> label_votes;
 
   const auto ensure_visual_node =
-      [&out, &visualization_graph, &visual_to_output](std::uint32_t visual_id) {
+      [&out, &visualization_graph, &visual_to_output,
+       &label_votes](std::uint32_t visual_id) {
         if (visual_id >= visualization_graph.nodes.size()) {
           return std::int32_t{-1};
         }
@@ -106,6 +136,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
         if (output_index < 0) {
           output_index = static_cast<std::int32_t>(out.nodes.size());
           out.nodes.push_back(visualization_graph.nodes[visual_id]);
+          label_votes.push_back({});
         }
         return output_index;
       };
@@ -121,6 +152,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
       if (current_pose_output < 0) {
         current_pose_output = static_cast<std::int32_t>(out.nodes.size());
         out.nodes.push_back(source_node);
+        label_votes.push_back({});
       }
       input_to_output[input_index] = current_pose_output;
       continue;
@@ -141,6 +173,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
       const std::int32_t output_index =
           static_cast<std::int32_t>(out.nodes.size());
       out.nodes.push_back(std::move(goal_node));
+      label_votes.push_back({});
       goal_to_output.emplace(source_node.id, output_index);
       input_to_output[input_index] = output_index;
       continue;
@@ -159,10 +192,11 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
     input_to_output[input_index] =
         ensure_visual_node(static_cast<std::uint32_t>(visual_id));
     if (input_to_output[input_index] >= 0) {
-      auto &output_node =
-          out.nodes[static_cast<std::size_t>(input_to_output[input_index])];
+      const auto output_index =
+          static_cast<std::size_t>(input_to_output[input_index]);
+      auto &output_node = out.nodes[output_index];
       output_node.is_goal = output_node.is_goal || source_node.is_goal;
-      preserveMoreSeverePathLabel(output_node, source_node.label);
+      castPathLabelVote(label_votes[output_index], source_node.label);
     }
   }
 
@@ -250,15 +284,19 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
             visualization_model.transition_path_nodes[oriented_index]);
       }
       if (current >= 0) {
-        auto &output_node = out.nodes[static_cast<std::size_t>(current)];
-        preserveMoreSeverePathLabel(output_node, source_node.label);
-        preserveMoreSeverePathLabel(output_node, target_node.label);
+        const auto current_index = static_cast<std::size_t>(current);
+        castPathLabelVote(label_votes[current_index], source_node.label);
+        castPathLabelVote(label_votes[current_index], target_node.label);
       }
       if (previous >= 0) {
         append_edge(previous, current);
       }
       previous = current;
     }
+  }
+
+  for (std::size_t i = 0; i < out.nodes.size(); ++i) {
+    out.nodes[i].label = majorityPathLabel(label_votes[i], out.nodes[i].label);
   }
   return out;
 }

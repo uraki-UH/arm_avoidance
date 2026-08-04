@@ -284,7 +284,9 @@ private:
     }
 
     void handleSourcesSetActive(WebSocket* ws, const std::string& id, const json& params) {
-        std::string sid = params.value("sourceId", ""); bool active = params.value("active", false);
+        std::string sid = params.value("sourceId", "");
+        bool active = params.value("active", false);
+        bool remove_layer = params.value("removeLayer", false);
         if (sid.empty()) return;
         if (sid.front() != '/') sid = "/" + sid;
         std::lock_guard<std::mutex> lock(connectionMutex_);
@@ -356,9 +358,13 @@ private:
                 }
             }
         } else {
-            if (activeDynamicSubs_.count(sid)) { sendStreamDelete(sid); activeDynamicSubs_.erase(sid); activeSubTypes_.erase(sid); }
+            if (activeDynamicSubs_.count(sid)) {
+                if (remove_layer) sendStreamDelete(sid);
+                activeDynamicSubs_.erase(sid);
+                activeSubTypes_.erase(sid);
+            }
         }
-        broadcastText(viewer_internal::makeOkResponse(id, {{"success",true},{"sourceId",sid},{"active",active},{"remove",!active}}));
+        broadcastText(viewer_internal::makeOkResponse(id, {{"success",true},{"sourceId",sid},{"active",active},{"remove",remove_layer}}));
         broadcastSourcesList();
     }
 

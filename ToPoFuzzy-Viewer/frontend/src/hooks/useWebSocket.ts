@@ -388,7 +388,7 @@ interface UseWebSocketReturn {
 
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string; active: boolean }>;
-    unsubscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string; active: boolean }>;
+    unsubscribeSource: (sourceId: string, removeLayer?: boolean) => Promise<{ success: boolean; sourceId: string; active: boolean }>;
 
     listRosbags: () => Promise<RosbagInfo[]>;
     playRosbag: (path: string, remaps: string[], loop: boolean) => Promise<{ success: boolean }>;
@@ -784,11 +784,23 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.delete': (p) => {
                             const targetId = p.topic || p.tag || p.id;
-                            if (targetId) setPointClouds(prev => {
+                            if (!targetId) return;
+                            setPointClouds(prev => {
                                 const next = { ...prev };
                                 delete next[targetId];
                                 return next;
                             });
+                            setVoxelData(prev => {
+                                const next = { ...prev };
+                                delete next[targetId];
+                                return next;
+                            });
+                            setMarkerData(prev => {
+                                const next = { ...prev };
+                                delete next[targetId];
+                                return next;
+                            });
+                            clearGraphLayer(targetId);
                         },
                         'stream.pointcloud.delete': (p) => handlers['stream.delete'](p),
                         'stream.remove_layer': (p) => handlers['stream.delete'](p),
@@ -918,15 +930,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         return sendRpc('sources.setActive', { sourceId, active: true });
     }, [sendRpc]);
 
-    const unsubscribeSource = useCallback(async (sourceId: string): Promise<{ success: boolean; sourceId: string; active: boolean }> => {
-        const result = await sendRpc<{ success: boolean; sourceId: string; active: boolean }>('sources.setActive', { sourceId, active: false });
-        if (result.success) {
-            // Immediately clear local data to prevent App.tsx from re-initializing it
-            setPointClouds((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
-            setVoxelData((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
-            setMarkerData((prev) => { const next = { ...prev }; delete next[sourceId]; return next; });
-        }
-        return result;
+    const unsubscribeSource = useCallback(async (sourceId: string, removeLayer = false): Promise<{ success: boolean; sourceId: string; active: boolean }> => {
+        return sendRpc('sources.setActive', { sourceId, active: false, removeLayer });
     }, [sendRpc]);
 
     const listRosbags = useCallback(async (): Promise<RosbagInfo[]> => {

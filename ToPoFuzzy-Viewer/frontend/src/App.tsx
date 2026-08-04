@@ -458,7 +458,7 @@ function App() {
 
         // Also unsubscribe from the stream if it's a streamable entity
         if (type === 'marker' || type === 'voxel') {
-            unsubscribeSource(tag);
+            unsubscribeSource(tag, true);
         }
     };
 
@@ -790,28 +790,10 @@ function App() {
                 next.delete(sourceId);
                 return next;
             });
-            // Show existing cloud immediately (for latched/one-shot topics like /edited)
-            setPointClouds((prev) => prev.map((pc) =>
-                pc.id === sourceId ? { ...pc, visible: true } : pc
-            ));
             return;
         }
 
         setDisabledSourceIds((prev) => new Set(prev).add(sourceId));
-        // Hide the cloud instead of removing it, so it can be shown again on re-enable
-        setPointClouds((prev) => {
-            const exists = prev.some((pc) => pc.id === sourceId);
-            if (exists) {
-                return prev.map((pc) =>
-                    pc.id === sourceId ? { ...pc, visible: false } : pc
-                );
-            }
-            return prev;
-        });
-        if (selectedLayerId === sourceId) {
-            const fallback = pointClouds.find((pc) => pc.id !== sourceId && pc.visible !== false);
-            setSelectedLayerId(fallback ? fallback.id : null);
-        }
     };
 
     const handleUpdateTransform = (id: string, updates: Partial<PointCloudData>) => {
@@ -852,7 +834,7 @@ function App() {
 
     const renderClouds = isEditMode && editLayerId
         ? pointClouds.filter((pc) => pc.id === editLayerId)
-        : pointClouds;
+        : pointClouds.filter((pc) => !disabledSourceIds.has(pc.id));
 
     const [boundsBuffer, setBoundsBuffer] = useState<ReturnType<typeof calculateBounds>[]>([]);
     const [smoothedBounds, setSmoothedBounds] = useState<ReturnType<typeof calculateBounds> | undefined>(undefined);
@@ -1098,17 +1080,17 @@ function App() {
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
-                                ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
+                                ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
-                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }, skipIfDisabled: true
+                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             }
-                        ].map(({ data, settings, component, defaultSettings, skipIfDisabled }) =>
+                        ].map(({ data, settings, component, defaultSettings }) =>
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = (settings as any)[tag] || defaultSettings;
-                                if (!s.visible || (skipIfDisabled && disabledSourceIds.has(tag))) return null;
+                                if (!s.visible || disabledSourceIds.has(tag)) return null;
                                 const tf = d.frameId && d.frameId !== 'world' ? (transforms[d.frameId] ?? null) : null;
                                 return component(tag, d, s, tf);
                             })
@@ -1116,7 +1098,7 @@ function App() {
 
                         {Object.entries(graphData).map(([tag, data]) => {
                             const settings = layerSettings[tag];
-                            if (!settings || !settings.visible) return null;
+                            if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             const common = {
                                 key: tag,

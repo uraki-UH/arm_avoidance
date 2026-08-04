@@ -17,11 +17,6 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-## RVizでロボットを表示
-ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm
-
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 
@@ -41,11 +36,6 @@ ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
 python3 -m http.server 8000
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
-## AISGNG実行
-
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
-
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ## 点群から占有ボクセルに変換
 ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
@@ -58,6 +48,14 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   input_topic:=/topo_voxel_ids \
   danger_inflation:=0.08
 
+## AISGNG実行
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
+
+## RVizでロボットを表示
+ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm
 
 
 ==============================================================
