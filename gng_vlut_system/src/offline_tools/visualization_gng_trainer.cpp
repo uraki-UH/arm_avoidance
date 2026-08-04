@@ -201,7 +201,7 @@ Options parseOptions(const std::vector<std::string> &arguments) {
     throw std::invalid_argument("--input is required");
   }
   if (options.output_prefix.empty()) {
-    options.output_prefix = options.input.parent_path() / "visualization_gng";
+    options.output_prefix = options.input.parent_path() / "vis_gng";
   }
   if (options.training.target_nodes < 2 || options.training.iterations < 1 ||
       options.training.insertion_interval < 1 ||

@@ -205,7 +205,7 @@ std::vector<std::pair<int, int>> collectSourceAngleEdges(
 
 std::filesystem::path visualizationGngLayerPath(
     const std::filesystem::path &path_prefix, std::uint32_t coord_layer) {
-  return path_prefix.string() + "_layer_" + std::to_string(coord_layer) +
+  return path_prefix.string() + "_L" + std::to_string(coord_layer) +
          ".bin";
 }
 

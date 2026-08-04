@@ -118,11 +118,11 @@
     visualization_gng:
       enabled: true
       path_prefix: ""
-      topic_prefix: "topological_map_visualization"
+      topic_prefix: "topological_map_vis"
       trajectory_input_topic: "planned_topological_map"
-      trajectory_topic_prefix: "planned_topological_map_visualization"
+      trajectory_topic_prefix: "planned_topological_map_vis"
       candidate_trajectory_input_topic: "candidate_topological_map"
-      candidate_trajectory_topic_prefix: "candidate_topological_map_visualization"
+      candidate_trajectory_topic_prefix: "candidate_topological_map_vis"
 
     # --- Self Recognition Settings ---
     self_recognition:

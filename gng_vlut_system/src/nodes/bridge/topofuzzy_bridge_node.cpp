@@ -82,15 +82,15 @@ public:
     declare_parameter("visualization_gng.enabled", false);
     declare_parameter("visualization_gng.path_prefix", "");
     declare_parameter("visualization_gng.topic_prefix",
-                      "topological_map_visualization");
+                      "topological_map_vis");
     declare_parameter("visualization_gng.trajectory_input_topic",
                       "planned_topological_map");
     declare_parameter("visualization_gng.trajectory_topic_prefix",
-                      "planned_topological_map_visualization");
+                      "planned_topological_map_vis");
     declare_parameter("visualization_gng.candidate_trajectory_input_topic",
                       "candidate_topological_map");
     declare_parameter("visualization_gng.candidate_trajectory_topic_prefix",
-                      "candidate_topological_map_visualization");
+                      "candidate_topological_map_vis");
 
     declare_parameter("urdf_path", "");
     declare_parameter("robot.arm_leaf_link_names", "");
@@ -184,7 +184,7 @@ public:
     if (layer_count > 1) {
       for (int i = 0; i < layer_count; ++i) {
         layer_pubs_.push_back(create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-            topic_name + "_layer_" + std::to_string(i), rclcpp::QoS(1).reliable().transient_local()));
+            topic_name + "_L" + std::to_string(i), rclcpp::QoS(1).reliable().transient_local()));
       }
     }
     initializeVisualizationGng(gng_path, layer_count);
@@ -415,7 +415,7 @@ private:
         get_parameter("visualization_gng.path_prefix").as_string();
     if (path_prefix.empty()) {
       path_prefix =
-          (std::filesystem::path(gng_path).parent_path() / "visualization_gng")
+          (std::filesystem::path(gng_path).parent_path() / "vis_gng")
               .string();
     } else if (!std::filesystem::path(path_prefix).is_absolute()) {
       path_prefix = robot_sim::common::resolvePath(path_prefix);
@@ -499,7 +499,7 @@ private:
       }
       visual_layer.publisher =
           create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-              topic_prefix + "_layer_" + std::to_string(layer),
+              topic_prefix + "_L" + std::to_string(layer),
               rclcpp::QoS(1).reliable().transient_local());
       // Trajectory/candidate publishers are created lazily (see
       // publishVisualizationTrajectory) once real data actually arrives on
@@ -510,11 +510,11 @@ private:
       // introspection based purely on "does a publisher exist".
       if (!trajectory_topic_prefix.empty()) {
         visual_layer.trajectory_topic_name =
-            trajectory_topic_prefix + "_layer_" + std::to_string(layer);
+            trajectory_topic_prefix + "_L" + std::to_string(layer);
       }
       if (!candidate_trajectory_topic_prefix.empty()) {
         visual_layer.candidate_trajectory_topic_name =
-            candidate_trajectory_topic_prefix + "_layer_" +
+            candidate_trajectory_topic_prefix + "_L" +
             std::to_string(layer);
       }
       RCLCPP_INFO(get_logger(),
