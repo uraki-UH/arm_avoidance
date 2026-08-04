@@ -54,8 +54,8 @@ ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
 
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
-  robot_name:=ToPoDualArm \   
-  input_topic:=/topo_voxel_ids \  
+  robot_name:=ToPoDualArm \
+  input_topic:=/topo_voxel_ids \
   danger_inflation:=0.08
 
 
@@ -162,20 +162,20 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   robot_name:=ToPoDualArm \
   gui:=true
 
-## Gazeboで接地固定したい場合
+## Gazeboでベースをワールドに固定したい場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
-  static_model:=true
+  spawn_z:=0.0 \
+  fixed_base_link:=base_footprint
 
 ## GazeboでTF追従させたい場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
-  follow_tf_frame:=ToPoDualArm/base_footprint \
-  follow_tf_reference_frame:=world
+  follow_tf_frame:=ToPoDualArm/base_footprint
 
 
 

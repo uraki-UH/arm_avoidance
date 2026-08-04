@@ -66,7 +66,12 @@ def gazebo_material_name(rgba: str) -> str | None:
     )
 
 
-def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str, static_model: bool) -> str:
+def write_gazebo_urdf(
+    robot_urdf: str,
+    mesh_root_dir: str,
+    static_model: bool,
+    fixed_base_link: str,
+) -> str:
     with open(robot_urdf, "r", encoding="utf-8") as f:
         urdf_text = f.read()
 
@@ -83,6 +88,24 @@ def write_gazebo_urdf(robot_urdf: str, mesh_root_dir: str, static_model: bool) -
     if static_model:
         gazebo = ET.SubElement(root, "gazebo")
         ET.SubElement(gazebo, "static").text = "true"
+    elif fixed_base_link:
+        link_names = {link.get("name") for link in root.findall("link")}
+        if fixed_base_link not in link_names:
+            raise ValueError(
+                f"fixed_base_link '{fixed_base_link}' is not defined in {robot_urdf}"
+            )
+        if "world" in link_names:
+            raise ValueError(
+                "Cannot inject a fixed Gazebo base because the URDF already defines a 'world' link"
+            )
+
+        # Keep the model dynamic while anchoring its base in Gazebo's world.
+        # A model-level <static> flag would also freeze the arm joints.
+        ET.SubElement(root, "link", name="world")
+        joint = ET.SubElement(root, "joint", name="world_to_robot_base", type="fixed")
+        ET.SubElement(joint, "parent", link="world")
+        ET.SubElement(joint, "child", link=fixed_base_link)
+        ET.SubElement(joint, "origin", xyz="0 0 0", rpy="0 0 0")
 
     joints = root.findall("joint")
     fixed_children = {
@@ -135,10 +158,14 @@ def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     spawn_z = LaunchConfiguration("spawn_z").perform(context)
     follow_tf_frame = LaunchConfiguration("follow_tf_frame").perform(context).strip()
-    follow_tf_reference_frame = LaunchConfiguration("follow_tf_reference_frame").perform(context).strip() or "world"
+    follow_tf_reference_frame = LaunchConfiguration("follow_tf_ref").perform(context).strip() or "world"
+    legacy_reference_frame = LaunchConfiguration("follow_tf_reference_frame").perform(context).strip()
+    if legacy_reference_frame:
+        follow_tf_reference_frame = legacy_reference_frame
     follow_tf_update_hz = float(LaunchConfiguration("follow_tf_update_hz").perform(context))
     follow_tf_service_name = LaunchConfiguration("follow_tf_service_name").perform(context).strip() or "/gazebo/set_entity_state"
     static_model = LaunchConfiguration("static_model").perform(context).lower() in ("true", "1", "yes", "on")
+    fixed_base_link = LaunchConfiguration("fixed_base_link").perform(context).strip()
     mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip()
     params_file = LaunchConfiguration("params_file").perform(context).strip()
     root_params = load_root_params(params_file)
@@ -154,9 +181,16 @@ def launch_setup(context, *args, **kwargs):
 
     mesh_root_dir = mesh_root_dir or str(root_params.get("mesh_root_dir", "")).strip()
     static_model = static_model or str(root_params.get("static_model", "")).lower() in ("true", "1", "yes", "on")
+    fixed_base_link = str(root_params.get("fixed_base_link", fixed_base_link)).strip()
     if follow_tf_frame:
         static_model = False
-    gazebo_urdf = write_gazebo_urdf(robot_urdf, mesh_root_dir, static_model)
+        fixed_base_link = ""
+    gazebo_urdf = write_gazebo_urdf(
+        robot_urdf,
+        mesh_root_dir,
+        static_model,
+        fixed_base_link,
+    )
 
     def cleanup_gazebo_urdf(_context, *unused_args, **unused_kwargs):
         try:
@@ -208,8 +242,10 @@ def generate_launch_description():
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("spawn_z", default_value="0.5"),
         DeclareLaunchArgument("static_model", default_value="false"),
+        DeclareLaunchArgument("fixed_base_link", default_value=""),
         DeclareLaunchArgument("follow_tf_frame", default_value=""),
-        DeclareLaunchArgument("follow_tf_reference_frame", default_value="world"),
+        DeclareLaunchArgument("follow_tf_ref", default_value="world"),
+        DeclareLaunchArgument("follow_tf_reference_frame", default_value=""),
         DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
         DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
         # We assume Gazebo is already running or started separately
