@@ -108,7 +108,7 @@ include_directories(src/core/safety_engine)
 add_subdirectory(src)
 
 # --- 3. Resource Installation ---
-install(DIRECTORY urdf config launch gng_results
+install(DIRECTORY urdf config launch gng_results worlds
   DESTINATION share/${PROJECT_NAME}
 )
 

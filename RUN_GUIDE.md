@@ -168,6 +168,19 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   spawn_z:=0.0 \
   fixed_base_link:=base_footprint
 
+## Gazeboのピックアンドプレース用worldを使う場合
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  spawn_z:=0.0 \
+  fixed_base_link:=base_footprint \
+  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
+
+このworldには作業台、動的な立方体・円柱・直方体、配置用トレイ2個が含まれる。
+現在の`dual_arm_robot.urdf`には`gazebo_ros2_control`がないため、Gazebo内の関節と
+グリッパを指令して実際に把持するには、別途Gazebo用controller接続が必要。
+
 ## GazeboでTF追従させたい場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
