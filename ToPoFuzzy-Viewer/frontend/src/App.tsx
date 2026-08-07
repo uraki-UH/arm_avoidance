@@ -11,25 +11,22 @@ import {
     EntityType,
     PointCloudData,
     HeatmapSettings,
-    GraphData,
     GraphNode,
-    EditRegion,
     LayerSettings,
-    STATIC_GNG_DEFAULTS,
-    DYNAMIC_GNG_DEFAULTS,
-    TRAJECTORY_GNG_DEFAULTS,
-    isTrajectoryGraphTag,
     ClippingPlane,
     ClippingAxis
 } from './types';
-import { GraphRenderer } from './features/visualization/GraphRenderer';
-import { StaticGraphRenderer } from './features/visualization/StaticGraphRenderer';
+import { GraphRenderer, StaticGraphRenderer } from './features/visualization/GraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
 import { VoxelRenderer } from './features/visualization/VoxelRenderer';
+import {
+    nodeHasManipulabilityData,
+    useGraphLayerSettings,
+} from './features/visualization/graphLayerSettings';
 
 function useClippingPlanes() {
     const [planes, setPlanes] = useState<ClippingPlane[]>([]);
@@ -100,7 +97,6 @@ function useClippingPlanes() {
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
 import { GraphNodeDetailPanel, GraphNodeDetailSnapshot } from './features/visualization/GraphNodeDetailPanel';
-import { type GngLayerState } from './features/visualization/GngLayerControls';
 import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
 import { RobotJointModal } from './features/manipulation/RobotJointModal';
 import { EntityColorModal } from './features/manipulation/EntityColorModal';
@@ -109,100 +105,10 @@ import { Sidebar } from './layout/Sidebar';
 import { MainLayout } from './layout/MainLayout';
 import { calculateBounds } from './utils/bounds';
 import { EditAabbTool } from './features/manipulation/EditAabbTool';
+import { useEditSession } from './features/manipulation/editSession';
 import { WebGLErrorBoundary } from './components/WebGLErrorBoundary';
 
-interface DraftRegion {
-    center: [number, number, number];
-    size: [number, number, number];
-}
-
-interface EditJobStatus {
-    isRunning: boolean;
-    jobId: string;
-    progress: number;
-    stage: string;
-    error?: string;
-}
-
-function nodeHasManipulabilityData(node?: GraphNode | null): boolean {
-    return Boolean(
-        node &&
-        (
-            node.manipValid !== undefined ||
-            node.manipValue !== undefined ||
-            node.manipConditionNumber !== undefined ||
-            node.manipScale !== undefined ||
-            node.manipOrientation !== undefined
-        )
-    );
-}
-
-function graphHasManipulabilityData(graph?: GraphData | null): boolean {
-    return Boolean(graph?.nodes.some((node) => nodeHasManipulabilityData(node)));
-}
-
 type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: string };
-
-const cloneVec3 = (
-    value: [number, number, number] | undefined,
-    fallback: [number, number, number]
-): [number, number, number] => {
-    if (!value) return fallback;
-    return [value[0], value[1], value[2]];
-};
-
-const defaultDraftRegion: DraftRegion = {
-    center: [0, 0, 0],
-    size: [1, 1, 1],
-};
-
-function createDraftRegionFromCloud(cloud: PointCloudData): DraftRegion {
-    if (!cloud.points || cloud.count === 0) {
-        return defaultDraftRegion;
-    }
-
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let minZ = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    let maxZ = Number.NEGATIVE_INFINITY;
-
-    for (let i = 0; i < cloud.count; i++) {
-        const x = cloud.points[i * 3];
-        const y = cloud.points[i * 3 + 1];
-        const z = cloud.points[i * 3 + 2];
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        minZ = Math.min(minZ, z);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-        maxZ = Math.max(maxZ, z);
-    }
-
-    const sizeX = Math.max(0.5, (maxX - minX) * 0.2);
-    const sizeY = Math.max(0.5, (maxY - minY) * 0.2);
-    const sizeZ = Math.max(0.5, (maxZ - minZ) * 0.2);
-
-    return {
-        center: [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2],
-        size: [sizeX, sizeY, sizeZ],
-    };
-}
-
-function draftToMinMax(draft: DraftRegion): {
-    min: [number, number, number];
-    max: [number, number, number];
-} {
-    const halfX = draft.size[0] / 2;
-    const halfY = draft.size[1] / 2;
-    const halfZ = draft.size[2] / 2;
-
-    return {
-        min: [draft.center[0] - halfX, draft.center[1] - halfY, draft.center[2] - halfZ],
-        max: [draft.center[0] + halfX, draft.center[1] + halfY, draft.center[2] + halfZ],
-    };
-}
 
 function App() {
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
@@ -271,10 +177,11 @@ function App() {
     useEffect(() => {
         connect();
         return () => disconnect();
-    }, []);
+    }, [connect, disconnect]);
 
     const clipping = useClippingPlanes();
-    const zoneMonitor = useZoneMonitor();
+  const zoneMonitor = useZoneMonitor();
+  const { getZoneCounts } = zoneMonitor;
 
     // Stable gl config: must not change between renders or r3f recreates the WebGL renderer.
     const canvasGl = useMemo(() => ({
@@ -285,124 +192,11 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 
-    // Multi-layer GNG settings
-    const [layerSettings, setLayerSettings] = useState<Record<string, LayerSettings>>({});
-
-    // Initialize settings for new tags
-    useEffect(() => {
-        const newSettings = { ...layerSettings };
-        let changed = false;
-
-        Object.keys(graphData).forEach(tag => {
-            const isStatic = graphData[tag]?.mode === 'static';
-            const isTrajectory = isTrajectoryGraphTag(tag);
-            const hasManipulabilityData = graphHasManipulabilityData(graphData[tag]);
-            const previousNodeColor = isStatic ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor;
-            const previousEdgeColor = isStatic ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor;
-            const migrateNodeColor = isTrajectory && (
-                !newSettings[tag]?.nodeColor || newSettings[tag].nodeColor === previousNodeColor
-            );
-            const migrateEdgeColor = isTrajectory && (
-                !newSettings[tag]?.edgeColor || newSettings[tag].edgeColor === previousEdgeColor
-            );
-            if (!newSettings[tag]) {
-                newSettings[tag] = {
-                    visible: true,
-                    showNodes: true,
-                    showEdges: !isStatic,
-                    showClusters: false,
-                    visibleSemanticLabels: {
-                        handle: true,
-                    },
-                    visibleLabels: {
-                        0: true,
-                        1: true,
-                        2: true,
-                        3: true,
-                        4: true,
-                        5: true,
-                    },
-                    showNormals: false,
-                    showVelocity: false,
-                    showCovarianceEllipsoids: false,
-                    showManipulabilityEllipsoids: false,
-                    manipEllipsoidMode: 'all',
-                    manipEllipsoidType: 'translational',
-                    nodeOpacity: STATIC_GNG_DEFAULTS.nodeOpacity,
-                    edgeOpacity: STATIC_GNG_DEFAULTS.edgeOpacity,
-                    graphTransform: {
-                        position: [0, 0, 0],
-                        rotation: [0, 0, 0],
-                        scale: [1, 1, 1],
-                    },
-                    ...(isStatic ? {
-                        nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : STATIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : STATIC_GNG_DEFAULTS.edgeColor,
-                        normalColor: '#00ffff',
-                        velocityColor: '#ffb347',
-                        covarianceEllipsoidColor: '#aefeff',
-                        normalScale: 0.075,
-                        velocityScale: 0.25,
-                        covarianceEllipsoidScale: 2.0,
-                        emissiveIntensity: STATIC_GNG_DEFAULTS.nodeEmissiveIntensity,
-                    } : {
-                        nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
-                        edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
-                        normalColor: '#00ffff',
-                        velocityColor: '#ffb347',
-                        covarianceEllipsoidColor: '#aefeff',
-                        normalScale: 0.075,
-                        velocityScale: 0.25,
-                        covarianceEllipsoidScale: 2.0,
-                        emissiveIntensity: DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
-                    })
-                };
-                changed = true;
-            } else if (migrateNodeColor || migrateEdgeColor) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    nodeColor: migrateNodeColor
-                        ? TRAJECTORY_GNG_DEFAULTS.nodeColor
-                        : newSettings[tag].nodeColor,
-                    edgeColor: migrateEdgeColor
-                        ? TRAJECTORY_GNG_DEFAULTS.edgeColor
-                        : newSettings[tag].edgeColor,
-                };
-                changed = true;
-            } else if (!newSettings[tag].visibleLabels) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    visibleLabels: {
-                        0: true,
-                        1: true,
-                        2: true,
-                        3: true,
-                        4: true,
-                        5: true,
-                    },
-                };
-                changed = true;
-            } else if (!newSettings[tag].visibleSemanticLabels) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    visibleSemanticLabels: {
-                        handle: true,
-                    },
-                };
-                changed = true;
-            } else if (!hasManipulabilityData && newSettings[tag].showManipulabilityEllipsoids) {
-                newSettings[tag] = {
-                    ...newSettings[tag],
-                    showManipulabilityEllipsoids: false,
-                };
-                changed = true;
-            }
-        });
-
-        if (changed) {
-            setLayerSettings(newSettings);
-        }
-    }, [graphData]);
+    const {
+        layerSettings,
+        updateLayerSettings: handleUpdateLayerSettings,
+        removeLayerSettings,
+    } = useGraphLayerSettings(graphData);
 
     // --- Unified Entity Initialization ---
     useEffect(() => {
@@ -462,20 +256,9 @@ function App() {
         }
     };
 
-    const handleUpdateLayerSettings = (tag: string, updates: Partial<LayerSettings>) => {
-        setLayerSettings(prev => ({
-            ...prev,
-            [tag]: { ...prev[tag], ...updates }
-        }));
-    };
-
     const removeLayer = (tag: string) => {
         deleteGraphLayer(tag);
-        setLayerSettings(prev => {
-            const next = { ...prev };
-            delete next[tag];
-            return next;
-        });
+        removeLayerSettings(tag);
     };
 
     const zoneCounts = useMemo(() => {
@@ -484,40 +267,53 @@ function App() {
         Object.entries(graphData).forEach(([tag, data]) => {
             const settings = layerSettings[tag];
             if (settings?.visible) {
-                const counts = zoneMonitor.getZoneCounts(data);
+      const counts = getZoneCounts(data);
                 counts.forEach((count, label) => {
                     aggregated.set(label, (aggregated.get(label) || 0) + count);
                 });
             }
         });
         return aggregated;
-    }, [graphData, layerSettings, zoneMonitor.points]);
+  }, [getZoneCounts, graphData, layerSettings]);
 
     const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
-
-    const [gngLayer, setGngLayer] = useState<GngLayerState>({
-        visible: true,
-        removed: false,
-        showGraph: true,
-        showEdges: true,
-        showClusterText: true,
-        showNormals: true,
-        normalArrowLength: 0.075,
-        normalArrowColor: '#00FFFF',
-        nodeScale: 0.01,
-        edgeWidth: 0.002,
-    });
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
     const [selectedManipSnapshot, setSelectedManipSnapshot] = useState<GraphNodeDetailSnapshot | null>(null);
 
-    const [isEditMode, setIsEditMode] = useState(false);
-    const [editLayerId, setEditLayerId] = useState<string | null>(null);
-    const [editSessionId, setEditSessionId] = useState<string | null>(null);
-    const [editRegions, setEditRegions] = useState<EditRegion[]>([]);
-    const [draftRegion, setDraftRegion] = useState<DraftRegion>(defaultDraftRegion);
-    const [regionGizmoMode, setRegionGizmoMode] = useState<'translate' | 'scale'>('translate');
-    const [editJobStatus, setEditJobStatus] = useState<EditJobStatus | null>(null);
+    const {
+        isEditMode,
+        editLayerId,
+        editRegions,
+        draftRegion,
+        regionGizmoMode,
+        setRegionGizmoMode,
+        editJobStatus,
+        canStartEdit,
+        startEditDisabledReason,
+        startEdit: handleStartEdit,
+        cancelEdit: handleCancelEdit,
+        addRegion: handleAddRegion,
+        removeRegion: handleRemoveRegion,
+        clearRegions: handleClearRegions,
+        publishEditedCloud: handlePublishEditedCloud,
+        updateDraftRegion: handleDraftRegionChange,
+    } = useEditSession({
+        pointClouds,
+        selectedLayerId,
+        onSelectLayer: setSelectedLayerId,
+        isConnected,
+        lastJobEvent,
+        api: {
+            subscribeSource,
+            openEditSession,
+            addEditRegion,
+            removeEditRegion,
+            clearEditRegions,
+            commitEditSession,
+            cancelEditSession,
+        },
+    });
 
     useEffect(() => {
         const handleResize = () => {
@@ -585,56 +381,6 @@ function App() {
         setPointClouds((prev) => prev.map((pc) => ({ ...pc, opacity: pointCloudOpacity })));
     }, [pointCloudOpacity]);
 
-    useEffect(() => {
-        // No-op for now as layerSettings handles visibility
-    }, [graphData]);
-
-    useEffect(() => {
-        if (!lastJobEvent || !editJobStatus) {
-            return;
-        }
-
-        if (lastJobEvent.jobId !== editJobStatus.jobId) {
-            return;
-        }
-
-        if (lastJobEvent.type === 'job.progress') {
-            setEditJobStatus((prev) => prev ? {
-                ...prev,
-                progress: lastJobEvent.progress,
-                stage: lastJobEvent.stage,
-            } : prev);
-            return;
-        }
-
-        if (lastJobEvent.type === 'job.failed') {
-            setEditJobStatus((prev) => prev ? {
-                ...prev,
-                isRunning: false,
-                stage: 'failed',
-                error: `${lastJobEvent.error.code}: ${lastJobEvent.error.message}`,
-            } : prev);
-            return;
-        }
-
-        if (lastJobEvent.type === 'job.completed') {
-            (async () => {
-                try {
-                    await subscribeSource(lastJobEvent.publishedTopic);
-                } catch (subscribeError) {
-                    console.warn('Failed to subscribe edited topic:', subscribeError);
-                }
-
-                setSelectedLayerId(lastJobEvent.publishedTopic);
-                setIsEditMode(false);
-                setEditLayerId(null);
-                setEditSessionId(null);
-                setEditRegions([]);
-                setEditJobStatus((prev) => prev ? { ...prev, isRunning: false, progress: 100, stage: 'completed' } : prev);
-            })();
-        }
-    }, [editJobStatus, lastJobEvent, subscribeSource]);
-
     const handleAddPointCloud = (data: PointCloudData) => {
         const cloud = {
             ...data,
@@ -642,125 +388,6 @@ function App() {
         };
         setPointClouds((prev) => [...prev, cloud]);
         setSelectedLayerId(data.id);
-    };
-
-    const handleStartEdit = async () => {
-        if (!selectedLayerId || isEditMode) return;
-        const cloud = pointClouds.find((pc) => pc.id === selectedLayerId);
-        if (!cloud || cloud.id.endsWith('/edited')) return;
-        if (!cloud.id.startsWith('/')) {
-            alert('Only ROS topic layers can be edited in backend session mode.');
-            return;
-        }
-
-        const maxRetries = 3;
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                const session = await openEditSession(cloud.id, 'map');
-                setEditSessionId(session.sessionId);
-                setEditLayerId(cloud.id);
-                setIsEditMode(true);
-                setSelectedLayerId(cloud.id);
-                setEditRegions(session.regions || []);
-                setDraftRegion(createDraftRegionFromCloud(cloud));
-                setRegionGizmoMode('translate');
-                setEditJobStatus(null);
-                return;
-            } catch (startError) {
-                const msg = startError instanceof Error ? startError.message : '';
-                const isSnapshotNotReady = msg.includes('snapshot') || msg.includes('Retry');
-                if (isSnapshotNotReady && attempt < maxRetries) {
-                    console.log(`Edit session snapshot not ready, retrying (${attempt + 1}/${maxRetries})...`);
-                    await new Promise((r) => setTimeout(r, 1000));
-                    continue;
-                }
-                console.error('Failed to start edit session:', startError);
-                alert(`Failed to start edit session: ${msg || 'Unknown error'}`);
-            }
-        }
-    };
-
-    const handleCancelEdit = async () => {
-        const currentSessionId = editSessionId;
-        if (currentSessionId) {
-            try {
-                await cancelEditSession(currentSessionId);
-            } catch (cancelError) {
-                console.warn('Failed to cancel edit session on backend:', cancelError);
-            }
-        }
-
-        setIsEditMode(false);
-        setEditLayerId(null);
-        setEditSessionId(null);
-        setEditRegions([]);
-        setEditJobStatus(null);
-    };
-
-    const handleAddRegion = async () => {
-        if (!isEditMode || !editSessionId || editJobStatus?.isRunning) return;
-        const { min, max } = draftToMinMax(draftRegion);
-
-        try {
-            const result = await addEditRegion(editSessionId, min, max, 'map');
-            setEditRegions((prev) => [...prev, result.region]);
-        } catch (addError) {
-            console.error('Failed to add region:', addError);
-            alert(`Failed to add region: ${addError instanceof Error ? addError.message : 'Unknown error'}`);
-        }
-    };
-
-    const handleRemoveRegion = async (regionId: string) => {
-        if (!isEditMode || !editSessionId || editJobStatus?.isRunning) return;
-
-        try {
-            await removeEditRegion(editSessionId, regionId);
-            setEditRegions((prev) => prev.filter((region) => region.regionId !== regionId));
-        } catch (removeError) {
-            console.error('Failed to remove region:', removeError);
-            alert(`Failed to remove region: ${removeError instanceof Error ? removeError.message : 'Unknown error'}`);
-        }
-    };
-
-    const handleClearRegions = async () => {
-        if (!isEditMode || !editSessionId || editJobStatus?.isRunning) return;
-
-        try {
-            await clearEditRegions(editSessionId);
-            setEditRegions([]);
-        } catch (clearError) {
-            console.error('Failed to clear regions:', clearError);
-            alert(`Failed to clear regions: ${clearError instanceof Error ? clearError.message : 'Unknown error'}`);
-        }
-    };
-
-    const handlePublishEditedCloud = async () => {
-        if (!isEditMode || !editSessionId || !isConnected) return;
-
-        const cloud = pointClouds.find((pc) => pc.id === editLayerId);
-        if (!cloud) return;
-
-        try {
-            const position = cloneVec3(cloud.position, [0, 0, 0]);
-            const rotation = cloneVec3(cloud.rotation, [0, 0, 0]);
-            const scale = cloneVec3(cloud.scale, [1, 1, 1]);
-
-            const result = await commitEditSession(editSessionId, {
-                position,
-                rotation,
-                scale,
-            });
-
-            setEditJobStatus({
-                isRunning: true,
-                jobId: result.jobId,
-                progress: 0,
-                stage: 'queued',
-            });
-        } catch (commitError) {
-            console.error('Failed to commit edit session:', commitError);
-            alert(`Failed to commit edit session: ${commitError instanceof Error ? commitError.message : 'Unknown error'}`);
-        }
     };
 
     const handleRemoveLayer = (id: string) => {
@@ -821,17 +448,6 @@ function App() {
 
     const totalPoints = pointClouds.reduce((sum, pc) => sum + pc.count, 0);
     const selectedCloud = pointClouds.find((pc) => pc.id === selectedLayerId);
-    const selectedIsEditedLayer = selectedCloud ? selectedCloud.id.endsWith('/edited') : false;
-    const selectedIsTopicLayer = selectedCloud ? selectedCloud.id.startsWith('/') : false;
-    const canStartEdit = Boolean(selectedCloud) && selectedIsTopicLayer && !selectedIsEditedLayer && !isEditMode;
-    const startEditDisabledReason = !selectedCloud
-        ? 'Select a layer to edit.'
-        : !selectedIsTopicLayer
-            ? 'Only ROS topic layers can be edited.'
-            : selectedIsEditedLayer
-                ? 'Select the original topic layer (not /edited).'
-                : undefined;
-
     const renderClouds = isEditMode && editLayerId
         ? pointClouds.filter((pc) => pc.id === editLayerId)
         : pointClouds.filter((pc) => !disabledSourceIds.has(pc.id));
@@ -925,10 +541,6 @@ function App() {
         });
     };
 
-    const handleDraftRegionChange = (center: [number, number, number], size: [number, number, number]) => {
-        setDraftRegion({ center, size });
-    };
-
     return (
         <>
             <MainLayout
@@ -962,8 +574,6 @@ function App() {
                             layerSettings={layerSettings}
                             onUpdateLayerSettings={handleUpdateLayerSettings}
                             onRemoveGngLayer={removeLayer}
-                            gngLayer={gngLayer}
-                            setGngLayer={setGngLayer}
                             heatmapSettings={heatmapSettings}
                             setHeatmapSettings={setHeatmapSettings}
                             pointCloudOpacity={pointCloudOpacity}
@@ -1113,25 +723,25 @@ function App() {
                                 edgeColor: settings.edgeColor,
                                 nodeEmissiveIntensity: settings.emissiveIntensity,
                                 edgeEmissiveIntensity: settings.emissiveIntensity,
-                                nodeScale: settings.nodeScale ?? gngLayer.nodeScale,
-                                edgeWidth: settings.edgeWidth ?? gngLayer.edgeWidth,
-                                showNormals: settings.showNormals ?? gngLayer.showNormals,
+                                nodeScale: settings.nodeScale ?? 0.01,
+                                edgeWidth: settings.edgeWidth ?? 0.002,
+                                showNormals: settings.showNormals ?? true,
                                 showVelocity: settings.showVelocity ?? false,
                                 showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
                                 showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
                                 manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
                                 manipEllipsoidType: settings.manipEllipsoidType ?? 'translational',
                                 visibleSemanticLabels: settings.visibleSemanticLabels,
-                                normalScale: settings.normalScale ?? gngLayer.normalArrowLength,
+                                normalScale: settings.normalScale ?? 0.075,
                                 velocityScale: settings.velocityScale ?? 0.25,
                                 covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
-                                normalColor: settings.normalColor ?? gngLayer.normalArrowColor,
+                                normalColor: settings.normalColor ?? '#00FFFF',
                                 velocityColor: settings.velocityColor ?? '#ffb347',
                                 covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
                             return data.mode === 'static'
                                 ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} />
-                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText={gngLayer.showClusterText} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} showClusterText visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />

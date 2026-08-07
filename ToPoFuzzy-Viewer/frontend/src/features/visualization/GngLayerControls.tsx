@@ -1,19 +1,7 @@
 import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 import { getStatusLabel, LayerItem, CompactToggle } from '../../components/ui/SharedControls';
-
-export interface GngLayerState {
-    visible: boolean;
-    removed: boolean;
-    showGraph: boolean;
-    showEdges: boolean;
-    showClusterText: boolean;
-    showNormals: boolean;
-    normalArrowLength: number;
-    normalArrowColor: string;
-    nodeScale: number;
-    edgeWidth: number;
-}
+import { graphHasManipulabilityData } from './graphLayerSettings';
 
 interface GngLayerControlsProps {
     tag: string;
@@ -45,13 +33,7 @@ export function GngLayerControls({
     const visibleLabelCount = settings.visibleLabels
         ? Object.values(settings.visibleLabels).filter(Boolean).length
         : 6;
-    const hasManipulabilityData = graphData.nodes.some((node) => (
-        node.manipValid !== undefined ||
-        node.manipValue !== undefined ||
-        node.manipConditionNumber !== undefined ||
-        node.manipScale !== undefined ||
-        node.manipOrientation !== undefined
-    ));
+    const hasManipulabilityData = graphHasManipulabilityData(graphData);
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">

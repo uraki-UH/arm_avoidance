@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, SEMANTIC_COLORS, isTrajectoryGraphTag } from '../../types';
+import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, STATIC_GNG_DEFAULTS, SEMANTIC_COLORS, isTrajectoryGraphTag } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
 import { DirectionalArrow } from './utils/DirectionalArrow';
@@ -68,7 +68,12 @@ interface GraphRendererProps {
     manualTransform?: Transform | null;
 }
 
-export function GraphRenderer({
+interface GraphRendererCoreProps extends GraphRendererProps {
+    variant: 'dynamic' | 'static';
+}
+
+function GraphRendererCore({
+    variant,
     tag,
     data,
     visible = true,
@@ -104,7 +109,7 @@ export function GraphRenderer({
     edgeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.edgeEmissiveIntensity,
     manualTransform = null,
     visibleSemanticLabels,
-}: GraphRendererProps) {
+}: GraphRendererCoreProps) {
     const manipDisplayScale = 0.25;
     const { invalidate } = useThree();
     const groupRef = useRef<THREE.Group>(null);
@@ -121,15 +126,16 @@ export function GraphRenderer({
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
     const semanticColorEnabled = visibleSemanticLabels?.handle ?? true;
     const isTrajectoryGraph = isTrajectoryGraphTag(tag);
+    const highlightGoalNodes = variant === 'static' || isTrajectoryGraph;
     const goalNodes = useMemo(() => {
-        if (!isTrajectoryGraph) return [];
+        if (!highlightGoalNodes) return [];
         return graph.nodes.filter((node) => {
             if (!node.isGoal) return false;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             return !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
         });
-    }, [graph.nodes, isTrajectoryGraph, visibleLabels]);
+    }, [graph.nodes, highlightGoalNodes, visibleLabels]);
     const goalNodeSignature = useMemo(
         () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
         [goalNodes]
@@ -157,7 +163,7 @@ export function GraphRenderer({
             semantic: [] as GraphData['nodes'],
         }));
         graph.nodes.forEach((node, nodeIndex) => {
-            if (isTrajectoryGraph && node.isGoal) return;
+            if (highlightGoalNodes && node.isGoal) return;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             const semanticLabel = Number.isFinite(node.semanticLabel)
@@ -177,7 +183,7 @@ export function GraphRenderer({
             }
         });
         return buckets;
-    }, [graph.nodes, graph.clusters, nodeSemanticLabels, visibleLabels, semanticColorEnabled, isTrajectoryGraph]);
+    }, [graph.nodes, nodeSemanticLabels, visibleLabels, semanticColorEnabled, highlightGoalNodes]);
 
     // Trigger re-render in demand mode for any visual changes
     useDemandUpdate([
@@ -210,6 +216,8 @@ export function GraphRenderer({
         nodeEmissiveIntensity,
         edgeEmissiveIntensity,
         transform,
+        variant,
+        goalNodeSignature,
     ]);
 
     // --- TF-based Positioning ---
@@ -302,10 +310,10 @@ export function GraphRenderer({
         emissiveIntensity: edgeEmissiveIntensity,
         transparent: edgeOpacity < 1,
         opacity: edgeOpacity,
-        depthTest: false,
+        depthTest: variant === 'static',
         depthWrite: false,
         toneMapped: false,
-    }), [edgeOpacity, edgeColor, edgeEmissiveIntensity]);
+    }), [edgeOpacity, edgeColor, edgeEmissiveIntensity, variant]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -385,8 +393,9 @@ export function GraphRenderer({
             graph.timestamp,
             semanticColorEnabled ? 1 : 0,
             goalNodeSignature,
+            variant,
         ].join(':');
-    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, semanticColorEnabled]);
+    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, semanticColorEnabled, variant]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
@@ -563,9 +572,9 @@ export function GraphRenderer({
     const content = (
         <>
             {canMountNodes && LAYER_COLORS.map((_, labelIndex) => (
-                <group key={`node-label-${labelIndex}`}>
+                <group key={`${variant}-node-label-${labelIndex}`}>
                     <instancedMesh
-                        key={`nodes-base-${labelIndex}-${nodeCapacity}`}
+                        key={`${variant}-nodes-base-${labelIndex}-${nodeCapacity}`}
                         ref={(el) => { nodeMeshRefs.current[labelIndex * 2] = el; }}
                         args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
                         count={nodeRenderReady ? nodeBuckets[labelIndex].base.length : 0}
@@ -574,7 +583,7 @@ export function GraphRenderer({
                     />
                     {semanticColorEnabled && (
                         <instancedMesh
-                            key={`nodes-semantic-${labelIndex}-${nodeCapacity}`}
+                            key={`${variant}-nodes-semantic-${labelIndex}-${nodeCapacity}`}
                             ref={(el) => { nodeMeshRefs.current[labelIndex * 2 + 1] = el; }}
                             args={[nodeSphereGeometry, semanticMaterial, nodeCapacity]}
                             count={nodeRenderReady ? nodeBuckets[labelIndex].semantic.length : 0}
@@ -587,7 +596,7 @@ export function GraphRenderer({
 
             {canMountNodes && goalNodes.length > 0 && (
                 <instancedMesh
-                    key={`candidate-goals-${nodeCapacity}`}
+                    key={`${variant}-candidate-goals-${nodeCapacity}`}
                     ref={goalNodeMeshRef}
                     args={[nodeSphereGeometry, goalNodeMaterial, nodeCapacity]}
                     count={nodeRenderReady ? goalNodes.length : 0}
@@ -598,7 +607,7 @@ export function GraphRenderer({
 
             {canMountEdges && (
                 <instancedMesh
-                    key={`edges-${edgeCapacity}`}
+                    key={`${variant}-edges-${edgeCapacity}`}
                     ref={edgesRef}
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
                     count={edgeRenderReady ? edgePairCount : 0}
@@ -609,7 +618,7 @@ export function GraphRenderer({
 
             {canMountCovarianceEllipsoids && (
                 <instancedMesh
-                    key={`cov-ellipsoids-${ellipsoidCapacity}`}
+                    key={`${variant}-cov-ellipsoids-${ellipsoidCapacity}`}
                     ref={ellipsoidRef}
                     args={[ellipsoidGeometry, ellipsoidMaterial, ellipsoidCapacity]}
                     count={ellipsoidRenderReady ? covarianceEllipsoids.length : 0}
@@ -619,7 +628,7 @@ export function GraphRenderer({
             )}
             {canMountManipEllipsoids && (
                 <instancedMesh
-                    key={`manip-ellipsoids-${manipEllipsoidCapacity}`}
+                    key={`${variant}-manip-ellipsoids-${manipEllipsoidCapacity}`}
                     ref={manipEllipsoidRef}
                     args={[ellipsoidGeometry, ellipsoidMaterial, manipEllipsoidCapacity]}
                     count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
@@ -634,7 +643,7 @@ export function GraphRenderer({
 
             {canMountNormals && graph.nodes.map((node, index) => (
                 <DirectionalArrow
-                    key={`normal-${index}`}
+                    key={`${variant}-normal-${index}`}
                     origin={[node.x, node.y, node.z]}
                     direction={[node.nx, node.ny, node.nz]}
                     lengthScale={normalScale}
@@ -715,5 +724,24 @@ export function GraphRenderer({
                 {content}
             </group>
         </group>
+    );
+}
+
+export function GraphRenderer(props: GraphRendererProps) {
+    return <GraphRendererCore {...props} variant="dynamic" />;
+}
+
+export function StaticGraphRenderer(props: GraphRendererProps) {
+    return (
+        <GraphRendererCore
+            {...props}
+            variant="static"
+            nodeOpacity={props.nodeOpacity ?? STATIC_GNG_DEFAULTS.nodeOpacity}
+            edgeOpacity={props.edgeOpacity ?? STATIC_GNG_DEFAULTS.edgeOpacity}
+            nodeColor={props.nodeColor ?? STATIC_GNG_DEFAULTS.nodeColor}
+            edgeColor={props.edgeColor ?? STATIC_GNG_DEFAULTS.edgeColor}
+            nodeEmissiveIntensity={props.nodeEmissiveIntensity ?? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity}
+            edgeEmissiveIntensity={props.edgeEmissiveIntensity ?? STATIC_GNG_DEFAULTS.edgeEmissiveIntensity}
+        />
     );
 }

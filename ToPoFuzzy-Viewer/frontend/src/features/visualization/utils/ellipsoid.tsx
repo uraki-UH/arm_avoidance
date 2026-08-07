@@ -140,7 +140,7 @@ function ensureRightHandedBasis(
     z: [number, number, number]
 ): [[number, number, number], [number, number, number], [number, number, number]] {
     const nx = normalize3(x);
-    let ny = normalize3(y);
+    const ny = normalize3(y);
     let nz = normalize3(z);
     const cross = cross3(nx, ny);
     if (dot3(cross, nz) < 0) {

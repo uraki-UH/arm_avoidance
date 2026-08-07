@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
 import {
     PointCloudData,
@@ -370,7 +370,7 @@ function robotHasChanged(prev: RobotData, next: RobotData): boolean {
     return false;
 }
 
-interface UseWebSocketReturn {
+export interface UseWebSocketReturn {
     sources: DataSource[];
     pointClouds: Record<string, PointCloudData>;
     markerData: Record<string, MarkerArrayData>;
@@ -432,6 +432,134 @@ interface UseWebSocketReturn {
     cancelEditSession: (sessionId: string) => Promise<{ success: boolean; sessionId: string }>;
 }
 
+type SendRpc = <T>(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+) => Promise<T>;
+
+function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSource[]) => void) {
+    return {
+        getSources: async (): Promise<DataSource[]> => {
+            const result = await sendRpc<{ sources: DataSource[] }>('sources.list');
+            updateSources(result.sources);
+            return result.sources;
+        },
+        subscribeSource: (sourceId: string): Promise<{ success: boolean; sourceId: string; active: boolean }> =>
+            sendRpc('sources.setActive', { sourceId, active: true }),
+        unsubscribeSource: (
+            sourceId: string,
+            removeLayer = false
+        ): Promise<{ success: boolean; sourceId: string; active: boolean }> =>
+            sendRpc('sources.setActive', { sourceId, active: false, removeLayer }),
+        listRosbags: async (): Promise<RosbagInfo[]> => {
+            try {
+                const result = await sendRpc<{ bags: RosbagInfo[] }>('rosbag.list');
+                return result.bags || [];
+            } catch (rpcError) {
+                if (!isUnmountCancellation(rpcError)) console.error('Failed to list rosbags:', rpcError);
+                return [];
+            }
+        },
+        playRosbag: (path: string, remaps: string[], loop: boolean): Promise<{ success: boolean }> =>
+            sendRpc('rosbag.play', { path, remaps, loop }),
+        stopRosbag: (): Promise<{ success: boolean }> => sendRpc('rosbag.stop'),
+        getRosbagStatus: (): Promise<PlaybackStatus> => sendRpc('rosbag.status'),
+        listPointCloudFiles: async (): Promise<PointCloudFileInfo[]> => {
+            try {
+                const result = await sendRpc<{ files: PointCloudFileInfo[] }>('files.list');
+                return result.files || [];
+            } catch (rpcError) {
+                if (!isUnmountCancellation(rpcError)) console.error('Failed to list files:', rpcError);
+                return [];
+            }
+        },
+        loadPointCloudFile: (
+            path: string
+        ): Promise<{ success: boolean; pointCount?: number; frameId?: string }> =>
+            sendRpc('files.load', { path }),
+        startGng: (
+            params: GngParams
+        ): Promise<{ success: boolean; pid?: number; inputTopic?: string }> =>
+            sendRpc('gng.start', params),
+        stopGng: (): Promise<{ success: boolean }> => sendRpc('gng.stop'),
+        getGngStatus: async (): Promise<GngStatus> => {
+            try {
+                return await sendRpc<GngStatus>('gng.status');
+            } catch (rpcError) {
+                if (!isUnmountCancellation(rpcError)) console.error('Failed to get gng status:', rpcError);
+                return { isRunning: false };
+            }
+        },
+        listGngConfigs: async (): Promise<GngConfigInfo[]> => {
+            try {
+                const result = await sendRpc<{ configs: GngConfigInfo[] }>('gng.listConfigs');
+                return result.configs || [];
+            } catch (rpcError) {
+                if (!isUnmountCancellation(rpcError)) console.error('Failed to list gng configs:', rpcError);
+                return [];
+            }
+        },
+        getParameters: (): Promise<NodeParameters> => sendRpc('params.get'),
+        setParameter: (
+            paramName: string,
+            value: number | string | boolean
+        ): Promise<SetParameterResult> => sendRpc('params.set', { paramName, value }),
+        startContinuousPublish: (
+            topic: string,
+            rateHz: number
+        ): Promise<{ success: boolean; topic?: string; rateHz?: number }> =>
+            sendRpc('publish.startContinuous', { topic, rateHz }),
+        stopContinuousPublish: (): Promise<{ success: boolean }> => sendRpc('publish.stopContinuous'),
+        getContinuousPublishStatus: async (): Promise<ContinuousPublishStatus> => {
+            try {
+                return await sendRpc<ContinuousPublishStatus>('publish.status');
+            } catch (rpcError) {
+                if (!isUnmountCancellation(rpcError)) {
+                    console.error('Failed to get continuous publish status:', rpcError);
+                }
+                return { isPublishing: false, topic: '', rateHz: 0, pointCount: 0 };
+            }
+        },
+        openEditSession: (
+            sourceTopic: string,
+            targetFrame = 'map'
+        ): Promise<EditSessionInfo> => sendRpc('edit.openSession', { sourceTopic, targetFrame }),
+        addEditRegion: (
+            sessionId: string,
+            min: [number, number, number],
+            max: [number, number, number],
+            frameId = 'map'
+        ): Promise<{ sessionId: string; region: EditRegion; regionCount: number }> =>
+            sendRpc('edit.addRegion', { sessionId, min, max, frameId }),
+        removeEditRegion: (
+            sessionId: string,
+            regionId: string
+        ): Promise<{ sessionId: string; regionId: string; removed: boolean; regionCount: number }> =>
+            sendRpc('edit.removeRegion', { sessionId, regionId }),
+        clearEditRegions: (
+            sessionId: string
+        ): Promise<{ sessionId: string; regionCount: number }> =>
+            sendRpc('edit.clearRegions', { sessionId }),
+        getEditSession: (sessionId: string): Promise<EditSessionInfo> =>
+            sendRpc('edit.getSession', { sessionId }),
+        commitEditSession: (
+            sessionId: string,
+            transform: {
+                position: [number, number, number];
+                rotation: [number, number, number];
+                scale: [number, number, number];
+            },
+            outputTopic?: string
+        ): Promise<{ accepted: boolean; sessionId: string; jobId: string; outputTopic: string }> =>
+            sendRpc('edit.commit', { sessionId, transform, outputTopic }, 60000),
+        cancelEditSession: (
+            sessionId: string
+        ): Promise<{ success: boolean; sessionId: string }> =>
+            sendRpc('edit.cancelSession', { sessionId }),
+    };
+}
+
 export function useWebSocket(url: string): UseWebSocketReturn {
     const [sources, setSources] = useState<DataSource[]>([]);
     const [pointClouds, setPointClouds] = useState<Record<string, PointCloudData>>({});
@@ -443,9 +571,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const [lastJobEvent, setLastJobEvent] = useState<EditJobEvent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [ws, setWs] = useState<WebSocket | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
-    wsRef.current = ws;
 
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
@@ -566,22 +692,24 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }, []);
 
     const deleteGraphLayer = useCallback((tag: string) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
+        const socket = wsRef.current;
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
             clearGraphLayer(tag);
             return;
         }
 
         clearGraphLayer(tag);
-        ws.send(JSON.stringify({
+        socket.send(JSON.stringify({
             type: 'stream.graph.delete',
             tag,
         }));
-    }, [ws, clearGraphLayer]);
+    }, [clearGraphLayer]);
 
     const connect = useCallback(() => {
-        if (ws) {
+        const currentSocket = wsRef.current;
+        if (currentSocket) {
             intentionalCloseRef.current = true;
-            ws.close();
+            currentSocket.close();
         }
 
         try {
@@ -823,6 +951,9 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             };
 
             socket.onclose = () => {
+                if (wsRef.current === socket) {
+                    wsRef.current = null;
+                }
                 setIsConnected(false);
                 setSources([]);
                 pendingTopicQueueRef.current = [];
@@ -853,30 +984,32 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }, delay);
             };
 
-            setWs(socket);
+            wsRef.current = socket;
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [flushPendingWithError, scheduleStreamFlush, url]);
+    }, [clearGraphLayer, flushPendingWithError, scheduleStreamFlush, url]);
 
     const disconnect = useCallback(() => {
-        if (ws) {
+        const socket = wsRef.current;
+        if (socket) {
             intentionalCloseRef.current = true;
-            ws.close();
-            setWs(null);
+            wsRef.current = null;
+            socket.close();
         }
-    }, [ws]);
+    }, []);
 
     useEffect(() => {
+        const pendingGraphUpdates = pendingGraphUpdatesRef.current;
+        const pendingVoxelUpdates = pendingVoxelUpdatesRef.current;
+        const pendingRobotPoseUpdates = pendingRobotPoseUpdatesRef.current;
+
         return () => {
-            // Use wsRef so this cleanup only runs on unmount, not on every ws change.
-            // Previously ws in the dep array caused cleanup (= flushPendingWithError) to
-            // fire on every reconnect, rejecting in-flight RPCs with "WebSocket hook disposed".
             intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
-            pendingGraphUpdatesRef.current.clear();
-            pendingVoxelUpdatesRef.current.clear();
-            pendingRobotPoseUpdatesRef.current.clear();
+            pendingGraphUpdates.clear();
+            pendingVoxelUpdates.clear();
+            pendingRobotPoseUpdates.clear();
             if (flushScheduledRef.current !== null) {
                 window.cancelAnimationFrame(flushScheduledRef.current);
                 flushScheduledRef.current = null;
@@ -885,13 +1018,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 wsRef.current.close();
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [flushPendingWithError]);
 
     const sendRpc = useCallback(
         <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs = 10000): Promise<T> => {
             return new Promise((resolve, reject) => {
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                const socket = wsRef.current;
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
                     reject(new Error('WebSocket not connected'));
                     return;
                 }
@@ -914,160 +1047,16 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     timer,
                 });
 
-                ws.send(JSON.stringify(request));
+                socket.send(JSON.stringify(request));
             });
         },
-        [ws]
+        []
     );
 
-    const getSources = useCallback(async (): Promise<DataSource[]> => {
-        const result = await sendRpc<{ sources: DataSource[] }>('sources.list');
-        setSources(result.sources);
-        return result.sources;
-    }, [sendRpc]);
-
-    const subscribeSource = useCallback(async (sourceId: string): Promise<{ success: boolean; sourceId: string; active: boolean }> => {
-        return sendRpc('sources.setActive', { sourceId, active: true });
-    }, [sendRpc]);
-
-    const unsubscribeSource = useCallback(async (sourceId: string, removeLayer = false): Promise<{ success: boolean; sourceId: string; active: boolean }> => {
-        return sendRpc('sources.setActive', { sourceId, active: false, removeLayer });
-    }, [sendRpc]);
-
-    const listRosbags = useCallback(async (): Promise<RosbagInfo[]> => {
-        try {
-            const result = await sendRpc<{ bags: RosbagInfo[] }>('rosbag.list');
-            return result.bags || [];
-        } catch (rpcError) {
-            if (!isUnmountCancellation(rpcError)) console.error('Failed to list rosbags:', rpcError);
-            return [];
-        }
-    }, [sendRpc]);
-
-    const playRosbag = useCallback(async (path: string, remaps: string[], loop: boolean): Promise<{ success: boolean }> => {
-        return sendRpc('rosbag.play', { path, remaps, loop });
-    }, [sendRpc]);
-
-    const stopRosbag = useCallback(async (): Promise<{ success: boolean }> => {
-        return sendRpc('rosbag.stop');
-    }, [sendRpc]);
-
-    const getRosbagStatus = useCallback(async (): Promise<PlaybackStatus> => {
-        return sendRpc('rosbag.status');
-    }, [sendRpc]);
-
-    const listPointCloudFiles = useCallback(async (): Promise<PointCloudFileInfo[]> => {
-        try {
-            const result = await sendRpc<{ files: PointCloudFileInfo[] }>('files.list');
-            return result.files || [];
-        } catch (rpcError) {
-            if (!isUnmountCancellation(rpcError)) console.error('Failed to list files:', rpcError);
-            return [];
-        }
-    }, [sendRpc]);
-
-    const loadPointCloudFile = useCallback(async (path: string): Promise<{ success: boolean; pointCount?: number; frameId?: string }> => {
-        return sendRpc('files.load', { path });
-    }, [sendRpc]);
-
-    const startGng = useCallback(async (params: GngParams): Promise<{ success: boolean; pid?: number; inputTopic?: string }> => {
-        return sendRpc('gng.start', params);
-    }, [sendRpc]);
-
-    const stopGng = useCallback(async (): Promise<{ success: boolean }> => {
-        return sendRpc('gng.stop');
-    }, [sendRpc]);
-
-    const getGngStatus = useCallback(async (): Promise<GngStatus> => {
-        try {
-            return await sendRpc<GngStatus>('gng.status');
-        } catch (rpcError) {
-            if (!isUnmountCancellation(rpcError)) console.error('Failed to get gng status:', rpcError);
-            return { isRunning: false };
-        }
-    }, [sendRpc]);
-
-    const listGngConfigs = useCallback(async (): Promise<GngConfigInfo[]> => {
-        try {
-            const result = await sendRpc<{ configs: GngConfigInfo[] }>('gng.listConfigs');
-            return result.configs || [];
-        } catch (rpcError) {
-            if (!isUnmountCancellation(rpcError)) console.error('Failed to list gng configs:', rpcError);
-            return [];
-        }
-    }, [sendRpc]);
-
-    const getParameters = useCallback(async (): Promise<NodeParameters> => {
-        return sendRpc('params.get');
-    }, [sendRpc]);
-
-    const setParameter = useCallback(async (paramName: string, value: number | string | boolean): Promise<SetParameterResult> => {
-        return sendRpc('params.set', { paramName, value });
-    }, [sendRpc]);
-
-    const startContinuousPublish = useCallback(async (
-        topic: string,
-        rateHz: number
-    ): Promise<{ success: boolean; topic?: string; rateHz?: number }> => {
-        return sendRpc('publish.startContinuous', { topic, rateHz });
-    }, [sendRpc]);
-
-    const stopContinuousPublish = useCallback(async (): Promise<{ success: boolean }> => {
-        return sendRpc('publish.stopContinuous');
-    }, [sendRpc]);
-
-    const getContinuousPublishStatus = useCallback(async (): Promise<ContinuousPublishStatus> => {
-        try {
-            return await sendRpc<ContinuousPublishStatus>('publish.status');
-        } catch (rpcError) {
-            if (!isUnmountCancellation(rpcError)) console.error('Failed to get continuous publish status:', rpcError);
-            return { isPublishing: false, topic: '', rateHz: 0, pointCount: 0 };
-        }
-    }, [sendRpc]);
-
-    const openEditSession = useCallback(async (sourceTopic: string, targetFrame: string = 'map'): Promise<EditSessionInfo> => {
-        return sendRpc('edit.openSession', { sourceTopic, targetFrame });
-    }, [sendRpc]);
-
-    const addEditRegion = useCallback(async (
-        sessionId: string,
-        min: [number, number, number],
-        max: [number, number, number],
-        frameId: string = 'map'
-    ): Promise<{ sessionId: string; region: EditRegion; regionCount: number }> => {
-        return sendRpc('edit.addRegion', { sessionId, min, max, frameId });
-    }, [sendRpc]);
-
-    const removeEditRegion = useCallback(async (
-        sessionId: string,
-        regionId: string
-    ): Promise<{ sessionId: string; regionId: string; removed: boolean; regionCount: number }> => {
-        return sendRpc('edit.removeRegion', { sessionId, regionId });
-    }, [sendRpc]);
-
-    const clearEditRegions = useCallback(async (sessionId: string): Promise<{ sessionId: string; regionCount: number }> => {
-        return sendRpc('edit.clearRegions', { sessionId });
-    }, [sendRpc]);
-
-    const getEditSession = useCallback(async (sessionId: string): Promise<EditSessionInfo> => {
-        return sendRpc('edit.getSession', { sessionId });
-    }, [sendRpc]);
-
-    const commitEditSession = useCallback(async (
-        sessionId: string,
-        transform: {
-            position: [number, number, number];
-            rotation: [number, number, number];
-            scale: [number, number, number];
-        },
-        outputTopic?: string
-    ): Promise<{ accepted: boolean; sessionId: string; jobId: string; outputTopic: string }> => {
-        return sendRpc('edit.commit', { sessionId, transform, outputTopic }, 60000);
-    }, [sendRpc]);
-
-    const cancelEditSession = useCallback(async (sessionId: string): Promise<{ success: boolean; sessionId: string }> => {
-        return sendRpc('edit.cancelSession', { sessionId });
-    }, [sendRpc]);
+    const rpcApi = useMemo(
+        () => createViewerRpcApi(sendRpc, setSources),
+        [sendRpc]
+    );
 
     return {
         sources,
@@ -1084,31 +1073,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         disconnect,
         clearGraphLayer,
         deleteGraphLayer,
-        getSources,
-        subscribeSource,
-        unsubscribeSource,
-        listRosbags,
-        playRosbag,
-        stopRosbag,
-        getRosbagStatus,
-        listPointCloudFiles,
-        loadPointCloudFile,
-        startGng,
-        stopGng,
-        getGngStatus,
-        listGngConfigs,
-        getParameters,
-        setParameter,
-        startContinuousPublish,
-        stopContinuousPublish,
-        getContinuousPublishStatus,
-        openEditSession,
-        addEditRegion,
-        removeEditRegion,
-        clearEditRegions,
-        getEditSession,
-        commitEditSession,
-        cancelEditSession,
+        ...rpcApi,
     };
 }
 

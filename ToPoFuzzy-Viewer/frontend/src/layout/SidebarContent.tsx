@@ -25,13 +25,14 @@ import { ExportPanel } from '../features/io/ExportPanel';
 import { GenericTransformPanel } from '../features/manipulation/GenericTransformPanel';
 // removed
 import { ClippingControls } from '../features/manipulation/ClippingControls';
-import { GngLayerControls, type GngLayerState } from '../features/visualization/GngLayerControls';
+import { GngLayerControls } from '../features/visualization/GngLayerControls';
 import { GngLabelModal } from '../features/visualization/GngLabelModal';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
 import { RosbagPlayer } from '../features/io/RosbagPlayer';
 import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
+import { createDefaultGraphLayerSettings } from '../features/visualization/graphLayerSettings';
 
 import {
     PointCloudData,
@@ -56,10 +57,6 @@ import {
     VoxelData,
     VoxelSettings,
     EntityType,
-    STATIC_GNG_DEFAULTS,
-    DYNAMIC_GNG_DEFAULTS,
-    TRAJECTORY_GNG_DEFAULTS,
-    isTrajectoryGraphTag,
 } from '../types';
 
 interface SidebarContentProps {
@@ -105,9 +102,6 @@ interface SidebarContentProps {
     layerSettings: Record<string, LayerSettings>;
     onUpdateLayerSettings: (tag: string, updates: Partial<LayerSettings>) => void;
     onRemoveGngLayer: (tag: string) => void;
-    gngLayer: GngLayerState;
-    setGngLayer: React.Dispatch<React.SetStateAction<GngLayerState>>;
-
     heatmapSettings: HeatmapSettings;
     setHeatmapSettings: (settings: HeatmapSettings) => void;
     pointCloudOpacity: number;
@@ -191,7 +185,7 @@ const ColorActionButton: React.FC<{
 };
 
 export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
-    const hasGngLayer = Boolean(props.graphData && !props.gngLayer.removed);
+    const hasGngLayer = Object.keys(props.graphData).length > 0;
     const isLayerActionDisabled = props.isEditMode;
     const [labelContext, setLabelContext] = useState<{ tag: string; title: string } | null>(null);
 
@@ -272,40 +266,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 key={tag}
                                 tag={tag}
                                 graphData={data}
-                                settings={props.layerSettings[tag] || {
-                                    visible: true,
-                                    showNodes: true,
-                                    showEdges: data.mode !== 'static',
-                                    showClusters: false,
-                                    visibleLabels: {
-                                        0: true,
-                                        1: true,
-                                        2: true,
-                                        3: true,
-                                        4: true,
-                                        5: true,
-                                    },
-                                    showNormals: false,
-                                    showVelocity: false,
-                                    showCovarianceEllipsoids: false,
-                                    showManipulabilityEllipsoids: false,
-                                    manipEllipsoidMode: 'all',
-                                    nodeOpacity: data.mode === 'static' ? STATIC_GNG_DEFAULTS.nodeOpacity : DYNAMIC_GNG_DEFAULTS.nodeOpacity,
-                                    edgeOpacity: data.mode === 'static' ? STATIC_GNG_DEFAULTS.edgeOpacity : DYNAMIC_GNG_DEFAULTS.edgeOpacity,
-                                    nodeColor: isTrajectoryGraphTag(tag)
-                                        ? TRAJECTORY_GNG_DEFAULTS.nodeColor
-                                        : data.mode === 'static' ? STATIC_GNG_DEFAULTS.nodeColor : DYNAMIC_GNG_DEFAULTS.nodeColor,
-                                    edgeColor: isTrajectoryGraphTag(tag)
-                                        ? TRAJECTORY_GNG_DEFAULTS.edgeColor
-                                        : data.mode === 'static' ? STATIC_GNG_DEFAULTS.edgeColor : DYNAMIC_GNG_DEFAULTS.edgeColor,
-                                    normalColor: '#00ffff',
-                                    velocityColor: '#ffb347',
-                                    covarianceEllipsoidColor: '#aefeff',
-                                    normalScale: 0.075,
-                                    velocityScale: 0.25,
-                                    covarianceEllipsoidScale: 2.0,
-                                    emissiveIntensity: data.mode === 'static' ? 0.10 : 0.14,
-                                }}
+                                settings={props.layerSettings[tag] || createDefaultGraphLayerSettings(tag, data)}
                                 onUpdate={(updates) => props.onUpdateLayerSettings(tag, updates)}
                             onRemove={() => props.onRemoveGngLayer(tag)}
                             hasTf={!!(data.frameId && data.frameId !== 'world' && props.transforms[data.frameId])}
