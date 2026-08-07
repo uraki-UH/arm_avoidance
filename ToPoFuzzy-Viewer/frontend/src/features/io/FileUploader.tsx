@@ -32,7 +32,7 @@ export function FileUploader({ onLoad, onPublish }: FileUploaderProps) {
                     if (!result.success) {
                         setError(`Publish failed: ${result.message}`);
                     }
-                } catch (err) {
+                } catch {
                     setError('Publish failed due to connection error');
                 } finally {
                     setIsPublishing(false);

@@ -73,9 +73,12 @@ function useMarkerFrame(tf: { pos: number[]; quat: number[] } | null) {
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
     const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
-    const pts = marker.points || [];
+    const pts = useMemo(() => marker.points || [], [marker.points]);
     const pointsLen = pts.length;
-    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    const { position, rotation } = useMemo(
+        () => getPose({ pos: marker.pos, quat: marker.quat }),
+        [marker.pos, marker.quat]
+    );
     
     const isCube = marker.type === 'cube_list';
     
@@ -168,7 +171,10 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
 
 function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
     const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    const { position, rotation } = useMemo(
+        () => getPose({ pos: marker.pos, quat: marker.quat }),
+        [marker.pos, marker.quat]
+    );
     const isCube = marker.type === 'cube';
 
     const geometry = useMemo(() => {
@@ -220,7 +226,10 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
 
 function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
     const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, rotation } = useMemo(() => getPose(marker), [marker.pos, marker.quat]);
+    const { position, rotation } = useMemo(
+        () => getPose({ pos: marker.pos, quat: marker.quat }),
+        [marker.pos, marker.quat]
+    );
     
     const material = useMemo(() => new THREE.LineBasicMaterial({
         color, transparent, opacity, depthTest: true, depthWrite: false,

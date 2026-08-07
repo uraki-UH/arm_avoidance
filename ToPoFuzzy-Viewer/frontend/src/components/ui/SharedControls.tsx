@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { Eye, EyeOff, Move, Trash2, Minus, Plus } from 'lucide-react';
-export const getStatusLabel = (type: string, mode?: string) => type === 'graph' ? (mode === 'static' ? 'Static Graph' : 'Dynamic Graph') : type.toUpperCase();
 
 const fmt = (id: string, type: string) => {
     if (!id || id === 'default') return type === 'graph' ? 'GNG Topology' : type === 'robot' ? 'Robot Model' : type === 'marker' ? 'Markers' : 'Layer';

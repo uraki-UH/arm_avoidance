@@ -55,7 +55,7 @@ export function TfCalibrationPanel({
                 };
             });
             setParams(nextParams);
-        } catch (err) {
+        } catch {
             setError('Failed to load parameters');
         } finally {
             setIsLoading(false);
@@ -79,7 +79,7 @@ export function TfCalibrationPanel({
         
         try {
             await setParameter(name, value);
-        } catch (err) {
+        } catch {
             setError(`Failed to set ${name}`);
         }
     };

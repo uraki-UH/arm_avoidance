@@ -1,7 +1,9 @@
 import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
-import { getStatusLabel, LayerItem, CompactToggle } from '../../components/ui/SharedControls';
+import { LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 import { graphHasManipulabilityData } from './graphLayerSettings';
+
+const getStatusLabel = (mode?: string) => mode === 'static' ? 'Static Graph' : 'Dynamic Graph';
 
 interface GngLayerControlsProps {
     tag: string;
@@ -42,7 +44,7 @@ export function GngLayerControls({
                 type="graph"
                 headerOnly
                 visible={settings.visible}
-                statusLabel={getStatusLabel('graph', graphData.mode)}
+                statusLabel={getStatusLabel(graphData.mode)}
                 onToggleVisibility={() => onUpdate({ visible: !settings.visible })}
                 onRemove={onRemove}
                 onOpenTransform={onOpenTransform}

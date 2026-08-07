@@ -72,7 +72,7 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
 
     const orbitTarget = useMemo(
         () => new THREE.Vector3(center[0], center[1], center[2]),
-        [center[0], center[1], center[2]]
+        [center]
     );
 
     const nodeGeometry = useMemo(() => new THREE.SphereGeometry(0.025, 8, 8), []);
