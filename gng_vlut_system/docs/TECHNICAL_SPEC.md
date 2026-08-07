@@ -30,8 +30,8 @@ flowchart TD
     B --> I[selected_topological_map_markers]
     B --> J[grasp_pose_candidates / grasp_pose_scores]
 
-    D --> K[candidate_topological_map]
-    D --> L[planned_topological_map]
+    D --> K[cand_topological_map]
+    D --> L[plan_topological_map]
     D --> M[grasp_candidate_metrics]
     D --> N[current_ee_pose]
     D --> O[target_joint_states]
@@ -67,8 +67,8 @@ flowchart TD
 | `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
 | `initial_joint_names_csv` | csv | 組み込み値 | 仮想関節初期化名 |
-| `trajectory_topic` | topic | `/ToPoDualArm/planned_topological_map` | 確定経路の出力 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/candidate_topological_map` | 候補経路の出力 |
+| `trajectory_topic` | topic | `/ToPoDualArm/plan_topological_map` | 確定経路の出力 |
+| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路の出力 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 候補評価指標の出力 |
 | `publish_hz` | float | `20.0` | avoidance node の publish 周波数 |
 | `avoid_collisions` | bool | `true` | 衝突ノードを避ける |
@@ -115,8 +115,8 @@ flowchart TD
 | `gng_model_path` | path | 空 | GNG モデル直接指定 |
 | `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 追跡対象マップ |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `trajectory_topic` | topic | `/ToPoDualArm/planned_topological_map` | 確定経路 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/candidate_topological_map` | 候補経路 |
+| `trajectory_topic` | topic | `/ToPoDualArm/plan_topological_map` | 確定経路 |
+| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 評価指標 |
 | `trial_mode` | bool | `false` | trial 動作 |
 | `trial_goal_interval_sec` | float | `4.0` | trial の目標切替周期 |
@@ -164,8 +164,8 @@ flowchart TD
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
 | `/grasp_pose_candidates` | `geometry_msgs/PoseArray` | 候補姿勢群 |
 | `/grasp_pose_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
-| `/ToPoDualArm/planned_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
-| `/ToPoDualArm/candidate_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
+| `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
+| `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
 | `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標 |
 | `/ToPoDualArm/current_ee_pose` | `geometry_msgs/PoseStamped` | 現在 EE pose |
 | `target_joint_states` | `sensor_msgs/JointState` | 目標関節値 |
@@ -195,8 +195,8 @@ flowchart TD
     I[joint_states] --> H
     H --> J[target_joint_states]
     H --> K[current_ee_pose]
-    H --> L[planned_topological_map]
-    H --> M[candidate_topological_map]
+    H --> L[plan_topological_map]
+    H --> M[cand_topological_map]
     H --> N[grasp_candidate_metrics]
     J --> O[virtual_joint_state_driver]
     O --> I
@@ -379,6 +379,11 @@ flowchart TD
 状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerにある
 `weight_coords[layer]`だけを3次元サンプルとして別のGNGを事前学習し、描画点数を減らす。
 
+coord layerは選択したGNG profileのEEF順に分離して学習・配信し、左右腕の手先位置を
+同じlayerへ混在させない。現行`ToPoDualArm.yaml`は`gng.profile_names: left_arm`なので、
+現在の`ToPoDualArm10000`はcoord layer 1個で、layer 0は`L_tcp`に対応する。右腕または
+双腕を対象にする場合は対象profileを選択して元GNGを学習し、各layerの可視化binを生成する。
+
 可視化GNGは関節姿勢を新規生成しない。各可視化ノードの`source_node_ids`が
 元姿勢GNGのノードを参照し、`weight_angle`、可操作性、衝突状態などは元GNGだけが保持する。
 したがって、関節角配列を可視化binへ重複保存しない。
@@ -432,7 +437,7 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 ```
 
 `--output-prefix`省略時は、入力binと同じディレクトリへ
-`visualization_gng_layer_<layer>.bin`を生成する。ToPoDualArm3の現モデルは
+`vis_gng_L<layer>.bin`を生成する。ToPoDualArm3の現モデルは
 coord layerが1つで、941元ノードから475可視化ノード、2,904遷移エッジを生成する。
 ToPoDualArm10000は10,801元ノードから500可視化ノード、3,251遷移エッジを生成する。
 どちらも1連結成分、孤立ノード0である。
@@ -489,15 +494,15 @@ signature schemaは4である。version 1との読み込み互換性は持たな
 | パラメータ | 既定値 | 意味 |
 |---|---|---|
 | `visualization_gng.enabled` | `false` | 可視化GNGの読み込みと配信 |
-| `visualization_gng.path_prefix` | 空 | 空なら元`gng.bin`と同じ場所の`visualization_gng` |
-| `visualization_gng.topic_prefix` | `topological_map_visualization` | layer suffixを付けるtopic接頭辞 |
-| `visualization_gng.trajectory_input_topic` | `planned_topological_map` | 元GNG IDで表された実行軌道入力 |
-| `visualization_gng.trajectory_topic_prefix` | `planned_topological_map_visualization` | 可視化ノード軌道の出力接頭辞 |
-| `visualization_gng.candidate_trajectory_input_topic` | `candidate_topological_map` | 元GNG IDで表された候補軌道入力 |
-| `visualization_gng.candidate_trajectory_topic_prefix` | `candidate_topological_map_visualization` | 可視化候補軌道の出力接頭辞 |
+| `visualization_gng.path_prefix` | 空 | 空なら元`gng.bin`と同じ場所の`vis_gng`をファイル接頭辞に使う |
+| `visualization_gng.topic_prefix` | `topological_map_vis` | `_L<layer>`を付けるtopic接頭辞 |
+| `visualization_gng.trajectory_input_topic` | `plan_topological_map` | 元GNG IDで表された実行軌道入力 |
+| `visualization_gng.trajectory_topic_prefix` | `plan_topological_map_vis` | 可視化ノード軌道の出力接頭辞 |
+| `visualization_gng.candidate_trajectory_input_topic` | `cand_topological_map` | 元GNG IDで表された候補軌道入力 |
+| `visualization_gng.candidate_trajectory_topic_prefix` | `cand_topological_map_vis` | 可視化候補軌道の出力接頭辞 |
 
 `ToPoDualArm.yaml`では有効化済みで、現在の出力は
-`/ToPoDualArm/topological_map_visualization_layer_0`、型は
+`/ToPoDualArm/topological_map_vis_L0`、型は
 `ais_gng_msgs/msg/TopologicalMap`である。既存の
 `/ToPoDualArm/topological_map_static`とlayer topicは変更しない。
 
@@ -513,8 +518,8 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 
 | 入力 | layer 0出力 |
 |---|---|
-| `/ToPoDualArm/planned_topological_map` | `/ToPoDualArm/planned_topological_map_visualization_layer_0` |
-| `/ToPoDualArm/candidate_topological_map` | `/ToPoDualArm/candidate_topological_map_visualization_layer_0` |
+| `/ToPoDualArm/plan_topological_map` | `/ToPoDualArm/plan_topological_map_vis_L0` |
+| `/ToPoDualArm/cand_topological_map` | `/ToPoDualArm/cand_topological_map_vis_L0` |
 
 複数の元ノードが同じ可視化ノードへ対応する場合は1ノードへ統合し、自己loopと
 重複edgeを除去する。ID `65535`の現在姿勢仮想ノードは入力と可視化graphのframeが
@@ -529,9 +534,9 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 `65534`から降順に割り当てる。Viewerはedgeの入出次数から目標を推測せず、`is_goal`だけで
 紫色表示を決める。候補軌道上の集約ノードは、対応する入力経路のlabelを
 collision、danger、safeの順に保守的に保持し、静的graphのbest-wins集約で上書きしない。
-Viewerでは`planned_topological_map`と`candidate_topological_map`を軌道レイヤーとして扱い、
-safeノードを青`#3b82f6`、edgeを青`#2563eb`で初期表示する。dangerの黄、collisionの赤、
-候補目標の紫は変更しない。旧既定の緑色を保持している軌道レイヤーだけ青へ移行し、
+Viewerでは`plan_topological_map`と`cand_topological_map`を軌道レイヤーとして扱い、
+safeノードとedgeをシアン`#25c3eb`で初期表示する。dangerの黄、collisionの赤、
+候補目標の紫は変更しない。旧既定の緑色を保持している軌道レイヤーだけシアンへ移行し、
 ユーザーが色設定で変更した値は維持する。
 
 bridgeは最新の実行軌道と候補軌道を保持する。起動直後に静的可視化graphのキャッシュが
@@ -556,7 +561,7 @@ flowchart TD
     H --> I[最近傍visual nodeの順序付き列へ変換]
     I --> J[直接でない列だけcompact override保存]
     J --> K[node 座標 関節角 両edgeのsignatureを計算]
-    K --> L[visualization_gng_layer_n.bin]
+    K --> L[vis_gng_Ln.bin]
     L --> M[保存直後に再読込して所属 edge 遷移列を検証]
 ```
 
@@ -568,9 +573,9 @@ flowchart TD
     C -- yes --> E[source ID逆引きとedge path hashを構築]
     E --> F[元ノードStatusをbest-wins集約]
     F --> G[TopologicalMapを生成]
-    G --> H[topological_map_visualization_layer_n]
+    G --> H[topological_map_vis_Ln]
     I[occupied/danger voxel更新] --> F
-    J[planned/candidate topological map] --> K[各source edgeをO 1で保存列へ変換]
+    J[plan/cand topological map] --> K[各source edgeをO 1で保存列へ変換]
     K --> L[保存済み中間visual nodeを展開]
     L --> M[自己loopと重複edgeを除去]
     M --> N[visualization trajectory layer_n]
