@@ -8,6 +8,7 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/msg/topological_node.hpp>
 #include <ais_gng_feature_msgs/msg/topological_node_feature_array.hpp>
+#include <gng_control_msgs/msg/grasp_state.hpp>
 #include <geometry_msgs/msg/point32.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <tf2/exceptions.h>
@@ -30,8 +31,10 @@
 #include "kinematics/kinematic_chain.hpp"
 #include "metrics/manipulability.hpp"
 #include "visualization/visualization_gng.hpp"
+#include <rigid/rigid_grasp_lifecycle_manager.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -59,6 +62,51 @@ std::string activeEdgeModeName(int edge_mode) {
   return "auto";
 }
 
+geometry_msgs::msg::Pose makePose(const Eigen::Vector3f &position,
+                                  const Eigen::Quaternionf &orientation) {
+  geometry_msgs::msg::Pose pose;
+  pose.position.x = position.x();
+  pose.position.y = position.y();
+  pose.position.z = position.z();
+  pose.orientation.x = orientation.x();
+  pose.orientation.y = orientation.y();
+  pose.orientation.z = orientation.z();
+  pose.orientation.w = orientation.w();
+  return pose;
+}
+
+bool normalizeQuaternion(geometry_msgs::msg::Pose &pose) {
+  const double norm = std::sqrt(
+      pose.orientation.x * pose.orientation.x +
+      pose.orientation.y * pose.orientation.y +
+      pose.orientation.z * pose.orientation.z +
+      pose.orientation.w * pose.orientation.w);
+  if (!std::isfinite(norm) || norm <= 1e-9) {
+    return false;
+  }
+  pose.orientation.x /= norm;
+  pose.orientation.y /= norm;
+  pose.orientation.z /= norm;
+  pose.orientation.w /= norm;
+  return true;
+}
+
+bool sameGraspDefinition(const gng_control_msgs::msg::GraspState &lhs,
+                         const gng_control_msgs::msg::GraspState &rhs) {
+  const auto &lp = lhs.object_pose_in_eef;
+  const auto &rp = rhs.object_pose_in_eef;
+  return lhs.object_id == rhs.object_id && lhs.eef_link == rhs.eef_link &&
+         lhs.shape_type == rhs.shape_type &&
+         lhs.dimensions.x == rhs.dimensions.x &&
+         lhs.dimensions.y == rhs.dimensions.y &&
+         lhs.dimensions.z == rhs.dimensions.z &&
+         lp.position.x == rp.position.x && lp.position.y == rp.position.y &&
+         lp.position.z == rp.position.z &&
+         lp.orientation.x == rp.orientation.x &&
+         lp.orientation.y == rp.orientation.y &&
+         lp.orientation.z == rp.orientation.z &&
+         lp.orientation.w == rp.orientation.w;
+}
 
 } // namespace
 
@@ -73,6 +121,8 @@ public:
     declare_parameter("source_frame_id", "world");
     declare_parameter("occupied_voxels_topic", "occupied_voxels");
     declare_parameter("danger_voxels_topic", "danger_voxels");
+    declare_parameter("grasp.state_topic", "grasp_state");
+    declare_parameter("grasp.applied_state_topic", "grasp_state_applied");
     declare_parameter("node_feature_topic", "topological_node_features");
     declare_parameter("gng.data_directory", "gng_results");
     declare_parameter("gng.experiment_id", "standard_train");
@@ -173,6 +223,19 @@ public:
                     std::placeholders::_1));
     }
 
+    grasp_state_topic_ = get_parameter("grasp.state_topic").as_string();
+    grasp_applied_state_topic_ =
+        get_parameter("grasp.applied_state_topic").as_string();
+    grasp_state_sub_ =
+        create_subscription<gng_control_msgs::msg::GraspState>(
+            grasp_state_topic_, rclcpp::QoS(10).reliable(),
+            std::bind(&TopoFuzzyBridgeNode::graspStateCallback, this,
+                      std::placeholders::_1));
+    grasp_state_applied_pub_ =
+        create_publisher<gng_control_msgs::msg::GraspState>(
+            grasp_applied_state_topic_,
+            rclcpp::QoS(1).reliable().transient_local());
+
     const std::string topic_name = get_parameter("topic_name").as_string();
     topological_map_pub_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         topic_name, rclcpp::QoS(1).reliable().transient_local());
@@ -200,9 +263,10 @@ public:
 
     RCLCPP_INFO(get_logger(),
                 "topofuzzy_bridge_node initialized. edge_mode=%s "
-                "occupied_topic=%s danger_topic=%s",
+                "occupied_topic=%s danger_topic=%s grasp_state_topic=%s",
                 activeEdgeModeName(edge_mode_).c_str(),
-                occupied_voxels_topic_.c_str(), danger_voxels_topic_.c_str());
+                occupied_voxels_topic_.c_str(), danger_voxels_topic_.c_str(),
+                grasp_state_topic_.c_str());
 
     publishGraph();
   }
@@ -270,6 +334,184 @@ private:
     }
   }
 
+  void graspStateCallback(
+      const gng_control_msgs::msg::GraspState::SharedPtr msg) {
+    std::lock_guard<std::mutex> lock(update_mutex_);
+    if (msg->state == gng_control_msgs::msg::GraspState::STATE_GRASPED) {
+      activateGraspLocked(*msg);
+      return;
+    }
+    if (msg->state == gng_control_msgs::msg::GraspState::STATE_RELEASED) {
+      releaseGraspLocked(*msg);
+      return;
+    }
+    RCLCPP_WARN(get_logger(), "Ignored unsupported grasp state: %u",
+                static_cast<unsigned int>(msg->state));
+  }
+
+  bool activateGraspLocked(
+      const gng_control_msgs::msg::GraspState &requested_state) {
+    if (!context_ || !context_->gng || !context_->spatial_index) {
+      RCLCPP_ERROR(get_logger(), "Cannot activate grasp without GNG/VLUT context");
+      return false;
+    }
+
+    auto applied_state = requested_state;
+    if (applied_state.object_id.empty() || applied_state.eef_link.empty()) {
+      RCLCPP_WARN(get_logger(),
+                  "Ignored grasp state: object_id and eef_link are required");
+      return false;
+    }
+    if (applied_state.shape_type !=
+        gng_control_msgs::msg::GraspState::SHAPE_BOX) {
+      RCLCPP_WARN(get_logger(), "Ignored unsupported grasp shape: %u",
+                  static_cast<unsigned int>(applied_state.shape_type));
+      return false;
+    }
+    const std::array<double, 3> dimensions{
+        applied_state.dimensions.x, applied_state.dimensions.y,
+        applied_state.dimensions.z};
+    if (std::any_of(dimensions.begin(), dimensions.end(), [](double size) {
+          return !std::isfinite(size) || size <= 0.0;
+        }) ||
+        !normalizeQuaternion(applied_state.object_pose_in_eef)) {
+      RCLCPP_WARN(get_logger(),
+                  "Ignored grasp state: dimensions and pose must be valid");
+      return false;
+    }
+
+    if (active_grasp_state_ &&
+        sameGraspDefinition(*active_grasp_state_, applied_state) &&
+        grasp_lifecycle_.activeVlut() != nullptr) {
+      publishAppliedGraspStateLocked(applied_state);
+      return true;
+    }
+
+    auto indexing = context_->spatial_index->getGrid().schema();
+    indexing.voxel_size = context_->spatial_index->getVoxelSize();
+    auto voxel_model =
+        grasping_system::voxel::GraspVoxelModel::makeBox(dimensions, indexing);
+    if (voxel_model.cells().empty()) {
+      RCLCPP_WARN(get_logger(), "Ignored grasp state: generated shape is empty");
+      return false;
+    }
+
+    std::vector<grasping_system::rigid::RigidGraspVlutSeed> seeds;
+    seeds.reserve(context_->gng->getActiveIndices().size());
+    context_->gng->forEachActiveValid([&](int id, const auto &node) {
+      grasping_system::rigid::RigidGraspVlutSeed seed;
+      seed.gng_node_id = id;
+      seed.eef_pose_in_world =
+          makePose(node.weight_coord, node.status.ee_orientation);
+      seed.object_pose_in_eef = applied_state.object_pose_in_eef;
+      seed.traversal_cost = node.error_angle;
+      seeds.push_back(seed);
+    });
+    if (seeds.empty()) {
+      RCLCPP_WARN(get_logger(), "Ignored grasp state: GNG has no active nodes");
+      return false;
+    }
+
+    grasping_system::core::GraspObject object;
+    object.object_id = applied_state.object_id;
+    object.object_class = "box";
+    object.reference_frame = frame_id_;
+    object.shape_kind =
+        grasping_system::core::ObjectShapeKind::kRigidPrimitive;
+    object.representation_kind =
+        grasping_system::core::ObjectRepresentationKind::kVoxel;
+    object.pose_in_world.orientation.w = 1.0;
+    object.voxel_resolution = indexing.voxel_size;
+
+    grasping_system::rigid::RigidGraspLifecycleManager next_lifecycle;
+    if (!next_lifecycle.upsertObject(object, voxel_model) ||
+        !next_lifecycle.setSeeds(object.object_id, std::move(seeds)) ||
+        !next_lifecycle.buildVlut(object.object_id) ||
+        next_lifecycle.activate(object.object_id) == nullptr) {
+      RCLCPP_ERROR(get_logger(), "Failed to build grasp VLUT for object=%s",
+                   object.object_id.c_str());
+      return false;
+    }
+
+    grasp_lifecycle_ = std::move(next_lifecycle);
+    active_grasp_state_ = applied_state;
+    updateSafetyLocked();
+    graph_dirty_ = true;
+    publishAppliedGraspStateLocked(applied_state);
+    RCLCPP_INFO(get_logger(),
+                "Grasp activated: object=%s eef=%s nodes=%zu object_voxels=%zu",
+                object.object_id.c_str(), applied_state.eef_link.c_str(),
+                grasp_lifecycle_.activeVlut()->size(), voxel_model.cells().size());
+    return true;
+  }
+
+  void releaseGraspLocked(
+      const gng_control_msgs::msg::GraspState &requested_state) {
+    if (!active_grasp_state_ || grasp_lifecycle_.activeVlut() == nullptr) {
+      auto applied_state = requested_state;
+      applied_state.state =
+          gng_control_msgs::msg::GraspState::STATE_RELEASED;
+      publishAppliedGraspStateLocked(applied_state);
+      return;
+    }
+    if (!requested_state.object_id.empty() &&
+        requested_state.object_id != active_grasp_state_->object_id) {
+      RCLCPP_WARN(get_logger(),
+                  "Ignored release for object=%s because active object is %s",
+                  requested_state.object_id.c_str(),
+                  active_grasp_state_->object_id.c_str());
+      return;
+    }
+
+    auto applied_state = *active_grasp_state_;
+    applied_state.header = requested_state.header;
+    applied_state.state = gng_control_msgs::msg::GraspState::STATE_RELEASED;
+    const std::string released_object_id = applied_state.object_id;
+    if (grasp_lifecycle_.deactivateActive() == nullptr) {
+      RCLCPP_ERROR(get_logger(), "Failed to release active grasp object=%s",
+                   released_object_id.c_str());
+      return;
+    }
+    active_grasp_state_.reset();
+    updateSafetyLocked();
+    graph_dirty_ = true;
+    publishAppliedGraspStateLocked(applied_state);
+    RCLCPP_INFO(get_logger(), "Grasp released: object=%s",
+                released_object_id.c_str());
+  }
+
+  void publishAppliedGraspStateLocked(
+      gng_control_msgs::msg::GraspState state) {
+    if (!grasp_state_applied_pub_) {
+      return;
+    }
+    state.header.stamp = now();
+    if (state.header.frame_id.empty()) {
+      state.header.frame_id = frame_id_;
+    }
+    grasp_state_applied_pub_->publish(std::move(state));
+  }
+
+  void accumulateGraspCountsLocked(const std::vector<long> &voxel_ids,
+                                   std::vector<int> &counts) const {
+    const auto *active_vlut = grasp_lifecycle_.activeVlut();
+    if (active_vlut == nullptr) {
+      return;
+    }
+    for (long voxel_id : voxel_ids) {
+      const auto *node_ids = active_vlut->findNodesByVoxel(voxel_id);
+      if (node_ids == nullptr) {
+        continue;
+      }
+      for (int node_id : *node_ids) {
+        if (node_id >= 0 &&
+            static_cast<std::size_t>(node_id) < counts.size()) {
+          ++counts[static_cast<std::size_t>(node_id)];
+        }
+      }
+    }
+  }
+
   void updateSafetyLocked() {
     if (!context_) {
       return;
@@ -289,9 +531,17 @@ private:
     auto &gng = *context_->gng;
     const auto &col_counts = context_->mapper->getCollisionCounts();
     const auto &dgr_counts = context_->mapper->getDangerCounts();
+    std::vector<int> grasp_col_counts(col_counts.size(), 0);
+    std::vector<int> grasp_dgr_counts(dgr_counts.size(), 0);
+    accumulateGraspCountsLocked(context_->mapper->getPrevOccupiedVoxels(),
+                                grasp_col_counts);
+    accumulateGraspCountsLocked(context_->mapper->getPrevDangerVoxels(),
+                                grasp_dgr_counts);
     size_t safe_nodes = 0;
     size_t collision_nodes = 0;
     size_t danger_nodes = 0;
+    size_t grasp_collision_nodes = 0;
+    size_t grasp_danger_nodes = 0;
 
     for (size_t i = 0; i < gng.getNodes().size(); ++i) {
       auto &node = gng.getNodes()[i];
@@ -300,10 +550,24 @@ private:
       }
 
       auto &status = node.status;
-      status.collision_count = (i < col_counts.size()) ? col_counts[i] : 0;
-      status.danger_count = (i < dgr_counts.size()) ? dgr_counts[i] : 0;
+      const int grasp_collision_count =
+          (i < grasp_col_counts.size()) ? grasp_col_counts[i] : 0;
+      const int grasp_danger_count =
+          (i < grasp_dgr_counts.size()) ? grasp_dgr_counts[i] : 0;
+      status.collision_count =
+          ((i < col_counts.size()) ? col_counts[i] : 0) +
+          grasp_collision_count;
+      status.danger_count =
+          ((i < dgr_counts.size()) ? dgr_counts[i] : 0) + grasp_danger_count;
       status.is_colliding = (status.collision_count > 0);
       status.is_danger = (status.danger_count > 0 && !status.is_colliding);
+
+      if (grasp_collision_count > 0) {
+        ++grasp_collision_nodes;
+      }
+      if (grasp_danger_count > 0) {
+        ++grasp_danger_nodes;
+      }
 
       if (status.is_colliding) {
         ++collision_nodes;
@@ -316,9 +580,12 @@ private:
 
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Safety updated: occupied=%zu danger=%zu -> safe=%zu collision=%zu danger=%zu",
+        "Safety updated: occupied=%zu danger=%zu -> safe=%zu collision=%zu "
+        "danger=%zu grasp=%s grasp_collision=%zu grasp_danger=%zu",
         latest_occ_vids_.size(), latest_dan_vids_.size(),
-        safe_nodes, collision_nodes, danger_nodes);
+        safe_nodes, collision_nodes, danger_nodes,
+        active_grasp_state_ ? active_grasp_state_->object_id.c_str() : "none",
+        grasp_collision_nodes, grasp_danger_nodes);
   }
 
   int selectedEdgeMode() const {
@@ -718,6 +985,10 @@ private:
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr occupied_sub_relative_;
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_;
   rclcpp::Subscription<std_msgs::msg::Int64MultiArray>::SharedPtr danger_sub_relative_;
+  rclcpp::Subscription<gng_control_msgs::msg::GraspState>::SharedPtr
+      grasp_state_sub_;
+  rclcpp::Publisher<gng_control_msgs::msg::GraspState>::SharedPtr
+      grasp_state_applied_pub_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr
       topological_map_pub_;
   rclcpp::Publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>::SharedPtr
@@ -737,6 +1008,8 @@ private:
   std::mutex update_mutex_;
   std::vector<long> latest_occ_vids_;
   std::vector<long> latest_dan_vids_;
+  grasping_system::rigid::RigidGraspLifecycleManager grasp_lifecycle_;
+  std::optional<gng_control_msgs::msg::GraspState> active_grasp_state_;
   bool graph_dirty_ = true;
 
   int edge_mode_ = -1;
@@ -747,6 +1020,8 @@ private:
   std::string occupied_voxels_topic_relative_;
   std::string danger_voxels_topic_ = "danger_voxels";
   std::string danger_voxels_topic_relative_;
+  std::string grasp_state_topic_ = "grasp_state";
+  std::string grasp_applied_state_topic_ = "grasp_state_applied";
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };

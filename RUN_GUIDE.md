@@ -10,6 +10,8 @@ docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend 
 
 docker compose --profile manual up  frontend
 
+chrome://restart
+
 ##  backendの起動
 ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 

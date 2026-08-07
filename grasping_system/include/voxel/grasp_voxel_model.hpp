@@ -5,6 +5,9 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -37,6 +40,44 @@ struct VoxelCell
 class GraspVoxelModel : public core::GraspGeometryModel
 {
 public:
+  static GraspVoxelModel makeBox(
+    const std::array<double, 3> &dimensions,
+    const voxel_idx::VoxelIndexingSchema &indexing)
+  {
+    GraspVoxelModel model;
+    model.indexing() = indexing;
+    if (indexing.voxel_size <= 0.0 ||
+        std::any_of(dimensions.begin(), dimensions.end(),
+                    [](double size) { return !std::isfinite(size) || size <= 0.0; })) {
+      return model;
+    }
+
+    std::array<int, 3> cell_counts{};
+    for (std::size_t axis = 0; axis < cell_counts.size(); ++axis) {
+      const double cell_ratio = dimensions[axis] / indexing.voxel_size;
+      const double nearest_integer = std::round(cell_ratio);
+      const double stable_ratio = std::abs(cell_ratio - nearest_integer) < 1e-6
+        ? nearest_integer
+        : cell_ratio;
+      cell_counts[axis] = std::max(1, static_cast<int>(std::ceil(stable_ratio)));
+    }
+    const std::array<int, 3> starts{
+      -cell_counts[0] / 2, -cell_counts[1] / 2, -cell_counts[2] / 2};
+
+    for (int x = starts[0]; x < starts[0] + cell_counts[0]; ++x) {
+      for (int y = starts[1]; y < starts[1] + cell_counts[1]; ++y) {
+        for (int z = starts[2]; z < starts[2] + cell_counts[2]; ++z) {
+          VoxelCell cell;
+          cell.key = {x, y, z};
+          cell.occupancy = 1.0;
+          cell.active = true;
+          model.addCell(cell);
+        }
+      }
+    }
+    return model;
+  }
+
   core::GraspGeometryKind kind() const noexcept override
   {
     return core::GraspGeometryKind::kVoxel;

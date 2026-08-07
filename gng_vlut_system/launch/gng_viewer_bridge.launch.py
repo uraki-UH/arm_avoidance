@@ -273,6 +273,8 @@ def launch_setup(context, *args, **kwargs):
                     # robot_name namespace 配下の相対トピックを購読する。
                     "occupied_voxels_topic": "occupied_voxels",
                     "danger_voxels_topic": "danger_voxels",
+                    "grasp.state_topic": LaunchConfiguration("grasp_state_topic"),
+                    "grasp.applied_state_topic": LaunchConfiguration("grasp_applied_state_topic"),
                     "urdf_path": urdf_path,
                 },
                 # 座標系などは指定がある場合のみ上書き
@@ -312,6 +314,8 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_hz", default_value=""),
         DeclareLaunchArgument("topic_name", default_value="topological_map_static"),
         DeclareLaunchArgument("node_feature_topic", default_value="topological_node_features"),
+        DeclareLaunchArgument("grasp_state_topic", default_value="grasp_state"),
+        DeclareLaunchArgument("grasp_applied_state_topic", default_value="grasp_state_applied"),
         DeclareLaunchArgument("edge_mode", default_value=""),
         OpaqueFunction(function=launch_setup)
     ])
