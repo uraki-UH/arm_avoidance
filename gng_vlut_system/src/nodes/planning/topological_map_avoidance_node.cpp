@@ -185,8 +185,8 @@ public:
     declare_parameter("control_claim_priority", 10);
     declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
     declare_parameter("control_claim_enabled", true);
-    declare_parameter("trajectory_topic", "/ToPoDualArm/planned_topological_map");
-    declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/candidate_topological_map");
+    declare_parameter("trajectory_topic", "/ToPoDualArm/plan_topological_map");
+    declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/cand_topological_map");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
     declare_parameter("evaluation_metrics_topic", "/evaluation_metrics");
     declare_parameter("current_ee_pose_topic", "");

@@ -37,7 +37,7 @@ topics:
     role: graph
     required: true
   - alias: candidate_graph
-    topic: /ToPoDualArm/candidate_topological_map
+    topic: /ToPoDualArm/cand_topological_map
     kind: topological_map
     role: candidate_graph
     compact: true

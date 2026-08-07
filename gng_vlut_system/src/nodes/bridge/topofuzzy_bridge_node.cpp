@@ -84,13 +84,13 @@ public:
     declare_parameter("visualization_gng.topic_prefix",
                       "topological_map_vis");
     declare_parameter("visualization_gng.trajectory_input_topic",
-                      "planned_topological_map");
+                      "plan_topological_map");
     declare_parameter("visualization_gng.trajectory_topic_prefix",
-                      "planned_topological_map_vis");
+                      "plan_topological_map_vis");
     declare_parameter("visualization_gng.candidate_trajectory_input_topic",
-                      "candidate_topological_map");
+                      "cand_topological_map");
     declare_parameter("visualization_gng.candidate_trajectory_topic_prefix",
-                      "candidate_topological_map_vis");
+                      "cand_topological_map_vis");
 
     declare_parameter("urdf_path", "");
     declare_parameter("robot.arm_leaf_link_names", "");
