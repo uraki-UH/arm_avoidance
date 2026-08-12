@@ -694,7 +694,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <button id="gngClearDataBtn" class="warn" type="button" style="display:none">JSONを破棄</button>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
-            <div id="evaluationMetricStatus" class="status evaluation-metric-status" style="margin-top:6px">評価指標: 未受信</div>
+            <div id="evaluationMetricStatus" class="status evaluation-metric-status" style="margin-top:6px">評価入力: 未受信</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
@@ -1040,7 +1040,7 @@ const state={
   useFixedBase:true,fixedBasePose:{x:0.25,y:0,z:NaN,roll:0,pitch:0,yaw:0},
   importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
   importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
-  evaluationMetrics:{schemas:{},samples:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0},
+  evaluationMetrics:{schemas:{},samples:{},structuredInputs:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0,receivedStructuredInputs:0},
   bundleFlow:null,
   gngWasmInputSource:'visible_points',
   gngWasmFileUrls:null
@@ -1681,6 +1681,137 @@ function v312NormalizeTopicMessages(entry){
   if(Array.isArray(entry.messages)) return entry.messages;
   return [];
 }
+function evaluationTopologicalMapTopicMatches(topic){
+  const value=String(topic||'').toLowerCase();
+  return value.includes('gripper_volume')&&value.endsWith('topological_map');
+}
+function normalizeEvaluationVector(value, fallback={x:0,y:0,z:0}){
+  if(Array.isArray(value))return{x:+value[0]||0,y:+value[1]||0,z:+value[2]||0};
+  if(value&&typeof value==='object')return{x:+value.x||0,y:+value.y||0,z:+value.z||0};
+  return{...fallback};
+}
+function normalizeEvaluationQuaternion(value){
+  if(Array.isArray(value))return{x:+value[0]||0,y:+value[1]||0,z:+value[2]||0,w:Number.isFinite(+value[3])?+value[3]:1};
+  if(value&&typeof value==='object')return{x:+value.x||0,y:+value.y||0,z:+value.z||0,w:Number.isFinite(+value.w)?+value.w:1};
+  return{x:0,y:0,z:0,w:1};
+}
+function normalizeEvaluationTopologicalNode(node,index){
+  if(Array.isArray(node)){
+    return{
+      id:Number.isFinite(+node[0])?+node[0]:index,
+      position:{x:+node[1]||0,y:+node[2]||0,z:+node[3]||0},
+      normal:{x:+node[4]||0,y:+node[5]||0,z:+node[6]||0},
+      label:node[8]??0,
+      semanticLabel:Number.isFinite(+node[9])?+node[9]:0,
+      raw:node,
+    };
+  }
+  const position=normalizeEvaluationVector(node&&(node.pos||node.position)||node);
+  return{
+    id:Number.isFinite(+node?.id)?+node.id:index,
+    position,
+    normal:normalizeEvaluationVector(node?.normal),
+    label:node?.label??0,
+    semanticLabel:Number.isFinite(+node?.semantic_label)?+node.semantic_label:0,
+    raw:node,
+  };
+}
+function normalizeEvaluationTopologicalEdges(edges){
+  if(!Array.isArray(edges))return[];
+  if(edges.length&&typeof edges[0]==='number'){
+    const out=[];
+    for(let i=0;i+1<edges.length;i+=2){
+      const a=+edges[i],b=+edges[i+1];
+      if(Number.isFinite(a)&&Number.isFinite(b)&&a!==b)out.push({a,b});
+    }
+    return out;
+  }
+  return edges.map(edge=>{
+    if(Array.isArray(edge))return{a:+edge[0],b:+edge[1]};
+    return{a:+(edge?.a??edge?.source),b:+(edge?.b??edge?.target)};
+  }).filter(edge=>Number.isFinite(edge.a)&&Number.isFinite(edge.b)&&edge.a!==edge.b);
+}
+function normalizeEvaluationTopologicalCluster(cluster,index){
+  if(Array.isArray(cluster)){
+    return{
+      id:Number.isFinite(+cluster[0])?+cluster[0]:index,
+      label:cluster[1]??0,
+      position:{x:+cluster[3]||0,y:+cluster[4]||0,z:+cluster[5]||0},
+      scale:{x:+cluster[6]||0,y:+cluster[7]||0,z:+cluster[8]||0},
+      orientation:normalizeEvaluationQuaternion(cluster.slice(9,13)),
+      nodeIds:Array.isArray(cluster[19])?cluster[19].map(Number).filter(Number.isFinite):[],
+      raw:cluster,
+    };
+  }
+  return{
+    id:Number.isFinite(+cluster?.id)?+cluster.id:index,
+    label:cluster?.label??0,
+    position:normalizeEvaluationVector(cluster?.pos||cluster?.position),
+    scale:normalizeEvaluationVector(cluster?.scale),
+    orientation:normalizeEvaluationQuaternion(cluster?.quat||cluster?.orientation),
+    nodeIds:Array.isArray(cluster?.nodes)?cluster.nodes.map(Number).filter(Number.isFinite):[],
+    raw:cluster,
+  };
+}
+function normalizeEvaluationTopologicalMap(msg,topic,role,source){
+  if(!msg||typeof msg!=='object')return null;
+  const nodes=(Array.isArray(msg.nodes)?msg.nodes:[]).map(normalizeEvaluationTopologicalNode);
+  const edges=normalizeEvaluationTopologicalEdges(msg.edges);
+  const clusters=(Array.isArray(msg.clusters)?msg.clusters:[]).map(normalizeEvaluationTopologicalCluster);
+  if(!nodes.length&&!clusters.length)return null;
+  const frameId=String(msg.header?.frame_id||msg.frame_id||msg.frameId||'');
+  return{
+    topic:String(topic||msg.topic||''),
+    inputType:'topological_map',
+    role:String(role||'topological_map'),
+    frameId,
+    frameNumber:Number.isFinite(+msg.frame_number)?+msg.frame_number:0,
+    nodes,
+    edges,
+    clusters,
+    source:String(source||'live'),
+    receivedAt:Date.now(),
+    raw:msg,
+  };
+}
+function storeEvaluationTopologicalMap(msg,topic,role='topological_map',source='live'){
+  const graph=normalizeEvaluationTopologicalMap(msg,topic,role,source);
+  if(!graph)return false;
+  const metrics=state.evaluationMetrics;
+  const inputs=metrics.structuredInputs||(metrics.structuredInputs={});
+  const key=[graph.inputType,graph.role,graph.topic||graph.frameId||Object.keys(inputs).length].join('::');
+  inputs[key]=graph;
+  metrics.receivedStructuredInputs=(metrics.receivedStructuredInputs||0)+1;
+  v320UpdateEvaluationMetricStatus();
+  return true;
+}
+function decodeBundleTopologicalMap(entry,row){
+  const payload=Array.isArray(row)?row:row&&typeof row==='object'&&'data' in row?row.data:row;
+  if(!Array.isArray(payload))return payload;
+  const schema=Array.isArray(entry?.schema)?entry.schema:[];
+  const decoded={};
+  for(let i=0;i<schema.length&&i<payload.length;i++)decoded[schema[i]]=payload[i];
+  return decoded;
+}
+function extractEvaluationStructuredInputsFromBundle(bundle){
+  const topics=v312ResolveBundleTopics(bundle);
+  if(!topics)return{inputs:0,messages:0};
+  let inputs=0,messages=0;
+  for(const [alias,entry] of Object.entries(topics)){
+    const role=String(entry?.role||'').toLowerCase();
+    const topic=String(entry?.topic||entry?.resolved_topic||alias||'');
+    if(!role.includes('gripper_volume_graph')&&!evaluationTopologicalMapTopicMatches(topic))continue;
+    let stored=false;
+    for(const row of v312NormalizeTopicMessages(entry)){
+      if(storeEvaluationTopologicalMap(decodeBundleTopologicalMap(entry,row),topic,role||'gripper_volume_graph','bundle')){
+        stored=true;
+        messages++;
+      }
+    }
+    if(stored)inputs++;
+  }
+  return{inputs,messages};
+}
 function v320EvaluationMetricKey(msg){
   return [
     msg&&msg.profile_name ? msg.profile_name : 'default',
@@ -1801,13 +1932,15 @@ function v320UpdateEvaluationMetricStatus(){
   const schemaCount=Object.keys(state.evaluationMetrics.schemas||{}).length;
   const sampleGroups=Object.keys(state.evaluationMetrics.samples||{}).length;
   const sampleCount=Object.values(state.evaluationMetrics.samples||{}).reduce((sum,group)=>sum+(group.samples?.length||0),0);
+  const structuredInputs=Object.values(state.evaluationMetrics.structuredInputs||{});
+  const inputCount=structuredInputs.length;
   const schemaKey=state.evaluationMetrics.lastSchemaKey||'-';
   const sampleKey=state.evaluationMetrics.lastSampleKey||'-';
-  el.innerHTML=`評価指標: <b>schema ${schemaCount}</b>, <b>sample ${sampleCount}</b> / groups ${sampleGroups}<br>schema=${schemaKey}<br>sample=${sampleKey}`;
+  el.innerHTML=`評価入力: <b>schema ${schemaCount}</b>, <b>sample ${sampleCount}</b> / groups ${sampleGroups}, <b>構造データ ${inputCount}</b><br>schema=${schemaKey}<br>sample=${sampleKey}`;
 }
 function v320ExtractEvaluationMetricsFromBundle(bundle){
   const topics=v312ResolveBundleTopics(bundle);
-  if(!topics) return {schemas:0,samples:0};
+  if(!topics) return {schemas:0,samples:0,structuredInputs:0,structuredMessages:0};
   let schemas=0,samples=0;
   for(const [alias,entry] of Object.entries(topics)){
     const role=String(entry&&entry.role||'').toLowerCase();
@@ -1823,13 +1956,17 @@ function v320ExtractEvaluationMetricsFromBundle(bundle){
       if(looksSample && v320StoreEvaluationMetricSampleArray(data,'bundle')) samples++;
     }
   }
+  const structured=extractEvaluationStructuredInputsFromBundle(bundle);
   v320UpdateEvaluationMetricStatus();
-  return {schemas,samples};
+  return {schemas,samples,structuredInputs:structured.inputs,structuredMessages:structured.messages};
 }
 window.__topoEvaluationMetricApi={
   storeMetrics:msg=>v320StoreEvaluationMetrics(msg,'ros'),
   storeSchema:msg=>v320StoreEvaluationMetricSchema(msg,'ros'),
   storeSampleArray:msg=>v320StoreEvaluationMetricSampleArray(msg,'ros'),
+  storeTopologicalMap:(msg,topic,role='topological_map',source='external')=>storeEvaluationTopologicalMap(msg,topic,role,source),
+  getStructuredInputs:(filter={})=>Object.values(state.evaluationMetrics.structuredInputs||{}).filter(input=>(!filter.inputType||input.inputType===filter.inputType)&&(!filter.role||input.role===filter.role)&&(!filter.topic||input.topic===filter.topic)&&(!filter.frameId||input.frameId===filter.frameId)),
+  loadBundle:bundle=>v320ExtractEvaluationMetricsFromBundle(bundle),
   updateStatus:v320UpdateEvaluationMetricStatus,
   getState:()=>state.evaluationMetrics
 };
@@ -6450,7 +6587,8 @@ function v312SetupGngInputFileLoader(){
         const poseCount=(state.graspPoseCandidates||[]).length;
         const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';
         const metricText=(metricInfo.schemas||metricInfo.samples)?`, eval schema=${metricInfo.schemas}, eval sample=${metricInfo.samples}`:'';
-        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}${metricText}. 再生で flow を開始します。`);
+        const structuredText=metricInfo.structuredInputs?`, eval structured=${metricInfo.structuredInputs} input/${metricInfo.structuredMessages} msg`:'';
+        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}${metricText}${structuredText}. 再生で flow を開始します。`);
         if(poseCount) renderAll();
         return;
       }
@@ -6978,7 +7116,7 @@ function bindDataModeControls(){
       state.importedGraphSession=null;
       state.bundleTopicSelection={};
       state.graspPoseCandidates=[];
-      state.evaluationMetrics={schemas:{},samples:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0};
+      state.evaluationMetrics={schemas:{},samples:{},structuredInputs:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0,receivedStructuredInputs:0};
       v320UpdateEvaluationMetricStatus();
       v321SyncEvaluationMetricFeatures();
       resetGngRunState();
@@ -7477,6 +7615,63 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     rosSubscribers.push({onConnection,onClose,onError,stop});
     return {start,stop};
   }
+  function createDiscoveredRosTopicSubscribers({messageType,statusPrefix,topicFilter,onMessage}){
+    const subscriptions = new Map();
+    let discoveryTimer = null;
+    const normalizedType=(value)=>String(value||'').replace(/^\/+/, '').replace('/msg/','/');
+    const typeMatches=(value)=>normalizedType(value)===normalizedType(messageType);
+    const stop=()=>{
+      if(discoveryTimer){clearInterval(discoveryTimer);discoveryTimer=null;}
+      subscriptions.forEach(topicObj=>{try{topicObj.unsubscribe();}catch(_e){}});
+      subscriptions.clear();
+    };
+    const subscribeTopic=(topic)=>{
+      if(subscriptions.has(topic))return;
+      const topicObj=new ROSLIB.Topic({ros,name:topic,messageType});
+      topicObj.subscribe(msg=>{
+        try{onMessage(msg,topic);}catch(e){console.warn(`${statusPrefix} subscribe error`,topic,e);}
+      });
+      subscriptions.set(topic,topicObj);
+    };
+    const syncTopics=(result)=>{
+      const topics=Array.isArray(result?.topics)?result.topics:[];
+      const types=Array.isArray(result?.types)?result.types:[];
+      const wanted=new Set();
+      topics.forEach((topic,index)=>{
+        if(!topicFilter(topic))return;
+        if(types[index]&&!typeMatches(types[index]))return;
+        wanted.add(topic);
+        subscribeTopic(topic);
+      });
+      subscriptions.forEach((topicObj,topic)=>{
+        if(wanted.has(topic))return;
+        try{topicObj.unsubscribe();}catch(_e){}
+        subscriptions.delete(topic);
+      });
+    };
+    const discover=()=>{
+      if(!ros||!ros.isConnected)return;
+      if(typeof ros.getTopics!=='function'){
+        console.warn(`${statusPrefix}: rosapi topic discovery unavailable`);
+        return;
+      }
+      ros.getTopics(syncTopics,error=>{
+        console.warn(`${statusPrefix} discovery error`,error);
+      });
+    };
+    const start=()=>{
+      if(!ros||!ros.isConnected)return false;
+      stop();
+      discover();
+      discoveryTimer=setInterval(discover,5000);
+      return true;
+    };
+    const onConnection=()=>start();
+    const onClose=()=>stop();
+    const onError=()=>{};
+    rosSubscribers.push({onConnection,onClose,onError,stop});
+    return{start,stop,discover};
+  }
   function ensureRos(){
     if(ros && ros.isConnected){
       setRosBridgeStatus('ROS bridge: connected');
@@ -7680,6 +7875,15 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         onMessage:(msg)=>window.__topoEvaluationMetricApi?.storeMetrics(msg),
       },
     ].forEach(createRosTopicSubscriber);
+    createDiscoveredRosTopicSubscribers({
+      messageType:'ais_gng_msgs/msg/TopologicalMap',
+      statusPrefix:'グリッパー体積graph',
+      topicFilter:(topic)=>{
+        const value=String(topic||'').toLowerCase();
+        return value.includes('gripper_volume')&&value.endsWith('topological_map');
+      },
+      onMessage:(msg,topic)=>window.__topoEvaluationMetricApi?.storeTopologicalMap(msg,topic,'gripper_volume_graph','ros'),
+    });
     const rosPublishers = rosPublishersConfig.map((config)=>{
       bindRosTopicPanel(config.enabledId, config.detailId);
       return createPointCloudPublisher(config);
