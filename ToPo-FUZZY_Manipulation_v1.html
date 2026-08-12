@@ -7581,7 +7581,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     rosPublishers.push({onConnection, onClose, onError});
     return {sync, stop};
   }
-  function createRosTopicSubscriber({topic,messageType,statusPrefix,onMessage}){
+  function applyRosTopicSubscribeQos(topicObj,qos){
+    if(!topicObj||!qos||typeof topicObj.callForSubscribeAndAdvertise!=='function')return topicObj;
+    const call=topicObj.callForSubscribeAndAdvertise.bind(topicObj);
+    topicObj.callForSubscribeAndAdvertise=(message)=>call(message?.op==='subscribe'?{...message,qos}:message);
+    return topicObj;
+  }
+  function createRosTopicSubscriber({topic,messageType,statusPrefix,qos,onMessage}){
     let topicObj = null;
     const setStatus = (text)=>{
       const el = document.getElementById('evaluationMetricStatus');
@@ -7599,7 +7605,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         return false;
       }
       stop();
-      topicObj = new ROSLIB.Topic({ros,name:topic,messageType});
+      topicObj = applyRosTopicSubscribeQos(
+        new ROSLIB.Topic({ros,name:topic,messageType}),qos);
       topicObj.subscribe((msg)=>{
         try{
           onMessage(msg);
@@ -7872,6 +7879,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         topic:'/evaluation_metrics',
         messageType:'gng_control_msgs/msg/EvaluationMetrics',
         statusPrefix:'評価指標',
+        qos:{history:'keep_last',depth:1,reliability:'reliable',durability:'transient_local'},
         onMessage:(msg)=>window.__topoEvaluationMetricApi?.storeMetrics(msg),
       },
     ].forEach(createRosTopicSubscriber);

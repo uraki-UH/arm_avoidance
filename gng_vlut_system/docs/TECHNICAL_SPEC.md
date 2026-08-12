@@ -341,6 +341,8 @@ Viewer のリンク別楕円は対象 URDF リンクの子として描画する�
 「4. 言語ラベル / Membership Function」の入力候補へ追加する。切断後にボタンを再度押した場合は
 WebSocketへ再接続して購読を張り直す。rosbridge接続だけでは評価値は生成されないため、
 `/evaluation_metrics`のPublisherが別途動作している必要がある。
+PublisherとHTMLの起動順に依存しないよう、rosbridge Subscriberは
+`RELIABLE`かつ`TRANSIENT_LOCAL`を使用する。
 rosbridgeコンテナはgng_cpuと同じ`ros_ws_volume`と`ros_ws_build_volume`を
 `/ros2_ws/install`と`/ros2_ws/build`へmountし、
 workspaceの`setup.bash`をsourceしてから起動する。これにより`gng_control_msgs`などの
