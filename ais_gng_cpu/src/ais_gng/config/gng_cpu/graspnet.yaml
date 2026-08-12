@@ -1,20 +1,21 @@
 ais_gng_node:
   ros__parameters:
-    node.num_max: 1000
+    node.num_max: 2000
     node.learning_num: 3000
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.covariance_enabled: false
-    node.edge_age_max: 100
+    edge.age_max: 1000
     node.s1_reset_range: 0.01
-    node.s1_age: [6, 6, 12, 12] #[default, safe, wall, unknown]
+    node.s1_age_max: [6, 6, 12, 6] #[default, safe, wall, unknown]
     node.clusted_s1_age: [20, 20, 24, 24] #[default, safe, wall, unknown]
-    node.interval: [0.4, 0.2, 0.2, 0.025] #[default, safe, wall, unknown]
-    node.static.age_min: 250 # 長期記憶の年齢
+    node.interval: [0.5, 0.2, 0.1, 0.01] #[default, safe, wall, unknown]
+    #safeの値を大きくすると一括削除がおきまくる
+    node.static.age_min: 1000 # 長期記憶の年齢
 
     ds.transformed: true
-    ds.range_max: 0.2
+    ds.range_max: 0.5
     ds.all.num_max: 4000
     ds.unknown.num_max: 2000
     ds.human.num_max: 3000
@@ -40,9 +41,9 @@ ais_gng_node:
     classify.car.model: "NN_car.pt"
     classify.threshold: 0.7
 
-    performance.log_interval_ms: 5000
+    performance.log_interval_ms: 500
 
-    input.point_cloud_num: 100000
+    input.point_cloud_num: 10000
     input.sampling_mode: "uniform"
     input.base_frame_id: "map"
     input.voxel_grid_unit: 0.02
@@ -55,3 +56,4 @@ ais_gng_node:
     input.z_min: -1.
     input.z_max: 20.
     input.topic_names: ["/camera/camera/depth/color/points"]
+    # input.topic_names: ["/semantic_points"]

@@ -238,9 +238,16 @@ ROS 側はプレビューの送信有無だけを制御し、見た目の指定�
 | `input.sampling_mode` | string | `head` | 上限超過時の選択方式。`head` または `uniform` |
 | `node.covariance_enabled` | bool | `false` | ノード移動共分散とViewer向け共分散楕円データの生成 |
 | `performance.log_interval_ms` | int | `5000` | 実行周期INFOログの最小間隔。`0`で無効 |
+| `node.s1_age_max` | int[] | `[6, 6, 6, 3]` | ラベル別の未勝者node削除周期 `[default, safe, wall, unknown]` |
+| `edge.age_max` | int | `100` | GNG edgeの最大age |
 
-`graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform`、
-`node.covariance_enabled=false`、`performance.log_interval_ms=5000` を使用する。
+`graspnet.yaml` は `input.point_cloud_num=10000`、`input.sampling_mode=uniform`、
+`node.covariance_enabled=false`、`performance.log_interval_ms=500` を使用する。
+node寿命とedge寿命の正式なparameter名は`node.s1_age_max`と`edge.age_max`である。
+`node.s1_age`と`node.edge_age_max`はAiS-GNG nodeが宣言していないため使用しない。
+`edge.age_max`のageは入力frame数ではなくGNG学習iterationで増える。
+`graspnet.yaml`は1 frame当たり`node.learning_num=4000`回学習するため、
+同一frame内のedge切断と孤立node一斉削除を避ける値として`edge.age_max=50000`を使用する。
 
 ### 9.2 選択方式
 

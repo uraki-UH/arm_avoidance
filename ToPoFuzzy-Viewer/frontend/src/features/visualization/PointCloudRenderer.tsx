@@ -206,7 +206,7 @@ export function PointCloudRenderer({
     return (
         <>
             <group ref={groupRef}>
-                <points ref={pointsRef} geometry={geometry} material={material} />
+                <points ref={pointsRef} geometry={geometry} material={material} dispose={null} />
             </group>
 
             {selected && groupRef.current && (

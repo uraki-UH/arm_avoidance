@@ -17,6 +17,17 @@ const EMPTY_GRAPH: GraphData = {
 };
 
 const CANDIDATE_GOAL_COLOR = '#a855f7';
+const MIN_INSTANCE_CAPACITY = 64;
+
+function initialInstanceCapacity(required: number) {
+    if (required <= 0) return 0;
+    return Math.max(MIN_INSTANCE_CAPACITY, Math.ceil(required * 1.25));
+}
+
+function growInstanceCapacity(current: number, required: number) {
+    if (required <= current) return current;
+    return Math.max(required, MIN_INSTANCE_CAPACITY, Math.ceil(current * 1.5));
+}
 
 // removed
 
@@ -315,11 +326,20 @@ function GraphRendererCore({
         toneMapped: false,
     }), [edgeOpacity, edgeColor, edgeEmissiveIntensity, variant]);
 
-    const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
+    useEffect(() => () => { nodeSphereGeometry.dispose(); }, [nodeSphereGeometry]);
+    useEffect(() => () => { edgeCylinderGeometry.dispose(); }, [edgeCylinderGeometry]);
+    useEffect(() => () => { ellipsoidGeometry.dispose(); }, [ellipsoidGeometry]);
+    useEffect(() => () => { nodeMaterials.forEach((material) => material.dispose()); }, [nodeMaterials]);
+    useEffect(() => () => { semanticMaterial.dispose(); }, [semanticMaterial]);
+    useEffect(() => () => { goalNodeMaterial.dispose(); }, [goalNodeMaterial]);
+    useEffect(() => () => { ellipsoidMaterial.dispose(); }, [ellipsoidMaterial]);
+    useEffect(() => () => { edgeMaterial.dispose(); }, [edgeMaterial]);
+
+    const [nodeCapacity, setNodeCapacity] = useState(() => initialInstanceCapacity(graph.nodes.length));
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
-    const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
-    const [ellipsoidCapacity, setEllipsoidCapacity] = useState(graph.nodes.length);
-    const [manipEllipsoidCapacity, setManipEllipsoidCapacity] = useState(graph.nodes.length);
+    const [edgeCapacity, setEdgeCapacity] = useState(() => initialInstanceCapacity(edgePairCount));
+    const [ellipsoidCapacity, setEllipsoidCapacity] = useState(() => initialInstanceCapacity(graph.nodes.length));
+    const [manipEllipsoidCapacity, setManipEllipsoidCapacity] = useState(() => initialInstanceCapacity(graph.nodes.length));
     const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
     const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
     const [ellipsoidReadySignature, setEllipsoidReadySignature] = useState<string | null>(null);
@@ -438,20 +458,20 @@ function GraphRendererCore({
     const manipEllipsoidRenderReady = manipEllipsoidReadySignature === manipEllipsoidRenderSignature;
 
     useEffect(() => {
-        if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
-    }, [graph.nodes.length, nodeCapacity]);
+        setNodeCapacity((current) => growInstanceCapacity(current, graph.nodes.length));
+    }, [graph.nodes.length]);
 
     useEffect(() => {
-        if (edgePairCount > edgeCapacity) setEdgeCapacity(edgePairCount);
-    }, [edgePairCount, edgeCapacity]);
+        setEdgeCapacity((current) => growInstanceCapacity(current, edgePairCount));
+    }, [edgePairCount]);
 
     useEffect(() => {
-        if (covarianceEllipsoids.length > ellipsoidCapacity) setEllipsoidCapacity(covarianceEllipsoids.length);
-    }, [covarianceEllipsoids.length, ellipsoidCapacity]);
+        setEllipsoidCapacity((current) => growInstanceCapacity(current, covarianceEllipsoids.length));
+    }, [covarianceEllipsoids.length]);
 
     useEffect(() => {
-        if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) setManipEllipsoidCapacity(manipulabilityEllipsoids.length);
-    }, [manipulabilityEllipsoids.length, manipEllipsoidCapacity]);
+        setManipEllipsoidCapacity((current) => growInstanceCapacity(current, manipulabilityEllipsoids.length));
+    }, [manipulabilityEllipsoids.length]);
 
     // --- Node Instances ---
     useLayoutEffect(() => {
@@ -577,6 +597,7 @@ function GraphRendererCore({
                         key={`${variant}-nodes-base-${labelIndex}-${nodeCapacity}`}
                         ref={(el) => { nodeMeshRefs.current[labelIndex * 2] = el; }}
                         args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
+                        dispose={null}
                         count={nodeRenderReady ? nodeBuckets[labelIndex].base.length : 0}
                         frustumCulled={false}
                         renderOrder={10}
@@ -586,6 +607,7 @@ function GraphRendererCore({
                             key={`${variant}-nodes-semantic-${labelIndex}-${nodeCapacity}`}
                             ref={(el) => { nodeMeshRefs.current[labelIndex * 2 + 1] = el; }}
                             args={[nodeSphereGeometry, semanticMaterial, nodeCapacity]}
+                            dispose={null}
                             count={nodeRenderReady ? nodeBuckets[labelIndex].semantic.length : 0}
                             frustumCulled={false}
                             renderOrder={11}
@@ -599,6 +621,7 @@ function GraphRendererCore({
                     key={`${variant}-candidate-goals-${nodeCapacity}`}
                     ref={goalNodeMeshRef}
                     args={[nodeSphereGeometry, goalNodeMaterial, nodeCapacity]}
+                    dispose={null}
                     count={nodeRenderReady ? goalNodes.length : 0}
                     frustumCulled={false}
                     renderOrder={12}
@@ -610,6 +633,7 @@ function GraphRendererCore({
                     key={`${variant}-edges-${edgeCapacity}`}
                     ref={edgesRef}
                     args={[edgeCylinderGeometry, edgeMaterial, edgeCapacity]}
+                    dispose={null}
                     count={edgeRenderReady ? edgePairCount : 0}
                     frustumCulled={false}
                     renderOrder={9}
@@ -621,6 +645,7 @@ function GraphRendererCore({
                     key={`${variant}-cov-ellipsoids-${ellipsoidCapacity}`}
                     ref={ellipsoidRef}
                     args={[ellipsoidGeometry, ellipsoidMaterial, ellipsoidCapacity]}
+                    dispose={null}
                     count={ellipsoidRenderReady ? covarianceEllipsoids.length : 0}
                     frustumCulled={false}
                     renderOrder={8}
@@ -631,6 +656,7 @@ function GraphRendererCore({
                     key={`${variant}-manip-ellipsoids-${manipEllipsoidCapacity}`}
                     ref={manipEllipsoidRef}
                     args={[ellipsoidGeometry, ellipsoidMaterial, manipEllipsoidCapacity]}
+                    dispose={null}
                     count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
                     frustumCulled={false}
                     renderOrder={7}

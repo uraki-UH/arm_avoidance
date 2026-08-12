@@ -24,6 +24,8 @@ import {
 } from '../types';
 import { generateUUID } from '../utils/uuid';
 
+const GRAPH_RENDER_INTERVAL_MS = 200;
+
 /** Returns true for errors that are expected on component unmount (RPC cancelled). */
 const isUnmountCancellation = (e: unknown): boolean =>
     e instanceof Error && (
@@ -629,13 +631,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
     const pendingRobotPoseUpdatesRef = useRef<Map<string, QueuedRobotPoseUpdate>>(new Map());
     const flushScheduledRef = useRef<number | null>(null);
+    const graphFlushTimerRef = useRef<number | null>(null);
+    const lastGraphFlushAtRef = useRef(0);
     const intentionalCloseRef = useRef(false);
     const reconnectCountRef = useRef(0);
     const reconnectTimerRef = useRef<number | null>(null);
 
-    const flushBufferedStreams = useCallback(() => {
-        flushScheduledRef.current = null;
-
+    const flushBufferedGraphs = useCallback(() => {
         if (pendingGraphUpdatesRef.current.size > 0) {
             const graphBatch = Array.from(pendingGraphUpdatesRef.current.values());
             pendingGraphUpdatesRef.current.clear();
@@ -658,6 +660,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 return changed ? next : prev;
             });
         }
+    }, []);
+
+    const flushBufferedStreams = useCallback(() => {
+        flushScheduledRef.current = null;
 
         if (pendingVoxelUpdatesRef.current.size > 0) {
             const voxelBatch = Array.from(pendingVoxelUpdatesRef.current.values());
@@ -712,6 +718,18 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             });
         }
     }, []);
+
+    const scheduleGraphFlush = useCallback(() => {
+        if (graphFlushTimerRef.current !== null) return;
+
+        const elapsed = performance.now() - lastGraphFlushAtRef.current;
+        const delay = Math.max(0, GRAPH_RENDER_INTERVAL_MS - elapsed);
+        graphFlushTimerRef.current = window.setTimeout(() => {
+            graphFlushTimerRef.current = null;
+            lastGraphFlushAtRef.current = performance.now();
+            flushBufferedGraphs();
+        }, delay);
+    }, [flushBufferedGraphs]);
 
     const scheduleStreamFlush = useCallback(() => {
         if (flushScheduledRef.current !== null) {
@@ -773,6 +791,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 window.cancelAnimationFrame(flushScheduledRef.current);
                 flushScheduledRef.current = null;
             }
+            if (graphFlushTimerRef.current !== null) {
+                window.clearTimeout(graphFlushTimerRef.current);
+                graphFlushTimerRef.current = null;
+            }
+            lastGraphFlushAtRef.current = 0;
 
             const socket = new WebSocket(url);
             socket.binaryType = 'arraybuffer';
@@ -920,7 +943,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                                 tag,
                                 graph: mergedGraph,
                             });
-                            scheduleStreamFlush();
+                            scheduleGraphFlush();
                         },
                         'stream.graph.delete': (p) => {
                             if (typeof p.tag === 'string') clearGraphLayer(p.tag);
@@ -1014,6 +1037,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                     window.cancelAnimationFrame(flushScheduledRef.current);
                     flushScheduledRef.current = null;
                 }
+                if (graphFlushTimerRef.current !== null) {
+                    window.clearTimeout(graphFlushTimerRef.current);
+                    graphFlushTimerRef.current = null;
+                }
                 flushPendingWithError('WebSocket closed');
                 
                 if (intentionalCloseRef.current) {
@@ -1038,7 +1065,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Connection failed');
         }
-    }, [clearGraphLayer, flushPendingWithError, scheduleStreamFlush, url]);
+    }, [clearGraphLayer, flushPendingWithError, scheduleGraphFlush, scheduleStreamFlush, url]);
 
     const disconnect = useCallback(() => {
         const socket = wsRef.current;
@@ -1063,6 +1090,10 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             if (flushScheduledRef.current !== null) {
                 window.cancelAnimationFrame(flushScheduledRef.current);
                 flushScheduledRef.current = null;
+            }
+            if (graphFlushTimerRef.current !== null) {
+                window.clearTimeout(graphFlushTimerRef.current);
+                graphFlushTimerRef.current = null;
             }
             if (wsRef.current) {
                 wsRef.current.close();
