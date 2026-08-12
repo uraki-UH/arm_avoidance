@@ -41,6 +41,19 @@ def safe_int(value, default):
     except Exception:
         return default
 
+
+def safe_bool(value, default):
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    return default
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
@@ -68,6 +81,8 @@ def launch_setup(context, *args, **kwargs):
     vlut_filename = "vlut.bin"
     yaml_resource_root_dir = ""
     yaml_mesh_root_dir = ""
+    yaml_gripper_volume_enabled = False
+    yaml_gripper_volume_config_file = ""
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -109,6 +124,14 @@ def launch_setup(context, *args, **kwargs):
                 candidate_robot_description = root_ros_params.get('urdf_path', '')
                 if candidate_robot_description is not None:
                     yaml_urdf_path = str(candidate_robot_description).strip()
+                gripper_volume_ns = root_ros_params.get('gripper_volume_graph', {})
+                if isinstance(gripper_volume_ns, dict):
+                    yaml_gripper_volume_enabled = safe_bool(
+                        gripper_volume_ns.get('enabled'), yaml_gripper_volume_enabled
+                    )
+                    candidate_config_file = gripper_volume_ns.get('definitions_file', '')
+                    if candidate_config_file is not None:
+                        yaml_gripper_volume_config_file = str(candidate_config_file).strip()
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
@@ -219,7 +242,7 @@ def launch_setup(context, *args, **kwargs):
             if isinstance(p, dict) and "stream_topic" in p:
                 p["stream_topic"] = stream_topic
 
-    return [
+    actions = [
         # 0. ロボット本体の召喚 (TF / robot_state_publisher / optional joint_state_publisher)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
@@ -296,6 +319,52 @@ def launch_setup(context, *args, **kwargs):
         )
     ]
 
+    enable_gripper_volume_arg = LaunchConfiguration(
+        "enable_gripper_volume_graph"
+    ).perform(context)
+    gripper_volume_enabled = safe_bool(
+        enable_gripper_volume_arg, yaml_gripper_volume_enabled
+    )
+    gripper_volume_config_file = LaunchConfiguration(
+        "gripper_volume_config_file"
+    ).perform(context).strip() or yaml_gripper_volume_config_file
+    gripper_volume_grippers = LaunchConfiguration(
+        "gripper_volume_grippers"
+    ).perform(context).strip()
+
+    if gripper_volume_enabled:
+        if gripper_volume_config_file:
+            gripper_volume_config_file = resolve_package_uri(gripper_volume_config_file)
+            if not os.path.exists(gripper_volume_config_file):
+                raise FileNotFoundError(
+                    "Gripper volume definition file does not exist: "
+                    f"{gripper_volume_config_file}"
+                )
+        elif not gripper_volume_grippers:
+            raise ValueError(
+                "Gripper volume graph is enabled but no definitions were provided. "
+                "Set gripper_volume_graph.definitions_file in params_file, "
+                "gripper_volume_config_file, or gripper_volume_grippers."
+            )
+
+        grasping_share = get_package_share_directory("grasping_system")
+        actions.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(
+                        grasping_share, "launch", "gripper_volume_graph.launch.py"
+                    )
+                ),
+                launch_arguments={
+                    "grippers_file": gripper_volume_config_file,
+                    "grippers": gripper_volume_grippers,
+                    "tf_prefix": robot_name,
+                }.items(),
+            )
+        )
+
+    return actions
+
 def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
@@ -316,6 +385,21 @@ def generate_launch_description():
         DeclareLaunchArgument("node_feature_topic", default_value="topological_node_features"),
         DeclareLaunchArgument("grasp_state_topic", default_value="grasp_state"),
         DeclareLaunchArgument("grasp_applied_state_topic", default_value="grasp_state_applied"),
+        DeclareLaunchArgument(
+            "enable_gripper_volume_graph",
+            default_value="",
+            description="Enable gripper-volume TopologicalMap publishers; empty uses params_file",
+        ),
+        DeclareLaunchArgument(
+            "gripper_volume_config_file",
+            default_value="",
+            description="Optional gripper definition YAML; overrides params_file",
+        ),
+        DeclareLaunchArgument(
+            "gripper_volume_grippers",
+            default_value="",
+            description="Optional inline YAML gripper list when no definition file is used",
+        ),
         DeclareLaunchArgument("edge_mode", default_value=""),
         OpaqueFunction(function=launch_setup)
     ])

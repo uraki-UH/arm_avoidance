@@ -6,7 +6,9 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(ais_gng_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -21,16 +23,31 @@ install(DIRECTORY include/
 
 add_executable(test_rigid_grasp_vlut src/test_rigid_grasp_vlut.cpp)
 ament_target_dependencies(test_rigid_grasp_vlut geometry_msgs tf2 tf2_geometry_msgs voxel_idx Eigen3)
-install(TARGETS test_rigid_grasp_vlut
+add_executable(gripper_volume_graph_node src/gripper_volume_graph_node.cpp)
+ament_target_dependencies(
+  gripper_volume_graph_node
+  ais_gng_msgs geometry_msgs rclcpp std_msgs Eigen3
+)
+install(TARGETS test_rigid_grasp_vlut gripper_volume_graph_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY docs
+install(DIRECTORY config docs launch
   DESTINATION share/${PROJECT_NAME}
   OPTIONAL
 )
 
+if(BUILD_TESTING)
+  enable_testing()
+  add_executable(test_gripper_volume_graph test/test_gripper_volume_graph.cpp)
+  ament_target_dependencies(
+    test_gripper_volume_graph
+    ais_gng_msgs geometry_msgs std_msgs Eigen3
+  )
+  add_test(NAME gripper_volume_graph COMMAND test_gripper_volume_graph)
+endif()
+
 ament_export_include_directories(include)
-ament_export_dependencies(geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx)
+ament_export_dependencies(ais_gng_msgs geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx)
 
 ament_package()

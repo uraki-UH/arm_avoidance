@@ -94,7 +94,7 @@ services:
       bash -lc "
       source /opt/ros/humble/setup.bash &&
       if [ -f /ros2_ws/install/setup.bash ]; then source /ros2_ws/install/setup.bash; fi &&
-      ros2 run rosbridge_server rosbridge_websocket --port 9090
+      ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
       "
 
 volumes:

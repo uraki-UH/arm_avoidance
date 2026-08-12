@@ -1,0 +1,23 @@
+grippers:
+  - name: left_gripper
+    tf_frame: L_tcp
+    output_topic: /ToPoDualArm/L_gripper_volume_topological_map
+    shape: box
+    # XYZ in the TCP frame: finger span, maximum opening, usable finger depth.
+    dimensions: [0.061, 0.074, 0.0883]
+    center: [0.0, 0.0, 0.04415]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    resolution: 0.01
+    label: 0
+    semantic_label: 0
+
+  - name: right_gripper
+    tf_frame: R_tcp
+    output_topic: /ToPoDualArm/R_gripper_volume_topological_map
+    shape: box
+    dimensions: [0.061, 0.074, 0.0883]
+    center: [0.0, 0.0, 0.04415]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    resolution: 0.01
+    label: 0
+    semantic_label: 0

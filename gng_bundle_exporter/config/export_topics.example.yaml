@@ -27,3 +27,15 @@ topics:
     topic: /evaluation_metrics
     kind: generic
     role: evaluation_metrics
+
+  - alias: left_gripper_volume_graph
+    topic: /ToPoDualArm/L_gripper_volume_topological_map
+    kind: topological_map
+    role: gripper_volume_graph
+    required: false
+
+  - alias: right_gripper_volume_graph
+    topic: /ToPoDualArm/R_gripper_volume_topological_map
+    kind: topological_map
+    role: gripper_volume_graph
+    required: false
