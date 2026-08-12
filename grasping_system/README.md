@@ -94,3 +94,63 @@ ros2 topic echo /ToPoDualArm/grasp_state_applied \
 
 The runtime currently accepts box payloads (`shape_type: 0`). Repeating an
 identical grasp message is idempotent and does not rebuild the payload VLUT.
+
+## Gripper grasp-volume graph
+
+`gripper_volume_graph_node` samples a configured graspable volume into the
+existing `ais_gng_msgs/msg/TopologicalMap` format. No additional message type
+is required.
+
+- `nodes`: volume sample centers
+- `edges`: six-neighbor connectivity between samples
+- `clusters[0]`: volume center, orientation, dimensions, and member node IDs
+- `header.frame_id`: the TCP or tool frame to which the volume is attached
+
+Supported shapes are `box`, `ellipsoid` (or `sphere`), and `cylinder`. The
+cluster remains the oriented bounding box used by the current viewer; nodes and
+edges preserve the selected non-box shape.
+
+Launch one configurable graph by passing a YAML list. Each element keeps the
+gripper name, corresponding TF frame, topic, and geometry together:
+
+```bash
+ros2 launch grasping_system gripper_volume_graph.launch.py \
+  grippers:='[
+    {
+      name: main_gripper,
+      tf_frame: tool0,
+      output_topic: /gripper_volume_topological_map,
+      shape: box,
+      dimensions: [0.08, 0.04, 0.10],
+      center: [0.0, 0.0, 0.05],
+      resolution: 0.01
+    }
+  ]'
+```
+
+For multiple grippers, add entries to the same list. A YAML file can be passed
+instead of a long inline argument. The generic launch reads any number of
+grippers from it:
+
+```bash
+ros2 launch grasping_system gripper_volume_graph.launch.py \
+  grippers_file:=/ros2_ws/src/grasping_system/config/ToPoDualArm_gripper_volumes.yaml \
+  tf_prefix:=ToPoDualArm
+```
+
+This publishes:
+
+- `/ToPoDualArm/L_gripper_volume_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_gripper_volume_topological_map` in `ToPoDualArm/R_tcp`
+
+`tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
+frames to isolate multiple robots. Frames that already contain the same prefix
+are left unchanged. `gng_viewer_bridge.launch.py` supplies its `robot_name`
+automatically.
+
+The ToPoDualArm dimensions describe the maximum open volume between the
+fingers, derived from the current URDF mesh bounds and prismatic joint limits.
+They are configuration rather than a new robot-specific message contract.
+The publisher sends the graph exactly once at node startup. Transient-local QoS
+keeps that sample available, so a viewer or rosbag recorder started later still
+receives the current static graph without application-level retransmission.

@@ -64,6 +64,11 @@
       voxel_size: 0.01
       inflation: 0.0
 
+    # --- Gripper grasp-volume graph ---
+    gripper_volume_graph:
+      enabled: true
+      definitions_file: "package://grasping_system/config/ToPoDualArm_gripper_volumes.yaml"
+
     collision:
       enable_ground_collision: true
       enable_self_collision: true
