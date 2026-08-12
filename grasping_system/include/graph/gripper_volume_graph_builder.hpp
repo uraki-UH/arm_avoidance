@@ -43,6 +43,10 @@ struct GripperVolumeGraphSpec
   geometry_msgs::msg::Pose pose_in_frame{};
   std::vector<GripperVolumeMeshExclusion> mesh_exclusions;
   double mesh_exclusion_clearance{0.0};
+  bool retain_internal_only{false};
+  std::array<double, 3> closing_axis{0.0, 1.0, 0.0};
+  std::vector<std::size_t> positive_finger_mesh_indices;
+  std::vector<std::size_t> negative_finger_mesh_indices;
 };
 
 struct GripperVolumeGraph
@@ -97,6 +101,11 @@ public:
           }
           const Eigen::Vector3d position = translation + rotation * local;
           if (isMeshOccupied(position, exclusions, spec.mesh_exclusion_clearance)) {
+            continue;
+          }
+          if (spec.retain_internal_only &&
+            !isBracketedByFingerMeshes(position, spec, exclusions))
+          {
             continue;
           }
           if (result.graph.nodes().size() >=
@@ -185,10 +194,8 @@ private:
         throw std::invalid_argument("all gripper volume dimensions must be positive");
       }
     }
-    if (!std::isfinite(spec.mesh_exclusion_clearance) ||
-      spec.mesh_exclusion_clearance < 0.0)
-    {
-      throw std::invalid_argument("mesh exclusion clearance must not be negative");
+    if (!std::isfinite(spec.mesh_exclusion_clearance)) {
+      throw std::invalid_argument("mesh exclusion clearance must be finite");
     }
     for (const auto &exclusion : spec.mesh_exclusions) {
       if (exclusion.path.empty()) {
@@ -199,6 +206,28 @@ private:
           throw std::invalid_argument("mesh exclusion scales must be finite and non-zero");
         }
       }
+    }
+    if (spec.retain_internal_only) {
+      const Eigen::Vector3d axis = Eigen::Map<const Eigen::Vector3d>(
+        spec.closing_axis.data());
+      if (!axis.allFinite() || axis.norm() < 1e-12) {
+        throw std::invalid_argument("closing axis must be a finite non-zero vector");
+      }
+      if (spec.positive_finger_mesh_indices.empty() ||
+        spec.negative_finger_mesh_indices.empty())
+      {
+        throw std::invalid_argument(
+                "internal-only volume requires positive and negative finger mesh indices");
+      }
+      const auto validate_indices = [&spec](const std::vector<std::size_t> &indices) {
+          for (const std::size_t index : indices) {
+            if (index >= spec.mesh_exclusions.size()) {
+              throw std::invalid_argument("internal finger mesh index is out of range");
+            }
+          }
+        };
+      validate_indices(spec.positive_finger_mesh_indices);
+      validate_indices(spec.negative_finger_mesh_indices);
     }
   }
 
@@ -277,9 +306,11 @@ private:
   {
     constexpr double kSurfaceTolerance = 1e-12;
     constexpr double kTwoPi = 6.28318530717958647692;
-    const double clearance_squared = clearance * clearance;
+    const double margin_distance = std::abs(clearance);
+    const double margin_squared = margin_distance * margin_distance;
     for (const auto &mesh : meshes) {
-      const Eigen::Array3d padding = Eigen::Array3d::Constant(clearance);
+      const Eigen::Array3d padding = Eigen::Array3d::Constant(
+        std::max(0.0, clearance));
       if ((point.array() < mesh.min.array() - padding).any() ||
         (point.array() > mesh.max.array() + padding).any())
       {
@@ -293,13 +324,76 @@ private:
           min_distance_squared, pointTriangleDistanceSquared(point, triangle));
         winding += solidAngle(point, triangle);
       }
-      if (min_distance_squared <= clearance_squared + kSurfaceTolerance ||
-        std::abs(winding) > kTwoPi)
+      const bool inside = std::abs(winding) > kTwoPi;
+      if (clearance >= 0.0) {
+        if (inside || min_distance_squared <= margin_squared + kSurfaceTolerance) {
+          return true;
+        }
+      } else if (
+        inside && min_distance_squared + kSurfaceTolerance >= margin_squared)
       {
         return true;
       }
     }
     return false;
+  }
+
+  static bool isBracketedByFingerMeshes(
+    const Eigen::Vector3d &point,
+    const GripperVolumeGraphSpec &spec,
+    const std::vector<PreparedMeshExclusion> &meshes)
+  {
+    Eigen::Vector3d axis = Eigen::Map<const Eigen::Vector3d>(spec.closing_axis.data());
+    axis.normalize();
+    const bool hits_positive_finger = rayHitsMeshGroup(
+      point, axis, spec.positive_finger_mesh_indices, meshes);
+    const bool hits_negative_finger = rayHitsMeshGroup(
+      point, -axis, spec.negative_finger_mesh_indices, meshes);
+    return hits_positive_finger && hits_negative_finger;
+  }
+
+  static bool rayHitsMeshGroup(
+    const Eigen::Vector3d &origin,
+    const Eigen::Vector3d &direction,
+    const std::vector<std::size_t> &mesh_indices,
+    const std::vector<PreparedMeshExclusion> &meshes)
+  {
+    for (const std::size_t mesh_index : mesh_indices) {
+      for (const auto &triangle : meshes[mesh_index].triangles) {
+        if (rayIntersectsTriangle(origin, direction, triangle)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool rayIntersectsTriangle(
+    const Eigen::Vector3d &origin,
+    const Eigen::Vector3d &direction,
+    const Triangle &triangle)
+  {
+    constexpr double kEpsilon = 1e-10;
+    const Eigen::Vector3d edge1 = triangle.b - triangle.a;
+    const Eigen::Vector3d edge2 = triangle.c - triangle.a;
+    const Eigen::Vector3d h = direction.cross(edge2);
+    const double determinant = edge1.dot(h);
+    if (std::abs(determinant) <= kEpsilon) {
+      return false;
+    }
+
+    const double inverse = 1.0 / determinant;
+    const Eigen::Vector3d s = origin - triangle.a;
+    const double u = inverse * s.dot(h);
+    if (u < -kEpsilon || u > 1.0 + kEpsilon) {
+      return false;
+    }
+    const Eigen::Vector3d q = s.cross(edge1);
+    const double v = inverse * direction.dot(q);
+    if (v < -kEpsilon || u + v > 1.0 + kEpsilon) {
+      return false;
+    }
+    return inverse * edge2.dot(q) > kEpsilon;
   }
 
   static double solidAngle(const Eigen::Vector3d &point, const Triangle &triangle)

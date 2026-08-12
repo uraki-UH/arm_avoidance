@@ -45,9 +45,24 @@ if(BUILD_TESTING)
     ais_gng_msgs geometry_msgs std_msgs Eigen3
   )
   add_test(NAME gripper_volume_graph COMMAND test_gripper_volume_graph)
+
+  add_executable(
+    test_grasp_pose_occupancy_evaluator
+    test/test_grasp_pose_occupancy_evaluator.cpp
+  )
+  ament_target_dependencies(
+    test_grasp_pose_occupancy_evaluator
+    geometry_msgs Eigen3
+  )
+  add_test(
+    NAME grasp_pose_occupancy_evaluator
+    COMMAND test_grasp_pose_occupancy_evaluator
+  )
 endif()
 
 ament_export_include_directories(include)
-ament_export_dependencies(ais_gng_msgs geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx)
+ament_export_dependencies(
+  ais_gng_msgs geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx Eigen3
+)
 
 ament_package()

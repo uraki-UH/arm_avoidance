@@ -119,7 +119,7 @@ ros2 launch grasping_system gripper_volume_graph.launch.py \
     {
       name: main_gripper,
       tf_frame: tool0,
-      output_topic: /gripper_volume_topological_map,
+      output_topic: /grip_V_topological_map,
       shape: box,
       dimensions: [0.08, 0.04, 0.10],
       center: [0.0, 0.0, 0.05],
@@ -140,10 +140,10 @@ ros2 launch grasping_system gripper_volume_graph.launch.py \
 
 This publishes:
 
-- `/ToPoDualArm/L_gripper_volume_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_gripper_volume_topological_map` in `ToPoDualArm/R_tcp`
-- `/ToPoDualArm/L_gripper_volume_undersize_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_gripper_volume_undersize_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_V_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_V_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_V_undersize_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_V_undersize_topological_map` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix
@@ -152,12 +152,16 @@ automatically.
 
 The ToPoDualArm dimensions describe the maximum open volume between the
 fingers, derived from the current URDF mesh bounds and prismatic joint limits.
-The two `undersize` graphs start from the same maximum-open volume and remove
-the closed-pose left finger, right finger, and gripper-base mesh occupancy. They
-therefore represent space that remains unoccupied even after the gripper closes,
-instead of using a fixed minimum-width box. The mesh paths and closed-pose TCP
-transforms are robot configuration rather than a new message contract. Grid
-centers inside a closed mesh or within half a voxel of its surface are removed.
+The two `undersize` graphs start from the same maximum-open volume. A grid center
+is retained only when a ray in each direction of the configured closing axis
+hits the corresponding closed-pose finger mesh. Mesh occupancy uses a signed
+`exclusion_clearance`: positive values shrink the retained void, while negative
+values erode mesh occupancy and expand the void. ToPoDualArm uses `-0.005 m`.
+This extracts only the free volume bracketed by the closed fingers; exterior
+free space is not part of the graph. Its `TopologicalMap` omits the source-volume
+cluster so the viewer does not draw the original maximum box around the filtered
+nodes. Mesh paths and closed-pose TCP transforms remain robot configuration
+rather than a new message contract.
 The publisher sends the graph exactly once at node startup. Transient-local QoS
 keeps that sample available, so a viewer or rosbag recorder started later still
 receives the current static graph without application-level retransmission.

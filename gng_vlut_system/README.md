@@ -116,8 +116,8 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
 
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
 
-ToPoDualArmのロボット、GNG、左右グリッパーの最大把持体積graphと
-全閉時にもグリッパーが占有しない領域graphをまとめて起動します。
+ToPoDualArmのロボット、GNG、左右グリッパーの最大把持体積graphと、
+全閉時の左右指に挟まれた内部の非占有領域graphをまとめて起動します。
 `ToPoDualArm.yaml`の`gripper_volume_graph.enabled`が`true`なら、対応する
 `L_tcp` / `R_tcp` graphも同じlaunchからpublishされます。
 

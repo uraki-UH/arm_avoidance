@@ -72,8 +72,8 @@ Message typeは既存の`ais_gng_msgs/msg/TopologicalMap`を変更せず使用�
 
 ToPoDualArmの既定topic:
 
-- `/ToPoDualArm/L_gripper_volume_topological_map` (`ToPoDualArm/L_tcp`)
-- `/ToPoDualArm/R_gripper_volume_topological_map` (`ToPoDualArm/R_tcp`)
+- `/ToPoDualArm/L_grip_V_topological_map` (`ToPoDualArm/L_tcp`)
+- `/ToPoDualArm/R_grip_V_topological_map` (`ToPoDualArm/R_tcp`)
 
 ## Verification
 

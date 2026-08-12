@@ -13,7 +13,7 @@ DEFAULT_GRIPPERS = """[
   {
     name: gripper,
     tf_frame: tool0,
-    output_topic: gripper_volume_topological_map,
+    output_topic: grip_V_topological_map,
     shape: box,
     dimensions: [0.08, 0.04, 0.10],
     center: [0.0, 0.0, 0.05],
@@ -43,6 +43,8 @@ def _mesh_exclusions(spec):
     scales = []
     positions = []
     orientations = []
+    positive_indices = []
+    negative_indices = []
     for index, exclusion in enumerate(exclusions):
         if not isinstance(exclusion, dict):
             raise ValueError(
@@ -56,12 +58,22 @@ def _mesh_exclusions(spec):
                 "requires path"
             )
         paths.append(path)
+        internal_side = str(exclusion.get("internal_side", "")).strip().lower()
+        if internal_side == "positive":
+            positive_indices.append(index)
+        elif internal_side == "negative":
+            negative_indices.append(index)
+        elif internal_side not in ("", "body"):
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                "internal_side must be positive, negative, body, or empty"
+            )
         scales.extend(_vector(exclusion, "scale", 3, [1.0, 1.0, 1.0]))
         positions.extend(_vector(exclusion, "position", 3, [0.0, 0.0, 0.0]))
         orientations.extend(
             _vector(exclusion, "orientation_xyzw", 4, [0.0, 0.0, 0.0, 1.0])
         )
-    return paths, scales, positions, orientations
+    return paths, scales, positions, orientations, positive_indices, negative_indices
 
 
 def _load_grippers(context):
@@ -107,9 +119,14 @@ def _launch_grippers(context):
         if not gripper_name or not tf_frame:
             raise ValueError(f"grippers[{index}] requires name and tf_frame")
         tf_frame = _with_tf_prefix(tf_frame, tf_prefix)
-        exclusion_paths, exclusion_scales, exclusion_positions, exclusion_orientations = (
-            _mesh_exclusions(spec)
-        )
+        (
+            exclusion_paths,
+            exclusion_scales,
+            exclusion_positions,
+            exclusion_orientations,
+            positive_finger_indices,
+            negative_finger_indices,
+        ) = _mesh_exclusions(spec)
 
         node_name = re.sub(r"[^A-Za-z0-9_]", "_", gripper_name).strip("_")
         node_name = f"{node_name or f'gripper_{index}'}_volume_graph_node"
@@ -119,7 +136,7 @@ def _launch_grippers(context):
 
         parameters = {
             "output_topic": str(
-                spec.get("output_topic", f"{gripper_name}/gripper_volume_topological_map")
+                spec.get("output_topic", f"{gripper_name}/grip_V_topological_map")
             ),
             "frame_id": tf_frame,
             "shape": str(spec.get("shape", "box")),
@@ -130,6 +147,9 @@ def _launch_grippers(context):
             ),
             "resolution": float(spec.get("resolution", 0.01)),
             "exclusion_clearance": float(spec.get("exclusion_clearance", 0.0)),
+            "retain_internal_only": bool(spec.get("retain_internal_only", False)),
+            "closing_axis": _vector(spec, "closing_axis", 3, [0.0, 1.0, 0.0]),
+            "include_cluster": bool(spec.get("include_cluster", True)),
             "label": int(spec.get("label", 0)),
             "semantic_label": int(spec.get("semantic_label", 0)),
         }
@@ -139,6 +159,8 @@ def _launch_grippers(context):
                 "exclusion_mesh_scales": exclusion_scales,
                 "exclusion_mesh_positions": exclusion_positions,
                 "exclusion_mesh_orientations_xyzw": exclusion_orientations,
+                "positive_finger_mesh_indices": positive_finger_indices,
+                "negative_finger_mesh_indices": negative_finger_indices,
             })
         actions.append(
             Node(

@@ -350,7 +350,7 @@ workspace内カスタムメッセージをWebSocketへ変換できる。
 
 グリッパー体積graph本体は`EvaluationMetrics`へflattenせず、既存の
 `ais_gng_msgs/msg/TopologicalMap` topicとして別に受信する。単体HTMLは`rosapi`のtopic一覧から
-名前が`gripper_volume`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
+名前が`grip_V`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
 `nodes`、`edges`、`clusters`、`header.frame_id`を`state.evaluationMetrics.structuredInputs`へ保持する。
 評価計算コードは共通の`window.__topoEvaluationMetricApi.getStructuredInputs()`から`inputType`、`role`、
 topic、frameを条件に取得できる。メインGNG graphの`state.nodes/state.edges`は上書きしない。
@@ -361,9 +361,30 @@ rosbag bundle JSONでは`kind: topological_map`、`role: gripper_volume_graph`�
 `rosbridge_websocket_launch.xml`で起動する。
 
 ToPoDualArmでは左右それぞれに最大把持領域と`undersize`領域を配信する。`undersize`領域はTCP基準の
-最大把持領域を母領域とし、全閉時の左右指およびグリッパ基部STLが占有する格子を除外して生成する。
-STL内部だけでなく、表面から半ボクセル以内の格子も除外する。したがって固定の最小幅boxではなく、
-グリッパを閉じても残る非占有空間を表す。
+最大把持領域を探索格子とし、各格子中心から閉方向の正負へrayを伸ばす。正方向rayが正側の全閉指STL、
+負方向rayが負側の全閉指STLにそれぞれ交差する格子だけを内部候補として残す。これは閉方向の指向性距離
+`d+`と`d-`がともに有限である、左右指に挟まれた空間に相当する。その後、全閉時の左右指および
+グリッパ基部STLを符号付き`exclusion_clearance`で除外する。正値はSTL占有を外側へ広げ、負値は
+STL占有を内側へ縮める。ToPoDualArmでは`-0.005 m`として非占有領域側へ逆向きの余裕を持たせる。
+外部自由空間はgraphへ入れず、固定の最小幅boxではなく、グリッパを閉じても左右指の内側に残る
+非占有空間を表す。`undersize` topicでは
+元の最大boxをViewerが描画しないよう`TopologicalMap.clusters`を空にする。
+
+把持手先Pose候補の占有判定は`GraspPoseOccupancyEvaluator`へ、候補Pose、同一基準座標系を参照する
+占有照会関数、TCPローカル座標の領域サンプル群を渡して行う。領域は特定のグリッパー名に固定せず、
+既存`GraspGraphModel`からも生成できる。各領域のルールは次の4種類とする。
+
+| rule | 判定 |
+|---|---|
+| `required_occupied` | 設定した閾値以上の占有サンプルが必要 |
+| `required_empty` | 閾値以上の占有サンプルがあれば不合格 |
+| `optional` | 占有の有無を許容し、通常の把持支持として数える |
+| `optional_not_sole_support` | 占有を許容するが、この種別の領域群にしか占有がない候補は不合格 |
+
+ここで「この種別の領域群にしかない」とは、`optional_not_sole_support`に占有があり、
+`required_occupied`または`optional`には占有がない状態を指す。`required_empty`の占有は支持とは数えず、
+独立した禁止領域違反として扱う。評価結果は合否だけでなく、領域別サンプル数、占有数、違反理由を返す。
+現段階では判定器の独立APIまでとし、ROS候補生成nodeへの接続とYAML読込は行わない。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

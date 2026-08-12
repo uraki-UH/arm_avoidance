@@ -31,26 +31,26 @@ topics:
     kind: generic
     role: evaluation_metrics
 
-  - alias: left_gripper_volume_graph
-    topic: /ToPoDualArm/L_gripper_volume_topological_map
+  - alias: left_grip_V_graph
+    topic: /ToPoDualArm/L_grip_V_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false
 
-  - alias: right_gripper_volume_graph
-    topic: /ToPoDualArm/R_gripper_volume_topological_map
+  - alias: right_grip_V_graph
+    topic: /ToPoDualArm/R_grip_V_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false
 
-  - alias: left_gripper_undersize_volume_graph
-    topic: /ToPoDualArm/L_gripper_volume_undersize_topological_map
+  - alias: left_grip_V_undersize_graph
+    topic: /ToPoDualArm/L_grip_V_undersize_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false
 
-  - alias: right_gripper_undersize_volume_graph
-    topic: /ToPoDualArm/R_gripper_volume_undersize_topological_map
+  - alias: right_grip_V_undersize_graph
+    topic: /ToPoDualArm/R_grip_V_undersize_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false

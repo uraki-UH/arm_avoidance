@@ -224,7 +224,7 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
 ```
 
 このlaunchはWebSocketに加えて`rosapi`を起動する。単体HTMLは`rosapi`から
-`*_gripper_volume_*topological_map` topicを自動発見するため、`ros2 run
+`*_grip_V_*topological_map` topicを自動発見するため、`ros2 run
 rosbridge_server rosbridge_websocket`だけではなく上記launchを使用する。
 
 ```bash

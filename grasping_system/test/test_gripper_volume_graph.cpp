@@ -33,6 +33,13 @@ int main()
   assert(std::abs(map.clusters.front().scale.x - 0.02F) < 1e-6F);
   assert(map.nodes.front().pos.x > 0.99F);
 
+  const auto map_without_cluster = grasping_system::graph::toTopologicalMap(
+    box, header, ais_gng_msgs::msg::TopologicalMap::DEFAULT,
+    ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT, false);
+  assert(map_without_cluster.nodes.size() == map.nodes.size());
+  assert(map_without_cluster.edges.size() == map.edges.size());
+  assert(map_without_cluster.clusters.empty());
+
   GripperVolumeGraphSpec ellipsoid_spec = box_spec;
   ellipsoid_spec.shape = GripperVolumeShape::kEllipsoid;
   ellipsoid_spec.dimensions = {0.04, 0.04, 0.04};

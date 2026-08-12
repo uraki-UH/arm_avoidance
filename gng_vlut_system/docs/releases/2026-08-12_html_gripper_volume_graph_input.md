@@ -26,7 +26,7 @@
 ## Topics / Params / Messages
 
 - Message: `ais_gng_msgs/msg/TopologicalMap`
-- ToPoDualArm既定topic: `/ToPoDualArm/L_gripper_volume_topological_map`、`/ToPoDualArm/R_gripper_volume_topological_map`
+- ToPoDualArm既定topic: `/ToPoDualArm/L_grip_V_topological_map`、`/ToPoDualArm/R_grip_V_topological_map`
 - rosbag bundle role: `gripper_volume_graph`
 - 評価値topic: `/evaluation_metrics`（変更なし）
 

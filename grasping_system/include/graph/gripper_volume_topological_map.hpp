@@ -19,7 +19,8 @@ inline ais_gng_msgs::msg::TopologicalMap toTopologicalMap(
   const GripperVolumeGraph &volume,
   const std_msgs::msg::Header &header,
   std::uint8_t label = ais_gng_msgs::msg::TopologicalMap::DEFAULT,
-  std::uint8_t semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT)
+  std::uint8_t semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT,
+  bool include_cluster = true)
 {
   ais_gng_msgs::msg::TopologicalMap map;
   map.header = header;
@@ -51,6 +52,10 @@ inline ais_gng_msgs::msg::TopologicalMap toTopologicalMap(
   for (const auto &source : volume.graph.edges()) {
     map.edges.push_back(static_cast<std::uint16_t>(source.from));
     map.edges.push_back(static_cast<std::uint16_t>(source.to));
+  }
+
+  if (!include_cluster) {
+    return map;
   }
 
   ais_gng_msgs::msg::TopologicalCluster cluster;
