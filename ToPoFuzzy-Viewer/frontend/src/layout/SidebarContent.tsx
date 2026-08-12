@@ -442,9 +442,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     <ControlSlider
                         label="Point Size"
                         value={props.heatmapSettings.pointSize}
-                        min={0.01}
+                        min={0.001}
                         max={0.2}
-                        step={0.01}
+                        step={0.001}
                         onChange={(val) => props.setHeatmapSettings({ ...props.heatmapSettings, pointSize: val })}
                     />
                     <ControlSlider
