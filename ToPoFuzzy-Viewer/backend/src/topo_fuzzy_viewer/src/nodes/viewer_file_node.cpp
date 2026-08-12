@@ -13,10 +13,10 @@
 
 namespace {
 
-class ViewerFileNode : public rclcpp::Node {
+class ViewerSourceNode : public rclcpp::Node {
 public:
-    ViewerFileNode()
-        : rclcpp::Node("viewer_file_node") {
+    ViewerSourceNode()
+        : rclcpp::Node("viewer_source_node") {
         const auto projectRoot = viewer_internal::resolveProjectRootFromExe();
         const std::filesystem::path pointCloudRoot = projectRoot / "data" / "pointcloud";
 
@@ -25,14 +25,14 @@ public:
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kRpcRequest,
             20,
-            std::bind(&ViewerFileNode::handleRpcRequest, this, std::placeholders::_1));
+            std::bind(&ViewerSourceNode::handleRpcRequest, this, std::placeholders::_1));
 
         rpcResponsePub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 20);
         loadedCloudPub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
             viewer_internal::topics::kFileLoadedCloud,
             rclcpp::QoS(rclcpp::KeepLast(10)).transient_local());
 
-        RCLCPP_INFO(get_logger(), "viewer_file_node initialized. root=%s", pointCloudRoot.string().c_str());
+        RCLCPP_INFO(get_logger(), "viewer_source_node initialized. root=%s", pointCloudRoot.string().c_str());
     }
 
 private:
@@ -142,7 +142,7 @@ private:
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<ViewerFileNode>();
+    auto node = std::make_shared<ViewerSourceNode>();
     rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;

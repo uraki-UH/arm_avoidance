@@ -115,14 +115,14 @@ ament_target_dependencies(viewer_ws_gateway_node ${ROS2_DEPENDENCIES_GRAPH})
 
 
 
-add_executable(viewer_file_node
+add_executable(viewer_source_node
   src/nodes/viewer_file_node.cpp
   src/services/pointcloud_file_manager.cpp
   src/common/pcl_converter.cpp
 )
-target_include_directories(viewer_file_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(viewer_file_node ${PCL_LIBRARIES} Threads::Threads)
-ament_target_dependencies(viewer_file_node ${ROS2_DEPENDENCIES_PC})
+target_include_directories(viewer_source_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(viewer_source_node ${PCL_LIBRARIES} Threads::Threads)
+ament_target_dependencies(viewer_source_node ${ROS2_DEPENDENCIES_PC})
 
 add_executable(viewer_rosbag_node
   src/nodes/viewer_rosbag_node.cpp
@@ -163,7 +163,7 @@ endif()
 
 install(TARGETS
   viewer_ws_gateway_node
-  viewer_file_node
+  viewer_source_node
   viewer_rosbag_node
   viewer_gng_node
   viewer_param_node

@@ -78,3 +78,5 @@
 - `edit.*`
 
 Refer to `doc/BACKEND_API.md` for concrete method parameters and response payloads.
+
+The Topics checkbox disables a source with `sources.setActive({ active: false, removeLayer: true })`, so the corresponding scene layer is removed with the subscription.

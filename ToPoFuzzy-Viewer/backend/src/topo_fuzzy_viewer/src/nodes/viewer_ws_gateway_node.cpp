@@ -239,6 +239,16 @@ public:
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTfTime_).count() > 33) { broadcastText(converter::to_json(msg).dump()); lastTfTime_ = now; }
         });
+        tfStaticSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
+            "/tf_static", rclcpp::QoS(1).reliable().transient_local(),
+            [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+                const std::string payload = converter::to_json(msg).dump();
+                {
+                    std::lock_guard<std::mutex> lock(tfMutex_);
+                    lastStaticTfPayload_ = payload;
+                }
+                broadcastText(payload);
+            });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
         RCLCPP_INFO(get_logger(), "Gateway (Unified) initialized on port %d", port);
@@ -430,11 +440,13 @@ private:
         std::lock_guard<std::mutex> l3(clusterFeatureMutex_);
         std::lock_guard<std::mutex> l4(robotMutex_);
         std::lock_guard<std::mutex> l5(markerMutex_);
+        std::lock_guard<std::mutex> l6(tfMutex_);
         for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastNodeFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastClusterFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastMarkerPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
+        if (!lastStaticTfPayload_.empty()) ws->send(lastStaticTfPayload_, uWS::OpCode::TEXT);
     }
 
     void runServerLoop(int port) {
@@ -584,12 +596,13 @@ private:
 
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rpcRequestPub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
-    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
+    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_, tfStaticSub_;
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
+    std::string lastStaticTfPayload_;
     std::chrono::steady_clock::time_point lastTfTime_;
-    std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_;
+    std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
     std::vector<WebSocket*> connections_;
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;

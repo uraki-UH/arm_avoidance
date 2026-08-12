@@ -31,6 +31,55 @@ const isUnmountCancellation = (e: unknown): boolean =>
         e.message === 'WebSocket not connected'
     );
 
+const composeTransforms = (parent: TransformData, child: TransformData): TransformData => {
+    const [px, py, pz, pw] = parent.quat;
+    const [cx, cy, cz, cw] = child.quat;
+    const [x, y, z] = child.pos;
+    const tx = 2 * (py * z - pz * y);
+    const ty = 2 * (pz * x - px * z);
+    const tz = 2 * (px * y - py * x);
+    const quat: [number, number, number, number] = [
+        pw * cx + px * cw + py * cz - pz * cy,
+        pw * cy - px * cz + py * cw + pz * cx,
+        pw * cz + px * cy - py * cx + pz * cw,
+        pw * cw - px * cx - py * cy - pz * cz,
+    ];
+    const norm = Math.hypot(...quat) || 1;
+
+    return {
+        frameId: parent.frameId,
+        childFrameId: child.childFrameId,
+        pos: [
+            parent.pos[0] + x + pw * tx + py * tz - pz * ty,
+            parent.pos[1] + y + pw * ty + pz * tx - px * tz,
+            parent.pos[2] + z + pw * tz + px * ty - py * tx,
+        ],
+        quat: quat.map(value => value / norm) as [number, number, number, number],
+    };
+};
+
+const resolveTransformTree = (
+    relative: Record<string, TransformData>
+): Record<string, TransformData> => {
+    const resolved: Record<string, TransformData> = {};
+    const resolving = new Set<string>();
+
+    const resolve = (childFrameId: string): TransformData | null => {
+        if (resolved[childFrameId]) return resolved[childFrameId];
+        const local = relative[childFrameId];
+        if (!local || resolving.has(childFrameId)) return null;
+
+        resolving.add(childFrameId);
+        const parent = relative[local.frameId] ? resolve(local.frameId) : null;
+        resolving.delete(childFrameId);
+        resolved[childFrameId] = parent ? composeTransforms(parent, local) : local;
+        return resolved[childFrameId];
+    };
+
+    Object.keys(relative).forEach(resolve);
+    return resolved;
+};
+
 export type {
     DataSource,
     RosbagInfo,
@@ -572,6 +621,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const [isConnected, setIsConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
+    const relativeTransformsRef = useRef<Record<string, TransformData>>({});
 
     const pendingTopicQueueRef = useRef<string[]>([]);
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
@@ -681,6 +731,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     }, []);
 
     const clearGraphLayer = useCallback((tag: string) => {
+        pendingGraphUpdatesRef.current.delete(tag);
         setGraphData((prev) => {
             if (!prev[tag]) {
                 return prev;
@@ -895,12 +946,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             }
                         },
                         'stream.tf': (p) => {
-                            if (p.transforms) {
-                                setTransforms(prev => {
-                                    const next = { ...prev };
-                                    p.transforms.forEach((ts: TransformData) => { next[ts.childFrameId] = ts; });
-                                    return next;
+                            if (Array.isArray(p.transforms)) {
+                                p.transforms.forEach((ts: TransformData) => {
+                                    relativeTransformsRef.current[ts.childFrameId] = ts;
                                 });
+                                setTransforms(resolveTransformTree(relativeTransformsRef.current));
                             }
                         },
                         'stream.robot.delete': (p) => {

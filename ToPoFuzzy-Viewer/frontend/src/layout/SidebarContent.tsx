@@ -68,7 +68,7 @@ interface SidebarContentProps {
     sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
-    unsubscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
+    unsubscribeSource: (sourceId: string, removeLayer?: boolean) => Promise<{ success: boolean; sourceId: string }>;
     onSourceToggled: (sourceId: string, active: boolean) => void;
     onLoadCloud: (data: PointCloudData) => void;
 

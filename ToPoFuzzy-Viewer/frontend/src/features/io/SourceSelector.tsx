@@ -6,7 +6,7 @@ interface SourceSelectorProps {
     sources: DataSource[];
     getSources: () => Promise<DataSource[]>;
     subscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
-    unsubscribeSource: (sourceId: string) => Promise<{ success: boolean; sourceId: string }>;
+    unsubscribeSource: (sourceId: string, removeLayer?: boolean) => Promise<{ success: boolean; sourceId: string }>;
     startGng: (params: GngParams) => Promise<{ success: boolean; pid?: number; inputTopic?: string }>;
     stopGng: () => Promise<{ success: boolean }>;
     getGngStatus: () => Promise<GngStatus>;
@@ -89,7 +89,7 @@ export function SourceSelector({
     const handleToggleSource = async (source: DataSource) => {
         try {
             if (source.active) {
-                await unsubscribeSource(source.id);
+                await unsubscribeSource(source.id, true);
             } else {
                 await subscribeSource(source.id);
             }
