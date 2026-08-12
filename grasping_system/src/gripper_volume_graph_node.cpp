@@ -30,6 +30,15 @@ public:
     orientation_xyzw_ = declare_parameter<std::vector<double>>(
       "orientation_xyzw", {0.0, 0.0, 0.0, 1.0});
     resolution_ = declare_parameter<double>("resolution", 0.01);
+    exclusion_mesh_paths_ = declare_parameter<std::vector<std::string>>(
+      "exclusion_mesh_paths", std::vector<std::string>{});
+    exclusion_mesh_scales_ = declare_parameter<std::vector<double>>(
+      "exclusion_mesh_scales", std::vector<double>{});
+    exclusion_mesh_positions_ = declare_parameter<std::vector<double>>(
+      "exclusion_mesh_positions", std::vector<double>{});
+    exclusion_mesh_orientations_xyzw_ = declare_parameter<std::vector<double>>(
+      "exclusion_mesh_orientations_xyzw", std::vector<double>{});
+    exclusion_clearance_ = declare_parameter<double>("exclusion_clearance", 0.0);
     label_ = declare_parameter<int>("label", 0);
     semantic_label_ = declare_parameter<int>("semantic_label", 0);
 
@@ -66,6 +75,36 @@ private:
       spec.pose_in_frame.orientation.y = orientation_xyzw_[1];
       spec.pose_in_frame.orientation.z = orientation_xyzw_[2];
       spec.pose_in_frame.orientation.w = orientation_xyzw_[3];
+      spec.mesh_exclusion_clearance = exclusion_clearance_;
+
+      const std::size_t exclusion_count = exclusion_mesh_paths_.size();
+      if (exclusion_mesh_scales_.size() != exclusion_count * 3U ||
+        exclusion_mesh_positions_.size() != exclusion_count * 3U ||
+        exclusion_mesh_orientations_xyzw_.size() != exclusion_count * 4U)
+      {
+        throw std::invalid_argument(
+                "each exclusion mesh needs 3 scale, 3 position, and 4 orientation values");
+      }
+      spec.mesh_exclusions.reserve(exclusion_count);
+      for (std::size_t index = 0; index < exclusion_count; ++index) {
+        graph::GripperVolumeMeshExclusion exclusion;
+        exclusion.path = exclusion_mesh_paths_[index];
+        std::copy_n(
+          exclusion_mesh_scales_.begin() + static_cast<std::ptrdiff_t>(index * 3U),
+          3, exclusion.scale.begin());
+        exclusion.pose_in_frame.position.x = exclusion_mesh_positions_[index * 3U];
+        exclusion.pose_in_frame.position.y = exclusion_mesh_positions_[index * 3U + 1U];
+        exclusion.pose_in_frame.position.z = exclusion_mesh_positions_[index * 3U + 2U];
+        exclusion.pose_in_frame.orientation.x =
+          exclusion_mesh_orientations_xyzw_[index * 4U];
+        exclusion.pose_in_frame.orientation.y =
+          exclusion_mesh_orientations_xyzw_[index * 4U + 1U];
+        exclusion.pose_in_frame.orientation.z =
+          exclusion_mesh_orientations_xyzw_[index * 4U + 2U];
+        exclusion.pose_in_frame.orientation.w =
+          exclusion_mesh_orientations_xyzw_[index * 4U + 3U];
+        spec.mesh_exclusions.push_back(std::move(exclusion));
+      }
 
       const auto volume = graph::GripperVolumeGraphBuilder::build(spec);
       std_msgs::msg::Header header;
@@ -77,9 +116,10 @@ private:
       publisher_->publish(map);
       RCLCPP_INFO(
         get_logger(),
-        "Published gripper volume graph: frame=%s shape=%s nodes=%zu edges=%zu topic=%s",
+        "Published gripper volume graph: frame=%s shape=%s nodes=%zu edges=%zu "
+        "exclusion_meshes=%zu topic=%s",
         frame_id_.c_str(), shape_.c_str(), map.nodes.size(), map.edges.size() / 2U,
-        publisher_->get_topic_name());
+        exclusion_count, publisher_->get_topic_name());
     } catch (const std::exception &error) {
       RCLCPP_ERROR(get_logger(), "Failed to build gripper volume graph: %s", error.what());
     }
@@ -90,7 +130,12 @@ private:
   std::vector<double> dimensions_;
   std::vector<double> center_;
   std::vector<double> orientation_xyzw_;
+  std::vector<std::string> exclusion_mesh_paths_;
+  std::vector<double> exclusion_mesh_scales_;
+  std::vector<double> exclusion_mesh_positions_;
+  std::vector<double> exclusion_mesh_orientations_xyzw_;
   double resolution_{0.01};
+  double exclusion_clearance_{0.0};
   int label_{0};
   int semantic_label_{0};
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher_;

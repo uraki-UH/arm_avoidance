@@ -360,6 +360,11 @@ rosbag bundle JSONでは`kind: topological_map`、`role: gripper_volume_graph`�
 固定しない。ライブ自動発見には`rosapi`が必要なため、rosbridgeは
 `rosbridge_websocket_launch.xml`で起動する。
 
+ToPoDualArmでは左右それぞれに最大把持領域と`undersize`領域を配信する。`undersize`領域はTCP基準の
+最大把持領域を母領域とし、全閉時の左右指およびグリッパ基部STLが占有する格子を除外して生成する。
+STL内部だけでなく、表面から半ボクセル以内の格子も除外する。したがって固定の最小幅boxではなく、
+グリッパを閉じても残る非占有空間を表す。
+
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
 `enabled=false` とし、MF入力候補から除外してファジィ推論でもその条件をスキップする。

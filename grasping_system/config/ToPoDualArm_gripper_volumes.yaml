@@ -11,6 +11,32 @@ grippers:
     label: 0
     semantic_label: 0
 
+  - name: left_gripper_undersize
+    tf_frame: L_tcp
+    output_topic: /ToPoDualArm/L_gripper_volume_undersize_topological_map
+    shape: box
+    # Maximum-open region minus gripper meshes at the fully closed pose.
+    dimensions: [0.061, 0.074, 0.0883]
+    center: [0.0, 0.0, 0.04415]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    resolution: 0.01
+    exclusion_clearance: 0.005
+    exclude_closed_meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.01836, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, -0.01836, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    label: 0
+    semantic_label: 0
+
   - name: right_gripper
     tf_frame: R_tcp
     output_topic: /ToPoDualArm/R_gripper_volume_topological_map
@@ -19,5 +45,30 @@ grippers:
     center: [0.0, 0.0, 0.04415]
     orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     resolution: 0.01
+    label: 0
+    semantic_label: 0
+
+  - name: right_gripper_undersize
+    tf_frame: R_tcp
+    output_topic: /ToPoDualArm/R_gripper_volume_undersize_topological_map
+    shape: box
+    dimensions: [0.061, 0.074, 0.0883]
+    center: [0.0, 0.0, 0.04415]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    resolution: 0.01
+    exclusion_clearance: 0.005
+    exclude_closed_meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.01836, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, -0.01836, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     label: 0
     semantic_label: 0

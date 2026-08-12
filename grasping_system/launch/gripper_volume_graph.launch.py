@@ -32,6 +32,38 @@ def _vector(spec, key, size, default):
     return [float(item) for item in value]
 
 
+def _mesh_exclusions(spec):
+    exclusions = spec.get("exclude_closed_meshes", [])
+    if not isinstance(exclusions, list):
+        raise ValueError(
+            f"gripper '{spec.get('name', '?')}' exclude_closed_meshes must be a list"
+        )
+
+    paths = []
+    scales = []
+    positions = []
+    orientations = []
+    for index, exclusion in enumerate(exclusions):
+        if not isinstance(exclusion, dict):
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                "must be a mapping"
+            )
+        path = str(exclusion.get("path", "")).strip()
+        if not path:
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                "requires path"
+            )
+        paths.append(path)
+        scales.extend(_vector(exclusion, "scale", 3, [1.0, 1.0, 1.0]))
+        positions.extend(_vector(exclusion, "position", 3, [0.0, 0.0, 0.0]))
+        orientations.extend(
+            _vector(exclusion, "orientation_xyzw", 4, [0.0, 0.0, 0.0, 1.0])
+        )
+    return paths, scales, positions, orientations
+
+
 def _load_grippers(context):
     config_path = LaunchConfiguration("grippers_file").perform(context).strip()
     if config_path:
@@ -75,6 +107,9 @@ def _launch_grippers(context):
         if not gripper_name or not tf_frame:
             raise ValueError(f"grippers[{index}] requires name and tf_frame")
         tf_frame = _with_tf_prefix(tf_frame, tf_prefix)
+        exclusion_paths, exclusion_scales, exclusion_positions, exclusion_orientations = (
+            _mesh_exclusions(spec)
+        )
 
         node_name = re.sub(r"[^A-Za-z0-9_]", "_", gripper_name).strip("_")
         node_name = f"{node_name or f'gripper_{index}'}_volume_graph_node"
@@ -94,9 +129,17 @@ def _launch_grippers(context):
                 spec, "orientation_xyzw", 4, [0.0, 0.0, 0.0, 1.0]
             ),
             "resolution": float(spec.get("resolution", 0.01)),
+            "exclusion_clearance": float(spec.get("exclusion_clearance", 0.0)),
             "label": int(spec.get("label", 0)),
             "semantic_label": int(spec.get("semantic_label", 0)),
         }
+        if exclusion_paths:
+            parameters.update({
+                "exclusion_mesh_paths": exclusion_paths,
+                "exclusion_mesh_scales": exclusion_scales,
+                "exclusion_mesh_positions": exclusion_positions,
+                "exclusion_mesh_orientations_xyzw": exclusion_orientations,
+            })
         actions.append(
             Node(
                 package="grasping_system",

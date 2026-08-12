@@ -42,3 +42,15 @@ topics:
     kind: topological_map
     role: gripper_volume_graph
     required: false
+
+  - alias: left_gripper_undersize_volume_graph
+    topic: /ToPoDualArm/L_gripper_volume_undersize_topological_map
+    kind: topological_map
+    role: gripper_volume_graph
+    required: false
+
+  - alias: right_gripper_undersize_volume_graph
+    topic: /ToPoDualArm/R_gripper_volume_undersize_topological_map
+    kind: topological_map
+    role: gripper_volume_graph
+    required: false

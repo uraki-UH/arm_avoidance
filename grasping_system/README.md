@@ -142,6 +142,8 @@ This publishes:
 
 - `/ToPoDualArm/L_gripper_volume_topological_map` in `ToPoDualArm/L_tcp`
 - `/ToPoDualArm/R_gripper_volume_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_gripper_volume_undersize_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_gripper_volume_undersize_topological_map` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix
@@ -150,7 +152,12 @@ automatically.
 
 The ToPoDualArm dimensions describe the maximum open volume between the
 fingers, derived from the current URDF mesh bounds and prismatic joint limits.
-They are configuration rather than a new robot-specific message contract.
+The two `undersize` graphs start from the same maximum-open volume and remove
+the closed-pose left finger, right finger, and gripper-base mesh occupancy. They
+therefore represent space that remains unoccupied even after the gripper closes,
+instead of using a fixed minimum-width box. The mesh paths and closed-pose TCP
+transforms are robot configuration rather than a new message contract. Grid
+centers inside a closed mesh or within half a voxel of its surface are removed.
 The publisher sends the graph exactly once at node startup. Transient-local QoS
 keeps that sample available, so a viewer or rosbag recorder started later still
 receives the current static graph without application-level retransmission.
