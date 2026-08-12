@@ -39,6 +39,7 @@ public:
     exclusion_mesh_orientations_xyzw_ = declare_parameter<std::vector<double>>(
       "exclusion_mesh_orientations_xyzw", std::vector<double>{});
     exclusion_clearance_ = declare_parameter<double>("exclusion_clearance", 0.0);
+    retain_occupied_meshes_ = declare_parameter<bool>("retain_occupied_meshes", false);
     retain_internal_only_ = declare_parameter<bool>("retain_internal_only", false);
     closing_axis_ = declare_parameter<std::vector<double>>(
       "closing_axis", {0.0, 1.0, 0.0});
@@ -85,6 +86,7 @@ private:
       spec.pose_in_frame.orientation.z = orientation_xyzw_[2];
       spec.pose_in_frame.orientation.w = orientation_xyzw_[3];
       spec.mesh_exclusion_clearance = exclusion_clearance_;
+      spec.retain_occupied_meshes = retain_occupied_meshes_;
       spec.retain_internal_only = retain_internal_only_;
       std::copy_n(closing_axis_.begin(), 3, spec.closing_axis.begin());
 
@@ -143,9 +145,10 @@ private:
       RCLCPP_INFO(
         get_logger(),
         "Published gripper volume graph: frame=%s shape=%s nodes=%zu edges=%zu "
-        "exclusion_meshes=%zu internal_only=%s clusters=%zu topic=%s",
+        "meshes=%zu occupied_only=%s internal_only=%s clusters=%zu topic=%s",
         frame_id_.c_str(), shape_.c_str(), map.nodes.size(), map.edges.size() / 2U,
-        exclusion_count, retain_internal_only_ ? "true" : "false", map.clusters.size(),
+        exclusion_count, retain_occupied_meshes_ ? "true" : "false",
+        retain_internal_only_ ? "true" : "false", map.clusters.size(),
         publisher_->get_topic_name());
     } catch (const std::exception &error) {
       RCLCPP_ERROR(get_logger(), "Failed to build gripper volume graph: %s", error.what());
@@ -166,6 +169,7 @@ private:
   std::vector<std::int64_t> negative_finger_mesh_indices_;
   double resolution_{0.01};
   double exclusion_clearance_{0.0};
+  bool retain_occupied_meshes_{false};
   bool retain_internal_only_{false};
   bool include_cluster_{true};
   int label_{0};

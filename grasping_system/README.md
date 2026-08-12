@@ -144,6 +144,8 @@ This publishes:
 - `/ToPoDualArm/R_grip_V_topological_map` in `ToPoDualArm/R_tcp`
 - `/ToPoDualArm/L_grip_minV_topological_map` in `ToPoDualArm/L_tcp`
 - `/ToPoDualArm/R_grip_minV_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_baseV_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_baseV_topological_map` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix
@@ -166,6 +168,10 @@ free space is not part of the graph. Its `TopologicalMap` omits the source-volum
 cluster so the viewer does not draw the original maximum box around the filtered
 nodes. Mesh paths and closed-pose TCP transforms remain robot configuration
 rather than a new message contract.
+The two `grip_baseV` graphs retain only the gripper-base STL occupancy plus a
+`0.005 m` collision margin, sampled at `0.005 m`. They are forbidden-volume
+inputs intended for a `required_empty` occupancy constraint, not graspable
+volume. The search-bound cluster is omitted.
 The publisher sends the graph exactly once at node startup. Transient-local QoS
 keeps that sample available, so a viewer or rosbag recorder started later still
 receives the current static graph without application-level retransmission.

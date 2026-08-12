@@ -33,10 +33,11 @@ def _vector(spec, key, size, default):
 
 
 def _mesh_exclusions(spec):
-    exclusions = spec.get("exclude_closed_meshes", [])
+    mesh_key = "meshes" if "meshes" in spec else "exclude_closed_meshes"
+    exclusions = spec.get(mesh_key, [])
     if not isinstance(exclusions, list):
         raise ValueError(
-            f"gripper '{spec.get('name', '?')}' exclude_closed_meshes must be a list"
+            f"gripper '{spec.get('name', '?')}' {mesh_key} must be a list"
         )
 
     paths = []
@@ -48,13 +49,13 @@ def _mesh_exclusions(spec):
     for index, exclusion in enumerate(exclusions):
         if not isinstance(exclusion, dict):
             raise ValueError(
-                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                f"gripper '{spec.get('name', '?')}' {mesh_key}[{index}] "
                 "must be a mapping"
             )
         path = str(exclusion.get("path", "")).strip()
         if not path:
             raise ValueError(
-                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                f"gripper '{spec.get('name', '?')}' {mesh_key}[{index}] "
                 "requires path"
             )
         paths.append(path)
@@ -65,7 +66,7 @@ def _mesh_exclusions(spec):
             negative_indices.append(index)
         elif internal_side not in ("", "body"):
             raise ValueError(
-                f"gripper '{spec.get('name', '?')}' exclude_closed_meshes[{index}] "
+                f"gripper '{spec.get('name', '?')}' {mesh_key}[{index}] "
                 "internal_side must be positive, negative, body, or empty"
             )
         scales.extend(_vector(exclusion, "scale", 3, [1.0, 1.0, 1.0]))
@@ -147,6 +148,7 @@ def _launch_grippers(context):
             ),
             "resolution": float(spec.get("resolution", 0.01)),
             "exclusion_clearance": float(spec.get("exclusion_clearance", 0.0)),
+            "retain_occupied_meshes": bool(spec.get("retain_occupied_meshes", False)),
             "retain_internal_only": bool(spec.get("retain_internal_only", False)),
             "closing_axis": _vector(spec, "closing_axis", 3, [0.0, 1.0, 0.0]),
             "include_cluster": bool(spec.get("include_cluster", True)),
@@ -159,9 +161,11 @@ def _launch_grippers(context):
                 "exclusion_mesh_scales": exclusion_scales,
                 "exclusion_mesh_positions": exclusion_positions,
                 "exclusion_mesh_orientations_xyzw": exclusion_orientations,
-                "positive_finger_mesh_indices": positive_finger_indices,
-                "negative_finger_mesh_indices": negative_finger_indices,
             })
+        if positive_finger_indices:
+            parameters["positive_finger_mesh_indices"] = positive_finger_indices
+        if negative_finger_indices:
+            parameters["negative_finger_mesh_indices"] = negative_finger_indices
         actions.append(
             Node(
                 package="grasping_system",

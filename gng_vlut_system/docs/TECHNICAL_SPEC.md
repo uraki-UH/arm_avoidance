@@ -350,14 +350,16 @@ workspace内カスタムメッセージをWebSocketへ変換できる。
 
 グリッパー体積graph本体は`EvaluationMetrics`へflattenせず、既存の
 `ais_gng_msgs/msg/TopologicalMap` topicとして別に受信する。単体HTMLは`rosapi`のtopic一覧から
-名前が`grip_V`または`grip_minV`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
+名前が`grip_V`、`grip_minV`、`grip_baseV`のいずれかを含み`topological_map`で終わる
+`TopologicalMap`を自動発見し、topicごとに
 `nodes`、`edges`、`clusters`、`header.frame_id`を`state.evaluationMetrics.structuredInputs`へ保持する。
 評価計算コードは共通の`window.__topoEvaluationMetricApi.getStructuredInputs()`から`inputType`、`role`、
 topic、frameを条件に取得できる。メインGNG graphの`state.nodes/state.edges`は上書きしない。
 
-rosbag bundle JSONでは`kind: topological_map`、`role: gripper_volume_graph`の全topicを同じ評価入力ストアへ
-復元する。bag記録対象の具体的なtopic名はexporter設定に記述するが、HTML側は左右名やロボット名を
-固定しない。ライブ自動発見には`rosapi`が必要なため、rosbridgeは
+rosbag bundle JSONでは`kind: topological_map`で、把持領域の`role: gripper_volume_graph`と
+基部禁止領域の`role: gripper_forbidden_volume_graph`を同じ評価入力ストアへ復元する。HTML側も
+`grip_baseV` topicを後者のroleとして保持する。bag記録対象の具体的なtopic名はexporter設定に記述するが、
+HTML側は左右名やロボット名を固定しない。ライブ自動発見には`rosapi`が必要なため、rosbridgeは
 `rosbridge_websocket_launch.xml`で起動する。
 
 ToPoDualArmでは左右それぞれに最大把持領域と`undersize`領域を配信する。最大把持領域はURDFの
@@ -403,6 +405,31 @@ STL占有を内側へ縮める。ToPoDualArmでは`-0.005 m`として非占有�
 外部自由空間はgraphへ入れず、固定の最小幅boxではなく、グリッパを閉じても左右指の内側に残る
 非占有空間を表す。`undersize` topicでは
 元の最大boxをViewerが描画しないよう`TopologicalMap.clusters`を空にする。
+
+基部禁止領域`grip_baseV`は、TCP基準へ変換したグリッパ基部STLの占有格子だけを残す。
+把持対象を入れる領域ではなく、候補Poseへ配置した際に環境占有があれば不合格とする
+`required_empty`入力である。ToPoDualArm設定は左右共通で次を使う。
+
+| 変数 | 値 | 意味 |
+|---|---:|---|
+| `dimensions` | `[0.0916, 0.161, 0.0305] m` | 5 mm安全余裕を含む基部STL探索範囲 |
+| `center` | `[0, 0, 0.09525] m` | TCP基準の探索範囲中心 |
+| `resolution` | `0.005 m` | 禁止領域の格子間隔 |
+| `exclusion_clearance` | `0.005 m` | STL外側へ追加する衝突安全余裕 |
+| `retain_occupied_meshes` | `true` | STL占有または安全余裕内の格子だけを残す |
+| `include_cluster` | `false` | 外接探索boxをgraphとして表示しない |
+
+```mermaid
+flowchart TD
+    A[基部STLをTCP座標へ変換] --> B[安全余裕込み外接boxを5 mm格子化]
+    B --> C{STL内部または表面から5 mm以内?}
+    C -- No --> X[格子を除外]
+    C -- Yes --> D[禁止領域nodeを追加]
+    D --> E[6近傍node間へedgeを追加]
+    E --> F[grip_baseV topicへpublish]
+    F --> G[gripper_forbidden_volume_graphとしてViewer/bundleへ保持]
+    G -. 将来接続 .-> H[required_empty候補評価]
+```
 
 把持手先Pose候補の占有判定は`GraspPoseOccupancyEvaluator`へ、候補Pose、同一基準座標系を参照する
 占有照会関数、TCPローカル座標の領域サンプル群を渡して行う。領域は特定のグリッパー名に固定せず、

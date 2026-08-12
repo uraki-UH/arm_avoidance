@@ -51,3 +51,15 @@ topics:
     kind: topological_map
     role: gripper_volume_graph
     required: false
+
+  - alias: left_grip_baseV_graph
+    topic: /ToPoDualArm/L_grip_baseV_topological_map
+    kind: topological_map
+    role: gripper_forbidden_volume_graph
+    required: false
+
+  - alias: right_grip_baseV_graph
+    topic: /ToPoDualArm/R_grip_baseV_topological_map
+    kind: topological_map
+    role: gripper_forbidden_volume_graph
+    required: false

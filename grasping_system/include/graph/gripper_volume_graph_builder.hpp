@@ -43,6 +43,7 @@ struct GripperVolumeGraphSpec
   geometry_msgs::msg::Pose pose_in_frame{};
   std::vector<GripperVolumeMeshExclusion> mesh_exclusions;
   double mesh_exclusion_clearance{0.0};
+  bool retain_occupied_meshes{false};
   bool retain_internal_only{false};
   std::array<double, 3> closing_axis{0.0, 1.0, 0.0};
   std::vector<std::size_t> positive_finger_mesh_indices;
@@ -100,7 +101,9 @@ public:
             continue;
           }
           const Eigen::Vector3d position = translation + rotation * local;
-          if (isMeshOccupied(position, exclusions, spec.mesh_exclusion_clearance)) {
+          const bool mesh_occupied = isMeshOccupied(
+            position, exclusions, spec.mesh_exclusion_clearance);
+          if (spec.retain_occupied_meshes ? !mesh_occupied : mesh_occupied) {
             continue;
           }
           if (spec.retain_internal_only &&
@@ -196,6 +199,13 @@ private:
     }
     if (!std::isfinite(spec.mesh_exclusion_clearance)) {
       throw std::invalid_argument("mesh exclusion clearance must be finite");
+    }
+    if (spec.retain_occupied_meshes && spec.mesh_exclusions.empty()) {
+      throw std::invalid_argument("occupied-mesh volume requires at least one mesh");
+    }
+    if (spec.retain_occupied_meshes && spec.retain_internal_only) {
+      throw std::invalid_argument(
+              "occupied-mesh and internal-only retention modes cannot be combined");
     }
     for (const auto &exclusion : spec.mesh_exclusions) {
       if (exclusion.path.empty()) {
