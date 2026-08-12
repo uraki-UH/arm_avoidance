@@ -346,6 +346,18 @@ rosbridgeコンテナはgng_cpuと同じ`ros_ws_volume`と`ros_ws_build_volume`�
 workspaceの`setup.bash`をsourceしてから起動する。これにより`gng_control_msgs`などの
 workspace内カスタムメッセージをWebSocketへ変換できる。
 
+グリッパー体積graph本体は`EvaluationMetrics`へflattenせず、既存の
+`ais_gng_msgs/msg/TopologicalMap` topicとして別に受信する。単体HTMLは`rosapi`のtopic一覧から
+名前が`gripper_volume`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
+`nodes`、`edges`、`clusters`、`header.frame_id`を`state.evaluationMetrics.structuredInputs`へ保持する。
+評価計算コードは共通の`window.__topoEvaluationMetricApi.getStructuredInputs()`から`inputType`、`role`、
+topic、frameを条件に取得できる。メインGNG graphの`state.nodes/state.edges`は上書きしない。
+
+rosbag bundle JSONでは`kind: topological_map`、`role: gripper_volume_graph`の全topicを同じ評価入力ストアへ
+復元する。bag記録対象の具体的なtopic名はexporter設定に記述するが、HTML側は左右名やロボット名を
+固定しない。ライブ自動発見には`rosapi`が必要なため、rosbridgeは
+`rosbridge_websocket_launch.xml`で起動する。
+
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
 `enabled=false` とし、MF入力候補から除外してファジィ推論でもその条件をスキップする。

@@ -78,7 +78,8 @@ Published before each binary cloud frame.
 
 ## Sources / Stream Control
 - `sources.list`
-- `sources.setActive` (`{ sourceId, active }`)
+- `sources.setActive` (`{ sourceId, active, removeLayer? }`)
+  - `active=false, removeLayer=true` stops the subscription and emits stream deletion events for the corresponding scene layer.
 
 ## File
 - `files.list`

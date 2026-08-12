@@ -16,7 +16,6 @@ This guide is specific to the current ToPoFuzzyViewer re-architecture (WS Protoc
   - `viewer_ws_gateway_node`
   - `viewer_source_node`
   - `viewer_edit_node`
-  - `viewer_file_node`
   - `viewer_rosbag_node`
   - `viewer_gng_node`
   - `viewer_param_node`
