@@ -23,8 +23,8 @@ Viewerで元の最大boxが重ならないよう、このgraphの`TopologicalMap
 
 ## Topics / Params / Messages
 
-- `/ToPoDualArm/L_grip_V_undersize_topological_map` (`ToPoDualArm/L_tcp`)
-- `/ToPoDualArm/R_grip_V_undersize_topological_map` (`ToPoDualArm/R_tcp`)
+- `/ToPoDualArm/L_grip_minV_topological_map` (`ToPoDualArm/L_tcp`)
+- `/ToPoDualArm/R_grip_minV_topological_map` (`ToPoDualArm/R_tcp`)
 - message: `ais_gng_msgs/msg/TopologicalMap`
 - source dimensions: `[0.061, 0.074, 0.0883] m`
 - center: `[0.0, 0.0, 0.04415] m`

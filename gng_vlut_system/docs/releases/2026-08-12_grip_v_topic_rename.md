@@ -20,8 +20,8 @@
 
 - `/ToPoDualArm/L_grip_V_topological_map`
 - `/ToPoDualArm/R_grip_V_topological_map`
-- `/ToPoDualArm/L_grip_V_undersize_topological_map`
-- `/ToPoDualArm/R_grip_V_undersize_topological_map`
+- `/ToPoDualArm/L_grip_minV_topological_map`
+- `/ToPoDualArm/R_grip_minV_topological_map`
 - message: `ais_gng_msgs/msg/TopologicalMap`（変更なし）
 
 ## Verification

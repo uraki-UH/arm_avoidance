@@ -1683,7 +1683,7 @@ function v312NormalizeTopicMessages(entry){
 }
 function evaluationTopologicalMapTopicMatches(topic){
   const value=String(topic||'').toLowerCase();
-  return value.includes('grip_v')&&value.endsWith('topological_map');
+  return (value.includes('grip_v')||value.includes('grip_minv'))&&value.endsWith('topological_map');
 }
 function normalizeEvaluationVector(value, fallback={x:0,y:0,z:0}){
   if(Array.isArray(value))return{x:+value[0]||0,y:+value[1]||0,z:+value[2]||0};
@@ -7888,7 +7888,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       statusPrefix:'グリッパー体積graph',
       topicFilter:(topic)=>{
         const value=String(topic||'').toLowerCase();
-        return value.includes('grip_v')&&value.endsWith('topological_map');
+        return (value.includes('grip_v')||value.includes('grip_minv'))&&value.endsWith('topological_map');
       },
       onMessage:(msg,topic)=>window.__topoEvaluationMetricApi?.storeTopologicalMap(msg,topic,'gripper_volume_graph','ros'),
     });

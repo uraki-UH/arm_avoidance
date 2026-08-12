@@ -350,7 +350,7 @@ workspace内カスタムメッセージをWebSocketへ変換できる。
 
 グリッパー体積graph本体は`EvaluationMetrics`へflattenせず、既存の
 `ais_gng_msgs/msg/TopologicalMap` topicとして別に受信する。単体HTMLは`rosapi`のtopic一覧から
-名前が`grip_V`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
+名前が`grip_V`または`grip_minV`を含み`topological_map`で終わる`TopologicalMap`を自動発見し、topicごとに
 `nodes`、`edges`、`clusters`、`header.frame_id`を`state.evaluationMetrics.structuredInputs`へ保持する。
 評価計算コードは共通の`window.__topoEvaluationMetricApi.getStructuredInputs()`から`inputType`、`role`、
 topic、frameを条件に取得できる。メインGNG graphの`state.nodes/state.edges`は上書きしない。
@@ -360,8 +360,42 @@ rosbag bundle JSONでは`kind: topological_map`、`role: gripper_volume_graph`�
 固定しない。ライブ自動発見には`rosapi`が必要なため、rosbridgeは
 `rosbridge_websocket_launch.xml`で起動する。
 
-ToPoDualArmでは左右それぞれに最大把持領域と`undersize`領域を配信する。`undersize`領域はTCP基準の
-最大把持領域を探索格子とし、各格子中心から閉方向の正負へrayを伸ばす。正方向rayが正側の全閉指STL、
+ToPoDualArmでは左右それぞれに最大把持領域と`undersize`領域を配信する。最大把持領域はURDFの
+prismatic上限`0.037 m`に左右指を配置する。TCP基準の外接boxを探索格子とし、各格子中心から閉方向の
+正負へrayを伸ばして、正方向rayが正側の全開指STL、負方向rayが負側の全開指STLに交差し、かつ指・基部
+STLに占有されない格子だけをgraphへ残す。外接box全体をgraphとはせず、実際の全開指形状に挟まれた
+自由空間を最大把持領域とする。外接boxの誤表示を避けるため`clusters`は空にする。
+
+最大領域生成に使うToPoDualArm変数は次のとおり。
+
+| 変数 | 左右の値 | 意味 |
+|---|---:|---|
+| `dimensions` | `[0.061, 0.074, 0.0883] m` | 全開指内面間を含むTCP基準の探索外接box |
+| `center` | `[0, 0, 0.04415] m` | 探索外接box中心 |
+| `resolution` | `0.01 m` | graph格子間隔 |
+| `closing_axis` | `[0, 1, 0]` | 指の開閉方向 |
+| 正側指`position` | `[0, 0.05536, 0.085] m` | joint origin `0.01836`へupper limit `0.037`を加えた全開位置 |
+| 負側指`position` | `[0, -0.05536, 0.085] m` | mimic側の全開位置 |
+| 基部`position` | `[0, 0, 0.1055] m` | TCP基準の固定基部位置 |
+| `retain_internal_only` | `true` | 左右指の両方に挟まれた格子だけを残す |
+| `exclusion_clearance` | `0.0 m` | 全開メッシュ占有を追加膨張・縮小しない |
+| `include_cluster` | `false` | 探索外接boxのclusterをpublishしない |
+
+```mermaid
+flowchart TD
+    A[全開指STLをTCP座標へ変換] --> B[外接boxをresolutionで格子化]
+    B --> C{指または基部STLが占有?}
+    C -- Yes --> X[格子を除外]
+    C -- No --> D{+closing_axis rayが正側指STLへ交差?}
+    D -- No --> X
+    D -- Yes --> E{-closing_axis rayが負側指STLへ交差?}
+    E -- No --> X
+    E -- Yes --> F[TopologicalNodeを追加]
+    F --> G[6近傍node間へedgeを追加]
+    G --> H[clustersなしでgrip_V topicへpublish]
+```
+
+`undersize`領域もTCP基準の最大把持領域を探索格子とし、各格子中心から閉方向の正負へrayを伸ばす。正方向rayが正側の全閉指STL、
 負方向rayが負側の全閉指STLにそれぞれ交差する格子だけを内部候補として残す。これは閉方向の指向性距離
 `d+`と`d-`がともに有限である、左右指に挟まれた空間に相当する。その後、全閉時の左右指および
 グリッパ基部STLを符号付き`exclusion_clearance`で除外する。正値はSTL占有を外側へ広げ、負値は

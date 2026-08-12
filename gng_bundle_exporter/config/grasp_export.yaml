@@ -43,14 +43,14 @@ topics:
     role: gripper_volume_graph
     required: false
 
-  - alias: left_grip_V_undersize_graph
-    topic: /ToPoDualArm/L_grip_V_undersize_topological_map
+  - alias: left_grip_minV_graph
+    topic: /ToPoDualArm/L_grip_minV_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false
 
-  - alias: right_grip_V_undersize_graph
-    topic: /ToPoDualArm/R_grip_V_undersize_topological_map
+  - alias: right_grip_minV_graph
+    topic: /ToPoDualArm/R_grip_minV_topological_map
     kind: topological_map
     role: gripper_volume_graph
     required: false

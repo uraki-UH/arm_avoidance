@@ -8,12 +8,33 @@ grippers:
     center: [0.0, 0.0, 0.04415]
     orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     resolution: 0.01
+    exclusion_clearance: 0.0
+    retain_internal_only: true
+    closing_axis: [0.0, 1.0, 0.0]
+    include_cluster: false
+    # Finger transforms in the TCP frame at the URDF prismatic upper limit (0.037 m).
+    exclude_closed_meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+        internal_side: positive
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.05536, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+        internal_side: negative
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, -0.05536, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+        internal_side: body
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     label: 0
     semantic_label: 0
 
   - name: left_gripper_undersize
     tf_frame: L_tcp
-    output_topic: /ToPoDualArm/L_grip_V_undersize_topological_map
+    output_topic: /ToPoDualArm/L_grip_minV_topological_map
     shape: box
     # Free voxels bracketed by the fully closed fingers along the closing axis.
     dimensions: [0.061, 0.074, 0.0883]
@@ -52,12 +73,32 @@ grippers:
     center: [0.0, 0.0, 0.04415]
     orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     resolution: 0.01
+    exclusion_clearance: 0.0
+    retain_internal_only: true
+    closing_axis: [0.0, 1.0, 0.0]
+    include_cluster: false
+    exclude_closed_meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+        internal_side: positive
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.05536, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+        internal_side: negative
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, -0.05536, 0.085]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+        internal_side: body
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     label: 0
     semantic_label: 0
 
   - name: right_gripper_undersize
     tf_frame: R_tcp
-    output_topic: /ToPoDualArm/R_grip_V_undersize_topological_map
+    output_topic: /ToPoDualArm/R_grip_minV_topological_map
     shape: box
     dimensions: [0.061, 0.074, 0.0883]
     center: [0.0, 0.0, 0.04415]

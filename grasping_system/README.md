@@ -142,16 +142,20 @@ This publishes:
 
 - `/ToPoDualArm/L_grip_V_topological_map` in `ToPoDualArm/L_tcp`
 - `/ToPoDualArm/R_grip_V_topological_map` in `ToPoDualArm/R_tcp`
-- `/ToPoDualArm/L_grip_V_undersize_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_grip_V_undersize_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_minV_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_minV_topological_map` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix
 are left unchanged. `gng_viewer_bridge.launch.py` supplies its `robot_name`
 automatically.
 
-The ToPoDualArm dimensions describe the maximum open volume between the
-fingers, derived from the current URDF mesh bounds and prismatic joint limits.
+The ToPoDualArm dimensions provide the search bounds between the fingers at the
+URDF prismatic upper limit. The maximum-volume graph retains a grid center only
+when rays along both directions of the closing axis hit the corresponding finger
+mesh in that fully open pose. Finger and gripper-base mesh occupancy is removed,
+so the published graph follows the actual fully open geometry instead of filling
+the entire bounding box. Its source-volume cluster is omitted for the same reason.
 The two `undersize` graphs start from the same maximum-open volume. A grid center
 is retained only when a ray in each direction of the configured closing axis
 hits the corresponding closed-pose finger mesh. Mesh occupancy uses a signed
