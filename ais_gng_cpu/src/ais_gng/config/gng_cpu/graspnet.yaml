@@ -5,6 +5,7 @@ ais_gng_node:
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
+    node.covariance_enabled: false
     node.edge_age_max: 100
     node.s1_reset_range: 0.01
     node.s1_age: [6, 6, 12, 12] #[default, safe, wall, unknown]
@@ -38,6 +39,8 @@ ais_gng_node:
     classify.car: false
     classify.car.model: "NN_car.pt"
     classify.threshold: 0.7
+
+    performance.log_interval_ms: 5000
 
     input.point_cloud_num: 100000
     input.sampling_mode: "uniform"

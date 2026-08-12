@@ -300,7 +300,10 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.eta_s2", 0.008);                                 // 近傍ノードの学習係数(cpu)
     this->declare_parameter("node.eta_decay_rate", 1.0);                                 // 学習係数の減衰率(cpu)
     this->declare_parameter("node.cov_decay_k", 1.5);                              // ノード移動量に応じた分散減衰係数
-    this->declare_parameter("node.covariance_enabled", true);                      // 共分散楕円の推定を有効にするか
+    node_covariance_enabled_ =
+        this->declare_parameter<bool>("node.covariance_enabled", false);           // 共分散楕円の推定を有効にするか
+    performance_log_interval_ms_ =
+        this->declare_parameter<int64_t>("performance.log_interval_ms", 5000);     // 実行周期ログの間隔(ms)。0で無効
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
     this->declare_parameter("node.grid", 0.05);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
     this->declare_parameter("node.s1_age_max", std::vector<int>{6, 6, 6, 3});      // ノードの選択回数に基づく削除(cpu/gpu)
@@ -538,6 +541,19 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             success = true;
         } else if (name == "node.covariance_enabled") {
             node_covariance_enabled_ = p.as_bool();
+            if (!node_covariance_enabled_) {
+                winner_point_stats_.clear();
+                last_published_nodes_.clear();
+            }
+            success = true;
+        } else if (name == "performance.log_interval_ms") {
+            const auto interval_ms = p.as_int();
+            if (interval_ms < 0) {
+                result.successful = false;
+                result.reason = "performance.log_interval_ms must be zero or greater";
+                return result;
+            }
+            performance_log_interval_ms_ = interval_ms;
             success = true;
         } else if (name == "input.topic_names") {
             input_topic_names_.clear();
@@ -624,15 +640,25 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     if(!initialized_ || clouds.empty()){
         return;
     }
-    auto start = std::chrono::steady_clock::now();
+    const auto start = std::chrono::steady_clock::now();
+    double cycle_period_ms = 0.0;
+    if (has_last_process_start_) {
+        cycle_period_ms = std::chrono::duration<double, std::milli>(
+            start - last_process_start_).count();
+    }
+    last_process_start_ = start;
+    has_last_process_start_ = true;
 
     // 入力点群のセット
     std::vector<uint8_t> semantic_labels;
     std::vector<uint32_t> source_point_indices;
     PC2::ConstSharedPtr gng_input_msg;
+    std::size_t raw_point_count_total = 0;
+    std::size_t submitted_point_count_total = 0;
     for(auto &msg: clouds){
         const uint64_t raw_point_count =
             static_cast<uint64_t>(msg->width) * static_cast<uint64_t>(msg->height);
+        raw_point_count_total += static_cast<std::size_t>(raw_point_count);
         const uint32_t point_count = static_cast<uint32_t>(std::min<uint64_t>(
             raw_point_count, std::numeric_limits<uint32_t>::max()));
         const std::size_t semantic_offset = semantic_labels.size();
@@ -651,6 +677,8 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         gng_input_msg = requires_repacking
             ? makeSelectedPointCloud(*msg, selected_indices)
             : msg;
+        submitted_point_count_total +=
+            static_cast<std::size_t>(gng_input_msg->width) * gng_input_msg->height;
         if (gng_input_msg->width == 0 && point_count > 0) {
             RCLCPP_WARN_THROTTLE(
                 this->get_logger(), *this->get_clock(), 5000,
@@ -694,9 +722,11 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         ? msg->header.frame_id
         : base_frame_id_;
     header.stamp = msg->header.stamp;
+    const auto input_end = std::chrono::steady_clock::now();
 
     // GNGの実行
     gng_exec();
+    const auto gng_end = std::chrono::steady_clock::now();
 
     // GNGの結果を取得
     uint32_t label_num = 0, transformed_pcl_num = 0;
@@ -710,6 +740,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     
     // アフィン変換後の点群をROS2メッセージに変換
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
+    const std::size_t output_node_count = map_msg->nodes.size();
+    const std::size_t output_edge_count = map_msg->edges.size() / 2;
+    const auto conversion_end = std::chrono::steady_clock::now();
 
     // クラスタのラベルを分類
     std::vector<uint32_t> cluster_ids, cluster_frames;
@@ -718,9 +751,12 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
     // GNGにフィードバック
     gng_setInferredClusterLabels(cluster_ids.data(), cluster_frames.data(), cluster_labels.data(), cluster_ids.size());
+    const auto classification_end = std::chrono::steady_clock::now();
 
     // トポロジカルマップをPublish
-    publishTopologicalMapUpdate(*map_msg);
+    if (node_covariance_enabled_) {
+        publishTopologicalMapUpdate(*map_msg);
+    }
     topological_map_pub_->publish(std::move(map_msg));
 
     if(downsampling_.isTransformed()){
@@ -736,10 +772,42 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     // 入力範囲の可視化
     filter_.publish(header);
 
-    // debug log
-    auto end = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Processing time: %ld ms", duration.count());
+    const auto end = std::chrono::steady_clock::now();
+    if (performance_log_interval_ms_ > 0) {
+        const double input_ms =
+            std::chrono::duration<double, std::milli>(input_end - start).count();
+        const double gng_ms =
+            std::chrono::duration<double, std::milli>(gng_end - input_end).count();
+        const double conversion_ms =
+            std::chrono::duration<double, std::milli>(conversion_end - gng_end).count();
+        const double classification_ms =
+            std::chrono::duration<double, std::milli>(classification_end - conversion_end).count();
+        const double publish_ms =
+            std::chrono::duration<double, std::milli>(end - classification_end).count();
+        const double total_ms =
+            std::chrono::duration<double, std::milli>(end - start).count();
+        const double cycle_hz = cycle_period_ms > 0.0 ? 1000.0 / cycle_period_ms : 0.0;
+        RCLCPP_INFO_THROTTLE(
+            this->get_logger(),
+            *this->get_clock(),
+            static_cast<uint64_t>(performance_log_interval_ms_),
+            "cycle period=%.2f ms (%.2f Hz), processing=%.2f ms "
+            "[input=%.2f gng=%.2f convert=%.2f classify=%.2f publish=%.2f], "
+            "points=%zu/%zu nodes=%zu edges=%zu covariance=%s",
+            cycle_period_ms,
+            cycle_hz,
+            total_ms,
+            input_ms,
+            gng_ms,
+            conversion_ms,
+            classification_ms,
+            publish_ms,
+            submitted_point_count_total,
+            raw_point_count_total,
+            output_node_count,
+            output_edge_count,
+            node_covariance_enabled_ ? "on" : "off");
+    }
 }
 
 void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
@@ -768,7 +836,6 @@ void AiSGNGComponent::publishTopologicalMapUpdate(const ais_gng_msgs::msg::Topol
     }
 
     last_published_nodes_ = std::move(current_nodes);
-    has_topological_map_snapshot_ = true;
 }
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(
@@ -853,8 +920,6 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
             *topological_map_msg,
             map,
             winner_point_stats_);
-    } else {
-        winner_point_stats_.clear();
     }
 
     if (semantic_labels && !semantic_labels->empty()) {
@@ -865,6 +930,10 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
     }
     updateSemanticLabelHistory(*topological_map_msg);
 
+    if (!node_covariance_enabled_) {
+        return topological_map_msg;
+    }
+
     std::size_t nodes_with_winners = 0;
     std::size_t total_samples = 0;
     std::size_t max_samples = 0;
@@ -872,11 +941,13 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
     float max_cov_abs = 0.0f;
     for (const auto &node : topological_map_msg->nodes) {
         const auto stats_it = winner_point_stats_.find(node.id);
-        if (node_covariance_enabled_ && stats_it != winner_point_stats_.end()) {
-            total_samples += static_cast<std::size_t>(std::lround(std::max(0.0, stats_it->second.count)));
+        if (stats_it != winner_point_stats_.end()) {
+            total_samples += static_cast<std::size_t>(
+                std::lround(std::max(0.0, stats_it->second.count)));
             max_samples = std::max<std::size_t>(
                 max_samples,
-                static_cast<std::size_t>(std::lround(std::max(0.0, stats_it->second.count))));
+                static_cast<std::size_t>(
+                    std::lround(std::max(0.0, stats_it->second.count))));
         }
         if (node.winner_point_count > 0) {
             ++nodes_with_winners;

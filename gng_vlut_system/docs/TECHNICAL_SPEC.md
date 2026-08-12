@@ -236,8 +236,11 @@ ROS 側はプレビューの送信有無だけを制御し、見た目の指定�
 |---|---:|---|---|
 | `input.point_cloud_num` | int | `20000` | GNG に渡す1フレーム当たりの最大点数 |
 | `input.sampling_mode` | string | `head` | 上限超過時の選択方式。`head` または `uniform` |
+| `node.covariance_enabled` | bool | `false` | ノード移動共分散とViewer向け共分散楕円データの生成 |
+| `performance.log_interval_ms` | int | `5000` | 実行周期INFOログの最小間隔。`0`で無効 |
 
-`graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform` を使用する。
+`graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform`、
+`node.covariance_enabled=false`、`performance.log_interval_ms=5000` を使用する。
 
 ### 9.2 選択方式
 
@@ -269,6 +272,31 @@ flowchart TD
 ```
 
 `uniform` では XYZ 以外の point field も点単位でコピーする。GNG 内部の `inpcl_ids` は publish 前に元点群のインデックスへ戻すため、semantic label の参照関係を維持する。`ds.transformed=false` の downsampling 出力は、抽出時には再パック後の点群を参照する。
+
+### 9.4 共分散楕円と実行周期ログ
+
+`node.covariance_enabled=false` の場合、ノード移動共分散の蓄積、近傍エッジからの初期分散推定、
+前フレームノードのスナップショット生成、共分散統計の走査を行わない。
+ToPoFuzzy Viewer側の共分散楕円表示も既定でオフであり、オフ中は固有値計算、インスタンス更新、描画を行わない。
+
+`performance.log_interval_ms` ごとのINFOログには、次を出力する。
+
+- コールバック開始間隔の`period`と換算`Hz`
+- 1フレームの`processing`時間
+- `input`、`gng`、`convert`、`classify`、`publish`の工程別時間
+- GNG投入点数と受信点数、出力node数・edge数、共分散処理のオン・オフ
+
+```mermaid
+flowchart LR
+    A[PointCloud2 callback] --> B[input selection]
+    B --> C[GNG learning]
+    C --> D[ROS message conversion]
+    D --> E[classification]
+    E --> F[publish]
+    D --> G{node.covariance_enabled}
+    G -- true --> H[covariance update and snapshot]
+    G -- false --> I[skip]
+```
 
 ## 10. リンク別可操作性の Viewer 表示
 

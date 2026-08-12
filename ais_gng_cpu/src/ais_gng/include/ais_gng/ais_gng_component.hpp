@@ -9,6 +9,7 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <unordered_map>
 #include <array>
+#include <chrono>
 #include <string>
 #include <vector>
 #include <deque>
@@ -70,6 +71,9 @@ class AiSGNGComponent : public rclcpp::Node {
     double node_cov_decay_k_{};
     bool node_covariance_enabled_{};
     std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
+    int64_t performance_log_interval_ms_{5000};
+    std::chrono::steady_clock::time_point last_process_start_{};
+    bool has_last_process_start_{false};
 
     // Add Plugin
     Downsampling downsampling_;
@@ -77,7 +81,6 @@ class AiSGNGComponent : public rclcpp::Node {
     ClusterClassification cluster_classification_;
 
     bool initialized_ = false;
-    bool has_topological_map_snapshot_ = false;
     std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> last_published_nodes_;
 
    public:

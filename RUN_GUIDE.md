@@ -54,6 +54,9 @@ ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
+ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
+
+
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
