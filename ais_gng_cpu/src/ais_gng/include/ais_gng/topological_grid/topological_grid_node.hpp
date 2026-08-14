@@ -7,7 +7,10 @@
 #include <std_msgs/msg/string.hpp>
 #include <voxel_msgs/msg/voxel.hpp>
 
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <unordered_set>
 
 namespace fuzzrobo::topological_grid
 {
@@ -34,6 +37,10 @@ private:
   int y_shift_ = 21;
   int z_shift_ = 0;
   long offset_ = 1000000L;
+  std::unordered_set<std::uint8_t> excluded_labels_;
+  std::size_t minimum_observations_ = 1;
+  std::size_t maximum_missed_updates_ = 0;
+  std::unique_ptr<TemporalVoxelFilter> temporal_filter_;
 };
 
 }  // namespace fuzzrobo::topological_grid

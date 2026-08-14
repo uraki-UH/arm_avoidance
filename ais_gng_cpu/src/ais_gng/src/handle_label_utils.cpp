@@ -137,8 +137,6 @@ std::vector<uint8_t> extractSemanticLabels(
   uint32_t handle_label_value)
 {
   std::vector<uint8_t> semantic_labels;
-  semantic_labels.reserve(static_cast<std::size_t>(msg.width) * static_cast<std::size_t>(msg.height));
-
   const auto semantic_field = findSemanticField(msg);
   if (!semantic_field) {
     return semantic_labels;

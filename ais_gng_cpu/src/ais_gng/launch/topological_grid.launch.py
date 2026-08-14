@@ -5,6 +5,10 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    node_name = DeclareLaunchArgument(
+        "node_name",
+        default_value="topological_grid_node",
+    )
     input_topic = DeclareLaunchArgument(
         "input_topic",
         default_value="/topological_map/merged",
@@ -19,7 +23,8 @@ def generate_launch_description():
     )
     grid_size = DeclareLaunchArgument(
         "grid_size",
-        default_value="0.5",
+        default_value="0.02",
+        description="Voxel edge length in meters.",
     )
     origin_x = DeclareLaunchArgument(
         "origin_x",
@@ -53,8 +58,30 @@ def generate_launch_description():
         "offset",
         default_value="1000000",
     )
+    excluded_labels = DeclareLaunchArgument(
+        "excluded_labels",
+        default_value="SAFE_TERRAIN,HUMAN,CAR",
+        description=(
+            "Comma-separated TopologicalMap label names or numeric values excluded "
+            "from voxelization. Use an empty string to include every label."
+        ),
+    )
+    minimum_observations = DeclareLaunchArgument(
+        "minimum_observations",
+        default_value="1",
+        description=(
+            "Number of observations required before a voxel is published. "
+            "Use a value greater than 1 for stable object candidates."
+        ),
+    )
+    maximum_missed_updates = DeclareLaunchArgument(
+        "maximum_missed_updates",
+        default_value="0",
+        description="Missing updates tolerated without resetting voxel stability.",
+    )
 
     return LaunchDescription([
+        node_name,
         input_topic,
         output_topic,
         summary_topic,
@@ -67,9 +94,13 @@ def generate_launch_description():
         y_shift,
         z_shift,
         offset,
+        excluded_labels,
+        minimum_observations,
+        maximum_missed_updates,
         Node(
             package="ais_gng",
             executable="topological_grid_node",
+            name=LaunchConfiguration("node_name"),
             parameters=[{
                 "input_topic": LaunchConfiguration("input_topic"),
                 "output_topic": LaunchConfiguration("output_topic"),
@@ -83,6 +114,9 @@ def generate_launch_description():
                 "y_shift": LaunchConfiguration("y_shift"),
                 "z_shift": LaunchConfiguration("z_shift"),
                 "offset": LaunchConfiguration("offset"),
+                "excluded_labels": LaunchConfiguration("excluded_labels"),
+                "minimum_observations": LaunchConfiguration("minimum_observations"),
+                "maximum_missed_updates": LaunchConfiguration("maximum_missed_updates"),
             }],
             output="screen",
             arguments=["--ros-args", "--log-level", "INFO"],

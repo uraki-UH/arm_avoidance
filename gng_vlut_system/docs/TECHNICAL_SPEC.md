@@ -473,7 +473,32 @@ flowchart TD
 ここで「この種別の領域群にしかない」とは、`optional_not_sole_support`に占有があり、
 `required_occupied`または`optional`には占有がない状態を指す。`required_empty`の占有は支持とは数えず、
 独立した禁止領域違反として扱う。評価結果は合否だけでなく、領域別サンプル数、占有数、違反理由を返す。
-現段階では判定器の独立APIまでとし、ROS候補生成nodeへの接続とYAML読込は行わない。
+
+`topological_grid_node`は`excluded_labels`で`SAFE_TERRAIN,HUMAN,CAR`を除いたラベル付き
+`voxel_msgs/Voxel`を物体候補占有としてpublishする。`minimum_observations`回以上同じラベルで観測された
+セルだけを出力し、`maximum_missed_updates`回までは一時欠落しても観測回数を保持できる。既定値は
+`grid_size=0.02 m`、`minimum_observations=1`、`maximum_missed_updates=0`とする。
+
+`grasp_voxel_matcher_node`はこの物体候補占有へグリッパ体積graphを配置して候補TCP Pose群を生成する。
+領域の対応は`grip_V=required_occupied`、`grip_minV=optional_not_sole_support`、
+`grip_baseV=required_empty`とする。最小体積だけでなくその外側にも対象占有が必要で、禁止領域は
+`environment_voxels_topic`の全環境占有に対して検査する。このtopicが空なら物体候補占有を兼用する。
+入力graphはTCPローカル座標、出力Poseは物体ボクセルと同じframeとする。
+
+照合は姿勢ごとにgraph点を整数ボクセルoffsetへ事前量子化し、対象ボクセルをアンカーとしてhash照会する。
+更新ごとの無制限な全探索は行わず、既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
+明示的な3次元姿勢群は`orientation_rpy`の`roll,pitch,yaw`列で指定できる。結果は新規messageを増やさず、
+`geometry_msgs/PoseArray`と、占有率・各ゲートの棄却数・処理時間を持つ`std_msgs/String` JSON summaryでpublishする。
+
+| 入出力 | 既定topic | 型 |
+|---|---|---|
+| 物体候補占有 | `/topological_grid_voxels` | `voxel_msgs/Voxel` |
+| 全環境占有 | 空(物体候補と共用) | `voxel_msgs/Voxel` |
+| 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
+| 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |
+| 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
+| 候補TCP Pose群 | `/grasp_voxel_candidates` | `geometry_msgs/PoseArray` |
+| 照合内訳 | `/grasp_voxel_candidates/summary` | `std_msgs/String` |
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

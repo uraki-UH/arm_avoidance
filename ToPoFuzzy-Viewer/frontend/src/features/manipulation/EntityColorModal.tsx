@@ -51,6 +51,7 @@ export function EntityColorModal({
     const robotSettings = settings as RobotSettings;
     const robotUseUrdfColors = robotSettings.useUrdfColors ?? true;
     const voxelSettings = settings as VoxelSettings;
+    const voxelColorMode = voxelSettings.colorMode ?? 'uniform';
     const layerSettings = settings as LayerSettings;
 
     return (
@@ -152,16 +153,33 @@ export function EntityColorModal({
                     {entityType === 'voxel' && (
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
+                                <button
+                                    type="button"
+                                    onClick={() => onUpdate({ colorMode: 'uniform' })}
+                                    className={`entity-btn justify-center px-3 py-1 text-[10px] ${voxelColorMode === 'uniform' ? 'active-indigo' : ''}`}
+                                >
+                                    UNIFORM
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => onUpdate({ colorMode: 'label' })}
+                                    className={`entity-btn justify-center px-3 py-1 text-[10px] ${voxelColorMode === 'label' ? 'active-indigo' : ''}`}
+                                >
+                                    BY LABEL
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
                                         Color
                                     </label>
                                     <input
                                         type="color"
-                                        value={voxelSettings.color || '#00ff88'}
+                                        value={voxelSettings.color || '#ffff00'}
+                                        disabled={voxelColorMode === 'label'}
                                         onChange={(e) => onUpdate({ color: e.target.value })}
                                         onInput={(e) => onUpdate({ color: (e.target as HTMLInputElement).value })}
-                                        className="h-8 w-full cursor-pointer rounded border border-white/ bg-transparent p-0"
+                                        className="h-8 w-full cursor-pointer rounded border border-white/ bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-40"
                                     />
                                 </div>
                             </div>

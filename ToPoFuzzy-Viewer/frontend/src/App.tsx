@@ -74,7 +74,7 @@ function useClippingPlanes() {
 
     const removeAll = () => setPlanes([]);
 
-    const getThreePlanes = (): THREE.Plane[] => {
+    const threePlanes = useMemo((): THREE.Plane[] => {
         return planes
             .filter(p => p.enabled && p.axis !== 'none')
             .flatMap((p) => {
@@ -98,9 +98,9 @@ function useClippingPlanes() {
                 // Range clipping is expressed as the intersection of two planes.
                 return [lower, upper];
             });
-    };
+    }, [planes]);
 
-    return { planes, addPlane, updatePlane, removePlane, removeAll, getThreePlanes };
+    return { planes, addPlane, updatePlane, removePlane, removeAll, threePlanes };
 }
 
 function ClippingPlaneSync({ planes }: { planes: THREE.Plane[] }) {
@@ -202,10 +202,7 @@ function App() {
   const zoneMonitor = useZoneMonitor();
   const { getZoneCounts } = zoneMonitor;
 
-    const threeClippingPlanes = useMemo(
-        () => clipping.getThreePlanes(),
-        [clipping.planes]
-    );
+    const threeClippingPlanes = clipping.threePlanes;
 
     // Stable gl config: clipping planes are synchronized inside the Canvas.
     const canvasGl = useMemo(() => ({
@@ -242,7 +239,7 @@ function App() {
                     transform: { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] }
                 }
             },
-            voxel: { data: voxelData, set: setVoxelSettings, defaults: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5 } }
+            voxel: { data: voxelData, set: setVoxelSettings, defaults: { visible: true, color: '#00ff88', colorMode: 'uniform', wireframe: true, opacity: 0.5 } }
         };
 
         Object.entries(configs).forEach(([_, { data, set, defaults }]) => {
@@ -250,10 +247,23 @@ function App() {
                 const next = { ...prev };
                 let changed = false;
                 Object.keys(data).forEach(tag => {
+                    const entityData = data[tag];
+                    const isLabeledVoxel = data === voxelData
+                        && Array.isArray(entityData?.labels)
+                        && entityData.labels.length > 0
+                        && entityData.labels.length === entityData.data?.length;
                     if (!next[tag]) {
                         next[tag] = {
                             ...defaults,
+                            ...(isLabeledVoxel ? { color: '#ffff00', colorMode: 'uniform' } : {}),
                             ...(data === robotData && tag.includes('candidate_goal_preview') ? { opacity: 0.18 } : {}),
+                        };
+                        changed = true;
+                    } else if (isLabeledVoxel && next[tag].colorMode === undefined) {
+                        next[tag] = {
+                            ...next[tag],
+                            color: next[tag].color === '#00ff88' ? '#ffff00' : next[tag].color,
+                            colorMode: 'uniform',
                         };
                         changed = true;
                     }
@@ -718,7 +728,7 @@ function App() {
                             {
                                 data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
                                     <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, labels: d.labels, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
-                                ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ), defaultSettings: { visible: true, color: '#00ff88', colorMode: 'uniform', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             }
                         ].map(({ data, settings, component, defaultSettings }) =>
                             Object.entries(data).map(([tag, d]: [string, any]) => {

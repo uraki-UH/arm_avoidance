@@ -15,7 +15,18 @@ ament_auto_find_build_dependencies()
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_gtest REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  ament_add_gtest(
+    test_topological_grid_assignment
+    test/test_topological_grid_assignment.cpp
+    src/topological_grid/topological_grid_assignment.cpp
+  )
+  target_include_directories(test_topological_grid_assignment PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  ament_target_dependencies(test_topological_grid_assignment ais_gng_msgs)
 endif()
 
 # visualizar

@@ -289,6 +289,7 @@ export interface VoxelData {
     id: string;
     tag: string;
     data: string[];
+    labels?: number[];
     layout: VoxelLayout;
     frameId?: string;
     visible?: boolean;
@@ -299,6 +300,7 @@ export type EntityType = 'robot' | 'marker' | 'voxel' | 'graph';
 export interface VoxelSettings {
     visible: boolean;
     color: string;
+    colorMode?: 'uniform' | 'label';
     wireframe: boolean;
     opacity: number;
     emissiveIntensity?: number;

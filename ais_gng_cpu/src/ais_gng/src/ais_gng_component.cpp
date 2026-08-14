@@ -14,20 +14,20 @@ using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
 
 namespace {
-PC2::SharedPtr makeSelectedPointCloud(
+bool fillSelectedPointCloud(
     const PC2 &source,
-    const std::vector<uint32_t> &source_indices)
+    const std::vector<uint32_t> &source_indices,
+    PC2 &selected)
 {
-    auto selected = std::make_shared<PC2>();
-    selected->header = source.header;
-    selected->height = 1;
-    selected->width = static_cast<uint32_t>(source_indices.size());
-    selected->fields = source.fields;
-    selected->is_bigendian = source.is_bigendian;
-    selected->point_step = source.point_step;
-    selected->row_step = selected->point_step * selected->width;
-    selected->is_dense = source.is_dense;
-    selected->data.resize(static_cast<std::size_t>(selected->row_step));
+    selected.header = source.header;
+    selected.height = 1;
+    selected.width = static_cast<uint32_t>(source_indices.size());
+    selected.fields = source.fields;
+    selected.is_bigendian = source.is_bigendian;
+    selected.point_step = source.point_step;
+    selected.row_step = selected.point_step * selected.width;
+    selected.is_dense = source.is_dense;
+    selected.data.resize(static_cast<std::size_t>(selected.row_step));
 
     for (std::size_t i = 0; i < source_indices.size(); ++i) {
         const uint32_t source_index = source_indices[i];
@@ -36,19 +36,19 @@ PC2::SharedPtr makeSelectedPointCloud(
         const std::size_t source_offset =
             static_cast<std::size_t>(row) * source.row_step +
             static_cast<std::size_t>(column) * source.point_step;
-        const std::size_t destination_offset = i * selected->point_step;
+        const std::size_t destination_offset = i * selected.point_step;
         if (source_offset + source.point_step > source.data.size()) {
-            selected->data.clear();
-            selected->width = 0;
-            selected->row_step = 0;
-            return selected;
+            selected.data.clear();
+            selected.width = 0;
+            selected.row_step = 0;
+            return false;
         }
         std::copy_n(
             source.data.begin() + source_offset,
             source.point_step,
-            selected->data.begin() + destination_offset);
+            selected.data.begin() + destination_offset);
     }
-    return selected;
+    return true;
 }
 
 std::array<double, 3> scaleResidualByEta(
@@ -650,46 +650,77 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     has_last_process_start_ = true;
 
     // 入力点群のセット
-    std::vector<uint8_t> semantic_labels;
-    std::vector<uint32_t> source_point_indices;
+    auto &semantic_labels = semantic_label_buffer_;
+    auto &source_point_indices = source_point_index_buffer_;
+    semantic_labels.clear();
+    source_point_indices.clear();
     PC2::ConstSharedPtr gng_input_msg;
     std::size_t raw_point_count_total = 0;
     std::size_t submitted_point_count_total = 0;
+    std::size_t processed_raw_point_count = 0;
+    bool has_semantic_labels = false;
     for(auto &msg: clouds){
         const uint64_t raw_point_count =
             static_cast<uint64_t>(msg->width) * static_cast<uint64_t>(msg->height);
         raw_point_count_total += static_cast<std::size_t>(raw_point_count);
         const uint32_t point_count = static_cast<uint32_t>(std::min<uint64_t>(
             raw_point_count, std::numeric_limits<uint32_t>::max()));
-        const std::size_t semantic_offset = semantic_labels.size();
+        const std::size_t semantic_offset = processed_raw_point_count;
         auto cloud_semantics = handle_label::extractSemanticLabels(*msg, semantic_handle_label_value_);
-        if (cloud_semantics.size() != point_count) {
-            cloud_semantics.assign(point_count, ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
+        if (!cloud_semantics.empty()) {
+            if (!has_semantic_labels) {
+                semantic_labels.resize(
+                    semantic_offset,
+                    ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
+                has_semantic_labels = true;
+            }
+            if (cloud_semantics.size() != point_count) {
+                cloud_semantics.assign(
+                    point_count,
+                    ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
+            }
+            semantic_labels.insert(
+                semantic_labels.end(), cloud_semantics.begin(), cloud_semantics.end());
+        } else if (has_semantic_labels) {
+            semantic_labels.insert(
+                semantic_labels.end(), point_count,
+                ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT);
         }
-        semantic_labels.insert(semantic_labels.end(), cloud_semantics.begin(), cloud_semantics.end());
+        processed_raw_point_count += point_count;
 
         const bool requires_repacking =
             input_sampling_mode_ == PointSamplingMode::Uniform &&
             point_count > input_point_cloud_num_;
-        const auto selected_indices = requires_repacking
-            ? selectPointIndices(point_count, input_point_cloud_num_, input_sampling_mode_)
-            : std::vector<uint32_t>{};
-        gng_input_msg = requires_repacking
-            ? makeSelectedPointCloud(*msg, selected_indices)
-            : msg;
+        if (requires_repacking) {
+            if (!sampled_indices_valid_ ||
+                sampled_source_point_count_ != point_count ||
+                sampled_max_point_count_ != input_point_cloud_num_ ||
+                sampled_mode_ != input_sampling_mode_)
+            {
+                sampled_point_indices_ = selectPointIndices(
+                    point_count, input_point_cloud_num_, input_sampling_mode_);
+                sampled_source_point_count_ = point_count;
+                sampled_max_point_count_ = input_point_cloud_num_;
+                sampled_mode_ = input_sampling_mode_;
+                sampled_indices_valid_ = true;
+            }
+            if (!fillSelectedPointCloud(*msg, sampled_point_indices_, *sampled_cloud_buffer_)) {
+                RCLCPP_WARN_THROTTLE(
+                    this->get_logger(), *this->get_clock(), 5000,
+                    "Failed to repack sampled point cloud; skipping frame");
+                return;
+            }
+            gng_input_msg = sampled_cloud_buffer_;
+        } else {
+            gng_input_msg = msg;
+        }
         submitted_point_count_total +=
             static_cast<std::size_t>(gng_input_msg->width) * gng_input_msg->height;
-        if (gng_input_msg->width == 0 && point_count > 0) {
-            RCLCPP_WARN_THROTTLE(
-                this->get_logger(), *this->get_clock(), 5000,
-                "Failed to repack sampled point cloud; skipping frame");
-            return;
-        }
 
         source_point_indices.clear();
         if (requires_repacking) {
-            source_point_indices.reserve(selected_indices.size());
-            for (const uint32_t index : selected_indices) {
+            source_point_indices.reserve(sampled_point_indices_.size());
+            for (const uint32_t index : sampled_point_indices_) {
                 source_point_indices.push_back(
                     static_cast<uint32_t>(semantic_offset + index));
             }
@@ -736,7 +767,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
     // トポロジカルマップをROS2メッセージに変換
     auto map_msg = makeTopologicalMapMsg(
-        map, header, &semantic_labels, &source_point_indices);
+        map, header,
+        has_semantic_labels ? &semantic_labels : nullptr,
+        &source_point_indices);
     
     // アフィン変換後の点群をROS2メッセージに変換
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
@@ -927,8 +960,10 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
             *topological_map_msg,
             *semantic_labels,
             semantic_handle_ratio_threshold_);
+        updateSemanticLabelHistory(*topological_map_msg);
+    } else if (!semantic_label_history_.empty()) {
+        semantic_label_history_.clear();
     }
-    updateSemanticLabelHistory(*topological_map_msg);
 
     if (!node_covariance_enabled_) {
         return topological_map_msg;

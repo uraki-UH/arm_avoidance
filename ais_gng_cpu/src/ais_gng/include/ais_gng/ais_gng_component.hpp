@@ -14,6 +14,7 @@
 #include <vector>
 #include <deque>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 
 #include "ais_gng_msgs/msg/topological_map.hpp"
@@ -60,6 +61,14 @@ class AiSGNGComponent : public rclcpp::Node {
     bool local_coordinates_{false};
     uint32_t input_point_cloud_num_{20000};
     PointSamplingMode input_sampling_mode_{PointSamplingMode::Head};
+    PC2::SharedPtr sampled_cloud_buffer_{std::make_shared<PC2>()};
+    std::vector<uint32_t> sampled_point_indices_;
+    uint32_t sampled_source_point_count_{};
+    uint32_t sampled_max_point_count_{};
+    PointSamplingMode sampled_mode_{PointSamplingMode::Head};
+    bool sampled_indices_valid_{false};
+    std::vector<uint8_t> semantic_label_buffer_;
+    std::vector<uint32_t> source_point_index_buffer_;
 
     std::vector<std::string> input_topic_names_;
     uint32_t semantic_handle_label_value_{};

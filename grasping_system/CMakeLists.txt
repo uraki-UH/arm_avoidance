@@ -13,6 +13,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(voxel_idx REQUIRED)
+find_package(voxel_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 include_directories(include)
@@ -28,7 +29,15 @@ ament_target_dependencies(
   gripper_volume_graph_node
   ais_gng_msgs geometry_msgs rclcpp std_msgs Eigen3
 )
-install(TARGETS test_rigid_grasp_vlut gripper_volume_graph_node
+add_executable(grasp_voxel_matcher_node src/grasp_voxel_matcher_node.cpp)
+ament_target_dependencies(
+  grasp_voxel_matcher_node
+  ais_gng_msgs geometry_msgs rclcpp std_msgs voxel_idx voxel_msgs Eigen3
+)
+install(TARGETS
+  test_rigid_grasp_vlut
+  gripper_volume_graph_node
+  grasp_voxel_matcher_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -58,11 +67,24 @@ if(BUILD_TESTING)
     NAME grasp_pose_occupancy_evaluator
     COMMAND test_grasp_pose_occupancy_evaluator
   )
+
+  add_executable(
+    test_grasp_voxel_matcher
+    test/test_grasp_voxel_matcher.cpp
+  )
+  ament_target_dependencies(
+    test_grasp_voxel_matcher
+    voxel_idx Eigen3
+  )
+  add_test(
+    NAME grasp_voxel_matcher
+    COMMAND test_grasp_voxel_matcher
+  )
 endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(
-  ais_gng_msgs geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx Eigen3
+  ais_gng_msgs geometry_msgs std_msgs tf2 tf2_geometry_msgs voxel_idx voxel_msgs Eigen3
 )
 
 ament_package()

@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { VoxelSettings, Transform } from '../../types';
+import { LAYER_COLORS, VoxelSettings, Transform } from '../../types';
 
 interface VoxelLayout {
     voxelSize: number;
@@ -19,6 +19,7 @@ interface VoxelMessage {
     type: 'stream.voxel';
     tag: string;
     data: string[]; // BigInt IDs as strings
+    labels?: number[];
     layout: VoxelLayout;
     frameId?: string;
 }
@@ -27,9 +28,21 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const groupRef = useRef<THREE.Group>(null);
     const { invalidate } = useThree();
-    const { data, layout } = message;
+    const { data, labels, layout } = message;
     const voxelSize = Math.round(layout.voxelSize * 1000) / 1000;
     const emissiveIntensity = settings?.emissiveIntensity ?? 0.2;
+    const hasLabels = Array.isArray(labels) && labels.length === data.length;
+    const useLabelColors = settings?.colorMode === 'label' && hasLabels;
+    const uniformColor = settings?.color || '#ffff00';
+
+    const instanceColors = useMemo(() => {
+        if (!useLabelColors || !labels) return [];
+        return labels.map((label) => {
+            const rawLabel = Number.isFinite(label) ? Math.trunc(label) : 0;
+            const index = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
+            return new THREE.Color(LAYER_COLORS[index] || uniformColor);
+        });
+    }, [labels, uniformColor, useLabelColors]);
 
     // TFおよび手動トランスフォームの適用
     useEffect(() => {
@@ -89,7 +102,7 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
         });
     }, [data, layout, voxelSize]);
 
-    useDemandUpdate([positions, settings?.color, settings?.opacity, settings?.wireframe, emissiveIntensity]);
+    useDemandUpdate([positions, instanceColors, settings?.color, settings?.opacity, settings?.wireframe, emissiveIntensity]);
 
     useEffect(() => {
         if (!meshRef.current) return;
@@ -98,10 +111,16 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             dummy.position.set(pos[0], pos[1], pos[2]);
             dummy.updateMatrix();
             meshRef.current?.setMatrixAt(i, dummy.matrix);
+            if (useLabelColors && instanceColors[i]) {
+                meshRef.current?.setColorAt(i, instanceColors[i]);
+            }
         });
         meshRef.current.count = positions.length;
         meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [positions]);
+        if (useLabelColors && meshRef.current.instanceColor) {
+            meshRef.current.instanceColor.needsUpdate = true;
+        }
+    }, [instanceColors, positions, useLabelColors]);
 
     const displaySize = voxelSize;
 
@@ -110,9 +129,10 @@ export const VoxelRenderer = ({ message, settings, tf, manualTransform }: { mess
             <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} frustumCulled={false}>
                 <boxGeometry args={[displaySize, displaySize, displaySize]} />
                 <meshStandardMaterial
-                    color={settings?.color || "#00ff88"}
-                    emissive={settings?.color || "#00ff88"}
+                    color={useLabelColors ? '#ffffff' : uniformColor}
+                    emissive={useLabelColors ? '#000000' : uniformColor}
                     emissiveIntensity={emissiveIntensity}
+                    vertexColors={useLabelColors}
                     transparent={true}
                     opacity={settings?.opacity ?? 0.6}
                     wireframe={settings?.wireframe ?? true}

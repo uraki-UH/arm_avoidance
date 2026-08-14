@@ -77,7 +77,7 @@ ros2 launch ais_gng topological_query.launch.py \
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   output_topic:=/topological_grid_voxels_shifted \
-  grid_size:=0.5 \
+  grid_size:=0.02 \
   origin_shift_half:=true
 
 ##　dynamixel handlerの起動（使えない可能性が高い）
@@ -146,14 +146,27 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 
-ボクセルにノードを所属させる
+GNGノードをラベル付きボクセルに変換する。
+既定では `SAFE_TERRAIN`、`HUMAN`、`CAR` を除外し、同じvoxelに
+複数ノードが入る場合は最多labelを `voxel_msgs/Voxel.labels` に格納する。
+
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
-  output_topic:=/topological_grid_voxels \
-  grid_size:=0.05
+  output_topic:=/topo_voxel_ids \
+  summary_topic:=/topo_voxel_ids/summary \
+  grid_size:=0.02
+
+除外labelを変更する場合は、label名または数値をカンマ区切りで指定する。
+
+ros2 launch ais_gng topological_grid.launch.py \
+  input_topic:=/topological_map \
+  output_topic:=/topo_voxel_ids \
+  summary_topic:=/topo_voxel_ids/summary \
+  grid_size:=0.02 \
+  excluded_labels:="SAFE_TERRAIN,HUMAN,CAR"
 
 
-realsense
+## realsense 
 ros2 launch realsense2_camera rs_launch.py \
   align_depth.enable:=true \
   pointcloud.enable:=true
@@ -247,5 +260,3 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   trial_mode:=true \
   trial_safe_only:=true
 
-
-ROS2 の `static_transform_publisher` を使うのが安全です。

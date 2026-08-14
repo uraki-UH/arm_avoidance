@@ -969,7 +969,14 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             if (p.data) {
                                 pendingVoxelUpdatesRef.current.set(tag, {
                                     tag,
-                                    voxel: { id: tag, tag, data: p.data, layout: p.layout, frameId: p.frameId } as VoxelData,
+                                    voxel: {
+                                        id: tag,
+                                        tag,
+                                        data: p.data,
+                                        labels: Array.isArray(p.labels) ? p.labels : undefined,
+                                        layout: p.layout,
+                                        frameId: p.frameId,
+                                    } as VoxelData,
                                 });
                                 scheduleStreamFlush();
                             }

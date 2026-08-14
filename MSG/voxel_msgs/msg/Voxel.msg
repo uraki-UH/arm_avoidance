@@ -13,3 +13,7 @@ int64 offset
 
 # Flattened voxel IDs
 int64[] data
+
+# Optional per-voxel labels aligned with data. Publishers that do not classify
+# voxels leave this empty; when populated, labels.length must equal data.length.
+uint8[] labels
