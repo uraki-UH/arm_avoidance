@@ -39,13 +39,16 @@ TEST(TopologicalGridAssignment, ExcludesConfiguredLabelsAndMergesDuplicateCells)
     makeNode(0.081F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::CAR),
   };
 
-  const std::unordered_set<std::uint8_t> excluded{
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.included_labels.clear();
+  options.excluded_labels = {
     ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN,
     ais_gng_msgs::msg::TopologicalMap::HUMAN,
     ais_gng_msgs::msg::TopologicalMap::CAR,
   };
+  options.require_input_points = false;
   const auto result = fuzzrobo::topological_grid::voxelizeNodes(
-    map, fuzzrobo::topological_grid::GridSpec{0.02, 0.0, 0.0, 0.0}, excluded);
+    map, fuzzrobo::topological_grid::GridSpec{0.02, 0.0, 0.0, 0.0}, options);
 
   ASSERT_EQ(result.included_node_count, 4U);
   ASSERT_EQ(result.excluded_node_count, 3U);
@@ -67,8 +70,12 @@ TEST(TopologicalGridAssignment, UsesLowestLabelToBreakDominantLabelTie)
     makeNode(0.002F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::DEFAULT),
   };
 
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.included_labels.clear();
+  options.excluded_labels.clear();
+  options.require_input_points = false;
   const auto result = fuzzrobo::topological_grid::voxelizeNodes(
-    map, fuzzrobo::topological_grid::GridSpec{0.02, 0.0, 0.0, 0.0}, {});
+    map, fuzzrobo::topological_grid::GridSpec{0.02, 0.0, 0.0, 0.0}, options);
 
   ASSERT_EQ(result.voxels.size(), 1U);
   EXPECT_EQ(result.voxels.front().label, ais_gng_msgs::msg::TopologicalMap::DEFAULT);
@@ -86,14 +93,74 @@ TEST(TopologicalGridAssignment, UsesFloorForNegativeCoordinates)
   EXPECT_EQ(cell.z, 1);
 }
 
+TEST(TopologicalGridAssignment, RequiresUnknownLabelWithCurrentPointSupport)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(
+      0.001F, 0.001F, 0.001F,
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(
+      0.021F, 0.001F, 0.001F,
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(
+      0.041F, 0.001F, 0.001F,
+      ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{1, 0, 0}, 2U);
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{},
+    fuzzrobo::topological_grid::VoxelizationOptions{}, &point_counts);
+
+  EXPECT_EQ(result.included_node_count, 1U);
+  EXPECT_EQ(result.excluded_node_count, 1U);
+  EXPECT_EQ(result.unsupported_node_count, 1U);
+  ASSERT_EQ(result.voxels.size(), 1U);
+  EXPECT_EQ(result.voxels.front().cell.x, 1);
+  EXPECT_EQ(result.voxels.front().input_point_count, 2U);
+}
+
+TEST(TopologicalGridAssignment, CountsTwentySixConnectedNeighbors)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(
+      0.001F, 0.001F, 0.001F,
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(
+      0.021F, 0.021F, 0.021F,
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(
+      0.061F, 0.001F, 0.001F,
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+  };
+
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{0, 0, 0}, 1U);
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{1, 1, 1}, 1U);
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{3, 0, 0}, 1U);
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{},
+    fuzzrobo::topological_grid::VoxelizationOptions{}, &point_counts);
+
+  ASSERT_EQ(result.voxels.size(), 3U);
+  EXPECT_EQ(result.voxels[0].neighbor_count, 1U);
+  EXPECT_EQ(result.voxels[1].neighbor_count, 1U);
+  EXPECT_EQ(result.voxels[2].neighbor_count, 0U);
+  EXPECT_EQ(result.isolated_voxel_count, 1U);
+}
+
 TEST(TopologicalGridAssignment, PublishesOnlyTemporallyStableVoxels)
 {
   using fuzzrobo::topological_grid::GridCell;
   using fuzzrobo::topological_grid::LabeledGridVoxel;
   using fuzzrobo::topological_grid::TemporalVoxelFilter;
+  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
 
-  TemporalVoxelFilter filter(3, 1);
-  const LabeledGridVoxel object{GridCell{1, 2, 3}, 3, 2};
+  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{3, 1, 5, 0});
+  const LabeledGridVoxel object{GridCell{1, 2, 3}, 3, 2, 2, 1};
 
   EXPECT_TRUE(filter.update({object}).empty());
   EXPECT_TRUE(filter.update({object}).empty());
@@ -108,12 +175,31 @@ TEST(TopologicalGridAssignment, ResetsStabilityWhenLabelChanges)
   using fuzzrobo::topological_grid::GridCell;
   using fuzzrobo::topological_grid::LabeledGridVoxel;
   using fuzzrobo::topological_grid::TemporalVoxelFilter;
+  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
 
-  TemporalVoxelFilter filter(2, 0);
+  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{2, 0, 2, 0});
   const GridCell cell{1, 2, 3};
-  EXPECT_TRUE(filter.update({LabeledGridVoxel{cell, 2, 1}}).empty());
-  EXPECT_TRUE(filter.update({LabeledGridVoxel{cell, 3, 1}}).empty());
-  ASSERT_EQ(filter.update({LabeledGridVoxel{cell, 3, 1}}).size(), 1U);
+  EXPECT_TRUE(filter.update({LabeledGridVoxel{cell, 2, 1, 1, 1}}).empty());
+  EXPECT_TRUE(filter.update({LabeledGridVoxel{cell, 3, 1, 1, 1}}).empty());
+  ASSERT_EQ(filter.update({LabeledGridVoxel{cell, 3, 1, 1, 1}}).size(), 1U);
+}
+
+TEST(TopologicalGridAssignment, IsolatedVoxelNeedsMoreHitsAndLosesHistoryImmediately)
+{
+  using fuzzrobo::topological_grid::GridCell;
+  using fuzzrobo::topological_grid::LabeledGridVoxel;
+  using fuzzrobo::topological_grid::TemporalVoxelFilter;
+  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
+
+  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{3, 2, 5, 0});
+  const LabeledGridVoxel isolated{GridCell{1, 2, 3}, 3, 1, 1, 0};
+
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_TRUE(filter.update({isolated}).empty());
+  }
+  ASSERT_EQ(filter.update({isolated}).size(), 1U);
+  EXPECT_TRUE(filter.update({}).empty());
+  EXPECT_EQ(filter.trackedVoxelCount(), 0U);
 }
 
 }  // namespace

@@ -147,8 +147,9 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 GNGノードをラベル付きボクセルに変換する。
-既定では `SAFE_TERRAIN`、`HUMAN`、`CAR` を除外し、同じvoxelに
-複数ノードが入る場合は最多labelを `voxel_msgs/Voxel.labels` に格納する。
+既定では、現在点群の `inpcl_ids` がある `UNKNOWN_OBJECT` ノードだけを候補にする。
+隣接候補は3回連続、26近傍に候補がない孤立セルは5回連続で確認してからpublishする。
+点群支持が消えた更新では出力せず、孤立セルの確認履歴は即時削除する。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
@@ -156,14 +157,17 @@ ros2 launch ais_gng topological_grid.launch.py \
   summary_topic:=/topo_voxel_ids/summary \
   grid_size:=0.02
 
-除外labelを変更する場合は、label名または数値をカンマ区切りで指定する。
+候補labelや点群支持条件を変更する場合は、次のように指定する。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
   grid_size:=0.02 \
-  excluded_labels:="SAFE_TERRAIN,HUMAN,CAR"
+  included_labels:="UNKNOWN_OBJECT" \
+  require_input_points:=true \
+  minimum_observations:=3 \
+  isolated_minimum_observations:=5
 
 
 ## realsense 
@@ -259,4 +263,3 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   trial_mode:=true \
   trial_safe_only:=true
-

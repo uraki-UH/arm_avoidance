@@ -20,6 +20,19 @@ struct GridSpec
   double origin_z = 0.0;
 };
 
+struct VoxelizationOptions
+{
+  std::unordered_set<std::uint8_t> included_labels{
+    ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT};
+  std::unordered_set<std::uint8_t> excluded_labels{
+    ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN,
+    ais_gng_msgs::msg::TopologicalMap::HUMAN,
+    ais_gng_msgs::msg::TopologicalMap::CAR};
+  bool require_input_points = true;
+  std::size_t minimum_input_points_per_voxel = 1;
+  int neighbor_radius_cells = 1;
+};
+
 struct GridCell
 {
   int x = 0;
@@ -37,6 +50,8 @@ struct GridCellHash
   std::size_t operator()(const GridCell &cell) const noexcept;
 };
 
+using GridPointCounts = std::unordered_map<GridCell, std::size_t, GridCellHash>;
+
 struct GridAssignment
 {
   std::size_t node_index = 0;
@@ -48,6 +63,8 @@ struct LabeledGridVoxel
   GridCell cell;
   std::uint8_t label = 0;
   std::size_t node_count = 0;
+  std::size_t input_point_count = 0;
+  std::size_t neighbor_count = 0;
 };
 
 struct GridVoxelizationResult
@@ -55,14 +72,24 @@ struct GridVoxelizationResult
   std::vector<LabeledGridVoxel> voxels;
   std::size_t included_node_count = 0;
   std::size_t excluded_node_count = 0;
+  std::size_t unsupported_node_count = 0;
+  std::size_t insufficient_point_voxel_count = 0;
+  std::size_t isolated_voxel_count = 0;
+};
+
+struct TemporalVoxelFilterConfig
+{
+  std::size_t minimum_observations = 3;
+  std::size_t maximum_missed_updates = 2;
+  std::size_t isolated_minimum_observations = 5;
+  std::size_t isolated_maximum_missed_updates = 0;
 };
 
 class TemporalVoxelFilter
 {
 public:
-  TemporalVoxelFilter(
-    std::size_t minimum_observations = 1,
-    std::size_t maximum_missed_updates = 0);
+  explicit TemporalVoxelFilter(
+    TemporalVoxelFilterConfig config = TemporalVoxelFilterConfig{});
 
   std::vector<LabeledGridVoxel> update(
     const std::vector<LabeledGridVoxel> &observed_voxels);
@@ -73,17 +100,22 @@ private:
   struct History
   {
     std::uint8_t label = 0;
-    std::size_t observations = 0;
+    std::size_t consecutive_observations = 0;
     std::size_t last_update = 0;
+    bool confirmed = false;
+    bool isolated = true;
   };
 
-  std::size_t minimum_observations_ = 1;
-  std::size_t maximum_missed_updates_ = 0;
+  TemporalVoxelFilterConfig config_;
   std::size_t update_count_ = 0;
   std::unordered_map<GridCell, History, GridCellHash> history_;
 };
 
 std::string gridCellToString(const GridCell &cell);
+
+GridCell positionToGridCell(
+  double x, double y, double z,
+  const GridSpec &spec);
 
 GridCell nodeToGridCell(
   const ais_gng_msgs::msg::TopologicalNode &node,
@@ -100,6 +132,7 @@ std::unordered_map<std::size_t, GridCell> assignNodeGridMap(
 GridVoxelizationResult voxelizeNodes(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridSpec &spec,
-  const std::unordered_set<std::uint8_t> &excluded_labels);
+  const VoxelizationOptions &options = VoxelizationOptions{},
+  const GridPointCounts *input_point_counts = nullptr);
 
 }  // namespace fuzzrobo::topological_grid
