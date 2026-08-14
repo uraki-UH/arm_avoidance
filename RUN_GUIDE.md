@@ -77,7 +77,7 @@ ros2 launch ais_gng topological_query.launch.py \
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   output_topic:=/topological_grid_voxels_shifted \
-  grid_size:=0.02 \
+  grid_size:=0.01 \
   origin_shift_half:=true
 
 ##　dynamixel handlerの起動（使えない可能性が高い）
@@ -148,16 +148,28 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 GNGノードをラベル付きボクセルに変換する。
 既定では、同一frame・同一timestampの `/topological_map` と `/downsampling/unknown` を照合し、
-`UNKNOWN_OBJECT` ノードと現在点群が同じセルにある場合だけ候補にする。
-隣接候補は3回連続、26近傍に候補がない孤立セルは5回連続で確認してからpublishする。
-点群支持が消えた更新では出力せず、孤立セルの確認履歴は即時削除する。
+`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のノードと現在点群が同じセルにある場合を候補にする。
+各セルは直近100更新の非除外label出現回数と点群input更新回数を別々に保持する。
+`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`は物体候補占有として合算する。
+隣接候補は各3回、26近傍に候補がない孤立セルは各5回を履歴内で満たしてからpublishする。
+このlabel最低カウントは新規追加と削除後の再追加にだけ使用し、確定済みセルの削除条件には使用しない。
+連続観測である必要はない。新規追加時だけ現在点群を必須とし、確定後に非除外labelがセルから消えても
+既定10更新は旧セルを維持する。隣接セルへ移動したノードが追加条件を満たすまでの欠落をこの猶予で防ぐ。
+孤立判定は現在点群ではなく非除外GNGセル同士の近傍で行う。確定後の非孤立セルは点群input履歴が
+最低カウント未満になっても削除せず、点群消失を削除条件に使うのは孤立セルだけとする。
+確定済みボクセルに所属するGNGノード同士がedge接続されている場合、既定ではボクセル対を1本へ集約し、
+最大`0.10 m`までの間を10 mmセルで補間する。`output_topic`は直接観測と補間セルの和集合、
+`<output_topic>/edge_inferred`は補間セルだけを保持する。補間セルを次の補間端点には使用しない。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
-  grid_size:=0.02
+  grid_size:=0.01
+
+# 補間由来だけを確認
+ros2 topic echo /topo_voxel_ids/edge_inferred
 
 候補labelや点群支持条件を変更する場合は、次のように指定する。
 
@@ -166,11 +178,17 @@ ros2 launch ais_gng topological_grid.launch.py \
   pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
-  grid_size:=0.02 \
-  included_labels:="UNKNOWN_OBJECT" \
+  grid_size:=0.01 \
+  excluded_labels:="SAFE_TERRAIN,HUMAN,CAR" \
   require_input_points:=true \
-  minimum_observations:=3 \
-  isolated_minimum_observations:=5
+  history_window_size:=100 \
+  minimum_label_history_count:=3 \
+  minimum_point_input_history_count:=3 \
+  isolated_minimum_label_history_count:=5 \
+  isolated_minimum_point_input_history_count:=5 \
+  maximum_missing_label_updates:=10 \
+  edge_inference_enabled:=true \
+  edge_max_length:=0.10
 
 
 ## realsense 

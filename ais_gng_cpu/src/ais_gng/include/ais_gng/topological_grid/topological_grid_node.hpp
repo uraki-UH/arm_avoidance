@@ -30,6 +30,9 @@ private:
     const ais_gng_msgs::msg::TopologicalMap &map,
     const GridPointCounts &input_point_counts);
   GridPointCounts buildPointCounts(const sensor_msgs::msg::PointCloud2 &msg) const;
+  voxel_msgs::msg::Voxel buildVoxelMessage(
+    const std_msgs::msg::Header &header,
+    const std::vector<LabeledGridVoxel> &voxels) const;
   bool headersMatch(
     const std_msgs::msg::Header &map_header,
     const std_msgs::msg::Header &pointcloud_header) const;
@@ -37,12 +40,14 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr voxel_pub_;
+  rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr edge_inferred_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
   rclcpp::TimerBase::SharedPtr pointcloud_watchdog_;
 
   std::string input_topic_;
   std::string pointcloud_topic_;
   std::string output_topic_;
+  std::string edge_inferred_topic_;
   std::string summary_topic_;
   double pointcloud_timeout_sec_ = 0.5;
   GridSpec grid_spec_;
@@ -52,6 +57,7 @@ private:
   int z_shift_ = 0;
   long offset_ = 1000000L;
   VoxelizationOptions voxelization_options_;
+  EdgeInferenceOptions edge_inference_options_;
   TemporalVoxelFilterConfig temporal_filter_config_;
   std::unique_ptr<TemporalVoxelFilter> temporal_filter_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr pending_map_;

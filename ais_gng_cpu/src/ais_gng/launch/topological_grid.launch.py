@@ -26,6 +26,22 @@ def generate_launch_description():
     output_topic = DeclareLaunchArgument(
         "output_topic",
         default_value="/topological_grid_voxels",
+        description="Combined direct and edge-inferred object voxels.",
+    )
+    edge_inferred_topic = DeclareLaunchArgument(
+        "edge_inferred_topic",
+        default_value="",
+        description="Edge-only output; empty derives <output_topic>/edge_inferred.",
+    )
+    edge_inference_enabled = DeclareLaunchArgument(
+        "edge_inference_enabled",
+        default_value="true",
+        description="Fill cells between stable direct voxels connected by GNG edges.",
+    )
+    edge_max_length = DeclareLaunchArgument(
+        "edge_max_length",
+        default_value="0.10",
+        description="Maximum voxel-center edge length eligible for filling, in meters.",
     )
     summary_topic = DeclareLaunchArgument(
         "summary_topic",
@@ -33,7 +49,7 @@ def generate_launch_description():
     )
     grid_size = DeclareLaunchArgument(
         "grid_size",
-        default_value="0.02",
+        default_value="0.01",
         description="Voxel edge length in meters.",
     )
     origin_x = DeclareLaunchArgument(
@@ -68,14 +84,6 @@ def generate_launch_description():
         "offset",
         default_value="1000000",
     )
-    included_labels = DeclareLaunchArgument(
-        "included_labels",
-        default_value="UNKNOWN_OBJECT",
-        description=(
-            "Comma-separated labels eligible for object-candidate voxels. "
-            "Use an empty string to allow every non-excluded label."
-        ),
-    )
     excluded_labels = DeclareLaunchArgument(
         "excluded_labels",
         default_value="SAFE_TERRAIN,HUMAN,CAR",
@@ -99,25 +107,35 @@ def generate_launch_description():
         default_value="1",
         description="Chebyshev radius used to count neighboring candidate voxels.",
     )
-    minimum_observations = DeclareLaunchArgument(
-        "minimum_observations",
+    history_window_size = DeclareLaunchArgument(
+        "history_window_size",
+        default_value="100",
+        description="Number of synchronized updates retained per voxel.",
+    )
+    minimum_label_history_count = DeclareLaunchArgument(
+        "minimum_label_history_count",
         default_value="3",
-        description="Consecutive point-supported updates required before publication.",
+        description="Label occurrences required within the history window.",
     )
-    maximum_missed_updates = DeclareLaunchArgument(
-        "maximum_missed_updates",
-        default_value="2",
-        description="Connected-cell misses tolerated before confirmation history resets.",
+    minimum_point_input_history_count = DeclareLaunchArgument(
+        "minimum_point_input_history_count",
+        default_value="3",
+        description="Point-cloud input updates required within the history window.",
     )
-    isolated_minimum_observations = DeclareLaunchArgument(
-        "isolated_minimum_observations",
+    isolated_minimum_label_history_count = DeclareLaunchArgument(
+        "isolated_minimum_label_history_count",
         default_value="5",
-        description="Consecutive updates required for a voxel with no neighbors.",
+        description="Label occurrences required for a voxel with no neighbors.",
     )
-    isolated_maximum_missed_updates = DeclareLaunchArgument(
-        "isolated_maximum_missed_updates",
-        default_value="0",
-        description="Isolated-cell misses tolerated before confirmation history resets.",
+    isolated_minimum_point_input_history_count = DeclareLaunchArgument(
+        "isolated_minimum_point_input_history_count",
+        default_value="5",
+        description="Point-cloud input updates required for a voxel with no neighbors.",
+    )
+    maximum_missing_label_updates = DeclareLaunchArgument(
+        "maximum_missing_label_updates",
+        default_value="10",
+        description="Updates to retain an active voxel after its eligible label disappears.",
     )
 
     return LaunchDescription([
@@ -126,6 +144,9 @@ def generate_launch_description():
         pointcloud_topic,
         pointcloud_timeout_sec,
         output_topic,
+        edge_inferred_topic,
+        edge_inference_enabled,
+        edge_max_length,
         summary_topic,
         grid_size,
         origin_x,
@@ -136,15 +157,16 @@ def generate_launch_description():
         y_shift,
         z_shift,
         offset,
-        included_labels,
         excluded_labels,
         require_input_points,
         minimum_input_points_per_voxel,
         neighbor_radius_cells,
-        minimum_observations,
-        maximum_missed_updates,
-        isolated_minimum_observations,
-        isolated_maximum_missed_updates,
+        history_window_size,
+        minimum_label_history_count,
+        minimum_point_input_history_count,
+        isolated_minimum_label_history_count,
+        isolated_minimum_point_input_history_count,
+        maximum_missing_label_updates,
         Node(
             package="ais_gng",
             executable="topological_grid_node",
@@ -154,6 +176,9 @@ def generate_launch_description():
                 "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
                 "pointcloud_timeout_sec": LaunchConfiguration("pointcloud_timeout_sec"),
                 "output_topic": LaunchConfiguration("output_topic"),
+                "edge_inferred_topic": LaunchConfiguration("edge_inferred_topic"),
+                "edge_inference_enabled": LaunchConfiguration("edge_inference_enabled"),
+                "edge_max_length": LaunchConfiguration("edge_max_length"),
                 "summary_topic": LaunchConfiguration("summary_topic"),
                 "grid_size": LaunchConfiguration("grid_size"),
                 "origin_x": LaunchConfiguration("origin_x"),
@@ -164,20 +189,27 @@ def generate_launch_description():
                 "y_shift": LaunchConfiguration("y_shift"),
                 "z_shift": LaunchConfiguration("z_shift"),
                 "offset": LaunchConfiguration("offset"),
-                "included_labels": LaunchConfiguration("included_labels"),
                 "excluded_labels": LaunchConfiguration("excluded_labels"),
                 "require_input_points": LaunchConfiguration("require_input_points"),
                 "minimum_input_points_per_voxel": LaunchConfiguration(
                     "minimum_input_points_per_voxel"
                 ),
                 "neighbor_radius_cells": LaunchConfiguration("neighbor_radius_cells"),
-                "minimum_observations": LaunchConfiguration("minimum_observations"),
-                "maximum_missed_updates": LaunchConfiguration("maximum_missed_updates"),
-                "isolated_minimum_observations": LaunchConfiguration(
-                    "isolated_minimum_observations"
+                "history_window_size": LaunchConfiguration("history_window_size"),
+                "minimum_label_history_count": LaunchConfiguration(
+                    "minimum_label_history_count"
                 ),
-                "isolated_maximum_missed_updates": LaunchConfiguration(
-                    "isolated_maximum_missed_updates"
+                "minimum_point_input_history_count": LaunchConfiguration(
+                    "minimum_point_input_history_count"
+                ),
+                "isolated_minimum_label_history_count": LaunchConfiguration(
+                    "isolated_minimum_label_history_count"
+                ),
+                "isolated_minimum_point_input_history_count": LaunchConfiguration(
+                    "isolated_minimum_point_input_history_count"
+                ),
+                "maximum_missing_label_updates": LaunchConfiguration(
+                    "maximum_missing_label_updates"
                 ),
             }],
             output="screen",

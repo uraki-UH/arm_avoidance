@@ -475,12 +475,29 @@ flowchart TD
 独立した禁止領域違反として扱う。評価結果は合否だけでなく、領域別サンプル数、占有数、違反理由を返す。
 
 `topological_grid_node`は、同一frame・同一timestampの`/topological_map`と現在点群
-`/downsampling/unknown`を照合し、既定で`UNKNOWN_OBJECT`ノードと点群が同じセルにある場合だけ
-`0.02 m`セルへ量子化する。セルは26近傍を数え、隣接セルありでは3回連続観測後、
-隣接セルなしでは5回連続観測後に`voxel_msgs/Voxel`へpublishする。点群支持がない更新では、GNGノードが
-Mapに残っていてもpublishしない。通常セルの確認履歴は2回欠落まで保持するが、孤立セルは1回欠落時に
-即時削除する。欠落猶予は再観測時の確認履歴だけに適用し、点群支持がないセルを出力し続けるものではない。
-対応する点群が0.5秒以内に届かないMap更新は空のボクセルとして処理し、過去の占有を残さない。
+`/downsampling/unknown`を照合し、既定で`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のノードと点群が
+同じセルにある場合を`0.01 m`セルへ量子化する。特定labelだけを許可するinclude条件は持たず、候補labelは
+`excluded_labels`だけで除外する。`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`は同じ物体候補占有として扱う。
+各セルには直近100同期更新のリング履歴を持ち、非除外labelが存在した更新回数をlabel種別にかかわらず合算し、
+点群inputが存在した更新回数とは独立に数える。連続観測は要求しない。セルは26近傍を数え、隣接セルありでは
+label・点群inputが各3回、隣接セルなしでは各5回を履歴内で満たした場合に`voxel_msgs/Voxel`へpublishする。
+label履歴の最低カウントは新規追加と削除後の再追加にだけ使用し、確定済みセルの削除条件には使用しない。
+新規追加時には現在更新の非除外labelと点群支持を両方必須とする。確定後に非除外labelが現在セルから消えても、
+`maximum_missing_label_updates`の既定10更新まではlabel履歴が最低値未満または0になっても旧セルをpublishし、
+隣接セル側の再確定を待つ。点群input履歴による解除は孤立セルだけに適用し、
+非孤立セルは確定後の点群input履歴低下だけでは解除しない。孤立判定は現在点群の有無ではなく、
+非除外GNGセル同士の近傍関係で行うため、
+点群が消えただけで接続済みセル全体が孤立セルへ変わることはない。確定解除後、label履歴が
+100更新の窓からすべて消えたセルは追跡対象から削除する。対応する点群が0.5秒以内に届かないMap更新では
+点群input履歴を加算せず、新規セルを追加しない。
+
+時間履歴を通過した直接観測ボクセルを頂点とし、`TopologicalMap.edges`の両端ノードがそれぞれ異なる
+直接観測ボクセルに所属する場合だけ、GNG edgeを間接的なボクセル接続へ変換する。同じボクセル対を結ぶ
+複数edgeは1本へ集約し、既定で長さ`0.10 m`以下のボクセル対の中間セルを3次元Bresenhamで補間する。
+両端のどちらかが未確定、または`SAFE_TERRAIN`、`HUMAN`、`CAR`の場合は補間しない。補間セルは次の
+補間処理の端点に使用せず、直接観測ボクセルが消えた更新では対応する補間セルも消える。
+`output_topic`は直接観測セルとedge補間セルの和集合をpublishし、`edge_inferred_topic`は補間セルだけを
+同じ`voxel_msgs/Voxel`形式でpublishする。異なるlabel間の補間セルは近い端点側のlabelを継承する。
 
 `grasp_voxel_matcher_node`はこの物体候補占有へグリッパ体積graphを配置して候補TCP Pose群を生成する。
 領域の対応は`grip_V=required_occupied`、`grip_minV=optional_not_sole_support`、
@@ -496,6 +513,7 @@ Mapに残っていてもpublishしない。通常セルの確認履歴は2回欠
 | 入出力 | 既定topic | 型 |
 |---|---|---|
 | 物体候補占有 | `/topological_grid_voxels` | `voxel_msgs/Voxel` |
+| GNG edge補間由来の物体候補占有 | `/topological_grid_voxels/edge_inferred` | `voxel_msgs/Voxel` |
 | 全環境占有 | 空(物体候補と共用) | `voxel_msgs/Voxel` |
 | 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |
