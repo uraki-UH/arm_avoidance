@@ -147,12 +147,14 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 GNGノードをラベル付きボクセルに変換する。
-既定では、現在点群の `inpcl_ids` がある `UNKNOWN_OBJECT` ノードだけを候補にする。
+既定では、同一frame・同一timestampの `/topological_map` と `/downsampling/unknown` を照合し、
+`UNKNOWN_OBJECT` ノードと現在点群が同じセルにある場合だけ候補にする。
 隣接候補は3回連続、26近傍に候補がない孤立セルは5回連続で確認してからpublishする。
 点群支持が消えた更新では出力せず、孤立セルの確認履歴は即時削除する。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
+  pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
   grid_size:=0.02
@@ -161,6 +163,7 @@ ros2 launch ais_gng topological_grid.launch.py \
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
+  pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
   grid_size:=0.02 \

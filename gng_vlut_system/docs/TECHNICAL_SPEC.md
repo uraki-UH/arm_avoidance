@@ -474,11 +474,13 @@ flowchart TD
 `required_occupied`または`optional`には占有がない状態を指す。`required_empty`の占有は支持とは数えず、
 独立した禁止領域違反として扱う。評価結果は合否だけでなく、領域別サンプル数、占有数、違反理由を返す。
 
-`topological_grid_node`は、既定で`UNKNOWN_OBJECT`かつ現在入力点群を示す`inpcl_ids`が1点以上ある
-GNGノードだけを`0.02 m`セルへ量子化する。セルは26近傍を数え、隣接セルありでは3回連続観測後、
+`topological_grid_node`は、同一frame・同一timestampの`/topological_map`と現在点群
+`/downsampling/unknown`を照合し、既定で`UNKNOWN_OBJECT`ノードと点群が同じセルにある場合だけ
+`0.02 m`セルへ量子化する。セルは26近傍を数え、隣接セルありでは3回連続観測後、
 隣接セルなしでは5回連続観測後に`voxel_msgs/Voxel`へpublishする。点群支持がない更新では、GNGノードが
 Mapに残っていてもpublishしない。通常セルの確認履歴は2回欠落まで保持するが、孤立セルは1回欠落時に
 即時削除する。欠落猶予は再観測時の確認履歴だけに適用し、点群支持がないセルを出力し続けるものではない。
+対応する点群が0.5秒以内に届かないMap更新は空のボクセルとして処理し、過去の占有を残さない。
 
 `grasp_voxel_matcher_node`はこの物体候補占有へグリッパ体積graphを配置して候補TCP Pose群を生成する。
 領域の対応は`grip_V=required_occupied`、`grip_minV=optional_not_sole_support`、
