@@ -11,6 +11,10 @@ int32 y_shift
 int32 z_shift
 int64 offset
 
+# Monotonic revision assigned by publishers that also provide VoxelLabelDelta.
+# Zero means that the publisher does not provide a revisioned stream.
+uint32 revision
+
 # Flattened voxel IDs
 int64[] data
 

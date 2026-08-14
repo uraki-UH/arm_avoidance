@@ -26,7 +26,22 @@ def generate_launch_description():
     output_topic = DeclareLaunchArgument(
         "output_topic",
         default_value="/topological_grid_voxels",
-        description="Combined direct and edge-inferred object voxels.",
+        description=(
+            "Connected direct, edge-inferred, and triangle-inferred grasp-candidate voxels."
+        ),
+    )
+    delta_topic = DeclareLaunchArgument(
+        "delta_topic",
+        default_value="",
+        description="Changed voxel labels only; empty derives <output_topic>/delta.",
+    )
+    isolated_topic = DeclareLaunchArgument(
+        "isolated_topic",
+        default_value="",
+        description=(
+            "Visualization-only isolated voxels excluded from grasp candidates; "
+            "empty derives <output_topic>/isolated."
+        ),
     )
     edge_inferred_topic = DeclareLaunchArgument(
         "edge_inferred_topic",
@@ -42,6 +57,41 @@ def generate_launch_description():
         "edge_max_length",
         default_value="0.10",
         description="Maximum voxel-center edge length eligible for filling, in meters.",
+    )
+    triangle_inferred_topic = DeclareLaunchArgument(
+        "triangle_inferred_topic",
+        default_value="",
+        description="Triangle-only output; empty derives <output_topic>/triangle_inferred.",
+    )
+    triangle_inference_enabled = DeclareLaunchArgument(
+        "triangle_inference_enabled",
+        default_value="true",
+        description="Fill cells intersected by validated GNG three-edge triangle faces.",
+    )
+    triangle_max_edge_length = DeclareLaunchArgument(
+        "triangle_max_edge_length",
+        default_value="0.05",
+        description="Maximum length of every accepted triangle edge, in meters.",
+    )
+    triangle_min_area = DeclareLaunchArgument(
+        "triangle_min_area",
+        default_value="0.000001",
+        description="Minimum accepted triangle area, in square meters.",
+    )
+    triangle_min_aspect_ratio = DeclareLaunchArgument(
+        "triangle_min_aspect_ratio",
+        default_value="0.05",
+        description="Minimum twice-area divided by squared longest edge.",
+    )
+    triangle_max_normal_angle_deg = DeclareLaunchArgument(
+        "triangle_max_normal_angle_deg",
+        default_value="45.0",
+        description="Maximum angle between triangle and valid node normals.",
+    )
+    triangle_min_point_support_ratio = DeclareLaunchArgument(
+        "triangle_min_point_support_ratio",
+        default_value="0.0",
+        description="Minimum fraction of triangle cells containing current input points.",
     )
     summary_topic = DeclareLaunchArgument(
         "summary_topic",
@@ -137,6 +187,16 @@ def generate_launch_description():
         default_value="10",
         description="Updates to retain an active voxel after its eligible label disappears.",
     )
+    node_identity_retention_enabled = DeclareLaunchArgument(
+        "node_identity_retention_enabled",
+        default_value="true",
+        description="Retain non-isolated cells while their source node generation remains nearby.",
+    )
+    node_identity_max_displacement = DeclareLaunchArgument(
+        "node_identity_max_displacement",
+        default_value="0.02",
+        description="Maximum source-node displacement that retains its previous cell, in meters.",
+    )
 
     return LaunchDescription([
         node_name,
@@ -144,9 +204,18 @@ def generate_launch_description():
         pointcloud_topic,
         pointcloud_timeout_sec,
         output_topic,
+        delta_topic,
+        isolated_topic,
         edge_inferred_topic,
         edge_inference_enabled,
         edge_max_length,
+        triangle_inferred_topic,
+        triangle_inference_enabled,
+        triangle_max_edge_length,
+        triangle_min_area,
+        triangle_min_aspect_ratio,
+        triangle_max_normal_angle_deg,
+        triangle_min_point_support_ratio,
         summary_topic,
         grid_size,
         origin_x,
@@ -167,6 +236,8 @@ def generate_launch_description():
         isolated_minimum_label_history_count,
         isolated_minimum_point_input_history_count,
         maximum_missing_label_updates,
+        node_identity_retention_enabled,
+        node_identity_max_displacement,
         Node(
             package="ais_gng",
             executable="topological_grid_node",
@@ -176,9 +247,28 @@ def generate_launch_description():
                 "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
                 "pointcloud_timeout_sec": LaunchConfiguration("pointcloud_timeout_sec"),
                 "output_topic": LaunchConfiguration("output_topic"),
+                "delta_topic": LaunchConfiguration("delta_topic"),
+                "isolated_topic": LaunchConfiguration("isolated_topic"),
                 "edge_inferred_topic": LaunchConfiguration("edge_inferred_topic"),
                 "edge_inference_enabled": LaunchConfiguration("edge_inference_enabled"),
                 "edge_max_length": LaunchConfiguration("edge_max_length"),
+                "triangle_inferred_topic": LaunchConfiguration("triangle_inferred_topic"),
+                "triangle_inference_enabled": LaunchConfiguration(
+                    "triangle_inference_enabled"
+                ),
+                "triangle_max_edge_length": LaunchConfiguration(
+                    "triangle_max_edge_length"
+                ),
+                "triangle_min_area": LaunchConfiguration("triangle_min_area"),
+                "triangle_min_aspect_ratio": LaunchConfiguration(
+                    "triangle_min_aspect_ratio"
+                ),
+                "triangle_max_normal_angle_deg": LaunchConfiguration(
+                    "triangle_max_normal_angle_deg"
+                ),
+                "triangle_min_point_support_ratio": LaunchConfiguration(
+                    "triangle_min_point_support_ratio"
+                ),
                 "summary_topic": LaunchConfiguration("summary_topic"),
                 "grid_size": LaunchConfiguration("grid_size"),
                 "origin_x": LaunchConfiguration("origin_x"),
@@ -210,6 +300,12 @@ def generate_launch_description():
                 ),
                 "maximum_missing_label_updates": LaunchConfiguration(
                     "maximum_missing_label_updates"
+                ),
+                "node_identity_retention_enabled": LaunchConfiguration(
+                    "node_identity_retention_enabled"
+                ),
+                "node_identity_max_displacement": LaunchConfiguration(
+                    "node_identity_max_displacement"
                 ),
             }],
             output="screen",

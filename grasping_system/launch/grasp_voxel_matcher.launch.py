@@ -17,9 +17,24 @@ def generate_launch_description():
         _argument("node_name", "grasp_voxel_matcher_node"),
         _argument("object_voxels_topic", "/topological_grid_voxels"),
         _argument(
+            "object_delta_topic",
+            "",
+            "Changed object voxels; empty derives <object_voxels_topic>/delta.",
+        ),
+        _argument(
             "environment_voxels_topic",
             "",
             "Optional full-environment grid used for forbidden-volume checks; empty reuses object voxels.",
+        ),
+        _argument(
+            "environment_delta_topic",
+            "",
+            "Changed environment voxels; empty derives <environment_voxels_topic>/delta.",
+        ),
+        _argument(
+            "incremental_matching_enabled",
+            "true",
+            "Use revisioned VoxelLabelDelta updates after the initial Voxel snapshot.",
         ),
         _argument("required_graph_topic", "grip_V_topological_map"),
         _argument("undersize_graph_topic", "grip_minV_topological_map"),
@@ -47,7 +62,10 @@ def generate_launch_description():
         name: LaunchConfiguration(name)
         for name in (
             "object_voxels_topic",
+            "object_delta_topic",
             "environment_voxels_topic",
+            "environment_delta_topic",
+            "incremental_matching_enabled",
             "required_graph_topic",
             "undersize_graph_topic",
             "forbidden_graph_topic",

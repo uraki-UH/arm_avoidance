@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -141,6 +142,8 @@ struct GraspVoxelMatchResult
   std::vector<GraspVoxelMatchCandidate> candidates;
   std::size_t anchors_considered = 0;
   std::size_t poses_evaluated = 0;
+  std::size_t candidate_states_tracked = 0;
+  std::size_t candidate_states_updated = 0;
   std::size_t rejected_required_occupancy = 0;
   std::size_t rejected_undersize_only = 0;
   std::size_t rejected_forbidden_occupancy = 0;
@@ -386,6 +389,344 @@ private:
       });
     return result;
   }
+};
+
+class IncrementalGraspVoxelMatcher
+{
+public:
+  IncrementalGraspVoxelMatcher(
+    VoxelGridGeometry geometry,
+    CompiledGraspVoxelTemplate grasp_template,
+    GraspVoxelMatchConfig config = {})
+  : geometry_(std::move(geometry)),
+    grasp_template_(std::move(grasp_template)),
+    config_(std::move(config))
+  {
+    if (!geometry_.isValid() ||
+      std::abs(geometry_.voxel_size - grasp_template_.voxel_size) > 1e-9)
+    {
+      throw std::invalid_argument("incremental matcher geometry does not match grasp template");
+    }
+    if (config_.maximum_anchor_voxels == 0 || config_.maximum_candidates == 0) {
+      throw std::invalid_argument("matcher anchor and candidate limits must be positive");
+    }
+    if (!std::isfinite(config_.minimum_required_occupancy_ratio) ||
+      config_.minimum_required_occupancy_ratio < 0.0 ||
+      config_.minimum_required_occupancy_ratio > 1.0)
+    {
+      throw std::invalid_argument("minimum required occupancy ratio must be in [0, 1]");
+    }
+  }
+
+  void reset(
+    const OccupiedVoxelGrid &target_occupancy,
+    const OccupiedVoxelGrid &collision_occupancy)
+  {
+    if (!geometry_.matches(target_occupancy.geometry()) ||
+      !geometry_.matches(collision_occupancy.geometry()))
+    {
+      throw std::invalid_argument("incremental matcher grids do not match configured geometry");
+    }
+    target_cells_.clear();
+    collision_cells_.clear();
+    target_cells_.insert(target_occupancy.cells().begin(), target_occupancy.cells().end());
+    collision_cells_.insert(collision_occupancy.cells().begin(), collision_occupancy.cells().end());
+    anchor_cells_.clear();
+    candidate_states_.clear();
+    updated_candidate_states_ = 0;
+
+    if (target_occupancy.cells().empty()) {
+      return;
+    }
+
+    const std::size_t anchor_limit = std::min(
+      target_occupancy.size(), config_.maximum_anchor_voxels);
+    const std::size_t anchor_stride = std::max<std::size_t>(
+      1, (target_occupancy.size() + anchor_limit - 1) / anchor_limit);
+    for (std::size_t index = 0;
+      index < target_occupancy.size() && anchor_cells_.size() < anchor_limit;
+      index += anchor_stride)
+    {
+      addAnchor(target_occupancy.cells()[index]);
+    }
+  }
+
+  bool applyTargetDelta(
+    const VoxelIndex &cell,
+    bool old_occupied,
+    bool new_occupied)
+  {
+    const bool was_occupied = target_cells_.find(cell) != target_cells_.end();
+    if (was_occupied != old_occupied) {
+      throw std::invalid_argument("target voxel delta does not match incremental state");
+    }
+    if (old_occupied == new_occupied) {
+      return false;
+    }
+    if (new_occupied) {
+      target_cells_.insert(cell);
+    } else {
+      target_cells_.erase(cell);
+    }
+    const int count_delta = new_occupied ? 1 : -1;
+    updateTargetCounts(cell, count_delta);
+    if (!new_occupied) {
+      removeAnchor(cell);
+    } else {
+      addAnchor(cell);
+    }
+    return true;
+  }
+
+  bool applyCollisionDelta(
+    const VoxelIndex &cell,
+    bool old_occupied,
+    bool new_occupied)
+  {
+    const bool was_occupied = collision_cells_.find(cell) != collision_cells_.end();
+    if (was_occupied != old_occupied) {
+      throw std::invalid_argument("collision voxel delta does not match incremental state");
+    }
+    if (old_occupied == new_occupied) {
+      return false;
+    }
+    if (new_occupied) {
+      collision_cells_.insert(cell);
+    } else {
+      collision_cells_.erase(cell);
+    }
+    const int count_delta = new_occupied ? 1 : -1;
+    for (std::size_t orientation_index = 0;
+      orientation_index < grasp_template_.orientations.size(); ++orientation_index)
+    {
+      updateCounts(
+        cell, orientation_index,
+        grasp_template_.orientations[orientation_index].forbidden_offsets,
+        count_delta, &GraspVoxelMatchCandidate::forbidden_hits);
+    }
+    return true;
+  }
+
+  GraspVoxelMatchResult match()
+  {
+    GraspVoxelMatchResult result;
+    result.anchors_considered = anchor_cells_.size();
+    result.poses_evaluated = candidate_states_.size();
+    result.candidate_states_tracked = candidate_states_.size();
+    result.candidate_states_updated = updated_candidate_states_;
+    for (const auto &[key, state] : candidate_states_) {
+      (void)key;
+      GraspVoxelMatchCandidate candidate = state;
+      candidate.required_occupancy_ratio = candidate.required_samples == 0 ? 0.0 :
+        static_cast<double>(candidate.required_hits) /
+        static_cast<double>(candidate.required_samples);
+      const std::size_t required_threshold = std::max(
+        config_.minimum_required_hits,
+        static_cast<std::size_t>(std::ceil(
+          config_.minimum_required_occupancy_ratio *
+          static_cast<double>(candidate.required_samples))));
+      if (candidate.required_hits < required_threshold) {
+        ++result.rejected_required_occupancy;
+        continue;
+      }
+      if (grasp_template_.has_undersize_region &&
+        candidate.outside_undersize_hits < config_.minimum_outside_undersize_hits)
+      {
+        ++result.rejected_undersize_only;
+        continue;
+      }
+      if (candidate.forbidden_hits > config_.maximum_forbidden_hits) {
+        ++result.rejected_forbidden_occupancy;
+        continue;
+      }
+      const auto &orientation = grasp_template_.orientations[candidate.orientation_index];
+      const double outside_ratio = orientation.outside_undersize_offsets.empty() ? 0.0 :
+        static_cast<double>(candidate.outside_undersize_hits) /
+        static_cast<double>(orientation.outside_undersize_offsets.size());
+      candidate.score = 0.8 * candidate.required_occupancy_ratio + 0.2 * outside_ratio;
+      result.candidates.push_back(std::move(candidate));
+    }
+    sortAndLimit(result);
+    updated_candidate_states_ = 0;
+    return result;
+  }
+
+  std::size_t targetVoxelCount() const noexcept {return target_cells_.size();}
+  std::size_t collisionVoxelCount() const noexcept {return collision_cells_.size();}
+
+private:
+  struct CandidateKey
+  {
+    VoxelIndex anchor;
+    std::size_t orientation_index = 0;
+
+    bool operator==(const CandidateKey &other) const noexcept
+    {
+      return anchor == other.anchor && orientation_index == other.orientation_index;
+    }
+  };
+
+  struct CandidateKeyHash
+  {
+    std::size_t operator()(const CandidateKey &key) const noexcept
+    {
+      std::size_t seed = VoxelIndexHash{}(key.anchor);
+      seed ^= std::hash<std::size_t>{}(key.orientation_index) +
+        0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+      return seed;
+    }
+  };
+
+  static VoxelIndex add(const VoxelIndex &lhs, const VoxelIndex &rhs) noexcept
+  {
+    return VoxelIndex{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
+  }
+
+  static VoxelIndex subtract(const VoxelIndex &lhs, const VoxelIndex &rhs) noexcept
+  {
+    return VoxelIndex{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+  }
+
+  static void adjust(std::size_t &count, int delta)
+  {
+    if (delta > 0) {
+      ++count;
+      return;
+    }
+    if (count == 0) {
+      throw std::logic_error("incremental candidate count underflow");
+    }
+    --count;
+  }
+
+  std::size_t countOccupied(
+    const std::unordered_set<VoxelIndex, VoxelIndexHash> &cells,
+    const VoxelIndex &anchor,
+    const std::vector<VoxelIndex> &offsets) const
+  {
+    std::size_t hits = 0;
+    for (const auto &offset : offsets) {
+      if (cells.find(add(anchor, offset)) != cells.end()) {
+        ++hits;
+      }
+    }
+    return hits;
+  }
+
+  void addAnchor(const VoxelIndex &anchor)
+  {
+    if (target_cells_.find(anchor) == target_cells_.end() ||
+      anchor_cells_.find(anchor) != anchor_cells_.end() ||
+      anchor_cells_.size() >= config_.maximum_anchor_voxels)
+    {
+      return;
+    }
+    anchor_cells_.insert(anchor);
+    for (std::size_t orientation_index = 0;
+      orientation_index < grasp_template_.orientations.size(); ++orientation_index)
+    {
+      const auto &orientation = grasp_template_.orientations[orientation_index];
+      GraspVoxelMatchCandidate candidate;
+      candidate.anchor = anchor;
+      candidate.orientation_index = orientation_index;
+      candidate.required_samples = orientation.required_offsets.size();
+      candidate.tcp_orientation = orientation.orientation;
+      candidate.tcp_position = geometry_.origin + geometry_.voxel_size * Eigen::Vector3d(
+        static_cast<double>(anchor.x) + 0.5,
+        static_cast<double>(anchor.y) + 0.5,
+        static_cast<double>(anchor.z) + 0.5) -
+        orientation.orientation * grasp_template_.required_centroid;
+      candidate.required_hits = countOccupied(
+        target_cells_, anchor, orientation.required_offsets);
+      candidate.outside_undersize_hits = countOccupied(
+        target_cells_, anchor, orientation.outside_undersize_offsets);
+      candidate.forbidden_hits = countOccupied(
+        collision_cells_, anchor, orientation.forbidden_offsets);
+      candidate_states_.emplace(
+        CandidateKey{anchor, orientation_index}, std::move(candidate));
+    }
+  }
+
+  void removeAnchor(const VoxelIndex &anchor)
+  {
+    if (anchor_cells_.erase(anchor) == 0) {
+      return;
+    }
+    for (std::size_t orientation_index = 0;
+      orientation_index < grasp_template_.orientations.size(); ++orientation_index)
+    {
+      candidate_states_.erase(CandidateKey{anchor, orientation_index});
+    }
+  }
+
+  void updateTargetCounts(const VoxelIndex &cell, int delta)
+  {
+    for (std::size_t orientation_index = 0;
+      orientation_index < grasp_template_.orientations.size(); ++orientation_index)
+    {
+      const auto &orientation = grasp_template_.orientations[orientation_index];
+      updateCounts(
+        cell, orientation_index, orientation.required_offsets,
+        delta, &GraspVoxelMatchCandidate::required_hits);
+      updateCounts(
+        cell, orientation_index, orientation.outside_undersize_offsets,
+        delta, &GraspVoxelMatchCandidate::outside_undersize_hits);
+    }
+  }
+
+  void updateCounts(
+    const VoxelIndex &cell,
+    std::size_t orientation_index,
+    const std::vector<VoxelIndex> &offsets,
+    int delta,
+    std::size_t GraspVoxelMatchCandidate::*member)
+  {
+    for (const auto &offset : offsets) {
+      const CandidateKey key{subtract(cell, offset), orientation_index};
+      const auto state = candidate_states_.find(key);
+      if (state == candidate_states_.end()) {
+        continue;
+      }
+      adjust(state->second.*member, delta);
+      ++updated_candidate_states_;
+    }
+  }
+
+  void sortAndLimit(GraspVoxelMatchResult &result) const
+  {
+    std::sort(
+      result.candidates.begin(), result.candidates.end(),
+      [](const GraspVoxelMatchCandidate &lhs, const GraspVoxelMatchCandidate &rhs) {
+        if (lhs.score != rhs.score) {
+          return lhs.score > rhs.score;
+        }
+        if (lhs.required_hits != rhs.required_hits) {
+          return lhs.required_hits > rhs.required_hits;
+        }
+        if (lhs.anchor.x != rhs.anchor.x) {
+          return lhs.anchor.x < rhs.anchor.x;
+        }
+        if (lhs.anchor.y != rhs.anchor.y) {
+          return lhs.anchor.y < rhs.anchor.y;
+        }
+        if (lhs.anchor.z != rhs.anchor.z) {
+          return lhs.anchor.z < rhs.anchor.z;
+        }
+        return lhs.orientation_index < rhs.orientation_index;
+      });
+    if (result.candidates.size() > config_.maximum_candidates) {
+      result.candidates.resize(config_.maximum_candidates);
+    }
+  }
+
+  VoxelGridGeometry geometry_;
+  CompiledGraspVoxelTemplate grasp_template_;
+  GraspVoxelMatchConfig config_;
+  std::unordered_set<VoxelIndex, VoxelIndexHash> target_cells_;
+  std::unordered_set<VoxelIndex, VoxelIndexHash> collision_cells_;
+  std::unordered_set<VoxelIndex, VoxelIndexHash> anchor_cells_;
+  std::unordered_map<CandidateKey, GraspVoxelMatchCandidate, CandidateKeyHash> candidate_states_;
+  std::size_t updated_candidate_states_ = 0;
 };
 
 }  // namespace grasping_system::candidate

@@ -12,6 +12,7 @@ namespace
 using grasping_system::candidate::GraspVoxelMatchConfig;
 using grasping_system::candidate::GraspVoxelMatcher;
 using grasping_system::candidate::GraspVoxelTemplate;
+using grasping_system::candidate::IncrementalGraspVoxelMatcher;
 using grasping_system::candidate::OccupiedVoxelGrid;
 using grasping_system::candidate::VoxelGridGeometry;
 using grasping_system::candidate::VoxelIndex;
@@ -71,6 +72,32 @@ int main()
   expect(
     accepted.candidates.front().outside_undersize_hits == 2U,
     "outside-undersize support was not counted");
+
+  IncrementalGraspVoxelMatcher incremental(geometry, compiled, strictConfig());
+  incremental.reset(target, collision_free);
+  const auto incremental_accepted = incremental.match();
+  expect(
+    incremental_accepted.candidates.size() == accepted.candidates.size(),
+    "incremental matcher did not reproduce the initial full match");
+  expect(
+    incremental_accepted.candidates.front().anchor == VoxelIndex{10, 0, 0},
+    "incremental matcher anchor mismatch");
+  incremental.applyTargetDelta(VoxelIndex{11, 0, 0}, true, false);
+  expect(
+    incremental.match().candidates.empty(),
+    "removed required voxel was not reflected in incremental state");
+  incremental.applyTargetDelta(VoxelIndex{11, 0, 0}, false, true);
+  expect(
+    incremental.match().candidates.size() == 1U,
+    "restored required voxel was not reflected in incremental state");
+  incremental.applyCollisionDelta(VoxelIndex{10, 1, 0}, false, true);
+  expect(
+    incremental.match().candidates.empty(),
+    "forbidden voxel was not reflected in incremental state");
+  incremental.applyCollisionDelta(VoxelIndex{10, 1, 0}, true, false);
+  expect(
+    incremental.match().candidates.size() == 1U,
+    "cleared forbidden voxel was not reflected in incremental state");
 
   OccupiedVoxelGrid undersize_only(geometry);
   undersize_only.add(VoxelIndex{10, 0, 0});

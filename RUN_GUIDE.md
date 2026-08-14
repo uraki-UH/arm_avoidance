@@ -156,10 +156,18 @@ GNGノードをラベル付きボクセルに変換する。
 連続観測である必要はない。新規追加時だけ現在点群を必須とし、確定後に非除外labelがセルから消えても
 既定10更新は旧セルを維持する。隣接セルへ移動したノードが追加条件を満たすまでの欠落をこの猶予で防ぐ。
 孤立判定は現在点群ではなく非除外GNGセル同士の近傍で行う。確定後の非孤立セルは点群input履歴が
-最低カウント未満になっても削除せず、点群消失を削除条件に使うのは孤立セルだけとする。
+最低カウント未満になっても削除しない。孤立セルも`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`のいずれかの
+ノードが現在セルに残る間は、点群やlabel種別が変化しても赤い非把持セルとして保持する。
+孤立セルの点群消失を削除条件に使うのは、非除外GNGノードもセルから消えた場合だけとする。
+非孤立セルは、確定時に一意だったGNGノードの`(id, frame)`が現在Mapにも存在し、確定位置からの移動が
+既定`0.02 m`以内なら保持する。同一Map内で重複する`(id, frame)`は追跡に使用しない。
 確定済みボクセルに所属するGNGノード同士がedge接続されている場合、既定ではボクセル対を1本へ集約し、
-最大`0.10 m`までの間を10 mmセルで補間する。`output_topic`は直接観測と補間セルの和集合、
+最大`0.10 m`までの間を10 mmセルで補間する。26近傍がない直接観測セルは把持候補から除外して
+`<output_topic>/isolated`へ分離する。Topo Fuzzy Viewerではこのtopicを選択すると既定で赤表示される。
+`output_topic`は非孤立の直接観測と補間セルの和集合、
 `<output_topic>/edge_inferred`は補間セルだけを保持する。補間セルを次の補間端点には使用しない。
+さらに3ノード間のedgeがすべて存在する3-cycleを三角形候補とし、辺長、面積、細長さ、ノード法線、
+任意の点群支持率を通過した面と交差するセルを追加する。`<output_topic>/triangle_inferred`は面由来だけを保持する。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
@@ -170,6 +178,10 @@ ros2 launch ais_gng topological_grid.launch.py \
 
 # 補間由来だけを確認
 ros2 topic echo /topo_voxel_ids/edge_inferred
+ros2 topic echo /topo_voxel_ids/triangle_inferred
+
+# 表示専用で、把持候補には含まれない孤立セルを確認
+ros2 topic echo /topo_voxel_ids/isolated
 
 候補labelや点群支持条件を変更する場合は、次のように指定する。
 
@@ -187,8 +199,16 @@ ros2 launch ais_gng topological_grid.launch.py \
   isolated_minimum_label_history_count:=5 \
   isolated_minimum_point_input_history_count:=5 \
   maximum_missing_label_updates:=10 \
+  node_identity_retention_enabled:=true \
+  node_identity_max_displacement:=0.02 \
   edge_inference_enabled:=true \
-  edge_max_length:=0.10
+  edge_max_length:=0.10 \
+  triangle_inference_enabled:=true \
+  triangle_max_edge_length:=0.05 \
+  triangle_min_area:=0.000001 \
+  triangle_min_aspect_ratio:=0.05 \
+  triangle_max_normal_angle_deg:=45.0 \
+  triangle_min_point_support_ratio:=0.0
 
 保持期限を超えたセルは通常削除されますが、削除によって占有セルの低いZ側と高いZ側が
 26近傍グラフ上で分断されるセルは保持されます。水平方向だけの分断は削除を妨げません。

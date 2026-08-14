@@ -248,6 +248,8 @@ function App() {
                 let changed = false;
                 Object.keys(data).forEach(tag => {
                     const entityData = data[tag];
+                    const isIsolatedVoxel = data === voxelData
+                        && /(^|\/)isolated$/.test(tag);
                     const isLabeledVoxel = data === voxelData
                         && Array.isArray(entityData?.labels)
                         && entityData.labels.length > 0
@@ -256,13 +258,16 @@ function App() {
                         next[tag] = {
                             ...defaults,
                             ...(isLabeledVoxel ? { color: '#ffff00', colorMode: 'uniform' } : {}),
+                            ...(isIsolatedVoxel ? { color: '#ff3131', colorMode: 'uniform' } : {}),
                             ...(data === robotData && tag.includes('candidate_goal_preview') ? { opacity: 0.18 } : {}),
                         };
                         changed = true;
                     } else if (isLabeledVoxel && next[tag].colorMode === undefined) {
                         next[tag] = {
                             ...next[tag],
-                            color: next[tag].color === '#00ff88' ? '#ffff00' : next[tag].color,
+                            color: isIsolatedVoxel
+                                ? '#ff3131'
+                                : next[tag].color === '#00ff88' ? '#ffff00' : next[tag].color,
                             colorMode: 'uniform',
                         };
                         changed = true;

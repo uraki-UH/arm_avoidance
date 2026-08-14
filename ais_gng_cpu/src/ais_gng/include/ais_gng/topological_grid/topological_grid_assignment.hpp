@@ -39,6 +39,16 @@ struct EdgeInferenceOptions
   double maximum_edge_length = 0.10;
 };
 
+struct TriangleInferenceOptions
+{
+  bool enabled = true;
+  double maximum_edge_length = 0.05;
+  double minimum_area = 1.0e-6;
+  double minimum_aspect_ratio = 0.05;
+  double maximum_normal_angle_degrees = 45.0;
+  double minimum_point_support_ratio = 0.0;
+};
+
 struct GridCell
 {
   int x = 0;
@@ -58,6 +68,34 @@ struct GridCellHash
 
 using GridPointCounts = std::unordered_map<GridCell, std::size_t, GridCellHash>;
 
+struct NodeIdentity
+{
+  std::uint16_t id = 0;
+  std::uint32_t frame = 0;
+
+  bool operator==(const NodeIdentity &other) const noexcept
+  {
+    return id == other.id && frame == other.frame;
+  }
+};
+
+struct NodeIdentityHash
+{
+  std::size_t operator()(const NodeIdentity &identity) const noexcept;
+};
+
+struct NodeObservation
+{
+  NodeIdentity identity;
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  std::uint8_t label = 0;
+};
+
+using NodeObservationMap =
+  std::unordered_map<NodeIdentity, NodeObservation, NodeIdentityHash>;
+
 struct GridAssignment
 {
   std::size_t node_index = 0;
@@ -66,6 +104,20 @@ struct GridAssignment
 
 struct LabeledGridVoxel
 {
+  LabeledGridVoxel() = default;
+  LabeledGridVoxel(
+    GridCell cell_value, std::uint8_t label_value,
+    std::size_t node_count_value = 0,
+    std::size_t input_point_count_value = 0,
+    std::size_t neighbor_count_value = 0)
+  : cell(cell_value),
+    label(label_value),
+    node_count(node_count_value),
+    input_point_count(input_point_count_value),
+    neighbor_count(neighbor_count_value)
+  {
+  }
+
   GridCell cell;
   std::uint8_t label = 0;
   std::size_t node_count = 0;
@@ -75,6 +127,9 @@ struct LabeledGridVoxel
   std::size_t label_history_count = 0;
   std::size_t point_input_history_count = 0;
   std::size_t edge_support_count = 0;
+  std::size_t triangle_support_count = 0;
+  std::vector<NodeObservation> node_observations;
+  bool retained_by_node_identity = false;
 };
 
 struct GridVoxelizationResult
@@ -86,6 +141,7 @@ struct GridVoxelizationResult
   std::size_t unsupported_node_count = 0;
   std::size_t insufficient_point_voxel_count = 0;
   std::size_t isolated_voxel_count = 0;
+  NodeObservationMap eligible_nodes;
 };
 
 struct EdgeVoxelizationResult
@@ -101,6 +157,25 @@ struct EdgeVoxelizationResult
   std::size_t duplicate_voxel_edge_count = 0;
 };
 
+struct TriangleVoxelizationResult
+{
+  std::vector<LabeledGridVoxel> voxels;
+  std::size_t candidate_triangle_count = 0;
+  std::size_t accepted_triangle_count = 0;
+  std::size_t inactive_vertex_triangle_count = 0;
+  std::size_t excluded_triangle_count = 0;
+  std::size_t overlength_triangle_count = 0;
+  std::size_t degenerate_triangle_count = 0;
+  std::size_t normal_rejected_triangle_count = 0;
+  std::size_t point_support_rejected_triangle_count = 0;
+};
+
+struct VoxelIsolationSplit
+{
+  std::vector<LabeledGridVoxel> connected_voxels;
+  std::vector<LabeledGridVoxel> isolated_voxels;
+};
+
 struct TemporalVoxelFilterConfig
 {
   std::size_t history_window_size = 100;
@@ -109,6 +184,8 @@ struct TemporalVoxelFilterConfig
   std::size_t isolated_minimum_label_history_count = 5;
   std::size_t isolated_minimum_point_input_history_count = 5;
   std::size_t maximum_missing_label_updates = 10;
+  bool node_identity_retention_enabled = true;
+  double node_identity_max_displacement = 0.02;
 };
 
 class TemporalVoxelFilter
@@ -121,7 +198,8 @@ public:
     const std::vector<LabeledGridVoxel> &label_voxels,
     bool require_input_points = true,
     std::size_t minimum_input_points_per_voxel = 1,
-    const GridPointCounts *input_point_counts = nullptr);
+    const GridPointCounts *input_point_counts = nullptr,
+    const NodeObservationMap *current_nodes = nullptr);
   void clear();
   std::size_t trackedVoxelCount() const noexcept;
 
@@ -181,6 +259,17 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
   const std::vector<LabeledGridVoxel> &stable_direct_voxels,
   const std::unordered_set<std::uint8_t> &excluded_labels,
   const EdgeInferenceOptions &options = EdgeInferenceOptions{});
+
+TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  const GridSpec &spec,
+  const std::vector<LabeledGridVoxel> &stable_direct_voxels,
+  const std::unordered_set<std::uint8_t> &excluded_labels,
+  const TriangleInferenceOptions &options = TriangleInferenceOptions{},
+  const GridPointCounts *input_point_counts = nullptr);
+
+VoxelIsolationSplit splitVoxelsByIsolation(
+  const std::vector<LabeledGridVoxel> &voxels);
 
 std::vector<LabeledGridVoxel> mergeDirectAndInferredVoxels(
   const std::vector<LabeledGridVoxel> &direct_voxels,

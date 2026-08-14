@@ -15,7 +15,49 @@ struct VoxelAccumulator
   std::size_t node_count = 0;
   std::size_t input_point_count = 0;
   std::size_t edge_support_count = 0;
+  std::size_t triangle_support_count = 0;
+  std::vector<fuzzrobo::topological_grid::NodeObservation> node_observations;
 };
+
+struct Vec3d
+{
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+};
+
+Vec3d operator-(const Vec3d &lhs, const Vec3d &rhs)
+{
+  return Vec3d{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+}
+
+Vec3d cross(const Vec3d &lhs, const Vec3d &rhs)
+{
+  return Vec3d{
+    lhs.y * rhs.z - lhs.z * rhs.y,
+    lhs.z * rhs.x - lhs.x * rhs.z,
+    lhs.x * rhs.y - lhs.y * rhs.x};
+}
+
+double dot(const Vec3d &lhs, const Vec3d &rhs)
+{
+  return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+}
+
+double squaredNorm(const Vec3d &value)
+{
+  return dot(value, value);
+}
+
+Vec3d nodePosition(const ais_gng_msgs::msg::TopologicalNode &node)
+{
+  return Vec3d{node.pos.x, node.pos.y, node.pos.z};
+}
+
+Vec3d nodeNormal(const ais_gng_msgs::msg::TopologicalNode &node)
+{
+  return Vec3d{node.normal.x, node.normal.y, node.normal.z};
+}
 
 std::uint8_t dominantLabel(const std::array<std::size_t, 256> &label_counts)
 {
@@ -164,6 +206,88 @@ std::vector<fuzzrobo::topological_grid::GridCell> rasterizeGridLine(
   return cells;
 }
 
+bool overlapOnAxis(
+  const Vec3d &axis,
+  const std::array<Vec3d, 3> &vertices,
+  const Vec3d &box_half_extent)
+{
+  if (squaredNorm(axis) <= 1.0e-18) {
+    return true;
+  }
+  const std::array<double, 3> projections{
+    dot(vertices[0], axis), dot(vertices[1], axis), dot(vertices[2], axis)};
+  const auto [minimum, maximum] = std::minmax_element(
+    projections.begin(), projections.end());
+  const double radius =
+    box_half_extent.x * std::abs(axis.x) +
+    box_half_extent.y * std::abs(axis.y) +
+    box_half_extent.z * std::abs(axis.z);
+  return *minimum <= radius && *maximum >= -radius;
+}
+
+bool triangleIntersectsGridCell(
+  const std::array<Vec3d, 3> &triangle,
+  const fuzzrobo::topological_grid::GridCell &cell,
+  const fuzzrobo::topological_grid::GridSpec &spec)
+{
+  const double half = spec.cell_size * 0.5;
+  const Vec3d center{
+    spec.origin_x + (static_cast<double>(cell.x) + 0.5) * spec.cell_size,
+    spec.origin_y + (static_cast<double>(cell.y) + 0.5) * spec.cell_size,
+    spec.origin_z + (static_cast<double>(cell.z) + 0.5) * spec.cell_size};
+  const std::array<Vec3d, 3> local{
+    triangle[0] - center, triangle[1] - center, triangle[2] - center};
+  const Vec3d box_half_extent{half, half, half};
+  const std::array<Vec3d, 3> box_axes{
+    Vec3d{1.0, 0.0, 0.0}, Vec3d{0.0, 1.0, 0.0}, Vec3d{0.0, 0.0, 1.0}};
+  const std::array<Vec3d, 3> edges{
+    local[1] - local[0], local[2] - local[1], local[0] - local[2]};
+
+  for (const auto &axis : box_axes) {
+    if (!overlapOnAxis(axis, local, box_half_extent)) {
+      return false;
+    }
+  }
+  if (!overlapOnAxis(cross(edges[0], edges[1]), local, box_half_extent)) {
+    return false;
+  }
+  for (const auto &edge : edges) {
+    for (const auto &box_axis : box_axes) {
+      if (!overlapOnAxis(cross(edge, box_axis), local, box_half_extent)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool triangleNormalsAreConsistent(
+  const std::array<const ais_gng_msgs::msg::TopologicalNode *, 3> &nodes,
+  const Vec3d &triangle_normal,
+  double maximum_angle_degrees)
+{
+  const double triangle_normal_norm = std::sqrt(squaredNorm(triangle_normal));
+  if (triangle_normal_norm <= 1.0e-9) {
+    return false;
+  }
+  constexpr double kPi = 3.14159265358979323846;
+  const double cosine_threshold = std::cos(
+    std::clamp(maximum_angle_degrees, 0.0, 180.0) * kPi / 180.0);
+  for (const auto *node : nodes) {
+    const Vec3d normal = nodeNormal(*node);
+    const double normal_norm = std::sqrt(squaredNorm(normal));
+    if (normal_norm <= 1.0e-9) {
+      continue;
+    }
+    const double alignment = std::abs(dot(normal, triangle_normal)) /
+      (normal_norm * triangle_normal_norm);
+    if (alignment < cosine_threshold) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 namespace fuzzrobo::topological_grid
@@ -177,8 +301,41 @@ std::size_t GridCellHash::operator()(const GridCell &cell) const noexcept
   return seed;
 }
 
+std::size_t NodeIdentityHash::operator()(const NodeIdentity &identity) const noexcept
+{
+  std::size_t seed = std::hash<std::uint16_t>{}(identity.id);
+  seed ^= std::hash<std::uint32_t>{}(identity.frame) +
+    0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+  return seed;
+}
+
 namespace
 {
+
+bool nodeIdentityRetainsVoxel(
+  const LabeledGridVoxel &voxel,
+  const NodeObservationMap *current_nodes,
+  double maximum_displacement)
+{
+  if (!current_nodes) {
+    return false;
+  }
+  const double maximum_displacement_squared =
+    maximum_displacement * maximum_displacement;
+  return std::any_of(
+    voxel.node_observations.begin(), voxel.node_observations.end(),
+    [current_nodes, maximum_displacement_squared](const NodeObservation &anchor) {
+      const auto current_it = current_nodes->find(anchor.identity);
+      if (current_it == current_nodes->end()) {
+        return false;
+      }
+      const auto &current = current_it->second;
+      const double dx = current.x - anchor.x;
+      const double dy = current.y - anchor.y;
+      const double dz = current.z - anchor.z;
+      return dx * dx + dy * dy + dz * dz <= maximum_displacement_squared;
+    });
+}
 
 bool deletionDisconnectsVerticalNeighbors(
   const GridCell &candidate,
@@ -255,6 +412,8 @@ TemporalVoxelFilter::TemporalVoxelFilter(TemporalVoxelFilterConfig config)
     config_.isolated_minimum_point_input_history_count, 1, config_.history_window_size);
   config_.maximum_missing_label_updates = std::min(
     config_.maximum_missing_label_updates, config_.history_window_size);
+  config_.node_identity_max_displacement = std::max(
+    0.0, config_.node_identity_max_displacement);
 }
 
 void TemporalVoxelFilter::appendSample(
@@ -286,7 +445,8 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   const std::vector<LabeledGridVoxel> &label_voxels,
   bool require_input_points,
   std::size_t minimum_input_points_per_voxel,
-  const GridPointCounts *input_point_counts)
+  const GridPointCounts *input_point_counts,
+  const NodeObservationMap *current_nodes)
 {
   struct ExpirationCandidate
   {
@@ -319,12 +479,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       history.label_observation_count >= minimum_label_count;
     const bool point_history_sufficient =
       history.point_input_observation_count >= minimum_point_count;
-    if (history.active) {
-      if (isolated && !point_history_sufficient) {
-        history.active = false;
-        continue;
-      }
-    } else {
+    if (!history.active) {
       if (!label_history_sufficient || !point_history_sufficient || !has_input_points) {
         continue;
       }
@@ -337,6 +492,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.history_sample_count = history.samples.size();
     stable_voxel.label_history_count = history.label_observation_count;
     stable_voxel.point_input_history_count = history.point_input_observation_count;
+    stable_voxel.retained_by_node_identity = false;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
   }
@@ -367,9 +523,15 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       !isolated || history.point_input_observation_count >= minimum_point_count;
     const bool within_retention_window =
       history.consecutive_missing_label_updates <= config_.maximum_missing_label_updates;
+    const bool retained_by_node_identity =
+      config_.node_identity_retention_enabled && !isolated &&
+      nodeIdentityRetainsVoxel(
+      history.last_voxel, current_nodes, config_.node_identity_max_displacement);
     if (history.active && !point_history_sufficient) {
       history.active = false;
-    } else if (history.active && within_retention_window) {
+    } else if (history.active &&
+      (within_retention_window || retained_by_node_identity))
+    {
       if (history.label_observation_count > 0) {
         history.active_label = dominantLabel(history.label_counts);
       }
@@ -380,6 +542,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       stable_voxel.history_sample_count = history.samples.size();
       stable_voxel.label_history_count = history.label_observation_count;
       stable_voxel.point_input_history_count = history.point_input_observation_count;
+      stable_voxel.retained_by_node_identity = retained_by_node_identity;
       stable_voxels.push_back(stable_voxel);
     } else if (history.active) {
       expiration_candidates.push_back(ExpirationCandidate{it->first, input_point_count});
@@ -503,6 +666,8 @@ GridVoxelizationResult voxelizeNodes(
   GridVoxelizationResult result;
   std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> accumulators;
   accumulators.reserve(map.nodes.size());
+  result.eligible_nodes.reserve(map.nodes.size());
+  std::unordered_set<NodeIdentity, NodeIdentityHash> ambiguous_node_identities;
 
   for (const auto &node : map.nodes) {
     if (options.excluded_labels.find(node.label) != options.excluded_labels.end()) {
@@ -510,9 +675,22 @@ GridVoxelizationResult voxelizeNodes(
       continue;
     }
     const GridCell cell = nodeToGridCell(node, spec);
+    const NodeObservation observation{
+      NodeIdentity{node.id, node.frame}, node.pos.x, node.pos.y, node.pos.z, node.label};
+    if (ambiguous_node_identities.find(observation.identity) ==
+      ambiguous_node_identities.end())
+    {
+      const auto [identity_it, inserted] = result.eligible_nodes.emplace(
+        observation.identity, observation);
+      if (!inserted) {
+        result.eligible_nodes.erase(identity_it);
+        ambiguous_node_identities.insert(observation.identity);
+      }
+    }
     auto &accumulator = accumulators[cell];
     ++accumulator.node_count;
     ++accumulator.label_counts[node.label];
+    accumulator.node_observations.push_back(observation);
   }
 
   result.label_voxels.reserve(accumulators.size());
@@ -523,9 +701,13 @@ GridVoxelizationResult voxelizeNodes(
         accumulator.input_point_count = point_it->second;
       }
     }
-    result.label_voxels.push_back(LabeledGridVoxel{
-      cell, dominantLabel(accumulator), accumulator.node_count,
-      accumulator.input_point_count, 0});
+    LabeledGridVoxel voxel;
+    voxel.cell = cell;
+    voxel.label = dominantLabel(accumulator);
+    voxel.node_count = accumulator.node_count;
+    voxel.input_point_count = accumulator.input_point_count;
+    voxel.node_observations = std::move(accumulator.node_observations);
+    result.label_voxels.push_back(std::move(voxel));
     if (options.require_input_points && accumulator.input_point_count <
       options.minimum_input_points_per_voxel)
     {
@@ -674,24 +856,214 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
   return result;
 }
 
+TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  const GridSpec &spec,
+  const std::vector<LabeledGridVoxel> &stable_direct_voxels,
+  const std::unordered_set<std::uint8_t> &excluded_labels,
+  const TriangleInferenceOptions &options,
+  const GridPointCounts *input_point_counts)
+{
+  TriangleVoxelizationResult result;
+  if (!options.enabled || map.nodes.size() < 3U) {
+    return result;
+  }
+
+  std::unordered_set<GridCell, GridCellHash> direct_cells;
+  direct_cells.reserve(stable_direct_voxels.size());
+  for (const auto &voxel : stable_direct_voxels) {
+    direct_cells.insert(voxel.cell);
+  }
+
+  std::vector<std::unordered_set<std::size_t>> adjacency(map.nodes.size());
+  for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+    const std::size_t lhs = static_cast<std::size_t>(map.edges[edge_index]);
+    const std::size_t rhs = static_cast<std::size_t>(map.edges[edge_index + 1U]);
+    if (lhs >= map.nodes.size() || rhs >= map.nodes.size() || lhs == rhs) {
+      continue;
+    }
+    adjacency[lhs].insert(rhs);
+    adjacency[rhs].insert(lhs);
+  }
+
+  std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> inferred;
+  for (std::size_t first = 0; first < map.nodes.size(); ++first) {
+    for (const std::size_t second : adjacency[first]) {
+      if (second <= first) {
+        continue;
+      }
+      for (const std::size_t third : adjacency[first]) {
+        if (third <= second || adjacency[second].find(third) == adjacency[second].end()) {
+          continue;
+        }
+        ++result.candidate_triangle_count;
+        const std::array<const ais_gng_msgs::msg::TopologicalNode *, 3> nodes{
+          &map.nodes[first], &map.nodes[second], &map.nodes[third]};
+        if (std::any_of(
+            nodes.begin(), nodes.end(),
+            [&excluded_labels](const auto *node) {
+              return excluded_labels.find(node->label) != excluded_labels.end();
+            }))
+        {
+          ++result.excluded_triangle_count;
+          continue;
+        }
+
+        const std::array<GridCell, 3> node_cells{
+          nodeToGridCell(*nodes[0], spec),
+          nodeToGridCell(*nodes[1], spec),
+          nodeToGridCell(*nodes[2], spec)};
+        if (std::any_of(
+            node_cells.begin(), node_cells.end(),
+            [&direct_cells](const GridCell &cell) {
+              return direct_cells.find(cell) == direct_cells.end();
+            }))
+        {
+          ++result.inactive_vertex_triangle_count;
+          continue;
+        }
+
+        const std::array<Vec3d, 3> triangle{
+          nodePosition(*nodes[0]), nodePosition(*nodes[1]), nodePosition(*nodes[2])};
+        const std::array<Vec3d, 3> edges{
+          triangle[1] - triangle[0],
+          triangle[2] - triangle[1],
+          triangle[0] - triangle[2]};
+        const std::array<double, 3> edge_lengths_squared{
+          squaredNorm(edges[0]), squaredNorm(edges[1]), squaredNorm(edges[2])};
+        const double maximum_edge_length_squared = *std::max_element(
+          edge_lengths_squared.begin(), edge_lengths_squared.end());
+        if (maximum_edge_length_squared >
+          options.maximum_edge_length * options.maximum_edge_length)
+        {
+          ++result.overlength_triangle_count;
+          continue;
+        }
+
+        const Vec3d triangle_normal = cross(edges[0], triangle[2] - triangle[0]);
+        const double twice_area = std::sqrt(squaredNorm(triangle_normal));
+        const double area = 0.5 * twice_area;
+        const double aspect_ratio = maximum_edge_length_squared > 0.0
+          ? twice_area / maximum_edge_length_squared : 0.0;
+        if (area < options.minimum_area || aspect_ratio < options.minimum_aspect_ratio) {
+          ++result.degenerate_triangle_count;
+          continue;
+        }
+        if (!triangleNormalsAreConsistent(
+            nodes, triangle_normal, options.maximum_normal_angle_degrees))
+        {
+          ++result.normal_rejected_triangle_count;
+          continue;
+        }
+
+        const Vec3d minimum{
+          std::min({triangle[0].x, triangle[1].x, triangle[2].x}),
+          std::min({triangle[0].y, triangle[1].y, triangle[2].y}),
+          std::min({triangle[0].z, triangle[1].z, triangle[2].z})};
+        const Vec3d maximum{
+          std::max({triangle[0].x, triangle[1].x, triangle[2].x}),
+          std::max({triangle[0].y, triangle[1].y, triangle[2].y}),
+          std::max({triangle[0].z, triangle[1].z, triangle[2].z})};
+        const GridCell minimum_cell = positionToGridCell(
+          minimum.x, minimum.y, minimum.z, spec);
+        const GridCell maximum_cell = positionToGridCell(
+          maximum.x, maximum.y, maximum.z, spec);
+        std::vector<GridCell> triangle_cells;
+        for (int x = minimum_cell.x; x <= maximum_cell.x; ++x) {
+          for (int y = minimum_cell.y; y <= maximum_cell.y; ++y) {
+            for (int z = minimum_cell.z; z <= maximum_cell.z; ++z) {
+              const GridCell cell{x, y, z};
+              if (triangleIntersectsGridCell(triangle, cell, spec)) {
+                triangle_cells.push_back(cell);
+              }
+            }
+          }
+        }
+
+        const auto supported_cell_count = static_cast<std::size_t>(std::count_if(
+          triangle_cells.begin(), triangle_cells.end(),
+          [input_point_counts](const GridCell &cell) {
+            return input_point_counts && input_point_counts->find(cell) !=
+                   input_point_counts->end();
+          }));
+        const double support_ratio = triangle_cells.empty() ? 0.0 :
+          static_cast<double>(supported_cell_count) /
+          static_cast<double>(triangle_cells.size());
+        if (support_ratio < options.minimum_point_support_ratio) {
+          ++result.point_support_rejected_triangle_count;
+          continue;
+        }
+
+        std::array<std::size_t, 256> triangle_label_counts{};
+        for (const auto *node : nodes) {
+          ++triangle_label_counts[node->label];
+        }
+        const std::uint8_t triangle_label = dominantLabel(triangle_label_counts);
+        ++result.accepted_triangle_count;
+        for (const auto &cell : triangle_cells) {
+          if (direct_cells.find(cell) != direct_cells.end()) {
+            continue;
+          }
+          auto &accumulator = inferred[cell];
+          ++accumulator.label_counts[triangle_label];
+          ++accumulator.triangle_support_count;
+        }
+      }
+    }
+  }
+
+  result.voxels.reserve(inferred.size());
+  for (const auto &[cell, accumulator] : inferred) {
+    LabeledGridVoxel voxel;
+    voxel.cell = cell;
+    voxel.label = dominantLabel(accumulator);
+    voxel.triangle_support_count = accumulator.triangle_support_count;
+    result.voxels.push_back(voxel);
+  }
+  std::sort(result.voxels.begin(), result.voxels.end(), cellLess);
+  return result;
+}
+
 std::vector<LabeledGridVoxel> mergeDirectAndInferredVoxels(
   const std::vector<LabeledGridVoxel> &direct_voxels,
   const std::vector<LabeledGridVoxel> &inferred_voxels)
 {
   std::vector<LabeledGridVoxel> merged = direct_voxels;
   merged.reserve(direct_voxels.size() + inferred_voxels.size());
-  std::unordered_set<GridCell, GridCellHash> direct_cells;
-  direct_cells.reserve(direct_voxels.size());
-  for (const auto &voxel : direct_voxels) {
-    direct_cells.insert(voxel.cell);
+  std::unordered_map<GridCell, std::size_t, GridCellHash> merged_indices;
+  merged_indices.reserve(direct_voxels.size() + inferred_voxels.size());
+  for (std::size_t index = 0; index < merged.size(); ++index) {
+    merged_indices.emplace(merged[index].cell, index);
   }
   for (const auto &voxel : inferred_voxels) {
-    if (direct_cells.find(voxel.cell) == direct_cells.end()) {
+    const auto existing = merged_indices.find(voxel.cell);
+    if (existing == merged_indices.end()) {
+      merged_indices.emplace(voxel.cell, merged.size());
       merged.push_back(voxel);
+      continue;
     }
+    auto &merged_voxel = merged[existing->second];
+    merged_voxel.edge_support_count += voxel.edge_support_count;
+    merged_voxel.triangle_support_count += voxel.triangle_support_count;
   }
   std::sort(merged.begin(), merged.end(), cellLess);
   return merged;
+}
+
+VoxelIsolationSplit splitVoxelsByIsolation(
+  const std::vector<LabeledGridVoxel> &voxels)
+{
+  VoxelIsolationSplit split;
+  split.connected_voxels.reserve(voxels.size());
+  split.isolated_voxels.reserve(voxels.size());
+  for (const auto &voxel : voxels) {
+    if (voxel.neighbor_count == 0) {
+      split.isolated_voxels.push_back(voxel);
+    } else {
+      split.connected_voxels.push_back(voxel);
+    }
+  }
+  return split;
 }
 
 }  // namespace fuzzrobo::topological_grid

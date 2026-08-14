@@ -11,6 +11,7 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Voxel.msg"
+  "msg/VoxelLabelDelta.msg"
   DEPENDENCIES std_msgs
 )
 

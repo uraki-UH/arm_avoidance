@@ -487,20 +487,46 @@ label履歴の最低カウントは新規追加と削除後の再追加にだけ
 隣接セル側の再確定を待つ。保持期限を超えたセルでも、その削除によって26近傍占有グラフの低いZ側と
 高いZ側が分断される場合は保持する。水平方向だけの分断は許可し、物体候補同士の切り分けを妨げない。
 複数の期限超過セルは順番に判定し、同一更新内の削除結果も後続判定へ反映する。
-点群input履歴による解除は孤立セルだけに適用し、
-非孤立セルは確定後の点群input履歴低下だけでは解除しない。孤立判定は現在点群の有無ではなく、
+点群input履歴による解除は、現在の非除外GNGノードも存在しない孤立セルだけに適用する。
+孤立セルでも`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`のノードが現在セルに残る間は、label種別が変わり
+点群input履歴が0になっても確定状態を保持する。非孤立セルも点群input履歴低下だけでは解除しない。
+孤立判定は現在点群の有無ではなく、
 非除外GNGセル同士の近傍関係で行うため、
 点群が消えただけで接続済みセル全体が孤立セルへ変わることはない。確定解除後、label履歴が
 100更新の窓からすべて消えたセルは追跡対象から削除する。対応する点群が0.5秒以内に届かないMap更新では
 点群input履歴を加算せず、新規セルを追加しない。
+
+非孤立セルは確定時に所属したGNGノードの`(id, frame)`をnode generationとして保持する。同じgenerationが
+現在の非除外ノード群にも一意に存在し、確定時位置からの移動が`node_identity_max_displacement`の既定
+`0.02 m`以内なら、label不在猶予を超えても旧セルを保持する。同一Map内で重複するgeneration、generation消滅、
+除外labelへの変更、移動閾値超過では保持せず、通常の期限判定とZ方向分断保護へ戻す。孤立セルには適用しない。
 
 時間履歴を通過した直接観測ボクセルを頂点とし、`TopologicalMap.edges`の両端ノードがそれぞれ異なる
 直接観測ボクセルに所属する場合だけ、GNG edgeを間接的なボクセル接続へ変換する。同じボクセル対を結ぶ
 複数edgeは1本へ集約し、既定で長さ`0.10 m`以下のボクセル対の中間セルを3次元Bresenhamで補間する。
 両端のどちらかが未確定、または`SAFE_TERRAIN`、`HUMAN`、`CAR`の場合は補間しない。補間セルは次の
 補間処理の端点に使用せず、直接観測ボクセルが消えた更新では対応する補間セルも消える。
-`output_topic`は直接観測セルとedge補間セルの和集合をpublishし、`edge_inferred_topic`は補間セルだけを
+`output_topic`は非孤立の直接観測セルとedge補間セルの和集合をpublishし、`edge_inferred_topic`は補間セルだけを
 同じ`voxel_msgs/Voxel`形式でpublishする。異なるlabel間の補間セルは近い端点側のlabelを継承する。
+
+時間履歴を通過しても26近傍がない直接観測セルは、物体の連続形状を支持しないため把持候補の
+主`output_topic`、差分topic、edge・triangle補間の端点から除外する。削除はせず、表示・診断専用の
+`isolated_topic`（既定`<output_topic>/isolated`）へ同じrevisionでpublishする。Topo Fuzzy Viewerは
+末尾が`/isolated`のvoxel sourceを初期状態で赤表示する。表示色は通常のvoxel色設定から変更できる。
+
+主`output_topic`の`Voxel`には単調増加する`revision`を付与する。同時に既定
+`<output_topic>/delta`へ`voxel_msgs/VoxelLabelDelta`をpublishし、追加・削除・label変更したセルだけを
+`data`、`old_labels`、`new_labels`の整列配列で送る。`255`は前後どちらかでセルが存在しないことを示し、
+通常のtopological labelには使わない。全量`Voxel`はtransient localの初期スナップショットとして残し、
+差分topicは信頼性ありの逐次更新とする。差分のrevisionが欠けた受信側は、次の全量スナップショットから
+再同期する。
+
+`TopologicalMap.edges`から3ノードが相互接続された3-cycleを列挙し、3頂点が確定済み直接セルに所属する場合に
+三角形面候補とする。既定では全辺`0.05 m`以下、面積`1e-6 m^2`以上、aspect ratio `0.05`以上、
+有効な各ノード法線との角度`45 deg`以内を要求し、triangle-box交差判定で面と交差するセルを生成する。
+点群支持率は`triangle_min_point_support_ratio`で任意に要求でき、既定`0.0`では頂点の時間安定性だけを使う。
+主`output_topic`は非孤立の直接観測、edge補間、triangle面の和集合とし、`triangle_inferred_topic`は面由来セルだけを
+publishする。重複セルは1件へ統合し、直接観測labelを優先しながらedge・triangle支持数をsummaryへ残す。
 
 `grasp_voxel_matcher_node`はこの物体候補占有へグリッパ体積graphを配置して候補TCP Pose群を生成する。
 領域の対応は`grip_V=required_occupied`、`grip_minV=optional_not_sole_support`、
@@ -509,14 +535,21 @@ label履歴の最低カウントは新規追加と削除後の再追加にだけ
 入力graphはTCPローカル座標、出力Poseは物体ボクセルと同じframeとする。
 
 照合は姿勢ごとにgraph点を整数ボクセルoffsetへ事前量子化し、対象ボクセルをアンカーとしてhash照会する。
-更新ごとの無制限な全探索は行わず、既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
+revision付き全量snapshotを受けた初回だけ、各候補へ`required_occupied`、
+`optional_not_sole_support`、`required_empty`の占有数を初期化する。以後の`VoxelLabelDelta`では、変更セルから
+各template offsetを逆引きして影響を受ける候補だけの3カウンタを加減算する。template、格子geometry、
+またはrevision連続性が変わった場合は、全量snapshotから再初期化する。revisionを持たない既存publisherは
+従来の全量照合へフォールバックする。既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
 明示的な3次元姿勢群は`orientation_rpy`の`roll,pitch,yaw`列で指定できる。結果は新規messageを増やさず、
 `geometry_msgs/PoseArray`と、占有率・各ゲートの棄却数・処理時間を持つ`std_msgs/String` JSON summaryでpublishする。
 
 | 入出力 | 既定topic | 型 |
 |---|---|---|
 | 物体候補占有 | `/topological_grid_voxels` | `voxel_msgs/Voxel` |
+| 物体候補占有の差分 | `/topological_grid_voxels/delta` | `voxel_msgs/VoxelLabelDelta` |
+| 表示・診断専用の孤立セル | `/topological_grid_voxels/isolated` | `voxel_msgs/Voxel` |
 | GNG edge補間由来の物体候補占有 | `/topological_grid_voxels/edge_inferred` | `voxel_msgs/Voxel` |
+| GNG三角形面由来の物体候補占有 | `/topological_grid_voxels/triangle_inferred` | `voxel_msgs/Voxel` |
 | 全環境占有 | 空(物体候補と共用) | `voxel_msgs/Voxel` |
 | 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |

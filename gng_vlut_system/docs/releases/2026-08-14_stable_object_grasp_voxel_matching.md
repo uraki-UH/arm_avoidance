@@ -15,6 +15,8 @@
 - `grasp_voxel_matcher_node`と`grasp_voxel_matcher.launch.py`。
 - 最大把持領域、最小把持領域、基部禁止領域を独立ゲートで照合するテスト。
 - 安定化済みボクセルを頂点、GNG edgeを間接的なボクセル接続として中間セルを補間する処理。
+- 一意なGNG node generationによる非孤立セル保持と、3-edge cycleから三角形面セルを生成する処理。
+- 把持候補から除外した孤立セルの表示・診断専用`isolated_topic`とViewerの赤色初期表示。
 
 ## Fixed
 
@@ -31,11 +33,14 @@
 - `grid_size`を省略した場合も、物体候補ボクセルは一辺`0.01 m`で生成する。
 - 既定では隣接セルはlabel・点群inputが各3回、26近傍に候補がない孤立セルは各5回を履歴内で満たす必要がある。連続観測は要求しない。
 - 新規追加時だけ現在点群を必須とし、確定後に非除外labelがセルから消えても既定10更新は旧セルを維持する。
-- 確定後の点群履歴低下で削除するのは孤立セルだけとし、非孤立セルは点群履歴だけでは解除しない。
+- 確定後の点群履歴低下で削除するのは、非除外GNGノードも消えた孤立セルだけとする。孤立セルでも`DEFAULT/WALL/UNKNOWN_OBJECT`ノードが残る間は点群履歴が0でも保持する。
 - label履歴最低カウントを新規・再追加専用とし、確定済みセルはlabel履歴が0でもlabel不在猶予内なら保持する。
 - 孤立判定を非除外GNGセル同士の近傍関係で行い、点群消失だけでは孤立扱いに変更しない。
 - GNG edgeの両端が直接観測ボクセルへ所属する場合だけ、既定`0.10 m`以下のボクセル間を補間する。補間セルから再帰的に補間しない。
-- 物体候補の主topicは直接観測とedge補間の和集合とし、補間由来だけのtopicも別途publishする。
+- 非孤立セルは一意な`(node.id,node.frame)`が同じ非除外label群で既定`0.02 m`以内に残る間、旧セルを保持する。孤立セルと重複generationには適用しない。
+- GNGの3-edge cycleを辺長・面積・aspect ratio・法線で検証し、三角形面と交差するセルを生成する。
+- 物体候補の主topicは直接観測、edge補間、triangle面の和集合とし、各推定由来だけのtopicも別途publishする。
+- 26近傍がない直接観測セルは主topic・差分・補間端点から除外し、`<output_topic>/isolated`だけへpublishする。
 - matcherは既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
 - `environment_voxels_topic`未指定時は、物体候補占有を禁止領域検査にも使用する。
 
@@ -43,6 +48,9 @@
 
 - `topological_grid_node`: `pointcloud_topic`、`pointcloud_timeout_sec`、`excluded_labels`、`require_input_points`、`minimum_input_points_per_voxel`、`neighbor_radius_cells`、`history_window_size`、`maximum_missing_label_updates`と、通常・孤立セル別のlabel・点群履歴最低カウントparameterを追加。
 - edge補間parameter: `edge_inference_enabled`、`edge_max_length`、`edge_inferred_topic`。
+- node identity parameter: `node_identity_retention_enabled`、`node_identity_max_displacement`。
+- triangle面parameter: `triangle_inference_enabled`、`triangle_max_edge_length`、`triangle_min_area`、`triangle_min_aspect_ratio`、`triangle_max_normal_angle_deg`、`triangle_min_point_support_ratio`、`triangle_inferred_topic`。
+- 孤立セル表示parameter: `isolated_topic`（空なら`<output_topic>/isolated`）。
 - 両launchへ複数grid・左右matcherを同時起動するための`node_name`を追加。
 - matcher入力: `object_voxels_topic`、`environment_voxels_topic`、`required_graph_topic`、`undersize_graph_topic`、`forbidden_graph_topic`。
 - matcher出力: `geometry_msgs/PoseArray`と`std_msgs/String` JSON summary。
@@ -54,7 +62,7 @@
 - `grasp_voxel_matcher`、`grasp_pose_occupancy_evaluator`、`gripper_volume_graph`、`test_topological_grid_assignment`が成功。
 - 合成3セル対象で候補1件、占有必須3/3、最小体積外支持2、禁止領域衝突0をROS topicで確認。
 - 非連続観測を含むlabel履歴4回、点群input履歴4回を独立に取得し、現在支持がある場合だけ出力することを確認。
-- 10 mmセル既定値、点群支持、GNG近傍判定、100更新リング、孤立セルだけの点群削除、label履歴0での保持、Z方向の切断保護、水平方向の分離許可、位置揺れ猶予、edge補間を含む`test_topological_grid_assignment` 20件が成功。
+- 10 mmセル既定値、点群支持、GNG近傍判定、100更新リング、孤立セルだけの点群削除、把持候補からの孤立セル分離、label履歴0での保持、Z方向の切断保護、水平方向の分離許可、node generation保持、edge補間、triangle面を含む`test_topological_grid_assignment` 27件が成功。
 - 分離した`ROS_DOMAIN_ID=126`で引数なし起動し、`grid_size=0.010`を確認後にノードを終了。
 - 実`/topological_map`入力で`frame_id=graspnet_table`、`voxel_size=0.01 m`、`origin=(0,0,0)`を確認。
 - 点群支持なし、対象外label、26近傍、label別カウント、孤立セルの各5回判定と100更新後の履歴削除を単体テストで確認。
