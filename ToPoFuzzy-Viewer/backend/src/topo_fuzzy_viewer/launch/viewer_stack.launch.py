@@ -11,13 +11,33 @@ def generate_launch_description():
             default_value='9001',
             description='WebSocket port for the viewer gateway'
         ),
+        DeclareLaunchArgument(
+            'pointcloud_max_points',
+            default_value='100000',
+            description='Maximum number of uniformly sampled points sent per viewer frame'
+        ),
+        DeclareLaunchArgument(
+            'pointcloud_max_hz',
+            default_value='10.0',
+            description='Maximum PointCloud2 forwarding rate for the viewer'
+        ),
+        DeclareLaunchArgument(
+            'websocket_max_backpressure_bytes',
+            default_value='8388608',
+            description='WebSocket send queue safety limit in bytes'
+        ),
         Node(
             package='topo_fuzzy_viewer',
             executable='viewer_ws_gateway_node',
             name='viewer_ws_gateway_node',
             output='screen',
             parameters=[{
-                'port': LaunchConfiguration('ws_port')
+                'port': LaunchConfiguration('ws_port'),
+                'pointcloud_max_points': LaunchConfiguration('pointcloud_max_points'),
+                'pointcloud_max_hz': LaunchConfiguration('pointcloud_max_hz'),
+                'websocket_max_backpressure_bytes': LaunchConfiguration(
+                    'websocket_max_backpressure_bytes'
+                )
             }]
         ),
         Node(

@@ -31,6 +31,18 @@ function configureSrgbVertexColors(material: THREE.PointsMaterial) {
     material.customProgramCacheKey = () => 'pointcloud-srgb-vertex-colors-v1';
 }
 
+function createStreamAttribute(array: Float32Array, itemSize: number) {
+    const attribute = new THREE.BufferAttribute(array, itemSize);
+    attribute.setUsage(THREE.StreamDrawUsage);
+    return attribute;
+}
+
+function markStreamRangeUpdated(attribute: THREE.BufferAttribute, count: number) {
+    attribute.clearUpdateRanges();
+    attribute.addUpdateRange(0, count);
+    attribute.needsUpdate = true;
+}
+
 export function PointCloudRenderer({
     data,
     heatmapSettings,
@@ -77,15 +89,15 @@ export function PointCloudRenderer({
 
             const positions = new Float32Array(capacity * 3);
             positions.set(data.points);
-            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('position', createStreamAttribute(positions, 3));
 
             const colors = new Float32Array(capacity * 3).fill(1);
             if (data.colors) colors.set(data.colors);
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('color', createStreamAttribute(colors, 3));
 
             const intensities = new Float32Array(capacity);
             if (data.intensities) intensities.set(data.intensities);
-            geometry.setAttribute('intensity', new THREE.BufferAttribute(intensities, 1));
+            geometry.setAttribute('intensity', createStreamAttribute(intensities, 1));
 
             capacityRef.current = capacity;
             hasColorRef.current = needsColor;
@@ -93,27 +105,22 @@ export function PointCloudRenderer({
         } else {
             const positionAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
             (positionAttr.array as Float32Array).set(data.points);
-            positionAttr.needsUpdate = true;
+            markStreamRangeUpdated(positionAttr, data.count * 3);
 
-            const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
             if (data.colors) {
+                const colorAttr = geometry.getAttribute('color') as THREE.BufferAttribute;
                 (colorAttr.array as Float32Array).set(data.colors);
-            } else {
-                (colorAttr.array as Float32Array).fill(1, 0, data.count * 3);
+                markStreamRangeUpdated(colorAttr, data.count * 3);
             }
-            colorAttr.needsUpdate = true;
 
-            const intensityAttr = geometry.getAttribute('intensity') as THREE.BufferAttribute;
             if (data.intensities) {
+                const intensityAttr = geometry.getAttribute('intensity') as THREE.BufferAttribute;
                 (intensityAttr.array as Float32Array).set(data.intensities);
-            } else {
-                (intensityAttr.array as Float32Array).fill(0, 0, data.count);
+                markStreamRangeUpdated(intensityAttr, data.count);
             }
-            intensityAttr.needsUpdate = true;
         }
 
         geometry.setDrawRange(0, data.count);
-        geometry.computeBoundingSphere();
     }, [data, geometry]);
 
     const material = useMemo(() => {
@@ -206,7 +213,7 @@ export function PointCloudRenderer({
     return (
         <>
             <group ref={groupRef}>
-                <points ref={pointsRef} geometry={geometry} material={material} />
+                <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
             </group>
 
             {selected && groupRef.current && (

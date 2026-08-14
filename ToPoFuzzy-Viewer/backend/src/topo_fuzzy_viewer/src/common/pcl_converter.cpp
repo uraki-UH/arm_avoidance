@@ -1,5 +1,6 @@
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 #include <pcl_conversions/pcl_conversions.h>
+#include <algorithm>
 #include <cmath>
 
 namespace utils {
@@ -10,13 +11,30 @@ inline bool isFinitePoint(float x, float y, float z) {
     return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
 }
 
+size_t sampledPointCount(size_t point_count, size_t max_points) {
+    return max_points == 0 ? point_count : std::min(point_count, max_points);
+}
+
+template<typename Callback>
+void forEachSampledIndex(size_t point_count, size_t max_points, Callback&& callback) {
+    const size_t sample_count = sampledPointCount(point_count, max_points);
+    for (size_t sample = 0; sample < sample_count; ++sample) {
+        const size_t index = sample_count == point_count
+            ? sample
+            : (sample * point_count) / sample_count;
+        callback(index);
+    }
+}
+
 } // namespace
 
 // =============================================================================
 // ROS2 PointCloud2 Conversion
 // =============================================================================
 
-PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr& msg) {
+PointCloudData convertFromRosMsg(
+    const sensor_msgs::msg::PointCloud2::SharedPtr& msg,
+    size_t max_points) {
     PointCloudData result;
     
     // Detect available fields
@@ -31,7 +49,9 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         }
     }
     
-    uint32_t expectedPointCount = msg->width * msg->height;
+    const size_t expectedPointCount = sampledPointCount(
+        static_cast<size_t>(msg->width) * msg->height,
+        max_points);
     result.positions.reserve(expectedPointCount * 3);
     if (hasRGB) result.colors.reserve(expectedPointCount * 3);
     if (hasIntensity) result.intensities.reserve(expectedPointCount);
@@ -40,7 +60,8 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
         // XYZRGB + Intensity
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::fromROSMsg(*msg, *cloud);
-        for (const auto& point : cloud->points) {
+        forEachSampledIndex(cloud->points.size(), max_points, [&](size_t index) {
+            const auto& point = cloud->points[index];
             if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
@@ -49,32 +70,35 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
                 result.colors.push_back(point.g);
                 result.colors.push_back(point.b);
             }
-        }
+        });
         // Read intensity separately
         pcl::PointCloud<pcl::PointXYZI>::Ptr icloud(new pcl::PointCloud<pcl::PointXYZI>);
         pcl::fromROSMsg(*msg, *icloud);
-        for (const auto& point : icloud->points) {
+        forEachSampledIndex(icloud->points.size(), max_points, [&](size_t index) {
+            const auto& point = icloud->points[index];
             if (isFinitePoint(point.x, point.y, point.z)) {
                 result.intensities.push_back(point.intensity);
             }
-        }
+        });
     } else if (hasIntensity) {
         // XYZI only
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZI>);
         pcl::fromROSMsg(*msg, *cloud);
-        for (const auto& point : cloud->points) {
+        forEachSampledIndex(cloud->points.size(), max_points, [&](size_t index) {
+            const auto& point = cloud->points[index];
             if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
                 result.intensities.push_back(point.intensity);
             }
-        }
+        });
     } else if (hasRGB) {
         // XYZRGB only
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::fromROSMsg(*msg, *cloud);
-        for (const auto& point : cloud->points) {
+        forEachSampledIndex(cloud->points.size(), max_points, [&](size_t index) {
+            const auto& point = cloud->points[index];
             if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
@@ -83,18 +107,19 @@ PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr&
                 result.colors.push_back(point.g);
                 result.colors.push_back(point.b);
             }
-        }
+        });
     } else {
         // XYZ only
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*msg, *cloud);
-        for (const auto& point : cloud->points) {
+        forEachSampledIndex(cloud->points.size(), max_points, [&](size_t index) {
+            const auto& point = cloud->points[index];
             if (isFinitePoint(point.x, point.y, point.z)) {
                 result.positions.push_back(point.x);
                 result.positions.push_back(point.y);
                 result.positions.push_back(point.z);
             }
-        }
+        });
     }
     
     result.pointCount = result.positions.size() / 3;

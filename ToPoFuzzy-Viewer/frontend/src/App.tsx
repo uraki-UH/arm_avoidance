@@ -187,8 +187,8 @@ function App() {
     const canvasGl = useMemo(() => ({
         localClippingEnabled: false,
         clippingPlanes: clipping.getThreePlanes(),
-        powerPreference: 'default' as const,
-        antialias: true,
+        powerPreference: 'high-performance' as const,
+        antialias: false,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 

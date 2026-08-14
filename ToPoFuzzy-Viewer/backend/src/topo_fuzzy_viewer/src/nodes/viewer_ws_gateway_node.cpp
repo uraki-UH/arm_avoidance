@@ -233,6 +233,13 @@ class ViewerWsGatewayNode : public rclcpp::Node {
 public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
         const int port = declare_parameter<int>("port", 9001);
+        pointCloudMaxPoints_ = static_cast<size_t>(std::max<int64_t>(
+            0, declare_parameter<int64_t>("pointcloud_max_points", 100000)));
+        pointCloudMaxHz_ = std::max(
+            0.0, declare_parameter<double>("pointcloud_max_hz", 10.0));
+        websocketMaxBackpressureBytes_ = static_cast<unsigned int>(std::max<int64_t>(
+            64 * 1024,
+            declare_parameter<int64_t>("websocket_max_backpressure_bytes", 8 * 1024 * 1024)));
         rpcRequestPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcRequest, 100);
         rpcResponseSub_ = create_subscription<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 100, [this](const std_msgs::msg::String::SharedPtr msg) { rpc_.handleResponse(msg->data); });
         tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>("/tf", 100, [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
@@ -251,7 +258,10 @@ public:
             });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
-        RCLCPP_INFO(get_logger(), "Gateway (Unified) initialized on port %d", port);
+        RCLCPP_INFO(
+            get_logger(),
+            "Gateway initialized on port %d (point cloud: max %zu points, %.1f Hz)",
+            port, pointCloudMaxPoints_, pointCloudMaxHz_);
     }
     ~ViewerWsGatewayNode() override { serverRunning_ = false; if (loop_) loop_->defer([this]() { if (listenSocket_) { us_listen_socket_close(0, listenSocket_); listenSocket_ = nullptr; } std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->close(); connections_.clear(); }); if (serverThread_.joinable()) serverThread_.join(); }
 
@@ -319,7 +329,16 @@ private:
                 }
                 if (st == "pointcloud") {
                     activeSubTypes_[sid] = "pointcloud";
-                    activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(sid, 10, [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) { broadcastPointCloud(sid, utils::convertToProtocolMessage(utils::convertFromRosMsg(m)).serialize()); });
+                    activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(
+                        sid,
+                        rclcpp::SensorDataQoS().keep_last(1),
+                        [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) {
+                            if (!shouldForwardPointCloud(sid)) return;
+                            broadcastPointCloud(
+                                sid,
+                                utils::convertToProtocolMessage(
+                                    utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
+                        });
                 } else if (st == "topological_map") {
                     activeSubTypes_[sid] = "topological_map";
                     activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
@@ -372,6 +391,8 @@ private:
                 if (remove_layer) sendStreamDelete(sid);
                 activeDynamicSubs_.erase(sid);
                 activeSubTypes_.erase(sid);
+                std::lock_guard<std::mutex> point_cloud_lock(pointCloudRateMutex_);
+                lastPointCloudForwardTime_.erase(sid);
             }
         }
         broadcastText(viewer_internal::makeOkResponse(id, {{"success",true},{"sourceId",sid},{"active",active},{"remove",remove_layer}}));
@@ -385,6 +406,25 @@ private:
         }).detach();
     }
 
+    bool shouldForwardPointCloud(const std::string& topic) {
+        if (pointCloudMaxHz_ <= 0.0) return true;
+
+        const auto now = std::chrono::steady_clock::now();
+        const std::chrono::duration<double> min_interval(0.9 / pointCloudMaxHz_);
+        std::lock_guard<std::mutex> lock(pointCloudRateMutex_);
+        const auto last = lastPointCloudForwardTime_.find(topic);
+        if (last != lastPointCloudForwardTime_.end() && now - last->second < min_interval) {
+            return false;
+        }
+        lastPointCloudForwardTime_[topic] = now;
+        return true;
+    }
+
+    struct PendingPointCloudPacket {
+        std::shared_ptr<std::string> meta;
+        std::shared_ptr<std::vector<uint8_t>> data;
+    };
+
     void broadcastPointCloud(const std::string& topic, const std::vector<uint8_t>& data) {
         // Prepend topic name for reliable identification (ROS-style multiplexing)
         uint8_t topicLen = static_cast<uint8_t>(std::min<size_t>(topic.length(), 255));
@@ -394,17 +434,44 @@ private:
         packet.insert(packet.end(), topic.begin(), topic.begin() + topicLen);
         packet.insert(packet.end(), data.begin(), data.end());
 
-        auto s = std::make_shared<std::vector<uint8_t>>(std::move(packet));
+        auto binary = std::make_shared<std::vector<uint8_t>>(std::move(packet));
         // We still send the meta for legacy/sync reasons, but the binary now contains its own ID
         auto meta = std::make_shared<std::string>(json({{"type", "stream.pointcloud.meta"}, {"topic", topic}, {"tag", topic}}).dump());
-        
-        loop_->defer([this, meta, s]() { 
-            std::lock_guard<std::mutex> l(connectionMutex_); 
-            for (auto* ws : connections_) { 
-                ws->send(*meta, uWS::OpCode::TEXT); 
-                ws->send(std::string_view(reinterpret_cast<const char*>(s->data()), s->size()), uWS::OpCode::BINARY); 
-            } 
-        });
+
+        bool schedule_flush = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingPointCloudMutex_);
+            pendingPointCloudPackets_[topic] = PendingPointCloudPacket{meta, binary};
+            if (!pointCloudFlushScheduled_) {
+                pointCloudFlushScheduled_ = true;
+                schedule_flush = true;
+            }
+        }
+        if (schedule_flush) {
+            loop_->defer([this]() { flushPendingPointClouds(); });
+        }
+    }
+
+    void flushPendingPointClouds() {
+        std::unordered_map<std::string, PendingPointCloudPacket> pending;
+        {
+            std::lock_guard<std::mutex> lock(pendingPointCloudMutex_);
+            pending.swap(pendingPointCloudPackets_);
+            pointCloudFlushScheduled_ = false;
+        }
+
+        std::lock_guard<std::mutex> lock(connectionMutex_);
+        for (auto* ws : connections_) {
+            if (ws->getBufferedAmount() > 0) continue;
+            for (const auto& [_, packet] : pending) {
+                ws->send(*packet.meta, uWS::OpCode::TEXT);
+                ws->send(
+                    std::string_view(
+                        reinterpret_cast<const char*>(packet.data->data()),
+                        packet.data->size()),
+                    uWS::OpCode::BINARY);
+            }
+        }
     }
 
     void broadcastText(const std::string& payload) { auto s = std::make_shared<std::string>(payload); loop_->defer([this, s]() { std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->send(*s, uWS::OpCode::TEXT); }); }
@@ -451,7 +518,10 @@ private:
 
     void runServerLoop(int port) {
         loop_ = uWS::Loop::get(); serverRunning_ = true;
-        uWS::App::WebSocketBehavior<PerSocketData> behavior; behavior.maxPayloadLength = 64 * 1024 * 1024;
+        uWS::App::WebSocketBehavior<PerSocketData> behavior;
+        behavior.maxPayloadLength = 64 * 1024 * 1024;
+        behavior.maxBackpressure = websocketMaxBackpressureBytes_;
+        behavior.closeOnBackpressureLimit = false;
         behavior.open = [this](auto* ws) { std::lock_guard<std::mutex> l(connectionMutex_); if (connections_.empty()) subscribeStreamingTopics(); connections_.push_back(ws); sendCurrentState(ws); };
         behavior.message = [this](auto* ws, std::string_view msg, uWS::OpCode op) { if (op == uWS::OpCode::TEXT) onWsMessage(ws, msg); };
         behavior.close = [this](auto* ws, int, std::string_view) { std::lock_guard<std::mutex> lock(connectionMutex_); connections_.erase(std::remove(connections_.begin(), connections_.end(), ws), connections_.end()); if (connections_.empty()) unsubscribeStreamingTopics(); };
@@ -473,6 +543,10 @@ private:
         lastGraphPayloads_.clear();
         lastNodeFeaturePayloads_.clear();
         lastClusterFeaturePayloads_.clear();
+        {
+            std::lock_guard<std::mutex> lock(pointCloudRateMutex_);
+            lastPointCloudForwardTime_.clear();
+        }
     }
     void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc) {
         if (msg->data.empty()) return;
@@ -600,13 +674,20 @@ private:
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
+    std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
     std::string lastStaticTfPayload_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
+    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_;
     std::vector<WebSocket*> connections_;
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
+    size_t pointCloudMaxPoints_ = 100000;
+    double pointCloudMaxHz_ = 10.0;
+    unsigned int websocketMaxBackpressureBytes_ = 8 * 1024 * 1024;
+    bool pointCloudFlushScheduled_ = false;
 };
 }
 

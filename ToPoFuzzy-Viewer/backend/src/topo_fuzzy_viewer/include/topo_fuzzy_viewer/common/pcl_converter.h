@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -43,7 +44,9 @@ struct PointCloudData {
  * Automatically detects RGB and intensity fields and extracts them.
  * NaN points are filtered out.
  */
-PointCloudData convertFromRosMsg(const sensor_msgs::msg::PointCloud2::SharedPtr& msg);
+PointCloudData convertFromRosMsg(
+    const sensor_msgs::msg::PointCloud2::SharedPtr& msg,
+    size_t max_points = 0);
 
 /**
  * @brief Convert internal format to ROS2 PointCloud2 message
