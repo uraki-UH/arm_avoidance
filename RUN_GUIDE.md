@@ -88,6 +88,10 @@ ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 ##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
 ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
 
+ros2 launch dynamixel_joint_state_bridge \
+  dynamixel_joint_state_bridge.launch.py \
+  namespace:=/ToPoDualArm
+
 realsense
 ros2 run dynamixel_joint_state_bridge dynamixel_joint_state_bridge_node \
   --ros-args \

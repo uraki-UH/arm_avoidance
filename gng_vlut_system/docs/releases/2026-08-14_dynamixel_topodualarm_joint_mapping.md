@@ -12,16 +12,19 @@ Dynamixel ID 1-8、11-18、21、22の現在角をToPoDualArmの実機状態とVi
 - Dynamixel handlerの自動探索上限をID 20から22へ広げた。
 - 右腕2軸目へ-90度、左腕2軸目へ+90度のゼロ点補正を追加した。
 - 首tiltの回転方向を実機に合わせて反転した。
-- 新URDFのリンク基準方向に合わせ、右腕1-7軸の回転方向を反転した。
+- 新URDFのリンク基準方向に合わせ、右腕1軸目と3-7軸の回転方向を反転した。右腕2軸目は正方向のまま-90度補正を適用する。
+- Viewer起動時はmuxの目標関節角を速度補間せず、表示へ直接反映するようにした。
 
 ## Added
 
 - `command_output_topic`、`control_claim_topic`、`control_claim_priority`、`joint_offsets_deg`パラメータを追加した。
 - Viewerの`joint_state_mux_node`へ入力元を登録する`JointControlClaim`をpublishするようにした。
+- 仮想関節ドライバへ`direct_tracking`、Viewer起動へ`direct_joint_tracking`パラメータを追加した。
 
 ## Behavior Impact
 
 - `namespace:=/ToPoDualArm`で起動すると、実機角が`/ToPoDualArm/joint_states`へ出力され、Viewerにも反映される。
+- `gng_viewer_bridge.launch.py`では`direct_joint_tracking:=true`が既定で、速度制限による追従遅れは発生しない。
 - IDが割り当てられていない`waist_joint`は既存の初期値を維持する。
 - handlerを起動していない場合、`/dynamixel/state/present`は配信されずViewerは動かない。
 
@@ -30,6 +33,7 @@ Dynamixel ID 1-8、11-18、21、22の現在角をToPoDualArmの実機状態とVi
 - 出力: `joint_states`、`dynamixel_joint_states`
 - claim: `control_claims`、優先度100、exclusive
 - 角度変換: `(position_deg + joint_offsets_deg) * deg_to_rad * joint_scales`
+- `direct_joint_tracking:=false`を指定すると、従来の`max_joint_velocity`による補間へ戻せる。
 - 入力メッセージに設定済みIDが1つでもない場合は、従来どおりpublishをスキップする。
 
 ## Verification

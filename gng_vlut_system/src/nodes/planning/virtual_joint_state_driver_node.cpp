@@ -31,6 +31,7 @@ public:
     max_joint_velocity_ = std::max(1e-6, declare_parameter<double>("max_joint_velocity", 0.6));
     position_tolerance_ = std::max(1e-6, declare_parameter<double>("position_tolerance", 0.01));
     use_wraparound_ = declare_parameter<bool>("use_wraparound", true);
+    direct_tracking_ = declare_parameter<bool>("direct_tracking", false);
     ignore_state_after_first_target_ = declare_parameter<bool>("ignore_state_after_first_target", false);
     const auto initial_joint_names_csv =
         declare_parameter<std::string>("initial_joint_names_csv", "");
@@ -93,9 +94,9 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "VirtualJointStateDriver ready. target=%s state_in=%s state_out=%s hz=%.1f max_vel=%.3f hold=%d wrap=%d ignore_state_after_target=%d",
+      "VirtualJointStateDriver ready. target=%s state_in=%s state_out=%s hz=%.1f max_vel=%.3f direct=%d wrap=%d ignore_state_after_target=%d",
       target_topic_.c_str(), state_topic_.c_str(), output_topic_.c_str(),
-      publish_hz_, max_joint_velocity_ ? 1 : 0,
+      publish_hz_, max_joint_velocity_, direct_tracking_ ? 1 : 0,
       use_wraparound_ ? 1 : 0, ignore_state_after_first_target_ ? 1 : 0);
   }
 
@@ -190,7 +191,7 @@ private:
 
     Eigen::VectorXf next_q = target_q;
     const float max_abs_diff = diff.cwiseAbs().maxCoeff();
-    if (max_abs_diff > static_cast<float>(position_tolerance_)) {
+    if (!direct_tracking_ && max_abs_diff > static_cast<float>(position_tolerance_)) {
       const float scale = kinematics::calculateVelocityScale(
         diff, static_cast<float>(max_joint_velocity_), static_cast<float>(1.0 / publish_hz_));
       const float clamped_scale = std::max(0.0f, std::min(1.0f, scale));
@@ -229,6 +230,7 @@ private:
   double max_joint_velocity_ = 0.6;
   double position_tolerance_ = 0.01;
   bool use_wraparound_ = true;
+  bool direct_tracking_ = false;
   bool ignore_state_after_first_target_ = false;
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr target_sub_;

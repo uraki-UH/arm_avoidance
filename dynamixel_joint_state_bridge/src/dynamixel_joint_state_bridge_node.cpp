@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "dynamixel_handler_msgs/msg/dynamixel_present.hpp"
+#include "gng_control_msgs/msg/joint_control_claim.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 
@@ -36,15 +37,23 @@ public:
   {
     declare_parameter<std::string>("input_topic", "/dynamixel/state/present");
     declare_parameter<std::string>("output_topic", "joint_states");
+    declare_parameter<std::string>("command_output_topic", "");
+    declare_parameter<std::string>("control_claim_topic", "");
+    declare_parameter<int64_t>("control_claim_priority", 100);
     declare_parameter<std::vector<int64_t>>("joint_ids", {});
     declare_parameter<std::vector<std::string>>("joint_names", {});
     declare_parameter<std::vector<double>>("joint_scales", {});
+    declare_parameter<std::vector<double>>("joint_offsets_deg", {});
 
     input_topic_ = get_parameter("input_topic").as_string();
     output_topic_ = get_parameter("output_topic").as_string();
+    command_output_topic_ = get_parameter("command_output_topic").as_string();
+    control_claim_topic_ = get_parameter("control_claim_topic").as_string();
+    control_claim_priority_ = get_parameter("control_claim_priority").as_int();
     const auto joint_ids_raw = get_parameter("joint_ids").as_integer_array();
     joint_names_ = get_parameter("joint_names").as_string_array();
     joint_scales_ = get_parameter("joint_scales").as_double_array();
+    joint_offsets_deg_ = get_parameter("joint_offsets_deg").as_double_array();
 
     joint_ids_.reserve(joint_ids_raw.size());
     for (const auto id : joint_ids_raw) {
@@ -72,8 +81,24 @@ public:
         "Unset entries will fall back to 1.0.",
         joint_scales_.size(), joint_ids_.size());
     }
+    if (!joint_offsets_deg_.empty() && joint_offsets_deg_.size() != joint_ids_.size()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "joint_offsets_deg size (%zu) does not match joint_ids size (%zu). "
+        "Unset entries will fall back to 0.0.",
+        joint_offsets_deg_.size(), joint_ids_.size());
+    }
 
-    publisher_namespaced_ = create_publisher<sensor_msgs::msg::JointState>(output_topic_, rclcpp::QoS(10));
+    state_publisher_ = create_publisher<sensor_msgs::msg::JointState>(output_topic_, rclcpp::QoS(10));
+    if (!command_output_topic_.empty()) {
+      command_publisher_ = create_publisher<sensor_msgs::msg::JointState>(
+        command_output_topic_, rclcpp::QoS(10).reliable());
+    }
+    if (!control_claim_topic_.empty() && command_publisher_) {
+      control_claim_publisher_ =
+        create_publisher<gng_control_msgs::msg::JointControlClaim>(
+        control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+    }
     subscription_ = create_subscription<dynamixel_handler_msgs::msg::DynamixelPresent>(
       input_topic_, rclcpp::QoS(10),
       std::bind(&DynamixelJointStateBridge::onPresent, this, std::placeholders::_1));
@@ -84,6 +109,14 @@ public:
       input_topic_.c_str(),
       output_topic_.c_str(),
       joint_ids_.empty() ? "all incoming joints" : "configured joint order");
+    if (command_publisher_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "publishing viewer commands to %s with claim topic %s (priority=%ld)",
+        command_output_topic_.c_str(),
+        control_claim_topic_.empty() ? "disabled" : control_claim_topic_.c_str(),
+        static_cast<long>(control_claim_priority_));
+    }
     if (!joint_names_.empty()) {
       RCLCPP_INFO(get_logger(), "joint_names: [%s]", joinNames(joint_names_).c_str());
     }
@@ -132,7 +165,8 @@ private:
           return;
         }
         joint_names.push_back(resolveJointName(i, id));
-        joint_positions.push_back(it->second * kDegToRad * resolveScale(i));
+        joint_positions.push_back(
+          (it->second + resolveOffsetDeg(i)) * kDegToRad * resolveScale(i));
       }
     }
 
@@ -140,7 +174,27 @@ private:
     out.header.stamp = now();
     out.name = std::move(joint_names);
     out.position = std::move(joint_positions);
-    publisher_namespaced_->publish(out);
+    state_publisher_->publish(out);
+    if (command_publisher_) {
+      publishControlClaim(out.name);
+      command_publisher_->publish(out);
+    }
+  }
+
+  void publishControlClaim(const std::vector<std::string>& joint_names)
+  {
+    if (!control_claim_publisher_ || joint_names == claimed_joint_names_) {
+      return;
+    }
+
+    gng_control_msgs::msg::JointControlClaim claim;
+    claim.command_topic = command_output_topic_;
+    claim.joint_names = joint_names;
+    claim.priority = static_cast<int32_t>(control_claim_priority_);
+    claim.mode = gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE;
+    claim.enabled = true;
+    control_claim_publisher_->publish(claim);
+    claimed_joint_names_ = joint_names;
   }
 
   std::string resolveJointName(size_t index, uint16_t id) const
@@ -152,18 +206,35 @@ private:
   }
 
   double resolveScale(size_t index) const
-  {if (index < joint_scales_.size()) {
-      return joint_scales_[index];}
+  {
+    if (index < joint_scales_.size()) {
+      return joint_scales_[index];
+    }
     return 1.0;
+  }
+
+  double resolveOffsetDeg(size_t index) const
+  {
+    if (index < joint_offsets_deg_.size()) {
+      return joint_offsets_deg_[index];
+    }
+    return 0.0;
   }
 
   std::string input_topic_;
   std::string output_topic_;
+  std::string command_output_topic_;
+  std::string control_claim_topic_;
+  int64_t control_claim_priority_ = 100;
   std::vector<uint16_t> joint_ids_;
   std::vector<std::string> joint_names_;
   std::vector<double> joint_scales_;
+  std::vector<double> joint_offsets_deg_;
+  std::vector<std::string> claimed_joint_names_;
   rclcpp::Subscription<dynamixel_handler_msgs::msg::DynamixelPresent>::SharedPtr subscription_;
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher_namespaced_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr state_publisher_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr command_publisher_;
+  rclcpp::Publisher<gng_control_msgs::msg::JointControlClaim>::SharedPtr control_claim_publisher_;
 };
 
 int main(int argc, char* argv[])

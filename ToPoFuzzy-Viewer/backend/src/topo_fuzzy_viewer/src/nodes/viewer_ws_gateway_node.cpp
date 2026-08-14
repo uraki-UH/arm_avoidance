@@ -480,6 +480,35 @@ private:
 
     void broadcastText(const std::string& payload) { auto s = std::make_shared<std::string>(payload); loop_->defer([this, s]() { std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->send(*s, uWS::OpCode::TEXT); }); }
 
+    void broadcastLatestRobotPose(const std::string& payload) {
+        bool schedule_flush = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingRobotPoseMutex_);
+            pendingRobotPosePayload_ = std::make_shared<std::string>(payload);
+            if (!robotPoseFlushScheduled_) {
+                robotPoseFlushScheduled_ = true;
+                schedule_flush = true;
+            }
+        }
+        if (!schedule_flush) return;
+
+        loop_->defer([this]() {
+            std::shared_ptr<const std::string> latest_pose;
+            {
+                std::lock_guard<std::mutex> lock(pendingRobotPoseMutex_);
+                latest_pose = std::move(pendingRobotPosePayload_);
+                robotPoseFlushScheduled_ = false;
+            }
+            if (!latest_pose) return;
+
+            std::lock_guard<std::mutex> lock(connectionMutex_);
+            for (auto* ws : connections_) {
+                if (ws->getBufferedAmount() > 0) continue;
+                ws->send(*latest_pose, uWS::OpCode::TEXT);
+            }
+        });
+    }
+
     void sendStreamDelete(const std::string& sid) {
         std::string id = (sid.front() == '/') ? sid : "/" + sid;
         broadcastText(json({{"type", "stream.delete"}, {"id", id}, {"tag", id}, {"topic", id}}).dump());
@@ -554,8 +583,16 @@ private:
     }
     void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc) {
         if (msg->data.empty()) return;
-        if (is_desc) { json j = json::parse(msg->data, nullptr, false); if (!j.is_discarded()) { std::lock_guard<std::mutex> lock(robotMutex_); lastRobotDescriptions_[j.value("tag", "default")] = msg->data; } }
-        broadcastText(msg->data);
+        if (is_desc) {
+            json j = json::parse(msg->data, nullptr, false);
+            if (!j.is_discarded()) {
+                std::lock_guard<std::mutex> lock(robotMutex_);
+                lastRobotDescriptions_[j.value("tag", "default")] = msg->data;
+            }
+            broadcastText(msg->data);
+            return;
+        }
+        broadcastLatestRobotPose(msg->data);
     }
     void checkLiveness() {
         if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) {
@@ -683,7 +720,8 @@ private:
     std::string lastStaticTfPayload_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
-    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_;
+    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_;
+    std::shared_ptr<const std::string> pendingRobotPosePayload_;
     std::vector<WebSocket*> connections_;
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;
@@ -692,6 +730,7 @@ private:
     double pointCloudMaxHz_ = 10.0;
     unsigned int websocketMaxBackpressureBytes_ = 8 * 1024 * 1024;
     bool pointCloudFlushScheduled_ = false;
+    bool robotPoseFlushScheduled_ = false;
 };
 }
 

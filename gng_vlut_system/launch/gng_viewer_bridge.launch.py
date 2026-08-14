@@ -72,6 +72,7 @@ def launch_setup(context, *args, **kwargs):
     node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
+    direct_joint_tracking = LaunchConfiguration("direct_joint_tracking").perform(context)
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
@@ -273,6 +274,7 @@ def launch_setup(context, *args, **kwargs):
                 "target_topic": f"/{robot_name}/target_joint_states",
                 "state_topic": viewer_joint_state_topic,
                 "output_topic": viewer_joint_state_topic,
+                "direct_tracking": direct_joint_tracking,
             }.items()
         ),
 
@@ -375,6 +377,11 @@ def generate_launch_description():
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument(
+            "direct_joint_tracking",
+            default_value="true",
+            description="Reflect mux target joint values directly without velocity interpolation",
+        ),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value=""),
         DeclareLaunchArgument("arm_leaf_link_names", default_value=""),

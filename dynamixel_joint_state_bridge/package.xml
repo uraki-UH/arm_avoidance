@@ -12,6 +12,7 @@
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
   <depend>dynamixel_handler_msgs</depend>
+  <depend>gng_control_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

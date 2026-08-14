@@ -41,6 +41,7 @@ def launch_setup(context, *args, **kwargs):
     max_joint_velocity = LaunchConfiguration("max_joint_velocity").perform(context)
     position_tolerance = LaunchConfiguration("position_tolerance").perform(context)
     use_wraparound = LaunchConfiguration("use_wraparound").perform(context)
+    direct_tracking = LaunchConfiguration("direct_tracking").perform(context)
     ignore_state_after_first_target = LaunchConfiguration("ignore_state_after_first_target").perform(context)
     initial_joint_names_csv = LaunchConfiguration("initial_joint_names_csv").perform(context)
 
@@ -63,6 +64,7 @@ def launch_setup(context, *args, **kwargs):
                 "max_joint_velocity": safe_float(max_joint_velocity, 0.6),
                 "position_tolerance": safe_float(position_tolerance, 0.01),
                 "use_wraparound": safe_bool(use_wraparound, True),
+                "direct_tracking": safe_bool(direct_tracking, False),
                 "ignore_state_after_first_target": safe_bool(ignore_state_after_first_target, False),
                 "initial_joint_names_csv": initial_joint_names_csv,
             }],
@@ -81,6 +83,7 @@ def generate_launch_description():
         DeclareLaunchArgument("max_joint_velocity", default_value="0.6"),
         DeclareLaunchArgument("position_tolerance", default_value="0.01"),
         DeclareLaunchArgument("use_wraparound", default_value="true"),
+        DeclareLaunchArgument("direct_tracking", default_value="false"),
         DeclareLaunchArgument("ignore_state_after_first_target", default_value="false"),
         DeclareLaunchArgument("initial_joint_names_csv", default_value=""),
         OpaqueFunction(function=launch_setup),
