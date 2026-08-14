@@ -123,11 +123,37 @@ ros2 run gng_vlut_system self_recognition_filter_node
 (topoarmの場合)
 python3 dummy_joint_pub.py --robot topoarm
 
-## realsenseのrosbag
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ --topics /camera/camera/depth/color/points --loop
+## realsenseのrosbag + 点群座標変換
+# bagのraw点群は内部トピックへ退避し、変換後の点群が元のトピック名を引き継ぐ。
+# 入出力を同じトピックにすると変換ノードが自己購読するため、直接同名にはしない。
 
-## 点群の座標変換版トピック
-ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py 
+# ターミナル1: raw点群を /camera/camera/depth/color/points_raw へリマップして再生
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
+  --topics /camera/camera/depth/color/points \
+  --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw \
+  --loop
+
+# ターミナル2: 変換後の点群を元のトピック名でpublish
+ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
+  input_topic:=/camera/camera/depth/color/points_raw \
+  output_topic:=/camera/camera/depth/color/points
+
+### 変換済み点群を新しいrosbagへ1周分だけ保存
+# 先に上の変換ノードを起動し、次にrecordを開始してから、最後にbagを--loopなしで再生する。
+
+# ターミナル3: 変換後の元トピック名をrecord
+ros2 bag record \
+  -o /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed \
+  /camera/camera/depth/color/points
+
+# ターミナル1: record開始後にraw bagを1回だけ再生
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
+  --topics /camera/camera/depth/color/points \
+  --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
+
+# 再生終了後、ターミナル3でCtrl-Cしてrecordを終了する。
+# 作成後は変換ノードなしで次を再生できる。
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
