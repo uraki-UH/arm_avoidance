@@ -12,6 +12,7 @@
 - [RELEASE_NOTE_TEMPLATE.md](./RELEASE_NOTE_TEMPLATE.md)
 - [releases/2026-07-29_documentation_workflow.md](./releases/2026-07-29_documentation_workflow.md)
 - [designs/2026-08-03_graph_coarsening_visualization.md](./designs/2026-08-03_graph_coarsening_visualization.md)
+- [designs/2026-08-14_grasp_contact_activation_lookup.md](./designs/2026-08-14_grasp_contact_activation_lookup.md)
 
 ## 運用ルール
 
