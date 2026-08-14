@@ -190,6 +190,9 @@ ros2 launch ais_gng topological_grid.launch.py \
   edge_inference_enabled:=true \
   edge_max_length:=0.10
 
+保持期限を超えたセルは通常削除されますが、削除によって占有セルの低いZ側と高いZ側が
+26近傍グラフ上で分断されるセルは保持されます。水平方向だけの分断は削除を妨げません。
+
 
 ## realsense 
 ros2 launch realsense2_camera rs_launch.py \

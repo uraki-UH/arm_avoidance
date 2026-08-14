@@ -271,6 +271,44 @@ TEST(TopologicalGridAssignment, KeepsConfirmedVoxelAfterLabelHistoryAgesOut)
   EXPECT_TRUE(filter.update({}).empty());
 }
 
+TEST(TopologicalGridAssignment, KeepsExpiredVoxelThatBridgesLowerAndUpperCells)
+{
+  using fuzzrobo::topological_grid::GridCell;
+  using fuzzrobo::topological_grid::LabeledGridVoxel;
+  using fuzzrobo::topological_grid::TemporalVoxelFilter;
+  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
+
+  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0});
+  const LabeledGridVoxel lower{GridCell{0, 0, 0}, 3, 1, 1, 1};
+  const LabeledGridVoxel bridge{GridCell{0, 0, 1}, 3, 1, 1, 2};
+  const LabeledGridVoxel upper{GridCell{0, 0, 2}, 3, 1, 1, 1};
+
+  ASSERT_EQ(filter.update({lower, bridge, upper}).size(), 3U);
+  const auto retained = filter.update({lower, upper});
+  ASSERT_EQ(retained.size(), 3U);
+  EXPECT_EQ(retained[1].cell.z, 1);
+  EXPECT_EQ(retained[1].node_count, 0U);
+}
+
+TEST(TopologicalGridAssignment, AllowsExpiredVoxelToSplitCellsHorizontally)
+{
+  using fuzzrobo::topological_grid::GridCell;
+  using fuzzrobo::topological_grid::LabeledGridVoxel;
+  using fuzzrobo::topological_grid::TemporalVoxelFilter;
+  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
+
+  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0});
+  const LabeledGridVoxel left{GridCell{0, 0, 0}, 3, 1, 1, 1};
+  const LabeledGridVoxel bridge{GridCell{1, 0, 0}, 3, 1, 1, 2};
+  const LabeledGridVoxel right{GridCell{2, 0, 0}, 3, 1, 1, 1};
+
+  ASSERT_EQ(filter.update({left, bridge, right}).size(), 3U);
+  const auto separated = filter.update({left, right});
+  ASSERT_EQ(separated.size(), 2U);
+  EXPECT_EQ(separated.front().cell.x, 0);
+  EXPECT_EQ(separated.back().cell.x, 2);
+}
+
 TEST(TopologicalGridAssignment, KeepsOccupancyAcrossIncludedLabelChanges)
 {
   using fuzzrobo::topological_grid::GridCell;

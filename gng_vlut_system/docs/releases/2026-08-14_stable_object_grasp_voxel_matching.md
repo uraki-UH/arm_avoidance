@@ -54,7 +54,7 @@
 - `grasp_voxel_matcher`、`grasp_pose_occupancy_evaluator`、`gripper_volume_graph`、`test_topological_grid_assignment`が成功。
 - 合成3セル対象で候補1件、占有必須3/3、最小体積外支持2、禁止領域衝突0をROS topicで確認。
 - 非連続観測を含むlabel履歴4回、点群input履歴4回を独立に取得し、現在支持がある場合だけ出力することを確認。
-- 10 mmセル既定値、点群支持、GNG近傍判定、100更新リング、孤立セルだけの点群削除、label履歴0での保持、位置揺れ猶予、edge補間を含む`test_topological_grid_assignment` 18件が成功。
+- 10 mmセル既定値、点群支持、GNG近傍判定、100更新リング、孤立セルだけの点群削除、label履歴0での保持、Z方向の切断保護、水平方向の分離許可、位置揺れ猶予、edge補間を含む`test_topological_grid_assignment` 20件が成功。
 - 分離した`ROS_DOMAIN_ID=126`で引数なし起動し、`grid_size=0.010`を確認後にノードを終了。
 - 実`/topological_map`入力で`frame_id=graspnet_table`、`voxel_size=0.01 m`、`origin=(0,0,0)`を確認。
 - 点群支持なし、対象外label、26近傍、label別カウント、孤立セルの各5回判定と100更新後の履歴削除を単体テストで確認。

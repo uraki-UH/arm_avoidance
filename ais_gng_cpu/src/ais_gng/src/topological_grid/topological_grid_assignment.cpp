@@ -177,6 +177,70 @@ std::size_t GridCellHash::operator()(const GridCell &cell) const noexcept
   return seed;
 }
 
+namespace
+{
+
+bool deletionDisconnectsVerticalNeighbors(
+  const GridCell &candidate,
+  const std::unordered_set<GridCell, GridCellHash> &active_cells)
+{
+  std::vector<GridCell> lower_neighbors;
+  std::vector<GridCell> upper_neighbors;
+  for (int dx = -1; dx <= 1; ++dx) {
+    for (int dy = -1; dy <= 1; ++dy) {
+      for (int dz = -1; dz <= 1; ++dz) {
+        if (dz == 0) {
+          continue;
+        }
+        const GridCell neighbor{
+          candidate.x + dx, candidate.y + dy, candidate.z + dz};
+        if (active_cells.find(neighbor) == active_cells.end()) {
+          continue;
+        }
+        (dz < 0 ? lower_neighbors : upper_neighbors).push_back(neighbor);
+      }
+    }
+  }
+  if (lower_neighbors.empty() || upper_neighbors.empty()) {
+    return false;
+  }
+
+  std::unordered_set<GridCell, GridCellHash> visited;
+  visited.reserve(active_cells.size());
+  std::deque<GridCell> pending;
+  pending.push_back(lower_neighbors.front());
+  visited.insert(lower_neighbors.front());
+  while (!pending.empty()) {
+    const GridCell current = pending.front();
+    pending.pop_front();
+    for (int dx = -1; dx <= 1; ++dx) {
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dz = -1; dz <= 1; ++dz) {
+          if (dx == 0 && dy == 0 && dz == 0) {
+            continue;
+          }
+          const GridCell neighbor{current.x + dx, current.y + dy, current.z + dz};
+          if (neighbor == candidate ||
+            active_cells.find(neighbor) == active_cells.end() ||
+            !visited.insert(neighbor).second)
+          {
+            continue;
+          }
+          pending.push_back(neighbor);
+        }
+      }
+    }
+  }
+
+  const auto is_disconnected = [&visited](const GridCell &cell) {
+      return visited.find(cell) == visited.end();
+    };
+  return std::any_of(lower_neighbors.begin(), lower_neighbors.end(), is_disconnected) ||
+         std::any_of(upper_neighbors.begin(), upper_neighbors.end(), is_disconnected);
+}
+
+}  // namespace
+
 TemporalVoxelFilter::TemporalVoxelFilter(TemporalVoxelFilterConfig config)
 : config_(config)
 {
@@ -224,8 +288,15 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   std::size_t minimum_input_points_per_voxel,
   const GridPointCounts *input_point_counts)
 {
+  struct ExpirationCandidate
+  {
+    GridCell cell;
+    std::size_t input_point_count = 0;
+  };
+
   std::vector<LabeledGridVoxel> stable_voxels;
   stable_voxels.reserve(label_voxels.size());
+  std::vector<ExpirationCandidate> expiration_candidates;
   std::unordered_set<GridCell, GridCellHash> updated_cells;
   updated_cells.reserve(label_voxels.size());
 
@@ -270,9 +341,8 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxels.push_back(stable_voxel);
   }
 
-  for (auto it = history_.begin(); it != history_.end();) {
+  for (auto it = history_.begin(); it != history_.end(); ++it) {
     if (updated_cells.find(it->first) != updated_cells.end()) {
-      ++it;
       continue;
     }
     bool has_input_points = !require_input_points;
@@ -293,10 +363,13 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     const std::size_t minimum_point_count = isolated
       ? config_.isolated_minimum_point_input_history_count
       : config_.minimum_point_input_history_count;
-    if (history.active &&
-      history.consecutive_missing_label_updates <= config_.maximum_missing_label_updates &&
-      (!isolated || history.point_input_observation_count >= minimum_point_count))
-    {
+    const bool point_history_sufficient =
+      !isolated || history.point_input_observation_count >= minimum_point_count;
+    const bool within_retention_window =
+      history.consecutive_missing_label_updates <= config_.maximum_missing_label_updates;
+    if (history.active && !point_history_sufficient) {
+      history.active = false;
+    } else if (history.active && within_retention_window) {
       if (history.label_observation_count > 0) {
         history.active_label = dominantLabel(history.label_counts);
       }
@@ -308,14 +381,50 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       stable_voxel.label_history_count = history.label_observation_count;
       stable_voxel.point_input_history_count = history.point_input_observation_count;
       stable_voxels.push_back(stable_voxel);
-    } else {
-      history.active = false;
+    } else if (history.active) {
+      expiration_candidates.push_back(ExpirationCandidate{it->first, input_point_count});
     }
-    if (!history.active && history.label_observation_count == 0) {
-      it = history_.erase(it);
+  }
+
+  std::unordered_set<GridCell, GridCellHash> active_cells;
+  active_cells.reserve(history_.size());
+  for (const auto &[cell, history] : history_) {
+    if (history.active) {
+      active_cells.insert(cell);
+    }
+  }
+  std::sort(
+    expiration_candidates.begin(), expiration_candidates.end(),
+    [](const ExpirationCandidate &lhs, const ExpirationCandidate &rhs) {
+      return gridCellLess(lhs.cell, rhs.cell);
+    });
+  for (const auto &candidate : expiration_candidates) {
+    auto history_it = history_.find(candidate.cell);
+    if (history_it == history_.end() || !history_it->second.active) {
       continue;
     }
-    ++it;
+    auto &history = history_it->second;
+    if (deletionDisconnectsVerticalNeighbors(candidate.cell, active_cells)) {
+      auto stable_voxel = history.last_voxel;
+      stable_voxel.label = history.active_label;
+      stable_voxel.node_count = 0;
+      stable_voxel.input_point_count = candidate.input_point_count;
+      stable_voxel.history_sample_count = history.samples.size();
+      stable_voxel.label_history_count = history.label_observation_count;
+      stable_voxel.point_input_history_count = history.point_input_observation_count;
+      stable_voxels.push_back(stable_voxel);
+      continue;
+    }
+    history.active = false;
+    active_cells.erase(candidate.cell);
+  }
+
+  for (auto it = history_.begin(); it != history_.end();) {
+    if (!it->second.active && it->second.label_observation_count == 0) {
+      it = history_.erase(it);
+    } else {
+      ++it;
+    }
   }
 
   std::sort(stable_voxels.begin(), stable_voxels.end(), cellLess);
