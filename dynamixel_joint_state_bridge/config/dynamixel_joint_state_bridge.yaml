@@ -2,6 +2,9 @@
   ros__parameters:
     input_topic: /dynamixel/state/present
     output_topic: joint_states
+    command_output_topic: dynamixel_joint_states
+    control_claim_topic: control_claims
+    control_claim_priority: 100
 
     joint_ids:
       - 1
@@ -26,29 +29,43 @@
       - 18
       - 18
 
+      - 21
+      - 22
+
     joint_names:
-      - right_joint1
-      - right_joint2
-      - right_joint3
-      - right_joint4
-      - right_joint5
-      - right_joint6
-      - right_joint7
-      - right_gripper_left_joint
-      - right_gripper_right_joint
+      - R_joint1
+      - R_joint2
+      - R_joint3
+      - R_joint4
+      - R_joint5
+      - R_joint6
+      - R_joint7
+      - R_gripper_joint
+      - R_gripper_mimic
 
-      - left_joint1
-      - left_joint2
-      - left_joint3
-      - left_joint4
-      - left_joint5
-      - left_joint6
-      - left_joint7
-      - left_gripper_left_joint
-      - left_gripper_right_joint
+      - L_joint1
+      - L_joint2
+      - L_joint3
+      - L_joint4
+      - L_joint5
+      - L_joint6
+      - L_joint7
+      - L_gripper_joint
+      - L_gripper_mimic
 
+      - neck_pan_joint
+      - neck_tilt_joint
 
     joint_scales:
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -1.0
+      - -0.015
+      - 0.015
       - 1.0
       - 1.0
       - 1.0
@@ -57,13 +74,28 @@
       - 1.0
       - 1.0
       - -0.015
-      - -0.015
+      - 0.015
       - 1.0
-      - 1.0
-      - 1.0
-      - 1.0
-      - 1.0
-      - 1.0
-      - 1.0
-      - -0.015
-      - -0.015
+      - -1.0
+
+    joint_offsets_deg:
+      - 0.0
+      - -90.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 90.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0

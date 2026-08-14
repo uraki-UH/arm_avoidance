@@ -88,6 +88,13 @@ ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 ##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
 ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
 
+realsense
+ros2 run dynamixel_joint_state_bridge dynamixel_joint_state_bridge_node \
+  --ros-args \
+  -r __ns:=/ToPoDualArm \
+  --params-file /ros2_ws/src/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge.yaml \
+  -p output_topic:=viewer_joint_states
+
 ##　自己認識ボクセルの起動
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -124,7 +131,7 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py
 
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
-
+## 衝突urdfの球化
 ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 
