@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
@@ -28,10 +28,12 @@ import {
     useGraphLayerSettings,
 } from './features/visualization/graphLayerSettings';
 
+type ClippingRange = Pick<ClippingPlane, 'min' | 'max'>;
+
 function useClippingPlanes() {
     const [planes, setPlanes] = useState<ClippingPlane[]>([]);
 
-    const addPlane = (axis: ClippingAxis) => {
+    const addPlane = (axis: ClippingAxis, initialRange?: ClippingRange) => {
         const existingPlane = planes.find((plane) => plane.axis === axis);
         if (existingPlane) {
             setPlanes(prev => prev.map((plane) => (
@@ -43,12 +45,18 @@ function useClippingPlanes() {
         }
 
         const id = `plane-${Date.now()}`;
+        const initialMin = initialRange?.min ?? -100;
+        const initialMax = initialRange?.max ?? 100;
+        const hasUsableRange =
+            Number.isFinite(initialMin) &&
+            Number.isFinite(initialMax) &&
+            initialMin < initialMax;
         const newPlane: ClippingPlane = {
             id,
             axis,
             position: 0,
-            min: -100,
-            max: 100,
+            min: hasUsableRange ? initialMin : -100,
+            max: hasUsableRange ? initialMax : 100,
             inverted: false,
             enabled: true,
         };
@@ -93,6 +101,17 @@ function useClippingPlanes() {
     };
 
     return { planes, addPlane, updatePlane, removePlane, removeAll, getThreePlanes };
+}
+
+function ClippingPlaneSync({ planes }: { planes: THREE.Plane[] }) {
+    const { gl, invalidate } = useThree();
+
+    useEffect(() => {
+        gl.clippingPlanes = planes;
+        invalidate();
+    }, [gl, invalidate, planes]);
+
+    return null;
 }
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
@@ -183,13 +202,16 @@ function App() {
   const zoneMonitor = useZoneMonitor();
   const { getZoneCounts } = zoneMonitor;
 
-    // Stable gl config: must not change between renders or r3f recreates the WebGL renderer.
+    const threeClippingPlanes = useMemo(
+        () => clipping.getThreePlanes(),
+        [clipping.planes]
+    );
+
+    // Stable gl config: clipping planes are synchronized inside the Canvas.
     const canvasGl = useMemo(() => ({
         localClippingEnabled: false,
-        clippingPlanes: clipping.getThreePlanes(),
         powerPreference: 'high-performance' as const,
         antialias: false,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []);
 
     const {
@@ -654,6 +676,7 @@ function App() {
                             });
                         }}
                     >
+                        <ClippingPlaneSync planes={threeClippingPlanes} />
                         <ambientLight intensity={0.3} />
                         <pointLight position={[10, 10, 10]} intensity={0.5} />
                         <pointLight position={[-10, -10, -10]} intensity={0.3} />
@@ -694,7 +717,7 @@ function App() {
                             },
                             {
                                 data: voxelData, settings: voxelSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                    <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
+                                    <VoxelRenderer key={tag} message={{ type: 'stream.voxel', tag, data: d.data, labels: d.labels, layout: d.layout, frameId: d.frameId }} settings={s} tf={tf} manualTransform={s.transform} />
                                 ), defaultSettings: { visible: true, color: '#00ff88', wireframe: true, opacity: 0.5, emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             }
                         ].map(({ data, settings, component, defaultSettings }) =>

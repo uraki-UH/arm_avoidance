@@ -13,7 +13,7 @@ interface ClippingBounds {
 
 interface ClippingControlsProps {
     planes: ClippingPlane[];
-    onAddPlane: (axis: ClippingAxis) => void;
+    onAddPlane: (axis: ClippingAxis, initialRange?: { min: number; max: number }) => void;
     onUpdatePlane: (id: string, updates: Partial<ClippingPlane>) => void;
     onRemovePlane: (id: string) => void;
     onRemoveAll: () => void;
@@ -29,19 +29,32 @@ export function ClippingControls({
     bounds,
 }: ClippingControlsProps) {
     const getFallbackRange = (axis: ClippingAxis): { min: number; max: number } => {
-        if (!bounds) {
-            return { min: -100, max: 100 };
-        }
+        let range: { min: number; max: number };
+        if (!bounds) return { min: -100, max: 100 };
         switch (axis) {
             case 'x':
-                return { min: bounds.minX, max: bounds.maxX };
+                range = { min: bounds.minX, max: bounds.maxX };
+                break;
             case 'y':
-                return { min: bounds.minY, max: bounds.maxY };
+                range = { min: bounds.minY, max: bounds.maxY };
+                break;
             case 'z':
-                return { min: bounds.minZ, max: bounds.maxZ };
+                range = { min: bounds.minZ, max: bounds.maxZ };
+                break;
             default:
                 return { min: -100, max: 100 };
         }
+
+        if (!Number.isFinite(range.min) || !Number.isFinite(range.max)) {
+            return { min: -100, max: 100 };
+        }
+        if (range.min === range.max) {
+            return { min: range.min - 0.01, max: range.max + 0.01 };
+        }
+        return {
+            min: Math.min(range.min, range.max),
+            max: Math.max(range.min, range.max),
+        };
     };
 
     return (
@@ -52,7 +65,7 @@ export function ClippingControls({
                     {(['x', 'y', 'z'] as ClippingAxis[]).map((axis) => (
                         <button
                             key={axis}
-                            onClick={() => onAddPlane(axis)}
+                            onClick={() => onAddPlane(axis, getFallbackRange(axis))}
                             className="btn-secondary px-3 py-3 text-xs font-semibold uppercase tracking-[0.08em]"
                         >
                             {axis}
@@ -75,9 +88,20 @@ export function ClippingControls({
                         const fallbackRange = getFallbackRange(plane.axis);
                         const min = plane.min ?? fallbackRange.min;
                         const max = plane.max ?? fallbackRange.max;
-                        const safeMin = Math.min(min, max);
-                        const safeMax = Math.max(min, max);
-                        const safeStep = Math.max((safeMax - safeMin) / 200, 0.01);
+                        const clamp = (value: number) => Math.min(
+                            fallbackRange.max,
+                            Math.max(fallbackRange.min, value)
+                        );
+                        let safeMin = clamp(Math.min(min, max));
+                        let safeMax = clamp(Math.max(min, max));
+                        if (safeMin >= safeMax) {
+                            safeMin = fallbackRange.min;
+                            safeMax = fallbackRange.max;
+                        }
+                        const safeStep = Math.max(
+                            (fallbackRange.max - fallbackRange.min) / 200,
+                            0.001
+                        );
                         return (
                             <div key={plane.id} className="surface-muted space-y-2 px-3 py-3">
                                 <div className="flex items-center justify-between gap-2">
