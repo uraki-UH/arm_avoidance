@@ -234,7 +234,7 @@ public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
         const int port = declare_parameter<int>("port", 9001);
         pointCloudMaxPoints_ = static_cast<size_t>(std::max<int64_t>(
-            0, declare_parameter<int64_t>("pointcloud_max_points", 100000)));
+            0, declare_parameter<int64_t>("pointcloud_max_points", 500000)));
         pointCloudMaxHz_ = std::max(
             0.0, declare_parameter<double>("pointcloud_max_hz", 10.0));
         websocketMaxBackpressureBytes_ = static_cast<unsigned int>(std::max<int64_t>(
@@ -684,7 +684,7 @@ private:
     std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
     std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
-    size_t pointCloudMaxPoints_ = 100000;
+    size_t pointCloudMaxPoints_ = 500000;
     double pointCloudMaxHz_ = 10.0;
     unsigned int websocketMaxBackpressureBytes_ = 8 * 1024 * 1024;
     bool pointCloudFlushScheduled_ = false;
