@@ -178,6 +178,18 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     this->declare_parameter<std::string>("point_support_mode", "auto"));
   voxelization_options_.point_support_radius_m = this->declare_parameter<double>(
     "point_support_radius_m", 0.02);
+  voxelization_options_.unknown_shape_filter_enabled = this->declare_parameter<bool>(
+    "unknown_shape_filter_enabled", true);
+  voxelization_options_.shape_neighborhood_hops = this->declare_parameter<int>(
+    "shape_neighborhood_hops", 2);
+  const int shape_minimum_neighbors = this->declare_parameter<int>(
+    "shape_minimum_neighbors", 3);
+  voxelization_options_.shape_residual_weight = this->declare_parameter<double>(
+    "shape_residual_weight", 0.7);
+  voxelization_options_.shape_mad_multiplier = this->declare_parameter<double>(
+    "shape_mad_multiplier", 3.0);
+  voxelization_options_.shape_seed_expansion_scale = this->declare_parameter<double>(
+    "shape_seed_expansion_scale", 2.0);
   edge_inference_options_.enabled = this->declare_parameter<bool>(
     "edge_inference_enabled", true);
   edge_inference_options_.maximum_edge_length = this->declare_parameter<double>(
@@ -225,6 +237,22 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "history_reset_on_time_regression", false);
   history_reset_node_count_ratio_ = this->declare_parameter<double>(
     "history_reset_node_count_ratio", 0.5);
+  point_activity_config_.enabled = this->declare_parameter<bool>(
+    "point_activity_update_enabled", true);
+  point_activity_cell_size_ = this->declare_parameter<double>(
+    "point_activity_cell_size", 0.02);
+  point_activity_config_.ema_alpha = this->declare_parameter<double>(
+    "point_activity_ema_alpha", 0.2);
+  point_activity_config_.top_fraction = this->declare_parameter<double>(
+    "point_activity_top_fraction", 0.1);
+  point_activity_config_.occupancy_change_weight = this->declare_parameter<double>(
+    "point_activity_occupancy_weight", 0.7);
+  const int point_activity_warmup_updates = this->declare_parameter<int>(
+    "point_activity_warmup_updates", 5);
+  const int point_activity_minimum_update_interval = this->declare_parameter<int>(
+    "point_activity_minimum_update_interval", 1);
+  const int point_activity_maximum_update_interval = this->declare_parameter<int>(
+    "point_activity_maximum_update_interval", 10);
 
   if (grid_spec_.cell_size <= 0.0 || pointcloud_timeout_sec_ <= 0.0 ||
     edge_inference_options_.maximum_edge_length <= 0.0 ||
@@ -239,7 +267,16 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     temporal_filter_config_.node_identity_max_displacement < 0.0 ||
     voxelization_options_.neighbor_radius_m < 0.0 ||
     voxelization_options_.point_support_radius_m < 0.0 ||
-    history_reset_node_count_ratio_ < 0.0 || history_reset_node_count_ratio_ > 1.0)
+    history_reset_node_count_ratio_ < 0.0 || history_reset_node_count_ratio_ > 1.0 ||
+    point_activity_cell_size_ <= 0.0 || point_activity_config_.ema_alpha <= 0.0 ||
+    point_activity_config_.ema_alpha > 1.0 || point_activity_config_.top_fraction <= 0.0 ||
+    point_activity_config_.top_fraction > 1.0 ||
+    point_activity_config_.occupancy_change_weight < 0.0 ||
+    point_activity_config_.occupancy_change_weight > 1.0 ||
+    voxelization_options_.shape_residual_weight < 0.0 ||
+    voxelization_options_.shape_residual_weight > 1.0 ||
+    voxelization_options_.shape_mad_multiplier < 0.0 ||
+    voxelization_options_.shape_seed_expansion_scale < 0.0)
   {
     throw std::invalid_argument(
             "grid, inference, point-support, and node-identity parameters are invalid");
@@ -249,6 +286,10 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     minimum_point_input_history_count <= 0 ||
     isolated_minimum_label_history_count <= 0 ||
     isolated_minimum_point_input_history_count <= 0 ||
+    point_activity_warmup_updates < 0 ||
+    voxelization_options_.shape_neighborhood_hops <= 0 || shape_minimum_neighbors <= 0 ||
+    point_activity_minimum_update_interval <= 0 ||
+    point_activity_maximum_update_interval < point_activity_minimum_update_interval ||
     maximum_missing_label_updates < 0 ||
     minimum_label_history_count > history_window_size ||
     minimum_point_input_history_count > history_window_size ||
@@ -263,6 +304,8 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   voxelization_options_.minimum_input_points_per_voxel =
     static_cast<std::size_t>(minimum_input_points_per_voxel);
   voxelization_options_.neighbor_radius_cells = neighbor_radius_cells;
+  voxelization_options_.shape_minimum_neighbors =
+    static_cast<std::size_t>(shape_minimum_neighbors);
   temporal_filter_config_.history_window_size =
     static_cast<std::size_t>(history_window_size);
   temporal_filter_config_.minimum_label_history_count =
@@ -276,6 +319,13 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   temporal_filter_config_.maximum_missing_label_updates =
     static_cast<std::size_t>(maximum_missing_label_updates);
   temporal_filter_ = std::make_unique<TemporalVoxelFilter>(temporal_filter_config_);
+  point_activity_config_.minimum_update_interval =
+    static_cast<std::size_t>(point_activity_minimum_update_interval);
+  point_activity_config_.warmup_update_count =
+    static_cast<std::size_t>(point_activity_warmup_updates);
+  point_activity_config_.maximum_update_interval =
+    static_cast<std::size_t>(point_activity_maximum_update_interval);
+  point_activity_scheduler_ = std::make_unique<PointActivityScheduler>(point_activity_config_);
 
   if (origin_shift_half_) {
     const double half = grid_spec_.cell_size * 0.5;
@@ -319,7 +369,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "origin=(%.3f, %.3f, %.3f) "
     "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
     "label/point=%zu/%zu isolated=%zu/%zu missing_label_grace=%zu "
-    "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm",
+    "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm "
+    "point_activity=%s/%.3fm/warmup=%zu/interval=%zu-%zu "
+    "unknown_shape=%s/hops=%d/mad=%.2f/expand=%.2f",
     input_topic_.c_str(),
     pointcloud_topic_.c_str(),
     pointcloud_timeout_sec_,
@@ -351,7 +403,16 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     temporal_filter_config_.node_identity_history_migration_enabled ? "enabled" : "disabled",
     triangle_inference_options_.enabled ? "enabled" : "disabled",
     triangle_inferred_topic_.c_str(),
-    triangle_inference_options_.maximum_edge_length);
+    triangle_inference_options_.maximum_edge_length,
+    point_activity_config_.enabled ? "enabled" : "disabled",
+    point_activity_cell_size_,
+    point_activity_config_.warmup_update_count,
+    point_activity_config_.minimum_update_interval,
+    point_activity_config_.maximum_update_interval,
+    voxelization_options_.unknown_shape_filter_enabled ? "enabled" : "disabled",
+    voxelization_options_.shape_neighborhood_hops,
+    voxelization_options_.shape_mad_multiplier,
+    voxelization_options_.shape_seed_expansion_scale);
 }
 
 void TopologicalGridNode::mapCallback(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg)
@@ -546,6 +607,7 @@ void TopologicalGridNode::publishResult(
   }
   if (!reset_reason.empty()) {
     temporal_filter_->clear();
+    point_activity_scheduler_->clear();
     ++history_reset_count_;
     last_history_reset_reason_ = reset_reason;
     RCLCPP_WARN(
@@ -555,6 +617,28 @@ void TopologicalGridNode::publishResult(
   last_map_stamp_ = current_stamp;
   last_map_node_count_ = map.nodes.size();
   has_last_map_state_ = true;
+
+  if (voxelization_options_.require_input_points && point_activity_config_.enabled) {
+    GridSpec activity_spec = grid_spec_;
+    activity_spec.cell_size = point_activity_cell_size_;
+    const auto activity_point_counts = aggregatePointCounts(
+      input_point_counts, grid_spec_, activity_spec);
+    last_point_activity_decision_ = point_activity_scheduler_->update(activity_point_counts);
+    if (!last_point_activity_decision_.should_process) {
+      ++point_activity_skipped_update_count_;
+      RCLCPP_DEBUG(
+        get_logger(),
+        "Skipping full voxel update: point activity=%.3f interval=%zu elapsed=%zu cells=%zu",
+        last_point_activity_decision_.activity_score,
+        last_point_activity_decision_.desired_update_interval,
+        last_point_activity_decision_.updates_since_process,
+        last_point_activity_decision_.tracked_cell_count);
+      return;
+    }
+  } else {
+    last_point_activity_decision_ = PointActivityDecision{};
+  }
+  ++point_activity_processed_update_count_;
 
   const auto result = voxelizeNodes(
     map, grid_spec_, voxelization_options_, &input_point_counts);
@@ -612,6 +696,13 @@ void TopologicalGridNode::publishResult(
   oss << "\"included_node_count\":" << result.included_node_count << ",";
   oss << "\"excluded_node_count\":" << result.excluded_node_count << ",";
   oss << "\"unsupported_node_count\":" << result.unsupported_node_count << ",";
+  oss << "\"shape_candidate_node_count\":" << result.shape_candidate_node_count << ",";
+  oss << "\"shape_seed_node_count\":" << result.shape_seed_node_count << ",";
+  oss << "\"shape_retained_node_count\":" << result.shape_retained_node_count << ",";
+  oss << "\"shape_rejected_node_count\":" << result.shape_rejected_node_count << ",";
+  oss << "\"shape_score_median\":" << result.shape_score_median << ",";
+  oss << "\"shape_score_mad\":" << result.shape_score_mad << ",";
+  oss << "\"shape_score_threshold\":" << result.shape_score_threshold << ",";
   oss << "\"insufficient_point_voxel_count\":"
       << result.insufficient_point_voxel_count << ",";
   oss << "\"observed_isolated_voxel_count\":" << result.isolated_voxel_count << ",";
@@ -681,6 +772,18 @@ void TopologicalGridNode::publishResult(
       << pointSupportModeName(voxelization_options_.point_support_mode) << "\",";
   oss << "\"point_support_radius_m\":"
       << voxelization_options_.point_support_radius_m << ",";
+  oss << "\"unknown_shape_filter_enabled\":"
+      << (voxelization_options_.unknown_shape_filter_enabled ? "true" : "false") << ",";
+  oss << "\"shape_neighborhood_hops\":"
+      << voxelization_options_.shape_neighborhood_hops << ",";
+  oss << "\"shape_minimum_neighbors\":"
+      << voxelization_options_.shape_minimum_neighbors << ",";
+  oss << "\"shape_residual_weight\":"
+      << voxelization_options_.shape_residual_weight << ",";
+  oss << "\"shape_mad_multiplier\":"
+      << voxelization_options_.shape_mad_multiplier << ",";
+  oss << "\"shape_seed_expansion_scale\":"
+      << voxelization_options_.shape_seed_expansion_scale << ",";
   oss << "\"minimum_input_points_per_voxel\":"
       << voxelization_options_.minimum_input_points_per_voxel << ",";
   oss << "\"neighbor_radius_cells\":"
@@ -689,6 +792,23 @@ void TopologicalGridNode::publishResult(
       << voxelization_options_.neighbor_radius_m << ",";
   oss << "\"history_reset_count\":" << history_reset_count_ << ",";
   oss << "\"last_history_reset_reason\":\"" << last_history_reset_reason_ << "\",";
+  oss << "\"point_activity_update_enabled\":"
+      << (point_activity_config_.enabled ? "true" : "false") << ",";
+  oss << "\"point_activity_cell_size\":" << point_activity_cell_size_ << ",";
+  oss << "\"point_activity_warmup_updates\":"
+      << point_activity_config_.warmup_update_count << ",";
+  oss << "\"point_activity_score\":"
+      << last_point_activity_decision_.activity_score << ",";
+  oss << "\"point_activity_mean_hit_frequency\":"
+      << last_point_activity_decision_.mean_hit_frequency << ",";
+  oss << "\"point_activity_desired_update_interval\":"
+      << last_point_activity_decision_.desired_update_interval << ",";
+  oss << "\"point_activity_tracked_cell_count\":"
+      << last_point_activity_decision_.tracked_cell_count << ",";
+  oss << "\"point_activity_processed_update_count\":"
+      << point_activity_processed_update_count_ << ",";
+  oss << "\"point_activity_skipped_update_count\":"
+      << point_activity_skipped_update_count_ << ",";
   oss << "\"edge_inference_enabled\":"
       << (edge_inference_options_.enabled ? "true" : "false") << ",";
   oss << "\"inferred_require_input_points\":"

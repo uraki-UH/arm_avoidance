@@ -42,6 +42,12 @@ struct VoxelizationOptions
   double neighbor_radius_m = 0.0;
   double point_support_radius_m = 0.02;
   PointSupportMode point_support_mode = PointSupportMode::SameCell;
+  bool unknown_shape_filter_enabled = false;
+  int shape_neighborhood_hops = 2;
+  std::size_t shape_minimum_neighbors = 3;
+  double shape_residual_weight = 0.7;
+  double shape_mad_multiplier = 3.0;
+  double shape_seed_expansion_scale = 2.0;
 };
 
 struct EdgeInferenceOptions
@@ -80,6 +86,51 @@ struct GridCellHash
 };
 
 using GridPointCounts = std::unordered_map<GridCell, std::size_t, GridCellHash>;
+
+struct PointActivitySchedulerConfig
+{
+  bool enabled = true;
+  double ema_alpha = 0.2;
+  double top_fraction = 0.1;
+  double occupancy_change_weight = 0.7;
+  std::size_t warmup_update_count = 5;
+  std::size_t minimum_update_interval = 1;
+  std::size_t maximum_update_interval = 10;
+};
+
+struct PointActivityDecision
+{
+  bool should_process = true;
+  double activity_score = 1.0;
+  double mean_hit_frequency = 0.0;
+  std::size_t desired_update_interval = 1;
+  std::size_t updates_since_process = 0;
+  std::size_t tracked_cell_count = 0;
+};
+
+class PointActivityScheduler
+{
+public:
+  explicit PointActivityScheduler(
+    PointActivitySchedulerConfig config = PointActivitySchedulerConfig{});
+
+  PointActivityDecision update(const GridPointCounts &point_counts);
+  void clear();
+
+private:
+  struct CellStatistics
+  {
+    double hit_frequency = 0.0;
+    double point_density = 0.0;
+    std::size_t consecutive_misses = 0;
+  };
+
+  PointActivitySchedulerConfig config_;
+  std::unordered_map<GridCell, CellStatistics, GridCellHash> statistics_;
+  std::size_t updates_since_process_ = 0;
+  std::size_t observed_update_count_ = 0;
+  bool initialized_ = false;
+};
 
 struct NodeIdentity
 {
@@ -154,6 +205,13 @@ struct GridVoxelizationResult
   std::size_t unsupported_node_count = 0;
   std::size_t insufficient_point_voxel_count = 0;
   std::size_t isolated_voxel_count = 0;
+  std::size_t shape_candidate_node_count = 0;
+  std::size_t shape_seed_node_count = 0;
+  std::size_t shape_retained_node_count = 0;
+  std::size_t shape_rejected_node_count = 0;
+  double shape_score_median = 0.0;
+  double shape_score_mad = 0.0;
+  double shape_score_threshold = 0.0;
   NodeObservationMap eligible_nodes;
 };
 
@@ -250,6 +308,11 @@ std::string gridCellToString(const GridCell &cell);
 GridCell positionToGridCell(
   double x, double y, double z,
   const GridSpec &spec);
+
+GridPointCounts aggregatePointCounts(
+  const GridPointCounts &source,
+  const GridSpec &source_spec,
+  const GridSpec &target_spec);
 
 GridCell nodeToGridCell(
   const ais_gng_msgs::msg::TopologicalNode &node,

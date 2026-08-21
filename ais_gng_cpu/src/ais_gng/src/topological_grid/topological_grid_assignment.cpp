@@ -4,6 +4,8 @@
 #include <array>
 #include <cmath>
 #include <functional>
+#include <limits>
+#include <queue>
 #include <sstream>
 #include <unordered_map>
 
@@ -698,6 +700,146 @@ GridCell positionToGridCell(
   };
 }
 
+GridPointCounts aggregatePointCounts(
+  const GridPointCounts &source,
+  const GridSpec &source_spec,
+  const GridSpec &target_spec)
+{
+  if (source_spec.cell_size <= 0.0 || target_spec.cell_size <= 0.0) {
+    throw std::invalid_argument("point-count grid cell sizes must be positive");
+  }
+
+  GridPointCounts aggregated;
+  aggregated.reserve(source.size());
+  for (const auto &[cell, count] : source) {
+    const double x = source_spec.origin_x +
+      (static_cast<double>(cell.x) + 0.5) * source_spec.cell_size;
+    const double y = source_spec.origin_y +
+      (static_cast<double>(cell.y) + 0.5) * source_spec.cell_size;
+    const double z = source_spec.origin_z +
+      (static_cast<double>(cell.z) + 0.5) * source_spec.cell_size;
+    aggregated[positionToGridCell(x, y, z, target_spec)] += count;
+  }
+  return aggregated;
+}
+
+PointActivityScheduler::PointActivityScheduler(PointActivitySchedulerConfig config)
+: config_(config)
+{
+  if (config_.ema_alpha <= 0.0 || config_.ema_alpha > 1.0 ||
+    config_.top_fraction <= 0.0 || config_.top_fraction > 1.0 ||
+    config_.occupancy_change_weight < 0.0 || config_.occupancy_change_weight > 1.0 ||
+    config_.minimum_update_interval == 0 ||
+    config_.maximum_update_interval < config_.minimum_update_interval)
+  {
+    throw std::invalid_argument("invalid point-activity scheduler configuration");
+  }
+}
+
+PointActivityDecision PointActivityScheduler::update(const GridPointCounts &point_counts)
+{
+  PointActivityDecision decision;
+  ++observed_update_count_;
+  if (!config_.enabled) {
+    decision.tracked_cell_count = point_counts.size();
+    return decision;
+  }
+
+  if (!initialized_) {
+    statistics_.reserve(point_counts.size());
+    for (const auto &[cell, count] : point_counts) {
+      statistics_.emplace(
+        cell, CellStatistics{1.0, static_cast<double>(count), 0});
+    }
+    initialized_ = true;
+    decision.tracked_cell_count = statistics_.size();
+    decision.mean_hit_frequency = statistics_.empty() ? 0.0 : 1.0;
+    return decision;
+  }
+
+  ++updates_since_process_;
+  std::vector<double> changes;
+  changes.reserve(statistics_.size() + point_counts.size());
+  for (auto iterator = statistics_.begin(); iterator != statistics_.end();) {
+    const auto current = point_counts.find(iterator->first);
+    const bool occupied = current != point_counts.end();
+    const double count = occupied ? static_cast<double>(current->second) : 0.0;
+    auto &stats = iterator->second;
+    const double occupancy_change = std::abs((occupied ? 1.0 : 0.0) - stats.hit_frequency);
+    const double density_denominator = std::max({1.0, count, stats.point_density});
+    const double density_change = std::abs(count - stats.point_density) / density_denominator;
+    changes.push_back(
+      config_.occupancy_change_weight * occupancy_change +
+      (1.0 - config_.occupancy_change_weight) * density_change);
+    stats.hit_frequency += config_.ema_alpha *
+      ((occupied ? 1.0 : 0.0) - stats.hit_frequency);
+    stats.point_density += config_.ema_alpha * (count - stats.point_density);
+    stats.consecutive_misses = occupied ? 0 : stats.consecutive_misses + 1;
+    if (!occupied && stats.consecutive_misses > config_.maximum_update_interval * 4 &&
+      stats.hit_frequency < 0.01 && stats.point_density < 0.01)
+    {
+      iterator = statistics_.erase(iterator);
+    } else {
+      ++iterator;
+    }
+  }
+  for (const auto &[cell, count] : point_counts) {
+    if (statistics_.find(cell) != statistics_.end()) {
+      continue;
+    }
+    statistics_.emplace(cell, CellStatistics{config_.ema_alpha,
+      config_.ema_alpha * static_cast<double>(count), 0});
+    changes.push_back(1.0);
+  }
+
+  if (!changes.empty()) {
+    const std::size_t top_count = std::max<std::size_t>(
+      1, static_cast<std::size_t>(std::ceil(config_.top_fraction * changes.size())));
+    const auto top_begin = changes.end() - static_cast<std::ptrdiff_t>(top_count);
+    std::nth_element(changes.begin(), top_begin, changes.end());
+    double sum = 0.0;
+    for (auto iterator = top_begin; iterator != changes.end(); ++iterator) {
+      sum += *iterator;
+    }
+    decision.activity_score = std::clamp(sum / static_cast<double>(top_count), 0.0, 1.0);
+  } else {
+    decision.activity_score = 0.0;
+  }
+
+  double hit_frequency_sum = 0.0;
+  for (const auto &[cell, stats] : statistics_) {
+    (void)cell;
+    hit_frequency_sum += stats.hit_frequency;
+  }
+  decision.mean_hit_frequency = statistics_.empty() ? 0.0 :
+    hit_frequency_sum / static_cast<double>(statistics_.size());
+  const double interval = static_cast<double>(config_.maximum_update_interval) -
+    decision.activity_score * static_cast<double>(
+    config_.maximum_update_interval - config_.minimum_update_interval);
+  decision.desired_update_interval = std::clamp<std::size_t>(
+    static_cast<std::size_t>(std::llround(interval)),
+    config_.minimum_update_interval, config_.maximum_update_interval);
+  decision.should_process = updates_since_process_ >= decision.desired_update_interval;
+  if (observed_update_count_ <= config_.warmup_update_count) {
+    decision.should_process = true;
+    decision.desired_update_interval = 1;
+  }
+  if (decision.should_process) {
+    updates_since_process_ = 0;
+  }
+  decision.updates_since_process = updates_since_process_;
+  decision.tracked_cell_count = statistics_.size();
+  return decision;
+}
+
+void PointActivityScheduler::clear()
+{
+  statistics_.clear();
+  updates_since_process_ = 0;
+  observed_update_count_ = 0;
+  initialized_ = false;
+}
+
 GridCell nodeToGridCell(
   const ais_gng_msgs::msg::TopologicalNode &node,
   const GridSpec &spec)
@@ -731,6 +873,255 @@ std::unordered_map<std::size_t, GridCell> assignNodeGridMap(
 
 namespace
 {
+
+double medianValue(std::vector<double> values)
+{
+  if (values.empty()) {
+    return 0.0;
+  }
+  const std::size_t middle = values.size() / 2U;
+  std::nth_element(
+    values.begin(), values.begin() + static_cast<std::ptrdiff_t>(middle), values.end());
+  const double upper = values[middle];
+  if ((values.size() % 2U) != 0U) {
+    return upper;
+  }
+  const auto lower = std::max_element(
+    values.begin(), values.begin() + static_cast<std::ptrdiff_t>(middle));
+  return 0.5 * (*lower + upper);
+}
+
+struct ShapeFilterResult
+{
+  std::vector<bool> retained;
+  std::size_t candidate_count = 0;
+  std::size_t seed_count = 0;
+  std::size_t retained_count = 0;
+  double score_median = 0.0;
+  double score_mad = 0.0;
+  double score_threshold = 0.0;
+};
+
+ShapeFilterResult computeUnknownShapeFilter(
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  const fuzzrobo::topological_grid::VoxelizationOptions &options)
+{
+  constexpr double kEpsilon = 1.0e-9;
+  const std::size_t node_count = map.nodes.size();
+  ShapeFilterResult result;
+  result.retained.assign(node_count, true);
+  if (!options.unknown_shape_filter_enabled || node_count == 0) {
+    return result;
+  }
+
+  std::vector<std::vector<std::size_t>> adjacency(node_count);
+  std::vector<double> all_edge_lengths;
+  all_edge_lengths.reserve(map.edges.size() / 2U);
+  for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
+    const std::size_t first = map.edges[edge];
+    const std::size_t second = map.edges[edge + 1U];
+    if (first >= node_count || second >= node_count || first == second) {
+      continue;
+    }
+    adjacency[first].push_back(second);
+    adjacency[second].push_back(first);
+    all_edge_lengths.push_back(std::sqrt(squaredNorm(
+      nodePosition(map.nodes[first]) - nodePosition(map.nodes[second]))));
+  }
+  const double global_spacing = std::max(medianValue(all_edge_lengths), kEpsilon);
+  std::vector<double> local_spacing(node_count, global_spacing);
+  for (std::size_t index = 0; index < node_count; ++index) {
+    std::vector<double> lengths;
+    lengths.reserve(adjacency[index].size());
+    for (const auto neighbor : adjacency[index]) {
+      lengths.push_back(std::sqrt(squaredNorm(
+        nodePosition(map.nodes[index]) - nodePosition(map.nodes[neighbor]))));
+    }
+    if (!lengths.empty()) {
+      local_spacing[index] = std::max(medianValue(std::move(lengths)), kEpsilon);
+    }
+  }
+
+  std::vector<double> scores(node_count, 0.0);
+  std::vector<bool> valid_score(node_count, false);
+  std::vector<double> candidate_scores;
+  for (std::size_t index = 0; index < node_count; ++index) {
+    if (map.nodes[index].label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT) {
+      continue;
+    }
+    ++result.candidate_count;
+    result.retained[index] = false;
+    std::vector<std::size_t> neighborhood;
+    std::vector<std::size_t> frontier{index};
+    std::vector<bool> visited(node_count, false);
+    visited[index] = true;
+    double best_score = 0.0;
+    for (int hop = 1; hop <= options.shape_neighborhood_hops; ++hop) {
+      std::vector<std::size_t> next_frontier;
+      for (const auto current : frontier) {
+        for (const auto neighbor : adjacency[current]) {
+          if (!visited[neighbor]) {
+            visited[neighbor] = true;
+            neighborhood.push_back(neighbor);
+            next_frontier.push_back(neighbor);
+          }
+        }
+      }
+      frontier = std::move(next_frontier);
+      if (neighborhood.size() < options.shape_minimum_neighbors) {
+        continue;
+      }
+
+      Vec3d centroid{};
+      Vec3d mean_normal{};
+      const Vec3d center_normal = nodeNormal(map.nodes[index]);
+      const double center_normal_norm = std::sqrt(squaredNorm(center_normal));
+      std::vector<double> normal_variations;
+      std::size_t valid_normal_count = 0;
+      for (const auto neighbor : neighborhood) {
+        const Vec3d position = nodePosition(map.nodes[neighbor]);
+        centroid.x += position.x;
+        centroid.y += position.y;
+        centroid.z += position.z;
+        Vec3d normal = nodeNormal(map.nodes[neighbor]);
+        const double normal_norm = std::sqrt(squaredNorm(normal));
+        if (normal_norm <= kEpsilon) {
+          continue;
+        }
+        normal.x /= normal_norm;
+        normal.y /= normal_norm;
+        normal.z /= normal_norm;
+        if (center_normal_norm > kEpsilon && dot(normal, center_normal) < 0.0) {
+          normal.x = -normal.x;
+          normal.y = -normal.y;
+          normal.z = -normal.z;
+        }
+        mean_normal.x += normal.x;
+        mean_normal.y += normal.y;
+        mean_normal.z += normal.z;
+        ++valid_normal_count;
+        if (center_normal_norm > kEpsilon) {
+          normal_variations.push_back(1.0 - std::abs(dot(normal, center_normal) /
+            center_normal_norm));
+        }
+      }
+      const double inverse_count = 1.0 / static_cast<double>(neighborhood.size());
+      centroid.x *= inverse_count;
+      centroid.y *= inverse_count;
+      centroid.z *= inverse_count;
+      const double mean_normal_norm = std::sqrt(squaredNorm(mean_normal));
+      if (valid_normal_count < options.shape_minimum_neighbors || mean_normal_norm <= kEpsilon) {
+        continue;
+      }
+      mean_normal.x /= mean_normal_norm;
+      mean_normal.y /= mean_normal_norm;
+      mean_normal.z /= mean_normal_norm;
+      const double normalized_residual = std::abs(dot(
+        mean_normal, nodePosition(map.nodes[index]) - centroid)) / local_spacing[index];
+      const double normal_variation = medianValue(std::move(normal_variations));
+      const double score = options.shape_residual_weight * normalized_residual +
+        (1.0 - options.shape_residual_weight) * normal_variation;
+      best_score = std::max(best_score, score);
+      valid_score[index] = true;
+    }
+    if (valid_score[index]) {
+      scores[index] = best_score;
+      candidate_scores.push_back(best_score);
+    }
+  }
+
+  if (candidate_scores.empty()) {
+    for (std::size_t index = 0; index < node_count; ++index) {
+      if (map.nodes[index].label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT) {
+        result.retained[index] = true;
+        ++result.retained_count;
+      }
+    }
+    return result;
+  }
+  result.score_median = medianValue(candidate_scores);
+  std::vector<double> deviations;
+  deviations.reserve(candidate_scores.size());
+  for (const double score : candidate_scores) {
+    deviations.push_back(std::abs(score - result.score_median));
+  }
+  result.score_mad = medianValue(std::move(deviations));
+  if (result.score_mad > kEpsilon) {
+    result.score_threshold = result.score_median +
+      options.shape_mad_multiplier * 1.4826 * result.score_mad;
+  } else {
+    double low_center = *std::min_element(candidate_scores.begin(), candidate_scores.end());
+    double high_center = *std::max_element(candidate_scores.begin(), candidate_scores.end());
+    for (int iteration = 0; iteration < 16 && high_center - low_center > kEpsilon; ++iteration) {
+      const double boundary = 0.5 * (low_center + high_center);
+      double low_sum = 0.0;
+      double high_sum = 0.0;
+      std::size_t low_count = 0;
+      std::size_t high_count = 0;
+      for (const double score : candidate_scores) {
+        if (score <= boundary) {
+          low_sum += score;
+          ++low_count;
+        } else {
+          high_sum += score;
+          ++high_count;
+        }
+      }
+      if (low_count > 0) {
+        low_center = low_sum / static_cast<double>(low_count);
+      }
+      if (high_count > 0) {
+        high_center = high_sum / static_cast<double>(high_count);
+      }
+    }
+    result.score_threshold = 0.5 * (low_center + high_center);
+  }
+
+  using QueueEntry = std::pair<double, std::size_t>;
+  std::priority_queue<QueueEntry, std::vector<QueueEntry>, std::greater<QueueEntry>> queue;
+  std::vector<double> graph_distance(node_count, std::numeric_limits<double>::infinity());
+  for (std::size_t index = 0; index < node_count; ++index) {
+    if (map.nodes[index].label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
+      valid_score[index] && scores[index] > result.score_threshold)
+    {
+      graph_distance[index] = 0.0;
+      queue.emplace(0.0, index);
+      ++result.seed_count;
+    }
+  }
+  while (!queue.empty()) {
+    const auto [distance, index] = queue.top();
+    queue.pop();
+    if (distance != graph_distance[index] || distance > options.shape_seed_expansion_scale) {
+      continue;
+    }
+    result.retained[index] = true;
+    for (const auto neighbor : adjacency[index]) {
+      if (map.nodes[neighbor].label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT) {
+        continue;
+      }
+      const double edge_length = std::sqrt(squaredNorm(
+        nodePosition(map.nodes[index]) - nodePosition(map.nodes[neighbor])));
+      const double scale = std::max(
+        0.5 * (local_spacing[index] + local_spacing[neighbor]), kEpsilon);
+      const double next_distance = distance + edge_length / scale;
+      if (next_distance <= options.shape_seed_expansion_scale &&
+        next_distance < graph_distance[neighbor])
+      {
+        graph_distance[neighbor] = next_distance;
+        queue.emplace(next_distance, neighbor);
+      }
+    }
+  }
+  for (std::size_t index = 0; index < node_count; ++index) {
+    if (map.nodes[index].label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
+      result.retained[index])
+    {
+      ++result.retained_count;
+    }
+  }
+  return result;
+}
 
 std::size_t countPointSupportWithinRadius(
   const GridCell &cell,
@@ -786,6 +1177,14 @@ GridVoxelizationResult voxelizeNodes(
   const GridPointCounts *input_point_counts)
 {
   GridVoxelizationResult result;
+  const auto shape_filter = computeUnknownShapeFilter(map, options);
+  result.shape_candidate_node_count = shape_filter.candidate_count;
+  result.shape_seed_node_count = shape_filter.seed_count;
+  result.shape_retained_node_count = shape_filter.retained_count;
+  result.shape_rejected_node_count = shape_filter.candidate_count - shape_filter.retained_count;
+  result.shape_score_median = shape_filter.score_median;
+  result.shape_score_mad = shape_filter.score_mad;
+  result.shape_score_threshold = shape_filter.score_threshold;
   std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> accumulators;
   accumulators.reserve(map.nodes.size());
   result.eligible_nodes.reserve(map.nodes.size());
@@ -799,8 +1198,13 @@ GridVoxelizationResult voxelizeNodes(
                !node.inpcl_ids.empty();
       }));
 
-  for (const auto &node : map.nodes) {
+  for (std::size_t node_index = 0; node_index < map.nodes.size(); ++node_index) {
+    const auto &node = map.nodes[node_index];
     if (options.excluded_labels.find(node.label) != options.excluded_labels.end()) {
+      ++result.excluded_node_count;
+      continue;
+    }
+    if (!shape_filter.retained[node_index]) {
       ++result.excluded_node_count;
       continue;
     }

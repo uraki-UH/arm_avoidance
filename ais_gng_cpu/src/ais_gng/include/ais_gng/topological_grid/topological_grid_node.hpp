@@ -72,6 +72,12 @@ private:
   TriangleInferenceOptions triangle_inference_options_;
   TemporalVoxelFilterConfig temporal_filter_config_;
   std::unique_ptr<TemporalVoxelFilter> temporal_filter_;
+  PointActivitySchedulerConfig point_activity_config_;
+  std::unique_ptr<PointActivityScheduler> point_activity_scheduler_;
+  double point_activity_cell_size_ = 0.02;
+  PointActivityDecision last_point_activity_decision_;
+  std::size_t point_activity_processed_update_count_ = 0;
+  std::size_t point_activity_skipped_update_count_ = 0;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr pending_map_;
   std::chrono::steady_clock::time_point pending_map_received_at_;
   GridPointCounts latest_point_counts_;

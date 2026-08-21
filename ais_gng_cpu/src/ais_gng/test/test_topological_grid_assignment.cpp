@@ -789,4 +789,117 @@ TEST(TopologicalGridAssignment, SplitsIsolatedVoxelsFromGraspCandidates)
   EXPECT_EQ(split.isolated_voxels.front().cell, isolated.cell);
 }
 
+TEST(TopologicalGridAssignment, AggregatesPointCountsOnMetricActivityGrid)
+{
+  using namespace fuzzrobo::topological_grid;
+  GridPointCounts fine;
+  fine.emplace(GridCell{0, 0, 0}, 2U);
+  fine.emplace(GridCell{1, 0, 0}, 3U);
+  fine.emplace(GridCell{4, 0, 0}, 7U);
+  const GridSpec fine_spec{0.005, 0.0, 0.0, 0.0};
+  const GridSpec activity_spec{0.02, 0.0, 0.0, 0.0};
+
+  const auto aggregated = aggregatePointCounts(fine, fine_spec, activity_spec);
+
+  ASSERT_EQ(aggregated.size(), 2U);
+  EXPECT_EQ(aggregated.at(GridCell{0, 0, 0}), 5U);
+  EXPECT_EQ(aggregated.at(GridCell{1, 0, 0}), 7U);
+}
+
+TEST(TopologicalGridAssignment, PointActivitySchedulerSlowsStaticInputContinuously)
+{
+  using namespace fuzzrobo::topological_grid;
+  PointActivitySchedulerConfig config;
+  config.minimum_update_interval = 1;
+  config.maximum_update_interval = 5;
+  config.top_fraction = 0.5;
+  config.warmup_update_count = 1;
+  PointActivityScheduler scheduler(config);
+  const GridPointCounts points{{GridCell{0, 0, 0}, 3U}};
+
+  EXPECT_TRUE(scheduler.update(points).should_process);
+  for (std::size_t update = 1; update < 5; ++update) {
+    const auto decision = scheduler.update(points);
+    EXPECT_FALSE(decision.should_process);
+    EXPECT_DOUBLE_EQ(decision.activity_score, 0.0);
+    EXPECT_EQ(decision.desired_update_interval, 5U);
+  }
+  EXPECT_TRUE(scheduler.update(points).should_process);
+}
+
+TEST(TopologicalGridAssignment, PointActivitySchedulerImmediatelyProcessesNewRegion)
+{
+  using namespace fuzzrobo::topological_grid;
+  PointActivitySchedulerConfig config;
+  config.minimum_update_interval = 1;
+  config.maximum_update_interval = 10;
+  config.top_fraction = 0.5;
+  config.warmup_update_count = 1;
+  PointActivityScheduler scheduler(config);
+  GridPointCounts points{{GridCell{0, 0, 0}, 3U}};
+  ASSERT_TRUE(scheduler.update(points).should_process);
+
+  points.emplace(GridCell{10, 0, 0}, 4U);
+  const auto decision = scheduler.update(points);
+
+  EXPECT_TRUE(decision.should_process);
+  EXPECT_DOUBLE_EQ(decision.activity_score, 1.0);
+  EXPECT_EQ(decision.desired_update_interval, 1U);
+}
+
+TEST(TopologicalGridAssignment, SuppressesPlanarUnknownComponentAtDifferentNodeDensities)
+{
+  using namespace fuzzrobo::topological_grid;
+  const auto make_map = [](double scale) {
+      ais_gng_msgs::msg::TopologicalMap map;
+      for (int component = 0; component < 2; ++component) {
+        for (int y = 0; y < 3; ++y) {
+          for (int x = 0; x < 3; ++x) {
+            auto node = makeNode(
+              static_cast<float>((component * 6 + x) * scale),
+              static_cast<float>(y * scale),
+              static_cast<float>(component == 1 && x == 1 && y == 1 ? scale : 0.0),
+              ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT);
+            node.normal.z = 1.0F;
+            map.nodes.push_back(node);
+          }
+        }
+      }
+      for (int component = 0; component < 2; ++component) {
+        const int base = component * 9;
+        for (int y = 0; y < 3; ++y) {
+          for (int x = 0; x < 3; ++x) {
+            const int index = base + y * 3 + x;
+            if (x + 1 < 3) {
+              map.edges.push_back(static_cast<std::uint16_t>(index));
+              map.edges.push_back(static_cast<std::uint16_t>(index + 1));
+            }
+            if (y + 1 < 3) {
+              map.edges.push_back(static_cast<std::uint16_t>(index));
+              map.edges.push_back(static_cast<std::uint16_t>(index + 3));
+            }
+          }
+        }
+      }
+      return map;
+    };
+  VoxelizationOptions options;
+  options.require_input_points = false;
+  options.unknown_shape_filter_enabled = true;
+  options.shape_neighborhood_hops = 2;
+  options.shape_minimum_neighbors = 3;
+  options.shape_seed_expansion_scale = 2.5;
+
+  const auto dense = voxelizeNodes(make_map(0.01), GridSpec{0.005}, options);
+  const auto sparse = voxelizeNodes(make_map(0.10), GridSpec{0.05}, options);
+
+  EXPECT_EQ(dense.shape_candidate_node_count, 18U);
+  EXPECT_GT(dense.shape_seed_node_count, 0U);
+  EXPECT_GT(dense.shape_rejected_node_count, 0U);
+  EXPECT_GT(dense.shape_retained_node_count, 0U);
+  EXPECT_EQ(dense.shape_seed_node_count, sparse.shape_seed_node_count);
+  EXPECT_EQ(dense.shape_retained_node_count, sparse.shape_retained_node_count);
+  EXPECT_EQ(dense.shape_rejected_node_count, sparse.shape_rejected_node_count);
+}
+
 }  // namespace

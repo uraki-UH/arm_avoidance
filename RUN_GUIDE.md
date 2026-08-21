@@ -138,6 +138,38 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
   input_topic:=/camera/camera/depth/color/points_raw \
   output_topic:=/camera/camera/depth/color/points
 
+### 深度画像ベースの動体ノード削除判定ベンチ
+
+`/camera/camera/depth/image_rect_raw` を直接読むため、点群から深度バッファを再構築しない。
+GNG は従来どおり変換済み点群を入力にする。ベンチマークは map と同時刻の深度画像を30フレーム照合し、
+等倍・実行時1/2・実行時1/4 min-pooling を比較して自動終了する。
+
+```bash
+# ターミナル1: 生点群は変換用に退避し、深度画像と内部パラメータも同時に再生する
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
+  --topics \
+    /camera/camera/depth/color/points \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info \
+  --remap /camera/camera/depth/color/points:=/visibility/raw_points \
+  --loop
+
+# ターミナル2: GNG 入力用の点群を base_link へ変換する
+ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
+  input_topic:=/visibility/raw_points \
+  output_topic:=/camera/camera/depth/color/points
+
+# ターミナル3: GNG
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
+
+# ターミナル4: 深度画像の削除証拠判定を計測する
+ros2 run fuzzy_voxel_grid depth_visibility_benchmark
+```
+
+この bag でのC++計測では、等倍の深度画像を直接参照する方式が p50 約1.30 ms で最速だった。
+実行時の1/2・1/4 min-pooling は各フレームで全画素を走査するため、p50 約7.38 ms / 6.74 ms となり遅い。
+解像度を下げるなら、このノード内でpoolingするのではなく、カメラ側で低解像度深度画像を出す。
+
 ### 変換済み点群を新しいrosbagへ1周分だけ保存
 # 先に上の変換ノードを起動し、次にrecordを開始してから、最後にbagを--loopなしで再生する。
 
@@ -214,15 +246,36 @@ ros2 launch ais_gng topological_grid.launch.py \
   grid_size:=0.01 \
   point_support_mode:=auto \
   point_support_radius_m:=0.02 \
+  unknown_shape_filter_enabled:=true \
+  shape_neighborhood_hops:=2 \
+  shape_minimum_neighbors:=3 \
+  shape_residual_weight:=0.7 \
+  shape_mad_multiplier:=3.0 \
+  shape_seed_expansion_scale:=2.0 \
   neighbor_radius_m:=0.02 \
   inferred_require_input_points:=true \
   node_identity_history_migration_enabled:=true \
   node_identity_retention_enabled:=false \
   history_reset_on_time_regression:=false \
-  history_reset_node_count_ratio:=0.5
+  history_reset_node_count_ratio:=0.5 \
+  point_activity_update_enabled:=true \
+  point_activity_cell_size:=0.02 \
+  point_activity_ema_alpha:=0.2 \
+  point_activity_top_fraction:=0.1 \
+  point_activity_occupancy_weight:=0.7 \
+  point_activity_warmup_updates:=5 \
+  point_activity_minimum_update_interval:=1 \
+  point_activity_maximum_update_interval:=10
 
 `point_support_mode:=auto`は、AIS-GNGノードに`inpcl_ids`がある場合は入力点との直接対応を
 点群支持に使い、対応がないMapでは`point_support_radius_m`以内の点群支持へフォールバックする。
+`unknown_shape_filter_enabled:=true`は、`UNKNOWN_OBJECT`ノードの1〜2 hop近傍について、
+局所平面残差をそのノードのGNG edge長中央値で正規化し、法線変化と合成する。
+全候補の中央値/MADに対して相対的に逸脱するノードだけをseedとし、局所edge長で正規化した
+graph距離内へ領域を拡張する。固定のmm半径や突出量は使用しない。後方の連続平面はseedを
+持たないため除外され、物体の角や段差に接続した平坦面はseed周辺として保持される。
+summaryの`shape_candidate_node_count`、`shape_seed_node_count`、
+`shape_retained_node_count`、`shape_rejected_node_count`で抑制量を確認できる。
 `neighbor_radius_m`はグリッドセル数ではなく実距離で近傍を判定する。
 `node_identity_history_migration_enabled:=true`では、一意な`(node.id, node.frame)`が
 `node_identity_max_displacement`以内で移動したとき、時間履歴を移動先セルへ引き継ぐ。
@@ -232,6 +285,16 @@ rosbagを`--loop`再生してもGNGノードIDが継続する構成では、時�
 GNGノード数が急減して実際にリセットされた場合は`history_reset_node_count_ratio`で履歴を消去する。
 履歴を移動先へ引き継ぐ場合、旧セルを二重保持しないよう
 `node_identity_retention_enabled:=false`を使用する。
+
+`point_activity_update_enabled:=true`では、点群占有頻度と点密度のEMAから活動度を計算し、
+重いノード・edge・triangle処理の実行間隔を1〜10入力の間で連続的に変更する。
+起動直後の5入力は必ず処理し、時間履歴を遅延なく確立する。
+新しい占有領域や消失領域があれば毎入力に近づき、静止点群では最大10入力ごとになる。
+活動度は出力ボクセルとは独立した既定20 mmの物理セルで計算するため、`grid_size`を5 mmへ
+小さくしても点のセル境界揺れと統計セル数が過剰に増えにくい。全更新を省略した入力では
+最後にpublishしたVoxelを維持し、最大間隔に達すると必ず再計算する。
+summaryの`point_activity_score`、`point_activity_desired_update_interval`、
+`point_activity_processed_update_count`、`point_activity_skipped_update_count`で動作を確認できる。
 
 # 補間由来だけを確認
 ros2 topic echo /topo_voxel_ids/edge_inferred
@@ -252,6 +315,12 @@ ros2 launch ais_gng topological_grid.launch.py \
   require_input_points:=true \
   point_support_mode:=auto \
   point_support_radius_m:=0.02 \
+  unknown_shape_filter_enabled:=true \
+  shape_neighborhood_hops:=2 \
+  shape_minimum_neighbors:=3 \
+  shape_residual_weight:=0.7 \
+  shape_mad_multiplier:=3.0 \
+  shape_seed_expansion_scale:=2.0 \
   neighbor_radius_m:=0.02 \
   inferred_require_input_points:=true \
   history_window_size:=100 \
@@ -265,6 +334,14 @@ ros2 launch ais_gng topological_grid.launch.py \
   node_identity_history_migration_enabled:=true \
   history_reset_on_time_regression:=false \
   history_reset_node_count_ratio:=0.5 \
+  point_activity_update_enabled:=true \
+  point_activity_cell_size:=0.02 \
+  point_activity_ema_alpha:=0.2 \
+  point_activity_top_fraction:=0.1 \
+  point_activity_occupancy_weight:=0.7 \
+  point_activity_warmup_updates:=5 \
+  point_activity_minimum_update_interval:=1 \
+  point_activity_maximum_update_interval:=10 \
   edge_inference_enabled:=true \
   edge_max_length:=0.10 \
   triangle_inference_enabled:=true \

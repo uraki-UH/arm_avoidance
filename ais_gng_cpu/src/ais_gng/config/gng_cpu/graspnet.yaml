@@ -1,6 +1,6 @@
 ais_gng_node:
   ros__parameters:
-    node.num_max: 4000
+    node.num_max: 5000
     node.learning_num: 5000
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08

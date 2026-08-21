@@ -40,12 +40,17 @@ ament_target_dependencies(topological_node_marker_node
 
 add_executable(voxel_grid_node src/main.cpp src/voxel_grid_node.cpp)
 add_executable(topo_visualizar src/topo_visualizar.cpp)
+add_executable(depth_visibility_benchmark src/depth_visibility_benchmark.cpp)
 
 target_include_directories(voxel_grid_node PRIVATE
   include
 )
 
 target_include_directories(topo_visualizar PRIVATE
+  include
+)
+
+target_include_directories(depth_visibility_benchmark PRIVATE
   include
 )
 
@@ -65,6 +70,13 @@ ament_target_dependencies(topo_visualizar
   geometry_msgs
   ais_gng_msgs
   std_srvs
+)
+
+ament_target_dependencies(depth_visibility_benchmark
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  ais_gng_msgs
 )
 
 
@@ -88,6 +100,7 @@ install(TARGETS
   voxel_grid_node
   topo_visualizar
   topological_node_marker_node
+  depth_visibility_benchmark
   DESTINATION lib/${PROJECT_NAME}
 )
 
