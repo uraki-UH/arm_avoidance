@@ -36,6 +36,171 @@ struct UnknownNodeComponent
     fuzzrobo::topological_grid::GridCellHash> cells;
 };
 
+// The point-support radius is queried for every labeled cell.  At a 10 mm
+// grid and 20 mm radius, the direct implementation performs 125 hash lookups
+// per query.  This sparse tiled summed-volume cache returns the exact same
+// inclusive grid cube sum with at most eight tile intersections.  A bounded
+// allocation and the legacy fallback keep it safe for very sparse or very
+// wide coordinate ranges.
+class SparsePointSupportIndex
+{
+public:
+  using GridCell = fuzzrobo::topological_grid::GridCell;
+  using GridCellHash = fuzzrobo::topological_grid::GridCellHash;
+  using GridPointCounts = fuzzrobo::topological_grid::GridPointCounts;
+
+  void build(const GridPointCounts &point_counts, int radius_cells)
+  {
+    enabled_ = false;
+    tiles_.clear();
+    if (radius_cells < 2 || point_counts.empty()) {
+      return;
+    }
+
+    const std::size_t width = static_cast<std::size_t>(2 * radius_cells + 1);
+    const std::size_t query_volume = width * width * width;
+    // The legacy path scans the sparse source directly when it has fewer
+    // entries than the requested cube, so a prefix cache cannot win there.
+    if (point_counts.size() <= query_volume) {
+      return;
+    }
+
+    std::unordered_set<GridCell, GridCellHash> tile_keys;
+    tile_keys.reserve(point_counts.size());
+    for (const auto &[cell, count] : point_counts) {
+      (void)count;
+      tile_keys.insert(tileCell(cell));
+    }
+    constexpr std::size_t kMaximumPrefixEntries = 4U * 1024U * 1024U;
+    const std::size_t entries_per_tile = kPrefixSide * kPrefixSide * kPrefixSide;
+    if (tile_keys.size() > kMaximumPrefixEntries / entries_per_tile) {
+      return;
+    }
+
+    tiles_.reserve(tile_keys.size());
+    for (const auto &key : tile_keys) {
+      tiles_.emplace(key, Tile{});
+    }
+    for (const auto &[cell, count] : point_counts) {
+      auto &tile = tiles_.at(tileCell(cell));
+      const int local_x = floorMod(cell.x, kTileWidth);
+      const int local_y = floorMod(cell.y, kTileWidth);
+      const int local_z = floorMod(cell.z, kTileWidth);
+      tile.prefix[prefixIndex(local_x + 1, local_y + 1, local_z + 1)] += count;
+    }
+    for (auto &[key, tile] : tiles_) {
+      (void)key;
+      for (int x = 1; x <= kTileWidth; ++x) {
+        for (int y = 1; y <= kTileWidth; ++y) {
+          for (int z = 1; z <= kTileWidth; ++z) {
+            auto &value = tile.prefix[prefixIndex(x, y, z)];
+            value += tile.prefix[prefixIndex(x - 1, y, z)] +
+              tile.prefix[prefixIndex(x, y - 1, z)] +
+              tile.prefix[prefixIndex(x, y, z - 1)] -
+              tile.prefix[prefixIndex(x - 1, y - 1, z)] -
+              tile.prefix[prefixIndex(x - 1, y, z - 1)] -
+              tile.prefix[prefixIndex(x, y - 1, z - 1)] +
+              tile.prefix[prefixIndex(x - 1, y - 1, z - 1)];
+          }
+        }
+      }
+    }
+    enabled_ = true;
+  }
+
+  bool enabled() const noexcept
+  {
+    return enabled_;
+  }
+
+  std::size_t countCube(const GridCell &cell, int radius_cells) const
+  {
+    const GridCell minimum{
+      cell.x - radius_cells, cell.y - radius_cells, cell.z - radius_cells};
+    const GridCell maximum{
+      cell.x + radius_cells, cell.y + radius_cells, cell.z + radius_cells};
+    const GridCell minimum_tile = tileCell(minimum);
+    const GridCell maximum_tile = tileCell(maximum);
+    std::size_t count = 0;
+    for (int tile_x = minimum_tile.x; tile_x <= maximum_tile.x; ++tile_x) {
+      for (int tile_y = minimum_tile.y; tile_y <= maximum_tile.y; ++tile_y) {
+        for (int tile_z = minimum_tile.z; tile_z <= maximum_tile.z; ++tile_z) {
+          const GridCell tile_key{tile_x, tile_y, tile_z};
+          const auto found = tiles_.find(tile_key);
+          if (found == tiles_.end()) {
+            continue;
+          }
+          const int base_x = tile_x * kTileWidth;
+          const int base_y = tile_y * kTileWidth;
+          const int base_z = tile_z * kTileWidth;
+          const int local_min_x = std::max(0, minimum.x - base_x);
+          const int local_min_y = std::max(0, minimum.y - base_y);
+          const int local_min_z = std::max(0, minimum.z - base_z);
+          const int local_max_x = std::min(kTileWidth - 1, maximum.x - base_x);
+          const int local_max_y = std::min(kTileWidth - 1, maximum.y - base_y);
+          const int local_max_z = std::min(kTileWidth - 1, maximum.z - base_z);
+          count += boxSum(
+            found->second, local_min_x, local_min_y, local_min_z,
+            local_max_x, local_max_y, local_max_z);
+        }
+      }
+    }
+    return count;
+  }
+
+private:
+  static constexpr int kTileWidth = 8;
+  static constexpr std::size_t kPrefixSide = static_cast<std::size_t>(kTileWidth + 1);
+
+  struct Tile
+  {
+    std::array<std::size_t, kPrefixSide * kPrefixSide * kPrefixSide> prefix{};
+  };
+
+  static int floorDiv(int value, int divisor)
+  {
+    const int quotient = value / divisor;
+    const int remainder = value % divisor;
+    return remainder < 0 ? quotient - 1 : quotient;
+  }
+
+  static int floorMod(int value, int divisor)
+  {
+    return value - floorDiv(value, divisor) * divisor;
+  }
+
+  static GridCell tileCell(const GridCell &cell)
+  {
+    return GridCell{
+      floorDiv(cell.x, kTileWidth), floorDiv(cell.y, kTileWidth),
+      floorDiv(cell.z, kTileWidth)};
+  }
+
+  static std::size_t prefixIndex(int x, int y, int z)
+  {
+    return (static_cast<std::size_t>(x) * kPrefixSide + static_cast<std::size_t>(y)) *
+      kPrefixSide + static_cast<std::size_t>(z);
+  }
+
+  static std::size_t boxSum(
+    const Tile &tile, int min_x, int min_y, int min_z,
+    int max_x, int max_y, int max_z)
+  {
+    const auto at = [&tile](int x, int y, int z) {
+        return tile.prefix[prefixIndex(x, y, z)];
+      };
+    const int x = max_x + 1;
+    const int y = max_y + 1;
+    const int z = max_z + 1;
+    return at(x, y, z) - at(min_x, y, z) - at(x, min_y, z) - at(x, y, min_z) +
+      at(min_x, min_y, z) + at(min_x, y, min_z) + at(x, min_y, min_z) -
+      at(min_x, min_y, min_z);
+  }
+
+  bool enabled_ = false;
+  std::unordered_map<GridCell, Tile, GridCellHash> tiles_;
+};
+
 struct Vec3d
 {
   double x = 0.0;
@@ -1220,7 +1385,8 @@ std::size_t countPointSupportWithinRadius(
   const GridCell &cell,
   const GridPointCounts &point_counts,
   const GridSpec &spec,
-  double radius_m)
+  double radius_m,
+  const SparsePointSupportIndex *support_index = nullptr)
 {
   if (point_counts.empty()) {
     return 0;
@@ -1232,6 +1398,9 @@ std::size_t countPointSupportWithinRadius(
 
   const int radius_cells = std::max(
     1, static_cast<int>(std::ceil(radius_m / spec.cell_size)));
+  if (support_index && support_index->enabled()) {
+    return support_index->countCube(cell, radius_cells);
+  }
   const std::size_t width = static_cast<std::size_t>(2 * radius_cells + 1);
   const std::size_t volume = width * width * width;
   std::size_t support_count = 0;
@@ -1377,6 +1546,17 @@ GridVoxelizationResult voxelizeNodes(
     accumulator.node_input_id_count += node.inpcl_ids.size();
   }
 
+  SparsePointSupportIndex point_support_index;
+  const bool uses_radius_support = input_point_counts &&
+    options.point_support_radius_m > 0.0 &&
+    (options.point_support_mode == PointSupportMode::Radius ||
+    options.point_support_mode == PointSupportMode::Auto);
+  if (uses_radius_support) {
+    const int radius_cells = std::max(
+      1, static_cast<int>(std::ceil(options.point_support_radius_m / spec.cell_size)));
+    point_support_index.build(*input_point_counts, radius_cells);
+  }
+
   result.label_voxels.reserve(accumulators.size());
   for (auto &[cell, accumulator] : accumulators) {
     std::size_t geometric_point_count = 0;
@@ -1385,7 +1565,8 @@ GridVoxelizationResult voxelizeNodes(
         options.point_support_mode == PointSupportMode::Auto;
       geometric_point_count = countPointSupportWithinRadius(
         cell, *input_point_counts, spec,
-        radius_support ? options.point_support_radius_m : 0.0);
+        radius_support ? options.point_support_radius_m : 0.0,
+        point_support_index.enabled() ? &point_support_index : nullptr);
     }
     switch (options.point_support_mode) {
       case PointSupportMode::NodeInputIds:

@@ -203,6 +203,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   if (summary_topic_.empty()) {
     summary_topic_ = output_topic_ + "/summary";
   }
+  assignment_detail_topic_ = output_topic_ + "/assignments";
   depth_visibility_enabled_ = this->declare_parameter<bool>(
     "depth_visibility_enabled", true);
   depth_topic_ = this->declare_parameter<std::string>(
@@ -410,6 +411,11 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inferred_topic_,
     rclcpp::QoS(1).reliable().transient_local());
   summary_pub_ = this->create_publisher<std_msgs::msg::String>(summary_topic_, 10);
+  // Per-cell JSON is useful for debugging, but constructing it for thousands
+  // of cells every update is much more expensive than the Voxel message.
+  // Keep it on a separate best-effort topic and build it only on demand.
+  assignment_detail_pub_ = this->create_publisher<std_msgs::msg::String>(
+    assignment_detail_topic_, rclcpp::QoS(1).best_effort());
   if (depth_visibility_enabled_ && depth_visibility_tf_enabled_) {
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -1460,46 +1466,55 @@ void TopologicalGridNode::publishResult(
     oss << "\"" << sorted_label_counts[i].first << "\":" << sorted_label_counts[i].second;
   }
   oss << "},";
-  oss << "\"assignments\":[";
-  for (std::size_t i = 0; i < combined_voxels.size(); ++i) {
-    if (i > 0) {
-      oss << ",";
-    }
-    const auto &voxel = combined_voxels[i];
-    oss << "{\"cell\":[" << voxel.cell.x << "," << voxel.cell.y << "," << voxel.cell.z << "]"
-        << ",\"voxel_id\":" << voxel_msg.data[i]
-        << ",\"label\":" << static_cast<int>(voxel.label)
-        << ",\"node_count\":" << voxel.node_count
-        << ",\"input_point_count\":" << voxel.input_point_count
-        << ",\"neighbor_count\":" << voxel.neighbor_count
-        << ",\"edge_support_count\":" << voxel.edge_support_count
-        << ",\"triangle_support_count\":" << voxel.triangle_support_count
-        << ",\"unknown_component_event\":"
-        << (voxel.unknown_component_event ? "true" : "false")
-        << ",\"retained_by_gng_structure\":"
-        << (voxel.retained_by_gng_structure ? "true" : "false")
-        << ",\"retained_by_local_structure\":"
-        << (voxel.retained_by_local_structure ? "true" : "false")
-        << ",\"retained_by_node_identity\":"
-        << (voxel.retained_by_node_identity ? "true" : "false")
-        << ",\"source\":\"";
-    const bool direct = voxel.history_sample_count > 0 || !voxel.node_observations.empty();
-    if (direct) {
-      oss << "direct";
-    } else if (voxel.edge_support_count > 0 && voxel.triangle_support_count > 0) {
-      oss << "edge_and_triangle_inferred";
-    } else if (voxel.triangle_support_count > 0) {
-      oss << "triangle_inferred";
-    } else {
-      oss << "edge_inferred";
-    }
-    oss
-        << "\"}";
-  }
-  oss << "]";
+  oss << "\"assignments_topic\":\"" << assignment_detail_topic_ << "\"";
   oss << "}";
   summary_msg.data = oss.str();
   summary_pub_->publish(summary_msg);
+
+  if (assignment_detail_pub_->get_subscription_count() > 0U) {
+    std_msgs::msg::String assignment_detail_msg;
+    std::ostringstream detail;
+    detail << "{\"revision\":" << revision
+           << ",\"voxel_count\":" << combined_voxels.size()
+           << ",\"assignments\":[";
+    for (std::size_t i = 0; i < combined_voxels.size(); ++i) {
+      if (i > 0) {
+        detail << ",";
+      }
+      const auto &voxel = combined_voxels[i];
+      detail << "{\"cell\":[" << voxel.cell.x << "," << voxel.cell.y << "," << voxel.cell.z << "]"
+             << ",\"voxel_id\":" << voxel_msg.data[i]
+             << ",\"label\":" << static_cast<int>(voxel.label)
+             << ",\"node_count\":" << voxel.node_count
+             << ",\"input_point_count\":" << voxel.input_point_count
+             << ",\"neighbor_count\":" << voxel.neighbor_count
+             << ",\"edge_support_count\":" << voxel.edge_support_count
+             << ",\"triangle_support_count\":" << voxel.triangle_support_count
+             << ",\"unknown_component_event\":"
+             << (voxel.unknown_component_event ? "true" : "false")
+             << ",\"retained_by_gng_structure\":"
+             << (voxel.retained_by_gng_structure ? "true" : "false")
+             << ",\"retained_by_local_structure\":"
+             << (voxel.retained_by_local_structure ? "true" : "false")
+             << ",\"retained_by_node_identity\":"
+             << (voxel.retained_by_node_identity ? "true" : "false")
+             << ",\"source\":\"";
+      const bool direct = voxel.history_sample_count > 0 || !voxel.node_observations.empty();
+      if (direct) {
+        detail << "direct";
+      } else if (voxel.edge_support_count > 0 && voxel.triangle_support_count > 0) {
+        detail << "edge_and_triangle_inferred";
+      } else if (voxel.triangle_support_count > 0) {
+        detail << "triangle_inferred";
+      } else {
+        detail << "edge_inferred";
+      }
+      detail << "\"}";
+    }
+    detail << "]}";
+    assignment_detail_msg.data = detail.str();
+    assignment_detail_pub_->publish(assignment_detail_msg);
+  }
 
   RCLCPP_INFO_THROTTLE(
     get_logger(), *get_clock(), 2000,

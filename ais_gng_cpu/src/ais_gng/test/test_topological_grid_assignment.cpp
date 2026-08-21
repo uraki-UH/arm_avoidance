@@ -260,6 +260,41 @@ TEST(TopologicalGridAssignment, AutoPointSupportFallsBackToMetricRadius)
   EXPECT_EQ(result.voxels.front().input_point_count, 3U);
 }
 
+TEST(TopologicalGridAssignment, CachedRadiusSupportMatchesExactCubeAcrossTileBoundaries)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(-0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.071F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+  };
+  GridPointCounts point_counts;
+  // Cell -1 with a radius of two crosses tiles [-8, -1] and [0, 7].
+  point_counts.emplace(GridCell{-3, 0, 0}, 7U);
+  point_counts.emplace(GridCell{1, 0, 0}, 11U);
+  point_counts.emplace(GridCell{-1, -2, 2}, 13U);
+  // Cell 7 crosses tiles [0, 7] and [8, 15].
+  point_counts.emplace(GridCell{5, 0, 0}, 2U);
+  point_counts.emplace(GridCell{9, 0, 0}, 3U);
+  point_counts.emplace(GridCell{7, 2, -2}, 5U);
+  // Force the tiled cache path without contributing to either query.
+  for (int index = 0; index < 128; ++index) {
+    point_counts.emplace(GridCell{100 + index, 100, 100}, 1U);
+  }
+  VoxelizationOptions options;
+  options.require_input_points = false;
+  options.point_support_mode = PointSupportMode::Radius;
+  options.point_support_radius_m = 0.02;
+
+  const auto result = voxelizeNodes(map, GridSpec{}, options, &point_counts);
+
+  ASSERT_EQ(result.label_voxels.size(), 2U);
+  EXPECT_EQ(result.label_voxels[0].cell, (GridCell{-1, 0, 0}));
+  EXPECT_EQ(result.label_voxels[0].input_point_count, 31U);
+  EXPECT_EQ(result.label_voxels[1].cell, (GridCell{7, 0, 0}));
+  EXPECT_EQ(result.label_voxels[1].input_point_count, 10U);
+}
+
 TEST(TopologicalGridAssignment, SameCellPointSupportKeepsLegacyBehavior)
 {
   ais_gng_msgs::msg::TopologicalMap map;

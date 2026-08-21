@@ -69,6 +69,7 @@ private:
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr edge_inferred_pub_;
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr triangle_inferred_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr assignment_detail_pub_;
   rclcpp::TimerBase::SharedPtr pointcloud_watchdog_;
 
   std::string input_topic_;
@@ -79,6 +80,7 @@ private:
   std::string edge_inferred_topic_;
   std::string triangle_inferred_topic_;
   std::string summary_topic_;
+  std::string assignment_detail_topic_;
   std::string depth_topic_;
   std::string camera_info_topic_;
   double pointcloud_timeout_sec_ = 0.5;

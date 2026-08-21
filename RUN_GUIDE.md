@@ -262,6 +262,9 @@ ros2 launch ais_gng topological_grid.launch.py \
 `temporal_retention_score`（消失）である。
 `retention_score < activation_score`のヒステリシスを保つ。`unknown_shape_filter_enabled`は既定で無効で、
 形状の逸脱だけを物体判定にしない。summaryにはこれらの設定値と活動度を出す。
+`<output_topic>/summary`は更新ごとの集計だけを送る。全セルのデバッグ明細は、必要なときだけ
+`<output_topic>/assignments`を購読する。購読者がいない通常運用では明細JSONを組み立てないため、
+多数ボクセル時の通信量とCPU負荷を増やさない。
 深度が有効なときは `depth_visibility_free_count`、`depth_visibility_occluded_count`、
 `depth_visibility_out_of_view_count` もsummaryに出る。移動物体の削除証拠として見るのは `free_count` だけである。
 局所構造の判定数は `local_structure_static_node_count`、`local_structure_moving_node_count`、
@@ -269,6 +272,9 @@ ros2 launch ais_gng topological_grid.launch.py \
 GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift_maximum_score` に出る。
 `edge_max_length: 0.0` は局所GNG edge長から自動で外れedgeを除く設定である。出力の`grid_size`は
 把持テンプレートの必要解像度で選び、物体連結性のために大きくする必要はない。
+`point_support_radius_m` を使う場合は、同一フレームで多数回行う半径内の点群支持数を疎な
+8×8×8セルの積分キャッシュから取得する。従来と同じ格子立方体内の点数になるため候補結果は
+変えない。極端に疎な入力またはキャッシュが大きくなり過ぎる入力では自動的に従来の直接探索へ戻る。
 
 `point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
 静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで
