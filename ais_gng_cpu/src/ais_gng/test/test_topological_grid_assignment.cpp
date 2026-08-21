@@ -148,6 +148,45 @@ TEST(TopologicalGridAssignment, IncludesEveryNonExcludedLabelWithCurrentPointSup
   EXPECT_EQ(result.voxels.back().label, ais_gng_msgs::msg::TopologicalMap::WALL);
 }
 
+TEST(TopologicalGridAssignment, MarksOnlyFourCellUnknownGngComponentsAsObjectEvents)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.011F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.021F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.031F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+  };
+  map.edges = {0, 1, 1, 2, 2, 3};
+  GridPointCounts point_counts;
+  for (int x = 0; x < 4; ++x) {
+    point_counts.emplace(GridCell{x, 0, 0}, 1U);
+  }
+
+  const auto result = voxelizeNodes(map, GridSpec{}, VoxelizationOptions{}, &point_counts);
+
+  EXPECT_EQ(result.unknown_component_count, 1U);
+  EXPECT_EQ(result.unknown_component_event_count, 1U);
+  EXPECT_EQ(result.unknown_component_event_node_count, 4U);
+  EXPECT_EQ(result.unknown_component_event_voxel_count, 4U);
+  ASSERT_EQ(result.label_voxels.size(), 4U);
+  EXPECT_TRUE(std::all_of(
+      result.label_voxels.begin(), result.label_voxels.end(),
+      [](const LabeledGridVoxel &voxel) {
+        return voxel.unknown_component_evaluated && voxel.unknown_component_event;
+      }));
+
+  map.nodes.pop_back();
+  map.edges = {0, 1, 1, 2};
+  const auto too_small = voxelizeNodes(map, GridSpec{}, VoxelizationOptions{}, &point_counts);
+  EXPECT_EQ(too_small.unknown_component_count, 1U);
+  EXPECT_EQ(too_small.unknown_component_event_count, 0U);
+  EXPECT_TRUE(std::none_of(
+      too_small.label_voxels.begin(), too_small.label_voxels.end(),
+      [](const LabeledGridVoxel &voxel) {return voxel.unknown_component_event;}));
+}
+
 TEST(TopologicalGridAssignment, AutoPointSupportUsesGngInputAssignmentsAcrossCellBoundaries)
 {
   ais_gng_msgs::msg::TopologicalMap map;
@@ -170,6 +209,31 @@ TEST(TopologicalGridAssignment, AutoPointSupportUsesGngInputAssignmentsAcrossCel
   ASSERT_EQ(result.voxels.size(), 1U);
   EXPECT_EQ(result.voxels.front().cell.x, 1);
   EXPECT_EQ(result.voxels.front().input_point_count, 2U);
+}
+
+TEST(TopologicalGridAssignment, AutoPointSupportFallsBackPerCellWhenGngIdsAreSparse)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.nodes[0].inpcl_ids = {10U, 11U};
+  GridPointCounts point_counts;
+  point_counts.emplace(GridCell{4, 0, 0}, 3U);
+  VoxelizationOptions options;
+  options.point_support_mode = PointSupportMode::Auto;
+  options.point_support_radius_m = 0.0;
+
+  const auto result = voxelizeNodes(
+    map, GridSpec{0.01, 0.0, 0.0, 0.0}, options, &point_counts);
+
+  ASSERT_EQ(result.voxels.size(), 2U);
+  EXPECT_EQ(result.voxels[0].cell, (GridCell{0, 0, 0}));
+  EXPECT_EQ(result.voxels[0].input_point_count, 2U);
+  EXPECT_EQ(result.voxels[1].cell, (GridCell{4, 0, 0}));
+  EXPECT_EQ(result.voxels[1].input_point_count, 3U);
 }
 
 TEST(TopologicalGridAssignment, AutoPointSupportFallsBackToMetricRadius)
@@ -311,6 +375,38 @@ TEST(TopologicalGridAssignment, ActivatesFromContinuousTemporalEvidence)
   EXPECT_DOUBLE_EQ(stable.front().point_support_score, 1.0);
 }
 
+TEST(TopologicalGridAssignment, KeepsObjectEvidenceAcrossTerrainRelabeling)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.history_window_size = 10;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+
+  LabeledGridVoxel object_event{GridCell{1, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT, 1, 1, 1};
+  object_event.unknown_component_evaluated = true;
+  object_event.unknown_component_event = true;
+  auto terrain = object_event;
+  terrain.label = ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN;
+  terrain.unknown_component_event = false;
+
+  EXPECT_TRUE(filter.update({object_event}, true, 1, nullptr, nullptr, 0.10).empty());
+  const auto stable = filter.update({terrain}, true, 1, nullptr, nullptr, 0.10);
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_EQ(stable.front().label, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT);
+
+  LabeledGridVoxel isolated_unknown{GridCell{5, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT, 1, 1, 1};
+  isolated_unknown.unknown_component_evaluated = true;
+  TemporalVoxelFilter noise_filter(config);
+  EXPECT_TRUE(noise_filter.update(
+      {isolated_unknown}, true, 1, nullptr, nullptr, 0.20).empty());
+  EXPECT_EQ(noise_filter.trackedVoxelCount(), 0U);
+}
+
 TEST(TopologicalGridAssignment, DoesNotUseConnectivityForTemporalActivation)
 {
   using namespace fuzzrobo::topological_grid;
@@ -419,6 +515,160 @@ TEST(TopologicalGridAssignment, UsesElapsedSecondsInsteadOfUpdateCount)
     1.0e-9);
 }
 
+TEST(TopologicalGridAssignment, HoldsOccludedAndOutOfViewVoxelsButDeletesVisibleFreeSpace)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
+
+  const auto make_active_filter = [&config, &supported]() {
+      TemporalVoxelFilter filter(config);
+      EXPECT_EQ(filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+      return filter;
+    };
+
+  auto out_of_view_filter = make_active_filter();
+  GridVisibilityStates out_of_view;
+  out_of_view.emplace(supported.cell, VoxelVisibilityState::OutOfView);
+  const auto held_out_of_view = out_of_view_filter.update(
+    {}, true, 1, nullptr, nullptr, 0.50, &out_of_view);
+  ASSERT_EQ(held_out_of_view.size(), 1U);
+  EXPECT_NEAR(held_out_of_view.front().temporal_stability_score, 0.8646647, 1.0e-6);
+
+  auto occluded_filter = make_active_filter();
+  GridVisibilityStates occluded;
+  occluded.emplace(supported.cell, VoxelVisibilityState::Occluded);
+  EXPECT_EQ(occluded_filter.update({}, true, 1, nullptr, nullptr, 0.50, &occluded).size(), 1U);
+
+  auto unknown_filter = make_active_filter();
+  GridVisibilityStates unknown;
+  unknown.emplace(supported.cell, VoxelVisibilityState::Unknown);
+  EXPECT_EQ(unknown_filter.update({}, true, 1, nullptr, nullptr, 0.50, &unknown).size(), 1U);
+
+  auto free_filter = make_active_filter();
+  GridVisibilityStates free_space;
+  free_space.emplace(supported.cell, VoxelVisibilityState::Free);
+  EXPECT_TRUE(free_filter.update({}, true, 1, nullptr, nullptr, 0.50, &free_space).empty());
+}
+
+TEST(TopologicalGridAssignment, NormalDriftSuppressesOtherwisePointSupportedVoxel)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  const LabeledGridVoxel stationary{GridCell{1, 2, 3}, 3, 1, 1, 1};
+
+  TemporalVoxelFilter stationary_filter(config);
+  ASSERT_EQ(stationary_filter.update({stationary}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  EXPECT_EQ(stationary_filter.update({stationary}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+
+  LabeledGridVoxel normal_motion = stationary;
+  normal_motion.normal_drift_score = 1.0;
+  TemporalVoxelFilter moving_filter(config);
+  ASSERT_EQ(moving_filter.update({stationary}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  EXPECT_TRUE(moving_filter.update(
+      {normal_motion}, true, 1, nullptr, nullptr, 0.50).empty());
+}
+
+TEST(TopologicalGridAssignment, IgnoresSubthresholdNormalDrift)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  const LabeledGridVoxel stationary{GridCell{1, 2, 3}, 3, 1, 1, 1};
+  auto small_normal_motion = stationary;
+  small_normal_motion.normal_drift_score = 0.49;
+
+  TemporalVoxelFilter filter(config);
+  ASSERT_EQ(filter.update({stationary}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  const auto stable = filter.update(
+    {small_normal_motion}, true, 1, nullptr, nullptr, 0.50);
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_GT(stable.front().temporal_stability_score, 0.99);
+}
+
+TEST(TopologicalGridAssignment, HoldsActiveGngStructureAcrossPointCloudDropout)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
+  const LabeledGridVoxel no_points{GridCell{1, 2, 3}, 3, 1, 0, 1};
+
+  TemporalVoxelFilter dropout_filter(config);
+  ASSERT_EQ(dropout_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  const auto held = dropout_filter.update({no_points}, true, 1, nullptr, nullptr, 1.00);
+  ASSERT_EQ(held.size(), 1U);
+  EXPECT_TRUE(held.front().retained_by_gng_structure);
+  EXPECT_NEAR(held.front().temporal_stability_score, 0.8646647, 1.0e-6);
+
+  TemporalVoxelFilter free_space_filter(config);
+  ASSERT_EQ(free_space_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  GridVisibilityStates free_space;
+  free_space.emplace(no_points.cell, VoxelVisibilityState::Free);
+  EXPECT_TRUE(free_space_filter.update(
+      {no_points}, true, 1, nullptr, nullptr, 1.00, &free_space).empty());
+
+  TemporalVoxelFilter moving_filter(config);
+  ASSERT_EQ(moving_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  auto strong_normal_motion = no_points;
+  strong_normal_motion.normal_drift_score = 1.0;
+  EXPECT_TRUE(moving_filter.update(
+      {strong_normal_motion}, true, 1, nullptr, nullptr, 1.00).empty());
+}
+
+TEST(TopologicalGridAssignment, HoldsMissingVoxelWhenFormerGngNeighborhoodIsStatic)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
+  const NodeIdentity identity{7, 10};
+  supported.node_observations.push_back(
+    NodeObservation{identity, 0.0, 0.0, 0.0, 3});
+
+  NodeLocalStructureStates static_neighborhood;
+  static_neighborhood.emplace(identity, NodeLocalStructureState::Static);
+  TemporalVoxelFilter static_filter(config);
+  ASSERT_EQ(static_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  const auto held = static_filter.update(
+    {}, true, 1, nullptr, nullptr, 1.00, nullptr, &static_neighborhood);
+  ASSERT_EQ(held.size(), 1U);
+  EXPECT_TRUE(held.front().retained_by_local_structure);
+
+  TemporalVoxelFilter free_space_filter(config);
+  ASSERT_EQ(free_space_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  GridVisibilityStates free_space;
+  free_space.emplace(supported.cell, VoxelVisibilityState::Free);
+  EXPECT_TRUE(free_space_filter.update(
+      {}, true, 1, nullptr, nullptr, 1.00, &free_space, &static_neighborhood).empty());
+
+  NodeLocalStructureStates moving_neighborhood;
+  moving_neighborhood.emplace(identity, NodeLocalStructureState::Moving);
+  TemporalVoxelFilter moving_filter(config);
+  ASSERT_EQ(moving_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  EXPECT_TRUE(moving_filter.update(
+      {}, true, 1, nullptr, nullptr, 1.00, nullptr, &moving_neighborhood).empty());
+
+  NodeLocalStructureStates ambiguous_neighborhood;
+  ambiguous_neighborhood.emplace(identity, NodeLocalStructureState::Ambiguous);
+  TemporalVoxelFilter ambiguous_filter(config);
+  ASSERT_EQ(ambiguous_filter.update({supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  EXPECT_EQ(ambiguous_filter.update(
+      {}, true, 1, nullptr, nullptr, 1.00, nullptr, &ambiguous_neighborhood).size(), 1U);
+}
+
 TEST(TopologicalGridAssignment, RequiresCurrentSupportButNotAnArbitraryHistoryCount)
 {
   using namespace fuzzrobo::topological_grid;
@@ -515,6 +765,72 @@ TEST(TopologicalGridAssignment, FillsBetweenStableVoxelsUsingGngEdge)
   EXPECT_EQ(result.voxels[1].cell.x, 2);
   EXPECT_EQ(result.voxels[2].cell.x, 3);
   EXPECT_EQ(result.voxels[1].edge_support_count, 1U);
+}
+
+TEST(TopologicalGridAssignment, UsesGngEdgesInsteadOfVoxelAdjacencyForConnectivity)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.edges = {0, 1};
+  const std::vector<LabeledGridVoxel> direct{
+    LabeledGridVoxel{GridCell{0, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{4, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+  };
+  EdgeInferenceOptions options;
+  options.maximum_edge_length = 0.0;
+
+  const auto edge_result = inferVoxelsFromStableVoxelEdges(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options);
+  const auto split = splitVoxelsByGngConnectivity(direct, edge_result);
+
+  ASSERT_EQ(edge_result.voxels.size(), 3U);
+  ASSERT_EQ(edge_result.connected_endpoint_cells.size(), 2U);
+  EXPECT_EQ(split.connected_voxels.size(), 2U);
+  EXPECT_TRUE(split.isolated_voxels.empty());
+}
+
+TEST(TopologicalGridAssignment, KeepsLocallyRetainedHistoricalVoxelInMainOutput)
+{
+  using namespace fuzzrobo::topological_grid;
+  LabeledGridVoxel retained{GridCell{3, 2, 1},
+    ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT};
+  retained.retained_by_local_structure = true;
+  const auto split = splitVoxelsByGngConnectivity({retained}, EdgeVoxelizationResult{});
+
+  ASSERT_EQ(split.connected_voxels.size(), 1U);
+  EXPECT_TRUE(split.isolated_voxels.empty());
+}
+
+TEST(TopologicalGridAssignment, RejectsOnlyRelativeGngEdgeOutlierInAdaptiveMode)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.011F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.021F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.501F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.edges = {0, 1, 1, 2, 2, 3};
+  const std::vector<LabeledGridVoxel> direct{
+    LabeledGridVoxel{GridCell{0, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{1, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{2, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{50, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+  };
+  EdgeInferenceOptions options;
+  options.maximum_edge_length = 0.0;
+
+  const auto result = inferVoxelsFromStableVoxelEdges(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options);
+
+  EXPECT_EQ(result.voxel_edge_count, 2U);
+  EXPECT_EQ(result.overlength_edge_count, 1U);
+  EXPECT_EQ(result.connected_endpoint_cells.size(), 3U);
 }
 
 TEST(TopologicalGridAssignment, RequiresBothEdgeEndpointsToBeStableDirectVoxels)

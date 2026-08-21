@@ -1,12 +1,21 @@
 #include <ais_gng/topological_grid/topological_grid_node.hpp>
 
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <sensor_msgs/image_encodings.hpp>
+#include <tf2/exceptions.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -128,6 +137,37 @@ const char *pointSupportModeName(fuzzrobo::topological_grid::PointSupportMode mo
   return "unknown";
 }
 
+std::int64_t stampNanoseconds(const builtin_interfaces::msg::Time &stamp)
+{
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL + stamp.nanosec;
+}
+
+float depthMeters(
+  const sensor_msgs::msg::Image &image, int x, int y, double unit_scale)
+{
+  if (x < 0 || y < 0 || x >= static_cast<int>(image.width) ||
+    y >= static_cast<int>(image.height))
+  {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
+  const auto *row = image.data.data() + static_cast<std::size_t>(y) * image.step;
+  if (image.encoding == sensor_msgs::image_encodings::TYPE_16UC1 ||
+    image.encoding == sensor_msgs::image_encodings::MONO16)
+  {
+    std::uint16_t value{};
+    std::memcpy(&value, row + static_cast<std::size_t>(x) * sizeof(value), sizeof(value));
+    return value == 0U ? std::numeric_limits<float>::quiet_NaN() :
+           static_cast<float>(static_cast<double>(value) * unit_scale);
+  }
+  if (image.encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+    float value{};
+    std::memcpy(&value, row + static_cast<std::size_t>(x) * sizeof(value), sizeof(value));
+    return std::isfinite(value) && value > 0.0F ? value :
+           std::numeric_limits<float>::quiet_NaN();
+  }
+  return std::numeric_limits<float>::quiet_NaN();
+}
+
 }  // namespace
 
 namespace fuzzrobo::topological_grid
@@ -163,6 +203,37 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   if (summary_topic_.empty()) {
     summary_topic_ = output_topic_ + "/summary";
   }
+  depth_visibility_enabled_ = this->declare_parameter<bool>(
+    "depth_visibility_enabled", true);
+  depth_topic_ = this->declare_parameter<std::string>(
+    "depth_topic", "/camera/camera/depth/image_rect_raw");
+  camera_info_topic_ = this->declare_parameter<std::string>(
+    "camera_info_topic", "/camera/camera/depth/camera_info");
+  depth_visibility_max_sync_offset_sec_ = this->declare_parameter<double>(
+    "depth_visibility_max_sync_offset_sec", 0.005);
+  depth_visibility_unit_scale_ = this->declare_parameter<double>(
+    "depth_visibility_unit_scale", 0.001);
+  depth_visibility_relative_tolerance_ = this->declare_parameter<double>(
+    "depth_visibility_relative_tolerance", 0.02);
+  depth_visibility_tf_enabled_ = this->declare_parameter<bool>(
+    "depth_visibility_tf_enabled", true);
+  depth_visibility_fallback_transform_enabled_ = this->declare_parameter<bool>(
+    "depth_visibility_fallback_transform_enabled", true);
+  depth_visibility_fallback_map_frame_ = this->declare_parameter<std::string>(
+    "depth_visibility_fallback_map_frame", "base_link");
+  camera_to_map_x_ = this->declare_parameter<double>("camera_to_map.x", 0.434);
+  camera_to_map_y_ = this->declare_parameter<double>("camera_to_map.y", -0.693);
+  camera_to_map_z_ = this->declare_parameter<double>("camera_to_map.z", 0.279);
+  camera_to_map_roll_deg_ = this->declare_parameter<double>(
+    "camera_to_map.roll_deg", -103.8);
+  camera_to_map_pitch_deg_ = this->declare_parameter<double>(
+    "camera_to_map.pitch_deg", -28.9);
+  camera_to_map_yaw_deg_ = this->declare_parameter<double>(
+    "camera_to_map.yaw_deg", -3.4);
+  const int depth_visibility_cache_size = this->declare_parameter<int>(
+    "depth_visibility_cache_size", 16);
+  normal_drift_filter_enabled_ = this->declare_parameter<bool>(
+    "normal_drift_filter_enabled", true);
   pointcloud_timeout_sec_ = this->declare_parameter<double>("pointcloud_timeout_sec", 0.5);
   grid_spec_.cell_size = this->declare_parameter<double>("grid_size", 0.01);
   grid_spec_.origin_x = this->declare_parameter<double>("origin_x", 0.0);
@@ -196,10 +267,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   edge_inference_options_.enabled = this->declare_parameter<bool>(
     "edge_inference_enabled", true);
   edge_inference_options_.maximum_edge_length = this->declare_parameter<double>(
-    "edge_max_length", 0.10);
-  const bool inferred_require_input_points = this->declare_parameter<bool>(
-    "inferred_require_input_points", true);
-  edge_inference_options_.require_point_support_for_output = inferred_require_input_points;
+    "edge_max_length", 0.0);
+  edge_inference_options_.require_point_support_for_output = this->declare_parameter<bool>(
+    "edge_inferred_require_input_points", false);
   triangle_inference_options_.enabled = this->declare_parameter<bool>(
     "triangle_inference_enabled", true);
   triangle_inference_options_.maximum_edge_length = this->declare_parameter<double>(
@@ -212,7 +282,8 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "triangle_max_normal_angle_deg", 45.0);
   triangle_inference_options_.minimum_point_support_ratio = this->declare_parameter<double>(
     "triangle_min_point_support_ratio", 0.0);
-  triangle_inference_options_.require_point_support_for_output = inferred_require_input_points;
+  triangle_inference_options_.require_point_support_for_output = this->declare_parameter<bool>(
+    "triangle_inferred_require_input_points", true);
   const int minimum_input_points_per_voxel = this->declare_parameter<int>(
     "minimum_input_points_per_voxel", 1);
   const int neighbor_radius_cells = this->declare_parameter<int>(
@@ -232,7 +303,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   temporal_filter_config_.node_identity_max_displacement = this->declare_parameter<double>(
     "node_identity_max_displacement", 0.02);
   temporal_filter_config_.node_identity_history_migration_enabled =
-    this->declare_parameter<bool>("node_identity_history_migration_enabled", true);
+    this->declare_parameter<bool>("node_identity_history_migration_enabled", false);
   history_reset_on_time_regression_ = this->declare_parameter<bool>(
     "history_reset_on_time_regression", false);
   history_reset_node_count_ratio_ = this->declare_parameter<double>(
@@ -255,7 +326,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "point_activity_maximum_update_interval", 10);
 
   if (grid_spec_.cell_size <= 0.0 || pointcloud_timeout_sec_ <= 0.0 ||
-    edge_inference_options_.maximum_edge_length <= 0.0 ||
+    edge_inference_options_.maximum_edge_length < 0.0 ||
     triangle_inference_options_.maximum_edge_length <= 0.0 ||
     triangle_inference_options_.minimum_area < 0.0 ||
     triangle_inference_options_.minimum_aspect_ratio < 0.0 ||
@@ -270,6 +341,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     temporal_filter_config_.retention_score < 0.0 ||
     temporal_filter_config_.retention_score > temporal_filter_config_.activation_score ||
     temporal_filter_config_.node_identity_max_displacement < 0.0 ||
+    depth_visibility_max_sync_offset_sec_ < 0.0 ||
+    depth_visibility_unit_scale_ <= 0.0 ||
+    depth_visibility_relative_tolerance_ < 0.0 ||
     voxelization_options_.neighbor_radius_m < 0.0 ||
     voxelization_options_.point_support_radius_m < 0.0 ||
     history_reset_node_count_ratio_ < 0.0 || history_reset_node_count_ratio_ > 1.0 ||
@@ -288,6 +362,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   }
   if (minimum_input_points_per_voxel <= 0 || neighbor_radius_cells < 0 ||
     temporal_history_window_size <= 0 ||
+    depth_visibility_cache_size <= 0 ||
     point_activity_warmup_updates < 0 ||
     voxelization_options_.shape_neighborhood_hops <= 0 || shape_minimum_neighbors <= 0 ||
     point_activity_minimum_update_interval <= 0 ||
@@ -303,6 +378,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     static_cast<std::size_t>(shape_minimum_neighbors);
   temporal_filter_config_.history_window_size =
     static_cast<std::size_t>(temporal_history_window_size);
+  depth_visibility_cache_size_ = static_cast<std::size_t>(depth_visibility_cache_size);
   temporal_filter_ = std::make_unique<TemporalVoxelFilter>(temporal_filter_config_);
   point_activity_config_.minimum_update_interval =
     static_cast<std::size_t>(point_activity_minimum_update_interval);
@@ -334,6 +410,10 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inferred_topic_,
     rclcpp::QoS(1).reliable().transient_local());
   summary_pub_ = this->create_publisher<std_msgs::msg::String>(summary_topic_, 10);
+  if (depth_visibility_enabled_ && depth_visibility_tf_enabled_) {
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+  }
   map_sub_ = this->create_subscription<ais_gng_msgs::msg::TopologicalMap>(
     input_topic_,
     rclcpp::QoS(1).reliable().transient_local(),
@@ -346,11 +426,19 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
       std::chrono::milliseconds(50),
       std::bind(&TopologicalGridNode::pointCloudWatchdog, this));
   }
+  if (depth_visibility_enabled_) {
+    depth_image_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
+      depth_topic_, rclcpp::SensorDataQoS().keep_last(depth_visibility_cache_size_),
+      std::bind(&TopologicalGridNode::depthImageCallback, this, std::placeholders::_1));
+    camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
+      camera_info_topic_, rclcpp::SensorDataQoS().keep_last(1),
+      std::bind(&TopologicalGridNode::cameraInfoCallback, this, std::placeholders::_1));
+  }
 
   RCLCPP_INFO(
     this->get_logger(),
     "TopologicalGridNode ready: input=%s pointcloud=%s timeout=%.2fs output=%s delta=%s "
-    "isolated=%s edge_inferred=%s edge_fill=%s/%.3fm grid_size=%.3f "
+    "isolated=%s edge_inferred=%s edge_fill=%s/%s grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
     "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
     "stability=tau:%.3fs activate:%.2f retain:%.2f "
@@ -365,7 +453,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     isolated_topic_.c_str(),
     edge_inferred_topic_.c_str(),
     edge_inference_options_.enabled ? "enabled" : "disabled",
-    edge_inference_options_.maximum_edge_length,
+    edge_inference_options_.maximum_edge_length > 0.0 ? "metric" : "adaptive",
     grid_spec_.cell_size,
     grid_spec_.origin_x,
     grid_spec_.origin_y,
@@ -396,6 +484,19 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     voxelization_options_.shape_neighborhood_hops,
     voxelization_options_.shape_mad_multiplier,
     voxelization_options_.shape_seed_expansion_scale);
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Depth visibility: %s depth=%s camera_info=%s sync=%.1fms tolerance=%.3f tf=%s fallback=%s",
+    depth_visibility_enabled_ ? "enabled" : "disabled",
+    depth_topic_.c_str(), camera_info_topic_.c_str(),
+    depth_visibility_max_sync_offset_sec_ * 1000.0,
+    depth_visibility_relative_tolerance_,
+    depth_visibility_tf_enabled_ ? "enabled" : "disabled",
+    depth_visibility_fallback_transform_enabled_ ? "enabled" : "disabled");
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Normal drift filter: %s (GNG normal displacement / local edge spacing)",
+    normal_drift_filter_enabled_ ? "enabled" : "disabled");
 }
 
 void TopologicalGridNode::mapCallback(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg)
@@ -437,6 +538,423 @@ void TopologicalGridNode::pointCloudCallback(
   latest_point_counts_ = std::move(point_counts);
   latest_pointcloud_header_ = msg->header;
   has_latest_pointcloud_ = true;
+}
+
+void TopologicalGridNode::depthImageCallback(const sensor_msgs::msg::Image::SharedPtr msg)
+{
+  if (!msg) {
+    return;
+  }
+  depth_image_cache_.push_back(msg);
+  while (depth_image_cache_.size() > depth_visibility_cache_size_) {
+    depth_image_cache_.pop_front();
+  }
+}
+
+void TopologicalGridNode::cameraInfoCallback(const sensor_msgs::msg::CameraInfo::SharedPtr msg)
+{
+  latest_camera_info_ = msg;
+}
+
+GridVisibilityStates TopologicalGridNode::buildVisibilityStates(
+  const std_msgs::msg::Header &map_header,
+  const std::vector<LabeledGridVoxel> &label_voxels)
+{
+  last_visibility_stats_ = VisibilityStats{};
+  GridVisibilityStates states;
+  if (!depth_visibility_enabled_ || !latest_camera_info_ || depth_image_cache_.empty()) {
+    return states;
+  }
+
+  const std::int64_t map_stamp_ns = stampNanoseconds(map_header.stamp);
+  const std::int64_t max_offset_ns = static_cast<std::int64_t>(
+    depth_visibility_max_sync_offset_sec_ * 1000000000.0);
+  sensor_msgs::msg::Image::SharedPtr depth_image;
+  std::int64_t best_offset_ns = std::numeric_limits<std::int64_t>::max();
+  for (const auto &candidate : depth_image_cache_) {
+    const auto offset_ns = std::llabs(stampNanoseconds(candidate->header.stamp) - map_stamp_ns);
+    if (offset_ns <= max_offset_ns && offset_ns < best_offset_ns) {
+      depth_image = candidate;
+      best_offset_ns = offset_ns;
+    }
+  }
+  if (!depth_image) {
+    return states;
+  }
+  last_visibility_stats_.depth_matched = true;
+  last_visibility_stats_.sync_offset_ms = static_cast<double>(best_offset_ns) / 1000000.0;
+  if (depth_image->encoding != sensor_msgs::image_encodings::TYPE_16UC1 &&
+    depth_image->encoding != sensor_msgs::image_encodings::MONO16 &&
+    depth_image->encoding != sensor_msgs::image_encodings::TYPE_32FC1)
+  {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Depth visibility disabled for frame: unsupported encoding '%s'",
+      depth_image->encoding.c_str());
+    return states;
+  }
+
+  const double fx = latest_camera_info_->k[0];
+  const double fy = latest_camera_info_->k[4];
+  const double cx = latest_camera_info_->k[2];
+  const double cy = latest_camera_info_->k[5];
+  if (fx <= 0.0 || fy <= 0.0) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Depth visibility disabled for frame: CameraInfo has invalid focal length");
+    return states;
+  }
+
+  tf2::Transform map_to_depth;
+  bool have_transform = map_header.frame_id == depth_image->header.frame_id;
+  if (have_transform) {
+    map_to_depth.setIdentity();
+  } else if (depth_visibility_tf_enabled_ && tf_buffer_) {
+    try {
+      const auto transform = tf_buffer_->lookupTransform(
+        depth_image->header.frame_id, map_header.frame_id,
+        rclcpp::Time(map_header.stamp, RCL_ROS_TIME));
+      tf2::fromMsg(transform.transform, map_to_depth);
+      have_transform = true;
+    } catch (const tf2::TransformException &) {
+      have_transform = false;
+    }
+  }
+  if (!have_transform && depth_visibility_fallback_transform_enabled_ &&
+    map_header.frame_id == depth_visibility_fallback_map_frame_)
+  {
+    constexpr double kDegToRad = 0.01745329251994329577;
+    tf2::Quaternion camera_to_map_rotation;
+    camera_to_map_rotation.setRPY(
+      camera_to_map_roll_deg_ * kDegToRad,
+      camera_to_map_pitch_deg_ * kDegToRad,
+      camera_to_map_yaw_deg_ * kDegToRad);
+    const tf2::Transform camera_to_map(
+      camera_to_map_rotation,
+      tf2::Vector3(camera_to_map_x_, camera_to_map_y_, camera_to_map_z_));
+    map_to_depth = camera_to_map.inverse();
+    have_transform = true;
+  }
+  if (!have_transform) {
+    RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 2000,
+      "Depth visibility skipped: no transform %s -> %s",
+      map_header.frame_id.c_str(), depth_image->header.frame_id.c_str());
+    return states;
+  }
+  last_visibility_stats_.transform_available = true;
+
+  std::unordered_set<GridCell, GridCellHash> cells;
+  cells.reserve(label_voxels.size() + temporal_filter_->trackedVoxelCount());
+  for (const auto &voxel : label_voxels) {
+    cells.insert(voxel.cell);
+  }
+  for (const auto &cell : temporal_filter_->trackedVoxels()) {
+    cells.insert(cell);
+  }
+  states.reserve(cells.size());
+  for (const auto &cell : cells) {
+    const tf2::Vector3 map_point(
+      grid_spec_.origin_x + (static_cast<double>(cell.x) + 0.5) * grid_spec_.cell_size,
+      grid_spec_.origin_y + (static_cast<double>(cell.y) + 0.5) * grid_spec_.cell_size,
+      grid_spec_.origin_z + (static_cast<double>(cell.z) + 0.5) * grid_spec_.cell_size);
+    const tf2::Vector3 camera_point = map_to_depth * map_point;
+    VoxelVisibilityState state = VoxelVisibilityState::Unknown;
+    if (camera_point.z() <= 1.0e-6) {
+      state = VoxelVisibilityState::OutOfView;
+    } else {
+      const int pixel_x = static_cast<int>(std::lround(
+        fx * camera_point.x() / camera_point.z() + cx));
+      const int pixel_y = static_cast<int>(std::lround(
+        fy * camera_point.y() / camera_point.z() + cy));
+      if (pixel_x < 1 || pixel_x >= static_cast<int>(depth_image->width) - 1 ||
+        pixel_y < 1 || pixel_y >= static_cast<int>(depth_image->height) - 1)
+      {
+        state = VoxelVisibilityState::OutOfView;
+      } else {
+        std::array<float, 9> samples{};
+        std::size_t sample_count = 0;
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dx = -1; dx <= 1; ++dx) {
+            const float sample = depthMeters(
+              *depth_image, pixel_x + dx, pixel_y + dy, depth_visibility_unit_scale_);
+            if (std::isfinite(sample)) {
+              samples[sample_count++] = sample;
+            }
+          }
+        }
+        if (sample_count > 0) {
+          std::sort(samples.begin(), samples.begin() + sample_count);
+          const float median_depth = samples[sample_count / 2];
+          const double near_limit = camera_point.z() *
+            (1.0 - depth_visibility_relative_tolerance_);
+          const double far_limit = camera_point.z() *
+            (1.0 + depth_visibility_relative_tolerance_);
+          if (median_depth < near_limit) {
+            state = VoxelVisibilityState::Occluded;
+          } else if (median_depth > far_limit) {
+            state = VoxelVisibilityState::Free;
+          }
+        }
+      }
+    }
+    states.emplace(cell, state);
+    switch (state) {
+      case VoxelVisibilityState::OutOfView:
+        ++last_visibility_stats_.out_of_view_count;
+        break;
+      case VoxelVisibilityState::Occluded:
+        ++last_visibility_stats_.occluded_count;
+        break;
+      case VoxelVisibilityState::Free:
+        ++last_visibility_stats_.free_count;
+        break;
+      case VoxelVisibilityState::Unknown:
+        ++last_visibility_stats_.unknown_count;
+        break;
+    }
+  }
+  return states;
+}
+
+void TopologicalGridNode::applyNormalDriftScores(
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  GridVoxelizationResult &result)
+{
+  last_normal_drift_stats_ = NormalDriftStats{};
+  if (!normal_drift_filter_enabled_ || result.eligible_nodes.empty()) {
+    return;
+  }
+
+  ++normal_drift_epoch_;
+  const std::size_t node_count = map.nodes.size();
+  std::vector<double> incident_length_sum(node_count, 0.0);
+  std::vector<std::size_t> incident_edge_count(node_count, 0U);
+  for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
+    const std::size_t first = map.edges[edge];
+    const std::size_t second = map.edges[edge + 1U];
+    if (first >= node_count || second >= node_count || first == second) {
+      continue;
+    }
+    const auto &a = map.nodes[first].pos;
+    const auto &b = map.nodes[second].pos;
+    const double dx = static_cast<double>(a.x) - b.x;
+    const double dy = static_cast<double>(a.y) - b.y;
+    const double dz = static_cast<double>(a.z) - b.z;
+    const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (!std::isfinite(length) || length <= 1.0e-9) {
+      continue;
+    }
+    incident_length_sum[first] += length;
+    incident_length_sum[second] += length;
+    ++incident_edge_count[first];
+    ++incident_edge_count[second];
+  }
+
+  std::unordered_map<NodeIdentity, std::size_t, NodeIdentityHash> node_indices;
+  std::unordered_set<NodeIdentity, NodeIdentityHash> ambiguous_identities;
+  node_indices.reserve(node_count);
+  for (std::size_t index = 0; index < node_count; ++index) {
+    const NodeIdentity identity{map.nodes[index].id, map.nodes[index].frame};
+    if (ambiguous_identities.find(identity) != ambiguous_identities.end()) {
+      continue;
+    }
+    const auto [existing, inserted] = node_indices.emplace(identity, index);
+    if (!inserted) {
+      node_indices.erase(existing);
+      ambiguous_identities.insert(identity);
+    }
+  }
+
+  std::unordered_map<NodeIdentity, double, NodeIdentityHash> score_by_identity;
+  score_by_identity.reserve(result.eligible_nodes.size());
+  double score_sum = 0.0;
+  for (const auto &[identity, observation] : result.eligible_nodes) {
+    ++last_normal_drift_stats_.observed_node_count;
+    double score = 0.0;
+    const auto node_index = node_indices.find(identity);
+    if (node_index != node_indices.end() &&
+      incident_edge_count[node_index->second] > 0U)
+    {
+      const double spacing = incident_length_sum[node_index->second] /
+        static_cast<double>(incident_edge_count[node_index->second]);
+      const double normal_norm = std::sqrt(
+        observation.normal_x * observation.normal_x +
+        observation.normal_y * observation.normal_y +
+        observation.normal_z * observation.normal_z);
+      if (std::isfinite(spacing) && spacing > 1.0e-9 &&
+        std::isfinite(normal_norm) && normal_norm > 1.0e-9)
+      {
+        ++last_normal_drift_stats_.valid_normal_node_count;
+        const auto previous = normal_drift_states_.find(identity);
+        if (previous != normal_drift_states_.end() &&
+          previous->second.last_seen_epoch + 1U == normal_drift_epoch_)
+        {
+          const double dx = observation.x - previous->second.observation.x;
+          const double dy = observation.y - previous->second.observation.y;
+          const double dz = observation.z - previous->second.observation.z;
+          const double normal_displacement = std::abs(
+            dx * observation.normal_x + dy * observation.normal_y + dz * observation.normal_z) /
+            normal_norm;
+          score = std::clamp(normal_displacement / spacing, 0.0, 1.0);
+        }
+      }
+    }
+    normal_drift_states_.insert_or_assign(
+      identity, NormalDriftState{observation, normal_drift_epoch_});
+    score_by_identity.emplace(identity, score);
+    score_sum += score;
+    last_normal_drift_stats_.maximum_score = std::max(
+      last_normal_drift_stats_.maximum_score, score);
+    if (score > 0.0) {
+      ++last_normal_drift_stats_.moving_node_count;
+    }
+  }
+  last_normal_drift_stats_.mean_score = result.eligible_nodes.empty() ? 0.0 :
+    score_sum / static_cast<double>(result.eligible_nodes.size());
+
+  for (auto &voxel : result.label_voxels) {
+    if (voxel.node_observations.empty()) {
+      continue;
+    }
+    double voxel_score = 0.0;
+    for (const auto &observation : voxel.node_observations) {
+      const auto score = score_by_identity.find(observation.identity);
+      if (score != score_by_identity.end()) {
+        voxel_score += score->second;
+      }
+    }
+    voxel.normal_drift_score = std::clamp(
+      voxel_score / static_cast<double>(voxel.node_observations.size()), 0.0, 1.0);
+  }
+
+  const std::size_t cleanup_limit = std::max<std::size_t>(
+    64U, result.eligible_nodes.size() * 2U);
+  if (normal_drift_states_.size() > cleanup_limit) {
+    for (auto it = normal_drift_states_.begin(); it != normal_drift_states_.end();) {
+      if (it->second.last_seen_epoch != normal_drift_epoch_) {
+        it = normal_drift_states_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+}
+
+NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  const GridVoxelizationResult &result)
+{
+  // Both thresholds are normalized by the former GNG neighbour spacing, not
+  // by grid_size or a metric distance.  A cluster must have moved by at least
+  // half its local spacing, with much smaller disagreement between neighbours,
+  // before its former cells are treated as a moving-object trail.
+  constexpr std::size_t kMinimumSharedNeighbors = 2U;
+  constexpr double kStaticShiftRatio = 0.5;
+  constexpr double kCoherentDisagreementRatio = 0.25;
+
+  last_local_structure_stats_ = LocalStructureStats{};
+  NodeLocalStructureStates states;
+  std::unordered_map<NodeIdentity, std::vector<NodeIdentity>, NodeIdentityHash>
+    current_neighbors;
+  current_neighbors.reserve(result.eligible_nodes.size());
+
+  for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
+    const std::size_t first_index = static_cast<std::size_t>(map.edges[edge]);
+    const std::size_t second_index = static_cast<std::size_t>(map.edges[edge + 1U]);
+    if (first_index >= map.nodes.size() || second_index >= map.nodes.size() ||
+      first_index == second_index)
+    {
+      continue;
+    }
+    const NodeIdentity first{map.nodes[first_index].id, map.nodes[first_index].frame};
+    const NodeIdentity second{map.nodes[second_index].id, map.nodes[second_index].frame};
+    if (result.eligible_nodes.find(first) == result.eligible_nodes.end() ||
+      result.eligible_nodes.find(second) == result.eligible_nodes.end())
+    {
+      continue;
+    }
+    current_neighbors[first].push_back(second);
+    current_neighbors[second].push_back(first);
+  }
+
+  if (!previous_node_observations_.empty()) {
+    states.reserve(previous_node_neighbors_.size());
+    for (const auto &[identity, neighbors] : previous_node_neighbors_) {
+      const auto previous_center = previous_node_observations_.find(identity);
+      if (previous_center == previous_node_observations_.end()) {
+        continue;
+      }
+      double mean_dx = 0.0;
+      double mean_dy = 0.0;
+      double mean_dz = 0.0;
+      double spacing_sum = 0.0;
+      std::vector<std::array<double, 3>> displacements;
+      displacements.reserve(neighbors.size());
+      for (const auto &neighbor_identity : neighbors) {
+        const auto previous_neighbor = previous_node_observations_.find(neighbor_identity);
+        const auto current_neighbor = result.eligible_nodes.find(neighbor_identity);
+        if (previous_neighbor == previous_node_observations_.end() ||
+          current_neighbor == result.eligible_nodes.end())
+        {
+          continue;
+        }
+        const double offset_x = previous_neighbor->second.x - previous_center->second.x;
+        const double offset_y = previous_neighbor->second.y - previous_center->second.y;
+        const double offset_z = previous_neighbor->second.z - previous_center->second.z;
+        const double spacing = std::sqrt(
+          offset_x * offset_x + offset_y * offset_y + offset_z * offset_z);
+        if (!std::isfinite(spacing) || spacing <= 1.0e-9) {
+          continue;
+        }
+        const double dx = current_neighbor->second.x - previous_neighbor->second.x;
+        const double dy = current_neighbor->second.y - previous_neighbor->second.y;
+        const double dz = current_neighbor->second.z - previous_neighbor->second.z;
+        if (!std::isfinite(dx) || !std::isfinite(dy) || !std::isfinite(dz)) {
+          continue;
+        }
+        displacements.push_back({dx, dy, dz});
+        mean_dx += dx;
+        mean_dy += dy;
+        mean_dz += dz;
+        spacing_sum += spacing;
+      }
+      if (displacements.size() < kMinimumSharedNeighbors) {
+        continue;
+      }
+      const double inverse_count = 1.0 / static_cast<double>(displacements.size());
+      mean_dx *= inverse_count;
+      mean_dy *= inverse_count;
+      mean_dz *= inverse_count;
+      const double local_spacing = spacing_sum * inverse_count;
+      const double translation_ratio = std::sqrt(
+        mean_dx * mean_dx + mean_dy * mean_dy + mean_dz * mean_dz) / local_spacing;
+      double disagreement_sum = 0.0;
+      for (const auto &displacement : displacements) {
+        const double dx = displacement[0] - mean_dx;
+        const double dy = displacement[1] - mean_dy;
+        const double dz = displacement[2] - mean_dz;
+        disagreement_sum += std::sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      const double disagreement_ratio = disagreement_sum * inverse_count / local_spacing;
+      ++last_local_structure_stats_.evaluated_node_count;
+      NodeLocalStructureState state = NodeLocalStructureState::Ambiguous;
+      if (translation_ratio < kStaticShiftRatio) {
+        state = NodeLocalStructureState::Static;
+        ++last_local_structure_stats_.static_node_count;
+      } else if (disagreement_ratio <= kCoherentDisagreementRatio) {
+        state = NodeLocalStructureState::Moving;
+        ++last_local_structure_stats_.moving_node_count;
+      } else {
+        ++last_local_structure_stats_.ambiguous_node_count;
+      }
+      states.emplace(identity, state);
+    }
+  }
+
+  previous_node_observations_ = result.eligible_nodes;
+  previous_node_neighbors_ = std::move(current_neighbors);
+  return states;
 }
 
 void TopologicalGridNode::pointCloudWatchdog()
@@ -592,6 +1110,11 @@ void TopologicalGridNode::publishResult(
     temporal_filter_->clear();
     has_last_temporal_filter_stamp_ = false;
     point_activity_scheduler_->clear();
+    normal_drift_states_.clear();
+    normal_drift_epoch_ = 0;
+    previous_node_neighbors_.clear();
+    previous_node_observations_.clear();
+    last_local_structure_stats_ = LocalStructureStats{};
     ++history_reset_count_;
     last_history_reset_reason_ = reset_reason;
     RCLCPP_WARN(
@@ -624,20 +1147,32 @@ void TopologicalGridNode::publishResult(
   }
   ++point_activity_processed_update_count_;
 
-  const auto result = voxelizeNodes(
-    map, grid_spec_, voxelization_options_, &input_point_counts);
+  // SAFE_TERRAIN must remain in the structural graph.  It is deliberately
+  // prevented from creating a candidate by TemporalVoxelFilter, but treating
+  // a terrain reclassification as an absent node destroys the history of an
+  // object resting on the floor. HUMAN and CAR remain hard exclusions.
+  auto structural_voxelization_options = voxelization_options_;
+  structural_voxelization_options.excluded_labels.erase(
+    ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN);
+  auto result = voxelizeNodes(
+    map, grid_spec_, structural_voxelization_options, &input_point_counts);
+  applyNormalDriftScores(map, result);
+  const auto local_structure_states = buildLocalStructureStates(map, result);
   double temporal_elapsed_seconds = 0.0;
   if (has_last_temporal_filter_stamp_ && current_stamp > last_temporal_filter_stamp_) {
     temporal_elapsed_seconds =
       (current_stamp - last_temporal_filter_stamp_).seconds();
   }
+  const auto visibility_states = buildVisibilityStates(map.header, result.label_voxels);
   const auto stable_voxels = temporal_filter_->update(
     result.label_voxels,
     voxelization_options_.require_input_points,
     voxelization_options_.minimum_input_points_per_voxel,
     &input_point_counts,
     &result.eligible_nodes,
-    temporal_elapsed_seconds);
+    temporal_elapsed_seconds,
+    visibility_states.empty() ? nullptr : &visibility_states,
+    local_structure_states.empty() ? nullptr : &local_structure_states);
   last_temporal_filter_stamp_ = current_stamp;
   has_last_temporal_filter_stamp_ = true;
   const auto retained_without_current_points = static_cast<std::size_t>(std::count_if(
@@ -652,14 +1187,20 @@ void TopologicalGridNode::publishResult(
   const auto retained_by_node_identity = static_cast<std::size_t>(std::count_if(
     stable_voxels.begin(), stable_voxels.end(),
     [](const LabeledGridVoxel &voxel) {return voxel.retained_by_node_identity;}));
-  const auto isolation_split = splitVoxelsByIsolation(stable_voxels);
+  const auto retained_by_gng_structure = static_cast<std::size_t>(std::count_if(
+    stable_voxels.begin(), stable_voxels.end(),
+    [](const LabeledGridVoxel &voxel) {return voxel.retained_by_gng_structure;}));
+  const auto retained_by_local_structure = static_cast<std::size_t>(std::count_if(
+    stable_voxels.begin(), stable_voxels.end(),
+    [](const LabeledGridVoxel &voxel) {return voxel.retained_by_local_structure;}));
   const auto edge_result = inferVoxelsFromStableVoxelEdges(
-    map, grid_spec_, isolation_split.connected_voxels,
-    voxelization_options_.excluded_labels,
+    map, grid_spec_, stable_voxels,
+    structural_voxelization_options.excluded_labels,
     edge_inference_options_, &input_point_counts);
+  const auto isolation_split = splitVoxelsByGngConnectivity(stable_voxels, edge_result);
   const auto triangle_result = inferVoxelsFromStableVoxelTriangles(
     map, grid_spec_, isolation_split.connected_voxels,
-    voxelization_options_.excluded_labels,
+    structural_voxelization_options.excluded_labels,
     triangle_inference_options_, &input_point_counts);
   const auto direct_and_edge_voxels = mergeDirectAndInferredVoxels(
     isolation_split.connected_voxels, edge_result.voxels);
@@ -695,9 +1236,17 @@ void TopologicalGridNode::publishResult(
   oss << "\"shape_score_median\":" << result.shape_score_median << ",";
   oss << "\"shape_score_mad\":" << result.shape_score_mad << ",";
   oss << "\"shape_score_threshold\":" << result.shape_score_threshold << ",";
+  oss << "\"unknown_component_count\":" << result.unknown_component_count << ",";
+  oss << "\"unknown_component_event_count\":"
+      << result.unknown_component_event_count << ",";
+  oss << "\"unknown_component_event_node_count\":"
+      << result.unknown_component_event_node_count << ",";
+  oss << "\"unknown_component_event_voxel_count\":"
+      << result.unknown_component_event_voxel_count << ",";
   oss << "\"insufficient_point_voxel_count\":"
       << result.insufficient_point_voxel_count << ",";
-  oss << "\"observed_isolated_voxel_count\":" << result.isolated_voxel_count << ",";
+  oss << "\"grid_neighbor_isolated_voxel_count\":"
+      << result.isolated_voxel_count << ",";
   oss << "\"isolated_voxel_count\":" << isolation_split.isolated_voxels.size() << ",";
   oss << "\"voxel_count\":" << combined_voxels.size() << ",";
   oss << "\"stable_direct_voxel_count\":" << stable_voxels.size() << ",";
@@ -734,6 +1283,8 @@ void TopologicalGridNode::publishResult(
       << retained_without_current_points << ",";
   oss << "\"retained_without_current_labels\":"
       << retained_without_current_labels << ",";
+  oss << "\"retained_by_gng_structure\":" << retained_by_gng_structure << ",";
+  oss << "\"retained_by_local_structure\":" << retained_by_local_structure << ",";
   oss << "\"retained_by_node_identity\":" << retained_by_node_identity << ",";
   oss << "\"label_voxel_count\":" << result.label_voxels.size() << ",";
   oss << "\"observed_voxel_count\":" << result.voxels.size() << ",";
@@ -746,6 +1297,42 @@ void TopologicalGridNode::publishResult(
       << temporal_filter_config_.activation_score << ",";
   oss << "\"temporal_retention_score\":"
       << temporal_filter_config_.retention_score << ",";
+  oss << "\"depth_visibility_enabled\":"
+      << (depth_visibility_enabled_ ? "true" : "false") << ",";
+  oss << "\"depth_visibility_matched\":"
+      << (last_visibility_stats_.depth_matched ? "true" : "false") << ",";
+  oss << "\"depth_visibility_transform_available\":"
+      << (last_visibility_stats_.transform_available ? "true" : "false") << ",";
+  oss << "\"depth_visibility_sync_offset_ms\":"
+      << last_visibility_stats_.sync_offset_ms << ",";
+  oss << "\"depth_visibility_out_of_view_count\":"
+      << last_visibility_stats_.out_of_view_count << ",";
+  oss << "\"depth_visibility_occluded_count\":"
+      << last_visibility_stats_.occluded_count << ",";
+  oss << "\"depth_visibility_free_count\":"
+      << last_visibility_stats_.free_count << ",";
+  oss << "\"depth_visibility_unknown_count\":"
+      << last_visibility_stats_.unknown_count << ",";
+  oss << "\"normal_drift_filter_enabled\":"
+      << (normal_drift_filter_enabled_ ? "true" : "false") << ",";
+  oss << "\"normal_drift_observed_node_count\":"
+      << last_normal_drift_stats_.observed_node_count << ",";
+  oss << "\"normal_drift_valid_normal_node_count\":"
+      << last_normal_drift_stats_.valid_normal_node_count << ",";
+  oss << "\"normal_drift_moving_node_count\":"
+      << last_normal_drift_stats_.moving_node_count << ",";
+  oss << "\"normal_drift_mean_score\":"
+      << last_normal_drift_stats_.mean_score << ",";
+  oss << "\"normal_drift_maximum_score\":"
+      << last_normal_drift_stats_.maximum_score << ",";
+  oss << "\"local_structure_evaluated_node_count\":"
+      << last_local_structure_stats_.evaluated_node_count << ",";
+  oss << "\"local_structure_static_node_count\":"
+      << last_local_structure_stats_.static_node_count << ",";
+  oss << "\"local_structure_moving_node_count\":"
+      << last_local_structure_stats_.moving_node_count << ",";
+  oss << "\"local_structure_ambiguous_node_count\":"
+      << last_local_structure_stats_.ambiguous_node_count << ",";
   oss << "\"node_identity_retention_enabled\":"
       << (temporal_filter_config_.node_identity_retention_enabled ? "true" : "false")
       << ",";
@@ -799,10 +1386,18 @@ void TopologicalGridNode::publishResult(
       << point_activity_skipped_update_count_ << ",";
   oss << "\"edge_inference_enabled\":"
       << (edge_inference_options_.enabled ? "true" : "false") << ",";
-  oss << "\"inferred_require_input_points\":"
+  oss << "\"edge_inferred_require_input_points\":"
       << (edge_inference_options_.require_point_support_for_output ? "true" : "false")
       << ",";
+  oss << "\"triangle_inferred_require_input_points\":"
+      << (triangle_inference_options_.require_point_support_for_output ? "true" : "false")
+      << ",";
   oss << "\"edge_max_length\":" << edge_inference_options_.maximum_edge_length << ",";
+  oss << "\"edge_length_gate\":\""
+      << (edge_inference_options_.maximum_edge_length > 0.0 ? "metric" : "adaptive")
+      << "\",";
+  oss << "\"gng_connected_direct_voxel_count\":"
+      << isolation_split.connected_voxels.size() << ",";
   oss << "\"edge_inferred_topic\":\"" << edge_inferred_topic_ << "\",";
   oss << "\"isolated_topic\":\"" << isolated_topic_ << "\",";
   oss << "\"isolated_excluded_from_grasp_candidates\":true,";
@@ -879,6 +1474,12 @@ void TopologicalGridNode::publishResult(
         << ",\"neighbor_count\":" << voxel.neighbor_count
         << ",\"edge_support_count\":" << voxel.edge_support_count
         << ",\"triangle_support_count\":" << voxel.triangle_support_count
+        << ",\"unknown_component_event\":"
+        << (voxel.unknown_component_event ? "true" : "false")
+        << ",\"retained_by_gng_structure\":"
+        << (voxel.retained_by_gng_structure ? "true" : "false")
+        << ",\"retained_by_local_structure\":"
+        << (voxel.retained_by_local_structure ? "true" : "false")
         << ",\"retained_by_node_identity\":"
         << (voxel.retained_by_node_identity ? "true" : "false")
         << ",\"source\":\"";

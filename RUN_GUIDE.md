@@ -173,14 +173,19 @@ ros2 run fuzzy_voxel_grid depth_visibility_benchmark
 ### 変換済み点群を新しいrosbagへ1周分だけ保存
 # 先に上の変換ノードを起動し、次にrecordを開始してから、最後にbagを--loopなしで再生する。
 
-# ターミナル3: 変換後の元トピック名をrecord
+# ターミナル3: 変換済み点群と可視性判定用の生depthをrecord
 ros2 bag record \
   -o /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed \
-  /camera/camera/depth/color/points
+  /camera/camera/depth/color/points \
+  /camera/camera/depth/image_rect_raw \
+  /camera/camera/depth/camera_info
 
 # ターミナル1: record開始後にraw bagを1回だけ再生
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
-  --topics /camera/camera/depth/color/points \
+  --topics \
+    /camera/camera/depth/color/points \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info \
   --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
 
 # 再生終了後、ターミナル3でCtrl-Cしてrecordを終了する。
@@ -216,12 +221,31 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
-`SAFE_TERRAIN`、`HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。セルの有効／無効は、
+`HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。`SAFE_TERRAIN`は候補としては除外するが、
+床際物体の履歴を切らないため内部の構造証拠としては保持する。`auto`支持は各セルごとに
+GNGの`inpcl_ids`と現在点群の近傍支持の大きい方を使うため、IDが一部のノードで欠けても安定した点群を失わない。セルの有効／無効は、
 点群支持の在席率と切替率から求める時間安定度で決める。現在の点群支持は周囲27セルの中央値で正規化し、
 点群・ノード密度や`grid_size`が変わっても固定個数閾値への依存を避ける。EMAはMap headerの時刻差から
 更新するため、点群レートにも依存しない。単発の欠落は残し、繰り返すON/OFFは切替率が上がるため抑制する。
 時間安定度は `在席率 × (1 - 切替率)` であり、rayを使わずに一時欠落と反復フリッカへの扱いを分ける。
-26近傍を持たない直接観測セルは把持候補から除外し、`<output_topic>/isolated`へ分離する。
+さらにネイティブ深度画像が同時刻にあるときは、各ボクセル中心を1回だけ射影して3×3画素の中央値を比較する。
+画角外と手前物体による遮蔽では履歴を保持し、対応画素の深度がセルより奥にある（その場所が空いた）場合だけ
+負の証拠として減衰させる。全rayの走査はしない。深度または座標変換が得られないフレームは従来の時間減衰に戻る。
+`depth_visibility_*` と `camera_to_map.*` は通常触らず、プロファイル YAML にだけ置いてある。TFを優先し、
+録画に `base_link`→カメラTFがない場合だけ既存の点群変換キャリブレーションをフォールバックとして使う。
+深度がない場合も、過去セルのGNG近傍が複数残り、局所的に静止または移動方向が不一致なら、その既知セルだけを保持する。
+近傍が局所edge間隔に対して大きく、同方向に並進したときだけ、移動物体の旧位置として通常の時間減衰へ渡す。
+これは前後フレームの既存GNG edgeとノード位置だけを1回走査する。新規セルの膨張、点群kNN・PCA、全ボクセル走査は行わない。
+単ノード法線方向の動きは補助オプションであり、既定では無効である。
+`SAFE_TERRAIN`は新規候補にはしないが、内部ではGNG構造・在席の証拠として残す。
+そのため床際の物体で`UNKNOWN_OBJECT`と`SAFE_TERRAIN`が交互になっても、terrainを観測欠損としては扱わない。
+ただし単発unknownは候補化せず、同一フレームのGNG edge連結成分が**4ノードかつ4つの点群支持済み出力セル**を
+占有したときだけ物体証拠として履歴へ記録する。`unknown_component_event_count`、
+`unknown_component_event_node_count`、`unknown_component_event_voxel_count`で確認できる。
+直接観測セルの連結性は26近傍セルではなく、両端が安定したGNG edgeで判定する。細かい`grid_size`で
+途中セルが抜けても、そのedge上だけを補間して連結を維持する。edge長の除外も固定距離ではなく、
+各端点の周辺GNG edge長に対するロバストな外れ値で決める。GNG edgeを持たない直接観測セルだけを
+`<output_topic>/isolated`へ分離する。
 `output_topic`は非孤立の直接観測と補間セルの和集合で、`edge_inferred`と`triangle_inferred`は補間由来だけを出す。
 
 ros2 launch ais_gng topological_grid.launch.py \
@@ -238,6 +262,13 @@ ros2 launch ais_gng topological_grid.launch.py \
 `temporal_retention_score`（消失）である。
 `retention_score < activation_score`のヒステリシスを保つ。`unknown_shape_filter_enabled`は既定で無効で、
 形状の逸脱だけを物体判定にしない。summaryにはこれらの設定値と活動度を出す。
+深度が有効なときは `depth_visibility_free_count`、`depth_visibility_occluded_count`、
+`depth_visibility_out_of_view_count` もsummaryに出る。移動物体の削除証拠として見るのは `free_count` だけである。
+局所構造の判定数は `local_structure_static_node_count`、`local_structure_moving_node_count`、
+`local_structure_ambiguous_node_count` に、これで保持された旧セル数は `retained_by_local_structure` に出る。
+GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift_maximum_score` に出る。
+`edge_max_length: 0.0` は局所GNG edge長から自動で外れedgeを除く設定である。出力の`grid_size`は
+把持テンプレートの必要解像度で選び、物体連結性のために大きくする必要はない。
 
 `point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
 静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで

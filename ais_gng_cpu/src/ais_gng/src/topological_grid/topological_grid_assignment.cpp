@@ -11,14 +11,29 @@
 
 namespace
 {
+// This is dimensionless: the normal displacement is divided by the node's
+// local incident-edge spacing.  Below half a local spacing, the movement is
+// treated as ordinary GNG/depth jitter rather than deletion evidence.
+constexpr double kNormalDriftEvidenceThreshold = 0.5;
+
 struct VoxelAccumulator
 {
   std::array<std::size_t, 256> label_counts{};
   std::size_t node_count = 0;
+  // GNG input IDs and live geometric point support are independent evidence.
+  // Keep them separate until the requested support mode combines them.
+  std::size_t node_input_id_count = 0;
   std::size_t input_point_count = 0;
   std::size_t edge_support_count = 0;
   std::size_t triangle_support_count = 0;
   std::vector<fuzzrobo::topological_grid::NodeObservation> node_observations;
+};
+
+struct UnknownNodeComponent
+{
+  std::vector<std::size_t> node_indices;
+  std::unordered_set<fuzzrobo::topological_grid::GridCell,
+    fuzzrobo::topological_grid::GridCellHash> cells;
 };
 
 struct Vec3d
@@ -455,7 +470,9 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   std::size_t minimum_input_points_per_voxel,
   const GridPointCounts *input_point_counts,
   const NodeObservationMap *current_nodes,
-  double elapsed_seconds)
+  double elapsed_seconds,
+  const GridVisibilityStates *visibility_states,
+  const NodeLocalStructureStates *local_structure_states)
 {
   const double alpha = std::isfinite(elapsed_seconds) && elapsed_seconds > 0.0
     ? -std::expm1(-elapsed_seconds / config_.time_constant_sec)
@@ -472,6 +489,45 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     history.stability_score = history.presence_score * (1.0 - history.switching_score);
     history.previous_observation_score = observation;
     history.has_previous_observation = true;
+  };
+  const auto holdsHistory = [visibility_states](const GridCell &cell) {
+    if (!visibility_states) {
+      return false;
+    }
+    const auto found = visibility_states->find(cell);
+    if (found == visibility_states->end()) {
+      return false;
+    }
+    // A matched depth image may still have holes.  Only FREE is a measured
+    // negative observation; every other state is intentionally non-destructive.
+    return found->second != VoxelVisibilityState::Free;
+  };
+  const auto isConfirmedFree = [visibility_states](const GridCell &cell) {
+    if (!visibility_states) {
+      return false;
+    }
+    const auto found = visibility_states->find(cell);
+    return found != visibility_states->end() &&
+           found->second == VoxelVisibilityState::Free;
+  };
+  const auto holdsByLocalStructure = [local_structure_states](const History &history) {
+    if (!local_structure_states) {
+      return false;
+    }
+    for (const auto &observation : history.last_voxel.node_observations) {
+      const auto found = local_structure_states->find(observation.identity);
+      if (found == local_structure_states->end() ||
+        found->second == NodeLocalStructureState::Unknown)
+      {
+        continue;
+      }
+      // Only an agreed local translation deletes the old cell. Static and
+      // ambiguous neighbourhoods are deliberately non-destructive.
+      if (found->second != NodeLocalStructureState::Moving) {
+        return true;
+      }
+    }
+    return false;
   };
 
   std::vector<LabeledGridVoxel> stable_voxels;
@@ -523,17 +579,69 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   }
 
   for (const auto &voxel : label_voxels) {
-    auto &history = history_[voxel.cell];
+    const bool unknown_requires_component_event =
+      voxel.label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
+      voxel.unknown_component_evaluated;
+    // SAFE_TERRAIN is a geometric observation, not a grasp-label observation.
+    // An extended UNKNOWN_OBJECT component can override a terrain-dominant
+    // cell: the event says that at least one unknown node occupied this cell
+    // simultaneously with the rest of the component.
+    const bool records_candidate_label = voxel.unknown_component_event ||
+      (voxel.label != ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN &&
+      !unknown_requires_component_event);
+    const std::uint8_t candidate_label = voxel.unknown_component_event ?
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT : voxel.label;
+    auto history_it = history_.find(voxel.cell);
+    // Do not allocate temporal history for the whole floor. Terrain-only
+    // cells are still kept in the current GNG graph and local point-density
+    // calculation, but matter temporally only after an object event has
+    // created candidate history in the same cell.
+    if (history_it == history_.end() && !records_candidate_label) {
+      continue;
+    }
+    if (history_it == history_.end()) {
+      history_it = history_.emplace(voxel.cell, History{}).first;
+    }
+    auto &history = history_it->second;
     const bool has_input_points = !require_input_points ||
       voxel.input_point_count >= minimum_input_points_per_voxel;
-    appendSample(history, HistorySample{voxel.label, true, has_input_points});
     updated_cells.insert(voxel.cell);
-    history.last_voxel = voxel;
     const double local_reference = local_density_reference.at(voxel.cell);
     const double point_support_score = !require_input_points ? 1.0 :
       (has_input_points ? std::sqrt(std::min(
       1.0, static_cast<double>(voxel.input_point_count) / local_reference)) : 0.0);
-    updateTemporalScores(history, point_support_score);
+    const double normal_drift_score = std::clamp(voxel.normal_drift_score, 0.0, 1.0);
+    // Tiny normal-direction shifts are ubiquitous in a continuously adapting
+    // GNG.  Do not turn them into a permanent point-support penalty.  Only a
+    // displacement of at least half the local GNG spacing is evidence of a
+    // potential moving surface.
+    const double normal_drift_evidence =
+      normal_drift_score >= kNormalDriftEvidenceThreshold ? normal_drift_score : 0.0;
+    const double temporal_observation_score =
+      point_support_score * (1.0 - normal_drift_evidence);
+    // Raw point support is admission evidence for a new voxel.  It is not, by
+    // itself, deletion evidence for an already active GNG surface: a current
+    // node in this cell still anchors its incident GNG edges.  Otherwise a
+    // point-cloud dropout removes the endpoints before edge inference gets a
+    // chance to restore its intermediate cells.
+    //
+    // A matched depth image proving FREE space or a large normal-direction
+    // GNG displacement are explicit negative evidence and deliberately do
+    // not receive this hold.
+    const bool retained_by_gng_structure = history.active &&
+      voxel.node_count > 0 &&
+      !has_input_points &&
+      normal_drift_evidence == 0.0 &&
+      !isConfirmedFree(voxel.cell);
+    const bool preserve_missing_support = temporal_observation_score == 0.0 &&
+      point_support_score == 0.0 &&
+      (holdsHistory(voxel.cell) || retained_by_gng_structure);
+    if (!preserve_missing_support) {
+      appendSample(history, HistorySample{
+        candidate_label, records_candidate_label, has_input_points});
+      history.last_voxel = voxel;
+      updateTemporalScores(history, temporal_observation_score);
+    }
     if (!history.active) {
       if (history.stability_score < config_.activation_score) {
         continue;
@@ -541,6 +649,9 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       history.active = true;
     } else if (history.stability_score < config_.retention_score) {
       history.active = false;
+      continue;
+    }
+    if (history.label_observation_count == 0) {
       continue;
     }
     history.active_label = dominantLabel(history.label_counts);
@@ -552,6 +663,9 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.point_input_history_count = history.point_input_observation_count;
     stable_voxel.temporal_stability_score = history.stability_score;
     stable_voxel.point_support_score = point_support_score;
+    stable_voxel.normal_drift_score = normal_drift_score;
+    stable_voxel.retained_by_gng_structure = retained_by_gng_structure;
+    stable_voxel.retained_by_local_structure = false;
     stable_voxel.retained_by_node_identity = false;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
@@ -571,9 +685,29 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
           point_it->second >= minimum_input_points_per_voxel;
       }
     }
-    appendSample(it->second, HistorySample{0, false, has_input_points});
-
     auto &history = it->second;
+    const bool retained_by_local_structure = !isConfirmedFree(it->first) &&
+      holdsByLocalStructure(history);
+    if (holdsHistory(it->first) || retained_by_local_structure) {
+      if (!history.active) {
+        continue;
+      }
+      auto stable_voxel = history.last_voxel;
+      stable_voxel.node_count = 0;
+      stable_voxel.input_point_count = input_point_count;
+      stable_voxel.history_sample_count = history.samples.size();
+      stable_voxel.label_history_count = history.label_observation_count;
+      stable_voxel.point_input_history_count = history.point_input_observation_count;
+      stable_voxel.temporal_stability_score = history.stability_score;
+      stable_voxel.point_support_score = 0.0;
+      stable_voxel.retained_by_gng_structure = false;
+      stable_voxel.retained_by_local_structure = retained_by_local_structure;
+      stable_voxel.retained_by_node_identity = false;
+      history.last_voxel = stable_voxel;
+      stable_voxels.push_back(stable_voxel);
+      continue;
+    }
+    appendSample(history, HistorySample{0, false, has_input_points});
     const bool retained_by_node_identity =
       config_.node_identity_retention_enabled &&
       nodeIdentityRetainsVoxel(
@@ -597,13 +731,15 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.point_input_history_count = history.point_input_observation_count;
     stable_voxel.temporal_stability_score = history.stability_score;
     stable_voxel.point_support_score = 0.0;
+    stable_voxel.retained_by_gng_structure = false;
+    stable_voxel.retained_by_local_structure = false;
     stable_voxel.retained_by_node_identity = retained_by_node_identity;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
   }
 
   for (auto it = history_.begin(); it != history_.end();) {
-    if (!it->second.active && it->second.label_observation_count == 0) {
+    if (it->second.label_observation_count == 0) {
       it = history_.erase(it);
     } else {
       ++it;
@@ -622,6 +758,17 @@ void TemporalVoxelFilter::clear()
 std::size_t TemporalVoxelFilter::trackedVoxelCount() const noexcept
 {
   return history_.size();
+}
+
+std::vector<GridCell> TemporalVoxelFilter::trackedVoxels() const
+{
+  std::vector<GridCell> cells;
+  cells.reserve(history_.size());
+  for (const auto &[cell, history] : history_) {
+    (void)history;
+    cells.push_back(cell);
+  }
+  return cells;
 }
 
 std::string gridCellToString(const GridCell &cell)
@@ -1131,32 +1278,88 @@ GridVoxelizationResult voxelizeNodes(
   result.shape_score_median = shape_filter.score_median;
   result.shape_score_mad = shape_filter.score_mad;
   result.shape_score_threshold = shape_filter.score_threshold;
+
+  // A one-node UNKNOWN_OBJECT label is often a classifier/GNG fluctuation.
+  // Treat it as object evidence only when the current GNG graph contains an
+  // extended component.  The four-node/four-cell condition represents a
+  // minimal occupied volume for the grasp pre-filter, rather than a temporal
+  // frame-count threshold.
+  constexpr std::size_t kMinimumUnknownComponentNodes = 4U;
+  constexpr std::size_t kMinimumUnknownComponentCells = 4U;
+  std::vector<bool> retained_nodes(map.nodes.size(), false);
+  std::vector<GridCell> node_cells(map.nodes.size());
+  for (std::size_t node_index = 0; node_index < map.nodes.size(); ++node_index) {
+    const auto &node = map.nodes[node_index];
+    if (options.excluded_labels.find(node.label) != options.excluded_labels.end() ||
+      !shape_filter.retained[node_index])
+    {
+      ++result.excluded_node_count;
+      continue;
+    }
+    retained_nodes[node_index] = true;
+    node_cells[node_index] = nodeToGridCell(node, spec);
+  }
+
+  std::vector<std::vector<std::size_t>> unknown_adjacency(map.nodes.size());
+  for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
+    const std::size_t first = static_cast<std::size_t>(map.edges[edge]);
+    const std::size_t second = static_cast<std::size_t>(map.edges[edge + 1U]);
+    if (first >= map.nodes.size() || second >= map.nodes.size() || first == second ||
+      !retained_nodes[first] || !retained_nodes[second] ||
+      map.nodes[first].label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT ||
+      map.nodes[second].label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT)
+    {
+      continue;
+    }
+    unknown_adjacency[first].push_back(second);
+    unknown_adjacency[second].push_back(first);
+  }
+
+  std::vector<UnknownNodeComponent> unknown_components;
+  std::vector<bool> unknown_visited(map.nodes.size(), false);
+  for (std::size_t seed = 0; seed < map.nodes.size(); ++seed) {
+    if (!retained_nodes[seed] || unknown_visited[seed] ||
+      map.nodes[seed].label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT)
+    {
+      continue;
+    }
+    UnknownNodeComponent component;
+    std::queue<std::size_t> queue;
+    queue.push(seed);
+    unknown_visited[seed] = true;
+    while (!queue.empty()) {
+      const std::size_t current = queue.front();
+      queue.pop();
+      component.node_indices.push_back(current);
+      component.cells.insert(node_cells[current]);
+      for (const std::size_t neighbor : unknown_adjacency[current]) {
+        if (!unknown_visited[neighbor]) {
+          unknown_visited[neighbor] = true;
+          queue.push(neighbor);
+        }
+      }
+    }
+    ++result.unknown_component_count;
+    if (component.node_indices.size() >= kMinimumUnknownComponentNodes &&
+      component.cells.size() >= kMinimumUnknownComponentCells)
+    {
+      unknown_components.push_back(std::move(component));
+    }
+  }
+
   std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> accumulators;
   accumulators.reserve(map.nodes.size());
   result.eligible_nodes.reserve(map.nodes.size());
   std::unordered_set<NodeIdentity, NodeIdentityHash> ambiguous_node_identities;
-  const bool node_input_ids_available = options.point_support_mode ==
-    PointSupportMode::NodeInputIds ||
-    (options.point_support_mode == PointSupportMode::Auto &&
-    std::any_of(
-      map.nodes.begin(), map.nodes.end(), [&options](const auto &node) {
-        return options.excluded_labels.find(node.label) == options.excluded_labels.end() &&
-               !node.inpcl_ids.empty();
-      }));
-
   for (std::size_t node_index = 0; node_index < map.nodes.size(); ++node_index) {
+    if (!retained_nodes[node_index]) {
+      continue;
+    }
     const auto &node = map.nodes[node_index];
-    if (options.excluded_labels.find(node.label) != options.excluded_labels.end()) {
-      ++result.excluded_node_count;
-      continue;
-    }
-    if (!shape_filter.retained[node_index]) {
-      ++result.excluded_node_count;
-      continue;
-    }
-    const GridCell cell = nodeToGridCell(node, spec);
+    const GridCell &cell = node_cells[node_index];
     const NodeObservation observation{
-      NodeIdentity{node.id, node.frame}, node.pos.x, node.pos.y, node.pos.z, node.label};
+      NodeIdentity{node.id, node.frame}, node.pos.x, node.pos.y, node.pos.z, node.label,
+      node.normal.x, node.normal.y, node.normal.z};
     if (ambiguous_node_identities.find(observation.identity) ==
       ambiguous_node_identities.end())
     {
@@ -1171,25 +1374,42 @@ GridVoxelizationResult voxelizeNodes(
     ++accumulator.node_count;
     ++accumulator.label_counts[node.label];
     accumulator.node_observations.push_back(observation);
-    if (node_input_ids_available) {
-      accumulator.input_point_count += node.inpcl_ids.size();
-    }
+    accumulator.node_input_id_count += node.inpcl_ids.size();
   }
 
   result.label_voxels.reserve(accumulators.size());
   for (auto &[cell, accumulator] : accumulators) {
-    if (!node_input_ids_available && input_point_counts) {
+    std::size_t geometric_point_count = 0;
+    if (input_point_counts && options.point_support_mode != PointSupportMode::NodeInputIds) {
       const bool radius_support = options.point_support_mode == PointSupportMode::Radius ||
         options.point_support_mode == PointSupportMode::Auto;
-      accumulator.input_point_count = countPointSupportWithinRadius(
+      geometric_point_count = countPointSupportWithinRadius(
         cell, *input_point_counts, spec,
         radius_support ? options.point_support_radius_m : 0.0);
+    }
+    switch (options.point_support_mode) {
+      case PointSupportMode::NodeInputIds:
+        accumulator.input_point_count = accumulator.node_input_id_count;
+        break;
+      case PointSupportMode::Auto:
+        // `inpcl_ids` are sometimes absent even while the current point cloud
+        // is stable at the node position.  Treat Auto as a per-cell fallback,
+        // not a global all-or-nothing choice: either evidence source can keep
+        // the cell supported, but max() avoids double-counting the same cloud.
+        accumulator.input_point_count = std::max(
+          accumulator.node_input_id_count, geometric_point_count);
+        break;
+      case PointSupportMode::Radius:
+      case PointSupportMode::SameCell:
+        accumulator.input_point_count = geometric_point_count;
+        break;
     }
     LabeledGridVoxel voxel;
     voxel.cell = cell;
     voxel.label = dominantLabel(accumulator);
     voxel.node_count = accumulator.node_count;
     voxel.input_point_count = accumulator.input_point_count;
+    voxel.unknown_component_evaluated = true;
     voxel.node_observations = std::move(accumulator.node_observations);
     result.label_voxels.push_back(std::move(voxel));
     if (options.require_input_points && accumulator.input_point_count <
@@ -1201,6 +1421,36 @@ GridVoxelizationResult voxelizeNodes(
     }
     result.included_node_count += accumulator.node_count;
   }
+
+  // A component is an event only when all of its distinct output cells have
+  // point support in this exact frame.  This rejects four graph nodes that
+  // happen to be present over a point-cloud hole.
+  std::unordered_map<GridCell, LabeledGridVoxel *, GridCellHash> label_by_cell;
+  label_by_cell.reserve(result.label_voxels.size());
+  for (auto &voxel : result.label_voxels) {
+    label_by_cell.emplace(voxel.cell, &voxel);
+  }
+  std::unordered_set<GridCell, GridCellHash> event_cells;
+  for (const auto &component : unknown_components) {
+    const bool every_cell_supported = std::all_of(
+      component.cells.begin(), component.cells.end(),
+      [&label_by_cell, &options](const GridCell &cell) {
+        const auto found = label_by_cell.find(cell);
+        return found != label_by_cell.end() &&
+               (!options.require_input_points ||
+               found->second->input_point_count >= options.minimum_input_points_per_voxel);
+      });
+    if (!every_cell_supported) {
+      continue;
+    }
+    ++result.unknown_component_event_count;
+    result.unknown_component_event_node_count += component.node_indices.size();
+    for (const auto &cell : component.cells) {
+      label_by_cell.at(cell)->unknown_component_event = true;
+      event_cells.insert(cell);
+    }
+  }
+  result.unknown_component_event_voxel_count = event_cells.size();
 
   std::unordered_set<GridCell, GridCellHash> label_cells;
   label_cells.reserve(result.label_voxels.size());
@@ -1283,6 +1533,74 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
     direct_cells.emplace(voxel.cell, voxel.label);
   }
 
+  // The output grid is only a quantization.  Gate a GNG edge by its physical
+  // length relative to neighbouring GNG edges, never by the distance between
+  // quantized cell centres.  This preserves the same topology when grid_size
+  // changes, while still rejecting an isolated graph shortcut.
+  const std::size_t edge_slot_count = map.edges.size() / 2U;
+  std::vector<double> physical_edge_lengths(
+    edge_slot_count, std::numeric_limits<double>::quiet_NaN());
+  std::vector<double> incident_length_sum(map.nodes.size(), 0.0);
+  std::vector<std::size_t> incident_edge_count(map.nodes.size(), 0U);
+  std::vector<double> all_edge_lengths;
+  all_edge_lengths.reserve(edge_slot_count);
+  for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+    const std::size_t lhs = static_cast<std::size_t>(map.edges[edge_index]);
+    const std::size_t rhs = static_cast<std::size_t>(map.edges[edge_index + 1U]);
+    if (lhs >= map.nodes.size() || rhs >= map.nodes.size() || lhs == rhs) {
+      continue;
+    }
+    const Vec3d delta = nodePosition(map.nodes[rhs]) - nodePosition(map.nodes[lhs]);
+    const double length = std::sqrt(squaredNorm(delta));
+    if (!std::isfinite(length) || length <= 1.0e-9) {
+      continue;
+    }
+    const std::size_t slot = edge_index / 2U;
+    physical_edge_lengths[slot] = length;
+    all_edge_lengths.push_back(length);
+    incident_length_sum[lhs] += length;
+    incident_length_sum[rhs] += length;
+    ++incident_edge_count[lhs];
+    ++incident_edge_count[rhs];
+  }
+  const double global_spacing = std::max(medianValue(all_edge_lengths), 1.0e-9);
+  std::vector<double> relative_edge_lengths(
+    edge_slot_count, std::numeric_limits<double>::quiet_NaN());
+  std::vector<double> relative_samples;
+  relative_samples.reserve(all_edge_lengths.size());
+  if (options.maximum_edge_length <= 0.0) {
+    for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+      const std::size_t slot = edge_index / 2U;
+      const double length = physical_edge_lengths[slot];
+      const std::size_t lhs = static_cast<std::size_t>(map.edges[edge_index]);
+      const std::size_t rhs = static_cast<std::size_t>(map.edges[edge_index + 1U]);
+      if (!std::isfinite(length) || lhs >= map.nodes.size() || rhs >= map.nodes.size()) {
+        continue;
+      }
+      const auto leave_one_out_spacing = [&incident_length_sum, &incident_edge_count,
+          global_spacing, length](std::size_t index) {
+          return incident_edge_count[index] > 1U ?
+                 (incident_length_sum[index] - length) /
+                 static_cast<double>(incident_edge_count[index] - 1U) : global_spacing;
+        };
+      const double local_spacing = std::max(
+        0.5 * (leave_one_out_spacing(lhs) + leave_one_out_spacing(rhs)), 1.0e-9);
+      const double relative_length = length / local_spacing;
+      relative_edge_lengths[slot] = relative_length;
+      relative_samples.push_back(relative_length);
+    }
+  }
+  double adaptive_relative_limit = std::numeric_limits<double>::infinity();
+  if (!relative_samples.empty()) {
+    const double median_relative_length = medianValue(relative_samples);
+    std::vector<double> deviations;
+    deviations.reserve(relative_samples.size());
+    for (const double sample : relative_samples) {
+      deviations.push_back(std::abs(sample - median_relative_length));
+    }
+    adaptive_relative_limit = median_relative_length + 3.0 * medianValue(std::move(deviations));
+  }
+
   std::unordered_set<VoxelEdge, VoxelEdgeHash> seen_voxel_edges;
   seen_voxel_edges.reserve(result.input_edge_count);
   std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> inferred;
@@ -1323,17 +1641,20 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
       continue;
     }
 
-    const double delta_x = static_cast<double>(rhs_cell.x - lhs_cell.x) * spec.cell_size;
-    const double delta_y = static_cast<double>(rhs_cell.y - lhs_cell.y) * spec.cell_size;
-    const double delta_z = static_cast<double>(rhs_cell.z - lhs_cell.z) * spec.cell_size;
-    if (std::sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z) >
-      options.maximum_edge_length)
-    {
+    const std::size_t slot = edge_index / 2U;
+    const double physical_length = physical_edge_lengths[slot];
+    const bool is_overlength = options.maximum_edge_length > 0.0 ?
+      (!std::isfinite(physical_length) || physical_length > options.maximum_edge_length) :
+      (!std::isfinite(relative_edge_lengths[slot]) ||
+      relative_edge_lengths[slot] > adaptive_relative_limit);
+    if (is_overlength) {
       ++result.overlength_edge_count;
       continue;
     }
 
     ++result.voxel_edge_count;
+    result.connected_endpoint_cells.push_back(lhs_cell);
+    result.connected_endpoint_cells.push_back(rhs_cell);
     const auto line_cells = rasterizeGridLine(lhs_cell, rhs_cell);
     for (std::size_t line_index = 1U; line_index + 1U < line_cells.size(); ++line_index) {
       const auto &cell = line_cells[line_index];
@@ -1360,6 +1681,20 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
     voxel.edge_support_count = accumulator.edge_support_count;
     result.voxels.push_back(voxel);
   }
+  const auto grid_cell_less = [](const GridCell &lhs, const GridCell &rhs) {
+      if (lhs.x != rhs.x) {
+        return lhs.x < rhs.x;
+      }
+      if (lhs.y != rhs.y) {
+        return lhs.y < rhs.y;
+      }
+      return lhs.z < rhs.z;
+    };
+  std::sort(
+    result.connected_endpoint_cells.begin(), result.connected_endpoint_cells.end(), grid_cell_less);
+  result.connected_endpoint_cells.erase(
+    std::unique(result.connected_endpoint_cells.begin(), result.connected_endpoint_cells.end()),
+    result.connected_endpoint_cells.end());
   std::sort(result.voxels.begin(), result.voxels.end(), cellLess);
   return result;
 }
@@ -1572,6 +1907,34 @@ VoxelIsolationSplit splitVoxelsByIsolation(
   split.isolated_voxels.reserve(voxels.size());
   for (const auto &voxel : voxels) {
     if (voxel.neighbor_count == 0) {
+      split.isolated_voxels.push_back(voxel);
+    } else {
+      split.connected_voxels.push_back(voxel);
+    }
+  }
+  return split;
+}
+
+VoxelIsolationSplit splitVoxelsByGngConnectivity(
+  const std::vector<LabeledGridVoxel> &voxels,
+  const EdgeVoxelizationResult &edge_result)
+{
+  VoxelIsolationSplit split;
+  split.connected_voxels.reserve(voxels.size());
+  split.isolated_voxels.reserve(voxels.size());
+  std::unordered_set<GridCell, GridCellHash> connected_cells;
+  connected_cells.reserve(edge_result.connected_endpoint_cells.size());
+  for (const auto &cell : edge_result.connected_endpoint_cells) {
+    connected_cells.insert(cell);
+  }
+  for (const auto &voxel : voxels) {
+    // A direct cell with no current endpoint is normally isolated.  The one
+    // exception is a historical object cell retained by a locally static GNG
+    // neighbourhood: its former edge endpoints disappeared only temporarily,
+    // so hiding it on the isolated topic would undo the temporal hold.
+    if (connected_cells.find(voxel.cell) == connected_cells.end() &&
+      !voxel.retained_by_local_structure)
+    {
       split.isolated_voxels.push_back(voxel);
     } else {
       split.connected_voxels.push_back(voxel);

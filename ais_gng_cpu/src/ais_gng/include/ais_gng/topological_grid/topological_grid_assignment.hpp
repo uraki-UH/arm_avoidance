@@ -53,7 +53,9 @@ struct VoxelizationOptions
 struct EdgeInferenceOptions
 {
   bool enabled = true;
-  double maximum_edge_length = 0.10;
+  // A positive value is an explicit metric cap.  Zero selects the robust
+  // local-edge-spacing gate, independent of output grid_size.
+  double maximum_edge_length = 0.0;
   bool require_point_support_for_output = false;
 };
 
@@ -86,6 +88,20 @@ struct GridCellHash
 };
 
 using GridPointCounts = std::unordered_map<GridCell, std::size_t, GridCellHash>;
+
+// Visibility is deliberately a small, conservative interface between the
+// depth-image front end and the temporal voxel filter.  It is not an
+// occupancy map: only a confirmed clear line of sight is negative evidence.
+enum class VoxelVisibilityState : std::uint8_t
+{
+  Unknown,
+  OutOfView,
+  Occluded,
+  Free
+};
+
+using GridVisibilityStates =
+  std::unordered_map<GridCell, VoxelVisibilityState, GridCellHash>;
 
 struct PointActivitySchedulerConfig
 {
@@ -155,10 +171,27 @@ struct NodeObservation
   double y = 0.0;
   double z = 0.0;
   std::uint8_t label = 0;
+  double normal_x = 0.0;
+  double normal_y = 0.0;
+  double normal_z = 0.0;
 };
 
 using NodeObservationMap =
   std::unordered_map<NodeIdentity, NodeObservation, NodeIdentityHash>;
+
+// Local GNG topology gives conservative evidence for a voxel that was known
+// previously but receives no node this update.  It is deliberately distinct
+// from a single-node motion score: several former neighbours must agree.
+enum class NodeLocalStructureState : std::uint8_t
+{
+  Unknown,
+  Static,
+  Moving,
+  Ambiguous
+};
+
+using NodeLocalStructureStates =
+  std::unordered_map<NodeIdentity, NodeLocalStructureState, NodeIdentityHash>;
 
 struct GridAssignment
 {
@@ -196,7 +229,24 @@ struct LabeledGridVoxel
   // voxel solely for diagnostics; the published Voxel message is unchanged.
   double temporal_stability_score = 0.0;
   double point_support_score = 0.0;
+  // Normal-direction displacement of its GNG nodes, normalized by local
+  // incident-edge spacing.  Zero means no usable motion evidence.
+  double normal_drift_score = 0.0;
   std::vector<NodeObservation> node_observations;
+  // `UNKNOWN_OBJECT` is allowed to create new grasp-candidate evidence only
+  // when it was part of a simultaneous, spatially extended GNG component.
+  // Keeping this result on the voxel makes a later SAFE_TERRAIN observation
+  // neutral rather than treating it as a point-cloud disappearance.
+  bool unknown_component_evaluated = false;
+  bool unknown_component_event = false;
+  // The cell was already temporally active and remains occupied by a current
+  // GNG node, but its raw point support is absent.  This is a hold, not fresh
+  // positive evidence: it prevents an edge-supported surface from being
+  // broken by a transient point-cloud dropout.
+  bool retained_by_gng_structure = false;
+  // A node disappeared from this old cell, but its former GNG neighbours are
+  // still locally static or inconclusive. This does not create new cells.
+  bool retained_by_local_structure = false;
   bool retained_by_node_identity = false;
 };
 
@@ -213,6 +263,10 @@ struct GridVoxelizationResult
   std::size_t shape_seed_node_count = 0;
   std::size_t shape_retained_node_count = 0;
   std::size_t shape_rejected_node_count = 0;
+  std::size_t unknown_component_count = 0;
+  std::size_t unknown_component_event_count = 0;
+  std::size_t unknown_component_event_node_count = 0;
+  std::size_t unknown_component_event_voxel_count = 0;
   double shape_score_median = 0.0;
   double shape_score_mad = 0.0;
   double shape_score_threshold = 0.0;
@@ -230,6 +284,9 @@ struct EdgeVoxelizationResult
   std::size_t same_voxel_edge_count = 0;
   std::size_t overlength_edge_count = 0;
   std::size_t duplicate_voxel_edge_count = 0;
+  // Stable direct cells touched by accepted GNG edges.  This separates graph
+  // continuity from 26-neighbour voxel adjacency.
+  std::vector<GridCell> connected_endpoint_cells;
 };
 
 struct TriangleVoxelizationResult
@@ -253,8 +310,9 @@ struct VoxelIsolationSplit
 
 struct TemporalVoxelFilterConfig
 {
-  // History is diagnostic only. Activation is governed by the continuous
-  // evidence score below, rather than occurrence-count thresholds.
+  // History bounds the lifetime of a semantic event label. Geometric
+  // activation itself is governed by the continuous evidence score below,
+  // rather than occurrence-count thresholds.
   std::size_t history_window_size = 32;
   // Per-update EMA alpha is derived from elapsed seconds. This keeps temporal
   // behavior independent of the input point-cloud rate.
@@ -265,7 +323,7 @@ struct TemporalVoxelFilterConfig
   double retention_score = 0.35;
   bool node_identity_retention_enabled = false;
   double node_identity_max_displacement = 0.02;
-  bool node_identity_history_migration_enabled = true;
+  bool node_identity_history_migration_enabled = false;
 };
 
 class TemporalVoxelFilter
@@ -280,9 +338,12 @@ public:
     std::size_t minimum_input_points_per_voxel = 1,
     const GridPointCounts *input_point_counts = nullptr,
     const NodeObservationMap *current_nodes = nullptr,
-    double elapsed_seconds = 0.10);
+    double elapsed_seconds = 0.10,
+    const GridVisibilityStates *visibility_states = nullptr,
+    const NodeLocalStructureStates *local_structure_states = nullptr);
   void clear();
   std::size_t trackedVoxelCount() const noexcept;
+  std::vector<GridCell> trackedVoxels() const;
 
 private:
   struct HistorySample
@@ -363,6 +424,10 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
 
 VoxelIsolationSplit splitVoxelsByIsolation(
   const std::vector<LabeledGridVoxel> &voxels);
+
+VoxelIsolationSplit splitVoxelsByGngConnectivity(
+  const std::vector<LabeledGridVoxel> &voxels,
+  const EdgeVoxelizationResult &edge_result);
 
 std::vector<LabeledGridVoxel> mergeDirectAndInferredVoxels(
   const std::vector<LabeledGridVoxel> &direct_voxels,
