@@ -91,6 +91,43 @@ std::string labelSetToString(const std::unordered_set<std::uint8_t> &labels)
   return stream.str();
 }
 
+fuzzrobo::topological_grid::PointSupportMode parsePointSupportMode(std::string value)
+{
+  value = trim(value);
+  std::transform(
+    value.begin(), value.end(), value.begin(),
+    [](unsigned char c) {return static_cast<char>(std::tolower(c));});
+  if (value == "same_cell") {
+    return fuzzrobo::topological_grid::PointSupportMode::SameCell;
+  }
+  if (value == "radius") {
+    return fuzzrobo::topological_grid::PointSupportMode::Radius;
+  }
+  if (value == "node_input_ids") {
+    return fuzzrobo::topological_grid::PointSupportMode::NodeInputIds;
+  }
+  if (value == "auto") {
+    return fuzzrobo::topological_grid::PointSupportMode::Auto;
+  }
+  throw std::invalid_argument(
+          "point_support_mode must be auto, radius, node_input_ids, or same_cell: " + value);
+}
+
+const char *pointSupportModeName(fuzzrobo::topological_grid::PointSupportMode mode)
+{
+  switch (mode) {
+    case fuzzrobo::topological_grid::PointSupportMode::SameCell:
+      return "same_cell";
+    case fuzzrobo::topological_grid::PointSupportMode::Radius:
+      return "radius";
+    case fuzzrobo::topological_grid::PointSupportMode::NodeInputIds:
+      return "node_input_ids";
+    case fuzzrobo::topological_grid::PointSupportMode::Auto:
+      return "auto";
+  }
+  return "unknown";
+}
+
 }  // namespace
 
 namespace fuzzrobo::topological_grid
@@ -137,10 +174,17 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "excluded_labels", "SAFE_TERRAIN,HUMAN,CAR"));
   voxelization_options_.require_input_points = this->declare_parameter<bool>(
     "require_input_points", true);
+  voxelization_options_.point_support_mode = parsePointSupportMode(
+    this->declare_parameter<std::string>("point_support_mode", "auto"));
+  voxelization_options_.point_support_radius_m = this->declare_parameter<double>(
+    "point_support_radius_m", 0.02);
   edge_inference_options_.enabled = this->declare_parameter<bool>(
     "edge_inference_enabled", true);
   edge_inference_options_.maximum_edge_length = this->declare_parameter<double>(
     "edge_max_length", 0.10);
+  const bool inferred_require_input_points = this->declare_parameter<bool>(
+    "inferred_require_input_points", true);
+  edge_inference_options_.require_point_support_for_output = inferred_require_input_points;
   triangle_inference_options_.enabled = this->declare_parameter<bool>(
     "triangle_inference_enabled", true);
   triangle_inference_options_.maximum_edge_length = this->declare_parameter<double>(
@@ -153,10 +197,13 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "triangle_max_normal_angle_deg", 45.0);
   triangle_inference_options_.minimum_point_support_ratio = this->declare_parameter<double>(
     "triangle_min_point_support_ratio", 0.0);
+  triangle_inference_options_.require_point_support_for_output = inferred_require_input_points;
   const int minimum_input_points_per_voxel = this->declare_parameter<int>(
     "minimum_input_points_per_voxel", 1);
   const int neighbor_radius_cells = this->declare_parameter<int>(
     "neighbor_radius_cells", 1);
+  voxelization_options_.neighbor_radius_m = this->declare_parameter<double>(
+    "neighbor_radius_m", 0.02);
   const int history_window_size = this->declare_parameter<int>("history_window_size", 100);
   const int minimum_label_history_count = this->declare_parameter<int>(
     "minimum_label_history_count", 3);
@@ -167,11 +214,17 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   const int isolated_minimum_point_input_history_count = this->declare_parameter<int>(
     "isolated_minimum_point_input_history_count", 5);
   const int maximum_missing_label_updates = this->declare_parameter<int>(
-    "maximum_missing_label_updates", 10);
+    "maximum_missing_label_updates", 2);
   temporal_filter_config_.node_identity_retention_enabled = this->declare_parameter<bool>(
-    "node_identity_retention_enabled", true);
+    "node_identity_retention_enabled", false);
   temporal_filter_config_.node_identity_max_displacement = this->declare_parameter<double>(
     "node_identity_max_displacement", 0.02);
+  temporal_filter_config_.node_identity_history_migration_enabled =
+    this->declare_parameter<bool>("node_identity_history_migration_enabled", true);
+  history_reset_on_time_regression_ = this->declare_parameter<bool>(
+    "history_reset_on_time_regression", false);
+  history_reset_node_count_ratio_ = this->declare_parameter<double>(
+    "history_reset_node_count_ratio", 0.5);
 
   if (grid_spec_.cell_size <= 0.0 || pointcloud_timeout_sec_ <= 0.0 ||
     edge_inference_options_.maximum_edge_length <= 0.0 ||
@@ -183,7 +236,10 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inference_options_.maximum_normal_angle_degrees > 180.0 ||
     triangle_inference_options_.minimum_point_support_ratio < 0.0 ||
     triangle_inference_options_.minimum_point_support_ratio > 1.0 ||
-    temporal_filter_config_.node_identity_max_displacement < 0.0)
+    temporal_filter_config_.node_identity_max_displacement < 0.0 ||
+    voxelization_options_.neighbor_radius_m < 0.0 ||
+    voxelization_options_.point_support_radius_m < 0.0 ||
+    history_reset_node_count_ratio_ < 0.0 || history_reset_node_count_ratio_ > 1.0)
   {
     throw std::invalid_argument(
             "grid, inference, point-support, and node-identity parameters are invalid");
@@ -261,9 +317,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "TopologicalGridNode ready: input=%s pointcloud=%s timeout=%.2fs output=%s delta=%s "
     "isolated=%s edge_inferred=%s edge_fill=%s/%.3fm grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
-    "shifted=%s excluded=[%s] point_support=%s/%zu neighbors=%d history=%zu "
+    "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
     "label/point=%zu/%zu isolated=%zu/%zu missing_label_grace=%zu "
-    "node_identity=%s/%.3fm triangle=%s/%s/%.3fm",
+    "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm",
     input_topic_.c_str(),
     pointcloud_topic_.c_str(),
     pointcloud_timeout_sec_,
@@ -280,8 +336,10 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     origin_shift_half_ ? "true" : "false",
     labelSetToString(voxelization_options_.excluded_labels).c_str(),
     voxelization_options_.require_input_points ? "required" : "disabled",
+    pointSupportModeName(voxelization_options_.point_support_mode),
     voxelization_options_.minimum_input_points_per_voxel,
     voxelization_options_.neighbor_radius_cells,
+    voxelization_options_.neighbor_radius_m,
     temporal_filter_config_.history_window_size,
     temporal_filter_config_.minimum_label_history_count,
     temporal_filter_config_.minimum_point_input_history_count,
@@ -290,6 +348,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     temporal_filter_config_.maximum_missing_label_updates,
     temporal_filter_config_.node_identity_retention_enabled ? "enabled" : "disabled",
     temporal_filter_config_.node_identity_max_displacement,
+    temporal_filter_config_.node_identity_history_migration_enabled ? "enabled" : "disabled",
     triangle_inference_options_.enabled ? "enabled" : "disabled",
     triangle_inferred_topic_.c_str(),
     triangle_inference_options_.maximum_edge_length);
@@ -472,6 +531,31 @@ void TopologicalGridNode::publishResult(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridPointCounts &input_point_counts)
 {
+  const rclcpp::Time current_stamp(map.header.stamp, RCL_ROS_TIME);
+  std::string reset_reason;
+  if (has_last_map_state_ && history_reset_on_time_regression_ &&
+    current_stamp < last_map_stamp_)
+  {
+    reset_reason = "time_regression";
+  } else if (has_last_map_state_ && history_reset_node_count_ratio_ > 0.0 &&
+    last_map_node_count_ > 0 &&
+    static_cast<double>(map.nodes.size()) <
+    static_cast<double>(last_map_node_count_) * history_reset_node_count_ratio_)
+  {
+    reset_reason = "node_count_drop";
+  }
+  if (!reset_reason.empty()) {
+    temporal_filter_->clear();
+    ++history_reset_count_;
+    last_history_reset_reason_ = reset_reason;
+    RCLCPP_WARN(
+      get_logger(), "Cleared topological-grid history: reason=%s nodes=%zu->%zu",
+      reset_reason.c_str(), last_map_node_count_, map.nodes.size());
+  }
+  last_map_stamp_ = current_stamp;
+  last_map_node_count_ = map.nodes.size();
+  has_last_map_state_ = true;
+
   const auto result = voxelizeNodes(
     map, grid_spec_, voxelization_options_, &input_point_counts);
   const auto stable_voxels = temporal_filter_->update(
@@ -496,7 +580,7 @@ void TopologicalGridNode::publishResult(
   const auto edge_result = inferVoxelsFromStableVoxelEdges(
     map, grid_spec_, isolation_split.connected_voxels,
     voxelization_options_.excluded_labels,
-    edge_inference_options_);
+    edge_inference_options_, &input_point_counts);
   const auto triangle_result = inferVoxelsFromStableVoxelTriangles(
     map, grid_spec_, isolation_split.connected_voxels,
     voxelization_options_.excluded_labels,
@@ -588,14 +672,28 @@ void TopologicalGridNode::publishResult(
       << ",";
   oss << "\"node_identity_max_displacement\":"
       << temporal_filter_config_.node_identity_max_displacement << ",";
+  oss << "\"node_identity_history_migration_enabled\":"
+      << (temporal_filter_config_.node_identity_history_migration_enabled ? "true" : "false")
+      << ",";
   oss << "\"require_input_points\":"
       << (voxelization_options_.require_input_points ? "true" : "false") << ",";
+  oss << "\"point_support_mode\":\""
+      << pointSupportModeName(voxelization_options_.point_support_mode) << "\",";
+  oss << "\"point_support_radius_m\":"
+      << voxelization_options_.point_support_radius_m << ",";
   oss << "\"minimum_input_points_per_voxel\":"
       << voxelization_options_.minimum_input_points_per_voxel << ",";
   oss << "\"neighbor_radius_cells\":"
       << voxelization_options_.neighbor_radius_cells << ",";
+  oss << "\"neighbor_radius_m\":"
+      << voxelization_options_.neighbor_radius_m << ",";
+  oss << "\"history_reset_count\":" << history_reset_count_ << ",";
+  oss << "\"last_history_reset_reason\":\"" << last_history_reset_reason_ << "\",";
   oss << "\"edge_inference_enabled\":"
       << (edge_inference_options_.enabled ? "true" : "false") << ",";
+  oss << "\"inferred_require_input_points\":"
+      << (edge_inference_options_.require_point_support_for_output ? "true" : "false")
+      << ",";
   oss << "\"edge_max_length\":" << edge_inference_options_.maximum_edge_length << ",";
   oss << "\"edge_inferred_topic\":\"" << edge_inferred_topic_ << "\",";
   oss << "\"isolated_topic\":\"" << isolated_topic_ << "\",";

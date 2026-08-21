@@ -58,6 +58,11 @@ def generate_launch_description():
         default_value="0.10",
         description="Maximum voxel-center edge length eligible for filling, in meters.",
     )
+    inferred_require_input_points = DeclareLaunchArgument(
+        "inferred_require_input_points",
+        default_value="true",
+        description="Emit inferred edge/triangle cells only where current points exist.",
+    )
     triangle_inferred_topic = DeclareLaunchArgument(
         "triangle_inferred_topic",
         default_value="",
@@ -145,7 +150,20 @@ def generate_launch_description():
     require_input_points = DeclareLaunchArgument(
         "require_input_points",
         default_value="true",
-        description="Require a matching current point-cloud cell for each candidate.",
+        description="Require current input-point support selected by point_support_mode.",
+    )
+    point_support_mode = DeclareLaunchArgument(
+        "point_support_mode",
+        default_value="auto",
+        description=(
+            "Point support source: auto prefers GNG node inpcl_ids and falls back to "
+            "metric radius; radius, node_input_ids, and same_cell force one behavior."
+        ),
+    )
+    point_support_radius_m = DeclareLaunchArgument(
+        "point_support_radius_m",
+        default_value="0.02",
+        description="Metric point-cloud support radius used by radius and auto modes.",
     )
     minimum_input_points_per_voxel = DeclareLaunchArgument(
         "minimum_input_points_per_voxel",
@@ -156,6 +174,14 @@ def generate_launch_description():
         "neighbor_radius_cells",
         default_value="1",
         description="Chebyshev radius used to count neighboring candidate voxels.",
+    )
+    neighbor_radius_m = DeclareLaunchArgument(
+        "neighbor_radius_m",
+        default_value="0.02",
+        description=(
+            "Physical Chebyshev neighbor radius in meters; set 0 to use "
+            "neighbor_radius_cells."
+        ),
     )
     history_window_size = DeclareLaunchArgument(
         "history_window_size",
@@ -184,18 +210,33 @@ def generate_launch_description():
     )
     maximum_missing_label_updates = DeclareLaunchArgument(
         "maximum_missing_label_updates",
-        default_value="10",
+        default_value="2",
         description="Updates to retain an active voxel after its eligible label disappears.",
     )
     node_identity_retention_enabled = DeclareLaunchArgument(
         "node_identity_retention_enabled",
-        default_value="true",
+        default_value="false",
         description="Retain non-isolated cells while their source node generation remains nearby.",
     )
     node_identity_max_displacement = DeclareLaunchArgument(
         "node_identity_max_displacement",
         default_value="0.02",
         description="Maximum source-node displacement that retains its previous cell, in meters.",
+    )
+    node_identity_history_migration_enabled = DeclareLaunchArgument(
+        "node_identity_history_migration_enabled",
+        default_value="true",
+        description="Move temporal history with a uniquely identified GNG node.",
+    )
+    history_reset_on_time_regression = DeclareLaunchArgument(
+        "history_reset_on_time_regression",
+        default_value="false",
+        description="Clear temporal history when rosbag or source timestamps move backward.",
+    )
+    history_reset_node_count_ratio = DeclareLaunchArgument(
+        "history_reset_node_count_ratio",
+        default_value="0.5",
+        description="Clear history when node count falls below this fraction; 0 disables it.",
     )
 
     return LaunchDescription([
@@ -209,6 +250,7 @@ def generate_launch_description():
         edge_inferred_topic,
         edge_inference_enabled,
         edge_max_length,
+        inferred_require_input_points,
         triangle_inferred_topic,
         triangle_inference_enabled,
         triangle_max_edge_length,
@@ -228,8 +270,11 @@ def generate_launch_description():
         offset,
         excluded_labels,
         require_input_points,
+        point_support_mode,
+        point_support_radius_m,
         minimum_input_points_per_voxel,
         neighbor_radius_cells,
+        neighbor_radius_m,
         history_window_size,
         minimum_label_history_count,
         minimum_point_input_history_count,
@@ -238,6 +283,9 @@ def generate_launch_description():
         maximum_missing_label_updates,
         node_identity_retention_enabled,
         node_identity_max_displacement,
+        node_identity_history_migration_enabled,
+        history_reset_on_time_regression,
+        history_reset_node_count_ratio,
         Node(
             package="ais_gng",
             executable="topological_grid_node",
@@ -252,6 +300,9 @@ def generate_launch_description():
                 "edge_inferred_topic": LaunchConfiguration("edge_inferred_topic"),
                 "edge_inference_enabled": LaunchConfiguration("edge_inference_enabled"),
                 "edge_max_length": LaunchConfiguration("edge_max_length"),
+                "inferred_require_input_points": LaunchConfiguration(
+                    "inferred_require_input_points"
+                ),
                 "triangle_inferred_topic": LaunchConfiguration("triangle_inferred_topic"),
                 "triangle_inference_enabled": LaunchConfiguration(
                     "triangle_inference_enabled"
@@ -281,10 +332,15 @@ def generate_launch_description():
                 "offset": LaunchConfiguration("offset"),
                 "excluded_labels": LaunchConfiguration("excluded_labels"),
                 "require_input_points": LaunchConfiguration("require_input_points"),
+                "point_support_mode": LaunchConfiguration("point_support_mode"),
+                "point_support_radius_m": LaunchConfiguration(
+                    "point_support_radius_m"
+                ),
                 "minimum_input_points_per_voxel": LaunchConfiguration(
                     "minimum_input_points_per_voxel"
                 ),
                 "neighbor_radius_cells": LaunchConfiguration("neighbor_radius_cells"),
+                "neighbor_radius_m": LaunchConfiguration("neighbor_radius_m"),
                 "history_window_size": LaunchConfiguration("history_window_size"),
                 "minimum_label_history_count": LaunchConfiguration(
                     "minimum_label_history_count"
@@ -306,6 +362,15 @@ def generate_launch_description():
                 ),
                 "node_identity_max_displacement": LaunchConfiguration(
                     "node_identity_max_displacement"
+                ),
+                "node_identity_history_migration_enabled": LaunchConfiguration(
+                    "node_identity_history_migration_enabled"
+                ),
+                "history_reset_on_time_regression": LaunchConfiguration(
+                    "history_reset_on_time_regression"
+                ),
+                "history_reset_node_count_ratio": LaunchConfiguration(
+                    "history_reset_node_count_ratio"
                 ),
             }],
             output="screen",

@@ -148,6 +148,96 @@ TEST(TopologicalGridAssignment, IncludesEveryNonExcludedLabelWithCurrentPointSup
   EXPECT_EQ(result.voxels.back().label, ais_gng_msgs::msg::TopologicalMap::WALL);
 }
 
+TEST(TopologicalGridAssignment, AutoPointSupportUsesGngInputAssignmentsAcrossCellBoundaries)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.019F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.nodes[0].inpcl_ids = {10, 11};
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{0, 0, 0}, 2U);
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.point_support_mode = fuzzrobo::topological_grid::PointSupportMode::Auto;
+
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{0.01, 0.0, 0.0, 0.0},
+    options, &point_counts);
+
+  EXPECT_EQ(result.included_node_count, 1U);
+  EXPECT_EQ(result.unsupported_node_count, 1U);
+  ASSERT_EQ(result.voxels.size(), 1U);
+  EXPECT_EQ(result.voxels.front().cell.x, 1);
+  EXPECT_EQ(result.voxels.front().input_point_count, 2U);
+}
+
+TEST(TopologicalGridAssignment, AutoPointSupportFallsBackToMetricRadius)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.021F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+    makeNode(0.061F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{0, 0, 0}, 3U);
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.point_support_mode = fuzzrobo::topological_grid::PointSupportMode::Auto;
+  options.point_support_radius_m = 0.02;
+
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{0.01, 0.0, 0.0, 0.0},
+    options, &point_counts);
+
+  EXPECT_EQ(result.included_node_count, 1U);
+  EXPECT_EQ(result.unsupported_node_count, 1U);
+  ASSERT_EQ(result.voxels.size(), 1U);
+  EXPECT_EQ(result.voxels.front().cell.x, 2);
+  EXPECT_EQ(result.voxels.front().input_point_count, 3U);
+}
+
+TEST(TopologicalGridAssignment, SameCellPointSupportKeepsLegacyBehavior)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.021F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT),
+  };
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{0, 0, 0}, 3U);
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.point_support_mode = fuzzrobo::topological_grid::PointSupportMode::SameCell;
+
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{0.01, 0.0, 0.0, 0.0},
+    options, &point_counts);
+
+  EXPECT_EQ(result.included_node_count, 0U);
+  EXPECT_EQ(result.unsupported_node_count, 1U);
+  EXPECT_TRUE(result.voxels.empty());
+}
+
+TEST(TopologicalGridAssignment, MetricNeighborRadiusIsStableAcrossGridSizes)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.021F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  fuzzrobo::topological_grid::VoxelizationOptions options;
+  options.require_input_points = false;
+  options.neighbor_radius_m = 0.025;
+
+  const auto coarse = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{0.01, 0.0, 0.0, 0.0}, options);
+  const auto fine = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{0.005, 0.0, 0.0, 0.0}, options);
+
+  ASSERT_EQ(coarse.voxels.size(), 2U);
+  ASSERT_EQ(fine.voxels.size(), 2U);
+  EXPECT_EQ(coarse.isolated_voxel_count, 0U);
+  EXPECT_EQ(fine.isolated_voxel_count, 0U);
+}
+
 TEST(TopologicalGridAssignment, CountsTwentySixConnectedNeighbors)
 {
   ais_gng_msgs::msg::TopologicalMap map;
@@ -452,6 +542,28 @@ TEST(TopologicalGridAssignment, BridgesShortVoxelPositionJitter)
   EXPECT_EQ(settled.front().cell.x, 1);
 }
 
+TEST(TopologicalGridAssignment, MovesHistoryWithNodeIdentityAcrossFineGridCells)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilter filter(
+    TemporalVoxelFilterConfig{5, 2, 2, 2, 2, 0, true, 0.02, true});
+  LabeledGridVoxel original{GridCell{0, 0, 0}, 3, 1, 1, 1};
+  original.node_observations.push_back(
+    NodeObservation{NodeIdentity{7, 10}, 0.001, 0.0, 0.0, 3});
+  LabeledGridVoxel moved{GridCell{9, 0, 0}, 3, 1, 1, 1};
+  moved.node_observations.push_back(
+    NodeObservation{NodeIdentity{7, 10}, 0.010, 0.0, 0.0, 3});
+
+  EXPECT_TRUE(filter.update({original}).empty());
+  ASSERT_EQ(filter.update({original}).size(), 1U);
+  const auto stable = filter.update({moved});
+
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_EQ(stable.front().cell.x, 9);
+  EXPECT_EQ(stable.front().history_sample_count, 3U);
+  EXPECT_EQ(filter.trackedVoxelCount(), 1U);
+}
+
 TEST(TopologicalGridAssignment, FillsBetweenStableVoxelsUsingGngEdge)
 {
   using namespace fuzzrobo::topological_grid;
@@ -500,6 +612,31 @@ TEST(TopologicalGridAssignment, RequiresBothEdgeEndpointsToBeStableDirectVoxels)
   EXPECT_EQ(result.inactive_endpoint_edge_count, 1U);
   ASSERT_EQ(result.voxels.size(), 1U);
   EXPECT_EQ(result.voxels.front().cell.x, 1);
+}
+
+TEST(TopologicalGridAssignment, EmitsOnlyPointSupportedInferredEdgeCells)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.edges = {0, 1};
+  const std::vector<LabeledGridVoxel> direct{
+    LabeledGridVoxel{GridCell{0, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{4, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+  };
+  GridPointCounts point_counts;
+  point_counts.emplace(GridCell{2, 0, 0}, 1U);
+  EdgeInferenceOptions options;
+  options.require_point_support_for_output = true;
+
+  const auto result = inferVoxelsFromStableVoxelEdges(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options, &point_counts);
+
+  ASSERT_EQ(result.voxels.size(), 1U);
+  EXPECT_EQ(result.voxels.front().cell, (GridCell{2, 0, 0}));
 }
 
 TEST(TopologicalGridAssignment, RejectsExcludedDuplicateAndLongVoxelEdges)
@@ -586,6 +723,37 @@ TEST(TopologicalGridAssignment, RequiresClosedThreeEdgeCycleForTriangle)
 
   EXPECT_EQ(result.candidate_triangle_count, 0U);
   EXPECT_TRUE(result.voxels.empty());
+}
+
+TEST(TopologicalGridAssignment, EmitsOnlyPointSupportedTriangleCells)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.001F, 0.041F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  for (auto &node : map.nodes) {
+    node.normal.z = 1.0F;
+  }
+  map.edges = {0, 1, 1, 2, 2, 0};
+  const std::vector<LabeledGridVoxel> direct{
+    LabeledGridVoxel{GridCell{0, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{4, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{0, 4, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+  };
+  GridPointCounts point_counts;
+  point_counts.emplace(GridCell{1, 1, 0}, 1U);
+  TriangleInferenceOptions options;
+  options.maximum_edge_length = 0.10;
+  options.require_point_support_for_output = true;
+
+  const auto result = inferVoxelsFromStableVoxelTriangles(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options, &point_counts);
+
+  ASSERT_EQ(result.voxels.size(), 1U);
+  EXPECT_EQ(result.voxels.front().cell, (GridCell{1, 1, 0}));
 }
 
 TEST(TopologicalGridAssignment, DirectVoxelWinsWhenMergingInferredVoxels)

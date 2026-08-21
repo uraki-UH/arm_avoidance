@@ -22,6 +22,14 @@ struct GridSpec
   double origin_z = 0.0;
 };
 
+enum class PointSupportMode
+{
+  SameCell,
+  Radius,
+  NodeInputIds,
+  Auto
+};
+
 struct VoxelizationOptions
 {
   std::unordered_set<std::uint8_t> excluded_labels{
@@ -31,12 +39,16 @@ struct VoxelizationOptions
   bool require_input_points = true;
   std::size_t minimum_input_points_per_voxel = 1;
   int neighbor_radius_cells = 1;
+  double neighbor_radius_m = 0.0;
+  double point_support_radius_m = 0.02;
+  PointSupportMode point_support_mode = PointSupportMode::SameCell;
 };
 
 struct EdgeInferenceOptions
 {
   bool enabled = true;
   double maximum_edge_length = 0.10;
+  bool require_point_support_for_output = false;
 };
 
 struct TriangleInferenceOptions
@@ -47,6 +59,7 @@ struct TriangleInferenceOptions
   double minimum_aspect_ratio = 0.05;
   double maximum_normal_angle_degrees = 45.0;
   double minimum_point_support_ratio = 0.0;
+  bool require_point_support_for_output = false;
 };
 
 struct GridCell
@@ -184,8 +197,9 @@ struct TemporalVoxelFilterConfig
   std::size_t isolated_minimum_label_history_count = 5;
   std::size_t isolated_minimum_point_input_history_count = 5;
   std::size_t maximum_missing_label_updates = 10;
-  bool node_identity_retention_enabled = true;
+  bool node_identity_retention_enabled = false;
   double node_identity_max_displacement = 0.02;
+  bool node_identity_history_migration_enabled = true;
 };
 
 class TemporalVoxelFilter
@@ -224,6 +238,8 @@ private:
   };
 
   void appendSample(History &history, const HistorySample &sample);
+  void migrateHistoriesByNodeIdentity(
+    const std::vector<LabeledGridVoxel> &label_voxels);
 
   TemporalVoxelFilterConfig config_;
   std::unordered_map<GridCell, History, GridCellHash> history_;
@@ -258,7 +274,8 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
   const GridSpec &spec,
   const std::vector<LabeledGridVoxel> &stable_direct_voxels,
   const std::unordered_set<std::uint8_t> &excluded_labels,
-  const EdgeInferenceOptions &options = EdgeInferenceOptions{});
+  const EdgeInferenceOptions &options = EdgeInferenceOptions{},
+  const GridPointCounts *input_point_counts = nullptr);
 
 TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
   const ais_gng_msgs::msg::TopologicalMap &map,

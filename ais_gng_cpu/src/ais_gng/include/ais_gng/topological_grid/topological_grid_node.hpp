@@ -78,6 +78,13 @@ private:
   std_msgs::msg::Header latest_pointcloud_header_;
   bool has_latest_pointcloud_ = false;
   std::uint32_t voxel_revision_ = 0;
+  rclcpp::Time last_map_stamp_{0, 0, RCL_ROS_TIME};
+  std::size_t last_map_node_count_ = 0;
+  std::size_t history_reset_count_ = 0;
+  std::string last_history_reset_reason_ = "none";
+  bool has_last_map_state_ = false;
+  bool history_reset_on_time_regression_ = true;
+  double history_reset_node_count_ratio_ = 0.5;
   std::unordered_map<std::int64_t, std::uint8_t> last_published_labels_;
 };
 

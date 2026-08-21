@@ -211,7 +211,27 @@ ros2 launch ais_gng topological_grid.launch.py \
   pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
   summary_topic:=/topo_voxel_ids/summary \
-  grid_size:=0.01
+  grid_size:=0.01 \
+  point_support_mode:=auto \
+  point_support_radius_m:=0.02 \
+  neighbor_radius_m:=0.02 \
+  inferred_require_input_points:=true \
+  node_identity_history_migration_enabled:=true \
+  node_identity_retention_enabled:=false \
+  history_reset_on_time_regression:=false \
+  history_reset_node_count_ratio:=0.5
+
+`point_support_mode:=auto`は、AIS-GNGノードに`inpcl_ids`がある場合は入力点との直接対応を
+点群支持に使い、対応がないMapでは`point_support_radius_m`以内の点群支持へフォールバックする。
+`neighbor_radius_m`はグリッドセル数ではなく実距離で近傍を判定する。
+`node_identity_history_migration_enabled:=true`では、一意な`(node.id, node.frame)`が
+`node_identity_max_displacement`以内で移動したとき、時間履歴を移動先セルへ引き継ぐ。
+これらの設定により、`grid_size`を小さくした際のセル境界による発火切れを抑制する。
+rosbagを`--loop`再生してもGNGノードIDが継続する構成では、時刻巻き戻りだけで履歴を消すと
+毎周回出力が途切れるため、`history_reset_on_time_regression:=false`を使用する。
+GNGノード数が急減して実際にリセットされた場合は`history_reset_node_count_ratio`で履歴を消去する。
+履歴を移動先へ引き継ぐ場合、旧セルを二重保持しないよう
+`node_identity_retention_enabled:=false`を使用する。
 
 # 補間由来だけを確認
 ros2 topic echo /topo_voxel_ids/edge_inferred
@@ -230,14 +250,21 @@ ros2 launch ais_gng topological_grid.launch.py \
   grid_size:=0.01 \
   excluded_labels:="SAFE_TERRAIN,HUMAN,CAR" \
   require_input_points:=true \
+  point_support_mode:=auto \
+  point_support_radius_m:=0.02 \
+  neighbor_radius_m:=0.02 \
+  inferred_require_input_points:=true \
   history_window_size:=100 \
   minimum_label_history_count:=3 \
   minimum_point_input_history_count:=3 \
   isolated_minimum_label_history_count:=5 \
   isolated_minimum_point_input_history_count:=5 \
-  maximum_missing_label_updates:=10 \
-  node_identity_retention_enabled:=true \
+  maximum_missing_label_updates:=2 \
+  node_identity_retention_enabled:=false \
   node_identity_max_displacement:=0.02 \
+  node_identity_history_migration_enabled:=true \
+  history_reset_on_time_regression:=false \
+  history_reset_node_count_ratio:=0.5 \
   edge_inference_enabled:=true \
   edge_max_length:=0.10 \
   triangle_inference_enabled:=true \

@@ -441,6 +441,77 @@ void TemporalVoxelFilter::appendSample(
   }
 }
 
+void TemporalVoxelFilter::migrateHistoriesByNodeIdentity(
+  const std::vector<LabeledGridVoxel> &label_voxels)
+{
+  if (!config_.node_identity_history_migration_enabled || history_.empty()) {
+    return;
+  }
+
+  struct HistoryAnchor
+  {
+    GridCell cell;
+    NodeObservation observation;
+    bool ambiguous = false;
+  };
+  std::unordered_map<NodeIdentity, HistoryAnchor, NodeIdentityHash> anchors;
+  for (const auto &[cell, history] : history_) {
+    for (const auto &observation : history.last_voxel.node_observations) {
+      const auto [it, inserted] = anchors.emplace(
+        observation.identity, HistoryAnchor{cell, observation, false});
+      if (!inserted && !(it->second.cell == cell)) {
+        it->second.ambiguous = true;
+      }
+    }
+  }
+
+  const double maximum_displacement_squared =
+    config_.node_identity_max_displacement * config_.node_identity_max_displacement;
+  std::unordered_set<GridCell, GridCellHash> migrated_sources;
+  for (const auto &voxel : label_voxels) {
+    if (history_.find(voxel.cell) != history_.end()) {
+      continue;
+    }
+
+    auto source = history_.end();
+    std::size_t best_observation_count = 0;
+    for (const auto &current : voxel.node_observations) {
+      const auto anchor_it = anchors.find(current.identity);
+      if (anchor_it == anchors.end() || anchor_it->second.ambiguous ||
+        anchor_it->second.cell == voxel.cell ||
+        migrated_sources.find(anchor_it->second.cell) != migrated_sources.end())
+      {
+        continue;
+      }
+      const auto &anchor = anchor_it->second.observation;
+      const double dx = current.x - anchor.x;
+      const double dy = current.y - anchor.y;
+      const double dz = current.z - anchor.z;
+      if (dx * dx + dy * dy + dz * dz > maximum_displacement_squared) {
+        continue;
+      }
+      const auto candidate = history_.find(anchor_it->second.cell);
+      if (candidate != history_.end() &&
+        (source == history_.end() ||
+        candidate->second.label_observation_count > best_observation_count))
+      {
+        source = candidate;
+        best_observation_count = candidate->second.label_observation_count;
+      }
+    }
+    if (source == history_.end()) {
+      continue;
+    }
+
+    const GridCell source_cell = source->first;
+    auto history_node = history_.extract(source);
+    history_node.key() = voxel.cell;
+    history_node.mapped().last_voxel.cell = voxel.cell;
+    history_.insert(std::move(history_node));
+    migrated_sources.insert(source_cell);
+  }
+}
+
 std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   const std::vector<LabeledGridVoxel> &label_voxels,
   bool require_input_points,
@@ -456,6 +527,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
 
   std::vector<LabeledGridVoxel> stable_voxels;
   stable_voxels.reserve(label_voxels.size());
+  migrateHistoriesByNodeIdentity(label_voxels);
   std::vector<ExpirationCandidate> expiration_candidates;
   std::unordered_set<GridCell, GridCellHash> updated_cells;
   updated_cells.reserve(label_voxels.size());
@@ -657,6 +729,56 @@ std::unordered_map<std::size_t, GridCell> assignNodeGridMap(
   return result;
 }
 
+namespace
+{
+
+std::size_t countPointSupportWithinRadius(
+  const GridCell &cell,
+  const GridPointCounts &point_counts,
+  const GridSpec &spec,
+  double radius_m)
+{
+  if (point_counts.empty()) {
+    return 0;
+  }
+  if (radius_m <= 0.0) {
+    const auto point_it = point_counts.find(cell);
+    return point_it == point_counts.end() ? 0U : point_it->second;
+  }
+
+  const int radius_cells = std::max(
+    1, static_cast<int>(std::ceil(radius_m / spec.cell_size)));
+  const std::size_t width = static_cast<std::size_t>(2 * radius_cells + 1);
+  const std::size_t volume = width * width * width;
+  std::size_t support_count = 0;
+  if (volume <= point_counts.size()) {
+    for (int dx = -radius_cells; dx <= radius_cells; ++dx) {
+      for (int dy = -radius_cells; dy <= radius_cells; ++dy) {
+        for (int dz = -radius_cells; dz <= radius_cells; ++dz) {
+          const auto point_it = point_counts.find(
+            GridCell{cell.x + dx, cell.y + dy, cell.z + dz});
+          if (point_it != point_counts.end()) {
+            support_count += point_it->second;
+          }
+        }
+      }
+    }
+    return support_count;
+  }
+
+  for (const auto &[point_cell, count] : point_counts) {
+    if (std::abs(point_cell.x - cell.x) <= radius_cells &&
+      std::abs(point_cell.y - cell.y) <= radius_cells &&
+      std::abs(point_cell.z - cell.z) <= radius_cells)
+    {
+      support_count += count;
+    }
+  }
+  return support_count;
+}
+
+}  // namespace
+
 GridVoxelizationResult voxelizeNodes(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridSpec &spec,
@@ -668,6 +790,14 @@ GridVoxelizationResult voxelizeNodes(
   accumulators.reserve(map.nodes.size());
   result.eligible_nodes.reserve(map.nodes.size());
   std::unordered_set<NodeIdentity, NodeIdentityHash> ambiguous_node_identities;
+  const bool node_input_ids_available = options.point_support_mode ==
+    PointSupportMode::NodeInputIds ||
+    (options.point_support_mode == PointSupportMode::Auto &&
+    std::any_of(
+      map.nodes.begin(), map.nodes.end(), [&options](const auto &node) {
+        return options.excluded_labels.find(node.label) == options.excluded_labels.end() &&
+               !node.inpcl_ids.empty();
+      }));
 
   for (const auto &node : map.nodes) {
     if (options.excluded_labels.find(node.label) != options.excluded_labels.end()) {
@@ -691,15 +821,19 @@ GridVoxelizationResult voxelizeNodes(
     ++accumulator.node_count;
     ++accumulator.label_counts[node.label];
     accumulator.node_observations.push_back(observation);
+    if (node_input_ids_available) {
+      accumulator.input_point_count += node.inpcl_ids.size();
+    }
   }
 
   result.label_voxels.reserve(accumulators.size());
   for (auto &[cell, accumulator] : accumulators) {
-    if (input_point_counts) {
-      const auto point_it = input_point_counts->find(cell);
-      if (point_it != input_point_counts->end()) {
-        accumulator.input_point_count = point_it->second;
-      }
+    if (!node_input_ids_available && input_point_counts) {
+      const bool radius_support = options.point_support_mode == PointSupportMode::Radius ||
+        options.point_support_mode == PointSupportMode::Auto;
+      accumulator.input_point_count = countPointSupportWithinRadius(
+        cell, *input_point_counts, spec,
+        radius_support ? options.point_support_radius_m : 0.0);
     }
     LabeledGridVoxel voxel;
     voxel.cell = cell;
@@ -724,19 +858,37 @@ GridVoxelizationResult voxelizeNodes(
     label_cells.insert(voxel.cell);
   }
 
-  const int radius = std::max(0, options.neighbor_radius_cells);
+  const int radius = options.neighbor_radius_m > 0.0 ?
+    std::max(1, static_cast<int>(std::ceil(options.neighbor_radius_m / spec.cell_size))) :
+    std::max(0, options.neighbor_radius_cells);
+  const std::size_t neighborhood_width = static_cast<std::size_t>(2 * radius + 1);
+  const std::size_t neighborhood_volume =
+    neighborhood_width * neighborhood_width * neighborhood_width - 1U;
+  const bool use_pairwise_neighbor_search = neighborhood_volume > result.label_voxels.size();
   result.voxels.reserve(result.label_voxels.size());
   for (auto &voxel : result.label_voxels) {
-    for (int dx = -radius; dx <= radius; ++dx) {
-      for (int dy = -radius; dy <= radius; ++dy) {
-        for (int dz = -radius; dz <= radius; ++dz) {
-          if (dx == 0 && dy == 0 && dz == 0) {
-            continue;
-          }
-          const GridCell neighbor{
-            voxel.cell.x + dx, voxel.cell.y + dy, voxel.cell.z + dz};
-          if (label_cells.find(neighbor) != label_cells.end()) {
-            ++voxel.neighbor_count;
+    if (use_pairwise_neighbor_search) {
+      for (const auto &candidate : result.label_voxels) {
+        if (!(candidate.cell == voxel.cell) &&
+          std::abs(candidate.cell.x - voxel.cell.x) <= radius &&
+          std::abs(candidate.cell.y - voxel.cell.y) <= radius &&
+          std::abs(candidate.cell.z - voxel.cell.z) <= radius)
+        {
+          ++voxel.neighbor_count;
+        }
+      }
+    } else {
+      for (int dx = -radius; dx <= radius; ++dx) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+          for (int dz = -radius; dz <= radius; ++dz) {
+            if (dx == 0 && dy == 0 && dz == 0) {
+              continue;
+            }
+            const GridCell neighbor{
+              voxel.cell.x + dx, voxel.cell.y + dy, voxel.cell.z + dz};
+            if (label_cells.find(neighbor) != label_cells.end()) {
+              ++voxel.neighbor_count;
+            }
           }
         }
       }
@@ -762,7 +914,8 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
   const GridSpec &spec,
   const std::vector<LabeledGridVoxel> &stable_direct_voxels,
   const std::unordered_set<std::uint8_t> &excluded_labels,
-  const EdgeInferenceOptions &options)
+  const EdgeInferenceOptions &options,
+  const GridPointCounts *input_point_counts)
 {
   EdgeVoxelizationResult result;
   if (!options.enabled) {
@@ -835,6 +988,11 @@ EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
     for (std::size_t line_index = 1U; line_index + 1U < line_cells.size(); ++line_index) {
       const auto &cell = line_cells[line_index];
       if (direct_cells.find(cell) != direct_cells.end()) {
+        continue;
+      }
+      if (options.require_point_support_for_output &&
+        (!input_point_counts || input_point_counts->find(cell) == input_point_counts->end()))
+      {
         continue;
       }
       auto &accumulator = inferred[cell];
@@ -973,6 +1131,12 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
           for (int y = minimum_cell.y; y <= maximum_cell.y; ++y) {
             for (int z = minimum_cell.z; z <= maximum_cell.z; ++z) {
               const GridCell cell{x, y, z};
+              if (options.require_point_support_for_output &&
+                (!input_point_counts ||
+                input_point_counts->find(cell) == input_point_counts->end()))
+              {
+                continue;
+              }
               if (triangleIntersectsGridCell(triangle, cell, spec)) {
                 triangle_cells.push_back(cell);
               }
