@@ -345,7 +345,7 @@ TemporalVoxelFilter::TemporalVoxelFilter(TemporalVoxelFilterConfig config)
 : config_(config)
 {
   config_.history_window_size = std::max<std::size_t>(1, config_.history_window_size);
-  config_.evidence_ema_alpha = std::clamp(config_.evidence_ema_alpha, 0.0, 1.0);
+  config_.time_constant_sec = std::max(1.0e-6, config_.time_constant_sec);
   config_.activation_score = std::clamp(config_.activation_score, 0.0, 1.0);
   config_.retention_score = std::clamp(
     config_.retention_score, 0.0, config_.activation_score);
@@ -454,8 +454,26 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   bool require_input_points,
   std::size_t minimum_input_points_per_voxel,
   const GridPointCounts *input_point_counts,
-  const NodeObservationMap *current_nodes)
+  const NodeObservationMap *current_nodes,
+  double elapsed_seconds)
 {
+  const double alpha = std::isfinite(elapsed_seconds) && elapsed_seconds > 0.0
+    ? -std::expm1(-elapsed_seconds / config_.time_constant_sec)
+    : 0.0;
+  const auto updateTemporalScores = [alpha](History &history, double observation_score) {
+    const double observation = std::clamp(observation_score, 0.0, 1.0);
+    const double transition = history.has_previous_observation
+      ? std::abs(observation - history.previous_observation_score)
+      : 0.0;
+    history.presence_score =
+      (1.0 - alpha) * history.presence_score + alpha * observation;
+    history.switching_score =
+      (1.0 - alpha) * history.switching_score + alpha * transition;
+    history.stability_score = history.presence_score * (1.0 - history.switching_score);
+    history.previous_observation_score = observation;
+    history.has_previous_observation = true;
+  };
+
   std::vector<LabeledGridVoxel> stable_voxels;
   stable_voxels.reserve(label_voxels.size());
   migrateHistoriesByNodeIdentity(label_voxels);
@@ -515,9 +533,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     const double point_support_score = !require_input_points ? 1.0 :
       (has_input_points ? std::sqrt(std::min(
       1.0, static_cast<double>(voxel.input_point_count) / local_reference)) : 0.0);
-    history.stability_score =
-      (1.0 - config_.evidence_ema_alpha) * history.stability_score +
-      config_.evidence_ema_alpha * point_support_score;
+    updateTemporalScores(history, point_support_score);
     if (!history.active) {
       if (history.stability_score < config_.activation_score) {
         continue;
@@ -562,12 +578,10 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       config_.node_identity_retention_enabled &&
       nodeIdentityRetainsVoxel(
       history.last_voxel, current_nodes, config_.node_identity_max_displacement);
-    history.stability_score *= 1.0 - config_.evidence_ema_alpha;
-    if (retained_by_node_identity) {
-      history.stability_score = std::max(
-        history.stability_score, config_.retention_score);
-    }
-    if (!history.active || history.stability_score < config_.retention_score) {
+    updateTemporalScores(history, 0.0);
+    if (!history.active ||
+      (history.stability_score < config_.retention_score && !retained_by_node_identity))
+    {
       history.active = false;
       continue;
     }

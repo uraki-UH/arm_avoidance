@@ -8,3 +8,6 @@ key
 release
 build
 *.egg-info
+
+install/
+log/

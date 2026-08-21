@@ -44,9 +44,10 @@
     triangle_max_normal_angle_deg: 45.0
     triangle_min_point_support_ratio: 0.0
 
-    # Continuous temporal evidence from local relative point support only.
+    # Temporal stability = presence * (1 - repeated switching). Both EMAs use
+    # the timestamp-derived time constant below, not a frame-count threshold.
     temporal_history_window_size: 32
-    temporal_evidence_ema_alpha: 0.35
+    temporal_time_constant_sec: 0.30
     temporal_activation_score: 0.65
     temporal_retention_score: 0.35
     node_identity_retention_enabled: false

@@ -256,8 +256,9 @@ struct TemporalVoxelFilterConfig
   // History is diagnostic only. Activation is governed by the continuous
   // evidence score below, rather than occurrence-count thresholds.
   std::size_t history_window_size = 32;
-  // 0 keeps the previous score; 1 follows the current observation exactly.
-  double evidence_ema_alpha = 0.35;
+  // Per-update EMA alpha is derived from elapsed seconds. This keeps temporal
+  // behavior independent of the input point-cloud rate.
+  double time_constant_sec = 0.30;
   // Hysteresis prevents a one-frame appearance/disappearance from toggling a
   // grasp-candidate voxel. retention_score must not exceed activation_score.
   double activation_score = 0.65;
@@ -278,7 +279,8 @@ public:
     bool require_input_points = true,
     std::size_t minimum_input_points_per_voxel = 1,
     const GridPointCounts *input_point_counts = nullptr,
-    const NodeObservationMap *current_nodes = nullptr);
+    const NodeObservationMap *current_nodes = nullptr,
+    double elapsed_seconds = 0.10);
   void clear();
   std::size_t trackedVoxelCount() const noexcept;
 
@@ -298,6 +300,10 @@ private:
     std::size_t point_input_observation_count = 0;
     std::uint8_t active_label = 0;
     LabeledGridVoxel last_voxel;
+    double presence_score = 0.0;
+    double switching_score = 0.0;
+    double previous_observation_score = 0.0;
+    bool has_previous_observation = false;
     double stability_score = 0.0;
     bool active = false;
   };

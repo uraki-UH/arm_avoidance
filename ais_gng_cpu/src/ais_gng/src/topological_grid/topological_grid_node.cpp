@@ -221,8 +221,8 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "neighbor_radius_m", 0.02);
   const int temporal_history_window_size = this->declare_parameter<int>(
     "temporal_history_window_size", 32);
-  temporal_filter_config_.evidence_ema_alpha = this->declare_parameter<double>(
-    "temporal_evidence_ema_alpha", 0.35);
+  temporal_filter_config_.time_constant_sec = this->declare_parameter<double>(
+    "temporal_time_constant_sec", 0.30);
   temporal_filter_config_.activation_score = this->declare_parameter<double>(
     "temporal_activation_score", 0.65);
   temporal_filter_config_.retention_score = this->declare_parameter<double>(
@@ -264,8 +264,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inference_options_.maximum_normal_angle_degrees > 180.0 ||
     triangle_inference_options_.minimum_point_support_ratio < 0.0 ||
     triangle_inference_options_.minimum_point_support_ratio > 1.0 ||
-    temporal_filter_config_.evidence_ema_alpha <= 0.0 ||
-    temporal_filter_config_.evidence_ema_alpha > 1.0 ||
+    temporal_filter_config_.time_constant_sec <= 0.0 ||
     temporal_filter_config_.activation_score <= 0.0 ||
     temporal_filter_config_.activation_score > 1.0 ||
     temporal_filter_config_.retention_score < 0.0 ||
@@ -354,7 +353,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "isolated=%s edge_inferred=%s edge_fill=%s/%.3fm grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
     "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
-    "stability=ema:%.2f activate:%.2f retain:%.2f "
+    "stability=tau:%.3fs activate:%.2f retain:%.2f "
     "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm "
     "point_activity=%s/%.3fm/warmup=%zu/interval=%zu-%zu "
     "unknown_shape=%s/hops=%d/mad=%.2f/expand=%.2f",
@@ -379,7 +378,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     voxelization_options_.neighbor_radius_cells,
     voxelization_options_.neighbor_radius_m,
     temporal_filter_config_.history_window_size,
-    temporal_filter_config_.evidence_ema_alpha,
+    temporal_filter_config_.time_constant_sec,
     temporal_filter_config_.activation_score,
     temporal_filter_config_.retention_score,
     temporal_filter_config_.node_identity_retention_enabled ? "enabled" : "disabled",
@@ -591,6 +590,7 @@ void TopologicalGridNode::publishResult(
   }
   if (!reset_reason.empty()) {
     temporal_filter_->clear();
+    has_last_temporal_filter_stamp_ = false;
     point_activity_scheduler_->clear();
     ++history_reset_count_;
     last_history_reset_reason_ = reset_reason;
@@ -626,12 +626,20 @@ void TopologicalGridNode::publishResult(
 
   const auto result = voxelizeNodes(
     map, grid_spec_, voxelization_options_, &input_point_counts);
+  double temporal_elapsed_seconds = 0.0;
+  if (has_last_temporal_filter_stamp_ && current_stamp > last_temporal_filter_stamp_) {
+    temporal_elapsed_seconds =
+      (current_stamp - last_temporal_filter_stamp_).seconds();
+  }
   const auto stable_voxels = temporal_filter_->update(
     result.label_voxels,
     voxelization_options_.require_input_points,
     voxelization_options_.minimum_input_points_per_voxel,
     &input_point_counts,
-    &result.eligible_nodes);
+    &result.eligible_nodes,
+    temporal_elapsed_seconds);
+  last_temporal_filter_stamp_ = current_stamp;
+  has_last_temporal_filter_stamp_ = true;
   const auto retained_without_current_points = static_cast<std::size_t>(std::count_if(
     stable_voxels.begin(), stable_voxels.end(),
     [this](const LabeledGridVoxel &voxel) {
@@ -732,8 +740,8 @@ void TopologicalGridNode::publishResult(
   oss << "\"tracked_voxel_count\":" << temporal_filter_->trackedVoxelCount() << ",";
   oss << "\"history_window_size\":"
       << temporal_filter_config_.history_window_size << ",";
-  oss << "\"temporal_evidence_ema_alpha\":"
-      << temporal_filter_config_.evidence_ema_alpha << ",";
+  oss << "\"temporal_time_constant_sec\":"
+      << temporal_filter_config_.time_constant_sec << ",";
   oss << "\"temporal_activation_score\":"
       << temporal_filter_config_.activation_score << ",";
   oss << "\"temporal_retention_score\":"

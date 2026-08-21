@@ -217,9 +217,10 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
 `SAFE_TERRAIN`、`HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。セルの有効／無効は、
-短期 EMA の安定度で決める。現在の点群支持は周囲27セルの中央値で正規化し、
-点群・ノード密度や`grid_size`が変わっても
-固定個数閾値への依存を避けられる。消失セルは同じスコアを減衰させ、短い欠落だけ保持してから除去する。
+点群支持の在席率と切替率から求める時間安定度で決める。現在の点群支持は周囲27セルの中央値で正規化し、
+点群・ノード密度や`grid_size`が変わっても固定個数閾値への依存を避ける。EMAはMap headerの時刻差から
+更新するため、点群レートにも依存しない。単発の欠落は残し、繰り返すON/OFFは切替率が上がるため抑制する。
+時間安定度は `在席率 × (1 - 切替率)` であり、rayを使わずに一時欠落と反復フリッカへの扱いを分ける。
 26近傍を持たない直接観測セルは把持候補から除外し、`<output_topic>/isolated`へ分離する。
 `output_topic`は非孤立の直接観測と補間セルの和集合で、`edge_inferred`と`triangle_inferred`は補間由来だけを出す。
 
@@ -233,7 +234,7 @@ ros2 launch ais_gng topological_grid.launch.py \
 `ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`に集約した。
 別プロファイルを試すときだけ、`params_file:=/absolute/path/profile.yaml`を追加する。
 
-主な調整点は`temporal_evidence_ema_alpha`（追従性）、`temporal_activation_score`（発火）、
+主な調整点は`temporal_time_constant_sec`（在席率・切替率の時間定数）、`temporal_activation_score`（発火）、
 `temporal_retention_score`（消失）である。
 `retention_score < activation_score`のヒステリシスを保つ。`unknown_shape_filter_enabled`は既定で無効で、
 形状の逸脱だけを物体判定にしない。summaryにはこれらの設定値と活動度を出す。
