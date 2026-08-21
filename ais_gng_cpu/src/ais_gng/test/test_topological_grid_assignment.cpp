@@ -293,260 +293,132 @@ TEST(TopologicalGridAssignment, CountsGngNeighborsWithoutPointSupport)
   EXPECT_EQ(result.isolated_voxel_count, 0U);
 }
 
-TEST(TopologicalGridAssignment, CountsLabelAndPointInputHistorySeparately)
+TEST(TopologicalGridAssignment, ActivatesFromContinuousTemporalEvidence)
 {
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{100, 3, 3, 5, 5});
-  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 2, 2, 1};
-  const LabeledGridVoxel label_only{GridCell{1, 2, 3}, 3, 2, 0, 1};
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.history_window_size = 10;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
 
   EXPECT_TRUE(filter.update({supported}).empty());
-  EXPECT_TRUE(filter.update({label_only}).empty());
-  EXPECT_TRUE(filter.update({supported}).empty());
-  fuzzrobo::topological_grid::GridPointCounts point_counts;
-  point_counts.emplace(GridCell{1, 2, 3}, 1U);
-  EXPECT_TRUE(filter.update({}, true, 1, &point_counts).empty());
-
   const auto stable = filter.update({supported});
   ASSERT_EQ(stable.size(), 1U);
-  EXPECT_EQ(stable.front().history_sample_count, 5U);
-  EXPECT_EQ(stable.front().label_history_count, 4U);
-  EXPECT_EQ(stable.front().point_input_history_count, 4U);
-  const auto retained_without_current_points = filter.update({label_only});
-  ASSERT_EQ(retained_without_current_points.size(), 1U);
-  EXPECT_EQ(retained_without_current_points.front().input_point_count, 0U);
+  EXPECT_GT(stable.front().temporal_stability_score, config.activation_score);
+  EXPECT_DOUBLE_EQ(stable.front().point_support_score, 1.0);
 }
 
-TEST(TopologicalGridAssignment, KeepsIsolatedVoxelWhileAnotherEligibleLabelNodeRemains)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 2, 2, 2, 2});
-  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 2, 1, 1, 0};
-  const LabeledGridVoxel changed_label_only{GridCell{1, 2, 3}, 3, 1, 0, 0};
-
-  EXPECT_TRUE(filter.update({supported}).empty());
-  ASSERT_EQ(filter.update({supported}).size(), 1U);
-  for (int i = 0; i < 6; ++i) {
-    const auto retained = filter.update({changed_label_only});
-    ASSERT_EQ(retained.size(), 1U);
-  }
-  EXPECT_TRUE(filter.update({}).empty());
-}
-
-TEST(TopologicalGridAssignment, KeepsNonIsolatedVoxelWithoutPointHistory)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 2, 2, 2, 2});
-  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
-  const LabeledGridVoxel label_only{GridCell{1, 2, 3}, 3, 1, 0, 1};
-
-  EXPECT_TRUE(filter.update({supported}).empty());
-  ASSERT_EQ(filter.update({supported}).size(), 1U);
-  std::vector<LabeledGridVoxel> retained;
-  for (int i = 0; i < 6; ++i) {
-    retained = filter.update({label_only});
-    ASSERT_EQ(retained.size(), 1U);
-  }
-  EXPECT_EQ(retained.front().point_input_history_count, 0U);
-}
-
-TEST(TopologicalGridAssignment, KeepsConfirmedVoxelAfterLabelHistoryAgesOut)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 2, 2, 2, 2, 5});
-  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
-
-  EXPECT_TRUE(filter.update({supported}).empty());
-  ASSERT_EQ(filter.update({supported}).size(), 1U);
-  std::vector<LabeledGridVoxel> retained;
-  for (int i = 0; i < 5; ++i) {
-    retained = filter.update({});
-    ASSERT_EQ(retained.size(), 1U);
-  }
-  EXPECT_EQ(retained.front().label_history_count, 0U);
-  EXPECT_TRUE(filter.update({}).empty());
-}
-
-TEST(TopologicalGridAssignment, KeepsExpiredVoxelThatBridgesLowerAndUpperCells)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0});
-  const LabeledGridVoxel lower{GridCell{0, 0, 0}, 3, 1, 1, 1};
-  const LabeledGridVoxel bridge{GridCell{0, 0, 1}, 3, 1, 1, 2};
-  const LabeledGridVoxel upper{GridCell{0, 0, 2}, 3, 1, 1, 1};
-
-  ASSERT_EQ(filter.update({lower, bridge, upper}).size(), 3U);
-  const auto retained = filter.update({lower, upper});
-  ASSERT_EQ(retained.size(), 3U);
-  EXPECT_EQ(retained[1].cell.z, 1);
-  EXPECT_EQ(retained[1].node_count, 0U);
-}
-
-TEST(TopologicalGridAssignment, AllowsExpiredVoxelToSplitCellsHorizontally)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0});
-  const LabeledGridVoxel left{GridCell{0, 0, 0}, 3, 1, 1, 1};
-  const LabeledGridVoxel bridge{GridCell{1, 0, 0}, 3, 1, 1, 2};
-  const LabeledGridVoxel right{GridCell{2, 0, 0}, 3, 1, 1, 1};
-
-  ASSERT_EQ(filter.update({left, bridge, right}).size(), 3U);
-  const auto separated = filter.update({left, right});
-  ASSERT_EQ(separated.size(), 2U);
-  EXPECT_EQ(separated.front().cell.x, 0);
-  EXPECT_EQ(separated.back().cell.x, 2);
-}
-
-TEST(TopologicalGridAssignment, RetainsNonIsolatedVoxelByNearbyNodeGeneration)
+TEST(TopologicalGridAssignment, DoesNotUseConnectivityForTemporalActivation)
 {
   using namespace fuzzrobo::topological_grid;
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0, true, 0.02});
-  LabeledGridVoxel tracked{GridCell{0, 0, 0}, 3, 1, 1, 1};
-  tracked.node_observations.push_back(NodeObservation{NodeIdentity{7, 10}, 0.0, 0.0, 0.0, 3});
-  NodeObservationMap current_nodes;
-  current_nodes.emplace(
-    NodeIdentity{7, 10}, NodeObservation{NodeIdentity{7, 10}, 0.01, 0.0, 0.0, 2});
-
-  ASSERT_EQ(filter.update({tracked}, false, 1, nullptr, &current_nodes).size(), 1U);
-  const auto retained = filter.update({}, false, 1, nullptr, &current_nodes);
-  ASSERT_EQ(retained.size(), 1U);
-  EXPECT_TRUE(retained.front().retained_by_node_identity);
-
-  current_nodes.clear();
-  current_nodes.emplace(
-    NodeIdentity{7, 11}, NodeObservation{NodeIdentity{7, 11}, 0.01, 0.0, 0.0, 3});
-  EXPECT_TRUE(filter.update({}, false, 1, nullptr, &current_nodes).empty());
-}
-
-TEST(TopologicalGridAssignment, ReleasesNodeIdentityVoxelBeyondMovementThreshold)
-{
-  using namespace fuzzrobo::topological_grid;
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0, true, 0.02});
-  LabeledGridVoxel tracked{GridCell{0, 0, 0}, 3, 1, 1, 1};
-  tracked.node_observations.push_back(NodeObservation{NodeIdentity{7, 10}, 0.0, 0.0, 0.0, 3});
-  NodeObservationMap current_nodes;
-  current_nodes.emplace(
-    NodeIdentity{7, 10}, NodeObservation{NodeIdentity{7, 10}, 0.021, 0.0, 0.0, 3});
-
-  ASSERT_EQ(filter.update({tracked}, false, 1, nullptr, &current_nodes).size(), 1U);
-  EXPECT_TRUE(filter.update({}, false, 1, nullptr, &current_nodes).empty());
-}
-
-TEST(TopologicalGridAssignment, DoesNotRetainIsolatedVoxelByNodeIdentity)
-{
-  using namespace fuzzrobo::topological_grid;
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{5, 1, 1, 1, 1, 0, true, 0.02});
-  LabeledGridVoxel tracked{GridCell{0, 0, 0}, 3, 1, 1, 0};
-  tracked.node_observations.push_back(NodeObservation{NodeIdentity{7, 10}, 0.0, 0.0, 0.0, 3});
-  NodeObservationMap current_nodes;
-  current_nodes.emplace(
-    NodeIdentity{7, 10}, NodeObservation{NodeIdentity{7, 10}, 0.0, 0.0, 0.0, 3});
-
-  ASSERT_EQ(filter.update({tracked}, false, 1, nullptr, &current_nodes).size(), 1U);
-  EXPECT_TRUE(filter.update({}, false, 1, nullptr, &current_nodes).empty());
-}
-
-TEST(TopologicalGridAssignment, KeepsOccupancyAcrossIncludedLabelChanges)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{100, 2, 2, 2, 2});
-  const GridCell cell{1, 2, 3};
-  EXPECT_TRUE(filter.update({LabeledGridVoxel{cell, 2, 1, 1, 1}}).empty());
-  const auto changed = filter.update({LabeledGridVoxel{cell, 3, 1, 1, 1}});
-  ASSERT_EQ(changed.size(), 1U);
-  EXPECT_EQ(changed.front().label, 2);
-  const auto stable = filter.update({LabeledGridVoxel{cell, 3, 1, 1, 1}});
-  ASSERT_EQ(stable.size(), 1U);
-  EXPECT_EQ(stable.front().label_history_count, 3U);
-  EXPECT_EQ(stable.front().point_input_history_count, 3U);
-}
-
-TEST(TopologicalGridAssignment, IsolatedVoxelUsesHigherHistoryCounts)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{100, 3, 3, 5, 5});
+  TemporalVoxelFilterConfig config;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
   const LabeledGridVoxel isolated{GridCell{1, 2, 3}, 3, 1, 1, 0};
 
-  for (int i = 0; i < 4; ++i) {
-    EXPECT_TRUE(filter.update({isolated}).empty());
-  }
+  EXPECT_TRUE(filter.update({isolated}).empty());
   ASSERT_EQ(filter.update({isolated}).size(), 1U);
-  for (int i = 0; i < 10; ++i) {
-    const auto retained = filter.update({});
-    ASSERT_EQ(retained.size(), 1U);
-    EXPECT_EQ(retained.front().node_count, 0U);
-  }
-  EXPECT_TRUE(filter.update({}).empty());
-  EXPECT_EQ(filter.trackedVoxelCount(), 1U);
-
-  for (int i = 0; i < 89; ++i) {
-    EXPECT_TRUE(filter.update({}).empty());
-  }
-  EXPECT_EQ(filter.trackedVoxelCount(), 0U);
 }
 
-TEST(TopologicalGridAssignment, BridgesShortVoxelPositionJitter)
-{
-  using fuzzrobo::topological_grid::GridCell;
-  using fuzzrobo::topological_grid::LabeledGridVoxel;
-  using fuzzrobo::topological_grid::TemporalVoxelFilter;
-  using fuzzrobo::topological_grid::TemporalVoxelFilterConfig;
-
-  TemporalVoxelFilter filter(TemporalVoxelFilterConfig{100, 2, 2, 2, 2, 3});
-  const LabeledGridVoxel original{GridCell{0, 0, 0}, 3, 1, 1, 1};
-  const LabeledGridVoxel moved{GridCell{1, 0, 0}, 3, 1, 1, 1};
-
-  EXPECT_TRUE(filter.update({original}).empty());
-  ASSERT_EQ(filter.update({original}).size(), 1U);
-  const auto first_moved = filter.update({moved});
-  ASSERT_EQ(first_moved.size(), 1U);
-  EXPECT_EQ(first_moved.front().cell.x, 0);
-  const auto second_moved = filter.update({moved});
-  ASSERT_EQ(second_moved.size(), 2U);
-  const auto third_moved = filter.update({moved});
-  ASSERT_EQ(third_moved.size(), 2U);
-  const auto settled = filter.update({moved});
-  ASSERT_EQ(settled.size(), 1U);
-  EXPECT_EQ(settled.front().cell.x, 1);
-}
-
-TEST(TopologicalGridAssignment, MovesHistoryWithNodeIdentityAcrossFineGridCells)
+TEST(TopologicalGridAssignment, RejectsSparseCellRelativeToLocalPointDensity)
 {
   using namespace fuzzrobo::topological_grid;
-  TemporalVoxelFilter filter(
-    TemporalVoxelFilterConfig{5, 2, 2, 2, 2, 0, true, 0.02, true});
+  TemporalVoxelFilterConfig config;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+  const LabeledGridVoxel sparse{GridCell{0, 0, 0}, 3, 1, 1, 0};
+  const LabeledGridVoxel dense{GridCell{1, 0, 0}, 3, 1, 9, 1};
+
+  for (int i = 0; i < 5; ++i) {
+    const auto stable = filter.update({sparse, dense});
+    const auto sparse_it = std::find_if(
+      stable.begin(), stable.end(), [](const LabeledGridVoxel &voxel) {
+        return voxel.cell == GridCell{0, 0, 0};
+      });
+    EXPECT_EQ(sparse_it, stable.end());
+  }
+}
+
+TEST(TopologicalGridAssignment, DecaysAndRemovesAfterAnObservedCellDisappears)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
+
+  EXPECT_TRUE(filter.update({supported}).empty());
+  ASSERT_EQ(filter.update({supported}).size(), 1U);
+  const auto retained_once = filter.update({});
+  ASSERT_EQ(retained_once.size(), 1U);
+  EXPECT_EQ(retained_once.front().node_count, 0U);
+  EXPECT_TRUE(filter.update({}).empty());
+}
+
+TEST(TopologicalGridAssignment, RequiresCurrentSupportButNotAnArbitraryHistoryCount)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.evidence_ema_alpha = 1.0;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+  const LabeledGridVoxel label_only{GridCell{1, 2, 3}, 3, 1, 0, 1};
+  const LabeledGridVoxel supported{GridCell{1, 2, 3}, 3, 1, 1, 1};
+
+  EXPECT_TRUE(filter.update({label_only}).empty());
+  EXPECT_TRUE(filter.update({label_only}).empty());
+  const auto stable = filter.update({supported});
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_EQ(stable.front().label_history_count, 3U);
+  EXPECT_EQ(stable.front().point_input_history_count, 1U);
+}
+
+TEST(TopologicalGridAssignment, RetainsByNearbyNodeIdentityOnlyWhenExplicitlyEnabled)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  config.node_identity_retention_enabled = true;
+  config.node_identity_max_displacement = 0.02;
+  TemporalVoxelFilter filter(config);
+  LabeledGridVoxel tracked{GridCell{0, 0, 0}, 3, 1, 1, 1};
+  tracked.node_observations.push_back(NodeObservation{NodeIdentity{7, 10}, 0.0, 0.0, 0.0, 3});
+  NodeObservationMap current_nodes;
+  current_nodes.emplace(
+    NodeIdentity{7, 10}, NodeObservation{NodeIdentity{7, 10}, 0.01, 0.0, 0.0, 3});
+
+  EXPECT_TRUE(filter.update({tracked}, true, 1, nullptr, &current_nodes).empty());
+  ASSERT_EQ(filter.update({tracked}, true, 1, nullptr, &current_nodes).size(), 1U);
+  for (int i = 0; i < 4; ++i) {
+    const auto retained = filter.update({}, true, 1, nullptr, &current_nodes);
+    ASSERT_EQ(retained.size(), 1U);
+    EXPECT_TRUE(retained.front().retained_by_node_identity);
+  }
+}
+
+TEST(TopologicalGridAssignment, PreservesHistoryWhenAUniqueNodeMovesAcrossFineCells)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.history_window_size = 10;
+  config.evidence_ema_alpha = 0.5;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  config.node_identity_history_migration_enabled = true;
+  config.node_identity_max_displacement = 0.02;
+  TemporalVoxelFilter filter(config);
   LabeledGridVoxel original{GridCell{0, 0, 0}, 3, 1, 1, 1};
   original.node_observations.push_back(
     NodeObservation{NodeIdentity{7, 10}, 0.001, 0.0, 0.0, 3});
@@ -557,7 +429,6 @@ TEST(TopologicalGridAssignment, MovesHistoryWithNodeIdentityAcrossFineGridCells)
   EXPECT_TRUE(filter.update({original}).empty());
   ASSERT_EQ(filter.update({original}).size(), 1U);
   const auto stable = filter.update({moved});
-
   ASSERT_EQ(stable.size(), 1U);
   EXPECT_EQ(stable.front().cell.x, 9);
   EXPECT_EQ(stable.front().history_sample_count, 3U);

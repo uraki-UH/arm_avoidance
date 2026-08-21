@@ -215,86 +215,32 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 
-GNGノードをラベル付きボクセルに変換する。
-既定では、同一frame・同一timestampの `/topological_map` と `/downsampling/unknown` を照合し、
-`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のノードと現在点群が同じセルにある場合を候補にする。
-各セルは直近100更新の非除外label出現回数と点群input更新回数を別々に保持する。
-`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`は物体候補占有として合算する。
-隣接候補は各3回、26近傍に候補がない孤立セルは各5回を履歴内で満たしてからpublishする。
-このlabel最低カウントは新規追加と削除後の再追加にだけ使用し、確定済みセルの削除条件には使用しない。
-連続観測である必要はない。新規追加時だけ現在点群を必須とし、確定後に非除外labelがセルから消えても
-既定10更新は旧セルを維持する。隣接セルへ移動したノードが追加条件を満たすまでの欠落をこの猶予で防ぐ。
-孤立判定は現在点群ではなく非除外GNGセル同士の近傍で行う。確定後の非孤立セルは点群input履歴が
-最低カウント未満になっても削除しない。孤立セルも`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`のいずれかの
-ノードが現在セルに残る間は、点群やlabel種別が変化しても赤い非把持セルとして保持する。
-孤立セルの点群消失を削除条件に使うのは、非除外GNGノードもセルから消えた場合だけとする。
-非孤立セルは、確定時に一意だったGNGノードの`(id, frame)`が現在Mapにも存在し、確定位置からの移動が
-既定`0.02 m`以内なら保持する。同一Map内で重複する`(id, frame)`は追跡に使用しない。
-確定済みボクセルに所属するGNGノード同士がedge接続されている場合、既定ではボクセル対を1本へ集約し、
-最大`0.10 m`までの間を10 mmセルで補間する。26近傍がない直接観測セルは把持候補から除外して
-`<output_topic>/isolated`へ分離する。Topo Fuzzy Viewerではこのtopicを選択すると既定で赤表示される。
-`output_topic`は非孤立の直接観測と補間セルの和集合、
-`<output_topic>/edge_inferred`は補間セルだけを保持する。補間セルを次の補間端点には使用しない。
-さらに3ノード間のedgeがすべて存在する3-cycleを三角形候補とし、辺長、面積、細長さ、ノード法線、
-任意の点群支持率を通過した面と交差するセルを追加する。`<output_topic>/triangle_inferred`は面由来だけを保持する。
+GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
+`SAFE_TERRAIN`、`HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。セルの有効／無効は
+固定の「3回・5回」ではなく、短期 EMA の安定度で決める。現在の点群支持は周囲27セルの中央値で正規化し、
+点群・ノード密度や`grid_size`が変わっても
+固定個数閾値への依存を避けられる。消失セルは同じスコアを減衰させ、短い欠落だけ保持してから除去する。
+26近傍を持たない直接観測セルは把持候補から除外し、`<output_topic>/isolated`へ分離する。
+`output_topic`は非孤立の直接観測と補間セルの和集合で、`edge_inferred`と`triangle_inferred`は補間由来だけを出す。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   pointcloud_topic:=/downsampling/unknown \
   output_topic:=/topo_voxel_ids \
-  summary_topic:=/topo_voxel_ids/summary \
-  grid_size:=0.01 \
-  point_support_mode:=auto \
-  point_support_radius_m:=0.02 \
-  unknown_shape_filter_enabled:=true \
-  shape_neighborhood_hops:=2 \
-  shape_minimum_neighbors:=3 \
-  shape_residual_weight:=0.7 \
-  shape_mad_multiplier:=3.0 \
-  shape_seed_expansion_scale:=2.0 \
-  neighbor_radius_m:=0.02 \
-  inferred_require_input_points:=true \
-  node_identity_history_migration_enabled:=true \
-  node_identity_retention_enabled:=false \
-  history_reset_on_time_regression:=false \
-  history_reset_node_count_ratio:=0.5 \
-  point_activity_update_enabled:=true \
-  point_activity_cell_size:=0.02 \
-  point_activity_ema_alpha:=0.2 \
-  point_activity_top_fraction:=0.1 \
-  point_activity_occupancy_weight:=0.7 \
-  point_activity_warmup_updates:=5 \
-  point_activity_minimum_update_interval:=1 \
-  point_activity_maximum_update_interval:=10
+  grid_size:=0.02
 
-`point_support_mode:=auto`は、AIS-GNGノードに`inpcl_ids`がある場合は入力点との直接対応を
-点群支持に使い、対応がないMapでは`point_support_radius_m`以内の点群支持へフォールバックする。
-`unknown_shape_filter_enabled:=true`は、`UNKNOWN_OBJECT`ノードの1〜2 hop近傍について、
-局所平面残差をそのノードのGNG edge長中央値で正規化し、法線変化と合成する。
-全候補の中央値/MADに対して相対的に逸脱するノードだけをseedとし、局所edge長で正規化した
-graph距離内へ領域を拡張する。固定のmm半径や突出量は使用しない。後方の連続平面はseedを
-持たないため除外され、物体の角や段差に接続した平坦面はseed周辺として保持される。
-summaryの`shape_candidate_node_count`、`shape_seed_node_count`、
-`shape_retained_node_count`、`shape_rejected_node_count`で抑制量を確認できる。
-`neighbor_radius_m`はグリッドセル数ではなく実距離で近傍を判定する。
-`node_identity_history_migration_enabled:=true`では、一意な`(node.id, node.frame)`が
-`node_identity_max_displacement`以内で移動したとき、時間履歴を移動先セルへ引き継ぐ。
-これらの設定により、`grid_size`を小さくした際のセル境界による発火切れを抑制する。
-rosbagを`--loop`再生してもGNGノードIDが継続する構成では、時刻巻き戻りだけで履歴を消すと
-毎周回出力が途切れるため、`history_reset_on_time_regression:=false`を使用する。
-GNGノード数が急減して実際にリセットされた場合は`history_reset_node_count_ratio`で履歴を消去する。
-履歴を移動先へ引き継ぐ場合、旧セルを二重保持しないよう
-`node_identity_retention_enabled:=false`を使用する。
+通常起動で指定できる値は上の4つだけである。詳細設定は
+`ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`に集約した。
+別プロファイルを試すときだけ、`params_file:=/absolute/path/profile.yaml`を追加する。
 
-`point_activity_update_enabled:=true`では、点群占有頻度と点密度のEMAから活動度を計算し、
-重いノード・edge・triangle処理の実行間隔を1〜10入力の間で連続的に変更する。
-起動直後の5入力は必ず処理し、時間履歴を遅延なく確立する。
-新しい占有領域や消失領域があれば毎入力に近づき、静止点群では最大10入力ごとになる。
-活動度は出力ボクセルとは独立した既定20 mmの物理セルで計算するため、`grid_size`を5 mmへ
-小さくしても点のセル境界揺れと統計セル数が過剰に増えにくい。全更新を省略した入力では
-最後にpublishしたVoxelを維持し、最大間隔に達すると必ず再計算する。
-summaryの`point_activity_score`、`point_activity_desired_update_interval`、
-`point_activity_processed_update_count`、`point_activity_skipped_update_count`で動作を確認できる。
+主な調整点は`temporal_evidence_ema_alpha`（追従性）、`temporal_activation_score`（発火）、
+`temporal_retention_score`（消失）である。
+`retention_score < activation_score`のヒステリシスを保つ。`unknown_shape_filter_enabled`は既定で無効で、
+形状の逸脱だけを物体判定にしない。summaryにはこれらの設定値と活動度を出す。
+
+`point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
+静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで
+統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
 
 # 補間由来だけを確認
 ros2 topic echo /topo_voxel_ids/edge_inferred
@@ -303,56 +249,8 @@ ros2 topic echo /topo_voxel_ids/triangle_inferred
 # 表示専用で、把持候補には含まれない孤立セルを確認
 ros2 topic echo /topo_voxel_ids/isolated
 
-候補labelや点群支持条件を変更する場合は、次のように指定する。
-
-ros2 launch ais_gng topological_grid.launch.py \
-  input_topic:=/topological_map \
-  pointcloud_topic:=/downsampling/unknown \
-  output_topic:=/topo_voxel_ids \
-  summary_topic:=/topo_voxel_ids/summary \
-  grid_size:=0.01 \
-  excluded_labels:="SAFE_TERRAIN,HUMAN,CAR" \
-  require_input_points:=true \
-  point_support_mode:=auto \
-  point_support_radius_m:=0.02 \
-  unknown_shape_filter_enabled:=true \
-  shape_neighborhood_hops:=2 \
-  shape_minimum_neighbors:=3 \
-  shape_residual_weight:=0.7 \
-  shape_mad_multiplier:=3.0 \
-  shape_seed_expansion_scale:=2.0 \
-  neighbor_radius_m:=0.02 \
-  inferred_require_input_points:=true \
-  history_window_size:=100 \
-  minimum_label_history_count:=3 \
-  minimum_point_input_history_count:=3 \
-  isolated_minimum_label_history_count:=5 \
-  isolated_minimum_point_input_history_count:=5 \
-  maximum_missing_label_updates:=2 \
-  node_identity_retention_enabled:=false \
-  node_identity_max_displacement:=0.02 \
-  node_identity_history_migration_enabled:=true \
-  history_reset_on_time_regression:=false \
-  history_reset_node_count_ratio:=0.5 \
-  point_activity_update_enabled:=true \
-  point_activity_cell_size:=0.02 \
-  point_activity_ema_alpha:=0.2 \
-  point_activity_top_fraction:=0.1 \
-  point_activity_occupancy_weight:=0.7 \
-  point_activity_warmup_updates:=5 \
-  point_activity_minimum_update_interval:=1 \
-  point_activity_maximum_update_interval:=10 \
-  edge_inference_enabled:=true \
-  edge_max_length:=0.10 \
-  triangle_inference_enabled:=true \
-  triangle_max_edge_length:=0.05 \
-  triangle_min_area:=0.000001 \
-  triangle_min_aspect_ratio:=0.05 \
-  triangle_max_normal_angle_deg:=45.0 \
-  triangle_min_point_support_ratio:=0.0
-
-保持期限を超えたセルは通常削除されますが、削除によって占有セルの低いZ側と高いZ側が
-26近傍グラフ上で分断されるセルは保持されます。水平方向だけの分断は削除を妨げません。
+候補labelや点群支持、補間条件を変える場合も、launch 引数を増やさず
+`topological_grid.yaml`をコピーしたプロファイルを作り、`params_file`で指定する。
 
 
 ## realsense 

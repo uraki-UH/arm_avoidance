@@ -159,7 +159,10 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inferred_topic_ = output_topic_ + "/triangle_inferred";
   }
   summary_topic_ = this->declare_parameter<std::string>(
-    "summary_topic", "/topological_grid_assignments/summary");
+    "summary_topic", "");
+  if (summary_topic_.empty()) {
+    summary_topic_ = output_topic_ + "/summary";
+  }
   pointcloud_timeout_sec_ = this->declare_parameter<double>("pointcloud_timeout_sec", 0.5);
   grid_spec_.cell_size = this->declare_parameter<double>("grid_size", 0.01);
   grid_spec_.origin_x = this->declare_parameter<double>("origin_x", 0.0);
@@ -179,7 +182,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   voxelization_options_.point_support_radius_m = this->declare_parameter<double>(
     "point_support_radius_m", 0.02);
   voxelization_options_.unknown_shape_filter_enabled = this->declare_parameter<bool>(
-    "unknown_shape_filter_enabled", true);
+    "unknown_shape_filter_enabled", false);
   voxelization_options_.shape_neighborhood_hops = this->declare_parameter<int>(
     "shape_neighborhood_hops", 2);
   const int shape_minimum_neighbors = this->declare_parameter<int>(
@@ -216,17 +219,14 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "neighbor_radius_cells", 1);
   voxelization_options_.neighbor_radius_m = this->declare_parameter<double>(
     "neighbor_radius_m", 0.02);
-  const int history_window_size = this->declare_parameter<int>("history_window_size", 100);
-  const int minimum_label_history_count = this->declare_parameter<int>(
-    "minimum_label_history_count", 3);
-  const int minimum_point_input_history_count = this->declare_parameter<int>(
-    "minimum_point_input_history_count", 3);
-  const int isolated_minimum_label_history_count = this->declare_parameter<int>(
-    "isolated_minimum_label_history_count", 5);
-  const int isolated_minimum_point_input_history_count = this->declare_parameter<int>(
-    "isolated_minimum_point_input_history_count", 5);
-  const int maximum_missing_label_updates = this->declare_parameter<int>(
-    "maximum_missing_label_updates", 2);
+  const int temporal_history_window_size = this->declare_parameter<int>(
+    "temporal_history_window_size", 32);
+  temporal_filter_config_.evidence_ema_alpha = this->declare_parameter<double>(
+    "temporal_evidence_ema_alpha", 0.35);
+  temporal_filter_config_.activation_score = this->declare_parameter<double>(
+    "temporal_activation_score", 0.65);
+  temporal_filter_config_.retention_score = this->declare_parameter<double>(
+    "temporal_retention_score", 0.35);
   temporal_filter_config_.node_identity_retention_enabled = this->declare_parameter<bool>(
     "node_identity_retention_enabled", false);
   temporal_filter_config_.node_identity_max_displacement = this->declare_parameter<double>(
@@ -264,6 +264,12 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     triangle_inference_options_.maximum_normal_angle_degrees > 180.0 ||
     triangle_inference_options_.minimum_point_support_ratio < 0.0 ||
     triangle_inference_options_.minimum_point_support_ratio > 1.0 ||
+    temporal_filter_config_.evidence_ema_alpha <= 0.0 ||
+    temporal_filter_config_.evidence_ema_alpha > 1.0 ||
+    temporal_filter_config_.activation_score <= 0.0 ||
+    temporal_filter_config_.activation_score > 1.0 ||
+    temporal_filter_config_.retention_score < 0.0 ||
+    temporal_filter_config_.retention_score > temporal_filter_config_.activation_score ||
     temporal_filter_config_.node_identity_max_displacement < 0.0 ||
     voxelization_options_.neighbor_radius_m < 0.0 ||
     voxelization_options_.point_support_radius_m < 0.0 ||
@@ -282,24 +288,14 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
             "grid, inference, point-support, and node-identity parameters are invalid");
   }
   if (minimum_input_points_per_voxel <= 0 || neighbor_radius_cells < 0 ||
-    history_window_size <= 0 || minimum_label_history_count <= 0 ||
-    minimum_point_input_history_count <= 0 ||
-    isolated_minimum_label_history_count <= 0 ||
-    isolated_minimum_point_input_history_count <= 0 ||
+    temporal_history_window_size <= 0 ||
     point_activity_warmup_updates < 0 ||
     voxelization_options_.shape_neighborhood_hops <= 0 || shape_minimum_neighbors <= 0 ||
     point_activity_minimum_update_interval <= 0 ||
-    point_activity_maximum_update_interval < point_activity_minimum_update_interval ||
-    maximum_missing_label_updates < 0 ||
-    minimum_label_history_count > history_window_size ||
-    minimum_point_input_history_count > history_window_size ||
-    isolated_minimum_label_history_count > history_window_size ||
-    isolated_minimum_point_input_history_count > history_window_size ||
-    maximum_missing_label_updates > history_window_size)
+    point_activity_maximum_update_interval < point_activity_minimum_update_interval)
   {
     throw std::invalid_argument(
-            "point and history counts must be positive and history counts must not exceed "
-            "history_window_size");
+            "point, temporal history, and activity interval counts must be valid");
   }
   voxelization_options_.minimum_input_points_per_voxel =
     static_cast<std::size_t>(minimum_input_points_per_voxel);
@@ -307,17 +303,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   voxelization_options_.shape_minimum_neighbors =
     static_cast<std::size_t>(shape_minimum_neighbors);
   temporal_filter_config_.history_window_size =
-    static_cast<std::size_t>(history_window_size);
-  temporal_filter_config_.minimum_label_history_count =
-    static_cast<std::size_t>(minimum_label_history_count);
-  temporal_filter_config_.minimum_point_input_history_count =
-    static_cast<std::size_t>(minimum_point_input_history_count);
-  temporal_filter_config_.isolated_minimum_label_history_count =
-    static_cast<std::size_t>(isolated_minimum_label_history_count);
-  temporal_filter_config_.isolated_minimum_point_input_history_count =
-    static_cast<std::size_t>(isolated_minimum_point_input_history_count);
-  temporal_filter_config_.maximum_missing_label_updates =
-    static_cast<std::size_t>(maximum_missing_label_updates);
+    static_cast<std::size_t>(temporal_history_window_size);
   temporal_filter_ = std::make_unique<TemporalVoxelFilter>(temporal_filter_config_);
   point_activity_config_.minimum_update_interval =
     static_cast<std::size_t>(point_activity_minimum_update_interval);
@@ -368,7 +354,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "isolated=%s edge_inferred=%s edge_fill=%s/%.3fm grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
     "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
-    "label/point=%zu/%zu isolated=%zu/%zu missing_label_grace=%zu "
+    "stability=ema:%.2f activate:%.2f retain:%.2f "
     "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm "
     "point_activity=%s/%.3fm/warmup=%zu/interval=%zu-%zu "
     "unknown_shape=%s/hops=%d/mad=%.2f/expand=%.2f",
@@ -393,11 +379,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     voxelization_options_.neighbor_radius_cells,
     voxelization_options_.neighbor_radius_m,
     temporal_filter_config_.history_window_size,
-    temporal_filter_config_.minimum_label_history_count,
-    temporal_filter_config_.minimum_point_input_history_count,
-    temporal_filter_config_.isolated_minimum_label_history_count,
-    temporal_filter_config_.isolated_minimum_point_input_history_count,
-    temporal_filter_config_.maximum_missing_label_updates,
+    temporal_filter_config_.evidence_ema_alpha,
+    temporal_filter_config_.activation_score,
+    temporal_filter_config_.retention_score,
     temporal_filter_config_.node_identity_retention_enabled ? "enabled" : "disabled",
     temporal_filter_config_.node_identity_max_displacement,
     temporal_filter_config_.node_identity_history_migration_enabled ? "enabled" : "disabled",
@@ -748,16 +732,12 @@ void TopologicalGridNode::publishResult(
   oss << "\"tracked_voxel_count\":" << temporal_filter_->trackedVoxelCount() << ",";
   oss << "\"history_window_size\":"
       << temporal_filter_config_.history_window_size << ",";
-  oss << "\"minimum_label_history_count\":"
-      << temporal_filter_config_.minimum_label_history_count << ",";
-  oss << "\"minimum_point_input_history_count\":"
-      << temporal_filter_config_.minimum_point_input_history_count << ",";
-  oss << "\"isolated_minimum_label_history_count\":"
-      << temporal_filter_config_.isolated_minimum_label_history_count << ",";
-  oss << "\"isolated_minimum_point_input_history_count\":"
-      << temporal_filter_config_.isolated_minimum_point_input_history_count << ",";
-  oss << "\"maximum_missing_label_updates\":"
-      << temporal_filter_config_.maximum_missing_label_updates << ",";
+  oss << "\"temporal_evidence_ema_alpha\":"
+      << temporal_filter_config_.evidence_ema_alpha << ",";
+  oss << "\"temporal_activation_score\":"
+      << temporal_filter_config_.activation_score << ",";
+  oss << "\"temporal_retention_score\":"
+      << temporal_filter_config_.retention_score << ",";
   oss << "\"node_identity_retention_enabled\":"
       << (temporal_filter_config_.node_identity_retention_enabled ? "true" : "false")
       << ",";

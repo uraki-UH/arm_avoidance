@@ -339,81 +339,16 @@ bool nodeIdentityRetainsVoxel(
     });
 }
 
-bool deletionDisconnectsVerticalNeighbors(
-  const GridCell &candidate,
-  const std::unordered_set<GridCell, GridCellHash> &active_cells)
-{
-  std::vector<GridCell> lower_neighbors;
-  std::vector<GridCell> upper_neighbors;
-  for (int dx = -1; dx <= 1; ++dx) {
-    for (int dy = -1; dy <= 1; ++dy) {
-      for (int dz = -1; dz <= 1; ++dz) {
-        if (dz == 0) {
-          continue;
-        }
-        const GridCell neighbor{
-          candidate.x + dx, candidate.y + dy, candidate.z + dz};
-        if (active_cells.find(neighbor) == active_cells.end()) {
-          continue;
-        }
-        (dz < 0 ? lower_neighbors : upper_neighbors).push_back(neighbor);
-      }
-    }
-  }
-  if (lower_neighbors.empty() || upper_neighbors.empty()) {
-    return false;
-  }
-
-  std::unordered_set<GridCell, GridCellHash> visited;
-  visited.reserve(active_cells.size());
-  std::deque<GridCell> pending;
-  pending.push_back(lower_neighbors.front());
-  visited.insert(lower_neighbors.front());
-  while (!pending.empty()) {
-    const GridCell current = pending.front();
-    pending.pop_front();
-    for (int dx = -1; dx <= 1; ++dx) {
-      for (int dy = -1; dy <= 1; ++dy) {
-        for (int dz = -1; dz <= 1; ++dz) {
-          if (dx == 0 && dy == 0 && dz == 0) {
-            continue;
-          }
-          const GridCell neighbor{current.x + dx, current.y + dy, current.z + dz};
-          if (neighbor == candidate ||
-            active_cells.find(neighbor) == active_cells.end() ||
-            !visited.insert(neighbor).second)
-          {
-            continue;
-          }
-          pending.push_back(neighbor);
-        }
-      }
-    }
-  }
-
-  const auto is_disconnected = [&visited](const GridCell &cell) {
-      return visited.find(cell) == visited.end();
-    };
-  return std::any_of(lower_neighbors.begin(), lower_neighbors.end(), is_disconnected) ||
-         std::any_of(upper_neighbors.begin(), upper_neighbors.end(), is_disconnected);
-}
-
 }  // namespace
 
 TemporalVoxelFilter::TemporalVoxelFilter(TemporalVoxelFilterConfig config)
 : config_(config)
 {
   config_.history_window_size = std::max<std::size_t>(1, config_.history_window_size);
-  config_.minimum_label_history_count = std::clamp<std::size_t>(
-    config_.minimum_label_history_count, 1, config_.history_window_size);
-  config_.minimum_point_input_history_count = std::clamp<std::size_t>(
-    config_.minimum_point_input_history_count, 1, config_.history_window_size);
-  config_.isolated_minimum_label_history_count = std::clamp<std::size_t>(
-    config_.isolated_minimum_label_history_count, 1, config_.history_window_size);
-  config_.isolated_minimum_point_input_history_count = std::clamp<std::size_t>(
-    config_.isolated_minimum_point_input_history_count, 1, config_.history_window_size);
-  config_.maximum_missing_label_updates = std::min(
-    config_.maximum_missing_label_updates, config_.history_window_size);
+  config_.evidence_ema_alpha = std::clamp(config_.evidence_ema_alpha, 0.0, 1.0);
+  config_.activation_score = std::clamp(config_.activation_score, 0.0, 1.0);
+  config_.retention_score = std::clamp(
+    config_.retention_score, 0.0, config_.activation_score);
   config_.node_identity_max_displacement = std::max(
     0.0, config_.node_identity_max_displacement);
 }
@@ -521,18 +456,53 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   const GridPointCounts *input_point_counts,
   const NodeObservationMap *current_nodes)
 {
-  struct ExpirationCandidate
-  {
-    GridCell cell;
-    std::size_t input_point_count = 0;
-  };
-
   std::vector<LabeledGridVoxel> stable_voxels;
   stable_voxels.reserve(label_voxels.size());
   migrateHistoriesByNodeIdentity(label_voxels);
-  std::vector<ExpirationCandidate> expiration_candidates;
   std::unordered_set<GridCell, GridCellHash> updated_cells;
   updated_cells.reserve(label_voxels.size());
+
+  // A point count is meaningful only relative to the surrounding sample
+  // density.  This avoids a global "N points" rule becoming stricter when the
+  // GNG/node density or the grid resolution changes.
+  GridPointCounts current_input_counts;
+  current_input_counts.reserve(label_voxels.size());
+  for (const auto &voxel : label_voxels) {
+    auto [it, inserted] = current_input_counts.emplace(
+      voxel.cell, voxel.input_point_count);
+    if (!inserted) {
+      it->second = std::max(it->second, voxel.input_point_count);
+    }
+  }
+  std::unordered_map<GridCell, double, GridCellHash> local_density_reference;
+  local_density_reference.reserve(label_voxels.size());
+  for (const auto &voxel : label_voxels) {
+    std::vector<std::size_t> neighborhood_counts;
+    neighborhood_counts.reserve(27);
+    for (int dx = -1; dx <= 1; ++dx) {
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dz = -1; dz <= 1; ++dz) {
+          const GridCell neighbor{voxel.cell.x + dx, voxel.cell.y + dy, voxel.cell.z + dz};
+          const auto count_it = current_input_counts.find(neighbor);
+          if (count_it != current_input_counts.end() && count_it->second > 0) {
+            neighborhood_counts.push_back(count_it->second);
+          }
+        }
+      }
+    }
+    if (neighborhood_counts.empty()) {
+      local_density_reference.emplace(
+        voxel.cell, static_cast<double>(std::max<std::size_t>(1, voxel.input_point_count)));
+      continue;
+    }
+    std::sort(neighborhood_counts.begin(), neighborhood_counts.end());
+    const std::size_t middle = neighborhood_counts.size() / 2;
+    const double median = neighborhood_counts.size() % 2 == 0
+      ? 0.5 * static_cast<double>(
+      neighborhood_counts[middle - 1] + neighborhood_counts[middle])
+      : static_cast<double>(neighborhood_counts[middle]);
+    local_density_reference.emplace(voxel.cell, median);
+  }
 
   for (const auto &voxel : label_voxels) {
     auto &history = history_[voxel.cell];
@@ -540,24 +510,22 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       voxel.input_point_count >= minimum_input_points_per_voxel;
     appendSample(history, HistorySample{voxel.label, true, has_input_points});
     updated_cells.insert(voxel.cell);
-    history.consecutive_missing_label_updates = 0;
     history.last_voxel = voxel;
-    const bool isolated = voxel.neighbor_count == 0;
-    const std::size_t minimum_label_count = isolated
-      ? config_.isolated_minimum_label_history_count
-      : config_.minimum_label_history_count;
-    const std::size_t minimum_point_count = isolated
-      ? config_.isolated_minimum_point_input_history_count
-      : config_.minimum_point_input_history_count;
-    const bool label_history_sufficient =
-      history.label_observation_count >= minimum_label_count;
-    const bool point_history_sufficient =
-      history.point_input_observation_count >= minimum_point_count;
+    const double local_reference = local_density_reference.at(voxel.cell);
+    const double point_support_score = !require_input_points ? 1.0 :
+      (has_input_points ? std::sqrt(std::min(
+      1.0, static_cast<double>(voxel.input_point_count) / local_reference)) : 0.0);
+    history.stability_score =
+      (1.0 - config_.evidence_ema_alpha) * history.stability_score +
+      config_.evidence_ema_alpha * point_support_score;
     if (!history.active) {
-      if (!label_history_sufficient || !point_history_sufficient || !has_input_points) {
+      if (history.stability_score < config_.activation_score) {
         continue;
       }
       history.active = true;
+    } else if (history.stability_score < config_.retention_score) {
+      history.active = false;
+      continue;
     }
     history.active_label = dominantLabel(history.label_counts);
 
@@ -566,6 +534,8 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.history_sample_count = history.samples.size();
     stable_voxel.label_history_count = history.label_observation_count;
     stable_voxel.point_input_history_count = history.point_input_observation_count;
+    stable_voxel.temporal_stability_score = history.stability_score;
+    stable_voxel.point_support_score = point_support_score;
     stable_voxel.retained_by_node_identity = false;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
@@ -586,74 +556,36 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       }
     }
     appendSample(it->second, HistorySample{0, false, has_input_points});
-    ++it->second.consecutive_missing_label_updates;
 
     auto &history = it->second;
-    const bool isolated = history.last_voxel.neighbor_count == 0;
-    const std::size_t minimum_point_count = isolated
-      ? config_.isolated_minimum_point_input_history_count
-      : config_.minimum_point_input_history_count;
-    const bool point_history_sufficient =
-      !isolated || history.point_input_observation_count >= minimum_point_count;
-    const bool within_retention_window =
-      history.consecutive_missing_label_updates <= config_.maximum_missing_label_updates;
     const bool retained_by_node_identity =
-      config_.node_identity_retention_enabled && !isolated &&
+      config_.node_identity_retention_enabled &&
       nodeIdentityRetainsVoxel(
       history.last_voxel, current_nodes, config_.node_identity_max_displacement);
-    if (history.active && !point_history_sufficient) {
+    history.stability_score *= 1.0 - config_.evidence_ema_alpha;
+    if (retained_by_node_identity) {
+      history.stability_score = std::max(
+        history.stability_score, config_.retention_score);
+    }
+    if (!history.active || history.stability_score < config_.retention_score) {
       history.active = false;
-    } else if (history.active &&
-      (within_retention_window || retained_by_node_identity))
-    {
-      if (history.label_observation_count > 0) {
-        history.active_label = dominantLabel(history.label_counts);
-      }
-      auto stable_voxel = history.last_voxel;
-      stable_voxel.label = history.active_label;
-      stable_voxel.node_count = 0;
-      stable_voxel.input_point_count = input_point_count;
-      stable_voxel.history_sample_count = history.samples.size();
-      stable_voxel.label_history_count = history.label_observation_count;
-      stable_voxel.point_input_history_count = history.point_input_observation_count;
-      stable_voxel.retained_by_node_identity = retained_by_node_identity;
-      stable_voxels.push_back(stable_voxel);
-    } else if (history.active) {
-      expiration_candidates.push_back(ExpirationCandidate{it->first, input_point_count});
-    }
-  }
-
-  std::unordered_set<GridCell, GridCellHash> active_cells;
-  active_cells.reserve(history_.size());
-  for (const auto &[cell, history] : history_) {
-    if (history.active) {
-      active_cells.insert(cell);
-    }
-  }
-  std::sort(
-    expiration_candidates.begin(), expiration_candidates.end(),
-    [](const ExpirationCandidate &lhs, const ExpirationCandidate &rhs) {
-      return gridCellLess(lhs.cell, rhs.cell);
-    });
-  for (const auto &candidate : expiration_candidates) {
-    auto history_it = history_.find(candidate.cell);
-    if (history_it == history_.end() || !history_it->second.active) {
       continue;
     }
-    auto &history = history_it->second;
-    if (deletionDisconnectsVerticalNeighbors(candidate.cell, active_cells)) {
-      auto stable_voxel = history.last_voxel;
-      stable_voxel.label = history.active_label;
-      stable_voxel.node_count = 0;
-      stable_voxel.input_point_count = candidate.input_point_count;
-      stable_voxel.history_sample_count = history.samples.size();
-      stable_voxel.label_history_count = history.label_observation_count;
-      stable_voxel.point_input_history_count = history.point_input_observation_count;
-      stable_voxels.push_back(stable_voxel);
-      continue;
+    if (history.label_observation_count > 0) {
+      history.active_label = dominantLabel(history.label_counts);
     }
-    history.active = false;
-    active_cells.erase(candidate.cell);
+    auto stable_voxel = history.last_voxel;
+    stable_voxel.label = history.active_label;
+    stable_voxel.node_count = 0;
+    stable_voxel.input_point_count = input_point_count;
+    stable_voxel.history_sample_count = history.samples.size();
+    stable_voxel.label_history_count = history.label_observation_count;
+    stable_voxel.point_input_history_count = history.point_input_observation_count;
+    stable_voxel.temporal_stability_score = history.stability_score;
+    stable_voxel.point_support_score = 0.0;
+    stable_voxel.retained_by_node_identity = retained_by_node_identity;
+    history.last_voxel = stable_voxel;
+    stable_voxels.push_back(stable_voxel);
   }
 
   for (auto it = history_.begin(); it != history_.end();) {

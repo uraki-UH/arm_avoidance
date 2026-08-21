@@ -192,6 +192,10 @@ struct LabeledGridVoxel
   std::size_t point_input_history_count = 0;
   std::size_t edge_support_count = 0;
   std::size_t triangle_support_count = 0;
+  // Short-term confidence used by TemporalVoxelFilter.  These are kept on the
+  // voxel solely for diagnostics; the published Voxel message is unchanged.
+  double temporal_stability_score = 0.0;
+  double point_support_score = 0.0;
   std::vector<NodeObservation> node_observations;
   bool retained_by_node_identity = false;
 };
@@ -249,12 +253,15 @@ struct VoxelIsolationSplit
 
 struct TemporalVoxelFilterConfig
 {
-  std::size_t history_window_size = 100;
-  std::size_t minimum_label_history_count = 3;
-  std::size_t minimum_point_input_history_count = 3;
-  std::size_t isolated_minimum_label_history_count = 5;
-  std::size_t isolated_minimum_point_input_history_count = 5;
-  std::size_t maximum_missing_label_updates = 10;
+  // History is diagnostic only. Activation is governed by the continuous
+  // evidence score below, rather than occurrence-count thresholds.
+  std::size_t history_window_size = 32;
+  // 0 keeps the previous score; 1 follows the current observation exactly.
+  double evidence_ema_alpha = 0.35;
+  // Hysteresis prevents a one-frame appearance/disappearance from toggling a
+  // grasp-candidate voxel. retention_score must not exceed activation_score.
+  double activation_score = 0.65;
+  double retention_score = 0.35;
   bool node_identity_retention_enabled = false;
   double node_identity_max_displacement = 0.02;
   bool node_identity_history_migration_enabled = true;
@@ -289,9 +296,9 @@ private:
     std::array<std::size_t, 256> label_counts{};
     std::size_t label_observation_count = 0;
     std::size_t point_input_observation_count = 0;
-    std::size_t consecutive_missing_label_updates = 0;
     std::uint8_t active_label = 0;
     LabeledGridVoxel last_voxel;
+    double stability_score = 0.0;
     bool active = false;
   };
 

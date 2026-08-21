@@ -1,503 +1,59 @@
+"""Launch the topological voxel pre-filter with a small operational surface.
+
+The normal invocation changes only the three topic names and the output grid
+resolution. Algorithmic settings belong to the YAML profile so that a launch
+command is reproducible and does not turn into an undocumented parameter dump.
+"""
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    node_name = DeclareLaunchArgument(
-        "node_name",
-        default_value="topological_grid_node",
+    params_file = DeclareLaunchArgument(
+        "params_file",
+        default_value=PathJoinSubstitution(
+            [FindPackageShare("ais_gng"), "config", "topological_grid.yaml"]
+        ),
+        description="Advanced algorithm profile YAML.",
     )
     input_topic = DeclareLaunchArgument(
-        "input_topic",
-        default_value="/topological_map/merged",
+        "input_topic", default_value="/topological_map/merged"
     )
     pointcloud_topic = DeclareLaunchArgument(
-        "pointcloud_topic",
-        default_value="/downsampling/unknown",
-        description="Point cloud used as current occupancy support.",
-    )
-    pointcloud_timeout_sec = DeclareLaunchArgument(
-        "pointcloud_timeout_sec",
-        default_value="0.5",
-        description="Maximum wait for a point cloud with the same frame and timestamp.",
+        "pointcloud_topic", default_value="/downsampling/unknown"
     )
     output_topic = DeclareLaunchArgument(
-        "output_topic",
-        default_value="/topological_grid_voxels",
-        description=(
-            "Connected direct, edge-inferred, and triangle-inferred grasp-candidate voxels."
-        ),
-    )
-    delta_topic = DeclareLaunchArgument(
-        "delta_topic",
-        default_value="",
-        description="Changed voxel labels only; empty derives <output_topic>/delta.",
-    )
-    isolated_topic = DeclareLaunchArgument(
-        "isolated_topic",
-        default_value="",
-        description=(
-            "Visualization-only isolated voxels excluded from grasp candidates; "
-            "empty derives <output_topic>/isolated."
-        ),
-    )
-    edge_inferred_topic = DeclareLaunchArgument(
-        "edge_inferred_topic",
-        default_value="",
-        description="Edge-only output; empty derives <output_topic>/edge_inferred.",
-    )
-    edge_inference_enabled = DeclareLaunchArgument(
-        "edge_inference_enabled",
-        default_value="true",
-        description="Fill cells between stable direct voxels connected by GNG edges.",
-    )
-    edge_max_length = DeclareLaunchArgument(
-        "edge_max_length",
-        default_value="0.10",
-        description="Maximum voxel-center edge length eligible for filling, in meters.",
-    )
-    inferred_require_input_points = DeclareLaunchArgument(
-        "inferred_require_input_points",
-        default_value="true",
-        description="Emit inferred edge/triangle cells only where current points exist.",
-    )
-    triangle_inferred_topic = DeclareLaunchArgument(
-        "triangle_inferred_topic",
-        default_value="",
-        description="Triangle-only output; empty derives <output_topic>/triangle_inferred.",
-    )
-    triangle_inference_enabled = DeclareLaunchArgument(
-        "triangle_inference_enabled",
-        default_value="true",
-        description="Fill cells intersected by validated GNG three-edge triangle faces.",
-    )
-    triangle_max_edge_length = DeclareLaunchArgument(
-        "triangle_max_edge_length",
-        default_value="0.05",
-        description="Maximum length of every accepted triangle edge, in meters.",
-    )
-    triangle_min_area = DeclareLaunchArgument(
-        "triangle_min_area",
-        default_value="0.000001",
-        description="Minimum accepted triangle area, in square meters.",
-    )
-    triangle_min_aspect_ratio = DeclareLaunchArgument(
-        "triangle_min_aspect_ratio",
-        default_value="0.05",
-        description="Minimum twice-area divided by squared longest edge.",
-    )
-    triangle_max_normal_angle_deg = DeclareLaunchArgument(
-        "triangle_max_normal_angle_deg",
-        default_value="45.0",
-        description="Maximum angle between triangle and valid node normals.",
-    )
-    triangle_min_point_support_ratio = DeclareLaunchArgument(
-        "triangle_min_point_support_ratio",
-        default_value="0.0",
-        description="Minimum fraction of triangle cells containing current input points.",
-    )
-    summary_topic = DeclareLaunchArgument(
-        "summary_topic",
-        default_value="/topological_grid_voxels/summary",
+        "output_topic", default_value="/topological_grid_voxels"
     )
     grid_size = DeclareLaunchArgument(
-        "grid_size",
-        default_value="0.01",
-        description="Voxel edge length in meters.",
-    )
-    origin_x = DeclareLaunchArgument(
-        "origin_x",
-        default_value="0.0",
-    )
-    origin_y = DeclareLaunchArgument(
-        "origin_y",
-        default_value="0.0",
-    )
-    origin_z = DeclareLaunchArgument(
-        "origin_z",
-        default_value="0.0",
-    )
-    origin_shift_half = DeclareLaunchArgument(
-        "origin_shift_half",
-        default_value="false",
-    )
-    x_shift = DeclareLaunchArgument(
-        "x_shift",
-        default_value="42",
-    )
-    y_shift = DeclareLaunchArgument(
-        "y_shift",
-        default_value="21",
-    )
-    z_shift = DeclareLaunchArgument(
-        "z_shift",
-        default_value="0",
-    )
-    offset = DeclareLaunchArgument(
-        "offset",
-        default_value="1000000",
-    )
-    excluded_labels = DeclareLaunchArgument(
-        "excluded_labels",
-        default_value="SAFE_TERRAIN,HUMAN,CAR",
-        description=(
-            "Comma-separated TopologicalMap label names or numeric values excluded "
-            "from voxelization. Use an empty string to include every label."
-        ),
-    )
-    require_input_points = DeclareLaunchArgument(
-        "require_input_points",
-        default_value="true",
-        description="Require current input-point support selected by point_support_mode.",
-    )
-    point_support_mode = DeclareLaunchArgument(
-        "point_support_mode",
-        default_value="auto",
-        description=(
-            "Point support source: auto prefers GNG node inpcl_ids and falls back to "
-            "metric radius; radius, node_input_ids, and same_cell force one behavior."
-        ),
-    )
-    point_support_radius_m = DeclareLaunchArgument(
-        "point_support_radius_m",
-        default_value="0.02",
-        description="Metric point-cloud support radius used by radius and auto modes.",
-    )
-    unknown_shape_filter_enabled = DeclareLaunchArgument(
-        "unknown_shape_filter_enabled",
-        default_value="true",
-        description="Keep UNKNOWN_OBJECT nodes only near density-normalized shape deviations.",
-    )
-    shape_neighborhood_hops = DeclareLaunchArgument(
-        "shape_neighborhood_hops",
-        default_value="2",
-        description="GNG graph scales used for local shape comparison.",
-    )
-    shape_minimum_neighbors = DeclareLaunchArgument(
-        "shape_minimum_neighbors",
-        default_value="3",
-        description="Minimum graph neighbors needed for a valid local shape score.",
-    )
-    shape_residual_weight = DeclareLaunchArgument(
-        "shape_residual_weight",
-        default_value="0.7",
-        description="Weight of spacing-normalized plane residual versus normal variation.",
-    )
-    shape_mad_multiplier = DeclareLaunchArgument(
-        "shape_mad_multiplier",
-        default_value="3.0",
-        description="Dimensionless robust-deviation multiplier used to select shape seeds.",
-    )
-    shape_seed_expansion_scale = DeclareLaunchArgument(
-        "shape_seed_expansion_scale",
-        default_value="2.0",
-        description="Graph expansion budget normalized by local median GNG edge length.",
-    )
-    minimum_input_points_per_voxel = DeclareLaunchArgument(
-        "minimum_input_points_per_voxel",
-        default_value="1",
-        description="Minimum current input-point support in each voxel.",
-    )
-    neighbor_radius_cells = DeclareLaunchArgument(
-        "neighbor_radius_cells",
-        default_value="1",
-        description="Chebyshev radius used to count neighboring candidate voxels.",
-    )
-    neighbor_radius_m = DeclareLaunchArgument(
-        "neighbor_radius_m",
-        default_value="0.02",
-        description=(
-            "Physical Chebyshev neighbor radius in meters; set 0 to use "
-            "neighbor_radius_cells."
-        ),
-    )
-    history_window_size = DeclareLaunchArgument(
-        "history_window_size",
-        default_value="100",
-        description="Number of synchronized updates retained per voxel.",
-    )
-    minimum_label_history_count = DeclareLaunchArgument(
-        "minimum_label_history_count",
-        default_value="3",
-        description="Label occurrences required within the history window.",
-    )
-    minimum_point_input_history_count = DeclareLaunchArgument(
-        "minimum_point_input_history_count",
-        default_value="3",
-        description="Point-cloud input updates required within the history window.",
-    )
-    isolated_minimum_label_history_count = DeclareLaunchArgument(
-        "isolated_minimum_label_history_count",
-        default_value="5",
-        description="Label occurrences required for a voxel with no neighbors.",
-    )
-    isolated_minimum_point_input_history_count = DeclareLaunchArgument(
-        "isolated_minimum_point_input_history_count",
-        default_value="5",
-        description="Point-cloud input updates required for a voxel with no neighbors.",
-    )
-    maximum_missing_label_updates = DeclareLaunchArgument(
-        "maximum_missing_label_updates",
-        default_value="2",
-        description="Updates to retain an active voxel after its eligible label disappears.",
-    )
-    node_identity_retention_enabled = DeclareLaunchArgument(
-        "node_identity_retention_enabled",
-        default_value="false",
-        description="Retain non-isolated cells while their source node generation remains nearby.",
-    )
-    node_identity_max_displacement = DeclareLaunchArgument(
-        "node_identity_max_displacement",
-        default_value="0.02",
-        description="Maximum source-node displacement that retains its previous cell, in meters.",
-    )
-    node_identity_history_migration_enabled = DeclareLaunchArgument(
-        "node_identity_history_migration_enabled",
-        default_value="true",
-        description="Move temporal history with a uniquely identified GNG node.",
-    )
-    history_reset_on_time_regression = DeclareLaunchArgument(
-        "history_reset_on_time_regression",
-        default_value="false",
-        description="Clear temporal history when rosbag or source timestamps move backward.",
-    )
-    history_reset_node_count_ratio = DeclareLaunchArgument(
-        "history_reset_node_count_ratio",
-        default_value="0.5",
-        description="Clear history when node count falls below this fraction; 0 disables it.",
-    )
-    point_activity_update_enabled = DeclareLaunchArgument(
-        "point_activity_update_enabled",
-        default_value="true",
-        description="Adapt the expensive full-update interval from point-cloud activity.",
-    )
-    point_activity_cell_size = DeclareLaunchArgument(
-        "point_activity_cell_size",
-        default_value="0.02",
-        description="Metric cell size used only to estimate point-cloud activity.",
-    )
-    point_activity_ema_alpha = DeclareLaunchArgument(
-        "point_activity_ema_alpha",
-        default_value="0.2",
-        description="EMA response for occupancy frequency and point density.",
-    )
-    point_activity_top_fraction = DeclareLaunchArgument(
-        "point_activity_top_fraction",
-        default_value="0.1",
-        description="Most active fraction of cells used for the global activity score.",
-    )
-    point_activity_occupancy_weight = DeclareLaunchArgument(
-        "point_activity_occupancy_weight",
-        default_value="0.7",
-        description="Weight of occupancy-frequency change versus point-density change.",
-    )
-    point_activity_warmup_updates = DeclareLaunchArgument(
-        "point_activity_warmup_updates",
-        default_value="5",
-        description="Initial updates always processed to establish temporal voxel history.",
-    )
-    point_activity_minimum_update_interval = DeclareLaunchArgument(
-        "point_activity_minimum_update_interval",
-        default_value="1",
-        description="Full-update interval at maximum point-cloud activity.",
-    )
-    point_activity_maximum_update_interval = DeclareLaunchArgument(
-        "point_activity_maximum_update_interval",
-        default_value="10",
-        description="Forced full-update interval for a static point cloud.",
+        "grid_size", default_value="0.01", description="Voxel edge length in metres."
     )
 
-    return LaunchDescription([
-        node_name,
-        input_topic,
-        pointcloud_topic,
-        pointcloud_timeout_sec,
-        output_topic,
-        delta_topic,
-        isolated_topic,
-        edge_inferred_topic,
-        edge_inference_enabled,
-        edge_max_length,
-        inferred_require_input_points,
-        triangle_inferred_topic,
-        triangle_inference_enabled,
-        triangle_max_edge_length,
-        triangle_min_area,
-        triangle_min_aspect_ratio,
-        triangle_max_normal_angle_deg,
-        triangle_min_point_support_ratio,
-        summary_topic,
-        grid_size,
-        origin_x,
-        origin_y,
-        origin_z,
-        origin_shift_half,
-        x_shift,
-        y_shift,
-        z_shift,
-        offset,
-        excluded_labels,
-        require_input_points,
-        point_support_mode,
-        point_support_radius_m,
-        unknown_shape_filter_enabled,
-        shape_neighborhood_hops,
-        shape_minimum_neighbors,
-        shape_residual_weight,
-        shape_mad_multiplier,
-        shape_seed_expansion_scale,
-        minimum_input_points_per_voxel,
-        neighbor_radius_cells,
-        neighbor_radius_m,
-        history_window_size,
-        minimum_label_history_count,
-        minimum_point_input_history_count,
-        isolated_minimum_label_history_count,
-        isolated_minimum_point_input_history_count,
-        maximum_missing_label_updates,
-        node_identity_retention_enabled,
-        node_identity_max_displacement,
-        node_identity_history_migration_enabled,
-        history_reset_on_time_regression,
-        history_reset_node_count_ratio,
-        point_activity_update_enabled,
-        point_activity_cell_size,
-        point_activity_ema_alpha,
-        point_activity_top_fraction,
-        point_activity_occupancy_weight,
-        point_activity_warmup_updates,
-        point_activity_minimum_update_interval,
-        point_activity_maximum_update_interval,
-        Node(
-            package="ais_gng",
-            executable="topological_grid_node",
-            name=LaunchConfiguration("node_name"),
-            parameters=[{
-                "input_topic": LaunchConfiguration("input_topic"),
-                "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
-                "pointcloud_timeout_sec": LaunchConfiguration("pointcloud_timeout_sec"),
-                "output_topic": LaunchConfiguration("output_topic"),
-                "delta_topic": LaunchConfiguration("delta_topic"),
-                "isolated_topic": LaunchConfiguration("isolated_topic"),
-                "edge_inferred_topic": LaunchConfiguration("edge_inferred_topic"),
-                "edge_inference_enabled": LaunchConfiguration("edge_inference_enabled"),
-                "edge_max_length": LaunchConfiguration("edge_max_length"),
-                "inferred_require_input_points": LaunchConfiguration(
-                    "inferred_require_input_points"
-                ),
-                "triangle_inferred_topic": LaunchConfiguration("triangle_inferred_topic"),
-                "triangle_inference_enabled": LaunchConfiguration(
-                    "triangle_inference_enabled"
-                ),
-                "triangle_max_edge_length": LaunchConfiguration(
-                    "triangle_max_edge_length"
-                ),
-                "triangle_min_area": LaunchConfiguration("triangle_min_area"),
-                "triangle_min_aspect_ratio": LaunchConfiguration(
-                    "triangle_min_aspect_ratio"
-                ),
-                "triangle_max_normal_angle_deg": LaunchConfiguration(
-                    "triangle_max_normal_angle_deg"
-                ),
-                "triangle_min_point_support_ratio": LaunchConfiguration(
-                    "triangle_min_point_support_ratio"
-                ),
-                "summary_topic": LaunchConfiguration("summary_topic"),
-                "grid_size": LaunchConfiguration("grid_size"),
-                "origin_x": LaunchConfiguration("origin_x"),
-                "origin_y": LaunchConfiguration("origin_y"),
-                "origin_z": LaunchConfiguration("origin_z"),
-                "origin_shift_half": LaunchConfiguration("origin_shift_half"),
-                "x_shift": LaunchConfiguration("x_shift"),
-                "y_shift": LaunchConfiguration("y_shift"),
-                "z_shift": LaunchConfiguration("z_shift"),
-                "offset": LaunchConfiguration("offset"),
-                "excluded_labels": LaunchConfiguration("excluded_labels"),
-                "require_input_points": LaunchConfiguration("require_input_points"),
-                "point_support_mode": LaunchConfiguration("point_support_mode"),
-                "point_support_radius_m": LaunchConfiguration(
-                    "point_support_radius_m"
-                ),
-                "unknown_shape_filter_enabled": LaunchConfiguration(
-                    "unknown_shape_filter_enabled"
-                ),
-                "shape_neighborhood_hops": LaunchConfiguration(
-                    "shape_neighborhood_hops"
-                ),
-                "shape_minimum_neighbors": LaunchConfiguration(
-                    "shape_minimum_neighbors"
-                ),
-                "shape_residual_weight": LaunchConfiguration(
-                    "shape_residual_weight"
-                ),
-                "shape_mad_multiplier": LaunchConfiguration("shape_mad_multiplier"),
-                "shape_seed_expansion_scale": LaunchConfiguration(
-                    "shape_seed_expansion_scale"
-                ),
-                "minimum_input_points_per_voxel": LaunchConfiguration(
-                    "minimum_input_points_per_voxel"
-                ),
-                "neighbor_radius_cells": LaunchConfiguration("neighbor_radius_cells"),
-                "neighbor_radius_m": LaunchConfiguration("neighbor_radius_m"),
-                "history_window_size": LaunchConfiguration("history_window_size"),
-                "minimum_label_history_count": LaunchConfiguration(
-                    "minimum_label_history_count"
-                ),
-                "minimum_point_input_history_count": LaunchConfiguration(
-                    "minimum_point_input_history_count"
-                ),
-                "isolated_minimum_label_history_count": LaunchConfiguration(
-                    "isolated_minimum_label_history_count"
-                ),
-                "isolated_minimum_point_input_history_count": LaunchConfiguration(
-                    "isolated_minimum_point_input_history_count"
-                ),
-                "maximum_missing_label_updates": LaunchConfiguration(
-                    "maximum_missing_label_updates"
-                ),
-                "node_identity_retention_enabled": LaunchConfiguration(
-                    "node_identity_retention_enabled"
-                ),
-                "node_identity_max_displacement": LaunchConfiguration(
-                    "node_identity_max_displacement"
-                ),
-                "node_identity_history_migration_enabled": LaunchConfiguration(
-                    "node_identity_history_migration_enabled"
-                ),
-                "history_reset_on_time_regression": LaunchConfiguration(
-                    "history_reset_on_time_regression"
-                ),
-                "history_reset_node_count_ratio": LaunchConfiguration(
-                    "history_reset_node_count_ratio"
-                ),
-                "point_activity_update_enabled": LaunchConfiguration(
-                    "point_activity_update_enabled"
-                ),
-                "point_activity_cell_size": LaunchConfiguration(
-                    "point_activity_cell_size"
-                ),
-                "point_activity_ema_alpha": LaunchConfiguration(
-                    "point_activity_ema_alpha"
-                ),
-                "point_activity_top_fraction": LaunchConfiguration(
-                    "point_activity_top_fraction"
-                ),
-                "point_activity_occupancy_weight": LaunchConfiguration(
-                    "point_activity_occupancy_weight"
-                ),
-                "point_activity_warmup_updates": LaunchConfiguration(
-                    "point_activity_warmup_updates"
-                ),
-                "point_activity_minimum_update_interval": LaunchConfiguration(
-                    "point_activity_minimum_update_interval"
-                ),
-                "point_activity_maximum_update_interval": LaunchConfiguration(
-                    "point_activity_maximum_update_interval"
-                ),
-            }],
-            output="screen",
-            arguments=["--ros-args", "--log-level", "INFO"],
-        ),
-    ])
+    return LaunchDescription(
+        [
+            params_file,
+            input_topic,
+            pointcloud_topic,
+            output_topic,
+            grid_size,
+            Node(
+                package="ais_gng",
+                executable="topological_grid_node",
+                name="topological_grid_node",
+                parameters=[
+                    LaunchConfiguration("params_file"),
+                    {
+                        "input_topic": LaunchConfiguration("input_topic"),
+                        "pointcloud_topic": LaunchConfiguration("pointcloud_topic"),
+                        "output_topic": LaunchConfiguration("output_topic"),
+                        "grid_size": LaunchConfiguration("grid_size"),
+                    },
+                ],
+                output="screen",
+            ),
+        ]
+    )
