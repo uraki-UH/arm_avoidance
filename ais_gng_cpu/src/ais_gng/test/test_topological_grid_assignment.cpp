@@ -174,7 +174,8 @@ TEST(TopologicalGridAssignment, MarksOnlyFourCellUnknownGngComponentsAsObjectEve
   EXPECT_TRUE(std::all_of(
       result.label_voxels.begin(), result.label_voxels.end(),
       [](const LabeledGridVoxel &voxel) {
-        return voxel.unknown_component_evaluated && voxel.unknown_component_event;
+        return voxel.unknown_component_evaluated && voxel.unknown_component_event &&
+               voxel.unknown_component_event_id != 0U;
       }));
 
   map.nodes.pop_back();
@@ -420,18 +421,38 @@ TEST(TopologicalGridAssignment, KeepsObjectEvidenceAcrossTerrainRelabeling)
   config.retention_score = 0.30;
   TemporalVoxelFilter filter(config);
 
-  LabeledGridVoxel object_event{GridCell{1, 2, 3},
-    ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT, 1, 1, 1};
-  object_event.unknown_component_evaluated = true;
-  object_event.unknown_component_event = true;
-  auto terrain = object_event;
-  terrain.label = ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN;
-  terrain.unknown_component_event = false;
+  std::vector<LabeledGridVoxel> object_events;
+  std::vector<LabeledGridVoxel> terrain_observations;
+  for (int x = 0; x < 4; ++x) {
+    LabeledGridVoxel object_event{GridCell{x, 2, 3},
+      ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT, 1, 1, 1};
+    object_event.unknown_component_evaluated = true;
+    object_event.unknown_component_event = true;
+    object_event.unknown_component_event_id = 1U;
+    auto terrain = object_event;
+    terrain.label = ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN;
+    terrain.unknown_component_event = false;
+    terrain.unknown_component_event_id = 0U;
+    object_events.push_back(object_event);
+    terrain_observations.push_back(terrain);
+  }
 
-  EXPECT_TRUE(filter.update({object_event}, true, 1, nullptr, nullptr, 0.10).empty());
-  const auto stable = filter.update({terrain}, true, 1, nullptr, nullptr, 0.10);
-  ASSERT_EQ(stable.size(), 1U);
-  EXPECT_EQ(stable.front().label, ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT);
+  EXPECT_TRUE(filter.update(object_events, true, 1, nullptr, nullptr, 0.10).empty());
+  const auto stable = filter.update(
+    terrain_observations, true, 1, nullptr, nullptr, 0.10);
+  ASSERT_EQ(stable.size(), 4U);
+  EXPECT_TRUE(std::all_of(
+      stable.begin(), stable.end(), [](const LabeledGridVoxel &voxel) {
+        return voxel.label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
+               voxel.unknown_component_active_cell_count == 4U;
+      }));
+
+  GridVisibilityStates free_space;
+  for (std::size_t index = 1; index < terrain_observations.size(); ++index) {
+    free_space.emplace(terrain_observations[index].cell, VoxelVisibilityState::Free);
+  }
+  EXPECT_TRUE(filter.update(
+      {terrain_observations.front()}, true, 1, nullptr, nullptr, 0.20, &free_space).empty());
 
   LabeledGridVoxel isolated_unknown{GridCell{5, 2, 3},
     ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT, 1, 1, 1};

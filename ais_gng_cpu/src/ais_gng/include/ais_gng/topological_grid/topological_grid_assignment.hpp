@@ -239,6 +239,12 @@ struct LabeledGridVoxel
   // neutral rather than treating it as a point-cloud disappearance.
   bool unknown_component_evaluated = false;
   bool unknown_component_event = false;
+  // Event IDs are local to one voxelization update.  TemporalVoxelFilter
+  // translates them into a persistent component ID so a qualified UNKNOWN
+  // component cannot later survive as an unrelated one-cell remnant.
+  std::uint64_t unknown_component_event_id = 0;
+  std::uint64_t unknown_component_history_id = 0;
+  std::size_t unknown_component_active_cell_count = 0;
   // The cell was already temporally active and remains occupied by a current
   // GNG node, but its raw point support is absent.  This is a hold, not fresh
   // positive evidence: it prevents an edge-supported surface from being
@@ -367,6 +373,7 @@ private:
     bool has_previous_observation = false;
     double stability_score = 0.0;
     bool active = false;
+    std::uint64_t unknown_component_history_id = 0;
   };
 
   void appendSample(History &history, const HistorySample &sample);
@@ -375,6 +382,7 @@ private:
 
   TemporalVoxelFilterConfig config_;
   std::unordered_map<GridCell, History, GridCellHash> history_;
+  std::uint64_t next_unknown_component_history_id_ = 1;
 };
 
 std::string gridCellToString(const GridCell &cell);

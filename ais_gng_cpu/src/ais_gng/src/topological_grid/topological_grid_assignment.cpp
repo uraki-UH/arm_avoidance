@@ -748,6 +748,33 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     local_density_reference.emplace(voxel.cell, median);
   }
 
+  // A current component event gets one persistent identity across all of its
+  // cells.  Later terrain relabeling may keep that component alive, but a
+  // surviving cell may not detach and become a new one-cell object.
+  std::unordered_map<std::uint64_t, std::uint64_t> history_id_by_event_id;
+  history_id_by_event_id.reserve(label_voxels.size());
+  for (const auto &voxel : label_voxels) {
+    if (!voxel.unknown_component_event || voxel.unknown_component_event_id == 0U) {
+      continue;
+    }
+    const auto history_it = history_.find(voxel.cell);
+    if (history_it == history_.end() ||
+      history_it->second.unknown_component_history_id == 0U)
+    {
+      continue;
+    }
+    history_id_by_event_id.try_emplace(
+      voxel.unknown_component_event_id,
+      history_it->second.unknown_component_history_id);
+  }
+  for (const auto &voxel : label_voxels) {
+    if (!voxel.unknown_component_event || voxel.unknown_component_event_id == 0U) {
+      continue;
+    }
+    history_id_by_event_id.try_emplace(
+      voxel.unknown_component_event_id, next_unknown_component_history_id_++);
+  }
+
   for (const auto &voxel : label_voxels) {
     const bool unknown_requires_component_event =
       voxel.label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
@@ -773,6 +800,10 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       history_it = history_.emplace(voxel.cell, History{}).first;
     }
     auto &history = history_it->second;
+    if (voxel.unknown_component_event && voxel.unknown_component_event_id != 0U) {
+      history.unknown_component_history_id =
+        history_id_by_event_id.at(voxel.unknown_component_event_id);
+    }
     const bool has_input_points = !require_input_points ||
       voxel.input_point_count >= minimum_input_points_per_voxel;
     updated_cells.insert(voxel.cell);
@@ -828,6 +859,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
 
     auto stable_voxel = voxel;
     stable_voxel.label = history.active_label;
+    stable_voxel.unknown_component_history_id = history.unknown_component_history_id;
     stable_voxel.history_sample_count = history.samples.size();
     stable_voxel.label_history_count = history.label_observation_count;
     stable_voxel.point_input_history_count = history.point_input_observation_count;
@@ -870,6 +902,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       stable_voxel.point_input_history_count = history.point_input_observation_count;
       stable_voxel.temporal_stability_score = history.stability_score;
       stable_voxel.point_support_score = 0.0;
+      stable_voxel.unknown_component_history_id = history.unknown_component_history_id;
       stable_voxel.retained_by_gng_structure = false;
       stable_voxel.retained_by_local_structure = retained_by_local_structure;
       stable_voxel.retained_by_node_identity = false;
@@ -901,12 +934,58 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.point_input_history_count = history.point_input_observation_count;
     stable_voxel.temporal_stability_score = history.stability_score;
     stable_voxel.point_support_score = 0.0;
+    stable_voxel.unknown_component_history_id = history.unknown_component_history_id;
     stable_voxel.retained_by_gng_structure = false;
     stable_voxel.retained_by_local_structure = false;
     stable_voxel.retained_by_node_identity = retained_by_node_identity;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
   }
+
+  // The birth condition is a four-cell UNKNOWN component.  Enforce the same
+  // condition while retaining it: each component may be occluded or relabeled
+  // as terrain, but a fragment of fewer than four active cells is discarded.
+  constexpr std::size_t kMinimumUnknownComponentCells = 4U;
+  std::unordered_map<std::uint64_t, std::size_t> active_cells_by_history_id;
+  active_cells_by_history_id.reserve(history_.size());
+  for (const auto &[cell, history] : history_) {
+    static_cast<void>(cell);
+    if (history.active &&
+      history.active_label == ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT &&
+      history.unknown_component_history_id != 0U)
+    {
+      ++active_cells_by_history_id[history.unknown_component_history_id];
+    }
+  }
+  for (auto &[cell, history] : history_) {
+    static_cast<void>(cell);
+    if (!history.active ||
+      history.active_label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT ||
+      history.unknown_component_history_id == 0U)
+    {
+      continue;
+    }
+    if (active_cells_by_history_id[history.unknown_component_history_id] <
+      kMinimumUnknownComponentCells)
+    {
+      history.active = false;
+    }
+  }
+  stable_voxels.erase(
+    std::remove_if(
+      stable_voxels.begin(), stable_voxels.end(),
+      [&active_cells_by_history_id](LabeledGridVoxel &voxel) {
+        if (voxel.label != ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT ||
+          voxel.unknown_component_history_id == 0U)
+        {
+          return false;
+        }
+        const auto found = active_cells_by_history_id.find(voxel.unknown_component_history_id);
+        voxel.unknown_component_active_cell_count = found == active_cells_by_history_id.end()
+          ? 0U : found->second;
+        return voxel.unknown_component_active_cell_count < kMinimumUnknownComponentCells;
+      }),
+    stable_voxels.end());
 
   for (auto it = history_.begin(); it != history_.end();) {
     if (it->second.label_observation_count == 0) {
@@ -923,6 +1002,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
 void TemporalVoxelFilter::clear()
 {
   history_.clear();
+  next_unknown_component_history_id_ = 1;
 }
 
 std::size_t TemporalVoxelFilter::trackedVoxelCount() const noexcept
@@ -1617,6 +1697,7 @@ GridVoxelizationResult voxelizeNodes(
     label_by_cell.emplace(voxel.cell, &voxel);
   }
   std::unordered_set<GridCell, GridCellHash> event_cells;
+  std::uint64_t next_unknown_component_event_id = 1U;
   for (const auto &component : unknown_components) {
     const bool every_cell_supported = std::all_of(
       component.cells.begin(), component.cells.end(),
@@ -1631,8 +1712,11 @@ GridVoxelizationResult voxelizeNodes(
     }
     ++result.unknown_component_event_count;
     result.unknown_component_event_node_count += component.node_indices.size();
+    const std::uint64_t event_id = next_unknown_component_event_id++;
     for (const auto &cell : component.cells) {
-      label_by_cell.at(cell)->unknown_component_event = true;
+      auto &voxel = *label_by_cell.at(cell);
+      voxel.unknown_component_event = true;
+      voxel.unknown_component_event_id = event_id;
       event_cells.insert(cell);
     }
   }

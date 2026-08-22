@@ -238,7 +238,7 @@ public:
     ViewerWsGatewayNode() : Node("viewer_ws_gateway_node") {
         const int port = declare_parameter<int>("port", 9001);
         pointCloudMaxPoints_ = static_cast<size_t>(std::max<int64_t>(
-            0, declare_parameter<int64_t>("pointcloud_max_points", 30000)));
+            0, declare_parameter<int64_t>("pointcloud_max_points", 100000)));
         pointCloudMaxHz_ = std::max(
             0.0, declare_parameter<double>("pointcloud_max_hz", 10.0));
         websocketMaxBackpressureBytes_ = static_cast<unsigned int>(std::max<int64_t>(
@@ -405,7 +405,7 @@ private:
 
     void forwardRpcRequest(WebSocket* ws, const std::string& id, const std::string& method, const std::string& raw) {
         std::thread([this, ws, id, raw]() {
-            std::string resp = rpc_.call(id, raw, rpcRequestPub_, 30000);
+            std::string resp = rpc_.call(id, raw, rpcRequestPub_, 100000);
             loop_->defer([this, ws, resp]() { std::lock_guard<std::mutex> lock(connectionMutex_); if (std::find(connections_.begin(), connections_.end(), ws) != connections_.end()) ws->send(resp, uWS::OpCode::TEXT); });
         }).detach();
     }

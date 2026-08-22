@@ -1499,6 +1499,8 @@ void TopologicalGridNode::publishResult(
              << ",\"triangle_support_count\":" << voxel.triangle_support_count
              << ",\"unknown_component_event\":"
              << (voxel.unknown_component_event ? "true" : "false")
+             << ",\"unknown_component_active_cell_count\":"
+             << voxel.unknown_component_active_cell_count
              << ",\"retained_by_gng_structure\":"
              << (voxel.retained_by_gng_structure ? "true" : "false")
              << ",\"retained_by_local_structure\":"
