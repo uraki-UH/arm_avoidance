@@ -4,6 +4,7 @@
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/event.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
@@ -26,6 +27,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <filesystem>
@@ -262,12 +264,31 @@ public:
             });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
+        graphWatchThread_ = std::thread([this]() { watchGraphChanges(); });
         RCLCPP_INFO(
             get_logger(),
             "Gateway initialized on port %d (point cloud: max %zu points, %.1f Hz)",
             port, pointCloudMaxPoints_, pointCloudMaxHz_);
     }
-    ~ViewerWsGatewayNode() override { serverRunning_ = false; if (loop_) loop_->defer([this]() { if (listenSocket_) { us_listen_socket_close(0, listenSocket_); listenSocket_ = nullptr; } std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->close(); connections_.clear(); }); if (serverThread_.joinable()) serverThread_.join(); }
+    ~ViewerWsGatewayNode() override {
+        graphWatchRunning_ = false;
+        try {
+            get_node_graph_interface()->notify_graph_change();
+        } catch (...) {}
+        if (graphWatchThread_.joinable()) graphWatchThread_.join();
+
+        serverRunning_ = false;
+        if (loop_) loop_->defer([this]() {
+            if (listenSocket_) {
+                us_listen_socket_close(0, listenSocket_);
+                listenSocket_ = nullptr;
+            }
+            std::lock_guard<std::mutex> lock(connectionMutex_);
+            for (auto* ws : connections_) ws->close();
+            connections_.clear();
+        });
+        if (serverThread_.joinable()) serverThread_.join();
+    }
 
 private:
     void onWsMessage(WebSocket* ws, std::string_view msg) {
@@ -283,27 +304,86 @@ private:
         else { forwardRpcRequest(ws, id, method, std::string(msg)); }
     }
 
-    void handleSourcesList(WebSocket* ws, const std::string& id) {
-        auto topics = get_topic_names_and_types(); json sources = json::array();
+    json collectSources() {
+        std::unordered_set<std::string> active_sources;
+        {
+            std::lock_guard<std::mutex> lock(sourceMutex_);
+            active_sources.reserve(activeDynamicSubs_.size());
+            for (const auto& [topic, _] : activeDynamicSubs_) {
+                active_sources.insert(topic);
+            }
+        }
+
+        auto topics = get_topic_names_and_types();
+        json sources = json::array();
         for (auto const& [topic, types] : topics) {
             if (topic_utils::isInternal(topic)) continue;
             std::string st = topic_utils::detectType(types); if (st.empty()) continue;
             if (!topic_utils::isBrowsableSourceType(st)) continue;
             if (count_publishers(topic) == 0) continue;
-            sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
+            sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",active_sources.count(topic)>0}});
         }
+        return sources;
+    }
+
+    void handleSourcesList(WebSocket* ws, const std::string& id) {
+        const json sources = collectSources();
+        cacheSourcesSnapshot(sources);
         ws->send(viewer_internal::makeOkResponse(id, {{"sources", sources}}), uWS::OpCode::TEXT);
     }
 
-    void broadcastSourcesList() {
-        auto topics = get_topic_names_and_types(); json sources = json::array();
-        for (auto const& [topic, types] : topics) {
-            if (topic_utils::isInternal(topic)) continue;
-            std::string st = topic_utils::detectType(types); if (st.empty()) continue;
-            if (!topic_utils::isBrowsableSourceType(st)) continue;
-            if (count_publishers(topic) == 0) continue;
-            sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",activeDynamicSubs_.count(topic)>0}});
+    void sendSourcesSnapshot(WebSocket* ws) {
+        const json sources = collectSources();
+        cacheSourcesSnapshot(sources);
+        ws->send(
+            viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}),
+            uWS::OpCode::TEXT);
+    }
+
+    void cacheSourcesSnapshot(const json& sources) {
+        std::lock_guard<std::mutex> lock(sourceSnapshotMutex_);
+        lastSourcesSnapshot_ = sources.dump();
+    }
+
+    bool hasSourceSnapshotChanged(const json& sources) {
+        const std::string snapshot = sources.dump();
+        std::lock_guard<std::mutex> lock(sourceSnapshotMutex_);
+        if (snapshot == lastSourcesSnapshot_) {
+            return false;
         }
+        lastSourcesSnapshot_ = snapshot;
+        return true;
+    }
+
+    bool hasWebSocketClients() {
+        std::lock_guard<std::mutex> lock(connectionMutex_);
+        return !connections_.empty();
+    }
+
+    void watchGraphChanges() {
+        const auto graph_event = get_graph_event();
+        while (graphWatchRunning_) {
+            // A bounded event wait is the ROS 2 graph-listener pattern.  It does not
+            // enumerate topics on timeout; collectSources() is called only when the
+            // event is actually set.
+            wait_for_graph_change(graph_event, std::chrono::milliseconds(200));
+            if (!graphWatchRunning_) break;
+            if (graph_event->check_and_clear()) {
+                broadcastSourcesIfChanged();
+            }
+        }
+    }
+
+    void broadcastSourcesIfChanged() {
+        if (!hasWebSocketClients()) return;
+        const json sources = collectSources();
+        if (!hasSourceSnapshotChanged(sources)) return;
+        broadcastText(viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}));
+    }
+
+    void broadcastSourcesList() {
+        const json sources = collectSources();
+        cacheSourcesSnapshot(sources);
         broadcastText(viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}));
     }
 
@@ -313,11 +393,12 @@ private:
         bool remove_layer = params.value("removeLayer", false);
         if (sid.empty()) return;
         if (sid.front() != '/') sid = "/" + sid;
-        std::lock_guard<std::mutex> lock(connectionMutex_);
-        if (active) {
-            if (activeDynamicSubs_.count(sid)) return;
-            auto topics = get_topic_names_and_types();
-            if (topics.count(sid)) {
+        {
+            std::lock_guard<std::mutex> lock(sourceMutex_);
+            if (active) {
+                if (activeDynamicSubs_.count(sid)) return;
+                auto topics = get_topic_names_and_types();
+                if (topics.count(sid)) {
                 std::string st = topic_utils::detectType(topics[sid]);
                 if (!topic_utils::isBrowsableSourceType(st)) {
                     broadcastText(viewer_internal::makeErrorResponse(
@@ -389,14 +470,15 @@ private:
                     activeSubTypes_[sid] = "voxel";
                     activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
                 }
-            }
-        } else {
-            if (activeDynamicSubs_.count(sid)) {
-                if (remove_layer) sendStreamDelete(sid);
-                activeDynamicSubs_.erase(sid);
-                activeSubTypes_.erase(sid);
-                std::lock_guard<std::mutex> point_cloud_lock(pointCloudRateMutex_);
-                lastPointCloudForwardTime_.erase(sid);
+                }
+            } else {
+                if (activeDynamicSubs_.count(sid)) {
+                    if (remove_layer) sendStreamDelete(sid);
+                    activeDynamicSubs_.erase(sid);
+                    activeSubTypes_.erase(sid);
+                    std::lock_guard<std::mutex> point_cloud_lock(pointCloudRateMutex_);
+                    lastPointCloudForwardTime_.erase(sid);
+                }
             }
         }
         broadcastText(viewer_internal::makeOkResponse(id, {{"success",true},{"sourceId",sid},{"active",active},{"remove",remove_layer}}));
@@ -555,7 +637,19 @@ private:
         behavior.maxPayloadLength = 64 * 1024 * 1024;
         behavior.maxBackpressure = websocketMaxBackpressureBytes_;
         behavior.closeOnBackpressureLimit = false;
-        behavior.open = [this](auto* ws) { std::lock_guard<std::mutex> l(connectionMutex_); if (connections_.empty()) subscribeStreamingTopics(); connections_.push_back(ws); sendCurrentState(ws); };
+        behavior.open = [this](auto* ws) {
+            bool start_streaming = false;
+            {
+                std::lock_guard<std::mutex> lock(connectionMutex_);
+                start_streaming = connections_.empty();
+                connections_.push_back(ws);
+            }
+            if (start_streaming) subscribeStreamingTopics();
+            sendCurrentState(ws);
+            // The first source list is pushed rather than relying on the UI to
+            // issue sources.list.  Later changes are delivered by graph events.
+            sendSourcesSnapshot(ws);
+        };
         behavior.message = [this](auto* ws, std::string_view msg, uWS::OpCode op) { if (op == uWS::OpCode::TEXT) onWsMessage(ws, msg); };
         behavior.close = [this](auto* ws, int, std::string_view) { std::lock_guard<std::mutex> lock(connectionMutex_); connections_.erase(std::remove(connections_.begin(), connections_.end(), ws), connections_.end()); if (connections_.empty()) unsubscribeStreamingTopics(); };
         uWS::App().get("/*", [this](auto* res, auto* req) { meshServer_.handle(res, req); }).ws<PerSocketData>("/*", std::move(behavior)).listen(port, [this, port](auto* s) { if (s) { listenSocket_ = s; RCLCPP_INFO(get_logger(), "WS Server on %d", port); } }).run();
@@ -571,8 +665,11 @@ private:
         robotDescSub_.reset();
         robotPoseSub_.reset();
         jobEventSub_.reset();
-        activeDynamicSubs_.clear();
-        activeSubTypes_.clear();
+        {
+            std::lock_guard<std::mutex> lock(sourceMutex_);
+            activeDynamicSubs_.clear();
+            activeSubTypes_.clear();
+        }
         lastGraphPayloads_.clear();
         lastNodeFeaturePayloads_.clear();
         lastClusterFeaturePayloads_.clear();
@@ -719,12 +816,13 @@ private:
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
     std::string lastStaticTfPayload_;
     std::chrono::steady_clock::time_point lastTfTime_;
-    std::mutex connectionMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
+    std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
     std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_;
+    std::string lastSourcesSnapshot_;
     std::shared_ptr<const std::string> pendingRobotPosePayload_;
     std::vector<WebSocket*> connections_;
-    std::thread serverThread_; us_listen_socket_t* listenSocket_ = nullptr;
-    std::atomic<bool> serverRunning_{false}; uWS::Loop* loop_ = nullptr;
+    std::thread serverThread_, graphWatchThread_; us_listen_socket_t* listenSocket_ = nullptr;
+    std::atomic<bool> serverRunning_{false}, graphWatchRunning_{true}; uWS::Loop* loop_ = nullptr;
     rclcpp::TimerBase::SharedPtr livenessTimer_;
     size_t pointCloudMaxPoints_ = 100000;
     double pointCloudMaxHz_ = 10.0;

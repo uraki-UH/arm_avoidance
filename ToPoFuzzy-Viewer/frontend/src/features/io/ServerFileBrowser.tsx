@@ -130,7 +130,7 @@ export function ServerFileBrowser({
     }
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
                 <span className="panel-title">Server Files</span>
                 <button onClick={refreshFiles} className="btn-secondary px-2.5 py-1 text-[11px] font-semibold">
