@@ -716,27 +716,32 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
   std::unordered_map<GridCell, double, GridCellHash> local_density_reference;
   local_density_reference.reserve(label_voxels.size());
   for (const auto &voxel : label_voxels) {
-    std::vector<std::size_t> neighborhood_counts;
-    neighborhood_counts.reserve(27);
+    // A 3x3x3 neighborhood has a fixed upper bound.  Keeping its values on
+    // the stack avoids one heap allocation for every labeled voxel while
+    // retaining the exact median-based density normalization.
+    std::array<std::size_t, 27> neighborhood_counts{};
+    std::size_t neighborhood_count = 0;
     for (int dx = -1; dx <= 1; ++dx) {
       for (int dy = -1; dy <= 1; ++dy) {
         for (int dz = -1; dz <= 1; ++dz) {
           const GridCell neighbor{voxel.cell.x + dx, voxel.cell.y + dy, voxel.cell.z + dz};
           const auto count_it = current_input_counts.find(neighbor);
           if (count_it != current_input_counts.end() && count_it->second > 0) {
-            neighborhood_counts.push_back(count_it->second);
+            neighborhood_counts[neighborhood_count++] = count_it->second;
           }
         }
       }
     }
-    if (neighborhood_counts.empty()) {
+    if (neighborhood_count == 0) {
       local_density_reference.emplace(
         voxel.cell, static_cast<double>(std::max<std::size_t>(1, voxel.input_point_count)));
       continue;
     }
-    std::sort(neighborhood_counts.begin(), neighborhood_counts.end());
-    const std::size_t middle = neighborhood_counts.size() / 2;
-    const double median = neighborhood_counts.size() % 2 == 0
+    std::sort(
+      neighborhood_counts.begin(),
+      neighborhood_counts.begin() + static_cast<std::ptrdiff_t>(neighborhood_count));
+    const std::size_t middle = neighborhood_count / 2;
+    const double median = neighborhood_count % 2 == 0
       ? 0.5 * static_cast<double>(
       neighborhood_counts[middle - 1] + neighborhood_counts[middle])
       : static_cast<double>(neighborhood_counts[middle]);

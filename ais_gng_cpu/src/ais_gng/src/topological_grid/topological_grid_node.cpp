@@ -886,6 +886,11 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
 
   if (!previous_node_observations_.empty()) {
     states.reserve(previous_node_neighbors_.size());
+    // Reuse this scratch buffer for every center node.  The prior version
+    // allocated one displacement vector per node even though only one center
+    // is evaluated at a time.  Keeping its capacity preserves the calculation
+    // and neighbour order while avoiding thousands of short-lived allocations.
+    std::vector<std::array<double, 3>> displacements;
     for (const auto &[identity, neighbors] : previous_node_neighbors_) {
       const auto previous_center = previous_node_observations_.find(identity);
       if (previous_center == previous_node_observations_.end()) {
@@ -895,8 +900,10 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
       double mean_dy = 0.0;
       double mean_dz = 0.0;
       double spacing_sum = 0.0;
-      std::vector<std::array<double, 3>> displacements;
-      displacements.reserve(neighbors.size());
+      displacements.clear();
+      if (displacements.capacity() < neighbors.size()) {
+        displacements.reserve(neighbors.size());
+      }
       for (const auto &neighbor_identity : neighbors) {
         const auto previous_neighbor = previous_node_observations_.find(neighbor_identity);
         const auto current_neighbor = result.eligible_nodes.find(neighbor_identity);

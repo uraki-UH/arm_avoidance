@@ -13,7 +13,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'pointcloud_max_points',
-            default_value='100000',
+            default_value='30000',
             description='Maximum number of uniformly sampled points sent per viewer frame'
         ),
         DeclareLaunchArgument(
