@@ -27,10 +27,9 @@ plane_cluster_incremental_node:
     # 確定時のしきい値(min_cluster_planarity)以下である必要がある。
     min_growth_planarity: 0.25
 
-    # 所属を動かすために要求する「移動先クラスタにすでに所属している隣接ノード」の数。
-    # 1本のエッジだけで所属が漏れ出すのを防ぐ。
-    absorb_neighbor_requirement: 2
-    migration_neighbor_requirement: 2
+    # 取り込み・移動・併合に共通して要求するGNG接続証拠の本数。
+    # 1本だけの偶然の接続による所属の漏れ出しや面の橋渡しを防ぐ。
+    connection_requirement: 2
     # 生成直後は競合相手がいないため、育てる途中だけ緩める。
     birth_neighbor_requirement: 1
 
@@ -51,26 +50,18 @@ plane_cluster_incremental_node:
     # 小さいクラスタが境界から吸われて消えるのを防ぐ。
     donor_protection_buffer: 3
 
-    # 同一クラスタのノードから複数のエッジが伸びているノードは、平面までの距離を
+    # 同一クラスタのノードから2つ以上エッジが伸びているノードは、平面までの距離を
     # 問わずそのクラスタの所属とする。所属の根拠を距離ではなく接続と法線一致に置く。
     # false にすると距離だけで判定し、うねった面が途中で分断される。
-    coplanar_multi_edge_overrides_distance: true
+    coplanar_multi_edge_overrides_distance: false
 
     # 保守点検の上限回数。変化が止まれば途中で抜ける。
     maintenance_iterations: 2
 
-    # クラスタ併合の判定にかけるために必要な、両者を直接つなぐGNGエッジ本数。
-    merge_edge_requirement: 2
-
-    # 併合の候補にするための法線一致の下限。可否は結合後の平面あてはめで決めるので、
-    # ここは高い判定を回す前のふるい。0.95 では真に合体すべき対の 7% しか到達できず、
-    # 同じ壁が割れたまま残った。
-    merge_normal_alignment_cos: 0.80
-
     # 併合を認めるために、結合後の残差が元から悪化してよい倍率とその下限。
     # 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
     merge_residual_growth_ratio: 1.3
-    merge_residual_growth_floor: 0.15
+    merge_residual_growth_min_th: 0.15
 
     # 新しいクラスタを出力に載せるまでに、生き残る必要があるフレーム数。
     # 生まれてすぐ消えるクラスタを表示しないための条件。0 なら即座に出す。

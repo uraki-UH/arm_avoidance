@@ -278,10 +278,8 @@ private:
       declare_parameter<double>("max_normalized_cluster_residual", 0.35);
     options.min_growth_planarity =
       declare_parameter<double>("min_growth_planarity", 0.25);
-    options.absorb_neighbor_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("absorb_neighbor_requirement", 2)));
-    options.migration_neighbor_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("migration_neighbor_requirement", 2)));
+    options.connection_requirement = static_cast<std::size_t>(
+      std::max<std::int64_t>(1, declare_parameter<int>("connection_requirement", 2)));
     options.birth_neighbor_requirement = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("birth_neighbor_requirement", 1)));
     options.migration_improvement_margin =
@@ -290,8 +288,6 @@ private:
       declare_parameter<bool>("coplanar_multi_edge_overrides_distance", true);
     options.maintenance_iterations = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iterations", 2)));
-    options.merge_edge_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("merge_edge_requirement", 2)));
     options.prefer_larger_cluster_on_migration =
       declare_parameter<bool>("prefer_larger_cluster_on_migration", false);
     options.migration_size_bias_tolerance =
@@ -300,12 +296,10 @@ private:
       declare_parameter<double>("migration_size_bias_ratio", 2.0);
     options.donor_protection_buffer = static_cast<std::size_t>(
       std::max<std::int64_t>(0, declare_parameter<int>("donor_protection_buffer", 3)));
-    options.merge_normal_alignment_cos =
-      declare_parameter<double>("merge_normal_alignment_cos", 0.80);
     options.merge_residual_growth_ratio =
       declare_parameter<double>("merge_residual_growth_ratio", 1.3);
-    options.merge_residual_growth_floor =
-      declare_parameter<double>("merge_residual_growth_floor", 0.15);
+    options.merge_residual_growth_min_th =
+      declare_parameter<double>("merge_residual_growth_min_th", 0.15);
     options.birth_confirm_frames = static_cast<std::size_t>(
       std::max<std::int64_t>(0, declare_parameter<int>("birth_confirm_frames", 3)));
     options.split_confirm_frames = static_cast<std::size_t>(
@@ -409,7 +403,8 @@ private:
       get_logger(), *get_clock(), 2000,
       "clusters=%zu nodes=%zu/%zu clustered=%zu | changes=%zu "
       "(release=%zu migrate=%zu absorb=%zu) born=%zu chain=%zu split=%zu merged=%zu removed=%zu "
-      "passes=%zu | members(default=%zu terrain=%zu wall=%zu unknown=%zu human=%zu car=%zu "
+      "passes=%zu merge(pairs=%zu edge=%zu invalid=%zu planarity=%zu absolute=%zu growth=%zu) "
+      "| members(default=%zu terrain=%zu wall=%zu unknown=%zu human=%zu car=%zu "
       "other=%zu) | update=%.2f publish=%.2f ms",
       result.statistics.cluster_count,
       result.statistics.usable_node_count,
@@ -425,6 +420,12 @@ private:
       result.statistics.merged_cluster_count,
       result.statistics.removed_cluster_count,
       result.statistics.maintenance_iterations_used,
+      result.statistics.merge_adjacent_pair_count,
+      result.statistics.merge_insufficient_edge_pair_count,
+      result.statistics.merge_invalid_fit_pair_count,
+      result.statistics.merge_planarity_rejected_pair_count,
+      result.statistics.merge_absolute_residual_rejected_pair_count,
+      result.statistics.merge_residual_growth_rejected_pair_count,
       result.statistics.clustered_default_node_count,
       result.statistics.clustered_terrain_node_count,
       result.statistics.clustered_wall_node_count,

@@ -42,14 +42,9 @@ struct ClusterOptions
   // 棄却され、同じノードを毎フレーム試し直すことになる。
   double min_growth_planarity = 0.25;
 
-  // 未所属ノードを既存クラスタへ取り込むために要求する、
-  // 「そのクラスタにすでに所属している隣接ノード」の数。
-  std::size_t absorb_neighbor_requirement = 2;
-
-  // 所属済みノードを別クラスタへ移すために要求する、
-  // 「移動先クラスタにすでに所属している隣接ノード」の数。
-  // 1本のエッジだけで所属が漏れ出すのを防ぐ条件。
-  std::size_t migration_neighbor_requirement = 2;
+  // 取り込み・移動・併合に共通して要求するGNG接続証拠の本数。
+  // 1本だけの偶然の接続による所属の漏れ出しや面の橋渡しを防ぐ。
+  std::size_t connection_requirement = 2;
 
   // 新しいクラスタを育てる途中で要求する、生成中クラスタ内の隣接ノード数。
   // 生成直後は競合相手がいないため小さくてよい。
@@ -99,17 +94,6 @@ struct ClusterOptions
   // 保守点検(移動・取り込み)を1フレームで回す上限回数。
   std::size_t maintenance_iterations = 2;
 
-  // 2つのクラスタを併合判定にかけるために必要な、両者を直接つなぐGNGエッジ本数。
-  std::size_t merge_edge_requirement = 2;
-
-  // 併合の候補にするための法線一致の下限。
-  //
-  // 併合の可否は「結合したら1枚の平面として成立するか」で決めるので、ここは
-  // 高い判定を回す前のふるいにすぎない。厳しくしすぎると、実際には同じ面である
-  // 対まで判定に到達しなくなる。実測では 0.95 だと真に合体すべき対の 7% しか
-  // 到達できなかった。
-  double merge_normal_alignment_cos = 0.80;
-
   // 併合を認めるために、結合後の残差が元のクラスタから悪化してよい倍率。
   //
   // 残差の絶対値だけで見ると、小さなクラスタ同士は何をつないでも通ってしまう。
@@ -118,7 +102,7 @@ struct ClusterOptions
 
   // 上の倍率を適用する下限。元の当てはめが十分よい場合に、僅かな悪化まで
   // 拒否しないための余裕。
-  double merge_residual_growth_floor = 0.15;
+  double merge_residual_growth_min_th = 0.15;
 
   // 新しいクラスタを出力に載せるまでに、生き残る必要があるフレーム数。
   //
@@ -157,6 +141,14 @@ struct ClusterStatistics
   std::size_t split_cluster_count = 0;
   std::size_t removed_cluster_count = 0;
   std::size_t maintenance_iterations_used = 0;
+
+  // 隣接クラスタ対が併合判定のどこで止まったかを示す診断値。
+  std::size_t merge_adjacent_pair_count = 0;
+  std::size_t merge_insufficient_edge_pair_count = 0;
+  std::size_t merge_invalid_fit_pair_count = 0;
+  std::size_t merge_planarity_rejected_pair_count = 0;
+  std::size_t merge_absolute_residual_rejected_pair_count = 0;
+  std::size_t merge_residual_growth_rejected_pair_count = 0;
 
   // 鎖状(第2固有値が第1固有値に対して小さすぎる)として捨てた領域の数。
   std::size_t chain_rejected_count = 0;

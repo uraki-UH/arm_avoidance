@@ -114,6 +114,37 @@ struct PlaneAccumulator
     ++count;
   }
 
+  // 別の累積量をこの累積量へ合成する。両者の原点が異なっても、二次モーメントを
+  // 現在の原点へ座標変換することで、全ノードを再走査せずに結合平面を求められる。
+  void mergeFrom(const PlaneAccumulator &other)
+  {
+    if (!other.has_anchor || other.count == 0U) {
+      return;
+    }
+    if (!has_anchor || count == 0U) {
+      *this = other;
+      return;
+    }
+
+    const Eigen::Vector3d anchor_delta = other.anchor - anchor;
+    const double other_count = static_cast<double>(other.count);
+    sum += other.sum + other_count * anchor_delta;
+    moment += other.moment;
+    moment.noalias() += anchor_delta * other.sum.transpose();
+    moment.noalias() += other.sum * anchor_delta.transpose();
+    moment.noalias() += other_count * anchor_delta * anchor_delta.transpose();
+
+    Eigen::Vector3d other_normal_sum = other.normal_sum;
+    if (normal_sum.squaredNorm() > kEpsilon &&
+      other_normal_sum.dot(normal_sum) < 0.0)
+    {
+      other_normal_sum = -other_normal_sum;
+    }
+    normal_sum += other_normal_sum;
+    spacing_sum += other.spacing_sum;
+    count += other.count;
+  }
+
   double meanSpacing() const
   {
     return count > 0U ? spacing_sum / static_cast<double>(count) : 0.0;
@@ -226,13 +257,10 @@ struct Clusterizer::Impl
     options.min_growth_planarity = std::clamp(
       options.min_growth_planarity, 0.0, options.min_cluster_planarity);
     options.maintenance_iterations = std::max<std::size_t>(1U, options.maintenance_iterations);
-    options.absorb_neighbor_requirement =
-      std::max<std::size_t>(1U, options.absorb_neighbor_requirement);
-    options.migration_neighbor_requirement =
-      std::max<std::size_t>(1U, options.migration_neighbor_requirement);
+    options.connection_requirement =
+      std::max<std::size_t>(1U, options.connection_requirement);
     options.birth_neighbor_requirement =
       std::max<std::size_t>(1U, options.birth_neighbor_requirement);
-    options.merge_edge_requirement = std::max<std::size_t>(1U, options.merge_edge_requirement);
   }
 
   // クラスタの永続状態。添字は1フレーム内でのみ有効で、同一性は id が担う。
@@ -292,7 +320,7 @@ struct Clusterizer::Impl
   std::vector<int> remap;
   std::vector<ClusterState> kept_clusters;
   std::vector<std::vector<std::uint32_t>> member_lists;
-  std::vector<std::vector<std::size_t>> members_by_cluster;
+  std::vector<PlaneAccumulator> merge_accumulators;
 
   // 隣接リスト(CSR)と局所量を作る。ここが唯一の O(N + E) 主走査になる。
   void prepareFrame(const ais_gng_msgs::msg::TopologicalMap &map, ClusterStatistics &statistics)
@@ -567,8 +595,6 @@ struct Clusterizer::Impl
       }
 
       const int current_label = label[index];
-      const std::size_t required = current_label == kUnassigned ?
-        options.absorb_neighbor_requirement : options.migration_neighbor_requirement;
 
       int best_label = kUnassigned;
       double best_score = std::numeric_limits<double>::infinity();
@@ -578,7 +604,7 @@ struct Clusterizer::Impl
         }
         const std::size_t cluster = static_cast<std::size_t>(candidate_label);
         if (clusters[cluster].member_count < 3U ||
-          neighbour_counts[cluster] < required ||
+          neighbour_counts[cluster] < options.connection_requirement ||
           !normalAligned(cluster, index))
         {
           continue;
@@ -984,17 +1010,21 @@ struct Clusterizer::Impl
       return;
     }
 
-    // 対ごとにノード全走査するのを避けるため、所属一覧を1回だけ作る。
-    members_by_cluster.assign(clusters.size(), std::vector<std::size_t>{});
+    // 各クラスタの累積共分散を1回だけ作る。候補対ごとのノード走査を避け、
+    // 結合平面を一定量の累積値合成と3x3固有値分解で判定する。
+    merge_accumulators.assign(clusters.size(), PlaneAccumulator{});
     for (std::size_t index = 0U; index < label.size(); ++index) {
       if (label[index] != kUnassigned) {
-        members_by_cluster[static_cast<std::size_t>(label[index])].push_back(index);
+        merge_accumulators[static_cast<std::size_t>(label[index])].add(
+          positions[index], normals[index], spacings[index]);
       }
     }
 
     merge_sets.reset(clusters.size());
     for (const auto &[key, pair] : adjacent_pair_counts) {
-      if (pair.edges < options.merge_edge_requirement) {
+      ++statistics.merge_adjacent_pair_count;
+      if (pair.edges < options.connection_requirement) {
+        ++statistics.merge_insufficient_edge_pair_count;
         continue;
       }
       const std::size_t first = static_cast<std::size_t>(key & 0xFFFFFFFFULL);
@@ -1004,28 +1034,24 @@ struct Clusterizer::Impl
       if (first_cluster.member_count < 3U || second_cluster.member_count < 3U) {
         continue;
       }
-      if (std::abs(first_cluster.normal.dot(second_cluster.normal)) <
-        options.merge_normal_alignment_cos)
-      {
-        continue;
-      }
       // 結合したら1枚の平面として成立するかを、そのまま確かめる。
       //
-      // 境界ノードのずれで代用すると、つなぐエッジが数本しかない対で平均が暴れて
-      // 誤って却下する。法線ゲートを通る対は毎フレーム数件しかないので、両クラスタの
-      // メンバーを合わせて解き直す方が安く、判定も確定条件とそろう。
-      PlaneAccumulator merged_fit;
-      for (const std::size_t member : members_by_cluster[first]) {
-        merged_fit.add(positions[member], normals[member], spacings[member]);
-      }
-      for (const std::size_t member : members_by_cluster[second]) {
-        merged_fit.add(positions[member], normals[member], spacings[member]);
-      }
+      // 局所クラスタ法線は小さいパッチでは揺れるため、事前の法線一致では棄却しない。
+      // GNG edgeで接続された対を、結合後の共分散平面そのもので判定する。
+      PlaneAccumulator merged_fit = merge_accumulators[first];
+      merged_fit.mergeFrom(merge_accumulators[second]);
       const PlaneFit union_fit = merged_fit.solve();
       const double union_spacing = std::max(merged_fit.meanSpacing(), kEpsilon);
-      if (!union_fit.valid || union_fit.planarity < options.min_cluster_planarity ||
-        union_fit.residual / union_spacing > options.max_normalized_cluster_residual)
-      {
+      if (!union_fit.valid) {
+        ++statistics.merge_invalid_fit_pair_count;
+        continue;
+      }
+      if (union_fit.planarity < options.min_cluster_planarity) {
+        ++statistics.merge_planarity_rejected_pair_count;
+        continue;
+      }
+      if (union_fit.residual / union_spacing > options.max_normalized_cluster_residual) {
+        ++statistics.merge_absolute_residual_rejected_pair_count;
         continue;
       }
       // つないだ結果、元より当てはめが悪くなっていないことも確かめる。
@@ -1037,8 +1063,9 @@ struct Clusterizer::Impl
       const double allowed_residual = std::max(
         options.merge_residual_growth_ratio *
         std::max(first_residual_ratio, second_residual_ratio),
-        options.merge_residual_growth_floor);
+        options.merge_residual_growth_min_th);
       if (union_fit.residual / union_spacing > allowed_residual) {
+        ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
       }
       // ノード数の多い側のIDを残す。少数側へ吸収されると、画面上は大きなクラスタが
