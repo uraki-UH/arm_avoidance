@@ -508,13 +508,11 @@ struct Clusterizer::Impl
         ++statistics.released_node_count;
         continue;
       }
-      if (fitScore(cluster, index) <= options.retention_residual_ratio) {
-        continue;
-      }
-      // 取り込みを接続本数で許すなら、保持も同じ根拠で判断する。基準が食い違うと
-      // 同じノードが毎フレーム取り込みと解放を往復して定常状態にならない。
+      // 逸脱判定は常に効かせる。接続本数はしきい値を緩めるだけで、判定そのものを
+      // 無効にはしない。無効にすると平面から離れても誰も外れず、集約値だけが
+      // 悪化していく。
+      std::size_t same_cluster_neighbours = 0U;
       if (options.coplanar_multi_edge_overrides_distance) {
-        std::size_t same_cluster_neighbours = 0U;
         for (std::size_t cursor = adjacency_offsets[index];
           cursor < adjacency_offsets[index + 1U]; ++cursor)
         {
@@ -522,9 +520,11 @@ struct Clusterizer::Impl
             ++same_cluster_neighbours;
           }
         }
-        if (same_cluster_neighbours >= 2U) {
-          continue;
-        }
+      }
+      const double retention_limit = same_cluster_neighbours >= 2U ?
+        options.retention_residual_ratio : options.growth_residual_ratio;
+      if (fitScore(cluster, index) <= retention_limit) {
+        continue;
       }
       label[index] = kUnassigned;
       ++statistics.released_node_count;
@@ -586,8 +586,12 @@ struct Clusterizer::Impl
         const double score = fitScore(cluster, index);
         // 同一クラスタのノードから複数のエッジが伸びているなら、平面までの距離は
         // 問わない。距離は候補が複数あるときの優先順位にだけ使う。
+        //
+        // 接続本数が足りていれば、しきい値を保持と同じ上限まで緩める。
+        // 逸脱ノードまで取り込まないよう、上限そのものは残す。
         const bool multi_edge_override = options.coplanar_multi_edge_overrides_distance &&
-          neighbour_counts[cluster] >= 2U;
+          neighbour_counts[cluster] >= 2U &&
+          score <= options.retention_residual_ratio;
         if (!multi_edge_override && score > options.growth_residual_ratio) {
           continue;
         }
@@ -1048,12 +1052,14 @@ struct Clusterizer::Impl
   // 条件を満たさない状態が続いたクラスタを捨て、添字を詰める。
   void cullClusters(ClusterStatistics &statistics)
   {
+    // 存続の可否はメンバー数だけで決める。
+    //
+    // クラスタ全体の平面性や残差を削除条件に使ってはならない。面を平面に保つのは
+    // ノード単位の逸脱判定の仕事であり、逸脱ノードを外せば集約値は自然に収まる。
+    // 集約値で切ると、実在する面が集約残差の一時的な悪化だけで丸ごと消える。
+    // 平面性と残差は、生成時と併合時の条件としてのみ使う。
     for (ClusterState &cluster : clusters) {
-      const bool fit_ok = cluster.member_count >= 3U &&
-        cluster.planarity >= options.min_cluster_planarity &&
-        cluster.residual / std::max(cluster.spacing, kEpsilon) <=
-        options.max_normalized_cluster_residual;
-      cluster.healthy = cluster.member_count >= options.min_cluster_nodes && fit_ok;
+      cluster.healthy = cluster.member_count >= options.min_cluster_nodes;
       if (cluster.healthy) {
         cluster.weak_frames = 0U;
         ++cluster.confirmed_frames;

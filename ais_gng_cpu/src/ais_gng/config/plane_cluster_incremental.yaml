@@ -67,6 +67,8 @@ plane_cluster_incremental_node:
     split_confirm_frames: 3
 
     # 条件を満たさないまま許容するフレーム数。
-    weak_frame_allowance: 2
+    # 不健全なクラスタは縮んで持ち直すが、収束に数フレーム掛かる。2 では間に合わず
+    # 満サイズのまま淘汰されていた。
+    weak_frame_allowance: 5
 
     publish_text: false

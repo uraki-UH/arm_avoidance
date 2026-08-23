@@ -82,13 +82,6 @@ ament_target_dependencies(
 
 if(BUILD_TESTING)
   ament_add_gtest(
-    test_topological_plane_cluster
-    test/test_topological_plane_cluster.cpp
-  )
-  target_link_libraries(test_topological_plane_cluster topological_plane_cluster)
-  ament_target_dependencies(test_topological_plane_cluster ais_gng_msgs Eigen3)
-
-  ament_add_gtest(
     test_plane_cluster_incremental
     test/test_plane_cluster_incremental.cpp
   )

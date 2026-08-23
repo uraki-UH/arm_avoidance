@@ -105,7 +105,10 @@ struct ClusterOptions
   std::size_t split_confirm_frames = 3;
 
   // 条件を満たさないまま許容するフレーム数。超えるとクラスタを破棄する。
-  std::size_t weak_frame_allowance = 2;
+  // 条件を満たさないまま許容するフレーム数。
+  // 不健全なクラスタは縮んで持ち直そうとするが、実測ではその収束に数フレーム掛かる。
+  // 2 では間に合わず満サイズのまま淘汰されていた(消滅238件 -> 5 で182件)。
+  std::size_t weak_frame_allowance = 5;
 };
 
 // 1フレーム分の処理内訳。定常状態に入れば変化量はすべて0に落ち着く。

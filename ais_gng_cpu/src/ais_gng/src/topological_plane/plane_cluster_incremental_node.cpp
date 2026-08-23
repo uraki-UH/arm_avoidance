@@ -7,9 +7,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include <utility>
 
 namespace
@@ -35,11 +39,11 @@ geometry_msgs::msg::Point planarCorner(
   return result;
 }
 
-// クラスタIDから決定的に色を作る。IDが持続するので、色もフレーム間で変わらない。
-std_msgs::msg::ColorRGBA clusterColor(const std::uint32_t id)
+// 色番号から決定的に色を作る。番号が変わらない限り、色もフレーム間で変わらない。
+std_msgs::msg::ColorRGBA clusterColor(const std::uint32_t color_index)
 {
-  // 黄金比で色相を回すと、隣り合うIDでも色が離れる。
-  const double hue = std::fmod(static_cast<double>(id) * 0.618033988749895, 1.0) * 6.0;
+  // 黄金比で色相を回すと、連続した番号でも色が離れる。
+  const double hue = std::fmod(static_cast<double>(color_index) * 0.618033988749895, 1.0) * 6.0;
   const int sector = static_cast<int>(hue);
   const double fraction = hue - static_cast<double>(sector);
   const double high = 0.95;
@@ -78,7 +82,8 @@ visualization_msgs::msg::Marker baseMarker(
 // 生き残っているクラスタのマーカーは上書き更新に任せる。
 visualization_msgs::msg::MarkerArray makeMarkers(
   const ais_gng_msgs::msg::PlanarClusterArray &clusters, const bool publish_text,
-  std::set<std::uint32_t> &published_ids)
+  std::set<std::uint32_t> &published_ids,
+  const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
 {
   visualization_msgs::msg::MarkerArray markers;
   std::set<std::uint32_t> current_ids;
@@ -103,7 +108,9 @@ visualization_msgs::msg::MarkerArray makeMarkers(
 
   for (const auto &cluster : clusters.clusters) {
     const auto marker_id = static_cast<std::int32_t>(cluster.id);
-    const auto color = clusterColor(cluster.id);
+    const auto color_it = color_of.find(cluster.id);
+    const auto color = clusterColor(
+      color_it != color_of.end() ? color_it->second : cluster.id);
 
     if (!cluster.support_edges.empty()) {
       auto edges = baseMarker(clusters.header, "incremental_plane_edges", marker_id);
@@ -243,8 +250,77 @@ private:
     options.split_confirm_frames = static_cast<std::size_t>(
       std::max<std::int64_t>(0, declare_parameter<int>("split_confirm_frames", 3)));
     options.weak_frame_allowance = static_cast<std::size_t>(
-      std::max<std::int64_t>(0, declare_parameter<int>("weak_frame_allowance", 2)));
+      std::max<std::int64_t>(0, declare_parameter<int>("weak_frame_allowance", 5)));
     return options;
+  }
+
+  // 隣り合うクラスタに同じ色を割り当てないようにする。
+  //
+  // 毎フレーム貪欲彩色をやり直すと色が飛び回るので、前フレームの色を優先して保ち、
+  // 隣接と衝突したときだけ空いている番号へ移す。処理量はノード数とエッジ数に比例する。
+  void assignColors(
+    const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+    const ais_gng_msgs::msg::TopologicalMap &map)
+  {
+    const std::size_t node_count = map.nodes.size();
+    std::vector<int> owner(node_count, -1);
+    std::vector<std::uint32_t> ids;
+    ids.reserve(clusters.clusters.size());
+    for (std::size_t index = 0U; index < clusters.clusters.size(); ++index) {
+      ids.push_back(clusters.clusters[index].id);
+      for (const std::uint32_t member : clusters.clusters[index].node_indices) {
+        if (member < node_count) {
+          owner[member] = static_cast<int>(index);
+        }
+      }
+    }
+
+    std::vector<std::unordered_set<std::size_t>> adjacency(clusters.clusters.size());
+    for (std::size_t edge = 0U; edge + 1U < map.edges.size(); edge += 2U) {
+      const std::size_t first = map.edges[edge];
+      const std::size_t second = map.edges[edge + 1U];
+      if (first >= node_count || second >= node_count) {
+        continue;
+      }
+      const int first_owner = owner[first];
+      const int second_owner = owner[second];
+      if (first_owner < 0 || second_owner < 0 || first_owner == second_owner) {
+        continue;
+      }
+      adjacency[static_cast<std::size_t>(first_owner)].insert(
+        static_cast<std::size_t>(second_owner));
+      adjacency[static_cast<std::size_t>(second_owner)].insert(
+        static_cast<std::size_t>(first_owner));
+    }
+
+    // 古いクラスタから決めることで、既存の色がなるべく動かないようにする。
+    std::vector<std::size_t> order(clusters.clusters.size());
+    for (std::size_t index = 0U; index < order.size(); ++index) { order[index] = index; }
+    std::sort(order.begin(), order.end(), [&ids](std::size_t a, std::size_t b) {
+        return ids[a] < ids[b];
+      });
+
+    std::unordered_map<std::uint32_t, std::uint32_t> next_color;
+    next_color.reserve(clusters.clusters.size() * 2U + 1U);
+    std::vector<int> assigned(clusters.clusters.size(), -1);
+    for (const std::size_t index : order) {
+      std::unordered_set<std::uint32_t> taken;
+      for (const std::size_t neighbour : adjacency[index]) {
+        if (assigned[neighbour] >= 0) {
+          taken.insert(static_cast<std::uint32_t>(assigned[neighbour]));
+        }
+      }
+      std::uint32_t chosen = 0U;
+      const auto previous = cluster_color_.find(ids[index]);
+      if (previous != cluster_color_.end() && taken.count(previous->second) == 0U) {
+        chosen = previous->second;
+      } else {
+        while (taken.count(chosen) != 0U) { ++chosen; }
+      }
+      assigned[index] = static_cast<int>(chosen);
+      next_color[ids[index]] = chosen;
+    }
+    cluster_color_.swap(next_color);
   }
 
   void onMap(const ais_gng_msgs::msg::TopologicalMap &map)
@@ -253,9 +329,10 @@ private:
     ClusterResult result = clusterizer_.update(map);
     const auto updated = std::chrono::steady_clock::now();
 
+    assignColors(result.clusters, map);
     cluster_publisher_->publish(result.clusters);
     marker_publisher_->publish(
-      makeMarkers(result.clusters, publish_text_, published_marker_ids_));
+      makeMarkers(result.clusters, publish_text_, published_marker_ids_, cluster_color_));
     const auto completed = std::chrono::steady_clock::now();
 
     const double update_ms =
@@ -296,6 +373,7 @@ private:
   }
 
   std::set<std::uint32_t> published_marker_ids_;
+  std::unordered_map<std::uint32_t, std::uint32_t> cluster_color_;
   std::string input_topic_;
   std::string output_topic_;
   std::string marker_topic_;
