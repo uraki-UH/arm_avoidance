@@ -23,17 +23,11 @@ def generate_launch_description():
     output_topic = DeclareLaunchArgument(
         "output_topic", default_value="/topological_planar_clusters_incremental"
     )
-    marker_topic = DeclareLaunchArgument(
-        "marker_topic",
-        default_value="/topological_planar_clusters_incremental/markers",
-    )
-
     return LaunchDescription(
         [
             params_file,
             input_topic,
             output_topic,
-            marker_topic,
             Node(
                 package="ais_gng",
                 executable="plane_cluster_incremental_node",
@@ -43,7 +37,6 @@ def generate_launch_description():
                     {
                         "input_topic": LaunchConfiguration("input_topic"),
                         "output_topic": LaunchConfiguration("output_topic"),
-                        "marker_topic": LaunchConfiguration("marker_topic"),
                     },
                 ],
                 output="screen",

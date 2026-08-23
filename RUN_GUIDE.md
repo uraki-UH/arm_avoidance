@@ -320,8 +320,10 @@ ros2 topic echo /topological_planar_clusters_incremental --once
 ```
 
 可視化はToPoFuzzy Viewerの`Connection & Streams`から
-`/topological_planar_clusters_incremental/markers`を有効化する。クラスタIDから決まる色なので、
-IDが持続する限り色も変わらない。
+`/topological_planar_clusters_incremental/markers/obb` と
+`/topological_planar_clusters_incremental/markers/nodes` を個別に有効化する。前者はOBB境界・
+法線矢印・任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。クラスタIDから
+決まる色なので、IDが持続する限り色も変わらない。
 
 既存ノードと同時に起動して同じ入力で比較できる。ログの`changes=`が0に張り付けば定常状態、
 `chain=`は鎖状（共分散の第2固有値が第1固有値に対して小さすぎる形）として棄却した領域数、
