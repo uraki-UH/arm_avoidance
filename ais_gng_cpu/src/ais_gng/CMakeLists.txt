@@ -11,6 +11,7 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(voxel_msgs REQUIRED)
+find_package(Eigen3 REQUIRED)
 ament_auto_find_build_dependencies()
 
 if(BUILD_TESTING)
@@ -27,6 +28,7 @@ if(BUILD_TESTING)
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
   ament_target_dependencies(test_topological_grid_assignment ais_gng_msgs)
+
 endif()
 
 # visualizar
@@ -34,6 +36,36 @@ ament_auto_add_executable(visualizar src/visualizar.cpp)
 ament_auto_add_executable(topological_query_node src/topological_query/topological_query_node.cpp src/topological_query/topological_reachability.cpp)
 ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
 ament_target_dependencies(topological_grid_node voxel_msgs)
+
+ament_auto_add_library(
+  topological_plane_cluster
+  SHARED
+  src/topological_plane/topological_plane_cluster.cpp
+)
+target_include_directories(topological_plane_cluster PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(topological_plane_cluster ais_gng_msgs Eigen3)
+
+ament_auto_add_executable(
+  topological_plane_cluster_node
+  src/topological_plane/topological_plane_cluster_node.cpp
+)
+target_link_libraries(topological_plane_cluster_node topological_plane_cluster)
+ament_target_dependencies(
+  topological_plane_cluster_node
+  ais_gng_msgs rclcpp visualization_msgs Eigen3
+)
+
+if(BUILD_TESTING)
+  ament_add_gtest(
+    test_topological_plane_cluster
+    test/test_topological_plane_cluster.cpp
+  )
+  target_link_libraries(test_topological_plane_cluster topological_plane_cluster)
+  ament_target_dependencies(test_topological_plane_cluster ais_gng_msgs Eigen3)
+endif()
 
 set(_gng_component_sources
   src/ais_gng_component.cpp

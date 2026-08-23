@@ -254,6 +254,30 @@ ros2 launch ais_gng topological_grid.launch.py \
   output_topic:=/topo_voxel_ids \
   grid_size:=0.02
 
+## GNGエッジから平面クラスタを作る
+
+点群全体にRANSACを掛けず、`TopologicalMap`の既存GNG edgeだけで平面らしいノードを連結する。
+各ノードの局所PCAと隣接edgeの法線方向ずれを**局所edge間隔で正規化**するので、ここでは
+`grid_size`や固定mm閾値を使わない。出力の`node_indices`は入力`TopologicalMap.nodes`への対応である。
+
+```bash
+ros2 launch ais_gng topological_plane_cluster.launch.py \
+  input_topic:=/topological_map
+```
+
+```bash
+# 数値確認: id、所属GNGノード、法線、輪郭、概算面積、局所間隔
+ros2 topic echo /topological_planar_clusters --once
+```
+
+可視化は追加のViewer実装なしで、ToPoFuzzy Viewerの`Connection & Streams`から
+`/topological_planar_clusters/markers`を有効化する。半透明シアンが局所凸包の概算面積、
+水色線が輪郭、黄矢印が平面法線である。凸包は「面の全域が観測済み」という意味ではなく、
+この段階では抽出結果を確認するための表示だけに使う。
+
+把持候補の衝突除外へは次段で、各環境ボクセルに近傍平面クラスタIDを関連付け、`sweptV`の
+各セルだけを符号付き平面距離で照会する。現段階では平面そのものを候補から消さない。
+
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
 上の`/topo_voxel_ids`を、最大把持体積・最小把持体積・グリッパ開閉の掃引禁止体積へ照合して

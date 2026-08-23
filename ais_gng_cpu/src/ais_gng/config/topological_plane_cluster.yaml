@@ -1,0 +1,12 @@
+topological_plane_cluster_node:
+  ros__parameters:
+    # All geometric thresholds are dimensionless ratios of local GNG edge
+    # spacing.  Keep this profile here rather than exposing every knob on the
+    # launch command.
+    minimum_node_planarity: 0.25
+    minimum_cluster_planarity: 0.45
+    normal_alignment_cosine: 0.90
+    maximum_normalized_edge_residual: 0.35
+    maximum_normalized_cluster_residual: 0.35
+    minimum_cluster_nodes: 4
+    publish_text: false
