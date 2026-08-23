@@ -17,7 +17,7 @@ plane_cluster_incremental_node:
     retention_residual_ratio: 1.40
 
     # ノード法線とクラスタ平面法線の許容角度[deg]。内積比較cos値へ内部で変換。
-    normal_alignment_deg: 60.0
+    normal_alignment_deg: 70.0
 
     # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
     min_cluster_planarity: 0.45
