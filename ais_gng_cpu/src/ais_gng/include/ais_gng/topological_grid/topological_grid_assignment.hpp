@@ -225,6 +225,10 @@ struct LabeledGridVoxel
   std::size_t point_input_history_count = 0;
   std::size_t edge_support_count = 0;
   std::size_t triangle_support_count = 0;
+  // True when at least one original GNG edge reaches a different grid cell.
+  // This is deliberately separate from grid-cell adjacency: fine grids can
+  // quantize the endpoints of a valid surface edge into non-adjacent cells.
+  bool has_cross_cell_gng_edge = false;
   // Short-term confidence used by TemporalVoxelFilter.  These are kept on the
   // voxel solely for diagnostics; the published Voxel message is unchanged.
   double temporal_stability_score = 0.0;
@@ -232,6 +236,10 @@ struct LabeledGridVoxel
   // Normal-direction displacement of its GNG nodes, normalized by local
   // incident-edge spacing.  Zero means no usable motion evidence.
   double normal_drift_score = 0.0;
+  // Fraction of this cell's persistent GNG nodes whose local neighbourhoods
+  // translate coherently.  Unlike normal drift, this detects tangential body
+  // motion as well as motion along the estimated surface normal.
+  double local_motion_score = 0.0;
   std::vector<NodeObservation> node_observations;
   // `UNKNOWN_OBJECT` is allowed to create new grasp-candidate evidence only
   // when it was part of a simultaneous, spatially extended GNG component.
@@ -254,6 +262,10 @@ struct LabeledGridVoxel
   // still locally static or inconclusive. This does not create new cells.
   bool retained_by_local_structure = false;
   bool retained_by_node_identity = false;
+  // A currently observed cell has neither a neighbouring label cell nor a
+  // cross-cell GNG connection.  It receives negative temporal evidence, but
+  // remains visible in the assignment diagnostics until it decays out.
+  bool isolated_temporal_decay_applied = false;
 };
 
 struct GridVoxelizationResult

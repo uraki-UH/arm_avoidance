@@ -178,7 +178,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
 {
   input_topic_ = this->declare_parameter<std::string>("input_topic", "/topological_map/merged");
   pointcloud_topic_ = this->declare_parameter<std::string>(
-    "pointcloud_topic", "/downsampling/unknown");
+    "pointcloud_topic", "/downsampling/grasp_support");
   output_topic_ = this->declare_parameter<std::string>(
     "output_topic", "/topological_grid_assignments");
   delta_topic_ = this->declare_parameter<std::string>("delta_topic", "");
@@ -854,9 +854,10 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
   // Both thresholds are normalized by the former GNG neighbour spacing, not
   // by grid_size or a metric distance.  A cluster must have moved by at least
   // half its local spacing, with much smaller disagreement between neighbours,
-  // before its former cells are treated as a moving-object trail.
+  // before its former cells and current cells are treated as a moving-object
+  // trail.  Coherent translation is used as current-cell negative evidence.
   constexpr std::size_t kMinimumSharedNeighbors = 2U;
-  constexpr double kStaticShiftRatio = 0.5;
+  constexpr double kStaticShiftRatio = 0.25;
   constexpr double kCoherentDisagreementRatio = 0.25;
 
   last_local_structure_stats_ = LocalStructureStats{};
@@ -1206,6 +1207,12 @@ void TopologicalGridNode::publishResult(
   const auto retained_by_local_structure = static_cast<std::size_t>(std::count_if(
     stable_voxels.begin(), stable_voxels.end(),
     [](const LabeledGridVoxel &voxel) {return voxel.retained_by_local_structure;}));
+  const auto local_motion_suppressed_voxel_count = static_cast<std::size_t>(std::count_if(
+    stable_voxels.begin(), stable_voxels.end(),
+    [](const LabeledGridVoxel &voxel) {return voxel.local_motion_score > 0.0;}));
+  const auto isolated_temporal_decay_count = static_cast<std::size_t>(std::count_if(
+    stable_voxels.begin(), stable_voxels.end(),
+    [](const LabeledGridVoxel &voxel) {return voxel.isolated_temporal_decay_applied;}));
   const auto edge_result = inferVoxelsFromStableVoxelEdges(
     map, grid_spec_, stable_voxels,
     structural_voxelization_options.excluded_labels,
@@ -1297,7 +1304,10 @@ void TopologicalGridNode::publishResult(
   oss << "\"retained_without_current_labels\":"
       << retained_without_current_labels << ",";
   oss << "\"retained_by_gng_structure\":" << retained_by_gng_structure << ",";
+  oss << "\"isolated_temporal_decay_count\":" << isolated_temporal_decay_count << ",";
   oss << "\"retained_by_local_structure\":" << retained_by_local_structure << ",";
+  oss << "\"local_motion_suppressed_voxel_count\":"
+      << local_motion_suppressed_voxel_count << ",";
   oss << "\"retained_by_node_identity\":" << retained_by_node_identity << ",";
   oss << "\"label_voxel_count\":" << result.label_voxels.size() << ",";
   oss << "\"observed_voxel_count\":" << result.voxels.size() << ",";
@@ -1495,6 +1505,9 @@ void TopologicalGridNode::publishResult(
              << ",\"node_count\":" << voxel.node_count
              << ",\"input_point_count\":" << voxel.input_point_count
              << ",\"neighbor_count\":" << voxel.neighbor_count
+             << ",\"local_motion_score\":" << voxel.local_motion_score
+             << ",\"has_cross_cell_gng_edge\":"
+             << (voxel.has_cross_cell_gng_edge ? "true" : "false")
              << ",\"edge_support_count\":" << voxel.edge_support_count
              << ",\"triangle_support_count\":" << voxel.triangle_support_count
              << ",\"unknown_component_event\":"
@@ -1507,6 +1520,8 @@ void TopologicalGridNode::publishResult(
              << (voxel.retained_by_local_structure ? "true" : "false")
              << ",\"retained_by_node_identity\":"
              << (voxel.retained_by_node_identity ? "true" : "false")
+             << ",\"isolated_temporal_decay_applied\":"
+             << (voxel.isolated_temporal_decay_applied ? "true" : "false")
              << ",\"source\":\"";
       const bool direct = voxel.history_sample_count > 0 || !voxel.node_observations.empty();
       if (direct) {

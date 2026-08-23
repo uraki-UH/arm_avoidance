@@ -393,6 +393,29 @@ TEST(TopologicalGridAssignment, CountsGngNeighborsWithoutPointSupport)
   EXPECT_EQ(result.isolated_voxel_count, 0U);
 }
 
+TEST(TopologicalGridAssignment, MarksCrossCellGngEdgesEvenAcrossAGridGap)
+{
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.031F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  map.edges = {0, 1};
+  fuzzrobo::topological_grid::GridPointCounts point_counts;
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{0, 0, 0}, 1U);
+  point_counts.emplace(fuzzrobo::topological_grid::GridCell{3, 0, 0}, 1U);
+
+  const auto result = fuzzrobo::topological_grid::voxelizeNodes(
+    map, fuzzrobo::topological_grid::GridSpec{},
+    fuzzrobo::topological_grid::VoxelizationOptions{}, &point_counts);
+
+  ASSERT_EQ(result.label_voxels.size(), 2U);
+  EXPECT_EQ(result.label_voxels[0].neighbor_count, 0U);
+  EXPECT_EQ(result.label_voxels[1].neighbor_count, 0U);
+  EXPECT_TRUE(result.label_voxels[0].has_cross_cell_gng_edge);
+  EXPECT_TRUE(result.label_voxels[1].has_cross_cell_gng_edge);
+}
+
 TEST(TopologicalGridAssignment, ActivatesFromContinuousTemporalEvidence)
 {
   using namespace fuzzrobo::topological_grid;
@@ -463,7 +486,7 @@ TEST(TopologicalGridAssignment, KeepsObjectEvidenceAcrossTerrainRelabeling)
   EXPECT_EQ(noise_filter.trackedVoxelCount(), 0U);
 }
 
-TEST(TopologicalGridAssignment, DoesNotUseConnectivityForTemporalActivation)
+TEST(TopologicalGridAssignment, DecaysAnUnanchoredIsolatedVoxel)
 {
   using namespace fuzzrobo::topological_grid;
   TemporalVoxelFilterConfig config;
@@ -471,10 +494,32 @@ TEST(TopologicalGridAssignment, DoesNotUseConnectivityForTemporalActivation)
   config.activation_score = 0.65;
   config.retention_score = 0.30;
   TemporalVoxelFilter filter(config);
-  const LabeledGridVoxel isolated{GridCell{1, 2, 3}, 3, 1, 1, 0};
+  const LabeledGridVoxel connected{GridCell{1, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::WALL, 1, 1, 1};
+  const LabeledGridVoxel isolated{GridCell{1, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::WALL, 1, 1, 0};
 
-  EXPECT_TRUE(filter.update({isolated}).empty());
-  ASSERT_EQ(filter.update({isolated}).size(), 1U);
+  ASSERT_EQ(filter.update({connected}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  // The still-observed cell has no adjacent label cell and no cross-cell GNG
+  // edge, so it receives zero temporal evidence and is removed by hysteresis.
+  EXPECT_TRUE(filter.update({isolated}, true, 1, nullptr, nullptr, 0.20).empty());
+}
+
+TEST(TopologicalGridAssignment, KeepsAnIsolatedGridCellWhenGngConnectsAcrossIt)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.65;
+  config.retention_score = 0.30;
+  TemporalVoxelFilter filter(config);
+  LabeledGridVoxel bridged{GridCell{1, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::WALL, 1, 1, 0};
+  bridged.has_cross_cell_gng_edge = true;
+
+  const auto stable = filter.update({bridged}, true, 1, nullptr, nullptr, 0.20);
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_FALSE(stable.front().isolated_temporal_decay_applied);
 }
 
 TEST(TopologicalGridAssignment, RejectsSparseCellRelativeToLocalPointDensity)
@@ -629,6 +674,39 @@ TEST(TopologicalGridAssignment, NormalDriftSuppressesOtherwisePointSupportedVoxe
   ASSERT_EQ(moving_filter.update({stationary}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
   EXPECT_TRUE(moving_filter.update(
       {normal_motion}, true, 1, nullptr, nullptr, 0.50).empty());
+}
+
+TEST(TopologicalGridAssignment, LocalCoherentMotionSuppressesCurrentVoxel)
+{
+  using namespace fuzzrobo::topological_grid;
+  TemporalVoxelFilterConfig config;
+  config.time_constant_sec = 0.10;
+  config.activation_score = 0.60;
+  config.retention_score = 0.30;
+  LabeledGridVoxel supported{GridCell{1, 2, 3},
+    ais_gng_msgs::msg::TopologicalMap::WALL, 1, 1, 1};
+  const NodeIdentity identity{7, 10};
+  supported.node_observations.push_back(
+    NodeObservation{identity, 0.0, 0.0, 0.0,
+      ais_gng_msgs::msg::TopologicalMap::WALL});
+
+  NodeLocalStructureStates moving;
+  moving.emplace(identity, NodeLocalStructureState::Moving);
+  TemporalVoxelFilter moving_filter(config);
+  ASSERT_EQ(moving_filter.update(
+      {supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  EXPECT_TRUE(moving_filter.update(
+      {supported}, true, 1, nullptr, nullptr, 0.20, nullptr, &moving).empty());
+
+  NodeLocalStructureStates stationary;
+  stationary.emplace(identity, NodeLocalStructureState::Static);
+  TemporalVoxelFilter stationary_filter(config);
+  ASSERT_EQ(stationary_filter.update(
+      {supported}, true, 1, nullptr, nullptr, 0.20).size(), 1U);
+  const auto stable = stationary_filter.update(
+    {supported}, true, 1, nullptr, nullptr, 0.20, nullptr, &stationary);
+  ASSERT_EQ(stable.size(), 1U);
+  EXPECT_DOUBLE_EQ(stable.front().local_motion_score, 0.0);
 }
 
 TEST(TopologicalGridAssignment, IgnoresSubthresholdNormalDrift)

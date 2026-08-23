@@ -1,12 +1,14 @@
 topological_plane_cluster_node:
   ros__parameters:
-    # All geometric thresholds are dimensionless ratios of local GNG edge
-    # spacing.  Keep this profile here rather than exposing every knob on the
-    # launch command.
-    minimum_node_planarity: 0.25
-    minimum_cluster_planarity: 0.45
-    normal_alignment_cosine: 0.90
-    maximum_normalized_edge_residual: 0.35
-    maximum_normalized_cluster_residual: 0.35
-    minimum_cluster_nodes: 4
+    # 平面クラスタの品質条件
+    min_cluster_planarity: 0.45
+    max_normalized_cluster_residual: 0.35
+    min_cluster_nodes: 7
+
+    # GNGエッジに基づく同一平面の連結・成長条件
+    min_normal_alignment_cos: 0.5
+    max_growth_dist_ratio: 0.7
+    max_seed_plane_dist_ratio: 2.8
+    min_cluster_edge_per_node: 1.3
+
     publish_text: false

@@ -6,7 +6,8 @@ ais_gng_node:
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.covariance_enabled: false
-    node.edge_age_max: 100
+    # This is the age of a stale connection, not a cap on total edge count.
+    edge.age_max: 100
     node.s1_reset_range: 0.1
     node.s1_age: [6, 6, 12, 12] #[default, safe, wall, unknown]
     node.clusted_s1_age: [20, 20, 24, 24] #[default, safe, wall, unknown]
@@ -15,8 +16,12 @@ ais_gng_node:
 
     ds.transformed: true
     ds.range_max: 0.2
-    ds.all.num_max: 4000
-    ds.unknown.num_max: 2000
+    # Grasp candidate support retains substantially more object evidence than
+    # the historical visualization-oriented 4k cloud.
+    # These established parameter names now configure the explicit
+    # /downsampling/grasp_support output as well as the legacy alias.
+    ds.all.num_max: 10000
+    ds.unknown.num_max: 6000
     ds.human.num_max: 3000
 
     label.fuzzy.unknown: 0.9

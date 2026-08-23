@@ -58,6 +58,28 @@ ament_target_dependencies(
   ais_gng_msgs rclcpp visualization_msgs Eigen3
 )
 
+# 増分方式の平面クラスタ生成。既存の topological_plane_cluster とは独立に動く。
+ament_auto_add_library(
+  plane_cluster_incremental
+  SHARED
+  src/topological_plane/plane_cluster_incremental.cpp
+)
+target_include_directories(plane_cluster_incremental PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(plane_cluster_incremental ais_gng_msgs Eigen3)
+
+ament_auto_add_executable(
+  plane_cluster_incremental_node
+  src/topological_plane/plane_cluster_incremental_node.cpp
+)
+target_link_libraries(plane_cluster_incremental_node plane_cluster_incremental)
+ament_target_dependencies(
+  plane_cluster_incremental_node
+  ais_gng_msgs rclcpp visualization_msgs Eigen3
+)
+
 if(BUILD_TESTING)
   ament_add_gtest(
     test_topological_plane_cluster
@@ -65,6 +87,13 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_topological_plane_cluster topological_plane_cluster)
   ament_target_dependencies(test_topological_plane_cluster ais_gng_msgs Eigen3)
+
+  ament_add_gtest(
+    test_plane_cluster_incremental
+    test/test_plane_cluster_incremental.cpp
+  )
+  target_link_libraries(test_plane_cluster_incremental plane_cluster_incremental)
+  ament_target_dependencies(test_plane_cluster_incremental ais_gng_msgs Eigen3)
 endif()
 
 set(_gng_component_sources

@@ -694,6 +694,27 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     }
     return false;
   };
+  const auto localMotionScore = [local_structure_states](const LabeledGridVoxel &voxel) {
+    if (!local_structure_states || voxel.node_observations.empty()) {
+      return 0.0;
+    }
+    std::size_t observed_count = 0U;
+    std::size_t moving_count = 0U;
+    for (const auto &observation : voxel.node_observations) {
+      const auto found = local_structure_states->find(observation.identity);
+      if (found == local_structure_states->end() ||
+        found->second == NodeLocalStructureState::Unknown)
+      {
+        continue;
+      }
+      ++observed_count;
+      if (found->second == NodeLocalStructureState::Moving) {
+        ++moving_count;
+      }
+    }
+    return observed_count == 0U ? 0.0 :
+      static_cast<double>(moving_count) / static_cast<double>(observed_count);
+  };
 
   std::vector<LabeledGridVoxel> stable_voxels;
   stable_voxels.reserve(label_voxels.size());
@@ -812,14 +833,24 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       (has_input_points ? std::sqrt(std::min(
       1.0, static_cast<double>(voxel.input_point_count) / local_reference)) : 0.0);
     const double normal_drift_score = std::clamp(voxel.normal_drift_score, 0.0, 1.0);
+    const double local_motion_score = std::clamp(localMotionScore(voxel), 0.0, 1.0);
     // Tiny normal-direction shifts are ubiquitous in a continuously adapting
     // GNG.  Do not turn them into a permanent point-support penalty.  Only a
     // displacement of at least half the local GNG spacing is evidence of a
     // potential moving surface.
     const double normal_drift_evidence =
       normal_drift_score >= kNormalDriftEvidenceThreshold ? normal_drift_score : 0.0;
-    const double temporal_observation_score =
-      point_support_score * (1.0 - normal_drift_evidence);
+    const double supported_observation_score =
+      point_support_score * (1.0 - normal_drift_evidence) * (1.0 - local_motion_score);
+    // Do not let an isolated one-cell node accumulate confidence forever.
+    // `neighbor_count` covers all current label cells (including UNKNOWN),
+    // while the edge flag protects a real GNG surface that happens to span a
+    // quantization gap at a fine grid resolution.  A graspable object needs
+    // spatial support, so this only removes the unanchored remainder.
+    const bool isolated_temporal_decay =
+      voxel.neighbor_count == 0U && !voxel.has_cross_cell_gng_edge;
+    const double temporal_observation_score = isolated_temporal_decay
+      ? 0.0 : supported_observation_score;
     // Raw point support is admission evidence for a new voxel.  It is not, by
     // itself, deletion evidence for an already active GNG surface: a current
     // node in this cell still anchors its incident GNG edges.  Otherwise a
@@ -833,8 +864,10 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       voxel.node_count > 0 &&
       !has_input_points &&
       normal_drift_evidence == 0.0 &&
+      local_motion_score == 0.0 &&
       !isConfirmedFree(voxel.cell);
-    const bool preserve_missing_support = temporal_observation_score == 0.0 &&
+    const bool preserve_missing_support = !isolated_temporal_decay &&
+      temporal_observation_score == 0.0 &&
       point_support_score == 0.0 &&
       (holdsHistory(voxel.cell) || retained_by_gng_structure);
     if (!preserve_missing_support) {
@@ -866,9 +899,11 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.temporal_stability_score = history.stability_score;
     stable_voxel.point_support_score = point_support_score;
     stable_voxel.normal_drift_score = normal_drift_score;
+    stable_voxel.local_motion_score = local_motion_score;
     stable_voxel.retained_by_gng_structure = retained_by_gng_structure;
     stable_voxel.retained_by_local_structure = false;
     stable_voxel.retained_by_node_identity = false;
+    stable_voxel.isolated_temporal_decay_applied = isolated_temporal_decay;
     history.last_voxel = stable_voxel;
     stable_voxels.push_back(stable_voxel);
   }
@@ -902,6 +937,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
       stable_voxel.point_input_history_count = history.point_input_observation_count;
       stable_voxel.temporal_stability_score = history.stability_score;
       stable_voxel.point_support_score = 0.0;
+      stable_voxel.local_motion_score = 0.0;
       stable_voxel.unknown_component_history_id = history.unknown_component_history_id;
       stable_voxel.retained_by_gng_structure = false;
       stable_voxel.retained_by_local_structure = retained_by_local_structure;
@@ -934,6 +970,7 @@ std::vector<LabeledGridVoxel> TemporalVoxelFilter::update(
     stable_voxel.point_input_history_count = history.point_input_observation_count;
     stable_voxel.temporal_stability_score = history.stability_score;
     stable_voxel.point_support_score = 0.0;
+    stable_voxel.local_motion_score = 0.0;
     stable_voxel.unknown_component_history_id = history.unknown_component_history_id;
     stable_voxel.retained_by_gng_structure = false;
     stable_voxel.retained_by_local_structure = false;
@@ -1695,6 +1732,32 @@ GridVoxelizationResult voxelizeNodes(
   label_by_cell.reserve(result.label_voxels.size());
   for (auto &voxel : result.label_voxels) {
     label_by_cell.emplace(voxel.cell, &voxel);
+  }
+
+  // Record only cross-cell GNG connectivity.  Connections within one cell do
+  // not provide spatial extent for a grasp candidate, whereas a valid edge
+  // over a fine-grid quantization gap must prevent isolated-cell decay.
+  for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
+    const std::size_t first = static_cast<std::size_t>(map.edges[edge]);
+    const std::size_t second = static_cast<std::size_t>(map.edges[edge + 1U]);
+    if (first >= map.nodes.size() || second >= map.nodes.size() || first == second ||
+      !retained_nodes[first] || !retained_nodes[second])
+    {
+      continue;
+    }
+    const GridCell &first_cell = node_cells[first];
+    const GridCell &second_cell = node_cells[second];
+    if (first_cell == second_cell) {
+      continue;
+    }
+    const auto first_voxel = label_by_cell.find(first_cell);
+    const auto second_voxel = label_by_cell.find(second_cell);
+    if (first_voxel != label_by_cell.end()) {
+      first_voxel->second->has_cross_cell_gng_edge = true;
+    }
+    if (second_voxel != label_by_cell.end()) {
+      second_voxel->second->has_cross_cell_gng_edge = true;
+    }
   }
   std::unordered_set<GridCell, GridCellHash> event_cells;
   std::uint64_t next_unknown_component_event_id = 1U;

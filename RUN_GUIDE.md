@@ -221,6 +221,11 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
+`/downsampling/grasp_support` は `UNKNOWN_OBJECT` を優先し、`DEFAULT`で残りを補う
+把持支持点群である。`graspnet.yaml`では最大10,000点（unknown最大5,000点）を空間的な
+カバレッジ優先で選ぶ。GNG本体は、別に設定した入力点群を均一選択して学習する。
+旧`/downsampling/unknown`は同じ内容を出す互換トピックであり、
+新規の処理には使わない。
 `HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。`SAFE_TERRAIN`は候補としては除外するが、
 床際物体の履歴を切らないため内部の構造証拠としては保持する。`auto`支持は各セルごとに
 GNGの`inpcl_ids`と現在点群の近傍支持の大きい方を使うため、IDが一部のノードで欠けても安定した点群を失わない。セルの有効／無効は、
@@ -234,7 +239,9 @@ GNGの`inpcl_ids`と現在点群の近傍支持の大きい方を使うため、
 `depth_visibility_*` と `camera_to_map.*` は通常触らず、プロファイル YAML にだけ置いてある。TFを優先し、
 録画に `base_link`→カメラTFがない場合だけ既存の点群変換キャリブレーションをフォールバックとして使う。
 深度がない場合も、過去セルのGNG近傍が複数残り、局所的に静止または移動方向が不一致なら、その既知セルだけを保持する。
-近傍が局所edge間隔に対して大きく、同方向に並進したときだけ、移動物体の旧位置として通常の時間減衰へ渡す。
+近傍が局所edge間隔に対して十分に大きく、同方向に並進したときは、移動物体の旧位置だけでなく
+現在観測中のセルにも連続的な負の証拠を入れる。そのため、腕だけでなく小さく揺れる胴体も
+把持候補として残り続けない。単ノード移動では発火せず、少なくとも2近傍の整合した並進だけを使う。
 これは前後フレームの既存GNG edgeとノード位置だけを1回走査する。新規セルの膨張、点群kNN・PCA、全ボクセル走査は行わない。
 単ノード法線方向の動きは補助オプションであり、既定では無効である。
 `SAFE_TERRAIN`は新規候補にはしないが、内部ではGNG構造・在席の証拠として残す。
@@ -246,11 +253,15 @@ GNGの`inpcl_ids`と現在点群の近傍支持の大きい方を使うため、
 途中セルが抜けても、そのedge上だけを補間して連結を維持する。edge長の除外も固定距離ではなく、
 各端点の周辺GNG edge長に対するロバストな外れ値で決める。GNG edgeを持たない直接観測セルだけを
 `<output_topic>/isolated`へ分離する。
+現在点があるセルでも、周囲のラベルセル（unknownを含む）がなく、別セルへ出るGNG edgeもない場合は
+孤立ノイズとして時間安定度に負の証拠を入れる。即時削除ではないため、同じ
+`temporal_time_constant_sec`とヒステリシスで減衰する。細かい`grid_size`によるセル間の隙間を
+GNG edgeが跨ぐ場合は、この孤立減衰を適用しない。
 `output_topic`は非孤立の直接観測と補間セルの和集合で、`edge_inferred`と`triangle_inferred`は補間由来だけを出す。
 
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
-  pointcloud_topic:=/downsampling/unknown \
+  pointcloud_topic:=/downsampling/grasp_support \
   output_topic:=/topo_voxel_ids \
   grid_size:=0.02
 
@@ -277,6 +288,43 @@ ros2 topic echo /topological_planar_clusters --once
 
 把持候補の衝突除外へは次段で、各環境ボクセルに近傍平面クラスタIDを関連付け、`sweptV`の
 各セルだけを符号付き平面距離で照会する。現段階では平面そのものを候補から消さない。
+
+## 平面クラスタを増分方式で作る（上の方式の置き換え候補）
+
+上の`topological_plane_cluster`と同じ入力から、別トピックへ出す。フレームごとに作り直さず、
+GNGノードID単位の所属を持ち越して差分だけ直すため、所属が定常状態に落ち着く。
+1フレームは`O(N + E)`とクラスタ数ぶんの3x3固有値分解だけで、優先度付きキューや
+クラスタ同士の総当たりを使わない。
+
+所属が動くのは、平面から離れすぎたとき（解放）、未所属で条件を満たしたとき（取り込み）、
+別クラスタへ明確により適合するとき（移動）に限る。取り込みと移動には
+**移動先クラスタにすでに所属している隣接ノードが2つ以上あること**を要求し、
+1本のエッジだけで所属が漏れ出すのを防ぐ。
+
+```bash
+# 初回はビルドが必要
+docker exec gng_cpu_container_uraki bash -lc '
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
+cd /ros2_ws && colcon build --packages-select ais_gng --symlink-install'
+```
+
+```bash
+ros2 launch ais_gng plane_cluster_incremental.launch.py \
+  input_topic:=/topological_map
+```
+
+```bash
+# 数値確認
+ros2 topic echo /topological_planar_clusters_incremental --once
+```
+
+可視化はToPoFuzzy Viewerの`Connection & Streams`から
+`/topological_planar_clusters_incremental/markers`を有効化する。クラスタIDから決まる色なので、
+IDが持続する限り色も変わらない。
+
+既存ノードと同時に起動して同じ入力で比較できる。ログの`changes=`が0に張り付けば定常状態、
+`chain=`は鎖状（共分散の第2固有値が第1固有値に対して小さすぎる形）として棄却した領域数、
+`update=`が1フレームの処理時間である。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
@@ -323,7 +371,8 @@ ros2 launch gng_vlut_system grasp_pose_marker_bridge.launch.py \
 深度が有効なときは `depth_visibility_free_count`、`depth_visibility_occluded_count`、
 `depth_visibility_out_of_view_count` もsummaryに出る。移動物体の削除証拠として見るのは `free_count` だけである。
 局所構造の判定数は `local_structure_static_node_count`、`local_structure_moving_node_count`、
-`local_structure_ambiguous_node_count` に、これで保持された旧セル数は `retained_by_local_structure` に出る。
+`local_structure_ambiguous_node_count` に、これで保持された旧セル数は `retained_by_local_structure`、
+現在セルで運動抑制が残っている数は `local_motion_suppressed_voxel_count` に出る。
 GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift_maximum_score` に出る。
 `edge_max_length: 0.0` は局所GNG edge長から自動で外れedgeを除く設定である。出力の`grid_size`は
 把持テンプレートの必要解像度で選び、物体連結性のために大きくする必要はない。

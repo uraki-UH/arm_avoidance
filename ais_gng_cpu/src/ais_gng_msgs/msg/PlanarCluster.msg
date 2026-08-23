@@ -1,8 +1,9 @@
-# A connected planar patch derived from the existing GNG node graph.
-# `node_indices` refer to indices in the TopologicalMap.nodes array that
-# produced this message.  They deliberately remain map-local: no persistent
-# global-node identifier is assumed by the extractor.
+# 既存のGNGノードグラフから得る、連結した平面パッチ。
+# `node_indices` は、このメッセージを生成した TopologicalMap.nodes 配列の
+# 添字を指す。永続的なグローバルノードIDを前提としないため、地図内の添字として
+# 扱う。
 uint32 id
+uint8 source_label
 uint32[] node_indices
 
 geometry_msgs/Point32 centroid
@@ -10,10 +11,17 @@ geometry_msgs/Vector3 normal
 geometry_msgs/Vector3 tangent_u
 geometry_msgs/Vector3 tangent_v
 
-# Convex 2-D boundary projected back into 3-D.  It is a compact diagnostic
-# footprint, not an assertion that the whole convex hull was observed.
+# 推定した凸包の外形は出力しない。平面クラスタは凹形状や未観測の穴を含み得るため、
+# 利用側は `boundary` を塗りつぶし済みの衝突面として扱ってはならない。
+# 将来、観測境界を追跡して格納するために予約している。
 geometry_msgs/Point32[] boundary
 
+# 連続する2点は、この構造的な連結成分で実際に観測されたGNGエッジである。
+# 凸包を推定せず、凹部と穴を保持する。
+geometry_msgs/Point32[] support_edges
+
+# グラフだけから得たクラスタでは、凸包による面積推定を意図的に行わない。
+# 観測面積の推定器を導入するまで、この値は0とする。
 float32 area
 float32 extent_u
 float32 extent_v

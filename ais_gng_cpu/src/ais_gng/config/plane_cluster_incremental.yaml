@@ -1,0 +1,72 @@
+plane_cluster_incremental_node:
+  ros__parameters:
+    # 増分方式の平面クラスタ生成。ラベルは接続条件に使わず、出力時の属性としてだけ保持する。
+    #
+    # 距離のしきい値はすべて、そのノードの局所ノード間隔で正規化した比で指定する。
+
+    # 出力クラスタに要求する最小ノード数。
+    min_cluster_nodes: 7
+
+    # 未所属ノードを取り込むときの、平面までの正規化距離の上限。
+    # max_normalized_cluster_residual と必ず一緒に動かす。取り込みだけ緩めると、
+    # 育てた領域が確定時の残差判定で丸ごと捨てられる(実測で大きく減った)。
+    growth_residual_ratio: 0.70
+    # すでに所属しているノードを保持し続ける上限。取り込みより緩くしてヒステリシスを作る。
+    retention_residual_ratio: 1.40
+
+    # ノード法線とクラスタ平面法線の整合下限(内積の絶対値)。
+    normal_alignment_cos: 0.50
+
+    # クラスタ確定に要求する平面性と正規化残差。
+    # 実機の机の面は残差比が実測 0.30〜0.43 あり、0.35 では面が途中で切れて
+    # 机の半分しかクラスタにならなかった。growth_residual_ratio と同値にする。
+    min_cluster_planarity: 0.45
+    max_normalized_cluster_residual: 0.70
+
+    # 成長中に要求する平面性の下限。鎖状に伸びた塊を育ちきる前に止める。
+    # 確定時のしきい値(min_cluster_planarity)以下である必要がある。
+    min_growth_planarity: 0.25
+
+    # 所属を動かすために要求する「移動先クラスタにすでに所属している隣接ノード」の数。
+    # 1本のエッジだけで所属が漏れ出すのを防ぐ。
+    absorb_neighbor_requirement: 2
+    migration_neighbor_requirement: 2
+    # 生成直後は競合相手がいないため、育てる途中だけ緩める。
+    birth_neighbor_requirement: 1
+
+    # 移動を認めるために必要な正規化距離の改善量。振動を止めるための余裕。
+    migration_improvement_margin: 0.05
+
+    # 同一クラスタのノードから複数のエッジが伸びているノードは、平面までの距離を
+    # 問わずそのクラスタの所属とする。所属の根拠を距離ではなく接続と法線一致に置く。
+    # false にすると距離だけで判定し、うねった面が途中で分断される。
+    coplanar_multi_edge_overrides_distance: true
+
+    # 保守点検の上限回数。変化が止まれば途中で抜ける。
+    maintenance_iterations: 2
+
+    # クラスタ併合の判定にかけるために必要な、両者を直接つなぐGNGエッジ本数。
+    merge_edge_requirement: 2
+
+    # 併合の候補にするための法線一致の下限。可否は結合後の平面あてはめで決めるので、
+    # ここは高い判定を回す前のふるい。0.95 では真に合体すべき対の 7% しか到達できず、
+    # 同じ壁が割れたまま残った。
+    merge_normal_alignment_cos: 0.80
+
+    # 併合を認めるために、結合後の残差が元から悪化してよい倍率とその下限。
+    # 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
+    merge_residual_growth_ratio: 1.3
+    merge_residual_growth_floor: 0.15
+
+    # 新しいクラスタを出力に載せるまでに、生き残る必要があるフレーム数。
+    # 生まれてすぐ消えるクラスタを表示しないための条件。0 なら即座に出す。
+    birth_confirm_frames: 3
+
+    # クラスタを実際に分割するまでに、接続が切れた状態が続く必要があるフレーム数。
+    # 境界ノードの解放で接続は一時的によく切れるため、即分割すると出入りが増える。
+    split_confirm_frames: 3
+
+    # 条件を満たさないまま許容するフレーム数。
+    weak_frame_allowance: 2
+
+    publish_text: false
