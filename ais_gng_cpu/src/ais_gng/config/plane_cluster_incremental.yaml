@@ -4,12 +4,12 @@ plane_cluster_incremental_node:
     # 距離しきい値の局所ノード間隔による正規化比。
 
     # 種候補を平面クラスタとして確定するための最小所属ノード数。
-    # この値未満の新規領域は種候補。既存クラスタが一時的に下回った場合は追跡のみ継続。
+    # 新規領域の種候補扱い。既存クラスタの一時的なノード数不足時は追跡のみ継続。
     min_cluster_nodes: 7
 
     # 未所属ノード取り込み用の平面までの正規化距離上限。
     # score = |平面法線・(ノード位置 - クラスタ重心)| / max(クラスタ間隔, ノード間隔)。
-    # score がこの値以下のノード。共分散固有値比との非対応。
+    # score による取り込み判定。共分散固有値比との非対応。
     # 最終確定時の厚み上限との同時調整。取り込みだけを緩めた場合の確定時一括棄却。
     growth_residual_ratio: 0.70
     # 既所属ノード保持用の同じ正規化距離上限。
@@ -19,13 +19,13 @@ plane_cluster_incremental_node:
     # ノード法線とクラスタ平面法線の許容角度[deg]。内積比較cos値へ内部で変換。
     normal_alignment_deg: 60.0
 
-    # 共分散固有値λに対して平面性 sqrt(λ2 / λ3)の下限。
+    # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
     min_cluster_planarity: 0.45
     # 平面からのRMS距離 / クラスタの平均局所ノード間隔 = sqrt(λ1) / mean(spacing)。
     max_normalized_cluster_residual: 0.70
 
-    # 成長中の sqrt(λ2 / λ3) 下限。この値未満の直鎖状の種の成長停止。
-    # 確定条件より緩い下限による、成長途中の面の許容。
+    # 成長中の sqrt(λ2 / λ3)。直鎖状の種の成長停止。
+    # 確定条件より緩い判定による、成長途中の面の許容。
     min_growth_planarity: 0.25
 
     # ノード取り込み・移動時の候補クラスタへの隣接エッジ数、およびクラスタ併合時の
@@ -47,7 +47,7 @@ plane_cluster_incremental_node:
     # 上の任意条件で「候補クラスタの方が十分大きい」とみなすノード数の倍率。
     migration_size_bias_ratio: 2.0
 
-    # 移動元のノード数が最小クラスタノード数にこの値を足した数以下の場合の移動禁止。
+    # 最小クラスタノード数に加える移動元保護余裕。
     # 小さいクラスタの境界からの漸減・消滅の防止。
     donor_protection_buffer: 3
 
@@ -59,7 +59,7 @@ plane_cluster_incremental_node:
     # 所属変化ゼロ時の早期終了。
     maintenance_iterations: 2
 
-    # 併合条件: r_union <= max(倍率 * max(r_A, r_B), 下限)。
+    # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
     # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
     merge_residual_growth_ratio: 1.3
     # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
@@ -73,7 +73,7 @@ plane_cluster_incremental_node:
     # 境界ノードの一時的な解放による過剰分割の防止。
     split_confirm_frames: 3
 
-    # 最小クラスタノード数未満の状態に対する削除前許容フレーム数。
+    # 最小クラスタノード数不足状態に対する削除前許容フレーム数。
     # ノード単位の逸脱で一時的に縮んだクラスタの回復余地。
     weak_frame_allowance: 5
 
