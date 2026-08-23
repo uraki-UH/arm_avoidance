@@ -270,8 +270,8 @@ private:
       declare_parameter<double>("growth_residual_ratio", 0.35);
     options.retention_residual_ratio =
       declare_parameter<double>("retention_residual_ratio", 0.70);
-    options.normal_alignment_cos =
-      declare_parameter<double>("normal_alignment_cos", 0.50);
+    options.normal_alignment_deg =
+      declare_parameter<double>("normal_alignment_deg", 60.0);
     options.min_cluster_planarity =
       declare_parameter<double>("min_cluster_planarity", 0.45);
     options.max_normalized_cluster_residual =

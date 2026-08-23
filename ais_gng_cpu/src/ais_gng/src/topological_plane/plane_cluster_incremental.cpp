@@ -17,6 +17,9 @@ namespace
 
 constexpr double kEpsilon = 1.0e-9;
 
+// 度で与えた設定値を、内積比較用のラジアンへ一度だけ変換するための係数。
+constexpr double kRadiansPerDeg = 0.017453292519943295769236907684886;
+
 // 未所属を表すクラスタ添字。
 constexpr int kUnassigned = -1;
 
@@ -245,7 +248,8 @@ struct Clusterizer::Impl
     options.growth_residual_ratio = std::max(0.0, options.growth_residual_ratio);
     options.retention_residual_ratio = std::max(
       options.growth_residual_ratio, options.retention_residual_ratio);
-    options.normal_alignment_cos = std::clamp(options.normal_alignment_cos, 0.0, 1.0);
+    options.normal_alignment_deg = std::clamp(options.normal_alignment_deg, 0.0, 90.0);
+    normal_alignment_cos = std::cos(options.normal_alignment_deg * kRadiansPerDeg);
     options.min_cluster_planarity = std::clamp(options.min_cluster_planarity, 0.0, 1.0);
     options.max_normalized_cluster_residual =
       std::max(0.0, options.max_normalized_cluster_residual);
@@ -280,6 +284,7 @@ struct Clusterizer::Impl
   };
 
   ClusterOptions options;
+  double normal_alignment_cos = 0.50;
 
   // --- フレームをまたいで保持する状態 ---
   std::vector<ClusterState> clusters;
@@ -516,7 +521,7 @@ struct Clusterizer::Impl
   bool normalAligned(const std::size_t cluster_index, const std::size_t node_index) const
   {
     return std::abs(clusters[cluster_index].normal.dot(normals[node_index])) >=
-           options.normal_alignment_cos;
+           normal_alignment_cos;
   }
 
   // 平面から離れすぎたメンバーを解放する。取り込みより緩い閾値を使う。
@@ -730,7 +735,7 @@ struct Clusterizer::Impl
         const std::size_t neighbour = adjacency_values[cursor];
         if (label[neighbour] != kUnassigned || birth_rejected[neighbour] != 0U ||
           visit_marks[neighbour] == visit_generation ||
-          std::abs(normals[seed].dot(normals[neighbour])) < options.normal_alignment_cos)
+          std::abs(normals[seed].dot(normals[neighbour])) < normal_alignment_cos)
         {
           continue;
         }
@@ -768,7 +773,7 @@ struct Clusterizer::Impl
           {
             continue;
           }
-          if (std::abs(fit.normal.dot(normals[neighbour])) < options.normal_alignment_cos) {
+          if (std::abs(fit.normal.dot(normals[neighbour])) < normal_alignment_cos) {
             continue;
           }
           const double spacing = std::max(
