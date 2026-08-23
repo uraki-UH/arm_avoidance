@@ -1,3 +1,4 @@
+import math
 import re
 from pathlib import Path
 
@@ -32,13 +33,103 @@ def _vector(spec, key, size, default):
     return [float(item) for item in value]
 
 
+def _lerp(start, end, fraction):
+    return [
+        (1.0 - fraction) * float(start[index]) + fraction * float(end[index])
+        for index in range(len(start))
+    ]
+
+
+def _normalize_quaternion(quaternion, description):
+    squared_norm = sum(component * component for component in quaternion)
+    if squared_norm <= 1.0e-16:
+        raise ValueError(f"{description} must be a non-zero quaternion")
+    inverse_norm = 1.0 / math.sqrt(squared_norm)
+    return [component * inverse_norm for component in quaternion]
+
+
+def _slerp_quaternion(start, end, fraction):
+    """Interpolate XYZW quaternions without adding a runtime dependency."""
+    dot = sum(start[index] * end[index] for index in range(4))
+    if dot < 0.0:
+        end = [-component for component in end]
+        dot = -dot
+    dot = max(-1.0, min(1.0, dot))
+
+    # Nearly identical orientations are more accurately handled linearly.
+    if dot > 0.9995:
+        return _normalize_quaternion(_lerp(start, end, fraction), "interpolated orientation")
+
+    theta = math.acos(dot)
+    sin_theta = math.sin(theta)
+    first_weight = math.sin((1.0 - fraction) * theta) / sin_theta
+    second_weight = math.sin(fraction * theta) / sin_theta
+    return [
+        first_weight * start[index] + second_weight * end[index]
+        for index in range(4)
+    ]
+
+
+def _expand_swept_meshes(spec):
+    swept_meshes = spec.get("swept_meshes", [])
+    if not isinstance(swept_meshes, list):
+        raise ValueError(f"gripper '{spec.get('name', '?')}' swept_meshes must be a list")
+
+    expanded = []
+    for index, sweep in enumerate(swept_meshes):
+        if not isinstance(sweep, dict):
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' swept_meshes[{index}] must be a mapping"
+            )
+        path = str(sweep.get("path", "")).strip()
+        if not path:
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' swept_meshes[{index}] requires path"
+            )
+        samples = sweep.get("samples", 2)
+        if isinstance(samples, bool) or not isinstance(samples, int) or samples < 2:
+            raise ValueError(
+                f"gripper '{spec.get('name', '?')}' swept_meshes[{index}] samples must be an integer >= 2"
+            )
+
+        default_position = _vector(sweep, "position", 3, [0.0, 0.0, 0.0])
+        start_position = _vector(sweep, "start_position", 3, default_position)
+        end_position = _vector(sweep, "end_position", 3, default_position)
+        default_orientation = _vector(
+            sweep, "orientation_xyzw", 4, [0.0, 0.0, 0.0, 1.0]
+        )
+        start_orientation = _normalize_quaternion(
+            _vector(sweep, "start_orientation_xyzw", 4, default_orientation),
+            f"gripper '{spec.get('name', '?')}' swept_meshes[{index}] start_orientation_xyzw",
+        )
+        end_orientation = _normalize_quaternion(
+            _vector(sweep, "end_orientation_xyzw", 4, default_orientation),
+            f"gripper '{spec.get('name', '?')}' swept_meshes[{index}] end_orientation_xyzw",
+        )
+        scale = _vector(sweep, "scale", 3, [1.0, 1.0, 1.0])
+
+        for sample_index in range(samples):
+            fraction = float(sample_index) / float(samples - 1)
+            expanded.append({
+                "path": path,
+                "scale": scale,
+                "position": _lerp(start_position, end_position, fraction),
+                "orientation_xyzw": _slerp_quaternion(
+                    start_orientation, end_orientation, fraction
+                ),
+            })
+    return expanded
+
+
 def _mesh_exclusions(spec):
     mesh_key = "meshes" if "meshes" in spec else "exclude_closed_meshes"
-    exclusions = spec.get(mesh_key, [])
-    if not isinstance(exclusions, list):
+    configured_meshes = spec.get(mesh_key, [])
+    if not isinstance(configured_meshes, list):
         raise ValueError(
             f"gripper '{spec.get('name', '?')}' {mesh_key} must be a list"
         )
+    exclusions = list(configured_meshes)
+    exclusions.extend(_expand_swept_meshes(spec))
 
     paths = []
     scales = []

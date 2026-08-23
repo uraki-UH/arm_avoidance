@@ -254,6 +254,37 @@ ros2 launch ais_gng topological_grid.launch.py \
   output_topic:=/topo_voxel_ids \
   grid_size:=0.02
 
+## 把持ボクセルテンプレート（左グリッパ、POC）
+
+上の`/topo_voxel_ids`を、最大把持体積・最小把持体積・グリッパ開閉の掃引禁止体積へ照合して
+TCP姿勢候補を出す。通常は引数なしでよい。
+
+```bash
+ros2 launch grasping_system grasp_voxel_template.launch.py
+```
+
+候補と照合内訳は次で確認する。
+
+```bash
+ros2 topic echo /grasp_voxel_candidates
+ros2 topic echo /grasp_voxel_candidates/summary
+```
+
+ToPoFuzzy Viewerで矢印として確認するときは、次も起動する。
+
+```bash
+ros2 launch gng_vlut_system grasp_pose_marker_bridge.launch.py \
+  input_topic:=/grasp_voxel_candidates
+```
+
+`/grasp_pose_markers`をViewerの`Connection & Streams`で有効化する。
+
+これは安定した物体候補ボクセルを対象にする一次POCである。`grip_sweptV`はグリッパ基部と
+開状態から閉状態までの指形状を合成した禁止体積である。ただし最大開口の`grip_V`内は把持対象が
+接触してよい領域として除外する。さらに、同じ開度で左右の接触帯が同時に占有されることを要求し、
+指の閉鎖軸と直交する二軸の両端まで連続する面状占有は除外する。GNG成分に基づく「取り出せる
+物体」への分離、全環境点群から作る衝突専用占有、進入経路の掃引判定は次段で追加する。
+
 通常起動で指定できる値は上の4つだけである。詳細設定は
 `ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`に集約した。
 別プロファイルを試すときだけ、`params_file:=/absolute/path/profile.yaml`を追加する。
@@ -365,7 +396,8 @@ ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
 ```
 
 このlaunchはWebSocketに加えて`rosapi`を起動する。単体HTMLは`rosapi`から
-`*_grip_V_topological_map`、`*_grip_minV_topological_map`、`*_grip_baseV_topological_map`
+`*_grip_V_topological_map`、`*_grip_minV_topological_map`、`*_grip_baseV_topological_map`、
+`*_grip_sweptV_topological_map`
 topicを自動発見するため、`ros2 run
 rosbridge_server rosbridge_websocket`だけではなく上記launchを使用する。
 

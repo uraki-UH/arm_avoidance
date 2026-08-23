@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -90,11 +91,33 @@ private:
   std::unordered_set<VoxelIndex, VoxelIndexHash> occupied_;
 };
 
+struct GraspVoxelContactPair
+{
+  std::vector<Eigen::Vector3d> positive;
+  std::vector<Eigen::Vector3d> negative;
+};
+
 struct GraspVoxelTemplate
 {
   std::vector<Eigen::Vector3d> required_occupied;
   std::vector<Eigen::Vector3d> optional_not_sole_support;
+  // Potential inner-finger contact locations for each sampled opening.  A
+  // candidate must support both sides within one matching opening sample.
+  std::vector<GraspVoxelContactPair> opposing_contact_pairs;
+  // Boundary pairs orthogonal to finger closing.  Occupancy spanning both
+  // sides of two such axes is a locally unbounded sheet/support, not a
+  // detachable grasp target.
+  std::vector<GraspVoxelContactPair> lateral_continuation_pairs;
+  // Occupancy within this region belongs to the prospective grasped object,
+  // so it must not be rejected even if a moving-gripper sweep overlaps it.
+  std::vector<Eigen::Vector3d> collision_exempt;
   std::vector<Eigen::Vector3d> required_empty;
+};
+
+struct CompiledGraspVoxelContactPair
+{
+  std::vector<VoxelIndex> positive_offsets;
+  std::vector<VoxelIndex> negative_offsets;
 };
 
 struct CompiledGraspOrientation
@@ -102,6 +125,8 @@ struct CompiledGraspOrientation
   Eigen::Quaterniond orientation = Eigen::Quaterniond::Identity();
   std::vector<VoxelIndex> required_offsets;
   std::vector<VoxelIndex> outside_undersize_offsets;
+  std::vector<CompiledGraspVoxelContactPair> opposing_contact_pairs;
+  std::vector<CompiledGraspVoxelContactPair> lateral_continuation_pairs;
   std::vector<VoxelIndex> forbidden_offsets;
 };
 
@@ -110,6 +135,7 @@ struct CompiledGraspVoxelTemplate
   double voxel_size = 0.0;
   Eigen::Vector3d required_centroid = Eigen::Vector3d::Zero();
   bool has_undersize_region = false;
+  bool has_opposing_contacts = false;
   std::vector<CompiledGraspOrientation> orientations;
 };
 
@@ -118,9 +144,17 @@ struct GraspVoxelMatchConfig
   double minimum_required_occupancy_ratio = 0.1;
   std::size_t minimum_required_hits = 3;
   std::size_t minimum_outside_undersize_hits = 1;
+  std::size_t minimum_contact_hits_per_side = 1;
+  std::size_t maximum_lateral_continuation_axes = 1;
   std::size_t maximum_forbidden_hits = 0;
   std::size_t maximum_anchor_voxels = 500;
   std::size_t maximum_candidates = 50;
+};
+
+struct GraspVoxelContactPairHits
+{
+  std::size_t positive = 0;
+  std::size_t negative = 0;
 };
 
 struct GraspVoxelMatchCandidate
@@ -132,6 +166,12 @@ struct GraspVoxelMatchCandidate
   std::size_t required_hits = 0;
   std::size_t required_samples = 0;
   std::size_t outside_undersize_hits = 0;
+  std::size_t positive_contact_hits = 0;
+  std::size_t negative_contact_hits = 0;
+  std::size_t selected_contact_pair = std::numeric_limits<std::size_t>::max();
+  std::vector<GraspVoxelContactPairHits> opposing_contact_pair_hits;
+  std::vector<GraspVoxelContactPairHits> lateral_continuation_pair_hits;
+  std::size_t lateral_continuation_axes = 0;
   std::size_t forbidden_hits = 0;
   double required_occupancy_ratio = 0.0;
   double score = 0.0;
@@ -146,6 +186,8 @@ struct GraspVoxelMatchResult
   std::size_t candidate_states_updated = 0;
   std::size_t rejected_required_occupancy = 0;
   std::size_t rejected_undersize_only = 0;
+  std::size_t rejected_missing_opposing_contact = 0;
+  std::size_t rejected_lateral_continuation = 0;
   std::size_t rejected_forbidden_occupancy = 0;
 };
 
@@ -178,7 +220,25 @@ public:
     }
     compiled.required_centroid /= static_cast<double>(grasp_template.required_occupied.size());
     validatePoints(grasp_template.optional_not_sole_support);
+    validatePoints(grasp_template.collision_exempt);
     validatePoints(grasp_template.required_empty);
+    for (const auto &contact_pair : grasp_template.opposing_contact_pairs) {
+      validatePoints(contact_pair.positive);
+      validatePoints(contact_pair.negative);
+      if (contact_pair.positive.empty() || contact_pair.negative.empty()) {
+        throw std::invalid_argument(
+                "each opposing grasp contact pair requires both non-empty sides");
+      }
+    }
+    for (const auto &continuation_pair : grasp_template.lateral_continuation_pairs) {
+      validatePoints(continuation_pair.positive);
+      validatePoints(continuation_pair.negative);
+      if (continuation_pair.positive.empty() || continuation_pair.negative.empty()) {
+        throw std::invalid_argument(
+                "each lateral continuation pair requires both non-empty sides");
+      }
+    }
+    compiled.has_opposing_contacts = !grasp_template.opposing_contact_pairs.empty();
 
     compiled.orientations.reserve(orientations.size());
     for (auto orientation : orientations) {
@@ -195,7 +255,30 @@ public:
       const auto undersize_offsets = quantizeOffsets(
         grasp_template.optional_not_sole_support, compiled.required_centroid,
         orientation, voxel_size);
-      compiled_orientation.forbidden_offsets = quantizeOffsets(
+      compiled_orientation.opposing_contact_pairs.reserve(
+        grasp_template.opposing_contact_pairs.size());
+      for (const auto &contact_pair : grasp_template.opposing_contact_pairs) {
+        CompiledGraspVoxelContactPair compiled_pair;
+        compiled_pair.positive_offsets = quantizeOffsets(
+          contact_pair.positive, compiled.required_centroid, orientation, voxel_size);
+        compiled_pair.negative_offsets = quantizeOffsets(
+          contact_pair.negative, compiled.required_centroid, orientation, voxel_size);
+        compiled_orientation.opposing_contact_pairs.push_back(std::move(compiled_pair));
+      }
+      compiled_orientation.lateral_continuation_pairs.reserve(
+        grasp_template.lateral_continuation_pairs.size());
+      for (const auto &continuation_pair : grasp_template.lateral_continuation_pairs) {
+        CompiledGraspVoxelContactPair compiled_pair;
+        compiled_pair.positive_offsets = quantizeOffsets(
+          continuation_pair.positive, compiled.required_centroid, orientation, voxel_size);
+        compiled_pair.negative_offsets = quantizeOffsets(
+          continuation_pair.negative, compiled.required_centroid, orientation, voxel_size);
+        compiled_orientation.lateral_continuation_pairs.push_back(std::move(compiled_pair));
+      }
+      const auto collision_exempt_offsets = quantizeOffsets(
+        grasp_template.collision_exempt, compiled.required_centroid,
+        orientation, voxel_size);
+      const auto forbidden_offsets = quantizeOffsets(
         grasp_template.required_empty, compiled.required_centroid,
         orientation, voxel_size);
 
@@ -204,6 +287,14 @@ public:
       for (const auto &offset : compiled_orientation.required_offsets) {
         if (undersize_set.find(offset) == undersize_set.end()) {
           compiled_orientation.outside_undersize_offsets.push_back(offset);
+        }
+      }
+      const std::unordered_set<VoxelIndex, VoxelIndexHash> collision_exempt_set(
+        collision_exempt_offsets.begin(), collision_exempt_offsets.end());
+      compiled_orientation.forbidden_offsets.reserve(forbidden_offsets.size());
+      for (const auto &offset : forbidden_offsets) {
+        if (collision_exempt_set.find(offset) == collision_exempt_set.end()) {
+          compiled_orientation.forbidden_offsets.push_back(offset);
         }
       }
       compiled.orientations.push_back(std::move(compiled_orientation));
@@ -277,6 +368,55 @@ public:
           continue;
         }
 
+        if (grasp_template.has_opposing_contacts) {
+          candidate.opposing_contact_pair_hits.reserve(
+            orientation.opposing_contact_pairs.size());
+          std::size_t best_pair_support = 0;
+          for (std::size_t pair_index = 0;
+            pair_index < orientation.opposing_contact_pairs.size(); ++pair_index)
+          {
+            const auto &contact_pair = orientation.opposing_contact_pairs[pair_index];
+            GraspVoxelContactPairHits hits;
+            hits.positive = countOccupied(
+              target_occupancy, anchor, contact_pair.positive_offsets);
+            hits.negative = countOccupied(
+              target_occupancy, anchor, contact_pair.negative_offsets);
+            candidate.opposing_contact_pair_hits.push_back(hits);
+            const std::size_t pair_support = std::min(hits.positive, hits.negative);
+            if (hits.positive >= config.minimum_contact_hits_per_side &&
+              hits.negative >= config.minimum_contact_hits_per_side &&
+              pair_support > best_pair_support)
+            {
+              best_pair_support = pair_support;
+              candidate.selected_contact_pair = pair_index;
+              candidate.positive_contact_hits = hits.positive;
+              candidate.negative_contact_hits = hits.negative;
+            }
+          }
+          if (candidate.selected_contact_pair == std::numeric_limits<std::size_t>::max()) {
+            ++result.rejected_missing_opposing_contact;
+            continue;
+          }
+        }
+
+        candidate.lateral_continuation_pair_hits.reserve(
+          orientation.lateral_continuation_pairs.size());
+        for (const auto &continuation_pair : orientation.lateral_continuation_pairs) {
+          GraspVoxelContactPairHits hits;
+          hits.positive = countOccupied(
+            target_occupancy, anchor, continuation_pair.positive_offsets);
+          hits.negative = countOccupied(
+            target_occupancy, anchor, continuation_pair.negative_offsets);
+          candidate.lateral_continuation_pair_hits.push_back(hits);
+          if (hits.positive > 0U && hits.negative > 0U) {
+            ++candidate.lateral_continuation_axes;
+          }
+        }
+        if (candidate.lateral_continuation_axes > config.maximum_lateral_continuation_axes) {
+          ++result.rejected_lateral_continuation;
+          continue;
+        }
+
         candidate.forbidden_hits = countOccupied(
           collision_occupancy, anchor, orientation.forbidden_offsets);
         if (candidate.forbidden_hits > config.maximum_forbidden_hits) {
@@ -287,7 +427,20 @@ public:
         const double outside_ratio = orientation.outside_undersize_offsets.empty() ? 0.0 :
           static_cast<double>(candidate.outside_undersize_hits) /
           static_cast<double>(orientation.outside_undersize_offsets.size());
-        candidate.score = 0.8 * candidate.required_occupancy_ratio + 0.2 * outside_ratio;
+        double positive_contact_ratio = 0.0;
+        double negative_contact_ratio = 0.0;
+        if (candidate.selected_contact_pair != std::numeric_limits<std::size_t>::max()) {
+          const auto &contact_pair = orientation.opposing_contact_pairs[
+            candidate.selected_contact_pair];
+          positive_contact_ratio = contact_pair.positive_offsets.empty() ? 0.0 :
+            static_cast<double>(candidate.positive_contact_hits) /
+            static_cast<double>(contact_pair.positive_offsets.size());
+          negative_contact_ratio = contact_pair.negative_offsets.empty() ? 0.0 :
+            static_cast<double>(candidate.negative_contact_hits) /
+            static_cast<double>(contact_pair.negative_offsets.size());
+        }
+        candidate.score = 0.7 * candidate.required_occupancy_ratio + 0.2 * outside_ratio +
+          0.1 * std::min(positive_contact_ratio, negative_contact_ratio);
         result.candidates.push_back(std::move(candidate));
       }
     }
@@ -535,15 +688,63 @@ public:
         ++result.rejected_undersize_only;
         continue;
       }
+      const auto &orientation = grasp_template_.orientations[candidate.orientation_index];
+      candidate.selected_contact_pair = std::numeric_limits<std::size_t>::max();
+      candidate.positive_contact_hits = 0;
+      candidate.negative_contact_hits = 0;
+      if (grasp_template_.has_opposing_contacts) {
+        std::size_t best_pair_support = 0;
+        for (std::size_t pair_index = 0;
+          pair_index < candidate.opposing_contact_pair_hits.size(); ++pair_index)
+        {
+          const auto &hits = candidate.opposing_contact_pair_hits[pair_index];
+          const std::size_t pair_support = std::min(hits.positive, hits.negative);
+          if (hits.positive >= config_.minimum_contact_hits_per_side &&
+            hits.negative >= config_.minimum_contact_hits_per_side &&
+            pair_support > best_pair_support)
+          {
+            best_pair_support = pair_support;
+            candidate.selected_contact_pair = pair_index;
+            candidate.positive_contact_hits = hits.positive;
+            candidate.negative_contact_hits = hits.negative;
+          }
+        }
+        if (candidate.selected_contact_pair == std::numeric_limits<std::size_t>::max()) {
+          ++result.rejected_missing_opposing_contact;
+          continue;
+        }
+      }
+      candidate.lateral_continuation_axes = 0;
+      for (const auto &hits : candidate.lateral_continuation_pair_hits) {
+        if (hits.positive > 0U && hits.negative > 0U) {
+          ++candidate.lateral_continuation_axes;
+        }
+      }
+      if (candidate.lateral_continuation_axes > config_.maximum_lateral_continuation_axes) {
+        ++result.rejected_lateral_continuation;
+        continue;
+      }
       if (candidate.forbidden_hits > config_.maximum_forbidden_hits) {
         ++result.rejected_forbidden_occupancy;
         continue;
       }
-      const auto &orientation = grasp_template_.orientations[candidate.orientation_index];
       const double outside_ratio = orientation.outside_undersize_offsets.empty() ? 0.0 :
         static_cast<double>(candidate.outside_undersize_hits) /
         static_cast<double>(orientation.outside_undersize_offsets.size());
-      candidate.score = 0.8 * candidate.required_occupancy_ratio + 0.2 * outside_ratio;
+      double positive_contact_ratio = 0.0;
+      double negative_contact_ratio = 0.0;
+      if (candidate.selected_contact_pair != std::numeric_limits<std::size_t>::max()) {
+        const auto &contact_pair = orientation.opposing_contact_pairs[
+          candidate.selected_contact_pair];
+        positive_contact_ratio = contact_pair.positive_offsets.empty() ? 0.0 :
+          static_cast<double>(candidate.positive_contact_hits) /
+          static_cast<double>(contact_pair.positive_offsets.size());
+        negative_contact_ratio = contact_pair.negative_offsets.empty() ? 0.0 :
+          static_cast<double>(candidate.negative_contact_hits) /
+          static_cast<double>(contact_pair.negative_offsets.size());
+      }
+      candidate.score = 0.7 * candidate.required_occupancy_ratio + 0.2 * outside_ratio +
+        0.1 * std::min(positive_contact_ratio, negative_contact_ratio);
       result.candidates.push_back(std::move(candidate));
     }
     sortAndLimit(result);
@@ -640,6 +841,20 @@ private:
         target_cells_, anchor, orientation.required_offsets);
       candidate.outside_undersize_hits = countOccupied(
         target_cells_, anchor, orientation.outside_undersize_offsets);
+      candidate.opposing_contact_pair_hits.reserve(
+        orientation.opposing_contact_pairs.size());
+      for (const auto &contact_pair : orientation.opposing_contact_pairs) {
+        candidate.opposing_contact_pair_hits.push_back({
+          countOccupied(target_cells_, anchor, contact_pair.positive_offsets),
+          countOccupied(target_cells_, anchor, contact_pair.negative_offsets)});
+      }
+      candidate.lateral_continuation_pair_hits.reserve(
+        orientation.lateral_continuation_pairs.size());
+      for (const auto &continuation_pair : orientation.lateral_continuation_pairs) {
+        candidate.lateral_continuation_pair_hits.push_back({
+          countOccupied(target_cells_, anchor, continuation_pair.positive_offsets),
+          countOccupied(target_cells_, anchor, continuation_pair.negative_offsets)});
+      }
       candidate.forbidden_hits = countOccupied(
         collision_cells_, anchor, orientation.forbidden_offsets);
       candidate_states_.emplace(
@@ -671,6 +886,24 @@ private:
       updateCounts(
         cell, orientation_index, orientation.outside_undersize_offsets,
         delta, &GraspVoxelMatchCandidate::outside_undersize_hits);
+      for (std::size_t pair_index = 0;
+        pair_index < orientation.opposing_contact_pairs.size(); ++pair_index)
+      {
+        const auto &contact_pair = orientation.opposing_contact_pairs[pair_index];
+        updateContactPairCounts(
+          cell, orientation_index, pair_index, contact_pair.positive_offsets, delta, true);
+        updateContactPairCounts(
+          cell, orientation_index, pair_index, contact_pair.negative_offsets, delta, false);
+      }
+      for (std::size_t pair_index = 0;
+        pair_index < orientation.lateral_continuation_pairs.size(); ++pair_index)
+      {
+        const auto &continuation_pair = orientation.lateral_continuation_pairs[pair_index];
+        updateLateralContinuationCounts(
+          cell, orientation_index, pair_index, continuation_pair.positive_offsets, delta, true);
+        updateLateralContinuationCounts(
+          cell, orientation_index, pair_index, continuation_pair.negative_offsets, delta, false);
+      }
     }
   }
 
@@ -688,6 +921,50 @@ private:
         continue;
       }
       adjust(state->second.*member, delta);
+      ++updated_candidate_states_;
+    }
+  }
+
+  void updateContactPairCounts(
+    const VoxelIndex &cell,
+    std::size_t orientation_index,
+    std::size_t pair_index,
+    const std::vector<VoxelIndex> &offsets,
+    int delta,
+    bool positive)
+  {
+    for (const auto &offset : offsets) {
+      const CandidateKey key{subtract(cell, offset), orientation_index};
+      const auto state = candidate_states_.find(key);
+      if (state == candidate_states_.end() ||
+        pair_index >= state->second.opposing_contact_pair_hits.size())
+      {
+        continue;
+      }
+      auto &hits = state->second.opposing_contact_pair_hits[pair_index];
+      adjust(positive ? hits.positive : hits.negative, delta);
+      ++updated_candidate_states_;
+    }
+  }
+
+  void updateLateralContinuationCounts(
+    const VoxelIndex &cell,
+    std::size_t orientation_index,
+    std::size_t pair_index,
+    const std::vector<VoxelIndex> &offsets,
+    int delta,
+    bool positive)
+  {
+    for (const auto &offset : offsets) {
+      const CandidateKey key{subtract(cell, offset), orientation_index};
+      const auto state = candidate_states_.find(key);
+      if (state == candidate_states_.end() ||
+        pair_index >= state->second.lateral_continuation_pair_hits.size())
+      {
+        continue;
+      }
+      auto &hits = state->second.lateral_continuation_pair_hits[pair_index];
+      adjust(positive ? hits.positive : hits.negative, delta);
       ++updated_candidate_states_;
     }
   }

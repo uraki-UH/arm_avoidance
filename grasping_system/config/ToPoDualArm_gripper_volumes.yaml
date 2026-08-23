@@ -85,6 +85,41 @@ grippers:
     label: 0
     semantic_label: 0
 
+  - name: left_gripper_closing_sweep_forbidden
+    tf_frame: L_tcp
+    output_topic: /ToPoDualArm/L_grip_sweptV_topological_map
+    # Union of the base and both fingers from fully open to fully closed.
+    # This is a collision template, not an object-volume template.
+    shape: box
+    dimensions: [0.10, 0.17, 0.14]
+    center: [0.0, 0.0, 0.07]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    # 10 mm sampling and five poses leave no >10 mm gap along the 37 mm stroke.
+    resolution: 0.01
+    exclusion_clearance: 0.0
+    retain_occupied_meshes: true
+    include_cluster: false
+    meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    swept_meshes:
+      # The actual ToPoDualArm fingers are prismatic.  The same schema also
+      # supports start/end orientations for a rotating gripper.
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+        scale: [0.001, 0.001, 0.001]
+        start_position: [0.0, 0.05536, 0.085]
+        end_position: [0.0, 0.01836, 0.085]
+        samples: 5
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+        scale: [0.001, 0.001, 0.001]
+        start_position: [0.0, -0.05536, 0.085]
+        end_position: [0.0, -0.01836, 0.085]
+        samples: 5
+    label: 0
+    semantic_label: 0
+
   - name: right_gripper
     tf_frame: R_tcp
     output_topic: /ToPoDualArm/R_grip_V_topological_map
@@ -163,5 +198,35 @@ grippers:
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    label: 0
+    semantic_label: 0
+
+  - name: right_gripper_closing_sweep_forbidden
+    tf_frame: R_tcp
+    output_topic: /ToPoDualArm/R_grip_sweptV_topological_map
+    shape: box
+    dimensions: [0.10, 0.17, 0.14]
+    center: [0.0, 0.0, 0.07]
+    orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    resolution: 0.01
+    exclusion_clearance: 0.0
+    retain_occupied_meshes: true
+    include_cluster: false
+    meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+        scale: [0.001, 0.001, 0.001]
+        position: [0.0, 0.0, 0.1055]
+        orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
+    swept_meshes:
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+        scale: [0.001, 0.001, 0.001]
+        start_position: [0.0, 0.05536, 0.085]
+        end_position: [0.0, 0.01836, 0.085]
+        samples: 5
+      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+        scale: [0.001, 0.001, 0.001]
+        start_position: [0.0, -0.05536, 0.085]
+        end_position: [0.0, -0.01836, 0.085]
+        samples: 5
     label: 0
     semantic_label: 0

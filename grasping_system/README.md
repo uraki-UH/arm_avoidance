@@ -146,6 +146,8 @@ This publishes:
 - `/ToPoDualArm/R_grip_minV_topological_map` in `ToPoDualArm/R_tcp`
 - `/ToPoDualArm/L_grip_baseV_topological_map` in `ToPoDualArm/L_tcp`
 - `/ToPoDualArm/R_grip_baseV_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_sweptV_topological_map` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_sweptV_topological_map` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix
@@ -172,6 +174,15 @@ The two `grip_baseV` graphs retain only the gripper-base STL occupancy plus a
 `0.005 m` collision margin, sampled at `0.005 m`. They are forbidden-volume
 inputs intended for a `required_empty` occupancy constraint, not graspable
 volume. The search-bound cluster is omitted.
+The two `grip_sweptV` graphs combine the base and both finger meshes across the
+open-to-closed stroke. ToPoDualArm fingers are prismatic, so five poses cover
+the 37 mm stroke at 10 mm sampling. `swept_meshes` also accepts
+`start_orientation_xyzw` and `end_orientation_xyzw`; a rotating finger is
+therefore sampled with quaternion interpolation using the same configuration
+format. A matcher using this graph exempts the fully open `grip_V` interior:
+occupancy there is the prospective object and may meet a closing finger. The
+remaining swept occupancy is a forbidden collision region. Treating the whole
+finger sweep as empty would reject every valid contact.
 The publisher sends the graph exactly once at node startup. Transient-local QoS
 keeps that sample available, so a viewer or rosbag recorder started later still
 receives the current static graph without application-level retransmission.
