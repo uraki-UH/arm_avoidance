@@ -661,7 +661,7 @@ struct Clusterizer::Impl
               static_cast<double>(clusters[best_cluster].member_count) >=
               options.migration_size_bias_ratio *
               static_cast<double>(clusters[current_cluster].member_count) &&
-              best_score <= current_score + options.migration_size_bias_tolerance)
+              best_score <= current_score + options.migration_size_bias_th)
             {
               is_migration_accepted = true;
             }

@@ -62,8 +62,8 @@ struct ClusterOptions
   // 大クラスタ側への任意移動機能のON/OFF。面の統合はクラスタ併合を優先。
   bool enable_larger_cluster_migration_bias = false;
 
-  // 大きいクラスタへ移すときに、当てはめがこの分だけ悪くなることを許す。
-  double migration_size_bias_tolerance = 0.10;
+  // 大クラスタ側への任意移動で許容するscore悪化量のしきい値。
+  double migration_size_bias_th = 0.10;
 
   // 大きい側とみなすために必要なノード数の比。
   //

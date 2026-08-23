@@ -290,8 +290,8 @@ private:
       std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iter", 2)));
     options.enable_larger_cluster_migration_bias =
       declare_parameter<bool>("enable_larger_cluster_migration_bias", false);
-    options.migration_size_bias_tolerance =
-      declare_parameter<double>("migration_size_bias_tolerance", 0.10);
+    options.migration_size_bias_th =
+      declare_parameter<double>("migration_size_bias_th", 0.10);
     options.migration_size_bias_ratio =
       declare_parameter<double>("migration_size_bias_ratio", 2.0);
     options.donor_protection_buffer = static_cast<std::size_t>(
