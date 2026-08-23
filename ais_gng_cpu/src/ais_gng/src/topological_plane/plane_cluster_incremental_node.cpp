@@ -81,7 +81,7 @@ visualization_msgs::msg::Marker baseMarker(
 // 毎フレーム DELETEALL を送ると、削除と再追加の間で表示が一瞬抜けて明滅する。
 // 生き残っているクラスタのマーカーは上書き更新に任せる。
 visualization_msgs::msg::MarkerArray makeObbMarkers(
-  const ais_gng_msgs::msg::PlanarClusterArray &clusters, const bool publish_text,
+  const ais_gng_msgs::msg::PlanarClusterArray &clusters, const bool enable_text_marker,
   std::set<std::uint32_t> &published_ids,
   const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
 {
@@ -146,7 +146,7 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
     normal.points.push_back(tip);
     markers.markers.push_back(std::move(normal));
 
-    if (publish_text) {
+    if (enable_text_marker) {
       auto text = baseMarker(clusters.header, "incremental_plane_label", marker_id);
       text.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
       text.pose.position = markerPoint(cluster.centroid);
@@ -241,7 +241,7 @@ public:
       "output_topic", "/topological_planar_clusters_incremental");
     obb_marker_topic_ = output_topic_ + "/markers/obb";
     node_marker_topic_ = output_topic_ + "/markers/nodes";
-    publish_text_ = declare_parameter<bool>("publish_text", false);
+    enable_text_marker_ = declare_parameter<bool>("enable_text_marker", false);
 
     const auto output_qos = rclcpp::QoS(1).transient_local();
     cluster_publisher_ =
@@ -284,12 +284,12 @@ private:
       std::max<std::int64_t>(1, declare_parameter<int>("birth_neighbor_requirement", 1)));
     options.migration_improvement_margin =
       declare_parameter<double>("migration_improvement_margin", 0.30);
-    options.coplanar_multi_edge_overrides_distance =
-      declare_parameter<bool>("coplanar_multi_edge_overrides_distance", true);
-    options.maintenance_iterations = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iterations", 2)));
-    options.prefer_larger_cluster_on_migration =
-      declare_parameter<bool>("prefer_larger_cluster_on_migration", false);
+    options.enable_multi_edge_dist_relaxation =
+      declare_parameter<bool>("enable_multi_edge_dist_relaxation", true);
+    options.maintenance_iter = static_cast<std::size_t>(
+      std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iter", 2)));
+    options.enable_larger_cluster_migration_bias =
+      declare_parameter<bool>("enable_larger_cluster_migration_bias", false);
     options.migration_size_bias_tolerance =
       declare_parameter<double>("migration_size_bias_tolerance", 0.10);
     options.migration_size_bias_ratio =
@@ -387,7 +387,8 @@ private:
     assignColors(result.clusters, map);
     cluster_publisher_->publish(result.clusters);
     obb_marker_publisher_->publish(
-      makeObbMarkers(result.clusters, publish_text_, published_obb_marker_ids_, cluster_color_));
+      makeObbMarkers(
+        result.clusters, enable_text_marker_, published_obb_marker_ids_, cluster_color_));
     node_marker_publisher_->publish(
       makeNodeMarkers(result.clusters, map.nodes, published_node_marker_ids_, cluster_color_));
     const auto completed = std::chrono::steady_clock::now();
@@ -419,7 +420,7 @@ private:
       result.statistics.split_cluster_count,
       result.statistics.merged_cluster_count,
       result.statistics.removed_cluster_count,
-      result.statistics.maintenance_iterations_used,
+      result.statistics.maintenance_iter_num,
       result.statistics.merge_adjacent_pair_count,
       result.statistics.merge_insufficient_edge_pair_count,
       result.statistics.merge_invalid_fit_pair_count,
@@ -443,7 +444,7 @@ private:
   std::string output_topic_;
   std::string obb_marker_topic_;
   std::string node_marker_topic_;
-  bool publish_text_ = false;
+  bool enable_text_marker_ = false;
 
   Clusterizer clusterizer_;
   rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_publisher_;

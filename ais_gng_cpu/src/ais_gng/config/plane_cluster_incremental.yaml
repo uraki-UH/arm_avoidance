@@ -41,7 +41,7 @@ plane_cluster_incremental_node:
 
     # true 時の大クラスタ側への任意移動規則。候補 B のノード数が移動元の指定倍率以上、
     # かつ候補への距離が指定した許容量以下の悪化。既定は無効。
-    prefer_larger_cluster_on_migration: false
+    enable_larger_cluster_migration_bias: false
     # 上の任意条件で許す、score の悪化量の上限。
     migration_size_bias_tolerance: 0.10
     # 上の任意条件で「候補クラスタの方が十分大きい」とみなすノード数の倍率。
@@ -53,11 +53,11 @@ plane_cluster_incremental_node:
 
     # true 時の複数接続ノードに対する保持用距離上限への緩和。距離判定の維持。
     # false 時の取り込み用距離上限への固定。
-    coplanar_multi_edge_overrides_distance: false
+    enable_multi_edge_dist_relaxation: false
 
     # 1入力フレームあたりの「解放→取り込み・移動→再平面フィット」最大回数。
     # 所属変化ゼロ時の早期終了。
-    maintenance_iterations: 2
+    maintenance_iter: 2
 
     # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
     # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
@@ -78,4 +78,4 @@ plane_cluster_incremental_node:
     weak_frame_allowance: 5
 
     # true 時のOBBマーカーへのクラスタID・ノード数文字列の重畳表示。
-    publish_text: false
+    enable_text_marker: false

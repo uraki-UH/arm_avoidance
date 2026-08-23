@@ -59,15 +59,8 @@ struct ClusterOptions
   // 実測(同一フレーム列100枚): 0.05 で移動9202・往復45.1%、0.30 で移動5799・往復37.8%。
   double migration_improvement_margin = 0.30;
 
-  // 拮抗した境界ノードを、ノード数の多いクラスタ側へ寄せる。
-  //
-  // 単一の壁へまとめる狙いで試したが、実測では往復がどの設定でも増えた
-  // (margin 0.30 で 37.8% -> 45.5%、サイズ比を4倍にしても改善しない)。
-  // 当てはめが悪くなる移動を許すぶん移動自体が増え、移動がサイズを変えて
-  // 大小関係を揺らすため、新たな振動源になる。既定では無効にする。
-  //
-  // 面をまとめたい場合は、境界から少しずつ移すのではなくクラスタ併合で行う。
-  bool prefer_larger_cluster_on_migration = false;
+  // 大クラスタ側への任意移動機能のON/OFF。面の統合はクラスタ併合を優先。
+  bool enable_larger_cluster_migration_bias = false;
 
   // 大きいクラスタへ移すときに、当てはめがこの分だけ悪くなることを許す。
   double migration_size_bias_tolerance = 0.10;
@@ -85,16 +78,11 @@ struct ClusterOptions
   // クラスタ併合として一括で行われるべきで、削り取られて消えるのは別物である。
   std::size_t donor_protection_buffer = 3;
 
-  // 同一クラスタのノードから複数のエッジが伸びているノードは、平面までの距離を
-  // 問わずそのクラスタの所属とする。
-  //
-  // 所属の根拠を「平面までの絶対距離」ではなく「接続と法線一致」に置く。実機では
-  // 机の面が局所ノード間隔の 0.3〜0.4 ぶんうねっており、距離だけで切ると面が途中で
-  // 分断された。距離は候補が複数あるときの優先順位にだけ使う。
-  bool coplanar_multi_edge_overrides_distance = true;
+  // 複数接続ノードに対する保持用距離上限緩和機能のON/OFF。
+  bool enable_multi_edge_dist_relaxation = true;
 
   // 保守点検(移動・取り込み)を1フレームで回す上限回数。
-  std::size_t maintenance_iterations = 2;
+  std::size_t maintenance_iter = 2;
 
   // 併合を認めるために、結合後の残差が元のクラスタから悪化してよい倍率。
   //
@@ -142,7 +130,7 @@ struct ClusterStatistics
   std::size_t merged_cluster_count = 0;
   std::size_t split_cluster_count = 0;
   std::size_t removed_cluster_count = 0;
-  std::size_t maintenance_iterations_used = 0;
+  std::size_t maintenance_iter_num = 0;
 
   // 隣接クラスタ対が併合判定のどこで止まったかを示す診断値。
   std::size_t merge_adjacent_pair_count = 0;

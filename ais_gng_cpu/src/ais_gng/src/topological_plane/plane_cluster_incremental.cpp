@@ -69,7 +69,7 @@ struct PlaneFit
   Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
   double planarity = 0.0;
   double residual = 0.0;
-  bool valid = false;
+  bool is_valid = false;
 };
 
 // 点列を保持せず、累積和だけから平面を解く。メンバー配列を作り直さずに済むため、
@@ -179,9 +179,9 @@ struct PlaneAccumulator
     // 平面性は「線分状でないこと」を見る指標で、厚みは residual で別に評価する。
     fit.planarity = std::sqrt(std::clamp(eigenvalues.y() / largest, 0.0, 1.0));
     fit.residual = std::sqrt(std::max(0.0, eigenvalues.x()));
-    fit.valid = fit.normal.allFinite() && std::isfinite(fit.planarity) &&
+    fit.is_valid = fit.normal.allFinite() && std::isfinite(fit.planarity) &&
       std::isfinite(fit.residual);
-    if (fit.valid) {
+    if (fit.is_valid) {
       orientNormal(fit.normal, normal_sum);
     }
     return fit;
@@ -260,7 +260,7 @@ struct Clusterizer::Impl
     // 成長中のしきい値が確定時より厳しいと、育つ前に必ず止まってしまう。
     options.min_growth_planarity = std::clamp(
       options.min_growth_planarity, 0.0, options.min_cluster_planarity);
-    options.maintenance_iterations = std::max<std::size_t>(1U, options.maintenance_iterations);
+    options.maintenance_iter = std::max<std::size_t>(1U, options.maintenance_iter);
     options.connection_requirement =
       std::max<std::size_t>(1U, options.connection_requirement);
     options.birth_neighbor_requirement =
@@ -280,7 +280,7 @@ struct Clusterizer::Impl
     std::size_t weak_frames = 0U;
     std::size_t disconnected_frames = 0U;
     std::size_t confirmed_frames = 0U;
-    bool healthy = false;
+    bool is_healthy = false;
   };
 
   ClusterOptions options;
@@ -392,9 +392,9 @@ struct Clusterizer::Impl
       for (std::size_t cursor = adjacency_offsets[index];
         cursor < adjacency_offsets[index + 1U]; ++cursor)
       {
-        const double distance = (positions[index] - positions[adjacency_values[cursor]]).norm();
-        if (std::isfinite(distance) && distance > kEpsilon) {
-          spacing_sum += distance;
+        const double dist = (positions[index] - positions[adjacency_values[cursor]]).norm();
+        if (std::isfinite(dist) && dist > kEpsilon) {
+          spacing_sum += dist;
           ++spacing_count;
         }
       }
@@ -418,7 +418,7 @@ struct Clusterizer::Impl
         local.add(positions[neighbour], Eigen::Vector3d::UnitZ(), spacings[neighbour]);
       }
       const PlaneFit fit = local.solve();
-      if (!fit.valid) {
+      if (!fit.is_valid) {
         usable[index] = 0U;
         continue;
       }
@@ -497,7 +497,7 @@ struct Clusterizer::Impl
         continue;
       }
       PlaneFit fit = accumulator.solve();
-      if (!fit.valid) {
+      if (!fit.is_valid) {
         continue;
       }
       // 前フレームの法線へそろえ、向きの反転で追従が切れないようにする。
@@ -518,7 +518,7 @@ struct Clusterizer::Impl
     return std::abs(cluster.normal.dot(positions[node_index] - cluster.centroid)) / spacing;
   }
 
-  bool normalAligned(const std::size_t cluster_index, const std::size_t node_index) const
+  bool is_normal_aligned(const std::size_t cluster_index, const std::size_t node_index) const
   {
     return std::abs(clusters[cluster_index].normal.dot(normals[node_index])) >=
            normal_alignment_cos;
@@ -536,7 +536,7 @@ struct Clusterizer::Impl
       if (clusters[cluster].member_count < 3U) {
         continue;
       }
-      if (!normalAligned(cluster, index)) {
+      if (!is_normal_aligned(cluster, index)) {
         label[index] = kUnassigned;
         ++statistics.released_node_count;
         continue;
@@ -545,7 +545,7 @@ struct Clusterizer::Impl
       // 無効にはしない。無効にすると平面から離れても誰も外れず、集約値だけが
       // 悪化していく。
       std::size_t same_cluster_neighbours = 0U;
-      if (options.coplanar_multi_edge_overrides_distance) {
+      if (options.enable_multi_edge_dist_relaxation) {
         for (std::size_t cursor = adjacency_offsets[index];
           cursor < adjacency_offsets[index + 1U]; ++cursor)
         {
@@ -610,7 +610,7 @@ struct Clusterizer::Impl
         const std::size_t cluster = static_cast<std::size_t>(candidate_label);
         if (clusters[cluster].member_count < 3U ||
           neighbour_counts[cluster] < options.connection_requirement ||
-          !normalAligned(cluster, index))
+          !is_normal_aligned(cluster, index))
         {
           continue;
         }
@@ -620,10 +620,11 @@ struct Clusterizer::Impl
         //
         // 接続本数が足りていれば、しきい値を保持と同じ上限まで緩める。
         // 逸脱ノードまで取り込まないよう、上限そのものは残す。
-        const bool multi_edge_override = options.coplanar_multi_edge_overrides_distance &&
+        const bool is_multi_edge_dist_relaxed =
+          options.enable_multi_edge_dist_relaxation &&
           neighbour_counts[cluster] >= 2U &&
           score <= options.retention_residual_ratio;
-        if (!multi_edge_override && score > options.growth_residual_ratio) {
+        if (!is_multi_edge_dist_relaxed && score > options.growth_residual_ratio) {
           continue;
         }
         // 同点時は添字の小さいクラスタを選び、フレーム間で結果を安定させる。
@@ -646,24 +647,25 @@ struct Clusterizer::Impl
           const std::size_t best_cluster = static_cast<std::size_t>(best_label);
           // 小さいクラスタは供給しない。境界から少しずつ吸われて消えるのを防ぐ。
           // まとまるべきならクラスタ併合として一括で行われるべきである。
-          const bool donor_protected =
+          const bool is_donor_protected =
             clusters[current_cluster].member_count <=
             options.min_cluster_nodes + options.donor_protection_buffer;
-          if (!donor_protected) {
+          if (!is_donor_protected) {
             const double current_score = fitScore(current_cluster, index);
             // 明確に当てはめが良くなる場合は移す。
-            bool accept = best_score < current_score - options.migration_improvement_margin;
+            bool is_migration_accepted =
+              best_score < current_score - options.migration_improvement_margin;
             // 拮抗しているだけなら、ノード数の多い側へ寄せる。行き先を一貫させる
             // ことで、法線の揺れによる往復が止まる。
-            if (!accept && options.prefer_larger_cluster_on_migration &&
+            if (!is_migration_accepted && options.enable_larger_cluster_migration_bias &&
               static_cast<double>(clusters[best_cluster].member_count) >=
               options.migration_size_bias_ratio *
               static_cast<double>(clusters[current_cluster].member_count) &&
               best_score <= current_score + options.migration_size_bias_tolerance)
             {
-              accept = true;
+              is_migration_accepted = true;
             }
-            if (accept) {
+            if (is_migration_accepted) {
               next_label[index] = best_label;
               ++statistics.migrated_node_count;
               ++changed;
@@ -744,7 +746,7 @@ struct Clusterizer::Impl
         frontier.push_back(neighbour);
       }
       PlaneFit fit = accumulator.solve();
-      if (!fit.valid) {
+      if (!fit.is_valid) {
         // 3点そろわず平面が解けなかっただけなので、領域として棄却はしない。
         // ここで却下マークを付けると、隣の種から育てば使えるノードまで潰れる。
         continue;
@@ -759,9 +761,9 @@ struct Clusterizer::Impl
       // 育てながら平面を更新する。サイズが倍になるたびに解き直すことで、
       // 再フィット回数を log に抑えつつドリフトを止める。
       std::size_t refit_th = frontier.size() * 2U;
-      bool chain_like = false;
+      bool is_chain_like = false;
       for (std::size_t frontier_index = 0U;
-        frontier_index < frontier.size() && !chain_like; ++frontier_index)
+        frontier_index < frontier.size() && !is_chain_like; ++frontier_index)
       {
         const std::size_t current = frontier[frontier_index];
         for (std::size_t cursor = adjacency_offsets[current];
@@ -800,12 +802,12 @@ struct Clusterizer::Impl
           frontier.push_back(neighbour);
           if (frontier.size() >= refit_th) {
             const PlaneFit updated = accumulator.solve();
-            if (updated.valid) {
+          if (updated.is_valid) {
               fit = updated;
               // サイズが倍になるたびに形を確認する。平面なら倍化しても
               // 第2固有値の比は保たれるが、鎖状に伸び始めるとここで落ちる。
               if (updated.planarity < options.min_growth_planarity) {
-                chain_like = true;
+                is_chain_like = true;
                 break;
               }
             }
@@ -814,7 +816,7 @@ struct Clusterizer::Impl
         }
       }
 
-      if (chain_like) {
+      if (is_chain_like) {
         ++statistics.chain_rejected_count;
         rejectFrontier();
         continue;
@@ -825,7 +827,7 @@ struct Clusterizer::Impl
       }
       const PlaneFit final_fit = accumulator.solve();
       const double spacing = std::max(accumulator.meanSpacing(), kEpsilon);
-      if (!final_fit.valid ||
+      if (!final_fit.is_valid ||
         final_fit.residual / spacing > options.max_normalized_cluster_residual)
       {
         rejectFrontier();
@@ -1047,7 +1049,7 @@ struct Clusterizer::Impl
       merged_fit.mergeFrom(merge_accumulators[second]);
       const PlaneFit union_fit = merged_fit.solve();
       const double union_spacing = std::max(merged_fit.meanSpacing(), kEpsilon);
-      if (!union_fit.valid) {
+      if (!union_fit.is_valid) {
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
@@ -1111,8 +1113,8 @@ struct Clusterizer::Impl
     // 集約値で切ると、実在する面が集約残差の一時的な悪化だけで丸ごと消える。
     // 平面性と残差は、生成時と併合時の条件としてのみ使う。
     for (ClusterState &cluster : clusters) {
-      cluster.healthy = cluster.member_count >= options.min_cluster_nodes;
-      if (cluster.healthy) {
+      cluster.is_healthy = cluster.member_count >= options.min_cluster_nodes;
+      if (cluster.is_healthy) {
         cluster.weak_frames = 0U;
         ++cluster.confirmed_frames;
       } else {
@@ -1164,7 +1166,7 @@ struct Clusterizer::Impl
       // クラスタ全体を出力から外すと、内部では生きているのに表示だけが明滅する。
       // 実測では120フレームで同一IDの復活が178件あった。
       //
-      // 平面性・残差は healthy として weak_frames にだけ効かせ、条件を満たさない状態が
+      // 平面性・残差は is_healthy として weak_frames にだけ効かせ、条件を満たさない状態が
       // weak_frame_allowance を超えて続いた場合に cullClusters が消す。こうすると
       // 消えるのは一度きりで、途中はメンバーが減って縮小するだけになる。
       if (state.member_count < options.min_cluster_nodes) {
@@ -1295,9 +1297,9 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
 
   // 解放と取り込みで平面が動くため、再フィットを挟みながら数回だけ回す。
   // 変化が止まった時点で抜けるので、定常状態では1回で終わる。
-  for (std::size_t iteration = 0U; iteration < impl_->options.maintenance_iterations; ++iteration) {
+  for (std::size_t iter = 0U; iter < impl_->options.maintenance_iter; ++iter) {
     impl_->refitClusters();
-    ++result.statistics.maintenance_iterations_used;
+    ++result.statistics.maintenance_iter_num;
     if (impl_->maintenancePass(result.statistics) == 0U) {
       break;
     }

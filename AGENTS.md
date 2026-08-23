@@ -31,6 +31,8 @@
 | `num` | number | 個数 | `number` |
 | `idx` | index | 添字 | `index` |
 | `req` | requirement | 要求数・要求条件 | `requirement` |
+| `dist` | distance | 距離 | `distance` |
+| `iter` | iteration | 反復回数・反復添字 | `iteration`、`iterations` |
 | `deg` | degree | 角度の単位 | `degree` |
 | `cos` | cosine | 余弦値 | `cosine` |
 | `sin` | sine | 正弦値 | `sine` |
