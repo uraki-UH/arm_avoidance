@@ -37,28 +37,7 @@ ament_auto_add_executable(topological_query_node src/topological_query/topologic
 ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
 ament_target_dependencies(topological_grid_node voxel_msgs)
 
-ament_auto_add_library(
-  topological_plane_cluster
-  SHARED
-  src/topological_plane/topological_plane_cluster.cpp
-)
-target_include_directories(topological_plane_cluster PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(topological_plane_cluster ais_gng_msgs Eigen3)
-
-ament_auto_add_executable(
-  topological_plane_cluster_node
-  src/topological_plane/topological_plane_cluster_node.cpp
-)
-target_link_libraries(topological_plane_cluster_node topological_plane_cluster)
-ament_target_dependencies(
-  topological_plane_cluster_node
-  ais_gng_msgs rclcpp visualization_msgs Eigen3
-)
-
-# 増分方式の平面クラスタ生成。既存の topological_plane_cluster とは独立に動く。
+# 増分方式の平面クラスタ生成。
 ament_auto_add_library(
   plane_cluster_incremental
   SHARED

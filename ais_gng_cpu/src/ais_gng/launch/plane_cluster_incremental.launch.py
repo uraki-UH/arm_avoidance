@@ -1,8 +1,4 @@
-"""増分方式の平面クラスタ生成ノードを起動する。
-
-既存の topological_plane_cluster とは別トピックへ出すため、同時に起動して
-同じ /topological_map に対する結果を比較できる。
-"""
+"""増分方式の平面クラスタ生成ノードを起動する。"""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument

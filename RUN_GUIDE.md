@@ -265,35 +265,11 @@ ros2 launch ais_gng topological_grid.launch.py \
   output_topic:=/topo_voxel_ids \
   grid_size:=0.02
 
-## GNGエッジから平面クラスタを作る
+## GNGエッジから増分平面クラスタを作る
 
-点群全体にRANSACを掛けず、`TopologicalMap`の既存GNG edgeだけで平面らしいノードを連結する。
-各ノードの局所PCAと隣接edgeの法線方向ずれを**局所edge間隔で正規化**するので、ここでは
-`grid_size`や固定mm閾値を使わない。出力の`node_indices`は入力`TopologicalMap.nodes`への対応である。
-
-```bash
-ros2 launch ais_gng topological_plane_cluster.launch.py \
-  input_topic:=/topological_map
-```
-
-```bash
-# 数値確認: id、所属GNGノード、法線、輪郭、概算面積、局所間隔
-ros2 topic echo /topological_planar_clusters --once
-```
-
-可視化は追加のViewer実装なしで、ToPoFuzzy Viewerの`Connection & Streams`から
-`/topological_planar_clusters/markers/obb` と
-`/topological_planar_clusters/markers/nodes` を個別に有効化する。前者はOBB境界・法線矢印・
-任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。OBBは「面の全域が観測済み」
-という意味ではなく、この段階では抽出結果を確認するためだけに使う。
-
-把持候補の衝突除外へは次段で、各環境ボクセルに近傍平面クラスタIDを関連付け、`sweptV`の
-各セルだけを符号付き平面距離で照会する。現段階では平面そのものを候補から消さない。
-
-## 平面クラスタを増分方式で作る（上の方式の置き換え候補）
-
-上の`topological_plane_cluster`と同じ入力から、別トピックへ出す。フレームごとに作り直さず、
-GNGノードID単位の所属を持ち越して差分だけ直すため、所属が定常状態に落ち着く。
+点群全体にRANSACを掛けず、`TopologicalMap`の既存GNG edgeとGNGノード法線から平面クラスタを作る。
+GNGノードID単位の所属を持ち越して差分だけ直すため、所属が定常状態に落ち着く。出力の
+`node_indices`は入力`TopologicalMap.nodes`への対応である。
 1フレームは`O(N + E)`とクラスタ数ぶんの3x3固有値分解だけで、優先度付きキューや
 クラスタ同士の総当たりを使わない。
 
@@ -325,8 +301,8 @@ ros2 topic echo /topological_planar_clusters_incremental --once
 法線矢印・任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。クラスタIDから
 決まる色なので、IDが持続する限り色も変わらない。
 
-既存ノードと同時に起動して同じ入力で比較できる。ログの`changes=`が0に張り付けば定常状態、
-`chain=`は鎖状（共分散の第2固有値が第1固有値に対して小さすぎる形）として棄却した領域数、
+ログの`changes=`が0に張り付けば定常状態、`chain=`は鎖状（共分散の第2固有値が第1固有値に
+対して小さすぎる形）として棄却した領域数、
 `update=`が1フレームの処理時間である。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）

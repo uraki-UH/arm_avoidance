@@ -229,8 +229,6 @@ namespace fuzzrobo::topological_plane::incremental
 {
 
 // 増分方式の平面クラスタ生成をROSノードとして動かす。
-// 既存の topological_plane_cluster_node とは別トピックへ出すため、同時に動かして
-// 同じ入力で結果を比べられる。
 class PlaneClusterIncrementalNode : public rclcpp::Node
 {
 public:
