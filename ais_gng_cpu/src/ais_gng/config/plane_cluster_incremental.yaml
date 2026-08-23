@@ -35,7 +35,21 @@ plane_cluster_incremental_node:
     birth_neighbor_requirement: 1
 
     # 移動を認めるために必要な正規化距離の改善量。振動を止めるための余裕。
-    migration_improvement_margin: 0.05
+    # 環境が静止していても所属が流動的なのは、境界で判定が拮抗し、GNG法線の揺れ
+    # (実測で毎フレーム約4度)で行き先が入れ替わるため。ここが最も効く。
+    # 実測(同一フレーム列100枚): 0.05 で移動9202・往復45.1%、0.30 で移動5799・往復37.8%。
+    migration_improvement_margin: 0.30
+
+    # 拮抗した境界ノードをノード数の多いクラスタ側へ寄せる。単一の壁へまとめる狙いで
+    # 試したが、実測ではどの設定でも往復が増えたため既定では無効。面をまとめたい場合は
+    # 境界から少しずつ移すのではなく、クラスタ併合で行う。
+    prefer_larger_cluster_on_migration: false
+    migration_size_bias_tolerance: 0.10
+    migration_size_bias_ratio: 2.0
+
+    # min_cluster_nodes にこの数を足した以下のクラスタは、移動でメンバーを失わない。
+    # 小さいクラスタが境界から吸われて消えるのを防ぐ。
+    donor_protection_buffer: 3
 
     # 同一クラスタのノードから複数のエッジが伸びているノードは、平面までの距離を
     # 問わずそのクラスタの所属とする。所属の根拠を距離ではなく接続と法線一致に置く。

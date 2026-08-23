@@ -232,13 +232,21 @@ private:
     options.birth_neighbor_requirement = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("birth_neighbor_requirement", 1)));
     options.migration_improvement_margin =
-      declare_parameter<double>("migration_improvement_margin", 0.05);
+      declare_parameter<double>("migration_improvement_margin", 0.30);
     options.coplanar_multi_edge_overrides_distance =
       declare_parameter<bool>("coplanar_multi_edge_overrides_distance", true);
     options.maintenance_iterations = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iterations", 2)));
     options.merge_edge_requirement = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("merge_edge_requirement", 2)));
+    options.prefer_larger_cluster_on_migration =
+      declare_parameter<bool>("prefer_larger_cluster_on_migration", false);
+    options.migration_size_bias_tolerance =
+      declare_parameter<double>("migration_size_bias_tolerance", 0.10);
+    options.migration_size_bias_ratio =
+      declare_parameter<double>("migration_size_bias_ratio", 2.0);
+    options.donor_protection_buffer = static_cast<std::size_t>(
+      std::max<std::int64_t>(0, declare_parameter<int>("donor_protection_buffer", 3)));
     options.merge_normal_alignment_cos =
       declare_parameter<double>("merge_normal_alignment_cos", 0.80);
     options.merge_residual_growth_ratio =

@@ -85,7 +85,7 @@ std::size_t countOverlappingMembers(
   return overlapping_node_count;
 }
 
-visualization_msgs::msg::MarkerArray makeMarkers(
+visualization_msgs::msg::MarkerArray makeObbMarkers(
   const ais_gng_msgs::msg::PlanarClusterArray &clusters, bool publish_text)
 {
   visualization_msgs::msg::MarkerArray markers;
@@ -103,21 +103,6 @@ visualization_msgs::msg::MarkerArray makeMarkers(
     constexpr double kNormalLength = 0.06;
     const double line_width = std::clamp(
       0.12 * static_cast<double>(cluster.local_spacing), 0.002, 0.012);
-
-    if (cluster.support_edges.size() >= 2U) {
-      auto edges = baseMarker(clusters.header, "planar_patch_support_edges", marker_id);
-      edges.type = visualization_msgs::msg::Marker::LINE_LIST;
-      edges.scale.x = line_width;
-      edges.color.r = terrain_cluster ? 0.18F : 0.0F;
-      edges.color.g = terrain_cluster ? 0.95F : 0.68F;
-      edges.color.b = terrain_cluster ? 0.30F : 1.0F;
-      edges.color.a = 0.95F;
-      edges.points.reserve(cluster.support_edges.size());
-      for (const auto &point : cluster.support_edges) {
-        edges.points.push_back(markerPoint(point));
-      }
-      markers.markers.push_back(std::move(edges));
-    }
 
     if (cluster.extent_u > 0.0F && cluster.extent_v > 0.0F) {
       // 面積や占有面を推定するための枠ではない。クラスタIDごとの広がりを
@@ -171,6 +156,59 @@ visualization_msgs::msg::MarkerArray makeMarkers(
   return markers;
 }
 
+visualization_msgs::msg::MarkerArray makeNodeMarkers(
+  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes)
+{
+  visualization_msgs::msg::MarkerArray markers;
+  visualization_msgs::msg::Marker clear;
+  clear.header = clusters.header;
+  clear.action = visualization_msgs::msg::Marker::DELETEALL;
+  markers.markers.push_back(std::move(clear));
+
+  for (const auto &cluster : clusters.clusters) {
+    const auto marker_id = static_cast<std::int32_t>(cluster.id);
+    const bool terrain_cluster = cluster.source_label ==
+      ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN;
+    const double point_size = std::clamp(
+      0.35 * static_cast<double>(cluster.local_spacing), 0.004, 0.018);
+    const double line_width = std::clamp(
+      0.12 * static_cast<double>(cluster.local_spacing), 0.002, 0.012);
+
+    auto member_nodes = baseMarker(clusters.header, "planar_patch_nodes", marker_id);
+    member_nodes.type = visualization_msgs::msg::Marker::POINTS;
+    member_nodes.scale.x = point_size;
+    member_nodes.scale.y = point_size;
+    member_nodes.color.r = terrain_cluster ? 0.18F : 0.0F;
+    member_nodes.color.g = terrain_cluster ? 0.95F : 0.68F;
+    member_nodes.color.b = terrain_cluster ? 0.30F : 1.0F;
+    member_nodes.color.a = 0.95F;
+    member_nodes.points.reserve(cluster.node_indices.size());
+    for (const std::uint32_t node_index : cluster.node_indices) {
+      if (node_index < nodes.size()) {
+        member_nodes.points.push_back(markerPoint(nodes[node_index].pos));
+      }
+    }
+    markers.markers.push_back(std::move(member_nodes));
+
+    if (cluster.support_edges.size() >= 2U) {
+      auto edges = baseMarker(clusters.header, "planar_patch_support_edges", marker_id);
+      edges.type = visualization_msgs::msg::Marker::LINE_LIST;
+      edges.scale.x = line_width;
+      edges.color.r = terrain_cluster ? 0.18F : 0.0F;
+      edges.color.g = terrain_cluster ? 0.95F : 0.68F;
+      edges.color.b = terrain_cluster ? 0.30F : 1.0F;
+      edges.color.a = 0.65F;
+      edges.points.reserve(cluster.support_edges.size());
+      for (const auto &point : cluster.support_edges) {
+        edges.points.push_back(markerPoint(point));
+      }
+      markers.markers.push_back(std::move(edges));
+    }
+  }
+  return markers;
+}
+
 }  // namespace
 
 namespace fuzzrobo::topological_plane
@@ -186,22 +224,26 @@ public:
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ = declare_parameter<std::string>(
       "output_topic", "/topological_planar_clusters");
-    marker_topic_ = declare_parameter<std::string>("marker_topic", output_topic_ + "/markers");
+    obb_marker_topic_ = output_topic_ + "/markers/obb";
+    node_marker_topic_ = output_topic_ + "/markers/nodes";
     publish_text_ = declare_parameter<bool>("publish_text", false);
 
     const auto output_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
     cluster_publisher_ = create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(
       output_topic_, output_qos);
-    marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-      marker_topic_, output_qos);
+    obb_marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+      obb_marker_topic_, output_qos);
+    node_marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+      node_marker_topic_, output_qos);
     input_subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
       input_topic_, rclcpp::QoS(rclcpp::KeepLast(1)).best_effort(),
       std::bind(&TopologicalPlaneClusterNode::onMap, this, std::placeholders::_1));
 
     RCLCPP_INFO(
       get_logger(),
-      "topological_plane_cluster: %s -> %s (markers: %s)",
-      input_topic_.c_str(), output_topic_.c_str(), marker_topic_.c_str());
+      "topological_plane_cluster: %s -> %s (obb: %s, nodes: %s)",
+      input_topic_.c_str(), output_topic_.c_str(), obb_marker_topic_.c_str(),
+      node_marker_topic_.c_str());
   }
 
 private:
@@ -276,7 +318,8 @@ private:
     last_overlapping_member_count_ = overlapping_member_count;
     has_cached_clusters_ = true;
     cluster_publisher_->publish(tracked_clusters);
-    marker_publisher_->publish(makeMarkers(tracked_clusters, publish_text_));
+    obb_marker_publisher_->publish(makeObbMarkers(tracked_clusters, publish_text_));
+    node_marker_publisher_->publish(makeNodeMarkers(tracked_clusters, map->nodes));
     const auto completed = std::chrono::steady_clock::now();
     const double observation_ms = std::chrono::duration<double, std::milli>(observed - started).count();
     const double extraction_ms = std::chrono::duration<double, std::milli>(extracted - observed).count();
@@ -356,7 +399,8 @@ private:
   PersistentPlaneClusterTracker tracker_;
   std::string input_topic_;
   std::string output_topic_;
-  std::string marker_topic_;
+  std::string obb_marker_topic_;
+  std::string node_marker_topic_;
   bool publish_text_ = false;
   bool has_cached_clusters_ = false;
   ais_gng_msgs::msg::PlanarClusterArray last_tracked_clusters_;
@@ -367,7 +411,8 @@ private:
   bool has_previous_topology_ = false;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr input_subscription_;
   rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_publisher_;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obb_marker_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_marker_publisher_;
 };
 
 }  // namespace fuzzrobo::topological_plane

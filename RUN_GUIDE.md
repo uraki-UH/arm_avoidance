@@ -282,9 +282,10 @@ ros2 topic echo /topological_planar_clusters --once
 ```
 
 可視化は追加のViewer実装なしで、ToPoFuzzy Viewerの`Connection & Streams`から
-`/topological_planar_clusters/markers`を有効化する。半透明シアンが局所凸包の概算面積、
-水色線が輪郭、黄矢印が平面法線である。凸包は「面の全域が観測済み」という意味ではなく、
-この段階では抽出結果を確認するための表示だけに使う。
+`/topological_planar_clusters/markers/obb` と
+`/topological_planar_clusters/markers/nodes` を個別に有効化する。前者はOBB境界・法線矢印・
+任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。OBBは「面の全域が観測済み」
+という意味ではなく、この段階では抽出結果を確認するためだけに使う。
 
 把持候補の衝突除外へは次段で、各環境ボクセルに近傍平面クラスタIDを関連付け、`sweptV`の
 各セルだけを符号付き平面距離で照会する。現段階では平面そのものを候補から消さない。

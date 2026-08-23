@@ -611,12 +611,32 @@ struct Clusterizer::Impl
           ++statistics.absorbed_node_count;
           ++changed;
         } else {
-          // 既存所属からの移動は、明確に改善する場合だけ認める。
-          const double current_score = fitScore(static_cast<std::size_t>(current_label), index);
-          if (best_score < current_score - options.migration_improvement_margin) {
-            next_label[index] = best_label;
-            ++statistics.migrated_node_count;
-            ++changed;
+          const std::size_t current_cluster = static_cast<std::size_t>(current_label);
+          const std::size_t best_cluster = static_cast<std::size_t>(best_label);
+          // 小さいクラスタは供給しない。境界から少しずつ吸われて消えるのを防ぐ。
+          // まとまるべきならクラスタ併合として一括で行われるべきである。
+          const bool donor_protected =
+            clusters[current_cluster].member_count <=
+            options.min_cluster_nodes + options.donor_protection_buffer;
+          if (!donor_protected) {
+            const double current_score = fitScore(current_cluster, index);
+            // 明確に当てはめが良くなる場合は移す。
+            bool accept = best_score < current_score - options.migration_improvement_margin;
+            // 拮抗しているだけなら、ノード数の多い側へ寄せる。行き先を一貫させる
+            // ことで、法線の揺れによる往復が止まる。
+            if (!accept && options.prefer_larger_cluster_on_migration &&
+              static_cast<double>(clusters[best_cluster].member_count) >=
+              options.migration_size_bias_ratio *
+              static_cast<double>(clusters[current_cluster].member_count) &&
+              best_score <= current_score + options.migration_size_bias_tolerance)
+            {
+              accept = true;
+            }
+            if (accept) {
+              next_label[index] = best_label;
+              ++statistics.migrated_node_count;
+              ++changed;
+            }
           }
         }
       }
