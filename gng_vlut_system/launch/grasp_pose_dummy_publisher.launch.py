@@ -6,8 +6,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("pose_topic", default_value="/grasp_pose_candidates"),
-        DeclareLaunchArgument("score_topic", default_value="/grasp_pose_scores"),
+        DeclareLaunchArgument("pose_topic", default_value="/grasp_pose_cands"),
+        DeclareLaunchArgument("score_topic", default_value="/grasp_pose_cand_scores"),
         DeclareLaunchArgument("marker_topic", default_value="/grasp_pose_markers"),
         DeclareLaunchArgument("frame_id", default_value="world"),
         DeclareLaunchArgument("publish_rate_hz", default_value="1.0"),

@@ -38,10 +38,12 @@ struct Candidate
 struct PoseAxisMarkerOptions
 {
   std::string marker_namespace{"grasp_pose_axes"};
-  double primary_axis_length{0.12};
+  double primary_axis_length{0.04};
+  std::size_t primary_axis_idx{0};
+  double primary_axis_sign{1.0};
   double helper_axis_length_ratio{0.5};
-  double shaft_diameter{0.01};
-  double head_diameter{0.02};
+  double shaft_diameter{0.006};
+  double head_diameter{0.008};
   double alpha{1.0};
 };
 
@@ -216,8 +218,8 @@ inline visualization_msgs::msg::MarkerArray buildPoseAxisMarkerArray(
   visualization_msgs::msg::MarkerArray out;
   out.markers.reserve(pose_array.poses.size() * 3);
 
-  const std::array<std::array<double, 4>, 3> axis_colors{{
-    {{1.0, 0.2, 0.2, 1.0}},
+  const std::array<double, 4> primary_axis_color{{1.0, 0.2, 0.2, 1.0}};
+  const std::array<std::array<double, 4>, 2> helper_axis_colors{{
     {{0.2, 0.8, 0.2, 1.0}},
     {{0.2, 0.4, 1.0, 1.0}},
   }};
@@ -227,6 +229,9 @@ inline visualization_msgs::msg::MarkerArray buildPoseAxisMarkerArray(
     Eigen::Vector3d::UnitZ(),
   }};
   const std::array<const char *, 3> axis_names{{"x", "y", "z"}};
+  const std::size_t primary_axis_idx = std::min(
+    options.primary_axis_idx, local_axes.size() - 1U);
+  const double primary_axis_sign = options.primary_axis_sign < 0.0 ? -1.0 : 1.0;
 
   for (std::size_t pose_index = 0; pose_index < pose_array.poses.size(); ++pose_index) {
     const auto &pose = pose_array.poses[pose_index];
@@ -240,13 +245,15 @@ inline visualization_msgs::msg::MarkerArray buildPoseAxisMarkerArray(
       pose.position.y,
       pose.position.z);
 
+    std::size_t helper_axis_idx = 0;
     for (std::size_t axis_index = 0; axis_index < local_axes.size(); ++axis_index) {
+      const bool is_primary_axis = axis_index == primary_axis_idx;
       const Eigen::Vector3d direction = (q * local_axes[axis_index]).normalized();
       const double length = options.primary_axis_length *
-        (axis_index == 0 ? 1.0 : options.helper_axis_length_ratio);
+        (is_primary_axis ? 1.0 : options.helper_axis_length_ratio);
       Eigen::Vector3d tip;
-      if (axis_index == 0) {
-        tip = origin + direction * length;
+      if (is_primary_axis) {
+        tip = origin + direction * (length * primary_axis_sign);
       } else {
         tip = local_axes[axis_index] * length;
       }
@@ -255,32 +262,34 @@ inline visualization_msgs::msg::MarkerArray buildPoseAxisMarkerArray(
       marker.header = pose_array.header;
       marker.ns = options.marker_namespace + "/" + axis_names[axis_index];
       marker.id = static_cast<int>(pose_index * 3 + axis_index);
-      marker.type = axis_index == 0
+      marker.type = is_primary_axis
         ? visualization_msgs::msg::Marker::ARROW
         : visualization_msgs::msg::Marker::LINE_LIST;
       marker.action = visualization_msgs::msg::Marker::ADD;
       marker.points.resize(2);
-      marker.points[0].x = axis_index == 0 ? origin.x() : 0.0;
-      marker.points[0].y = axis_index == 0 ? origin.y() : 0.0;
-      marker.points[0].z = axis_index == 0 ? origin.z() : 0.0;
+      marker.points[0].x = is_primary_axis ? origin.x() : 0.0;
+      marker.points[0].y = is_primary_axis ? origin.y() : 0.0;
+      marker.points[0].z = is_primary_axis ? origin.z() : 0.0;
       marker.points[1].x = tip.x();
       marker.points[1].y = tip.y();
       marker.points[1].z = tip.z();
-      if (axis_index == 0) {
-        marker.scale.x = length;
-        marker.scale.y = options.shaft_diameter * 1.5;
-        marker.scale.z = options.head_diameter * 1.5;
+      if (is_primary_axis) {
+        marker.scale.x = options.shaft_diameter;
+        marker.scale.y = options.head_diameter;
+        marker.scale.z = std::min(length, options.head_diameter * 1.5);
       } else {
         marker.scale.x = options.shaft_diameter * 1.2;
         marker.scale.y = options.shaft_diameter * 1.2;
         marker.scale.z = options.shaft_diameter * 1.2;
       }
-      marker.color.r = static_cast<float>(axis_colors[axis_index][0]);
-      marker.color.g = static_cast<float>(axis_colors[axis_index][1]);
-      marker.color.b = static_cast<float>(axis_colors[axis_index][2]);
-      marker.color.a = static_cast<float>(options.alpha);
+      const auto &color = is_primary_axis ? primary_axis_color :
+        helper_axis_colors[helper_axis_idx++];
+      marker.color.r = static_cast<float>(color[0]);
+      marker.color.g = static_cast<float>(color[1]);
+      marker.color.b = static_cast<float>(color[2]);
+      marker.color.a = static_cast<float>(color[3] * options.alpha);
       marker.frame_locked = false;
-      if (axis_index != 0) {
+      if (!is_primary_axis) {
         marker.pose.position.x = origin.x();
         marker.pose.position.y = origin.y();
         marker.pose.position.z = origin.z();

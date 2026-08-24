@@ -13,7 +13,7 @@ interface MarkerArrayRendererProps {
     manualTransform?: Transform;
 }
 
-const isDeleteAll = (marker: MarkerMessage) => marker.action === 3; // 3 is DELETEALL in ROS
+const is_delete_action = (marker: MarkerMessage) => marker.action === 2 || marker.action === 3;
 
 const getPose = (marker: any) => {
     const pos = marker.pos || [0, 0, 0];
@@ -272,7 +272,7 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
 
 function ArrowMarker({ marker }: { marker: MarkerMessage }) {
     const { color } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, direction, lengthScale, maxLength, shaftWidth } = useMemo(() => {
+    const { position, direction, lengthScale, maxLength, shaftWidth, head_length, head_width } = useMemo(() => {
         const pos = marker.pos || [0, 0, 0];
         const quat = marker.quat || [0, 0, 0, 1];
         const px = pos[0] ?? 0;
@@ -295,12 +295,21 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             origin[1] = p0[1];
             origin[2] = p0[2];
             const length = dir.length();
+            const shaft_diameter = marker.scale?.[0] ?? 0;
+            const head_diameter = marker.scale?.[1] ?? 0;
+            const marker_head_length = marker.scale?.[2] ?? 0;
             return {
                 position: origin,
                 direction: [dir.x, dir.y, dir.z] as [number, number, number],
                 lengthScale: 1.0,
                 maxLength: Math.max(0.2, length * 1.5),
-                shaftWidth: Math.max(0.008, length * 0.08),
+                shaftWidth: shaft_diameter > 0 && shaft_diameter < length * 0.5
+                    ? shaft_diameter
+                    : Math.max(0.003, length * 0.06),
+                head_length: marker_head_length > 0
+                    ? Math.min(length, marker_head_length)
+                    : length * 0.24,
+                head_width: head_diameter > 0 ? head_diameter : length * 0.12,
             };
         } else {
             const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
@@ -314,6 +323,8 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             lengthScale: scale,
             maxLength: Math.max(0.2, scale * 1.5),
             shaftWidth: Math.max(0.005, scale * 0.06),
+            head_length: scale * 0.28,
+            head_width: scale * 0.18,
         };
     }, [marker.pos, marker.quat, marker.points, marker.scale]);
 
@@ -325,12 +336,14 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             color={color.getStyle()}
             maxLength={maxLength}
             shaftWidth={shaftWidth}
+            head_length={head_length}
+            head_width={head_width}
         />
     );
 }
 
 function renderMarker(marker: MarkerMessage) {
-    if (isDeleteAll(marker)) return null;
+    if (is_delete_action(marker)) return null;
 
     switch (marker.type) {
     case 'arrow':

@@ -231,10 +231,17 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
 }
 
 // 前フレームに出したIDを渡し、消えた所属ノードとクラスタ内エッジだけ DELETE する。
+//
+// エッジは所属ノードと違って、クラスタが生きたまま support_edges が空になる
+// (クラスタ内の直接GNG接続が一時的にゼロになる)ことがある。その場合ADDを送らずに
+// 放置すると、RVizには最後にエッジがあったフレームの位置がそのまま残り続け、
+// 現在のノード位置と食い違って見える。edge専用のpublished集合で追跡し、
+// 空に転じた回だけ明示的にDELETEする。
 visualization_msgs::msg::MarkerArray makeNodeMarkers(
   const ais_gng_msgs::msg::PlanarClusterArray &clusters,
   const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes,
   std::set<std::uint32_t> &published_ids,
+  std::set<std::uint32_t> &published_edge_ids,
   const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
 {
   visualization_msgs::msg::MarkerArray markers;
@@ -253,6 +260,7 @@ visualization_msgs::msg::MarkerArray makeNodeMarkers(
       remove.action = visualization_msgs::msg::Marker::DELETE;
       markers.markers.push_back(std::move(remove));
     }
+    published_edge_ids.erase(id);
   }
   published_ids = std::move(current_ids);
 
@@ -288,6 +296,15 @@ visualization_msgs::msg::MarkerArray makeNodeMarkers(
         edges.points.push_back(markerPoint(point));
       }
       markers.markers.push_back(std::move(edges));
+      published_edge_ids.insert(cluster.id);
+    } else if (published_edge_ids.erase(cluster.id) != 0U) {
+      // 前フレームまでエッジがあったのに今回ゼロになった。ADDを送らないだけでは
+      // 古い位置が残るので、明示的にDELETEする。
+      visualization_msgs::msg::Marker remove;
+      remove.ns = "incremental_plane_edges";
+      remove.id = marker_id;
+      remove.action = visualization_msgs::msg::Marker::DELETE;
+      markers.markers.push_back(std::move(remove));
     }
   }
   return markers;
@@ -340,6 +357,8 @@ private:
       declare_parameter<double>("growth_residual_ratio", 0.70);
     options.retention_residual_ratio =
       declare_parameter<double>("retention_residual_ratio", 1.40);
+    options.max_effective_spacing =
+      declare_parameter<double>("max_effective_spacing", 0.03);
     options.normal_filter_alpha =
       declare_parameter<double>("normal_filter_alpha", 0.30);
     options.normal_alignment_deg =
@@ -463,7 +482,9 @@ private:
         result.clusters, map.nodes, enable_text_marker_, published_obb_marker_ids_,
         cluster_color_));
     node_marker_publisher_->publish(
-      makeNodeMarkers(result.clusters, map.nodes, published_node_marker_ids_, cluster_color_));
+      makeNodeMarkers(
+        result.clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
+        cluster_color_));
     const auto completed = std::chrono::steady_clock::now();
 
     const double update_ms =
@@ -512,6 +533,7 @@ private:
 
   std::set<std::uint32_t> published_obb_marker_ids_;
   std::set<std::uint32_t> published_node_marker_ids_;
+  std::set<std::uint32_t> published_edge_marker_ids_;
   std::unordered_map<std::uint32_t, std::uint32_t> cluster_color_;
   std::string input_topic_;
   std::string output_topic_;

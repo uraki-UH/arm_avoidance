@@ -308,7 +308,7 @@ ros2 topic echo /topological_planar_clusters_incremental --once
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
 上の`/topo_voxel_ids`を、最大把持体積・最小把持体積・グリッパ開閉の掃引禁止体積へ照合して
-TCP姿勢候補を出す。通常は引数なしでよい。
+TCP姿勢候補を出す。通常は引数なしでよい。この起動で`/grasp_pose_markers`も同時に出力する。
 
 ```bash
 ros2 launch grasping_system grasp_voxel_template.launch.py
@@ -317,24 +317,53 @@ ros2 launch grasping_system grasp_voxel_template.launch.py
 候補と照合内訳は次で確認する。
 
 ```bash
-ros2 topic echo /grasp_voxel_candidates
-ros2 topic echo /grasp_voxel_candidates/summary
-```
-
-ToPoFuzzy Viewerで矢印として確認するときは、次も起動する。
-
-```bash
-ros2 launch gng_vlut_system grasp_pose_marker_bridge.launch.py \
-  input_topic:=/grasp_voxel_candidates
+ros2 topic echo /grasp_pose_cands
+ros2 topic echo /grasp_pose_cand_cells
+ros2 topic echo /grasp_pose_cands/summary
 ```
 
 `/grasp_pose_markers`をViewerの`Connection & Streams`で有効化する。
+
+`/grasp_pose_cand_cells`は、テンプレート照合・対向接触・禁止体積の各条件を通過し、
+同じTCPセルに密集する姿勢を1件へ代表化した候補セルである。`labels`は現在すべて`1`であり、
+「テンプレート上の把持候補TCPセル」を表す。平行移動なしの実ロボット到達性やIK可否は、この段階では
+含まれない。`/grasp_pose_cands`の`PoseArray`は各候補セルの代表姿勢だけを出力する。
+
+summaryには、代表化前の`raw_candidate_num`、TCPセル数の`candidate_cell_num`、同一TCPセルから
+抑制した`suppressed_same_tcp_cell_num`、および法線・平面クラスタとの接触根拠を出力する。
+`contact_normal_alignment`は対向する両接触帯にあるGNG法線とグリッパ閉鎖軸の絶対内積の小さい側、
+`planar_contact_ratio`は両接触帯で平面クラスタに所属する法線の割合の小さい側である。法線または
+同一フレームの平面クラスタが未着時は`-1`であり、これらの値だけで候補を棄却しない。
+
+同一フレームの平面クラスタに所属するGNGノードは、`grip_V`の外側にある指・基部の掃引禁止体積に
+対する疎な衝突面としても使う。床・壁・周辺物体の平面ノードが禁止体積へ入る候補は、この衝突判定で
+除外する。一方、把持対象の平面ノードが`grip_V`内にある場合は、把持対象との接触を許容するため
+衝突扱いにしない。凸包やOBBを塗りつぶさず、実在するGNGノードセルだけを使うため、未観測穴を
+障害物として過大に埋めない。summaryの`planar_collision_cell_num`は、この衝突面に使ったセル数である。
+
+さらに、単眼の点群で未観測側を空き空間とみなさないため、深度可視性を有効にした場合は深度画像
+`/camera/camera/depth/image_rect_raw`とCameraInfo
+`/camera/camera/depth/camera_info`も参照する。各姿勢について`grip_V`の外側にある掃引体積の代表セルを
+深度画像へ投影し、セル中心より深い深度が得られる観測自由空間だけを通過させる。深度欠損、画角外、
+手前の物体による遮蔽、TF未取得はいずれも候補の棄却条件である。深度との差分余裕は`grid_size`と同じ
+ため、固定のmmしきい値は用いない。深度はボクセル入力と同じヘッダ時刻のフレームだけを使う。深度または
+CameraInfoが未着の間は、古い候補を残さず空の候補を出力する。summaryの`rejected_visibility`で、この判定
+による棄却数を確認できる。
+
+現在の`graspnet_player`は点群だけを配信するため、通常起動では深度可視性を無効にしている。深度画像・
+CameraInfo・時刻整合するTFも配信できる入力でだけ、次の詳細指定により有効化する。
+
+```bash
+ros2 launch grasping_system grasp_voxel_template.launch.py \
+  enable_depth_visibility:=true
+```
 
 これは安定した物体候補ボクセルを対象にする一次POCである。`grip_sweptV`はグリッパ基部と
 開状態から閉状態までの指形状を合成した禁止体積である。ただし最大開口の`grip_V`内は把持対象が
 接触してよい領域として除外する。さらに、同じ開度で左右の接触帯が同時に占有されることを要求し、
 指の閉鎖軸と直交する二軸の両端まで連続する面状占有は除外する。GNG成分に基づく「取り出せる
-物体」への分離、全環境点群から作る衝突専用占有、進入経路の掃引判定は次段で追加する。
+物体」への分離、全環境点群から作る衝突専用占有、進入経路の掃引判定は次段で追加する。平面クラスタは
+ペットボトルなど把持対象の表面にもなり得るため、`grip_V`内外の区別を伴う掃引衝突面として用いる。
 
 通常起動で指定できる値は上の4つだけである。詳細設定は
 `ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`に集約した。

@@ -27,6 +27,17 @@ struct ClusterOptions
   // 取り込みより緩くすることでヒステリシスを作り、境界ノードの往復を防ぐ。
   double retention_residual_ratio = 1.40;
 
+  // growth/retention_residual_ratio の正規化に使う、実効ノード間隔の上限[m]。
+  //
+  // fitScoreは生の距離を局所間隔(cluster.spacing, node.spacing のうち大きい方)で
+  // 割った比率であり、間隔が粗い領域ほど「同じ比率でも許容される実距離」が
+  // 際限なく大きくなる。卓上の小物体(数cm程度の高さ)が、間隔の粗い床などの上で
+  // ノイズとして紛れ込み、合体と分離を繰り返す原因になっていた。実測(密集領域
+  // 150フレーム): 局所間隔の中央値2.2cm・p90 4.1cmに対し、実際に不安定だった
+  // クラスタは3.3〜3.5cmと粗い側に偏っていた。分母をこの値で頭打ちにすることで、
+  // 間隔が粗い場所でも許容距離が青天井にならないようにする。
+  double max_effective_spacing = 0.03;
+
   // ノード法線に掛ける指数移動平均(EMA)の混合率。1.0ならフィルタなし(生の値を
   // そのまま使う)。小さいほど平滑化が強く、追従が遅くなる。
   //
@@ -131,6 +142,17 @@ struct ClusterOptions
   // 拒否しないための余裕。
   double merge_residual_growth_min_th = 0.15;
 
+  // 併合を認めるために要求する、メンバー数が少ない側の点群単体を結合後の平面へ
+  // 当てはめたときのRMS残差比の上限。
+  //
+  // union_fit(結合後の共分散)は全メンバーの平均統計なので、大きいクラスタに
+  // 小さいクラスタを混ぜても、小さい側の実際のズレ(例: 卓上の小物体が数cm浮いて
+  // いる)が平均に埋もれて見えなくなる。少数側の点群を union の平面に対して
+  // 個別に評価することで、この抜け道を塞ぐ。growth_residual_ratioと同じ
+  // 「候補点は平面にこれだけ近くなければならない」という基準を、少数側の
+  // 点群全体に適用するイメージ。
+  double merge_smaller_side_residual_ratio = 0.70;
+
   // 新しいクラスタを出力に載せるまでに、生き残る必要があるフレーム数。
   //
   // 生まれてすぐ消えるクラスタを表示しないための条件。実測では毎フレーム約4.5個が
@@ -176,6 +198,7 @@ struct ClusterStatistics
   std::size_t merge_planarity_rejected_pair_count = 0;
   std::size_t merge_absolute_residual_rejected_pair_count = 0;
   std::size_t merge_residual_growth_rejected_pair_count = 0;
+  std::size_t merge_smaller_side_rejected_pair_count = 0;
 
   // 鎖状(第2固有値が第1固有値に対して小さすぎる)として捨てた領域の数。
   std::size_t chain_rejected_count = 0;

@@ -6,12 +6,12 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("input_topic", default_value="/grasp_pose_candidates"),
+        DeclareLaunchArgument("input_topic", default_value="/grasp_pose_cands"),
         DeclareLaunchArgument("output_topic", default_value="/grasp_pose_markers"),
         DeclareLaunchArgument("marker_namespace", default_value="grasp_pose"),
         DeclareLaunchArgument("arrow_length", default_value="0.12"),
-        DeclareLaunchArgument("shaft_diameter", default_value="0.01"),
-        DeclareLaunchArgument("head_diameter", default_value="0.02"),
+        DeclareLaunchArgument("shaft_diameter", default_value="0.006"),
+        DeclareLaunchArgument("head_diameter", default_value="0.012"),
         DeclareLaunchArgument("color_r", default_value="0.0"),
         DeclareLaunchArgument("color_g", default_value="0.8"),
         DeclareLaunchArgument("color_b", default_value="0.2"),

@@ -10,6 +10,8 @@ interface DirectionalArrowProps {
     visible?: boolean;
     headLengthRatio?: number;
     headWidthRatio?: number;
+    head_length?: number;
+    head_width?: number;
     shaftWidth?: number;
 }
 
@@ -22,6 +24,8 @@ export function DirectionalArrow({
     visible = true,
     headLengthRatio = 0.28,
     headWidthRatio = 0.18,
+    head_length,
+    head_width,
     shaftWidth = 0.01,
 }: DirectionalArrowProps) {
     const arrowRef = useRef<THREE.ArrowHelper | null>(null);
@@ -49,10 +53,15 @@ export function DirectionalArrow({
         dir.normalize();
         arrow.position.set(origin[0], origin[1], origin[2]);
         arrow.setDirection(dir);
-        arrow.setLength(length, Math.max(length * headLengthRatio, shaftWidth * 4), Math.max(length * headWidthRatio, shaftWidth * 2));
+        const cone_length = Math.min(
+            length,
+            Math.max(0.0001, head_length ?? length * headLengthRatio),
+        );
+        const cone_width = Math.max(0.0001, head_width ?? length * headWidthRatio);
+        arrow.setLength(length, cone_length, cone_width);
         arrow.setColor(new THREE.Color(color));
         arrow.visible = true;
-    }, [origin, direction, lengthScale, maxLength, color, visible, headLengthRatio, headWidthRatio, shaftWidth]);
+    }, [origin, direction, lengthScale, maxLength, color, visible, headLengthRatio, headWidthRatio, head_length, head_width, shaftWidth]);
 
     useEffect(() => {
         return () => {

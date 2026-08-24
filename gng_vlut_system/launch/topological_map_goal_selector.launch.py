@@ -94,11 +94,11 @@ def generate_launch_description():
         DeclareLaunchArgument("target_point_topic", default_value=""),
         DeclareLaunchArgument(
             "target_pose_array_topic",
-            default_value="/grasp_pose_candidates",
+            default_value="/grasp_pose_cands",
         ),
         DeclareLaunchArgument(
             "target_score_topic",
-            default_value="/grasp_pose_scores",
+            default_value="/grasp_pose_cand_scores",
         ),
         DeclareLaunchArgument(
             "goal_candidate_ids_topic",

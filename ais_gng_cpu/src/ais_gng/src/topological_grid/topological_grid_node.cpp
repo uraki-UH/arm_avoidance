@@ -511,14 +511,15 @@ void TopologicalGridNode::mapCallback(const ais_gng_msgs::msg::TopologicalMap::S
     return;
   }
   if (!voxelization_options_.require_input_points) {
-    publishResult(*msg, GridPointCounts{});
+    publishResult(*msg, GridPointCounts{}, 0.0);
     return;
   }
 
   if (has_latest_pointcloud_ && headersMatch(msg->header, latest_pointcloud_header_)) {
-    publishResult(*msg, latest_point_counts_);
+    publishResult(*msg, latest_point_counts_, latest_point_count_ms_);
     has_latest_pointcloud_ = false;
     latest_point_counts_.clear();
+    latest_point_count_ms_ = 0.0;
     return;
   }
 
@@ -534,15 +535,19 @@ void TopologicalGridNode::pointCloudCallback(
   if (!msg) {
     return;
   }
+  const auto point_count_started = std::chrono::steady_clock::now();
   auto point_counts = buildPointCounts(*msg);
+  const double point_count_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - point_count_started).count();
   if (pending_map_ && headersMatch(pending_map_->header, msg->header)) {
-    publishResult(*pending_map_, point_counts);
+    publishResult(*pending_map_, point_counts, point_count_ms);
     pending_map_.reset();
     return;
   }
 
   latest_point_counts_ = std::move(point_counts);
   latest_pointcloud_header_ = msg->header;
+  latest_point_count_ms_ = point_count_ms;
   has_latest_pointcloud_ = true;
 }
 
@@ -986,7 +991,7 @@ void TopologicalGridNode::pointCloudWatchdog()
     get_logger(), *get_clock(), 2000,
     "No matching pointcloud received within %.2fs for map frame=%s; publishing empty voxels",
     pointcloud_timeout_sec_, pending_map_->header.frame_id.c_str());
-  publishResult(*pending_map_, GridPointCounts{});
+  publishResult(*pending_map_, GridPointCounts{}, 0.0);
   pending_map_.reset();
 }
 
@@ -1105,8 +1110,10 @@ voxel_msgs::msg::VoxelLabelDelta TopologicalGridNode::buildVoxelDelta(
 
 void TopologicalGridNode::publishResult(
   const ais_gng_msgs::msg::TopologicalMap &map,
-  const GridPointCounts &input_point_counts)
+  const GridPointCounts &input_point_counts,
+  double point_count_ms)
 {
+  const auto update_started = std::chrono::steady_clock::now();
   const rclcpp::Time current_stamp(map.header.stamp, RCL_ROS_TIME);
   std::string reset_reason;
   if (has_last_map_state_ && history_reset_on_time_regression_ &&
@@ -1147,13 +1154,17 @@ void TopologicalGridNode::publishResult(
     last_point_activity_decision_ = point_activity_scheduler_->update(activity_point_counts);
     if (!last_point_activity_decision_.should_process) {
       ++point_activity_skipped_update_count_;
-      RCLCPP_DEBUG(
-        get_logger(),
-        "Skipping full voxel update: point activity=%.3f interval=%zu elapsed=%zu cells=%zu",
+      const double update_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - update_started).count();
+      RCLCPP_INFO_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Topological grid: skipped point_activity=%.3f interval=%zu elapsed=%zu cells=%zu "
+        "point_count=%.2fms update=%.2fms total=%.2fms",
         last_point_activity_decision_.activity_score,
         last_point_activity_decision_.desired_update_interval,
         last_point_activity_decision_.updates_since_process,
-        last_point_activity_decision_.tracked_cell_count);
+        last_point_activity_decision_.tracked_cell_count,
+        point_count_ms, update_ms, point_count_ms + update_ms);
       return;
     }
   } else {
@@ -1168,15 +1179,19 @@ void TopologicalGridNode::publishResult(
   auto structural_voxelization_options = voxelization_options_;
   structural_voxelization_options.excluded_labels.erase(
     ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN);
+  const auto assignment_started = std::chrono::steady_clock::now();
   auto result = voxelizeNodes(
     map, grid_spec_, structural_voxelization_options, &input_point_counts);
   applyNormalDriftScores(map, result);
   const auto local_structure_states = buildLocalStructureStates(map, result);
+  const double assignment_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - assignment_started).count();
   double temporal_elapsed_seconds = 0.0;
   if (has_last_temporal_filter_stamp_ && current_stamp > last_temporal_filter_stamp_) {
     temporal_elapsed_seconds =
       (current_stamp - last_temporal_filter_stamp_).seconds();
   }
+  const auto temporal_started = std::chrono::steady_clock::now();
   const auto visibility_states = buildVisibilityStates(map.header, result.label_voxels);
   const auto stable_voxels = temporal_filter_->update(
     result.label_voxels,
@@ -1187,6 +1202,8 @@ void TopologicalGridNode::publishResult(
     temporal_elapsed_seconds,
     visibility_states.empty() ? nullptr : &visibility_states,
     local_structure_states.empty() ? nullptr : &local_structure_states);
+  const double temporal_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - temporal_started).count();
   last_temporal_filter_stamp_ = current_stamp;
   has_last_temporal_filter_stamp_ = true;
   const auto retained_without_current_points = static_cast<std::size_t>(std::count_if(
@@ -1213,6 +1230,7 @@ void TopologicalGridNode::publishResult(
   const auto isolated_temporal_decay_count = static_cast<std::size_t>(std::count_if(
     stable_voxels.begin(), stable_voxels.end(),
     [](const LabeledGridVoxel &voxel) {return voxel.isolated_temporal_decay_applied;}));
+  const auto inference_started = std::chrono::steady_clock::now();
   const auto edge_result = inferVoxelsFromStableVoxelEdges(
     map, grid_spec_, stable_voxels,
     structural_voxelization_options.excluded_labels,
@@ -1226,6 +1244,9 @@ void TopologicalGridNode::publishResult(
     isolation_split.connected_voxels, edge_result.voxels);
   const auto combined_voxels = mergeDirectAndInferredVoxels(
     direct_and_edge_voxels, triangle_result.voxels);
+  const double inference_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - inference_started).count();
+  const auto message_started = std::chrono::steady_clock::now();
   const std::uint32_t revision = ++voxel_revision_;
   const auto voxel_msg = buildVoxelMessage(map.header, combined_voxels, revision);
   const auto isolated_voxel_msg = buildVoxelMessage(
@@ -1235,6 +1256,9 @@ void TopologicalGridNode::publishResult(
   const auto triangle_inferred_msg = buildVoxelMessage(
     map.header, triangle_result.voxels, revision);
   const auto voxel_delta = buildVoxelDelta(voxel_msg);
+  const double message_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - message_started).count();
+  const auto pub_started = std::chrono::steady_clock::now();
   voxel_pub_->publish(voxel_msg);
   voxel_delta_pub_->publish(voxel_delta);
   isolated_voxel_pub_->publish(isolated_voxel_msg);
@@ -1539,19 +1563,25 @@ void TopologicalGridNode::publishResult(
     assignment_detail_msg.data = detail.str();
     assignment_detail_pub_->publish(assignment_detail_msg);
   }
+  const double pub_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - pub_started).count();
+  const double update_ms = std::chrono::duration<double, std::milli>(
+    std::chrono::steady_clock::now() - update_started).count();
 
   RCLCPP_INFO_THROTTLE(
     get_logger(), *get_clock(), 2000,
     "Topological grid: input_nodes=%zu included=%zu excluded=%zu unsupported=%zu "
     "observed_voxels=%zu isolated=%zu grasp_direct=%zu voxel_edges=%zu edge_inferred=%zu "
-    "triangles=%zu triangle_inferred=%zu combined=%zu",
+    "triangles=%zu triangle_inferred=%zu combined=%zu point_count=%.2fms assignment=%.2fms "
+    "temporal=%.2fms inference=%.2fms message=%.2fms pub=%.2fms update=%.2fms total=%.2fms",
     map.nodes.size(), result.included_node_count, result.excluded_node_count,
     result.unsupported_node_count, result.voxels.size(),
     isolation_split.isolated_voxels.size(),
     isolation_split.connected_voxels.size(), edge_result.voxel_edge_count,
     edge_result.voxels.size(),
     triangle_result.accepted_triangle_count, triangle_result.voxels.size(),
-    combined_voxels.size());
+    combined_voxels.size(), point_count_ms, assignment_ms, temporal_ms, inference_ms,
+    message_ms, pub_ms, update_ms, point_count_ms + update_ms);
 }
 
 }  // namespace fuzzrobo::topological_grid

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
@@ -45,6 +46,15 @@ struct VoxelGridGeometry
   {
     return std::abs(voxel_size - other.voxel_size) <= tolerance &&
            (origin - other.origin).cwiseAbs().maxCoeff() <= tolerance;
+  }
+
+  VoxelIndex pointToCell(const Eigen::Vector3d &point) const noexcept
+  {
+    const Eigen::Vector3d local = (point - origin) / voxel_size;
+    return VoxelIndex{
+      static_cast<int>(std::floor(local.x())),
+      static_cast<int>(std::floor(local.y())),
+      static_cast<int>(std::floor(local.z()))};
   }
 };
 
@@ -91,6 +101,49 @@ private:
   std::unordered_set<VoxelIndex, VoxelIndexHash> occupied_;
 };
 
+struct VoxelSurfaceNormalSample
+{
+  Eigen::Vector3d normal = Eigen::Vector3d::Zero();
+  bool is_planar_cluster_member = false;
+};
+
+class VoxelSurfaceNormalGrid
+{
+public:
+  explicit VoxelSurfaceNormalGrid(VoxelGridGeometry geometry)
+  : geometry_(std::move(geometry))
+  {
+    if (!geometry_.isValid()) {
+      throw std::invalid_argument("surface normal grid geometry is invalid");
+    }
+  }
+
+  bool add(
+    const VoxelIndex &index,
+    const Eigen::Vector3d &normal,
+    bool is_planar_cluster_member)
+  {
+    if (!normal.allFinite() || normal.squaredNorm() <= 1e-12) {
+      return false;
+    }
+    samples_[index].push_back({normal.normalized(), is_planar_cluster_member});
+    return true;
+  }
+
+  const std::vector<VoxelSurfaceNormalSample> *find(const VoxelIndex &index) const noexcept
+  {
+    const auto iterator = samples_.find(index);
+    return iterator == samples_.end() ? nullptr : &iterator->second;
+  }
+
+  const VoxelGridGeometry &geometry() const noexcept {return geometry_;}
+  std::size_t size() const noexcept {return samples_.size();}
+
+private:
+  VoxelGridGeometry geometry_;
+  std::unordered_map<VoxelIndex, std::vector<VoxelSurfaceNormalSample>, VoxelIndexHash> samples_;
+};
+
 struct GraspVoxelContactPair
 {
   std::vector<Eigen::Vector3d> positive;
@@ -101,15 +154,14 @@ struct GraspVoxelTemplate
 {
   std::vector<Eigen::Vector3d> required_occupied;
   std::vector<Eigen::Vector3d> optional_not_sole_support;
-  // Potential inner-finger contact locations for each sampled opening.  A
-  // candidate must support both sides within one matching opening sample.
+  // 各開口標本における指内側の接触候補
+  // 同一開口標本内での両側支持
   std::vector<GraspVoxelContactPair> opposing_contact_pairs;
-  // Boundary pairs orthogonal to finger closing.  Occupancy spanning both
-  // sides of two such axes is a locally unbounded sheet/support, not a
-  // detachable grasp target.
+  // 指閉鎖軸と直交する境界対
+  // 二軸両側にまたがる占有による取り出し不能な面・支持体
   std::vector<GraspVoxelContactPair> lateral_continuation_pairs;
-  // Occupancy within this region belongs to the prospective grasped object,
-  // so it must not be rejected even if a moving-gripper sweep overlaps it.
+  // 把持対象予定体積内の占有
+  // 指掃引と重なっても棄却対象外の領域
   std::vector<Eigen::Vector3d> collision_exempt;
   std::vector<Eigen::Vector3d> required_empty;
 };
@@ -128,6 +180,7 @@ struct CompiledGraspOrientation
   std::vector<CompiledGraspVoxelContactPair> opposing_contact_pairs;
   std::vector<CompiledGraspVoxelContactPair> lateral_continuation_pairs;
   std::vector<VoxelIndex> forbidden_offsets;
+  std::vector<VoxelIndex> visibility_offsets;
 };
 
 struct CompiledGraspVoxelTemplate
@@ -162,6 +215,7 @@ struct GraspVoxelMatchCandidate
   Eigen::Vector3d tcp_position = Eigen::Vector3d::Zero();
   Eigen::Quaterniond tcp_orientation = Eigen::Quaterniond::Identity();
   VoxelIndex anchor;
+  VoxelIndex tcp_cell;
   std::size_t orientation_index = 0;
   std::size_t required_hits = 0;
   std::size_t required_samples = 0;
@@ -174,12 +228,21 @@ struct GraspVoxelMatchCandidate
   std::size_t lateral_continuation_axes = 0;
   std::size_t forbidden_hits = 0;
   double required_occupancy_ratio = 0.0;
+  std::size_t positive_normal_num = 0;
+  std::size_t negative_normal_num = 0;
+  std::size_t positive_planar_normal_num = 0;
+  std::size_t negative_planar_normal_num = 0;
+  double contact_normal_alignment = -1.0;
+  double planar_contact_ratio = -1.0;
   double score = 0.0;
 };
 
 struct GraspVoxelMatchResult
 {
   std::vector<GraspVoxelMatchCandidate> candidates;
+  std::size_t raw_candidate_num = 0;
+  std::size_t candidate_cell_num = 0;
+  std::size_t suppressed_same_tcp_cell_num = 0;
   std::size_t anchors_considered = 0;
   std::size_t poses_evaluated = 0;
   std::size_t candidate_states_tracked = 0;
@@ -189,11 +252,16 @@ struct GraspVoxelMatchResult
   std::size_t rejected_missing_opposing_contact = 0;
   std::size_t rejected_lateral_continuation = 0;
   std::size_t rejected_forbidden_occupancy = 0;
+  std::size_t rejected_visibility = 0;
 };
 
 class GraspVoxelMatcher
 {
 public:
+  using CandidateFilter = std::function<bool(
+      const GraspVoxelMatchCandidate &,
+      const CompiledGraspOrientation &)>;
+
   static CompiledGraspVoxelTemplate compile(
     const GraspVoxelTemplate &grasp_template,
     const std::vector<Eigen::Quaterniond> &orientations,
@@ -297,6 +365,8 @@ public:
           compiled_orientation.forbidden_offsets.push_back(offset);
         }
       }
+      compiled_orientation.visibility_offsets = representativeOffsets(
+        compiled_orientation.forbidden_offsets);
       compiled.orientations.push_back(std::move(compiled_orientation));
     }
     return compiled;
@@ -306,7 +376,8 @@ public:
     const OccupiedVoxelGrid &target_occupancy,
     const OccupiedVoxelGrid &collision_occupancy,
     const CompiledGraspVoxelTemplate &grasp_template,
-    const GraspVoxelMatchConfig &config = {})
+    const GraspVoxelMatchConfig &config = {},
+    const CandidateFilter &candidate_filter = {})
   {
     validateConfig(config);
     if (!target_occupancy.geometry().matches(collision_occupancy.geometry()) ||
@@ -343,6 +414,7 @@ public:
         candidate.tcp_orientation = orientation.orientation;
         candidate.tcp_position = target_occupancy.cellCenter(anchor) -
           orientation.orientation * grasp_template.required_centroid;
+        candidate.tcp_cell = target_occupancy.geometry().pointToCell(candidate.tcp_position);
 
         candidate.required_hits = countOccupied(
           target_occupancy, anchor, orientation.required_offsets);
@@ -423,6 +495,10 @@ public:
           ++result.rejected_forbidden_occupancy;
           continue;
         }
+        if (candidate_filter && !candidate_filter(candidate, orientation)) {
+          ++result.rejected_visibility;
+          continue;
+        }
 
         const double outside_ratio = orientation.outside_undersize_offsets.empty() ? 0.0 :
           static_cast<double>(candidate.outside_undersize_hits) /
@@ -445,6 +521,72 @@ public:
       }
     }
 
+    rankAndLimit(result, config.maximum_candidates);
+    return result;
+  }
+
+  static void annotateContactNormals(
+    GraspVoxelMatchResult &result,
+    const CompiledGraspVoxelTemplate &grasp_template,
+    const VoxelSurfaceNormalGrid &surface_normals,
+    const Eigen::Vector3d &closing_axis)
+  {
+    if (std::abs(surface_normals.geometry().voxel_size - grasp_template.voxel_size) > 1e-9)
+    {
+      throw std::invalid_argument("contact normal grids do not match grasp template geometry");
+    }
+    if (!closing_axis.allFinite() || closing_axis.squaredNorm() <= 1e-12) {
+      throw std::invalid_argument("contact closing axis must be finite and non-zero");
+    }
+    const Eigen::Vector3d normalized_closing_axis = closing_axis.normalized();
+    for (auto &candidate : result.candidates) {
+      candidate.positive_normal_num = 0;
+      candidate.negative_normal_num = 0;
+      candidate.positive_planar_normal_num = 0;
+      candidate.negative_planar_normal_num = 0;
+      candidate.contact_normal_alignment = -1.0;
+      candidate.planar_contact_ratio = -1.0;
+      if (candidate.orientation_index >= grasp_template.orientations.size() ||
+        candidate.selected_contact_pair == std::numeric_limits<std::size_t>::max())
+      {
+        continue;
+      }
+      const auto &orientation = grasp_template.orientations[candidate.orientation_index];
+      if (candidate.selected_contact_pair >= orientation.opposing_contact_pairs.size()) {
+        continue;
+      }
+      const Eigen::Vector3d world_closing_axis =
+        (candidate.tcp_orientation * normalized_closing_axis).normalized();
+      const auto &contact_pair = orientation.opposing_contact_pairs[
+        candidate.selected_contact_pair];
+      const auto positive = contactNormalEvidence(
+        surface_normals, candidate.anchor,
+        contact_pair.positive_offsets, world_closing_axis);
+      const auto negative = contactNormalEvidence(
+        surface_normals, candidate.anchor,
+        contact_pair.negative_offsets, world_closing_axis);
+      candidate.positive_normal_num = positive.normal_num;
+      candidate.negative_normal_num = negative.normal_num;
+      candidate.positive_planar_normal_num = positive.planar_normal_num;
+      candidate.negative_planar_normal_num = negative.planar_normal_num;
+      if (positive.normal_num == 0U || negative.normal_num == 0U) {
+        continue;
+      }
+      candidate.contact_normal_alignment = std::min(
+        positive.alignment_sum / static_cast<double>(positive.normal_num),
+        negative.alignment_sum / static_cast<double>(negative.normal_num));
+      candidate.planar_contact_ratio = std::min(
+        static_cast<double>(positive.planar_normal_num) /
+        static_cast<double>(positive.normal_num),
+        static_cast<double>(negative.planar_normal_num) /
+        static_cast<double>(negative.normal_num));
+    }
+  }
+
+  static void rankAndLimit(
+    GraspVoxelMatchResult &result,
+    std::size_t max_candidates)
+  {
     std::sort(
       result.candidates.begin(), result.candidates.end(),
       [](const GraspVoxelMatchCandidate &lhs, const GraspVoxelMatchCandidate &rhs) {
@@ -465,13 +607,34 @@ public:
         }
         return lhs.orientation_index < rhs.orientation_index;
       });
-    if (result.candidates.size() > config.maximum_candidates) {
-      result.candidates.resize(config.maximum_candidates);
+    result.raw_candidate_num = result.candidates.size();
+    result.candidate_cell_num = 0;
+    result.suppressed_same_tcp_cell_num = 0;
+    std::unordered_set<VoxelIndex, VoxelIndexHash> selected_cells;
+    std::vector<GraspVoxelMatchCandidate> selected;
+    selected.reserve(result.candidates.size());
+    for (auto &candidate : result.candidates) {
+      if (!selected_cells.insert(candidate.tcp_cell).second) {
+        ++result.suppressed_same_tcp_cell_num;
+        continue;
+      }
+      selected.push_back(std::move(candidate));
     }
-    return result;
+    result.candidate_cell_num = selected.size();
+    if (selected.size() > max_candidates) {
+      selected.resize(max_candidates);
+    }
+    result.candidates = std::move(selected);
   }
 
 private:
+  struct ContactNormalEvidence
+  {
+    std::size_t normal_num = 0;
+    std::size_t planar_normal_num = 0;
+    double alignment_sum = 0.0;
+  };
+
   static void validatePoints(const std::vector<Eigen::Vector3d> &points)
   {
     for (const auto &point : points) {
@@ -513,6 +676,30 @@ private:
     return hits;
   }
 
+  static ContactNormalEvidence contactNormalEvidence(
+    const VoxelSurfaceNormalGrid &surface_normals,
+    const VoxelIndex &anchor,
+    const std::vector<VoxelIndex> &offsets,
+    const Eigen::Vector3d &closing_axis)
+  {
+    ContactNormalEvidence result;
+    for (const auto &offset : offsets) {
+      const VoxelIndex cell = add(anchor, offset);
+      const auto *samples = surface_normals.find(cell);
+      if (!samples) {
+        continue;
+      }
+      for (const auto &sample : *samples) {
+        result.alignment_sum += std::abs(sample.normal.dot(closing_axis));
+        ++result.normal_num;
+        if (sample.is_planar_cluster_member) {
+          ++result.planar_normal_num;
+        }
+      }
+    }
+    return result;
+  }
+
   static std::vector<VoxelIndex> quantizeOffsets(
     const std::vector<Eigen::Vector3d> &points,
     const Eigen::Vector3d &center,
@@ -528,6 +715,54 @@ private:
         static_cast<int>(std::floor(offset.y() + 0.5)),
         static_cast<int>(std::floor(offset.z() + 0.5))});
     }
+    std::vector<VoxelIndex> result(unique.begin(), unique.end());
+    std::sort(
+      result.begin(), result.end(),
+      [](const VoxelIndex &lhs, const VoxelIndex &rhs) {
+        if (lhs.x != rhs.x) {
+          return lhs.x < rhs.x;
+        }
+        if (lhs.y != rhs.y) {
+          return lhs.y < rhs.y;
+        }
+        return lhs.z < rhs.z;
+      });
+    return result;
+  }
+
+  static std::vector<VoxelIndex> representativeOffsets(
+    const std::vector<VoxelIndex> &offsets)
+  {
+    if (offsets.empty()) {
+      return {};
+    }
+    const auto less_x = [](const VoxelIndex &lhs, const VoxelIndex &rhs) {
+        return lhs.x < rhs.x;
+      };
+    const auto less_y = [](const VoxelIndex &lhs, const VoxelIndex &rhs) {
+        return lhs.y < rhs.y;
+      };
+    const auto less_z = [](const VoxelIndex &lhs, const VoxelIndex &rhs) {
+        return lhs.z < rhs.z;
+      };
+    const auto squared_norm = [](const VoxelIndex &offset) {
+        return offset.x * offset.x + offset.y * offset.y + offset.z * offset.z;
+      };
+    const auto less_norm = [&squared_norm](const VoxelIndex &lhs, const VoxelIndex &rhs) {
+        return squared_norm(lhs) < squared_norm(rhs);
+      };
+    std::unordered_set<VoxelIndex, VoxelIndexHash> unique;
+    const auto append = [&unique](const VoxelIndex &offset) {
+        unique.insert(offset);
+      };
+    append(*std::min_element(offsets.begin(), offsets.end(), less_x));
+    append(*std::max_element(offsets.begin(), offsets.end(), less_x));
+    append(*std::min_element(offsets.begin(), offsets.end(), less_y));
+    append(*std::max_element(offsets.begin(), offsets.end(), less_y));
+    append(*std::min_element(offsets.begin(), offsets.end(), less_z));
+    append(*std::max_element(offsets.begin(), offsets.end(), less_z));
+    append(*std::min_element(offsets.begin(), offsets.end(), less_norm));
+    append(*std::max_element(offsets.begin(), offsets.end(), less_norm));
     std::vector<VoxelIndex> result(unique.begin(), unique.end());
     std::sort(
       result.begin(), result.end(),
@@ -660,7 +895,7 @@ public:
     return true;
   }
 
-  GraspVoxelMatchResult match()
+  GraspVoxelMatchResult match(const GraspVoxelMatcher::CandidateFilter &candidate_filter = {})
   {
     GraspVoxelMatchResult result;
     result.anchors_considered = anchor_cells_.size();
@@ -726,6 +961,10 @@ public:
       }
       if (candidate.forbidden_hits > config_.maximum_forbidden_hits) {
         ++result.rejected_forbidden_occupancy;
+        continue;
+      }
+      if (candidate_filter && !candidate_filter(candidate, orientation)) {
+        ++result.rejected_visibility;
         continue;
       }
       const double outside_ratio = orientation.outside_undersize_offsets.empty() ? 0.0 :
@@ -837,6 +1076,7 @@ private:
         static_cast<double>(anchor.y) + 0.5,
         static_cast<double>(anchor.z) + 0.5) -
         orientation.orientation * grasp_template_.required_centroid;
+      candidate.tcp_cell = geometry_.pointToCell(candidate.tcp_position);
       candidate.required_hits = countOccupied(
         target_cells_, anchor, orientation.required_offsets);
       candidate.outside_undersize_hits = countOccupied(
@@ -971,29 +1211,7 @@ private:
 
   void sortAndLimit(GraspVoxelMatchResult &result) const
   {
-    std::sort(
-      result.candidates.begin(), result.candidates.end(),
-      [](const GraspVoxelMatchCandidate &lhs, const GraspVoxelMatchCandidate &rhs) {
-        if (lhs.score != rhs.score) {
-          return lhs.score > rhs.score;
-        }
-        if (lhs.required_hits != rhs.required_hits) {
-          return lhs.required_hits > rhs.required_hits;
-        }
-        if (lhs.anchor.x != rhs.anchor.x) {
-          return lhs.anchor.x < rhs.anchor.x;
-        }
-        if (lhs.anchor.y != rhs.anchor.y) {
-          return lhs.anchor.y < rhs.anchor.y;
-        }
-        if (lhs.anchor.z != rhs.anchor.z) {
-          return lhs.anchor.z < rhs.anchor.z;
-        }
-        return lhs.orientation_index < rhs.orientation_index;
-      });
-    if (result.candidates.size() > config_.maximum_candidates) {
-      result.candidates.resize(config_.maximum_candidates);
-    }
+    GraspVoxelMatcher::rankAndLimit(result, config_.maximum_candidates);
   }
 
   VoxelGridGeometry geometry_;
@@ -1006,4 +1224,4 @@ private:
   std::size_t updated_candidate_states_ = 0;
 };
 
-}  // namespace grasping_system::candidate
+}  // grasping_system::candidate 名前空間

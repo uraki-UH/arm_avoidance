@@ -16,6 +16,13 @@ plane_cluster_incremental_node:
     # 取り込みより緩い上限によるヒステリシス。境界ノードの所属往復の抑制。
     retention_residual_ratio: 1.40
 
+    # growth/retention_residual_ratioの正規化に使う、実効ノード間隔の上限[m]。
+    # 間隔が粗い領域ほど「同じ比率でも許容される実距離」が際限なく大きくなり、
+    # 卓上の小物体(数cm程度の高さ)が床などにノイズとして紛れ込み、合体と分離を
+    # 繰り返す原因になっていた。実測(密集領域150フレーム): 局所間隔の中央値2.2cm・
+    # p90 4.1cmに対し、実際に不安定だったクラスタは3.3〜3.5cmと粗い側に偏っていた。
+    max_effective_spacing: 0.03
+
     # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
     normal_filter_alpha: 0.30
 

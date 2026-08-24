@@ -14,6 +14,7 @@ using grasping_system::candidate::GraspVoxelMatcher;
 using grasping_system::candidate::GraspVoxelTemplate;
 using grasping_system::candidate::IncrementalGraspVoxelMatcher;
 using grasping_system::candidate::OccupiedVoxelGrid;
+using grasping_system::candidate::VoxelSurfaceNormalGrid;
 using grasping_system::candidate::VoxelGridGeometry;
 using grasping_system::candidate::VoxelIndex;
 
@@ -41,11 +42,11 @@ GraspVoxelTemplate makeSweepTemplate()
 {
   GraspVoxelTemplate grasp_template;
   grasp_template.required_occupied = {{0.0, 0.0, 0.0}};
-  // The closing finger may meet the object inside the initial open gap.
+  // 初期開口内部で許容する閉鎖指と把持対象の接触
   grasp_template.collision_exempt = {{0.0, 1.0, 0.0}};
   grasp_template.required_empty = {
-    {0.0, 1.0, 0.0},  // swept finger location inside the allowed gap
-    {0.0, 2.0, 0.0},  // swept body location outside the allowed gap
+    {0.0, 1.0, 0.0},  // 許容開口内部の掃引指位置
+    {0.0, 2.0, 0.0},  // 許容開口外部の掃引基部位置
   };
   return grasp_template;
 }
@@ -94,7 +95,7 @@ GraspVoxelMatchConfig oneHitConfig()
   return config;
 }
 
-}  // namespace
+}  // 無名名前空間
 
 int main()
 {
@@ -143,6 +144,24 @@ int main()
   expect(
     incremental.match().candidates.size() == 1U,
     "cleared forbidden voxel was not reflected in incremental state");
+
+  const auto visibility_rejected = GraspVoxelMatcher::match(
+    target, collision_free, compiled, strictConfig(),
+    [](const auto &, const auto &) {return false;});
+  expect(
+    visibility_rejected.candidates.empty(),
+    "visibility filter did not reject the full matcher candidate");
+  expect(
+    visibility_rejected.rejected_visibility == 1U,
+    "visibility rejection was not reported by the full matcher");
+  const auto incremental_visibility_rejected = incremental.match(
+    [](const auto &, const auto &) {return false;});
+  expect(
+    incremental_visibility_rejected.candidates.empty(),
+    "visibility filter did not reject the incremental matcher candidate");
+  expect(
+    incremental_visibility_rejected.rejected_visibility == 1U,
+    "visibility rejection was not reported by the incremental matcher");
 
   OccupiedVoxelGrid undersize_only(geometry);
   undersize_only.add(VoxelIndex{10, 0, 0});
@@ -199,6 +218,18 @@ int main()
   expect(
     opposing_contact_accepted.candidates.size() == 1U,
     "opposing contacts did not produce a grasp match");
+  auto normal_annotated = opposing_contact_accepted;
+  VoxelSurfaceNormalGrid surface_normals(geometry);
+  surface_normals.add(VoxelIndex{10, 1, 0}, Eigen::Vector3d::UnitY(), true);
+  surface_normals.add(VoxelIndex{10, -1, 0}, -Eigen::Vector3d::UnitY(), true);
+  GraspVoxelMatcher::annotateContactNormals(
+    normal_annotated, compiled_opposing_contacts, surface_normals, Eigen::Vector3d::UnitY());
+  expect(
+    std::abs(normal_annotated.candidates.front().contact_normal_alignment - 1.0) < 1e-12,
+    "contact normal alignment mismatch");
+  expect(
+    std::abs(normal_annotated.candidates.front().planar_contact_ratio - 1.0) < 1e-12,
+    "planar contact ratio mismatch");
   OccupiedVoxelGrid one_sided_target(geometry);
   one_sided_target.add(VoxelIndex{10, 0, 0});
   one_sided_target.add(VoxelIndex{10, 1, 0});
@@ -245,6 +276,24 @@ int main()
     rotated_target, collision_free, rotated_template, strictConfig());
   expect(rotated_match.candidates.size() == 1U, "rotated grasp was not isolated");
   expect(rotated_match.candidates.front().orientation_index == 1U, "rotation index mismatch");
+
+  const auto same_tcp_template = GraspVoxelMatcher::compile(
+    makeOpposingContactTemplate(),
+    {Eigen::Quaterniond::Identity(), yaw_90}, geometry.voxel_size);
+  OccupiedVoxelGrid same_tcp_target(geometry);
+  same_tcp_target.add(VoxelIndex{10, 0, 0});
+  same_tcp_target.add(VoxelIndex{10, 1, 0});
+  same_tcp_target.add(VoxelIndex{10, -1, 0});
+  same_tcp_target.add(VoxelIndex{9, 0, 0});
+  same_tcp_target.add(VoxelIndex{11, 0, 0});
+  const auto same_tcp_match = GraspVoxelMatcher::match(
+    same_tcp_target, collision_free, same_tcp_template, contact_config);
+  expect(same_tcp_match.raw_candidate_num > same_tcp_match.candidates.size(),
+    "same TCP cell candidates were not counted before representative selection");
+  expect(same_tcp_match.suppressed_same_tcp_cell_num > 0U,
+    "same TCP cell candidates were not suppressed");
+  expect(same_tcp_match.candidate_cell_num == same_tcp_match.candidates.size(),
+    "TCP cell representative count mismatch");
 
   return 0;
 }

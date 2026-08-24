@@ -1,9 +1,17 @@
 #include <candidate/grasp_voxel_matcher.hpp>
 
+#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/image_encodings.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <tf2/LinearMath/Transform.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 #include <voxel_msgs/msg/voxel.hpp>
 #include <voxel_msgs/msg/voxel_label_delta.hpp>
 
@@ -14,11 +22,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -54,9 +65,20 @@ public:
     forbidden_graph_topic_ = declare_parameter<std::string>(
       "forbidden_graph_topic", "grip_baseV_topological_map");
     const std::string candidate_topic = declare_parameter<std::string>(
-      "candidate_topic", "/grasp_voxel_candidates");
+      "candidate_topic", "/grasp_pose_cands");
+    const std::string candidate_voxels_topic = declare_parameter<std::string>(
+      "candidate_voxels_topic", "/grasp_pose_cand_cells");
     const std::string summary_topic = declare_parameter<std::string>(
-      "summary_topic", "/grasp_voxel_candidates/summary");
+      "summary_topic", "/grasp_pose_cands/summary");
+    topological_map_topic_ = declare_parameter<std::string>(
+      "topological_map_topic", "/topological_map");
+    planar_clusters_topic_ = declare_parameter<std::string>(
+      "planar_clusters_topic", "/topological_planar_clusters_incremental");
+    enable_depth_visibility_ = declare_parameter<bool>("enable_depth_visibility", false);
+    depth_topic_ = declare_parameter<std::string>(
+      "depth_topic", "/camera/camera/depth/image_rect_raw");
+    camera_info_topic_ = declare_parameter<std::string>(
+      "camera_info_topic", "/camera/camera/depth/camera_info");
 
     match_config_.minimum_required_occupancy_ratio = declare_parameter<double>(
       "minimum_required_occupancy_ratio", 0.1);
@@ -70,6 +92,7 @@ public:
       "maximum_anchor_voxels", 500, false);
     match_config_.maximum_candidates = positiveSizeParameter(
       "maximum_candidates", 50, false);
+    max_depth_cache_num_ = positiveSizeParameter("max_depth_cache_num", 64, false);
     const auto closing_axis = declare_parameter<std::vector<double>>(
       "contact_closing_axis", {0.0, 1.0, 0.0});
     if (closing_axis.size() != 3U) {
@@ -91,7 +114,30 @@ public:
     const auto transient_qos = rclcpp::QoS(1).reliable().transient_local();
     candidate_pub_ = create_publisher<geometry_msgs::msg::PoseArray>(
       candidate_topic, transient_qos);
+    candidate_voxels_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
+      candidate_voxels_topic, transient_qos);
     summary_pub_ = create_publisher<std_msgs::msg::String>(summary_topic, transient_qos);
+
+    if (enable_depth_visibility_) {
+      tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+      tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+      depth_sub_ = create_subscription<sensor_msgs::msg::Image>(
+        depth_topic_, rclcpp::SensorDataQoS(),
+        [this](sensor_msgs::msg::Image::SharedPtr msg) {
+          const std::int64_t stamp_ns = stampNanoseconds(msg->header.stamp);
+          depth_image_cache_[stamp_ns] = std::move(msg);
+          while (depth_image_cache_.size() > max_depth_cache_num_) {
+            depth_image_cache_.erase(depth_image_cache_.begin());
+          }
+          is_depth_dirty_ = true;
+        });
+      camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
+        camera_info_topic_, rclcpp::SensorDataQoS(),
+        [this](sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+          camera_info_ = std::move(msg);
+          is_depth_dirty_ = true;
+        });
+    }
 
     object_voxels_sub_ = create_subscription<voxel_msgs::msg::Voxel>(
       object_voxels_topic_, transient_qos,
@@ -145,6 +191,24 @@ public:
           forbidden_graph_ = std::move(msg);
           template_dirty_ = true;
           dirty_ = true;
+      });
+    }
+    if (!topological_map_topic_.empty()) {
+      topological_map_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+        topological_map_topic_, transient_qos,
+        [this](ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+          topological_map_ = std::move(msg);
+          surface_normals_dirty_ = true;
+          planar_collision_dirty_ = true;
+        });
+    }
+    if (!planar_clusters_topic_.empty()) {
+      planar_clusters_sub_ = create_subscription<ais_gng_msgs::msg::PlanarClusterArray>(
+        planar_clusters_topic_, transient_qos,
+        [this](ais_gng_msgs::msg::PlanarClusterArray::SharedPtr msg) {
+          planar_clusters_ = std::move(msg);
+          surface_normals_dirty_ = true;
+          planar_collision_dirty_ = true;
         });
     }
 
@@ -154,13 +218,17 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Grasp voxel matcher ready: objects=%s delta=%s environment=%s required=%s undersize=%s forbidden=%s orientations=%zu period=%dms incremental=%s",
+      "Grasp voxel matcher ready: objects=%s delta=%s environment=%s required=%s undersize=%s forbidden=%s map=%s planes=%s depth=%s camera_info=%s orientations=%zu period=%dms incremental=%s",
       object_voxels_topic_.c_str(),
       object_delta_topic_.c_str(),
       environment_voxels_topic_.empty() ? "<object voxels>" : environment_voxels_topic_.c_str(),
       required_graph_topic_.c_str(),
       undersize_graph_topic_.empty() ? "<disabled>" : undersize_graph_topic_.c_str(),
       forbidden_graph_topic_.empty() ? "<disabled>" : forbidden_graph_topic_.c_str(),
+      topological_map_topic_.empty() ? "<disabled>" : topological_map_topic_.c_str(),
+      planar_clusters_topic_.empty() ? "<disabled>" : planar_clusters_topic_.c_str(),
+      enable_depth_visibility_ ? depth_topic_.c_str() : "<disabled>",
+      enable_depth_visibility_ ? camera_info_topic_.c_str() : "<disabled>",
       orientations_.size(), update_period_ms,
       incremental_matching_enabled_ ? "enabled" : "disabled");
   }
@@ -387,6 +455,8 @@ private:
   void objectSnapshotCallback(voxel_msgs::msg::Voxel::SharedPtr msg)
   {
     object_voxels_ = std::move(msg);
+    surface_normals_dirty_ = true;
+    planar_collision_dirty_ = true;
     if (!incremental_matching_enabled_ || object_voxels_->revision == 0U ||
       !object_snapshot_initialized_ ||
       object_voxels_->revision < object_revision_ ||
@@ -477,8 +547,11 @@ private:
             cell, old_occupied, new_occupied) || occupancy_changed;
         }
         if (update_collision) {
+          const bool is_planar_collision =
+            planar_collision_cells_.find(cell) != planar_collision_cells_.end();
           occupancy_changed = incremental_matcher_->applyCollisionDelta(
-            cell, old_occupied, new_occupied) || occupancy_changed;
+            cell, old_occupied || is_planar_collision,
+            new_occupied || is_planar_collision) || occupancy_changed;
         }
       }
       last_revision = msg.revision;
@@ -521,6 +594,281 @@ private:
     return grid;
   }
 
+  bool refreshPlanarCollisionCells()
+  {
+    if (!planar_collision_dirty_) {
+      return false;
+    }
+    planar_collision_dirty_ = false;
+    has_planar_collision_context_ = false;
+    std::unordered_set<candidate::VoxelIndex, candidate::VoxelIndexHash> cells;
+    if (planar_clusters_ && object_voxels_ &&
+      planar_clusters_->header.frame_id == object_voxels_->header.frame_id)
+    {
+      const candidate::VoxelGridGeometry geometry{
+        object_voxels_->voxel_size,
+        Eigen::Vector3d(
+          object_voxels_->origin_x, object_voxels_->origin_y, object_voxels_->origin_z)};
+      for (const auto &cluster : planar_clusters_->clusters) {
+        for (const auto &point : cluster.support_edges) {
+          cells.insert(geometry.pointToCell(Eigen::Vector3d(point.x, point.y, point.z)));
+        }
+        if (cluster.support_edges.empty() && topological_map_ &&
+          topological_map_->header.frame_id == planar_clusters_->header.frame_id &&
+          topological_map_->frame_number == planar_clusters_->frame_number)
+        {
+          for (const auto node_idx : cluster.node_indices) {
+            if (node_idx >= topological_map_->nodes.size()) {
+              continue;
+            }
+            const auto &node = topological_map_->nodes[node_idx];
+            cells.insert(geometry.pointToCell(Eigen::Vector3d(
+                node.pos.x, node.pos.y, node.pos.z)));
+          }
+        }
+      }
+      has_planar_collision_context_ = true;
+    }
+    const bool is_same = cells.size() == planar_collision_cells_.size() &&
+      std::all_of(
+      cells.begin(), cells.end(),
+      [this](const candidate::VoxelIndex &cell) {
+        return planar_collision_cells_.find(cell) != planar_collision_cells_.end();
+      });
+    planar_collision_cell_num_ = cells.size();
+    if (is_same) {
+      return false;
+    }
+    planar_collision_cells_ = std::move(cells);
+    return true;
+  }
+
+  std::unique_ptr<candidate::OccupiedVoxelGrid> makeCollisionGrid(
+    const voxel_msgs::msg::Voxel &msg) const
+  {
+    auto grid = makeGrid(msg);
+    for (const auto &cell : planar_collision_cells_) {
+      grid->add(cell);
+    }
+    return grid;
+  }
+
+  void rebuildSurfaceNormals(const candidate::VoxelGridGeometry &geometry)
+  {
+    surface_normals_.reset();
+    has_surface_normal_context_ = false;
+    has_planar_cluster_context_ = false;
+    surface_normal_cell_num_ = 0;
+    surface_normals_dirty_ = false;
+    if (!topological_map_ || !object_voxels_) {
+      return;
+    }
+    if (topological_map_->header.frame_id != object_voxels_->header.frame_id) {
+      return;
+    }
+
+    std::unordered_set<std::uint32_t> planar_node_indices;
+    if (planar_clusters_ &&
+      planar_clusters_->header.frame_id == topological_map_->header.frame_id &&
+      planar_clusters_->frame_number == topological_map_->frame_number)
+    {
+      for (const auto &cluster : planar_clusters_->clusters) {
+        planar_node_indices.insert(cluster.node_indices.begin(), cluster.node_indices.end());
+      }
+      has_planar_cluster_context_ = true;
+    }
+
+    const auto indexing = makeIndexing(
+      object_voxels_->voxel_size,
+      object_voxels_->x_shift,
+      object_voxels_->y_shift,
+      object_voxels_->z_shift,
+      object_voxels_->offset);
+    std::unordered_set<candidate::VoxelIndex, candidate::VoxelIndexHash> object_cells;
+    object_cells.reserve(object_voxels_->data.size());
+    for (const auto raw_id : object_voxels_->data) {
+      object_cells.insert(indexing.unpack(static_cast<std::uint64_t>(raw_id)));
+    }
+
+    auto surface_normals = std::make_unique<candidate::VoxelSurfaceNormalGrid>(geometry);
+    for (std::size_t node_idx = 0; node_idx < topological_map_->nodes.size(); ++node_idx) {
+      const auto &node = topological_map_->nodes[node_idx];
+      const Eigen::Vector3d position(node.pos.x, node.pos.y, node.pos.z);
+      const Eigen::Vector3d normal(node.normal.x, node.normal.y, node.normal.z);
+      const auto cell = geometry.pointToCell(position);
+      if (object_cells.find(cell) == object_cells.end()) {
+        continue;
+      }
+      surface_normals->add(
+        cell, normal,
+        planar_node_indices.find(static_cast<std::uint32_t>(node_idx)) !=
+        planar_node_indices.end());
+    }
+    surface_normal_cell_num_ = surface_normals->size();
+    has_surface_normal_context_ = surface_normal_cell_num_ > 0U;
+    surface_normals_ = std::move(surface_normals);
+  }
+
+  static bool isSupportedDepthEncoding(const sensor_msgs::msg::Image &image)
+  {
+    return image.encoding == sensor_msgs::image_encodings::TYPE_16UC1 ||
+           image.encoding == sensor_msgs::image_encodings::MONO16 ||
+           image.encoding == sensor_msgs::image_encodings::TYPE_32FC1;
+  }
+
+  static std::int64_t stampNanoseconds(const builtin_interfaces::msg::Time &stamp)
+  {
+    return static_cast<std::int64_t>(stamp.sec) * 1000000000LL +
+           static_cast<std::int64_t>(stamp.nanosec);
+  }
+
+  sensor_msgs::msg::Image::SharedPtr findMatchingDepthImage(
+    const voxel_msgs::msg::Voxel &object_voxels) const
+  {
+    const auto iterator = depth_image_cache_.find(stampNanoseconds(object_voxels.header.stamp));
+    return iterator == depth_image_cache_.end() ? nullptr : iterator->second;
+  }
+
+  bool isDepthVisibilityReady() const
+  {
+    return object_voxels_ && camera_info_ && findMatchingDepthImage(*object_voxels_);
+  }
+
+  static double depthMetersAt(
+    const sensor_msgs::msg::Image &image,
+    int column,
+    int row)
+  {
+    if (column < 0 || row < 0 ||
+      column >= static_cast<int>(image.width) || row >= static_cast<int>(image.height) ||
+      image.is_bigendian != 0U)
+    {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (image.encoding == sensor_msgs::image_encodings::TYPE_16UC1 ||
+      image.encoding == sensor_msgs::image_encodings::MONO16)
+    {
+      const std::size_t pixel_idx = static_cast<std::size_t>(row) * image.step +
+        static_cast<std::size_t>(column) * sizeof(std::uint16_t);
+      if (pixel_idx + sizeof(std::uint16_t) > image.data.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+      }
+      std::uint16_t raw_depth = 0U;
+      std::memcpy(&raw_depth, image.data.data() + pixel_idx, sizeof(raw_depth));
+      return raw_depth == 0U ? std::numeric_limits<double>::quiet_NaN() :
+             static_cast<double>(raw_depth) * 0.001;
+    }
+    if (image.encoding == sensor_msgs::image_encodings::TYPE_32FC1) {
+      const std::size_t pixel_idx = static_cast<std::size_t>(row) * image.step +
+        static_cast<std::size_t>(column) * sizeof(float);
+      if (pixel_idx + sizeof(float) > image.data.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+      }
+      float raw_depth = std::numeric_limits<float>::quiet_NaN();
+      std::memcpy(&raw_depth, image.data.data() + pixel_idx, sizeof(raw_depth));
+      return raw_depth;
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  candidate::GraspVoxelMatcher::CandidateFilter makeDepthVisibilityFilter(
+    const voxel_msgs::msg::Voxel &object_voxels,
+    const sensor_msgs::msg::Image::SharedPtr &depth_image) const
+  {
+    if (!depth_image || !camera_info_) {
+      throw std::logic_error("depth visibility context is unavailable");
+    }
+    if (!isSupportedDepthEncoding(*depth_image)) {
+      throw std::invalid_argument("depth image encoding is unsupported");
+    }
+    if (depth_image->is_bigendian != 0U) {
+      throw std::invalid_argument("big-endian depth images are unsupported");
+    }
+    if (depth_image->header.frame_id.empty() || object_voxels.header.frame_id.empty()) {
+      throw std::invalid_argument("depth and object voxel frame ids are required");
+    }
+    if (!camera_info_->header.frame_id.empty() &&
+      camera_info_->header.frame_id != depth_image->header.frame_id)
+    {
+      throw std::invalid_argument("camera info frame does not match the depth image frame");
+    }
+    const double focal_x = camera_info_->k[0U];
+    const double focal_y = camera_info_->k[4U];
+    const double center_x = camera_info_->k[2U];
+    const double center_y = camera_info_->k[5U];
+    if (!std::isfinite(focal_x) || !std::isfinite(focal_y) ||
+      !std::isfinite(center_x) || !std::isfinite(center_y) ||
+      focal_x <= 0.0 || focal_y <= 0.0)
+    {
+      throw std::invalid_argument("camera info has invalid intrinsics");
+    }
+
+    tf2::Transform object_to_depth;
+    object_to_depth.setIdentity();
+    if (object_voxels.header.frame_id != depth_image->header.frame_id) {
+      const auto transform = tf_buffer_->lookupTransform(
+        depth_image->header.frame_id,
+        object_voxels.header.frame_id,
+        rclcpp::Time(depth_image->header.stamp));
+      tf2::fromMsg(transform.transform, object_to_depth);
+    }
+    const candidate::VoxelGridGeometry geometry{
+      object_voxels.voxel_size,
+      Eigen::Vector3d(
+        object_voxels.origin_x, object_voxels.origin_y, object_voxels.origin_z)};
+    if (!geometry.isValid()) {
+      throw std::invalid_argument("object voxel geometry is invalid");
+    }
+    return [
+      depth_image, geometry, object_to_depth,
+      focal_x, focal_y, center_x, center_y](
+      const candidate::GraspVoxelMatchCandidate &candidate_result,
+      const candidate::CompiledGraspOrientation &orientation) {
+        if (orientation.visibility_offsets.empty()) {
+          return false;
+        }
+        for (const auto &offset : orientation.visibility_offsets) {
+          const candidate::VoxelIndex cell{
+            candidate_result.anchor.x + offset.x,
+            candidate_result.anchor.y + offset.y,
+            candidate_result.anchor.z + offset.z};
+          const Eigen::Vector3d point = geometry.origin + geometry.voxel_size *
+            Eigen::Vector3d(
+            static_cast<double>(cell.x) + 0.5,
+            static_cast<double>(cell.y) + 0.5,
+            static_cast<double>(cell.z) + 0.5);
+          const tf2::Vector3 depth_point = object_to_depth * tf2::Vector3(
+            point.x(), point.y(), point.z());
+          if (!std::isfinite(depth_point.x()) || !std::isfinite(depth_point.y()) ||
+            !std::isfinite(depth_point.z()) || depth_point.z() <= 0.0)
+          {
+            return false;
+          }
+          const double projected_column =
+            focal_x * depth_point.x() / depth_point.z() + center_x;
+          const double projected_row =
+            focal_y * depth_point.y() / depth_point.z() + center_y;
+          if (!std::isfinite(projected_column) || !std::isfinite(projected_row) ||
+            projected_column < static_cast<double>(std::numeric_limits<int>::min()) ||
+            projected_column > static_cast<double>(std::numeric_limits<int>::max()) ||
+            projected_row < static_cast<double>(std::numeric_limits<int>::min()) ||
+            projected_row > static_cast<double>(std::numeric_limits<int>::max()))
+          {
+            return false;
+          }
+          const int column = static_cast<int>(std::lround(projected_column));
+          const int row = static_cast<int>(std::lround(projected_row));
+          const double observed_depth = depthMetersAt(*depth_image, column, row);
+          if (!std::isfinite(observed_depth) || observed_depth <= 0.0 ||
+            observed_depth - depth_point.z() <= geometry.voxel_size)
+          {
+            return false;
+          }
+        }
+        return true;
+      };
+  }
+
   std::string waitingReason() const
   {
     if (!object_voxels_) {
@@ -540,17 +888,41 @@ private:
     if (!forbidden_graph_topic_.empty() && !forbidden_graph_) {
       return "forbidden_graph";
     }
+    if (enable_depth_visibility_ && !isDepthVisibilityReady()) {
+      return "depth_visibility";
+    }
     return {};
+  }
+
+  void publishEmptyCandidates()
+  {
+    if (!object_voxels_) {
+      return;
+    }
+    const candidate::GraspVoxelMatchResult result;
+    publishCandidates(result);
+    publishCandidateVoxels(result);
   }
 
   void updateMatches()
   {
-    if (!dirty_) {
+    if (!dirty_ && !planar_collision_dirty_ &&
+      !(enable_depth_visibility_ && is_depth_dirty_))
+    {
       return;
     }
     const std::string waiting_for = waitingReason();
     if (!waiting_for.empty()) {
+      if (waiting_for == "depth_visibility") {
+        publishEmptyCandidates();
+      }
       publishStatus("waiting", waiting_for);
+      return;
+    }
+    const bool voxel_state_changed = dirty_;
+    const bool depth_state_changed = enable_depth_visibility_ && is_depth_dirty_;
+    const bool planar_collision_changed = refreshPlanarCollisionCells();
+    if (!voxel_state_changed && !planar_collision_changed && !depth_state_changed) {
       return;
     }
     dirty_ = false;
@@ -558,16 +930,18 @@ private:
     try {
       const auto started = std::chrono::steady_clock::now();
       const auto environment_msg = environment_voxels_ ? environment_voxels_ : object_voxels_;
+      const auto depth_visibility_filter = enable_depth_visibility_ ?
+        makeDepthVisibilityFilter(*object_voxels_, findMatchingDepthImage(*object_voxels_)) :
+        candidate::GraspVoxelMatcher::CandidateFilter{};
       bool template_rebuilt = false;
       if (!compiled_template_ || template_dirty_ ||
         std::abs(compiled_template_->voxel_size - object_voxels_->voxel_size) > 1e-9)
       {
         candidate::GraspVoxelTemplate grasp_template;
         grasp_template.required_occupied = graphPoints(*required_graph_);
-        // The maximum-open interior is the prospective object volume.  It is
-        // intentionally exempt from a finger-closing sweep: an object is
-        // allowed to meet a finger there.  Only the swept volume outside this
-        // gap remains a collision constraint.
+        // 最大開口内部の把持対象予定体積
+        // 指との接触を許容する開口内部の掃引衝突判定除外
+        // 開口外側の掃引体積だけによる衝突制約
         grasp_template.collision_exempt = grasp_template.required_occupied;
         grasp_template.lateral_continuation_pairs = makeLateralContinuationPairs(
           grasp_template.required_occupied, contact_closing_axis_);
@@ -593,14 +967,16 @@ private:
         (!usesSeparateEnvironment() || environment_msg->revision != 0U);
       bool incremental_active = false;
       std::size_t object_voxel_count = 0;
-      std::size_t environment_voxel_count = 0;
+      const std::size_t environment_voxel_count = environment_msg->data.size();
+      std::size_t collision_voxel_count = 0;
       candidate::GraspVoxelMatchResult result;
       if (incremental_stream) {
-        if (!incremental_matcher_ || template_rebuilt || object_snapshot_needs_reset_ ||
+        if (!incremental_matcher_ || template_rebuilt || planar_collision_changed ||
+          object_snapshot_needs_reset_ ||
           (usesSeparateEnvironment() && environment_snapshot_needs_reset_))
         {
           auto target_grid = makeGrid(*object_voxels_);
-          auto collision_grid = makeGrid(*environment_msg);
+          auto collision_grid = makeCollisionGrid(*environment_msg);
           incremental_matcher_ = std::make_unique<candidate::IncrementalGraspVoxelMatcher>(
             target_grid->geometry(), *compiled_template_, match_config_);
           incremental_matcher_->reset(*target_grid, *collision_grid);
@@ -615,31 +991,56 @@ private:
             environment_revision_ = object_revision_;
           }
         }
-        result = incremental_matcher_->match();
+        result = incremental_matcher_->match(depth_visibility_filter);
         object_voxel_count = incremental_matcher_->targetVoxelCount();
-        environment_voxel_count = incremental_matcher_->collisionVoxelCount();
+        collision_voxel_count = incremental_matcher_->collisionVoxelCount();
         incremental_active = true;
       } else {
         auto target_grid = makeGrid(*object_voxels_);
-        auto collision_grid = makeGrid(*environment_msg);
+        auto collision_grid = makeCollisionGrid(*environment_msg);
         result = candidate::GraspVoxelMatcher::match(
-          *target_grid, *collision_grid, *compiled_template_, match_config_);
+          *target_grid, *collision_grid, *compiled_template_, match_config_,
+          depth_visibility_filter);
         object_voxel_count = target_grid->size();
-        environment_voxel_count = collision_grid->size();
+        collision_voxel_count = collision_grid->size();
       }
-      const double processing_ms = std::chrono::duration<double, std::milli>(
+      const candidate::VoxelGridGeometry geometry{
+        object_voxels_->voxel_size,
+        Eigen::Vector3d(
+          object_voxels_->origin_x, object_voxels_->origin_y, object_voxels_->origin_z)};
+      if (surface_normals_dirty_ || !surface_normals_ ||
+        !surface_normals_->geometry().matches(geometry))
+      {
+        rebuildSurfaceNormals(geometry);
+      }
+      if (has_surface_normal_context_) {
+        candidate::GraspVoxelMatcher::annotateContactNormals(
+          result, *compiled_template_, *surface_normals_, contact_closing_axis_);
+      }
+      is_depth_dirty_ = false;
+      const double calc_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
 
+      const auto pub_started = std::chrono::steady_clock::now();
       publishCandidates(result);
+      publishCandidateVoxels(result);
       publishSummary(
-        result, object_voxel_count, environment_voxel_count, processing_ms, incremental_active);
+        result, object_voxel_count, environment_voxel_count, collision_voxel_count,
+        calc_ms, incremental_active);
+      const double pub_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - pub_started).count();
+      const double total_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - started).count();
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "Grasp voxel match: mode=%s objects=%zu anchors=%zu poses=%zu changed_states=%zu accepted=%zu processing=%.2fms",
-        incremental_active ? "incremental" : "full", object_voxel_count,
+        "Grasp voxel match: objects=%zu anchors=%zu poses=%zu changed_states=%zu accepted=%zu calc=%.2fms pub=%.2fms total=%.2fms",
+        object_voxel_count,
         result.anchors_considered, result.poses_evaluated, result.candidate_states_updated,
-        result.candidates.size(), processing_ms);
+        result.candidates.size(), calc_ms, pub_ms, total_ms);
     } catch (const std::exception &error) {
+      if (enable_depth_visibility_) {
+        publishEmptyCandidates();
+      }
       publishStatus("error", error.what());
       RCLCPP_ERROR_THROTTLE(
         get_logger(), *get_clock(), 2000,
@@ -666,10 +1067,35 @@ private:
     candidate_pub_->publish(msg);
   }
 
+  void publishCandidateVoxels(const candidate::GraspVoxelMatchResult &result)
+  {
+    voxel_msgs::msg::Voxel msg;
+    msg.header = object_voxels_->header;
+    msg.voxel_size = object_voxels_->voxel_size;
+    msg.origin_x = object_voxels_->origin_x;
+    msg.origin_y = object_voxels_->origin_y;
+    msg.origin_z = object_voxels_->origin_z;
+    msg.x_shift = object_voxels_->x_shift;
+    msg.y_shift = object_voxels_->y_shift;
+    msg.z_shift = object_voxels_->z_shift;
+    msg.offset = object_voxels_->offset;
+    msg.revision = object_voxels_->revision;
+    msg.data.reserve(result.candidates.size());
+    msg.labels.reserve(result.candidates.size());
+    const auto indexing = makeIndexing(
+      msg.voxel_size, msg.x_shift, msg.y_shift, msg.z_shift, msg.offset);
+    for (const auto &candidate_result : result.candidates) {
+      msg.data.push_back(static_cast<std::int64_t>(indexing.pack(candidate_result.tcp_cell)));
+      msg.labels.push_back(1U);
+    }
+    candidate_voxels_pub_->publish(msg);
+  }
+
   void publishSummary(
     const candidate::GraspVoxelMatchResult &result,
     std::size_t object_voxel_count,
     std::size_t environment_voxel_count,
+    std::size_t collision_voxel_count,
     double processing_ms,
     bool incremental_active)
   {
@@ -678,6 +1104,7 @@ private:
     stream << "{\"status\":\"ready\""
            << ",\"object_voxel_count\":" << object_voxel_count
            << ",\"environment_voxel_count\":" << environment_voxel_count
+           << ",\"collision_voxel_count\":" << collision_voxel_count
            << ",\"matching_mode\":\""
            << (incremental_active ? "incremental" : "full") << "\""
            << ",\"orientation_count\":" << orientations_.size()
@@ -685,7 +1112,23 @@ private:
            << ",\"poses_evaluated\":" << result.poses_evaluated
            << ",\"candidate_states_tracked\":" << result.candidate_states_tracked
            << ",\"candidate_states_updated\":" << result.candidate_states_updated
+           << ",\"raw_candidate_num\":" << result.raw_candidate_num
+           << ",\"candidate_cell_num\":" << result.candidate_cell_num
+           << ",\"suppressed_same_tcp_cell_num\":"
+           << result.suppressed_same_tcp_cell_num
            << ",\"candidate_count\":" << result.candidates.size()
+           << ",\"surface_normal_context\":"
+           << (has_surface_normal_context_ ? "true" : "false")
+           << ",\"surface_normal_cell_num\":" << surface_normal_cell_num_
+           << ",\"planar_cluster_context\":"
+           << (has_planar_cluster_context_ ? "true" : "false")
+           << ",\"planar_collision_context\":"
+           << (has_planar_collision_context_ ? "true" : "false")
+           << ",\"planar_collision_cell_num\":" << planar_collision_cell_num_
+           << ",\"depth_visibility_enabled\":"
+           << (enable_depth_visibility_ ? "true" : "false")
+           << ",\"depth_visibility_ready\":"
+           << (isDepthVisibilityReady() ? "true" : "false")
            << ",\"rejected_required_occupancy\":"
            << result.rejected_required_occupancy
            << ",\"rejected_undersize_only\":" << result.rejected_undersize_only
@@ -695,6 +1138,7 @@ private:
            << result.rejected_lateral_continuation
            << ",\"rejected_forbidden_occupancy\":"
            << result.rejected_forbidden_occupancy
+           << ",\"rejected_visibility\":" << result.rejected_visibility
            << ",\"processing_ms\":" << processing_ms
            << ",\"candidates\":[";
     for (std::size_t index = 0; index < result.candidates.size(); ++index) {
@@ -721,7 +1165,21 @@ private:
              << ",\"forbidden_hits\":" << candidate_result.forbidden_hits
              << ",\"anchor\":[" << candidate_result.anchor.x << ","
              << candidate_result.anchor.y << "," << candidate_result.anchor.z << "]"
+             << ",\"tcp_cell\":[" << candidate_result.tcp_cell.x << ","
+             << candidate_result.tcp_cell.y << "," << candidate_result.tcp_cell.z << "]"
              << ",\"orientation_index\":" << candidate_result.orientation_index
+             << ",\"tcp_position\":[" << candidate_result.tcp_position.x() << ","
+             << candidate_result.tcp_position.y() << ","
+             << candidate_result.tcp_position.z() << "]"
+             << ",\"contact_normal_alignment\":"
+             << candidate_result.contact_normal_alignment
+             << ",\"planar_contact_ratio\":" << candidate_result.planar_contact_ratio
+             << ",\"positive_normal_num\":" << candidate_result.positive_normal_num
+             << ",\"negative_normal_num\":" << candidate_result.negative_normal_num
+             << ",\"positive_planar_normal_num\":"
+             << candidate_result.positive_planar_normal_num
+             << ",\"negative_planar_normal_num\":"
+             << candidate_result.negative_planar_normal_num
              << "}";
     }
     stream << "]}";
@@ -752,6 +1210,10 @@ private:
   std::string required_graph_topic_;
   std::string undersize_graph_topic_;
   std::string forbidden_graph_topic_;
+  std::string topological_map_topic_;
+  std::string planar_clusters_topic_;
+  std::string depth_topic_;
+  std::string camera_info_topic_;
   candidate::GraspVoxelMatchConfig match_config_;
   Eigen::Vector3d contact_closing_axis_ = Eigen::Vector3d::UnitY();
   std::vector<Eigen::Quaterniond> orientations_;
@@ -762,16 +1224,34 @@ private:
   bool environment_snapshot_initialized_ = false;
   bool object_snapshot_needs_reset_ = true;
   bool environment_snapshot_needs_reset_ = true;
+  bool surface_normals_dirty_ = true;
+  bool planar_collision_dirty_ = true;
+  bool has_surface_normal_context_ = false;
+  bool has_planar_cluster_context_ = false;
+  bool has_planar_collision_context_ = false;
+  bool enable_depth_visibility_ = true;
+  bool is_depth_dirty_ = true;
   std::uint32_t object_revision_ = 0;
   std::uint32_t environment_revision_ = 0;
+  std::size_t surface_normal_cell_num_ = 0;
+  std::size_t planar_collision_cell_num_ = 0;
+  std::size_t max_depth_cache_num_ = 0;
   std::unique_ptr<candidate::CompiledGraspVoxelTemplate> compiled_template_;
   std::unique_ptr<candidate::IncrementalGraspVoxelMatcher> incremental_matcher_;
+  std::unique_ptr<candidate::VoxelSurfaceNormalGrid> surface_normals_;
+  std::unordered_set<candidate::VoxelIndex, candidate::VoxelIndexHash> planar_collision_cells_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   voxel_msgs::msg::Voxel::SharedPtr object_voxels_;
   voxel_msgs::msg::Voxel::SharedPtr environment_voxels_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr required_graph_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr undersize_graph_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr forbidden_graph_;
+  ais_gng_msgs::msg::TopologicalMap::SharedPtr topological_map_;
+  ais_gng_msgs::msg::PlanarClusterArray::SharedPtr planar_clusters_;
+  sensor_msgs::msg::CameraInfo::SharedPtr camera_info_;
+  std::map<std::int64_t, sensor_msgs::msg::Image::SharedPtr> depth_image_cache_;
 
   rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr object_voxels_sub_;
   rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr environment_voxels_sub_;
@@ -780,12 +1260,17 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr required_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr undersize_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr forbidden_graph_sub_;
+  rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_sub_;
+  rclcpp::Subscription<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr planar_clusters_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_pub_;
+  rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr candidate_voxels_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
-}  // namespace grasping_system::nodes
+}  // grasping_system::nodes 名前空間
 
 int main(int argc, char **argv)
 {

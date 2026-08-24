@@ -252,6 +252,7 @@ struct Clusterizer::Impl
     options.growth_residual_ratio = std::max(0.0, options.growth_residual_ratio);
     options.retention_residual_ratio = std::max(
       options.growth_residual_ratio, options.retention_residual_ratio);
+    options.max_effective_spacing = std::max(kEpsilon, options.max_effective_spacing);
     options.normal_filter_alpha = std::clamp(options.normal_filter_alpha, 0.01, 1.0);
     options.normal_alignment_deg = std::clamp(options.normal_alignment_deg, 0.0, 90.0);
     normal_alignment_cos = std::cos(options.normal_alignment_deg * kRadiansPerDeg);
@@ -578,7 +579,9 @@ struct Clusterizer::Impl
   double fitScore(const std::size_t cluster_index, const std::size_t node_index) const
   {
     const ClusterState &cluster = clusters[cluster_index];
-    const double spacing = std::max({cluster.spacing, spacings[node_index], kEpsilon});
+    const double spacing = std::min(
+      std::max({cluster.spacing, spacings[node_index], kEpsilon}),
+      options.max_effective_spacing);
     return std::abs(cluster.normal.dot(positions[node_index] - cluster.centroid)) / spacing;
   }
 
@@ -1075,11 +1078,16 @@ struct Clusterizer::Impl
 
     // 各クラスタの累積共分散を1回だけ作る。候補対ごとのノード走査を避け、
     // 結合平面を一定量の累積値合成と3x3固有値分解で判定する。
+    // メンバーの索引一覧も同じ1パスで作り、少数側単体をunion平面へ当てはめる
+    // チェックに使う(buildOutputのmember_listsとは別に、ここで作り直す)。
     merge_accumulators.assign(clusters.size(), PlaneAccumulator{});
+    member_lists.assign(clusters.size(), std::vector<std::uint32_t>{});
     for (std::size_t index = 0U; index < label.size(); ++index) {
       if (label[index] != kUnassigned) {
-        merge_accumulators[static_cast<std::size_t>(label[index])].add(
+        const auto cluster_index = static_cast<std::size_t>(label[index]);
+        merge_accumulators[cluster_index].add(
           positions[index], normals[index], spacings[index]);
+        member_lists[cluster_index].push_back(static_cast<std::uint32_t>(index));
       }
     }
 
@@ -1132,6 +1140,30 @@ struct Clusterizer::Impl
       if (union_fit.residual / union_spacing > allowed_residual) {
         ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
+      }
+      // union_fitは全メンバーの平均統計なので、大きい側に小さい側を混ぜても
+      // 全体の当てはめはほとんど動かず、小さい側だけが実際にはunion平面から
+      // 離れているケースを見逃す。少数側の点群をunion平面へ個別に当てはめ、
+      // RMS残差比で確かめる。
+      {
+        const std::size_t smaller = first_cluster.member_count <= second_cluster.member_count ?
+          first : second;
+        const ClusterState &smaller_cluster = clusters[smaller];
+        const auto &smaller_members = member_lists[smaller];
+        double sum_sq = 0.0;
+        for (const std::uint32_t member : smaller_members) {
+          const double d = union_fit.normal.dot(positions[member] - union_fit.centroid);
+          sum_sq += d * d;
+        }
+        const double smaller_rms = smaller_members.empty() ?
+          0.0 : std::sqrt(sum_sq / static_cast<double>(smaller_members.size()));
+        const double smaller_spacing = std::min(
+          std::max({smaller_cluster.spacing, union_spacing, kEpsilon}),
+          options.max_effective_spacing);
+        if (smaller_rms / smaller_spacing > options.merge_smaller_side_residual_ratio) {
+          ++statistics.merge_smaller_side_rejected_pair_count;
+          continue;
+        }
       }
       // ノード数の多い側のIDを残す。少数側へ吸収されると、画面上は大きなクラスタが
       // 消えて別IDへ置き換わったように見える。同数なら若いID(古い方)を残す。

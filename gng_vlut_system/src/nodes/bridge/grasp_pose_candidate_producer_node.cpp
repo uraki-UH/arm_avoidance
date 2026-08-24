@@ -38,8 +38,8 @@ public:
     codec_(::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE)
   {
     declare_parameter<std::string>("input_topic", "/topo_points");
-    declare_parameter<std::string>("pose_topic", "/grasp_pose_candidates");
-    declare_parameter<std::string>("score_topic", "/grasp_pose_scores");
+    declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
+    declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
     declare_parameter<std::string>("marker_topic", "/grasp_pose_markers");
     declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);

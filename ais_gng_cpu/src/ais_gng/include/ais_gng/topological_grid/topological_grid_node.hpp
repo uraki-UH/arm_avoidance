@@ -38,7 +38,8 @@ private:
   void pointCloudWatchdog();
   void publishResult(
     const ais_gng_msgs::msg::TopologicalMap &map,
-    const GridPointCounts &input_point_counts);
+    const GridPointCounts &input_point_counts,
+    double point_count_ms);
   GridPointCounts buildPointCounts(const sensor_msgs::msg::PointCloud2 &msg) const;
   NodeLocalStructureStates buildLocalStructureStates(
     const ais_gng_msgs::msg::TopologicalMap &map,
@@ -124,6 +125,7 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   GridPointCounts latest_point_counts_;
   std_msgs::msg::Header latest_pointcloud_header_;
+  double latest_point_count_ms_ = 0.0;
   bool has_latest_pointcloud_ = false;
   std::uint32_t voxel_revision_ = 0;
   rclcpp::Time last_map_stamp_{0, 0, RCL_ROS_TIME};

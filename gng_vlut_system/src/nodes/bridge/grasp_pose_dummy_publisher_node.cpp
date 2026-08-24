@@ -21,8 +21,8 @@ public:
   explicit GraspPoseDummyPublisherNode(const rclcpp::NodeOptions &options)
   : Node("grasp_pose_dummy_publisher_node", options)
   {
-    declare_parameter<std::string>("pose_topic", "/grasp_pose_candidates");
-    declare_parameter<std::string>("score_topic", "/grasp_pose_scores");
+    declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
+    declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
     declare_parameter<std::string>("marker_topic", "/grasp_pose_markers");
     declare_parameter<std::string>("frame_id", "world");
     declare_parameter<double>("publish_rate_hz", 1.0);

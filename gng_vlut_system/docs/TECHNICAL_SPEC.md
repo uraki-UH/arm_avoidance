@@ -61,8 +61,8 @@ flowchart TD
 | `orientation_weight` | float | `0.0` | 向き一致度の重み |
 | `target_pose_topic` | topic | 空 | 単一目標姿勢入力 |
 | `target_point_topic` | topic | 空 | 単一目標位置入力 |
-| `target_pose_array_topic` | topic | `/grasp_pose_candidates` | 目標姿勢配列入力 |
-| `target_score_topic` | topic | `/grasp_pose_scores` | 目標姿勢のスコア配列 |
+| `target_pose_array_topic` | topic | `/grasp_pose_cands` | 目標姿勢配列入力 |
+| `target_score_topic` | topic | `/grasp_pose_cand_scores` | 目標姿勢のスコア配列 |
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
 | `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
@@ -99,8 +99,8 @@ flowchart TD
 | `orientation_weight` | float | `0.25` | 姿勢整合重み |
 | `target_pose_topic` | topic | 空 | 単一目標姿勢 |
 | `target_point_topic` | topic | 空 | 単一目標位置 |
-| `target_pose_array_topic` | topic | `/grasp_pose_candidates` | 候補姿勢群 |
-| `target_score_topic` | topic | `/grasp_pose_scores` | 姿勢スコア群 |
+| `target_pose_array_topic` | topic | `/grasp_pose_cands` | 候補姿勢群 |
+| `target_score_topic` | topic | `/grasp_pose_cand_scores` | 姿勢スコア群 |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 選定ノード ID の出力 |
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | manipulability 補正用特徴量 |
 | `manipulability_weight` | float | `0.25` | 可操作性補正重み |
@@ -162,8 +162,8 @@ flowchart TD
 | `/ToPoDualArm/topological_map_static` | `ais_gng_msgs/TopologicalMap` | 元の GNG マップ |
 | `/selected_topological_map` | `ais_gng_msgs/TopologicalMap` | target に応じて選ばれたマップ |
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
-| `/grasp_pose_candidates` | `geometry_msgs/PoseArray` | 候補姿勢群 |
-| `/grasp_pose_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
+| `/grasp_pose_cands` | `geometry_msgs/PoseArray` | 候補姿勢群 |
+| `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
 | `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
 | `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
 | `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標 |
@@ -554,8 +554,8 @@ revision付き全量snapshotを受けた初回だけ、各候補へ`required_occ
 | 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
-| 候補TCP Pose群 | `/grasp_voxel_candidates` | `geometry_msgs/PoseArray` |
-| 照合内訳 | `/grasp_voxel_candidates/summary` | `std_msgs/String` |
+| 候補TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
+| 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
