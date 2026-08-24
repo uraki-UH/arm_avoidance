@@ -260,6 +260,8 @@ struct Clusterizer::Impl
     // 成長中のしきい値が確定時より厳しいと、育つ前に必ず止まってしまう。
     options.min_growth_planarity = std::clamp(
       options.min_growth_planarity, 0.0, options.min_cluster_planarity);
+    options.merge_min_planarity = std::clamp(
+      options.merge_min_planarity, 0.0, options.min_cluster_planarity);
     options.maintenance_iter = std::max<std::size_t>(1U, options.maintenance_iter);
     options.connection_requirement =
       std::max<std::size_t>(1U, options.connection_requirement);
@@ -273,6 +275,10 @@ struct Clusterizer::Impl
     std::uint32_t id = 0U;
     Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
     Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
+    // 前フレームのOBB接平面基底。法線が僅かに動いただけで軸が不連続に選び直される
+    // unitOrthogonal() の切り替わりを避けるため、この方向へ射影して引き継ぐ。
+    Eigen::Vector3d tangent_u = Eigen::Vector3d::Zero();
+    bool has_tangent_u = false;
     double spacing = 0.0;
     double planarity = 0.0;
     double residual = 0.0;
@@ -1053,7 +1059,9 @@ struct Clusterizer::Impl
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
-      if (union_fit.planarity < options.min_cluster_planarity) {
+      // 確定条件(min_cluster_planarity)より緩い専用しきい値を使う。誤併合を防ぐのは
+      // 次の絶対残差条件の役目で、平面性は鎖状のまま結合されるのだけを防げばよい。
+      if (union_fit.planarity < options.merge_min_planarity) {
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
       }
@@ -1161,7 +1169,7 @@ struct Clusterizer::Impl
     }
 
     for (std::size_t cluster_index = 0U; cluster_index < clusters.size(); ++cluster_index) {
-      const ClusterState &state = clusters[cluster_index];
+      ClusterState &state = clusters[cluster_index];
       // 出力の条件はノード数だけにする。平面性や残差が一時的に閾値をまたいだだけで
       // クラスタ全体を出力から外すと、内部では生きているのに表示だけが明滅する。
       // 実測では120フレームで同一IDの復活が178件あった。
@@ -1178,7 +1186,22 @@ struct Clusterizer::Impl
       }
       const std::vector<std::uint32_t> &members = member_lists[cluster_index];
 
-      const Eigen::Vector3d tangent_u = state.normal.unitOrthogonal();
+      // OBBの接平面基底。unitOrthogonal() を毎フレーム独立に呼ぶと、法線がわずかに
+      // 動いただけで軸の選び方が離散的に切り替わり、OBBの向きが不連続にジャンプする
+      // (実測で15度超の飛びが1.1%)。前フレームの tangent_u を新しい法線平面へ射影して
+      // 引き継ぐことで、法線自体の回転ぶんだけ滑らかに追従させる。射影後の長さが
+      // 短すぎる場合(前フレームのtangent_uがほぼ法線と平行だった場合)だけ作り直す。
+      Eigen::Vector3d tangent_u;
+      if (state.has_tangent_u) {
+        tangent_u = state.tangent_u - state.normal * state.normal.dot(state.tangent_u);
+      }
+      if (!state.has_tangent_u || tangent_u.squaredNorm() < kEpsilon) {
+        tangent_u = state.normal.unitOrthogonal();
+      } else {
+        tangent_u.normalize();
+      }
+      state.tangent_u = tangent_u;
+      state.has_tangent_u = true;
       const Eigen::Vector3d tangent_v = state.normal.cross(tangent_u).normalized();
       double min_u = std::numeric_limits<double>::infinity();
       double max_u = -std::numeric_limits<double>::infinity();

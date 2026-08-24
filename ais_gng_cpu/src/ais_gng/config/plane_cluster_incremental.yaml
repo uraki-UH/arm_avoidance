@@ -42,9 +42,9 @@ plane_cluster_incremental_node:
     # true 時の大クラスタ側への任意移動規則。候補 B のノード数が移動元の指定倍率以上、
     # かつ候補への距離が指定した許容量以下の悪化。
     enable_larger_cluster_migration_bias: false
-    # 上の任意条件における score 悪化量のしきい値。
+    #上の条件true のときだけ効く。score 悪化量のしきい値。
     migration_size_bias_th: 0.10
-    # 上の任意条件で「候補クラスタの方が十分大きい」とみなすノード数の倍率。
+    #  #上の条件true のときだけ効く。「候補クラスタの方が十分大きい」とみなすノード数の倍率。
     migration_size_bias_ratio: 2.0
 
     # 最小クラスタノード数に加える移動元保護余裕。
@@ -59,9 +59,17 @@ plane_cluster_incremental_node:
     # 所属変化ゼロ時の早期終了。
     maintenance_iter: 2
 
+    # 併合を認める結合後の平面性 sqrt(λ2/λ3) の下限。min_cluster_planarity より緩い。
+    # 実測: 直交面を結合しても平面性は0.620まで上がり0.45を満たしてしまう一方、
+    # 残差比は1.208まで悪化して弾かれた。誤併合の防止は残差条件が担っており、
+    # 平面性条件は寄与しない。逆に細長い帯状の同一平面領域を追加すると平面性だけが
+    # 一時的に下がり、残差比は十分小さいのに併合できず、境界を奪い合ったまま
+    # 何十フレームも足踏みする原因になっていた。
+    merge_min_planarity: 0.25
+
     # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
     # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
-    merge_residual_growth_ratio: 1.3
+    merge_residual_growth_ratio: 1.2
     # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
     merge_residual_growth_min_th: 0.15
 

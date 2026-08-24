@@ -267,15 +267,15 @@ private:
     options.min_cluster_nodes = static_cast<std::size_t>(
       std::max<std::int64_t>(3, declare_parameter<int>("min_cluster_nodes", 7)));
     options.growth_residual_ratio =
-      declare_parameter<double>("growth_residual_ratio", 0.35);
+      declare_parameter<double>("growth_residual_ratio", 0.70);
     options.retention_residual_ratio =
-      declare_parameter<double>("retention_residual_ratio", 0.70);
+      declare_parameter<double>("retention_residual_ratio", 1.40);
     options.normal_alignment_deg =
       declare_parameter<double>("normal_alignment_deg", 60.0);
     options.min_cluster_planarity =
       declare_parameter<double>("min_cluster_planarity", 0.45);
     options.max_normalized_cluster_residual =
-      declare_parameter<double>("max_normalized_cluster_residual", 0.35);
+      declare_parameter<double>("max_normalized_cluster_residual", 0.70);
     options.min_growth_planarity =
       declare_parameter<double>("min_growth_planarity", 0.25);
     options.connection_requirement = static_cast<std::size_t>(
@@ -296,6 +296,8 @@ private:
       declare_parameter<double>("migration_size_bias_ratio", 2.0);
     options.donor_protection_buffer = static_cast<std::size_t>(
       std::max<std::int64_t>(0, declare_parameter<int>("donor_protection_buffer", 3)));
+    options.merge_min_planarity =
+      declare_parameter<double>("merge_min_planarity", 0.25);
     options.merge_residual_growth_ratio =
       declare_parameter<double>("merge_residual_growth_ratio", 1.3);
     options.merge_residual_growth_min_th =
