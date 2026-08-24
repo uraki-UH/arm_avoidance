@@ -39,6 +39,51 @@ geometry_msgs::msg::Point planarCorner(
   return result;
 }
 
+struct PlanarPoint
+{
+  double u = 0.0;
+  double v = 0.0;
+};
+
+// Andrewのmonotone chainによる2D凸包(反時計回り、始点と終点は重複させない)。
+//
+// OBBの外接矩形は重心まわりに対称と見なすため、L字状など偏った分布では
+// 実メンバーが存在しない領域まで枠がはみ出し、隣接クラスタの枠と重なって見える
+// (実測: 同一フレーム列60枚でノードの最大25%が2クラスタ以上の枠に同時に入っていた)。
+// 実分布に沿う凸包に替えるとこの重なりが目に見えて減る(実測で約2-3割減)。
+std::vector<PlanarPoint> convexHull(std::vector<PlanarPoint> points)
+{
+  std::sort(points.begin(), points.end(), [](const PlanarPoint &a, const PlanarPoint &b) {
+      return a.u != b.u ? a.u < b.u : a.v < b.v;
+    });
+  points.erase(
+    std::unique(
+      points.begin(), points.end(),
+      [](const PlanarPoint &a, const PlanarPoint &b) { return a.u == b.u && a.v == b.v; }),
+    points.end());
+  if (points.size() < 3U) {
+    return points;
+  }
+  const auto cross = [](const PlanarPoint &o, const PlanarPoint &a, const PlanarPoint &b) {
+      return (a.u - o.u) * (b.v - o.v) - (a.v - o.v) * (b.u - o.u);
+    };
+  std::vector<PlanarPoint> hull(2U * points.size());
+  int k = 0;
+  for (std::size_t i = 0U; i < points.size(); ++i) {
+    while (k >= 2 && cross(hull[k - 2], hull[k - 1], points[i]) <= 0.0) { --k; }
+    hull[static_cast<std::size_t>(k++)] = points[i];
+  }
+  const int lower = k + 1;
+  for (int i = static_cast<int>(points.size()) - 2; i >= 0; --i) {
+    while (k >= lower && cross(hull[k - 2], hull[k - 1], points[static_cast<std::size_t>(i)]) <= 0.0) {
+      --k;
+    }
+    hull[static_cast<std::size_t>(k++)] = points[static_cast<std::size_t>(i)];
+  }
+  hull.resize(static_cast<std::size_t>(k - 1));
+  return hull;
+}
+
 // 色番号から決定的に色を作る。番号が変わらない限り、色もフレーム間で変わらない。
 std_msgs::msg::ColorRGBA clusterColor(const std::uint32_t color_index)
 {
@@ -81,7 +126,8 @@ visualization_msgs::msg::Marker baseMarker(
 // 毎フレーム DELETEALL を送ると、削除と再追加の間で表示が一瞬抜けて明滅する。
 // 生き残っているクラスタのマーカーは上書き更新に任せる。
 visualization_msgs::msg::MarkerArray makeObbMarkers(
-  const ais_gng_msgs::msg::PlanarClusterArray &clusters, const bool enable_text_marker,
+  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes, const bool enable_text_marker,
   std::set<std::uint32_t> &published_ids,
   const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
 {
@@ -113,16 +159,40 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
       color_it != color_of.end() ? color_it->second : cluster.id);
 
     // 平面上の有向境界枠。エッジ群より見分けやすく、クラスタの広がりが一目で分かる。
-    // extent は重心まわりに対称と見なして描くため、実際の分布が偏っている場合は近似になる。
-    if (cluster.extent_u > 0.0F || cluster.extent_v > 0.0F) {
+    // 実メンバーの接平面投影から凸包を取って描く。外接矩形(重心対称)と違い、
+    // L字状など偏った分布でも実メンバーのいない領域まではみ出さない。凸包が
+    // 作れない(メンバー3未満やほぼ一直線)場合だけ、従来の外接矩形にフォールバックする。
+    std::vector<PlanarPoint> projected;
+    projected.reserve(cluster.node_indices.size());
+    for (const std::uint32_t node_index : cluster.node_indices) {
+      if (node_index >= nodes.size()) { continue; }
+      const geometry_msgs::msg::Point32 &pos = nodes[node_index].pos;
+      const double dx = static_cast<double>(pos.x) - static_cast<double>(cluster.centroid.x);
+      const double dy = static_cast<double>(pos.y) - static_cast<double>(cluster.centroid.y);
+      const double dz = static_cast<double>(pos.z) - static_cast<double>(cluster.centroid.z);
+      projected.push_back(
+        {dx * cluster.tangent_u.x + dy * cluster.tangent_u.y + dz * cluster.tangent_u.z,
+          dx * cluster.tangent_v.x + dy * cluster.tangent_v.y + dz * cluster.tangent_v.z});
+    }
+    const std::vector<PlanarPoint> hull = convexHull(std::move(projected));
+
+    auto bounds = baseMarker(clusters.header, "incremental_plane_obb", marker_id);
+    bounds.type = visualization_msgs::msg::Marker::LINE_LIST;
+    bounds.scale.x = std::clamp(
+      2.5 * 0.15 * static_cast<double>(cluster.local_spacing), 0.004, 0.016);
+    bounds.color = color;
+    bounds.color.a = 1.0F;
+    if (hull.size() >= 3U) {
+      bounds.points.reserve(hull.size() * 2U);
+      for (std::size_t i = 0U; i < hull.size(); ++i) {
+        const std::size_t next = (i + 1U) % hull.size();
+        bounds.points.push_back(planarCorner(cluster, hull[i].u, hull[i].v));
+        bounds.points.push_back(planarCorner(cluster, hull[next].u, hull[next].v));
+      }
+      markers.markers.push_back(std::move(bounds));
+    } else if (cluster.extent_u > 0.0F || cluster.extent_v > 0.0F) {
       const double half_u = 0.5 * static_cast<double>(cluster.extent_u);
       const double half_v = 0.5 * static_cast<double>(cluster.extent_v);
-      auto bounds = baseMarker(clusters.header, "incremental_plane_obb", marker_id);
-      bounds.type = visualization_msgs::msg::Marker::LINE_LIST;
-      bounds.scale.x = std::clamp(
-        2.5 * 0.15 * static_cast<double>(cluster.local_spacing), 0.004, 0.016);
-      bounds.color = color;
-      bounds.color.a = 1.0F;
       const auto c0 = planarCorner(cluster, -half_u, -half_v);
       const auto c1 = planarCorner(cluster, half_u, -half_v);
       const auto c2 = planarCorner(cluster, half_u, half_v);
@@ -270,8 +340,12 @@ private:
       declare_parameter<double>("growth_residual_ratio", 0.70);
     options.retention_residual_ratio =
       declare_parameter<double>("retention_residual_ratio", 1.40);
+    options.normal_filter_alpha =
+      declare_parameter<double>("normal_filter_alpha", 0.30);
     options.normal_alignment_deg =
       declare_parameter<double>("normal_alignment_deg", 60.0);
+    options.retention_normal_alignment_deg =
+      declare_parameter<double>("retention_normal_alignment_deg", 85.0);
     options.min_cluster_planarity =
       declare_parameter<double>("min_cluster_planarity", 0.45);
     options.max_normalized_cluster_residual =
@@ -280,6 +354,8 @@ private:
       declare_parameter<double>("min_growth_planarity", 0.25);
     options.connection_requirement = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("connection_requirement", 2)));
+    options.merge_connection_requirement = static_cast<std::size_t>(
+      std::max<std::int64_t>(1, declare_parameter<int>("merge_connection_requirement", 1)));
     options.birth_neighbor_requirement = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("birth_neighbor_requirement", 1)));
     options.migration_improvement_margin =
@@ -288,12 +364,6 @@ private:
       declare_parameter<bool>("enable_multi_edge_dist_relaxation", true);
     options.maintenance_iter = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iter", 2)));
-    options.enable_larger_cluster_migration_bias =
-      declare_parameter<bool>("enable_larger_cluster_migration_bias", false);
-    options.migration_size_bias_th =
-      declare_parameter<double>("migration_size_bias_th", 0.10);
-    options.migration_size_bias_ratio =
-      declare_parameter<double>("migration_size_bias_ratio", 2.0);
     options.donor_protection_buffer = static_cast<std::size_t>(
       std::max<std::int64_t>(0, declare_parameter<int>("donor_protection_buffer", 3)));
     options.merge_min_planarity =
@@ -390,7 +460,8 @@ private:
     cluster_publisher_->publish(result.clusters);
     obb_marker_publisher_->publish(
       makeObbMarkers(
-        result.clusters, enable_text_marker_, published_obb_marker_ids_, cluster_color_));
+        result.clusters, map.nodes, enable_text_marker_, published_obb_marker_ids_,
+        cluster_color_));
     node_marker_publisher_->publish(
       makeNodeMarkers(result.clusters, map.nodes, published_node_marker_ids_, cluster_color_));
     const auto completed = std::chrono::steady_clock::now();

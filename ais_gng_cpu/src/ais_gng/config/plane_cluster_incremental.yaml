@@ -16,8 +16,15 @@ plane_cluster_incremental_node:
     # 取り込みより緩い上限によるヒステリシス。境界ノードの所属往復の抑制。
     retention_residual_ratio: 1.40
 
-    # ノード法線とクラスタ平面法線の許容角度[deg]。内積比較cos値へ内部で変換。
-    normal_alignment_deg: 70.0
+    # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
+    normal_filter_alpha: 0.30
+
+    # 種の生成・成長で要求する法線の許容角度[deg]。内積比較cos値へ内部で変換。
+    normal_alignment_deg: 60.0
+
+    # 既に所属しているノードの保持・取り込み・移動で要求する法線の許容角度[deg]。
+    # 種の判定用より緩くする。
+    retention_normal_alignment_deg: 80.0
 
     # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
     min_cluster_planarity: 0.45
@@ -28,24 +35,20 @@ plane_cluster_incremental_node:
     # 確定条件より緩い判定による、成長途中の面の許容。
     min_growth_planarity: 0.25
 
-    # ノード取り込み・移動時の候補クラスタへの隣接エッジ数、およびクラスタ併合時の
-    # クラスタ間直接エッジ数に対する要求値。
+    # ノード取り込み・移動時の候補クラスタへの隣接エッジ数の要求値。
+    # ノード1個の判定は偶然の接続で誤って移りやすい。
     connection_requirement: 2
+
+    # クラスタ併合の候補と認めるための、クラスタ間直接エッジ数の要求値。
+    merge_connection_requirement: 1
+
     # 新規クラスタ成長中の、追加候補から生成中の種への必要隣接エッジ数。
     # 生成直後に限定した通常時より緩い接続条件。
     birth_neighbor_requirement: 1
 
     # 所属クラスタ A から候補 B への移動条件: score(B) < score(A) - この値。
     # score: 上記の正規化平面距離。境界での僅差な所属往復の抑制。
-    migration_improvement_margin: 0.30
-
-    # true 時の大クラスタ側への任意移動規則。候補 B のノード数が移動元の指定倍率以上、
-    # かつ候補への距離が指定した許容量以下の悪化。
-    enable_larger_cluster_migration_bias: false
-    #上の条件true のときだけ効く。score 悪化量のしきい値。
-    migration_size_bias_th: 0.10
-    #  #上の条件true のときだけ効く。「候補クラスタの方が十分大きい」とみなすノード数の倍率。
-    migration_size_bias_ratio: 2.0
+    migration_improvement_margin: 0.10
 
     # 最小クラスタノード数に加える移動元保護余裕。
     # 小さいクラスタの境界からの漸減・消滅の防止。
@@ -59,19 +62,14 @@ plane_cluster_incremental_node:
     # 所属変化ゼロ時の早期終了。
     maintenance_iter: 2
 
-    # 併合を認める結合後の平面性 sqrt(λ2/λ3) の下限。min_cluster_planarity より緩い。
-    # 実測: 直交面を結合しても平面性は0.620まで上がり0.45を満たしてしまう一方、
-    # 残差比は1.208まで悪化して弾かれた。誤併合の防止は残差条件が担っており、
-    # 平面性条件は寄与しない。逆に細長い帯状の同一平面領域を追加すると平面性だけが
-    # 一時的に下がり、残差比は十分小さいのに併合できず、境界を奪い合ったまま
-    # 何十フレームも足踏みする原因になっていた。
+    # 併合を認める結合後の平面性 sqrt(λ2/λ3) の下限。min_cluster_planarity より緩くする。
     merge_min_planarity: 0.25
 
     # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
     # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
-    merge_residual_growth_ratio: 1.2
+    merge_residual_growth_ratio: 1.1
     # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
-    merge_residual_growth_min_th: 0.15
+    merge_residual_growth_min_th: 0.1
 
     # 新規平面クラスタの確定後、出力前に必要な確認フレーム数。
     # 0 時の即時出力。

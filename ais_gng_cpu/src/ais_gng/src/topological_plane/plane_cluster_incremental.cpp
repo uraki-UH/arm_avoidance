@@ -23,6 +23,10 @@ constexpr double kRadiansPerDeg = 0.017453292519943295769236907684886;
 // 未所属を表すクラスタ添字。
 constexpr int kUnassigned = -1;
 
+// GNGノードIDの取りうる範囲(uint16_t)。法線EMA状態をハッシュ表ではなく
+// この幅のフラット配列で直接インデックスするために使う。
+constexpr std::size_t kNodeIdRange = 65536U;
+
 Eigen::Vector3d pointOf(const geometry_msgs::msg::Point32 &point)
 {
   return Eigen::Vector3d(point.x, point.y, point.z);
@@ -248,8 +252,17 @@ struct Clusterizer::Impl
     options.growth_residual_ratio = std::max(0.0, options.growth_residual_ratio);
     options.retention_residual_ratio = std::max(
       options.growth_residual_ratio, options.retention_residual_ratio);
+    options.normal_filter_alpha = std::clamp(options.normal_filter_alpha, 0.01, 1.0);
     options.normal_alignment_deg = std::clamp(options.normal_alignment_deg, 0.0, 90.0);
     normal_alignment_cos = std::cos(options.normal_alignment_deg * kRadiansPerDeg);
+    // 保持用は種形成用より緩くする。厳しくして種形成側の意図を壊さないよう、
+    // 下限を種形成用の角度に揃える(保持用の角度がそれより小さくならないようにする)。
+    options.retention_normal_alignment_deg = std::clamp(
+      options.retention_normal_alignment_deg, 0.0, 90.0);
+    options.retention_normal_alignment_deg = std::max(
+      options.retention_normal_alignment_deg, options.normal_alignment_deg);
+    retention_normal_alignment_cos =
+      std::cos(options.retention_normal_alignment_deg * kRadiansPerDeg);
     options.min_cluster_planarity = std::clamp(options.min_cluster_planarity, 0.0, 1.0);
     options.max_normalized_cluster_residual =
       std::max(0.0, options.max_normalized_cluster_residual);
@@ -265,6 +278,8 @@ struct Clusterizer::Impl
     options.maintenance_iter = std::max<std::size_t>(1U, options.maintenance_iter);
     options.connection_requirement =
       std::max<std::size_t>(1U, options.connection_requirement);
+    options.merge_connection_requirement =
+      std::max<std::size_t>(1U, options.merge_connection_requirement);
     options.birth_neighbor_requirement =
       std::max<std::size_t>(1U, options.birth_neighbor_requirement);
   }
@@ -291,11 +306,22 @@ struct Clusterizer::Impl
 
   ClusterOptions options;
   double normal_alignment_cos = 0.50;
+  double retention_normal_alignment_cos = 0.087;
 
   // --- フレームをまたいで保持する状態 ---
   std::vector<ClusterState> clusters;
   std::unordered_map<std::uint16_t, std::uint32_t> owner_by_node_id;
   std::uint32_t next_cluster_id = 1U;
+  // ノードIDごとの法線EMA状態。IDをそのまま添字にしたフラット配列で持つ
+  // (unordered_mapのハッシュ計算・バケット走査・ヒープ確保を避けるため)。
+  // normal_filter_frame[id] が「その値を書いた時のフレーム番号」で、0は
+  // 「一度も書かれていない」を表す番兵として予約する(実フレーム番号は1以上
+  // しか書き込まない)。直前フレーム番号と一致する時だけ前回値とみなして混合する。
+  std::vector<Eigen::Vector3d> normal_filter_values =
+    std::vector<Eigen::Vector3d>(kNodeIdRange);
+  std::vector<std::uint32_t> normal_filter_frame =
+    std::vector<std::uint32_t>(kNodeIdRange, 0U);
+  std::uint32_t normal_filter_current_frame = 0U;
 
   // --- フレームごとに再利用するバッファ ---
   std::vector<Eigen::Vector3d> positions;
@@ -431,6 +457,38 @@ struct Clusterizer::Impl
       normals[index] = fit.normal;
     }
 
+    // 法線へEMA(指数移動平均)を掛け、瞬間的な推定誤差を均す。
+    //
+    // GNG法線のフレーム間角度変化は分布の裾が非常に重く、p99.9で約86度に達する
+    // (実測)。この裾のほとんどは境界・稜線ノードの瞬間的な推定誤差であり、構造的な
+    // 不安定性ではない。EMAを掛けるとp99.9が大きく縮む(alpha=0.3で約22度)ため、
+    // is_normal_aligned のしきい値を緩めるより先に、ここでノイズそのものを削る。
+    // ノードIDを直接添字にして前フレームの値を読み書きする。直前フレームに
+    // 存在しなかったIDはフレーム番号が一致せず、自然に「初回」扱いになる。
+    // 符号は法線ごとに不定なので、混合前にそろえる。
+    ++normal_filter_current_frame;
+    const std::uint32_t previous_frame = normal_filter_current_frame - 1U;
+    for (std::size_t index = 0U; index < node_count; ++index) {
+      if (usable[index] == 0U) {
+        continue;
+      }
+      const std::uint16_t id = node_ids[index];
+      if (normal_filter_frame[id] != 0U && normal_filter_frame[id] == previous_frame) {
+        Eigen::Vector3d oriented = normals[index];
+        const Eigen::Vector3d &previous = normal_filter_values[id];
+        if (oriented.dot(previous) < 0.0) {
+          oriented = -oriented;
+        }
+        const Eigen::Vector3d blended =
+          options.normal_filter_alpha * oriented + (1.0 - options.normal_filter_alpha) * previous;
+        if (blended.squaredNorm() > kEpsilon) {
+          normals[index] = blended.normalized();
+        }
+      }
+      normal_filter_values[id] = normals[index];
+      normal_filter_frame[id] = normal_filter_current_frame;
+    }
+
     // 法線コヒーレンス。面の内側ほど1に近く、稜線や角で下がる。
     // 新規クラスタの種を選ぶ順序にだけ使うので、内積の平均で足りる。
     for (std::size_t index = 0U; index < node_count; ++index) {
@@ -524,10 +582,11 @@ struct Clusterizer::Impl
     return std::abs(cluster.normal.dot(positions[node_index] - cluster.centroid)) / spacing;
   }
 
+  // 保持・取り込み・移動で使う。種の判定(normal_alignment_cos)より緩い。
   bool is_normal_aligned(const std::size_t cluster_index, const std::size_t node_index) const
   {
     return std::abs(clusters[cluster_index].normal.dot(normals[node_index])) >=
-           normal_alignment_cos;
+           retention_normal_alignment_cos;
   }
 
   // 平面から離れすぎたメンバーを解放する。取り込みより緩い閾値を使う。
@@ -615,9 +674,11 @@ struct Clusterizer::Impl
         }
         const std::size_t cluster = static_cast<std::size_t>(candidate_label);
         if (clusters[cluster].member_count < 3U ||
-          neighbour_counts[cluster] < options.connection_requirement ||
-          !is_normal_aligned(cluster, index))
+          neighbour_counts[cluster] < options.connection_requirement)
         {
+          continue;
+        }
+        if (!is_normal_aligned(cluster, index)) {
           continue;
         }
         const double score = fitScore(cluster, index);
@@ -650,7 +711,6 @@ struct Clusterizer::Impl
           ++changed;
         } else {
           const std::size_t current_cluster = static_cast<std::size_t>(current_label);
-          const std::size_t best_cluster = static_cast<std::size_t>(best_label);
           // 小さいクラスタは供給しない。境界から少しずつ吸われて消えるのを防ぐ。
           // まとまるべきならクラスタ併合として一括で行われるべきである。
           const bool is_donor_protected =
@@ -659,18 +719,8 @@ struct Clusterizer::Impl
           if (!is_donor_protected) {
             const double current_score = fitScore(current_cluster, index);
             // 明確に当てはめが良くなる場合は移す。
-            bool is_migration_accepted =
+            const bool is_migration_accepted =
               best_score < current_score - options.migration_improvement_margin;
-            // 拮抗しているだけなら、ノード数の多い側へ寄せる。行き先を一貫させる
-            // ことで、法線の揺れによる往復が止まる。
-            if (!is_migration_accepted && options.enable_larger_cluster_migration_bias &&
-              static_cast<double>(clusters[best_cluster].member_count) >=
-              options.migration_size_bias_ratio *
-              static_cast<double>(clusters[current_cluster].member_count) &&
-              best_score <= current_score + options.migration_size_bias_th)
-            {
-              is_migration_accepted = true;
-            }
             if (is_migration_accepted) {
               next_label[index] = best_label;
               ++statistics.migrated_node_count;
@@ -1036,7 +1086,7 @@ struct Clusterizer::Impl
     merge_sets.reset(clusters.size());
     for (const auto &[key, pair] : adjacent_pair_counts) {
       ++statistics.merge_adjacent_pair_count;
-      if (pair.edges < options.connection_requirement) {
+      if (pair.edges < options.merge_connection_requirement) {
         ++statistics.merge_insufficient_edge_pair_count;
         continue;
       }
@@ -1300,6 +1350,10 @@ void Clusterizer::reset()
   // 利用側が取り違えるため。
   impl_->clusters.clear();
   impl_->owner_by_node_id.clear();
+  // フレーム番号の一致で「直前フレームの値か」を判定しているため、frame配列を
+  // 番兵の0へ戻すだけで全エントリが無効化される(current_frameは巻き戻さない)。
+  std::fill(
+    impl_->normal_filter_frame.begin(), impl_->normal_filter_frame.end(), 0U);
 }
 
 ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
