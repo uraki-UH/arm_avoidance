@@ -40,7 +40,7 @@ plane_cluster_incremental_node:
     migration_improvement_margin: 0.30
 
     # true 時の大クラスタ側への任意移動規則。候補 B のノード数が移動元の指定倍率以上、
-    # かつ候補への距離が指定した許容量以下の悪化。既定は無効。
+    # かつ候補への距離が指定した許容量以下の悪化。
     enable_larger_cluster_migration_bias: false
     # 上の任意条件における score 悪化量のしきい値。
     migration_size_bias_th: 0.10
