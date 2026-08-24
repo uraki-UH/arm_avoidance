@@ -63,7 +63,7 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         },
         nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : visualDefaults.nodeColor,
         edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : visualDefaults.edgeColor,
-        normalColor: '#00ffff',
+        normalColor: '#4fa3a5',
         velocityColor: '#ffb347',
         covarianceEllipsoidColor: '#aefeff',
         normalScale: 0.075,

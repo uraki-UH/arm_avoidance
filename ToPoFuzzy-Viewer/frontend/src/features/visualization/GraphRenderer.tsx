@@ -102,7 +102,7 @@ function GraphRendererCore({
     tf = null,
     nodeColor = '#81c720',
     edgeColor = '#08d408',
-    normalColor = '#00ffff',
+    normalColor = '#4fa3a5',
     velocityColor = '#ffb347',
     covarianceEllipsoidColor = '#aefeff',
     nodeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
@@ -118,6 +118,8 @@ function GraphRendererCore({
     const edgesRef = useRef<THREE.InstancedMesh>(null);
     const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
     const manipEllipsoidRef = useRef<THREE.InstancedMesh>(null);
+    const normalLineRef = useRef<THREE.LineSegments>(null);
+    const normalHeadRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
 
     const graph = data ?? EMPTY_GRAPH;
@@ -291,6 +293,23 @@ function GraphRendererCore({
     }), [nodeOpacity, nodeEmissiveIntensity]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
+    const normalHeadGeometry = useMemo(() => new THREE.ConeGeometry(0.5, 1, 6), []);
+    const normalLineMaterial = useMemo(() => new THREE.LineBasicMaterial({
+        color: normalColor,
+        transparent: true,
+        opacity: 0.65,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+    }), [normalColor]);
+    const normalHeadMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: normalColor,
+        transparent: true,
+        opacity: 0.65,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+    }), [normalColor]);
     const ellipsoidGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
     const ellipsoidMaterial = useMemo(() => new THREE.MeshStandardMaterial({
         color: covarianceEllipsoidColor,
@@ -320,10 +339,19 @@ function GraphRendererCore({
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
     const [ellipsoidCapacity, setEllipsoidCapacity] = useState(graph.nodes.length);
     const [manipEllipsoidCapacity, setManipEllipsoidCapacity] = useState(graph.nodes.length);
+    const [normalCapacity, setNormalCapacity] = useState(Math.max(1, graph.nodes.length));
     const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
     const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
     const [ellipsoidReadySignature, setEllipsoidReadySignature] = useState<string | null>(null);
     const [manipEllipsoidReadySignature, setManipEllipsoidReadySignature] = useState<string | null>(null);
+    const normalLineGeometry = useMemo(() => {
+        const geometry = new THREE.BufferGeometry();
+        const position = new THREE.BufferAttribute(new Float32Array(normalCapacity * 6), 3);
+        position.setUsage(THREE.DynamicDrawUsage);
+        geometry.setAttribute('position', position);
+        geometry.setDrawRange(0, 0);
+        return geometry;
+    }, [normalCapacity]);
 
     const covarianceEllipsoids = useMemo(() => {
         if (!showCovarianceEllipsoids) return [];
@@ -453,6 +481,10 @@ function GraphRendererCore({
         if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) setManipEllipsoidCapacity(manipulabilityEllipsoids.length);
     }, [manipulabilityEllipsoids.length, manipEllipsoidCapacity]);
 
+    useEffect(() => {
+        if (graph.nodes.length > normalCapacity) setNormalCapacity(graph.nodes.length);
+    }, [graph.nodes.length, normalCapacity]);
+
     // --- Node Instances ---
     useLayoutEffect(() => {
         if (!showNodes || graph.nodes.length === 0) return;
@@ -554,6 +586,72 @@ function GraphRendererCore({
         invalidate();
     }, [showManipulabilityEllipsoids, invalidate]);
 
+    useLayoutEffect(() => {
+        const normalLine = normalLineRef.current;
+        const normalHead = normalHeadRef.current;
+        if (!normalLine || !normalHead) return;
+
+        if (!showNormals || !showNodes || graph.nodes.length === 0 || graph.nodes.length > normalCapacity) {
+            normalLine.geometry.setDrawRange(0, 0);
+            normalHead.count = 0;
+            normalHead.instanceMatrix.needsUpdate = true;
+            invalidate();
+            return;
+        }
+
+        const positions = normalLineGeometry.getAttribute('position') as THREE.BufferAttribute;
+        const positionArray = positions.array as Float32Array;
+        const unitY = new THREE.Vector3(0, 1, 0);
+        const direction = new THREE.Vector3();
+        const headCenter = new THREE.Vector3();
+        const headQuaternion = new THREE.Quaternion();
+        const headScale = new THREE.Vector3();
+        const headMatrix = new THREE.Matrix4();
+        let normalNum = 0;
+
+        for (const node of graph.nodes) {
+            direction.set(node.nx, node.ny, node.nz);
+            const magnitude = direction.length();
+            if (!Number.isFinite(magnitude) || magnitude <= 1e-8) continue;
+
+            const length = Math.min(0.35, magnitude * normalScale);
+            if (!Number.isFinite(length) || length <= 0) continue;
+
+            direction.multiplyScalar(1 / magnitude);
+            const headLength = Math.max(length * 0.24, 0.024);
+            const headWidth = Math.max(length * 0.16, 0.012);
+            const shaftLength = Math.max(0, length - headLength);
+            const shaftEndX = node.x + direction.x * shaftLength;
+            const shaftEndY = node.y + direction.y * shaftLength;
+            const shaftEndZ = node.z + direction.z * shaftLength;
+            const positionOffset = normalNum * 6;
+
+            positionArray[positionOffset] = node.x;
+            positionArray[positionOffset + 1] = node.y;
+            positionArray[positionOffset + 2] = node.z;
+            positionArray[positionOffset + 3] = shaftEndX;
+            positionArray[positionOffset + 4] = shaftEndY;
+            positionArray[positionOffset + 5] = shaftEndZ;
+
+            headCenter.set(
+                node.x + direction.x * (length - headLength * 0.5),
+                node.y + direction.y * (length - headLength * 0.5),
+                node.z + direction.z * (length - headLength * 0.5),
+            );
+            headQuaternion.setFromUnitVectors(unitY, direction);
+            headScale.set(headWidth, headLength, headWidth);
+            headMatrix.compose(headCenter, headQuaternion, headScale);
+            normalHead.setMatrixAt(normalNum, headMatrix);
+            normalNum += 1;
+        }
+
+        positions.needsUpdate = true;
+        normalLineGeometry.setDrawRange(0, normalNum * 2);
+        normalHead.count = normalNum;
+        normalHead.instanceMatrix.needsUpdate = true;
+        invalidate();
+    }, [graph.nodes, showNormals, showNodes, normalScale, normalCapacity, normalLineGeometry, invalidate]);
+
     if (!data || !visible) return null;
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
@@ -641,20 +739,25 @@ function GraphRendererCore({
                 />
             )}
 
-            {canMountNormals && graph.nodes.map((node, index) => (
-                <DirectionalArrow
-                    key={`${variant}-normal-${index}`}
-                    origin={[node.x, node.y, node.z]}
-                    direction={[node.nx, node.ny, node.nz]}
-                    lengthScale={normalScale}
-                    maxLength={0.35}
-                    color={normalColor}
-                    visible={showNormals}
-                    headLengthRatio={0.24}
-                    headWidthRatio={0.16}
-                    shaftWidth={0.006}
-                />
-            ))}
+            {canMountNormals && (
+                <>
+                    <lineSegments
+                        ref={normalLineRef}
+                        geometry={normalLineGeometry}
+                        material={normalLineMaterial}
+                        frustumCulled={false}
+                        renderOrder={13}
+                    />
+                    <instancedMesh
+                        key={`${variant}-normal-heads-${normalCapacity}`}
+                        ref={normalHeadRef}
+                        args={[normalHeadGeometry, normalHeadMaterial, normalCapacity]}
+                        count={0}
+                        frustumCulled={false}
+                        renderOrder={14}
+                    />
+                </>
+            )}
 
             {showClusters && graph.clusters
             .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])

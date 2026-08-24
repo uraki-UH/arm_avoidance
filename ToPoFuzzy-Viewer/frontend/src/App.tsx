@@ -773,7 +773,7 @@ function App() {
                                 normalScale: settings.normalScale ?? 0.075,
                                 velocityScale: settings.velocityScale ?? 0.25,
                                 covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
-                                normalColor: settings.normalColor ?? '#00FFFF',
+                                normalColor: settings.normalColor ?? '#4fa3a5',
                                 velocityColor: settings.velocityColor ?? '#ffb347',
                                 covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
