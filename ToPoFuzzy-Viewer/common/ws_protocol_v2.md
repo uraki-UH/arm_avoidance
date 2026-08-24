@@ -41,6 +41,15 @@
 { "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false }], "edges": [], "clusters": [] } }
 ```
 
+### Stream Reset
+```json
+{ "type": "stream.reset", "topic": "/points", "tag": "/points" }
+```
+
+同名ROSトピックのpublisher GID更新時の描画キャッシュ初期化。フロントエンドは対象トピックの
+点群・グラフ・ボクセル・Markerを消去し、後続メッセージで同じレイヤーを再構築する。レイヤーの
+可視設定と手動変換は維持する。
+
 ### Edit Job Progress
 ```json
 { "type": "job.progress", "jobId": "job-...", "sessionId": "edit-...", "progress": 35, "stage": "processing" }

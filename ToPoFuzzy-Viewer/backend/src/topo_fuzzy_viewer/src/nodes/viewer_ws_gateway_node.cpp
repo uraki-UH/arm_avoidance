@@ -5,6 +5,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/event.hpp>
+#include <rmw/types.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
@@ -369,8 +370,69 @@ private:
             wait_for_graph_change(graph_event, std::chrono::milliseconds(200));
             if (!graphWatchRunning_) break;
             if (graph_event->check_and_clear()) {
+                broadcast_restarted_source_resets();
                 broadcastSourcesIfChanged();
             }
+        }
+    }
+
+    std::string publisher_signature(const std::string& source_id) {
+        std::vector<std::string> endpoint_ids;
+        for (const auto& publisher : get_publishers_info_by_topic(source_id)) {
+            const auto& gid = publisher.endpoint_gid();
+            endpoint_ids.emplace_back(
+                reinterpret_cast<const char*>(gid.data()), RMW_GID_STORAGE_SIZE);
+        }
+        std::sort(endpoint_ids.begin(), endpoint_ids.end());
+
+        std::string signature;
+        for (const auto& endpoint_id : endpoint_ids) {
+            signature.append(endpoint_id);
+        }
+        return signature;
+    }
+
+    void broadcast_restarted_source_resets() {
+        std::vector<std::string> source_ids;
+        {
+            std::lock_guard<std::mutex> lock(sourceMutex_);
+            source_ids.reserve(activeDynamicSubs_.size());
+            for (const auto& [source_id, _] : activeDynamicSubs_) {
+                source_ids.push_back(source_id);
+            }
+        }
+
+        std::vector<std::pair<std::string, std::string>> current_signatures;
+        current_signatures.reserve(source_ids.size());
+        for (const auto& source_id : source_ids) {
+            current_signatures.emplace_back(source_id, publisher_signature(source_id));
+        }
+
+        std::vector<std::string> restarted_source_ids;
+        {
+            std::lock_guard<std::mutex> lock(sourceMutex_);
+            for (const auto& [source_id, signature] : current_signatures) {
+                if (activeDynamicSubs_.count(source_id) == 0U) {
+                    active_source_publisher_signatures_.erase(source_id);
+                    continue;
+                }
+
+                const auto existing = active_source_publisher_signatures_.find(source_id);
+                if (existing != active_source_publisher_signatures_.end() &&
+                    !existing->second.empty() && !signature.empty() &&
+                    existing->second != signature)
+                {
+                    restarted_source_ids.push_back(source_id);
+                }
+                active_source_publisher_signatures_[source_id] = signature;
+            }
+        }
+
+        for (const auto& source_id : restarted_source_ids) {
+            broadcastText(json({
+                {"type", "stream.reset"}, {"id", source_id},
+                {"tag", source_id}, {"topic", source_id}
+            }).dump());
         }
     }
 
@@ -470,12 +532,14 @@ private:
                     activeSubTypes_[sid] = "voxel";
                     activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
                 }
+                active_source_publisher_signatures_[sid] = publisher_signature(sid);
                 }
             } else {
                 if (activeDynamicSubs_.count(sid)) {
                     if (remove_layer) sendStreamDelete(sid);
                     activeDynamicSubs_.erase(sid);
                     activeSubTypes_.erase(sid);
+                    active_source_publisher_signatures_.erase(sid);
                     std::lock_guard<std::mutex> point_cloud_lock(pointCloudRateMutex_);
                     lastPointCloudForwardTime_.erase(sid);
                 }
@@ -669,6 +733,7 @@ private:
             std::lock_guard<std::mutex> lock(sourceMutex_);
             activeDynamicSubs_.clear();
             activeSubTypes_.clear();
+            active_source_publisher_signatures_.clear();
         }
         lastGraphPayloads_.clear();
         lastNodeFeaturePayloads_.clear();
@@ -811,6 +876,7 @@ private:
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_, tfStaticSub_;
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
+    std::unordered_map<std::string, std::string> active_source_publisher_signatures_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;

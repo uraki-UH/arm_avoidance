@@ -1000,6 +1000,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             const targetId = p.topic || p.tag || p.id;
                             if (!targetId) return;
                             pendingPointCloudUpdatesRef.current.delete(targetId);
+                            pendingVoxelUpdatesRef.current.delete(targetId);
                             setPointClouds(prev => {
                                 const next = { ...prev };
                                 delete next[targetId];
@@ -1017,6 +1018,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             });
                             clearGraphLayer(targetId);
                         },
+                        'stream.reset': (p) => handlers['stream.delete'](p),
                         'stream.pointcloud.delete': (p) => handlers['stream.delete'](p),
                         'stream.remove_layer': (p) => handlers['stream.delete'](p),
                         'stream.robot': (p) => handlers['stream.robot.description'](p), // Legacy support
