@@ -598,6 +598,50 @@ ros2 topic hz /perception/person/annotated_image
 `publish_hz:=10.0`のように指定する。入力画像topicは`/video/image_raw`、
 frameは`video_optical_frame`。`model_path`、`image_topic`、`frame_id`もlaunch引数で変更できる。
 
+## RGB-D点群で人物検出する場合
+
+PCLの`GroundBasedPeopleDetectionApp`を使い、organizedな色付きRGB-D点群から
+床除去、3Dクラスタリング、人物判定を行う。2D画像topicや画像復元ノードは不要。
+RealSenseではaligned depthとpointcloudを有効化する。
+
+```bash
+ros2 launch realsense2_camera rs_launch.py \
+  align_depth.enable:=true \
+  pointcloud.enable:=true
+```
+
+別terminalで人物検出を起動する。
+
+```bash
+ros2 launch gng_vlut_system rgbd_pointcloud_person_detection.launch.py
+```
+
+topic名が機器構成と異なる場合は
+`config/rgbd_pointcloud_person_detection.yaml`をコピーし、`input_topic`と
+`camera_info_topic`を変更して`params_file`へ指定する。入力は同じ光学系の
+organized RGB/RGBA `PointCloud2`と`CameraInfo`が必要。
+
+```bash
+ros2 launch gng_vlut_system rgbd_pointcloud_person_detection.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/rgbd_pointcloud_person_detection.yaml
+
+ros2 topic echo /perception/person/is_detected
+ros2 topic echo /perception/person/is_inference_healthy
+ros2 topic echo /perception/person/detections_3d --once
+ros2 topic echo /perception/person/points --field header --once
+```
+
+`ground_coefficients`は入力点群座標系の床平面`ax + by + cz + d = 0`。
+既定値`[0, 1, 0, -1]`は、光学座標系の下向きY軸でcameraが床上1 mの例。
+実際の取付高さと姿勢に合わせて調整する。検出失敗や不正入力時は
+`is_inference_healthy=false`、`enable_fail_safe=true`なら
+`is_detected=true`を出力する。
+
+この方式は深度による床除去と3D形状を使うが、人物classの判定には点群内のRGBと
+PCL付属HOG+SVMも使う。organizedではない通常の3D LiDAR点群やXYZのみの点群には
+適用不可。その場合はPointPillarsなどLiDAR専用3D検出器と、対象sensorに合わせた
+学習済みmodelが必要。この出力は研究・動作確認用であり、安全機能として単独使用しない。
+
 ## Gazeboのロボットへ3D LiDARを追加する場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \

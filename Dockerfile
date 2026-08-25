@@ -63,6 +63,12 @@ RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.o
 # YOLO人物検出
 RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
 
+# PCL RGB-D人物検出用HOG+SVM
+RUN mkdir -p /opt/pcl_people \
+ && curl -L --fail --silent --show-error \
+    https://raw.githubusercontent.com/PointCloudLibrary/pcl/pcl-1.12.1/people/data/trainedLinearSVMForPeopleDetectionWithHOG.yaml \
+    -o /opt/pcl_people/trainedLinearSVMForPeopleDetectionWithHOG.yaml
+
 # PyG CPU only
 RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv \
     -f https://data.pyg.org/whl/torch-2.8.0+cpu.html

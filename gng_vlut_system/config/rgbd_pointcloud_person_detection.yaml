@@ -1,0 +1,24 @@
+rgbd_pointcloud_person_detector_node:
+  ros__parameters:
+    input_topic: /camera/depth/color/points
+    camera_info_topic: /camera/color/camera_info
+    detections_3d_topic: /perception/person/detections_3d
+    person_points_topic: /perception/person/points
+    person_detected_topic: /perception/person/is_detected
+    inference_healthy_topic: /perception/person/is_inference_healthy
+    svm_file: /opt/pcl_people/trainedLinearSVMForPeopleDetectionWithHOG.yaml
+    person_confidence_th: -1.5
+    voxel_size_m: 0.06
+    min_person_height_m: 1.0
+    max_person_height_m: 2.4
+    min_person_width_m: 0.1
+    max_person_width_m: 1.5
+    min_fov_m: 0.3
+    max_fov_m: 8.0
+    min_head_dist_m: 0.3
+    sampling_factor: 1
+    enable_sensor_portrait: false
+    enable_head_centroid: false
+    enable_fail_safe: true
+    # PointCloud2座標系での床平面係数 ax + by + cz + d = 0
+    ground_coefficients: [0.0, 1.0, 0.0, -1.0]
