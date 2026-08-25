@@ -233,6 +233,21 @@ def add_camera_sensor(
         raise ValueError(f"cameraの親link '{parent_link}'がURDFにありません")
     if not camera_name or not camera_frame_id or not camera_topic or not camera_info_topic:
         raise ValueError("cameraのname、frame_id、topicは空にできません")
+    image_topic_suffix = "/image_raw"
+    camera_info_topic_suffix = "/camera_info"
+    if not camera_topic.endswith(image_topic_suffix):
+        raise ValueError("cameraのtopicは/image_rawで終わる必要があります")
+    if not camera_info_topic.endswith(camera_info_topic_suffix):
+        raise ValueError("camera_info_topicは/camera_infoで終わる必要があります")
+    camera_topic_prefix = camera_topic.removesuffix(image_topic_suffix)
+    camera_info_topic_prefix = camera_info_topic.removesuffix(
+        camera_info_topic_suffix
+    )
+    if camera_topic_prefix != camera_info_topic_prefix:
+        raise ValueError("cameraのimageとcamera_infoは同じtopic階層が必要です")
+    plugin_camera_name = camera_topic_prefix.strip("/")
+    if not plugin_camera_name:
+        raise ValueError("cameraのtopic階層は空にできません")
     if camera_update_hz <= 0.0:
         raise ValueError("camera_update_hzは正数が必要です")
     if camera_width < 1 or camera_height < 1:
@@ -269,10 +284,7 @@ def add_camera_sensor(
         name=f"{camera_name}_ros_controller",
         filename="libgazebo_ros_camera.so",
     )
-    ros = ET.SubElement(plugin, "ros")
-    ET.SubElement(ros, "remapping").text = f"image_raw:={camera_topic}"
-    ET.SubElement(ros, "remapping").text = f"camera_info:={camera_info_topic}"
-    ET.SubElement(plugin, "camera_name").text = camera_name
+    ET.SubElement(plugin, "camera_name").text = plugin_camera_name
     ET.SubElement(plugin, "frame_name").text = camera_frame_id
 
 
