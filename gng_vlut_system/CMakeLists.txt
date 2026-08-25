@@ -113,6 +113,7 @@ install(DIRECTORY urdf config launch gng_results worlds
 )
 
 install(PROGRAMS
+  scripts/video_file_publisher.py
   scripts/yolo_person_detector.py
   DESTINATION lib/${PROJECT_NAME}
 )

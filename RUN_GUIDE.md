@@ -533,6 +533,34 @@ modelは`yolo_person_detection.yaml`で設定する。既定はCPU、最大5 Hz�
 `/perception/person/is_detected`はfail-safeとして`true`となる。
 この出力は研究・動作確認用であり、安全機能として単独使用しない。
 
+## 動画ファイルでYOLO人物検出を確認する場合
+
+MP4、AVIなどOpenCVで読める動画をROS 2画像topicへ変換し、YOLO人物検出へ接続する。
+
+```bash
+ros2 launch gng_vlut_system yolo_video_detection.launch.py \
+  video_path:=/datasets/sample.mp4 \
+  enable_loop:=true
+```
+
+別terminalでbounding box描画済み動画を表示する。
+
+```bash
+rqt_image_view /perception/person/annotated_image
+```
+
+検出結果の確認例。
+
+```bash
+ros2 topic echo /perception/person/is_detected
+ros2 topic echo /perception/person/detections_2d
+ros2 topic hz /perception/person/annotated_image
+```
+
+動画のFPSを再生周期に使う場合は`publish_hz:=0.0`、固定周期へ変更する場合は
+`publish_hz:=10.0`のように指定する。入力画像topicは`/video/image_raw`、
+frameは`video_optical_frame`。`model_path`、`image_topic`、`frame_id`もlaunch引数で変更できる。
+
 ## Gazeboのロボットへ3D LiDARを追加する場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
