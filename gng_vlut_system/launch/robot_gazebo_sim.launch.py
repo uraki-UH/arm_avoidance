@@ -3,6 +3,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -88,6 +89,31 @@ def generate_launch_description():
         DeclareLaunchArgument("follow_tf_reference_frame", default_value=""),
         DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
         DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
+        DeclareLaunchArgument("enable_lidar", default_value="false"),
+        DeclareLaunchArgument(
+            "lidar_params_file", default_value=os.path.join(pkg_share, "config", "gazebo_lidar.yaml")
+        ),
+        DeclareLaunchArgument("lidar_parent_link", default_value=""),
+        DeclareLaunchArgument("lidar_link", default_value=""),
+        DeclareLaunchArgument("lidar_xyz", default_value=""),
+        DeclareLaunchArgument("lidar_rpy", default_value=""),
+        DeclareLaunchArgument("lidar_topic", default_value=""),
+        DeclareLaunchArgument("lidar_frame_id", default_value=""),
+        DeclareLaunchArgument("lidar_update_hz", default_value=""),
+        DeclareLaunchArgument("num_lidar_horizontal_samples", default_value=""),
+        DeclareLaunchArgument("num_lidar_vertical_samples", default_value=""),
+        DeclareLaunchArgument("min_lidar_horizontal_angle", default_value=""),
+        DeclareLaunchArgument("max_lidar_horizontal_angle", default_value=""),
+        DeclareLaunchArgument("min_lidar_vertical_angle", default_value=""),
+        DeclareLaunchArgument("max_lidar_vertical_angle", default_value=""),
+        DeclareLaunchArgument("min_lidar_range", default_value=""),
+        DeclareLaunchArgument("max_lidar_range", default_value=""),
+        DeclareLaunchArgument("enable_world_lidar", default_value="false"),
+        DeclareLaunchArgument("world_lidar_model_name", default_value=""),
+        DeclareLaunchArgument("world_lidar_frame_id", default_value=""),
+        DeclareLaunchArgument("world_lidar_xyz", default_value=""),
+        DeclareLaunchArgument("world_lidar_rpy", default_value=""),
+        DeclareLaunchArgument("world_lidar_topic", default_value=""),
         DeclareLaunchArgument("gui", default_value="true"),
         DeclareLaunchArgument(
             "world",
@@ -134,10 +160,50 @@ def generate_launch_description():
                 "follow_tf_reference_frame": LaunchConfiguration("follow_tf_reference_frame"),
                 "follow_tf_update_hz": LaunchConfiguration("follow_tf_update_hz"),
                 "follow_tf_service_name": LaunchConfiguration("follow_tf_service_name"),
+                "enable_lidar": LaunchConfiguration("enable_lidar"),
+                "lidar_params_file": LaunchConfiguration("lidar_params_file"),
+                "lidar_parent_link": LaunchConfiguration("lidar_parent_link"),
+                "lidar_link": LaunchConfiguration("lidar_link"),
+                "lidar_xyz": LaunchConfiguration("lidar_xyz"),
+                "lidar_rpy": LaunchConfiguration("lidar_rpy"),
+                "lidar_topic": LaunchConfiguration("lidar_topic"),
+                "lidar_frame_id": LaunchConfiguration("lidar_frame_id"),
+                "lidar_update_hz": LaunchConfiguration("lidar_update_hz"),
+                "num_lidar_horizontal_samples": LaunchConfiguration("num_lidar_horizontal_samples"),
+                "num_lidar_vertical_samples": LaunchConfiguration("num_lidar_vertical_samples"),
+                "min_lidar_horizontal_angle": LaunchConfiguration("min_lidar_horizontal_angle"),
+                "max_lidar_horizontal_angle": LaunchConfiguration("max_lidar_horizontal_angle"),
+                "min_lidar_vertical_angle": LaunchConfiguration("min_lidar_vertical_angle"),
+                "max_lidar_vertical_angle": LaunchConfiguration("max_lidar_vertical_angle"),
+                "min_lidar_range": LaunchConfiguration("min_lidar_range"),
+                "max_lidar_range": LaunchConfiguration("max_lidar_range"),
             }.items()
         ),
 
-        # 4. Start GNG/VLUT Monitor
+        # 4. 環境固定LiDARモデルの追加
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gazebo_world_lidar.launch.py")),
+            condition=IfCondition(LaunchConfiguration("enable_world_lidar")),
+            launch_arguments={
+                "lidar_params_file": LaunchConfiguration("lidar_params_file"),
+                "world_lidar_model_name": LaunchConfiguration("world_lidar_model_name"),
+                "world_lidar_frame_id": LaunchConfiguration("world_lidar_frame_id"),
+                "world_lidar_xyz": LaunchConfiguration("world_lidar_xyz"),
+                "world_lidar_rpy": LaunchConfiguration("world_lidar_rpy"),
+                "world_lidar_topic": LaunchConfiguration("world_lidar_topic"),
+                "lidar_update_hz": LaunchConfiguration("lidar_update_hz"),
+                "num_lidar_horizontal_samples": LaunchConfiguration("num_lidar_horizontal_samples"),
+                "num_lidar_vertical_samples": LaunchConfiguration("num_lidar_vertical_samples"),
+                "min_lidar_horizontal_angle": LaunchConfiguration("min_lidar_horizontal_angle"),
+                "max_lidar_horizontal_angle": LaunchConfiguration("max_lidar_horizontal_angle"),
+                "min_lidar_vertical_angle": LaunchConfiguration("min_lidar_vertical_angle"),
+                "max_lidar_vertical_angle": LaunchConfiguration("max_lidar_vertical_angle"),
+                "min_lidar_range": LaunchConfiguration("min_lidar_range"),
+                "max_lidar_range": LaunchConfiguration("max_lidar_range"),
+            }.items(),
+        ),
+
+        # 5. GNG/VLUT Monitorの起動
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "gng_vlut_monitor.launch.py")),
             launch_arguments={

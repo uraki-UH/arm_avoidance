@@ -21,6 +21,8 @@ endif()
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PlanarCluster.msg"
   "msg/PlanarClusterArray.msg"
+  "msg/PlanarResidualBlob.msg"
+  "msg/PlanarResidualBlobArray.msg"
   "msg/TopologicalCluster.msg"
   "msg/TopologicalNode.msg"
   "msg/TopologicalMap.msg"

@@ -5,7 +5,7 @@ plane_cluster_incremental_node:
 
     # 種候補を平面クラスタとして確定するための最小所属ノード数。
     # 新規領域の種候補扱い。既存クラスタの一時的なノード数不足時は追跡のみ継続。
-    min_cluster_nodes: 7
+    min_cluster_nodes: 10
 
     # 未所属ノード取り込み用の平面までの正規化距離上限。
     # score = |平面法線・(ノード位置 - クラスタ重心)| / max(クラスタ間隔, ノード間隔)。
@@ -17,21 +17,18 @@ plane_cluster_incremental_node:
     retention_residual_ratio: 1.40
 
     # growth/retention_residual_ratioの正規化に使う、実効ノード間隔の上限[m]。
-    # 間隔が粗い領域ほど「同じ比率でも許容される実距離」が際限なく大きくなり、
-    # 卓上の小物体(数cm程度の高さ)が床などにノイズとして紛れ込み、合体と分離を
-    # 繰り返す原因になっていた。実測(密集領域150フレーム): 局所間隔の中央値2.2cm・
-    # p90 4.1cmに対し、実際に不安定だったクラスタは3.3〜3.5cmと粗い側に偏っていた。
-    max_effective_spacing: 0.03
+    # 間隔が粗い領域ほど「同じ比率でも許容される実距離」が際限なく大きくなり、実測(密集領域150フレーム): 局所間隔の中央値2.2cm・
+    max_effective_spacing: 0.02
 
     # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
     normal_filter_alpha: 0.30
 
     # 種の生成・成長で要求する法線の許容角度[deg]。内積比較cos値へ内部で変換。
-    normal_alignment_deg: 60.0
+    normal_alignment_deg: 30.0
 
     # 既に所属しているノードの保持・取り込み・移動で要求する法線の許容角度[deg]。
     # 種の判定用より緩くする。
-    retention_normal_alignment_deg: 80.0
+    retention_normal_alignment_deg: 50.0
 
     # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
     min_cluster_planarity: 0.45
@@ -47,7 +44,7 @@ plane_cluster_incremental_node:
     connection_requirement: 2
 
     # クラスタ併合の候補と認めるための、クラスタ間直接エッジ数の要求値。
-    merge_connection_requirement: 1
+    merge_connection_requirement: 2
 
     # 新規クラスタ成長中の、追加候補から生成中の種への必要隣接エッジ数。
     # 生成直後に限定した通常時より緩い接続条件。
@@ -59,7 +56,7 @@ plane_cluster_incremental_node:
 
     # 最小クラスタノード数に加える移動元保護余裕。
     # 小さいクラスタの境界からの漸減・消滅の防止。
-    donor_protection_buffer: 3
+    donor_protection_buffer: 5
 
     # true 時の複数接続ノードに対する保持用距離上限への緩和。距離判定の維持。
     # false 時の取り込み用距離上限への固定。

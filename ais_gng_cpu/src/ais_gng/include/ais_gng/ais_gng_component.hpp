@@ -80,7 +80,7 @@ class AiSGNGComponent : public rclcpp::Node {
     double node_cov_decay_k_{};
     bool node_covariance_enabled_{};
     std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
-    int64_t performance_log_interval_ms_{5000};
+    int64_t performance_log_interval_ms_{0};
     std::chrono::steady_clock::time_point last_process_start_{};
     bool has_last_process_start_{false};
 

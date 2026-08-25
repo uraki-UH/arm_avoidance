@@ -45,7 +45,7 @@ ais_gng_node:
     classify.car.model: "NN_car.pt"
     classify.threshold: 0.7
 
-    performance.log_interval_ms: 5000
+    performance.log_interval_ms: 0
 
     input.point_cloud_num: 100000
     input.sampling_mode: "uniform"

@@ -4,9 +4,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
+
+#include <unistd.h>
 
 // #include "core/common/manipulability_serialization.hpp"
 
@@ -14,6 +18,120 @@ using namespace fuzzrobo;
 using PC2 = sensor_msgs::msg::PointCloud2;
 
 namespace {
+class GngStdoutCapture {
+ public:
+    GngStdoutCapture() {
+        output_file_ = std::tmpfile();
+        if (output_file_ == nullptr) {
+            return;
+        }
+        std::fflush(stdout);
+        saved_stdout_fd_ = dup(STDOUT_FILENO);
+        if (saved_stdout_fd_ < 0) {
+            std::fclose(output_file_);
+            output_file_ = nullptr;
+            return;
+        }
+        if (dup2(fileno(output_file_), STDOUT_FILENO) < 0) {
+            close(saved_stdout_fd_);
+            saved_stdout_fd_ = -1;
+            std::fclose(output_file_);
+            output_file_ = nullptr;
+            return;
+        }
+        is_capturing_ = true;
+    }
+
+    ~GngStdoutCapture() {
+        restoreStdout();
+        if (output_file_ != nullptr) {
+            std::fclose(output_file_);
+        }
+    }
+
+    std::string takeOutput() {
+        if (!is_capturing_ || output_file_ == nullptr) {
+            return "";
+        }
+        std::fflush(stdout);
+        restoreStdout();
+        std::rewind(output_file_);
+
+        std::string output;
+        std::array<char, 1024> buffer{};
+        while (true) {
+            const std::size_t read_size = std::fread(
+                buffer.data(), sizeof(char), buffer.size(), output_file_);
+            output.append(buffer.data(), read_size);
+            if (read_size < buffer.size()) {
+                break;
+            }
+        }
+        std::fclose(output_file_);
+        output_file_ = nullptr;
+        return output;
+    }
+
+ private:
+    void restoreStdout() {
+        if (!is_capturing_) {
+            return;
+        }
+        std::fflush(stdout);
+        dup2(saved_stdout_fd_, STDOUT_FILENO);
+        close(saved_stdout_fd_);
+        saved_stdout_fd_ = -1;
+        is_capturing_ = false;
+    }
+
+    FILE *output_file_{nullptr};
+    int saved_stdout_fd_{-1};
+    bool is_capturing_{false};
+};
+
+void replayGngSummaryWithTime(const std::string &output, double gng_ms) {
+    std::size_t line_start = 0;
+    while (line_start < output.size()) {
+        const std::size_t line_end = output.find('\n', line_start);
+        const bool has_newline = line_end != std::string::npos;
+        const std::size_t line_size = has_newline
+            ? line_end - line_start
+            : output.size() - line_start;
+        const std::string line = output.substr(line_start, line_size);
+
+        int input_num = 0;
+        int voxel_num = 0;
+        int active_num = 0;
+        int node_num = 0;
+        int cluster_num = 0;
+        if (std::sscanf(
+                line.c_str(),
+                "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d",
+                &input_num,
+                &voxel_num,
+                &active_num,
+                &node_num,
+                &cluster_num) == 5) {
+            std::fprintf(
+                stdout,
+                "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, %.2f ms",
+                input_num,
+                voxel_num,
+                active_num,
+                node_num,
+                cluster_num,
+                gng_ms);
+        } else {
+            std::fwrite(line.data(), sizeof(char), line.size(), stdout);
+        }
+        if (has_newline) {
+            std::fputc('\n', stdout);
+        }
+        line_start = has_newline ? line_end + 1 : output.size();
+    }
+    std::fflush(stdout);
+}
+
 bool fillSelectedPointCloud(
     const PC2 &source,
     const std::vector<uint32_t> &source_indices,
@@ -303,7 +421,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     node_covariance_enabled_ =
         this->declare_parameter<bool>("node.covariance_enabled", false);           // 共分散楕円の推定を有効にするか
     performance_log_interval_ms_ =
-        this->declare_parameter<int64_t>("performance.log_interval_ms", 5000);     // 実行周期ログの間隔(ms)。0で無効
+    this->declare_parameter<int64_t>("performance.log_interval_ms", 0);        // 詳細実行周期ログの間隔(ms)。0で無効
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
     this->declare_parameter("node.grid", 0.05);      //おそらく0.05ぐらいが限度                              // ノードのグリッドサイズ(m)(cpu/gpu)
     this->declare_parameter("node.s1_age_max", std::vector<int>{6, 6, 6, 3});      // ノードの選択回数に基づく削除(cpu/gpu)
@@ -755,9 +873,13 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     header.stamp = msg->header.stamp;
     const auto input_end = std::chrono::steady_clock::now();
 
-    // GNGの実行
+    // GNGの実行とライブラリ要約ログへの処理時間付加
+    GngStdoutCapture gng_stdout_capture;
     gng_exec();
     const auto gng_end = std::chrono::steady_clock::now();
+    replayGngSummaryWithTime(
+        gng_stdout_capture.takeOutput(),
+        std::chrono::duration<double, std::milli>(gng_end - input_end).count());
 
     // GNGの結果を取得
     uint32_t label_num = 0, transformed_pcl_num = 0;

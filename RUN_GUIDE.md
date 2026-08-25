@@ -56,6 +56,18 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
+## OCID の点群を AIS GNG へ入力
+
+`dataset_pointcloud_player` が `/dataset/points` を配信している状態で、次を実行する。
+既存の AIS GNG は終了してから起動する。
+
+```bash
+ros2 launch ais_gng ais_gng.launch.py \
+  backend:=cpu \
+  lidar:=graspnet.yaml \
+  input_topic:=/dataset/points
+```
+
 
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
@@ -413,7 +425,68 @@ ros2 launch realsense2_camera rs_launch.py \
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
-  gui:=true
+  gui:=true \
+  fixed_base_link:=base_footprint \
+  follow_tf_frame:=ToPoDualArm/base_footprint
+
+`fixed_base_link`でGazebo物理上のベースを固定し、重力による転倒を防ぐ。
+`follow_tf_frame`はGazebo entityを`base_footprint`のTFへ追従させる。
+
+## Gazeboのロボットへ3D LiDARを追加する場合
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  fixed_base_link:=base_footprint \
+  follow_tf_frame:=ToPoDualArm/base_footprint \
+  enable_lidar:=true \
+  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
+
+点群は`/lidar/points`へ`sensor_msgs/msg/PointCloud2`として出力される。
+搭載姿勢・出力先・走査条件は`gazebo_lidar.yaml`の`robot_lidar`と`scan`で設定する。
+初期設定は水平360点、垂直16点、10 Hz、距離0.1–20 m。launch引数の
+`lidar_xyz`、`lidar_rpy`、`lidar_topic`などを明示した場合はYAML設定を上書きする。
+
+```bash
+ros2 topic hz /lidar/points
+ros2 topic echo /lidar/points --once
+```
+
+RViz2ではFixed Frameを`ToPoDualArm/base_link`、PointCloud2のTopicを
+`/lidar/points`に設定する。LiDARのTFは`ToPoDualArm/lidar_link`として配信される。
+
+## Gazebo環境へ固定3D LiDARを設置する場合
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  fixed_base_link:=base_footprint \
+  follow_tf_frame:=ToPoDualArm/base_footprint \
+  enable_world_lidar:=true \
+  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
+
+環境LiDARはロボットのURDFから独立したstatic modelとしてGazeboへ追加される。
+点群topicは`/environment/lidar/points`、frameは`world_lidar_link`。
+設置位置・姿勢・出力先は`gazebo_lidar.yaml`の`world_lidar`で設定する。
+`world_lidar_xyz`、`world_lidar_rpy`、`world_lidar_topic`を明示した場合は
+YAML設定を上書きする。ロボット搭載LiDARが不要なら`enable_lidar`は既定値の
+`false`のままでよい。
+
+```bash
+ros2 topic hz /environment/lidar/points
+ros2 topic echo /environment/lidar/points --once
+```
+
+Gazeboを別途起動済みの場合は、環境LiDARだけを後から追加できる。
+
+```bash
+ros2 launch gng_vlut_system gazebo_world_lidar.launch.py \
+  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
+```
+
+RViz2ではFixed Frameを`world`に設定し、PointCloud2へ
+`/environment/lidar/points`を指定する。`world`から`world_lidar_link`へのTFも
+同時に配信される。
 
 ## Gazeboでベースをワールドに固定したい場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
@@ -441,6 +514,7 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
+  fixed_base_link:=base_footprint \
   follow_tf_frame:=ToPoDualArm/base_footprint
 
 

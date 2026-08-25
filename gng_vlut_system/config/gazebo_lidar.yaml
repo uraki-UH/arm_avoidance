@@ -1,0 +1,28 @@
+# Gazebo用LiDARの共通走査設定
+scan:
+  update_hz: 10.0
+  num_horizontal_samples: 360
+  num_vertical_samples: 16
+  min_horizontal_angle: -3.14159265
+  max_horizontal_angle: 3.14159265
+  min_vertical_angle: -0.261799
+  max_vertical_angle: 0.261799
+  min_range: 0.10
+  max_range: 20.0
+
+# ロボット搭載LiDARの設置設定
+robot_lidar:
+  parent_link: camera_link
+  link: lidar_link
+  xyz: [0.0, 0.0, 0.08]
+  rpy: [0.0, 0.0, 0.0]
+  topic: /lidar/points
+  frame_id: ""
+
+# Gazebo環境固定LiDARの設置設定
+world_lidar:
+  model_name: environment_lidar
+  frame_id: world_lidar_link
+  xyz: [1.5, 0.0, 1.2]
+  rpy: [0.0, 0.0, 0.0]
+  topic: /environment/lidar/points
