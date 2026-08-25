@@ -119,6 +119,7 @@ type QueuedRobotPoseUpdate = {
 
 type QueuedPointCloudUpdate = {
     layerId: string;
+    frameId?: string;
     buffer: ArrayBuffer;
 };
 
@@ -143,6 +144,7 @@ function decodePointCloudUpdate(update: QueuedPointCloudUpdate): PointCloudData 
     return {
         id: update.layerId,
         name: update.layerId,
+        frameId: update.frameId,
         points: deserialized.positions,
         colors: deserialized.colors ? convertToFloat32RGB(deserialized.colors) : undefined,
         intensities: deserialized.intensities,
@@ -657,6 +659,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const relativeTransformsRef = useRef<Record<string, TransformData>>({});
 
     const pendingTopicQueueRef = useRef<string[]>([]);
+    const pointCloudFrameIdsRef = useRef<Map<string, string>>(new Map());
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
@@ -815,6 +818,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
         try {
             pendingTopicQueueRef.current = [];
+            pointCloudFrameIdsRef.current.clear();
             flushPendingWithError('WebSocket reconnected');
             pendingGraphUpdatesRef.current.clear();
             pendingVoxelUpdatesRef.current.clear();
@@ -872,7 +876,11 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             pendingTopicQueueRef.current.shift();
                         }
 
-                        pendingPointCloudUpdatesRef.current.set(layerId, { layerId, buffer });
+                        pendingPointCloudUpdatesRef.current.set(layerId, {
+                            layerId,
+                            frameId: pointCloudFrameIdsRef.current.get(layerId),
+                            buffer,
+                        });
                         scheduleStreamFlush();
                     } catch (parseError) {
                         console.error('Failed to parse binary point cloud:', parseError);
@@ -916,7 +924,13 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
                     const handlers: Record<string, (p: any) => void> = {
                         'stream.pointcloud.meta': (p) => {
-                            if (typeof p.topic === 'string') pendingTopicQueueRef.current.push(p.topic);
+                            if (typeof p.topic !== 'string') return;
+                            pendingTopicQueueRef.current.push(p.topic);
+                            if (typeof p.frameId === 'string' && p.frameId.length > 0) {
+                                pointCloudFrameIdsRef.current.set(p.topic, p.frameId);
+                            } else {
+                                pointCloudFrameIdsRef.current.delete(p.topic);
+                            }
                         },
                         'stream.marker_array': (p) => {
                             if (!Array.isArray(p.markers)) return;
@@ -1046,6 +1060,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 setIsConnected(false);
                 setSources([]);
                 pendingTopicQueueRef.current = [];
+                pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
                 pendingRobotPoseUpdatesRef.current.clear();

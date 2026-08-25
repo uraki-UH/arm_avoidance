@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     vim \
     ros-humble-rosbag2-storage-mcap \
+    ros-humble-hardware-interface \
     ros-humble-pcl-ros \
     ros-humble-rosbridge-server \
     ros-humble-joint-state-publisher \

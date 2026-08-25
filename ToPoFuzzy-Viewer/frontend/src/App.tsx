@@ -700,16 +700,20 @@ function App() {
                         <pointLight position={[10, 10, 10]} intensity={0.5} />
                         <pointLight position={[-10, -10, -10]} intensity={0.3} />
 
-                        {renderClouds.map((pc) => (
-                            <PointCloudRenderer
-                                key={pc.id}
-                                data={pc}
-                                heatmapSettings={heatmapSettings}
-                                selected={isEditMode && pc.id === editLayerId}
-                                transformMode={transformMode}
-                                onTransformChange={(pos, rot, scale) => handleTransformChange(pc.id, pos, rot, scale)}
-                            />
-                        ))}
+                        {renderClouds.map((pc) => {
+                            const tf = pc.frameId && pc.frameId !== 'world' ? (transforms[pc.frameId] ?? null) : null;
+                            return (
+                                <PointCloudRenderer
+                                    key={pc.id}
+                                    data={pc}
+                                    tf={tf}
+                                    heatmapSettings={heatmapSettings}
+                                    selected={isEditMode && pc.id === editLayerId}
+                                    transformMode={transformMode}
+                                    onTransformChange={(pos, rot, scale) => handleTransformChange(pc.id, pos, rot, scale)}
+                                />
+                            );
+                        })}
 
                         <EditAabbTool
                             enabled={isEditMode && !editJobStatus?.isRunning}

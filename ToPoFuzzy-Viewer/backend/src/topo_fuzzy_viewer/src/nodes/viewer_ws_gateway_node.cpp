@@ -490,6 +490,7 @@ private:
                             if (!shouldForwardPointCloud(sid)) return;
                             broadcastPointCloud(
                                 sid,
+                                m->header.frame_id,
                                 utils::convertToProtocolMessage(
                                     utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
                         });
@@ -582,7 +583,11 @@ private:
         std::shared_ptr<std::vector<uint8_t>> data;
     };
 
-    void broadcastPointCloud(const std::string& topic, const std::vector<uint8_t>& data) {
+    void broadcastPointCloud(
+        const std::string& topic,
+        const std::string& frame_id,
+        const std::vector<uint8_t>& data)
+    {
         // Prepend topic name for reliable identification (ROS-style multiplexing)
         uint8_t topicLen = static_cast<uint8_t>(std::min<size_t>(topic.length(), 255));
         std::vector<uint8_t> packet;
@@ -593,7 +598,12 @@ private:
 
         auto binary = std::make_shared<std::vector<uint8_t>>(std::move(packet));
         // We still send the meta for legacy/sync reasons, but the binary now contains its own ID
-        auto meta = std::make_shared<std::string>(json({{"type", "stream.pointcloud.meta"}, {"topic", topic}, {"tag", topic}}).dump());
+        auto meta = std::make_shared<std::string>(json({
+            {"type", "stream.pointcloud.meta"},
+            {"topic", topic},
+            {"tag", topic},
+            {"frameId", frame_id},
+        }).dump());
 
         bool schedule_flush = false;
         {

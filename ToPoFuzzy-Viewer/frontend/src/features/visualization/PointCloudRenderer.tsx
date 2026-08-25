@@ -8,6 +8,7 @@ import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface PointCloudRendererProps {
     data: PointCloudData;
+    tf?: { pos: number[]; quat: number[] } | null;
     heatmapSettings?: HeatmapSettings;
     selected?: boolean;
     transformMode?: 'translate' | 'rotate' | 'scale';
@@ -45,18 +46,32 @@ function markStreamRangeUpdated(attribute: THREE.BufferAttribute, count: number)
 
 export function PointCloudRenderer({
     data,
+    tf,
     heatmapSettings,
     selected = false,
     transformMode = 'translate',
     onTransformChange,
 }: PointCloudRendererProps) {
     const pointsRef = useRef<THREE.Points>(null);
+    const frameGroupRef = useRef<THREE.Group>(null);
     const groupRef = useRef<THREE.Group>(null);
     const transformControlsRef = useRef<any>(null);
-    const { camera, gl } = useThree();
+    const { camera, gl, invalidate } = useThree();
 
     // Trigger re-render in demand mode
-    useDemandUpdate([data, heatmapSettings, selected, transformMode]);
+    useDemandUpdate([data, tf, heatmapSettings, selected, transformMode]);
+
+    useEffect(() => {
+        if (!frameGroupRef.current) return;
+        if (tf) {
+            frameGroupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
+            frameGroupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
+        } else {
+            frameGroupRef.current.position.set(0, 0, 0);
+            frameGroupRef.current.quaternion.set(0, 0, 0, 1);
+        }
+        invalidate();
+    }, [tf, invalidate]);
 
     // Geometry is created once and its GPU buffers are reused across streaming
     // updates (updated in place / grown as needed) instead of being disposed
@@ -212,8 +227,10 @@ export function PointCloudRenderer({
 
     return (
         <>
-            <group ref={groupRef}>
-                <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
+            <group ref={frameGroupRef}>
+                <group ref={groupRef}>
+                    <points ref={pointsRef} geometry={geometry} material={material} frustumCulled={false} />
+                </group>
             </group>
 
             {selected && groupRef.current && (

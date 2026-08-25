@@ -33,8 +33,10 @@
 
 ### Point Cloud Metadata
 ```json
-{ "type": "stream.pointcloud.meta", "topic": "/points" }
+{ "type": "stream.pointcloud.meta", "topic": "/points", "tag": "/points", "frameId": "lidar_link" }
 ```
+
+`frameId`は入力`PointCloud2.header.frame_id`。フロントエンドで固定座標系へのTF適用と状態表示に使用。
 
 ### Graph Stream
 ```json

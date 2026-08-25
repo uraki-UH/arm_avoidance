@@ -5,6 +5,7 @@ import * as THREE from 'three';
 export interface PointCloudData {
     id: string;
     name: string;
+    frameId?: string;
     points: Float32Array; // [x, y, z, x, y, z, ...]
     colors?: Float32Array; // [r, g, b, r, g, b, ...] normalized 0-1
     intensities?: Float32Array; // [i, i, i, ...]

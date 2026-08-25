@@ -38,8 +38,10 @@ This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_n
 ### `stream.pointcloud.meta`
 Published before each binary cloud frame.
 ```json
-{ "type": "stream.pointcloud.meta", "topic": "/points" }
+{ "type": "stream.pointcloud.meta", "topic": "/points", "tag": "/points", "frameId": "lidar_link" }
 ```
+
+`frameId`は入力`PointCloud2.header.frame_id`。後続のbinary cloud frameの座標系。
 
 ### `stream.graph`
 ```json

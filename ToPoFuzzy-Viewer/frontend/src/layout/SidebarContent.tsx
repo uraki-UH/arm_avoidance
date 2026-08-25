@@ -258,6 +258,21 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 onOpenTransform={() => props.onOpenTransform('cloud', pc.id, pc.name)}
                             >
                                 <p className="text-[11px] text-[var(--text-secondary)]">{pc.count.toLocaleString()} pts</p>
+                                {pc.frameId && (() => {
+                                    const isWorld = pc.frameId === 'world';
+                                    const hasTf = !!props.transforms[pc.frameId];
+                                    const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
+                                    const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                                    return (
+                                        <div className="mt-[1px] flex items-center gap-1 text-[10px] leading-none text-[var(--text-secondary)]">
+                                            <span>Frame:</span>
+                                            <span className="flex items-center gap-1">
+                                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />
+                                                <span className="font-mono opacity-70">{pc.frameId}</span>
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
                             </LayerItem>
                         ))}
 
