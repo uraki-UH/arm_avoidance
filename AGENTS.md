@@ -21,6 +21,27 @@
 - エージェントが新規プロセスを起動した場合は、最終報告に起動コマンドと停止済みであることを
   必ず記載する。
 
+## Git worktree同期フロー
+
+- 各worktreeの基準ブランチは、`branch.<worktreeブランチ名>.codex-base`へ明示的に保存する。
+  元workspaceで現在checkoutされているブランチを、暗黙の基準として扱わない。
+- 新しいタスクでファイルを変更する前に、リポジトリルートで
+  `./scripts/worktree_status.sh`を実行する。ファイル本文の全走査による比較は行わない。
+- 基準ブランチが未設定の場合は変更作業を開始せず、対象を確認してから
+  `./scripts/worktree_update.sh --set-base <branch>`で設定する。
+- `behind > 0`かつworktreeがcleanの場合は、変更作業の前に
+  `./scripts/worktree_update.sh`を実行する。worktree固有コミットと基準ブランチが分岐している場合は、
+  内容を確認してから`./scripts/worktree_update.sh --rebase`を明示的に実行する。
+- worktreeがdirtyの場合、自動stash、自動commit、自動reset、基準ブランチの取り込みを行わない。
+  既存変更の所有者と内容を確認し、退避またはcommitの方針を決めてから同期する。
+- タスク開始後に基準ブランチまたは元workspaceのcheckoutブランチが変わっても、作業途中では
+  自動追従しない。次のタスク開始時に同期状態を再確認する。
+- 元workspaceのcheckoutブランチと基準ブランチが異なる場合、`is_root_mismatch=yes`を警告として扱う。
+  基準ブランチの変更はユーザーの指示または明示的な作業対象変更がある場合だけ行う。
+- worktreeの成果はcommit単位で基準ブランチへmergeまたはcherry-pickする。通常の反映手段として、
+  元workspaceへのファイルコピーや未コミットpatch適用を使わない。
+- `git reset --hard`、強制checkout、未確認のstash削除など、既存変更を失う可能性がある同期操作は禁止。
+
 ## 識別子・ROSパラメータ名の省略形辞書
 
 | 使用する表記 | 意味 | 用途 | 識別子・ROSパラメータ名で避ける表記 |
