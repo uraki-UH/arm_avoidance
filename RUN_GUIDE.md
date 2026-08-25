@@ -598,7 +598,30 @@ ros2 topic hz /perception/person/annotated_image
 `publish_hz:=10.0`のように指定する。入力画像topicは`/video/image_raw`、
 frameは`video_optical_frame`。`model_path`、`image_topic`、`frame_id`もlaunch引数で変更できる。
 
-## RGB-D点群で人物検出する場合
+## XYZ深度点群で人体形状候補を検出する場合
+
+通常の3D LiDAR点群や非organizedなRGB-D点群を、画像へ変換せず直接処理する。
+床除去、voxel化、Euclidean clustering、人体寸法による候補抽出のCPU向け構成。
+
+```bash
+ros2 launch gng_vlut_system pointcloud_human_candidate_detection.launch.py
+
+ros2 topic echo /perception/human_candidate/is_detected
+ros2 topic echo /perception/human_candidate/is_inference_healthy
+ros2 topic echo /perception/human_candidate/detections_3d --once
+ros2 topic echo /perception/human_candidate/points --field header --once
+```
+
+入力topicや人体寸法は`config/pointcloud_human_candidate_detection.yaml`で設定する。
+`ground_coefficients`は入力点群座標系の床平面`ax + by + cz + d = 0`。
+既定値`[0, 0, 1, 0]`はZ-up座標系の`z=0`。camera光学座標系でcameraが
+床上1 mなら、例として`[0, 1, 0, -1]`を使用する。
+
+これは純粋な深度形状による保守的な除外候補であり、人物classを意味的に識別する
+学習modelではない。マネキン、柱なども候補となり得るため、`human_candidate`が
+検出された領域を「把持しない」用途向け。人物と断定する表示には使用しない。
+
+## organized RGB-D点群で人物分類する場合
 
 PCLの`GroundBasedPeopleDetectionApp`を使い、organizedな色付きRGB-D点群から
 床除去、3Dクラスタリング、人物判定を行う。2D画像topicや画像復元ノードは不要。
