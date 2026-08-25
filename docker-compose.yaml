@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     image: gng_cpu:latest
     privileged: true
-    container_name: gng_cpu_container_uraki
+    container_name: gng_cpu_container
     tty: true
     stdin_open: true
     ipc: host
@@ -50,7 +50,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.dataset_player
     image: dataset_player:latest
-    container_name: dataset_pointcloud_player_uraki
+    container_name: dataset_pointcloud_player
     profiles:
       - dataset
     tty: true
@@ -85,7 +85,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.topoarm_hardware
     image: topoarm_hardware:latest
-    container_name: topoarm_hardware_container_uraki
+    container_name: topoarm_hardware_container
     profiles:
       - hardware
     privileged: true
@@ -118,6 +118,7 @@ services:
   # npm run devをdockerで実行する用
   frontend:
     image: gng_cpu:latest
+    container_name: frontend
     profiles:
       - manual
     depends_on:
@@ -146,7 +147,7 @@ services:
 
   rosbridge:
     image: gng_cpu:latest
-    container_name: rosbridge_container_uraki
+    container_name: rosbridge_container
     depends_on:
       - gng_cpu
     tty: false

@@ -6,10 +6,11 @@
 #include <voxel_msgs/msg/voxel.hpp>
 
 #include <algorithm>
-#include <cmath>
+#include <chrono>
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
-#include <vector>
 
 #include <Eigen/Geometry>
 
@@ -18,8 +19,8 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-#include "common/voxel_utils.hpp"
 #include "core/common/constants.hpp"
+#include "nodes/bridge/reachability_voxel_accumulator.hpp"
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
 namespace robot_sim::bridge
@@ -41,6 +42,17 @@ public:
     declare_parameter<int>("y_shift", 21);
     declare_parameter<int>("z_shift", 0);
     declare_parameter<long>("offset", 1000000L);
+    declare_parameter<bool>("enable_reachability_filter", false);
+    declare_parameter<double>("min_reachability_x", -0.1);
+    declare_parameter<double>("max_reachability_x", 0.5);
+    declare_parameter<double>("min_reachability_y", -1.0);
+    declare_parameter<double>("max_reachability_y", 1.0);
+    declare_parameter<double>("min_reachability_z", -1.0);
+    declare_parameter<double>("max_reachability_z", 1.0);
+    declare_parameter<double>("reachability_margin_x", 0.2);
+    declare_parameter<double>("reachability_margin_y", 0.2);
+    declare_parameter<double>("reachability_margin_z", 0.2);
+    declare_parameter<int>("max_dense_voxel_num", 8000000);
 
     input_topic_ = get_parameter("input_topic").as_string();
     output_topic_ = get_parameter("output_topic").as_string();
@@ -56,6 +68,30 @@ public:
       get_parameter("z_shift").as_int(),
       static_cast<long>(get_parameter("offset").as_int()));
 
+    reachability_bounds_.enable_filter =
+      get_parameter("enable_reachability_filter").as_bool();
+    reachability_bounds_.min_corner = Eigen::Vector3d(
+      get_parameter("min_reachability_x").as_double(),
+      get_parameter("min_reachability_y").as_double(),
+      get_parameter("min_reachability_z").as_double());
+    reachability_bounds_.max_corner = Eigen::Vector3d(
+      get_parameter("max_reachability_x").as_double(),
+      get_parameter("max_reachability_y").as_double(),
+      get_parameter("max_reachability_z").as_double());
+    reachability_bounds_.margin = Eigen::Vector3d(
+      get_parameter("reachability_margin_x").as_double(),
+      get_parameter("reachability_margin_y").as_double(),
+      get_parameter("reachability_margin_z").as_double());
+    try {
+      reachability_bounds_.validate();
+    } catch (const std::invalid_argument &ex) {
+      throw rclcpp::exceptions::InvalidParametersException(ex.what());
+    }
+    const auto max_dense_voxel_num = static_cast<std::size_t>(
+      std::max<std::int64_t>(0, get_parameter("max_dense_voxel_num").as_int()));
+    voxel_accumulator_ = std::make_unique<reachability_voxel_accumulator>(
+      codec_, reachability_bounds_, max_dense_voxel_num);
+
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
@@ -68,9 +104,13 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "PointCloudVoxelBridgeNode initialized. input=%s output=%s target_frame=%s voxel_size=%.4f",
+      "PointCloudVoxelBridgeNode initialized. input=%s output=%s target_frame=%s voxel_size=%.4f reachability_filter=%s margin=(%.3f, %.3f, %.3f) accumulator=%s",
       input_topic_.c_str(), output_topic_.c_str(),
-      target_frame_id_.c_str(), codec_.voxelSize());
+      target_frame_id_.c_str(), codec_.voxelSize(),
+      reachability_bounds_.enable_filter ? "enabled" : "disabled",
+      reachability_bounds_.margin.x(), reachability_bounds_.margin.y(),
+      reachability_bounds_.margin.z(),
+      voxel_accumulator_->uses_dense_bitmap() ? "dense_bitmap" : "hash");
   }
 
 private:
@@ -136,46 +176,13 @@ private:
     }
   }
 
-  static Eigen::Vector3d centroidOfPoints(
-    const std::vector<Eigen::Vector3f> &points)
-  {
-    if (points.empty()) {
-      return Eigen::Vector3d::Zero();
-    }
-
-    Eigen::Vector3d sum = Eigen::Vector3d::Zero();
-    for (const auto &p : points) {
-      sum += p.cast<double>();
-    }
-    return sum / static_cast<double>(points.size());
-  }
-
-  Eigen::Vector3d centroidOfVoxelCenters(
-    const std::vector<long> &voxel_ids) const
-  {
-    if (voxel_ids.empty()) {
-      return Eigen::Vector3d::Zero();
-    }
-
-    Eigen::Vector3d sum = Eigen::Vector3d::Zero();
-    for (const long flat_id : voxel_ids) {
-      const auto idx = codec_.toIndex(flat_id);
-      const auto center = voxel_idx::VoxelIndexingSchema::indexToWorldCenter(
-        voxel_idx::VoxelIndex{idx.x(), idx.y(), idx.z()},
-        codec_.voxelSize());
-      sum += Eigen::Vector3d(center[0], center[1], center[2]);
-    }
-    return sum / static_cast<double>(voxel_ids.size());
-  }
-
   void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
+    const auto processing_start = std::chrono::steady_clock::now();
     const bool missing_frame_id = msg->header.frame_id.empty();
     const std::string source_frame = resolveSourceFrameId(*msg);
     const bool has_cloud_stamp =
       msg->header.stamp.sec != 0 || msg->header.stamp.nanosec != 0;
-
-    sensor_msgs::msg::PointCloud2 transformed_msg = *msg;
 
     if (source_frame.empty()) {
       RCLCPP_WARN_THROTTLE(
@@ -196,22 +203,12 @@ private:
         msg->header.frame_id.c_str(), source_frame.c_str());
     }
 
-    RCLCPP_INFO(
-      get_logger(),
+    RCLCPP_DEBUG_THROTTLE(
+      get_logger(), *get_clock(), 1000,
       "Received point cloud from frame '%s'. Target frame is '%s'.",
       source_frame.c_str(), target_frame_id_.c_str());
 
-    std::vector<Eigen::Vector3f> source_points;
-    source_points.reserve(static_cast<size_t>(msg->width) * msg->height);
-    {
-      sensor_msgs::PointCloud2ConstIterator<float> sx(*msg, "x");
-      sensor_msgs::PointCloud2ConstIterator<float> sy(*msg, "y");
-      sensor_msgs::PointCloud2ConstIterator<float> sz(*msg, "z");
-      for (; sx != sx.end(); ++sx, ++sy, ++sz) {
-        source_points.emplace_back(*sx, *sy, *sz);
-      }
-    }
-
+    Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
     try {
       if (!shouldSkipPointCloudTransform(source_frame, *msg)) {
         geometry_msgs::msg::TransformStamped tf_msg;
@@ -223,24 +220,9 @@ private:
             target_frame_id_.c_str(), source_frame.c_str());
           return;
         }
-        const Eigen::Isometry3d T = tf2::transformToEigen(tf_msg.transform);
-
-        sensor_msgs::PointCloud2ConstIterator<float> src_x(*msg, "x");
-        sensor_msgs::PointCloud2ConstIterator<float> src_y(*msg, "y");
-        sensor_msgs::PointCloud2ConstIterator<float> src_z(*msg, "z");
-        sensor_msgs::PointCloud2Iterator<float> dst_x(transformed_msg, "x");
-        sensor_msgs::PointCloud2Iterator<float> dst_y(transformed_msg, "y");
-        sensor_msgs::PointCloud2Iterator<float> dst_z(transformed_msg, "z");
-
-        for (; src_x != src_x.end(); ++src_x, ++src_y, ++src_z, ++dst_x, ++dst_y, ++dst_z) {
-          const Eigen::Vector3d p_source(*src_x, *src_y, *src_z);
-          const Eigen::Vector3d p_target = T * p_source;
-          *dst_x = static_cast<float>(p_target.x());
-          *dst_y = static_cast<float>(p_target.y());
-          *dst_z = static_cast<float>(p_target.z());
-        }
-        RCLCPP_INFO(
-          get_logger(),
+        source_to_target = tf2::transformToEigen(tf_msg.transform);
+        RCLCPP_DEBUG_THROTTLE(
+          get_logger(), *get_clock(), 1000,
           "Successfully looked up transform from '%s' to '%s'%s.",
           source_frame.c_str(), target_frame_id_.c_str(),
           used_latest_fallback ? " using latest fallback" : "");
@@ -253,54 +235,17 @@ private:
         target_frame_id_.c_str(), source_frame.c_str(), ex.what());
       return;
     }
-    std::vector<Eigen::Vector3f> points;
-    points.reserve(static_cast<size_t>(transformed_msg.width) * transformed_msg.height);
-
-    sensor_msgs::PointCloud2ConstIterator<float> ix(transformed_msg, "x");
-    sensor_msgs::PointCloud2ConstIterator<float> iy(transformed_msg, "y");
-    sensor_msgs::PointCloud2ConstIterator<float> iz(transformed_msg, "z");
-
+    voxel_accumulator_->begin_frame(static_cast<std::size_t>(msg->width) * msg->height);
+    sensor_msgs::PointCloud2ConstIterator<float> ix(*msg, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iy(*msg, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iz(*msg, "z");
     for (; ix != ix.end(); ++ix, ++iy, ++iz) {
-      points.emplace_back(*ix, *iy, *iz);
+      voxel_accumulator_->add_point(Eigen::Vector3d(*ix, *iy, *iz), source_to_target);
     }
+    const auto stats = voxel_accumulator_->stats();
+    const auto &voxel_ids = voxel_accumulator_->finish_voxel_ids();
 
-    RCLCPP_INFO(
-      get_logger(),
-      "Processed %zu points from input point cloud.",
-      points.size());
-
-    const auto voxel_ids = codec_.voxelize(points);
-
-    const Eigen::Vector3d source_centroid = centroidOfPoints(source_points);
-    const Eigen::Vector3d voxel_centroid_target = centroidOfVoxelCenters(voxel_ids);
-    if (!voxel_ids.empty() && !target_frame_id_.empty() && source_frame != target_frame_id_) {
-      try {
-        geometry_msgs::msg::TransformStamped tf_msg;
-        bool used_latest_fallback = false;
-        if (!lookupPointCloudTransform(source_frame, *msg, tf_msg, used_latest_fallback)) {
-          throw tf2::TransformException("lookup failed with both stamped and latest transforms");
-        }
-        const Eigen::Isometry3d T_source_to_target = tf2::transformToEigen(tf_msg.transform);
-        const Eigen::Vector3d voxel_centroid_source =
-          T_source_to_target.inverse() * voxel_centroid_target;
-        const double centroid_error = (source_centroid - voxel_centroid_source).norm();
-
-        RCLCPP_INFO_THROTTLE(
-          get_logger(), *get_clock(), 1000,
-          "Centroid check source=(%.4f, %.4f, %.4f) voxel_source=(%.4f, %.4f, %.4f) error=%.6f%s",
-          source_centroid.x(), source_centroid.y(), source_centroid.z(),
-          voxel_centroid_source.x(), voxel_centroid_source.y(), voxel_centroid_source.z(),
-          centroid_error,
-          used_latest_fallback ? " (latest tf fallback)" : "");
-      } catch (const tf2::TransformException &ex) {
-        RCLCPP_WARN_THROTTLE(
-          get_logger(), *get_clock(), 2000,
-          "Centroid check skipped because TF lookup failed: %s",
-          ex.what());
-      }
-    }
-
-    std_msgs::msg::Header header = transformed_msg.header;
+    std_msgs::msg::Header header = msg->header;
     header.frame_id = target_frame_id_.empty() ? source_frame : target_frame_id_;
     if (!has_cloud_stamp) {
       header.stamp = now();
@@ -308,11 +253,14 @@ private:
 
     auto out = codec_.makeMessage(header, voxel_ids);
     publisher_->publish(std::move(out));
+    const double processing_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - processing_start).count();
 
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
-      "Published voxel ids: input=%zu output=%zu frame=%s",
-      points.size(), voxel_ids.size(), header.frame_id.c_str());
+      "Published voxel ids: input=%zu accepted=%zu outside=%zu nonfinite=%zu output=%zu processing_ms=%.3f frame=%s",
+      stats.input_point_count, stats.accepted_point_count, stats.outside_point_count,
+      stats.nonfinite_point_count, voxel_ids.size(), processing_ms, header.frame_id.c_str());
   }
 
 private:
@@ -320,8 +268,10 @@ private:
   std::string output_topic_;
   std::string source_frame_id_;
   std::string target_frame_id_;
+  reachability_bounds reachability_bounds_;
 
   robot_sim::analysis::VoxelIdCodec codec_;
+  std::unique_ptr<reachability_voxel_accumulator> voxel_accumulator_;
 
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
@@ -330,7 +280,7 @@ private:
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr publisher_;
 };
 
-}  // namespace robot_sim::bridge
+}  // robot_sim::bridge namespace終端
 
 RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::PointCloudVoxelBridgeNode)
 

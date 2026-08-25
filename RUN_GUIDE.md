@@ -98,6 +98,43 @@ ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
   input_topic:=/semantic_points \
   output_topic:=/topo_voxel_ids
 
+### depth persistent world indexの比較
+
+固定cameraのraw depthをpixel handleとして保持し、複数robotの局所ROIを共有world indexから抽出する比較node。
+設定は`gng_vlut_system/config/depth_world_index_benchmark.yaml`へ集約。
+
+```bash
+# ターミナル1: Docker内の計測node
+docker compose exec gng_cpu bash -lc '
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
+ros2 run gng_vlut_system depth_world_index_benchmark_node --ros-args \
+  --params-file /ros2_ws/src/gng_vlut_system/config/depth_world_index_benchmark.yaml'
+
+# ターミナル2: raw depthとcamera_infoの配信
+docker compose exec gng_cpu bash -lc '
+source /opt/ros/humble/setup.bash &&
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
+  --topics /camera/camera/depth/image_rect_raw /camera/camera/depth/camera_info'
+```
+
+YAML既定値では、`direct8`の全再構築比較を実行しない。`robot_num: 1`のpersistent queryと
+debug voxel出力だけのため、Viewer確認時に基準方式のCPU負荷を加えない。比較が必要なときだけ
+`enable_comparison_benchmark: true`を指定する。`depth_update_mm_th: 1`と`free_confirmation_num: 1`は、
+比較有効時に現frameの全再構築と同じVLUT IDとなる基準設定。
+
+常駐時の毎frame計測ログも既定では無効である。処理時間を観測する場合だけ
+`enable_runtime_log: true`を指定する。
+固定cameraを実機で使う場合は、YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
+
+YAMLでは視覚検証用debug outputが有効で、`frame_num: 0`のためCtrl-Cまで継続する。
+
+- `/depth_world_index/debug/roi_voxels`: ROIで採用された2 cm `voxel_msgs/Voxel`
+- `/depth_world_index/debug/world_buckets_voxels`: 非空world bucketを既定幅0.2 mの`voxel_msgs/Voxel`として出力
+
+raw depth rosbagのidentity座標設定では`frame_id`が`camera_depth_optical_frame`となる。RVizのFixed Frameを
+同frameへ設定する。`camera_world_*`を実機のworld座標系へ設定した場合は、
+`debug_frame_id`も同じworld frameへ変更する。
+
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
   robot_name:=ToPoDualArm \

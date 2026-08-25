@@ -107,6 +107,24 @@ include_directories(src/core/safety_engine)
 # Subdirectories
 add_subdirectory(src)
 
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(
+    test_reachability_voxel_accumulator
+    test/test_reachability_voxel_accumulator.cpp
+    test/test_world_point_bucket_index.cpp
+    test/test_persistent_depth_world_index.cpp
+  )
+  if(TARGET test_reachability_voxel_accumulator)
+    target_include_directories(
+      test_reachability_voxel_accumulator PRIVATE src src/core
+    )
+    ament_target_dependencies(
+      test_reachability_voxel_accumulator Eigen3 sensor_msgs std_msgs voxel_msgs voxel_idx
+    )
+  endif()
+endif()
+
 # --- 3. Resource Installation ---
 install(DIRECTORY urdf config launch gng_results worlds
   DESTINATION share/${PROJECT_NAME}
