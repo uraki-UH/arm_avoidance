@@ -615,7 +615,8 @@ ros2 topic echo /perception/human_candidate/points --field header --once
 入力topicや人体寸法は`config/pointcloud_human_candidate_detection.yaml`で設定する。
 `ground_coefficients`は入力点群座標系の床平面`ax + by + cz + d = 0`。
 既定値`[0, 0, 1, 0]`はZ-up座標系の`z=0`。camera光学座標系でcameraが
-床上1 mなら、例として`[0, 1, 0, -1]`を使用する。
+床上1 mなら、例として`[0, -1, 0, 1]`を使用する。法線`[a, b, c]`は
+床から検出領域へ向ける。
 
 これは純粋な深度形状による保守的な除外候補であり、人物classを意味的に識別する
 学習modelではない。マネキン、柱なども候補となり得るため、`human_candidate`が
