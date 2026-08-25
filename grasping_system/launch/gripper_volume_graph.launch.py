@@ -1,4 +1,5 @@
 import math
+import os
 import re
 from pathlib import Path
 
@@ -24,6 +25,15 @@ DEFAULT_GRIPPERS = """[
     semantic_label: 0
   }
 ]"""
+
+
+def _parse_bool(value):
+    normalized = str(value).strip().lower()
+    if normalized in ("true", "1", "yes", "on"):
+        return True
+    if normalized in ("false", "0", "no", "off"):
+        return False
+    raise ValueError(f"boolean value required: {value}")
 
 
 def _vector(spec, key, size, default):
@@ -202,6 +212,10 @@ def _launch_grippers(context):
     actions = []
     node_names = set()
     tf_prefix = LaunchConfiguration("tf_prefix").perform(context)
+    cache_directory = LaunchConfiguration("cache_directory").perform(context).strip()
+    cache_mode = LaunchConfiguration("cache_mode").perform(context).strip()
+    publish_graph = LaunchConfiguration("publish_graph").perform(context)
+    exit_after_publish = LaunchConfiguration("exit_after_publish").perform(context)
     for index, spec in enumerate(_load_grippers(context)):
         if not isinstance(spec, dict):
             raise ValueError(f"grippers[{index}] must be a mapping")
@@ -257,6 +271,16 @@ def _launch_grippers(context):
             parameters["positive_finger_mesh_indices"] = positive_finger_indices
         if negative_finger_indices:
             parameters["negative_finger_mesh_indices"] = negative_finger_indices
+        cache_file = str(spec.get("cache_file", "")).strip()
+        if cache_file and not os.path.isabs(cache_file) and cache_directory:
+            cache_file = os.path.join(cache_directory, cache_file)
+        if not cache_file and cache_directory:
+            cache_file = os.path.join(cache_directory, f"{node_name}.cdr")
+        if cache_file:
+            parameters["cache_file"] = cache_file
+            parameters["cache_mode"] = cache_mode
+        parameters["publish_graph"] = _parse_bool(publish_graph)
+        parameters["exit_after_publish"] = _parse_bool(exit_after_publish)
         actions.append(
             Node(
                 package="grasping_system",
@@ -285,6 +309,26 @@ def generate_launch_description():
             "tf_prefix",
             default_value="",
             description="Optional prefix applied to every configured gripper TF frame",
+        ),
+        DeclareLaunchArgument(
+            "cache_directory",
+            default_value="",
+            description="Optional directory for persistent gripper volume caches",
+        ),
+        DeclareLaunchArgument(
+            "cache_mode",
+            default_value="use",
+            description="Cache policy: use, refresh, or disabled",
+        ),
+        DeclareLaunchArgument(
+            "exit_after_publish",
+            default_value="false",
+            description="Exit after static graph publication for cache prebuild",
+        ),
+        DeclareLaunchArgument(
+            "publish_graph",
+            default_value="true",
+            description="Publish static graphs; disable for cache-only prebuild",
         ),
         OpaqueFunction(function=_launch_grippers),
     ])

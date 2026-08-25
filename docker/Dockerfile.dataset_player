@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
-# ROS 1 bag変換ツール
-RUN pip3 install rosbags
+# ROS 1 bag変換とGoogle Drive取得ツール
+RUN pip3 install rosbags gdown
 
 WORKDIR /ros2_ws
 

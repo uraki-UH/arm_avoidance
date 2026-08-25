@@ -84,6 +84,8 @@ def launch_setup(context, *args, **kwargs):
     yaml_mesh_root_dir = ""
     yaml_gripper_volume_enabled = False
     yaml_gripper_volume_config_file = ""
+    yaml_gripper_volume_cache_directory = ""
+    yaml_gripper_volume_cache_mode = "use"
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -133,6 +135,14 @@ def launch_setup(context, *args, **kwargs):
                     candidate_config_file = gripper_volume_ns.get('definitions_file', '')
                     if candidate_config_file is not None:
                         yaml_gripper_volume_config_file = str(candidate_config_file).strip()
+                    candidate_cache_directory = gripper_volume_ns.get('cache_directory', '')
+                    if candidate_cache_directory is not None:
+                        yaml_gripper_volume_cache_directory = str(
+                            candidate_cache_directory
+                        ).strip()
+                    candidate_cache_mode = gripper_volume_ns.get('cache_mode', '')
+                    if candidate_cache_mode is not None and str(candidate_cache_mode).strip():
+                        yaml_gripper_volume_cache_mode = str(candidate_cache_mode).strip()
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
@@ -333,6 +343,12 @@ def launch_setup(context, *args, **kwargs):
     gripper_volume_grippers = LaunchConfiguration(
         "gripper_volume_grippers"
     ).perform(context).strip()
+    gripper_volume_cache_directory = LaunchConfiguration(
+        "gripper_volume_cache_directory"
+    ).perform(context).strip() or yaml_gripper_volume_cache_directory
+    gripper_volume_cache_mode = LaunchConfiguration(
+        "gripper_volume_cache_mode"
+    ).perform(context).strip() or yaml_gripper_volume_cache_mode
 
     if gripper_volume_enabled:
         if gripper_volume_config_file:
@@ -361,6 +377,8 @@ def launch_setup(context, *args, **kwargs):
                     "grippers_file": gripper_volume_config_file,
                     "grippers": gripper_volume_grippers,
                     "tf_prefix": robot_name,
+                    "cache_directory": gripper_volume_cache_directory,
+                    "cache_mode": gripper_volume_cache_mode,
                 }.items(),
             )
         )
@@ -406,6 +424,16 @@ def generate_launch_description():
             "gripper_volume_grippers",
             default_value="",
             description="Optional inline YAML gripper list when no definition file is used",
+        ),
+        DeclareLaunchArgument(
+            "gripper_volume_cache_directory",
+            default_value="",
+            description="Optional gripper-volume cache directory; empty uses params_file",
+        ),
+        DeclareLaunchArgument(
+            "gripper_volume_cache_mode",
+            default_value="",
+            description="Gripper-volume cache policy; empty uses params_file",
         ),
         DeclareLaunchArgument("edge_mode", default_value=""),
         OpaqueFunction(function=launch_setup)
