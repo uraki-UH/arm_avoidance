@@ -61,6 +61,8 @@ def write_world_lidar_sdf(
     max_vertical_angle: float,
     min_range: float,
     max_range: float,
+    noise_mean: float,
+    noise_std_dev: float,
 ) -> str:
     if not model_name or not frame_id or not topic:
         raise ValueError("環境LiDARのmodel、frame、topicには空でない値が必要です")
@@ -74,6 +76,8 @@ def write_world_lidar_sdf(
         raise ValueError("環境LiDARの水平angle設定が不正です")
     if max_vertical_angle < min_vertical_angle:
         raise ValueError("環境LiDARの垂直angle設定が不正です")
+    if noise_std_dev < 0.0:
+        raise ValueError("lidar_noise_std_devは0以上が必要です")
 
     sdf = ET.Element("sdf", version="1.6")
     model = ET.SubElement(sdf, "model", name=model_name)
@@ -82,13 +86,6 @@ def write_world_lidar_sdf(
     ET.SubElement(model, "pose").text = " ".join(str(value) for value in pose_values)
 
     link = ET.SubElement(model, "link", name="world_lidar_link")
-    visual = ET.SubElement(link, "visual", name="world_lidar_visual")
-    geometry = ET.SubElement(visual, "geometry")
-    ET.SubElement(geometry, "cylinder", radius="0.05", length="0.08")
-    material = ET.SubElement(visual, "material")
-    ET.SubElement(material, "ambient").text = "0.05 0.05 0.05 1"
-    ET.SubElement(material, "diffuse").text = "0.1 0.1 0.1 1"
-
     sensor = ET.SubElement(link, "sensor", name="world_lidar_sensor", type="ray")
     ET.SubElement(sensor, "always_on").text = "true"
     ET.SubElement(sensor, "visualize").text = "false"
@@ -111,8 +108,8 @@ def write_world_lidar_sdf(
     ET.SubElement(lidar_range, "resolution").text = "0.01"
     noise = ET.SubElement(ray, "noise")
     ET.SubElement(noise, "type").text = "gaussian"
-    ET.SubElement(noise, "mean").text = "0.0"
-    ET.SubElement(noise, "stddev").text = "0.005"
+    ET.SubElement(noise, "mean").text = str(noise_mean)
+    ET.SubElement(noise, "stddev").text = str(noise_std_dev)
 
     plugin = ET.SubElement(
         sensor,
@@ -187,6 +184,12 @@ def launch_setup(context, *args, **kwargs):
         max_range=float(resolve_lidar_value(
             context, "max_lidar_range", scan_params, "max_range", 20.0
         )),
+        noise_mean=float(resolve_lidar_value(
+            context, "lidar_noise_mean", scan_params, "noise_mean", 0.0
+        )),
+        noise_std_dev=float(resolve_lidar_value(
+            context, "lidar_noise_std_dev", scan_params, "noise_std_dev", 0.005
+        )),
     )
 
     def cleanup_sdf(_context, *unused_args, **unused_kwargs):
@@ -244,5 +247,7 @@ def generate_launch_description():
         DeclareLaunchArgument("max_lidar_vertical_angle", default_value=""),
         DeclareLaunchArgument("min_lidar_range", default_value=""),
         DeclareLaunchArgument("max_lidar_range", default_value=""),
+        DeclareLaunchArgument("lidar_noise_mean", default_value=""),
+        DeclareLaunchArgument("lidar_noise_std_dev", default_value=""),
         OpaqueFunction(function=launch_setup),
     ])

@@ -118,6 +118,8 @@ def add_lidar_sensor(
     max_lidar_vertical_angle: float,
     min_lidar_range: float,
     max_lidar_range: float,
+    lidar_noise_mean: float,
+    lidar_noise_std_dev: float,
 ) -> None:
     link_names = {link.get("name") for link in root.findall("link")}
     if parent_link not in link_names:
@@ -134,6 +136,8 @@ def add_lidar_sensor(
         raise ValueError("LiDARの垂直angle設定が不正です")
     if lidar_update_hz <= 0.0:
         raise ValueError("lidar_update_hzは正数が必要です")
+    if lidar_noise_std_dev < 0.0:
+        raise ValueError("lidar_noise_std_devは0以上が必要です")
     if not lidar_topic:
         raise ValueError("lidar_topicが空です")
 
@@ -155,12 +159,6 @@ def add_lidar_sensor(
         iyz="0",
         izz="1e-5",
     )
-    visual = ET.SubElement(link, "visual")
-    geometry = ET.SubElement(visual, "geometry")
-    ET.SubElement(geometry, "cylinder", radius="0.04", length="0.06")
-    material = ET.SubElement(visual, "material", name="lidar_black")
-    ET.SubElement(material, "color", rgba="0.05 0.05 0.05 1")
-
     joint = ET.SubElement(root, "joint", name=f"{parent_link}_to_{lidar_link}", type="fixed")
     ET.SubElement(joint, "parent", link=parent_link)
     ET.SubElement(joint, "child", link=lidar_link)
@@ -189,8 +187,8 @@ def add_lidar_sensor(
     ET.SubElement(lidar_range, "resolution").text = "0.01"
     noise = ET.SubElement(ray, "noise")
     ET.SubElement(noise, "type").text = "gaussian"
-    ET.SubElement(noise, "mean").text = "0.0"
-    ET.SubElement(noise, "stddev").text = "0.005"
+    ET.SubElement(noise, "mean").text = str(lidar_noise_mean)
+    ET.SubElement(noise, "stddev").text = str(lidar_noise_std_dev)
 
     plugin = ET.SubElement(
         sensor,
@@ -204,12 +202,46 @@ def add_lidar_sensor(
     ET.SubElement(plugin, "frame_name").text = lidar_frame_id
 
 
+def add_joint_state_publisher(
+    root: ET.Element,
+    robot_name: str,
+    joint_state_topic: str,
+    joint_state_update_hz: float,
+) -> None:
+    if joint_state_update_hz <= 0.0:
+        raise ValueError("joint_state_update_hzは正数が必要です")
+
+    joint_names = [
+        joint.get("name")
+        for joint in root.findall("joint")
+        if joint.get("type") != "fixed" and joint.get("name")
+    ]
+    if not joint_names:
+        raise ValueError("Gazebo関節状態の配信対象jointがありません")
+
+    gazebo = ET.SubElement(root, "gazebo")
+    plugin = ET.SubElement(
+        gazebo,
+        "plugin",
+        name="gazebo_ros_joint_state_publisher",
+        filename="libgazebo_ros_joint_state_publisher.so",
+    )
+    ros = ET.SubElement(plugin, "ros")
+    ET.SubElement(ros, "namespace").text = f"/{robot_name}"
+    if joint_state_topic:
+        ET.SubElement(ros, "remapping").text = f"joint_states:={joint_state_topic}"
+    ET.SubElement(plugin, "update_rate").text = str(joint_state_update_hz)
+    for joint_name in joint_names:
+        ET.SubElement(plugin, "joint_name").text = joint_name
+
+
 def write_gazebo_urdf(
     robot_urdf: str,
     mesh_root_dir: str,
     static_model: bool,
     fixed_base_link: str,
     lidar_config: dict | None = None,
+    joint_state_config: dict | None = None,
 ) -> str:
     with open(robot_urdf, "r", encoding="utf-8") as f:
         urdf_text = f.read()
@@ -225,7 +257,14 @@ def write_gazebo_urdf(
 
     root = ET.fromstring(urdf_text)
     if lidar_config:
-        add_lidar_sensor(root, **lidar_config)
+        lidar_sensor_config = {
+            key: value
+            for key, value in lidar_config.items()
+            if key not in ("transformed_topic", "target_frame")
+        }
+        add_lidar_sensor(root, **lidar_sensor_config)
+    if joint_state_config:
+        add_joint_state_publisher(root, **joint_state_config)
     if static_model:
         gazebo = ET.SubElement(root, "gazebo")
         ET.SubElement(gazebo, "static").text = "true"
@@ -308,6 +347,12 @@ def launch_setup(context, *args, **kwargs):
     static_model = LaunchConfiguration("static_model").perform(context).lower() in ("true", "1", "yes", "on")
     fixed_base_link = LaunchConfiguration("fixed_base_link").perform(context).strip()
     enable_lidar = LaunchConfiguration("enable_lidar").perform(context).lower() in ("true", "1", "yes", "on")
+    enable_gazebo_joint_state_publisher = (
+        LaunchConfiguration("enable_gazebo_joint_state_publisher").perform(context).lower()
+        in ("true", "1", "yes", "on")
+    )
+    joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
+    joint_state_update_hz = float(LaunchConfiguration("joint_state_update_hz").perform(context))
     mesh_root_dir = LaunchConfiguration("mesh_root_dir").perform(context).strip()
     params_file = LaunchConfiguration("params_file").perform(context).strip()
     root_params = load_root_params(params_file)
@@ -338,7 +383,7 @@ def launch_setup(context, *args, **kwargs):
             context, "lidar_parent_link", robot_lidar_params, "parent_link", "camera_link"
         )
         lidar_link = resolve_lidar_value(context, "lidar_link", robot_lidar_params, "link", "lidar_link")
-        lidar_xyz = resolve_lidar_value(context, "lidar_xyz", robot_lidar_params, "xyz", "0 0 0.08")
+        lidar_xyz = resolve_lidar_value(context, "lidar_xyz", robot_lidar_params, "xyz", "0 0 0")
         lidar_rpy = resolve_lidar_value(context, "lidar_rpy", robot_lidar_params, "rpy", "0 0 0")
         lidar_frame_id = resolve_lidar_value(
             context, "lidar_frame_id", robot_lidar_params, "frame_id", ""
@@ -354,6 +399,16 @@ def launch_setup(context, *args, **kwargs):
                 context, "lidar_topic", robot_lidar_params, "topic", "/lidar/points"
             ),
             "lidar_frame_id": lidar_frame_id,
+            "transformed_topic": resolve_lidar_value(
+                context,
+                "lidar_transformed_topic",
+                robot_lidar_params,
+                "transformed_topic",
+                "/lidar/points_world",
+            ),
+            "target_frame": resolve_lidar_value(
+                context, "lidar_target_frame", robot_lidar_params, "target_frame", "world"
+            ),
             "lidar_update_hz": float(resolve_lidar_value(
                 context, "lidar_update_hz", scan_params, "update_hz", 10.0
             )),
@@ -381,6 +436,12 @@ def launch_setup(context, *args, **kwargs):
             "max_lidar_range": float(resolve_lidar_value(
                 context, "max_lidar_range", scan_params, "max_range", 20.0
             )),
+            "lidar_noise_mean": float(resolve_lidar_value(
+                context, "lidar_noise_mean", scan_params, "noise_mean", 0.0
+            )),
+            "lidar_noise_std_dev": float(resolve_lidar_value(
+                context, "lidar_noise_std_dev", scan_params, "noise_std_dev", 0.005
+            )),
         }
         lidar_tf_config = {
             "parent_frame_id": f"{robot_name}/{lidar_parent_link}",
@@ -394,6 +455,11 @@ def launch_setup(context, *args, **kwargs):
         static_model,
         fixed_base_link,
         lidar_config,
+        {
+            "robot_name": robot_name,
+            "joint_state_topic": joint_state_topic,
+            "joint_state_update_hz": joint_state_update_hz,
+        } if enable_gazebo_joint_state_publisher else None,
     )
 
     def cleanup_gazebo_urdf(_context, *unused_args, **unused_kwargs):
@@ -419,6 +485,21 @@ def launch_setup(context, *args, **kwargs):
             OnProcessExit(target_action=spawn_node, on_exit=[OpaqueFunction(function=cleanup_gazebo_urdf)])
         ),
     ]
+    if fixed_base_link:
+        nodes.append(
+            Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                name="gazebo_fixed_base_tf_publisher",
+                arguments=[
+                    "--x", "0", "--y", "0", "--z", spawn_z,
+                    "--roll", "0", "--pitch", "0", "--yaw", "0",
+                    "--frame-id", "world",
+                    "--child-frame-id", f"{robot_name}/{fixed_base_link}",
+                ],
+                output="screen",
+            )
+        )
     if follow_tf_frame:
         nodes.append(
             Node(
@@ -452,6 +533,20 @@ def launch_setup(context, *args, **kwargs):
                 output="screen",
             )
         )
+    if lidar_config and lidar_config["transformed_topic"] and lidar_config["target_frame"]:
+        nodes.append(
+            Node(
+                package="gng_vlut_system",
+                executable="pointcloud_tf_transformer_node",
+                name="lidar_pointcloud_tf_transformer_node",
+                parameters=[{
+                    "input_topic": lidar_config["lidar_topic"],
+                    "output_topic": lidar_config["transformed_topic"],
+                    "target_frame": lidar_config["target_frame"],
+                }],
+                output="screen",
+            )
+        )
     return nodes
 
 def generate_launch_description():
@@ -461,7 +556,7 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm.yaml")),
         DeclareLaunchArgument("urdf_path", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
-        DeclareLaunchArgument("spawn_z", default_value="0.5"),
+        DeclareLaunchArgument("spawn_z", default_value="0.0"),
         DeclareLaunchArgument("static_model", default_value="false"),
         DeclareLaunchArgument("fixed_base_link", default_value=""),
         DeclareLaunchArgument("follow_tf_frame", default_value=""),
@@ -469,6 +564,9 @@ def generate_launch_description():
         DeclareLaunchArgument("follow_tf_reference_frame", default_value=""),
         DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
         DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
+        DeclareLaunchArgument("enable_gazebo_joint_state_publisher", default_value="true"),
+        DeclareLaunchArgument("joint_state_topic", default_value="joint_states"),
+        DeclareLaunchArgument("joint_state_update_hz", default_value="50.0"),
         DeclareLaunchArgument("enable_lidar", default_value="false"),
         DeclareLaunchArgument(
             "lidar_params_file", default_value=os.path.join(pkg_share, "config", "gazebo_lidar.yaml")
@@ -479,6 +577,8 @@ def generate_launch_description():
         DeclareLaunchArgument("lidar_rpy", default_value=""),
         DeclareLaunchArgument("lidar_topic", default_value=""),
         DeclareLaunchArgument("lidar_frame_id", default_value=""),
+        DeclareLaunchArgument("lidar_transformed_topic", default_value=""),
+        DeclareLaunchArgument("lidar_target_frame", default_value=""),
         DeclareLaunchArgument("lidar_update_hz", default_value=""),
         DeclareLaunchArgument("num_lidar_horizontal_samples", default_value=""),
         DeclareLaunchArgument("num_lidar_vertical_samples", default_value=""),
@@ -488,6 +588,8 @@ def generate_launch_description():
         DeclareLaunchArgument("max_lidar_vertical_angle", default_value=""),
         DeclareLaunchArgument("min_lidar_range", default_value=""),
         DeclareLaunchArgument("max_lidar_range", default_value=""),
+        DeclareLaunchArgument("lidar_noise_mean", default_value=""),
+        DeclareLaunchArgument("lidar_noise_std_dev", default_value=""),
         # Gazebo起動済み、または別途起動する構成の前提
         OpaqueFunction(function=launch_setup)
     ])

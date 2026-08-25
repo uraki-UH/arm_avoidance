@@ -426,6 +426,7 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
+  spawn_z:=0.0 \
   fixed_base_link:=base_footprint \
   follow_tf_frame:=ToPoDualArm/base_footprint
 
@@ -437,33 +438,43 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
+  spawn_z:=0.0 \
   fixed_base_link:=base_footprint \
   follow_tf_frame:=ToPoDualArm/base_footprint \
   enable_lidar:=true \
-  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
+  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml \
+  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
 
-点群は`/lidar/points`へ`sensor_msgs/msg/PointCloud2`として出力される。
+生点群は`/lidar/points`へLiDAR座標系で、TF変換済み点群は
+`/lidar/points_world`へ`world`座標系で`sensor_msgs/msg/PointCloud2`として出力される。
 搭載姿勢・出力先・走査条件は`gazebo_lidar.yaml`の`robot_lidar`と`scan`で設定する。
+既定の搭載位置は、`neck_tilt_link`の先にある`camera_link`の原点。
 初期設定は水平360点、垂直16点、10 Hz、距離0.1–20 m。launch引数の
 `lidar_xyz`、`lidar_rpy`、`lidar_topic`などを明示した場合はYAML設定を上書きする。
+距離ノイズはGaussian分布で、`scan.noise_mean`と`scan.noise_std_dev`にメートル単位で設定する。
 
 ```bash
 ros2 topic hz /lidar/points
 ros2 topic echo /lidar/points --once
+ros2 topic echo /lidar/points_world --field header --once
 ```
 
-RViz2ではFixed Frameを`ToPoDualArm/base_link`、PointCloud2のTopicを
-`/lidar/points`に設定する。LiDARのTFは`ToPoDualArm/lidar_link`として配信される。
+RViz2ではFixed Frameを`world`、PointCloud2のTopicを`/lidar/points_world`に設定する。
+LiDARのTFは`ToPoDualArm/lidar_link`として配信される。
+Gazebo内の実関節角は`/ToPoDualArm/joint_states`へ50 Hzで配信されるため、
+重力で動いた首の姿勢も`/lidar/points_world`へ反映される。
 
 ## Gazebo環境へ固定3D LiDARを設置する場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
+  spawn_z:=0.0 \
   fixed_base_link:=base_footprint \
   follow_tf_frame:=ToPoDualArm/base_footprint \
   enable_world_lidar:=true \
-  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
+  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml \
+  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
 
 環境LiDARはロボットのURDFから独立したstatic modelとしてGazeboへ追加される。
 点群topicは`/environment/lidar/points`、frameは`world_lidar_link`。

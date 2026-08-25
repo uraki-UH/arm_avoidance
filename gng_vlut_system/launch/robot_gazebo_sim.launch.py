@@ -81,7 +81,7 @@ def generate_launch_description():
         DeclareLaunchArgument("experiment_id", default_value=""),
         DeclareLaunchArgument("enable_safety_monitor", default_value="true"),
         DeclareLaunchArgument("safety_margin", default_value="0.05"),
-        DeclareLaunchArgument("spawn_z", default_value="0.5"),
+        DeclareLaunchArgument("spawn_z", default_value="0.0"),
         DeclareLaunchArgument("static_model", default_value="false"),
         DeclareLaunchArgument("fixed_base_link", default_value=""),
         DeclareLaunchArgument("follow_tf_frame", default_value=""),
@@ -89,6 +89,10 @@ def generate_launch_description():
         DeclareLaunchArgument("follow_tf_reference_frame", default_value=""),
         DeclareLaunchArgument("follow_tf_update_hz", default_value="20.0"),
         DeclareLaunchArgument("follow_tf_service_name", default_value="/gazebo/set_entity_state"),
+        DeclareLaunchArgument("publish_initial_joint_state", default_value="false"),
+        DeclareLaunchArgument("joint_state_topic", default_value=""),
+        DeclareLaunchArgument("enable_gazebo_joint_state_publisher", default_value="true"),
+        DeclareLaunchArgument("joint_state_update_hz", default_value="50.0"),
         DeclareLaunchArgument("enable_lidar", default_value="false"),
         DeclareLaunchArgument(
             "lidar_params_file", default_value=os.path.join(pkg_share, "config", "gazebo_lidar.yaml")
@@ -99,6 +103,8 @@ def generate_launch_description():
         DeclareLaunchArgument("lidar_rpy", default_value=""),
         DeclareLaunchArgument("lidar_topic", default_value=""),
         DeclareLaunchArgument("lidar_frame_id", default_value=""),
+        DeclareLaunchArgument("lidar_transformed_topic", default_value=""),
+        DeclareLaunchArgument("lidar_target_frame", default_value=""),
         DeclareLaunchArgument("lidar_update_hz", default_value=""),
         DeclareLaunchArgument("num_lidar_horizontal_samples", default_value=""),
         DeclareLaunchArgument("num_lidar_vertical_samples", default_value=""),
@@ -108,6 +114,8 @@ def generate_launch_description():
         DeclareLaunchArgument("max_lidar_vertical_angle", default_value=""),
         DeclareLaunchArgument("min_lidar_range", default_value=""),
         DeclareLaunchArgument("max_lidar_range", default_value=""),
+        DeclareLaunchArgument("lidar_noise_mean", default_value=""),
+        DeclareLaunchArgument("lidar_noise_std_dev", default_value=""),
         DeclareLaunchArgument("enable_world_lidar", default_value="false"),
         DeclareLaunchArgument("world_lidar_model_name", default_value=""),
         DeclareLaunchArgument("world_lidar_frame_id", default_value=""),
@@ -141,6 +149,8 @@ def generate_launch_description():
                 "mesh_root_dir": LaunchConfiguration("mesh_root_dir"),
                 "spawn_z": LaunchConfiguration("spawn_z"),
                 "resource_root_dir": LaunchConfiguration("resource_root_dir"),
+                "publish_initial_joint_state": LaunchConfiguration("publish_initial_joint_state"),
+                "joint_state_topic": LaunchConfiguration("joint_state_topic"),
             }.items()
         ),
 
@@ -160,6 +170,11 @@ def generate_launch_description():
                 "follow_tf_reference_frame": LaunchConfiguration("follow_tf_reference_frame"),
                 "follow_tf_update_hz": LaunchConfiguration("follow_tf_update_hz"),
                 "follow_tf_service_name": LaunchConfiguration("follow_tf_service_name"),
+                "enable_gazebo_joint_state_publisher": LaunchConfiguration(
+                    "enable_gazebo_joint_state_publisher"
+                ),
+                "joint_state_topic": LaunchConfiguration("joint_state_topic"),
+                "joint_state_update_hz": LaunchConfiguration("joint_state_update_hz"),
                 "enable_lidar": LaunchConfiguration("enable_lidar"),
                 "lidar_params_file": LaunchConfiguration("lidar_params_file"),
                 "lidar_parent_link": LaunchConfiguration("lidar_parent_link"),
@@ -168,6 +183,8 @@ def generate_launch_description():
                 "lidar_rpy": LaunchConfiguration("lidar_rpy"),
                 "lidar_topic": LaunchConfiguration("lidar_topic"),
                 "lidar_frame_id": LaunchConfiguration("lidar_frame_id"),
+                "lidar_transformed_topic": LaunchConfiguration("lidar_transformed_topic"),
+                "lidar_target_frame": LaunchConfiguration("lidar_target_frame"),
                 "lidar_update_hz": LaunchConfiguration("lidar_update_hz"),
                 "num_lidar_horizontal_samples": LaunchConfiguration("num_lidar_horizontal_samples"),
                 "num_lidar_vertical_samples": LaunchConfiguration("num_lidar_vertical_samples"),
@@ -177,6 +194,8 @@ def generate_launch_description():
                 "max_lidar_vertical_angle": LaunchConfiguration("max_lidar_vertical_angle"),
                 "min_lidar_range": LaunchConfiguration("min_lidar_range"),
                 "max_lidar_range": LaunchConfiguration("max_lidar_range"),
+                "lidar_noise_mean": LaunchConfiguration("lidar_noise_mean"),
+                "lidar_noise_std_dev": LaunchConfiguration("lidar_noise_std_dev"),
             }.items()
         ),
 
@@ -200,6 +219,8 @@ def generate_launch_description():
                 "max_lidar_vertical_angle": LaunchConfiguration("max_lidar_vertical_angle"),
                 "min_lidar_range": LaunchConfiguration("min_lidar_range"),
                 "max_lidar_range": LaunchConfiguration("max_lidar_range"),
+                "lidar_noise_mean": LaunchConfiguration("lidar_noise_mean"),
+                "lidar_noise_std_dev": LaunchConfiguration("lidar_noise_std_dev"),
             }.items(),
         ),
 

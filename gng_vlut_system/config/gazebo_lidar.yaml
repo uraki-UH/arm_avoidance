@@ -9,15 +9,19 @@ scan:
   max_vertical_angle: 0.261799
   min_range: 0.10
   max_range: 20.0
+  noise_mean: 0.0
+  noise_std_dev: 0.005
 
 # ロボット搭載LiDARの設置設定
 robot_lidar:
   parent_link: camera_link
   link: lidar_link
-  xyz: [0.0, 0.0, 0.08]
+  xyz: [0.0, 0.0, 0.0]
   rpy: [0.0, 0.0, 0.0]
   topic: /lidar/points
   frame_id: ""
+  transformed_topic: /lidar/points_world
+  target_frame: world
 
 # Gazebo環境固定LiDARの設置設定
 world_lidar:
