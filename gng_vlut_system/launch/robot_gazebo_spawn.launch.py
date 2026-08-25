@@ -169,7 +169,7 @@ def add_lidar_sensor(
     gazebo = ET.SubElement(root, "gazebo", reference=lidar_link)
     sensor = ET.SubElement(gazebo, "sensor", name="lidar_sensor", type="ray")
     ET.SubElement(sensor, "always_on").text = "true"
-    ET.SubElement(sensor, "visualize").text = "true"
+    ET.SubElement(sensor, "visualize").text = "false"
     ET.SubElement(sensor, "update_rate").text = str(lidar_update_hz)
     ray = ET.SubElement(sensor, "ray")
     scan = ET.SubElement(ray, "scan")

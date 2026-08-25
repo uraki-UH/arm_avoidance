@@ -91,7 +91,7 @@ def write_world_lidar_sdf(
 
     sensor = ET.SubElement(link, "sensor", name="world_lidar_sensor", type="ray")
     ET.SubElement(sensor, "always_on").text = "true"
-    ET.SubElement(sensor, "visualize").text = "true"
+    ET.SubElement(sensor, "visualize").text = "false"
     ET.SubElement(sensor, "update_rate").text = str(update_hz)
     ray = ET.SubElement(sensor, "ray")
     scan = ET.SubElement(ray, "scan")
