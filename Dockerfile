@@ -60,6 +60,9 @@ ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
 # PyTorch CPU only
 RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
+# YOLO人物検出
+RUN pip3 install --no-cache-dir "numpy<2" "ultralytics>=8.3,<9"
+
 # PyG CPU only
 RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv \
     -f https://data.pyg.org/whl/torch-2.8.0+cpu.html

@@ -112,4 +112,9 @@ install(DIRECTORY urdf config launch gng_results worlds
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/yolo_person_detector.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_auto_package()

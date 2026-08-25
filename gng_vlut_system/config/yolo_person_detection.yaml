@@ -1,0 +1,14 @@
+yolo_person_detector:
+  ros__parameters:
+    image_topic: /camera/color/image_raw
+    detections_topic: /perception/person/detections_2d
+    annotated_image_topic: /perception/person/annotated_image
+    person_detected_topic: /perception/person/is_detected
+    inference_healthy_topic: /perception/person/is_inference_healthy
+    model_path: yolo11n.pt
+    device: cpu
+    confidence_th: 0.20
+    iou_th: 0.70
+    image_size: 640
+    max_inference_hz: 5.0
+    enable_annotated_image: true

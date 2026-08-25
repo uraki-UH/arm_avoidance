@@ -1,0 +1,15 @@
+# Gazebo用RGB camera設定
+camera:
+  parent_link: camera_link
+  name: head_rgb_camera
+  frame_id: ""
+  topic: /camera/color/image_raw
+  camera_info_topic: /camera/color/camera_info
+  update_hz: 10.0
+  width: 640
+  height: 480
+  horizontal_fov: 1.0472
+  min_clip: 0.05
+  max_clip: 50.0
+  noise_mean: 0.0
+  noise_std_dev: 0.002

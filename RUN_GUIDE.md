@@ -487,6 +487,52 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
 `fixed_base_link`でGazebo物理上のベースを固定し、重力による転倒を防ぐ。
 `follow_tf_frame`はGazebo entityを`base_footprint`のTFへ追従させる。
 
+## Gazeboの頭部cameraでYOLO人物検出を動かす場合
+
+初回のみ、Ultralyticsを含むDocker imageを再buildする。
+
+```bash
+docker compose up -d --build gng_cpu
+```
+
+Gazeboの頭部RGB cameraを有効にしてロボットを召喚する。
+
+```bash
+ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm \
+  gui:=true \
+  spawn_z:=0.0 \
+  fixed_base_link:=base_footprint \
+  follow_tf_frame:=ToPoDualArm/base_footprint \
+  enable_camera:=true \
+  camera_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_camera.yaml \
+  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
+```
+
+別terminalでYOLO人物検出を起動する。初回起動時は`yolo11n.pt`のdownloadが発生する。
+
+```bash
+ros2 launch gng_vlut_system yolo_person_detection.launch.py
+```
+
+入力画像と人物検出結果の確認例。
+
+```bash
+ros2 topic hz /camera/color/image_raw
+ros2 topic echo /camera/color/image_raw --field header --once
+ros2 topic echo /perception/person/is_detected
+ros2 topic echo /perception/person/is_inference_healthy
+ros2 topic echo /perception/person/detections_2d --once
+rqt_image_view /perception/person/annotated_image
+```
+
+cameraの画角、解像度、ノイズは`gazebo_camera.yaml`、YOLOの信頼度、推論周期、
+modelは`yolo_person_detection.yaml`で設定する。既定はCPU、最大5 Hz、人物classのみ。
+`/perception/person/is_inference_healthy`が`false`の場合、
+`/perception/person/is_detected`はfail-safeとして`true`となる。
+この出力は研究・動作確認用であり、安全機能として単独使用しない。
+
 ## Gazeboのロボットへ3D LiDARを追加する場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \

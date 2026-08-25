@@ -55,6 +55,16 @@ def load_lidar_params(params_file: str) -> dict:
     return params
 
 
+def load_camera_params(params_file: str) -> dict:
+    if not params_file or not os.path.exists(params_file):
+        raise FileNotFoundError(f"camera設定ファイルがありません: {params_file}")
+    with open(params_file, "r", encoding="utf-8") as params_stream:
+        params = yaml.safe_load(params_stream) or {}
+    if not isinstance(params, dict):
+        raise ValueError(f"camera設定のrootがmappingではありません: {params_file}")
+    return params
+
+
 def get_lidar_section(params: dict, section_name: str) -> dict:
     section = params.get(section_name, {})
     if not isinstance(section, dict):
@@ -202,6 +212,70 @@ def add_lidar_sensor(
     ET.SubElement(plugin, "frame_name").text = lidar_frame_id
 
 
+def add_camera_sensor(
+    root: ET.Element,
+    parent_link: str,
+    camera_name: str,
+    camera_frame_id: str,
+    camera_topic: str,
+    camera_info_topic: str,
+    camera_update_hz: float,
+    camera_width: int,
+    camera_height: int,
+    camera_horizontal_fov: float,
+    min_camera_clip: float,
+    max_camera_clip: float,
+    camera_noise_mean: float,
+    camera_noise_std_dev: float,
+) -> None:
+    link_names = {link.get("name") for link in root.findall("link")}
+    if parent_link not in link_names:
+        raise ValueError(f"cameraの親link '{parent_link}'がURDFにありません")
+    if not camera_name or not camera_frame_id or not camera_topic or not camera_info_topic:
+        raise ValueError("cameraのname、frame_id、topicは空にできません")
+    if camera_update_hz <= 0.0:
+        raise ValueError("camera_update_hzは正数が必要です")
+    if camera_width < 1 or camera_height < 1:
+        raise ValueError("cameraの画像サイズは1以上が必要です")
+    if camera_horizontal_fov <= 0.0:
+        raise ValueError("camera_horizontal_fovは正数が必要です")
+    if min_camera_clip <= 0.0 or max_camera_clip <= min_camera_clip:
+        raise ValueError("cameraのclip設定が不正です")
+    if camera_noise_std_dev < 0.0:
+        raise ValueError("camera_noise_std_devは0以上が必要です")
+
+    gazebo = ET.SubElement(root, "gazebo", reference=parent_link)
+    sensor = ET.SubElement(gazebo, "sensor", name=camera_name, type="camera")
+    ET.SubElement(sensor, "always_on").text = "true"
+    ET.SubElement(sensor, "visualize").text = "false"
+    ET.SubElement(sensor, "update_rate").text = str(camera_update_hz)
+    camera = ET.SubElement(sensor, "camera", name=camera_name)
+    ET.SubElement(camera, "horizontal_fov").text = str(camera_horizontal_fov)
+    image = ET.SubElement(camera, "image")
+    ET.SubElement(image, "width").text = str(camera_width)
+    ET.SubElement(image, "height").text = str(camera_height)
+    ET.SubElement(image, "format").text = "R8G8B8"
+    clip = ET.SubElement(camera, "clip")
+    ET.SubElement(clip, "near").text = str(min_camera_clip)
+    ET.SubElement(clip, "far").text = str(max_camera_clip)
+    noise = ET.SubElement(camera, "noise")
+    ET.SubElement(noise, "type").text = "gaussian"
+    ET.SubElement(noise, "mean").text = str(camera_noise_mean)
+    ET.SubElement(noise, "stddev").text = str(camera_noise_std_dev)
+
+    plugin = ET.SubElement(
+        sensor,
+        "plugin",
+        name=f"{camera_name}_ros_controller",
+        filename="libgazebo_ros_camera.so",
+    )
+    ros = ET.SubElement(plugin, "ros")
+    ET.SubElement(ros, "remapping").text = f"image_raw:={camera_topic}"
+    ET.SubElement(ros, "remapping").text = f"camera_info:={camera_info_topic}"
+    ET.SubElement(plugin, "camera_name").text = camera_name
+    ET.SubElement(plugin, "frame_name").text = camera_frame_id
+
+
 def add_joint_state_publisher(
     root: ET.Element,
     robot_name: str,
@@ -241,6 +315,7 @@ def write_gazebo_urdf(
     static_model: bool,
     fixed_base_link: str,
     lidar_config: dict | None = None,
+    camera_config: dict | None = None,
     joint_state_config: dict | None = None,
 ) -> str:
     with open(robot_urdf, "r", encoding="utf-8") as f:
@@ -263,6 +338,8 @@ def write_gazebo_urdf(
             if key not in ("transformed_topic", "target_frame")
         }
         add_lidar_sensor(root, **lidar_sensor_config)
+    if camera_config:
+        add_camera_sensor(root, **camera_config)
     if joint_state_config:
         add_joint_state_publisher(root, **joint_state_config)
     if static_model:
@@ -347,6 +424,9 @@ def launch_setup(context, *args, **kwargs):
     static_model = LaunchConfiguration("static_model").perform(context).lower() in ("true", "1", "yes", "on")
     fixed_base_link = LaunchConfiguration("fixed_base_link").perform(context).strip()
     enable_lidar = LaunchConfiguration("enable_lidar").perform(context).lower() in ("true", "1", "yes", "on")
+    enable_camera = LaunchConfiguration("enable_camera").perform(context).lower() in (
+        "true", "1", "yes", "on"
+    )
     enable_gazebo_joint_state_publisher = (
         LaunchConfiguration("enable_gazebo_joint_state_publisher").perform(context).lower()
         in ("true", "1", "yes", "on")
@@ -449,12 +529,41 @@ def launch_setup(context, *args, **kwargs):
             "xyz": parse_vector(lidar_xyz, "lidar_xyz"),
             "rpy": parse_vector(lidar_rpy, "lidar_rpy"),
         }
+    camera_config = None
+    if enable_camera:
+        camera_params_file = LaunchConfiguration("camera_params_file").perform(context).strip()
+        all_camera_params = load_camera_params(camera_params_file)
+        camera_params = all_camera_params.get("camera", {})
+        if not isinstance(camera_params, dict):
+            raise ValueError("camera設定の'camera'がmappingではありません")
+        camera_parent_link = str(camera_params.get("parent_link", "camera_link")).strip()
+        camera_frame_id = str(camera_params.get("frame_id", "")).strip()
+        if not camera_frame_id:
+            camera_frame_id = f"{robot_name}/camera_optical_frame"
+        camera_config = {
+            "parent_link": camera_parent_link,
+            "camera_name": str(camera_params.get("name", "head_rgb_camera")).strip(),
+            "camera_frame_id": camera_frame_id,
+            "camera_topic": str(camera_params.get("topic", "/camera/color/image_raw")).strip(),
+            "camera_info_topic": str(
+                camera_params.get("camera_info_topic", "/camera/color/camera_info")
+            ).strip(),
+            "camera_update_hz": float(camera_params.get("update_hz", 10.0)),
+            "camera_width": int(camera_params.get("width", 640)),
+            "camera_height": int(camera_params.get("height", 480)),
+            "camera_horizontal_fov": float(camera_params.get("horizontal_fov", 1.0472)),
+            "min_camera_clip": float(camera_params.get("min_clip", 0.05)),
+            "max_camera_clip": float(camera_params.get("max_clip", 50.0)),
+            "camera_noise_mean": float(camera_params.get("noise_mean", 0.0)),
+            "camera_noise_std_dev": float(camera_params.get("noise_std_dev", 0.002)),
+        }
     gazebo_urdf = write_gazebo_urdf(
         robot_urdf,
         mesh_root_dir,
         static_model,
         fixed_base_link,
         lidar_config,
+        camera_config,
         {
             "robot_name": robot_name,
             "joint_state_topic": joint_state_topic,
@@ -590,6 +699,11 @@ def generate_launch_description():
         DeclareLaunchArgument("max_lidar_range", default_value=""),
         DeclareLaunchArgument("lidar_noise_mean", default_value=""),
         DeclareLaunchArgument("lidar_noise_std_dev", default_value=""),
+        DeclareLaunchArgument("enable_camera", default_value="false"),
+        DeclareLaunchArgument(
+            "camera_params_file",
+            default_value=os.path.join(pkg_share, "config", "gazebo_camera.yaml"),
+        ),
         # Gazebo起動済み、または別途起動する構成の前提
         OpaqueFunction(function=launch_setup)
     ])

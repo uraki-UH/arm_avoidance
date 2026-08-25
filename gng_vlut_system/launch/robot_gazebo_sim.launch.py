@@ -116,6 +116,11 @@ def generate_launch_description():
         DeclareLaunchArgument("max_lidar_range", default_value=""),
         DeclareLaunchArgument("lidar_noise_mean", default_value=""),
         DeclareLaunchArgument("lidar_noise_std_dev", default_value=""),
+        DeclareLaunchArgument("enable_camera", default_value="false"),
+        DeclareLaunchArgument(
+            "camera_params_file",
+            default_value=os.path.join(pkg_share, "config", "gazebo_camera.yaml"),
+        ),
         DeclareLaunchArgument("enable_world_lidar", default_value="false"),
         DeclareLaunchArgument("world_lidar_model_name", default_value=""),
         DeclareLaunchArgument("world_lidar_frame_id", default_value=""),
@@ -196,6 +201,8 @@ def generate_launch_description():
                 "max_lidar_range": LaunchConfiguration("max_lidar_range"),
                 "lidar_noise_mean": LaunchConfiguration("lidar_noise_mean"),
                 "lidar_noise_std_dev": LaunchConfiguration("lidar_noise_std_dev"),
+                "enable_camera": LaunchConfiguration("enable_camera"),
+                "camera_params_file": LaunchConfiguration("camera_params_file"),
             }.items()
         ),
 
