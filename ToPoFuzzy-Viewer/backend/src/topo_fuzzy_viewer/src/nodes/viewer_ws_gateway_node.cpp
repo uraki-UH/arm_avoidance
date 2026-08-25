@@ -370,7 +370,7 @@ private:
             wait_for_graph_change(graph_event, std::chrono::milliseconds(200));
             if (!graphWatchRunning_) break;
             if (graph_event->check_and_clear()) {
-                broadcast_restarted_source_resets();
+                broadcast_source_lifecycle_events();
                 broadcastSourcesIfChanged();
             }
         }
@@ -392,7 +392,7 @@ private:
         return signature;
     }
 
-    void broadcast_restarted_source_resets() {
+    void broadcast_source_lifecycle_events() {
         std::vector<std::string> source_ids;
         {
             std::lock_guard<std::mutex> lock(sourceMutex_);
@@ -408,6 +408,7 @@ private:
             current_signatures.emplace_back(source_id, publisher_signature(source_id));
         }
 
+        std::vector<std::string> disappeared_source_ids;
         std::vector<std::string> restarted_source_ids;
         {
             std::lock_guard<std::mutex> lock(sourceMutex_);
@@ -418,16 +419,22 @@ private:
                 }
 
                 const auto existing = active_source_publisher_signatures_.find(source_id);
-                if (existing != active_source_publisher_signatures_.end() &&
-                    !existing->second.empty() && !signature.empty() &&
-                    existing->second != signature)
-                {
-                    restarted_source_ids.push_back(source_id);
+                if (existing != active_source_publisher_signatures_.end()) {
+                    if (!existing->second.empty() && signature.empty()) {
+                        disappeared_source_ids.push_back(source_id);
+                    } else if (!existing->second.empty() && !signature.empty() &&
+                        existing->second != signature)
+                    {
+                        restarted_source_ids.push_back(source_id);
+                    }
                 }
                 active_source_publisher_signatures_[source_id] = signature;
             }
         }
 
+        for (const auto& source_id : disappeared_source_ids) {
+            sendStreamDelete(source_id);
+        }
         for (const auto& source_id : restarted_source_ids) {
             broadcastText(json({
                 {"type", "stream.reset"}, {"id", source_id},

@@ -429,6 +429,7 @@ function App() {
 
     const handleRemoveLayer = (id: string) => {
         if (isEditMode) return;
+        setDisabledSourceIds((prev) => new Set(prev).add(id));
         setPointClouds((prev) => {
             const filtered = prev.filter((pc) => pc.id !== id);
             if (selectedLayerId === id) {
@@ -436,6 +437,9 @@ function App() {
                 setSelectedLayerId(fallback ? fallback.id : null);
             }
             return filtered;
+        });
+        void unsubscribeSource(id, true).catch((unsubscribeError) => {
+            console.warn('点群レイヤーの購読解除に失敗しました:', unsubscribeError);
         });
     };
 
