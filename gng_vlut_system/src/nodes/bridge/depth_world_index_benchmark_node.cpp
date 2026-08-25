@@ -48,7 +48,7 @@ public:
       declare_parameter<int>("robot_num", 1), 1, static_cast<std::int64_t>(max_robot_num)));
     enable_comparison_benchmark_ = declare_parameter<bool>(
       "enable_comparison_benchmark", false);
-    enable_runtime_log_ = declare_parameter<bool>("enable_runtime_log", false);
+    enable_runtime_log_ = declare_parameter<bool>("enable_runtime_log", true);
     enable_debug_publish_ = declare_parameter<bool>("enable_debug_publish", false);
     debug_roi_voxel_topic_ = declare_parameter<std::string>(
       "debug_roi_voxel_topic", "/depth_world_index/debug/roi_voxels");
@@ -320,6 +320,7 @@ private:
       std::size_t count_idx = 0U;
       std::size_t candidate_point_num = 0U;
       std::size_t accepted_point_num = 0U;
+      std::size_t roi_voxel_num = 0U;
       std::vector<long> debug_roi_voxel_ids;
       const std::size_t query_robot_num =
         enable_comparison_benchmark_ ? max_robot_num : robot_num_;
@@ -339,8 +340,11 @@ private:
           accepted_point_num += query_stats.accepted_point_num;
         }
         const std::vector<long> &persistent_voxel_ids = accumulator.finish_voxel_ids();
-        if (enable_debug_publish_ && robot_idx == 0U) {
-          debug_roi_voxel_ids = persistent_voxel_ids;
+        if (robot_idx == 0U) {
+          roi_voxel_num = persistent_voxel_ids.size();
+          if (enable_debug_publish_) {
+            debug_roi_voxel_ids = persistent_voxel_ids;
+          }
         }
         if (enable_comparison_benchmark_) {
           const auto [false_negative_num, false_positive_num] = count_voxel_difference(
@@ -379,10 +383,10 @@ private:
           static_cast<double>(changed_point_num) / static_cast<double>(depth_mm.size());
         RCLCPP_INFO(
           get_logger(),
-          "計測 %zu/%d: rebuild=%s pixels=%zu index_points=%zu buckets=%zu update=%.3fms query=%.3fms total=%.3fms robot_num=%zu changed=%zu changed_ratio=%.4f candidates=%zu accepted=%zu",
+          "計測 %zu/%d: rebuild=%s pixels=%zu index_points=%zu world_bucket_num=%zu roi_voxel_num=%zu update=%.3fms query=%.3fms total=%.3fms robot_num=%zu changed=%zu changed_ratio=%.4f candidates=%zu accepted=%zu",
           measured_frame_num_, frame_num_, update_stats.is_rebuild ? "true" : "false",
-          depth_mm.size(), index_->point_num(), index_->bucket_num(), update_ms,
-          query_ms, update_ms + query_ms, query_robot_num, changed_point_num,
+          depth_mm.size(), index_->point_num(), index_->bucket_num(), roi_voxel_num,
+          update_ms, query_ms, update_ms + query_ms, query_robot_num, changed_point_num,
           changed_ratio, candidate_point_num, accepted_point_num);
       }
 

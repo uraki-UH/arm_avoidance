@@ -14,7 +14,7 @@ depth_world_index_benchmark:
     max_dense_voxel_num: 8000000
     robot_num: 1
     enable_comparison_benchmark: false
-    enable_runtime_log: false
+    enable_runtime_log: true
 
     # VLUT ID符号化パラメータ
     x_shift: 42

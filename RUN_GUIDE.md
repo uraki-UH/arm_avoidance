@@ -122,8 +122,8 @@ debug voxel出力だけのため、Viewer確認時に基準方式のCPU負荷を
 `enable_comparison_benchmark: true`を指定する。`depth_update_mm_th: 1`と`free_confirmation_num: 1`は、
 比較有効時に現frameの全再構築と同じVLUT IDとなる基準設定。
 
-常駐時の毎frame計測ログも既定では無効である。処理時間を観測する場合だけ
-`enable_runtime_log: true`を指定する。
+常駐時の毎frame計測ログは既定で有効である。処理時間、world bucket数、ROI voxel数を出力し、
+ログを抑止する場合だけ`enable_runtime_log: false`を指定する。
 固定cameraを実機で使う場合は、YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
 
 YAMLでは視覚検証用debug outputが有効で、`frame_num: 0`のためCtrl-Cまで継続する。
