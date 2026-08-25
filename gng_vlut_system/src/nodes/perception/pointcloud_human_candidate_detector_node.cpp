@@ -8,6 +8,7 @@
 
 #include <Eigen/Core>
 #include <pcl/common/common.h>
+#include <pcl/common/point_tests.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
