@@ -549,21 +549,23 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         std::bind(&AiSGNGComponent::semseg_cb, this, _1)
     );
 
-    // point cloud subscription
+    // 点群入力subscription
     int num_topics = input_topic_names_.size();
     int queue_size = 10;
+    const auto pointcloud_qos = rclcpp::SensorDataQoS();
     if(num_topics == 0){
         RCLCPP_ERROR(this->get_logger(), "input.topic_names is empty.");
     }else if(num_topics == 1){ // 通常のサブスクライバ
         pcl_sub_ = this->create_subscription<PC2>(
-            input_topic_names_[0], 10,
+            input_topic_names_[0], pointcloud_qos,
             [this](const PC2::ConstSharedPtr& m1){
                 this->process_clouds({m1});
             }
         );
     }else { // メッセージフィルタを使用した同期
         for (const auto& name : input_topic_names_) {
-            pcl_subs_.push_back(std::make_shared<message_filters::Subscriber<PC2>>(this, name));
+            pcl_subs_.push_back(std::make_shared<message_filters::Subscriber<PC2>>(
+                this, name, pointcloud_qos.get_rmw_qos_profile()));
         }
         if (num_topics == 2) {
             using Policy = message_filters::sync_policies::ApproximateTime<PC2, PC2>;
