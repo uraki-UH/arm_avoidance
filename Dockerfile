@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     vim \
     ros-humble-rosbag2-storage-mcap \
-    ros-humble-hardware-interface \
     ros-humble-pcl-ros \
     ros-humble-rosbridge-server \
     ros-humble-joint-state-publisher \
@@ -60,9 +59,6 @@ ENV PATH="/opt/emsdk:/opt/emsdk/upstream/emscripten:${PATH}"
 
 # PyTorch CPU only
 RUN pip3 install torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
-
-# ROS 1 bag変換ツール
-RUN pip3 install rosbags
 
 # PyG CPU only
 RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv \

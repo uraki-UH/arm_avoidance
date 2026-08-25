@@ -2,11 +2,65 @@
 
 ##　実行ガイド
 cd uraki_ws
-docker compose down && docker compose up --build  && docker compose up -d
+docker compose up -d --build
 docker compose exec gng_cpu bash
+
+## 用途別コンテナ
+
+計算用の`gng_cpu`、データセット再生用の`dataset_player`、ToPoArm実機ドライバ用の`topoarm_hardware`を分離する構成。
+全コンテナは同じ`ROS_DOMAIN_ID`でDDS通信するため、別コンテナ間でもROS 2 topicを直接利用可能。
+
+```bash
+# データセット再生コンテナを含む全サービスの作成・パッケージビルド
+docker compose --profile dataset up -d --build
+
+# OCIDの再生
+docker compose exec dataset_player bash -c '
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
+ros2 launch dataset_pointcloud_player dataset_pointcloud_player.launch.py \
+  dataset_path:=/datasets/OCID'
+
+# Hilti 2023 RobotのLiDAR点群だけを取得・変換・再生
+docker compose exec dataset_player bash -c '
+cd /ros2_ws/src/dataset_pointcloud_player &&
+bash scripts/download_hardware_dataset.sh --root /datasets --datasets hilti2023_robot &&
+bash scripts/convert_ros1_bag.sh \
+  /datasets/hardware/hilti_slam_2023/rosbags/site2_robot_2.bag \
+  /datasets/hardware/hilti_slam_2023/rosbags/site2_robot_2_pointcloud_ros2 \
+  --topics /rslidar_points &&
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
+ros2 launch dataset_pointcloud_player hardware_bag_player.launch.py \
+  bag_path:=/datasets/hardware/hilti_slam_2023/rosbags/site2_robot_2_pointcloud_ros2 \
+  loop:=true'
+
+# ToPoArm実機ドライバ用コンテナを含む全サービスの作成・パッケージビルド
+docker compose --profile hardware up -d --build
+
+# 実機ドライバコンテナのシェル
+docker compose exec topoarm_hardware bash -c '
+source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && exec bash'
+```
+
+Hilti 2023の再生中は、ToPoFuzzyViewerの入力一覧で`/rslidar_points`を選択して有効化する。
+
+データセット再生と実機ドライバを同時に使う場合は、次の一回で両方のコンテナを作成・ビルドする。
+
+```bash
+docker compose --profile dataset --profile hardware up -d --build
+```
+
+ソース変更後に`dataset_player`だけを再ビルドする場合は、bind mount済みのソースを使うためimage再作成は不要。対象コンテナを再作成すると起動時の`colcon build`が実行される。
+
+```bash
+docker compose --profile dataset up -d --force-recreate dataset_player
+```
+
+`gng_cpu`は実機ドライバの`topoarm_hardware`をマウント上で除外するため、ROS 2 Controlの依存を持たない。
+一方で実機ドライバコンテナだけに`hardware_interface`と`/dev`アクセスを付与する構成。
+
 ## frontendの起動
 cd ~/uraki_ws
-docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
+docker compose exec gng_cpu bash -c 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
 
 docker compose --profile manual up  frontend
 
@@ -292,7 +346,7 @@ GNGノードID単位の所属を持ち越して差分だけ直すため、所属
 
 ```bash
 # 初回はビルドが必要
-docker exec gng_cpu_container_uraki bash -lc '
+docker exec gng_cpu_container_uraki bash -c '
 source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
 cd /ros2_ws && colcon build --packages-select ais_gng --symlink-install'
 ```
