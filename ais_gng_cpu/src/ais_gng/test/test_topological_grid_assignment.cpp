@@ -62,6 +62,34 @@ TEST(TopologicalGridAssignment, ExcludesConfiguredLabelsAndMergesDuplicateCells)
   EXPECT_EQ(result.voxels[1].label, ais_gng_msgs::msg::TopologicalMap::WALL);
 }
 
+TEST(TopologicalGridAssignment, LimitsSafeTerrainToCandidateAndHistoryContext)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::DEFAULT),
+    makeNode(0.011F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN),
+    makeNode(0.101F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN),
+  };
+  VoxelizationOptions options;
+  options.excluded_labels = {
+    ais_gng_msgs::msg::TopologicalMap::HUMAN,
+    ais_gng_msgs::msg::TopologicalMap::CAR,
+  };
+  options.require_input_points = false;
+  options.neighbor_radius_cells = 1;
+
+  const GridCellSet no_history_cells;
+  const auto candidate_context = voxelizeNodes(
+    map, GridSpec{}, options, nullptr, &no_history_cells);
+  ASSERT_EQ(candidate_context.label_voxels.size(), 2U);
+
+  const GridCellSet history_cells{GridCell{10, 0, 0}};
+  const auto history_context = voxelizeNodes(
+    map, GridSpec{}, options, nullptr, &history_cells);
+  ASSERT_EQ(history_context.label_voxels.size(), 3U);
+}
+
 TEST(TopologicalGridAssignment, UsesLowestLabelToBreakDominantLabelTie)
 {
   ais_gng_msgs::msg::TopologicalMap map;
@@ -1077,6 +1105,70 @@ TEST(TopologicalGridAssignment, FillsValidatedGngTriangleArea)
   ASSERT_NE(interior, result.voxels.end());
   EXPECT_EQ(interior->triangle_support_count, 1U);
   EXPECT_EQ(interior->label, ais_gng_msgs::msg::TopologicalMap::WALL);
+}
+
+TEST(TopologicalGridAssignment, ReusesTriangleTopologyUntilEdgeOrGenerationChanges)
+{
+  using namespace fuzzrobo::topological_grid;
+  ais_gng_msgs::msg::TopologicalMap map;
+  map.nodes = {
+    makeNode(0.001F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.041F, 0.001F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+    makeNode(0.001F, 0.041F, 0.001F, ais_gng_msgs::msg::TopologicalMap::WALL),
+  };
+  for (std::size_t index = 0; index < map.nodes.size(); ++index) {
+    map.nodes[index].id = static_cast<std::uint16_t>(index + 1U);
+    map.nodes[index].frame = 7U;
+    map.nodes[index].normal.z = 1.0F;
+  }
+  map.edges = {0, 1, 1, 2, 2, 0};
+
+  TriangleTopologyCache cache;
+  const auto &first_indices = cache.update(map);
+  ASSERT_TRUE(cache.wasRebuilt());
+  ASSERT_EQ(cache.rebuildCount(), 1U);
+  ASSERT_EQ(first_indices.size(), 1U);
+
+  map.nodes[0].pos.x = 0.003F;
+  const auto &reused_indices = cache.update(map);
+  EXPECT_FALSE(cache.wasRebuilt());
+  EXPECT_EQ(cache.rebuildCount(), 1U);
+  EXPECT_EQ(reused_indices, first_indices);
+
+  const std::vector<LabeledGridVoxel> direct{
+    LabeledGridVoxel{GridCell{0, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{4, 0, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+    LabeledGridVoxel{GridCell{0, 4, 0}, ais_gng_msgs::msg::TopologicalMap::WALL},
+  };
+  TriangleInferenceOptions options;
+  options.maximum_edge_length = 0.10;
+  const auto cached_result = inferVoxelsFromStableVoxelTriangles(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options, nullptr,
+    &reused_indices);
+  const auto uncached_result = inferVoxelsFromStableVoxelTriangles(
+    map, GridSpec{}, direct, VoxelizationOptions{}.excluded_labels, options);
+  EXPECT_EQ(cached_result.candidate_triangle_count, uncached_result.candidate_triangle_count);
+  EXPECT_EQ(cached_result.accepted_triangle_count, uncached_result.accepted_triangle_count);
+  ASSERT_EQ(cached_result.voxels.size(), uncached_result.voxels.size());
+  for (std::size_t index = 0; index < cached_result.voxels.size(); ++index) {
+    EXPECT_EQ(cached_result.voxels[index].cell, uncached_result.voxels[index].cell);
+    EXPECT_EQ(cached_result.voxels[index].label, uncached_result.voxels[index].label);
+    EXPECT_EQ(
+      cached_result.voxels[index].triangle_support_count,
+      uncached_result.voxels[index].triangle_support_count);
+  }
+
+  map.nodes[0].frame = 8U;
+  const auto &generation_changed_indices = cache.update(map);
+  EXPECT_TRUE(cache.wasRebuilt());
+  EXPECT_EQ(cache.rebuildCount(), 2U);
+  EXPECT_EQ(generation_changed_indices.size(), 1U);
+
+  map.edges = {0, 1, 1, 2};
+  const auto &changed_indices = cache.update(map);
+  EXPECT_TRUE(cache.wasRebuilt());
+  EXPECT_EQ(cache.rebuildCount(), 3U);
+  EXPECT_TRUE(changed_indices.empty());
 }
 
 TEST(TopologicalGridAssignment, RequiresClosedThreeEdgeCycleForTriangle)

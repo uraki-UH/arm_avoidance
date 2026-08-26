@@ -845,7 +845,8 @@ void TopologicalGridNode::applyNormalDriftScores(
 
 NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
   const ais_gng_msgs::msg::TopologicalMap &map,
-  const GridVoxelizationResult &result)
+  const GridVoxelizationResult &result,
+  const NodeIdentitySet &evaluation_identities)
 {
   // Both thresholds are normalized by the former GNG neighbour spacing, not
   // by grid_size or a metric distance.  A cluster must have moved by at least
@@ -860,7 +861,14 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
   NodeLocalStructureStates states;
   std::unordered_map<NodeIdentity, std::vector<NodeIdentity>, NodeIdentityHash>
     current_neighbors;
-  current_neighbors.reserve(result.eligible_nodes.size());
+  NodeIdentitySet tracked_identities = evaluation_identities;
+  tracked_identities.reserve(
+    tracked_identities.size() + previous_node_neighbors_.size());
+  for (const auto &[identity, neighbors] : previous_node_neighbors_) {
+    static_cast<void>(neighbors);
+    tracked_identities.insert(identity);
+  }
+  current_neighbors.reserve(tracked_identities.size());
 
   for (std::size_t edge = 0; edge + 1U < map.edges.size(); edge += 2U) {
     const std::size_t first_index = static_cast<std::size_t>(map.edges[edge]);
@@ -872,13 +880,22 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
     }
     const NodeIdentity first{map.nodes[first_index].id, map.nodes[first_index].frame};
     const NodeIdentity second{map.nodes[second_index].id, map.nodes[second_index].frame};
+    const bool first_tracked = tracked_identities.find(first) != tracked_identities.end();
+    const bool second_tracked = tracked_identities.find(second) != tracked_identities.end();
+    if (!first_tracked && !second_tracked) {
+      continue;
+    }
     if (result.eligible_nodes.find(first) == result.eligible_nodes.end() ||
       result.eligible_nodes.find(second) == result.eligible_nodes.end())
     {
       continue;
     }
-    current_neighbors[first].push_back(second);
-    current_neighbors[second].push_back(first);
+    if (first_tracked) {
+      current_neighbors[first].push_back(second);
+    }
+    if (second_tracked) {
+      current_neighbors[second].push_back(first);
+    }
   }
 
   if (!previous_node_observations_.empty()) {
@@ -962,7 +979,21 @@ NodeLocalStructureStates TopologicalGridNode::buildLocalStructureStates(
     }
   }
 
-  previous_node_observations_ = result.eligible_nodes;
+  NodeObservationMap next_node_observations;
+  next_node_observations.reserve(current_neighbors.size() * 2U);
+  for (const auto &[identity, neighbors] : current_neighbors) {
+    const auto center = result.eligible_nodes.find(identity);
+    if (center != result.eligible_nodes.end()) {
+      next_node_observations.emplace(identity, center->second);
+    }
+    for (const auto &neighbor_identity : neighbors) {
+      const auto neighbor = result.eligible_nodes.find(neighbor_identity);
+      if (neighbor != result.eligible_nodes.end()) {
+        next_node_observations.emplace(neighbor_identity, neighbor->second);
+      }
+    }
+  }
+  previous_node_observations_ = std::move(next_node_observations);
   previous_node_neighbors_ = std::move(current_neighbors);
   return states;
 }
@@ -1170,11 +1201,25 @@ void TopologicalGridNode::publishResult(
   auto structural_voxelization_options = voxelization_options_;
   structural_voxelization_options.excluded_labels.erase(
     ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN);
+  GridCellSet safe_terrain_required_cells;
+  temporal_filter_->appendTrackedCells(safe_terrain_required_cells);
   const auto assignment_started = std::chrono::steady_clock::now();
   auto result = voxelizeNodes(
-    map, grid_spec_, structural_voxelization_options, &input_point_counts);
+    map, grid_spec_, structural_voxelization_options, &input_point_counts,
+    &safe_terrain_required_cells);
   applyNormalDriftScores(map, result);
-  const auto local_structure_states = buildLocalStructureStates(map, result);
+  NodeIdentitySet evaluation_identities;
+  evaluation_identities.reserve(result.label_voxels.size());
+  for (const auto &voxel : result.label_voxels) {
+    for (const auto &observation : voxel.node_observations) {
+      if (observation.label != ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN) {
+        evaluation_identities.insert(observation.identity);
+      }
+    }
+  }
+  temporal_filter_->appendTrackedNodeIdentities(evaluation_identities);
+  const auto local_structure_states = buildLocalStructureStates(
+    map, result, evaluation_identities);
   const double assignment_ms = std::chrono::duration<double, std::milli>(
     std::chrono::steady_clock::now() - assignment_started).count();
   double temporal_elapsed_seconds = 0.0;
@@ -1221,6 +1266,18 @@ void TopologicalGridNode::publishResult(
   const auto isolated_temporal_decay_count = static_cast<std::size_t>(std::count_if(
     stable_voxels.begin(), stable_voxels.end(),
     [](const LabeledGridVoxel &voxel) {return voxel.isolated_temporal_decay_applied;}));
+  double triangle_topology_ms = 0.0;
+  bool triangle_topology_rebuilt = false;
+  std::size_t triangle_topology_cycle_count = 0U;
+  const std::vector<std::array<std::size_t, 3>> *triangle_indices = nullptr;
+  if (triangle_inference_options_.enabled) {
+    const auto triangle_topology_started = std::chrono::steady_clock::now();
+    triangle_indices = &triangle_topology_cache_.update(map);
+    triangle_topology_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - triangle_topology_started).count();
+    triangle_topology_rebuilt = triangle_topology_cache_.wasRebuilt();
+    triangle_topology_cycle_count = triangle_indices->size();
+  }
   const auto inference_started = std::chrono::steady_clock::now();
   const auto edge_result = inferVoxelsFromStableVoxelEdges(
     map, grid_spec_, stable_voxels,
@@ -1230,7 +1287,7 @@ void TopologicalGridNode::publishResult(
   const auto triangle_result = inferVoxelsFromStableVoxelTriangles(
     map, grid_spec_, isolation_split.connected_voxels,
     structural_voxelization_options.excluded_labels,
-    triangle_inference_options_, &input_point_counts);
+    triangle_inference_options_, &input_point_counts, triangle_indices);
   const auto direct_and_edge_voxels = mergeDirectAndInferredVoxels(
     isolation_split.connected_voxels, edge_result.voxels);
   const auto combined_voxels = mergeDirectAndInferredVoxels(
@@ -1259,6 +1316,12 @@ void TopologicalGridNode::publishResult(
   std_msgs::msg::String summary_msg;
   std::ostringstream oss;
   oss << "{";
+  oss << "\"point_count_ms\":" << point_count_ms << ",";
+  oss << "\"assignment_ms\":" << assignment_ms << ",";
+  oss << "\"temporal_ms\":" << temporal_ms << ",";
+  oss << "\"triangle_topology_ms\":" << triangle_topology_ms << ",";
+  oss << "\"inference_ms\":" << inference_ms << ",";
+  oss << "\"message_ms\":" << message_ms << ",";
   oss << "\"node_count\":" << result.included_node_count << ",";
   oss << "\"input_node_count\":" << map.nodes.size() << ",";
   oss << "\"included_node_count\":" << result.included_node_count << ",";
@@ -1300,6 +1363,12 @@ void TopologicalGridNode::publishResult(
       << edge_result.duplicate_voxel_edge_count << ",";
   oss << "\"candidate_triangle_count\":"
       << triangle_result.candidate_triangle_count << ",";
+  oss << "\"triangle_topology_cycle_count\":"
+      << triangle_topology_cycle_count << ",";
+  oss << "\"triangle_topology_rebuilt\":"
+      << (triangle_topology_rebuilt ? "true" : "false") << ",";
+  oss << "\"triangle_topology_rebuild_count\":"
+      << triangle_topology_cache_.rebuildCount() << ",";
   oss << "\"accepted_triangle_count\":"
       << triangle_result.accepted_triangle_count << ",";
   oss << "\"inactive_vertex_triangle_count\":"

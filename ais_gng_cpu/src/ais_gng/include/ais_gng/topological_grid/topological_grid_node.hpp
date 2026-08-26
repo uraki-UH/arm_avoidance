@@ -43,7 +43,8 @@ private:
   GridPointCounts buildPointCounts(const sensor_msgs::msg::PointCloud2 &msg) const;
   NodeLocalStructureStates buildLocalStructureStates(
     const ais_gng_msgs::msg::TopologicalMap &map,
-    const GridVoxelizationResult &result);
+    const GridVoxelizationResult &result,
+    const NodeIdentitySet &evaluation_identities);
   GridVisibilityStates buildVisibilityStates(
     const std_msgs::msg::Header &map_header,
     const std::vector<LabeledGridVoxel> &label_voxels);
@@ -108,6 +109,7 @@ private:
   VoxelizationOptions voxelization_options_;
   EdgeInferenceOptions edge_inference_options_;
   TriangleInferenceOptions triangle_inference_options_;
+  TriangleTopologyCache triangle_topology_cache_;
   TemporalVoxelFilterConfig temporal_filter_config_;
   std::unique_ptr<TemporalVoxelFilter> temporal_filter_;
   PointActivitySchedulerConfig point_activity_config_;

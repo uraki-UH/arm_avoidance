@@ -28,7 +28,7 @@ plane_cluster_incremental_node:
 
     # 既に所属しているノードの保持・取り込み・移動で要求する法線の許容角度[deg]。
     # 種の判定用より緩くする。
-    retention_normal_alignment_deg: 50.0
+    retention_normal_alignment_deg: 70.0
 
     # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
     min_cluster_planarity: 0.45

@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -11,6 +12,8 @@ def generate_launch_description():
         DeclareLaunchArgument("source_frame_id", default_value=""),
         DeclareLaunchArgument("world_frame_id", default_value="world"),
         DeclareLaunchArgument("target_frame_id", default_value="ToPoDualArm/base_link"),
+        DeclareLaunchArgument(
+            "allow_unconnected_source_as_world", default_value="false"),
         DeclareLaunchArgument("enable_world_index", default_value="true"),
         DeclareLaunchArgument("enable_roi_query", default_value="true"),
         DeclareLaunchArgument(
@@ -46,6 +49,8 @@ def generate_launch_description():
                 "source_frame_id": LaunchConfiguration("source_frame_id"),
                 "world_frame_id": LaunchConfiguration("world_frame_id"),
                 "target_frame_id": LaunchConfiguration("target_frame_id"),
+                "allow_unconnected_source_as_world": LaunchConfiguration(
+                    "allow_unconnected_source_as_world"),
                 "enable_world_index": LaunchConfiguration("enable_world_index"),
                 "enable_roi_query": LaunchConfiguration("enable_roi_query"),
                 "world_bucket_topic": LaunchConfiguration("world_bucket_topic"),
@@ -70,8 +75,9 @@ def generate_launch_description():
                 "reachability_margin_z": LaunchConfiguration("reachability_margin_z"),
                 "max_dense_voxel_num": LaunchConfiguration("max_dense_voxel_num"),
                 "parallel_thread_num": LaunchConfiguration("parallel_thread_num"),
-                "additional_consumers_json": LaunchConfiguration(
-                    "additional_consumers_json"),
+                "additional_consumers_json": ParameterValue(
+                    LaunchConfiguration("additional_consumers_json"),
+                    value_type=str),
             }],
         ),
     ])

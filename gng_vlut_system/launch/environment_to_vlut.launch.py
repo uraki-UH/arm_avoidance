@@ -245,6 +245,8 @@ def _shared_world_index_actions(
         world_index, "enable_bucket_publish", True)) and enable_build
     parallel_thread_num = max(1, int(_value(
         world_index, "parallel_thread_num", 1)))
+    allow_unconnected_source_as_world = _is_enabled(_value(
+        environment, "allow_unconnected_source_as_world", True))
     additional_consumers_json = json.dumps([
         _additional_consumer_json(consumer) for consumer in consumers[1:]
     ], separators=(",", ":"))
@@ -261,6 +263,8 @@ def _shared_world_index_actions(
                 "source_frame_id": source_frame_id,
                 "world_frame_id": world_frame_id,
                 "target_frame_id": primary_consumer["target_frame_id"],
+                "allow_unconnected_source_as_world":
+                    allow_unconnected_source_as_world,
                 "enable_world_index": enable_build,
                 "enable_roi_query": enable_roi_query,
                 "world_bucket_topic": bucket_topic,
@@ -408,6 +412,8 @@ def _launch_setup(context, *_args, **_kwargs):
         "world_index_enable": enable_world_index_build,
         "world_index_enable_build": enable_world_index_build,
         "world_index_enable_roi_query": enable_world_index_roi_query,
+        "allow_unconnected_source_as_world": _value(
+            environment, "allow_unconnected_source_as_world", True),
         "world_index_frame_id": world_index_frame_id,
         "world_index_bucket_topic": world_index_bucket_topic,
         "world_index_enable_bucket_publish": enable_world_index_bucket_publish,

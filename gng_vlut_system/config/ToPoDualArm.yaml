@@ -76,6 +76,7 @@
       input_topic: "/camera/camera/depth/color/points"
       voxel_topic: "/ToPoDualArm/roi_voxel_ids"
       source_frame_id: ""
+      allow_unconnected_source_as_world: true
       base_frame: "base_link"
       reachability_margin_x: 0.2
       reachability_margin_y: 0.2

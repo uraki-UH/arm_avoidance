@@ -162,8 +162,11 @@ def _launch_setup(context, *_args, **_kwargs):
     if enable_world_index_build:
         voxel_source_launch = "world_index_to_voxel.launch.py"
         voxel_source_arguments.update({
-            "enable_world_index": True,
-            "enable_roi_query": enable_world_index_roi_query,
+            "enable_world_index": "true",
+            "enable_roi_query": (
+                "true" if enable_world_index_roi_query else "false"),
+            "allow_unconnected_source_as_world": LaunchConfiguration(
+                "allow_unconnected_source_as_world"),
             "world_frame_id": LaunchConfiguration("world_index_frame_id"),
             "world_bucket_topic": LaunchConfiguration("world_index_bucket_topic"),
             "enable_world_bucket_publish": LaunchConfiguration(
@@ -216,6 +219,8 @@ def generate_launch_description():
         DeclareLaunchArgument("world_index_enable", default_value="false"),
         DeclareLaunchArgument("world_index_enable_build", default_value=""),
         DeclareLaunchArgument("world_index_enable_roi_query", default_value=""),
+        DeclareLaunchArgument(
+            "allow_unconnected_source_as_world", default_value="false"),
         DeclareLaunchArgument("world_index_frame_id", default_value="world"),
         DeclareLaunchArgument(
             "world_index_bucket_topic", default_value="/world_index/buckets"),

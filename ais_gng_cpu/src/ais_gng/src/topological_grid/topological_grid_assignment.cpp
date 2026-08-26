@@ -491,6 +491,91 @@ std::size_t NodeIdentityHash::operator()(const NodeIdentity &identity) const noe
   return seed;
 }
 
+const std::vector<std::array<std::size_t, 3>> &TriangleTopologyCache::update(
+  const ais_gng_msgs::msg::TopologicalMap &map)
+{
+  if (matches(map)) {
+    was_rebuilt_ = false;
+    return triangles_;
+  }
+  rebuild(map);
+  was_rebuilt_ = true;
+  return triangles_;
+}
+
+bool TriangleTopologyCache::wasRebuilt() const noexcept
+{
+  return was_rebuilt_;
+}
+
+std::size_t TriangleTopologyCache::rebuildCount() const noexcept
+{
+  return rebuild_count_;
+}
+
+bool TriangleTopologyCache::matches(const ais_gng_msgs::msg::TopologicalMap &map) const
+{
+  if (!can_reuse_ || node_identities_.size() != map.nodes.size() || edges_ != map.edges) {
+    return false;
+  }
+  for (std::size_t index = 0; index < map.nodes.size(); ++index) {
+    if (!(node_identities_[index] == NodeIdentity{map.nodes[index].id, map.nodes[index].frame})) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void TriangleTopologyCache::rebuild(const ais_gng_msgs::msg::TopologicalMap &map)
+{
+  node_identities_.clear();
+  node_identities_.reserve(map.nodes.size());
+  std::unordered_set<NodeIdentity, NodeIdentityHash> unique_identities;
+  unique_identities.reserve(map.nodes.size());
+  can_reuse_ = true;
+  for (const auto &node : map.nodes) {
+    const NodeIdentity identity{node.id, node.frame};
+    node_identities_.push_back(identity);
+    if (!unique_identities.insert(identity).second) {
+      can_reuse_ = false;
+    }
+  }
+  edges_ = map.edges;
+
+  std::vector<std::vector<std::size_t>> adjacency(map.nodes.size());
+  for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+    const std::size_t first = static_cast<std::size_t>(map.edges[edge_index]);
+    const std::size_t second = static_cast<std::size_t>(map.edges[edge_index + 1U]);
+    if (first >= map.nodes.size() || second >= map.nodes.size() || first == second) {
+      continue;
+    }
+    adjacency[first].push_back(second);
+    adjacency[second].push_back(first);
+  }
+  for (auto &neighbors : adjacency) {
+    std::sort(neighbors.begin(), neighbors.end());
+    neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+  }
+
+  triangles_.clear();
+  for (std::size_t first = 0; first < adjacency.size(); ++first) {
+    for (const std::size_t second : adjacency[first]) {
+      if (second <= first) {
+        continue;
+      }
+      for (const std::size_t third : adjacency[first]) {
+        if (third <= second || !std::binary_search(
+            adjacency[second].begin(), adjacency[second].end(), third))
+        {
+          continue;
+        }
+        triangles_.push_back({first, second, third});
+      }
+    }
+  }
+  ++rebuild_count_;
+}
+
 namespace
 {
 
@@ -1058,6 +1143,26 @@ std::vector<GridCell> TemporalVoxelFilter::trackedVoxels() const
   return cells;
 }
 
+void TemporalVoxelFilter::appendTrackedCells(GridCellSet &cells) const
+{
+  cells.reserve(cells.size() + history_.size());
+  for (const auto &[cell, history] : history_) {
+    static_cast<void>(history);
+    cells.insert(cell);
+  }
+}
+
+void TemporalVoxelFilter::appendTrackedNodeIdentities(NodeIdentitySet &identities) const
+{
+  for (const auto &[cell, history] : history_) {
+    static_cast<void>(cell);
+    identities.reserve(identities.size() + history.last_voxel.node_observations.size());
+    for (const auto &observation : history.last_voxel.node_observations) {
+      identities.insert(observation.identity);
+    }
+  }
+}
+
 std::string gridCellToString(const GridCell &cell)
 {
   std::ostringstream oss;
@@ -1558,7 +1663,8 @@ GridVoxelizationResult voxelizeNodes(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridSpec &spec,
   const VoxelizationOptions &options,
-  const GridPointCounts *input_point_counts)
+  const GridPointCounts *input_point_counts,
+  const GridCellSet *safe_terrain_required_cells)
 {
   GridVoxelizationResult result;
   const auto shape_filter = computeUnknownShapeFilter(map, options);
@@ -1579,6 +1685,10 @@ GridVoxelizationResult voxelizeNodes(
   constexpr std::size_t kMinimumUnknownComponentCells = 4U;
   std::vector<bool> retained_nodes(map.nodes.size(), false);
   std::vector<GridCell> node_cells(map.nodes.size());
+  GridCellSet candidate_cells;
+  GridCellSet all_safe_terrain_cells;
+  candidate_cells.reserve(map.nodes.size());
+  all_safe_terrain_cells.reserve(map.nodes.size());
   for (std::size_t node_index = 0; node_index < map.nodes.size(); ++node_index) {
     const auto &node = map.nodes[node_index];
     if (options.excluded_labels.find(node.label) != options.excluded_labels.end() ||
@@ -1589,6 +1699,35 @@ GridVoxelizationResult voxelizeNodes(
     }
     retained_nodes[node_index] = true;
     node_cells[node_index] = nodeToGridCell(node, spec);
+    if (node.label == ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN) {
+      all_safe_terrain_cells.insert(node_cells[node_index]);
+    } else {
+      candidate_cells.insert(node_cells[node_index]);
+    }
+  }
+
+  GridCellSet retained_safe_terrain_cells;
+  if (safe_terrain_required_cells) {
+    retained_safe_terrain_cells = *safe_terrain_required_cells;
+    const int radius = options.neighbor_radius_m > 0.0 ?
+      std::max(1, static_cast<int>(std::ceil(options.neighbor_radius_m / spec.cell_size))) :
+      std::max(1, options.neighbor_radius_cells);
+    GridCellSet context_cells = candidate_cells;
+    context_cells.reserve(context_cells.size() + safe_terrain_required_cells->size());
+    context_cells.insert(
+      safe_terrain_required_cells->begin(), safe_terrain_required_cells->end());
+    for (const auto &cell : context_cells) {
+      for (int dx = -radius; dx <= radius; ++dx) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+          for (int dz = -radius; dz <= radius; ++dz) {
+            const GridCell neighbor{cell.x + dx, cell.y + dy, cell.z + dz};
+            if (all_safe_terrain_cells.find(neighbor) != all_safe_terrain_cells.end()) {
+              retained_safe_terrain_cells.insert(neighbor);
+            }
+          }
+        }
+      }
+    }
   }
 
   std::vector<std::vector<std::size_t>> unknown_adjacency(map.nodes.size());
@@ -1660,6 +1799,12 @@ GridVoxelizationResult voxelizeNodes(
         result.eligible_nodes.erase(identity_it);
         ambiguous_node_identities.insert(observation.identity);
       }
+    }
+    if (safe_terrain_required_cells &&
+      node.label == ais_gng_msgs::msg::TopologicalMap::SAFE_TERRAIN &&
+      retained_safe_terrain_cells.find(cell) == retained_safe_terrain_cells.end())
+    {
+      continue;
     }
     auto &accumulator = accumulators[cell];
     ++accumulator.node_count;
@@ -2038,7 +2183,8 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
   const std::vector<LabeledGridVoxel> &stable_direct_voxels,
   const std::unordered_set<std::uint8_t> &excluded_labels,
   const TriangleInferenceOptions &options,
-  const GridPointCounts *input_point_counts)
+  const GridPointCounts *input_point_counts,
+  const std::vector<std::array<std::size_t, 3>> *triangle_indices)
 {
   TriangleVoxelizationResult result;
   if (!options.enabled || map.nodes.size() < 3U) {
@@ -2051,30 +2197,22 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
     direct_cells.insert(voxel.cell);
   }
 
-  std::vector<std::unordered_set<std::size_t>> adjacency(map.nodes.size());
-  for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
-    const std::size_t lhs = static_cast<std::size_t>(map.edges[edge_index]);
-    const std::size_t rhs = static_cast<std::size_t>(map.edges[edge_index + 1U]);
-    if (lhs >= map.nodes.size() || rhs >= map.nodes.size() || lhs == rhs) {
-      continue;
-    }
-    adjacency[lhs].insert(rhs);
-    adjacency[rhs].insert(lhs);
+  TriangleTopologyCache local_topology_cache;
+  if (!triangle_indices) {
+    triangle_indices = &local_topology_cache.update(map);
   }
 
   std::unordered_map<GridCell, VoxelAccumulator, GridCellHash> inferred;
-  for (std::size_t first = 0; first < map.nodes.size(); ++first) {
-    for (const std::size_t second : adjacency[first]) {
-      if (second <= first) {
-        continue;
-      }
-      for (const std::size_t third : adjacency[first]) {
-        if (third <= second || adjacency[second].find(third) == adjacency[second].end()) {
-          continue;
-        }
-        ++result.candidate_triangle_count;
-        const std::array<const ais_gng_msgs::msg::TopologicalNode *, 3> nodes{
-          &map.nodes[first], &map.nodes[second], &map.nodes[third]};
+  for (const auto &indices : *triangle_indices) {
+    const std::size_t first = indices[0];
+    const std::size_t second = indices[1];
+    const std::size_t third = indices[2];
+    if (first >= map.nodes.size() || second >= map.nodes.size() || third >= map.nodes.size()) {
+      continue;
+    }
+    ++result.candidate_triangle_count;
+    const std::array<const ais_gng_msgs::msg::TopologicalNode *, 3> nodes{
+      &map.nodes[first], &map.nodes[second], &map.nodes[third]};
         if (std::any_of(
             nodes.begin(), nodes.end(),
             [&excluded_labels](const auto *node) {
@@ -2190,9 +2328,7 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
           ++accumulator.label_counts[triangle_label];
           ++accumulator.triangle_support_count;
         }
-      }
     }
-  }
 
   result.voxels.reserve(inferred.size());
   for (const auto &[cell, accumulator] : inferred) {

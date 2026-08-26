@@ -88,6 +88,7 @@ struct GridCellHash
 };
 
 using GridPointCounts = std::unordered_map<GridCell, std::size_t, GridCellHash>;
+using GridCellSet = std::unordered_set<GridCell, GridCellHash>;
 
 // Visibility is deliberately a small, conservative interface between the
 // depth-image front end and the temporal voxel filter.  It is not an
@@ -162,6 +163,28 @@ struct NodeIdentity
 struct NodeIdentityHash
 {
   std::size_t operator()(const NodeIdentity &identity) const noexcept;
+};
+
+using NodeIdentitySet = std::unordered_set<NodeIdentity, NodeIdentityHash>;
+
+class TriangleTopologyCache
+{
+public:
+  const std::vector<std::array<std::size_t, 3>> &update(
+    const ais_gng_msgs::msg::TopologicalMap &map);
+  bool wasRebuilt() const noexcept;
+  std::size_t rebuildCount() const noexcept;
+
+private:
+  bool matches(const ais_gng_msgs::msg::TopologicalMap &map) const;
+  void rebuild(const ais_gng_msgs::msg::TopologicalMap &map);
+
+  std::vector<NodeIdentity> node_identities_;
+  std::vector<std::uint16_t> edges_;
+  std::vector<std::array<std::size_t, 3>> triangles_;
+  bool can_reuse_ = false;
+  bool was_rebuilt_ = false;
+  std::size_t rebuild_count_ = 0;
 };
 
 struct NodeObservation
@@ -362,6 +385,8 @@ public:
   void clear();
   std::size_t trackedVoxelCount() const noexcept;
   std::vector<GridCell> trackedVoxels() const;
+  void appendTrackedCells(GridCellSet &cells) const;
+  void appendTrackedNodeIdentities(NodeIdentitySet &identities) const;
 
 private:
   struct HistorySample
@@ -424,7 +449,8 @@ GridVoxelizationResult voxelizeNodes(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridSpec &spec,
   const VoxelizationOptions &options = VoxelizationOptions{},
-  const GridPointCounts *input_point_counts = nullptr);
+  const GridPointCounts *input_point_counts = nullptr,
+  const GridCellSet *safe_terrain_required_cells = nullptr);
 
 EdgeVoxelizationResult inferVoxelsFromStableVoxelEdges(
   const ais_gng_msgs::msg::TopologicalMap &map,
@@ -440,7 +466,8 @@ TriangleVoxelizationResult inferVoxelsFromStableVoxelTriangles(
   const std::vector<LabeledGridVoxel> &stable_direct_voxels,
   const std::unordered_set<std::uint8_t> &excluded_labels,
   const TriangleInferenceOptions &options = TriangleInferenceOptions{},
-  const GridPointCounts *input_point_counts = nullptr);
+  const GridPointCounts *input_point_counts = nullptr,
+  const std::vector<std::array<std::size_t, 3>> *triangle_indices = nullptr);
 
 VoxelIsolationSplit splitVoxelsByIsolation(
   const std::vector<LabeledGridVoxel> &voxels);

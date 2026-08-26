@@ -57,6 +57,7 @@ public:
     declare_parameter<std::string>("source_frame_id", "");
     declare_parameter<std::string>("world_frame_id", "world");
     declare_parameter<std::string>("target_frame_id", "world");
+    declare_parameter<bool>("allow_unconnected_source_as_world", false);
     declare_parameter<bool>("enable_world_index", true);
     declare_parameter<bool>("enable_roi_query", true);
     declare_parameter<std::string>("world_bucket_topic", "/world_index/buckets");
@@ -86,6 +87,8 @@ public:
     source_frame_id_ = get_parameter("source_frame_id").as_string();
     world_frame_id_ = get_parameter("world_frame_id").as_string();
     target_frame_id_ = get_parameter("target_frame_id").as_string();
+    allow_unconnected_source_as_world_ =
+      get_parameter("allow_unconnected_source_as_world").as_bool();
     enable_world_index_ = get_parameter("enable_world_index").as_bool();
     enable_roi_query_ = get_parameter("enable_roi_query").as_bool();
     world_bucket_topic_ = get_parameter("world_bucket_topic").as_string();
@@ -159,7 +162,7 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "WorldIndexToVoxelNode initialized. input=%s output=%s world_index=%s roi_query=%s additional_consumer_num=%zu parallel_thread_num=%d world_bucket=%s world_frame=%s target_frame=%s bucket_size=%.3f voxel_size=%.4f accumulator=%s",
+      "WorldIndexToVoxelNode initialized. input=%s output=%s world_index=%s roi_query=%s additional_consumer_num=%zu parallel_thread_num=%d world_bucket=%s world_frame=%s target_frame=%s source_world_fallback=%s bucket_size=%.3f voxel_size=%.4f accumulator=%s",
       input_topic_.c_str(), output_topic_.c_str(),
       enable_world_index_ ? "enabled" : "disabled",
       enable_roi_query_ ? "index" : "direct",
@@ -167,7 +170,9 @@ public:
       parallel_thread_num_,
       enable_world_index_ && enable_world_bucket_publish_
         ? world_bucket_topic_.c_str() : "disabled",
-      world_frame_id_.c_str(), target_frame_id_.c_str(), world_index_->bucket_size(),
+      world_frame_id_.c_str(), target_frame_id_.c_str(),
+      allow_unconnected_source_as_world_ ? "enabled" : "disabled",
+      world_index_->bucket_size(),
       voxel_codec_.voxelSize(),
       voxel_accumulator_->uses_dense_bitmap() ? "dense_bitmap" : "hash");
   }
@@ -180,6 +185,12 @@ private:
     }
     if (msg.header.frame_id.empty() || msg.header.frame_id == "map") {
       return world_frame_id_;
+    }
+    const std::size_t namespace_pos = target_frame_id_.find_last_of('/');
+    if (namespace_pos != std::string::npos &&
+      msg.header.frame_id == target_frame_id_.substr(namespace_pos + 1))
+    {
+      return target_frame_id_;
     }
     return msg.header.frame_id;
   }
@@ -585,11 +596,17 @@ private:
 
     Eigen::Isometry3d source_to_world = Eigen::Isometry3d::Identity();
     if (!lookupTransform(world_frame_id_, source_frame, *msg, source_to_world)) {
+      if (!allow_unconnected_source_as_world_) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "world index用TF取得失敗: target=%s source=%s",
+          world_frame_id_.c_str(), source_frame.c_str());
+        return;
+      }
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "world index用TF取得失敗: target=%s source=%s",
+        "点群側TF未接続のためworld座標として処理: world=%s source=%s",
         world_frame_id_.c_str(), source_frame.c_str());
-      return;
     }
     const bool is_source_to_world_identity = isIdentityTransform(source_to_world);
     if (!enable_roi_query_) {
@@ -705,6 +722,7 @@ private:
   std::string source_frame_id_;
   std::string world_frame_id_;
   std::string target_frame_id_;
+  bool allow_unconnected_source_as_world_{false};
   std::string world_bucket_topic_;
   bool enable_world_index_{true};
   bool enable_roi_query_{true};

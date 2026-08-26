@@ -44,20 +44,15 @@ ros2 launch gng_vlut_system point_to_voxel.launch.py \
   input_topic:=/semantic_points \
   output_topic:=/topo_voxel_ids
 
-### `/dataset/points`をToPoDualArmのVLUTへ反映
-
+### 点群をToPoDualArmのVLUTへ反映
 `/dataset/points`のheader frameは`world`とし、点群のframeを強制的に
 `ToPoDualArm/base_link`として扱わない。点群時刻のTF
-`world`→`ToPoDualArm/base_link`でロボット座標系へ変換した後、2 cm voxel IDを
-VLUT入力へ渡す構成。
 
 ```bash
 # ROI voxel化、world index、occupied/danger更新の起動
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
-
-このlaunchはViewer gatewayとロボットを起動しないため、`gng_viewer_bridge.launch.py`を別terminalで起動する。
 ボクセル解像度はVLUT headerから取得するため、通常は手動指定しない。
 
 `environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
@@ -81,7 +76,6 @@ Viewer gatewayを別途起動後、Viewerのtopic一覧から次の`voxel_msgs/V
 移動ロボットでは`enable_static_tf: false`、固定設置で外部TFがない場合だけ静的TFを設定する。
 
 ### 複数robotの共有world index
-
 `config/world_index.yaml`の`consumers`へrobotごとの設定を列挙する。
 
 ```bash
@@ -416,9 +410,6 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
 
 
 必要に応じて
-source /opt/ros/humble/setup.bash
-source /ros2_ws/install/setup.bash 
-
 echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc
 echo 'source /ros2_ws/install/setup.bash' >> ~/.bashrc
 
@@ -436,7 +427,6 @@ alias sw='source /ros2_ws/install/setup.bash'
 ```bash
 sudo apt install ros-humble-rosbridge-server
 ```
-
 ### 起動手順
 ```bash
 # 1) rosbridge を起動
@@ -454,7 +444,6 @@ python3 -m http.server 8000
 ```
 
 ```text
-# 3) ブラウザで開く
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 ```
 
