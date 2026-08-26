@@ -13,7 +13,6 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <voxel_msgs/msg/voxel.hpp>
-#include <voxel_msgs/msg/voxel_label_delta.hpp>
 
 #include <Eigen/Geometry>
 
@@ -48,16 +47,6 @@ public:
       "object_voxels_topic", "/topological_grid_voxels");
     environment_voxels_topic_ = declare_parameter<std::string>(
       "environment_voxels_topic", "");
-    incremental_matching_enabled_ = declare_parameter<bool>(
-      "incremental_matching_enabled", true);
-    object_delta_topic_ = declare_parameter<std::string>("object_delta_topic", "");
-    if (object_delta_topic_.empty()) {
-      object_delta_topic_ = object_voxels_topic_ + "/delta";
-    }
-    environment_delta_topic_ = declare_parameter<std::string>("environment_delta_topic", "");
-    if (environment_delta_topic_.empty() && !environment_voxels_topic_.empty()) {
-      environment_delta_topic_ = environment_voxels_topic_ + "/delta";
-    }
     required_graph_topic_ = declare_parameter<std::string>(
       "required_graph_topic", "grip_V_topological_map");
     undersize_graph_topic_ = declare_parameter<std::string>(
@@ -144,13 +133,6 @@ public:
       [this](voxel_msgs::msg::Voxel::SharedPtr msg) {
         objectSnapshotCallback(std::move(msg));
       });
-    if (incremental_matching_enabled_) {
-      object_delta_sub_ = create_subscription<voxel_msgs::msg::VoxelLabelDelta>(
-        object_delta_topic_, rclcpp::QoS(10).reliable(),
-        [this](voxel_msgs::msg::VoxelLabelDelta::SharedPtr msg) {
-          applyDelta(*msg, true, !usesSeparateEnvironment());
-        });
-    }
     if (!environment_voxels_topic_.empty() &&
       environment_voxels_topic_ != object_voxels_topic_)
     {
@@ -159,13 +141,6 @@ public:
         [this](voxel_msgs::msg::Voxel::SharedPtr msg) {
           environmentSnapshotCallback(std::move(msg));
         });
-      if (incremental_matching_enabled_) {
-        environment_delta_sub_ = create_subscription<voxel_msgs::msg::VoxelLabelDelta>(
-          environment_delta_topic_, rclcpp::QoS(10).reliable(),
-          [this](voxel_msgs::msg::VoxelLabelDelta::SharedPtr msg) {
-            applyDelta(*msg, false, true);
-          });
-      }
     }
 
     required_graph_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
@@ -218,9 +193,8 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Grasp voxel matcher ready: objects=%s delta=%s environment=%s required=%s undersize=%s forbidden=%s map=%s planes=%s depth=%s camera_info=%s orientations=%zu period=%dms incremental=%s",
+      "Grasp voxel matcher ready: objects=%s environment=%s required=%s undersize=%s forbidden=%s map=%s planes=%s depth=%s camera_info=%s orientations=%zu period=%dms",
       object_voxels_topic_.c_str(),
-      object_delta_topic_.c_str(),
       environment_voxels_topic_.empty() ? "<object voxels>" : environment_voxels_topic_.c_str(),
       required_graph_topic_.c_str(),
       undersize_graph_topic_.empty() ? "<disabled>" : undersize_graph_topic_.c_str(),
@@ -229,8 +203,7 @@ public:
       planar_clusters_topic_.empty() ? "<disabled>" : planar_clusters_topic_.c_str(),
       enable_depth_visibility_ ? depth_topic_.c_str() : "<disabled>",
       enable_depth_visibility_ ? camera_info_topic_.c_str() : "<disabled>",
-      orientations_.size(), update_period_ms,
-      incremental_matching_enabled_ ? "enabled" : "disabled");
+      orientations_.size(), update_period_ms);
   }
 
 private:
@@ -457,27 +430,13 @@ private:
     object_voxels_ = std::move(msg);
     surface_normals_dirty_ = true;
     planar_collision_dirty_ = true;
-    if (!incremental_matching_enabled_ || object_voxels_->revision == 0U ||
-      !object_snapshot_initialized_ ||
-      object_voxels_->revision < object_revision_ ||
-      object_voxels_->revision > object_revision_ + 1U)
-    {
-      object_snapshot_needs_reset_ = true;
-      dirty_ = true;
-    }
+    dirty_ = true;
   }
 
   void environmentSnapshotCallback(voxel_msgs::msg::Voxel::SharedPtr msg)
   {
     environment_voxels_ = std::move(msg);
-    if (!incremental_matching_enabled_ || environment_voxels_->revision == 0U ||
-      !environment_snapshot_initialized_ ||
-      environment_voxels_->revision < environment_revision_ ||
-      environment_voxels_->revision > environment_revision_ + 1U)
-    {
-      environment_snapshot_needs_reset_ = true;
-      dirty_ = true;
-    }
+    dirty_ = true;
   }
 
   static voxel_idx::VoxelIndexingSchema makeIndexing(
@@ -497,78 +456,6 @@ private:
       throw std::invalid_argument("voxel message has an invalid indexing schema");
     }
     return indexing;
-  }
-
-  void applyDelta(
-    const voxel_msgs::msg::VoxelLabelDelta &msg,
-    bool update_target,
-    bool update_collision)
-  {
-    constexpr std::uint8_t kAbsentLabel = 255U;
-    try {
-      if (msg.revision == 0U || msg.data.size() != msg.old_labels.size() ||
-        msg.data.size() != msg.new_labels.size())
-      {
-        throw std::invalid_argument("voxel delta fields are not aligned");
-      }
-      if (!incremental_matcher_ ||
-        (update_target && (!object_snapshot_initialized_ || object_snapshot_needs_reset_)) ||
-        (update_collision && usesSeparateEnvironment() &&
-        (!environment_snapshot_initialized_ || environment_snapshot_needs_reset_)))
-      {
-        dirty_ = true;
-        return;
-      }
-
-      std::uint32_t &last_revision = update_target ? object_revision_ : environment_revision_;
-      if (msg.revision <= last_revision) {
-        return;
-      }
-      if (msg.revision != last_revision + 1U) {
-        if (update_target) {
-          object_snapshot_needs_reset_ = true;
-        }
-        if (update_collision && usesSeparateEnvironment()) {
-          environment_snapshot_needs_reset_ = true;
-        }
-        dirty_ = true;
-        return;
-      }
-
-      const auto indexing = makeIndexing(
-        msg.voxel_size, msg.x_shift, msg.y_shift, msg.z_shift, msg.offset);
-      bool occupancy_changed = false;
-      for (std::size_t index = 0; index < msg.data.size(); ++index) {
-        const auto cell = indexing.unpack(static_cast<std::uint64_t>(msg.data[index]));
-        const bool old_occupied = msg.old_labels[index] != kAbsentLabel;
-        const bool new_occupied = msg.new_labels[index] != kAbsentLabel;
-        if (update_target) {
-          occupancy_changed = incremental_matcher_->applyTargetDelta(
-            cell, old_occupied, new_occupied) || occupancy_changed;
-        }
-        if (update_collision) {
-          const bool is_planar_collision =
-            planar_collision_cells_.find(cell) != planar_collision_cells_.end();
-          occupancy_changed = incremental_matcher_->applyCollisionDelta(
-            cell, old_occupied || is_planar_collision,
-            new_occupied || is_planar_collision) || occupancy_changed;
-        }
-      }
-      last_revision = msg.revision;
-      dirty_ = dirty_ || occupancy_changed;
-    } catch (const std::exception &error) {
-      if (update_target) {
-        object_snapshot_needs_reset_ = true;
-      }
-      if (update_collision && usesSeparateEnvironment()) {
-        environment_snapshot_needs_reset_ = true;
-      }
-      dirty_ = true;
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "Incremental voxel update discarded; a full snapshot will resynchronize: %s",
-        error.what());
-    }
   }
 
   static std::unique_ptr<candidate::OccupiedVoxelGrid> makeGrid(
@@ -933,7 +820,6 @@ private:
       const auto depth_visibility_filter = enable_depth_visibility_ ?
         makeDepthVisibilityFilter(*object_voxels_, findMatchingDepthImage(*object_voxels_)) :
         candidate::GraspVoxelMatcher::CandidateFilter{};
-      bool template_rebuilt = false;
       if (!compiled_template_ || template_dirty_ ||
         std::abs(compiled_template_->voxel_size - object_voxels_->voxel_size) > 1e-9)
       {
@@ -960,50 +846,15 @@ private:
           candidate::GraspVoxelMatcher::compile(
             grasp_template, orientations_, object_voxels_->voxel_size));
         template_dirty_ = false;
-        template_rebuilt = true;
       }
-      const bool incremental_stream = incremental_matching_enabled_ &&
-        object_voxels_->revision != 0U &&
-        (!usesSeparateEnvironment() || environment_msg->revision != 0U);
-      bool incremental_active = false;
-      std::size_t object_voxel_count = 0;
+      auto target_grid = makeGrid(*object_voxels_);
+      auto collision_grid = makeCollisionGrid(*environment_msg);
+      auto result = candidate::GraspVoxelMatcher::match(
+        *target_grid, *collision_grid, *compiled_template_, match_config_,
+        depth_visibility_filter);
+      const std::size_t object_voxel_count = target_grid->size();
       const std::size_t environment_voxel_count = environment_msg->data.size();
-      std::size_t collision_voxel_count = 0;
-      candidate::GraspVoxelMatchResult result;
-      if (incremental_stream) {
-        if (!incremental_matcher_ || template_rebuilt || planar_collision_changed ||
-          object_snapshot_needs_reset_ ||
-          (usesSeparateEnvironment() && environment_snapshot_needs_reset_))
-        {
-          auto target_grid = makeGrid(*object_voxels_);
-          auto collision_grid = makeCollisionGrid(*environment_msg);
-          incremental_matcher_ = std::make_unique<candidate::IncrementalGraspVoxelMatcher>(
-            target_grid->geometry(), *compiled_template_, match_config_);
-          incremental_matcher_->reset(*target_grid, *collision_grid);
-          object_revision_ = object_voxels_->revision;
-          object_snapshot_initialized_ = true;
-          object_snapshot_needs_reset_ = false;
-          if (usesSeparateEnvironment()) {
-            environment_revision_ = environment_msg->revision;
-            environment_snapshot_initialized_ = true;
-            environment_snapshot_needs_reset_ = false;
-          } else {
-            environment_revision_ = object_revision_;
-          }
-        }
-        result = incremental_matcher_->match(depth_visibility_filter);
-        object_voxel_count = incremental_matcher_->targetVoxelCount();
-        collision_voxel_count = incremental_matcher_->collisionVoxelCount();
-        incremental_active = true;
-      } else {
-        auto target_grid = makeGrid(*object_voxels_);
-        auto collision_grid = makeCollisionGrid(*environment_msg);
-        result = candidate::GraspVoxelMatcher::match(
-          *target_grid, *collision_grid, *compiled_template_, match_config_,
-          depth_visibility_filter);
-        object_voxel_count = target_grid->size();
-        collision_voxel_count = collision_grid->size();
-      }
+      const std::size_t collision_voxel_count = collision_grid->size();
       const candidate::VoxelGridGeometry geometry{
         object_voxels_->voxel_size,
         Eigen::Vector3d(
@@ -1026,16 +877,16 @@ private:
       publishCandidateVoxels(result);
       publishSummary(
         result, object_voxel_count, environment_voxel_count, collision_voxel_count,
-        calc_ms, incremental_active);
+        calc_ms);
       const double pub_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - pub_started).count();
       const double total_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - started).count();
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 2000,
-        "Grasp voxel match: objects=%zu anchors=%zu poses=%zu changed_states=%zu accepted=%zu calc=%.2fms pub=%.2fms total=%.2fms",
+        "Grasp voxel match: objects=%zu anchors=%zu poses=%zu accepted=%zu calc=%.2fms pub=%.2fms total=%.2fms",
         object_voxel_count,
-        result.anchors_considered, result.poses_evaluated, result.candidate_states_updated,
+        result.anchors_considered, result.poses_evaluated,
         result.candidates.size(), calc_ms, pub_ms, total_ms);
     } catch (const std::exception &error) {
       if (enable_depth_visibility_) {
@@ -1096,8 +947,7 @@ private:
     std::size_t object_voxel_count,
     std::size_t environment_voxel_count,
     std::size_t collision_voxel_count,
-    double processing_ms,
-    bool incremental_active)
+    double processing_ms)
   {
     std_msgs::msg::String msg;
     std::ostringstream stream;
@@ -1105,13 +955,9 @@ private:
            << ",\"object_voxel_count\":" << object_voxel_count
            << ",\"environment_voxel_count\":" << environment_voxel_count
            << ",\"collision_voxel_count\":" << collision_voxel_count
-           << ",\"matching_mode\":\""
-           << (incremental_active ? "incremental" : "full") << "\""
            << ",\"orientation_count\":" << orientations_.size()
            << ",\"anchors_considered\":" << result.anchors_considered
            << ",\"poses_evaluated\":" << result.poses_evaluated
-           << ",\"candidate_states_tracked\":" << result.candidate_states_tracked
-           << ",\"candidate_states_updated\":" << result.candidate_states_updated
            << ",\"raw_candidate_num\":" << result.raw_candidate_num
            << ",\"candidate_cell_num\":" << result.candidate_cell_num
            << ",\"suppressed_same_tcp_cell_num\":"
@@ -1205,8 +1051,6 @@ private:
 
   std::string object_voxels_topic_;
   std::string environment_voxels_topic_;
-  std::string object_delta_topic_;
-  std::string environment_delta_topic_;
   std::string required_graph_topic_;
   std::string undersize_graph_topic_;
   std::string forbidden_graph_topic_;
@@ -1217,13 +1061,8 @@ private:
   candidate::GraspVoxelMatchConfig match_config_;
   Eigen::Vector3d contact_closing_axis_ = Eigen::Vector3d::UnitY();
   std::vector<Eigen::Quaterniond> orientations_;
-  bool incremental_matching_enabled_ = true;
   bool dirty_ = true;
   bool template_dirty_ = true;
-  bool object_snapshot_initialized_ = false;
-  bool environment_snapshot_initialized_ = false;
-  bool object_snapshot_needs_reset_ = true;
-  bool environment_snapshot_needs_reset_ = true;
   bool surface_normals_dirty_ = true;
   bool planar_collision_dirty_ = true;
   bool has_surface_normal_context_ = false;
@@ -1231,13 +1070,10 @@ private:
   bool has_planar_collision_context_ = false;
   bool enable_depth_visibility_ = true;
   bool is_depth_dirty_ = true;
-  std::uint32_t object_revision_ = 0;
-  std::uint32_t environment_revision_ = 0;
   std::size_t surface_normal_cell_num_ = 0;
   std::size_t planar_collision_cell_num_ = 0;
   std::size_t max_depth_cache_num_ = 0;
   std::unique_ptr<candidate::CompiledGraspVoxelTemplate> compiled_template_;
-  std::unique_ptr<candidate::IncrementalGraspVoxelMatcher> incremental_matcher_;
   std::unique_ptr<candidate::VoxelSurfaceNormalGrid> surface_normals_;
   std::unordered_set<candidate::VoxelIndex, candidate::VoxelIndexHash> planar_collision_cells_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -1255,8 +1091,6 @@ private:
 
   rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr object_voxels_sub_;
   rclcpp::Subscription<voxel_msgs::msg::Voxel>::SharedPtr environment_voxels_sub_;
-  rclcpp::Subscription<voxel_msgs::msg::VoxelLabelDelta>::SharedPtr object_delta_sub_;
-  rclcpp::Subscription<voxel_msgs::msg::VoxelLabelDelta>::SharedPtr environment_delta_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr required_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr undersize_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr forbidden_graph_sub_;

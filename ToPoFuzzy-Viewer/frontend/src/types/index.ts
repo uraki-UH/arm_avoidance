@@ -293,6 +293,7 @@ export interface VoxelData {
     labels?: number[];
     layout: VoxelLayout;
     frameId?: string;
+    sequence?: number;
     visible?: boolean;
 }
 

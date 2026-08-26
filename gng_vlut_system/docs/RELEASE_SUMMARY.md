@@ -88,10 +88,10 @@
 グリッパ体積3graphの独立ゲートで把持候補TCP Poseを照合する。
 
 - **ゲート**: `grip_V`＝必須占有、`grip_minV`＝最小体積外の支持、`grip_baseV`＝禁止領域衝突
-- **物体候補の主topic**: 直接観測・GNG edge補間・3-edge cycleからの三角形面の**和集合**。各推定由来だけのtopicも別途publishする
+- **物体候補の主topic**: 直接観測・GNG edge補間・3-edge cycleからの三角形面の**和集合**
 - **孤立セル**: 26近傍を持たない直接観測セルは主topicから除外し、`<output_topic>/isolated` だけへ出す（Viewerでは赤で初期表示）
 - **履歴**: 各セルが直近100同期更新の非除外label出現回数と点群input更新回数を独立に保持する。連続観測は要求しない
-- **増分更新**: `voxel_msgs/Voxel` の `revision` と `voxel_msgs/VoxelLabelDelta` により、初期snapshot後は変更セルだけを反映する。revision 0 は既存publisher互換の未管理streamとして従来どおり全量照合する
+- **更新方式**: `voxel_msgs/Voxel` の全量snapshotで候補を再評価する
 - **既定の処理上限**: 500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補
 - **セルサイズ**: launch・ノード・共通グリッド定義とも `0.01 m` に統一
 
@@ -191,7 +191,6 @@ AMD GPUでのWebGLコンテキスト喪失を再発させない既定値に収�
 | `/ToPoDualArm/{L,R}_grip_minV_topological_map` | `TopologicalMap` | 最小把持領域 |
 | `/ToPoDualArm/{L,R}_grip_baseV_topological_map` | `TopologicalMap` | 基部禁止領域 |
 | `/ToPoDualArm/grasp_state` / `grasp_state_applied` | `GraspState` | 把持指示と適用済み状態 |
-| `<output_topic>/delta` | `VoxelLabelDelta` | 物体候補ボクセルの差分 |
 | `<output_topic>/isolated` | `Voxel` | 把持候補から除外した孤立セル |
 | `/evaluation_metrics` | `EvaluationMetrics` | schema revision 5 |
 | matcher出力 | `PoseArray` + `String` | 候補TCP PoseとJSON summary |

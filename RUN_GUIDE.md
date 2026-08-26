@@ -421,3 +421,7 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   trial_mode:=true \
   trial_safe_only:=true
+
+
+すべてのプロセスをキル　frontendを除く
+./scripts/stop_ros2_stack.sh

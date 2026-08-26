@@ -117,12 +117,13 @@ services:
 
   # npm run devをdockerで実行する用
   frontend:
-    image: gng_cpu:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: topofuzzy_frontend:latest
     container_name: frontend
     profiles:
       - manual
-    depends_on:
-      - gng_cpu
     tty: true
     stdin_open: true
     network_mode: host

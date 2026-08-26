@@ -12,7 +12,6 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <voxel_msgs/msg/voxel.hpp>
-#include <voxel_msgs/msg/voxel_label_delta.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -55,8 +54,6 @@ private:
     const std_msgs::msg::Header &header,
     const std::vector<LabeledGridVoxel> &voxels,
     std::uint32_t revision) const;
-  voxel_msgs::msg::VoxelLabelDelta buildVoxelDelta(
-    const voxel_msgs::msg::Voxel &voxel_msg);
   bool headersMatch(
     const std_msgs::msg::Header &map_header,
     const std_msgs::msg::Header &pointcloud_header) const;
@@ -66,10 +63,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_image_sub_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr voxel_pub_;
-  rclcpp::Publisher<voxel_msgs::msg::VoxelLabelDelta>::SharedPtr voxel_delta_pub_;
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr isolated_voxel_pub_;
-  rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr edge_inferred_pub_;
-  rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr triangle_inferred_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr assignment_detail_pub_;
   rclcpp::TimerBase::SharedPtr pointcloud_watchdog_;
@@ -77,10 +71,7 @@ private:
   std::string input_topic_;
   std::string pointcloud_topic_;
   std::string output_topic_;
-  std::string delta_topic_;
   std::string isolated_topic_;
-  std::string edge_inferred_topic_;
-  std::string triangle_inferred_topic_;
   std::string summary_topic_;
   std::string assignment_detail_topic_;
   std::string depth_topic_;
@@ -176,7 +167,6 @@ private:
     std::size_t unknown_count = 0;
   };
   VisibilityStats last_visibility_stats_;
-  std::unordered_map<std::int64_t, std::uint8_t> last_published_labels_;
 };
 
 }  // namespace fuzzrobo::topological_grid

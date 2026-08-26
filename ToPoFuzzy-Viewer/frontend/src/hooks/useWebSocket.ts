@@ -112,6 +112,32 @@ type QueuedVoxelUpdate = {
     voxel: VoxelData;
 };
 
+type VoxelStreamSnapshot = {
+    voxels: Map<string, number>;
+    hasLabels: boolean;
+    layout: VoxelData['layout'];
+    frameId?: string;
+    sequence: number;
+};
+
+function materializeVoxelSnapshot(
+    tag: string,
+    snapshot: VoxelStreamSnapshot
+): VoxelData {
+    const entries = Array.from(snapshot.voxels.entries());
+    return {
+        id: tag,
+        tag,
+        data: entries.map(([voxelId]) => voxelId),
+        labels: snapshot.hasLabels
+            ? entries.map(([, label]) => label)
+            : undefined,
+        layout: snapshot.layout,
+        frameId: snapshot.frameId,
+        sequence: snapshot.sequence,
+    };
+}
+
 type QueuedRobotPoseUpdate = {
     tag: string;
     robot: RobotData;
@@ -663,6 +689,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
+    const voxelStreamSnapshotsRef = useRef<Map<string, VoxelStreamSnapshot>>(new Map());
     const pendingRobotPoseUpdatesRef = useRef<Map<string, QueuedRobotPoseUpdate>>(new Map());
     const pendingPointCloudUpdatesRef = useRef<Map<string, QueuedPointCloudUpdate>>(new Map());
     const flushScheduledRef = useRef<number | null>(null);
@@ -980,20 +1007,77 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             scheduleStreamFlush();
                         },
                         'stream.voxel': (p) => {
-                            if (p.data) {
-                                pendingVoxelUpdatesRef.current.set(tag, {
-                                    tag,
-                                    voxel: {
-                                        id: tag,
-                                        tag,
-                                        data: p.data,
-                                        labels: Array.isArray(p.labels) ? p.labels : undefined,
-                                        layout: p.layout,
-                                        frameId: p.frameId,
-                                    } as VoxelData,
-                                });
-                                scheduleStreamFlush();
+                            if (!Array.isArray(p.data) || !p.layout) return;
+                            const hasLabels =
+                                Array.isArray(p.labels) &&
+                                p.labels.length === p.data.length;
+                            const voxels = new Map<string, number>();
+                            p.data.forEach((voxelId: unknown, index: number) => {
+                                if (typeof voxelId !== 'string') return;
+                                voxels.set(
+                                    voxelId,
+                                    hasLabels ? Number(p.labels[index]) : 0
+                                );
+                            });
+                            const snapshot: VoxelStreamSnapshot = {
+                                voxels,
+                                hasLabels,
+                                layout: p.layout,
+                                frameId: typeof p.frameId === 'string'
+                                    ? p.frameId
+                                    : undefined,
+                                sequence: Number.isSafeInteger(p.sequence)
+                                    ? Number(p.sequence)
+                                    : 0,
+                            };
+                            voxelStreamSnapshotsRef.current.set(tag, snapshot);
+                            pendingVoxelUpdatesRef.current.set(tag, {
+                                tag,
+                                voxel: materializeVoxelSnapshot(tag, snapshot),
+                            });
+                            scheduleStreamFlush();
+                        },
+                        'stream.voxel.delta': (p) => {
+                            if (!Array.isArray(p.added) || !Array.isArray(p.removed)) {
+                                return;
                             }
+                            const snapshot = voxelStreamSnapshotsRef.current.get(tag);
+                            const sequence = Number(p.sequence);
+                            if (
+                                !snapshot ||
+                                !Number.isSafeInteger(sequence) ||
+                                sequence !== snapshot.sequence + 1
+                            ) {
+                                voxelStreamSnapshotsRef.current.delete(tag);
+                                pendingVoxelUpdatesRef.current.delete(tag);
+                                socket.send(JSON.stringify({ type: 'request.state' }));
+                                return;
+                            }
+                            const labels = Array.isArray(p.labels) ? p.labels : [];
+                            if (snapshot.hasLabels && labels.length !== p.added.length) {
+                                voxelStreamSnapshotsRef.current.delete(tag);
+                                pendingVoxelUpdatesRef.current.delete(tag);
+                                socket.send(JSON.stringify({ type: 'request.state' }));
+                                return;
+                            }
+                            for (const voxelId of p.removed) {
+                                if (typeof voxelId === 'string') {
+                                    snapshot.voxels.delete(voxelId);
+                                }
+                            }
+                            p.added.forEach((voxelId: unknown, index: number) => {
+                                if (typeof voxelId !== 'string') return;
+                                snapshot.voxels.set(
+                                    voxelId,
+                                    snapshot.hasLabels ? Number(labels[index]) : 0
+                                );
+                            });
+                            snapshot.sequence = sequence;
+                            pendingVoxelUpdatesRef.current.set(tag, {
+                                tag,
+                                voxel: materializeVoxelSnapshot(tag, snapshot),
+                            });
+                            scheduleStreamFlush();
                         },
                         'stream.tf': (p) => {
                             if (Array.isArray(p.transforms)) {
@@ -1015,6 +1099,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             if (!targetId) return;
                             pendingPointCloudUpdatesRef.current.delete(targetId);
                             pendingVoxelUpdatesRef.current.delete(targetId);
+                            voxelStreamSnapshotsRef.current.delete(targetId);
                             setPointClouds(prev => {
                                 const next = { ...prev };
                                 delete next[targetId];
@@ -1063,6 +1148,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
+                voxelStreamSnapshotsRef.current.clear();
                 pendingRobotPoseUpdatesRef.current.clear();
                 pendingPointCloudUpdatesRef.current.clear();
                 if (flushScheduledRef.current !== null) {

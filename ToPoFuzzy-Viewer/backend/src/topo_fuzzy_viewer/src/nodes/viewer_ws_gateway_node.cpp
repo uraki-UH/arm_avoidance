@@ -39,6 +39,13 @@ using json = nlohmann::json;
 struct PerSocketData {};
 using WebSocket = uWS::WebSocket<false, true, PerSocketData>;
 
+struct VoxelStreamState {
+    voxel_msgs::msg::Voxel::SharedPtr latest;
+    std::unordered_map<std::int64_t, std::uint8_t> labels;
+    bool has_labels = false;
+    std::uint64_t sequence = 0;
+};
+
 namespace topic_utils {
     bool isInternal(const std::string& t) { 
         if (t.find("/viewer/") == 0) return true; // Hide ALL internal viewer topics
@@ -174,19 +181,39 @@ namespace converter {
         return {{"type", "stream.tf"}, {"transforms", tfs}};
     }
 
-    //idからボクセルを復元して可視化する
-    json to_json(const voxel_msgs::msg::Voxel::SharedPtr msg, const std::string& tag) {
+    json voxel_layout_to_json(const voxel_msgs::msg::Voxel& msg) {
+        return {{"voxelSize", std::round(msg.voxel_size * 10000.0) / 10000.0},
+                {"originX", msg.origin_x}, {"originY", msg.origin_y},
+                {"originZ", msg.origin_z}, {"xShift", msg.x_shift},
+                {"yShift", msg.y_shift}, {"zShift", msg.z_shift},
+                {"offset", msg.offset}};
+    }
+
+    // IDからボクセルを復元するための初期スナップショット
+    json to_json(const voxel_msgs::msg::Voxel::SharedPtr msg, const std::string& tag,
+                 std::uint64_t sequence) {
         json ids = json::array(); for (auto id : msg->data) ids.push_back(std::to_string(id));
         json labels = json::array();
         if (msg->labels.size() == msg->data.size()) {
             for (auto label : msg->labels) labels.push_back(label);
         }
-        return {{"type", "stream.voxel"}, {"tag", tag}, {"data", ids}, {"labels", labels}, {"frameId", msg->header.frame_id},
-                {"layout", {{"voxelSize", std::round(msg->voxel_size * 10000.0) / 10000.0}, 
-                            {"originX", msg->origin_x},
-                            {"originY", msg->origin_y},
-                            {"originZ", msg->origin_z},
-                            {"xShift", msg->x_shift}, {"yShift", msg->y_shift}, {"zShift", msg->z_shift}, {"offset", msg->offset}}}};
+        return {{"type", "stream.voxel"}, {"tag", tag}, {"data", ids},
+                {"labels", labels}, {"frameId", msg->header.frame_id},
+                {"sequence", sequence}, {"layout", voxel_layout_to_json(*msg)}};
+    }
+
+    json voxel_delta_to_json(
+        const std::string& tag, std::uint64_t sequence,
+        const std::vector<std::int64_t>& added,
+        const std::vector<std::uint8_t>& labels,
+        const std::vector<std::int64_t>& removed) {
+        json added_ids = json::array();
+        for (const auto id : added) added_ids.push_back(std::to_string(id));
+        json removed_ids = json::array();
+        for (const auto id : removed) removed_ids.push_back(std::to_string(id));
+        return {{"type", "stream.voxel.delta"}, {"tag", tag},
+                {"sequence", sequence}, {"added", std::move(added_ids)},
+                {"labels", labels}, {"removed", std::move(removed_ids)}};
     }
 }
 
@@ -538,7 +565,11 @@ private:
                     activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
                 } else if (st == "voxel") {
                     activeSubTypes_[sid] = "voxel";
-                    activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
+                    {
+                        std::lock_guard<std::mutex> voxel_lock(voxelMutex_);
+                        voxelStreamStates_.erase(sid);
+                    }
+                    activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { handleVoxelData(m, sid); });
                 }
                 active_source_publisher_signatures_[sid] = publisher_signature(sid);
                 }
@@ -550,6 +581,8 @@ private:
                     active_source_publisher_signatures_.erase(sid);
                     std::lock_guard<std::mutex> point_cloud_lock(pointCloudRateMutex_);
                     lastPointCloudForwardTime_.erase(sid);
+                    std::lock_guard<std::mutex> voxel_lock(voxelMutex_);
+                    voxelStreamStates_.erase(sid);
                 }
             }
         }
@@ -643,6 +676,75 @@ private:
 
     void broadcastText(const std::string& payload) { auto s = std::make_shared<std::string>(payload); loop_->defer([this, s]() { std::lock_guard<std::mutex> l(connectionMutex_); for (auto* ws : connections_) ws->send(*s, uWS::OpCode::TEXT); }); }
 
+    static bool voxelLayoutMatches(
+        const voxel_msgs::msg::Voxel& lhs,
+        const voxel_msgs::msg::Voxel& rhs) {
+        return lhs.header.frame_id == rhs.header.frame_id &&
+               lhs.voxel_size == rhs.voxel_size &&
+               lhs.origin_x == rhs.origin_x && lhs.origin_y == rhs.origin_y &&
+               lhs.origin_z == rhs.origin_z && lhs.x_shift == rhs.x_shift &&
+               lhs.y_shift == rhs.y_shift && lhs.z_shift == rhs.z_shift &&
+               lhs.offset == rhs.offset;
+    }
+
+    void handleVoxelData(
+        const voxel_msgs::msg::Voxel::SharedPtr msg,
+        const std::string& tag) {
+        const bool has_labels = msg->labels.size() == msg->data.size();
+        std::unordered_map<std::int64_t, std::uint8_t> current;
+        current.reserve(msg->data.size());
+        for (std::size_t i = 0; i < msg->data.size(); ++i) {
+            current.insert_or_assign(msg->data[i], has_labels ? msg->labels[i] : 0U);
+        }
+
+        std::string payload;
+        {
+            std::lock_guard<std::mutex> lock(voxelMutex_);
+            auto& state = voxelStreamStates_[tag];
+            const bool requires_snapshot =
+                !state.latest || state.has_labels != has_labels ||
+                !voxelLayoutMatches(*state.latest, *msg);
+            if (requires_snapshot) {
+                state.latest = msg;
+                state.labels = std::move(current);
+                state.has_labels = has_labels;
+                ++state.sequence;
+                payload = converter::to_json(msg, tag, state.sequence).dump();
+            } else {
+                std::vector<std::int64_t> added;
+                std::vector<std::int64_t> removed;
+                std::vector<std::uint8_t> labels;
+                added.reserve(current.size());
+                removed.reserve(state.labels.size());
+                if (has_labels) labels.reserve(current.size());
+
+                for (const auto& [voxel_id, label] : current) {
+                    const auto previous = state.labels.find(voxel_id);
+                    if (previous == state.labels.end() || previous->second != label) {
+                        added.push_back(voxel_id);
+                        if (has_labels) labels.push_back(label);
+                    }
+                }
+                for (const auto& [voxel_id, label] : state.labels) {
+                    (void)label;
+                    if (current.find(voxel_id) == current.end()) {
+                        removed.push_back(voxel_id);
+                    }
+                }
+
+                state.latest = msg;
+                if (added.empty() && removed.empty()) {
+                    return;
+                }
+                state.labels = std::move(current);
+                ++state.sequence;
+                payload = converter::voxel_delta_to_json(
+                    tag, state.sequence, added, labels, removed).dump();
+            }
+        }
+        broadcastText(payload);
+    }
+
     void broadcastLatestRobotPose(const std::string& payload) {
         bool schedule_flush = false;
         {
@@ -688,6 +790,10 @@ private:
             lastGraphPayloads_.erase(id);
         }
         {
+            std::lock_guard<std::mutex> lock(voxelMutex_);
+            voxelStreamStates_.erase(id);
+        }
+        {
             std::lock_guard<std::mutex> l(nodeFeatureMutex_);
             lastNodeFeaturePayloads_.erase(id);
         }
@@ -704,11 +810,19 @@ private:
         std::lock_guard<std::mutex> l4(robotMutex_);
         std::lock_guard<std::mutex> l5(markerMutex_);
         std::lock_guard<std::mutex> l6(tfMutex_);
+        std::lock_guard<std::mutex> l7(voxelMutex_);
         for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastNodeFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastClusterFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastMarkerPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
+        for (auto& [tag, state] : voxelStreamStates_) {
+            if (state.latest) {
+                ws->send(
+                    converter::to_json(state.latest, tag, state.sequence).dump(),
+                    uWS::OpCode::TEXT);
+            }
+        }
         if (!lastStaticTfPayload_.empty()) ws->send(lastStaticTfPayload_, uWS::OpCode::TEXT);
     }
 
@@ -758,6 +872,10 @@ private:
         {
             std::lock_guard<std::mutex> lock(pointCloudRateMutex_);
             lastPointCloudForwardTime_.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(voxelMutex_);
+            voxelStreamStates_.clear();
         }
     }
     void handleRobotData(const std_msgs::msg::String::SharedPtr msg, bool is_desc) {
@@ -900,7 +1018,8 @@ private:
     std::string lastStaticTfPayload_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
-    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_;
+    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_, voxelMutex_;
+    std::unordered_map<std::string, VoxelStreamState> voxelStreamStates_;
     std::string lastSourcesSnapshot_;
     std::shared_ptr<const std::string> pendingRobotPosePayload_;
     std::vector<WebSocket*> connections_;

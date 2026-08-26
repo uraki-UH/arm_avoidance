@@ -181,22 +181,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "pointcloud_topic", "/downsampling/grasp_support");
   output_topic_ = this->declare_parameter<std::string>(
     "output_topic", "/topological_grid_assignments");
-  delta_topic_ = this->declare_parameter<std::string>("delta_topic", "");
-  if (delta_topic_.empty()) {
-    delta_topic_ = output_topic_ + "/delta";
-  }
   isolated_topic_ = this->declare_parameter<std::string>("isolated_topic", "");
   if (isolated_topic_.empty()) {
     isolated_topic_ = output_topic_ + "/isolated";
-  }
-  edge_inferred_topic_ = this->declare_parameter<std::string>("edge_inferred_topic", "");
-  if (edge_inferred_topic_.empty()) {
-    edge_inferred_topic_ = output_topic_ + "/edge_inferred";
-  }
-  triangle_inferred_topic_ = this->declare_parameter<std::string>(
-    "triangle_inferred_topic", "");
-  if (triangle_inferred_topic_.empty()) {
-    triangle_inferred_topic_ = output_topic_ + "/triangle_inferred";
   }
   summary_topic_ = this->declare_parameter<std::string>(
     "summary_topic", "");
@@ -391,16 +378,8 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   voxel_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
     output_topic_,
     rclcpp::QoS(1).reliable().transient_local());
-  voxel_delta_pub_ = this->create_publisher<voxel_msgs::msg::VoxelLabelDelta>(
-    delta_topic_, rclcpp::QoS(10).reliable());
   isolated_voxel_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
     isolated_topic_,
-    rclcpp::QoS(1).reliable().transient_local());
-  edge_inferred_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
-    edge_inferred_topic_,
-    rclcpp::QoS(1).reliable().transient_local());
-  triangle_inferred_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
-    triangle_inferred_topic_,
     rclcpp::QoS(1).reliable().transient_local());
   summary_pub_ = this->create_publisher<std_msgs::msg::String>(summary_topic_, 10);
   // Per-cell JSON is useful for debugging, but constructing it for thousands
@@ -435,21 +414,19 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
 
   RCLCPP_INFO(
     this->get_logger(),
-    "TopologicalGridNode ready: input=%s pointcloud=%s timeout=%.2fs output=%s delta=%s "
-    "isolated=%s edge_inferred=%s edge_fill=%s/%s grid_size=%.3f "
+    "TopologicalGridNode ready: input=%s pointcloud=%s timeout=%.2fs output=%s "
+    "isolated=%s edge_fill=%s/%s grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
     "excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
     "stability=tau:%.3fs activate:%.2f retain:%.2f "
-    "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm "
+    "node_identity=%s/%.3fm migration=%s triangle=%s/%.3fm "
     "point_activity=%s/%.3fm/warmup=%zu/interval=%zu-%zu "
     "unknown_shape=%s/hops=%d/mad=%.2f/expand=%.2f",
     input_topic_.c_str(),
     pointcloud_topic_.c_str(),
     pointcloud_timeout_sec_,
     output_topic_.c_str(),
-    delta_topic_.c_str(),
     isolated_topic_.c_str(),
-    edge_inferred_topic_.c_str(),
     edge_inference_options_.enabled ? "enabled" : "disabled",
     edge_inference_options_.maximum_edge_length > 0.0 ? "metric" : "adaptive",
     grid_spec_.cell_size,
@@ -470,7 +447,6 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     temporal_filter_config_.node_identity_max_displacement,
     temporal_filter_config_.node_identity_history_migration_enabled ? "enabled" : "disabled",
     triangle_inference_options_.enabled ? "enabled" : "disabled",
-    triangle_inferred_topic_.c_str(),
     triangle_inference_options_.maximum_edge_length,
     point_activity_config_.enabled ? "enabled" : "disabled",
     point_activity_cell_size_,
@@ -1077,59 +1053,6 @@ voxel_msgs::msg::Voxel TopologicalGridNode::buildVoxelMessage(
   return voxel_msg;
 }
 
-voxel_msgs::msg::VoxelLabelDelta TopologicalGridNode::buildVoxelDelta(
-  const voxel_msgs::msg::Voxel &voxel_msg)
-{
-  constexpr std::uint8_t kAbsentLabel = 255U;
-  std::unordered_map<std::int64_t, std::uint8_t> current_labels;
-  current_labels.reserve(voxel_msg.data.size());
-  for (std::size_t index = 0; index < voxel_msg.data.size(); ++index) {
-    current_labels.insert_or_assign(voxel_msg.data[index], voxel_msg.labels[index]);
-  }
-
-  std::vector<std::int64_t> changed_ids;
-  changed_ids.reserve(current_labels.size() + last_published_labels_.size());
-  for (const auto &[id, label] : current_labels) {
-    const auto previous = last_published_labels_.find(id);
-    if (previous == last_published_labels_.end() || previous->second != label) {
-      changed_ids.push_back(id);
-    }
-  }
-  for (const auto &[id, label] : last_published_labels_) {
-    (void)label;
-    if (current_labels.find(id) == current_labels.end()) {
-      changed_ids.push_back(id);
-    }
-  }
-  std::sort(changed_ids.begin(), changed_ids.end());
-
-  voxel_msgs::msg::VoxelLabelDelta delta;
-  delta.header = voxel_msg.header;
-  delta.voxel_size = voxel_msg.voxel_size;
-  delta.origin_x = voxel_msg.origin_x;
-  delta.origin_y = voxel_msg.origin_y;
-  delta.origin_z = voxel_msg.origin_z;
-  delta.x_shift = voxel_msg.x_shift;
-  delta.y_shift = voxel_msg.y_shift;
-  delta.z_shift = voxel_msg.z_shift;
-  delta.offset = voxel_msg.offset;
-  delta.revision = voxel_msg.revision;
-  delta.data.reserve(changed_ids.size());
-  delta.old_labels.reserve(changed_ids.size());
-  delta.new_labels.reserve(changed_ids.size());
-  for (const auto id : changed_ids) {
-    const auto previous = last_published_labels_.find(id);
-    const auto current = current_labels.find(id);
-    delta.data.push_back(id);
-    delta.old_labels.push_back(previous == last_published_labels_.end() ?
-      kAbsentLabel : previous->second);
-    delta.new_labels.push_back(current == current_labels.end() ?
-      kAbsentLabel : current->second);
-  }
-  last_published_labels_ = std::move(current_labels);
-  return delta;
-}
-
 void TopologicalGridNode::publishResult(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const GridPointCounts &input_point_counts,
@@ -1299,19 +1222,11 @@ void TopologicalGridNode::publishResult(
   const auto voxel_msg = buildVoxelMessage(map.header, combined_voxels, revision);
   const auto isolated_voxel_msg = buildVoxelMessage(
     map.header, isolation_split.isolated_voxels, revision);
-  const auto edge_inferred_msg = buildVoxelMessage(
-    map.header, edge_result.voxels, revision);
-  const auto triangle_inferred_msg = buildVoxelMessage(
-    map.header, triangle_result.voxels, revision);
-  const auto voxel_delta = buildVoxelDelta(voxel_msg);
   const double message_ms = std::chrono::duration<double, std::milli>(
     std::chrono::steady_clock::now() - message_started).count();
   const auto pub_started = std::chrono::steady_clock::now();
   voxel_pub_->publish(voxel_msg);
-  voxel_delta_pub_->publish(voxel_delta);
   isolated_voxel_pub_->publish(isolated_voxel_msg);
-  edge_inferred_pub_->publish(edge_inferred_msg);
-  triangle_inferred_pub_->publish(triangle_inferred_msg);
 
   std_msgs::msg::String summary_msg;
   std::ostringstream oss;
@@ -1505,7 +1420,6 @@ void TopologicalGridNode::publishResult(
       << "\",";
   oss << "\"gng_connected_direct_voxel_count\":"
       << isolation_split.connected_voxels.size() << ",";
-  oss << "\"edge_inferred_topic\":\"" << edge_inferred_topic_ << "\",";
   oss << "\"isolated_topic\":\"" << isolated_topic_ << "\",";
   oss << "\"isolated_excluded_from_grasp_candidates\":true,";
   oss << "\"triangle_inference_enabled\":"
@@ -1519,13 +1433,10 @@ void TopologicalGridNode::publishResult(
       << triangle_inference_options_.maximum_normal_angle_degrees << ",";
   oss << "\"triangle_min_point_support_ratio\":"
       << triangle_inference_options_.minimum_point_support_ratio << ",";
-  oss << "\"triangle_inferred_topic\":\"" << triangle_inferred_topic_ << "\",";
   oss << "\"input_point_voxel_count\":" << input_point_counts.size() << ",";
   oss << "\"grid_size\":" << grid_spec_.cell_size << ",";
   oss << "\"voxel_size\":" << voxel_msg.voxel_size << ",";
   oss << "\"revision\":" << voxel_msg.revision << ",";
-  oss << "\"delta_topic\":\"" << delta_topic_ << "\",";
-  oss << "\"delta_voxel_count\":" << voxel_delta.data.size() << ",";
   oss << "\"origin_x\":" << voxel_msg.origin_x << ",";
   oss << "\"origin_y\":" << voxel_msg.origin_y << ",";
   oss << "\"origin_z\":" << voxel_msg.origin_z << ",";

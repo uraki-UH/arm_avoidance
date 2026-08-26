@@ -1,6 +1,9 @@
 import { Component, ReactNode } from 'react';
 
-interface Props { children: ReactNode; }
+interface Props {
+    children: ReactNode;
+    failed?: boolean;
+}
 interface State { failed: boolean; }
 
 export class WebGLErrorBoundary extends Component<Props, State> {
@@ -15,7 +18,7 @@ export class WebGLErrorBoundary extends Component<Props, State> {
     // Only a browser restart can recover from that state.
 
     render() {
-        if (this.state.failed) {
+        if (this.state.failed || this.props.failed) {
             return (
                 <div style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center',

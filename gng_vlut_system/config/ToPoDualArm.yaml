@@ -102,8 +102,9 @@
       publish_hz: 30.0
 
       # 固定設置時だけ使用するworldからロボットbaseへの外部較正TF
-      enable_static_tf: false
+      enable_static_tf: true
       static_tf_parent_frame: "world"
+      static_tf_child_frame: "base_footprint"
       static_tf_x: 0.0
       static_tf_y: 0.0
       static_tf_z: 0.0
@@ -183,3 +184,31 @@
       output_topic: "/camera/self_filtered_points"
       self_output_topic: "/camera/self_points"
       mask_topic: "self_voxel"
+
+/left_grasp_voxel_matcher:
+  ros__parameters:
+    object_voxels_topic: "/topo_voxel_ids"
+    environment_voxels_topic: ""
+    required_graph_topic: "/ToPoDualArm/L_grip_V_topological_map"
+    undersize_graph_topic: "/ToPoDualArm/L_grip_minV_topological_map"
+    forbidden_graph_topic: "/ToPoDualArm/L_grip_sweptV_topological_map"
+    candidate_topic: "/grasp_pose_cands"
+    candidate_voxels_topic: "/grasp_pose_cand_cells"
+    summary_topic: "/grasp_pose_cands/summary"
+    enable_depth_visibility: false
+    minimum_required_occupancy_ratio: 0.1
+    minimum_required_hits: 3
+    minimum_outside_undersize_hits: 1
+    maximum_forbidden_hits: 0
+    maximum_anchor_voxels: 500
+    maximum_candidates: 50
+    yaw_samples: 12
+    roll: 0.0
+    pitch: 0.0
+    yaw_offset: 0.0
+    update_period_ms: 500
+
+/grasp_pose_marker_bridge_node:
+  ros__parameters:
+    input_topic: "/grasp_pose_cands"
+    output_topic: "/grasp_pose_markers"

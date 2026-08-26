@@ -2,10 +2,7 @@
   ros__parameters:
     # Topics and grid_size are deliberately overridden by the launch file.
     pointcloud_timeout_sec: 0.5
-    delta_topic: ""
     isolated_topic: ""
-    edge_inferred_topic: ""
-    triangle_inferred_topic: ""
     summary_topic: ""
 
     origin_x: 0.0

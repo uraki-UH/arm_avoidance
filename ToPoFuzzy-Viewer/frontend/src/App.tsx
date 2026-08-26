@@ -132,6 +132,7 @@ type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: stri
 function App() {
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [isWebGlContextLost, setIsWebGlContextLost] = useState(false);
 
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
     const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
@@ -674,21 +675,23 @@ function App() {
                 }
             >
                 <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
-                    <WebGLErrorBoundary>
+                    <WebGLErrorBoundary failed={isWebGlContextLost}>
                     <Canvas
                         frameloop="demand"
+                        dpr={1}
                         camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
                         gl={canvasGl}
                         onCreated={({ gl }) => {
                             if (import.meta.hot) {
                                 import.meta.hot.dispose(() => gl.dispose());
                             }
-                            // Diagnostics only — do NOT auto-retry here, see WebGLErrorBoundary.
+                            // コンテキスト喪失後はCanvasを外し、GPUへの描画要求を止める。
                             gl.domElement.addEventListener('webglcontextlost', (e) => {
                                 console.error('[WebGL] context lost', {
                                     time: new Date().toISOString(),
                                     statusMessage: (e as WebGLContextEvent).statusMessage,
                                 });
+                                setIsWebGlContextLost(true);
                             });
                             gl.domElement.addEventListener('webglcontextrestored', () => {
                                 console.warn('[WebGL] context restored event fired (not expected to recover automatically)', new Date().toISOString());

@@ -571,8 +571,6 @@ private:
     size_t safe_nodes = 0;
     size_t collision_nodes = 0;
     size_t danger_nodes = 0;
-    size_t grasp_collision_nodes = 0;
-    size_t grasp_danger_nodes = 0;
 
     for (size_t i = 0; i < gng.getNodes().size(); ++i) {
       auto &node = gng.getNodes()[i];
@@ -593,13 +591,6 @@ private:
       status.is_colliding = (status.collision_count > 0);
       status.is_danger = (status.danger_count > 0 && !status.is_colliding);
 
-      if (grasp_collision_count > 0) {
-        ++grasp_collision_nodes;
-      }
-      if (grasp_danger_count > 0) {
-        ++grasp_danger_nodes;
-      }
-
       if (status.is_colliding) {
         ++collision_nodes;
       } else if (status.is_danger) {
@@ -612,11 +603,9 @@ private:
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "Safety updated: occupied=%zu danger=%zu -> safe=%zu collision=%zu "
-        "danger=%zu grasp=%s grasp_collision=%zu grasp_danger=%zu",
+        "danger=%zu",
         latest_occ_vids_.size(), latest_dan_vids_.size(),
-        safe_nodes, collision_nodes, danger_nodes,
-        active_grasp_state_ ? active_grasp_state_->object_id.c_str() : "none",
-        grasp_collision_nodes, grasp_danger_nodes);
+        safe_nodes, collision_nodes, danger_nodes);
   }
 
   int selectedEdgeMode() const {
@@ -693,7 +682,7 @@ private:
     if (!graph_dirty_) {
       return;
     }
-    publishGraphLocked();
+    publishGraphLocked(false);
     graph_dirty_ = false;
   }
 
@@ -898,26 +887,55 @@ private:
 
   void publishGraph() {
     std::lock_guard<std::mutex> lock(update_mutex_);
-    publishGraphLocked();
+    // transient local購読者向けの起動時初期スナップショット
+    publishGraphLocked(true);
     graph_dirty_ = false;
   }
 
-  void publishGraphLocked() {
+  template <typename MessageT>
+  bool hasSubscribers(
+      const typename rclcpp::Publisher<MessageT>::SharedPtr &publisher) const {
+    return publisher &&
+           (publisher->get_subscription_count() > 0U ||
+            publisher->get_intra_process_subscription_count() > 0U);
+  }
+
+  void publishGraphLocked(bool force_publish) {
     if (!context_ || !context_->gng || !topological_map_pub_) {
       return;
     }
-    topological_map_pub_->publish(buildGraphMessage());
-    if (node_feature_pub_) {
+    if (force_publish ||
+        hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(
+            topological_map_pub_)) {
+      topological_map_pub_->publish(buildGraphMessage());
+    }
+    if (force_publish ||
+        hasSubscribers<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
+            node_feature_pub_)) {
       node_feature_pub_->publish(robot_sim::bridge::topofuzzy::buildNodeFeatureArray(
           *this, context_->gng, frame_id_));
     }
     for (size_t i = 0; i < layer_pubs_.size(); ++i) {
-      if (layer_pubs_[i]) {
+      if (force_publish ||
+          hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(layer_pubs_[i])) {
         layer_pubs_[i]->publish(buildLayerGraphMessage(static_cast<int>(i)));
       }
     }
     for (auto &visual_layer : visualization_layers_) {
       if (!visual_layer.publisher) {
+        continue;
+      }
+      const bool publish_visual_graph =
+          force_publish ||
+          hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(
+              visual_layer.publisher);
+      const bool update_cached_graph =
+          publish_visual_graph ||
+          hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(
+              visual_layer.trajectory_publisher) ||
+          hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(
+              visual_layer.candidate_trajectory_publisher);
+      if (!update_cached_graph) {
         continue;
       }
       auto message =
@@ -927,7 +945,9 @@ private:
       visual_layer.cached_graph_valid =
           message.nodes.size() == visual_layer.model.nodes.size();
       visual_layer.cached_graph = message;
-      visual_layer.publisher->publish(std::move(message));
+      if (publish_visual_graph) {
+        visual_layer.publisher->publish(std::move(message));
+      }
     }
     if (latest_visualization_trajectory_) {
       publishVisualizationTrajectoryLocked(

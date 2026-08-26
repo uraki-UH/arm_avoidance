@@ -11,8 +11,8 @@ int32 y_shift
 int32 z_shift
 int64 offset
 
-# Monotonic revision assigned by publishers that also provide VoxelLabelDelta.
-# Zero means that the publisher does not provide a revisioned stream.
+# 全量snapshotの単調増加更新番号
+# 0は更新番号なしのstream
 uint32 revision
 
 # Flattened voxel IDs
