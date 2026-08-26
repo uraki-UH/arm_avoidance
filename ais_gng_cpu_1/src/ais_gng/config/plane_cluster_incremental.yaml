@@ -1,0 +1,91 @@
+plane_cluster_incremental_node:
+  ros__parameters:
+    # 増分方式の平面クラスタ生成。ラベルの出力属性化。
+    # 距離しきい値の局所ノード間隔による正規化比。
+
+    # 種候補を平面クラスタとして確定するための最小所属ノード数。
+    # 新規領域の種候補扱い。既存クラスタの一時的なノード数不足時は追跡のみ継続。
+    min_cluster_nodes: 10
+
+    # 未所属ノード取り込み用の平面までの正規化距離上限。
+    # score = |平面法線・(ノード位置 - クラスタ重心)| / max(クラスタ間隔, ノード間隔)。
+    # score による取り込み判定。共分散固有値比との非対応。
+    # 最終確定時の厚み上限との同時調整。取り込みだけを緩めた場合の確定時一括棄却。
+    growth_residual_ratio: 0.70
+    # 既所属ノード保持用の同じ正規化距離上限。
+    # 取り込みより緩い上限によるヒステリシス。境界ノードの所属往復の抑制。
+    retention_residual_ratio: 1.40
+
+    # growth/retention_residual_ratioの正規化に使う、実効ノード間隔の上限[m]。
+    # 間隔が粗い領域ほど「同じ比率でも許容される実距離」が際限なく大きくなり、実測(密集領域150フレーム): 局所間隔の中央値2.2cm・
+    max_effective_spacing: 0.02
+
+    # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
+    normal_filter_alpha: 0.30
+
+    # 種の生成・成長で要求する法線の許容角度[deg]。内積比較cos値へ内部で変換。
+    normal_alignment_deg: 30.0
+
+    # 既に所属しているノードの保持・取り込み・移動で要求する法線の許容角度[deg]。
+    # 種の判定用より緩くする。
+    retention_normal_alignment_deg: 70.0
+
+    # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
+    min_cluster_planarity: 0.45
+    # 平面からのRMS距離 / クラスタの平均局所ノード間隔 = sqrt(λ1) / mean(spacing)。
+    max_normalized_cluster_residual: 0.70
+
+    # 成長中の sqrt(λ2 / λ3)。直鎖状の種の成長停止。
+    # 確定条件より緩い判定による、成長途中の面の許容。
+    min_growth_planarity: 0.25
+
+    # ノード取り込み・移動時の候補クラスタへの隣接エッジ数の要求値。
+    # ノード1個の判定は偶然の接続で誤って移りやすい。
+    connection_requirement: 2
+
+    # クラスタ併合の候補と認めるための、クラスタ間直接エッジ数の要求値。
+    merge_connection_requirement: 2
+
+    # 新規クラスタ成長中の、追加候補から生成中の種への必要隣接エッジ数。
+    # 生成直後に限定した通常時より緩い接続条件。
+    birth_neighbor_requirement: 1
+
+    # 所属クラスタ A から候補 B への移動条件: score(B) < score(A) - この値。
+    # score: 上記の正規化平面距離。境界での僅差な所属往復の抑制。
+    migration_improvement_margin: 0.10
+
+    # 最小クラスタノード数に加える移動元保護余裕。
+    # 小さいクラスタの境界からの漸減・消滅の防止。
+    donor_protection_buffer: 5
+
+    # true 時の複数接続ノードに対する保持用距離上限への緩和。距離判定の維持。
+    # false 時の取り込み用距離上限への固定。
+    enable_multi_edge_dist_relaxation: false
+
+    # 1入力フレームあたりの「解放→取り込み・移動→再平面フィット」最大回数。
+    # 所属変化ゼロ時の早期終了。
+    maintenance_iter: 2
+
+    # 併合を認める結合後の平面性 sqrt(λ2/λ3) の下限。min_cluster_planarity より緩くする。
+    merge_min_planarity: 0.25
+
+    # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
+    # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
+    merge_residual_growth_ratio: 1.1
+    # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
+    merge_residual_growth_min_th: 0.1
+
+    # 新規平面クラスタの確定後、出力前に必要な確認フレーム数。
+    # 0 時の即時出力。
+    birth_confirm_frames: 3
+
+    # 同一クラスタ内のGNG連結切断の分割前確認フレーム数。
+    # 境界ノードの一時的な解放による過剰分割の防止。
+    split_confirm_frames: 3
+
+    # 最小クラスタノード数不足状態に対する削除前許容フレーム数。
+    # ノード単位の逸脱で一時的に縮んだクラスタの回復余地。
+    weak_frame_allowance: 5
+
+    # true 時のOBBマーカーへのクラスタID・ノード数文字列の重畳表示。
+    enable_text_marker: false

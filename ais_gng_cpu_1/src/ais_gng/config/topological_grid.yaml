@@ -1,0 +1,103 @@
+/**:
+  ros__parameters:
+    # Topics and grid_size are deliberately overridden by the launch file.
+    pointcloud_timeout_sec: 0.5
+    isolated_topic: ""
+    summary_topic: ""
+
+    origin_x: 0.0
+    origin_y: 0.0
+    origin_z: 0.0
+    x_shift: 42
+    y_shift: 21
+    z_shift: 0
+    offset: 1000000
+
+    # HUMAN/CAR are hard-excluded. SAFE_TERRAIN is excluded from new grasp
+    # candidates, but is retained internally as structural evidence so a
+    # floor-contact object is not erased when UNKNOWN_OBJECT flickers terrain.
+    excluded_labels: "SAFE_TERRAIN,HUMAN,CAR"
+    require_input_points: true
+    # auto uses the stronger of per-node inpcl_ids and current geometric point
+    # support for each cell. Missing IDs therefore never hide stable points.
+    point_support_mode: "auto"
+    point_support_radius_m: 0.02
+    minimum_input_points_per_voxel: 1
+    neighbor_radius_cells: 1
+    neighbor_radius_m: 0.02
+
+    # UNKNOWN_OBJECT shape gating is intentionally opt-in: it is a weak
+    # geometric cue, not a reliable definition of a graspable object.
+    unknown_shape_filter_enabled: false
+    shape_neighborhood_hops: 2
+    shape_minimum_neighbors: 3
+    shape_residual_weight: 0.7
+    shape_mad_multiplier: 3.0
+    shape_seed_expansion_scale: 2.0
+
+    edge_inference_enabled: true
+    # 0 selects a robust local GNG-edge-length gate (no fixed metric cap).
+    edge_max_length: 0.0
+    # GNG edge bridges repair quantization holes; triangle fill remains
+    # point-supported because it covers area rather than a graph segment.
+    edge_inferred_require_input_points: false
+    triangle_inference_enabled: true
+    triangle_inferred_require_input_points: true
+    triangle_max_edge_length: 0.05
+    triangle_min_area: 0.000001
+    triangle_min_aspect_ratio: 0.05
+    triangle_max_normal_angle_deg: 45.0
+    triangle_min_point_support_ratio: 0.0
+
+    # Temporal stability = presence * (1 - repeated switching). Both EMAs use
+    # the timestamp-derived time constant below, not a frame-count threshold.
+    # Current point support admits new cells.  Once active, a current GNG node
+    # keeps its cell and incident edge structure through a point dropout;
+    # deletion still requires depth FREE or strong normal-direction motion.
+    temporal_history_window_size: 32
+    temporal_time_constant_sec: 0.30
+    temporal_activation_score: 0.65
+    temporal_retention_score: 0.35
+    node_identity_retention_enabled: false
+    node_identity_max_displacement: 0.02
+    # Moving a node to another cell must not carry the old cell's confidence.
+    # Enable only when a downstream use explicitly wants tracking semantics.
+    node_identity_history_migration_enabled: false
+    history_reset_on_time_regression: false
+    history_reset_node_count_ratio: 0.5
+
+    # Optional single-node cue. Local multi-neighbour GNG motion is the
+    # default deletion evidence because it is less sensitive to node jitter.
+    normal_drift_filter_enabled: false
+
+    # Project only voxel centres into the native depth image (3x3 median).
+    # Out-of-view and foreground-occluded cells hold temporal confidence;
+    # only a confirmed farther depth sample is negative (FREE) evidence.
+    depth_visibility_enabled: true
+    depth_topic: "/camera/camera/depth/image_rect_raw"
+    camera_info_topic: "/camera/camera/depth/camera_info"
+    depth_visibility_max_sync_offset_sec: 0.005
+    depth_visibility_unit_scale: 0.001
+    depth_visibility_relative_tolerance: 0.02
+    depth_visibility_tf_enabled: true
+    # Fallback matches pointcloud_transformer_cpp/realsense_calibration.yaml
+    # when the recording has no usable base_link -> camera TF.
+    depth_visibility_fallback_transform_enabled: true
+    depth_visibility_fallback_map_frame: "base_link"
+    camera_to_map.x: 0.434
+    camera_to_map.y: -0.693
+    camera_to_map.z: 0.279
+    camera_to_map.roll_deg: -103.8
+    camera_to_map.pitch_deg: -28.9
+    camera_to_map.yaw_deg: -3.4
+    depth_visibility_cache_size: 16
+
+    # The expensive GNG-to-grid update is scheduled from point-cloud activity.
+    point_activity_update_enabled: true
+    point_activity_cell_size: 0.02
+    point_activity_ema_alpha: 0.2
+    point_activity_top_fraction: 0.1
+    point_activity_occupancy_weight: 0.7
+    point_activity_warmup_updates: 5
+    point_activity_minimum_update_interval: 1
+    point_activity_maximum_update_interval: 10

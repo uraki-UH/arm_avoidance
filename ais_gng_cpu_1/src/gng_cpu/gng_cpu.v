@@ -1,0 +1,15 @@
+{
+  global:
+    gng_init;
+    gng_setParameter;
+    gng_setPointCloud;
+    gng_exec;
+    gng_getTopologicalMap;
+    gng_getDownSampling;
+    gng_getAffineTransformedInputPointCloud;
+    gng_setInferredClusterLabels;
+    gng_setInferredNodeLabels;
+    gng_setNodePositions;
+  local:
+    *;
+};
