@@ -90,7 +90,7 @@
         enable_roi_query: true
         frame_id: "world"
         bucket_size: 0.2
-        bucket_topic: "/ToPoDualArm/world_index_buckets"
+        bucket_topic: "/world_index/buckets"
         enable_bucket_publish: true
         # 追加ROI抽出の並列worker数
         parallel_thread_num: 1
@@ -177,6 +177,7 @@
       resolution: 0.02
       inflation: 0.0
       update_hz: 30.0
+      enable_self_recognition_viz: false
       root_link: "base_link"
       target_frame_id: "base_link"
       marker_frame_id: "base_link"

@@ -1,4 +1,6 @@
 import os
+import math
+import struct
 import yaml
 
 from ament_index_python.packages import get_package_share_directory
@@ -25,6 +27,34 @@ def resolve_package_uri(raw_path: str) -> str:
     return os.path.join(pkg_share, rel_path)
 
 
+def read_vlut_voxel_size(vlut_file: str):
+    if not vlut_file:
+        return None
+    try:
+        with open(vlut_file, "rb") as stream:
+            header = stream.read(12)
+    except OSError:
+        return None
+    if len(header) != 12:
+        return None
+    file_id, version, voxel_size = struct.unpack("<IIf", header)
+    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 1:
+        return None
+    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
+        return None
+    return voxel_size
+
+
+def _root_parameters(params_yaml):
+    for root_key in ("/**", "ros__parameters"):
+        candidate = params_yaml.get(root_key, {})
+        if isinstance(candidate, dict) and "ros__parameters" in candidate:
+            candidate = candidate["ros__parameters"]
+        if isinstance(candidate, dict):
+            return candidate
+    return {}
+
+
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
     params_file = LaunchConfiguration("params_file").perform(context)
@@ -33,6 +63,7 @@ def launch_setup(context, *args, **kwargs):
     robot_name_default = LaunchConfiguration("robot_name").perform(context)
     robot_name = robot_name_default
     yaml_urdf_path = ""
+    yaml_vlut_resolution = 0.0
     
     if params_file and os.path.exists(params_file):
         try:
@@ -54,19 +85,18 @@ def launch_setup(context, *args, **kwargs):
                 if extracted_name:
                     robot_name = extracted_name
 
-                root_params = {}
-                for root_key in ('/**', 'ros__parameters'):
-                    candidate = config.get(root_key, {})
-                    if isinstance(candidate, dict) and 'ros__parameters' in candidate:
-                        candidate = candidate.get('ros__parameters', {})
-                    if isinstance(candidate, dict):
-                        root_params = candidate
-                        break
+                root_params = _root_parameters(config or {})
 
                 if isinstance(root_params, dict):
                     candidate_robot_description = root_params.get('urdf_path', '')
                     if candidate_robot_description:
                         yaml_urdf_path = str(candidate_robot_description).strip()
+                    gng_params = root_params.get("gng", {})
+                    if isinstance(gng_params, dict):
+                        try:
+                            yaml_vlut_resolution = float(gng_params.get("vlut_resolution", 0.0))
+                        except Exception:
+                            yaml_vlut_resolution = 0.0
         except Exception as e:
             print(f"Warning: Failed to parse YAML for robot_name: {e}")
 
@@ -89,10 +119,28 @@ def launch_setup(context, *args, **kwargs):
     if not os.path.exists(robot_urdf):
         raise FileNotFoundError(f"Robot description file does not exist: {robot_urdf}")
 
+    vlut_file = ""
+    if params_file and os.path.exists(params_file):
+        root_params = _root_parameters(config if 'config' in locals() else {})
+        gng_params = root_params.get("gng", {}) if isinstance(root_params, dict) else {}
+        if isinstance(gng_params, dict):
+            data_directory = str(gng_params.get("data_directory", "")).strip()
+            experiment_id = str(gng_params.get("experiment_id", "")).strip()
+            vlut_filename = str(gng_params.get("vlut_filename", "vlut.bin")).strip()
+            if data_directory and experiment_id and vlut_filename:
+                vlut_file = os.path.join(data_directory, experiment_id, vlut_filename)
+
+    self_recognition_resolution = read_vlut_voxel_size(vlut_file)
+    if self_recognition_resolution is None or self_recognition_resolution <= 0.0:
+        self_recognition_resolution = yaml_vlut_resolution
+
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     node_params = {}
     if robot_urdf:
         node_params["urdf_path"] = robot_urdf
+    if self_recognition_resolution and self_recognition_resolution > 0.0:
+        # VLUT のセルサイズへ自己認識側を追従
+        node_params["self_recognition.resolution"] = self_recognition_resolution
     
     # コマンドライン引数を辞書に追加（明示的に指定された場合のみ、適切な型でYAMLを上書きするようにする）
     def add_if_not_empty(name, config_name, type_func=None):

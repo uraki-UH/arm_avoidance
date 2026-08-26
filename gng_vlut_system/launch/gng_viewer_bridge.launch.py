@@ -1,4 +1,6 @@
 import os
+import math
+import struct
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -22,6 +24,24 @@ def resolve_package_uri(raw_path: str) -> str:
     except Exception:
         return raw_path
     return os.path.join(pkg_share, rel_path)
+
+
+def read_vlut_voxel_size(vlut_file: str):
+    if not vlut_file:
+        return None
+    try:
+        with open(vlut_file, "rb") as stream:
+            header = stream.read(12)
+    except OSError:
+        return None
+    if len(header) != 12:
+        return None
+    file_id, version, voxel_size = struct.unpack("<IIf", header)
+    if file_id != int.from_bytes(b"VLUT", byteorder="big") or version < 1:
+        return None
+    if not math.isfinite(voxel_size) or voxel_size <= 0.0:
+        return None
+    return voxel_size
 
 
 def safe_float(value, default):
@@ -73,6 +93,9 @@ def launch_setup(context, *args, **kwargs):
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
     direct_joint_tracking = LaunchConfiguration("direct_joint_tracking").perform(context)
+    enable_self_recognition_viz_arg = LaunchConfiguration(
+        "enable_self_recognition_viz"
+    ).perform(context)
 
     yaml_data_dir = data_dir
     yaml_exp_id = exp_id
@@ -86,6 +109,8 @@ def launch_setup(context, *args, **kwargs):
     yaml_gripper_volume_config_file = ""
     yaml_gripper_volume_cache_directory = ""
     yaml_gripper_volume_cache_mode = "use"
+    yaml_enable_self_recognition_viz = False
+    yaml_vlut_resolution = 0.0
     if params_file and os.path.exists(params_file):
         try:
             with open(params_file, "r", encoding="utf-8") as f:
@@ -122,6 +147,9 @@ def launch_setup(context, *args, **kwargs):
                 yaml_exp_id = gng_ns.get('experiment_id', yaml_exp_id)
                 gng_model_filename = gng_ns.get('gng_model_filename', gng_model_filename)
                 vlut_filename = gng_ns.get('vlut_filename', vlut_filename)
+                yaml_vlut_resolution = safe_float(
+                    gng_ns.get("vlut_resolution"), yaml_vlut_resolution
+                )
                 yaml_resource_root_dir = root_ros_params.get('resource_root_dir', yaml_resource_root_dir)
                 yaml_mesh_root_dir = root_ros_params.get('mesh_root_dir', yaml_mesh_root_dir)
                 candidate_robot_description = root_ros_params.get('urdf_path', '')
@@ -143,6 +171,18 @@ def launch_setup(context, *args, **kwargs):
                     candidate_cache_mode = gripper_volume_ns.get('cache_mode', '')
                     if candidate_cache_mode is not None and str(candidate_cache_mode).strip():
                         yaml_gripper_volume_cache_mode = str(candidate_cache_mode).strip()
+
+                self_recognition_ns = root_ros_params.get('self_recognition', {})
+                if isinstance(self_recognition_ns, dict):
+                    yaml_enable_self_recognition_viz = safe_bool(
+                        self_recognition_ns.get('enable_self_recognition_viz'),
+                        yaml_enable_self_recognition_viz,
+                    )
+                if 'enable_self_recognition_viz' in root_ros_params:
+                    yaml_enable_self_recognition_viz = safe_bool(
+                        root_ros_params.get('enable_self_recognition_viz'),
+                        yaml_enable_self_recognition_viz,
+                    )
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
                 ros_params = params_yaml.get(node_key, {}).get("ros__parameters", {})
@@ -187,9 +227,6 @@ def launch_setup(context, *args, **kwargs):
             "Pass urdf_path explicitly or install the matching description package."
         )
 
-    resource_root = yaml_resource_root_dir
-    mesh_root = yaml_mesh_root_dir
-
     def resolve_result_path(path: str, default_filename: str) -> str:
         if path:
             if os.path.isabs(path):
@@ -200,7 +237,20 @@ def launch_setup(context, *args, **kwargs):
             if path.startswith("gng_results/") or "/" in path:
                 return os.path.join(pkg_share, path)
         filename = path or default_filename
+        if data_dir and os.path.isabs(data_dir):
+            return os.path.join(data_dir, exp_id, filename)
         return os.path.join(pkg_share, data_dir, exp_id, filename)
+
+    enable_self_recognition_viz = safe_bool(
+        enable_self_recognition_viz_arg, yaml_enable_self_recognition_viz
+    )
+    vlut_file = resolve_result_path(vlut_path, vlut_filename)
+    self_recognition_resolution = read_vlut_voxel_size(vlut_file)
+    if self_recognition_resolution is None or self_recognition_resolution <= 0.0:
+        self_recognition_resolution = yaml_vlut_resolution
+
+    resource_root = yaml_resource_root_dir
+    mesh_root = yaml_mesh_root_dir
 
     # 最終的なパラメータを準備（YAMLとコマンドライン引数のマージ）
     # YAMLの値を上書き（消去）しないよう、明示的に指定された（空でない）パラメータのみを抽出
@@ -331,6 +381,30 @@ def launch_setup(context, *args, **kwargs):
         )
     ]
 
+    if enable_self_recognition_viz:
+        # 起動時の自己認識ボクセル生成ノード
+        self_recognition_params = []
+        if params_file and os.path.exists(params_file):
+            self_recognition_params.append(params_file)
+        node_params = {
+            "urdf_path": urdf_path,
+            "joint_topic": viewer_joint_state_topic,
+        }
+        if self_recognition_resolution and self_recognition_resolution > 0.0:
+            # VLUT のセルサイズへ自己認識側を追従
+            node_params["self_recognition.resolution"] = self_recognition_resolution
+        self_recognition_params.append(node_params)
+        actions.append(
+            Node(
+                package="gng_vlut_system",
+                executable="self_recognition_viz_node",
+                name="self_recognition_viz_node",
+                namespace=robot_name,
+                output="screen",
+                parameters=self_recognition_params,
+            )
+        )
+
     enable_gripper_volume_arg = LaunchConfiguration(
         "enable_gripper_volume_graph"
     ).perform(context)
@@ -410,6 +484,11 @@ def generate_launch_description():
         DeclareLaunchArgument("node_feature_topic", default_value="topological_node_features"),
         DeclareLaunchArgument("grasp_state_topic", default_value="grasp_state"),
         DeclareLaunchArgument("grasp_applied_state_topic", default_value="grasp_state_applied"),
+        DeclareLaunchArgument(
+            "enable_self_recognition_viz",
+            default_value="",
+            description="自己認識ボクセル生成ノードの起動切替。空の場合は params_file を優先",
+        ),
         DeclareLaunchArgument(
             "enable_gripper_volume_graph",
             default_value="",
