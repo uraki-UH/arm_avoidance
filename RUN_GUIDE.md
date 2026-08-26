@@ -298,7 +298,7 @@ ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   pointcloud_topic:=/downsampling/grasp_support \
   output_topic:=/topo_voxel_ids \
-  grid_size:=0.01
+  grid_size:=0.02
 ```
 
 主な補助出力は`<output_topic>/delta`、`<output_topic>/isolated`、`<output_topic>/edge_inferred`、
@@ -314,8 +314,6 @@ GNG edgeとノード法線から平面クラスタを増分生成する。
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 
-確認用Markerは`/topological_planar_clusters_incremental/markers/obb`と
-`/topological_planar_clusters_incremental/markers/nodes`。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
