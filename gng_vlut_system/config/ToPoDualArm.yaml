@@ -73,7 +73,7 @@
 
     # --- 環境点群からVLUTまでの統合起動設定 ---
     environment_voxelization:
-      input_topic: "/dataset/points"
+      input_topic: "/camera/camera/depth/color/points"
       voxel_topic: "/ToPoDualArm/roi_voxel_ids"
       source_frame_id: ""
       base_frame: "base_link"

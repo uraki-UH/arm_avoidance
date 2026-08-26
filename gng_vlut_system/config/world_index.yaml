@@ -1,8 +1,9 @@
 /**:
   ros__parameters:
     environment_voxelization:
-      input_topic: "/dataset/points"
-      source_frame_id: ""
+      input_topic: "/camera/camera/depth/color/points"
+      # 点群座標値の座標系。headerのgraspnet_tableを上書き
+      source_frame_id: "world"
 
       # world bucket索引の設定
       world_index:
