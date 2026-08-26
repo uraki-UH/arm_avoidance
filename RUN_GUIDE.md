@@ -245,13 +245,6 @@ ros2 launch ais_gng topological_query.launch.py \
   max_euclidean_distance:=0.5 \
   max_hops:=-1
 
-## グリッド所属を半セルずらしで出す（未使用）
-ros2 launch ais_gng topological_grid.launch.py \
-  input_topic:=/topological_map \
-  output_topic:=/topological_grid_voxels_shifted \
-  grid_size:=0.01 \
-  origin_shift_half:=true
-
 ##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
 USB の番号が変わる環境では、こちらのラッパーの方が安定。
