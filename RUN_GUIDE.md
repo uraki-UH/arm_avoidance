@@ -213,14 +213,8 @@ YAMLのROIは今回の狭い局所chunkの実測条件である。`robot_spacing
 各robotのworld poseを使う。実機の固定cameraでは同YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
 
 #### ROI voxelとworld indexの視覚確認
-
-YAMLの既定値ではdebug publishが有効で、`frame_num:=0`のためCtrl-Cまで継続する。ToPo Fuzzy Viewerでは次の2 topicだけを有効化する。
-
-- `/depth_world_index/debug/roi_voxels` (`voxel_msgs/Voxel`): ROIで採用された2 cm voxel。VLUT入力と同一形式
-- `/depth_world_index/debug/world_buckets_voxels` (`voxel_msgs/Voxel`): 非空world bucketを`bucket_size=0.2 m`のvoxelとして出力。world indexの格子確認用
-
-camera-to-worldをidentityにしたraw depth rosbagでは、両topicの`frame_id`は`camera_depth_optical_frame`になる。
-実機設定では、`camera_world_*`でworld座標系へ変換し、同時に`debug_frame_id`をそのworld frameへ指定する。
+- `/depth_world_index/debug/roi_voxels` 
+- `/depth_world_index/debug/world_buckets_voxels` 
 
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
@@ -296,15 +290,11 @@ ros2 run gng_vlut_system self_recognition_filter_node
   # self-recognition voxel内の点群: /self_recognition_points
   # self-recognition voxel外の点群: /self_filtered_points
 
-
 # joint_statesのダミー
 (topoarmの場合)
 python3 dummy_joint_pub.py --robot topoarm
 
 ## realsenseのrosbag + 点群座標変換
-# bagのraw点群は内部トピックへ退避し、変換後の点群が元のトピック名を引き継ぐ。
-# 入出力を同じトピックにすると変換ノードが自己購読するため、直接同名にはしない。
-
 # ターミナル1: raw点群を /camera/camera/depth/color/points_raw へリマップして再生
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
   --topics /camera/camera/depth/color/points \
@@ -469,16 +459,6 @@ TCP姿勢候補を出す。通常は引数なしでよい。この起動で`/gra
 ```bash
 ros2 launch grasping_system grasp_voxel_template.launch.py
 ```
-
-候補と照合内訳は次で確認する。
-
-```bash
-ros2 topic echo /grasp_pose_cands
-ros2 topic echo /grasp_pose_cand_cells
-ros2 topic echo /grasp_pose_cands/summary
-```
-
-`/grasp_pose_markers`をViewerの`Connection & Streams`で有効化する。
 
 `/grasp_pose_cand_cells`は、テンプレート照合・対向接触・禁止体積の各条件を通過し、
 同じTCPセルに密集する姿勢を1件へ代表化した候補セルである。`labels`は現在すべて`1`であり、
