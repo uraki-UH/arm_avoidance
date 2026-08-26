@@ -1,11 +1,10 @@
 # ToPoFuzzy-Viewer 実行ガイド
 
 ##　実行ガイド
-cd uraki_ws
+cd ~/uraki_ws
 docker compose down && docker compose up --build  && docker compose up -d
 docker compose exec gng_cpu bash
 ## frontendの起動
-cd ~/uraki_ws
 docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
 
 docker compose --profile manual up  frontend
@@ -45,14 +44,9 @@ ros2 launch gng_vlut_system point_to_voxel.launch.py \
   output_topic:=/topo_voxel_ids
 
 ### 点群をToPoDualArmのVLUTへ反映
-`/dataset/points`のheader frameは`world`とし、点群のframeを強制的に
-`ToPoDualArm/base_link`として扱わない。点群時刻のTF
-
-```bash
-# ROI voxel化、world index、occupied/danger更新の起動
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
+
 ボクセル解像度はVLUT headerから取得するため、通常は手動指定しない。
 
 `environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
@@ -83,15 +77,6 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
 ```
 
-robot本体とViewer gatewayはrobotごとに別terminalで起動する。
-
-```bash
-ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm_A
-```
-
-2台目以降も`params_file`と`robot_name`を変更して同様に起動する。
 
 danger判定方式は`ToPoDualArm.yaml`の`environment_voxelization.danger_source`で選択する。
 
@@ -106,14 +91,6 @@ environment_voxelization:
   vlut_danger_dist: 0.025
 ```
 
-起動後は、`/dataset/points`、`/ToPoDualArm/roi_voxel_ids`、
-`/ToPoDualArm/occupied_voxels`が順に更新されることを確認する。
-
-```bash
-ros2 topic hz /dataset/points
-ros2 topic echo --once /ToPoDualArm/roi_voxel_ids
-ros2 topic echo --once /ToPoDualArm/occupied_voxels
-```
 
 別ロボットでROIを変更する場合は、TCPサンプリング範囲と余裕を指定する。
 
@@ -136,17 +113,13 @@ marginには把持物の張り出し、推定誤差、安全余裕、必要な�
 固定カメラのraw depthからpersistent world indexを構築し、全再構築方式と比較する。
 実機では`camera_world_*`へ外部パラメータを設定する。
 
-```bash
-# ターミナル1: persistent indexの実行設定
-ros2 run gng_vlut_system depth_world_index_benchmark_node --ros-args \
-  --params-file /ros2_ws/src/gng_vlut_system/config/depth_world_index_benchmark.yaml
 
 # ターミナル2: raw depthとcamera_infoを同時に配信
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
   --topics \
     /camera/camera/depth/image_rect_raw \
     /camera/camera/depth/camera_info
-```
+
 
 全再構築比較は`enable_comparison_benchmark:=true`、ログ抑止は`enable_runtime_log:=false`。
 条件と計測結果は
@@ -285,8 +258,14 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
     /camera/camera/depth/camera_info \
   --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
 
-# 再生終了後、作成後は変換御殿軍を次で再生。
+# 再生終了後、作成後は変換した点群を次で再生。
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
+
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed 
+  --topics \
+    /camera/camera/depth/color/points \
+--loop
+
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -304,10 +283,6 @@ ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=
 
 
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
-
-
-同じ座標系でそのまま通す場合は、`voxel_to_vlut` の `target_frame_id` は指定しません。
-このとき、入力 voxel の frame をそのまま使って再エンコードします。
 
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
@@ -335,10 +310,9 @@ ros2 launch ais_gng topological_grid.launch.py \
 
 GNG edgeとノード法線から平面クラスタを増分生成する。
 
-```bash
+## 平面クラスタ抽出
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
-```
 
 確認用Markerは`/topological_planar_clusters_incremental/markers/obb`と
 `/topological_planar_clusters_incremental/markers/nodes`。
@@ -417,13 +391,7 @@ alias sh='source /opt/ros/humble/setup.bash'
 alias sw='source /ros2_ws/install/setup.bash'
 
 
-
-### このリポジトリでの前提
-- `Dockerfile` に `ros-humble-rosbridge-server` が入っています
-- `docker-compose.yaml` に `rosbridge` サービスがあります
-- そのため、通常は `docker compose up -d` で足ります
-
-### 素の ROS2 環境で入れる場合
+### dockerではなく素の ROS2 環境で入れる場合
 ```bash
 sudo apt install ros-humble-rosbridge-server
 ```
