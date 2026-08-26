@@ -52,7 +52,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     grid.resize(grid_config.maxXYZ);
     grid_node_num.resize(grid_config.maxXYZ, 0);
     for (auto& node : nodes)
-        node.init(NODE_NOID);
+        node.init(NODE_NOID, 0.f, 0.f);
 
     // 学習回数
     frame_number = 0;
@@ -218,15 +218,7 @@ void CUGNG::learn_normal(Vec3f& p) {
     auto &node0 = nodes[n.id1];
     // ノードの移動
     // if (!node0.static_node){
-    uint32_t age = frame_number - node0.frame; // ノードの年齢
-    float eta = gng_config.eta_s1;
-    if (gng_config.eta_decay) {
-        eta /= ((float)age + 1);
-    }
-    float eta_2 = 1.f - eta;
-
-    // move_node(node0, p, gng_config.eta_s1, gng_config.eta_s1_2);
-    Vec3f new_pos = node0.pos.move(p, eta, eta_2);
+    Vec3f new_pos = node0.pos.move(p, node0.eta_s1, 1.f - node0.eta_s1);
     move_node(node0, new_pos);
     // }
 
@@ -262,13 +254,7 @@ void CUGNG::learn_normal(Vec3f& p) {
         // if(!edge.static_node){
         // move_node(edge, p, gng_config.eta_s2, gng_config.eta_s2_2);
         // }
-        const uint32_t age = frame_number - edge.frame; // ノードの年齢
-        float eta = gng_config.eta_s2;
-        if (gng_config.eta_decay) {
-            eta /= ((float)age + 1);
-        }
-        eta_2 = 1.f - eta;
-        new_pos = edge.pos.move(p, eta, eta_2);
+        new_pos = edge.pos.move(p, edge.eta_s2, 1.f - edge.eta_s2);
         move_node(edge, new_pos);
     }
 
@@ -500,7 +486,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
     for (uint32_t i = 0; i < node_num_max; i++) {
         if (nodes[i].id == NODE_NOID) {
             auto& node = nodes[i];
-            node.init(i, pos);
+            node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
             node.frame = frame_number;
             node.grid_i = grid_i;
             auto& g1 = grid[grid_i];
@@ -582,10 +568,17 @@ void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
     n2.edges[n2.edge_num++] = idx1;
 }
 
-void CUGNG::check_delete_no_edge() {
+void CUGNG::check_delete_no_edge_and_decay_eta() {
     for (auto& node : nodes) {
-        if (node.id != NODE_NOID && node.edge_num == 0)
+        if (node.id == NODE_NOID) {
+            continue;
+        }
+        if (node.edge_num == 0) {
             delete_node(node.id);
+        } else if (gng_config.eta_decay_rate < 1.f) {
+            node.eta_s1 *= gng_config.eta_decay_rate;
+            node.eta_s2 *= gng_config.eta_decay_rate;
+        }
     }
 }
 uint32_t CUGNG::getEdgeIndex(uint32_t idx1, uint32_t idx2){

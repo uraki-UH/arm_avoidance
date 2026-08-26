@@ -1,20 +1,21 @@
 #include "node.hpp"
 
 Node::Node() {
-    Vec3f p;
-    init(NODE_NOID);
+    init(NODE_NOID, 0.f, 0.f);
 }
 
 Node::~Node() {
 }
 
-void Node::init(uint32_t _id) {
+void Node::init(uint32_t _id, float _eta_s1, float _eta_s2) {
     id = _id;
     edge_num = 0;
 
     // 時間
     frame = 0;
     age_s1 = 0;
+    eta_s1 = _eta_s1;
+    eta_s2 = _eta_s2;
 
     // flag
     static_node = false;
@@ -33,8 +34,8 @@ void Node::init(uint32_t _id) {
     clusted_label = UNKNOWN_OBJECT;
     clustered_flag = false;
 }
-void Node::init(uint32_t _id, Vec3f &_pos) {
-    init(_id);
+void Node::init(uint32_t _id, float _eta_s1, float _eta_s2, Vec3f &_pos) {
+    init(_id, _eta_s1, _eta_s2);
     pos[0] = _pos[0];
     pos[1] = _pos[1];
     pos[2] = _pos[2];

@@ -53,8 +53,8 @@ class CUGNG {
     void disconnect_all(uint32_t idx);
     /* ノード同士を接続する関数 */
     void connect(uint32_t idx1, uint32_t idx2);
-    /* エッジ数が0のノードを削除する関数 */
-    void check_delete_no_edge();
+    /* エッジ数が0のノードを削除し、学習係数を減衰する関数 */
+    void check_delete_no_edge_and_decay_eta();
     /* エッジIDを検索 */
     uint32_t getEdgeIndex(uint32_t idx1, uint32_t idx2);
     /* ノードの法線ベクトルの算出 */

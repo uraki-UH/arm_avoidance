@@ -25,10 +25,8 @@ struct NodeConfig{
     int unknown_learning_rate;
     /* 学習係数 */
     float eta_s1;            // s1更新時の学習係数
-    float eta_s1_2;          // s1更新時の学習係数
     float eta_s2;            // s1更新時の学習係数
-    float eta_s2_2;          // s1更新時の学習係数
-    bool eta_decay;       // etaを学習回数に応じて減衰させるか
+    float eta_decay_rate;    // フレームごとの学習係数減衰率
     float vigilance2[4]; //警戒領域
     int s1_age[4];
     int clusted_s1_age[4];

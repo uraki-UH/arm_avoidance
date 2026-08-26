@@ -89,10 +89,8 @@ void Param::init() {
     node.learning_num = 4000;
     node.unknown_learning_rate = 5;
     node.eta_s1 = 0.08;
-    node.eta_s1_2 = 1.f - node.eta_s1;
     node.eta_s2 = 0.008;
-    node.eta_s2_2 = 1.f - node.eta_s2;
-    node.eta_decay = true;
+    node.eta_decay_rate = 0.99;
     // node.dynamic_vel_min = 0.5;
     // node.dynamic_lpf_time = 0.5;
     node.s1_reset_range2 = 0.1 * 0.1; // ノードの選択回数リセット範囲
@@ -158,12 +156,10 @@ bool Param::setParameter(const char *p_c, const uint32_t index, const float valu
         node.unknown_learning_rate = (int)(1.f / (1.f - (std::floor(value * 10) / 10.f)));
     } else if (p == "node.eta_s1" && value >= 0 && value <= 1) {
         node.eta_s1 = value;
-        node.eta_s1_2 = 1.f - node.eta_s1;
     } else if (p == "node.eta_s2" && value >= 0 && value <= 1) {
         node.eta_s2 = value;
-        node.eta_s2_2 = 1.f - node.eta_s2;
-    } else if (p == "node.eta_decay" && value >= 0) {
-        node.eta_decay = (value == 1.f);
+    } else if (p == "node.eta_decay_rate" && value >= 0 && value <= 1) {
+        node.eta_decay_rate = value;
     } else if (p == "node.s1_reset_range" && value > 0) {
         node.s1_reset_range2 = value * value;
     } else if (p == "node.interval" && index < 4 && value >= 0) {

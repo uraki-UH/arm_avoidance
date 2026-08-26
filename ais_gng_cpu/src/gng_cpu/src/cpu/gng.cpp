@@ -209,8 +209,8 @@ void GNG::exec() {
     n1.check_edge_distance();
     // 年齢に基づく削除
     n1.check_age();
-    // エッジが無いノードの削除
-    n1.check_delete_no_edge();
+    // エッジが無いノードの削除と学習係数の減衰
+    n1.check_delete_no_edge_and_decay_eta();
     // クラスタリングのために，エッジの距離を計算
     n1.calc_edge_distanceXY();
     auto t5 = std::chrono::system_clock::now();

@@ -7,8 +7,8 @@ class Node{
     public:
         Node();
         ~Node();
-        void init(uint32_t id);
-        void init(uint32_t id, Vec3f &pos);
+        void init(uint32_t id, float eta_s1, float eta_s2);
+        void init(uint32_t id, float eta_s1, float eta_s2, Vec3f &pos);
         uint32_t id;
         Vec3f pos;
         // Vec3f pos_prev;
@@ -22,6 +22,8 @@ class Node{
         // 時間
         uint32_t frame;
         uint32_t age_s1 = 0;
+        float eta_s1;
+        float eta_s2;
 
         // flag
         bool static_node;
