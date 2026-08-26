@@ -301,8 +301,7 @@ ros2 launch ais_gng topological_grid.launch.py \
   grid_size:=0.02
 ```
 
-主な補助出力は`<output_topic>/delta`、`<output_topic>/isolated`、`<output_topic>/edge_inferred`、
-`<output_topic>/triangle_inferred`、`<output_topic>/summary`。詳細設定は
+主な補助出力は`<output_topic>/isolated`、`<output_topic>/summary`。詳細設定は
 `ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`、処理仕様は
 [`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
 
