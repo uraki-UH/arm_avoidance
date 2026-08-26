@@ -4,6 +4,7 @@ from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     # Correct way: find the configuration file relative to the package installation
@@ -15,6 +16,8 @@ def generate_launch_description():
         DeclareLaunchArgument('config_file', default_value=default_config_path),
         DeclareLaunchArgument('input_topic', default_value='/camera/camera/depth/color/points'),
         DeclareLaunchArgument('output_topic', default_value='/camera/transformed_points'),
+        DeclareLaunchArgument('input_queue_depth', default_value='1'),
+        DeclareLaunchArgument('reliable_input', default_value='false'),
 
         Node(
             package='pointcloud_transformer_cpp',
@@ -25,6 +28,12 @@ def generate_launch_description():
                 {
                     'input_topic': LaunchConfiguration('input_topic'),
                     'output_topic': LaunchConfiguration('output_topic'),
+                    'input_queue_depth': ParameterValue(
+                        LaunchConfiguration('input_queue_depth'), value_type=int
+                    ),
+                    'reliable_input': ParameterValue(
+                        LaunchConfiguration('reliable_input'), value_type=bool
+                    ),
                 }
             ],
             output='screen'

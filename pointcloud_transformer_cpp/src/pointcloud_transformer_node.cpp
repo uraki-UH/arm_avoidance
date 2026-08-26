@@ -2,6 +2,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <Eigen/Core>
+#include <cstdint>
 #include "pointcloud_transformer_cpp/geometry_utils.hpp"
 
 class PointCloudTransformerNode : public rclcpp::Node {
@@ -14,6 +15,8 @@ public:
     this->declare_parameter<std::string>("target_frame", "base_link");
     this->declare_parameter<std::string>("input_topic", "/camera/camera/depth/color/points");
     this->declare_parameter<std::string>("output_topic", "/camera/transformed_points");
+    this->declare_parameter<std::int64_t>("input_queue_depth", 1);
+    this->declare_parameter<bool>("reliable_input", false);
 
     // 2. 初期計算
     update_transform();
@@ -31,8 +34,15 @@ public:
     // 4. Pub/Sub 作成
     pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(get_parameter("output_topic").as_string(), 10);
     
-    rclcpp::QoS qos(1);
-    qos.best_effort();
+    const auto configured_queue_depth = get_parameter("input_queue_depth").as_int();
+    const auto input_queue_depth = static_cast<std::size_t>(
+      configured_queue_depth > 0 ? configured_queue_depth : 1);
+    rclcpp::QoS qos(input_queue_depth);
+    if (get_parameter("reliable_input").as_bool()) {
+      qos.reliable();
+    } else {
+      qos.best_effort();
+    }
     sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
       get_parameter("input_topic").as_string(), qos,
       [this](const sensor_msgs::msg::PointCloud2::SharedPtr msg) {

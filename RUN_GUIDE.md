@@ -57,12 +57,8 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-このlaunchはViewer gatewayやロボットを起動しない。先に別terminalで
-`gng_viewer_bridge.launch.py`を起動した状態で使用する。既定で`ToPoDualArm.yaml`からVLUT fileを特定し、`vlut.bin` headerの
-`voxel_size`をROI voxel化と`occupied_voxels`出力の両方へ自動適用する。したがって、
-通常は`voxel_size`や`output_voxel_size`を指定しない。別のrobot設定では、同じrobotの
-`params_file`を指定する。headerを持たない旧VLUTだけは、起動ログを警告して手動設定値の
-`0.02 m`へフォールバックする。
+このlaunchはViewer gatewayとロボットを起動しないため、`gng_viewer_bridge.launch.py`を別terminalで起動する。
+ボクセル解像度はVLUT headerから取得するため、通常は手動指定しない。
 
 `environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
 
@@ -72,15 +68,7 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 | `true` | `false` | world indexはViewer確認用に構築し、ROI voxel化は直接方式 |
 | `true` | `true` | world indexを構築し、bucket AABB抽出後にROI voxel化 |
 
-`enable_build: false`と`enable_roi_query: true`の組合せは不正として起動を停止する。`enable_bucket_publish`はworld bucketの
-Viewer出力だけを制御する。`enable_build`が`false`ならbucket出力も無効になる。旧設定の
-`world_index.enable`は、新しい2項目が未指定の場合だけ両方の既定値として扱う後方互換設定である。
-`ToPoDualArm.yaml`の既定値は`enable_build: true`、`enable_roi_query: true`、`0.2 m` bucketである。
-
-複数robotのindex ROI抽出は`parallel_thread_num`で並列化できる。`1`は逐次、`4`は追加ROIを最大4 workerで
-並列抽出する設定である。共有設定例は`4`、単一robot設定は`1`である。運用ログには
-`world_points`、`world_buckets`、`candidate`、`roi_voxels`、`build_ms`、`primary_query_ms`、
-`additional_query_ms`、`processing_ms`を出力する。比較専用の`world_bucket_benchmark_node`は廃止した。
+`enable_build: false`と`enable_roi_query: true`は使用不可。既定値は両方`true`。
 
 ### ToPo Fuzzy Viewerでのworld index確認
 
@@ -89,33 +77,19 @@ Viewer gatewayを別途起動後、Viewerのtopic一覧から次の`voxel_msgs/V
 - `/ToPoDualArm/roi_voxel_ids`: `ToPoDualArm/base_link`座標系のVLUT入力ROI voxel
 - `/ToPoDualArm/world_index_buckets`: `world`座標系の非空world bucket voxel
 
-どちらもreliable/transient-localでpublishするため、Viewerを後から接続しても直近の状態を
-受信する。`world index更新:`ログの`roi_voxels`と`world_buckets`が0以外であること、Viewer側で
-両topicのレイヤーを有効化すること、`world`から`ToPoDualArm/base_link`へのTFが存在することが
-可視化の確認条件である。
-
-`environment_voxelization.base_frame`と`robot_name`から、入力点群の変換先
-`ToPoDualArm/base_link`を自動解決する。`source_frame_id`が空なら、入力点群headerの
-frameを使用する。移動マニピュレータは自己位置推定またはSLAMが毎時刻の
-`world`→`ToPoDualArm/base_link`をpublishするため、YAMLの`enable_static_tf`は`false`のままにする。
-固定設置だけは同YAMLの`enable_static_tf: true`と`static_tf_*`へ外部キャリブレーション値を設定する。
-既存のlocalization TFがある場合に静的TFを追加してはならない。
+`world`から`ToPoDualArm/base_link`へのTFと、両topicのViewerレイヤーが必要。
+移動ロボットでは`enable_static_tf: false`、固定設置で外部TFがない場合だけ静的TFを設定する。
 
 ### 複数robotの共有world index
 
-`environment_voxelization.world_index.consumers`に各robotの`params_file`、`robot_name`、
-`voxel_topic`を列挙すると、`environment_to_vlut.launch.py`がworld bucket索引を1回だけ構築し、
-各robotのTF・ROI・VLUT header解像度で個別にROI voxelを出力する。
-`config/world_index.yaml`は同一URDFを2台使う動作例であり、実機では各要素の`params_file`を
-各robotの設定へ置き換える。
+`config/world_index.yaml`の`consumers`へrobotごとの設定を列挙する。
 
 ```bash
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
 ```
 
-robot本体とViewer gatewayは各robotごとに別terminalで起動する。共有world index launchはそれらを
-起動しないため、既存の`gng_viewer_bridge.launch.py`とnode名・topic名が重複しない。
+robot本体とViewer gatewayはrobotごとに別terminalで起動する。
 
 ```bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
@@ -123,19 +97,14 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   robot_name:=ToPoDualArm_A
 ```
 
-2台目以降も、そのrobotの`params_file`と`robot_name`で同様に起動する。
-
-`/ToPoDualArm/occupied_voxels`と`/ToPoDualArm/danger_voxels`はfull snapshotとしてpublishする。
-TopoFuzzyの`SafetyVlutMapper`は前回snapshotとの差分だけをVLUT node countへ加減算するため、
-追加・削除ボクセルのための別launchは不要。full snapshotにより、点群から消えた占有も安全に解除する。
+2台目以降も`params_file`と`robot_name`を変更して同様に起動する。
 
 danger判定方式は`ToPoDualArm.yaml`の`environment_voxelization.danger_source`で選択する。
 
 - `environment_inflation`: 現在の既定値。`danger_inflation`だけ環境voxelを膨張してdangerへ送る方式
 - `vlut_distance`: 環境側膨張を0にし、VLUT relationの距離値を`vlut_danger_dist`で判定する方式
 
-現行の`ToPoDualArm10000/vlut.bin`はrelation距離が全て0のため、`vlut_distance`には切り替えない。
-距離付きVLUTを生成した後にだけ、次の設定へ変更する。
+現行VLUTは距離値を持たないため、`vlut_distance`は距離付きVLUT生成後に使用する。
 
 ```yaml
 environment_voxelization:
@@ -152,10 +121,7 @@ ros2 topic echo --once /ToPoDualArm/roi_voxel_ids
 ros2 topic echo --once /ToPoDualArm/occupied_voxels
 ```
 
-既定では`ToPoDualArm/base_link`へ点群を変換し、同座標系のreachability範囲
-`x=[-0.1, 0.5] m`、`y=[-1.0, 1.0] m`、`z=[-1.0, 1.0] m`だけを
-各軸0.2 m拡張した領域を逐次ボクセル化する。別ロボットでは次の引数をrobot configの
-TCPサンプリング範囲へ合わせる。
+別ロボットでROIを変更する場合は、TCPサンプリング範囲と余裕を指定する。
 
 ```bash
 ros2 launch gng_vlut_system point_to_voxel.launch.py \
@@ -168,23 +134,13 @@ ros2 launch gng_vlut_system point_to_voxel.launch.py \
   reachability_margin_z:=<margin_z>
 ```
 
-marginには把持物の最大張り出し、位置推定誤差、安全余裕を含める。移動マニピュレータでは、
-ボクセルを保持したい移動範囲を`reachability_margin_x`と`reachability_margin_y`へ加える。
-領域は各点群時刻のTFで現在のロボット基準座標系へ追従するため、marginには先読みする
-台車移動範囲を指定する。不要な高さ方向のボクセル増加を避けるため、各軸を個別指定する。
-
-全点を従来どおりボクセル化する場合は`enable_reachability_filter:=false`を指定する。
-dense bitmapは既定で最大8,000,000 voxelとし、超える範囲では再利用hashへ自動fallbackする。
-メモリ上限を調整する場合は`max_dense_voxel_num`を指定する。
+marginには把持物の張り出し、推定誤差、安全余裕、必要な台車移動範囲を含める。
+全点を対象にする場合は`enable_reachability_filter:=false`を指定する。
 
 ### depth画素handle付きpersistent world indexの比較
 
-`depth_world_index_benchmark_node`は固定解像度のraw depth画素を安定handleにし、world bucket内の
-点だけを差分更新する。各フレームのdepth全画素を読むが、複数robotのためのworld index構築は1回だけで、
-各robotには局所AABB query後の点だけをVLUT IDへ変換する。debug有効時だけ、確認用voxel topicもpublishする。
-
-camera-to-worldが固定である前提のため、実機では`camera_world_*`に固定外部パラメータを指定する。
-camera姿勢、camera_infoの画像寸法、intrinsicsの変更時は安全側でworld indexを全再構築する。
+固定カメラのraw depthからpersistent world indexを構築し、全再構築方式と比較する。
+実機では`camera_world_*`へ外部パラメータを設定する。
 
 ```bash
 # ターミナル1: persistent indexの実行設定
@@ -198,19 +154,9 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
     /camera/camera/depth/camera_info
 ```
 
-YAML既定値では、毎フレームの`direct8`全再構築比較を実行しない。`robot_num:=1`のpersistent queryと
-debug voxel出力だけのため、Viewer確認時に基準方式のCPU負荷を加えない。比較が必要なときだけ
-`enable_comparison_benchmark:=true`を指定する。`depth_update_mm_th:=1`と`free_confirmation_num:=1`では、
-比較有効時の`mismatch_num=0`、`recall=1`、`precision=1`が毎フレーム全再構築と同じVLUT IDの条件となる。`free_confirmation_num:=3`は
-depth値が0になった画素を3フレーム残す保守設定であり、false negativeを抑える代わりに一時的な
-false positiveを許容する。valid depthが奥へ移る変化は、現観測を優先して即時更新する。
-
-常駐時の毎フレーム計測ログは既定で有効である。処理時間、world bucket数、ROI voxel数を出力し、
-ログを抑止する場合だけ`enable_runtime_log:=false`を指定する。
-
-YAMLのROIは今回の狭い局所chunkの実測条件である。`robot_spacing_x:=0.0`と
-`robot_yaw_step_deg:=0.0`はworld indexの共有費用だけを分離する比較条件であり、実機のrobot配置には
-各robotのworld poseを使う。実機の固定cameraでは同YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
+全再構築比較は`enable_comparison_benchmark:=true`、ログ抑止は`enable_runtime_log:=false`。
+条件と計測結果は
+[`2026-08-25_reachability_filtered_environment_voxelization.md`](gng_vlut_system/docs/releases/2026-08-25_reachability_filtered_environment_voxelization.md)を参照。
 
 #### ROI voxelとworld indexの視覚確認
 - `/depth_world_index/debug/roi_voxels` 
@@ -301,9 +247,7 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
 
 ### 深度画像ベースの動体ノード削除判定ベンチ
 
-`/camera/camera/depth/image_rect_raw` を直接読むため、点群から深度バッファを再構築しない。
-GNG は従来どおり変換済み点群を入力にする。ベンチマークは map と同時刻の深度画像を30フレーム照合し、
-等倍・実行時1/2・実行時1/4 min-pooling を比較して自動終了する。
+Mapと同時刻の深度画像を30フレーム照合し、解像度別の処理時間を比較する。
 
 ```bash
 # ターミナル1: 生点群は変換用に退避し、深度画像と内部パラメータも同時に再生する
@@ -327,9 +271,7 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
 ros2 run fuzzy_voxel_grid depth_visibility_benchmark
 ```
 
-この bag でのC++計測では、等倍の深度画像を直接参照する方式が p50 約1.30 ms で最速だった。
-実行時の1/2・1/4 min-pooling は各フレームで全画素を走査するため、p50 約7.38 ms / 6.74 ms となり遅い。
-解像度を下げるなら、このノード内でpoolingするのではなく、カメラ側で低解像度深度画像を出す。
+このbagでは等倍参照が最速。低解像度化はノード内poolingではなくカメラ側で行う。
 
 ### 変換済み点群を新しいrosbagへ1周分だけ保存
 # 先に上の変換ノードを起動し、次にrecordを開始してから、最後にbagを--loopなしで再生する。
@@ -377,148 +319,56 @@ python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
-## GNGノードを、把持候補の前段となるラベル付きボクセルへ変換?
-`/downsampling/grasp_support` は `UNKNOWN_OBJECT` を優先し、`DEFAULT`で残りを補う
-把持支持点群である。`graspnet.yaml`では最大10,000点（unknown最大5,000点）を空間的な
-カバレッジ優先で選ぶ。GNG本体は、別に設定した入力点群を均一選択して学習する。
-旧`/downsampling/unknown`は同じ内容を出す互換トピックであり、
-新規の処理には使わない。
-`HUMAN`、`CAR`を除外し、現在の点群支持があるセルを対象にする。`SAFE_TERRAIN`は候補としては除外するが、
-床際物体の履歴を切らないため内部の構造証拠としては保持する。`auto`支持は各セルごとに
-GNGの`inpcl_ids`と現在点群の近傍支持の大きい方を使うため、IDが一部のノードで欠けても安定した点群を失わない。セルの有効／無効は、
-点群支持の在席率と切替率から求める時間安定度で決める。現在の点群支持は周囲27セルの中央値で正規化し、
-点群・ノード密度や`grid_size`が変わっても固定個数閾値への依存を避ける。EMAはMap headerの時刻差から
-更新するため、点群レートにも依存しない。単発の欠落は残し、繰り返すON/OFFは切替率が上がるため抑制する。
-時間安定度は `在席率 × (1 - 切替率)` であり、rayを使わずに一時欠落と反復フリッカへの扱いを分ける。
-さらにネイティブ深度画像が同時刻にあるときは、各ボクセル中心を1回だけ射影して3×3画素の中央値を比較する。
-画角外と手前物体による遮蔽では履歴を保持し、対応画素の深度がセルより奥にある（その場所が空いた）場合だけ
-負の証拠として減衰させる。全rayの走査はしない。深度または座標変換が得られないフレームは従来の時間減衰に戻る。
-`depth_visibility_*` と `camera_to_map.*` は通常触らず、プロファイル YAML にだけ置いてある。TFを優先し、
-録画に `base_link`→カメラTFがない場合だけ既存の点群変換キャリブレーションをフォールバックとして使う。
-深度がない場合も、過去セルのGNG近傍が複数残り、局所的に静止または移動方向が不一致なら、その既知セルだけを保持する。
-近傍が局所edge間隔に対して十分に大きく、同方向に並進したときは、移動物体の旧位置だけでなく
-現在観測中のセルにも連続的な負の証拠を入れる。そのため、腕だけでなく小さく揺れる胴体も
-把持候補として残り続けない。単ノード移動では発火せず、少なくとも2近傍の整合した並進だけを使う。
-これは前後フレームの既存GNG edgeとノード位置だけを1回走査する。新規セルの膨張、点群kNN・PCA、全ボクセル走査は行わない。
-単ノード法線方向の動きは補助オプションであり、既定では無効である。
-`SAFE_TERRAIN`は新規候補にはしないが、内部ではGNG構造・在席の証拠として残す。
-そのため床際の物体で`UNKNOWN_OBJECT`と`SAFE_TERRAIN`が交互になっても、terrainを観測欠損としては扱わない。
-ただし単発unknownは候補化せず、同一フレームのGNG edge連結成分が**4ノードかつ4つの点群支持済み出力セル**を
-占有したときだけ物体証拠として履歴へ記録する。`unknown_component_event_count`、
-`unknown_component_event_node_count`、`unknown_component_event_voxel_count`で確認できる。
-直接観測セルの連結性は26近傍セルではなく、両端が安定したGNG edgeで判定する。細かい`grid_size`で
-途中セルが抜けても、そのedge上だけを補間して連結を維持する。edge長の除外も固定距離ではなく、
-各端点の周辺GNG edge長に対するロバストな外れ値で決める。GNG edgeを持たない直接観測セルだけを
-`<output_topic>/isolated`へ分離する。
-現在点があるセルでも、周囲のラベルセル（unknownを含む）がなく、別セルへ出るGNG edgeもない場合は
-孤立ノイズとして時間安定度に負の証拠を入れる。即時削除ではないため、同じ
-`temporal_time_constant_sec`とヒステリシスで減衰する。細かい`grid_size`によるセル間の隙間を
-GNG edgeが跨ぐ場合は、この孤立減衰を適用しない。
-`output_topic`は非孤立の直接観測と補間セルの和集合で、`edge_inferred`と`triangle_inferred`は補間由来だけを出す。
+## GNGノードを把持候補用ボクセルへ変換
 
+`/topological_map`と`/downsampling/grasp_support`を照合し、点群支持のある物体候補をボクセル化する。
+`SAFE_TERRAIN`、`HUMAN`、`CAR`は候補から除外する。
+
+```bash
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   pointcloud_topic:=/downsampling/grasp_support \
   output_topic:=/topo_voxel_ids \
-  grid_size:=0.02
+  grid_size:=0.01
+```
+
+主な補助出力は`<output_topic>/delta`、`<output_topic>/isolated`、`<output_topic>/edge_inferred`、
+`<output_topic>/triangle_inferred`、`<output_topic>/summary`。詳細設定は
+`ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`、処理仕様は
+[`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
 
 ## GNGエッジから増分平面クラスタを作る
 
-点群全体にRANSACを掛けず、`TopologicalMap`の既存GNG edgeとGNGノード法線から平面クラスタを作る。
-GNGノードID単位の所属を持ち越して差分だけ直すため、所属が定常状態に落ち着く。出力の
-`node_indices`は入力`TopologicalMap.nodes`への対応である。
-1フレームは`O(N + E)`とクラスタ数ぶんの3x3固有値分解だけで、優先度付きキューや
-クラスタ同士の総当たりを使わない。
-
-所属が動くのは、平面から離れすぎたとき（解放）、未所属で条件を満たしたとき（取り込み）、
-別クラスタへ明確により適合するとき（移動）に限る。取り込みと移動には
-**移動先クラスタにすでに所属している隣接ノードが2つ以上あること**を要求し、
-1本のエッジだけで所属が漏れ出すのを防ぐ。
+GNG edgeとノード法線から平面クラスタを増分生成する。
 
 ```bash
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 ```
 
-`/topological_planar_clusters_incremental/markers/obb` と
-`/topological_planar_clusters_incremental/markers/nodes` 。
-
+確認用Markerは`/topological_planar_clusters_incremental/markers/obb`と
+`/topological_planar_clusters_incremental/markers/nodes`。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
-上の`/topo_voxel_ids`を、最大把持体積・最小把持体積・グリッパ開閉の掃引禁止体積へ照合して
-TCP姿勢候補を出す。通常は引数なしでよい。この起動で`/grasp_pose_markers`も同時に出力する。
+`/topo_voxel_ids`をグリッパ体積と照合し、TCP姿勢候補とMarkerを出力する。
 
 ```bash
 ros2 launch grasping_system grasp_voxel_template.launch.py
 ```
 
-`/grasp_pose_cand_cells`は、テンプレート照合・対向接触・禁止体積の各条件を通過し、
-同じTCPセルに密集する姿勢を1件へ代表化した候補セルである。`labels`は現在すべて`1`であり、
-「テンプレート上の把持候補TCPセル」を表す。平行移動なしの実ロボット到達性やIK可否は、この段階では
-含まれない。`/grasp_pose_cands`の`PoseArray`は各候補セルの代表姿勢だけを出力する。
+主な出力は`/grasp_pose_cand_cells`、`/grasp_pose_cands`、`/grasp_pose_markers`、
+`/grasp_pose_cands/summary`。この段階ではIKと実ロボット到達性を評価しない。
 
-summaryには、代表化前の`raw_candidate_num`、TCPセル数の`candidate_cell_num`、同一TCPセルから
-抑制した`suppressed_same_tcp_cell_num`、および法線・平面クラスタとの接触根拠を出力する。
-`contact_normal_alignment`は対向する両接触帯にあるGNG法線とグリッパ閉鎖軸の絶対内積の小さい側、
-`planar_contact_ratio`は両接触帯で平面クラスタに所属する法線の割合の小さい側である。法線または
-同一フレームの平面クラスタが未着時は`-1`であり、これらの値だけで候補を棄却しない。
-
-同一フレームの平面クラスタに所属するGNGノードは、`grip_V`の外側にある指・基部の掃引禁止体積に
-対する疎な衝突面としても使う。床・壁・周辺物体の平面ノードが禁止体積へ入る候補は、この衝突判定で
-除外する。一方、把持対象の平面ノードが`grip_V`内にある場合は、把持対象との接触を許容するため
-衝突扱いにしない。凸包やOBBを塗りつぶさず、実在するGNGノードセルだけを使うため、未観測穴を
-障害物として過大に埋めない。summaryの`planar_collision_cell_num`は、この衝突面に使ったセル数である。
-
-さらに、単眼の点群で未観測側を空き空間とみなさないため、深度可視性を有効にした場合は深度画像
-`/camera/camera/depth/image_rect_raw`とCameraInfo
-`/camera/camera/depth/camera_info`も参照する。各姿勢について`grip_V`の外側にある掃引体積の代表セルを
-深度画像へ投影し、セル中心より深い深度が得られる観測自由空間だけを通過させる。深度欠損、画角外、
-手前の物体による遮蔽、TF未取得はいずれも候補の棄却条件である。深度との差分余裕は`grid_size`と同じ
-ため、固定のmmしきい値は用いない。深度はボクセル入力と同じヘッダ時刻のフレームだけを使う。深度または
-CameraInfoが未着の間は、古い候補を残さず空の候補を出力する。summaryの`rejected_visibility`で、この判定
-による棄却数を確認できる。
-
-現在の`graspnet_player`は点群だけを配信するため、通常起動では深度可視性を無効にしている。深度画像・
-CameraInfo・時刻整合するTFも配信できる入力でだけ、次の詳細指定により有効化する。
+深度画像、CameraInfo、同時刻TFがある入力でだけ深度可視性を有効化する。
 
 ```bash
 ros2 launch grasping_system grasp_voxel_template.launch.py \
   enable_depth_visibility:=true
 ```
 
-これは安定した物体候補ボクセルを対象にする一次POCである。`grip_sweptV`はグリッパ基部と
-開状態から閉状態までの指形状を合成した禁止体積である。ただし最大開口の`grip_V`内は把持対象が
-接触してよい領域として除外する。さらに、同じ開度で左右の接触帯が同時に占有されることを要求し、
-指の閉鎖軸と直交する二軸の両端まで連続する面状占有は除外する。GNG成分に基づく「取り出せる
-物体」への分離、全環境点群から作る衝突専用占有、進入経路の掃引判定は次段で追加する。平面クラスタは
-ペットボトルなど把持対象の表面にもなり得るため、`grip_V`内外の区別を伴う掃引衝突面として用いる。
-
-通常起動で指定できる値は上の4つだけである。詳細設定は
-`ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`に集約した。
-別プロファイルを試すときだけ、`params_file:=/absolute/path/profile.yaml`を追加する。
-
-主な調整点は`temporal_time_constant_sec`（在席率・切替率の時間定数）、`temporal_activation_score`（発火）、
-`temporal_retention_score`（消失）である。
-`retention_score < activation_score`のヒステリシスを保つ。`unknown_shape_filter_enabled`は既定で無効で、
-形状の逸脱だけを物体判定にしない。summaryにはこれらの設定値と活動度を出す。
-`<output_topic>/summary`は更新ごとの集計だけを送る。全セルのデバッグ明細は、必要なときだけ
-`<output_topic>/assignments`を購読する。購読者がいない通常運用では明細JSONを組み立てないため、
-多数ボクセル時の通信量とCPU負荷を増やさない。
-深度が有効なときは `depth_visibility_free_count`、`depth_visibility_occluded_count`、
-`depth_visibility_out_of_view_count` もsummaryに出る。移動物体の削除証拠として見るのは `free_count` だけである。
-局所構造の判定数は `local_structure_static_node_count`、`local_structure_moving_node_count`、
-`local_structure_ambiguous_node_count` に、これで保持された旧セル数は `retained_by_local_structure`、
-現在セルで運動抑制が残っている数は `local_motion_suppressed_voxel_count` に出る。
-GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift_maximum_score` に出る。
-`edge_max_length: 0.0` は局所GNG edge長から自動で外れedgeを除く設定である。出力の`grid_size`は
-把持テンプレートの必要解像度で選び、物体連結性のために大きくする必要はない。
-`point_support_radius_m` を使う場合は、同一フレームで多数回行う半径内の点群支持数を疎な
-8×8×8セルの積分キャッシュから取得する。従来と同じ格子立方体内の点数になるため候補結果は
-変えない。極端に疎な入力またはキャッシュが大きくなり過ぎる入力では自動的に従来の直接探索へ戻る。
-
-`point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
-静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
+照合条件、掃引禁止体積、深度可視性、summary項目の詳細は
+[`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
 
 ## realsense 
 ros2 launch realsense2_camera rs_launch.py \
