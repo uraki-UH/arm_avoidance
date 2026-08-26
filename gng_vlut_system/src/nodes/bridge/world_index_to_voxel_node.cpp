@@ -78,6 +78,7 @@ public:
     declare_parameter<double>("reachability_margin_y", 0.2);
     declare_parameter<double>("reachability_margin_z", 0.2);
     declare_parameter<int>("max_dense_voxel_num", 8000000);
+    declare_parameter<int>("parallel_thread_num", 1);
     declare_parameter<std::string>("additional_consumers_json", "[]");
 
     input_topic_ = get_parameter("input_topic").as_string();
@@ -135,6 +136,8 @@ public:
     }
     const std::size_t max_dense_voxel_num = static_cast<std::size_t>(
       std::max<std::int64_t>(0, get_parameter("max_dense_voxel_num").as_int()));
+    parallel_thread_num_ = static_cast<int>(std::max<std::int64_t>(
+      1, get_parameter("parallel_thread_num").as_int()));
     voxel_accumulator_ = std::make_unique<reachability_voxel_accumulator>(
       voxel_codec_, reachability_bounds_, max_dense_voxel_num);
 
@@ -156,11 +159,12 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "WorldIndexToVoxelNode initialized. input=%s output=%s world_index=%s roi_query=%s additional_consumer_num=%zu world_bucket=%s world_frame=%s target_frame=%s bucket_size=%.3f voxel_size=%.4f accumulator=%s",
+      "WorldIndexToVoxelNode initialized. input=%s output=%s world_index=%s roi_query=%s additional_consumer_num=%zu parallel_thread_num=%d world_bucket=%s world_frame=%s target_frame=%s bucket_size=%.3f voxel_size=%.4f accumulator=%s",
       input_topic_.c_str(), output_topic_.c_str(),
       enable_world_index_ ? "enabled" : "disabled",
       enable_roi_query_ ? "index" : "direct",
       additional_consumers_.size(),
+      parallel_thread_num_,
       enable_world_index_ && enable_world_bucket_publish_
         ? world_bucket_topic_.c_str() : "disabled",
       world_frame_id_.c_str(), target_frame_id_.c_str(), world_index_->bucket_size(),
@@ -356,48 +360,85 @@ private:
       world_bucket_codec_.makeMessage(header, world_bucket_ids));
   }
 
-  void publishAdditionalConsumers(const sensor_msgs::msg::PointCloud2 &msg)
+  double publishAdditionalConsumers(const sensor_msgs::msg::PointCloud2 &msg)
   {
-    for (additional_consumer &consumer : additional_consumers_) {
+    if (additional_consumers_.empty()) {
+      return 0.0;
+    }
+    struct additional_consumer_result
+    {
+      bool has_transform{false};
+      bool has_output{false};
+      bool is_world_to_target_identity{false};
+      world_bucket_query_stats query_stats;
+      reachability_voxelization_stats voxel_stats;
+      std::string error;
+    };
+
+    const auto query_start = std::chrono::steady_clock::now();
+    std::vector<additional_consumer_result> results(additional_consumers_.size());
+    const int query_thread_num = std::min<int>(
+      parallel_thread_num_, static_cast<int>(additional_consumers_.size()));
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(query_thread_num) schedule(static)
+#endif
+    for (int consumer_idx = 0;
+      consumer_idx < static_cast<int>(additional_consumers_.size()); ++consumer_idx)
+    {
+      additional_consumer &consumer = additional_consumers_[consumer_idx];
+      additional_consumer_result &result = results[consumer_idx];
       Eigen::Isometry3d world_to_target = Eigen::Isometry3d::Identity();
       if (!lookupTransform(
           consumer.target_frame_id, world_frame_id_, msg, world_to_target))
       {
+        continue;
+      }
+      result.has_transform = true;
+      result.is_world_to_target_identity = isIdentityTransform(world_to_target);
+      const auto [min_world, max_world] = makeWorldQueryBounds(
+        consumer.bounds, world_to_target.inverse());
+      consumer.voxel_accumulator->begin_frame(world_index_->point_num());
+      try {
+        result.query_stats = world_index_->query_aabb(
+          min_world, max_world,
+          [&consumer, &world_to_target, &result](
+            const Eigen::Vector3f &world_point) {
+            if (result.is_world_to_target_identity) {
+              consumer.voxel_accumulator->add_point_in_target_frame(
+                world_point.cast<double>());
+            } else {
+              consumer.voxel_accumulator->add_point(
+                world_point.cast<double>(), world_to_target);
+              }
+          });
+      } catch (const std::exception &error) {
+        result.error = error.what();
+        continue;
+      }
+
+      result.voxel_stats = consumer.voxel_accumulator->stats();
+      result.has_output = true;
+    }
+
+    for (std::size_t consumer_idx = 0; consumer_idx < additional_consumers_.size();
+      ++consumer_idx)
+    {
+      additional_consumer &consumer = additional_consumers_[consumer_idx];
+      const additional_consumer_result &result = results[consumer_idx];
+      if (!result.has_transform) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
           "追加ROI用TF取得失敗: consumer=%s target=%s source=%s",
           consumer.name.c_str(), consumer.target_frame_id.c_str(), world_frame_id_.c_str());
         continue;
       }
-
-      const bool is_world_to_target_identity = isIdentityTransform(world_to_target);
-      const auto [min_world, max_world] = makeWorldQueryBounds(
-        consumer.bounds, world_to_target.inverse());
-      consumer.voxel_accumulator->begin_frame(world_index_->point_num());
-      world_bucket_query_stats query_stats;
-      try {
-        query_stats = world_index_->query_aabb(
-          min_world, max_world,
-          [&consumer, &world_to_target, is_world_to_target_identity](
-            const Eigen::Vector3f &world_point) {
-            if (is_world_to_target_identity) {
-              consumer.voxel_accumulator->add_point_in_target_frame(
-                world_point.cast<double>());
-            } else {
-              consumer.voxel_accumulator->add_point(
-                world_point.cast<double>(), world_to_target);
-            }
-          });
-      } catch (const std::exception &error) {
+      if (!result.has_output) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
           "追加ROI抽出失敗: consumer=%s error=%s",
-          consumer.name.c_str(), error.what());
+          consumer.name.c_str(), result.error.c_str());
         continue;
       }
-
-      const reachability_voxelization_stats voxel_stats =
-        consumer.voxel_accumulator->stats();
       const std::vector<long> &roi_voxel_ids =
         consumer.voxel_accumulator->finish_voxel_ids();
       std_msgs::msg::Header roi_header = msg.header;
@@ -410,10 +451,17 @@ private:
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
         "追加ROI出力: consumer=%s candidate=%zu accepted=%zu roi_points=%zu roi_voxels=%zu target_identity=%s",
-        consumer.name.c_str(), query_stats.candidate_point_num,
-        query_stats.accepted_point_num, voxel_stats.accepted_point_count,
-        roi_voxel_ids.size(), is_world_to_target_identity ? "true" : "false");
+        consumer.name.c_str(), result.query_stats.candidate_point_num,
+        result.query_stats.accepted_point_num, result.voxel_stats.accepted_point_count,
+        roi_voxel_ids.size(), result.is_world_to_target_identity ? "true" : "false");
     }
+    const double query_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - query_start).count();
+    RCLCPP_INFO_THROTTLE(
+      get_logger(), *get_clock(), 1000,
+      "追加ROI抽出集計: consumer_num=%zu parallel_thread_num=%d processing_ms=%.3f",
+      additional_consumers_.size(), query_thread_num, query_ms);
+    return query_ms;
   }
 
   void accumulateDirectPoints(
@@ -550,6 +598,7 @@ private:
         "world indexは可視化用に構築し、ROI voxel化は直接方式を使用");
     }
 
+    const auto world_index_build_start = std::chrono::steady_clock::now();
     world_index_->begin_frame(input_point_num);
     sensor_msgs::PointCloud2ConstIterator<float> point_x(*msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> point_y(*msg, "y");
@@ -561,6 +610,8 @@ private:
         : (source_to_world * source_point.cast<double>()).cast<float>();
       world_index_->add_point(world_point);
     }
+    const double world_index_build_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - world_index_build_start).count();
 
     if (!enable_roi_query_) {
       std_msgs::msg::Header world_header = msg->header;
@@ -573,14 +624,15 @@ private:
         std::chrono::steady_clock::now() - processing_start).count();
       RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "world index可視化更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s roi_voxels=%zu additional_consumer_num=%zu processing_ms=%.3f source_to_world_identity=%s",
+        "world index可視化更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s roi_voxels=%zu additional_consumer_num=%zu build_ms=%.3f processing_ms=%.3f source_to_world_identity=%s",
         input_point_num, world_index_->point_num(), world_index_->bucket_num(),
         has_direct_primary_output ? "true" : "false", direct_roi_voxel_num,
-        additional_consumers_.size(), processing_ms,
+        additional_consumers_.size(), world_index_build_ms, processing_ms,
         is_source_to_world_identity ? "true" : "false");
       return;
     }
 
+    const auto primary_query_start = std::chrono::steady_clock::now();
     world_bucket_query_stats query_stats;
     reachability_voxelization_stats voxel_stats;
     std::size_t roi_voxel_num = 0;
@@ -624,7 +676,9 @@ private:
       }
     }
 
-    publishAdditionalConsumers(*msg);
+    const double primary_query_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - primary_query_start).count();
+    const double additional_query_ms = publishAdditionalConsumers(*msg);
     std_msgs::msg::Header world_header = msg->header;
     world_header.frame_id = world_frame_id_;
     if (world_header.stamp.sec == 0 && world_header.stamp.nanosec == 0) {
@@ -636,11 +690,12 @@ private:
       std::chrono::steady_clock::now() - processing_start).count();
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
-      "world index更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s candidate=%zu accepted=%zu roi_points=%zu roi_voxels=%zu additional_consumer_num=%zu processing_ms=%.3f source_to_world_identity=%s world_to_target_identity=%s",
+      "world index更新: input=%zu world_points=%zu world_buckets=%zu primary_output=%s candidate=%zu accepted=%zu roi_points=%zu roi_voxels=%zu additional_consumer_num=%zu build_ms=%.3f primary_query_ms=%.3f additional_query_ms=%.3f processing_ms=%.3f source_to_world_identity=%s world_to_target_identity=%s",
       input_point_num, world_index_->point_num(), world_index_->bucket_num(),
       has_primary_output ? "true" : "false",
       query_stats.candidate_point_num, query_stats.accepted_point_num,
-      voxel_stats.accepted_point_count, roi_voxel_num, additional_consumers_.size(), processing_ms,
+      voxel_stats.accepted_point_count, roi_voxel_num, additional_consumers_.size(),
+      world_index_build_ms, primary_query_ms, additional_query_ms, processing_ms,
       is_source_to_world_identity ? "true" : "false",
       is_world_to_target_identity ? "true" : "false");
   }
@@ -654,6 +709,7 @@ private:
   bool enable_world_index_{true};
   bool enable_roi_query_{true};
   bool enable_world_bucket_publish_{true};
+  int parallel_thread_num_{1};
   reachability_bounds reachability_bounds_;
   robot_sim::analysis::VoxelIdCodec voxel_codec_;
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;

@@ -33,6 +33,7 @@ def generate_launch_description():
         DeclareLaunchArgument("reachability_margin_y", default_value="0.2"),
         DeclareLaunchArgument("reachability_margin_z", default_value="0.2"),
         DeclareLaunchArgument("max_dense_voxel_num", default_value="8000000"),
+        DeclareLaunchArgument("parallel_thread_num", default_value="1"),
         DeclareLaunchArgument("additional_consumers_json", default_value="[]"),
         Node(
             package="gng_vlut_system",
@@ -68,6 +69,7 @@ def generate_launch_description():
                 "reachability_margin_y": LaunchConfiguration("reachability_margin_y"),
                 "reachability_margin_z": LaunchConfiguration("reachability_margin_z"),
                 "max_dense_voxel_num": LaunchConfiguration("max_dense_voxel_num"),
+                "parallel_thread_num": LaunchConfiguration("parallel_thread_num"),
                 "additional_consumers_json": LaunchConfiguration(
                     "additional_consumers_json"),
             }],

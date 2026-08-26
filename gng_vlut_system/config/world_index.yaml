@@ -4,7 +4,7 @@
       input_topic: "/dataset/points"
       source_frame_id: ""
 
-      # 全robot共有のworld bucket索引
+      # world bucket索引の設定
       world_index:
         # world bucket索引の構築
         enable_build: true
@@ -14,6 +14,8 @@
         bucket_size: 0.2
         bucket_topic: "/world_index/buckets"
         enable_bucket_publish: true
+        # 追加ROI抽出の並列worker数
+        parallel_thread_num: 4
 
         # 各要素のparams_fileからVLUT解像度とROIを読込
         consumers:

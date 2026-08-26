@@ -243,6 +243,8 @@ def _shared_world_index_actions(
     enable_build, enable_roi_query = _world_index_modes(world_index)
     enable_bucket_publish = _is_enabled(_value(
         world_index, "enable_bucket_publish", True)) and enable_build
+    parallel_thread_num = max(1, int(_value(
+        world_index, "parallel_thread_num", 1)))
     additional_consumers_json = json.dumps([
         _additional_consumer_json(consumer) for consumer in consumers[1:]
     ], separators=(",", ":"))
@@ -264,6 +266,7 @@ def _shared_world_index_actions(
                 "world_bucket_topic": bucket_topic,
                 "enable_world_bucket_publish": enable_bucket_publish,
                 "bucket_size": bucket_size,
+                "parallel_thread_num": parallel_thread_num,
                 "additional_consumers_json": additional_consumers_json,
                 **{
                     key: primary_consumer[key]
@@ -316,6 +319,7 @@ def _shared_world_index_actions(
         "[environment_to_vlut] 共有world index起動設定: "
         f"input={input_topic} world_frame={world_frame_id} bucket_size={bucket_size:.6g} "
         f"consumer_num={len(consumers)} build={enable_build} roi_query={enable_roi_query} "
+        f"parallel_thread_num={parallel_thread_num} "
         f"bucket_topic={bucket_topic if enable_bucket_publish else 'disabled'}"
     )
     for consumer in consumers:
@@ -366,6 +370,8 @@ def _launch_setup(context, *_args, **_kwargs):
     enable_world_index_bucket_publish = _is_enabled(
         _value(world_index, "enable_bucket_publish", True)) and enable_world_index_build
     world_index_bucket_size = _value(world_index, "bucket_size", 0.2)
+    world_index_parallel_thread_num = max(1, int(_value(
+        world_index, "parallel_thread_num", 1)))
     danger_source = str(_value(
         environment, "danger_source", "environment_inflation")).strip().lower()
     if danger_source not in ("environment_inflation", "vlut_distance"):
@@ -406,6 +412,7 @@ def _launch_setup(context, *_args, **_kwargs):
         "world_index_bucket_topic": world_index_bucket_topic,
         "world_index_enable_bucket_publish": enable_world_index_bucket_publish,
         "world_index_bucket_size": world_index_bucket_size,
+        "world_index_parallel_thread_num": world_index_parallel_thread_num,
         "danger_inflation": danger_inflation,
         "publish_hz": _value(environment, "publish_hz", 30.0),
     }

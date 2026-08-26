@@ -169,6 +169,8 @@ def _launch_setup(context, *_args, **_kwargs):
             "enable_world_bucket_publish": LaunchConfiguration(
                 "world_index_enable_bucket_publish"),
             "bucket_size": LaunchConfiguration("world_index_bucket_size"),
+            "parallel_thread_num": LaunchConfiguration(
+                "world_index_parallel_thread_num"),
         })
 
     return [
@@ -219,6 +221,7 @@ def generate_launch_description():
             "world_index_bucket_topic", default_value="/world_index/buckets"),
         DeclareLaunchArgument("world_index_enable_bucket_publish", default_value="true"),
         DeclareLaunchArgument("world_index_bucket_size", default_value="0.2"),
+        DeclareLaunchArgument("world_index_parallel_thread_num", default_value="1"),
         DeclareLaunchArgument("voxel_size", default_value=DEFAULT_VOXEL_SIZE),
         DeclareLaunchArgument("x_shift", default_value="42"),
         DeclareLaunchArgument("y_shift", default_value="21"),

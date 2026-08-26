@@ -72,10 +72,15 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 | `true` | `false` | world indexはViewer確認用に構築し、ROI voxel化は直接方式 |
 | `true` | `true` | world indexを構築し、bucket AABB抽出後にROI voxel化 |
 
-`false`と`true`の組合せは不正として起動を停止する。`enable_bucket_publish`はworld bucketの
+`enable_build: false`と`enable_roi_query: true`の組合せは不正として起動を停止する。`enable_bucket_publish`はworld bucketの
 Viewer出力だけを制御する。`enable_build`が`false`ならbucket出力も無効になる。旧設定の
 `world_index.enable`は、新しい2項目が未指定の場合だけ両方の既定値として扱う後方互換設定である。
 `ToPoDualArm.yaml`の既定値は`enable_build: true`、`enable_roi_query: true`、`0.2 m` bucketである。
+
+複数robotのindex ROI抽出は`parallel_thread_num`で並列化できる。`1`は逐次、`4`は追加ROIを最大4 workerで
+並列抽出する設定である。共有設定例は`4`、単一robot設定は`1`である。運用ログには
+`world_points`、`world_buckets`、`candidate`、`roi_voxels`、`build_ms`、`primary_query_ms`、
+`additional_query_ms`、`processing_ms`を出力する。比較専用の`world_bucket_benchmark_node`は廃止した。
 
 ### ToPo Fuzzy Viewerでのworld index確認
 
@@ -101,12 +106,12 @@ frameを使用する。移動マニピュレータは自己位置推定または
 `environment_voxelization.world_index.consumers`に各robotの`params_file`、`robot_name`、
 `voxel_topic`を列挙すると、`environment_to_vlut.launch.py`がworld bucket索引を1回だけ構築し、
 各robotのTF・ROI・VLUT header解像度で個別にROI voxelを出力する。
-`config/shared_world_index.yaml`は同一URDFを2台使う動作例であり、実機では各要素の`params_file`を
+`config/world_index.yaml`は同一URDFを2台使う動作例であり、実機では各要素の`params_file`を
 各robotの設定へ置き換える。
 
 ```bash
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/shared_world_index.yaml
+  params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
 ```
 
 robot本体とViewer gatewayは各robotごとに別terminalで起動する。共有world index launchはそれらを
@@ -171,50 +176,6 @@ marginには把持物の最大張り出し、位置推定誤差、安全余裕�
 全点を従来どおりボクセル化する場合は`enable_reachability_filter:=false`を指定する。
 dense bitmapは既定で最大8,000,000 voxelとし、超える範囲では再利用hashへ自動fallbackする。
 メモリ上限を調整する場合は`max_dense_voxel_num`を指定する。
-
-### 複数ロボット共有world bucketの比較
-
-`world_bucket_benchmark_node`は入力点群から0.2 mのworld bucketを1回構築し、1、2、4、8台分の
-直接走査とbucket抽出を比較する。各robot座標系で2 cm voxel IDまで生成し、ID不一致数も確認後に
-`frame_num`で自動終了する。
-
-```bash
-ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
-  -p input_topic:=/camera/camera/depth/color/points \
-  -p frame_num:=30 \
-  -p bucket_size:=0.2 \
-  -p parallel_thread_num:=8
-```
-
-出力の`bucket_total`には全ロボットで共有するbucket構築時間を含む。`mismatch_num=0`が
-直接方式とVLUT IDが一致した状態。`PARALLEL_RESULT`は8台分をrobot単位で並列化したwall time。
-比較用ノードのためvoxel topicはpublishしない。
-
-局所chunk相当のROI感度試験例：
-
-```bash
-ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
-  -p frame_num:=30 -p bucket_size:=0.2 \
-  -p robot_spacing_x:=0.0 -p robot_yaw_step_deg:=0.0 \
-  -p min_reachability_x:=-0.05 -p max_reachability_x:=0.25 \
-  -p min_reachability_y:=-0.15 -p max_reachability_y:=0.15 \
-  -p min_reachability_z:=-0.15 -p max_reachability_z:=0.15 \
-  -p reachability_margin_x:=0.03 \
-  -p reachability_margin_y:=0.03 \
-  -p reachability_margin_z:=0.03
-```
-
-world indexを複数フレーム再利用した場合のstale差分評価：
-
-```bash
-ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
-  -p index_refresh_frame_num:=2 \
-  -p depth_topic:=/camera/camera/depth/image_rect_raw
-```
-
-`REUSE_RESULT`の`recall`は現在フレームに存在するoccupied IDの保持率、`precision`は再利用indexの
-occupied IDのうち現在フレームにも存在する割合。安全用途ではfalse negativeを許容しないため、
-単純再利用ではなくdepth差分による新規点の即時overlayが必要。
 
 ### depth画素handle付きpersistent world indexの比較
 
