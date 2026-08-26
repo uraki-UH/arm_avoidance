@@ -426,3 +426,5 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
 
 すべてのプロセスをキル　frontendを除く
 ./scripts/stop_ros2_stack.sh
+
+docker compose --profile manual up -d --build frontend
