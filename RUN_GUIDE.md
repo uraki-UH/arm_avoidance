@@ -317,21 +317,16 @@ ros2 launch ais_gng plane_cluster_incremental.launch.py \
 `/topo_voxel_ids`をグリッパ体積と照合し、TCP姿勢候補とMarkerを出力する。
 
 ```bash
-ros2 launch grasping_system grasp_voxel_template.launch.py
-```
-
 ros2 launch grasping_system grasp_voxel_matcher.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
 
 主な出力は`/grasp_pose_cand_cells`、`/grasp_pose_cands`、`/grasp_pose_markers`、
 `/grasp_pose_cands/summary`。この段階ではIKと実ロボット到達性を評価しない。
 
-深度画像、CameraInfo、同時刻TFがある入力でだけ深度可視性を有効化する。
-
-```bash
-ros2 launch grasping_system grasp_voxel_template.launch.py \
-  enable_depth_visibility:=true
-```
+体積graphも同時に起動する場合だけ、`ToPoDualArm.yaml` の
+`gripper_volume_graph.enable_matcher_launch`を`true`にする。既存の
+`gng_viewer_bridge.launch.py`が体積graphを起動中なら`false`のままとする。
 
 照合条件、掃引禁止体積、深度可視性、summary項目の詳細は
 [`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
