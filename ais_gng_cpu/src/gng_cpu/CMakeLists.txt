@@ -21,6 +21,8 @@ else()
 endif()
 
 option(TARGET_JETSON "build for jetson" OFF)
+option(GNG_ENABLE_AUTHENTICATION "Enable binary signature and YubiKey authentication" OFF)
+option(GNG_ENABLE_FRAME_LOG "Enable per-frame GNG summary logging" ON)
 
 # --- 警告オプション ---
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -66,6 +68,8 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 # $<CONFIG:Release:...> でReleaseビルドの時だけ...を適用する
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Release>:_RELEASE>
+    $<$<BOOL:${GNG_ENABLE_AUTHENTICATION}>:GNG_ENABLE_AUTHENTICATION>
+    $<$<BOOL:${GNG_ENABLE_FRAME_LOG}>:GNG_ENABLE_FRAME_LOG>
     GNG_VERSION=${GNG_VERSION}
 )
 

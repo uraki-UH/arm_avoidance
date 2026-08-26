@@ -6,9 +6,9 @@
 
 ## Changed
 
-- `grasp_voxel_matcher.launch.py` は `params_file` と `node_name` だけを受け付ける構成
+- `grasp_voxel_matcher.launch.py` は `params_file`、`node_name`、任意の体積graph起動引数を受け付ける構成
 - `grasp_voxel_matcher.launch.py` は matcher と Marker bridge に同じ parameter file を適用
-- `gripper_volume_graph.enable_matcher_launch`が有効な場合だけ、matcher launchから体積graphを起動
+- `enable_gripper_volume_graph` launch 引数が有効な場合だけ、matcher launchから体積graphを起動
 
 ## Removed
 
@@ -32,4 +32,4 @@
 ## Risk / Notes
 
 robot またはグリッパーごとに matcher を追加する場合は、対応する node 名の `ros__parameters` block を YAML に追加する。
-既存のgraph publisherと併用する場合は`enable_matcher_launch`を無効にする。
+既存のgraph publisherと併用する場合は`enable_gripper_volume_graph`を指定しない。

@@ -67,7 +67,6 @@
     # --- Gripper grasp-volume graph ---
     gripper_volume_graph:
       enabled: true
-      enable_matcher_launch: false
       definitions_file: "package://grasping_system/config/ToPoDualArm_gripper_volumes.yaml"
       cache_directory: "/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gripper_volume_cache"
       cache_mode: "use"

@@ -11,7 +11,7 @@ GNG::~GNG(){
 }
 int GNG::init(const char *binary_path) {
     // このプログラムの改ざんチェック
-#ifdef _RELEASE	
+#ifdef GNG_ENABLE_AUTHENTICATION
     if(!auth.checkFile(binary_path, cl.fkey1, n1.fkey2, fkey3, la.fkey4, vg.fkey5)){
         return ERROR_CHECK_FILE;
     }
@@ -184,7 +184,7 @@ void GNG::exec() {
     if (!initialized)
         return;
 
-#ifdef _RELEASE
+#ifdef GNG_ENABLE_AUTHENTICATION
     // ライセンス認証ブロック
     if(!licenceAuthentication()){
         return;
@@ -218,7 +218,7 @@ void GNG::exec() {
     cl.clustering();
     auto t6 = std::chrono::system_clock::now();
 
-#ifndef _RELEASE
+#ifdef GNG_ENABLE_FRAME_LOG
     log.println("I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d", 
         input_pcl_num,
         vg.filtered_pcl_num,

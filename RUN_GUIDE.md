@@ -312,7 +312,7 @@ ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 
 
-## 把持ボクセルテンプレート（左グリッパ、POC）
+## 把持ボクセル照合（左グリッパ、POC）
 
 `/topo_voxel_ids`をグリッパ体積と照合し、TCP姿勢候補とMarkerを出力する。
 
@@ -324,9 +324,17 @@ ros2 launch grasping_system grasp_voxel_matcher.launch.py \
 主な出力は`/grasp_pose_cand_cells`、`/grasp_pose_cands`、`/grasp_pose_markers`、
 `/grasp_pose_cands/summary`。この段階ではIKと実ロボット到達性を評価しない。
 
-体積graphも同時に起動する場合だけ、`ToPoDualArm.yaml` の
-`gripper_volume_graph.enable_matcher_launch`を`true`にする。既存の
-`gng_viewer_bridge.launch.py`が体積graphを起動中なら`false`のままとする。
+体積graphも同時に起動する場合だけ、以下の launch 引数を追加する。既存の
+`gng_viewer_bridge.launch.py`が体積graphを起動中なら指定しない。
+
+```bash
+ros2 launch grasping_system grasp_voxel_matcher.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  enable_gripper_volume_graph:=true \
+  grippers_file:=/ros2_ws/src/grasping_system/config/ToPoDualArm_gripper_volumes.yaml \
+  tf_prefix:=ToPoDualArm \
+  cache_directory:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gripper_volume_cache
+```
 
 照合条件、掃引禁止体積、深度可視性、summary項目の詳細は
 [`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
