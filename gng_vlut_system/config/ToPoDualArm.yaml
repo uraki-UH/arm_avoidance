@@ -71,6 +71,43 @@
       cache_directory: "/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gripper_volume_cache"
       cache_mode: "use"
 
+    # --- 環境点群からVLUTまでの統合起動設定 ---
+    environment_voxelization:
+      input_topic: "/dataset/points"
+      voxel_topic: "/ToPoDualArm/roi_voxel_ids"
+      source_frame_id: ""
+      base_frame: "base_link"
+      reachability_margin_x: 0.2
+      reachability_margin_y: 0.2
+      reachability_margin_z: 0.2
+
+      # world座標系のbucket索引とViewer用可視化出力
+      world_index:
+        # world bucket索引の構築
+        enable_build: true
+        # ROI voxel化でのworld bucket索引利用
+        enable_roi_query: true
+        frame_id: "world"
+        bucket_size: 0.2
+        bucket_topic: "/ToPoDualArm/world_index_buckets"
+        enable_bucket_publish: true
+
+      # 環境側膨張またはVLUT距離によるdanger判定方式
+      danger_source: "environment_inflation"
+      danger_inflation: 0.05
+      vlut_danger_dist: 0.025
+      publish_hz: 30.0
+
+      # 固定設置時だけ使用するworldからロボットbaseへの外部較正TF
+      enable_static_tf: false
+      static_tf_parent_frame: "world"
+      static_tf_x: 0.0
+      static_tf_y: 0.0
+      static_tf_z: 0.0
+      static_tf_roll: 0.0
+      static_tf_pitch: 0.0
+      static_tf_yaw: 0.0
+
     collision:
       enable_ground_collision: true
       enable_self_collision: true

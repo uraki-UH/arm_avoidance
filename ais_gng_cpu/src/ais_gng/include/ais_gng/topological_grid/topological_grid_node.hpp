@@ -101,7 +101,6 @@ private:
   std::size_t depth_visibility_cache_size_ = 16;
   bool normal_drift_filter_enabled_ = true;
   GridSpec grid_spec_;
-  bool origin_shift_half_ = false;
   int x_shift_ = 42;
   int y_shift_ = 21;
   int z_shift_ = 0;

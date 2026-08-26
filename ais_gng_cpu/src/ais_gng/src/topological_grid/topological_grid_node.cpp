@@ -240,7 +240,6 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   grid_spec_.origin_x = this->declare_parameter<double>("origin_x", 0.0);
   grid_spec_.origin_y = this->declare_parameter<double>("origin_y", 0.0);
   grid_spec_.origin_z = this->declare_parameter<double>("origin_z", 0.0);
-  origin_shift_half_ = this->declare_parameter<bool>("origin_shift_half", false);
   x_shift_ = this->declare_parameter<int>("x_shift", 42);
   y_shift_ = this->declare_parameter<int>("y_shift", 21);
   z_shift_ = this->declare_parameter<int>("z_shift", 0);
@@ -389,13 +388,6 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     static_cast<std::size_t>(point_activity_maximum_update_interval);
   point_activity_scheduler_ = std::make_unique<PointActivityScheduler>(point_activity_config_);
 
-  if (origin_shift_half_) {
-    const double half = grid_spec_.cell_size * 0.5;
-    grid_spec_.origin_x = half;
-    grid_spec_.origin_y = half;
-    grid_spec_.origin_z = half;
-  }
-
   voxel_pub_ = this->create_publisher<voxel_msgs::msg::Voxel>(
     output_topic_,
     rclcpp::QoS(1).reliable().transient_local());
@@ -446,7 +438,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     "TopologicalGridNode ready: input=%s pointcloud=%s timeout=%.2fs output=%s delta=%s "
     "isolated=%s edge_inferred=%s edge_fill=%s/%s grid_size=%.3f "
     "origin=(%.3f, %.3f, %.3f) "
-    "shifted=%s excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
+    "excluded=[%s] point_support=%s/%s/%zu neighbors=%d/%.3fm history=%zu "
     "stability=tau:%.3fs activate:%.2f retain:%.2f "
     "node_identity=%s/%.3fm migration=%s triangle=%s/%s/%.3fm "
     "point_activity=%s/%.3fm/warmup=%zu/interval=%zu-%zu "
@@ -464,7 +456,6 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
     grid_spec_.origin_x,
     grid_spec_.origin_y,
     grid_spec_.origin_z,
-    origin_shift_half_ ? "true" : "false",
     labelSetToString(voxelization_options_.excluded_labels).c_str(),
     voxelization_options_.require_input_points ? "required" : "disabled",
     pointSupportModeName(voxelization_options_.point_support_mode),

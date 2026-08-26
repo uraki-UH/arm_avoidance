@@ -11,7 +11,6 @@
     origin_x: 0.0
     origin_y: 0.0
     origin_z: 0.0
-    origin_shift_half: false
     x_shift: 42
     y_shift: 21
     z_shift: 0

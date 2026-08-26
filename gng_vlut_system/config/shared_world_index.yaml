@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    environment_voxelization:
+      input_topic: "/dataset/points"
+      source_frame_id: ""
+
+      # 全robot共有のworld bucket索引
+      world_index:
+        # world bucket索引の構築
+        enable_build: true
+        # 各robot ROI抽出でのworld bucket索引利用
+        enable_roi_query: true
+        frame_id: "world"
+        bucket_size: 0.2
+        bucket_topic: "/world_index/buckets"
+        enable_bucket_publish: true
+
+        # 各要素のparams_fileからVLUT解像度とROIを読込
+        consumers:
+          - params_file: "/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml"
+            robot_name: "ToPoDualArm_A"
+            voxel_topic: "/ToPoDualArm_A/roi_voxel_ids"
+          - params_file: "/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml"
+            robot_name: "ToPoDualArm_B"
+            voxel_topic: "/ToPoDualArm_B/roi_voxel_ids"

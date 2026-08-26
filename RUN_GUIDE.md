@@ -2,30 +2,11 @@
 
 ##　実行ガイド
 cd uraki_ws
-docker compose up -d --build
+docker compose down && docker compose up --build  && docker compose up -d
 docker compose exec gng_cpu bash
-
-## コンテナ構成
-
-計算用の`gng_cpu`、データセット再生用の`dataset_player`、ToPoArm実機ドライバ用の`topoarm_hardware`を分離する構成。
-全コンテナは同じ`ROS_DOMAIN_ID`でDDS通信するため、別コンテナ間でもROS 2 topicを直接利用可能。
-データセットの取得・再生手順は[DATASET_GUIDE.md](DATASET_GUIDE.md)を参照。
-
-```bash
-# ToPoArm実機ドライバ用コンテナを含む全サービスの作成・パッケージビルド
-docker compose --profile hardware up -d --build
-
-# 実機ドライバコンテナのシェル
-docker compose exec topoarm_hardware bash -c '
-source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && exec bash'
-```
-
-`gng_cpu`は実機ドライバの`topoarm_hardware`をマウント上で除外するため、ROS 2 Controlの依存を持たない。
-一方で実機ドライバコンテナだけに`hardware_interface`と`/dev`アクセスを付与する構成。
-
 ## frontendの起動
 cd ~/uraki_ws
-docker compose exec gng_cpu bash -c 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
+docker compose exec gng_cpu bash -lc 'cd /ros2_ws/src/ToPoFuzzy-Viewer/frontend && npm run build'
 
 docker compose --profile manual up  frontend
 
@@ -59,49 +40,229 @@ http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
 
 ## 点群から占有ボクセルに変換
-ros2 launch gng_vlut_system pointcloud_voxel_bridge.launch.py \
+ros2 launch gng_vlut_system point_to_voxel.launch.py \
   input_topic:=/semantic_points \
   output_topic:=/topo_voxel_ids
 
-### depth persistent world indexの比較
+### `/dataset/points`をToPoDualArmのVLUTへ反映
 
-固定cameraのraw depthをpixel handleとして保持し、複数robotの局所ROIを共有world indexから抽出する比較node。
-設定は`gng_vlut_system/config/depth_world_index_benchmark.yaml`へ集約。
+`/dataset/points`のheader frameは`world`とし、点群のframeを強制的に
+`ToPoDualArm/base_link`として扱わない。点群時刻のTF
+`world`→`ToPoDualArm/base_link`でロボット座標系へ変換した後、2 cm voxel IDを
+VLUT入力へ渡す構成。
 
 ```bash
-# ターミナル1: Docker内の計測node
-docker compose exec gng_cpu bash -lc '
-source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
-ros2 run gng_vlut_system depth_world_index_benchmark_node --ros-args \
-  --params-file /ros2_ws/src/gng_vlut_system/config/depth_world_index_benchmark.yaml'
-
-# ターミナル2: raw depthとcamera_infoの配信
-docker compose exec gng_cpu bash -lc '
-source /opt/ros/humble/setup.bash &&
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
-  --topics /camera/camera/depth/image_rect_raw /camera/camera/depth/camera_info'
+# ROI voxel化、world index、occupied/danger更新の起動
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-YAML既定値では、`direct8`の全再構築比較を実行しない。`robot_num: 1`のpersistent queryと
+このlaunchはViewer gatewayやロボットを起動しない。先に別terminalで
+`gng_viewer_bridge.launch.py`を起動した状態で使用する。既定で`ToPoDualArm.yaml`からVLUT fileを特定し、`vlut.bin` headerの
+`voxel_size`をROI voxel化と`occupied_voxels`出力の両方へ自動適用する。したがって、
+通常は`voxel_size`や`output_voxel_size`を指定しない。別のrobot設定では、同じrobotの
+`params_file`を指定する。headerを持たない旧VLUTだけは、起動ログを警告して手動設定値の
+`0.02 m`へフォールバックする。
+
+`environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
+
+| `enable_build` | `enable_roi_query` | 動作 |
+| --- | --- | --- |
+| `false` | `false` | indexを構築せず、各robot座標系へ直接ROI voxel化 |
+| `true` | `false` | world indexはViewer確認用に構築し、ROI voxel化は直接方式 |
+| `true` | `true` | world indexを構築し、bucket AABB抽出後にROI voxel化 |
+
+`false`と`true`の組合せは不正として起動を停止する。`enable_bucket_publish`はworld bucketの
+Viewer出力だけを制御する。`enable_build`が`false`ならbucket出力も無効になる。旧設定の
+`world_index.enable`は、新しい2項目が未指定の場合だけ両方の既定値として扱う後方互換設定である。
+`ToPoDualArm.yaml`の既定値は`enable_build: true`、`enable_roi_query: true`、`0.2 m` bucketである。
+
+### ToPo Fuzzy Viewerでのworld index確認
+
+Viewer gatewayを別途起動後、Viewerのtopic一覧から次の`voxel_msgs/Voxel`を有効にする。
+
+- `/ToPoDualArm/roi_voxel_ids`: `ToPoDualArm/base_link`座標系のVLUT入力ROI voxel
+- `/ToPoDualArm/world_index_buckets`: `world`座標系の非空world bucket voxel
+
+どちらもreliable/transient-localでpublishするため、Viewerを後から接続しても直近の状態を
+受信する。`world index更新:`ログの`roi_voxels`と`world_buckets`が0以外であること、Viewer側で
+両topicのレイヤーを有効化すること、`world`から`ToPoDualArm/base_link`へのTFが存在することが
+可視化の確認条件である。
+
+`environment_voxelization.base_frame`と`robot_name`から、入力点群の変換先
+`ToPoDualArm/base_link`を自動解決する。`source_frame_id`が空なら、入力点群headerの
+frameを使用する。移動マニピュレータは自己位置推定またはSLAMが毎時刻の
+`world`→`ToPoDualArm/base_link`をpublishするため、YAMLの`enable_static_tf`は`false`のままにする。
+固定設置だけは同YAMLの`enable_static_tf: true`と`static_tf_*`へ外部キャリブレーション値を設定する。
+既存のlocalization TFがある場合に静的TFを追加してはならない。
+
+### 複数robotの共有world index
+
+`environment_voxelization.world_index.consumers`に各robotの`params_file`、`robot_name`、
+`voxel_topic`を列挙すると、`environment_to_vlut.launch.py`がworld bucket索引を1回だけ構築し、
+各robotのTF・ROI・VLUT header解像度で個別にROI voxelを出力する。
+`config/shared_world_index.yaml`は同一URDFを2台使う動作例であり、実機では各要素の`params_file`を
+各robotの設定へ置き換える。
+
+```bash
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/shared_world_index.yaml
+```
+
+robot本体とViewer gatewayは各robotごとに別terminalで起動する。共有world index launchはそれらを
+起動しないため、既存の`gng_viewer_bridge.launch.py`とnode名・topic名が重複しない。
+
+```bash
+ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  robot_name:=ToPoDualArm_A
+```
+
+2台目以降も、そのrobotの`params_file`と`robot_name`で同様に起動する。
+
+`/ToPoDualArm/occupied_voxels`と`/ToPoDualArm/danger_voxels`はfull snapshotとしてpublishする。
+TopoFuzzyの`SafetyVlutMapper`は前回snapshotとの差分だけをVLUT node countへ加減算するため、
+追加・削除ボクセルのための別launchは不要。full snapshotにより、点群から消えた占有も安全に解除する。
+
+danger判定方式は`ToPoDualArm.yaml`の`environment_voxelization.danger_source`で選択する。
+
+- `environment_inflation`: 現在の既定値。`danger_inflation`だけ環境voxelを膨張してdangerへ送る方式
+- `vlut_distance`: 環境側膨張を0にし、VLUT relationの距離値を`vlut_danger_dist`で判定する方式
+
+現行の`ToPoDualArm10000/vlut.bin`はrelation距離が全て0のため、`vlut_distance`には切り替えない。
+距離付きVLUTを生成した後にだけ、次の設定へ変更する。
+
+```yaml
+environment_voxelization:
+  danger_source: "vlut_distance"
+  vlut_danger_dist: 0.025
+```
+
+起動後は、`/dataset/points`、`/ToPoDualArm/roi_voxel_ids`、
+`/ToPoDualArm/occupied_voxels`が順に更新されることを確認する。
+
+```bash
+ros2 topic hz /dataset/points
+ros2 topic echo --once /ToPoDualArm/roi_voxel_ids
+ros2 topic echo --once /ToPoDualArm/occupied_voxels
+```
+
+既定では`ToPoDualArm/base_link`へ点群を変換し、同座標系のreachability範囲
+`x=[-0.1, 0.5] m`、`y=[-1.0, 1.0] m`、`z=[-1.0, 1.0] m`だけを
+各軸0.2 m拡張した領域を逐次ボクセル化する。別ロボットでは次の引数をrobot configの
+TCPサンプリング範囲へ合わせる。
+
+```bash
+ros2 launch gng_vlut_system point_to_voxel.launch.py \
+  target_frame_id:=<robot_base_frame> \
+  min_reachability_x:=<min_x> max_reachability_x:=<max_x> \
+  min_reachability_y:=<min_y> max_reachability_y:=<max_y> \
+  min_reachability_z:=<min_z> max_reachability_z:=<max_z> \
+  reachability_margin_x:=<margin_x> \
+  reachability_margin_y:=<margin_y> \
+  reachability_margin_z:=<margin_z>
+```
+
+marginには把持物の最大張り出し、位置推定誤差、安全余裕を含める。移動マニピュレータでは、
+ボクセルを保持したい移動範囲を`reachability_margin_x`と`reachability_margin_y`へ加える。
+領域は各点群時刻のTFで現在のロボット基準座標系へ追従するため、marginには先読みする
+台車移動範囲を指定する。不要な高さ方向のボクセル増加を避けるため、各軸を個別指定する。
+
+全点を従来どおりボクセル化する場合は`enable_reachability_filter:=false`を指定する。
+dense bitmapは既定で最大8,000,000 voxelとし、超える範囲では再利用hashへ自動fallbackする。
+メモリ上限を調整する場合は`max_dense_voxel_num`を指定する。
+
+### 複数ロボット共有world bucketの比較
+
+`world_bucket_benchmark_node`は入力点群から0.2 mのworld bucketを1回構築し、1、2、4、8台分の
+直接走査とbucket抽出を比較する。各robot座標系で2 cm voxel IDまで生成し、ID不一致数も確認後に
+`frame_num`で自動終了する。
+
+```bash
+ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
+  -p input_topic:=/camera/camera/depth/color/points \
+  -p frame_num:=30 \
+  -p bucket_size:=0.2 \
+  -p parallel_thread_num:=8
+```
+
+出力の`bucket_total`には全ロボットで共有するbucket構築時間を含む。`mismatch_num=0`が
+直接方式とVLUT IDが一致した状態。`PARALLEL_RESULT`は8台分をrobot単位で並列化したwall time。
+比較用ノードのためvoxel topicはpublishしない。
+
+局所chunk相当のROI感度試験例：
+
+```bash
+ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
+  -p frame_num:=30 -p bucket_size:=0.2 \
+  -p robot_spacing_x:=0.0 -p robot_yaw_step_deg:=0.0 \
+  -p min_reachability_x:=-0.05 -p max_reachability_x:=0.25 \
+  -p min_reachability_y:=-0.15 -p max_reachability_y:=0.15 \
+  -p min_reachability_z:=-0.15 -p max_reachability_z:=0.15 \
+  -p reachability_margin_x:=0.03 \
+  -p reachability_margin_y:=0.03 \
+  -p reachability_margin_z:=0.03
+```
+
+world indexを複数フレーム再利用した場合のstale差分評価：
+
+```bash
+ros2 run gng_vlut_system world_bucket_benchmark_node --ros-args \
+  -p index_refresh_frame_num:=2 \
+  -p depth_topic:=/camera/camera/depth/image_rect_raw
+```
+
+`REUSE_RESULT`の`recall`は現在フレームに存在するoccupied IDの保持率、`precision`は再利用indexの
+occupied IDのうち現在フレームにも存在する割合。安全用途ではfalse negativeを許容しないため、
+単純再利用ではなくdepth差分による新規点の即時overlayが必要。
+
+### depth画素handle付きpersistent world indexの比較
+
+`depth_world_index_benchmark_node`は固定解像度のraw depth画素を安定handleにし、world bucket内の
+点だけを差分更新する。各フレームのdepth全画素を読むが、複数robotのためのworld index構築は1回だけで、
+各robotには局所AABB query後の点だけをVLUT IDへ変換する。debug有効時だけ、確認用voxel topicもpublishする。
+
+camera-to-worldが固定である前提のため、実機では`camera_world_*`に固定外部パラメータを指定する。
+camera姿勢、camera_infoの画像寸法、intrinsicsの変更時は安全側でworld indexを全再構築する。
+
+```bash
+# ターミナル1: persistent indexの実行設定
+ros2 run gng_vlut_system depth_world_index_benchmark_node --ros-args \
+  --params-file /ros2_ws/src/gng_vlut_system/config/depth_world_index_benchmark.yaml
+
+# ターミナル2: raw depthとcamera_infoを同時に配信
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
+  --topics \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info
+```
+
+YAML既定値では、毎フレームの`direct8`全再構築比較を実行しない。`robot_num:=1`のpersistent queryと
 debug voxel出力だけのため、Viewer確認時に基準方式のCPU負荷を加えない。比較が必要なときだけ
-`enable_comparison_benchmark: true`を指定する。`depth_update_mm_th: 1`と`free_confirmation_num: 1`は、
-比較有効時に現frameの全再構築と同じVLUT IDとなる基準設定。
+`enable_comparison_benchmark:=true`を指定する。`depth_update_mm_th:=1`と`free_confirmation_num:=1`では、
+比較有効時の`mismatch_num=0`、`recall=1`、`precision=1`が毎フレーム全再構築と同じVLUT IDの条件となる。`free_confirmation_num:=3`は
+depth値が0になった画素を3フレーム残す保守設定であり、false negativeを抑える代わりに一時的な
+false positiveを許容する。valid depthが奥へ移る変化は、現観測を優先して即時更新する。
 
-常駐時の毎frame計測ログは既定で有効である。処理時間、world bucket数、ROI voxel数を出力し、
-ログを抑止する場合だけ`enable_runtime_log: false`を指定する。
-固定cameraを実機で使う場合は、YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
+常駐時の毎フレーム計測ログは既定で有効である。処理時間、world bucket数、ROI voxel数を出力し、
+ログを抑止する場合だけ`enable_runtime_log:=false`を指定する。
 
-YAMLでは視覚検証用debug outputが有効で、`frame_num: 0`のためCtrl-Cまで継続する。
+YAMLのROIは今回の狭い局所chunkの実測条件である。`robot_spacing_x:=0.0`と
+`robot_yaw_step_deg:=0.0`はworld indexの共有費用だけを分離する比較条件であり、実機のrobot配置には
+各robotのworld poseを使う。実機の固定cameraでは同YAMLの`camera_world_*`を外部キャリブレーション値へ変更する。
 
-- `/depth_world_index/debug/roi_voxels`: ROIで採用された2 cm `voxel_msgs/Voxel`
-- `/depth_world_index/debug/world_buckets_voxels`: 非空world bucketを既定幅0.2 mの`voxel_msgs/Voxel`として出力
+#### ROI voxelとworld indexの視覚確認
 
-raw depth rosbagのidentity座標設定では`frame_id`が`camera_depth_optical_frame`となる。RVizのFixed Frameを
-同frameへ設定する。`camera_world_*`を実機のworld座標系へ設定した場合は、
-`debug_frame_id`も同じworld frameへ変更する。
+YAMLの既定値ではdebug publishが有効で、`frame_num:=0`のためCtrl-Cまで継続する。ToPo Fuzzy Viewerでは次の2 topicだけを有効化する。
+
+- `/depth_world_index/debug/roi_voxels` (`voxel_msgs/Voxel`): ROIで採用された2 cm voxel。VLUT入力と同一形式
+- `/depth_world_index/debug/world_buckets_voxels` (`voxel_msgs/Voxel`): 非空world bucketを`bucket_size=0.2 m`のvoxelとして出力。world indexの格子確認用
+
+camera-to-worldをidentityにしたraw depth rosbagでは、両topicの`frame_id`は`camera_depth_optical_frame`になる。
+実機設定では、`camera_world_*`でworld座標系へ変換し、同時に`debug_frame_id`をそのworld frameへ指定する。
 
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/topo_voxel_ids \
   danger_inflation:=0.08
@@ -111,18 +272,6 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
-
-## OCID の点群を AIS GNG へ入力
-
-`dataset_pointcloud_player` が `/dataset/points` を配信している状態で、次を実行する。
-既存の AIS GNG は終了してから起動する。
-
-```bash
-ros2 launch ais_gng ais_gng.launch.py \
-  backend:=cpu \
-  lidar:=graspnet.yaml \
-  input_topic:=/dataset/points
-```
 
 
 ## RVizでロボットを表示
@@ -150,7 +299,7 @@ ros2 launch ais_gng topological_grid.launch.py \
 
 ##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
-USB の番号が変わる環境では、こちらのラッパーの方が安定します。
+USB の番号が変わる環境では、こちらのラッパーの方が安定。
 ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
 
 ##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
@@ -175,7 +324,7 @@ ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   mask_topic:=/ToPoDualArm/right_arm_voxel
 
 ##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut_bridge.launch.py \
+ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   robot_name:=ToPoDualArm \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
@@ -228,7 +377,7 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
   output_topic:=/camera/camera/depth/color/points
 
 # ターミナル3: GNG
-ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml input_topic:=/bf_lidar/point_raw
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
 
 # ターミナル4: 深度画像の削除証拠判定を計測する
 ros2 run fuzzy_voxel_grid depth_visibility_benchmark
@@ -256,14 +405,12 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
     /camera/camera/depth/camera_info \
   --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
 
-# 再生終了後、ターミナル3でCtrl-Cしてrecordを終了する。
-# 作成後は変換ノードなしで次を再生できる。
+# 再生終了後、作成後は変換御殿軍を次で再生。
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
 ## GNGの学習の実行
   ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   use_voxel_collision:=true \gng_profile_names:=left_arm 
-
   (initial_collision_only:=true):初期姿勢での衝突リンクの組み合わせを検証
 
 ## 衝突urdfの球化
@@ -279,16 +426,14 @@ ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=
 python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
 
 
-同じ座標系でそのまま通す場合は、`voxel_to_vlut_bridge` の `target_frame_id` は指定しません。
+同じ座標系でそのまま通す場合は、`voxel_to_vlut` の `target_frame_id` は指定しません。
 このとき、入力 voxel の frame をそのまま使って再エンコードします。
 
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
-
-
-GNGノードを、把持候補の前段となるラベル付きボクセルへ変換する。
+## GNGノードを、把持候補の前段となるラベル付きボクセルへ変換?
 `/downsampling/grasp_support` は `UNKNOWN_OBJECT` を優先し、`DEFAULT`で残りを補う
 把持支持点群である。`graspnet.yaml`では最大10,000点（unknown最大5,000点）を空間的な
 カバレッジ優先で選ぶ。GNG本体は、別に設定した入力点群を均一選択して学習する。
@@ -347,31 +492,13 @@ GNGノードID単位の所属を持ち越して差分だけ直すため、所属
 1本のエッジだけで所属が漏れ出すのを防ぐ。
 
 ```bash
-# 初回はビルドが必要
-docker exec gng_cpu_container_uraki bash -c '
-source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash &&
-cd /ros2_ws && colcon build --packages-select ais_gng --symlink-install'
-```
-
-```bash
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 ```
 
-```bash
-# 数値確認
-ros2 topic echo /topological_planar_clusters_incremental --once
-```
-
-可視化はToPoFuzzy Viewerの`Connection & Streams`から
 `/topological_planar_clusters_incremental/markers/obb` と
-`/topological_planar_clusters_incremental/markers/nodes` を個別に有効化する。前者はOBB境界・
-法線矢印・任意テキスト、後者は所属GNGノード点とクラスタ内エッジである。クラスタIDから
-決まる色なので、IDが持続する限り色も変わらない。
+`/topological_planar_clusters_incremental/markers/nodes` 。
 
-ログの`changes=`が0に張り付けば定常状態、`chain=`は鎖状（共分散の第2固有値が第1固有値に
-対して小さすぎる形）として棄却した領域数、
-`update=`が1フレームの処理時間である。
 
 ## 把持ボクセルテンプレート（左グリッパ、POC）
 
@@ -457,19 +584,7 @@ GNG法線方向の補助スコアは `normal_drift_mean_score` と `normal_drift
 変えない。極端に疎な入力またはキャッシュが大きくなり過ぎる入力では自動的に従来の直接探索へ戻る。
 
 `point_activity_update_enabled:=true`では、点群占有頻度と点密度から重い更新の実行間隔を連続的に変える。
-静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで
-統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
-
-# 補間由来だけを確認
-ros2 topic echo /topo_voxel_ids/edge_inferred
-ros2 topic echo /topo_voxel_ids/triangle_inferred
-
-# 表示専用で、把持候補には含まれない孤立セルを確認
-ros2 topic echo /topo_voxel_ids/isolated
-
-候補labelや点群支持、補間条件を変える場合も、launch 引数を増やさず
-`topological_grid.yaml`をコピーしたプロファイルを作り、`params_file`で指定する。
-
+静止点群では更新を間引き、新しい占有や消失が多いと毎入力へ近づく。出力ボクセルとは別の物理セルで統計を取るため、`grid_size`を小さくしても活動度の統計セル数が過剰に増えにくい。
 
 ## realsense 
 ros2 launch realsense2_camera rs_launch.py \
@@ -481,221 +596,7 @@ ros2 launch realsense2_camera rs_launch.py \
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
-  gui:=true \
-  spawn_z:=0.0 \
-  fixed_base_link:=base_footprint \
-  follow_tf_frame:=ToPoDualArm/base_footprint
-
-`fixed_base_link`でGazebo物理上のベースを固定し、重力による転倒を防ぐ。
-`follow_tf_frame`はGazebo entityを`base_footprint`のTFへ追従させる。
-
-## Gazeboの頭部cameraでYOLO人物検出を動かす場合
-
-初回のみ、Ultralyticsを含むDocker imageを再buildする。
-
-```bash
-docker compose up -d --build gng_cpu
-```
-
-Gazeboの頭部RGB cameraを有効にしてロボットを召喚する。
-
-```bash
-ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm \
-  gui:=true \
-  spawn_z:=0.0 \
-  fixed_base_link:=base_footprint \
-  follow_tf_frame:=ToPoDualArm/base_footprint \
-  enable_camera:=true \
-  camera_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_camera.yaml \
-  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
-```
-
-別terminalでYOLO人物検出を起動する。初回起動時は`yolo11n.pt`のdownloadが発生する。
-
-```bash
-ros2 launch gng_vlut_system yolo_person_detection.launch.py
-```
-
-入力画像と人物検出結果の確認例。
-
-```bash
-ros2 topic hz /camera/color/image_raw
-ros2 topic echo /camera/color/image_raw --field header --once
-ros2 topic echo /perception/person/is_detected
-ros2 topic echo /perception/person/is_inference_healthy
-ros2 topic echo /perception/person/detections_2d --once
-rqt_image_view /perception/person/annotated_image
-```
-
-cameraの画角、解像度、ノイズは`gazebo_camera.yaml`、YOLOの信頼度、推論周期、
-modelは`yolo_person_detection.yaml`で設定する。既定はCPU、最大5 Hz、人物classのみ。
-`/perception/person/is_inference_healthy`が`false`の場合、
-`/perception/person/is_detected`はfail-safeとして`true`となる。
-この出力は研究・動作確認用であり、安全機能として単独使用しない。
-
-## 動画ファイルでYOLO人物検出を確認する場合
-
-MP4、AVIなどOpenCVで読める動画をROS 2画像topicへ変換し、YOLO人物検出へ接続する。
-
-```bash
-ros2 launch gng_vlut_system yolo_video_detection.launch.py \
-  video_path:=/datasets/sample.mp4 \
-  enable_loop:=true
-```
-
-別terminalでbounding box描画済み動画を表示する。
-
-```bash
-rqt_image_view /perception/person/annotated_image
-```
-
-検出結果の確認例。
-
-```bash
-ros2 topic echo /perception/person/is_detected
-ros2 topic echo /perception/person/detections_2d
-ros2 topic hz /perception/person/annotated_image
-```
-
-動画のFPSを再生周期に使う場合は`publish_hz:=0.0`、固定周期へ変更する場合は
-`publish_hz:=10.0`のように指定する。入力画像topicは`/video/image_raw`、
-frameは`video_optical_frame`。`model_path`、`image_topic`、`frame_id`もlaunch引数で変更できる。
-
-## XYZ深度点群で人体形状候補を検出する場合
-
-通常の3D LiDAR点群や非organizedなRGB-D点群を、画像へ変換せず直接処理する。
-床除去、voxel化、Euclidean clustering、人体寸法による候補抽出のCPU向け構成。
-
-```bash
-ros2 launch gng_vlut_system pointcloud_human_candidate_detection.launch.py
-
-ros2 topic echo /perception/human_candidate/is_detected
-ros2 topic echo /perception/human_candidate/is_inference_healthy
-ros2 topic echo /perception/human_candidate/detections_3d --once
-ros2 topic echo /perception/human_candidate/points --field header --once
-```
-
-入力topicや人体寸法は`config/pointcloud_human_candidate_detection.yaml`で設定する。
-`ground_coefficients`は入力点群座標系の床平面`ax + by + cz + d = 0`。
-既定値`[0, 0, 1, 0]`はZ-up座標系の`z=0`。camera光学座標系でcameraが
-床上1 mなら、例として`[0, -1, 0, 1]`を使用する。法線`[a, b, c]`は
-床から検出領域へ向ける。
-
-これは純粋な深度形状による保守的な除外候補であり、人物classを意味的に識別する
-学習modelではない。マネキン、柱なども候補となり得るため、`human_candidate`が
-検出された領域を「把持しない」用途向け。人物と断定する表示には使用しない。
-
-## organized RGB-D点群で人物分類する場合
-
-PCLの`GroundBasedPeopleDetectionApp`を使い、organizedな色付きRGB-D点群から
-床除去、3Dクラスタリング、人物判定を行う。2D画像topicや画像復元ノードは不要。
-RealSenseではaligned depthとpointcloudを有効化する。
-
-```bash
-ros2 launch realsense2_camera rs_launch.py \
-  align_depth.enable:=true \
-  pointcloud.enable:=true
-```
-
-別terminalで人物検出を起動する。
-
-```bash
-ros2 launch gng_vlut_system rgbd_pointcloud_person_detection.launch.py
-```
-
-topic名が機器構成と異なる場合は
-`config/rgbd_pointcloud_person_detection.yaml`をコピーし、`input_topic`と
-`camera_info_topic`を変更して`params_file`へ指定する。入力は同じ光学系の
-organized RGB/RGBA `PointCloud2`と`CameraInfo`が必要。
-
-```bash
-ros2 launch gng_vlut_system rgbd_pointcloud_person_detection.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/rgbd_pointcloud_person_detection.yaml
-
-ros2 topic echo /perception/person/is_detected
-ros2 topic echo /perception/person/is_inference_healthy
-ros2 topic echo /perception/person/detections_3d --once
-ros2 topic echo /perception/person/points --field header --once
-```
-
-`ground_coefficients`は入力点群座標系の床平面`ax + by + cz + d = 0`。
-既定値`[0, 1, 0, -1]`は、光学座標系の下向きY軸でcameraが床上1 mの例。
-実際の取付高さと姿勢に合わせて調整する。検出失敗や不正入力時は
-`is_inference_healthy=false`、`enable_fail_safe=true`なら
-`is_detected=true`を出力する。
-
-この方式は深度による床除去と3D形状を使うが、人物classの判定には点群内のRGBと
-PCL付属HOG+SVMも使う。organizedではない通常の3D LiDAR点群やXYZのみの点群には
-適用不可。その場合はPointPillarsなどLiDAR専用3D検出器と、対象sensorに合わせた
-学習済みmodelが必要。この出力は研究・動作確認用であり、安全機能として単独使用しない。
-
-## Gazeboのロボットへ3D LiDARを追加する場合
-ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm \
-  gui:=true \
-  spawn_z:=0.0 \
-  fixed_base_link:=base_footprint \
-  follow_tf_frame:=ToPoDualArm/base_footprint \
-  enable_lidar:=true \
-  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml \
-  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
-
-生点群は`/lidar/points`へLiDAR座標系で、TF変換済み点群は
-`/lidar/points_world`へ`world`座標系で`sensor_msgs/msg/PointCloud2`として出力される。
-搭載姿勢・出力先・走査条件は`gazebo_lidar.yaml`の`robot_lidar`と`scan`で設定する。
-既定の搭載位置は、`neck_tilt_link`の先にある`camera_link`の原点。
-初期設定は水平360点、垂直16点、10 Hz、距離0.1–20 m。launch引数の
-`lidar_xyz`、`lidar_rpy`、`lidar_topic`などを明示した場合はYAML設定を上書きする。
-距離ノイズはGaussian分布で、`scan.noise_mean`と`scan.noise_std_dev`にメートル単位で設定する。
-
-```bash
-ros2 topic hz /lidar/points
-ros2 topic echo /lidar/points --once
-ros2 topic echo /lidar/points_world --field header --once
-```
-
-RViz2ではFixed Frameを`world`、PointCloud2のTopicを`/lidar/points_world`に設定する。
-LiDARのTFは`ToPoDualArm/lidar_link`として配信される。
-Gazebo内の実関節角は`/ToPoDualArm/joint_states`へ50 Hzで配信されるため、
-重力で動いた首の姿勢も`/lidar/points_world`へ反映される。
-
-## Gazebo環境へ固定3D LiDARを設置する場合
-ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm \
-  gui:=true \
-  spawn_z:=0.0 \
-  fixed_base_link:=base_footprint \
-  follow_tf_frame:=ToPoDualArm/base_footprint \
-  enable_world_lidar:=true \
-  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml \
-  world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
-
-環境LiDARはロボットのURDFから独立したstatic modelとしてGazeboへ追加される。
-点群topicは`/environment/lidar/points`、frameは`world_lidar_link`。
-設置位置・姿勢・出力先は`gazebo_lidar.yaml`の`world_lidar`で設定する。
-`world_lidar_xyz`、`world_lidar_rpy`、`world_lidar_topic`を明示した場合は
-YAML設定を上書きする。ロボット搭載LiDARが不要なら`enable_lidar`は既定値の
-`false`のままでよい。
-
-```bash
-ros2 topic hz /environment/lidar/points
-ros2 topic echo /environment/lidar/points --once
-```
-
-Gazeboを別途起動済みの場合は、環境LiDARだけを後から追加できる。
-
-```bash
-ros2 launch gng_vlut_system gazebo_world_lidar.launch.py \
-  lidar_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_lidar.yaml
-```
-
-RViz2ではFixed Frameを`world`に設定し、PointCloud2へ
-`/environment/lidar/points`を指定する。`world`から`world_lidar_link`へのTFも
-同時に配信される。
+  gui:=true
 
 ## Gazeboでベースをワールドに固定したい場合
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
@@ -723,7 +624,6 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
   robot_name:=ToPoDualArm \
   gui:=true \
-  fixed_base_link:=base_footprint \
   follow_tf_frame:=ToPoDualArm/base_footprint
 
 

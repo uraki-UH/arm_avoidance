@@ -6,7 +6,7 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 
 ## Changed
 
-- `pointcloud_voxel_bridge_node`の全量`PointCloud2`コピーと変換済み点vectorを廃止した。
+- `point_to_voxel_node`の全量`PointCloud2`コピーと変換済み点vectorを廃止した。
 - 点をロボット基準座標系へ逐次変換し、範囲内の点だけを直接voxel IDへ集約する構成へ変更した。
 - 非有限値、範囲外点、同一voxelの重複をpublish前に除外する。
 - 範囲内voxelの重複除去を再利用可能なdense bitmapで高速化し、過大領域では再利用hashへfallbackする。
@@ -19,7 +19,7 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 
 ## Behavior Impact
 
-- `pointcloud_voxel_bridge.launch.py`と`pointcloud_to_vlut_bridge.launch.py`ではreachability filterが既定で有効になる。
+- `point_to_voxel.launch.py`と`point_to_vlut.launch.py`ではreachability filterが既定で有効になる。
 - nodeを`ros2 run`で直接起動した場合は後方互換のためfilterが無効になる。
 - 範囲内に点がない入力でも空の`voxel_msgs/Voxel`をpublishし、下流の占有を消去できる。
 
@@ -67,7 +67,7 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 - 1～4台では索引構築費を回収できず、8台かつ狭いROIでのみ有効性を確認。
 
 固定俯瞰カメラ向けにbucketと点配列の確保容量をフレーム間で再利用する。現時点では比較用実装であり、
-`pointcloud_voxel_bridge_node`の既定経路には組み込まない。
+`point_to_voxel_node`の既定経路には組み込まない。
 
 広いROIでは索引よりrobot単位の並列化が有効だったため、完全一致のOpenMP比較経路も追加した。
 
@@ -128,7 +128,7 @@ frameは`camera_depth_optical_frame`となる。
 - camera-to-world transform、画像寸法、intrinsicsの変更時は全点を再構築する。
 - 各robotは自身のworld poseから局所AABBを問い合わせ、既存のreachability filterと`VoxelIdCodec`で
   従来どおりVLUT IDを生成する。
-- 現時点では比較用nodeのみであり、productionの`pointcloud_voxel_bridge_node`には未統合。
+- 現時点では比較用nodeのみであり、productionの`point_to_voxel_node`には未統合。
 
 Docker内のRelease buildとgtestは成功し、合計17 testでerror/failureなし。
 

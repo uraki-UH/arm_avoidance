@@ -40,9 +40,9 @@ add_executable(robot_viewer_bridge_node robot_viewer_bridge_node_main.cpp)
 target_link_libraries(robot_viewer_bridge_node robot_viewer_bridge_node_component)
 
 # 6. Voxel to VLUT Bridge
-add_executable(voxel_to_vlut_bridge_node voxel_to_vlut_bridge_node.cpp)
-target_link_libraries(voxel_to_vlut_bridge_node common_lib)
-ament_target_dependencies(voxel_to_vlut_bridge_node rclcpp rclcpp_components std_msgs voxel_msgs)
+add_executable(voxel_to_vlut_node voxel_to_vlut_node.cpp)
+target_link_libraries(voxel_to_vlut_node common_lib)
+ament_target_dependencies(voxel_to_vlut_node rclcpp rclcpp_components std_msgs voxel_msgs)
 
 # Installation
 install(TARGETS
@@ -51,7 +51,7 @@ install(TARGETS
     topoarm_udp_bridge
     topofuzzy_bridge_node
     robot_viewer_bridge_node
-    voxel_to_vlut_bridge_node
+    voxel_to_vlut_node
     DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -165,6 +165,16 @@ public:
     return nonfinite_point_num_;
   }
 
+  template<typename Visitor>
+  void visit_buckets(Visitor visitor) const
+  {
+    for (const auto &bucket_entry : buckets_) {
+      if (!bucket_entry.second.empty()) {
+        visitor(bucket_entry.first, bucket_entry.second.size());
+      }
+    }
+  }
+
 private:
   world_bucket_key to_key(const Eigen::Vector3d &point) const
   {

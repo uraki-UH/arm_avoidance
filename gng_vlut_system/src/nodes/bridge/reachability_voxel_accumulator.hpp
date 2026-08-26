@@ -88,7 +88,37 @@ public:
       return;
     }
 
-    const Eigen::Vector3d target_point = source_to_target * source_point;
+    add_target_point(source_to_target * source_point);
+  }
+
+  void add_point_in_target_frame(const Eigen::Vector3d &target_point)
+  {
+    ++stats_.input_point_count;
+    add_target_point(target_point);
+  }
+
+  const std::vector<long> &finish_voxel_ids()
+  {
+    if (!enable_dense_bitmap_) {
+      voxel_ids_.assign(sparse_voxel_ids_.begin(), sparse_voxel_ids_.end());
+    }
+    std::sort(voxel_ids_.begin(), voxel_ids_.end());
+    return voxel_ids_;
+  }
+
+  const reachability_voxelization_stats &stats() const
+  {
+    return stats_;
+  }
+
+  bool uses_dense_bitmap() const
+  {
+    return enable_dense_bitmap_;
+  }
+
+private:
+  void add_target_point(const Eigen::Vector3d &target_point)
+  {
     if (!target_point.allFinite()) {
       ++stats_.nonfinite_point_count;
       return;
@@ -121,26 +151,6 @@ public:
     ++stats_.accepted_point_count;
   }
 
-  const std::vector<long> &finish_voxel_ids()
-  {
-    if (!enable_dense_bitmap_) {
-      voxel_ids_.assign(sparse_voxel_ids_.begin(), sparse_voxel_ids_.end());
-    }
-    std::sort(voxel_ids_.begin(), voxel_ids_.end());
-    return voxel_ids_;
-  }
-
-  const reachability_voxelization_stats &stats() const
-  {
-    return stats_;
-  }
-
-  bool uses_dense_bitmap() const
-  {
-    return enable_dense_bitmap_;
-  }
-
-private:
   void configure_dense_bitmap(std::size_t max_dense_voxel_num)
   {
     if (!bounds_.enable_filter || codec_.voxelSize() <= 0.0) {

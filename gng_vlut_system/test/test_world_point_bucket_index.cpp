@@ -75,5 +75,26 @@ TEST(world_point_bucket_index_test, clears_points_between_frames)
   EXPECT_EQ(selected_point_num, 0U);
 }
 
+TEST(world_point_bucket_index_test, visits_only_nonempty_buckets)
+{
+  world_point_bucket_index index(0.2);
+  index.begin_frame(3U);
+  index.add_point(Eigen::Vector3f(0.01F, 0.0F, 0.0F));
+  index.add_point(Eigen::Vector3f(0.02F, 0.0F, 0.0F));
+  index.add_point(Eigen::Vector3f(0.21F, 0.0F, 0.0F));
+
+  std::size_t visited_bucket_num = 0U;
+  std::size_t visited_point_num = 0U;
+  index.visit_buckets([&visited_bucket_num, &visited_point_num](
+    const world_bucket_key &,
+    std::size_t point_num) {
+    ++visited_bucket_num;
+    visited_point_num += point_num;
+  });
+
+  EXPECT_EQ(visited_bucket_num, 2U);
+  EXPECT_EQ(visited_point_num, 3U);
+}
+
 }  // 無名namespace終端
 }  // robot_sim::bridge namespace終端

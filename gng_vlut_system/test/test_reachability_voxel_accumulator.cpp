@@ -91,6 +91,34 @@ TEST(reachability_voxel_accumulator_test, aggregates_only_transformed_reachable_
   EXPECT_TRUE(accumulator.uses_dense_bitmap());
 }
 
+TEST(reachability_voxel_accumulator_test, aggregates_target_frame_points_without_transform)
+{
+  robot_sim::analysis::VoxelIdCodec codec(0.1);
+  codec.setIndexingParams(42, 21, 0, 1000000L);
+
+  reachability_bounds bounds;
+  bounds.enable_filter = true;
+  bounds.min_corner = Eigen::Vector3d(0.0, -0.5, -0.5);
+  bounds.max_corner = Eigen::Vector3d(1.0, 0.5, 0.5);
+
+  reachability_voxel_accumulator accumulator(codec, bounds, 8000000U);
+  accumulator.begin_frame(4);
+  accumulator.add_point_in_target_frame(Eigen::Vector3d(0.51, 0.01, 0.01));
+  accumulator.add_point_in_target_frame(Eigen::Vector3d(0.52, 0.02, 0.02));
+  accumulator.add_point_in_target_frame(Eigen::Vector3d(1.01, 0.0, 0.0));
+  accumulator.add_point_in_target_frame(
+    Eigen::Vector3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0));
+
+  const auto stats = accumulator.stats();
+  const auto voxel_ids = accumulator.finish_voxel_ids();
+
+  ASSERT_EQ(voxel_ids.size(), 1U);
+  EXPECT_EQ(stats.input_point_count, 4U);
+  EXPECT_EQ(stats.accepted_point_count, 2U);
+  EXPECT_EQ(stats.outside_point_count, 1U);
+  EXPECT_EQ(stats.nonfinite_point_count, 1U);
+}
+
 TEST(reachability_voxel_accumulator_test, reuses_dense_bitmap_between_frames)
 {
   robot_sim::analysis::VoxelIdCodec codec(0.1);

@@ -6,9 +6,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("input_topic", default_value="/topo_points"),
-        DeclareLaunchArgument("voxel_topic", default_value="/topo_voxel_ids"),
+        DeclareLaunchArgument("output_topic", default_value="/voxel_ids"),
         DeclareLaunchArgument("source_frame_id", default_value=""),
         DeclareLaunchArgument("target_frame_id", default_value="ToPoDualArm/base_link"),
         DeclareLaunchArgument("voxel_size", default_value="0.02"),
@@ -27,20 +26,20 @@ def generate_launch_description():
         DeclareLaunchArgument("reachability_margin_y", default_value="0.2"),
         DeclareLaunchArgument("reachability_margin_z", default_value="0.2"),
         DeclareLaunchArgument("max_dense_voxel_num", default_value="8000000"),
-        DeclareLaunchArgument("danger_inflation", default_value="0.05"),
-        DeclareLaunchArgument("output_voxel_size", default_value="0.02"),
-        DeclareLaunchArgument("publish_hz", default_value="30.0"),
-
         Node(
             package="gng_vlut_system",
-            executable="pointcloud_voxel_bridge_node",
-            name="pointcloud_voxel_bridge_node",
+            executable="world_index_to_voxel_node",
+            name="point_to_voxel_node",
             output="screen",
             parameters=[{
                 "input_topic": LaunchConfiguration("input_topic"),
-                "output_topic": LaunchConfiguration("voxel_topic"),
+                "output_topic": LaunchConfiguration("output_topic"),
                 "source_frame_id": LaunchConfiguration("source_frame_id"),
+                "world_frame_id": LaunchConfiguration("target_frame_id"),
                 "target_frame_id": LaunchConfiguration("target_frame_id"),
+                "enable_world_index": False,
+                "enable_roi_query": False,
+                "enable_world_bucket_publish": False,
                 "voxel_size": LaunchConfiguration("voxel_size"),
                 "x_shift": LaunchConfiguration("x_shift"),
                 "y_shift": LaunchConfiguration("y_shift"),
@@ -57,23 +56,6 @@ def generate_launch_description():
                 "reachability_margin_y": LaunchConfiguration("reachability_margin_y"),
                 "reachability_margin_z": LaunchConfiguration("reachability_margin_z"),
                 "max_dense_voxel_num": LaunchConfiguration("max_dense_voxel_num"),
-            }],
-        ),
-
-        Node(
-            package="gng_vlut_system",
-            executable="voxel_to_vlut_bridge_node",
-            name="voxel_to_vlut_bridge_node",
-            namespace=LaunchConfiguration("robot_name"),
-            output="screen",
-            parameters=[{
-                "input_topic": LaunchConfiguration("voxel_topic"),
-                "occupied_voxels_topic": "occupied_voxels",
-                "danger_voxels_topic": "danger_voxels",
-                "target_frame_id": LaunchConfiguration("target_frame_id"),
-                "danger_inflation": LaunchConfiguration("danger_inflation"),
-                "output_voxel_size": LaunchConfiguration("output_voxel_size"),
-                "publish_hz": LaunchConfiguration("publish_hz"),
             }],
         ),
     ])

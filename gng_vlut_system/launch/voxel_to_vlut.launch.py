@@ -8,8 +8,8 @@ def launch_setup(context, *args, **kwargs):
     return [
         Node(
             package="gng_vlut_system",
-            executable="voxel_to_vlut_bridge_node",
-            name="voxel_to_vlut_bridge_node",
+            executable="voxel_to_vlut_node",
+            name="voxel_to_vlut_node",
             namespace=LaunchConfiguration("robot_name"),
             output="screen",
             parameters=[{
