@@ -197,7 +197,6 @@ ros2 run gng_vlut_system self_recognition_filter_node
   # self-recognition voxel外の点群: /self_filtered_points
 
 # joint_statesのダミー
-(topoarmの場合)
 python3 dummy_joint_pub.py --robot topoarm
 
 ## realsenseのrosbag + 点群座標変換
@@ -241,7 +240,6 @@ ros2 run fuzzy_voxel_grid depth_visibility_benchmark
 このbagでは等倍参照が最速。低解像度化はノード内poolingではなくカメラ側で行う。
 
 ### 変換済み点群を新しいrosbagへ1周分だけ保存
-# 先に上の変換ノードを起動し、次にrecordを開始してから、最後にbagを--loopなしで再生する。
 
 # ターミナル3: 変換済み点群と可視性判定用の生depthをrecord
 ros2 bag record \

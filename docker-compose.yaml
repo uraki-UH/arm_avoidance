@@ -19,6 +19,10 @@ services:
       - QT_X11_NO_MITSHM=1
       - XDG_RUNTIME_DIR=/tmp/runtime/
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - HISTFILE=/root/.bash_history_data/bash_history
+      - HISTSIZE=10000
+      - HISTFILESIZE=20000
+      - "PROMPT_COMMAND=history -a; history -n"
 
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
@@ -32,6 +36,7 @@ services:
       - ros_ws_build_volume:/ros2_ws/build
       - ${HOME}/rosbag:/rosbag
       - ${HOME}/datasets:/datasets
+      - gng_cpu_bash_history:/root/.bash_history_data
       # 実機ドライバの計算用コンテナからの除外
       - compute_topoarm_hardware_mask:/ros2_ws/src/ToPoDualArm/topoarm_hardware
 
@@ -183,3 +188,4 @@ volumes:
   dataset_player_install:
   topoarm_hardware_build:
   topoarm_hardware_install:
+  gng_cpu_bash_history:
