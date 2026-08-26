@@ -390,6 +390,10 @@ def launch_setup(context, *args, **kwargs):
             "urdf_path": urdf_path,
             "joint_topic": viewer_joint_state_topic,
         }
+        if resource_root:
+            node_params["resource_root_dir"] = resource_root
+        if mesh_root:
+            node_params["mesh_root_dir"] = mesh_root
         if self_recognition_resolution and self_recognition_resolution > 0.0:
             # VLUT のセルサイズへ自己認識側を追従
             node_params["self_recognition.resolution"] = self_recognition_resolution

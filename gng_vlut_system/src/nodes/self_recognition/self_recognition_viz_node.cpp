@@ -247,6 +247,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     
     // パラメータ：計算に必要な最小限の設定
     declare_parameter("urdf_path", "");
+    declare_parameter("resource_root_dir", "");
+    declare_parameter("mesh_root_dir", "");
     declare_parameter("joint_topic", "joint_states");
     declare_parameter("robot.voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
@@ -283,6 +285,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("self_recognition.self_output_topic", "");
 
     const std::string urdf_rel = get_parameter("urdf_path").as_string();
+    const std::string resource_root_dir = get_parameter("resource_root_dir").as_string();
+    const std::string mesh_root_dir = get_parameter("mesh_root_dir").as_string();
     const std::string urdf_path = robot_sim::common::resolvePath(urdf_rel);
     if (urdf_path.empty()) {
         RCLCPP_ERROR(get_logger(), "Failed to resolve URDF path: %s", urdf_rel.c_str());
@@ -305,7 +309,8 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 
     // モデルとチェインの構築
     try {
-        model_ = std::make_shared<simulation::RobotModel>(simulation::loadRobotFromUrdf(urdf_path));
+        model_ = std::make_shared<simulation::RobotModel>(
+            simulation::loadRobotFromUrdf(urdf_path, resource_root_dir, mesh_root_dir));
     } catch (const std::exception& e) {
         RCLCPP_ERROR(get_logger(), "Failed to load robot model: %s", e.what());
         throw;
