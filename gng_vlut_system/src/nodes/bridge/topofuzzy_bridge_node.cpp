@@ -553,12 +553,6 @@ private:
     const auto t1 = std::chrono::steady_clock::now();
     const double vlut_update_ms =
         std::chrono::duration<double, std::milli>(t1 - t0).count();
-    RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), 1000,
-        "VLUT update: %.3f ms | occ=%zu dan=%zu",
-        vlut_update_ms, latest_occ_vids_.size(),
-        latest_dan_vids_.size());
-
     auto &gng = *context_->gng;
     const auto &col_counts = context_->mapper->getCollisionCounts();
     const auto &dgr_counts = context_->mapper->getDangerCounts();
@@ -602,8 +596,9 @@ private:
 
     RCLCPP_INFO_THROTTLE(
         get_logger(), *get_clock(), 1000,
-        "Safety updated: occupied=%zu danger=%zu -> safe=%zu collision=%zu "
-        "danger=%zu",
+        "VLUT update = %.3f ms | voxels: occ=%zu dan=%zu | "
+        "nodes: safe=%zu col=%zu dan=%zu",
+        vlut_update_ms,
         latest_occ_vids_.size(), latest_dan_vids_.size(),
         safe_nodes, collision_nodes, danger_nodes);
   }
