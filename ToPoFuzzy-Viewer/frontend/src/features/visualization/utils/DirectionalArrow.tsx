@@ -13,6 +13,7 @@ interface DirectionalArrowProps {
     head_length?: number;
     head_width?: number;
     shaftWidth?: number;
+    overlayRenderOrder?: number;
 }
 
 export function DirectionalArrow({
@@ -27,6 +28,7 @@ export function DirectionalArrow({
     head_length,
     head_width,
     shaftWidth = 0.01,
+    overlayRenderOrder,
 }: DirectionalArrowProps) {
     const arrowRef = useRef<THREE.ArrowHelper | null>(null);
 
@@ -62,6 +64,27 @@ export function DirectionalArrow({
         arrow.setColor(new THREE.Color(color));
         arrow.visible = true;
     }, [origin, direction, lengthScale, maxLength, color, visible, headLengthRatio, headWidthRatio, head_length, head_width, shaftWidth]);
+
+    useEffect(() => {
+        const arrow = arrowRef.current;
+        if (!arrow || overlayRenderOrder === undefined) return;
+
+        arrow.traverse((object) => {
+            object.renderOrder = overlayRenderOrder;
+            const renderable = object as THREE.Object3D & {
+                material?: THREE.Material | THREE.Material[];
+            };
+            const materials = Array.isArray(renderable.material)
+                ? renderable.material
+                : renderable.material ? [renderable.material] : [];
+            materials.forEach((material) => {
+                material.transparent = true;
+                material.depthTest = false;
+                material.depthWrite = false;
+                material.needsUpdate = true;
+            });
+        });
+    }, [overlayRenderOrder]);
 
     useEffect(() => {
         return () => {

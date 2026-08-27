@@ -15,8 +15,16 @@ em++ \
   -std=c++17 \
   -O3 \
   -I"${ROOT_DIR}/include" \
+  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/include" \
+  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu" \
+  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils" \
   "${ROOT_DIR}/src/gng_kernel.cpp" \
   "${ROOT_DIR}/src/wasm_exports.cpp" \
+  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp" \
+  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp" \
+  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp" \
+  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp" \
+  -DGNG_VERSION=0 \
   -sMODULARIZE=1 \
   -sEXPORT_ES6=0 \
   -sEXPORT_NAME='GngWasmCore' \

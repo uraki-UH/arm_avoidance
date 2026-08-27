@@ -678,7 +678,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="section-title">GNG Learning Mode</div>
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
-          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><!-- <option value="wasm">GNG-WASM / Emscripten</option> FROZEN --></select></div>
+          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><option value="wasm">GNG-WASM / C++ WebAssembly</option></select></div>
           <div class="full"><label>Point-cloud source</label><select id="pointCloudSource"><option value="synthetic_depth" selected>Synthetic / synthetic depth</option><option value="imported_frames">Imported frames / 取り込みデータ</option></select></div>
           <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
           <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
@@ -699,8 +699,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
           </div>
-          <!-- FROZEN: WASM GNG UI suspended — libgng source unavailable
-          <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
+          <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
+          <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm,text/javascript" multiple>
           <div class="full">
             <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
             <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
@@ -758,7 +758,13 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>ds.human.num_max</label><input id="wasmDsHumanNumMax" type="number" min="100" max="50000" step="100" value="3000"></div>
             </div>
           </details>
-          END FROZEN WASM UI -->
+          旧WASMパラメータUIここまで -->
+          <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
+          <div class="full">
+            <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
+            <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
+            <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNG-WASM実行時に gng_wasm_core/dist/gng_wasm_core.js を自動読込み。差し替え用のCMake成果物は gng_wasm_core.js と gng_wasm_core.wasm を同時選択。</div>
+          </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
             <div><label>Motion duration [s]</label><input id="ikMotionDuration" type="range" min="0.2" max="6.0" step="0.1" value="2.0"><input id="ikMotionDurationNum" type="number" min="0.2" max="6.0" step="0.1" value="2.0"></div>
             <div><label>IK replanning interval [ms]</label><input id="ikReplanMs" type="range" min="33" max="1000" step="1" value="100"><input id="ikReplanMsNum" type="number" min="33" max="1000" step="1" value="100"></div>
@@ -1542,7 +1548,7 @@ function gngAlgorithm(){const el=$('gngAlgorithm');return el?el.value:'standard'
 function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
 function gngIsDensityAlgorithm(alg){return alg==='density_gng_t'||alg==='cell_density'}
 function gngUsesTriangulationAlgorithm(alg){return alg==='gng_t'||alg==='density_gng_t'}
-function gngAlgorithmLabel(){const a=gngAlgorithm();return a==='density_gng_t'?'Density-Control GNG-T':a==='gng_t'?'GNG-T':'GNG'}
+function gngAlgorithmLabel(){const a=gngAlgorithm();return a==='wasm'?'GNG-WASM':a==='density_gng_t'?'Density-Control GNG-T':a==='gng_t'?'GNG-T':'GNG'}
 function isGraphOnlyMode(){return gngDataSourceMode()==='graph_only'}
 function setGngDataSourceMode(mode){
   state.dataSourceMode=mode==='graph_only'?'graph_only':'pointcloud_to_gng';
@@ -2595,7 +2601,7 @@ const GNG_ALGORITHMS=[
   {value:'standard',label:'GNG実行',short:'GNG'},
   {value:'gng_t',label:'GNG-T実行',short:'GNG-T'},
   {value:'density_gng_t',label:'密度制御GNG-T実行',short:'density-GNG-T'},
-  // {value:'wasm',label:'GNG-WASM実行',short:'GNG-WASM'} // FROZEN: libgng source unavailable
+  {value:'wasm',label:'GNG-WASM実行',short:'GNG-WASM'},
 ];
 function setGngAlgorithmValue(alg){const el=$('gngAlgorithm');if(el)el.value=alg;}
 function runGngAlgorithmFromViewer(alg){
@@ -2605,10 +2611,10 @@ function runGngAlgorithmFromViewer(alg){
     return;
   }
   setGngAlgorithmValue(alg);
-  // if(alg==='wasm'){runGngWasmFull();return;} // FROZEN
+  if(alg==='wasm'){runGngWasmFull();return;}
   runGngAnimated();
 }
-/* FROZEN: WASM GNG implementation suspended — libgng source unavailable for WASM compilation.
+/* FROZEN: 現行WASM APIと互換性がない旧実行処理。
 function wasmSetParam(ex,name,index,value){
   try{
     const len=ex.lengthBytesUTF8(name)+1;
@@ -2704,7 +2710,45 @@ function runGngWasmFull_FROZEN(){
     $('topoStatus').textContent='GNG-WASM init error: '+(e&&e.message?e.message:e);
   }
 } // end FROZEN */
-function runGngWasmFull(){$('topoStatus').textContent='GNG-WASM: 凍結中 (libgngソース未公開のため)。';}
+async function v312LoadBundledGngWasm(){
+  if(v312WasmMode(GNG_WASM_EXPORTS)==='emscripten') return true;
+  if(GNG_WASM_CORE_LOADING) return GNG_WASM_CORE_LOADING;
+  const status=$('gngWasmStatus');
+  if(status) status.textContent='基幹GNG学習コアWASMを読み込み中...';
+  GNG_WASM_CORE_LOADING=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='gng_wasm_core/dist/gng_wasm_core.js';
+    script.onload=async()=>{
+      try{
+        if(typeof GngWasmCore!=='function') throw new Error('GngWasmCore factory was not found');
+        GNG_WASM_EXPORTS=await GngWasmCore();
+        if(v312WasmMode(GNG_WASM_EXPORTS)!=='emscripten') throw new Error('基幹GNG学習コアWASM APIが不正です');
+        if(status) status.textContent='基幹GNG学習コアWASMを読み込みました。';
+        resolve(true);
+      }catch(error){reject(error);}
+    };
+    script.onerror=()=>reject(new Error('基幹GNG学習コアWASMの読込みに失敗しました'));
+    document.head.appendChild(script);
+  });
+  try{
+    return await GNG_WASM_CORE_LOADING;
+  }catch(error){
+    console.warn('Bundled GNG WASM load failed.',error);
+    if(status) status.textContent=`基幹GNG学習コアWASMの読込み失敗: ${error.message}`;
+    return false;
+  }finally{
+    GNG_WASM_CORE_LOADING=null;
+  }
+}
+async function runGngWasmFull(){
+  if(isGraphOnlyMode()){
+    $('topoStatus').textContent='GNG-WASM: Graph-only modeでは実行できません。Point cloud -> GNGへ切り替えてください。';
+    return;
+  }
+  setGngAlgorithmValue('wasm');
+  if(!await v312LoadBundledGngWasm()) return;
+  runGng();
+}
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
     box.innerHTML=GNG_ALGORITHMS.map(a=>`<button type="button" data-gng-alg-run="${a.value}"> ${a.label}</button>`).join('');
@@ -3016,6 +3060,7 @@ function initGng(){
 const GNG_WASM_BASE64='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BCAFIAYgB0EBIAggCSAKIAsgDBCXgICAAAsA/gMEbmFtZQAaGXRvcG9fZ25nX2tlcm5lbF92MjY2Lndhc20BxgMZABFfX3dhc21fY2FsbF9jdG9ycwEOZ25nX21heF9wb2ludHMCDWduZ19tYXhfbm9kZXMDDWduZ19tYXhfZWRnZXMEDGduZ19wb2ludHNfeAUMZ25nX3BvaW50c195BgxnbmdfcG9pbnRzX3oHDmduZ19wb2ludHNfY2xzCAtnbmdfbm9kZXNfeAkLZ25nX25vZGVzX3kKC2duZ19ub2Rlc196Cw1nbmdfbm9kZXNfZXJyDA1nbmdfbm9kZXNfd2luDQ5nbmdfbm9kZXNfdXRpbA4NZ25nX25vZGVzX2Nscw8LZ25nX2VkZ2VzX2EQC2duZ19lZGdlc19iEQ1nbmdfZWRnZXNfYWdlEg5nbmdfbm9kZV9jb3VudBMOZ25nX2VkZ2VfY291bnQUCGduZ19pdGVyFQlnbmdfcmVzZXQWB2duZ19ydW4XZ2duZ19ydW5faW1wbChpbnQsIGludCwgaW50LCBpbnQsIGludCwgZmxvYXQsIGZsb2F0LCB1bnNpZ25lZCBpbnQsIGludCwgZmxvYXQsIGludCwgZmxvYXQsIGZsb2F0LCBmbG9hdCkYFGduZ19ydW5fY2VsbF9kZW5zaXR5BxIBAA9fX3N0YWNrX3BvaW50ZXIAfwlwcm9kdWNlcnMBDHByb2Nlc3NlZC1ieQEFY2xhbmdfMTcuMC4wIChodHRwczovL2dpdGh1Yi5jb20vc3dpZnRsYW5nL2xsdm0tcHJvamVjdC5naXQgMTA5OTliNmQwMzRmZTMxOGYzZDU2YzgzYmRkYjY1NzI1OTNhOGJiMCkASQ90YXJnZXRfZmVhdHVyZXMEKwptdWx0aXZhbHVlKw9tdXRhYmxlLWdsb2JhbHMrD3JlZmVyZW5jZS10eXBlcysIc2lnbi1leHQ=';
 let GNG_WASM_EXPORTS=null;
 let GNG_WASM_UNAVAILABLE=false;
+let GNG_WASM_CORE_LOADING=null;
 function decodeBase64ToBytes(b64){
   const bin=atob(b64), bytes=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
@@ -3079,9 +3124,10 @@ function v312ReleaseGngWasmFileUrls(){
 async function v312LoadGngWasmFromFiles(fileList){
   const files=Array.from(fileList||[]);
   const jsFile=Array.from(files||[]).find(f=>/\.js$/i.test(f.name));
+  const wasmFile=Array.from(files||[]).find(f=>/\.wasm$/i.test(f.name));
   if(!jsFile){
     const status=$('gngWasmStatus');
-    if(status) status.textContent='gng_wasm_core.js を選択してください（WASM内蔵済み単一ファイル）。';
+    if(status) status.textContent='gng_wasm_core.js を選択してください。';
     return false;
   }
   try{
@@ -3090,23 +3136,32 @@ async function v312LoadGngWasmFromFiles(fileList){
     if(status) status.textContent=`読み込み中: ${jsFile.name}...`;
     const jsText=await jsFile.text();
     const jsUrl=URL.createObjectURL(new Blob([jsText],{type:'application/javascript'}));
-    state.gngWasmFileUrls={jsUrl,wasmUrl:null};
-    const mod=await new Promise((resolve,reject)=>{
-      const script=document.createElement('script');
-      script.src=jsUrl;
-      script.onload=async()=>{
-        try{
-          if(typeof GngWasmCore==='function'){
-            resolve(await GngWasmCore());
-          }else{
-            reject(new Error(`GngWasmCore not found (typeof=${typeof GngWasmCore})`));
-          }
-        }catch(e){reject(e);}
-      };
-      script.onerror=e=>reject(new Error('script fetch/parse error'));
-      document.head.appendChild(script);
-      setTimeout(()=>reject(new Error('WASM load timeout (15s)')),15000);
-    });
+    const wasmUrl=wasmFile?URL.createObjectURL(wasmFile):null;
+    state.gngWasmFileUrls={jsUrl,wasmUrl};
+    let mod;
+    if(/\bexport\s+default\b/.test(jsText)){
+      if(!wasmUrl) throw new Error('gng_wasm_core.wasm も同時に選択してください');
+      const namespace=await import(jsUrl);
+      if(typeof namespace.default!=='function') throw new Error('WASM module factory was not found');
+      mod=await namespace.default({locateFile:()=>wasmUrl});
+    }else{
+      mod=await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src=jsUrl;
+        script.onload=async()=>{
+          try{
+            if(typeof GngWasmCore==='function'){
+              resolve(await GngWasmCore({locateFile:()=>wasmUrl}));
+            }else{
+              reject(new Error(`GngWasmCore not found (typeof=${typeof GngWasmCore})`));
+            }
+          }catch(e){reject(e);}
+        };
+        script.onerror=()=>reject(new Error('script fetch/parse error'));
+        document.head.appendChild(script);
+        setTimeout(()=>reject(new Error('WASM load timeout (15s)')),15000);
+      });
+    }
     GNG_WASM_EXPORTS=mod;
     if(status) status.textContent=`Loaded: ${jsFile.name}`;
     const sec=$('wasmParamsSection');if(sec) sec.style.display='';
@@ -3360,6 +3415,10 @@ function gngStep(batch,opts={}){
   if(opts.updateMetrics!==false)updateMetrics();else updateCoreMetricsOnly();
 }
 function runGng(){
+  if(gngAlgorithm()==='wasm'&&v312WasmMode(GNG_WASM_EXPORTS)!=='emscripten'){
+    void runGngWasmFull();
+    return;
+  }
   if(isGraphOnlyMode()){
     const ok=state.importedGraphSession?loadImportedGraphSession(state.importedGraphSession):state.nodes.length>=2;
     if(!ok){
@@ -3383,7 +3442,7 @@ function runGng(){
   const started=performance.now();
   let usedWasm=false;
   try{
-    if(gngAlgorithm()==='standard') usedWasm=runGngWasmAccelerated();
+    if(gngAlgorithm()==='standard'||gngAlgorithm()==='wasm') usedWasm=runGngWasmAccelerated();
   }catch(e){
     console.warn('C++/WASM GNG failed; JavaScript fallback will run.',e);
     usedWasm=false;
@@ -7107,10 +7166,10 @@ function bindDataModeControls(){
       }
     };
   }
-  /* FROZEN: if($('gngLoadWasmBtn')&&!$('gngLoadWasmBtn').dataset.bound){
+  if($('gngLoadWasmBtn')&&!$('gngLoadWasmBtn').dataset.bound){
     $('gngLoadWasmBtn').dataset.bound='1';
     $('gngLoadWasmBtn').onclick=()=>{const fileEl=$('gngWasmFile');if(fileEl)fileEl.click();};
-  } */
+  }
   if($('gngClearDataBtn')&&!$('gngClearDataBtn').dataset.bound){
     $('gngClearDataBtn').dataset.bound='1';
     $('gngClearDataBtn').onclick=()=>{
@@ -7133,10 +7192,10 @@ function bindDataModeControls(){
       renderAll();updateHud();
     };
   }
-  /* FROZEN: if($('gngRunWasmGngBtn')&&!$('gngRunWasmGngBtn').dataset.bound){
+  if($('gngRunWasmGngBtn')&&!$('gngRunWasmGngBtn').dataset.bound){
     $('gngRunWasmGngBtn').dataset.bound='1';
     $('gngRunWasmGngBtn').onclick=()=>runGngWasmFull();
-  } */
+  }
   if($('gngBundleToggleAllBtn')&&!$('gngBundleToggleAllBtn').dataset.bound){
     $('gngBundleToggleAllBtn').dataset.bound='1';
     $('gngBundleToggleAllBtn').onclick=()=>{
@@ -7150,7 +7209,7 @@ function bindDataModeControls(){
       v312SetGngLoadStatus(shouldSelect ? 'bundle topic を全選択しました。' : 'bundle topic を全解除しました。');
     };
   }
-  /* FROZEN: if($('gngWasmFile')&&!$('gngWasmFile').dataset.bound){
+  if($('gngWasmFile')&&!$('gngWasmFile').dataset.bound){
     $('gngWasmFile').dataset.bound='1';
     $('gngWasmFile').addEventListener('change',async()=>{
       const fileEl=$('gngWasmFile');
@@ -7158,7 +7217,7 @@ function bindDataModeControls(){
         await v312LoadGngWasmFromFiles(fileEl.files);
       }
     });
-  } */
+  }
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));

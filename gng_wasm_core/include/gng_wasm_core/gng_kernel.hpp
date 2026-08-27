@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace gng_wasm_core {
@@ -92,6 +92,9 @@ struct Config {
 
 class GngKernel {
 public:
+  GngKernel();
+  ~GngKernel();
+
   void reset();
   void set_config(const Config &config);
   bool set_parameter(const char *name, std::uint32_t index, float value);
@@ -99,10 +102,10 @@ public:
   void set_point_labels(const std::vector<std::uint8_t> &labels);
   bool run();
   bool exec(std::uint32_t steps);
-  void prune_isolated_nodes_public() { prune_isolated_nodes(); }
-  void update_normals_public() { update_normals(); }
-  void assign_fuzzy_labels_public() { assign_fuzzy_labels(); }
-  void build_clusters_public() { build_clusters(); }
+  void prune_isolated_nodes_public();
+  void update_normals_public();
+  void assign_fuzzy_labels_public();
+  void build_clusters_public();
 
   const std::vector<Node> &nodes() const;
   const std::vector<Edge> &edges() const;
@@ -113,33 +116,20 @@ public:
   std::string to_json() const;
 
 private:
+  class GngCpuState;
+
   std::vector<Point3f> points_;
   std::vector<std::uint8_t> point_labels_;
   std::vector<Node> nodes_;
   std::vector<Edge> edges_;
   std::vector<Cluster> clusters_;
   Config config_{};
+  std::unique_ptr<GngCpuState> cpu_state_;
   std::uint32_t iter_ = 0;
-  std::uint32_t frame_ = 0;
-  std::uint32_t next_node_id_ = 0;
 
-  std::uint32_t random_u32();
-  float random_unit();
-  std::size_t pick_point_index();
-  std::pair<int, int> nearest_nodes(const Point3f &p) const;
-  void add_edge(std::size_t a, std::size_t b);
-  void age_edges_from(std::size_t node_index);
-  void prune_old_edges();
-  void prune_isolated_nodes();
-  void insert_node();
-  void decay_errors();
-  void update_normals();
-  void assign_fuzzy_labels();
-  void build_clusters();
-
-  static float distance2(const Point3f &a, const Point3f &b);
-  static float distance_xy2(const Point3f &a, const Point3f &b);
-  static Point3f midpoint(const Point3f &a, const Point3f &b);
+  bool initialize_cpu_core();
+  void sync_graph();
+  void update_node_geometry();
 };
 
 }  // namespace gng_wasm_core

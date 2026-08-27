@@ -549,6 +549,8 @@ transient localでpublishする。
 
 上面把持だけを対象にする場合は、`top_grasp_surface_estimator_node`を別経路として使用する。
 同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
+`PlanarCluster.position_covariance`は所属GNGノード位置の母共分散`3×3`を`float32[9]`の行優先で保持する。
+平面フィット時に算出済みの空間共分散を再利用し、GNGノードの入力残差共分散とは区別する。
 法線方向では候補を除外せず、各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
 `footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
 `grasp_size_x × grasp_size_y`へ90度回転のどちらかで全体が収まる場合だけ候補にする。

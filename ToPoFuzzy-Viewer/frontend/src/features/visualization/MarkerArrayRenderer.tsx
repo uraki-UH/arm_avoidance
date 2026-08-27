@@ -13,6 +13,8 @@ interface MarkerArrayRendererProps {
     manualTransform?: Transform;
 }
 
+const MARKER_RENDER_ORDER = 1000;
+
 const is_delete_action = (marker: MarkerMessage) => marker.action === 2 || marker.action === 3;
 
 const getPose = (marker: any) => {
@@ -72,7 +74,7 @@ function useMarkerFrame(tf: { pos: number[]; quat: number[] } | null) {
 }
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
-    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
     const pts = useMemo(() => marker.points || [], [marker.points]);
     const pointsLen = pts.length;
     const { position, rotation } = useMemo(
@@ -113,13 +115,13 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     }, [isCube, pts, marker.scale, pointsLen]);
 
     const lineMaterial = useMemo(() => new THREE.LineBasicMaterial({
-        color, transparent, opacity, depthTest: true, depthWrite: false,
-    }), [color, transparent, opacity]);
+        color, transparent: true, opacity, depthTest: false, depthWrite: false,
+    }), [color, opacity]);
 
     const meshGeometry = useMemo(() => isCube ? null : new THREE.SphereGeometry(0.5, 12, 8), [isCube]);
     const meshMaterial = useMemo(() => isCube ? null : new THREE.MeshLambertMaterial({
-        color, transparent, opacity, depthTest: true, depthWrite: true,
-    }), [color, transparent, opacity, isCube]);
+        color, transparent: true, opacity, depthTest: false, depthWrite: false,
+    }), [color, opacity, isCube]);
 
     const instRef = useRef<THREE.InstancedMesh>(null);
     useEffect(() => {
@@ -151,7 +153,7 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
                 material={lineMaterial}
                 position={position}
                 rotation={rotation}
-                renderOrder={30}
+                renderOrder={MARKER_RENDER_ORDER}
             />
         );
     }
@@ -164,13 +166,13 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
             count={pointsLen}
             position={position}
             rotation={rotation}
-            renderOrder={30}
+            renderOrder={MARKER_RENDER_ORDER}
         />
     );
 }
 
 function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
-    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
     const { position, rotation } = useMemo(
         () => getPose({ pos: marker.pos, quat: marker.quat }),
         [marker.pos, marker.quat]
@@ -184,9 +186,9 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
     }, [marker.type, isCube]);
 
     const material = useMemo(() => {
-        if (isCube) return new THREE.LineBasicMaterial({ color, transparent, opacity, depthTest: true, depthWrite: false });
-        return new THREE.MeshLambertMaterial({ color, transparent, opacity, depthTest: true, depthWrite: true });
-    }, [isCube, color, transparent, opacity]);
+        if (isCube) return new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
+        return new THREE.MeshLambertMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
+    }, [isCube, color, opacity]);
 
     useEffect(() => () => {
         material.dispose();
@@ -207,7 +209,7 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
                 position={position}
                 rotation={rotation}
                 scale={scale}
-                renderOrder={30}
+                renderOrder={MARKER_RENDER_ORDER}
             />
         );
     }
@@ -219,21 +221,21 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
             position={position}
             rotation={rotation}
             scale={scale}
-            renderOrder={30}
+            renderOrder={MARKER_RENDER_ORDER}
         />
     );
 }
 
 function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
-    const { color, opacity, transparent } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
     const { position, rotation } = useMemo(
         () => getPose({ pos: marker.pos, quat: marker.quat }),
         [marker.pos, marker.quat]
     );
     
     const material = useMemo(() => new THREE.LineBasicMaterial({
-        color, transparent, opacity, depthTest: true, depthWrite: false,
-    }), [color, transparent, opacity]);
+        color, transparent: true, opacity, depthTest: false, depthWrite: false,
+    }), [color, opacity]);
 
     const geometry = useMemo(() => {
         // pts: [number, number, number][] -> Float32Array: [x, y, z, x, y, z, ...]
@@ -265,7 +267,7 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
             object={lineObject}
             position={position}
             rotation={rotation}
-            renderOrder={30}
+            renderOrder={MARKER_RENDER_ORDER}
         />
     );
 }
@@ -338,6 +340,7 @@ function ArrowMarker({ marker }: { marker: MarkerMessage }) {
             shaftWidth={shaftWidth}
             head_length={head_length}
             head_width={head_width}
+            overlayRenderOrder={MARKER_RENDER_ORDER}
         />
     );
 }

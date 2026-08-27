@@ -232,8 +232,8 @@
     minimum_protrusion_distance: 0.01
     minimum_region_nodes: 4
     # ToPoDualArmの開口内部寸法。余白とGNG点間の補正を両側へ適用する。
-    grasp_size_x: 0.061
-    grasp_size_y: 0.074
+    grasp_size_x: 0.15
+    grasp_size_y: 0.15
     footprint_margin: 0.002
     footprint_padding: 0.003
     tcp_standoff: 0.0

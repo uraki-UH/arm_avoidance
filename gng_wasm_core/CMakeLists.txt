@@ -15,11 +15,21 @@ set(GNG_WASM_OUTPUT_DIR "" CACHE PATH "Optional output directory for Emscripten-
 add_library(gng_wasm_core
   src/gng_kernel.cpp
   src/wasm_exports.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp
 )
 target_include_directories(gng_wasm_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_include_directories(gng_wasm_core PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu
+  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils
+)
+target_compile_definitions(gng_wasm_core PRIVATE GNG_VERSION=0)
 
 if(EMSCRIPTEN)
   target_compile_options(gng_wasm_core PRIVATE -fno-exceptions -fno-rtti)
@@ -35,10 +45,18 @@ if(EMSCRIPTEN)
   add_executable(gng_wasm_core_wasm
     src/gng_kernel.cpp
     src/wasm_exports.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp
   )
   target_include_directories(gng_wasm_core_wasm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu
+    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils
   )
+  target_compile_definitions(gng_wasm_core_wasm PRIVATE GNG_VERSION=0)
   target_compile_options(gng_wasm_core_wasm PRIVATE -fno-exceptions -fno-rtti)
   target_link_options(gng_wasm_core_wasm PRIVATE
     "SHELL:-sALLOW_MEMORY_GROWTH=1"
@@ -75,4 +93,14 @@ install(
 
 ament_export_include_directories(include)
 ament_export_libraries(gng_wasm_core)
+
+if(BUILD_TESTING)
+  add_executable(
+    gng_wasm_core_cpu_kernel_test
+    test/gng_wasm_core_cpu_kernel_test.cpp
+  )
+  target_link_libraries(gng_wasm_core_cpu_kernel_test PRIVATE gng_wasm_core)
+  add_test(NAME gng_wasm_core_cpu_kernel_test COMMAND gng_wasm_core_cpu_kernel_test)
+endif()
+
 ament_package()

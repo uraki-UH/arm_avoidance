@@ -1,11 +1,11 @@
 #pragma once
 
+#include <stdint.h>
+#include <cstddef>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdint.h>
-#include <cstddef>
 
 // ラベル
 typedef enum {
