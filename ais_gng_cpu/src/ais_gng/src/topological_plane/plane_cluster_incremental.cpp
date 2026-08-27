@@ -16,6 +16,7 @@ namespace
 {
 
 constexpr double kEpsilon = 1.0e-9;
+constexpr double kHalfPi = 1.5707963267948966192313216916398;
 
 // 度で与えた設定値を、内積比較用のラジアンへ一度だけ変換するための係数。
 constexpr double kRadiansPerDeg = 0.017453292519943295769236907684886;
@@ -331,7 +332,7 @@ struct Clusterizer::Impl
   std::vector<Eigen::Vector3d> positions;
   std::vector<Eigen::Vector3d> normals;
   std::vector<double> spacings;
-  std::vector<double> coherences;
+  std::vector<double> seed_scores;
   std::vector<std::uint8_t> usable;
   std::vector<std::uint16_t> node_ids;
   std::vector<std::uint32_t> adjacency_offsets;
@@ -370,7 +371,7 @@ struct Clusterizer::Impl
     positions.assign(node_count, Eigen::Vector3d::Zero());
     normals.assign(node_count, Eigen::Vector3d::UnitZ());
     spacings.assign(node_count, 0.0);
-    coherences.assign(node_count, 0.0);
+    seed_scores.assign(node_count, 0.0);
     usable.assign(node_count, 0U);
     node_ids.assign(node_count, 0U);
 
@@ -493,13 +494,22 @@ struct Clusterizer::Impl
       normal_filter_frame[id] = normal_filter_current_frame;
     }
 
-    // 法線コヒーレンス。面の内側ほど1に近く、稜線や角で下がる。
-    // 新規クラスタの種を選ぶ順序にだけ使うので、内積の平均で足りる。
+    // 新規クラスタの種は、面の内側に近いノードから選ぶ。
+    // CPU GNGは rho=acos(mean(abs(n_i・n_j))) をすでに計算しているので、
+    // 直結経路では-rhoをそのまま順序スコアに使い、全edge内積の重複計算を避ける。
+    // rhoが無効なノードと、rhoを使わない独立経路だけ従来計算する。
     for (std::size_t index = 0U; index < node_count; ++index) {
       if (usable[index] == 0U) {
         continue;
       }
       ++statistics.usable_node_count;
+      if (options.use_node_rho_for_seed_order) {
+        const double rho = static_cast<double>(map.nodes[index].rho);
+        if (std::isfinite(rho) && rho >= 0.0 && rho <= kHalfPi + kEpsilon) {
+          seed_scores[index] = -rho;
+          continue;
+        }
+      }
       double coherence_sum = 0.0;
       std::size_t coherence_count = 0U;
       for (std::size_t cursor = adjacency_offsets[index];
@@ -512,8 +522,10 @@ struct Clusterizer::Impl
         coherence_sum += std::abs(normals[index].dot(normals[neighbour]));
         ++coherence_count;
       }
-      coherences[index] = coherence_count > 0U ?
+      const double coherence = coherence_count > 0U ?
         coherence_sum / static_cast<double>(coherence_count) : 0.0;
+      seed_scores[index] = options.use_node_rho_for_seed_order ?
+        -std::acos(std::clamp(coherence, 0.0, 1.0)) : coherence;
     }
   }
 
@@ -597,8 +609,9 @@ struct Clusterizer::Impl
   }
 
   // 平面から離れすぎたメンバーを解放する。取り込みより緩い閾値を使う。
-  void releaseOutliers(ClusterStatistics &statistics)
+  std::size_t releaseOutliers(ClusterStatistics &statistics)
   {
+    std::size_t released = 0U;
     for (std::size_t index = 0U; index < label.size(); ++index) {
       const int cluster_index = label[index];
       if (cluster_index == kUnassigned) {
@@ -611,6 +624,7 @@ struct Clusterizer::Impl
       if (!is_normal_aligned(cluster, index)) {
         label[index] = kUnassigned;
         ++statistics.released_node_count;
+        ++released;
         continue;
       }
       // 逸脱判定は常に効かせる。接続本数はしきい値を緩めるだけで、判定そのものを
@@ -633,7 +647,9 @@ struct Clusterizer::Impl
       }
       label[index] = kUnassigned;
       ++statistics.released_node_count;
+      ++released;
     }
+    return released;
   }
 
   // 保守点検の1回分。取り込みと移動を同時に判定する。
@@ -762,8 +778,8 @@ struct Clusterizer::Impl
     std::sort(
       birth_order.begin(), birth_order.end(),
       [this](const std::size_t first, const std::size_t second) {
-        if (coherences[first] != coherences[second]) {
-          return coherences[first] > coherences[second];
+        if (seed_scores[first] != seed_scores[second]) {
+          return seed_scores[first] > seed_scores[second];
         }
         return first < second;
       });
@@ -921,11 +937,12 @@ struct Clusterizer::Impl
   }
 
   // 障害物などで接続が切れたクラスタを、連結成分ごとに分ける。
-  void splitClusters(ClusterStatistics &statistics)
+  bool splitClusters(ClusterStatistics &statistics)
   {
     if (clusters.empty()) {
-      return;
+      return false;
     }
+    bool changed = false;
     component_of.assign(label.size(), kUnassigned);
     cluster_best_component.assign(clusters.size(), kUnassigned);
     cluster_best_size.assign(clusters.size(), 0U);
@@ -1018,6 +1035,7 @@ struct Clusterizer::Impl
         continue;
       }
       ++statistics.split_cluster_count;
+      changed = true;
       if (component_size < options.min_cluster_nodes) {
         continue;
       }
@@ -1049,13 +1067,14 @@ struct Clusterizer::Impl
       }
       label[index] = component_new_label[static_cast<std::size_t>(component_of[index])];
     }
+    return changed;
   }
 
   // 同じ平面に乗っていて、実際にエッジでつながっているクラスタ同士を併合する。
-  void mergeClusters(ClusterStatistics &statistics)
+  bool mergeClusters(ClusterStatistics &statistics)
   {
     if (clusters.size() < 2U) {
-      return;
+      return false;
     }
     adjacent_pair_counts.clear();
     for (std::size_t index = 0U; index < label.size(); ++index) {
@@ -1078,7 +1097,7 @@ struct Clusterizer::Impl
       }
     }
     if (adjacent_pair_counts.empty()) {
-      return;
+      return false;
     }
 
     // 各クラスタの累積共分散を1回だけ作る。候補対ごとのノード走査を避け、
@@ -1187,7 +1206,7 @@ struct Clusterizer::Impl
       }
     }
     if (absorbed == 0U) {
-      return;
+      return false;
     }
     statistics.merged_cluster_count += absorbed;
     for (std::size_t index = 0U; index < label.size(); ++index) {
@@ -1196,6 +1215,7 @@ struct Clusterizer::Impl
       }
       label[index] = static_cast<int>(merge_sets.find(static_cast<std::size_t>(label[index])));
     }
+    return true;
   }
 
   // 条件を満たさない状態が続いたクラスタを捨て、添字を詰める。
@@ -1413,23 +1433,31 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
   impl_->prepareFrame(map, result.statistics);
   impl_->carryOverLabels(map);
   impl_->refitClusters();
-  impl_->releaseOutliers(result.statistics);
+  bool labels_changed = impl_->releaseOutliers(result.statistics) != 0U;
 
   // 解放と取り込みで平面が動くため、再フィットを挟みながら数回だけ回す。
   // 変化が止まった時点で抜けるので、定常状態では1回で終わる。
   for (std::size_t iter = 0U; iter < impl_->options.maintenance_iter; ++iter) {
-    impl_->refitClusters();
+    if (labels_changed) {
+      impl_->refitClusters();
+      labels_changed = false;
+    }
     ++result.statistics.maintenance_iter_num;
     if (impl_->maintenancePass(result.statistics) == 0U) {
       break;
     }
+    labels_changed = true;
   }
 
-  impl_->refitClusters();
+  if (labels_changed) {
+    impl_->refitClusters();
+  }
   impl_->birthClusters(result.statistics);
-  impl_->splitClusters(result.statistics);
-  impl_->mergeClusters(result.statistics);
-  impl_->refitClusters();
+  const bool split_changed = impl_->splitClusters(result.statistics);
+  const bool merge_changed = impl_->mergeClusters(result.statistics);
+  if (split_changed || merge_changed) {
+    impl_->refitClusters();
+  }
   impl_->cullClusters(result.statistics);
   impl_->buildOutput(map, result);
   return result;

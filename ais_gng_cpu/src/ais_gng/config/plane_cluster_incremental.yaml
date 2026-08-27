@@ -23,6 +23,11 @@ plane_cluster_incremental_node:
     # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
     normal_filter_alpha: 0.30
 
+    # GNGが計算済みのrhoを新規クラスタの種順序に再利用する。
+    # 古いbagのrho未設定を考慮し、独立ノードでは既定false。
+    # CPU ais_gng直結経路では既定true。
+    use_node_rho_for_seed_order: false
+
     # 種の生成・成長で要求する法線の許容角度[deg]。内積比較cos値へ内部で変換。
     normal_alignment_deg: 30.0
 

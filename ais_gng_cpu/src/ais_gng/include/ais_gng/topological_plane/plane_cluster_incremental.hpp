@@ -49,6 +49,11 @@ struct ClusterOptions
   // (normal_alignment_deg等)のは対症療法にすぎない。
   double normal_filter_alpha = 0.30;
 
+  // GNGが計算済みの rho (近傍法線との角度不一致)を、新規クラスタの
+  // 種候補順序に使う。平面クラスタ側で同じ近傍法線内積を再計算しない。
+  // 古いbagでは rho が未設定の場合があるため、汎用Clusterizerの既定はfalse。
+  bool use_node_rho_for_seed_order = false;
+
   // 種の生成・成長で要求する、ノード法線とクラスタ平面法線の許容角度[deg]。
   // 法線の正負は区別しない。
   //

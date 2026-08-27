@@ -108,6 +108,7 @@ int main()
   TopologicalMap map = makeBenchmarkMap();
   ClusterOptions options;
   options.birth_confirm_frames = 0U;
+  options.use_node_rho_for_seed_order = true;
   Clusterizer clusterizer(options);
 
   for (std::size_t iteration = 0U; iteration < kWarmupIterations; ++iteration) {

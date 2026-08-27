@@ -131,6 +131,25 @@ TEST(PlaneClusterIncremental, SinglePlaneBecomesOneCluster)
   EXPECT_NEAR(covariance[5], covariance[7], 1.0e-9);
 }
 
+// CPU GNG直結経路と同じく計算済みrhoを種順序に使っても、
+// 平面クラスタの結果が変わらない。
+TEST(PlaneClusterIncremental, ReusesNodeRhoForSeedOrdering)
+{
+  ClusterOptions options;
+  options.use_node_rho_for_seed_order = true;
+  Clusterizer clusterizer{options};
+  TopologicalMap map = makeSinglePlane();
+  for (auto &node : map.nodes) {
+    node.rho = 0.0F;
+  }
+
+  const ClusterResult result = warmUp(clusterizer, map);
+
+  ASSERT_EQ(result.clusters.clusters.size(), 1U);
+  EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+  EXPECT_NEAR(std::abs(result.clusters.clusters.front().normal.z), 1.0, 1.0e-3);
+}
+
 // 同じ地図をもう一度入れたとき、所属がまったく動かない。
 //
 // 「クラスタ所属が定常状態にならない」という問題に対する、直接の回帰テスト。

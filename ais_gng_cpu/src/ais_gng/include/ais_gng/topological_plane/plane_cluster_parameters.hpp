@@ -10,7 +10,8 @@ namespace fuzzrobo::topological_plane::incremental
 {
 
 template<typename NodeT>
-ClusterOptions declareClusterOptions(NodeT &node, const std::string &prefix = "")
+ClusterOptions declareClusterOptions(
+  NodeT &node, const std::string &prefix = "", const bool use_node_rho_default = false)
 {
   ClusterOptions options;
   const auto name = [&prefix](const char *suffix) {return prefix + suffix;};
@@ -25,6 +26,8 @@ ClusterOptions declareClusterOptions(NodeT &node, const std::string &prefix = ""
     node.template declare_parameter<double>(name("max_effective_spacing"), 0.02);
   options.normal_filter_alpha =
     node.template declare_parameter<double>(name("normal_filter_alpha"), 0.30);
+  options.use_node_rho_for_seed_order = node.template declare_parameter<bool>(
+    name("use_node_rho_for_seed_order"), use_node_rho_default);
   options.normal_alignment_deg =
     node.template declare_parameter<double>(name("normal_alignment_deg"), 30.0);
   options.retention_normal_alignment_deg =

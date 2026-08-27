@@ -317,7 +317,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         this->declare_parameter<bool>("plane_cluster.direct_enabled", true);
     if (direct_plane_cluster_enabled_) {
         auto options = topological_plane::incremental::declareClusterOptions(
-            *this, "plane_cluster.");
+            *this, "plane_cluster.", true);
         direct_plane_clusterizer_ =
             std::make_unique<topological_plane::incremental::Clusterizer>(options);
         const auto output_topic = this->declare_parameter<std::string>(
