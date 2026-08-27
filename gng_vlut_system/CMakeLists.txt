@@ -118,6 +118,7 @@ if(BUILD_TESTING)
     test/test_reachability_voxel_accumulator.cpp
     test/test_world_point_bucket_index.cpp
     test/test_persistent_depth_world_index.cpp
+    test/test_voxelizer_engine.cpp
   )
   if(TARGET test_reachability_voxel_accumulator)
     target_include_directories(

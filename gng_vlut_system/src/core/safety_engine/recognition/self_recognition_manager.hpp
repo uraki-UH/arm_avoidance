@@ -12,6 +12,7 @@
 #include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_voxelizer.hpp"
 #include "kinematics/kinematic_chain.hpp"
+#include "core/common/voxelizer_engine.hpp"
 #include "common/voxel_utils.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
 
@@ -33,6 +34,20 @@ public:
         link_data_list_ = voxel_data;
         voxel_size_ = voxel_size;
         grid_.setVoxelSize(voxel_size);
+        initial_link_tfs_ = getCurrentLinkTransforms();
+        initial_base_voxel_centers_.clear();
+        initial_base_voxel_centers_.reserve(link_data_list_.size());
+        for (const auto& data : link_data_list_) {
+            const auto tf_it = initial_link_tfs_.find(data.name);
+            if (tf_it == initial_link_tfs_.end()) {
+                initial_base_voxel_centers_.push_back({});
+                continue;
+            }
+            initial_base_voxel_centers_.push_back(
+                buildInitialBaseVoxelCenters(data, tf_it->second));
+        }
+        last_vids_.clear();
+        need_mask_update_ = true;
     }
 
     void updateRobotState(const std::vector<double>& joints) {
@@ -62,20 +77,7 @@ public:
         std::map<std::string, Eigen::Isometry3d> link_tfs;
         if (!chain_ || !model_) return link_tfs;
 
-        // 各チェイン外の固定リンクをここで解決すると、別腕チェインの
-        // 部分姿勢で同名リンクが上書きされるため、まず各チェインに含まれる
-        // 経路だけから姿勢を構築
-        const std::map<std::string,
-                       std::pair<std::string, Eigen::Isometry3d>>
-            empty_fixed_link_info;
-        chain_->buildAllLinkTransforms(
-            chain_->getLinkPositions(), 
-            chain_->getLinkOrientations(), 
-            empty_fixed_link_info,
-            link_tfs
-        );
-
-        // 指先など主チェイン外の分岐リンクを、現在の関節値とURDFツリーから補完
+        // Viewerと同じURDF木構造を唯一のリンク姿勢の基準として使用
         const auto joint_values = chain_->getJointValues();
         std::map<std::string, double> joint_value_hints;
         std::size_t value_idx = 0;
@@ -87,6 +89,10 @@ public:
             }
             value_idx += static_cast<std::size_t>(std::max(dof, 0));
         }
+
+        // ルートから全関節を展開し、複数アームの部分チェイン由来の
+        // 上書きや固定リンクの欠落を防止
+        link_tfs[model_->getRootLinkName()] = Eigen::Isometry3d::Identity();
         ::simulation::completeMissingBranchLinkTransforms(
             *model_, joint_value_hints, link_tfs);
         return link_tfs;
@@ -119,12 +125,18 @@ public:
         std::vector<LinkJob> jobs;
         jobs.reserve(link_data_list_.size());
 
-        for (const auto& data : link_data_list_) {
-            auto it = tfs.find(data.name);
-            if (it != tfs.end()) {
-                // target_to_base * base_to_link = target_to_link
-                jobs.push_back({&data.local_voxel_centers, target_to_base * it->second});
-                total_points += data.local_voxel_centers.size();
+        for (std::size_t link_idx = 0; link_idx < link_data_list_.size(); ++link_idx) {
+            const auto& data = link_data_list_[link_idx];
+            const auto current_tf_it = tfs.find(data.name);
+            const auto initial_tf_it = initial_link_tfs_.find(data.name);
+            if (current_tf_it != tfs.end() &&
+                initial_tf_it != initial_link_tfs_.end() &&
+                link_idx < initial_base_voxel_centers_.size()) {
+                // target_to_base * current_base_to_link * initial_base_to_link^-1
+                jobs.push_back({&initial_base_voxel_centers_[link_idx],
+                                target_to_base * current_tf_it->second *
+                                    initial_tf_it->second.inverse()});
+                total_points += initial_base_voxel_centers_[link_idx].size();
             }
         }
 
@@ -132,19 +144,11 @@ public:
 
         // 2. 座標変換（シングルスレッド）
         auto t1 = std::chrono::high_resolution_clock::now();
-        std::vector<long> all_vids(total_points);
-        size_t offset = 0;
+        std::vector<long> all_vids;
+        all_vids.reserve(total_points * 2);
 
         for (const auto& job : jobs) {
-            const auto& centers = *job.centers;
-            const auto& tf = job.tf;
-            size_t n = centers.size();
-            for (size_t i = 0; i < n; ++i) {
-                Eigen::Vector3d wp = tf * centers[i];
-                all_vids[offset + i] = grid_.getFlatVoxelId(
-                    ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_));
-            }
-            offset += n;
+            appendTransformedVoxelCenters(*job.centers, job.tf, all_vids);
         }
         auto t2 = std::chrono::high_resolution_clock::now();
 
@@ -197,15 +201,18 @@ public:
         
         for (size_t i = 0; i < link_data_list_.size(); ++i) {
             const auto& data = link_data_list_[i];
-            auto it = tfs.find(data.name);
-            if (it != tfs.end()) {
-                Eigen::Isometry3d tf = target_to_base * it->second;
-                result[i].reserve(data.local_voxel_centers.size());
-                for (const auto& lp : data.local_voxel_centers) {
-                    Eigen::Vector3d wp = tf * lp;
-                    result[i].push_back(grid_.getFlatVoxelId(
-                        ::common::geometry::VoxelUtils::worldToVoxel(wp.template cast<float>(), (float)voxel_size_)));
-                }
+            const auto current_tf_it = tfs.find(data.name);
+            const auto initial_tf_it = initial_link_tfs_.find(data.name);
+            if (current_tf_it != tfs.end() &&
+                initial_tf_it != initial_link_tfs_.end() &&
+                i < initial_base_voxel_centers_.size()) {
+                const Eigen::Isometry3d initial_base_to_target =
+                    target_to_base * current_tf_it->second *
+                    initial_tf_it->second.inverse();
+                result[i].reserve(initial_base_voxel_centers_[i].size() * 2);
+                appendTransformedVoxelCenters(
+                    initial_base_voxel_centers_[i], initial_base_to_target,
+                    result[i]);
                 if (result[i].size() > 1) {
                     ::common::geometry::VoxelUtils::radixSort(result[i]);
                     result[i].erase(std::unique(result[i].begin(), result[i].end()), result[i].end());
@@ -216,6 +223,80 @@ public:
     }
 
 private:
+    std::vector<Eigen::Vector3d> buildInitialBaseVoxelCenters(
+        const ::simulation::LinkVoxelData& data,
+        const Eigen::Isometry3d& initial_base_to_link) const {
+        std::vector<long> initial_voxel_ids;
+        if (!data.local_mesh_triangles.empty()) {
+            appendTransformedMeshTriangles(
+                data.local_mesh_triangles, initial_base_to_link,
+                initial_voxel_ids);
+        } else {
+            appendTransformedVoxelCenters(
+                data.local_voxel_centers, initial_base_to_link,
+                initial_voxel_ids);
+        }
+        appendTransformedVoxelCenters(
+            data.local_primitive_voxel_centers, initial_base_to_link,
+            initial_voxel_ids);
+        if (initial_voxel_ids.size() > 1) {
+            ::common::geometry::VoxelUtils::radixSort(initial_voxel_ids);
+            initial_voxel_ids.erase(
+                std::unique(initial_voxel_ids.begin(), initial_voxel_ids.end()),
+                initial_voxel_ids.end());
+        }
+
+        std::vector<Eigen::Vector3d> initial_centers;
+        initial_centers.reserve(initial_voxel_ids.size());
+        for (const long voxel_id : initial_voxel_ids) {
+            initial_centers.push_back(
+                ::common::geometry::VoxelUtils::voxelToWorld(
+                    grid_.getIndexFromFlatId(voxel_id),
+                    static_cast<float>(voxel_size_)).template cast<double>());
+        }
+        return initial_centers;
+    }
+
+    void appendTransformedVoxelCenters(
+        const std::vector<Eigen::Vector3d>& centers,
+        const Eigen::Isometry3d& local_to_target,
+        std::vector<long>& voxel_ids) const {
+        const bool is_grid_aligned =
+            ::robot_sim::common::VoxelizerEngine::
+                isVoxelGridAlignedTransform(local_to_target);
+        for (const auto& center : centers) {
+            if (!is_grid_aligned) {
+                ::robot_sim::common::VoxelizerEngine::
+                    appendTransformedVoxelCell(
+                        center, local_to_target, grid_, voxel_ids);
+                continue;
+            }
+            const Eigen::Vector3d target_point = local_to_target * center;
+            voxel_ids.push_back(grid_.getFlatVoxelId(
+                ::common::geometry::VoxelUtils::worldToVoxel(
+                    target_point.template cast<float>(),
+                    static_cast<float>(voxel_size_))));
+        }
+    }
+
+    void appendTransformedMeshTriangles(
+        const std::vector<Eigen::Vector3d>& local_triangles,
+        const Eigen::Isometry3d& local_to_target,
+        std::vector<long>& voxel_ids) const {
+        std::vector<Eigen::Vector3d> target_triangles;
+        target_triangles.reserve(local_triangles.size());
+        for (const auto& vertex : local_triangles) {
+            target_triangles.push_back(local_to_target * vertex);
+        }
+
+        std::unordered_set<long> mesh_voxel_ids;
+        mesh_voxel_ids.reserve(local_triangles.size());
+        ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(
+            target_triangles, grid_, mesh_voxel_ids);
+        voxel_ids.insert(voxel_ids.end(), mesh_voxel_ids.begin(),
+                         mesh_voxel_ids.end());
+    }
+
     size_t last_total_points_pre_unique_ = 0;
     double last_calc_time_ms_ = 0;
     Eigen::Isometry3d last_target_to_base_ = Eigen::Isometry3d::Identity();
@@ -227,6 +308,8 @@ private:
     std::shared_ptr<::simulation::RobotModel> model_;
     double voxel_size_;
     std::vector<::simulation::LinkVoxelData> link_data_list_;
+    std::map<std::string, Eigen::Isometry3d> initial_link_tfs_;
+    std::vector<std::vector<Eigen::Vector3d>> initial_base_voxel_centers_;
     ::GNG::Analysis::IndexVoxelGrid grid_{0.0};
 };
 

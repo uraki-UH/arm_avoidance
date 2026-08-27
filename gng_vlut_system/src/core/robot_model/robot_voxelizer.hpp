@@ -20,6 +20,8 @@ namespace simulation {
 struct LinkVoxelData {
     std::string name;
     std::vector<Eigen::Vector3d> local_voxel_centers;
+    std::vector<Eigen::Vector3d> local_mesh_triangles;
+    std::vector<Eigen::Vector3d> local_primitive_voxel_centers;
     Eigen::Vector3d local_min;
     Eigen::Vector3d local_max;
 };
@@ -74,17 +76,18 @@ public:
             data.local_min.setConstant(std::numeric_limits<double>::max());
             data.local_max.setConstant(std::numeric_limits<double>::lowest());
 
-            std::unordered_set<long> vids;
+            std::unordered_set<long> primitive_vids;
+            std::unordered_set<long> mesh_vids;
             bool has_mesh = false;
             for (const auto& col : props->collisions) {
                 if (col.geometry.type == GeometryType::MESH) {
                     has_mesh = true;
                 } else if (col.geometry.type == GeometryType::BOX) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeBox(col.geometry.size + Eigen::Vector3d::Constant(padding * 2.0), col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeBox(col.geometry.size + Eigen::Vector3d::Constant(padding * 2.0), col.origin, grid, primitive_vids);
                 } else if (col.geometry.type == GeometryType::SPHERE) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeSphere(col.geometry.size.x() + padding, col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeSphere(col.geometry.size.x() + padding, col.origin, grid, primitive_vids);
                 } else if (col.geometry.type == GeometryType::CYLINDER) {
-                    ::robot_sim::common::VoxelizerEngine::voxelizeCylinder(col.geometry.size.x() + padding, col.geometry.size.y() + padding * 2.0, col.origin, grid, vids);
+                    ::robot_sim::common::VoxelizerEngine::voxelizeCylinder(col.geometry.size.x() + padding, col.geometry.size.y() + padding * 2.0, col.origin, grid, primitive_vids);
                 }
             }
 
@@ -115,17 +118,31 @@ public:
                     }
 
                     if (!triangle_soup.empty()) {
-                        ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(triangle_soup, grid, vids);
+                        data.local_mesh_triangles.insert(
+                            data.local_mesh_triangles.end(),
+                            triangle_soup.begin(), triangle_soup.end());
+                        ::robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(
+                            triangle_soup, grid, mesh_vids);
                     }
                 }
             }
 
+            std::unordered_set<long> vids = primitive_vids;
+            vids.insert(mesh_vids.begin(), mesh_vids.end());
             for (long vid : vids) {
                 Eigen::Vector3i idx = grid.getIndexFromFlatId(vid);
                 Eigen::Vector3d p = ::common::geometry::VoxelUtils::voxelToWorld(idx, (float)voxel_size).template cast<double>();
                 data.local_voxel_centers.push_back(p);
                 data.local_min = data.local_min.cwiseMin(p);
                 data.local_max = data.local_max.cwiseMax(p);
+            }
+
+            data.local_primitive_voxel_centers.reserve(primitive_vids.size());
+            for (long vid : primitive_vids) {
+                const Eigen::Vector3i idx = grid.getIndexFromFlatId(vid);
+                data.local_primitive_voxel_centers.push_back(
+                    ::common::geometry::VoxelUtils::voxelToWorld(
+                        idx, static_cast<float>(voxel_size)).template cast<double>());
             }
 
             if (!data.local_voxel_centers.empty()) {

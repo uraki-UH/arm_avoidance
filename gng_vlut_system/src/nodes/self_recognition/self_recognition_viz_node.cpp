@@ -429,11 +429,11 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
         hz = get_parameter("update_hz").as_double();
     }
     double inflation = get_parameter("self_recognition.inflation").as_double();
-    if (inflation <= 0.0) {
+    if (inflation < 0.0) {
         inflation = get_parameter("robot.inflation").as_double();
     }
-    if (inflation <= 0.0) {
-        inflation = 0.02;
+    if (inflation < 0.0) {
+        inflation = 0.0;
     }
 
     std::vector<std::string> voxel_links;
@@ -477,6 +477,10 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
 
     // ボクセル化の実行（チェインは全体、voxel_links だけを範囲指定）
     auto voxel_data = ::simulation::RobotVoxelizer::build(*model_, voxel_links, *grid, {}, inflation);
+    RCLCPP_INFO(
+        get_logger(),
+        "自己認識ボクセル化: 対象リンク=%zu, コリジョン有効リンク=%zu, 解像度=%.3fm, 膨張=%.3fm",
+        voxel_links.size(), voxel_data.size(), voxel_size_param, inflation);
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
     // 通信

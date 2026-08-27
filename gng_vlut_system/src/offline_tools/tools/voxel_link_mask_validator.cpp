@@ -13,6 +13,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "core/common/constants.hpp"
+#include "core/common/voxelizer_engine.hpp"
 #include "common/resource_utils.hpp"
 #include "common/voxel_utils.hpp"
 #include "robot_model/kinematic_adapter.hpp"
@@ -20,6 +21,7 @@
 #include "robot_model/robot_voxelizer.hpp"
 #include "robot_model/urdf_loader.hpp"
 #include "safety_engine/indexing/index_voxel_grid.hpp"
+#include "safety_engine/recognition/urdf_geometry_simplifier.hpp"
 #include "safety_engine/recognition/self_recognition_manager.hpp"
 
 namespace {
@@ -50,13 +52,61 @@ struct LinkReport {
   std::string name;
   std::size_t local_count = 0;
   std::size_t unique_count = 0;
+  std::size_t direct_mesh_count = 0;
+  std::size_t missing_mesh_count = 0;
   bool match_manager = false;
+  bool covers_direct_mesh = false;
   Eigen::Vector3d local_min = Eigen::Vector3d::Zero();
   Eigen::Vector3d local_max = Eigen::Vector3d::Zero();
   std::vector<long> direct_mask;
   std::vector<long> manager_mask;
   std::vector<VoxelSample> samples;
 };
+
+static std::vector<long> buildDirectMeshMask(
+    const simulation::LinkProperties &link,
+    const Eigen::Isometry3d &link_to_target,
+    const ::GNG::Analysis::IndexVoxelGrid &grid, double inflation) {
+  std::unordered_set<long> voxel_ids;
+  const auto simplified =
+      robot_sim::recognition::UrdfGeometrySimplifier::simplifyLink(link);
+
+  for (std::size_t mesh_idx = 0; mesh_idx < simplified.meshes.size(); ++mesh_idx) {
+    const auto &mesh = simplified.meshes[mesh_idx];
+    const auto &mesh_to_link = simplified.mesh_origins[mesh_idx];
+    std::vector<Eigen::Vector3d> target_vertices;
+    target_vertices.reserve(mesh.vertices.size() / 3);
+
+    for (std::size_t vertex_idx = 0; vertex_idx < mesh.vertices.size() / 3;
+         ++vertex_idx) {
+      Eigen::Vector3d vertex(mesh.vertices[vertex_idx * 3],
+                             mesh.vertices[vertex_idx * 3 + 1],
+                             mesh.vertices[vertex_idx * 3 + 2]);
+      if (inflation > 0.0 && vertex.norm() > 1e-6) {
+        vertex += vertex.normalized() * inflation;
+      }
+      target_vertices.push_back(link_to_target * (mesh_to_link * vertex));
+    }
+
+    std::vector<Eigen::Vector3d> target_triangles;
+    target_triangles.reserve(mesh.indices.size());
+    for (std::size_t triangle_idx = 0; triangle_idx < mesh.indices.size() / 3;
+         ++triangle_idx) {
+      target_triangles.push_back(
+          target_vertices[mesh.indices[triangle_idx * 3]]);
+      target_triangles.push_back(
+          target_vertices[mesh.indices[triangle_idx * 3 + 1]]);
+      target_triangles.push_back(
+          target_vertices[mesh.indices[triangle_idx * 3 + 2]]);
+    }
+    robot_sim::common::VoxelizerEngine::voxelizeMeshTriangles(
+        target_triangles, grid, voxel_ids);
+  }
+
+  std::vector<long> result(voxel_ids.begin(), voxel_ids.end());
+  std::sort(result.begin(), result.end());
+  return result;
+}
 
 } // namespace
 
@@ -185,9 +235,12 @@ private:
         get_parameter("voxel_idx_shift.z_shift").as_int(),
         get_parameter("voxel_idx_shift.offset").as_int());
 
-    const double inflation = get_parameter("self_recognition.inflation").as_double();
+    inflation_ = get_parameter("self_recognition.inflation").as_double();
+    if (inflation_ < 0.0) {
+      inflation_ = 0.0;
+    }
     voxel_data_ = simulation::RobotVoxelizer::build(
-        *model_, collision_links, *grid, {}, inflation);
+        *model_, collision_links, *grid, {}, inflation_);
 
     manager_.initialize(chain_, model_, voxel_data_, grid->getVoxelSize());
 
@@ -262,7 +315,10 @@ private:
       link.local_max = data.local_max;
 
       std::vector<long> direct_mask;
-      direct_mask.reserve(data.local_voxel_centers.size());
+      const bool is_grid_aligned =
+          ::robot_sim::common::VoxelizerEngine::
+              isVoxelGridAlignedTransform(tf);
+      direct_mask.reserve(data.local_voxel_centers.size() * 2);
       std::vector<VoxelSample> samples;
       samples.reserve(static_cast<std::size_t>(std::min<std::size_t>(data.local_voxel_centers.size(),
                                                                      static_cast<std::size_t>(max_print))));
@@ -279,7 +335,12 @@ private:
                 roundtrip_idx, static_cast<float>(manager_.getVoxelSize()))
                 .template cast<double>();
 
-        direct_mask.push_back(flat);
+        if (is_grid_aligned) {
+          direct_mask.push_back(flat);
+        } else {
+          ::robot_sim::common::VoxelizerEngine::appendTransformedVoxelCell(
+              local, tf, *manager_.getIndexGrid(), direct_mask);
+        }
 
         if (static_cast<int>(k) < max_print) {
           samples.push_back(VoxelSample{
@@ -292,6 +353,15 @@ private:
         }
       }
 
+      const auto *link_props = model_->getLink(data.name);
+      if (link_props != nullptr) {
+        const auto direct_mesh_mask = buildDirectMeshMask(
+            *link_props, tf, *manager_.getIndexGrid(), inflation_);
+        if (!data.local_mesh_triangles.empty()) {
+          direct_mask = direct_mesh_mask;
+        }
+        link.direct_mesh_count = direct_mesh_mask.size();
+      }
       if (direct_mask.size() > 1) {
         ::common::geometry::VoxelUtils::radixSort(direct_mask);
         direct_mask.erase(std::unique(direct_mask.begin(), direct_mask.end()),
@@ -303,11 +373,26 @@ private:
         link.manager_mask = manager_masks[i];
         link.match_manager = (link.direct_mask == link.manager_mask);
       }
+
+      std::vector<long> manager_mask_sorted = link.manager_mask;
+      std::sort(manager_mask_sorted.begin(), manager_mask_sorted.end());
+      std::vector<long> missing_mesh_mask;
+      missing_mesh_mask.reserve(link.direct_mesh_count);
+      if (link_props != nullptr && link.direct_mesh_count > 0) {
+        const auto direct_mesh_mask = buildDirectMeshMask(
+            *link_props, tf, *manager_.getIndexGrid(), inflation_);
+        std::set_difference(
+            direct_mesh_mask.begin(), direct_mesh_mask.end(),
+            manager_mask_sorted.begin(), manager_mask_sorted.end(),
+            std::back_inserter(missing_mesh_mask));
+      }
+      link.missing_mesh_count = missing_mesh_mask.size();
+      link.covers_direct_mesh = missing_mesh_mask.empty();
       link.unique_count = link.direct_mask.size();
       link.samples = samples;
       reports_.push_back(link);
 
-      if (!link.match_manager) {
+      if (!link.match_manager || !link.covers_direct_mesh) {
         mismatched_links_.push_back(link.name);
       }
 
@@ -318,10 +403,14 @@ private:
       report << "[" << (link.match_manager ? "OK" : "MISMATCH") << "] "
              << link.name << "\n";
       report << "  local_count=" << link.local_count
-             << " unique_count=" << link.unique_count
-             << " manager_count="
-             << (i < manager_masks.size() ? manager_masks[i].size() : 0)
-             << "\n";
+            << " unique_count=" << link.unique_count
+            << " manager_count="
+            << (i < manager_masks.size() ? manager_masks[i].size() : 0)
+            << "\n";
+      report << "  direct_mesh_count=" << link.direct_mesh_count
+             << " missing_mesh_count=" << link.missing_mesh_count
+             << " direct_mesh_covered="
+             << (link.covers_direct_mesh ? "true" : "false") << "\n";
       report << "  local_min=" << vec3ToString(link.local_min)
              << " local_max=" << vec3ToString(link.local_max) << "\n";
 
@@ -360,6 +449,8 @@ private:
     const auto manager_union = manager_.getSelfVoxelMask();
     report << "Summary:\n";
     report << "  manager_union_count=" << manager_union.size() << "\n";
+    report << "  manager_calc_ms=" << std::fixed << std::setprecision(3)
+           << manager_.getLastCalcTimeMs() << "\n";
     report << "  mismatched_links=" << mismatched_links_.size() << "\n";
     if (!mismatched_links_.empty()) {
       report << "  mismatch_names=";
@@ -405,6 +496,7 @@ private:
   std::vector<std::string> mismatched_links_;
   std::string root_link_;
   std::string report_;
+  double inflation_ = 0.0;
 };
 
 int main(int argc, char **argv) {
