@@ -844,8 +844,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="topoPublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
-                <input id="topoAutoHz" type="range" min="0.1" max="20" step="0.1" value="1">
-                <input id="topoAutoHzNum" type="number" min="0.1" max="20" step="0.1" value="1">
+                <input id="topoAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
+                <input id="topoAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="topoRosStatus" class="status">ROS topo: disconnected</div>
             </div>
@@ -857,8 +857,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="rawPublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
-                <input id="rawAutoHz" type="range" min="0.1" max="20" step="0.1" value="1">
-                <input id="rawAutoHzNum" type="number" min="0.1" max="20" step="0.1" value="1">
+                <input id="rawAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
+                <input id="rawAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="rawRosStatus" class="status">ROS raw: disconnected</div>
             </div>
@@ -870,8 +870,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="handlePublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
-                <input id="handleAutoHz" type="range" min="0.1" max="20" step="0.1" value="1">
-                <input id="handleAutoHzNum" type="number" min="0.1" max="20" step="0.1" value="1">
+                <input id="handleAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
+                <input id="handleAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="handleRosStatus" class="status">ROS handle: disconnected</div>
             </div>
@@ -883,8 +883,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="semanticPublishDetail" class="ros-source-detail">
               <div class="control-pair">
-                <input id="semanticAutoHz" type="range" min="0.1" max="20" step="0.1" value="1">
-                <input id="semanticAutoHzNum" type="number" min="0.1" max="20" step="0.1" value="1">
+                <input id="semanticAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
+                <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="semanticRosStatus" class="status">ROS semantic: disconnected</div>
             </div>
@@ -7587,6 +7587,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     let intervalId = null;
     let topicObj = null;
     let hzPairBound = false;
+    let publishTimes = [];
 
     const setStatus = (text)=>{
       if(statusEl) statusEl.textContent = text;
@@ -7596,6 +7597,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         clearInterval(intervalId);
         intervalId = null;
       }
+      publishTimes = [];
     };
     const start = ()=>{
       if(!ros || !ros.isConnected){
@@ -7613,7 +7615,14 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         try{
           const msg = messageBuilder(getPointsFn() || []);
           topicObj.publish(msg);
-          setStatus(`${statusPrefix}: published ${msg.width} pts`);
+          const now = performance.now();
+          publishTimes.push(now);
+          while(publishTimes.length>1 && now-publishTimes[0]>5000) publishTimes.shift();
+          const elapsedMs=now-publishTimes[0];
+          const actualHz=publishTimes.length>1 && elapsedMs>0
+            ? (publishTimes.length-1)*1000/elapsedMs
+            : 0;
+          setStatus(`${msg.width} pts ${actualHz.toFixed(1)} Hz`);
         }catch(e){
           console.error(`${statusPrefix} publish error`, e);
         }
@@ -7628,7 +7637,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       };
       const applyFromNumber = ()=>{
         const min = Number.isFinite(+hzEl.min) ? +hzEl.min : 0.1;
-        const max = Number.isFinite(+hzEl.max) ? +hzEl.max : 20;
+        const max = Number.isFinite(+hzEl.max) ? +hzEl.max : 50;
         const v = clamp(+hzNumEl.value || +hzEl.value || 1, min, max);
         hzEl.value = String(v);
         hzNumEl.value = String(v);
