@@ -9,9 +9,9 @@ ais_gng_node:
     # 古い接続の削除年齢
     edge.age_max: 100
     node.s1_reset_range: 0.1
-    node.s1_age_max: [6, 12, 12, 4] # [標準, 安全, 壁面, unknown]
-    node.clusted_s1_age: [20, 30, 30, 10] # [標準, 安全, 壁面, unknown]
-    node.interval: [0.1, 0.2, 0.1, 0.001] # [標準, 安全, 壁面, unknown]
+    node.s1_age_max: [6, 30, 12, 4] # [標準, 安全, 壁面, unknown]
+    node.clusted_s1_age: [20, 100, 30, 10] # [標準, 安全, 壁面, unknown]
+    node.interval: [0.1, 0.4, 0.2, 0.001] # [標準, 安全, 壁面, unknown]
     node.static.age_min: 250 # 長期記憶の年齢
 
     ds.transformed: true

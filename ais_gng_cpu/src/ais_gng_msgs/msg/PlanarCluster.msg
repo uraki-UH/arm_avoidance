@@ -11,6 +11,11 @@ geometry_msgs/Vector3 normal
 geometry_msgs/Vector3 tangent_u
 geometry_msgs/Vector3 tangent_v
 
+# 所属GNGノード位置の母共分散[m^2]。行優先の3x3行列:
+# [xx, xy, xz, yx, yy, yz, zx, zy, zz]
+# GNGノード自身の入力残差共分散ではなく、クラスタの空間的な広がりを表す。
+float32[9] position_covariance
+
 # 推定した凸包の外形は出力しない。平面クラスタは凹形状や未観測の穴を含み得るため、
 # 利用側は `boundary` を塗りつぶし済みの衝突面として扱ってはならない。
 # 将来、観測境界を追跡して格納するために予約している。

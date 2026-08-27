@@ -70,6 +70,7 @@ void orientNormal(Eigen::Vector3d &normal, const Eigen::Vector3d &reference)
 struct PlaneFit
 {
   Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
+  Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
   Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
   double planarity = 0.0;
   double residual = 0.0;
@@ -179,12 +180,13 @@ struct PlaneAccumulator
     }
 
     fit.centroid = anchor + mean;
+    fit.covariance = covariance;
     fit.normal = solver.eigenvectors().col(0).normalized();
     // 平面性は「線分状でないこと」を見る指標で、厚みは residual で別に評価する。
     fit.planarity = std::sqrt(std::clamp(eigenvalues.y() / largest, 0.0, 1.0));
     fit.residual = std::sqrt(std::max(0.0, eigenvalues.x()));
-    fit.is_valid = fit.normal.allFinite() && std::isfinite(fit.planarity) &&
-      std::isfinite(fit.residual);
+    fit.is_valid = fit.covariance.allFinite() && fit.normal.allFinite() &&
+      std::isfinite(fit.planarity) && std::isfinite(fit.residual);
     if (fit.is_valid) {
       orientNormal(fit.normal, normal_sum);
     }
@@ -290,6 +292,7 @@ struct Clusterizer::Impl
   {
     std::uint32_t id = 0U;
     Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
+    Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
     Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
     // 前フレームのOBB接平面基底。法線が僅かに動いただけで軸が不連続に選び直される
     // unitOrthogonal() の切り替わりを避けるため、この方向へ射影して引き継ぐ。
@@ -568,6 +571,7 @@ struct Clusterizer::Impl
       // 前フレームの法線へそろえ、向きの反転で追従が切れないようにする。
       orientNormal(fit.normal, cluster.normal);
       cluster.centroid = fit.centroid;
+      cluster.covariance = fit.covariance;
       cluster.normal = fit.normal;
       cluster.planarity = fit.planarity;
       cluster.residual = fit.residual;
@@ -901,6 +905,7 @@ struct Clusterizer::Impl
       ClusterState cluster;
       cluster.id = next_cluster_id++;
       cluster.centroid = final_fit.centroid;
+      cluster.covariance = final_fit.covariance;
       cluster.normal = final_fit.normal;
       cluster.planarity = final_fit.planarity;
       cluster.residual = final_fit.residual;
@@ -1355,6 +1360,12 @@ struct Clusterizer::Impl
       cluster.normal = vectorMessage(state.normal);
       cluster.tangent_u = vectorMessage(tangent_u);
       cluster.tangent_v = vectorMessage(tangent_v);
+      for (std::size_t row = 0U; row < 3U; ++row) {
+        for (std::size_t column = 0U; column < 3U; ++column) {
+          cluster.position_covariance[row * 3U + column] =
+            static_cast<float>(state.covariance(row, column));
+        }
+      }
       cluster.area = 0.0F;
       cluster.extent_u = static_cast<float>(max_u - min_u);
       cluster.extent_v = static_cast<float>(max_v - min_v);

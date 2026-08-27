@@ -45,6 +45,18 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
+MY_API void gng_setTrainingEventCapture(uint8_t enable) {
+    gng.n1.setTrainingEventCapture(enable != 0);
+}
+
+MY_API void gng_setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
+    gng.n1.setTrainingEventMaxWinnerRank(max_winner_rank);
+}
+
+MY_API const GngTrainingEvent* gng_getTrainingEvents(uint32_t *num) {
+    return gng.n1.getTrainingEvents(num);
+}
+
 MY_API TopologicalMap gng_getTopologicalMap(){
     return gng.getTopologicalMap();
 }

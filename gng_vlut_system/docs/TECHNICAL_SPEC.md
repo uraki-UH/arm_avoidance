@@ -236,7 +236,8 @@ ROS 側はプレビューの送信有無だけを制御し、見た目の指定�
 |---|---:|---|---|
 | `input.point_cloud_num` | int | `20000` | GNG に渡す1フレーム当たりの最大点数 |
 | `input.sampling_mode` | string | `head` | 上限超過時の選択方式。`head` または `uniform` |
-| `node.covariance_enabled` | bool | `false` | 第一勝者ノードの入力残差共分散とViewer向け共分散楕円データの生成 |
+| `node.covariance_enabled` | bool | `false` | 勝者ノードの入力残差共分散とViewer向け共分散楕円データの生成 |
+| `node.covariance_winner_rank_max` | int | `1` | 共分散へ含める勝者rankの最大値。CPUは`1`または`2` |
 | `performance.log_interval_ms` | int | `5000` | 実行周期INFOログの最小間隔。`0`で無効 |
 
 `graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform`、
@@ -275,10 +276,13 @@ flowchart TD
 
 ### 9.4 共分散楕円と実行周期ログ
 
-`node.covariance_enabled=true` の場合、CPU GNGは学習時に更新前の第一勝者ID、ノード生成frame、
-入力点との差分XYZを固定長の学習イベント配列へ記録する。`ais_gng`は`gng_exec()`直後に配列を読み、
-ノード生成frame単位のWelford逐次共分散へ畳み込む。共分散ロジックは`ais_gng`側にあり、GNGコアの
-共有ライブラリはイベントABIだけを公開する。
+`node.covariance_enabled=true` の場合、CPU GNGは学習時に更新前の勝者ID、勝者rank、ノード生成frame、
+入力点との差分XYZを固定長の学習イベント配列へ記録する。`node.covariance_winner_rank_max=1`は第一勝者のみ、
+`2`は第一・第二勝者を等重みで記録する。`ais_gng`は`gng_exec()`直後に配列を読み、ノード生成frame単位の
+Welford逐次共分散へ畳み込む。共分散ロジックは`ais_gng`側にあり、GNGコアの共有ライブラリはイベントABIだけを公開する。
+
+現行CPU GNGの勝者探索は第二勝者まで保持する。第N勝者へ拡張する場合は、イベントABIを変えずに、コア側の
+近傍探索をN近傍へ拡張してrank `3`以上のイベントを追加する。
 
 `node.covariance_enabled=false` の場合、イベント配列の確保、学習中のイベント記録、共分散統計の更新と
 走査を行わない。ノードIDが再利用された場合は、node生成frameが異なる統計を破棄する。
@@ -554,6 +558,7 @@ transient localでpublishする。
 壁に接した対象でも壁全体を含む巨大なOBBにはならない。同一平面上の細かな分割領域は平面距離が
 ほぼ0となるため除外される。TCP位置は単体OBB中心の最高Z、
 姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
+上面把持launchのMarkerはこのローカル`+Z`を赤い主矢印として表示する。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
 最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。
 

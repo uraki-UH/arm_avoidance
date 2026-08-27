@@ -84,6 +84,9 @@ def generate_launch_description():
                         "score_topic": LaunchConfiguration("score_topic"),
                         "output_topic": LaunchConfiguration("marker_topic"),
                         "marker_namespace": "top_grasp_pose",
+                        # Top-grasp poses define local +Z as the downward approach axis.
+                        "primary_axis_idx": 2,
+                        "primary_axis_sign": 1.0,
                     }
                 ],
             ),

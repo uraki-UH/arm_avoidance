@@ -39,6 +39,8 @@ using namespace std::chrono_literals;
 namespace fuzzrobo {
 
 struct SequentialNodeStats {
+    uint32_t node_frame = 0;
+    bool has_node_frame = false;
     double count = 0.0;
     std::array<double, 3> mean{0.0, 0.0, 0.0};
     std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -75,10 +77,8 @@ class AiSGNGComponent : public rclcpp::Node {
     double semantic_handle_ratio_threshold_{};
     std::size_t semantic_handle_history_size_{};
     std::vector<std::deque<uint8_t>> semantic_label_history_;
-    double node_eta_s1_{};
-    double node_eta_s2_{};
-    double node_cov_decay_k_{};
     bool node_covariance_enabled_{};
+    uint16_t node_covariance_winner_rank_max_{1};
     std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
     int64_t performance_log_interval_ms_{0};
     std::chrono::steady_clock::time_point last_process_start_{};
@@ -90,8 +90,6 @@ class AiSGNGComponent : public rclcpp::Node {
     ClusterClassification cluster_classification_;
 
     bool initialized_ = false;
-    std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> last_published_nodes_;
-
    public:
     AiSGNGComponent(const rclcpp::NodeOptions & options);
     ~AiSGNGComponent();
@@ -100,7 +98,6 @@ class AiSGNGComponent : public rclcpp::Node {
     rcl_interfaces::msg::SetParametersResult param_cb(const std::vector<rclcpp::Parameter> &params);
     void process_clouds(const std::vector<PC2::ConstSharedPtr>& msg);
     void semseg_cb(const PC2::SharedPtr msg);
-    void publishTopologicalMapUpdate(const ais_gng_msgs::msg::TopologicalMap &map_msg);
     void updateSemanticLabelHistory(ais_gng_msgs::msg::TopologicalMap &map_msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,

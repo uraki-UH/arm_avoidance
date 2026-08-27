@@ -86,6 +86,14 @@ struct NodeSemSeg{
     uint32_t label=0;
 };
 
+// 学習時の勝者ノードに対応した入力誤差
+struct GngTrainingEvent {
+    uint16_t winner_node_id=0;
+    uint16_t winner_rank=0;
+    uint32_t winner_node_frame=0;
+    Vec3 residual={0, 0, 0};
+};
+
 /**
  * @brief 初期化
  */
@@ -111,6 +119,25 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
  * @brief GNGを実行する
  */
 void gng_exec();
+
+/**
+ * @brief 学習イベントの記録を切り替える
+ * @param[in] enable 0以外で有効
+ */
+void gng_setTrainingEventCapture(uint8_t enable);
+
+/**
+ * @brief 学習イベントへ記録する勝者rankの最大値を設定する
+ * @param[in] max_winner_rank 1から現在対応する最大rankまでの値
+ */
+void gng_setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
+
+/**
+ * @brief 直近のgng_execで記録した学習イベントを取得する
+ * @param[out] num イベント数
+ * @return 次回gng_execまで有効なイベント配列
+ */
+const GngTrainingEvent* gng_getTrainingEvents(uint32_t *num);
 
 /**
  * @brief GNGによるトポロジカルマップを返す

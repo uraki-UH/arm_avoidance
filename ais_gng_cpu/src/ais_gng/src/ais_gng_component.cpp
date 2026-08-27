@@ -169,115 +169,7 @@ bool fillSelectedPointCloud(
     return true;
 }
 
-std::array<double, 3> scaleResidualByEta(
-    const std::array<double, 3> &residual,
-    double eta_s1)
-{
-    const double eta = std::clamp(eta_s1, 1e-6, 1.0);
-    const double inv_eta = 1.0 / eta;
-    return {
-        residual[0] * inv_eta,
-        residual[1] * inv_eta,
-        residual[2] * inv_eta,
-    };
-}
-
-double covarianceScale(const SequentialNodeStats &stats) {
-    if (stats.count <= 1.0) {
-        return 0.0;
-    }
-
-    const double denom = std::max(1.0, stats.count - 1.0);
-    const double var_x = std::max(0.0, stats.m2[0] / denom);
-    const double var_y = std::max(0.0, stats.m2[4] / denom);
-    const double var_z = std::max(0.0, stats.m2[8] / denom);
-    return std::sqrt((var_x + var_y + var_z) / 3.0);
-}
-
-double movementDecayFactor(
-    const std::array<double, 3> &residual,
-    const SequentialNodeStats &stats,
-    double k_motion,
-    double k_cov)
-{
-    const double norm = std::sqrt(
-        residual[0] * residual[0] +
-        residual[1] * residual[1] +
-        residual[2] * residual[2]);
-    const double cov = covarianceScale(stats);
-    const double motion_term = std::exp(-std::max(0.0, k_motion) * norm);
-    const double cov_term = std::exp(-std::max(0.0, k_cov) * cov);
-    return std::clamp(motion_term * cov_term, 0.15, 1.0);
-}
-
-bool seedNodeStatsFromNeighbors(
-    const TopologicalMap &map,
-    std::size_t node_idx,
-    SequentialNodeStats &stats)
-{
-    if (node_idx >= map.node_num || map.edges == nullptr || map.edge_num < 2) {
-        return false;
-    }
-
-    const auto &node = map.nodes[node_idx];
-    std::array<double, 3> sum_abs_diff{0.0, 0.0, 0.0};
-    std::size_t neighbor_count = 0;
-
-    for (uint32_t edge_idx = 0; edge_idx + 1 < map.edge_num; edge_idx += 2) {
-        const auto lhs = static_cast<std::size_t>(map.edges[edge_idx]);
-        const auto rhs = static_cast<std::size_t>(map.edges[edge_idx + 1]);
-        std::size_t neighbor_idx = std::numeric_limits<std::size_t>::max();
-
-        if (lhs == node_idx && rhs < map.node_num) {
-            neighbor_idx = rhs;
-        } else if (rhs == node_idx && lhs < map.node_num) {
-            neighbor_idx = lhs;
-        }
-
-        if (neighbor_idx == std::numeric_limits<std::size_t>::max()) {
-            continue;
-        }
-
-        const auto &neighbor = map.nodes[neighbor_idx];
-        sum_abs_diff[0] += std::fabs(static_cast<double>(neighbor.pos.x) - static_cast<double>(node.pos.x));
-        sum_abs_diff[1] += std::fabs(static_cast<double>(neighbor.pos.y) - static_cast<double>(node.pos.y));
-        sum_abs_diff[2] += std::fabs(static_cast<double>(neighbor.pos.z) - static_cast<double>(node.pos.z));
-        ++neighbor_count;
-    }
-
-    if (neighbor_count == 0) {
-        return false;
-    }
-
-    const double inv_neighbor_count = 1.0 / static_cast<double>(neighbor_count);
-    const double sigma_x = std::max(1e-4, 0.5 * sum_abs_diff[0] * inv_neighbor_count);
-    const double sigma_y = std::max(1e-4, 0.5 * sum_abs_diff[1] * inv_neighbor_count);
-    const double sigma_z = std::max(1e-4, 0.5 * sum_abs_diff[2] * inv_neighbor_count);
-
-    stats.count = 2.0;
-    stats.mean = {0.0, 0.0, 0.0};
-    stats.m2 = {
-        sigma_x * sigma_x, 0.0, 0.0,
-        0.0, sigma_y * sigma_y, 0.0,
-        0.0, 0.0, sigma_z * sigma_z,
-    };
-    return true;
-}
-
-void decaySequentialNodeStats(SequentialNodeStats &stats, double decay) {
-    const double d = std::clamp(decay, 0.15, 1.0);
-    stats.count *= d;
-    stats.m2[0] *= d;
-    stats.m2[1] *= d;
-    stats.m2[2] *= d;
-    stats.m2[3] *= d;
-    stats.m2[4] *= d;
-    stats.m2[5] *= d;
-    stats.m2[6] *= d;
-    stats.m2[7] *= d;
-    stats.m2[8] *= d;
-}
-
+#if defined(AIS_GNG_BACKEND_CPU)
 void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<double, 3> &point) {
     stats.count += 1.0;
     const double n = stats.count;
@@ -309,60 +201,48 @@ void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<doub
     stats.m2[8] += delta[2] * delta2[2];
 }
 
-void accumulateNodeMotionStats(
-    const TopologicalMap &map,
-    const std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> &previous_nodes,
-    double eta_s1,
-    double cov_decay_k,
+void accumulateWinnerPointResidualStats(
+    const GngTrainingEvent *events,
+    uint32_t event_num,
+    uint16_t winner_rank_max,
     std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
-    if (map.node_num == 0) {
+    if (events == nullptr || event_num == 0) {
         return;
     }
 
-    std::unordered_map<uint16_t, bool> active_node_ids;
-    active_node_ids.reserve(map.node_num);
+    for (uint32_t event_idx = 0; event_idx < event_num; ++event_idx) {
+        const auto &event = events[event_idx];
+        if (event.winner_rank == 0 || event.winner_rank > winner_rank_max) {
+            continue;
+        }
+        auto &stats = stats_by_node[event.winner_node_id];
+        if (!stats.has_node_frame || stats.node_frame != event.winner_node_frame) {
+            stats = SequentialNodeStats{};
+            stats.node_frame = event.winner_node_frame;
+            stats.has_node_frame = true;
+        }
+        updateSequentialNodeStats(stats, {
+            static_cast<double>(event.residual.x),
+            static_cast<double>(event.residual.y),
+            static_cast<double>(event.residual.z),
+        });
+    }
+}
 
-    // GNG内部の勝者選択後のノード移動量を、ノード座標誤差の逐次統計として蓄積する。
+void removeInactiveWinnerPointStats(
+    const TopologicalMap &map,
+    std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
+    std::unordered_map<uint16_t, uint32_t> active_node_frames;
+    active_node_frames.reserve(map.node_num);
     for (uint32_t node_idx = 0; node_idx < map.node_num; ++node_idx) {
         const auto &node = map.nodes[node_idx];
-        active_node_ids[node.id] = true;
-        const auto prev_it = previous_nodes.find(node.id);
-        if (prev_it == previous_nodes.end()) {
-            auto &node_stats = stats_by_node[node.id];
-            if (node_stats.count <= 0.0) {
-                seedNodeStatsFromNeighbors(map, node_idx, node_stats);
-            }
-            continue;
-        }
-
-        const auto &prev = prev_it->second;
-        if (prev.frame != node.frame) {
-            stats_by_node.erase(node.id);
-            auto &node_stats = stats_by_node[node.id];
-            if (seedNodeStatsFromNeighbors(map, node_idx, node_stats)) {
-                continue;
-            }
-            stats_by_node.erase(node.id);
-            continue;
-        }
-
-        const std::array<double, 3> residual{
-            static_cast<double>(node.pos.x) - static_cast<double>(prev.pos.x),
-            static_cast<double>(node.pos.y) - static_cast<double>(prev.pos.y),
-            static_cast<double>(node.pos.z) - static_cast<double>(prev.pos.z),
-        };
-        auto &node_stats = stats_by_node[node.id];
-        if (node_stats.count <= 0.0) {
-            seedNodeStatsFromNeighbors(map, node_idx, node_stats);
-        }
-        const double decay = movementDecayFactor(residual, node_stats, cov_decay_k, cov_decay_k);
-        const auto estimated_input_offset = scaleResidualByEta(residual, eta_s1);
-        decaySequentialNodeStats(node_stats, decay);
-        updateSequentialNodeStats(node_stats, estimated_input_offset);
+        active_node_frames.emplace(node.id, node.frame);
     }
 
     for (auto it = stats_by_node.begin(); it != stats_by_node.end();) {
-        if (active_node_ids.find(it->first) == active_node_ids.end()) {
+        const auto active_it = active_node_frames.find(it->first);
+        if (active_it == active_node_frames.end() ||
+            active_it->second != it->second.node_frame) {
             it = stats_by_node.erase(it);
         } else {
             ++it;
@@ -380,7 +260,8 @@ void applySequentialWinnerStats(
         auto &dst = map_msg.nodes[i];
         const auto stats_it = stats_by_node.find(map_node.id);
 
-        if (stats_it == stats_by_node.end()) {
+        if (stats_it == stats_by_node.end() ||
+            stats_it->second.node_frame != map_node.frame) {
             dst.winner_point_count = 0;
             dst.winner_point_covariance.fill(0.0f);
             continue;
@@ -396,6 +277,7 @@ void applySequentialWinnerStats(
         }
     }
 }
+#endif
 
 }  // namespace
 
@@ -417,9 +299,15 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.eta_s1", 0.4);                                   // 第１近傍ノードの学習係数(cpu/gpu)
     this->declare_parameter("node.eta_s2", 0.008);                                 // 近傍ノードの学習係数(cpu)
     this->declare_parameter("node.eta_decay_rate", 1.0);                                 // 学習係数の減衰率(cpu)
-    this->declare_parameter("node.cov_decay_k", 1.5);                              // ノード移動量に応じた分散減衰係数
     node_covariance_enabled_ =
         this->declare_parameter<bool>("node.covariance_enabled", false);           // 共分散楕円の推定を有効にするか
+    const auto covariance_winner_rank_max =
+        this->declare_parameter<int64_t>("node.covariance_winner_rank_max", 1);    // 共分散へ含める勝者rankの最大値
+    if (covariance_winner_rank_max < 1 || covariance_winner_rank_max > 2) {
+        throw std::invalid_argument(
+            "node.covariance_winner_rank_max must be between 1 and 2");
+    }
+    node_covariance_winner_rank_max_ = static_cast<uint16_t>(covariance_winner_rank_max);
     performance_log_interval_ms_ =
     this->declare_parameter<int64_t>("performance.log_interval_ms", 0);        // 詳細実行周期ログの間隔(ms)。0で無効
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
@@ -531,6 +419,10 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
             return;
         case SUCCESS:
             RCLCPP_INFO(this->get_logger(), "Initialized successfully");
+#if defined(AIS_GNG_BACKEND_CPU)
+            gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
+            gng_setTrainingEventCapture(node_covariance_enabled_ ? 1 : 0);
+#endif
             break;
         default:
             break;
@@ -653,18 +545,31 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             semantic_handle_history_size_ = static_cast<std::size_t>(
                 std::max<int64_t>(1, p.as_int()));
             success = true;
-        } else if (name == "node.eta_s1") {
-            node_eta_s1_ = std::max(1e-6, p.as_double());
-            success = true;
-        } else if (name == "node.cov_decay_k") {
-            node_cov_decay_k_ = std::max(0.0, p.as_double());
-            success = true;
         } else if (name == "node.covariance_enabled") {
             node_covariance_enabled_ = p.as_bool();
             if (!node_covariance_enabled_) {
                 winner_point_stats_.clear();
-                last_published_nodes_.clear();
             }
+#if defined(AIS_GNG_BACKEND_CPU)
+            if (initialized_) {
+                gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
+                gng_setTrainingEventCapture(node_covariance_enabled_ ? 1 : 0);
+            }
+#endif
+            success = true;
+        } else if (name == "node.covariance_winner_rank_max") {
+            const auto winner_rank_max = p.as_int();
+            if (winner_rank_max < 1 || winner_rank_max > 2) {
+                result.successful = false;
+                result.reason = "node.covariance_winner_rank_max must be between 1 and 2";
+                return result;
+            }
+            node_covariance_winner_rank_max_ = static_cast<uint16_t>(winner_rank_max);
+#if defined(AIS_GNG_BACKEND_CPU)
+            if (initialized_) {
+                gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
+            }
+#endif
             success = true;
         } else if (name == "performance.log_interval_ms") {
             const auto interval_ms = p.as_int();
@@ -883,6 +788,18 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         gng_stdout_capture.takeOutput(),
         std::chrono::duration<double, std::milli>(gng_end - input_end).count());
 
+#if defined(AIS_GNG_BACKEND_CPU)
+    if (node_covariance_enabled_) {
+        uint32_t event_num = 0;
+        const auto *events = gng_getTrainingEvents(&event_num);
+        accumulateWinnerPointResidualStats(
+            events,
+            event_num,
+            node_covariance_winner_rank_max_,
+            winner_point_stats_);
+    }
+#endif
+
     // GNGの結果を取得
     uint32_t label_num = 0, transformed_pcl_num = 0;
     auto map = gng_getTopologicalMap();// トポロジカルマップ
@@ -911,9 +828,6 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const auto classification_end = std::chrono::steady_clock::now();
 
     // トポロジカルマップをPublish
-    if (node_covariance_enabled_) {
-        publishTopologicalMapUpdate(*map_msg);
-    }
     topological_map_pub_->publish(std::move(map_msg));
 
     if(downsampling_.isTransformed()){
@@ -983,16 +897,6 @@ void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
     }
     gng_setInferredNodeLabels((NodeSemSeg*)result.data(), (uint32_t)result.size());
     // RCLCPP_INFO(this->get_logger(), "Received semseg result with %u points", (uint32_t)result.size());
-}
-
-void AiSGNGComponent::publishTopologicalMapUpdate(const ais_gng_msgs::msg::TopologicalMap &map_msg) {
-    std::unordered_map<uint16_t, ais_gng_msgs::msg::TopologicalNode> current_nodes;
-    current_nodes.reserve(map_msg.nodes.size());
-    for (const auto &node : map_msg.nodes) {
-        current_nodes.emplace(node.id, node);
-    }
-
-    last_published_nodes_ = std::move(current_nodes);
 }
 
 std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologicalMapMsg(
@@ -1066,18 +970,15 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         topological_map_msg->clusters.emplace_back(cluster_msg);
     }
 
+#if defined(AIS_GNG_BACKEND_CPU)
     if (node_covariance_enabled_) {
-        accumulateNodeMotionStats(
-            map,
-            last_published_nodes_,
-            node_eta_s1_,
-            node_cov_decay_k_,
-            winner_point_stats_);
+        removeInactiveWinnerPointStats(map, winner_point_stats_);
         applySequentialWinnerStats(
             *topological_map_msg,
             map,
             winner_point_stats_);
     }
+#endif
 
     if (semantic_labels && !semantic_labels->empty()) {
         handle_label::applySemanticLabelsToMap(

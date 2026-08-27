@@ -73,6 +73,69 @@ void CUGNG::clear() {
     edge_count.clear();
     grid.clear();
     grid_node_num.clear();
+    training_events.clear();
+    training_event_num = 0;
+}
+void CUGNG::setTrainingEventCapture(bool enable) {
+    if (enable && training_events.empty()) {
+        resizeTrainingEventBuffer();
+    }
+    training_event_capture_enabled = enable;
+    training_event_num = 0;
+}
+
+void CUGNG::setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
+    constexpr uint16_t supported_winner_rank_max = 2;
+    training_event_winner_rank_max = std::clamp<uint16_t>(
+        max_winner_rank,
+        1,
+        supported_winner_rank_max);
+    if (training_event_capture_enabled) {
+        resizeTrainingEventBuffer();
+    }
+    training_event_num = 0;
+}
+
+const GngTrainingEvent* CUGNG::getTrainingEvents(uint32_t *num) const {
+    if (num != nullptr) {
+        *num = training_event_num;
+    }
+    return training_event_num == 0 ? nullptr : training_events.data();
+}
+
+void CUGNG::beginTrainingEvents() {
+    training_event_num = 0;
+}
+
+void CUGNG::resizeTrainingEventBuffer() {
+    const auto learning_num = static_cast<std::size_t>(std::max(0, gng_config.learning_num));
+    training_events.resize(learning_num * training_event_winner_rank_max);
+}
+
+void CUGNG::recordTrainingEvent(
+    uint16_t winner_rank,
+    const Node &winner_node,
+    const Vec3f &input_point) {
+    if (!training_event_capture_enabled || training_event_num >= training_events.size()) {
+        return;
+    }
+
+    auto &event = training_events[training_event_num++];
+    event.winner_node_id = static_cast<uint16_t>(winner_node.id);
+    event.winner_rank = winner_rank;
+    event.winner_node_frame = winner_node.frame;
+    event.residual.x = input_point.p[0] - winner_node.pos.p[0];
+    event.residual.y = input_point.p[1] - winner_node.pos.p[1];
+    event.residual.z = input_point.p[2] - winner_node.pos.p[2];
+}
+
+void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point) {
+    if (winners.id1 != NODE_NOID) {
+        recordTrainingEvent(1, nodes[winners.id1], input_point);
+    }
+    if (training_event_winner_rank_max >= 2 && winners.id2 != NODE_NOID) {
+        recordTrainingEvent(2, nodes[winners.id2], input_point);
+    }
 }
 void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num){
     uint32_t i, j;
@@ -171,6 +234,7 @@ void CUGNG::check_edge_distance() {
 void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num){
     // frame
     frame_number++;
+    beginTrainingEvents();
 
     random_device rnd;  // 非決定的な乱数生成器を生成
     mt19937 mt(rnd());  //  引数は初期シード値
@@ -216,6 +280,7 @@ void CUGNG::learn_normal(Vec3f& p) {
     }
 
     auto &node0 = nodes[n.id1];
+    recordTrainingEvents(n, p);
     // ノードの移動
     // if (!node0.static_node){
     Vec3f new_pos = node0.pos.move(p, node0.eta_s1, 1.f - node0.eta_s1);

@@ -227,9 +227,9 @@
     candidate_topic: "/top_grasp_pose_cands"
     score_topic: "/top_grasp_pose_cand_scores"
     summary_topic: "/top_grasp_pose_cands/summary"
-    # 各平面クラスタから重心Zが高い隣接クラスタをまとめ、XY投影OBBで判定する。
+    # 各平面クラスタをXY投影OBBと隣接平面からの突出距離で判定する。
     up_axis: [0.0, 0.0, 1.0]
-    higher_neighbor_z_tolerance: 0.01
+    minimum_protrusion_distance: 0.01
     minimum_region_nodes: 4
     # ToPoDualArmの開口内部寸法。余白とGNG点間の補正を両側へ適用する。
     grasp_size_x: 0.061

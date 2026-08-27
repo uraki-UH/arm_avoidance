@@ -23,6 +23,7 @@ endif()
 option(TARGET_JETSON "build for jetson" OFF)
 option(GNG_ENABLE_AUTHENTICATION "Enable binary signature and YubiKey authentication" OFF)
 option(GNG_ENABLE_FRAME_LOG "Enable per-frame GNG summary logging" ON)
+option(GNG_BUILD_BENCHMARKS "学習イベント転送ベンチマークのビルド" OFF)
 
 # --- 警告オプション ---
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -122,4 +123,25 @@ install(
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
 ament_export_dependencies(Boost OpenSSL)
+
+if(GNG_BUILD_BENCHMARKS)
+  add_executable(
+    gng_training_event_benchmark
+    test/gng_training_event_benchmark.cpp
+  )
+  target_include_directories(
+    gng_training_event_benchmark
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_compile_options(gng_training_event_benchmark PRIVATE -O3 -DNDEBUG)
+
+  add_executable(
+    gng_training_event_api_test
+    test/gng_training_event_api_test.cpp
+  )
+  target_link_libraries(gng_training_event_api_test PRIVATE gng_cpu)
+  target_compile_options(gng_training_event_api_test PRIVATE -O3 -DNDEBUG)
+endif()
+
 ament_package()

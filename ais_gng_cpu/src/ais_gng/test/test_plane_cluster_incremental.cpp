@@ -122,6 +122,13 @@ TEST(PlaneClusterIncremental, SinglePlaneBecomesOneCluster)
   EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
   EXPECT_EQ(result.clusters.clusters.front().source_label, TopologicalMap::SAFE_TERRAIN);
   EXPECT_NEAR(std::abs(result.clusters.clusters.front().normal.z), 1.0, 1.0e-3);
+  const auto &covariance = result.clusters.clusters.front().position_covariance;
+  EXPECT_NEAR(covariance[0], 0.007291667, 1.0e-7);
+  EXPECT_NEAR(covariance[4], 0.007291667, 1.0e-7);
+  EXPECT_NEAR(covariance[8], 0.0, 1.0e-9);
+  EXPECT_NEAR(covariance[1], covariance[3], 1.0e-9);
+  EXPECT_NEAR(covariance[2], covariance[6], 1.0e-9);
+  EXPECT_NEAR(covariance[5], covariance[7], 1.0e-9);
 }
 
 // 同じ地図をもう一度入れたとき、所属がまったく動かない。

@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,8 @@ public:
     declare_parameter<double>("shaft_diameter", 0.006);
     declare_parameter<double>("head_diameter", 0.008);
     declare_parameter<double>("color_a", 1.0);
+    declare_parameter<int>("primary_axis_idx", 0);
+    declare_parameter<double>("primary_axis_sign", -1.0);
 
     input_topic_ = get_parameter("input_topic").as_string();
     score_topic_ = get_parameter("score_topic").as_string();
@@ -42,6 +45,12 @@ public:
     shaft_diameter_ = std::max(0.0001, get_parameter("shaft_diameter").as_double());
     head_diameter_ = std::max(0.0001, get_parameter("head_diameter").as_double());
     color_a_ = std::clamp(get_parameter("color_a").as_double(), 0.0, 1.0);
+    const int primary_axis_idx = get_parameter("primary_axis_idx").as_int();
+    if (primary_axis_idx < 0 || primary_axis_idx > 2) {
+      throw std::invalid_argument("primary_axis_idx must be 0 (X), 1 (Y), or 2 (Z)");
+    }
+    primary_axis_idx_ = static_cast<std::size_t>(primary_axis_idx);
+    primary_axis_sign_ = get_parameter("primary_axis_sign").as_double() < 0.0 ? -1.0 : 1.0;
 
     subscription_ = create_subscription<geometry_msgs::msg::PoseArray>(
       input_topic_, rclcpp::QoS(1).reliable().transient_local(),
@@ -56,8 +65,9 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "GraspPoseMarkerBridgeNode initialized. input=%s output=%s count_arrow_length=%.4f",
-      input_topic_.c_str(), output_topic_.c_str(), arrow_length_);
+      "GraspPoseMarkerBridgeNode initialized. input=%s output=%s arrow_length=%.4f axis=%zu sign=%.0f",
+      input_topic_.c_str(), output_topic_.c_str(), arrow_length_, primary_axis_idx_,
+      primary_axis_sign_);
   }
 
 private:
@@ -88,8 +98,8 @@ private:
     robot_sim::common::grasp::PoseAxisMarkerOptions options;
     options.marker_namespace = marker_namespace_;
     options.primary_axis_length = arrow_length_;
-    options.primary_axis_idx = 0U;
-    options.primary_axis_sign = -1.0;
+    options.primary_axis_idx = primary_axis_idx_;
+    options.primary_axis_sign = primary_axis_sign_;
     options.helper_axis_length_ratio = 0.5;
     options.shaft_diameter = shaft_diameter_;
     options.head_diameter = head_diameter_;
@@ -116,6 +126,8 @@ private:
   double shaft_diameter_ = 0.006;
   double head_diameter_ = 0.008;
   double color_a_ = 1.0;
+  std::size_t primary_axis_idx_ = 0U;
+  double primary_axis_sign_ = -1.0;
   std::size_t last_marker_num_ = 0;
   std::mutex mutex_;
   std::vector<float> latest_scores_;

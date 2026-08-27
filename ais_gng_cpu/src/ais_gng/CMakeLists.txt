@@ -73,6 +73,13 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_plane_cluster_incremental plane_cluster_incremental)
   ament_target_dependencies(test_plane_cluster_incremental ais_gng_msgs Eigen3)
+
+  add_executable(
+    benchmark_plane_cluster_incremental
+    test/benchmark_plane_cluster_incremental.cpp
+  )
+  target_link_libraries(benchmark_plane_cluster_incremental plane_cluster_incremental)
+  ament_target_dependencies(benchmark_plane_cluster_incremental ais_gng_msgs Eigen3)
 endif()
 
 set(_gng_component_sources

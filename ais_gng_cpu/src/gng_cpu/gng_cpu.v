@@ -4,6 +4,9 @@
     gng_setParameter;
     gng_setPointCloud;
     gng_exec;
+    gng_setTrainingEventCapture;
+    gng_setTrainingEventMaxWinnerRank;
+    gng_getTrainingEvents;
     gng_getTopologicalMap;
     gng_getDownSampling;
     gng_getAffineTransformedInputPointCloud;

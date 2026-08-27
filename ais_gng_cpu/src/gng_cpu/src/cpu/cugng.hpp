@@ -29,6 +29,10 @@ class CUGNG {
     GridConfig grid_config;
     vector<float> edge_distance; // エッジの距離
     uint32_t frame_number = 0; // フレーム数
+    bool training_event_capture_enabled = false;
+    uint16_t training_event_winner_rank_max = 1;
+    vector<GngTrainingEvent> training_events;
+    uint32_t training_event_num = 0;
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
@@ -36,6 +40,9 @@ class CUGNG {
     // void learnBatch(vector<Vec3f> &inpcl, int input_pcl_num);
     void learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num);
     void learn_normal(Vec3f& input_point);
+    void setTrainingEventCapture(bool enable);
+    void setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
+    const GngTrainingEvent* getTrainingEvents(uint32_t *num) const;
 
     void getMinAll(Vec3f& p, Node_d& result);
     bool getMinGrid(Vec3f& p, Node_d& result);
@@ -70,4 +77,13 @@ class CUGNG {
 
     const uint32_t ykey2[4] = {_YK_KEY2_1, _YK_KEY2_2, _YK_KEY2_3, _YK_KEY2_4};
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
+
+   private:
+    void beginTrainingEvents();
+    void resizeTrainingEventBuffer();
+    void recordTrainingEvent(
+        uint16_t winner_rank,
+        const Node &winner_node,
+        const Vec3f &input_point);
+    void recordTrainingEvents(const Node_d &winners, const Vec3f &input_point);
 };
