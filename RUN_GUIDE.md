@@ -47,8 +47,6 @@ ros2 launch gng_vlut_system point_to_voxel.launch.py \
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-ボクセル解像度はVLUT headerから取得するため、通常は手動指定しない。
-
 `environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
 
 | `enable_build` | `enable_roi_query` | 動作 |

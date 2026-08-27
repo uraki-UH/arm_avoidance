@@ -219,12 +219,8 @@ private:
   }
 
   void buildVoxelData() {
-    auto fixed_info = model_->getFixedLinkInfo();
-    chain_->buildAllLinkTransforms(
-        chain_->getLinkPositions(),
-        chain_->getLinkOrientations(),
-        fixed_info,
-        direct_link_tfs_);
+    // 自己認識本体と同じリンク姿勢生成経路の検証
+    direct_link_tfs_ = manager_.getCurrentLinkTransforms();
     if (direct_link_tfs_.empty()) {
       throw std::runtime_error("Failed to build link transforms.");
     }

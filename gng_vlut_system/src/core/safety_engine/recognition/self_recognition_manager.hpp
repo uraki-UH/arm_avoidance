@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "robot_model/robot_model.hpp"
+#include "robot_model/kinematic_adapter.hpp"
 #include "robot_model/robot_voxelizer.hpp"
 #include "kinematics/kinematic_chain.hpp"
 #include "common/voxel_utils.hpp"
@@ -61,13 +62,33 @@ public:
         std::map<std::string, Eigen::Isometry3d> link_tfs;
         if (!chain_ || !model_) return link_tfs;
 
-        auto fixed_info = model_->getFixedLinkInfo();
+        // 各チェイン外の固定リンクをここで解決すると、別腕チェインの
+        // 部分姿勢で同名リンクが上書きされるため、まず各チェインに含まれる
+        // 経路だけから姿勢を構築
+        const std::map<std::string,
+                       std::pair<std::string, Eigen::Isometry3d>>
+            empty_fixed_link_info;
         chain_->buildAllLinkTransforms(
             chain_->getLinkPositions(), 
             chain_->getLinkOrientations(), 
-            fixed_info, 
+            empty_fixed_link_info,
             link_tfs
         );
+
+        // 指先など主チェイン外の分岐リンクを、現在の関節値とURDFツリーから補完
+        const auto joint_values = chain_->getJointValues();
+        std::map<std::string, double> joint_value_hints;
+        std::size_t value_idx = 0;
+        for (int joint_idx = 0; joint_idx < chain_->getNumJoints(); ++joint_idx) {
+            const int dof = chain_->getJointDOF(joint_idx);
+            const std::string joint_name = chain_->getJointName(joint_idx);
+            if (dof == 1 && value_idx < joint_values.size() && !joint_name.empty()) {
+                joint_value_hints[joint_name] = joint_values[value_idx];
+            }
+            value_idx += static_cast<std::size_t>(std::max(dof, 0));
+        }
+        ::simulation::completeMissingBranchLinkTransforms(
+            *model_, joint_value_hints, link_tfs);
         return link_tfs;
     }
 
