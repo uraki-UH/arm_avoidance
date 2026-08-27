@@ -125,7 +125,7 @@ visualization_msgs::msg::Marker baseMarker(
 //
 // 毎フレーム DELETEALL を送ると、削除と再追加の間で表示が一瞬抜けて明滅する。
 // 生き残っているクラスタのマーカーは上書き更新に任せる。
-visualization_msgs::msg::MarkerArray makeObbMarkers(
+visualization_msgs::msg::MarkerArray makeHullMarkers(
   const ais_gng_msgs::msg::PlanarClusterArray &clusters,
   const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes, const bool enable_text_marker,
   std::set<std::uint32_t> &published_ids,
@@ -140,8 +140,7 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
     if (current_ids.count(id) != 0U) {
       continue;
     }
-    for (const char *name_space : {"incremental_plane_obb",
-        "incremental_plane_normal", "incremental_plane_label"})
+    for (const char *name_space : {"incremental_plane_hull", "incremental_plane_label"})
     {
       visualization_msgs::msg::Marker remove;
       remove.ns = name_space;
@@ -176,7 +175,7 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
     }
     const std::vector<PlanarPoint> hull = convexHull(std::move(projected));
 
-    auto bounds = baseMarker(clusters.header, "incremental_plane_obb", marker_id);
+    auto bounds = baseMarker(clusters.header, "incremental_plane_hull", marker_id);
     bounds.type = visualization_msgs::msg::Marker::LINE_LIST;
     bounds.scale.x = std::clamp(
       2.5 * 0.15 * static_cast<double>(cluster.local_spacing), 0.004, 0.016);
@@ -201,6 +200,48 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
       markers.markers.push_back(std::move(bounds));
     }
 
+    if (enable_text_marker) {
+      auto text = baseMarker(clusters.header, "incremental_plane_label", marker_id);
+      text.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      text.pose.position = markerPoint(cluster.centroid);
+      text.scale.z = std::max(0.03, 1.5 * static_cast<double>(cluster.local_spacing));
+      text.color = color;
+      text.text = "id=" + std::to_string(cluster.id) +
+        " n=" + std::to_string(cluster.node_indices.size());
+      markers.markers.push_back(std::move(text));
+    }
+  }
+  return markers;
+}
+
+visualization_msgs::msg::MarkerArray makeNormalMarkers(
+  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  std::set<std::uint32_t> &published_ids,
+  const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
+{
+  visualization_msgs::msg::MarkerArray markers;
+  std::set<std::uint32_t> current_ids;
+  for (const auto &cluster : clusters.clusters) {
+    current_ids.insert(cluster.id);
+  }
+  for (const std::uint32_t id : published_ids) {
+    if (current_ids.count(id) != 0U) {
+      continue;
+    }
+    visualization_msgs::msg::Marker remove;
+    remove.ns = "incremental_plane_normal";
+    remove.id = static_cast<std::int32_t>(id);
+    remove.action = visualization_msgs::msg::Marker::DELETE;
+    markers.markers.push_back(std::move(remove));
+  }
+  published_ids = std::move(current_ids);
+
+  for (const auto &cluster : clusters.clusters) {
+    const auto marker_id = static_cast<std::int32_t>(cluster.id);
+    const auto color_it = color_of.find(cluster.id);
+    const auto color = clusterColor(
+      color_it != color_of.end() ? color_it->second : cluster.id);
+
     auto normal = baseMarker(clusters.header, "incremental_plane_normal", marker_id);
     normal.type = visualization_msgs::msg::Marker::ARROW;
     const double length = std::max(0.05, 2.0 * static_cast<double>(cluster.local_spacing));
@@ -215,17 +256,6 @@ visualization_msgs::msg::MarkerArray makeObbMarkers(
     tip.z += cluster.normal.z * length;
     normal.points.push_back(tip);
     markers.markers.push_back(std::move(normal));
-
-    if (enable_text_marker) {
-      auto text = baseMarker(clusters.header, "incremental_plane_label", marker_id);
-      text.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-      text.pose.position = markerPoint(cluster.centroid);
-      text.scale.z = std::max(0.03, 1.5 * static_cast<double>(cluster.local_spacing));
-      text.color = color;
-      text.text = "id=" + std::to_string(cluster.id) +
-        " n=" + std::to_string(cluster.node_indices.size());
-      markers.markers.push_back(std::move(text));
-    }
   }
   return markers;
 }
@@ -326,15 +356,18 @@ public:
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ = declare_parameter<std::string>(
       "output_topic", "/topological_planar_clusters_incremental");
-    obb_marker_topic_ = output_topic_ + "/markers/obb";
+    hull_marker_topic_ = output_topic_ + "/markers/hull";
+    normal_marker_topic_ = output_topic_ + "/markers/normal";
     node_marker_topic_ = output_topic_ + "/markers/nodes";
     enable_text_marker_ = declare_parameter<bool>("enable_text_marker", false);
 
     const auto output_qos = rclcpp::QoS(1).transient_local();
     cluster_publisher_ =
       create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(output_topic_, output_qos);
-    obb_marker_publisher_ =
-      create_publisher<visualization_msgs::msg::MarkerArray>(obb_marker_topic_, output_qos);
+    hull_marker_publisher_ =
+      create_publisher<visualization_msgs::msg::MarkerArray>(hull_marker_topic_, output_qos);
+    normal_marker_publisher_ =
+      create_publisher<visualization_msgs::msg::MarkerArray>(normal_marker_topic_, output_qos);
     node_marker_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>(node_marker_topic_, output_qos);
     subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
@@ -342,9 +375,10 @@ public:
       [this](const ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr &map) {onMap(*map);});
 
     RCLCPP_INFO(
-      get_logger(), "plane_cluster_incremental: %s -> %s (obb: %s, nodes: %s)",
-      input_topic_.c_str(), output_topic_.c_str(), obb_marker_topic_.c_str(),
-      node_marker_topic_.c_str());
+      get_logger(),
+      "plane_cluster_incremental: %s -> %s (hull: %s, normal: %s, nodes: %s)",
+      input_topic_.c_str(), output_topic_.c_str(), hull_marker_topic_.c_str(),
+      normal_marker_topic_.c_str(), node_marker_topic_.c_str());
   }
 
 private:
@@ -477,10 +511,12 @@ private:
 
     assignColors(result.clusters, map);
     cluster_publisher_->publish(result.clusters);
-    obb_marker_publisher_->publish(
-      makeObbMarkers(
-        result.clusters, map.nodes, enable_text_marker_, published_obb_marker_ids_,
+    hull_marker_publisher_->publish(
+      makeHullMarkers(
+        result.clusters, map.nodes, enable_text_marker_, published_hull_marker_ids_,
         cluster_color_));
+    normal_marker_publisher_->publish(
+      makeNormalMarkers(result.clusters, published_normal_marker_ids_, cluster_color_));
     node_marker_publisher_->publish(
       makeNodeMarkers(
         result.clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
@@ -531,19 +567,22 @@ private:
       update_ms, publish_ms);
   }
 
-  std::set<std::uint32_t> published_obb_marker_ids_;
+  std::set<std::uint32_t> published_hull_marker_ids_;
+  std::set<std::uint32_t> published_normal_marker_ids_;
   std::set<std::uint32_t> published_node_marker_ids_;
   std::set<std::uint32_t> published_edge_marker_ids_;
   std::unordered_map<std::uint32_t, std::uint32_t> cluster_color_;
   std::string input_topic_;
   std::string output_topic_;
-  std::string obb_marker_topic_;
+  std::string hull_marker_topic_;
+  std::string normal_marker_topic_;
   std::string node_marker_topic_;
   bool enable_text_marker_ = false;
 
   Clusterizer clusterizer_;
   rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_publisher_;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr obb_marker_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr hull_marker_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr normal_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_marker_publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr subscription_;
 };
