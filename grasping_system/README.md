@@ -190,13 +190,12 @@ receives the current static graph without application-level retransmission.
 ## Top-only surface grasp estimation
 
 For a top-only grasp, the surface estimator builds planar-cluster adjacency from
-the GNG edges. A region whose individual XY OBB fits the gripper is a seed. From
-each seed, the estimator follows adjacent clusters with a higher centroid Z and
-merges every seed that reaches the same highest cluster. The merged XY OBB must
-still fit the gripper footprint. Plane normals do not reject regions, so a small
-side or step is evaluated together with the higher adjacent surface instead of
-becoming a standalone candidate. The output pose always points the TCP local Z
-axis downward.
+the GNG edges. Each planar cluster is evaluated independently: its XY OBB must
+fit the gripper, and its centroid must be at least
+`minimum_protrusion_distance` away from every adjacent cluster plane. Adjacent
+clusters are not merged into the candidate footprint, so a nearby wall does not
+make the OBB oversized. A cluster with no adjacent plane remains eligible. The
+output pose always points the TCP local Z axis downward.
 
 ```bash
 ros2 launch grasping_system top_grasp_surface_estimator.launch.py \

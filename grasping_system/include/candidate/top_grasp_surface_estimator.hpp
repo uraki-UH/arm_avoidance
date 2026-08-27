@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <queue>
 #include <stdexcept>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -23,7 +21,7 @@ namespace grasping_system::candidate
 struct TopGraspSurfaceConfig
 {
   Eigen::Vector3d up_axis = Eigen::Vector3d::UnitZ();
-  double higher_neighbor_z_tolerance = 0.01;
+  double minimum_protrusion_distance = 0.01;
   std::size_t minimum_region_nodes = 4U;
   double grasp_size_x = 0.061;
   double grasp_size_y = 0.074;
@@ -36,7 +34,6 @@ struct TopGraspSurfaceConfig
 struct TopGraspSurfaceCandidate
 {
   std::uint32_t cluster_id = 0U;
-  std::vector<std::uint32_t> cluster_ids;
   std::vector<std::uint32_t> node_indices;
   Eigen::Vector3d tcp_position = Eigen::Vector3d::Zero();
   Eigen::Quaterniond tcp_orientation = Eigen::Quaterniond::Identity();
@@ -44,17 +41,19 @@ struct TopGraspSurfaceCandidate
   double extent_y = 0.0;
   double surface_height = 0.0;
   double footprint_fill_ratio = 0.0;
+  std::size_t adjacent_region_count = 0U;
+  bool has_neighbor_plane_distance = false;
+  double minimum_neighbor_plane_distance = 0.0;
 };
 
 struct TopGraspSurfaceResult
 {
   std::size_t region_count = 0U;
   std::size_t adjacent_region_pair_count = 0U;
-  std::size_t candidate_group_count = 0U;
   std::size_t rejected_small_region = 0U;
   std::size_t rejected_invalid_region = 0U;
-  std::size_t rejected_seed_oversize_region = 0U;
-  std::size_t rejected_group_oversize_region = 0U;
+  std::size_t rejected_oversize_region = 0U;
+  std::size_t rejected_low_protrusion_region = 0U;
   std::vector<TopGraspSurfaceCandidate> candidates;
 };
 
@@ -79,15 +78,15 @@ public:
 
     const auto [basis_u, basis_v] = horizontalBasis();
     const std::size_t region_count = clusters.clusters.size();
-    std::vector<double> centroid_heights(region_count, 0.0);
-    std::vector<std::uint8_t> seed_eligible(region_count, 0U);
+    std::vector<std::uint8_t> candidate_eligible(region_count, 0U);
+    std::vector<Footprint> footprints(region_count);
     std::vector<int> owner_by_node(map.nodes.size(), -1);
 
     for (std::size_t region_index = 0U; region_index < region_count; ++region_index) {
       const auto &cluster = clusters.clusters[region_index];
-      centroid_heights[region_index] = config_.up_axis.dot(Eigen::Vector3d(
-          cluster.centroid.x, cluster.centroid.y, cluster.centroid.z));
-      if (!std::isfinite(centroid_heights[region_index]) || std::any_of(
+      const Eigen::Vector3d centroid(
+        cluster.centroid.x, cluster.centroid.y, cluster.centroid.z);
+      if (!centroid.allFinite() || std::any_of(
           cluster.node_indices.begin(), cluster.node_indices.end(),
           [&map](std::uint32_t node_index) {return node_index >= map.nodes.size();}))
       {
@@ -103,13 +102,14 @@ public:
         ++result.rejected_small_region;
         continue;
       }
-      const Footprint footprint = fitFootprint(cluster.node_indices, map, basis_u, basis_v);
-      if (!footprint.valid) {
+      footprints[region_index] = fitFootprint(
+        cluster.node_indices, map, basis_u, basis_v);
+      if (!footprints[region_index].valid) {
         ++result.rejected_invalid_region;
-      } else if (!footprint.fits) {
-        ++result.rejected_seed_oversize_region;
+      } else if (!footprints[region_index].fits) {
+        ++result.rejected_oversize_region;
       } else {
-        seed_eligible[region_index] = 1U;
+        candidate_eligible[region_index] = 1U;
       }
     }
 
@@ -135,43 +135,39 @@ public:
     }
     result.adjacent_region_pair_count /= 2U;
 
-    std::unordered_map<std::size_t, std::unordered_set<std::size_t>> group_by_apex;
-    for (std::size_t seed = 0U; seed < region_count; ++seed) {
-      if (seed_eligible[seed] == 0U) {
+    for (std::size_t region_index = 0U; region_index < region_count; ++region_index) {
+      if (candidate_eligible[region_index] == 0U) {
         continue;
       }
-      const std::vector<std::size_t> closure = higherClosure(
-        seed, adjacency, centroid_heights);
-      std::size_t apex = seed;
-      for (const std::size_t region : closure) {
-        if (centroid_heights[region] > centroid_heights[apex] ||
-          (centroid_heights[region] == centroid_heights[apex] &&
-          clusters.clusters[region].id < clusters.clusters[apex].id))
+      const auto &cluster = clusters.clusters[region_index];
+      double minimum_plane_distance = std::numeric_limits<double>::infinity();
+      for (const std::size_t neighbour_index : adjacency[region_index]) {
+        const auto &neighbour = clusters.clusters[neighbour_index];
+        Eigen::Vector3d normal(
+          neighbour.normal.x, neighbour.normal.y, neighbour.normal.z);
+        const Eigen::Vector3d neighbour_centroid(
+          neighbour.centroid.x, neighbour.centroid.y, neighbour.centroid.z);
+        if (!normal.allFinite() || normal.norm() < 1.0e-12 ||
+          !neighbour_centroid.allFinite())
         {
-          apex = region;
+          continue;
         }
+        normal.normalize();
+        const Eigen::Vector3d candidate_centroid(
+          cluster.centroid.x, cluster.centroid.y, cluster.centroid.z);
+        minimum_plane_distance = std::min(
+          minimum_plane_distance,
+          std::abs(normal.dot(candidate_centroid - neighbour_centroid)));
       }
-      auto &group = group_by_apex[apex];
-      group.insert(closure.begin(), closure.end());
-    }
-
-    result.candidate_group_count = group_by_apex.size();
-    for (auto &[apex, region_indices] : group_by_apex) {
-      std::unordered_set<std::uint32_t> unique_nodes;
-      std::vector<std::uint32_t> cluster_ids;
-      for (const std::size_t region_index : region_indices) {
-        const auto &cluster = clusters.clusters[region_index];
-        cluster_ids.push_back(cluster.id);
-        unique_nodes.insert(cluster.node_indices.begin(), cluster.node_indices.end());
-      }
-      std::vector<std::uint32_t> node_indices(unique_nodes.begin(), unique_nodes.end());
-      std::sort(node_indices.begin(), node_indices.end());
-      std::sort(cluster_ids.begin(), cluster_ids.end());
-      const Footprint footprint = fitFootprint(node_indices, map, basis_u, basis_v);
-      if (!footprint.valid || !footprint.fits) {
-        ++result.rejected_group_oversize_region;
+      const bool has_plane_distance = std::isfinite(minimum_plane_distance);
+      if (has_plane_distance &&
+        minimum_plane_distance < config_.minimum_protrusion_distance)
+      {
+        ++result.rejected_low_protrusion_region;
         continue;
       }
+
+      const Footprint &footprint = footprints[region_index];
 
       const Eigen::Vector3d world_y =
         (basis_u * footprint.local_y_axis.x() +
@@ -184,9 +180,8 @@ public:
       rotation.col(2) = world_z;
 
       TopGraspSurfaceCandidate candidate;
-      candidate.cluster_id = clusters.clusters[apex].id;
-      candidate.cluster_ids = std::move(cluster_ids);
-      candidate.node_indices = std::move(node_indices);
+      candidate.cluster_id = cluster.id;
+      candidate.node_indices = cluster.node_indices;
       candidate.tcp_position = basis_u * footprint.center_uv.x() +
         basis_v * footprint.center_uv.y() +
         config_.up_axis * (footprint.maximum_height + config_.tcp_standoff);
@@ -195,6 +190,11 @@ public:
       candidate.extent_y = footprint.extent_y;
       candidate.surface_height = footprint.maximum_height;
       candidate.footprint_fill_ratio = footprint.fill_ratio;
+      candidate.adjacent_region_count = adjacency[region_index].size();
+      candidate.has_neighbor_plane_distance = has_plane_distance;
+      if (has_plane_distance) {
+        candidate.minimum_neighbor_plane_distance = minimum_plane_distance;
+      }
       result.candidates.push_back(std::move(candidate));
     }
 
@@ -231,10 +231,10 @@ private:
       throw std::invalid_argument("up_axis must be finite and non-zero");
     }
     config_.up_axis.normalize();
-    if (!std::isfinite(config_.higher_neighbor_z_tolerance) ||
-      config_.higher_neighbor_z_tolerance < 0.0)
+    if (!std::isfinite(config_.minimum_protrusion_distance) ||
+      config_.minimum_protrusion_distance < 0.0)
     {
-      throw std::invalid_argument("higher_neighbor_z_tolerance must be finite and non-negative");
+      throw std::invalid_argument("minimum_protrusion_distance must be finite and non-negative");
     }
     if (!std::isfinite(config_.grasp_size_x) || !std::isfinite(config_.grasp_size_y) ||
       config_.grasp_size_x <= 0.0 || config_.grasp_size_y <= 0.0 ||
@@ -256,34 +256,6 @@ private:
     const Eigen::Vector3d basis_u =
       (reference - config_.up_axis * config_.up_axis.dot(reference)).normalized();
     return {basis_u, config_.up_axis.cross(basis_u).normalized()};
-  }
-
-  std::vector<std::size_t> higherClosure(
-    std::size_t seed,
-    const std::vector<std::unordered_set<std::size_t>> &adjacency,
-    const std::vector<double> &centroid_heights) const
-  {
-    std::vector<std::size_t> closure;
-    std::vector<std::uint8_t> visited(adjacency.size(), 0U);
-    std::queue<std::size_t> frontier;
-    visited[seed] = 1U;
-    frontier.push(seed);
-    while (!frontier.empty()) {
-      const std::size_t current = frontier.front();
-      frontier.pop();
-      closure.push_back(current);
-      for (const std::size_t neighbour : adjacency[current]) {
-        if (visited[neighbour] != 0U ||
-          centroid_heights[neighbour] <=
-          centroid_heights[current] + config_.higher_neighbor_z_tolerance)
-        {
-          continue;
-        }
-        visited[neighbour] = 1U;
-        frontier.push(neighbour);
-      }
-    }
-    return closure;
   }
 
   Footprint fitFootprint(

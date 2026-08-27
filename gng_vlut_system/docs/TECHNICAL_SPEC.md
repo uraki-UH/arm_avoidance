@@ -236,7 +236,7 @@ ROS 側はプレビューの送信有無だけを制御し、見た目の指定�
 |---|---:|---|---|
 | `input.point_cloud_num` | int | `20000` | GNG に渡す1フレーム当たりの最大点数 |
 | `input.sampling_mode` | string | `head` | 上限超過時の選択方式。`head` または `uniform` |
-| `node.covariance_enabled` | bool | `false` | ノード移動共分散とViewer向け共分散楕円データの生成 |
+| `node.covariance_enabled` | bool | `false` | 第一勝者ノードの入力残差共分散とViewer向け共分散楕円データの生成 |
 | `performance.log_interval_ms` | int | `5000` | 実行周期INFOログの最小間隔。`0`で無効 |
 
 `graspnet.yaml` は `input.point_cloud_num=100000`、`input.sampling_mode=uniform`、
@@ -275,8 +275,13 @@ flowchart TD
 
 ### 9.4 共分散楕円と実行周期ログ
 
-`node.covariance_enabled=false` の場合、ノード移動共分散の蓄積、近傍エッジからの初期分散推定、
-前フレームノードのスナップショット生成、共分散統計の走査を行わない。
+`node.covariance_enabled=true` の場合、CPU GNGは学習時に更新前の第一勝者ID、ノード生成frame、
+入力点との差分XYZを固定長の学習イベント配列へ記録する。`ais_gng`は`gng_exec()`直後に配列を読み、
+ノード生成frame単位のWelford逐次共分散へ畳み込む。共分散ロジックは`ais_gng`側にあり、GNGコアの
+共有ライブラリはイベントABIだけを公開する。
+
+`node.covariance_enabled=false` の場合、イベント配列の確保、学習中のイベント記録、共分散統計の更新と
+走査を行わない。ノードIDが再利用された場合は、node生成frameが異なる統計を破棄する。
 ToPoFuzzy Viewer側の共分散楕円表示も既定でオフであり、オフ中は固有値計算、インスタンス更新、描画を行わない。
 
 `performance.log_interval_ms` ごとのINFOログには、次を出力する。
@@ -290,12 +295,14 @@ ToPoFuzzy Viewer側の共分散楕円表示も既定でオフであり、オフ�
 flowchart LR
     A[PointCloud2 callback] --> B[input selection]
     B --> C[GNG learning]
-    C --> D[ROS message conversion]
-    D --> E[classification]
-    E --> F[publish]
-    D --> G{node.covariance_enabled}
-    G -- true --> H[covariance update and snapshot]
-    G -- false --> I[skip]
+    C --> D{node.covariance_enabled}
+    D -- true --> E[固定長学習イベント配列]
+    E --> F[外部Welford共分散更新]
+    D -- false --> G[イベント記録なし]
+    F --> H[ROS message conversion]
+    G --> H
+    H --> I[classification]
+    I --> J[publish]
 ```
 
 ## 10. リンク別可操作性の Viewer 表示
@@ -538,14 +545,14 @@ transient localでpublishする。
 
 上面把持だけを対象にする場合は、`top_grasp_surface_estimator_node`を別経路として使用する。
 同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
-法線方向では候補を除外しない。各領域を水平面へ投影した単体OBBが把持面積へ収まるものを起点とし、
-隣接領域のうち重心Zが`higher_neighbor_z_tolerance`より高いものを再帰的にたどる。
-同じ最上位クラスタへ到達する領域群は統合し、統合後の全所属ノードからXY平面上のOBBを再計算する。
-この最終OBBにはGNG点間を補う
+法線方向では候補を除外せず、各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
 `footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
 `grasp_size_x × grasp_size_y`へ90度回転のどちらかで全体が収まる場合だけ候補にする。
-大きな床領域は単体OBBが入らないため起点にならない。側面や段差の小領域だけなら収まっても、
-その上に隣接する高い領域との統合OBBが入らなければ候補にしない。TCP位置は統合OBB中心の最高Z、
+さらに候補クラスタの重心から各隣接クラスタ平面までの絶対距離を求め、その最小値が
+`minimum_protrusion_distance`以上であることを要求する。隣接クラスタがない候補はこの条件を通す。
+点同士の最小距離は接触境界でほぼ0になるため使わない。隣接平面を候補OBBへ統合しないため、
+壁に接した対象でも壁全体を含む巨大なOBBにはならない。同一平面上の細かな分割領域は平面距離が
+ほぼ0となるため除外される。TCP位置は単体OBB中心の最高Z、
 姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
 最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。

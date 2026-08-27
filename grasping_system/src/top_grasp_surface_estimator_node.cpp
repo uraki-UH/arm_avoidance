@@ -76,8 +76,8 @@ private:
       throw std::invalid_argument("up_axis must contain exactly three values");
     }
     config.up_axis = Eigen::Vector3d(up_axis[0], up_axis[1], up_axis[2]);
-    config.higher_neighbor_z_tolerance = declare_parameter<double>(
-      "higher_neighbor_z_tolerance", 0.01);
+    config.minimum_protrusion_distance = declare_parameter<double>(
+      "minimum_protrusion_distance", 0.01);
     config.minimum_region_nodes = positiveSizeParameter("minimum_region_nodes", 4);
     config.grasp_size_x = declare_parameter<double>("grasp_size_x", 0.061);
     config.grasp_size_y = declare_parameter<double>("grasp_size_y", 0.074);
@@ -120,11 +120,11 @@ private:
     publishSummary(result, processing_ms);
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 2000,
-      "Top grasp: regions=%zu adjacent=%zu groups=%zu accepted=%zu small=%zu invalid=%zu seed_oversize=%zu group_oversize=%zu calc=%.2fms",
-      result.region_count, result.adjacent_region_pair_count, result.candidate_group_count,
-      result.candidates.size(), result.rejected_small_region,
-      result.rejected_invalid_region, result.rejected_seed_oversize_region,
-      result.rejected_group_oversize_region, processing_ms);
+      "Top grasp: regions=%zu adjacent=%zu accepted=%zu small=%zu invalid=%zu oversize=%zu low_protrusion=%zu calc=%.2fms",
+      result.region_count, result.adjacent_region_pair_count, result.candidates.size(),
+      result.rejected_small_region, result.rejected_invalid_region,
+      result.rejected_oversize_region, result.rejected_low_protrusion_region,
+      processing_ms);
   }
 
   static std::int64_t stampNanoseconds(const builtin_interfaces::msg::Time &stamp)
@@ -165,14 +165,13 @@ private:
            << ",\"frame_number\":" << map_->frame_number
            << ",\"region_count\":" << result.region_count
            << ",\"adjacent_region_pair_count\":" << result.adjacent_region_pair_count
-           << ",\"candidate_group_count\":" << result.candidate_group_count
            << ",\"candidate_count\":" << result.candidates.size()
            << ",\"rejected_small_region\":" << result.rejected_small_region
            << ",\"rejected_invalid_region\":" << result.rejected_invalid_region
-           << ",\"rejected_seed_oversize_region\":"
-           << result.rejected_seed_oversize_region
-           << ",\"rejected_group_oversize_region\":"
-           << result.rejected_group_oversize_region
+           << ",\"rejected_oversize_region\":"
+           << result.rejected_oversize_region
+           << ",\"rejected_low_protrusion_region\":"
+           << result.rejected_low_protrusion_region
            << ",\"processing_ms\":" << processing_ms
            << ",\"candidates\":[";
     for (std::size_t index = 0U; index < result.candidates.size(); ++index) {
@@ -182,18 +181,15 @@ private:
       const auto &surface = result.candidates[index];
       stream << "{\"index\":" << index
              << ",\"cluster_id\":" << surface.cluster_id
-             << ",\"cluster_count\":" << surface.cluster_ids.size()
-             << ",\"cluster_ids\":[";
-      for (std::size_t cluster_index = 0U;
-        cluster_index < surface.cluster_ids.size(); ++cluster_index)
-      {
-        if (cluster_index != 0U) {
-          stream << ',';
-        }
-        stream << surface.cluster_ids[cluster_index];
-      }
-      stream << "]"
              << ",\"node_count\":" << surface.node_indices.size()
+             << ",\"adjacent_region_count\":" << surface.adjacent_region_count
+             << ",\"minimum_neighbor_plane_distance\":";
+      if (surface.has_neighbor_plane_distance) {
+        stream << surface.minimum_neighbor_plane_distance;
+      } else {
+        stream << "null";
+      }
+      stream
              << ",\"extent_x\":" << surface.extent_x
              << ",\"extent_y\":" << surface.extent_y
              << ",\"surface_height\":" << surface.surface_height

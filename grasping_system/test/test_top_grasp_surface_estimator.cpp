@@ -74,7 +74,7 @@ TopGraspSurfaceConfig makeConfig()
 {
   TopGraspSurfaceConfig config;
   config.minimum_region_nodes = 4U;
-  config.higher_neighbor_z_tolerance = 0.01;
+  config.minimum_protrusion_distance = 0.01;
   config.grasp_size_x = 0.061;
   config.grasp_size_y = 0.074;
   config.footprint_margin = 0.0;
@@ -89,42 +89,46 @@ int main()
   TopologicalMap map;
   PlanarClusterArray clusters;
 
-  const auto fitting_side = addRectangle(map, 0.0, 0.0, 0.05, 0.03, 0.02);
   const auto fitting_top = addRectangle(map, 0.0, 0.0, 0.10, 0.03, 0.04);
-  clusters.clusters.push_back(makeCluster(10U, fitting_side, 0.0, 0.0, 0.05, {
-      1.0, 0.0, 0.0}));
+  const auto wall = addRectangle(map, -0.02, 0.0, 0.05, 0.20, 0.20);
   clusters.clusters.push_back(makeCluster(11U, fitting_top, 0.0, 0.0, 0.10, {
       0.0, 0.0, 1.0}));
-  addEdge(map, fitting_side.front(), fitting_top.front());
-
-  const auto wide_lower = addRectangle(map, 0.15, 0.0, 0.05, 0.03, 0.02);
-  const auto wide_upper = addRectangle(map, 0.23, 0.0, 0.10, 0.03, 0.02);
-  clusters.clusters.push_back(makeCluster(20U, wide_lower, 0.15, 0.0, 0.05, {
+  clusters.clusters.push_back(makeCluster(12U, wall, -0.02, 0.0, 0.05, {
       1.0, 0.0, 0.0}));
-  clusters.clusters.push_back(makeCluster(21U, wide_upper, 0.23, 0.0, 0.10, {
-      0.0, 0.0, 1.0}));
-  addEdge(map, wide_lower.front(), wide_upper.front());
+  addEdge(map, fitting_top.front(), wall.front());
 
-  const auto floor = addRectangle(map, 0.0, 0.0, 0.0, 0.20, 0.20);
-  clusters.clusters.push_back(makeCluster(30U, floor, 0.0, 0.0, 0.0, {
+  const auto flat_fragment = addRectangle(map, 0.20, 0.0, 0.0, 0.03, 0.02);
+  const auto floor = addRectangle(map, 0.20, 0.0, 0.0, 0.20, 0.20);
+  clusters.clusters.push_back(makeCluster(20U, flat_fragment, 0.20, 0.0, 0.0, {
       0.0, 0.0, 1.0}));
-  addEdge(map, floor.front(), fitting_side.front());
+  clusters.clusters.push_back(makeCluster(21U, floor, 0.20, 0.0, 0.0, {
+      0.0, 0.0, 1.0}));
+  addEdge(map, flat_fragment.front(), floor.front());
+
+  const auto isolated = addRectangle(map, 0.40, 0.0, 0.08, 0.03, 0.02);
+  clusters.clusters.push_back(makeCluster(30U, isolated, 0.40, 0.0, 0.08, {
+      0.0, 1.0, 0.0}));
 
   const TopGraspSurfaceEstimator estimator(makeConfig());
   const auto result = estimator.estimate(map, clusters);
   expect(result.region_count == 5U, "region count mismatch");
-  expect(result.adjacent_region_pair_count == 3U, "region adjacency mismatch");
-  expect(result.candidate_group_count == 2U, "candidate group count mismatch");
-  expect(result.rejected_seed_oversize_region == 1U, "floor was not excluded as a seed");
-  expect(result.rejected_group_oversize_region == 1U, "wide upper closure was not rejected");
-  expect(result.candidates.size() == 1U, "fitting upper closure was not isolated");
-
-  const auto &candidate = result.candidates.front();
-  expect(candidate.cluster_id == 11U, "highest adjacent cluster was not selected as apex");
-  expect(candidate.cluster_ids.size() == 2U, "adjacent side was not included");
+  expect(result.adjacent_region_pair_count == 2U, "region adjacency mismatch");
+  expect(result.rejected_oversize_region == 2U, "large wall and floor were not excluded");
   expect(
-    std::find(candidate.cluster_ids.begin(), candidate.cluster_ids.end(), 10U) !=
-    candidate.cluster_ids.end(), "vertical side cluster was filtered by its normal");
+    result.rejected_low_protrusion_region == 1U,
+    "coplanar fragment was not rejected by protrusion distance");
+  expect(result.candidates.size() == 2U, "expected wall-side and isolated candidates");
+
+  const auto candidate_it = std::find_if(
+    result.candidates.begin(), result.candidates.end(),
+    [](const auto &candidate) {return candidate.cluster_id == 11U;});
+  expect(candidate_it != result.candidates.end(), "wall-side protrusion was rejected");
+  const auto &candidate = *candidate_it;
+  expect(candidate.adjacent_region_count == 1U, "wall adjacency was not recorded");
+  expect(candidate.has_neighbor_plane_distance, "wall plane distance was not computed");
+  expect(
+    std::abs(candidate.minimum_neighbor_plane_distance - 0.02) < 1.0e-6,
+    "wall plane distance mismatch");
   expect(candidate.extent_x <= 0.061 + 1.0e-9, "candidate x extent exceeds grasp area");
   expect(candidate.extent_y <= 0.074 + 1.0e-9, "candidate y extent exceeds grasp area");
   expect(
@@ -132,5 +136,13 @@ int main()
     "TCP was not placed at the highest adjacent region");
   const Eigen::Vector3d approach = candidate.tcp_orientation * Eigen::Vector3d::UnitZ();
   expect((approach + Eigen::Vector3d::UnitZ()).norm() < 1.0e-9, "approach is not downward");
+
+  const auto isolated_it = std::find_if(
+    result.candidates.begin(), result.candidates.end(),
+    [](const auto &surface) {return surface.cluster_id == 30U;});
+  expect(isolated_it != result.candidates.end(), "isolated fitting region was rejected");
+  expect(
+    !isolated_it->has_neighbor_plane_distance,
+    "isolated region unexpectedly has a neighbour distance");
   return 0;
 }
