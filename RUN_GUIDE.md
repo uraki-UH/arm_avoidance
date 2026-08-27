@@ -129,7 +129,7 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=20.0
 
 
-python3 test_tf_once_publisher.py   --world-frame world   --frame-id ToPoDualArm/base_link   --x 0.35   --y 0.15   --z -0.3 --yaw 3.2  --hold-seconds 1.0   --publish-hz 20
+python3 test_tf_publisher.py --static --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2 --hold-seconds 1.0
 
 
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
