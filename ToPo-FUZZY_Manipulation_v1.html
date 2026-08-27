@@ -679,8 +679,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><option value="wasm">GNG-WASM / C++ WebAssembly</option></select></div>
-          <div class="full"><label>Point-cloud source</label><select id="pointCloudSource"><option value="synthetic_depth" selected>Synthetic / synthetic depth</option><option value="imported_frames">Imported frames / 取り込みデータ</option></select></div>
-          <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
+          <div class="full"><label>Point-cloud source</label><select id="pointCloudSource"><option value="synthetic_depth" selected>Synthetic / synthetic depth</option><option value="object_surface">Object surface / no depth・遮蔽なし</option><option value="imported_frames">Imported frames / 取り込みデータ</option></select></div>
+          <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="object_surface">Object surface / no depth・遮蔽なし</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
           <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
           <div id="gngBundleTopicContainer" class="full hide">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -1035,7 +1035,7 @@ const $=id=>document.getElementById(id);
 const TAU=Math.PI*2;
 function reportGngRuntimeError(context,err){console.warn('[GNG error]',context,err);}
 const state={
-  basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
+  objectSurfacePoints:[],basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
@@ -1240,7 +1240,9 @@ function genCylinderBody(pts,n,noise,r,o){
   // o: {height, rad, radMod:'sin'|'linear'|'taper'|'flare', modAmt, scaleY, rimFrac, rimH}
   const h=o.h || o.height, baseRad=o.rad, mod=o.radMod||'none', amt=o.modAmt||0;
   const sy=o.scaleY||1, rimFrac=o.rimFrac||0.18, rimH=o.rimH??h*0.915;
-  for(let i=0;i<n;i++){
+  const bottomN=Math.floor(n*(o.bottomFrac??0.12));
+  const sideN=n-bottomN;
+  for(let i=0;i<sideN;i++){
     const z=r()*h; const th=r()*TAU;
     let rad=baseRad+(r()-.5)*0.004;
     if(mod==='sin')   rad+=amt*Math.sin(Math.PI*z/h);
@@ -1249,6 +1251,11 @@ function genCylinderBody(pts,n,noise,r,o){
     if(mod==='flare') rad+=amt*(z/h);           // alias
     if(r()<rimFrac){const rz=rimH+(r()-.5)*0.003; pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*sy)*Math.sin(th),z:rz,label:'rim'},noise,r); continue;}
     pushNoisy(pts,{x:rad*Math.cos(th),y:(rad*sy)*Math.sin(th),z,label:z>rimH?'rim':'body'},noise,r);
+  }
+  const bottomRad=baseRad+(mod==='taper'?amt:0);
+  for(let i=0;i<bottomN;i++){
+    const th=r()*TAU, rv=Math.sqrt(r())*bottomRad;
+    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z:0,label:'body'},noise,r);
   }
 }
 function genBoxBody(pts,n,noise,r,o){
@@ -1275,10 +1282,17 @@ function genSphereBody(pts,n,noise,r,o){
 function genFlatBody(pts,n,noise,r,o){
   // o: {rad, scaleY, depth, rimRad}
   const rad=o.rad, sy=o.scaleY||1, depth=o.depth||0.055, rimRad=o.rimRad??rad*0.88;
-  for(let i=0;i<n;i++){
+  const bottomN=Math.floor(n*(o.bottomFrac??0.12));
+  const topN=n-bottomN;
+  for(let i=0;i<topN;i++){
     const th=r()*TAU, rv=Math.sqrt(r())*rad;
     const z=depth*(rv/rad)*(rv/rad)+0.004*(r()-.5);
     pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z,label:rv>rimRad?'rim':'body'},noise,r);
+  }
+  const bottomZ=-(o.bottomThickness??Math.max(0.003,depth*0.08));
+  for(let i=0;i<bottomN;i++){
+    const th=r()*TAU, rv=Math.sqrt(r())*rad;
+    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z:bottomZ,label:'body'},noise,r);
   }
 }
 function genCap(pts,n,noise,r,o){
@@ -1427,7 +1441,7 @@ function generateObject(key, n, noise, seed){
 
 // ── 特殊形状オブジェクト（独自ボディロジックのため個別実装） ──
 function generateDetergent(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.68),handleN=Math.floor(n*.22),capN=n-bodyN-handleN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.10,y=(r()-.5)*0.065,z=r()*0.24;if(face===0)x=-0.05;if(face===1)x=0.05;if(face===2)y=-0.032;if(face===3)y=0.032;if(face===4)z=0;if(face===5)z=0.24;let round=0.010*Math.sin(Math.PI*z/0.24);x+=Math.sign(x||1)*round*r()*.35;y+=Math.sign(y||1)*round*r()*.35;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.052,outerX:0.093,centerZ:0.142,rz:0.060,tubeR:0.0055,widthY:0.009,arc:1.55});for(let i=0;i<capN;i++){let th=r()*TAU,z=.245+r()*0.045,rad=.025;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
-function generateSprayBottle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),headN=Math.floor(n*.15),handleN=n-bodyN-headN;for(let i=0;i<bodyN;i++){let z=r()*0.23,th=r()*TAU,radx=0.035+(r()-.5)*.004,rady=0.026+(r()-.5)*.003;pushNoisy(pts,{x:radx*Math.cos(th),y:rady*Math.sin(th),z,label:'body'},noise,r)}for(let i=0;i<headN;i++){let x=(r()-.5)*.055,y=(r()-.5)*.036,z=.225+r()*.055;if(r()<.45){x=-.02-r()*.06;y=(r()-.5)*.018;z=.252+r()*.025}pushNoisy(pts,{x,y,z,label:'cap'},noise,r)}for(let i=0;i<handleN;i++){let t=r(),x=.028+r()*.030,y=(r()-.5)*.018,z=.105+t*.120; if(r()<.45){x=.050+r()*.028;z=.125+r()*.065}pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
+function generateSprayBottle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),headN=Math.floor(n*.15),handleN=n-bodyN-headN,bottomN=Math.floor(bodyN*.14),sideN=bodyN-bottomN;for(let i=0;i<sideN;i++){let z=r()*0.23,th=r()*TAU,radx=0.035+(r()-.5)*.004,rady=0.026+(r()-.5)*.003;pushNoisy(pts,{x:radx*Math.cos(th),y:rady*Math.sin(th),z,label:'body'},noise,r)}for(let i=0;i<bottomN;i++){let th=r()*TAU,rv=Math.sqrt(r());pushNoisy(pts,{x:rv*.035*Math.cos(th),y:rv*.026*Math.sin(th),z:0,label:'body'},noise,r)}for(let i=0;i<headN;i++){let x=(r()-.5)*.055,y=(r()-.5)*.036,z=.225+r()*.055;if(r()<.45){x=-.02-r()*.06;y=(r()-.5)*.018;z=.252+r()*.025}pushNoisy(pts,{x,y,z,label:'cap'},noise,r)}for(let i=0;i<handleN;i++){let t=r(),x=.028+r()*.030,y=(r()-.5)*.018,z=.105+t*.120; if(r()<.45){x=.050+r()*.028;z=.125+r()*.065}pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
 function generateBasket(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let x=(r()-.5)*.14,y=(r()-.5)*.095,z=r()*.095;let f=Math.floor(r()*5);if(f===0)x=-.07;if(f===1)x=.07;if(f===2)y=-.048;if(f===3)y=.048;if(f===4)z=.095;pushNoisy(pts,{x,y,z,label:z>.085?'rim':'body'},noise,r)}for(let i=0;i<handleN;i++){let side=r()<.5?-1:1,t=(r()-.5)*Math.PI*1.15,cx=side*.077,cy=0,cz=.070,Rz=.052,Ry=.042,tube=.007*(.8+r()*.4),ph=r()*TAU;pushNoisy(pts,{x:cx+tube*Math.cos(ph),y:cy+Ry*Math.sin(t)+tube*Math.sin(ph)*.7,z:cz+Rz*Math.cos(t)+tube*Math.sin(ph)*.5,label:'handle'},noise,r)}return pts}
 function generateToolbox(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.74),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.12,y=(r()-.5)*0.070,z=r()*0.090;if(face===0)x=-0.060;if(face===1)x=0.060;if(face===2)y=-0.035;if(face===3)y=0.035;if(face===4)z=0;if(face===5)z=0.090;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.0,outerX:0.0,centerZ:0.118,rz:0.028,tubeR:0.0048,widthY:0.046,arc:3.14159,axis:'x'});return pts}
 
@@ -1542,7 +1556,15 @@ function transformPoint(p,t){
   }
   return {x,y,z,label:p.label,id:p.id};
 }
-function updateMovingPoints(){const pts=state.basePoints.map(p=>transformPoint(p,state.time)).filter(Boolean);state.points=v312ApplyDepthCameraVisibility(pts,state.time||0);}
+function updateMovingPoints(){
+  const source=$('pointCloudSource')?.value||'synthetic_depth';
+  if(source==='object_surface'){
+    state.points=(state.objectSurfacePoints||[]).map(p=>transformPoint(p,state.time)).filter(Boolean);
+    return;
+  }
+  const pts=state.basePoints.map(p=>transformPoint(p,state.time)).filter(Boolean);
+  state.points=v312ApplyDepthCameraVisibility(pts,state.time||0);
+}
 function gngMode(){const el=$('gngLearningMode');return el?el.value:'online'}
 function gngAlgorithm(){const el=$('gngAlgorithm');return el?el.value:'standard'}
 function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
@@ -2952,9 +2974,11 @@ function buildOfflineBatchDataset(){
   if(!state.basePoints.length)generate();
   // v307: Offline batch no longer has independent user parameters.
   // It uses one fixed snapshot from basePoints; per-frame learning count is controlled only by gngSamplesPerFrame.
+  const source=$('pointCloudSource')?.value||'synthetic_depth';
+  const sourcePoints=source==='object_surface' ? state.objectSurfacePoints : state.basePoints;
   const pts=[];
-  for(const p of state.basePoints){
-    const q=transformPoint(p,0);
+  for(const p of sourcePoints||[]){
+    const q=source==='object_surface' ? p : transformPoint(p,0);
     if(q && v305IsGngTrainingPoint(q)) pts.push(q);
   }
   state.batchDataset=pts;
@@ -2969,6 +2993,10 @@ function v312GetGngWasmInputPoints(){
   };
   const base=()=>{
     if(Array.isArray(state.basePoints) && state.basePoints.length) return state.basePoints.map((p,i)=>transformPoint(p,state.time||0)||p).filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
+    return [];
+  };
+  const objectSurface=()=>{
+    if(Array.isArray(state.objectSurfacePoints) && state.objectSurfacePoints.length) return state.objectSurfacePoints.filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
     return [];
   };
   const importedFrame=()=>{
@@ -2988,6 +3016,8 @@ function v312GetGngWasmInputPoints(){
     return pts;
   };
   switch(mode){
+    case 'object_surface':
+      return objectSurface();
     case 'base_points':
       return base();
     case 'imported_frame':
@@ -3028,6 +3058,9 @@ function generate(){
   else if(type==='toolbox') raw=generateToolbox(n,noise,seed);
   else if(type==='watering_pitcher') raw=generateWateringPitcher(n,noise,seed);
   else raw=generateMug(n,noise,seed);
+  const tableMode=$('tableMode')?$('tableMode').value:'off';
+  const tableHeight=tableMode==='off'?0:(+$('tableHeight').value||0);
+  state.objectSurfacePoints=raw.map((p,i)=>({...p,z:p.z+tableHeight,id:i}));
   raw=addTabletopScene(raw,seed);
   state.basePoints=applyDefects(raw,seed).map((p,i)=>({...p,id:i}));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
   updateMetrics();renderAll();
@@ -6482,7 +6515,7 @@ function v312DepthCameraPose(t){
 }
 function v312ApplyDepthCameraVisibility(points,t){
   const source=$('pointCloudSource')?.value||'synthetic_depth';
-  if(source==='synthetic_full')return points;
+  if(source==='synthetic_full'||source==='object_surface')return points;
   if(source==='imported_frames' && state.importedPointFrames&&state.importedPointFrames.length){
     const idx=Math.floor((state.time||0)*Math.max(1,+($('motionHz')?.value||12)))%state.importedPointFrames.length;
     return state.importedPointFrames[idx].map((p,i)=>({...p,id:p.id??i}));
@@ -6672,11 +6705,13 @@ function v312SetupGngInputFileLoader(){
 }
 
 function v311RealtimeVibratePoints(){
-  if(!state.basePoints||!state.basePoints.length)return;
+  const source=$('pointCloudSource')?.value||'synthetic_depth';
+  const sourcePoints=source==='object_surface' ? state.objectSurfacePoints : state.basePoints;
+  if(!sourcePoints||!sourcePoints.length)return;
   const amp=Math.max(0,+($('motionAmp')?.value||0.0012));
   const seed=(+$('seed')?.value||1);
   const t=state.time||0;
-  let pts=state.basePoints.map((p,i)=>{
+  let pts=sourcePoints.map((p,i)=>{
     const h1=v311PointHash(i+11,seed),h2=v311PointHash(i+37,seed),h3=v311PointHash(i+73,seed);
     const f1=1.7+h1*2.4, f2=2.1+h2*2.8, f3=2.5+h3*3.2;
     const ph1=h1*TAU, ph2=h2*TAU, ph3=h3*TAU;
@@ -6687,7 +6722,7 @@ function v311RealtimeVibratePoints(){
       z:p.z + amp*0.65*Math.sin(TAU*f3*t+ph3)
     };
   });
-  state.points=v312ApplyDepthCameraVisibility(pts,t);
+  state.points=source==='object_surface' ? pts : v312ApplyDepthCameraVisibility(pts,t);
 }
 function v303SetReplayMicroVibrationDefaults(){
   const pat=$('motionPattern');
@@ -7221,7 +7256,7 @@ function bindDataModeControls(){
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('gotoTopoBtn').onclick=()=>{showTask('grasp');document.getElementById('taskGrasp').scrollIntoView({behavior:'smooth',block:'start'});};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
-  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{if($('pointCloudSource').value==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='Point-cloud source switched to imported frames.';}else{$('topoStatus').textContent='Point-cloud source switched to synthetic depth.';}});
+  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='Point-cloud source switched to imported frames.';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'Point-cloud source switched to object surface without depth, occlusion, table, holes, missing points, or outliers.':'Point-cloud source switched to synthetic depth.';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
