@@ -21,6 +21,11 @@
 #include "ais_gng_msgs/msg/topological_node.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 
+#if defined(AIS_GNG_BACKEND_CPU)
+#include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
+#include "ais_gng_msgs/msg/planar_cluster_array.hpp"
+#endif
+
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
@@ -51,6 +56,11 @@ class AiSGNGComponent : public rclcpp::Node {
 
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
+#if defined(AIS_GNG_BACKEND_CPU)
+    bool direct_plane_cluster_enabled_{false};
+    std::unique_ptr<topological_plane::incremental::Clusterizer> direct_plane_clusterizer_;
+    rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr direct_plane_cluster_pub_;
+#endif
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;
     std::vector<std::shared_ptr<message_filters::Subscriber<PC2>>> pcl_subs_;

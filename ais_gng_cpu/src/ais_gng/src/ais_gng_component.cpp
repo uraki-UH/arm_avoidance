@@ -1,6 +1,10 @@
 #include <ais_gng/ais_gng_component.hpp>
 #include <ais_gng/handle_label_utils.hpp>
 
+#if defined(AIS_GNG_BACKEND_CPU)
+#include <ais_gng/topological_plane/plane_cluster_parameters.hpp>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -288,6 +292,25 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         "topological_map",
         rclcpp::QoS(1).reliable().transient_local());
+
+#if defined(AIS_GNG_BACKEND_CPU)
+    direct_plane_cluster_enabled_ =
+        this->declare_parameter<bool>("plane_cluster.direct_enabled", true);
+    if (direct_plane_cluster_enabled_) {
+        auto options = topological_plane::incremental::declareClusterOptions(
+            *this, "plane_cluster.");
+        direct_plane_clusterizer_ =
+            std::make_unique<topological_plane::incremental::Clusterizer>(options);
+        const auto output_topic = this->declare_parameter<std::string>(
+            "plane_cluster.output_topic", "/topological_planar_clusters_incremental");
+        direct_plane_cluster_pub_ =
+            this->create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(
+                output_topic, rclcpp::QoS(1).reliable().transient_local());
+        RCLCPP_INFO(
+            this->get_logger(), "Direct plane clustering enabled: GNG -> %s",
+            output_topic.c_str());
+    }
+#endif
 
     // パラメーターを動的に変える関数をセット
     param_handle_ = this->add_on_set_parameters_callback(std::bind(&AiSGNGComponent::param_cb, this, _1));
@@ -827,8 +850,23 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     gng_setInferredClusterLabels(cluster_ids.data(), cluster_frames.data(), cluster_labels.data(), cluster_ids.size());
     const auto classification_end = std::chrono::steady_clock::now();
 
-    // トポロジカルマップをPublish
+#if defined(AIS_GNG_BACKEND_CPU)
+    std::unique_ptr<ais_gng_msgs::msg::PlanarClusterArray> direct_plane_clusters;
+    if (direct_plane_clusterizer_) {
+        auto result = direct_plane_clusterizer_->update(*map_msg);
+        direct_plane_clusters =
+            std::make_unique<ais_gng_msgs::msg::PlanarClusterArray>(std::move(result.clusters));
+    }
+#endif
+    const auto plane_cluster_end = std::chrono::steady_clock::now();
+
+    // マップを先にPublishし、表示専用ノードが同じフレームのクラスタを描画できるようにする。
     topological_map_pub_->publish(std::move(map_msg));
+#if defined(AIS_GNG_BACKEND_CPU)
+    if (direct_plane_clusters) {
+        direct_plane_cluster_pub_->publish(std::move(direct_plane_clusters));
+    }
+#endif
 
     if(downsampling_.isTransformed()){
         downsampling_.publish<std::unique_ptr<sensor_msgs::msg::PointCloud2>>(transformed_msg, label, label_num, header); // 変換後の点群をPublish
@@ -853,8 +891,11 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             std::chrono::duration<double, std::milli>(conversion_end - gng_end).count();
         const double classification_ms =
             std::chrono::duration<double, std::milli>(classification_end - conversion_end).count();
+        const double plane_cluster_ms =
+            std::chrono::duration<double, std::milli>(
+                plane_cluster_end - classification_end).count();
         const double publish_ms =
-            std::chrono::duration<double, std::milli>(end - classification_end).count();
+            std::chrono::duration<double, std::milli>(end - plane_cluster_end).count();
         const double total_ms =
             std::chrono::duration<double, std::milli>(end - start).count();
         const double cycle_hz = cycle_period_ms > 0.0 ? 1000.0 / cycle_period_ms : 0.0;
@@ -863,7 +904,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             *this->get_clock(),
             static_cast<uint64_t>(performance_log_interval_ms_),
             "cycle period=%.2f ms (%.2f Hz), processing=%.2f ms "
-            "[input=%.2f gng=%.2f convert=%.2f classify=%.2f publish=%.2f], "
+            "[input=%.2f gng=%.2f convert=%.2f classify=%.2f plane=%.2f publish=%.2f], "
             "points=%zu/%zu nodes=%zu edges=%zu covariance=%s",
             cycle_period_ms,
             cycle_hz,
@@ -872,6 +913,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             gng_ms,
             conversion_ms,
             classification_ms,
+            plane_cluster_ms,
             publish_ms,
             submitted_point_count_total,
             raw_point_count_total,

@@ -202,9 +202,21 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-The launch starts `plane_cluster_incremental_node` by default. Pass
-`start_plane_cluster:=false` when an existing instance already publishes
-`/topological_planar_clusters_incremental`.
+The CPU `ais_gng` component generates planar clusters directly in the GNG point
+cloud callback. This avoids serializing and subscribing to `/topological_map`
+for clustering. The launch starts `plane_cluster_incremental_node` in
+markers-only mode by default, so it consumes the direct cluster output without
+running the clustering algorithm a second time.
+
+For the GPU backend or the legacy ROS-connected path, disable direct clustering
+and clear the marker-only input:
+
+```bash
+ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+  plane_clusters_input_topic:=''
+```
+
+Pass `start_plane_cluster:=false` when no plane-cluster marker process is needed.
 
 - Candidates: `/top_grasp_pose_cands`
 - Footprint fill ratios: `/top_grasp_pose_cand_scores`

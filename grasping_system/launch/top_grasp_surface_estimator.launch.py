@@ -28,6 +28,10 @@ def generate_launch_description():
                 default_value="/topological_planar_clusters_incremental",
             ),
             DeclareLaunchArgument(
+                "plane_clusters_input_topic",
+                default_value=LaunchConfiguration("planar_clusters_topic"),
+            ),
+            DeclareLaunchArgument(
                 "candidate_topic", default_value="/top_grasp_pose_cands"
             ),
             DeclareLaunchArgument(
@@ -50,6 +54,9 @@ def generate_launch_description():
                     {
                         "input_topic": LaunchConfiguration("topological_map_topic"),
                         "output_topic": LaunchConfiguration("planar_clusters_topic"),
+                        "clusters_input_topic": LaunchConfiguration(
+                            "plane_clusters_input_topic"
+                        ),
                     },
                 ],
             ),

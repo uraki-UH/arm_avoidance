@@ -15,7 +15,7 @@
 ## Behavior Impact
 
 - GNGの学習、node・edge生成、削除、labeling、クラスタリング結果は変更しない。
-- 現時点の`plane_cluster_incremental`はこのAPIを使用しておらず、従来どおり毎frame全node・edgeを処理する。平面クラスタ処理時間は今回の変更では短縮されない。
+- `plane_cluster_incremental`のクラスタ更新自体は引き続き毎frame全node・edgeを処理する。後続のCPU直接接続対応では、GNGコンポーネント内でこの更新を呼び出し、`/topological_map`のDDS転送は経由しない。
 - 差分記録は既定で無効。初回有効化までは変更一覧用バッファを確保せず、無効時の記録処理は早期returnする。
 - node UPDATEは同一frame内でIDごとに1件へまとめる。node/edgeのADD/REMOVEは発生順に保持する。
 - 差分配列はライブラリ所有で、次の`gng_setPointCloud()`または`gng_exec()`まで有効。

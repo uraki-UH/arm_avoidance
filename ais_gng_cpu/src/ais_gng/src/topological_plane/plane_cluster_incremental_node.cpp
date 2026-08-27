@@ -1,4 +1,5 @@
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
+#include "ais_gng/topological_plane/plane_cluster_parameters.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -351,89 +352,63 @@ class PlaneClusterIncrementalNode : public rclcpp::Node
 public:
   PlaneClusterIncrementalNode()
   : rclcpp::Node("plane_cluster_incremental_node"),
-    clusterizer_(readOptions())
+    clusterizer_(declareClusterOptions(*this))
   {
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ = declare_parameter<std::string>(
       "output_topic", "/topological_planar_clusters_incremental");
+    clusters_input_topic_ = declare_parameter<std::string>("clusters_input_topic", "");
     hull_marker_topic_ = output_topic_ + "/markers/hull";
     normal_marker_topic_ = output_topic_ + "/markers/normal";
     node_marker_topic_ = output_topic_ + "/markers/nodes";
     enable_text_marker_ = declare_parameter<bool>("enable_text_marker", false);
 
     const auto output_qos = rclcpp::QoS(1).transient_local();
-    cluster_publisher_ =
-      create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(output_topic_, output_qos);
     hull_marker_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>(hull_marker_topic_, output_qos);
     normal_marker_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>(normal_marker_topic_, output_qos);
     node_marker_publisher_ =
       create_publisher<visualization_msgs::msg::MarkerArray>(node_marker_topic_, output_qos);
+    const auto input_qos = rclcpp::QoS(1).reliable().transient_local();
     subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
-      input_topic_, rclcpp::QoS(1),
-      [this](const ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr &map) {onMap(*map);});
+      input_topic_, input_qos,
+      [this](const ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr &map) {
+        if (clusters_input_topic_.empty()) {
+          onMap(*map);
+        } else {
+          latest_map_ = map;
+          if (latest_clusters_ && latest_clusters_->frame_number == map->frame_number) {
+            publishMarkers(*latest_clusters_, *map);
+          }
+        }
+      });
+
+    if (clusters_input_topic_.empty()) {
+      cluster_publisher_ =
+        create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(output_topic_, output_qos);
+    } else {
+      cluster_subscription_ =
+        create_subscription<ais_gng_msgs::msg::PlanarClusterArray>(
+        clusters_input_topic_, input_qos,
+        [this](const ais_gng_msgs::msg::PlanarClusterArray::ConstSharedPtr &clusters) {
+          latest_clusters_ = clusters;
+          onClusters(*clusters);
+        });
+    }
 
     RCLCPP_INFO(
       get_logger(),
-      "plane_cluster_incremental: %s -> %s (hull: %s, normal: %s, nodes: %s)",
-      input_topic_.c_str(), output_topic_.c_str(), hull_marker_topic_.c_str(),
+      "plane_cluster_incremental: mode=%s map=%s clusters=%s "
+      "(hull: %s, normal: %s, nodes: %s)",
+      clusters_input_topic_.empty() ? "cluster" : "markers-only",
+      input_topic_.c_str(),
+      (clusters_input_topic_.empty() ? output_topic_ : clusters_input_topic_).c_str(),
+      hull_marker_topic_.c_str(),
       normal_marker_topic_.c_str(), node_marker_topic_.c_str());
   }
 
 private:
-  ClusterOptions readOptions()
-  {
-    ClusterOptions options;
-    options.min_cluster_nodes = static_cast<std::size_t>(
-      std::max<std::int64_t>(3, declare_parameter<int>("min_cluster_nodes", 7)));
-    options.growth_residual_ratio =
-      declare_parameter<double>("growth_residual_ratio", 0.70);
-    options.retention_residual_ratio =
-      declare_parameter<double>("retention_residual_ratio", 1.40);
-    options.max_effective_spacing =
-      declare_parameter<double>("max_effective_spacing", 0.03);
-    options.normal_filter_alpha =
-      declare_parameter<double>("normal_filter_alpha", 0.30);
-    options.normal_alignment_deg =
-      declare_parameter<double>("normal_alignment_deg", 60.0);
-    options.retention_normal_alignment_deg =
-      declare_parameter<double>("retention_normal_alignment_deg", 85.0);
-    options.min_cluster_planarity =
-      declare_parameter<double>("min_cluster_planarity", 0.45);
-    options.max_normalized_cluster_residual =
-      declare_parameter<double>("max_normalized_cluster_residual", 0.70);
-    options.min_growth_planarity =
-      declare_parameter<double>("min_growth_planarity", 0.25);
-    options.connection_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("connection_requirement", 2)));
-    options.merge_connection_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("merge_connection_requirement", 1)));
-    options.birth_neighbor_requirement = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("birth_neighbor_requirement", 1)));
-    options.migration_improvement_margin =
-      declare_parameter<double>("migration_improvement_margin", 0.30);
-    options.enable_multi_edge_dist_relaxation =
-      declare_parameter<bool>("enable_multi_edge_dist_relaxation", true);
-    options.maintenance_iter = static_cast<std::size_t>(
-      std::max<std::int64_t>(1, declare_parameter<int>("maintenance_iter", 2)));
-    options.donor_protection_buffer = static_cast<std::size_t>(
-      std::max<std::int64_t>(0, declare_parameter<int>("donor_protection_buffer", 3)));
-    options.merge_min_planarity =
-      declare_parameter<double>("merge_min_planarity", 0.25);
-    options.merge_residual_growth_ratio =
-      declare_parameter<double>("merge_residual_growth_ratio", 1.3);
-    options.merge_residual_growth_min_th =
-      declare_parameter<double>("merge_residual_growth_min_th", 0.15);
-    options.birth_confirm_frames = static_cast<std::size_t>(
-      std::max<std::int64_t>(0, declare_parameter<int>("birth_confirm_frames", 3)));
-    options.split_confirm_frames = static_cast<std::size_t>(
-      std::max<std::int64_t>(0, declare_parameter<int>("split_confirm_frames", 3)));
-    options.weak_frame_allowance = static_cast<std::size_t>(
-      std::max<std::int64_t>(0, declare_parameter<int>("weak_frame_allowance", 5)));
-    return options;
-  }
-
   // 隣り合うクラスタに同じ色を割り当てないようにする。
   //
   // 毎フレーム貪欲彩色をやり直すと色が飛び回るので、前フレームの色を優先して保ち、
@@ -509,18 +484,8 @@ private:
     ClusterResult result = clusterizer_.update(map);
     const auto updated = std::chrono::steady_clock::now();
 
-    assignColors(result.clusters, map);
     cluster_publisher_->publish(result.clusters);
-    hull_marker_publisher_->publish(
-      makeHullMarkers(
-        result.clusters, map.nodes, enable_text_marker_, published_hull_marker_ids_,
-        cluster_color_));
-    normal_marker_publisher_->publish(
-      makeNormalMarkers(result.clusters, published_normal_marker_ids_, cluster_color_));
-    node_marker_publisher_->publish(
-      makeNodeMarkers(
-        result.clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
-        cluster_color_));
+    publishMarkers(result.clusters, map);
     const auto completed = std::chrono::steady_clock::now();
 
     const double update_ms =
@@ -567,6 +532,41 @@ private:
       update_ms, publish_ms);
   }
 
+  void onClusters(const ais_gng_msgs::msg::PlanarClusterArray &clusters)
+  {
+    if (!latest_map_) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Waiting for %s before drawing plane-cluster markers", input_topic_.c_str());
+      return;
+    }
+    if (clusters.frame_number != latest_map_->frame_number) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "Skipping marker frame: clusters=%u map=%u",
+        clusters.frame_number, latest_map_->frame_number);
+      return;
+    }
+    publishMarkers(clusters, *latest_map_);
+  }
+
+  void publishMarkers(
+    const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+    const ais_gng_msgs::msg::TopologicalMap &map)
+  {
+    assignColors(clusters, map);
+    hull_marker_publisher_->publish(
+      makeHullMarkers(
+        clusters, map.nodes, enable_text_marker_, published_hull_marker_ids_,
+        cluster_color_));
+    normal_marker_publisher_->publish(
+      makeNormalMarkers(clusters, published_normal_marker_ids_, cluster_color_));
+    node_marker_publisher_->publish(
+      makeNodeMarkers(
+        clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
+        cluster_color_));
+  }
+
   std::set<std::uint32_t> published_hull_marker_ids_;
   std::set<std::uint32_t> published_normal_marker_ids_;
   std::set<std::uint32_t> published_node_marker_ids_;
@@ -574,6 +574,7 @@ private:
   std::unordered_map<std::uint32_t, std::uint32_t> cluster_color_;
   std::string input_topic_;
   std::string output_topic_;
+  std::string clusters_input_topic_;
   std::string hull_marker_topic_;
   std::string normal_marker_topic_;
   std::string node_marker_topic_;
@@ -585,6 +586,9 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr normal_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_marker_publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr subscription_;
+  rclcpp::Subscription<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_subscription_;
+  ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr latest_map_;
+  ais_gng_msgs::msg::PlanarClusterArray::ConstSharedPtr latest_clusters_;
 };
 
 }  // fuzzrobo::topological_plane::incremental 名前空間
