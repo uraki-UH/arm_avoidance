@@ -22,11 +22,6 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 
 
-## ダミー把持姿勢をPoseArrayで流す
-ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
-  frame_id:=world \
-  candidate_count:=1
-
 ## 把持候補姿勢、軌道、動く
 ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -273,3 +268,9 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
   --topics \
     /camera/camera/depth/image_rect_raw \
     /camera/camera/depth/camera_info
+
+
+## ダミー把持姿勢をPoseArrayで流す
+ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
+  frame_id:=world \
+  candidate_count:=1
