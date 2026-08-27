@@ -37,10 +37,16 @@ ament_target_dependencies(
   ais_gng_msgs geometry_msgs rclcpp sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros
   voxel_idx voxel_msgs Eigen3
 )
+add_executable(top_grasp_surface_estimator_node src/top_grasp_surface_estimator_node.cpp)
+ament_target_dependencies(
+  top_grasp_surface_estimator_node
+  ais_gng_msgs geometry_msgs rclcpp std_msgs Eigen3
+)
 install(TARGETS
   test_rigid_grasp_vlut
   gripper_volume_graph_node
   grasp_voxel_matcher_node
+  top_grasp_surface_estimator_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -82,6 +88,19 @@ if(BUILD_TESTING)
   add_test(
     NAME grasp_voxel_matcher
     COMMAND test_grasp_voxel_matcher
+  )
+
+  add_executable(
+    test_top_grasp_surface_estimator
+    test/test_top_grasp_surface_estimator.cpp
+  )
+  ament_target_dependencies(
+    test_top_grasp_surface_estimator
+    ais_gng_msgs Eigen3
+  )
+  add_test(
+    NAME top_grasp_surface_estimator
+    COMMAND test_top_grasp_surface_estimator
   )
 endif()
 

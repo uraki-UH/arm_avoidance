@@ -186,3 +186,28 @@ finger sweep as empty would reject every valid contact.
 The publisher sends the graph exactly once at node startup. Transient-local QoS
 keeps that sample available, so a viewer or rosbag recorder started later still
 receives the current static graph without application-level retransmission.
+
+## Top-only surface grasp estimation
+
+For a top-only grasp, the surface estimator builds planar-cluster adjacency from
+the GNG edges. A region whose individual XY OBB fits the gripper is a seed. From
+each seed, the estimator follows adjacent clusters with a higher centroid Z and
+merges every seed that reaches the same highest cluster. The merged XY OBB must
+still fit the gripper footprint. Plane normals do not reject regions, so a small
+side or step is evaluated together with the higher adjacent surface instead of
+becoming a standalone candidate. The output pose always points the TCP local Z
+axis downward.
+
+```bash
+ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
+
+The launch starts `plane_cluster_incremental_node` by default. Pass
+`start_plane_cluster:=false` when an existing instance already publishes
+`/topological_planar_clusters_incremental`.
+
+- Candidates: `/top_grasp_pose_cands`
+- Footprint fill ratios: `/top_grasp_pose_cand_scores`
+- Selection summary: `/top_grasp_pose_cands/summary`
+- Markers: `/top_grasp_pose_markers`

@@ -536,6 +536,20 @@ transient localでpublishする。
 明示的な3次元姿勢群は`orientation_rpy`の`roll,pitch,yaw`列で指定できる。結果は新規messageを増やさず、
 `geometry_msgs/PoseArray`と、占有率・各ゲートの棄却数・処理時間を持つ`std_msgs/String` JSON summaryでpublishする。
 
+上面把持だけを対象にする場合は、`top_grasp_surface_estimator_node`を別経路として使用する。
+同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
+法線方向では候補を除外しない。各領域を水平面へ投影した単体OBBが把持面積へ収まるものを起点とし、
+隣接領域のうち重心Zが`higher_neighbor_z_tolerance`より高いものを再帰的にたどる。
+同じ最上位クラスタへ到達する領域群は統合し、統合後の全所属ノードからXY平面上のOBBを再計算する。
+この最終OBBにはGNG点間を補う
+`footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
+`grasp_size_x × grasp_size_y`へ90度回転のどちらかで全体が収まる場合だけ候補にする。
+大きな床領域は単体OBBが入らないため起点にならない。側面や段差の小領域だけなら収まっても、
+その上に隣接する高い領域との統合OBBが入らなければ候補にしない。TCP位置は統合OBB中心の最高Z、
+姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
+この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
+最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。
+
 | 入出力 | 既定topic | 型 |
 |---|---|---|
 | 物体候補占有 | `/topological_grid_voxels` | `voxel_msgs/Voxel` |
@@ -546,6 +560,9 @@ transient localでpublishする。
 | 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 候補TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
+| 上面把持TCP Pose群 | `/top_grasp_pose_cands` | `geometry_msgs/PoseArray` |
+| 上面把持面積スコア | `/top_grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
+| 上面把持判定内訳 | `/top_grasp_pose_cands/summary` | `std_msgs/String` |
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
