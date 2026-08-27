@@ -90,11 +90,10 @@ class DummyJointPublisher(Node):
     """URDF準拠のダミー関節状態publisher。"""
 
     def __init__(self, topic: str, motions: Sequence[JointMotion], rate_hz: float,
-                 enable_motion: bool, motion_speed: float,
+                 motion_speed: float,
                  claim_topic: str, claim_priority: int) -> None:
         super().__init__("dummy_joint_publisher")
         self._motions = list(motions)
-        self._enable_motion = enable_motion
         self._motion_speed = motion_speed
         self._elapsed_sec = 0.0
         self._topic = topic
@@ -119,7 +118,6 @@ class DummyJointPublisher(Node):
         self.get_logger().info(
             f"ダミー関節状態を開始: topic={topic} "
             f"joints={len(self._motions)} rate_hz={rate_hz:.2f} "
-            f"motion={'on' if enable_motion else 'off'} "
             f"claim={'on' if self._claim_pub else 'off'}")
 
     def _publish_claim(self, enabled: bool) -> None:
@@ -137,14 +135,11 @@ class DummyJointPublisher(Node):
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = [motion.name for motion in self._motions]
-        if self._enable_motion:
-            msg.position = [
-                motion.center_position + motion.amplitude * math.sin(
-                    self._elapsed_sec * self._motion_speed + motion.phase)
-                for motion in self._motions
-            ]
-        else:
-            msg.position = [motion.center_position for motion in self._motions]
+        msg.position = [
+            motion.center_position + motion.amplitude * math.sin(
+                self._elapsed_sec * self._motion_speed + motion.phase)
+            for motion in self._motions
+        ]
         self._publisher.publish(msg)
         self._publish_claim(True)
         self._elapsed_sec += self._step_sec
@@ -170,7 +165,6 @@ def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
                         help="関節リミット幅に対する片振幅の比率")
     parser.add_argument("--motion-speed", type=float, default=0.55,
                         help="往復運動の角速度")
-    parser.add_argument("--static", action="store_true", help="関節中点姿勢のみをpublish")
     return parser.parse_args(args)
 
 
@@ -188,7 +182,7 @@ def main(args: Sequence[str] | None = None) -> int:
 
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = DummyJointPublisher(
-        topic, motions, cli.rate_hz, not cli.static, cli.motion_speed,
+        topic, motions, cli.rate_hz, cli.motion_speed,
         cli.claim_topic, cli.claim_priority)
     try:
         rclpy.spin(node)

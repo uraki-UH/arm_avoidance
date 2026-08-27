@@ -38,94 +38,12 @@ python3 -m http.server 8000
 http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
 
 
-## 点群から占有ボクセルに変換
-ros2 launch gng_vlut_system point_to_voxel.launch.py \
-  input_topic:=/semantic_points \
-  output_topic:=/topo_voxel_ids
-
 ### 点群をToPoDualArmのVLUTへ反映
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-`environment_voxelization.world_index`では、index構築とROI抽出経路を別々に選択できる。
-
-| `enable_build` | `enable_roi_query` | 動作 |
-| --- | --- | --- |
-| `false` | `false` | indexを構築せず、各robot座標系へ直接ROI voxel化 |
-| `true` | `false` | world indexはViewer確認用に構築し、ROI voxel化は直接方式 |
-| `true` | `true` | world indexを構築し、bucket AABB抽出後にROI voxel化 |
-
-`enable_build: false`と`enable_roi_query: true`は使用不可。既定値は両方`true`。
-
-### ToPo Fuzzy Viewerでのworld index確認
-
-Viewer gatewayを別途起動後、Viewerのtopic一覧から次の`voxel_msgs/Voxel`を有効にする。
-
-- `/ToPoDualArm/roi_voxel_ids`: `ToPoDualArm/base_link`座標系のVLUT入力ROI voxel
-- `/ToPoDualArm/world_index_buckets`: `world`座標系の非空world bucket voxel
-
-`world`から`ToPoDualArm/base_link`へのTFと、両topicのViewerレイヤーが必要。
-移動ロボットでは`enable_static_tf: false`、固定設置で外部TFがない場合だけ静的TFを設定する。
-
-### 複数robotの共有world index
-`config/world_index.yaml`の`consumers`へrobotごとの設定を列挙する。
-
-```bash
-ros2 launch gng_vlut_system environment_to_vlut.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
-```
-
-
-danger判定方式は`ToPoDualArm.yaml`の`environment_voxelization.danger_source`で選択する。
-
-- `environment_inflation`: 現在の既定値。`danger_inflation`だけ環境voxelを膨張してdangerへ送る方式
-- `vlut_distance`: 環境側膨張を0にし、VLUT relationの距離値を`vlut_danger_dist`で判定する方式
-
-現行VLUTは距離値を持たないため、`vlut_distance`は距離付きVLUT生成後に使用する。
-
-```yaml
-environment_voxelization:
-  danger_source: "vlut_distance"
-  vlut_danger_dist: 0.025
-```
-
-
-別ロボットでROIを変更する場合は、TCPサンプリング範囲と余裕を指定する。
-
-```bash
-ros2 launch gng_vlut_system point_to_voxel.launch.py \
-  target_frame_id:=<robot_base_frame> \
-  min_reachability_x:=<min_x> max_reachability_x:=<max_x> \
-  min_reachability_y:=<min_y> max_reachability_y:=<max_y> \
-  min_reachability_z:=<min_z> max_reachability_z:=<max_z> \
-  reachability_margin_x:=<margin_x> \
-  reachability_margin_y:=<margin_y> \
-  reachability_margin_z:=<margin_z>
-```
-
-marginには把持物の張り出し、推定誤差、安全余裕、必要な台車移動範囲を含める。
-全点を対象にする場合は`enable_reachability_filter:=false`を指定する。
-
-### depth画素handle付きpersistent world indexの比較
-
-固定カメラのraw depthからpersistent world indexを構築し、全再構築方式と比較する。
-実機では`camera_world_*`へ外部パラメータを設定する。
-
-
-# ターミナル2: raw depthとcamera_infoを同時に配信
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
-  --topics \
-    /camera/camera/depth/image_rect_raw \
-    /camera/camera/depth/camera_info
-
-
-全再構築比較は`enable_comparison_benchmark:=true`、ログ抑止は`enable_runtime_log:=false`。
-条件と計測結果は
-[`2026-08-25_reachability_filtered_environment_voxelization.md`](gng_vlut_system/docs/releases/2026-08-25_reachability_filtered_environment_voxelization.md)を参照。
 
 #### ROI voxelとworld indexの視覚確認
-- `/depth_world_index/debug/roi_voxels` 
-- `/depth_world_index/debug/world_buckets_voxels` 
 
 ##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
 ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
@@ -134,7 +52,6 @@ ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   danger_inflation:=0.08
 
 ## AISGNG実行
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=d435.yaml
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
@@ -208,8 +125,6 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
 ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
   input_topic:=/camera/camera/depth/color/points_raw \
   output_topic:=/camera/camera/depth/color/points
-
-### 深度画像ベースの動体ノード削除判定ベンチ
 
 
 ## GNGの学習の実行
@@ -362,3 +277,22 @@ ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
 
 今はais_gng_実行で生成できるようにしている
+
+## 点群から占有ボクセルに変換
+ros2 launch gng_vlut_system point_to_voxel.launch.py \
+  input_topic:=/semantic_points \
+  output_topic:=/topo_voxel_ids
+
+
+
+### depth画素handle付きpersistent world indexの比較
+
+固定カメラのraw depthからpersistent world indexを構築し、全再構築方式と比較する。
+実機では`camera_world_*`へ外部パラメータを設定する。
+
+
+# ターミナル2: raw depthとcamera_infoを同時に配信
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
+  --topics \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info
