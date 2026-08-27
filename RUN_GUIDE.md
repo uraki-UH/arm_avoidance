@@ -137,7 +137,7 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 ## GNGノードを把持候補用ボクセルへ変換
 `/topological_map`と`/downsampling/grasp_support`を照合し、点群支持のある物体候補をボクセル化する。
-`SAFE_TERRAIN`、`HUMAN`、`CAR`は候補から除外する。
+`SAFE_TERRAIN`、`HUMAN`、`CAR`は候補から除外。
 
 ```bash
 ros2 launch ais_gng topological_grid.launch.py \
