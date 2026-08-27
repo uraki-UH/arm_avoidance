@@ -192,16 +192,10 @@ ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
 ## 自己認識ボクセル内外の点群に分けてパブリッシュ
 ros2 run gng_vlut_system self_recognition_filter_node
   # self-recognition voxel内の点群: /self_recognition_points
-  # self-recognition voxel外の点群: /self_filtered_points
 
 # URDF準拠のダミー関節状態
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
-
-# 中点姿勢で固定
-ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
-  urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf \
-  is_static:=true
 
 ## realsenseのrosbag + 点群座標変換
 # ターミナル1: raw点群を /camera/camera/depth/color/points_raw へリマップして再生
@@ -216,57 +210,6 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
   output_topic:=/camera/camera/depth/color/points
 
 ### 深度画像ベースの動体ノード削除判定ベンチ
-
-Mapと同時刻の深度画像を30フレーム照合し、解像度別の処理時間を比較する。
-
-```bash
-# ターミナル1: 生点群は変換用に退避し、深度画像と内部パラメータも同時に再生する
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
-  --topics \
-    /camera/camera/depth/color/points \
-    /camera/camera/depth/image_rect_raw \
-    /camera/camera/depth/camera_info \
-  --remap /camera/camera/depth/color/points:=/visibility/raw_points \
-  --loop
-
-# ターミナル2: GNG 入力用の点群を base_link へ変換する
-ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
-  input_topic:=/visibility/raw_points \
-  output_topic:=/camera/camera/depth/color/points
-
-# ターミナル3: GNG
-ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
-
-# ターミナル4: 深度画像の削除証拠判定を計測する
-ros2 run fuzzy_voxel_grid depth_visibility_benchmark
-```
-
-このbagでは等倍参照が最速。低解像度化はノード内poolingではなくカメラ側で行う。
-
-### 変換済み点群を新しいrosbagへ1周分だけ保存
-
-# ターミナル3: 変換済み点群と可視性判定用の生depthをrecord
-ros2 bag record \
-  -o /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed \
-  /camera/camera/depth/color/points \
-  /camera/camera/depth/image_rect_raw \
-  /camera/camera/depth/camera_info
-
-# ターミナル1: record開始後にraw bagを1回だけ再生
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
-  --topics \
-    /camera/camera/depth/color/points \
-    /camera/camera/depth/image_rect_raw \
-    /camera/camera/depth/camera_info \
-  --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw
-
-# 再生終了後、作成後は変換した点群を次で再生。
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
-
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed 
-  --topics \
-    /camera/camera/depth/color/points \
---loop
 
 
 ## GNGの学習の実行
@@ -303,45 +246,11 @@ ros2 launch ais_gng topological_grid.launch.py \
   grid_size:=0.02
 ```
 
-主な補助出力は`<output_topic>/isolated`、`<output_topic>/summary`。詳細設定は
-`ais_gng_cpu/src/ais_gng/config/topological_grid.yaml`、処理仕様は
-[`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
-
-## GNGエッジから増分平面クラスタを作る
-
-GNG edgeとノード法線から平面クラスタを増分生成する。
-
-## 平面クラスタ抽出
-ros2 launch ais_gng plane_cluster_incremental.launch.py \
-  input_topic:=/topological_map
-
-
 ## 把持ボクセル照合（左グリッパ、POC）
+ボクセルとグリッパ体積、平面クラスタなどを使って  tcp候補を得る
 
-`/topo_voxel_ids`をグリッパ体積と照合し、TCP姿勢候補とMarkerを出力する。
-
-```bash
 ros2 launch grasping_system grasp_voxel_matcher.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
-
-主な出力は`/grasp_pose_cand_cells`、`/grasp_pose_cands`、`/grasp_pose_markers`、
-`/grasp_pose_cands/summary`。この段階ではIKと実ロボット到達性を評価しない。
-
-体積graphも同時に起動する場合だけ、以下の launch 引数を追加する。既存の
-`gng_viewer_bridge.launch.py`が体積graphを起動中なら指定しない。
-
-```bash
-ros2 launch grasping_system grasp_voxel_matcher.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  enable_gripper_volume_graph:=true \
-  grippers_file:=/ros2_ws/src/grasping_system/config/ToPoDualArm_gripper_volumes.yaml \
-  tf_prefix:=ToPoDualArm \
-  cache_directory:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gripper_volume_cache
-```
-
-照合条件、掃引禁止体積、深度可視性、summary項目の詳細は
-[`TECHNICAL_SPEC.md`](gng_vlut_system/docs/TECHNICAL_SPEC.md)を参照。
 
 ## realsense 
 ros2 launch realsense2_camera rs_launch.py \
@@ -432,3 +341,24 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
 ./scripts/stop_ros2_stack.sh
 
 docker compose --profile manual up -d --build frontend
+
+
+# ターミナル1: 生点群は変換用に退避し、深度画像と内部パラメータも同時に再生する
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
+  --topics \
+    /camera/camera/depth/color/points \
+    /camera/camera/depth/image_rect_raw \
+    /camera/camera/depth/camera_info \
+  --remap /camera/camera/depth/color/points:=/visibility/raw_points \
+  --loop
+
+# ターミナル2: GNG 入力用の点群を base_link へ変換する
+ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
+  input_topic:=/visibility/raw_points \
+  output_topic:=/camera/camera/depth/color/points
+
+## GNGエッジから差分方式で平面クラスタを作る
+ros2 launch ais_gng plane_cluster_incremental.launch.py \
+  input_topic:=/topological_map
+
+今はais_gng_実行で生成できるようにしている
