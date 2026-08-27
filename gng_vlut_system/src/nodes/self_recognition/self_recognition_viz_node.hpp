@@ -43,6 +43,7 @@ private:
     std::vector<double> current_joints_;
     std::mutex mutex_;
     rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr latched_joint_sub_;
     rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr mask_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
     rclcpp::TimerBase::SharedPtr graph_timer_;

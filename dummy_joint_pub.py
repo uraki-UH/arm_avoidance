@@ -1,137 +1,207 @@
 #!/usr/bin/env python3
 
+"""URDFの可動関節を安全な範囲で往復させるJointState publisher。"""
+
 from __future__ import annotations
 
 import argparse
 import math
+import os
+import xml.etree.ElementTree as element_tree
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Sequence
+from typing import Sequence
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.signals import SignalHandlerOptions
+from rclpy.utilities import remove_ros_args
 from sensor_msgs.msg import JointState
+
+try:
+    from gng_control_msgs.msg import JointControlClaim
+except ImportError:
+    JointControlClaim = None
 
 
 @dataclass(frozen=True)
-class RobotPreset:
-    namespace: str
-    joint_names: Sequence[str]
-    position_fn: Callable[[float], Sequence[float]]
+class JointMotion:
+    """ダミー更新対象の関節情報。"""
+
+    name: str
+    min_position: float
+    max_position: float
+    center_position: float
+    amplitude: float
+    phase: float
 
 
-def clamp(v: float, low: float, high: float) -> float:
-    return max(low, min(high, v))
+def read_joint_motions(urdf_path: str, motion_ratio: float) -> list[JointMotion]:
+    """URDFからmimic以外の可動関節と可動範囲を取得。"""
+    try:
+        root = element_tree.parse(urdf_path).getroot()
+    except (element_tree.ParseError, OSError) as exc:
+        raise RuntimeError(f"URDFを読み込めません: {urdf_path}: {exc}") from exc
 
+    motions: list[JointMotion] = []
+    for joint in root.findall("joint"):
+        joint_type = joint.get("type", "")
+        if joint_type not in {"revolute", "continuous", "prismatic"}:
+            continue
+        if joint.find("mimic") is not None:
+            continue
 
-def make_topo_dual_arm_preset() -> RobotPreset:
-    joint_names = [
-        "left_joint1", "left_joint2", "left_joint3", "left_joint4",
-        "left_joint5", "left_joint6", "left_joint7",
-        "left_gripper_left_joint", "left_gripper_right_joint",
-        "right_joint1", "right_joint2", "right_joint3", "right_joint4",
-        "right_joint5", "right_joint6", "right_joint7",
-        "right_gripper_left_joint", "right_gripper_right_joint",
-    ]
+        joint_name = joint.get("name", "")
+        if not joint_name:
+            continue
 
-    def positions(t: float) -> Sequence[float]:
-        # ゆっくりした安全寄りの動き。必要ならこの関数だけ差し替えればよい。
-        a = math.sin(t) * 0.8
-        g = clamp(0.02 + 0.01 * math.sin(t * 0.8), 0.0, 0.0775)
+        limit = joint.find("limit")
+        if joint_type == "continuous":
+            min_position = -math.pi
+            max_position = math.pi
+        elif limit is not None and limit.get("lower") is not None and limit.get("upper") is not None:
+            min_position = float(limit.get("lower", "0.0"))
+            max_position = float(limit.get("upper", "0.0"))
+        else:
+            min_position = -1.0
+            max_position = 1.0
 
-        left = [a, a,  a, a,  a, a, a]
-        right = list(left)
+        if max_position < min_position:
+            min_position, max_position = max_position, min_position
+        center_position = (min_position + max_position) * 0.5
+        movable_range = max_position - min_position
+        amplitude = movable_range * 0.5 * motion_ratio
+        motions.append(JointMotion(
+            name=joint_name,
+            min_position=min_position,
+            max_position=max_position,
+            center_position=center_position,
+            amplitude=amplitude,
+            phase=len(motions) * 0.61,
+        ))
 
-        # gripper_left_joint が主関節、gripper_right_joint は mimic だが
-        # JointState は両方同じ値
-        left_gripper = [g, g]
-        right_gripper = [g, g]
-
-        return [
-            *left,
-            *left_gripper,
-            *right,
-            *right_gripper,
-        ]
-
-    return RobotPreset(namespace="ToPoDualArm", joint_names=joint_names, position_fn=positions)
-
-
-def make_topoarm_preset() -> RobotPreset:
-    joint_names = [
-        "joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7",
-        "gripper_left_joint", "gripper_right_joint",
-    ]
-
-    def positions(t: float) -> Sequence[float]:
-        a = math.sin(t) *0.8
-        g = clamp(0.02 + 0.01 * math.sin(t * 0.8), 0.0, 0.0775)
-        return [a, a, a, a, a, a, a, g, g]
-
-    return RobotPreset(namespace="topoarm", joint_names=joint_names, position_fn=positions)
-
-
-PRESETS: Dict[str, RobotPreset] = {
-    "topo_dual_arm": make_topo_dual_arm_preset(),
-    "ToPoDualArm": make_topo_dual_arm_preset(),
-    "topoarm": make_topoarm_preset(),
-}
+    if not motions:
+        raise RuntimeError("URDF内に更新対象の可動関節がありません")
+    return motions
 
 
 class DummyJointPublisher(Node):
-    def __init__(self, preset: RobotPreset, rate_hz: float):
-        super().__init__("dummy_joint_publisher", namespace=preset.namespace)
-        self._preset = preset
-        # robot namespace 配下だけに publish する。
-        self._publisher = self.create_publisher(JointState, "joint_states", 10)
-        self._timer = self.create_timer(max(0.01, 1.0 / rate_hz), self._timer_callback)
-        self._t = 0.0
+    """URDF準拠のダミー関節状態publisher。"""
+
+    def __init__(self, topic: str, motions: Sequence[JointMotion], rate_hz: float,
+                 enable_motion: bool, motion_speed: float,
+                 claim_topic: str, claim_priority: int) -> None:
+        super().__init__("dummy_joint_publisher")
+        self._motions = list(motions)
+        self._enable_motion = enable_motion
+        self._motion_speed = motion_speed
+        self._elapsed_sec = 0.0
+        self._topic = topic
+        self._claim_pub = None
+        self._claim_priority = claim_priority
+        self._publisher = self.create_publisher(JointState, topic, 10)
+        if claim_topic:
+            if JointControlClaim is None:
+                raise RuntimeError(
+                    "--claim-topic には gng_control_msgs が必要です")
+            claim_qos = QoSProfile(
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self._claim_pub = self.create_publisher(
+                JointControlClaim, claim_topic, claim_qos)
+            self._publish_claim(True)
+        self._timer = self.create_timer(
+            max(0.01, 1.0 / rate_hz), self._timer_callback)
+        self._step_sec = max(0.01, 1.0 / rate_hz)
 
         self.get_logger().info(
-            f"dummy_joint_pub started: namespace={preset.namespace} "
-            f"joints={len(preset.joint_names)} rate_hz={rate_hz:.2f}"
-        )
+            f"ダミー関節状態を開始: topic={topic} "
+            f"joints={len(self._motions)} rate_hz={rate_hz:.2f} "
+            f"motion={'on' if enable_motion else 'off'} "
+            f"claim={'on' if self._claim_pub else 'off'}")
+
+    def _publish_claim(self, enabled: bool) -> None:
+        if self._claim_pub is None:
+            return
+        claim = JointControlClaim()
+        claim.command_topic = self._topic
+        claim.joint_names = [motion.name for motion in self._motions]
+        claim.priority = self._claim_priority
+        claim.mode = JointControlClaim.MODE_EXCLUSIVE
+        claim.enabled = enabled
+        self._claim_pub.publish(claim)
 
     def _timer_callback(self) -> None:
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.name = list(self._preset.joint_names)
-        msg.position = list(self._preset.position_fn(self._t))
-
-        if len(msg.position) != len(msg.name):
-            self.get_logger().error(
-                f"position count mismatch: names={len(msg.name)} positions={len(msg.position)}"
-            )
-            return
-
+        msg.name = [motion.name for motion in self._motions]
+        if self._enable_motion:
+            msg.position = [
+                motion.center_position + motion.amplitude * math.sin(
+                    self._elapsed_sec * self._motion_speed + motion.phase)
+                for motion in self._motions
+            ]
+        else:
+            msg.position = [motion.center_position for motion in self._motions]
         self._publisher.publish(msg)
-        self._t += 0.05
+        self._publish_claim(True)
+        self._elapsed_sec += self._step_sec
+
+    def disable_claim(self) -> None:
+        """joint_state_muxにダミー制御の終了を通知。"""
+        self._publish_claim(False)
+        if self._claim_pub is not None:
+            self.get_logger().info("ダミー制御claimを無効化")
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Publish dummy JointState messages")
-    parser.add_argument("--robot", default="topo_dual_arm", help="Robot preset name (topo_dual_arm, topoarm)")
-    parser.add_argument("--namespace", default="", help="Override ROS namespace")
-    parser.add_argument("--rate-hz", type=float, default=10.0, help="Publish rate in Hz")
-    args, _ = parser.parse_known_args()
-    return args
+def parse_args(args: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="URDFの関節名とリミットを用いるダミーJointState publisher")
+    parser.add_argument("--urdf", required=True, help="対象URDFの絶対パスまたは相対パス")
+    parser.add_argument("--topic", required=True, help="出力JointState topic")
+    parser.add_argument("--claim-topic", default="",
+                        help="joint_state_mux用のJointControlClaim topic")
+    parser.add_argument("--claim-priority", type=int, default=100,
+                        help="joint_state_muxで使用する優先度")
+    parser.add_argument("--rate-hz", type=float, default=30.0, help="publish周波数")
+    parser.add_argument("--motion-ratio", type=float, default=0.35,
+                        help="関節リミット幅に対する片振幅の比率")
+    parser.add_argument("--motion-speed", type=float, default=0.55,
+                        help="往復運動の角速度")
+    parser.add_argument("--static", action="store_true", help="関節中点姿勢のみをpublish")
+    return parser.parse_args(args)
 
 
-def main(args=None):
-    cli = parse_args()
-    preset = PRESETS.get(cli.robot, PRESETS["topo_dual_arm"])
-    if cli.namespace:
-        preset = RobotPreset(namespace=cli.namespace, joint_names=preset.joint_names, position_fn=preset.position_fn)
+def main(args: Sequence[str] | None = None) -> int:
+    cli = parse_args(remove_ros_args(args=args)[1:])
+    urdf_path = os.path.abspath(cli.urdf)
+    if not os.path.isfile(urdf_path):
+        raise RuntimeError(f"URDFが見つかりません: {urdf_path}")
+    if cli.rate_hz <= 0.0:
+        raise RuntimeError("--rate-hz は正の値が必要です")
 
-    rclpy.init(args=args)
-    node = DummyJointPublisher(preset, cli.rate_hz)
+    motion_ratio = min(1.0, max(0.0, cli.motion_ratio))
+    motions = read_joint_motions(urdf_path, motion_ratio)
+    topic = cli.topic
+
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+    node = DummyJointPublisher(
+        topic, motions, cli.rate_hz, not cli.static, cli.motion_speed,
+        cli.claim_topic, cli.claim_priority)
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        if rclpy.ok():
+            node.disable_claim()
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -138,6 +138,7 @@ install(DIRECTORY urdf config launch gng_results worlds
 install(PROGRAMS
   scripts/video_file_publisher.py
   scripts/yolo_person_detector.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -27,7 +27,8 @@ public:
       throw std::runtime_error("Robot description has no movable joints");
     }
 
-    publisher_ = create_publisher<sensor_msgs::msg::JointState>(topic, rclcpp::QoS(1).reliable());
+    publisher_ = create_publisher<sensor_msgs::msg::JointState>(
+        topic, rclcpp::QoS(1).reliable().transient_local());
     timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() { publishOnce(); });
   }
 

@@ -116,6 +116,7 @@ add_executable(initial_joint_state_publisher_node nodes/self_recognition/initial
 add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
+add_executable(self_voxel_filter_node nodes/self_recognition/self_voxel_filter_node.cpp)
 add_executable(topological_map_avoidance_node nodes/planning/topological_map_avoidance_node.cpp)
 add_executable(arm_avoid_node nodes/planning/arm_avoid_node.cpp)
 add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
@@ -130,7 +131,7 @@ add_subdirectory(offline_tools/tools)
 
 # Link & Installation for all nodes
 set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node world_index_to_voxel_node depth_world_index_benchmark_node voxel_topic_merger_node grasp_pose_candidate_producer_node grasp_pose_marker_bridge_node robot_viewer_bridge_node gazebo_entity_tf_follower_node voxel_spherized_robot_viewer_node voxel_to_vlut_node safety_monitor_node robot_description_player_node rviz_robot_visual_marker_node initial_joint_state_publisher_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node arm_avoid_node target_joint_state_executor_node virtual_joint_state_driver_node offline_urdf_trainer visualization_gng_trainer)
-set(NODES ${NODES} grasp_pose_dummy_publisher_node)
+set(NODES ${NODES} grasp_pose_dummy_publisher_node self_voxel_filter_node)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})

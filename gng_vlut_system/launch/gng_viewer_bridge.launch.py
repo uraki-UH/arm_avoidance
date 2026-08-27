@@ -4,7 +4,7 @@ import struct
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -91,7 +91,9 @@ def launch_setup(context, *args, **kwargs):
     topic_name = LaunchConfiguration("topic_name").perform(context)
     node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
     edge_mode = LaunchConfiguration("edge_mode").perform(context)
-    enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context)
+    enable_joint_state_publisher_arg = LaunchConfiguration(
+        "enable_joint_state_publisher"
+    ).perform(context)
     direct_joint_tracking = LaunchConfiguration("direct_joint_tracking").perform(context)
     enable_self_recognition_viz_arg = LaunchConfiguration(
         "enable_self_recognition_viz"
@@ -110,6 +112,8 @@ def launch_setup(context, *args, **kwargs):
     yaml_gripper_volume_cache_directory = ""
     yaml_gripper_volume_cache_mode = "use"
     yaml_enable_self_recognition_viz = False
+    yaml_enable_environment_self_filter = False
+    yaml_enable_joint_state_publisher = True
     yaml_vlut_resolution = 0.0
     if params_file and os.path.exists(params_file):
         try:
@@ -178,10 +182,19 @@ def launch_setup(context, *args, **kwargs):
                         self_recognition_ns.get('enable_self_recognition_viz'),
                         yaml_enable_self_recognition_viz,
                     )
+                    yaml_enable_environment_self_filter = safe_bool(
+                        self_recognition_ns.get('enable_environment_self_filter'),
+                        yaml_enable_environment_self_filter,
+                    )
                 if 'enable_self_recognition_viz' in root_ros_params:
                     yaml_enable_self_recognition_viz = safe_bool(
                         root_ros_params.get('enable_self_recognition_viz'),
                         yaml_enable_self_recognition_viz,
+                    )
+                if 'enable_joint_state_publisher' in root_ros_params:
+                    yaml_enable_joint_state_publisher = safe_bool(
+                        root_ros_params.get('enable_joint_state_publisher'),
+                        yaml_enable_joint_state_publisher,
                     )
 
             for node_key in ("offline_urdf_trainer", "gng_safety", "viewer_ws_gateway"):
@@ -215,6 +228,11 @@ def launch_setup(context, *args, **kwargs):
         data_dir = os.path.basename(data_dir) or data_dir
     if not urdf_path and yaml_urdf_path:
         urdf_path = yaml_urdf_path
+
+    enable_joint_state_publisher = (
+        safe_bool(enable_joint_state_publisher_arg, yaml_enable_joint_state_publisher)
+        if enable_joint_state_publisher_arg else yaml_enable_joint_state_publisher
+    )
     if not urdf_path:
         raise FileNotFoundError(
             "No robot description path was provided. "
@@ -304,13 +322,15 @@ def launch_setup(context, *args, **kwargs):
                 p["stream_topic"] = stream_topic
 
     actions = [
-        # 0. ロボット本体の召喚 (TF / robot_state_publisher / optional joint_state_publisher)
+        # 0. ロボット本体の起動（TF / robot_state_publisher / 初回姿勢配信）
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "robot_spawn.launch.py")),
             launch_arguments={
                 "robot_name": robot_name,
-                "enable_joint_state_publisher": enable_joint_state_publisher,
-                "publish_initial_joint_state": "true",
+                "enable_joint_state_publisher": "false",
+                "publish_initial_joint_state": (
+                    "true" if enable_joint_state_publisher else "false"
+                ),
                 "urdf_path": urdf_path,
                 "resource_root_dir": resource_root,
                 "mesh_root_dir": mesh_root,
@@ -381,6 +401,17 @@ def launch_setup(context, *args, **kwargs):
         )
     ]
 
+    if enable_joint_state_publisher:
+        actions.insert(
+            0,
+            LogInfo(
+                msg=(
+                    "初回姿勢publisherを起動します。"
+                    "継続する joint_state_publisher は起動しません。"
+                )
+            ),
+        )
+
     if enable_self_recognition_viz:
         # 起動時の自己認識ボクセル生成ノード
         self_recognition_params = []
@@ -406,6 +437,21 @@ def launch_setup(context, *args, **kwargs):
                 namespace=robot_name,
                 output="screen",
                 parameters=self_recognition_params,
+            )
+        )
+
+    if yaml_enable_environment_self_filter:
+        filter_params = []
+        if params_file and os.path.exists(params_file):
+            filter_params.append(params_file)
+        actions.append(
+            Node(
+                package="gng_vlut_system",
+                executable="self_voxel_filter_node",
+                name="self_voxel_filter_node",
+                namespace=robot_name,
+                output="screen",
+                parameters=filter_params,
             )
         )
 
@@ -472,7 +518,11 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_model_path", default_value=""),
         DeclareLaunchArgument("vlut_path", default_value=""),
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "topoarm_dual.yaml")),
-        DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
+        DeclareLaunchArgument(
+            "enable_joint_state_publisher",
+            default_value="",
+            description="初回姿勢配信の上書き。未指定時はparams_fileを使用。",
+        ),
         DeclareLaunchArgument(
             "direct_joint_tracking",
             default_value="true",

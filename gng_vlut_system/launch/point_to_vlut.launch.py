@@ -125,6 +125,8 @@ def _launch_setup(context, *_args, **_kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     input_topic = LaunchConfiguration("input_topic").perform(context)
     voxel_topic = LaunchConfiguration("voxel_topic").perform(context)
+    source_voxel_topic = (
+        LaunchConfiguration("source_voxel_topic").perform(context).strip() or voxel_topic)
     source_frame_id = LaunchConfiguration("source_frame_id").perform(context)
     target_frame_id = LaunchConfiguration("target_frame_id").perform(context)
     legacy_enable_world_index = _bool_argument(context, "world_index_enable")
@@ -137,7 +139,7 @@ def _launch_setup(context, *_args, **_kwargs):
 
     voxel_source_arguments = {
         "input_topic": input_topic,
-        "output_topic": voxel_topic,
+        "output_topic": source_voxel_topic,
         "source_frame_id": source_frame_id,
         "target_frame_id": target_frame_id,
         "voxel_size": f"{point_voxel_size:.9g}",
@@ -211,6 +213,7 @@ def generate_launch_description():
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("input_topic", default_value="/topo_points"),
         DeclareLaunchArgument("voxel_topic", default_value="/topo_voxel_ids"),
+        DeclareLaunchArgument("source_voxel_topic", default_value=""),
         DeclareLaunchArgument("source_frame_id", default_value=""),
         DeclareLaunchArgument("target_frame_id", default_value="ToPoDualArm/base_link"),
         DeclareLaunchArgument("params_file", default_value=default_params_file),

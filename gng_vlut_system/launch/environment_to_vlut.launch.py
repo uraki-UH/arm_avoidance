@@ -61,6 +61,14 @@ def _namespaced_frame(robot_name, frame_id):
     return f"{robot_name}/{normalized}" if robot_name else normalized
 
 
+def _namespaced_topic(robot_name, topic):
+    normalized = str(topic).strip()
+    if normalized.startswith("/"):
+        return normalized
+    normalized = normalized.lstrip("/")
+    return f"/{robot_name}/{normalized}" if robot_name else f"/{normalized}"
+
+
 def _world_index_modes(world_index):
     legacy_enable = _is_enabled(_value(world_index, "enable", False))
     enable_build = _is_enabled(_value(
@@ -119,6 +127,9 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
     voxel_idx_params = root_params.get("voxel_idx_shift", {})
     if not isinstance(voxel_idx_params, dict):
         voxel_idx_params = {}
+    self_recognition = root_params.get("self_recognition", {})
+    if not isinstance(self_recognition, dict):
+        self_recognition = {}
 
     default_robot_name = _value(
         environment, "robot_name", root_params.get("robot_name", ""))
@@ -137,6 +148,12 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
     voxel_topic = str(_value(
         entry, "voxel_topic", _value(
             environment, "voxel_topic", f"/{robot_name}/roi_voxel_ids")))
+    enable_environment_self_filter = _is_enabled(_value(
+        self_recognition, "enable_environment_self_filter", False))
+    raw_voxel_topic = voxel_topic
+    if enable_environment_self_filter:
+        raw_voxel_topic = _namespaced_topic(robot_name, _value(
+            self_recognition, "raw_environment_voxel_topic", "roi_voxel_ids_raw"))
     input_topic = str(_value(entry, "input_topic", default_input_topic))
     source_frame_id = str(_value(entry, "source_frame_id", default_source_frame_id))
 
@@ -170,6 +187,8 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
         "source_frame_id": source_frame_id,
         "target_frame_id": target_frame_id,
         "voxel_topic": voxel_topic,
+        "raw_voxel_topic": raw_voxel_topic,
+        "enable_environment_self_filter": enable_environment_self_filter,
         "voxel_size": voxel_size,
         "x_shift": int(_value(voxel_idx_params, "x_shift", 42)),
         "y_shift": int(_value(voxel_idx_params, "y_shift", 21)),
@@ -215,7 +234,7 @@ def _additional_consumer_json(consumer):
         "min_reachability_z", "max_reachability_z", "reachability_margin_x",
         "reachability_margin_y", "reachability_margin_z", "max_dense_voxel_num")
     values = {key: consumer[key] for key in keys}
-    values["output_topic"] = values.pop("voxel_topic")
+    values["output_topic"] = consumer["raw_voxel_topic"]
     return values
 
 
@@ -266,7 +285,7 @@ def _shared_world_index_actions(
             output="screen",
             parameters=[{
                 "input_topic": input_topic,
-                "output_topic": primary_consumer["voxel_topic"],
+                "output_topic": primary_consumer["raw_voxel_topic"],
                 "source_frame_id": source_frame_id,
                 "world_frame_id": world_frame_id,
                 "target_frame_id": primary_consumer["target_frame_id"],
@@ -366,6 +385,9 @@ def _launch_setup(context, *_args, **_kwargs):
     voxel_idx_params = root_params.get("voxel_idx_shift", {})
     if not isinstance(voxel_idx_params, dict):
         voxel_idx_params = {}
+    self_recognition = root_params.get("self_recognition", {})
+    if not isinstance(self_recognition, dict):
+        self_recognition = {}
 
     configured_robot_name = _value(
         environment, "robot_name", root_params.get("robot_name", "ToPoDualArm"))
@@ -374,6 +396,12 @@ def _launch_setup(context, *_args, **_kwargs):
     target_frame_id = _namespaced_frame(robot_name, base_frame)
     input_topic = _value(environment, "input_topic", "/topo_points")
     voxel_topic = _value(environment, "voxel_topic", f"/{robot_name}/roi_voxel_ids")
+    enable_environment_self_filter = _is_enabled(_value(
+        self_recognition, "enable_environment_self_filter", False))
+    source_voxel_topic = voxel_topic
+    if enable_environment_self_filter:
+        source_voxel_topic = _namespaced_topic(robot_name, _value(
+            self_recognition, "raw_environment_voxel_topic", "roi_voxel_ids_raw"))
     source_frame_id = _value(environment, "source_frame_id", "")
     enable_world_index_build, enable_world_index_roi_query = _world_index_modes(world_index)
     world_index_frame_id = _value(world_index, "frame_id", "world")
@@ -398,6 +426,7 @@ def _launch_setup(context, *_args, **_kwargs):
         "robot_name": robot_name,
         "input_topic": input_topic,
         "voxel_topic": voxel_topic,
+        "source_voxel_topic": source_voxel_topic,
         "source_frame_id": source_frame_id,
         "target_frame_id": target_frame_id,
         "params_file": params_file,
@@ -470,7 +499,8 @@ def _launch_setup(context, *_args, **_kwargs):
     print(
         "[environment_to_vlut] 統合起動設定: "
         f"robot={robot_name} input={input_topic} target_frame={target_frame_id} "
-        f"voxel_topic={voxel_topic} tf={tf_mode} danger_source={danger_source} "
+        f"source_voxel_topic={source_voxel_topic} voxel_topic={voxel_topic} "
+        f"self_filter={enable_environment_self_filter} tf={tf_mode} danger_source={danger_source} "
         f"world_index_build={enable_world_index_build} "
         f"world_index_roi_query={enable_world_index_roi_query}"
     )

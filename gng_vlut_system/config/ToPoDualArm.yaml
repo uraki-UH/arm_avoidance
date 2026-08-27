@@ -11,6 +11,8 @@
     urdf_path: "/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf"
     resource_root_dir: "/ros2_ws/src/dual_arm_urdf"
     mesh_root_dir: "/ros2_ws/src/dual_arm_urdf/meshes"
+    # Viewer起動直後の初回関節姿勢配信
+    enable_joint_state_publisher: true
 
     # --- GNG & Safety Settings ---
     gng:
@@ -178,6 +180,15 @@
       inflation: 0.0
       update_hz: 30.0
       enable_self_recognition_viz: true
+      # 環境ボクセルから自己ボクセルと膨張領域を除外するフィルタ
+      enable_environment_self_filter: true
+      raw_environment_voxel_topic: "roi_voxel_ids_raw"
+      filtered_environment_voxel_topic: "roi_voxel_ids"
+      # 自己認識境界の位置ずれ吸収用膨張幅
+      self_exclusion_inflation: 0.02
+      # 停止済み自己認識結果の継続利用防止用受信間隔
+      max_self_mask_age_sec: 0.5
+      voxel_size_match_th: 1.0e-9
       root_link: "base_link"
       target_frame_id: "base_link"
       marker_frame_id: "base_link"

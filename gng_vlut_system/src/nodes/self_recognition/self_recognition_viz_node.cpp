@@ -484,13 +484,16 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     recognition_manager_->initialize(chain_, model_, voxel_data, voxel_size_param);
 
     // 通信
-    joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-        joint_topic, 10,
+    const auto update_joint_state =
         [this](const sensor_msgs::msg::JointState::ConstSharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
             chain_->updateJointValuesByName(msg->name, msg->position);
             current_joints_ = chain_->getJointValues();
-        });
+        };
+    joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+        joint_topic, rclcpp::QoS(10).reliable(), update_joint_state);
+    latched_joint_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+        joint_topic, rclcpp::QoS(1).reliable().transient_local(), update_joint_state);
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);

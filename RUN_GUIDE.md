@@ -194,8 +194,14 @@ ros2 run gng_vlut_system self_recognition_filter_node
   # self-recognition voxel内の点群: /self_recognition_points
   # self-recognition voxel外の点群: /self_filtered_points
 
-# joint_statesのダミー
-python3 dummy_joint_pub.py --robot topoarm
+# URDF準拠のダミー関節状態
+ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+  urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
+
+# 中点姿勢で固定
+ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+  urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf \
+  is_static:=true
 
 ## realsenseのrosbag + 点群座標変換
 # ターミナル1: raw点群を /camera/camera/depth/color/points_raw へリマップして再生
