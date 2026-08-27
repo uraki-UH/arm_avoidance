@@ -21,7 +21,14 @@ def generate_launch_description():
                     [FindPackageShare("ais_gng"), "config", "plane_cluster_incremental.yaml"]
                 ),
             ),
-            DeclareLaunchArgument("start_plane_cluster", default_value="true"),
+            DeclareLaunchArgument(
+                "start_plane_cluster",
+                default_value="false",
+                description=(
+                    "ais_gng.launch.pyを使わない場合に平面クラスタの"
+                    "マーカー変換ノードを起動"
+                ),
+            ),
             DeclareLaunchArgument("topological_map_topic", default_value="/topological_map"),
             DeclareLaunchArgument(
                 "planar_clusters_topic",

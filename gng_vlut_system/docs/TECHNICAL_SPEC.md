@@ -877,3 +877,22 @@ launchは既定の`/datasets`へ`<dataset_id>_object_surface_dataset_v1.json`を
 
 このtopicは物体認識・照合用であり、ロボット関節空間の`/ToPoDualArm/topological_map_static`を
 置換しない。`gng_viewer_bridge.launch.py`が読むロボット用`gng.bin`と`vlut.bin`も変更しない。
+
+### 15.2 物体照合仮説の配信
+
+`object_match_hypothesis_publisher_node`は、テンプレートGNGと環境側GNGが両方取得できた後に、
+照合候補の環境nodeを空間セルで集約して配信する。現段階では照合スコアを計算せず、
+`score`、`yaw_deg`、対象クラスタを外部指定する仮説表現だけを提供する。将来の照合器は候補ごとに
+このnodeを起動するか、同等の集約処理へ照合結果を渡す。
+
+```bash
+ros2 launch gng_vlut_system object_match_hypothesis_publisher.launch.py \
+  template_id:=mug_complete_v1 \
+  environment_cluster_id:=3 \
+  grid_cell_size:=0.03
+```
+
+テンプレート入力は`/<template_id>/topological_map_static`、環境入力は既定で`/topological_map`となる。
+`environment_cluster_id:=-1`なら環境マップ全体を候補として扱う。出力は
+`/<template_id>/hypotheses/<hypothesis_id>/topological_map`、AABBと候補名のMarkerArrayは同じprefixの
+`/markers`、候補ID・スコア・yaw・AABBを含むJSONは`/metadata`へ`transient_local`で配信する。

@@ -80,7 +80,7 @@ function GraphRendererCore({
     showNodes = true,
     showEdges = true,
     showClusters = true,
-    showClusterText = true,
+    showClusterText = false,
     showNormals = false,
     showVelocity = false,
     showCovarianceEllipsoids = false,
