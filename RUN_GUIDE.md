@@ -43,14 +43,6 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 
-#### ROI voxelとworld indexの視覚確認
-
-##　ボクセルからGNGのoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
-  robot_name:=ToPoDualArm \
-  input_topic:=/topo_voxel_ids \
-  danger_inflation:=0.08
-
 ## AISGNG実行
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
@@ -115,7 +107,7 @@ ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
 
 ## realsenseのrosbag + 点群座標変換
-# ターミナル1: raw点群を /camera/camera/depth/color/points_raw へリマップして再生
+# ターミナル1: raw点群を /camera/camera/depth/color/points_raw へ　リマップして再生
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
   --topics /camera/camera/depth/color/points \
   --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw \
@@ -149,7 +141,6 @@ python3 -m pip install --user torch==2.8.0 torchvision --index-url https://downl
 
 
 ## GNGノードを把持候補用ボクセルへ変換
-
 `/topological_map`と`/downsampling/grasp_support`を照合し、点群支持のある物体候補をボクセル化する。
 `SAFE_TERRAIN`、`HUMAN`、`CAR`は候補から除外する。
 
@@ -171,7 +162,6 @@ ros2 launch grasping_system grasp_voxel_matcher.launch.py \
 ros2 launch realsense2_camera rs_launch.py \
   align_depth.enable:=true \
   pointcloud.enable:=true
-
 
 ## Gazeboに召喚
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
@@ -196,7 +186,6 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   fixed_base_link:=base_footprint \
   world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
 
-このworldには作業台、動的な立方体・円柱・直方体、配置用トレイ2個が含まれる。
 現在の`dual_arm_robot.urdf`には`gazebo_ros2_control`がないため、Gazebo内の関節と
 グリッパを指令して実際に把持するには、別途Gazebo用controller接続が必要。
 
@@ -221,29 +210,17 @@ alias sw='source /ros2_ws/install/setup.bash'
 
 
 ### dockerではなく素の ROS2 環境で入れる場合
-```bash
 sudo apt install ros-humble-rosbridge-server
-```
+
 ### 起動手順
-```bash
 # 1) rosbridge を起動
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
-```
 
 このlaunchはWebSocketに加えて`rosapi`を起動する。単体HTMLは`rosapi`から
 `*_grip_V_topological_map`、`*_grip_minV_topological_map`、`*_grip_baseV_topological_map`、
 `*_grip_sweptV_topological_map`
 topicを自動発見するため、`ros2 run
 rosbridge_server rosbridge_websocket`だけではなく上記launchを使用する。
-
-```bash
-python3 -m http.server 8000
-```
-
-```text
-http://localhost:8000/ToPo-FUZZY_Manipulation_v1.html
-```
-
 
 ## 左腕をtopological_map_avoidanceで動かす
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
