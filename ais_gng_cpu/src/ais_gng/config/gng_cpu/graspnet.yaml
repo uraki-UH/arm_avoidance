@@ -5,7 +5,7 @@ ais_gng_node:
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
-    node.covariance_enabled: false
+    node.covariance_enabled: true
     # 古い接続の削除年齢
     edge.age_max: 100
     node.s1_reset_range: 0.1

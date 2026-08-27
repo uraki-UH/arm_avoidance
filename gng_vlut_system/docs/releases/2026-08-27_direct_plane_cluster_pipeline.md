@@ -8,6 +8,7 @@
 - `top_grasp_surface_estimator.launch.py`は表示ノードを既定でmarkers-onlyモードにし、CPU GNG側とのクラスタ計算の二重化を解消した。
 - 平面クラスタパラメータ宣言を共通化し、直接経路は`plane_cluster.*`、単独ノードは従来名で同じ設定を利用する。
 - backend用コンパイル定義の大文字・小文字不一致を修正し、CPU専用処理が実際に有効になるようにした。
+- 既存の`I: ..., Nodes: ..., Clusters: ...`要約行へ`GNG: ... ms, Plane: ... ms`を追加した。直接平面処理が無効な場合は`Plane: off`と表示する。
 
 ## パラメータ
 

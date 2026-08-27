@@ -93,7 +93,11 @@ class GngStdoutCapture {
     bool is_capturing_{false};
 };
 
-void replayGngSummaryWithTime(const std::string &output, double gng_ms) {
+void replayGngSummaryWithTime(
+    const std::string &output,
+    double gng_ms,
+    bool plane_cluster_ran,
+    double plane_cluster_ms) {
     std::size_t line_start = 0;
     while (line_start < output.size()) {
         const std::size_t line_end = output.find('\n', line_start);
@@ -116,15 +120,30 @@ void replayGngSummaryWithTime(const std::string &output, double gng_ms) {
                 &active_num,
                 &node_num,
                 &cluster_num) == 5) {
-            std::fprintf(
-                stdout,
-                "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, %.2f ms",
-                input_num,
-                voxel_num,
-                active_num,
-                node_num,
-                cluster_num,
-                gng_ms);
+            if (plane_cluster_ran) {
+                std::fprintf(
+                    stdout,
+                    "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
+                    "GNG: %.2f ms, Plane: %.2f ms",
+                    input_num,
+                    voxel_num,
+                    active_num,
+                    node_num,
+                    cluster_num,
+                    gng_ms,
+                    plane_cluster_ms);
+            } else {
+                std::fprintf(
+                    stdout,
+                    "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
+                    "GNG: %.2f ms, Plane: off",
+                    input_num,
+                    voxel_num,
+                    active_num,
+                    node_num,
+                    cluster_num,
+                    gng_ms);
+            }
         } else {
             std::fwrite(line.data(), sizeof(char), line.size(), stdout);
         }
@@ -807,9 +826,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     GngStdoutCapture gng_stdout_capture;
     gng_exec();
     const auto gng_end = std::chrono::steady_clock::now();
-    replayGngSummaryWithTime(
-        gng_stdout_capture.takeOutput(),
-        std::chrono::duration<double, std::milli>(gng_end - input_end).count());
+    const std::string gng_summary_output = gng_stdout_capture.takeOutput();
 
 #if defined(AIS_GNG_BACKEND_CPU)
     if (node_covariance_enabled_) {
@@ -852,13 +869,23 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 
 #if defined(AIS_GNG_BACKEND_CPU)
     std::unique_ptr<ais_gng_msgs::msg::PlanarClusterArray> direct_plane_clusters;
+    bool plane_cluster_ran = false;
     if (direct_plane_clusterizer_) {
         auto result = direct_plane_clusterizer_->update(*map_msg);
         direct_plane_clusters =
             std::make_unique<ais_gng_msgs::msg::PlanarClusterArray>(std::move(result.clusters));
+        plane_cluster_ran = true;
     }
+#else
+    constexpr bool plane_cluster_ran = false;
 #endif
     const auto plane_cluster_end = std::chrono::steady_clock::now();
+    replayGngSummaryWithTime(
+        gng_summary_output,
+        std::chrono::duration<double, std::milli>(gng_end - input_end).count(),
+        plane_cluster_ran,
+        std::chrono::duration<double, std::milli>(
+            plane_cluster_end - classification_end).count());
 
     // マップを先にPublishし、表示専用ノードが同じフレームのクラスタを描画できるようにする。
     topological_map_pub_->publish(std::move(map_msg));
