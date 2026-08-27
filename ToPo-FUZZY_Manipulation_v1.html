@@ -699,6 +699,21 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
           </div>
+          <div class="section-title">Object Template / 事前登録GNG</div>
+          <div class="full"><label>Template ID</label><input id="objectTemplateId" type="text" value="object_template_v1" maxlength="80"></div>
+          <div class="full"><label>Template name</label><input id="objectTemplateName" type="text" value="Object template" maxlength="120"></div>
+          <div><label>Canonical yaw [deg]</label><input id="objectTemplateYawDeg" type="number" min="-180" max="180" step="1" value="0"></div>
+          <div class="full"><label><input id="showObjectTemplate" type="checkbox" checked> 登録GNGテンプレートを重ね描画</label></div>
+          <input id="objectTemplateFile" type="file" class="hide" accept=".json,application/json">
+          <div class="full">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="objectTemplateSaveBtn" class="primary" type="button">現在GNGをテンプレート保存</button>
+              <button id="objectSurfaceDatasetSaveBtn" class="go" type="button">完全表面点群データセット保存</button>
+              <button id="objectTemplateLoadBtn" type="button">テンプレート読込</button>
+              <button id="objectTemplateClearBtn" class="warn" type="button">テンプレート解除</button>
+            </div>
+            <div id="objectTemplateStatus" class="status" style="margin-top:6px">テンプレート: 未読込</div>
+          </div>
           <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
           <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm,text/javascript" multiple>
           <div class="full">
@@ -1044,7 +1059,7 @@ const state={
   robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
   robotGl:{layers:new Map(),unavailable:false,lastError:''},
   useFixedBase:true,fixedBasePose:{x:0.25,y:0,z:NaN,roll:0,pitch:0,yaw:0},
-  importedGraphSession:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
+  importedGraphSession:null,objectTemplate:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
   importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
   evaluationMetrics:{schemas:{},samples:{},structuredInputs:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0,receivedStructuredInputs:0},
   bundleFlow:null,
@@ -1636,6 +1651,15 @@ function normalizeGraphNode(node, idx){
     err:Number.isFinite(+node.err)?+node.err:0,
     win:Number.isFinite(+node.win)?+node.win:0,
     util:Number.isFinite(+node.util)?+node.util:0,
+    nx:Number.isFinite(+node.nx)?+node.nx:0,
+    ny:Number.isFinite(+node.ny)?+node.ny:0,
+    nz:Number.isFinite(+node.nz)?+node.nz:0,
+    rho:Number.isFinite(+node.rho)?+node.rho:0,
+    age:Number.isFinite(+node.age)?+node.age:0,
+    frame:Number.isFinite(+node.frame)?+node.frame:0,
+    inpcl_ids:Array.isArray(node.inpcl_ids)?node.inpcl_ids.map(v=>+v||0):[],
+    winner_point_count:Number.isFinite(+node.winner_point_count)?+node.winner_point_count:0,
+    winner_point_covariance:Array.isArray(node.winner_point_covariance)?node.winner_point_covariance.map(v=>+v||0):[],
     densityClass:Number.isFinite(+node.densityClass)?+node.densityClass:pointDensityClass(node),
     targetEdgeLength:Number.isFinite(+node.targetEdgeLength)?+node.targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass(node))),
     id:node.id??idx
@@ -1653,6 +1677,173 @@ function normalizeGraphEdge(edge, fallbackIndex){
   const b=Number.isFinite(+edge.b)?+edge.b:Number.isFinite(+edge.target)?+edge.target:null;
   if(a==null||b==null||a===b) return null;
   return {a:Math.min(a,b),b:Math.max(a,b),age:Number.isFinite(+edge.age)?+edge.age:0,id:edge.id??fallbackIndex};
+}
+function v322CopyObjectTemplateNode(node, idx){
+  const n=node||{};
+  return {
+    id:n.id??idx,
+    x:+n.x||0,y:+n.y||0,z:+n.z||0,
+    label:n.label||'gng',
+    err:+n.err||0,win:+n.win||0,util:+n.util||0,
+    densityClass:+n.densityClass||0,targetEdgeLength:+n.targetEdgeLength||0,
+    nx:+n.nx||0,ny:+n.ny||0,nz:+n.nz||0,rho:+n.rho||0,
+    age:+n.age||0,frame:+n.frame||0,
+    winner_point_count:+n.winner_point_count||0,
+    winner_point_covariance:Array.isArray(n.winner_point_covariance)?n.winner_point_covariance.map(v=>+v||0):[]
+  };
+}
+function v322CopyJsonValue(value, fallback){
+  try{return JSON.parse(JSON.stringify(value));}catch(_e){return fallback;}
+}
+function v322SetObjectTemplateStatus(text){
+  const el=$('objectTemplateStatus');
+  if(el) el.textContent=text;
+}
+function v322ObjectTemplateFileName(template){
+  const raw=String(template?.template_id||'object_template').trim().toLowerCase();
+  const id=(raw.replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'object_template').slice(0,80);
+  return `${id}_gng_template_v1.json`;
+}
+function v322CreateObjectTemplate(){
+  const templateId=String($('objectTemplateId')?.value||'object_template_v1').trim()||'object_template_v1';
+  const displayName=String($('objectTemplateName')?.value||templateId).trim()||templateId;
+  const rawYawDeg=+($('objectTemplateYawDeg')?.value||0);
+  const yawDeg=Number.isFinite(rawYawDeg)?clamp(rawYawDeg,-180,180):0;
+  const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];
+  return {
+    schema_version:1,
+    kind:'object_template',
+    template_id:templateId,
+    display_name:displayName,
+    canonical_yaw_deg:yawDeg,
+    created_at:new Date().toISOString(),
+    source:{sample:state.sample,point_cloud_source:$('pointCloudSource')?.value||'',gng_algorithm:gngAlgorithm()},
+    gng:{
+      nodes:(state.nodes||[]).map(v322CopyObjectTemplateNode),
+      edges:(state.edges||[]).map((e,i)=>({a:+e.a||0,b:+e.b||0,age:+e.age||0,id:e.id??i})),
+      node_attributes:v322CopyJsonValue(state.nodeStats,[]),
+      node_clusters:v322CopyJsonValue(state.nodeClusters,[]),
+      node_features:v322CopyJsonValue(nodeFeatures,[])
+    }
+  };
+}
+function v323CopyObjectSurfacePoint(point, idx){
+  const p=point||{};
+  const value={id:p.id??idx,x:+p.x||0,y:+p.y||0,z:+p.z||0,label:p.label||'surface'};
+  if(Number.isFinite(+p.nx)&&Number.isFinite(+p.ny)&&Number.isFinite(+p.nz)){
+    value.nx=+p.nx;value.ny=+p.ny;value.nz=+p.nz;
+  }
+  return value;
+}
+function v323CreateObjectSurfaceDataset(){
+  const template=v322CreateObjectTemplate();
+  const surfacePoints=(state.objectSurfacePoints||[]).map(v323CopyObjectSurfacePoint);
+  const hasSurfaceGng=$('pointCloudSource')?.value==='object_surface'&&(state.nodes||[]).length>=2;
+  return {
+    schema_version:1,
+    kind:'object_surface_dataset',
+    dataset_id:template.template_id,
+    display_name:template.display_name,
+    canonical_yaw_deg:template.canonical_yaw_deg,
+    created_at:template.created_at,
+    source:{...template.source,source_mesh:{format:'procedural_surface',file_name:null,checksum:null}},
+    surface_points:surfacePoints,
+    gng_template:hasSurfaceGng?template:null
+  };
+}
+function v323ObjectSurfaceDatasetFileName(dataset){
+  const raw=String(dataset?.dataset_id||'object_surface').trim().toLowerCase();
+  const id=(raw.replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'object_surface').slice(0,80);
+  return `${id}_object_surface_dataset_v1.json`;
+}
+function v323SaveObjectSurfaceDataset(){
+  if(!(state.objectSurfacePoints||[]).length){
+    v322SetObjectTemplateStatus('保存不可: 完全表面点群がありません。');
+    return;
+  }
+  const dataset=v323CreateObjectSurfaceDataset();
+  const blob=new Blob([JSON.stringify(dataset,null,2)],{type:'application/json'});
+  const anchor=document.createElement('a');
+  anchor.href=URL.createObjectURL(blob);
+  anchor.download=v323ObjectSurfaceDatasetFileName(dataset);
+  anchor.click();
+  setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+  const gngText=dataset.gng_template?`, GNG nodes=${dataset.gng_template.gng.nodes.length}`:', GNG未同梱';
+  v322SetObjectTemplateStatus(`完全表面点群データセット保存: points=${dataset.surface_points.length}${gngText}`);
+}
+function v322NormalizeObjectTemplate(value){
+  if(!value||typeof value!=='object'||value.kind!=='object_template') throw new Error('object_template JSON ではありません。');
+  const graph=value.gng;
+  if(!graph||typeof graph!=='object') throw new Error('gng がありません。');
+  const nodes=(Array.isArray(graph.nodes)?graph.nodes:[]).map(normalizeGraphNode).filter(Boolean);
+  if(nodes.length<2) throw new Error('GNGノードが2個未満です。');
+  const edges=(Array.isArray(graph.edges)?graph.edges:[]).map(normalizeGraphEdge).filter(edge=>edge&&nodes[edge.a]&&nodes[edge.b]);
+  return {
+    schema_version:1,
+    kind:'object_template',
+    template_id:String(value.template_id||'object_template_v1'),
+    display_name:String(value.display_name||value.template_id||'Object template'),
+    canonical_yaw_deg:Number.isFinite(+(value.canonical_yaw_deg||0))?clamp(+(value.canonical_yaw_deg||0),-180,180):0,
+    created_at:String(value.created_at||''),
+    source:v322CopyJsonValue(value.source,{}),
+    gng:{
+      nodes,
+      edges,
+      node_attributes:v322CopyJsonValue(graph.node_attributes,[]),
+      node_clusters:v322CopyJsonValue(graph.node_clusters,[]),
+      node_features:v322CopyJsonValue(graph.node_features,[])
+    }
+  };
+}
+function v322UpdateObjectTemplateControls(){
+  const template=state.objectTemplate;
+  if($('objectTemplateClearBtn')) $('objectTemplateClearBtn').disabled=!template;
+  if(!template){
+    v322SetObjectTemplateStatus('テンプレート: 未読込');
+    return;
+  }
+  if($('objectTemplateId')) $('objectTemplateId').value=template.template_id;
+  if($('objectTemplateName')) $('objectTemplateName').value=template.display_name;
+  if($('objectTemplateYawDeg')) $('objectTemplateYawDeg').value=String(template.canonical_yaw_deg);
+  v322SetObjectTemplateStatus(`テンプレート: ${template.display_name} / nodes=${template.gng.nodes.length}, edges=${template.gng.edges.length}, yaw=${template.canonical_yaw_deg.toFixed(1)} deg`);
+}
+function v322SaveObjectTemplate(){
+  if((state.nodes||[]).length<2){
+    v322SetObjectTemplateStatus('保存不可: 現在GNGのノードが2個未満です。');
+    return;
+  }
+  const template=v322CreateObjectTemplate();
+  const blob=new Blob([JSON.stringify(template,null,2)],{type:'application/json'});
+  const anchor=document.createElement('a');
+  anchor.href=URL.createObjectURL(blob);
+  anchor.download=v322ObjectTemplateFileName(template);
+  anchor.click();
+  setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+  v322SetObjectTemplateStatus(`テンプレート保存: ${template.display_name} / nodes=${template.gng.nodes.length}, edges=${template.gng.edges.length}`);
+}
+async function v322LoadObjectTemplateFile(file){
+  if(!file) return;
+  v322SetObjectTemplateStatus(`テンプレート読込中: ${file.name}`);
+  try{
+    const template=v322NormalizeObjectTemplate(JSON.parse(await file.text()));
+    state.objectTemplate=template;
+    v322UpdateObjectTemplateControls();
+    renderAll();
+  }catch(error){
+    v322SetObjectTemplateStatus(`テンプレート読込失敗: ${error&&error.message?error.message:error}`);
+  }
+}
+function v322SetupObjectTemplateControls(){
+  const fileEl=$('objectTemplateFile');
+  if(!fileEl||fileEl.dataset.boundV322) return;
+  fileEl.dataset.boundV322='1';
+  $('objectTemplateSaveBtn').onclick=v322SaveObjectTemplate;
+  $('objectSurfaceDatasetSaveBtn').onclick=v323SaveObjectSurfaceDataset;
+  $('objectTemplateLoadBtn').onclick=()=>{fileEl.value='';fileEl.click();};
+  $('objectTemplateClearBtn').onclick=()=>{state.objectTemplate=null;v322UpdateObjectTemplateControls();renderAll();};
+  $('showObjectTemplate').addEventListener('change',renderAll);
+  fileEl.addEventListener('change',()=>v322LoadObjectTemplateFile(fileEl.files&&fileEl.files[0]));
+  v322UpdateObjectTemplateControls();
 }
 function normalizeImportedPoint(point, idx){
   if(Array.isArray(point)){
@@ -4816,6 +5007,37 @@ function viewerLayerVisible(id,defaultValue=true){
   return el ? !!el.checked : defaultValue;
 }
 
+function drawObjectTemplate(ctx,c){
+  const template=state.objectTemplate;
+  if(!template||!$('showObjectTemplate')?.checked) return;
+  const graph=template.gng;
+  if(!graph||!graph.nodes.length) return;
+  ctx.save();
+  ctx.globalAlpha=.72;
+  ctx.strokeStyle='#38bdf8';
+  ctx.lineWidth=1.35;
+  ctx.setLineDash([5,3]);
+  const edgeStride=v308DrawStride(graph.edges.length,900);
+  for(let i=0;i<graph.edges.length;i+=edgeStride){
+    const edge=graph.edges[i];
+    if(!graph.nodes[edge.a]||!graph.nodes[edge.b]) continue;
+    const a=project(graph.nodes[edge.a],c),b=project(graph.nodes[edge.b],c);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const nodeStride=v308DrawStride(graph.nodes.length,650);
+  for(let i=0;i<graph.nodes.length;i+=nodeStride){
+    const p=project(graph.nodes[i],c);
+    ctx.fillStyle='#facc15';
+    ctx.beginPath();ctx.arc(p.x,p.y,2.4,0,TAU);ctx.fill();
+  }
+  ctx.globalAlpha=.92;
+  ctx.fillStyle='#bae6fd';
+  ctx.font='700 12px sans-serif';
+  ctx.fillText(`TEMPLATE: ${template.display_name}`,14,c.height-18);
+  ctx.restore();
+}
+
 function render(canvasId,withGrasp){
   const c=$(canvasId),ctx=c.getContext('2d');
   clearRobotWebglLayer(c);
@@ -4839,6 +5061,7 @@ function render(canvasId,withGrasp){
     }
     ctx.globalAlpha=1;
   }
+  drawObjectTemplate(ctx,c);
   if(state.nodes.length){
     const edgeColor=gngEdgeColor(),ew=gngEdgeWidth(),ns=gngNodeSize(),eo=gngEdgeOpacity(),no=gngNodeOpacity();
     if(viewerLayerVisible('showGngEdges',true)&&state.edges.length){
@@ -6346,6 +6569,7 @@ function robotRenderStatusText(){
 function renderAll(){const mode=viewerMode();render('viewTopo',mode==='grasp');$('topoOverlay').textContent=state.points.length?`Viewer: ${viewerMode()==='grasp'?'Grasp / 把持姿勢':'Mapping / 点群・GNG'}
 ${labelOf(state.sample)}
 points=${state.points.length}, GNG nodes=${state.nodes.length}, edges=${state.edges.length}
+Template: ${state.objectTemplate?`${state.objectTemplate.display_name} / nodes=${state.objectTemplate.gng.nodes.length}, edges=${state.objectTemplate.gng.edges.length}${$('showObjectTemplate')?.checked?' / overlay=on':' / overlay=off'}`:'none'}
 defect: hole ${Math.round(+$('holeRatio').value*100)}%, missing ${Math.round(+$('missingRatio').value*100)}%, outlier ${Math.round(+$('outlierRatio').value*100)}%
 acquisition: ${$('motionPattern').selectedOptions[0].textContent}, jitter=${(+$('motionAmp').value).toFixed(4)} m, scan=${(+$('motionHz').value).toFixed(1)} Hz
 GNG mode: ${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / alg=${gngAlgorithmLabel()}${state.gng&&state.gng.mode==='offline'?`, offline training points=${(state.gng.trainingPoints||[]).length}`:''}
@@ -7258,7 +7482,7 @@ $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='Point-cloud source switched to imported frames.';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'Point-cloud source switched to object surface without depth, occlusion, table, holes, missing points, or outliers.':'Point-cloud source switched to synthetic depth.';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
-  bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();
+  bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern','playbackSpeed'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
 setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');

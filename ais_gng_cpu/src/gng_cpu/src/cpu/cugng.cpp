@@ -56,6 +56,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 
     // 学習回数
     frame_number = 0;
+    map_delta_frame_open = false;
 
     // 積算誤差による追加
 #ifdef ADD_NODE_ERR
@@ -75,6 +76,12 @@ void CUGNG::clear() {
     grid_node_num.clear();
     training_events.clear();
     training_event_num = 0;
+    node_update_recorded.clear();
+    updated_node_ids.clear();
+    node_deltas.clear();
+    edge_deltas.clear();
+    map_delta_capture_enabled = false;
+    map_delta_frame_open = false;
 }
 void CUGNG::setTrainingEventCapture(bool enable) {
     if (enable && training_events.empty()) {
@@ -101,6 +108,93 @@ const GngTrainingEvent* CUGNG::getTrainingEvents(uint32_t *num) const {
         *num = training_event_num;
     }
     return training_event_num == 0 ? nullptr : training_events.data();
+}
+
+GngNodeKey CUGNG::nodeKey(const Node &node) {
+    GngNodeKey key;
+    key.id = static_cast<uint16_t>(node.id);
+    key.frame = node.frame;
+    return key;
+}
+
+void CUGNG::setMapDeltaCapture(bool enable) {
+    if (enable == map_delta_capture_enabled) return;
+    map_delta_capture_enabled = enable;
+    map_delta_frame_open = false;
+    updated_node_ids.clear();
+    node_deltas.clear();
+    edge_deltas.clear();
+    if (enable) {
+        node_update_recorded.assign(node_num_max, 0U);
+    } else {
+        node_update_recorded.clear();
+    }
+}
+
+void CUGNG::beginMapDeltaFrame() {
+    if (!map_delta_capture_enabled || map_delta_frame_open) {
+        return;
+    }
+    for (const uint16_t id : updated_node_ids) {
+        node_update_recorded[id] = 0U;
+    }
+    updated_node_ids.clear();
+    node_deltas.clear();
+    edge_deltas.clear();
+    map_delta_frame_open = true;
+}
+
+void CUGNG::recordNodeDelta(const Node &node, uint8_t operation) {
+    if (!map_delta_capture_enabled || node.id == NODE_NOID ||
+        node.id >= node_update_recorded.size()) {
+        return;
+    }
+    beginMapDeltaFrame();
+    const uint16_t id = static_cast<uint16_t>(node.id);
+    if (operation == GNG_DELTA_UPDATE) {
+        if (node_update_recorded[id] != 0U) return;
+        node_update_recorded[id] = 1U;
+        updated_node_ids.push_back(id);
+    }
+    GngNodeDelta delta;
+    delta.key = nodeKey(node);
+    delta.operation = operation;
+    node_deltas.push_back(delta);
+}
+
+void CUGNG::recordEdgeDelta(const Node &first, const Node &second, uint8_t operation) {
+    if (!map_delta_capture_enabled || first.id == NODE_NOID || second.id == NODE_NOID ||
+        first.id >= node_update_recorded.size() ||
+        second.id >= node_update_recorded.size()) {
+        return;
+    }
+    beginMapDeltaFrame();
+    GngEdgeDelta delta;
+    delta.first = nodeKey(first);
+    delta.second = nodeKey(second);
+    if (delta.second.id < delta.first.id ||
+        (delta.second.id == delta.first.id && delta.second.frame < delta.first.frame)) {
+        std::swap(delta.first, delta.second);
+    }
+    delta.operation = operation;
+    edge_deltas.push_back(delta);
+}
+
+void CUGNG::finishMapDeltaFrame() {
+    map_delta_frame_open = false;
+}
+
+const GngMapDelta* CUGNG::getMapDelta() {
+    if (!map_delta_capture_enabled) {
+        return nullptr;
+    }
+    map_delta_view.version = 1;
+    map_delta_view.frame_number = frame_number;
+    map_delta_view.node_delta_count = static_cast<uint32_t>(node_deltas.size());
+    map_delta_view.edge_delta_count = static_cast<uint32_t>(edge_deltas.size());
+    map_delta_view.node_deltas = node_deltas.empty() ? nullptr : node_deltas.data();
+    map_delta_view.edge_deltas = edge_deltas.empty() ? nullptr : edge_deltas.data();
+    return &map_delta_view;
 }
 
 void CUGNG::beginTrainingEvents() {
@@ -474,6 +568,7 @@ void CUGNG::delete_node(uint32_t idx) {
     auto& node = nodes[idx];
     if (node.id == NODE_NOID)
         return;
+    recordNodeDelta(node, GNG_DELTA_REMOVE);
     // gridから削除
     auto& g1 = grid[node.grid_i];
     uint32_t last = --grid_node_num[node.grid_i];
@@ -507,9 +602,15 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
     if (new_index != node.grid_i && grid_node_num[new_index] >= NODE_GRID_NODE_NUM_NAX) {
         return;
     }
+    const bool position_changed = map_delta_capture_enabled &&
+        (node.pos[0] != new_pos[0] || node.pos[1] != new_pos[1] ||
+         node.pos[2] != new_pos[2]);
     node.pos[0] = new_pos[0];
     node.pos[1] = new_pos[1];
     node.pos[2] = new_pos[2];
+    if (position_changed) {
+        recordNodeDelta(node, GNG_DELTA_UPDATE);
+    }
 
     // 動かさない
     if (new_index == node.grid_i) {
@@ -558,6 +659,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             node.grid_vec_i = grid_node_num[grid_i]++;
             g1[node.grid_vec_i] = i;
             node_num++;
+            recordNodeDelta(node, GNG_DELTA_ADD);
             return i;
         }
     }
@@ -571,6 +673,7 @@ void CUGNG::disconnect(uint32_t idx1, uint32_t idx2) {
     // エッジ
     auto& n1 = nodes[idx1];
     auto& n2 = nodes[idx2];
+    const bool was_connected = edge_count[getEdgeIndex(idx1, idx2)] != EDGE_NO_CONNECT;
     auto& e1 = n1.edges;
     auto& e2 = n2.edges;
     // 自身のEdgesから相手を消す
@@ -589,6 +692,9 @@ void CUGNG::disconnect(uint32_t idx1, uint32_t idx2) {
         }
     }
     edge_count[getEdgeIndex(idx1, idx2)] = EDGE_NO_CONNECT;
+    if (was_connected) {
+        recordEdgeDelta(n1, n2, GNG_DELTA_REMOVE);
+    }
 }
 
 void CUGNG::disconnect_all(uint32_t idx) {
@@ -603,6 +709,7 @@ void CUGNG::disconnect_all(uint32_t idx) {
         for (j = 0; j < n2.edge_num; ++j) {
             // 相手から見たノードが自分のIndexのときなら
             if (n2.edges[j] == idx) {
+                recordEdgeDelta(n1, n2, GNG_DELTA_REMOVE);
                 n2.edges[j] = n2.edges[--n2.edge_num];
                 edge_count[getEdgeIndex(idx, n2_id)] = EDGE_NO_CONNECT;
                 break;
@@ -631,6 +738,7 @@ void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
     // 末尾に追加
     n1.edges[n1.edge_num++] = idx2;
     n2.edges[n2.edge_num++] = idx1;
+    recordEdgeDelta(n1, n2, GNG_DELTA_ADD);
 }
 
 void CUGNG::check_delete_no_edge_and_decay_eta() {

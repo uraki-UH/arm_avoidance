@@ -45,6 +45,14 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
+MY_API void gng_setMapDeltaCapture(uint8_t enable) {
+    gng.n1.setMapDeltaCapture(enable != 0);
+}
+
+MY_API const GngMapDelta* gng_getTopologicalMapDelta() {
+    return gng.n1.getMapDelta();
+}
+
 MY_API void gng_setTrainingEventCapture(uint8_t enable) {
     gng.n1.setTrainingEventCapture(enable != 0);
 }

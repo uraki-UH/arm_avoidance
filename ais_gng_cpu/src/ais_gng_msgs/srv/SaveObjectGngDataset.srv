@@ -1,0 +1,5 @@
+string dataset_id
+string output_dir
+---
+bool success
+string message

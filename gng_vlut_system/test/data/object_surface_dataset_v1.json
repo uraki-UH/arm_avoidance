@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "kind": "object_surface_dataset",
+  "dataset_id": "mug_template_test",
+  "display_name": "Mug template test",
+  "canonical_yaw_deg": 0.0,
+  "surface_points": [
+    {"id": 0, "x": 0.0, "y": 0.0, "z": 0.0, "label": "body"},
+    {"id": 1, "x": 0.1, "y": 0.0, "z": 0.0, "label": "body"},
+    {"id": 2, "x": 0.0, "y": 0.1, "z": 0.0, "label": "handle"}
+  ],
+  "gng_template": {
+    "schema_version": 1,
+    "kind": "object_template",
+    "template_id": "mug_template_test",
+    "display_name": "Mug template test",
+    "canonical_yaw_deg": 0.0,
+    "gng": {
+      "nodes": [
+        {"id": 10, "x": 0.0, "y": 0.0, "z": 0.0, "nx": 0.0, "ny": 0.0, "nz": 1.0, "label": "body", "winner_point_count": 2, "winner_point_covariance": [0.01, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.001]},
+        {"id": 11, "x": 0.1, "y": 0.0, "z": 0.0, "nx": 0.0, "ny": 0.0, "nz": 1.0, "label": "body", "winner_point_count": 3, "winner_point_covariance": [0.02, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.002]},
+        {"id": 12, "x": 0.0, "y": 0.1, "z": 0.0, "nx": 0.0, "ny": 0.0, "nz": 1.0, "label": "handle", "winner_point_count": 4, "winner_point_covariance": [0.03, 0.0, 0.0, 0.0, 0.03, 0.0, 0.0, 0.0, 0.003]}
+      ],
+      "edges": [
+        {"a": 0, "b": 1},
+        {"a": 1, "b": 2},
+        {"a": 2, "b": 0}
+      ],
+      "node_clusters": [
+        {"id": 0, "idx": [0, 1, 2]}
+      ]
+    }
+  }
+}

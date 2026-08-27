@@ -113,6 +113,7 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     static LiDAR_Config prev_config;
     static bool no_prev_config = true;
     if (!initialized) return;
+    n1.beginMapDeltaFrame();
     // 入力点群の確保
     int i;
 
@@ -184,9 +185,12 @@ void GNG::exec() {
     if (!initialized)
         return;
 
+    n1.beginMapDeltaFrame();
+
 #ifdef GNG_ENABLE_AUTHENTICATION
     // ライセンス認証ブロック
     if(!licenceAuthentication()){
+        n1.finishMapDeltaFrame();
         return;
     }
 #endif
@@ -217,6 +221,7 @@ void GNG::exec() {
     // クラスタリング
     cl.clustering();
     auto t6 = std::chrono::system_clock::now();
+    n1.finishMapDeltaFrame();
 
 #ifdef GNG_ENABLE_FRAME_LOG
     log.println("I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d", 

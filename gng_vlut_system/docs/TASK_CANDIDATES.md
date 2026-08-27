@@ -169,6 +169,13 @@ C空間で一様にノードを置く手法ではこの自由度がノード列�
 - 現在の `DATASET_GUIDE.md` とComposeが参照する `dataset_pointcloud_player` package本体は、現worktree、Git履歴、stash、`/home/fuzzrobo` 配下で未確認。分離前に復元元の特定、または再実装範囲の確定が必要。
 - 完了条件は、新リポジトリ単独でのDocker build、対象データセットの再生、`PointCloud2` のtopic名・frame・QoSの検証、`uraki_ws` 側との接続確認、両リポジトリの実行ガイド更新。
 
+### 物体GNGテンプレートのyaw照合
+
+- `object_template`の完全形GNGと、深度由来で欠損を含む環境GNGまたはクラスタを照合する評価式の確定。
+- テンプレート側から環境側へ対応できた構造だけを加点し、遮蔽・視野外によるテンプレート側の未対応部分は減点しない方式の比較。
+- 探索自由度は当面`canonical_yaw_deg`を基準としたyawのみとし、XY平行移動や姿勢推定は照合対象外。
+- 対応候補、支持率、yaw score、未観測領域をテンプレート表示へ重ねる結果形式の設計。
+
 ### 今後の記入ルール
 
 - このファイルは手で更新する。

@@ -7,6 +7,8 @@
 
 #include "define.h"
 
+#include <cstdint>
+
 struct Node_d{
     uint32_t id1;
     float id1_d2;
@@ -33,6 +35,7 @@ class CUGNG {
     uint16_t training_event_winner_rank_max = 1;
     vector<GngTrainingEvent> training_events;
     uint32_t training_event_num = 0;
+    bool map_delta_capture_enabled = false;
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
@@ -43,6 +46,11 @@ class CUGNG {
     void setTrainingEventCapture(bool enable);
     void setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
     const GngTrainingEvent* getTrainingEvents(uint32_t *num) const;
+    void setMapDeltaCapture(bool enable);
+    const GngMapDelta* getMapDelta();
+    void beginMapDeltaFrame();
+    void finishMapDeltaFrame();
+    void recordNodeDelta(const Node &node, uint8_t operation);
 
     void getMinAll(Vec3f& p, Node_d& result);
     bool getMinGrid(Vec3f& p, Node_d& result);
@@ -86,4 +94,13 @@ class CUGNG {
         const Node &winner_node,
         const Vec3f &input_point);
     void recordTrainingEvents(const Node_d &winners, const Vec3f &input_point);
+    void recordEdgeDelta(const Node &first, const Node &second, uint8_t operation);
+    static GngNodeKey nodeKey(const Node &node);
+
+    bool map_delta_frame_open = false;
+    vector<uint8_t> node_update_recorded;
+    vector<uint16_t> updated_node_ids;
+    vector<GngNodeDelta> node_deltas;
+    vector<GngEdgeDelta> edge_deltas;
+    GngMapDelta map_delta_view;
 };

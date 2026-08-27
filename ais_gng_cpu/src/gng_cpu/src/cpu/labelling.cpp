@@ -18,6 +18,7 @@ void Labelling::init(NodeConfig *_gng_config, LabelConfig *_label_config, CUGNG 
 void Labelling::labelling_fuzzy() {
     // ラベリング処理
     time.update(label_config->lpf_time);
+    const bool capture_map_delta = gng->map_delta_capture_enabled;
     float h_exp[3];
     int i, num1, num2, num, max_label;
     float angle;
@@ -26,11 +27,28 @@ void Labelling::labelling_fuzzy() {
     for (auto &node : gng->nodes) {
         if (node.id == NODE_NOID)
             continue;
+        Vec3f previous_normal;
+        if (capture_map_delta) {
+            previous_normal = node.normal;
+        }
         gng->normal_vector(node);
+        if (capture_map_delta &&
+            (node.normal[0] != previous_normal[0] ||
+             node.normal[1] != previous_normal[1] ||
+             node.normal[2] != previous_normal[2]))
+        {
+            gng->recordNodeDelta(node, GNG_DELTA_UPDATE);
+        }
     }
     for (auto &node : gng->nodes) {
         if (node.id == NODE_NOID)
             continue;
+        float previous_rho;
+        int previous_label;
+        if (capture_map_delta) {
+            previous_rho = node.rho;
+            previous_label = node.label;
+        }
         // 新規追加
         // if (node.age != 0)
         //     node.vel = time->lpf_a * node.vel + time->lpf_dt_T * node.pos.norm(node.pos_prev);
@@ -70,6 +88,10 @@ void Labelling::labelling_fuzzy() {
             node.label = max_label + 1;
         }else{
             node.label = DEFAULT;  // ラベルが決まらない場合はUNKNOWN_OBJECT
+        }
+        if (capture_map_delta &&
+            (node.rho != previous_rho || node.label != previous_label)) {
+            gng->recordNodeDelta(node, GNG_DELTA_UPDATE);
         }
     }
 }

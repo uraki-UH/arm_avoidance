@@ -40,6 +40,7 @@ endif()
 
 # visualizar
 ament_auto_add_executable(visualizar src/visualizar.cpp)
+ament_auto_add_executable(object_gng_dataset_exporter_node src/object_gng_dataset_exporter.cpp)
 ament_auto_add_executable(topological_query_node src/topological_query/topological_query_node.cpp src/topological_query/topological_reachability.cpp)
 ament_auto_add_executable(topological_grid_node src/topological_grid/topological_grid_node.cpp src/topological_grid/topological_grid_assignment.cpp)
 ament_target_dependencies(topological_grid_node voxel_msgs)
@@ -165,6 +166,11 @@ endif()
 install(
  DIRECTORY include config launch
  DESTINATION share/${PROJECT_NAME}/
+)
+
+install(
+  PROGRAMS scripts/save_object_gng_dataset
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_auto_package()

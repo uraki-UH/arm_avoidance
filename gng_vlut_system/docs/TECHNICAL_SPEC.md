@@ -829,3 +829,51 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 `ToPoDualArm10000`の`left_arm` profileでは`L_link1`を設定どおり除外し、
 `L_link2`から`L_link7`、`L_gripper_base`、`L_finger_left`、`L_finger_right`を収録する。
 `L_shoulder_mount`と`L_tcp`はcollision geometryを持たないため関係レコードを生成しない。
+
+## 15. 単体HTMLの物体GNGテンプレート
+
+`ToPo-FUZZY_Manipulation_v1.html`は、現在のGNGを物体テンプレートJSONとして保存し、
+別の環境GNGを保持したまま読み込み・重ね描画できる。
+
+| 項目 | 仕様 |
+|---|---|
+| schema | `schema_version: 1`、`kind: object_template` |
+| 識別情報 | `template_id`、`display_name`、`canonical_yaw_deg` |
+| GNG本体 | `gng.nodes`、`gng.edges` |
+| 付随情報 | `node_attributes`、`node_clusters`、`node_features` |
+| 勝者点群情報 | nodeの`winner_point_count`と`winner_point_covariance` |
+| 表示 | シアン破線edgeと黄色nodeによる環境GNGとの重ね描画 |
+| 完全表面データセット | `kind: object_surface_dataset`、`surface_points`、条件付き`gng_template` |
+
+テンプレートの読込先は環境GNGの`state.nodes`、`state.edges`と分離した
+`state.objectTemplate`とする。テンプレート読込・解除・表示切替は、現在の点群、GNG学習状態、
+クラスタ、ROS入力を変更しない。`canonical_yaw_deg`は登録時の基準方位であり、現段階では
+描画座標への回転や平行移動を行わない。照合器はこの値を候補yawの基準として後段で使用する。
+
+完全表面データセットは、現在の`objectSurfacePoints`を`surface_points`として保存する。
+入力源が`object_surface`で、GNG nodeが2個以上ある場合だけ、同じJSONへ`gng_template`を同梱する。
+深度点群から学習した環境GNGは完全表面データセットへ同梱しない。現段階の`source_mesh`は
+手続き的な完全表面を示すmetadataであり、任意STL/OBJ本体は保存しない。
+
+### 15.1 ROS 2静的マップ配信
+
+`object_template_map_publisher_node`は`object_template`またはGNG同梱済みの
+`object_surface_dataset`を読み、JSONの`template_id`ごとに
+`/<template_id>/topological_map_static`へ`ais_gng_msgs/msg/TopologicalMap`を配信する。
+QoSは`reliable`、depth 1、`transient_local`とする。配信するnodeには位置、法線、`rho`、
+入力点ID、勝者点群数、勝者点群共分散を設定し、edgeと`idx`形式のクラスタも変換する。
+
+```bash
+ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
+  dataset_id:=mug_complete_v1
+```
+
+launchは既定の`/datasets`へ`<dataset_id>_object_surface_dataset_v1.json`を連結して読込先を組み立てる。
+上記の`dataset_id`が`mug_complete_v1`なら、読込先は
+`/datasets/mug_complete_v1_object_surface_dataset_v1.json`、出力topicは
+`/mug_complete_v1/topological_map_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
+ない場合は`gng_template.template_id`を使用する。IDは英字開始の英数字と`_`だけを許可する。
+テストなどで読込先ディレクトリだけを変更する場合は、任意引数`dataset_dir`を使用する。
+
+このtopicは物体認識・照合用であり、ロボット関節空間の`/ToPoDualArm/topological_map_static`を
+置換しない。`gng_viewer_bridge.launch.py`が読むロボット用`gng.bin`と`vlut.bin`も変更しない。

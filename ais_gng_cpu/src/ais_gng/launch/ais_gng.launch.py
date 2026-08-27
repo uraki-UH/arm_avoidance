@@ -23,7 +23,6 @@ def generate_launch_description():
         default_value='',
         description='入力PointCloud2トピックの上書き'
     )
-
     def launch_setup(context, *args, **kwargs):
         backend = LaunchConfiguration('backend').perform(context)
         if backend not in ('cpu', 'gpu'):
@@ -56,7 +55,12 @@ def generate_launch_description():
                 output='screen',
                 # prefix='gdb -ex run -ex bt --args', # for debugging
                 # arguments=['--ros-args', '--log-level', 'WARN'] # no screen log
-            )
+            ),
+            Node(
+                package='ais_gng',
+                executable='object_gng_dataset_exporter_node',
+                output='screen',
+            ),
         ]
 
     return LaunchDescription([

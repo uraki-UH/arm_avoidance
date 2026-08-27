@@ -26,6 +26,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TopologicalCluster.msg"
   "msg/TopologicalNode.msg"
   "msg/TopologicalMap.msg"
+  "srv/SaveObjectGngDataset.srv"
   DEPENDENCIES std_msgs geometry_msgs
 )
 ament_export_dependencies(rosidl_default_runtime)

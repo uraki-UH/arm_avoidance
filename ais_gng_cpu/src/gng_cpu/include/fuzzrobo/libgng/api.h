@@ -94,6 +94,44 @@ struct GngTrainingEvent {
     Vec3 residual={0, 0, 0};
 };
 
+typedef enum {
+    GNG_DELTA_NONE = 0,
+    GNG_DELTA_ADD = 1,
+    GNG_DELTA_UPDATE = 2,
+    GNG_DELTA_REMOVE = 3,
+} GngDeltaOperation;
+
+// ノードIDは再利用されるため、生成フレームと組にして同一性を表す。
+struct GngNodeKey {
+    uint16_t id=0;
+    uint16_t reserved=0;
+    uint32_t frame=0;
+};
+
+struct GngNodeDelta {
+    GngNodeKey key{};
+    uint8_t operation=GNG_DELTA_NONE;
+    uint8_t reserved[3]={0, 0, 0};
+};
+
+// first/secondはNodeKeyの辞書順に正規化される。
+struct GngEdgeDelta {
+    GngNodeKey first{};
+    GngNodeKey second{};
+    uint8_t operation=GNG_DELTA_NONE;
+    uint8_t reserved[3]={0, 0, 0};
+};
+
+// 配列は次のgng_setPointCloudまたはgng_execまでライブラリが所有する。
+struct GngMapDelta {
+    uint32_t version=1;
+    uint32_t frame_number=0;
+    uint32_t node_delta_count=0;
+    uint32_t edge_delta_count=0;
+    const GngNodeDelta *node_deltas=nullptr;
+    const GngEdgeDelta *edge_deltas=nullptr;
+};
+
 /**
  * @brief 初期化
  */
@@ -119,6 +157,18 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
  * @brief GNGを実行する
  */
 void gng_exec();
+
+/**
+ * @brief TopologicalMap差分の記録を切り替える
+ * @param[in] enable 0以外で有効。無効時は変更記録の処理を行わない
+ */
+void gng_setMapDeltaCapture(uint8_t enable);
+
+/**
+ * @brief 直近のgng_execで確定したnode・edge差分を取得する
+ * @return capture無効時はnullptr
+ */
+const GngMapDelta* gng_getTopologicalMapDelta();
 
 /**
  * @brief 学習イベントの記録を切り替える

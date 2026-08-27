@@ -23,7 +23,7 @@ endif()
 option(TARGET_JETSON "build for jetson" OFF)
 option(GNG_ENABLE_AUTHENTICATION "Enable binary signature and YubiKey authentication" OFF)
 option(GNG_ENABLE_FRAME_LOG "Enable per-frame GNG summary logging" ON)
-option(GNG_BUILD_BENCHMARKS "学習イベント転送ベンチマークのビルド" OFF)
+option(GNG_BUILD_BENCHMARKS "APIテストとベンチマークのビルド" OFF)
 
 # --- 警告オプション ---
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -142,6 +142,14 @@ if(GNG_BUILD_BENCHMARKS)
   )
   target_link_libraries(gng_training_event_api_test PRIVATE gng_cpu)
   target_compile_options(gng_training_event_api_test PRIVATE -O3 -DNDEBUG)
+
+  add_executable(
+    gng_map_delta_api_test
+    test/gng_map_delta_api_test.cpp
+  )
+  target_link_libraries(gng_map_delta_api_test PRIVATE gng_cpu)
+  target_compile_options(gng_map_delta_api_test PRIVATE -O3 -DNDEBUG)
+
 endif()
 
 ament_package()
