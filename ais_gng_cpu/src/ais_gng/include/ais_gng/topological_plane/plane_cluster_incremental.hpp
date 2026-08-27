@@ -248,6 +248,10 @@ public:
   // 保持している所属をすべて捨てる。地図の系列が切り替わったときに使う。
   void reset();
 
+  // 次フレームから新規クラスタの種順序にGNG rhoを使うかを切り替える。
+  // 既存クラスタの所属状態はリセットしない。
+  void setUseNodeRhoForSeedOrder(bool enabled);
+
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;

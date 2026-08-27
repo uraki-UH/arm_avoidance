@@ -148,6 +148,12 @@ TEST(PlaneClusterIncremental, ReusesNodeRhoForSeedOrdering)
   ASSERT_EQ(result.clusters.clusters.size(), 1U);
   EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
   EXPECT_NEAR(std::abs(result.clusters.clusters.front().normal.z), 1.0, 1.0e-3);
+
+  clusterizer.setUseNodeRhoForSeedOrder(false);
+  const ClusterResult switched = clusterizer.update(map);
+  ASSERT_EQ(switched.clusters.clusters.size(), 1U);
+  EXPECT_EQ(switched.statistics.clustered_node_count, map.nodes.size());
+  EXPECT_EQ(switched.clusters.clusters.front().id, result.clusters.clusters.front().id);
 }
 
 // 同じ地図をもう一度入れたとき、所属がまったく動かない。

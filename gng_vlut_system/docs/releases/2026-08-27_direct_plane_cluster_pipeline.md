@@ -17,7 +17,8 @@
 
 - `plane_cluster.direct_enabled` (CPU版既定: `true`)
 - `plane_cluster.output_topic` (既定: `/topological_planar_clusters_incremental`)
-- `plane_cluster.use_node_rho_for_seed_order` (CPU直結経路の既定: `true`)。独立ノードの`use_node_rho_for_seed_order`は古いbagとの互換性のため既定`false`。
+- `plane_cluster.use_node_rho_for_seed_order` (CPU直結経路の既定: `true`)。独立ノードの`use_node_rho_for_seed_order`は古いbagとの互換性のため既定`false`。`ais_gng.launch.py`では`use_node_rho_for_seed_order:=true|false`で起動時に上書き、`auto`でYAMLまたはCPU直結側の既定値を使う。
+- 実行中は`ros2 param set /ais_gng_node plane_cluster.use_node_rho_for_seed_order true|false`で、既存のクラスタ所属とIDをリセットせず次フレームから切り替えられる。
 - その他の平面クラスタ設定は`plane_cluster.min_cluster_nodes`など、既存名へ`plane_cluster.`を付けてCPU GNG側で指定する。
 - 従来経路へ戻す場合はCPU GNGで`plane_cluster.direct_enabled:=false`とし、`ais_gng.launch.py`で`plane_clusters_input_topic:=''`を指定する。
 - `ais_gng.launch.py`:`start_plane_cluster` (既定: `true`)。平面クラスタの描画が不要な場合は`false`にする。

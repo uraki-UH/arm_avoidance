@@ -1419,6 +1419,11 @@ void Clusterizer::reset()
     impl_->normal_filter_frame.begin(), impl_->normal_filter_frame.end(), 0U);
 }
 
+void Clusterizer::setUseNodeRhoForSeedOrder(const bool enabled)
+{
+  impl_->options.use_node_rho_for_seed_order = enabled;
+}
+
 ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
 {
   ClusterResult result;

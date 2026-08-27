@@ -63,6 +63,14 @@ def generate_launch_description():
             '空文字は独立ノードでクラスタを再計算'
         )
     )
+    declar_use_node_rho_for_seed_order = DeclareLaunchArgument(
+        'use_node_rho_for_seed_order',
+        default_value='auto',
+        description=(
+            'CPU平面クラスタのGNG rho再利用をtrue/falseで上書き。'
+            'autoはYAMLまたはCPU直結側の既定値を使用'
+        )
+    )
 
     def launch_setup(context, *args, **kwargs):
         backend = LaunchConfiguration('backend').perform(context)
@@ -93,9 +101,16 @@ def generate_launch_description():
         planar_clusters_topic = LaunchConfiguration(
             'planar_clusters_topic').perform(context)
         if backend == 'cpu':
-            parameters.append({
+            plane_parameter_overrides = {
                 'plane_cluster.output_topic': planar_clusters_topic,
-            })
+            }
+            rho_mode = LaunchConfiguration(
+                'use_node_rho_for_seed_order').perform(context)
+            if rho_mode != 'auto':
+                plane_parameter_overrides[
+                    'plane_cluster.use_node_rho_for_seed_order'
+                ] = parse_bool(rho_mode, 'use_node_rho_for_seed_order')
+            parameters.append(plane_parameter_overrides)
 
         nodes = [
             Node(
@@ -152,5 +167,6 @@ def generate_launch_description():
         declar_topological_map_topic,
         declar_planar_clusters_topic,
         declar_plane_clusters_input_topic,
+        declar_use_node_rho_for_seed_order,
         OpaqueFunction(function=launch_setup),
     ])

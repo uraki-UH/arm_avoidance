@@ -613,6 +613,13 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             }
 #endif
             success = true;
+#if defined(AIS_GNG_BACKEND_CPU)
+        } else if (name == "plane_cluster.use_node_rho_for_seed_order") {
+            if (direct_plane_clusterizer_) {
+                direct_plane_clusterizer_->setUseNodeRhoForSeedOrder(p.as_bool());
+            }
+            success = true;
+#endif
         } else if (name == "performance.log_interval_ms") {
             const auto interval_ms = p.as_int();
             if (interval_ms < 0) {
