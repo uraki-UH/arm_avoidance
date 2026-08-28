@@ -278,4 +278,5 @@ ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
 
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
-ros2 launch graspnet_ros2 play_scene.launch.py scene_id:=3 camera:=realsense start:=10 end:=20 hz:=20.0
+ros2 launch graspnet_ros2 play_scene.launch.py scene_id:=3 camera:=realsense start:=10 end:=20 h
+z:=20.0
