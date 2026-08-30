@@ -102,6 +102,7 @@ button{cursor:pointer;font-weight:900}
 .go{background:#2f5f1f;border-color:#00ff00;color:#f8fafc;box-shadow:none}
 .warn{background:#3b2f1a;border-color:#f59e0b;color:#f8fafc}
 .primary{background:#1e3a5f;border-color:#38bdf8;color:#f8fafc}
+.gng-wasm-run{display:block;margin-top:10px}
 .hide{display:none!important}
 .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mini-grid input[type="number"]{margin-top:6px}
@@ -775,7 +776,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
           <div class="full">
             <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">WASMでGNG実行</button>
+            <button id="gngRunWasmGngBtn" class="gng-wasm-run" data-action-kind="run" type="button">WASMでGNG実行</button>
             <div id="gngWasmStatus" class="readout" style="margin-top:6px">標準WASMを自動読込。差し替えはJSとWASMを同時選択。</div>
           </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
