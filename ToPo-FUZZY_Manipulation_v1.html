@@ -625,7 +625,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Handle confidence</label><input id="objectHandleConf" type="range" min="0" max="1" step="0.01" value="0.84"></div>
           <div><label>Shape ambiguity</label><input id="objectAmbiguity" type="range" min="0" max="1" step="0.01" value="0.18"></div>
         </div>
-        <div class="grid2" style="margin-top:12px"><button id="objectRefreshBtn" class="primary">識別スコア更新</button><button id="objectToGraspBtn" class="go">把持位置推定器へ</button></div>
+        <div class="grid2" style="margin-top:12px"><button id="objectRefreshBtn" data-action-kind="data">識別スコア更新</button><button id="objectToGraspBtn" data-action-kind="run">把持位置推定器へ</button></div>
         <div id="objectStatus" class="status">把持位置推定器と同じサンプル設定を参照します。</div>
       </div>
     </aside>
@@ -691,7 +691,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           </div>
           <input id="gngDataFile" type="file" class="hide" accept=".json,.json.gz,.mcap,application/json,application/gzip,application/octet-stream">
           <div class="full">
-            <button id="gngLoadDataBtn" class="primary" type="button">MCAP / ROS bag JSONを読み込む</button>
+            <button id="gngLoadDataBtn" data-action-kind="load" type="button">MCAP / ROS bag JSONを読み込む</button>
             <button id="gngClearDataBtn" class="warn" type="button" style="display:none">読込みデータを破棄</button>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
@@ -715,8 +715,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
           <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm,text/javascript" multiple>
           <div class="full">
-            <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
+            <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMを読み込む</button>
+            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">WASMでGNG実行</button>
             <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNGロジック差し替え用。gng_wasm_core/dist/ の `gng_wasm_core.js` を選択（WASM内蔵済み単一ファイル）。</div>
           </div>
           <details id="wasmParamsSection" class="full gng-params-toggle" style="display:none">
@@ -774,8 +774,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           旧WASMパラメータUIここまで -->
           <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
           <div class="full">
-            <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
+            <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMを読み込む</button>
+            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">WASMでGNG実行</button>
             <div id="gngWasmStatus" class="readout" style="margin-top:6px">標準WASMを自動読込。差し替えはJSとWASMを同時選択。</div>
           </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
@@ -842,11 +842,11 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="full"><label>Region growing threshold</label><div class="control-pair"><input id="regionGrowThreshold" type="range" min="0.1" max="0.95" step="0.01" value="0.68"><input id="regionGrowThresholdNum" type="number" min="0.1" max="0.95" step="0.01" value="0.68"></div></div>
             </div>
           </details>
-        <div class="grid2" style="margin-top:12px"><button id="genBtn" class="primary">サンプル点群を生成</button><button id="gngBtn" class="go">GNG学習を実行</button></div>
-        <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" class="primary">3D点群リアルタイム再生</button><button id="gngPlayBtn" class="go">GNG学習再生</button></div>
-        <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" class="go">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
+        <div class="grid2" style="margin-top:12px"><button id="genBtn" data-action-kind="data">サンプル点群を生成</button><button id="gngBtn" data-action-kind="run">GNG学習を実行</button></div>
+        <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" data-action-kind="play">3D点群リアルタイム再生</button><button id="gngPlayBtn" data-action-kind="play">GNG学習再生</button></div>
+        <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" data-action-kind="run">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
         <div class="grid2" style="margin-top:8px">
-          <button id="rosBridgeStartBtn" class="go">ROS2 ブリッジの起動</button>
+          <button id="rosBridgeStartBtn" data-action-kind="run">ROS2 ブリッジの起動</button>
           <span id="rosBridgeStatus" class="status">ROS bridge: disconnected</span>
         </div>
         <div class="ros-publish-stack">
@@ -914,16 +914,16 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
         <div class="metric"><div class="t">Object</div><div id="mObject" class="v">-</div></div>
       </div>
       <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div><div class="viewer-fuzzy-ik-panel" data-v292-viewer-fuzzy-grasp-button data-view-panel="play">
-  <button id="viewerFuzzyIkBtn" type="button">ファジィ把持実行</button>
+  <button id="viewerFuzzyIkBtn" data-action-kind="run" type="button">ファジィ把持実行</button>
   <div id="viewerFuzzyIkReadout" class="viewer-fuzzy-ik-readout">Ready: grasp + IK</div>
-</div><div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
+</div><div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
 <div><label>X [m]</label><div class="control-pair"><input id="viewerBaseTfX" type="range" min="-1.0" max="1.0" step="0.005" value="0.25"><input id="viewerBaseTfXNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.25"></div></div>
 <div><label>Y [m]</label><div class="control-pair"><input id="viewerBaseTfY" type="range" min="-1.0" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfYNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Z [m]</label><div class="control-pair"><input id="viewerBaseTfZ" type="range" min="-0.5" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfZNum" type="number" min="-0.5" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
-</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" type="button" class="go">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" data-action-kind="run" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" data-action-kind="run" type="button">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
@@ -940,7 +940,7 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="backg
           <div><label>URDF palm height [m]</label><input id="fingerHeight" type="number" min="0.015" max="0.12" step="0.005" value="0.045"></div>
           <div><label>URDF source</label><input id="robotUrdfSource" type="text" value="dual_arm_urdf/dual_arm_robot.urdf" spellcheck="false"></div>
           <div><label>Target link hint</label><input id="robotUrdfTargetHint" type="text" placeholder="auto" spellcheck="false"></div>
-          <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="robotUrdfLoadBtn" type="button">Load URDF</button><div id="robotUrdfStatus" class="readout" style="flex:1 1 320px">URDF not loaded</div></div>
+          <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="robotUrdfLoadBtn" data-action-kind="load" type="button">Load URDF</button><div id="robotUrdfStatus" class="readout" style="flex:1 1 320px">URDF not loaded</div></div>
           <div><label>Gripper display</label><select id="gripperDisplay"><option value="solid">ToPoArm STL gripper</option><option value="wire">ToPoArm STL wire</option><option value="simple">simple grasp marker</option><option value="off">off</option></select></div>
           <div><label>Collision check</label><select id="collisionCheck"><option value="on" selected>on / 点群・GNG衝突回避</option><option value="off">off</option></select></div>
           <div><label>Hard reject collisions</label><select id="collisionHardReject"><option value="on" selected>on / 干渉姿勢を候補除外</option><option value="off">off / 減点のみ</option></select></div>
@@ -953,8 +953,8 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="backg
           <div><label>Approach preference</label><select id="approachPref"><option value="auto">auto</option><option value="side">side</option><option value="top">top</option><option value="handle">handle</option></select></div>
           <div><label>Candidate count</label><input id="candidateN" type="number" min="3" max="12" step="1" value="6"></div>
         </div>
-        <div class="grid2" style="margin-top:12px"><button id="inferBtn" class="go">ファジィ把持推定</button></div>
-        <div class="grid2" style="margin-top:8px"><button id="copyPoseBtn" class="primary">Best Pose JSONコピー</button></div>
+        <div class="grid2" style="margin-top:12px"><button id="inferBtn" data-action-kind="run">ファジィ把持推定</button></div>
+        <div class="grid2" style="margin-top:8px"><button id="copyPoseBtn" data-action-kind="data">Best Pose JSONコピー</button></div>
         <div class="grid2" style="margin-top:8px"><button id="regenInferBtn" class="warn">再生成→GNG→推定</button></div>
         <div id="graspStatus" class="status">このTASK内で、点群生成→内包GNGトポロジカルマッピング→ファジィ把持位置推定を実行します。</div>
       </div>
@@ -966,7 +966,7 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="backg
         <div class="metric"><div class="t">Required Width</div><div id="gWidth" class="v">-</div></div>
         <div class="metric"><div class="t">Candidates</div><div id="gCandN" class="v">0</div></div>
       </div>
-      <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div id="graspOverlay" class="overlay" data-view-panel="info">No estimation yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div id="graspCornerNote" class="viewer-corner-note" data-view-panel="info">Gripper pose<br>Orbit / Pan / Zoom</div><div id="graspTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+      <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div id="graspOverlay" class="overlay" data-view-panel="info">No estimation yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div id="graspCornerNote" class="viewer-corner-note" data-view-panel="info">Gripper pose<br>Orbit / Pan / Zoom</div><div id="graspTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
       <div class="panel fuzzy-rule-panel" id="explicitFuzzyRulePanel" style="margin-top:14px">
         <h2>明示的ファジィ IF-THEN ルールエディタ</h2>
@@ -989,10 +989,10 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
             <div class="fuzzy-editor-card"><h3>4. 言語ラベル / Membership Function</h3><div class="fuzzy-mf-form">
               <div><label>Input feature</label><select id="fzMfFeature"></select></div><div><label>Label name</label><input id="fzMfLabel" type="text" value="High"></div><div><label>MF shape</label><select id="fzMfShape"><option value="triangular">三角型 / triangular</option><option value="gaussian">ガウス型 / Gaussian</option><option value="trapezoid">台形型 / trapezoid</option><option value="rbf">ラジアル基底関数型 / RBF</option></select></div>
               <div class="fuzzy-param-grid"><div><label>a</label><input id="fzMfA" type="number" min="0" max="1" step="0.01" value="0.55"></div><div><label>b / center</label><input id="fzMfB" type="number" min="0" max="1" step="0.01" value="0.78"></div><div><label>c / sigma</label><input id="fzMfC" type="number" min="0" max="1" step="0.01" value="1.00"></div><div><label>d / radius</label><input id="fzMfD" type="number" min="0" max="1" step="0.01" value="1.00"></div></div>
-            </div><div class="fuzzy-actions"><button id="fzAddMfBtn" class="primary">ラベル追加 / 更新</button><button id="fzDeleteMfBtn" class="warn">選択ラベル削除</button></div><div id="fuzzyMfList" class="fuzzy-mf-table"></div></div>
-            <div class="fuzzy-editor-card"><h3>5. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" class="primary">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
-            <div class="fuzzy-editor-card full"><h3>6. ルール構造エディタ</h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" class="primary">ルール追加</button><button id="fzApplyRulesBtn" class="go">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn">JSONへ書き出し</button><button id="fzImportRulesBtn">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
-            <div class="fuzzy-editor-card full"><h3>7. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" class="primary">確認画面を更新</button><button id="fzDownloadRulesBtn">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
+            </div><div class="fuzzy-actions"><button id="fzAddMfBtn" data-action-kind="data">ラベル追加 / 更新</button><button id="fzDeleteMfBtn" class="warn">選択ラベル削除</button></div><div id="fuzzyMfList" class="fuzzy-mf-table"></div></div>
+            <div class="fuzzy-editor-card"><h3>5. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" data-action-kind="data">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
+            <div class="fuzzy-editor-card full"><h3>6. ルール構造エディタ</h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" data-action-kind="data">ルール追加</button><button id="fzApplyRulesBtn" data-action-kind="run">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn" data-action-kind="data">JSONへ書き出し</button><button id="fzImportRulesBtn" data-action-kind="load">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
+            <div class="fuzzy-editor-card full"><h3>7. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" data-action-kind="data">確認画面を更新</button><button id="fzDownloadRulesBtn" data-action-kind="data">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
             <div class="fuzzy-editor-card full"><h3>8. 現在の候補に対するルール発火状況</h3><div id="fuzzyRuleDebug" class="fuzzy-rule-debug">No inference yet.</div></div>
           </div>
         </div>
@@ -1014,19 +1014,19 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
             <span class="chip"><i id="legendDefaultColor"></i>Default / 未割当</span>
           </div>
           <div id="topoSemanticStats" class="topo-stats">GNG未実行。GNG学習後、全ノードの法線・曲率・面・属性ラベルを計算します。</div>
-          <div class="fuzzy-actions" style="margin:10px 0 12px"><button id="recomputeTopoSemanticsBtn" class="primary">法線・曲率・面・ラベルを再計算</button><button id="downloadEmbeddedHtmlBtn" class="go">ファジィルール埋込HTMLを保存</button></div>
+          <div class="fuzzy-actions" style="margin:10px 0 12px"><button id="recomputeTopoSemanticsBtn" data-action-kind="run">法線・曲率・面・ラベルを再計算</button><button id="downloadEmbeddedHtmlBtn" data-action-kind="data">ファジィルール埋込HTMLを保存</button></div>
           <div class="topo-rule-two">
             <div class="topo-rule-card">
               <h3>Node Attribute Rule Base / ノード属性ラベル推定</h3>
               <div class="fuzzy-small">入力: normal_up, normal_horizontal, curvature_high, region_size, neighbor_normal_similarity。出力: Safe area, Wall, Unknown Object, Default。</div>
-              <div class="fuzzy-actions"><button id="applyNodeRulesBtn" class="primary">JSON適用</button><button id="resetNodeRulesBtn" class="warn">初期ルール復元</button></div>
+              <div class="fuzzy-actions"><button id="applyNodeRulesBtn" data-action-kind="data">JSON適用</button><button id="resetNodeRulesBtn" class="warn">初期ルール復元</button></div>
               <textarea id="nodeLabelRuleJson" class="topo-rule-json" spellcheck="false"></textarea>
               <div id="nodeLabelRuleConfirm" class="topo-confirm"></div>
             </div>
             <div class="topo-rule-card">
               <h3>Topological Cluster Rule Base / エッジ領域成長判定</h3>
               <div class="fuzzy-small">入力: normal_similarity, curvature_similarity, edge_length_fit。出力: Connect, Reject。Connect活性が閾値以上のエッジだけで領域成長します。</div>
-              <div class="fuzzy-actions"><button id="applyClusterRulesBtn" class="primary">JSON適用</button><button id="resetClusterRulesBtn" class="warn">初期ルール復元</button></div>
+              <div class="fuzzy-actions"><button id="applyClusterRulesBtn" data-action-kind="data">JSON適用</button><button id="resetClusterRulesBtn" class="warn">初期ルール復元</button></div>
               <textarea id="clusterRuleJson" class="topo-rule-json" spellcheck="false"></textarea>
               <div id="clusterRuleConfirm" class="topo-confirm"></div>
             </div>
@@ -1044,12 +1044,12 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
 'use strict';
 const $=id=>document.getElementById(id);
 const TAU=Math.PI*2;
-const action_button_class_by_kind=Object.freeze({load:'primary',play:'go'});
+const action_button_class_by_kind=Object.freeze({data:'primary',load:'primary',play:'go',run:'go'});
 function set_action_button_style(button,action_kind){
   if(!button) return;
   const class_name=action_button_class_by_kind[action_kind];
   if(!class_name) return;
-  button.classList.remove(...Object.values(action_button_class_by_kind));
+  button.classList.remove(...new Set(Object.values(action_button_class_by_kind)));
   button.classList.add(class_name);
 }
 function sync_action_button_styles(root=document){
@@ -1617,8 +1617,9 @@ function updateGngDataSourceUi(){
   const btn=$('gngBtn');
   if(btn){
     btn.textContent=graphOnly?'既存GNGを読み込む':'GNG学習を実行';
-    btn.classList.toggle('go', !graphOnly);
-    btn.classList.toggle('primary', graphOnly);
+    const action_kind=graphOnly?'load':'run';
+    btn.dataset.actionKind=action_kind;
+    set_action_button_style(btn,action_kind);
   }
   const status=$('topoStatus');
   if(status){
@@ -3117,7 +3118,8 @@ async function runGngWasmFull(){
 }
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
-    box.innerHTML=GNG_ALGORITHMS.map(a=>`<button type="button" data-gng-alg-run="${a.value}"> ${a.label}</button>`).join('');
+    box.innerHTML=GNG_ALGORITHMS.map(a=>`<button type="button" data-action-kind="run" data-gng-alg-run="${a.value}"> ${a.label}</button>`).join('');
+    sync_action_button_styles(box);
   });
   document.querySelectorAll('[data-gng-alg-run]').forEach(btn=>{btn.onclick=e=>{e.preventDefault();runGngAlgorithmFromViewer(btn.dataset.gngAlgRun);};});
   updateGngAlgorithmButtonStates();
