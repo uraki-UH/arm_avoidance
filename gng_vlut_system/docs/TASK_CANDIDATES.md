@@ -45,12 +45,6 @@
 - ToPoDualArm は `continuous` 関節を持たないため、現状の wraparound 対象は 0 関節とする。
 - `continuous` の `+179/-179` 度と制限付き `revolute` の `+2.5/-2.5` rad をテストする。
 
-### 単体 HTML の URDF visual mesh 描画
-
-- `ToPo-FUZZY_Manipulation_v1.html` の主目的は評価指標・把持候補・軌道再生の検証とし、ロボット描画品質の改善は後回しにする。
-- topo fuzzy viewer と同等の描画が必要になった場合は、Three.js / URDFLoader / STLLoader 相当と URDF・mesh 資産を HTML 内へ埋め込む方式を検討する。
-- 軽量スケルトン表示のような代替描画へ置き換えるのではなく、URDF visual mesh と material 色を正しく使う方針を候補として残す。
-
 ### コンクリートガラの物理シミュレーション方式
 
 - 既存の `robot_gazebo_sim.launch.py` (Gazebo) を流用するか、別エンジンを立てるかを決める。
