@@ -13,7 +13,8 @@ binary-compressed PCDへ分離保存する方式へ変更。
 - 空配列、既定値、空の`inpcl_ids`を省略
 - edgeをnode添字の2要素配列として保存
 - テンプレートを`*_gng_template_v1.json.gz`へgzip保存
-- 任意の元点群を`*_source.pcd`へbinary-compressed PCDとして分離保存
+- 投影整合性を満たすorganized RGB-Dを16-bit depth PNGとRGB/RGBA PNGへ分離保存
+- 完全表面、裏面を含む点群、unorganized点群、追加field付き点群を`*_source.pcd`へ自動退避
 - 点群の相対ファイル名、topic、frame、stamp、点数、field定義、色情報の有無をテンプレートへ記録
 - 静的マップ配信ノードと単体HTMLへgzip読込対応を追加
 
@@ -32,4 +33,5 @@ ros2 run ais_gng save_object_gng_dataset concrete --with-points
 ```
 
 元点群保存には`ais_gng.launch.py`の`source_point_cloud_topic`指定が必要。`auto`は明示された
-`input_topic`を使用し、空文字は点群保存を無効化。
+`input_topic`またはGNG設定ファイル中の先頭入力topicを使用し、空文字は点群保存を無効化。
+`source_camera_info_topic:=auto`は既知のGraspNet系topicに対応するCameraInfoを選択する。

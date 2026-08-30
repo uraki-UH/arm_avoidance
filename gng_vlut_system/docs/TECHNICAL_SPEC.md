@@ -862,11 +862,20 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 空配列と既定値は省略し、edgeはnode添字の2要素配列として格納する。保存サービスは
 `/save_gng_data`、サービス型は`ais_gng_msgs/srv/SaveObjectGngDataset`とする。
 
-元点群保存を要求した場合は、GNG mapとstampが一致する`PointCloud2`を
-`<dataset_id>_source.pcd`へbinary-compressed PCDとして分離保存する。テンプレートJSONには相対ファイル名、
-topic、frame、stamp、点数、field定義、色情報の有無を格納する。`rgb`、`rgba`、独立した`r`/`g`/`b`、
-`intensity`、`label`、`ring`など、入力`PointCloud2`に存在するfieldはPCD側へ引き継ぐ。
+元点群保存を要求した場合は、GNG mapとstampが一致する`PointCloud2`を分離保存する。
+organized点群、対応する`CameraInfo`、無歪み投影、1 mm単位の深度、field保持条件をすべて満たす場合は、
+`<dataset_id>_depth.png`へ16-bit深度、色情報があれば`<dataset_id>_color.png`へRGB/RGBAを保存する。
+画像条件を満たさない場合は`<dataset_id>_source.pcd`へbinary-compressed PCDとして保存する。
+
+PNG判定では各点のXYZとCameraInfoによるピンホール投影を照合する。unorganized点群、座標変換済み点群、
+追加fieldを持つ点群、裏面を含む完全表面点群はPCDへフォールバックし、単一depth画像への変換による
+オクルージョン面の欠落を防止する。テンプレートJSONには保存形式、相対ファイル名、topic、frame、stamp、
+点数、field定義、色情報の有無を格納する。PCDでは`rgb`、`rgba`、独立した`r`/`g`/`b`、
+`intensity`、`label`、`ring`など、入力`PointCloud2`に存在するfieldを引き継ぐ。
 元点群を要求しない場合、点群ファイルと参照metadataは作成しない。
+
+`ais_gng.launch.py`の`source_camera_info_topic`はPNG自動判定用CameraInfo topicとする。
+`auto`では既知のGraspNet系topicを選択し、空文字ではPCD保存だけを使用する。
 
 `object_template_map_publisher_node`は`object_template`またはGNG同梱済みの
 `object_surface_dataset`を読み、JSONの`template_id`ごとに

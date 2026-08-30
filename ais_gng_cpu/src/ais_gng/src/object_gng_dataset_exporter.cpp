@@ -3,7 +3,9 @@
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <png.h>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <zlib.h>
 
@@ -14,6 +16,7 @@
 #include <cmath>
 #include <cstdint>
 #include <ctime>
+#include <cstring>
 #include <deque>
 #include <filesystem>
 #include <fstream>
@@ -28,6 +31,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -36,7 +40,205 @@ namespace
 
 using json = nlohmann::json;
 using TopologicalMap = ais_gng_msgs::msg::TopologicalMap;
+using CameraInfo = sensor_msgs::msg::CameraInfo;
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
+
+struct RgbdPngData
+{
+  std::vector<png_uint_16> depth;
+  std::vector<std::uint8_t> color;
+  bool has_color = false;
+  bool has_alpha = false;
+};
+
+const sensor_msgs::msg::PointField *find_field(
+  const PointCloud2 &point_cloud, const std::string &name)
+{
+  const auto found = std::find_if(
+    point_cloud.fields.begin(), point_cloud.fields.end(), [&name](const auto &field) {
+      return field.name == name;
+    });
+  return found == point_cloud.fields.end() ? nullptr : &*found;
+}
+
+std::uint32_t read_uint32(const std::uint8_t *data, bool is_bigendian)
+{
+  if (is_bigendian) {
+    return (static_cast<std::uint32_t>(data[0]) << 24U) |
+           (static_cast<std::uint32_t>(data[1]) << 16U) |
+           (static_cast<std::uint32_t>(data[2]) << 8U) |
+           static_cast<std::uint32_t>(data[3]);
+  }
+  return static_cast<std::uint32_t>(data[0]) |
+         (static_cast<std::uint32_t>(data[1]) << 8U) |
+         (static_cast<std::uint32_t>(data[2]) << 16U) |
+         (static_cast<std::uint32_t>(data[3]) << 24U);
+}
+
+float read_float32(const std::uint8_t *data, bool is_bigendian)
+{
+  const std::uint32_t bits = read_uint32(data, is_bigendian);
+  float value = 0.0F;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+bool has_zero_distortion(const CameraInfo &camera_info)
+{
+  return std::all_of(camera_info.d.begin(), camera_info.d.end(), [](double value) {
+    return std::fabs(value) <= 1.0e-12;
+  });
+}
+
+std::optional<RgbdPngData> make_rgbd_png_data(
+  const PointCloud2 &point_cloud, const CameraInfo &camera_info)
+{
+  if (point_cloud.height <= 1U || point_cloud.width == 0U ||
+    camera_info.width != point_cloud.width || camera_info.height != point_cloud.height ||
+    camera_info.header.frame_id != point_cloud.header.frame_id || !has_zero_distortion(camera_info) ||
+    camera_info.k[0] <= 0.0 || camera_info.k[4] <= 0.0)
+  {
+    return std::nullopt;
+  }
+  const auto *x_field = find_field(point_cloud, "x");
+  const auto *y_field = find_field(point_cloud, "y");
+  const auto *z_field = find_field(point_cloud, "z");
+  const auto has_field_bytes = [&point_cloud](
+      const sensor_msgs::msg::PointField *field, std::uint32_t size) {
+      return field != nullptr && field->count > 0U && field->offset <= point_cloud.point_step &&
+             size <= point_cloud.point_step - field->offset;
+    };
+  if (x_field == nullptr || y_field == nullptr || z_field == nullptr ||
+    !has_field_bytes(x_field, 4U) || !has_field_bytes(y_field, 4U) ||
+    !has_field_bytes(z_field, 4U) ||
+    x_field->datatype != sensor_msgs::msg::PointField::FLOAT32 ||
+    y_field->datatype != sensor_msgs::msg::PointField::FLOAT32 ||
+    z_field->datatype != sensor_msgs::msg::PointField::FLOAT32)
+  {
+    return std::nullopt;
+  }
+
+  const auto *rgb_field = find_field(point_cloud, "rgb");
+  const auto *rgba_field = find_field(point_cloud, "rgba");
+  const auto *r_field = find_field(point_cloud, "r");
+  const auto *g_field = find_field(point_cloud, "g");
+  const auto *b_field = find_field(point_cloud, "b");
+  const auto *a_field = find_field(point_cloud, "a");
+  const bool has_packed_color = rgb_field != nullptr || rgba_field != nullptr;
+  const bool has_separate_color = r_field != nullptr && g_field != nullptr && b_field != nullptr;
+  const bool has_color = has_packed_color || has_separate_color;
+  const bool has_alpha = has_separate_color ? a_field != nullptr : rgba_field != nullptr;
+
+  for (const auto &field : point_cloud.fields) {
+    const bool is_supported = field.name == "x" || field.name == "y" || field.name == "z" ||
+      field.name == "rgb" || field.name == "rgba" || field.name == "r" || field.name == "g" ||
+      field.name == "b" || field.name == "a" || field.name == "_";
+    if (!is_supported) {
+      return std::nullopt;
+    }
+  }
+  if (has_separate_color &&
+    (!has_field_bytes(r_field, 1U) || !has_field_bytes(g_field, 1U) ||
+    !has_field_bytes(b_field, 1U) || (a_field != nullptr && !has_field_bytes(a_field, 1U)) ||
+    r_field->datatype != sensor_msgs::msg::PointField::UINT8 ||
+    g_field->datatype != sensor_msgs::msg::PointField::UINT8 ||
+    b_field->datatype != sensor_msgs::msg::PointField::UINT8 ||
+    (a_field != nullptr && a_field->datatype != sensor_msgs::msg::PointField::UINT8)))
+  {
+    return std::nullopt;
+  }
+  const auto *packed_field = rgba_field != nullptr ? rgba_field : rgb_field;
+  if (packed_field != nullptr &&
+    (!has_field_bytes(packed_field, 4U) ||
+    (packed_field->datatype != sensor_msgs::msg::PointField::FLOAT32 &&
+    packed_field->datatype != sensor_msgs::msg::PointField::UINT32)))
+  {
+    return std::nullopt;
+  }
+
+  const std::size_t point_num =
+    static_cast<std::size_t>(point_cloud.width) * point_cloud.height;
+  RgbdPngData result;
+  result.depth.resize(point_num, 0U);
+  result.has_color = has_color;
+  result.has_alpha = has_alpha;
+  if (has_color) {
+    result.color.resize(point_num * (has_alpha ? 4U : 3U), 0U);
+  }
+  const double fx = camera_info.k[0];
+  const double fy = camera_info.k[4];
+  const double cx = camera_info.k[2];
+  const double cy = camera_info.k[5];
+  for (std::uint32_t row = 0; row < point_cloud.height; ++row) {
+    for (std::uint32_t column = 0; column < point_cloud.width; ++column) {
+      const std::size_t index = static_cast<std::size_t>(row) * point_cloud.width + column;
+      const std::size_t byte_index = static_cast<std::size_t>(row) * point_cloud.row_step +
+        static_cast<std::size_t>(column) * point_cloud.point_step;
+      if (byte_index + point_cloud.point_step > point_cloud.data.size()) {
+        return std::nullopt;
+      }
+      const auto *point = point_cloud.data.data() + byte_index;
+      const float x = read_float32(point + x_field->offset, point_cloud.is_bigendian);
+      const float y = read_float32(point + y_field->offset, point_cloud.is_bigendian);
+      const float z = read_float32(point + z_field->offset, point_cloud.is_bigendian);
+      if (std::isfinite(z) && z > 0.0F) {
+        const double depth_mm_value = std::round(static_cast<double>(z) * 1000.0);
+        if (depth_mm_value <= 0.0 || depth_mm_value > 65535.0 ||
+          std::fabs(static_cast<double>(z) - depth_mm_value * 0.001) > 5.0e-6 ||
+          !std::isfinite(x) || !std::isfinite(y))
+        {
+          return std::nullopt;
+        }
+        const double expected_x = (static_cast<double>(column) - cx) * z / fx;
+        const double expected_y = (static_cast<double>(row) - cy) * z / fy;
+        if (std::fabs(static_cast<double>(x) - expected_x) > 2.0e-4 ||
+          std::fabs(static_cast<double>(y) - expected_y) > 2.0e-4)
+        {
+          return std::nullopt;
+        }
+        result.depth[index] = static_cast<png_uint_16>(depth_mm_value);
+      } else if (std::isfinite(x) || std::isfinite(y)) {
+        return std::nullopt;
+      }
+
+      if (has_color) {
+        const std::size_t color_index = index * (has_alpha ? 4U : 3U);
+        if (has_separate_color) {
+          result.color[color_index] = point[r_field->offset];
+          result.color[color_index + 1U] = point[g_field->offset];
+          result.color[color_index + 2U] = point[b_field->offset];
+          if (has_alpha) {
+            result.color[color_index + 3U] = point[a_field->offset];
+          }
+        } else {
+          const std::uint32_t packed = read_uint32(
+            point + packed_field->offset, point_cloud.is_bigendian);
+          result.color[color_index] = static_cast<std::uint8_t>((packed >> 16U) & 0xffU);
+          result.color[color_index + 1U] = static_cast<std::uint8_t>((packed >> 8U) & 0xffU);
+          result.color[color_index + 2U] = static_cast<std::uint8_t>(packed & 0xffU);
+          if (has_alpha) {
+            result.color[color_index + 3U] = static_cast<std::uint8_t>((packed >> 24U) & 0xffU);
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+
+void write_png(
+  const std::filesystem::path &output_path, std::uint32_t width, std::uint32_t height,
+  png_uint_32 format, const void *data)
+{
+  png_image image{};
+  image.version = PNG_IMAGE_VERSION;
+  image.width = width;
+  image.height = height;
+  image.format = format;
+  if (png_image_write_to_file(&image, output_path.c_str(), 0, data, 0, nullptr) == 0) {
+    throw std::runtime_error("PNG書込失敗: " + output_path.string() + " " + image.message);
+  }
+}
 
 bool is_object_name(const std::string &value)
 {
@@ -178,6 +380,7 @@ public:
     output_dir_ = declare_parameter<std::string>("output_dir", "/datasets");
     const std::string map_topic = declare_parameter<std::string>("map_topic", "topological_map");
     point_cloud_topic_ = declare_parameter<std::string>("point_cloud_topic", "");
+    camera_info_topic_ = declare_parameter<std::string>("camera_info_topic", "");
     point_cloud_cache_num_ = static_cast<std::size_t>(std::max<std::int64_t>(
       1, declare_parameter<std::int64_t>("point_cloud_cache_num", 4)));
     const std::string save_service =
@@ -197,6 +400,13 @@ public:
           &ObjectGngDatasetExporterNode::on_point_cloud, this,
           std::placeholders::_1));
     }
+    if (!camera_info_topic_.empty()) {
+      camera_info_sub_ = create_subscription<CameraInfo>(
+        camera_info_topic_, rclcpp::SensorDataQoS().keep_last(1),
+        std::bind(
+          &ObjectGngDatasetExporterNode::on_camera_info, this,
+          std::placeholders::_1));
+    }
     save_service_ = create_service<ais_gng_msgs::srv::SaveObjectGngDataset>(
       save_service,
       std::bind(
@@ -205,9 +415,10 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "物体GNG保存待機: map=%s point_cloud=%s service=%s output_dir=%s",
+      "物体GNG保存待機: map=%s point_cloud=%s camera_info=%s service=%s output_dir=%s",
       map_topic.c_str(), point_cloud_topic_.empty() ? "無効" : point_cloud_topic_.c_str(),
-      save_service.c_str(), output_dir_.c_str());
+      camera_info_topic_.empty() ? "無効" : camera_info_topic_.c_str(), save_service.c_str(),
+      output_dir_.c_str());
   }
 
 private:
@@ -236,12 +447,19 @@ private:
     }
   }
 
+  void on_camera_info(const CameraInfo::ConstSharedPtr camera_info)
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    latest_camera_info_ = camera_info;
+  }
+
   void saveDataset(
     const std::shared_ptr<ais_gng_msgs::srv::SaveObjectGngDataset::Request> request,
     std::shared_ptr<ais_gng_msgs::srv::SaveObjectGngDataset::Response> response)
   {
     TopologicalMap map;
     PointCloud2::ConstSharedPtr point_cloud;
+    CameraInfo::ConstSharedPtr camera_info;
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
       if (!latest_map_) {
@@ -259,6 +477,7 @@ private:
           return;
         }
         point_cloud = latest_matched_point_cloud_;
+        camera_info = latest_camera_info_;
       }
     }
 
@@ -278,20 +497,59 @@ private:
         (dataset_id + "_gng_template_v1.json.gz");
       const std::filesystem::path point_cloud_path =
         std::filesystem::path(output_dir) / (dataset_id + "_source.pcd");
+      const std::filesystem::path depth_path =
+        std::filesystem::path(output_dir) / (dataset_id + "_depth.png");
+      const std::filesystem::path color_path =
+        std::filesystem::path(output_dir) / (dataset_id + "_color.png");
+      const std::optional<RgbdPngData> rgbd_png =
+        point_cloud && camera_info ? make_rgbd_png_data(*point_cloud, *camera_info) : std::nullopt;
+      json point_cloud_storage;
       std::filesystem::create_directories(output_path.parent_path());
       try {
         if (point_cloud) {
-          write_point_cloud(point_cloud_path, *point_cloud);
+          if (rgbd_png) {
+            write_png(
+              depth_path, point_cloud->width, point_cloud->height,
+              PNG_FORMAT_LINEAR_Y, rgbd_png->depth.data());
+            point_cloud_storage = {
+              {"format", "rgbd_png"},
+              {"depth_file_name", depth_path.filename().string()},
+              {"depth_unit_m", 0.001},
+              {"coordinate_encoding", "pinhole_depth"},
+              {"camera_info_topic", camera_info_topic_},
+              {"camera", {
+                  {"k", camera_info->k},
+                  {"p", camera_info->p},
+                  {"distortion_model", camera_info->distortion_model},
+                  {"d", camera_info->d},
+                }},
+            };
+            if (rgbd_png->has_color) {
+              write_png(
+                color_path, point_cloud->width, point_cloud->height,
+                rgbd_png->has_alpha ? PNG_FORMAT_RGBA : PNG_FORMAT_RGB,
+                rgbd_png->color.data());
+              point_cloud_storage["color_file_name"] = color_path.filename().string();
+              point_cloud_storage["color_format"] = rgbd_png->has_alpha ? "rgba8" : "rgb8";
+            }
+          } else {
+            write_point_cloud(point_cloud_path, *point_cloud);
+            point_cloud_storage = {
+              {"format", "pcd_binary_compressed"},
+              {"file_name", point_cloud_path.filename().string()},
+            };
+          }
         }
         write_gzip_json(
           output_path,
           buildDataset(
-            map, dataset_id, request->object_name, point_cloud.get(),
-            point_cloud ? point_cloud_path.filename().string() : ""));
+            map, dataset_id, request->object_name, point_cloud.get(), point_cloud_storage));
       } catch (...) {
         std::error_code error;
         std::filesystem::remove(output_path, error);
         std::filesystem::remove(point_cloud_path, error);
+        std::filesystem::remove(depth_path, error);
+        std::filesystem::remove(color_path, error);
         throw;
       }
       response->success = true;
@@ -301,8 +559,18 @@ private:
         " clusters=" + std::to_string(map.clusters.size()) +
         " bytes=" + std::to_string(std::filesystem::file_size(output_path));
       if (point_cloud) {
-        response->message += " point_cloud=" + point_cloud_path.string() +
-          " point_cloud_bytes=" + std::to_string(std::filesystem::file_size(point_cloud_path));
+        if (rgbd_png) {
+          response->message += " point_cloud_format=rgbd_png depth=" + depth_path.string() +
+            " depth_bytes=" + std::to_string(std::filesystem::file_size(depth_path));
+          if (rgbd_png->has_color) {
+            response->message += " color=" + color_path.string() +
+              " color_bytes=" + std::to_string(std::filesystem::file_size(color_path));
+          }
+        } else {
+          response->message += " point_cloud_format=pcd_binary_compressed point_cloud=" +
+            point_cloud_path.string() + " point_cloud_bytes=" +
+            std::to_string(std::filesystem::file_size(point_cloud_path));
+        }
       }
       RCLCPP_INFO(get_logger(), "%s", response->message.c_str());
     } catch (const std::exception &error) {
@@ -315,7 +583,7 @@ private:
   json buildDataset(
     const TopologicalMap &map, const std::string &dataset_id,
     const std::string &object_name, const PointCloud2 *point_cloud,
-    const std::string &point_cloud_file_name) const
+    const json &point_cloud_storage) const
   {
     json nodes = json::array();
     std::unordered_map<std::uint16_t, std::size_t> node_indices;
@@ -417,8 +685,6 @@ private:
       }
       const bool has_color = has_packed_color || (has_r && has_g && has_b);
       source["point_cloud"] = {
-        {"file_name", point_cloud_file_name},
-        {"format", "pcd_binary_compressed"},
         {"topic", point_cloud_topic_},
         {"frame_id", point_cloud->header.frame_id},
         {"stamp", {
@@ -432,6 +698,7 @@ private:
         {"has_color", has_color},
         {"fields", std::move(fields)},
       };
+      source["point_cloud"].update(point_cloud_storage);
     }
     json graph = {
       {"nodes", nodes},
@@ -454,13 +721,16 @@ private:
 
   std::string output_dir_;
   std::string point_cloud_topic_;
+  std::string camera_info_topic_;
   std::size_t point_cloud_cache_num_ = 4;
   std::mutex data_mutex_;
   std::optional<TopologicalMap> latest_map_;
   std::deque<PointCloud2::ConstSharedPtr> point_cloud_cache_;
   PointCloud2::ConstSharedPtr latest_matched_point_cloud_;
+  CameraInfo::ConstSharedPtr latest_camera_info_;
   rclcpp::Subscription<TopologicalMap>::SharedPtr map_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr point_cloud_sub_;
+  rclcpp::Subscription<CameraInfo>::SharedPtr camera_info_sub_;
   rclcpp::Service<ais_gng_msgs::srv::SaveObjectGngDataset>::SharedPtr save_service_;
 };
 

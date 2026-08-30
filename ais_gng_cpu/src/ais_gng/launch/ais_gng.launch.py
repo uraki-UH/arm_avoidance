@@ -1,4 +1,5 @@
 import os
+import yaml
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -6,6 +7,26 @@ from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration
 
 package_dir = get_package_share_directory("ais_gng")
+
+
+def configured_input_topic(config_path):
+    with open(config_path, encoding='utf-8') as config_file:
+        config = yaml.safe_load(config_file)
+    for node_config in config.values():
+        params = node_config.get('ros__parameters', {})
+        topic_names = params.get('input.topic_names', [])
+        if topic_names:
+            return str(topic_names[0])
+    return ''
+
+
+def automatic_camera_info_topic(point_cloud_topic):
+    known_topics = {
+        '/camera/camera/depth/color/points':
+            '/camera/camera/depth/camera_info',
+        '/dataset/points': '/dataset/camera_info',
+    }
+    return known_topics.get(point_cloud_topic, '')
 
 
 def parse_bool(value, argument_name):
@@ -39,6 +60,14 @@ def generate_launch_description():
         description=(
             '保存用元PointCloud2トピック。autoはinput_topicを使用し、'
             '空文字は元点群保存を無効化'
+        )
+    )
+    declar_source_camera_info_topic = DeclareLaunchArgument(
+        'source_camera_info_topic',
+        default_value='auto',
+        description=(
+            'RGB-D PNG自動保存用CameraInfoトピック。autoは既知の'
+            'PointCloud2トピックから選択し、空文字はPCD保存のみ'
         )
     )
     declar_plane_params_file = DeclareLaunchArgument(
@@ -106,7 +135,13 @@ def generate_launch_description():
         source_point_cloud_topic = LaunchConfiguration(
             'source_point_cloud_topic').perform(context)
         if source_point_cloud_topic == 'auto':
-            source_point_cloud_topic = input_topic
+            source_point_cloud_topic = (
+                input_topic or configured_input_topic(gng_config_path))
+        source_camera_info_topic = LaunchConfiguration(
+            'source_camera_info_topic').perform(context)
+        if source_camera_info_topic == 'auto':
+            source_camera_info_topic = automatic_camera_info_topic(
+                source_point_cloud_topic)
 
         topological_map_topic = LaunchConfiguration(
             'topological_map_topic').perform(context)
@@ -140,6 +175,7 @@ def generate_launch_description():
                 parameters=[{
                     'map_topic': topological_map_topic,
                     'point_cloud_topic': source_point_cloud_topic,
+                    'camera_info_topic': source_camera_info_topic,
                 }],
                 output='screen',
             ),
@@ -178,6 +214,7 @@ def generate_launch_description():
         declar_backend,
         declar_input_topic,
         declar_source_point_cloud_topic,
+        declar_source_camera_info_topic,
         declar_plane_params_file,
         declar_start_plane_cluster,
         declar_topological_map_topic,
