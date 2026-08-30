@@ -700,20 +700,19 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
             </div>
           </div>
-          <div class="section-title">Object Template / 事前登録GNG</div>
-          <div class="full"><label>Template ID</label><input id="objectTemplateId" type="text" value="object_template_v1" maxlength="80"></div>
-          <div class="full"><label>Template name</label><input id="objectTemplateName" type="text" value="Object template" maxlength="120"></div>
+          <div class="section-title">登録済みオブジェクトGNG</div>
+          <div class="full"><label>Object name</label><input id="object_name" type="text" value="" maxlength="120" placeholder="例: old_tyre"></div>
           <div><label>Canonical yaw [deg]</label><input id="objectTemplateYawDeg" type="number" min="-180" max="180" step="1" value="0"></div>
-          <div class="full"><label><input id="showObjectTemplate" type="checkbox" checked> 登録GNGテンプレートを重ね描画</label></div>
-          <input id="objectTemplateFile" type="file" class="hide" accept=".json,.json.gz,application/json,application/gzip">
+          <div class="full"><label><input id="showObjectTemplate" type="checkbox" checked> 登録済みGNGを重ね描画</label></div>
+          <div id="object_template_candidate_row" class="full hide"><label>一致候補</label><select id="object_template_candidate_select"></select></div>
+          <input id="object_template_file" type="file" class="hide" accept=".json,.json.gz,application/json,application/gzip" multiple>
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="objectTemplateSaveBtn" class="primary" type="button">現在GNGをテンプレート保存</button>
               <button id="objectSurfaceDatasetSaveBtn" class="go" type="button">完全表面点群データセット保存</button>
-              <button id="objectTemplateLoadBtn" type="button">テンプレート読込</button>
-              <button id="objectTemplateClearBtn" class="warn" type="button">テンプレート解除</button>
+              <button id="object_template_action_btn" type="button">登録GNGを選択</button>
             </div>
-            <div id="objectTemplateStatus" class="status" style="margin-top:6px">テンプレート: 未読込</div>
+            <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
           </div>
           <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
           <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm,text/javascript" multiple>
@@ -1060,7 +1059,7 @@ const state={
   robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
   robotGl:{layers:new Map(),unavailable:false,lastError:''},
   useFixedBase:true,fixedBasePose:{x:0.25,y:0,z:NaN,roll:0,pitch:0,yaw:0},
-  importedGraphSession:null,objectTemplate:null,dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
+  importedGraphSession:null,objectTemplate:null,object_template_candidates:[],dataSourceMode:'pointcloud_to_gng',importedPointFrames:null,nodeFeaturesById:null,clusterFeaturesById:null,
   importedBundle:null,bundleTopicSelection:{},graspPoseCandidates:[],
   evaluationMetrics:{schemas:{},samples:{},structuredInputs:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0,receivedStructuredInputs:0},
   bundleFlow:null,
@@ -1705,20 +1704,24 @@ function v322SetObjectTemplateStatus(text){
   if(el) el.textContent=text;
 }
 function v322ObjectTemplateFileName(template){
-  const raw=String(template?.template_id||'object_template').trim().toLowerCase();
-  const id=(raw.replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'object_template').slice(0,80);
-  return `${id}_gng_template_v1.json`;
+  const raw=String(template?.display_name||'object').trim().toLowerCase();
+  const object_name=(raw.replace(/[^\p{L}\p{N}_-]+/gu,'_').replace(/^_+|_+$/g,'')||'object').slice(0,80);
+  const created_at=String(template?.created_at||'').replace(/[^0-9]/g,'').slice(0,14);
+  return `${object_name}${created_at?`_${created_at}`:''}_gng_template_v1.json`;
+}
+function v322_create_template_id(){
+  if(globalThis.crypto&&typeof globalThis.crypto.randomUUID==='function') return globalThis.crypto.randomUUID();
+  return `object_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
 }
 function v322CreateObjectTemplate(){
-  const templateId=String($('objectTemplateId')?.value||'object_template_v1').trim()||'object_template_v1';
-  const displayName=String($('objectTemplateName')?.value||templateId).trim()||templateId;
+  const displayName=String($('object_name')?.value||'').trim()||'object';
   const rawYawDeg=+($('objectTemplateYawDeg')?.value||0);
   const yawDeg=Number.isFinite(rawYawDeg)?clamp(rawYawDeg,-180,180):0;
   const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];
   return {
     schema_version:1,
     kind:'object_template',
-    template_id:templateId,
+    template_id:v322_create_template_id(),
     display_name:displayName,
     canonical_yaw_deg:yawDeg,
     created_at:new Date().toISOString(),
@@ -1757,9 +1760,10 @@ function v323CreateObjectSurfaceDataset(){
   };
 }
 function v323ObjectSurfaceDatasetFileName(dataset){
-  const raw=String(dataset?.dataset_id||'object_surface').trim().toLowerCase();
-  const id=(raw.replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'object_surface').slice(0,80);
-  return `${id}_object_surface_dataset_v1.json`;
+  const raw=String(dataset?.display_name||'object').trim().toLowerCase();
+  const object_name=(raw.replace(/[^\p{L}\p{N}_-]+/gu,'_').replace(/^_+|_+$/g,'')||'object').slice(0,80);
+  const created_at=String(dataset?.created_at||'').replace(/[^0-9]/g,'').slice(0,14);
+  return `${object_name}${created_at?`_${created_at}`:''}_object_surface_dataset_v1.json`;
 }
 function v323SaveObjectSurfaceDataset(){
   if(!(state.objectSurfacePoints||[]).length){
@@ -1778,6 +1782,8 @@ function v323SaveObjectSurfaceDataset(){
 }
 function v322NormalizeObjectTemplate(value){
   if(!value||typeof value!=='object'||value.kind!=='object_template') throw new Error('object_template JSON ではありません。');
+  const schema_version=value.schema_version==null?1:Number(value.schema_version);
+  if(schema_version!==1) throw new Error(`非対応のschema_versionです: ${value.schema_version}`);
   const graph=value.gng;
   if(!graph||typeof graph!=='object') throw new Error('gng がありません。');
   const nodes=(Array.isArray(graph.nodes)?graph.nodes:[]).map(normalizeGraphNode).filter(Boolean);
@@ -1786,8 +1792,8 @@ function v322NormalizeObjectTemplate(value){
   return {
     schema_version:1,
     kind:'object_template',
-    template_id:String(value.template_id||'object_template_v1'),
-    display_name:String(value.display_name||value.template_id||'Object template'),
+    template_id:String(value.template_id||v322_create_template_id()),
+    display_name:String(value.display_name||value.template_id||'object'),
     canonical_yaw_deg:Number.isFinite(+(value.canonical_yaw_deg||0))?clamp(+(value.canonical_yaw_deg||0),-180,180):0,
     created_at:String(value.created_at||''),
     source:v322CopyJsonValue(value.source,{}),
@@ -1802,15 +1808,58 @@ function v322NormalizeObjectTemplate(value){
 }
 function v322UpdateObjectTemplateControls(){
   const template=state.objectTemplate;
-  if($('objectTemplateClearBtn')) $('objectTemplateClearBtn').disabled=!template;
+  const action_btn=$('object_template_action_btn');
+  if(action_btn){
+    action_btn.textContent=template?'登録GNGを解除':'登録GNGを選択';
+    action_btn.classList.toggle('warn',!!template);
+  }
+  v322_update_object_template_candidate_select();
   if(!template){
-    v322SetObjectTemplateStatus('テンプレート: 未読込');
+    const candidate_num=state.object_template_candidates.length;
+    v322SetObjectTemplateStatus(`登録GNG: 未選択${candidate_num?` / 読込候補=${candidate_num}`:''}`);
     return;
   }
-  if($('objectTemplateId')) $('objectTemplateId').value=template.template_id;
-  if($('objectTemplateName')) $('objectTemplateName').value=template.display_name;
+  if($('object_name')) $('object_name').value=template.display_name;
   if($('objectTemplateYawDeg')) $('objectTemplateYawDeg').value=String(template.canonical_yaw_deg);
-  v322SetObjectTemplateStatus(`テンプレート: ${template.display_name} / nodes=${template.gng.nodes.length}, edges=${template.gng.edges.length}, yaw=${template.canonical_yaw_deg.toFixed(1)} deg`);
+  const created_at=template.created_at?` / ${template.created_at}`:'';
+  v322SetObjectTemplateStatus(`登録GNG: ${template.display_name}${created_at} / nodes=${template.gng.nodes.length}, edges=${template.gng.edges.length}, yaw=${template.canonical_yaw_deg.toFixed(1)} deg`);
+}
+function v322_normalize_object_name(value){
+  return String(value||'').trim().toLocaleLowerCase();
+}
+function v322_object_template_created_time(candidate){
+  const time=Date.parse(candidate?.template?.created_at||'');
+  return Number.isFinite(time)?time:0;
+}
+function v322_update_object_template_candidate_select(){
+  const row=$('object_template_candidate_row');
+  const select=$('object_template_candidate_select');
+  if(!row||!select) return;
+  const candidates=state.object_template_candidates;
+  row.classList.toggle('hide',candidates.length<2);
+  select.replaceChildren();
+  const empty_option=document.createElement('option');
+  empty_option.value='';
+  empty_option.textContent='候補を選択';
+  select.appendChild(empty_option);
+  candidates.forEach((candidate,idx)=>{
+    const option=document.createElement('option');
+    option.value=String(idx);
+    const created_at=candidate.template.created_at||'作成日時なし';
+    option.textContent=`${candidate.template.display_name} / ${created_at} / ${candidate.file_name}`;
+    if(candidate.template===state.objectTemplate) option.selected=true;
+    select.appendChild(option);
+  });
+}
+function v322_select_latest_matching_template(){
+  const object_name=v322_normalize_object_name($('object_name')?.value);
+  const matches=state.object_template_candidates.filter(candidate=>
+    !object_name||v322_normalize_object_name(candidate.template.display_name)===object_name
+  );
+  if(!matches.length) return false;
+  state.objectTemplate=matches[0].template;
+  v322UpdateObjectTemplateControls();
+  return true;
 }
 function v322SaveObjectTemplate(){
   if((state.nodes||[]).length<2){
@@ -1826,28 +1875,80 @@ function v322SaveObjectTemplate(){
   setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
   v322SetObjectTemplateStatus(`テンプレート保存: ${template.display_name} / nodes=${template.gng.nodes.length}, edges=${template.gng.edges.length}`);
 }
-async function v322LoadObjectTemplateFile(file){
-  if(!file) return;
-  v322SetObjectTemplateStatus(`テンプレート読込中: ${file.name}`);
-  try{
-    const template=v322NormalizeObjectTemplate(JSON.parse(await v312ReadImportedFileText(file)));
-    state.objectTemplate=template;
-    v322UpdateObjectTemplateControls();
-    renderAll();
-  }catch(error){
-    v322SetObjectTemplateStatus(`テンプレート読込失敗: ${error&&error.message?error.message:error}`);
+async function v322_load_object_template_files(files){
+  const file_list=Array.from(files||[]);
+  if(!file_list.length) return;
+  v322SetObjectTemplateStatus(`登録GNG読込中: ${file_list.length}件`);
+  const loaded=[];
+  const errors=[];
+  for(const file of file_list){
+    try{
+      const template=v322NormalizeObjectTemplate(JSON.parse(await v312ReadImportedFileText(file)));
+      loaded.push({file_name:file.name,template});
+    }catch(error){
+      errors.push(`${file.name}: ${error&&error.message?error.message:error}`);
+    }
   }
+  const candidates=[...state.object_template_candidates,...loaded];
+  const unique_candidates=new Map(candidates.map(candidate=>[
+    `${candidate.template.template_id}::${candidate.template.created_at}`,
+    candidate
+  ]));
+  state.object_template_candidates=[...unique_candidates.values()].sort((a,b)=>
+    v322_object_template_created_time(b)-v322_object_template_created_time(a)
+  );
+  state.objectTemplate=null;
+  const has_match=v322_select_latest_matching_template();
+  v322UpdateObjectTemplateControls();
+  if(!loaded.length&&errors.length){
+    v322SetObjectTemplateStatus(`登録GNG読込失敗: ${errors.join(' / ')}`);
+  }else if(!has_match&&loaded.length){
+    const object_name=String($('object_name')?.value||'').trim();
+    v322SetObjectTemplateStatus(`登録GNG: ${loaded.length}件読込 / Object name「${object_name}」の一致候補なし`);
+  }else if(errors.length){
+    v322SetObjectTemplateStatus(`登録GNG: ${loaded.length}件読込 / ${errors.length}件失敗`);
+  }
+  renderAll();
 }
 function v322SetupObjectTemplateControls(){
-  const fileEl=$('objectTemplateFile');
+  const fileEl=$('object_template_file');
   if(!fileEl||fileEl.dataset.boundV322) return;
   fileEl.dataset.boundV322='1';
   $('objectTemplateSaveBtn').onclick=v322SaveObjectTemplate;
   $('objectSurfaceDatasetSaveBtn').onclick=v323SaveObjectSurfaceDataset;
-  $('objectTemplateLoadBtn').onclick=()=>{fileEl.value='';fileEl.click();};
-  $('objectTemplateClearBtn').onclick=()=>{state.objectTemplate=null;v322UpdateObjectTemplateControls();renderAll();};
+  $('object_template_action_btn').onclick=()=>{
+    if(state.objectTemplate){
+      state.objectTemplate=null;
+      v322UpdateObjectTemplateControls();
+      renderAll();
+      return;
+    }
+    if(v322_select_latest_matching_template()){
+      renderAll();
+      return;
+    }
+    fileEl.value='';
+    fileEl.click();
+  };
+  $('object_template_candidate_select').addEventListener('change',(event)=>{
+    if(event.target.value==='') return;
+    const idx=Number(event.target.value);
+    if(!Number.isInteger(idx)||!state.object_template_candidates[idx]) return;
+    state.objectTemplate=state.object_template_candidates[idx].template;
+    v322UpdateObjectTemplateControls();
+    renderAll();
+  });
+  $('object_name').addEventListener('change',()=>{
+    state.objectTemplate=null;
+    const has_match=v322_select_latest_matching_template();
+    v322UpdateObjectTemplateControls();
+    if(!has_match&&state.object_template_candidates.length){
+      v322SetObjectTemplateStatus(`登録GNG: Object name「${String($('object_name').value||'').trim()}」の一致候補なし`);
+    }
+    renderAll();
+  });
   $('showObjectTemplate').addEventListener('change',renderAll);
-  fileEl.addEventListener('change',()=>v322LoadObjectTemplateFile(fileEl.files&&fileEl.files[0]));
+  fileEl.addEventListener('change',()=>v322_load_object_template_files(fileEl.files));
   v322UpdateObjectTemplateControls();
 }
 function normalizeImportedPoint(point, idx){
