@@ -2,15 +2,15 @@
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
-  printf '使用法: ros2 run ais_gng save_object_gng_dataset <dataset_id>\n' >&2
+  printf '使用法: ros2 run ais_gng save_object_gng_dataset <object_name>\n' >&2
   exit 2
 fi
 
-dataset_id="$1"
-if [[ ! "$dataset_id" =~ ^[[:alpha:]][[:alnum:]_]*$ ]]; then
-  printf 'dataset_idは英字開始の英数字または_だけで指定してください: %s\n' "$dataset_id" >&2
+object_name="$1"
+if [[ ! "$object_name" =~ ^[[:alpha:]][[:alnum:]_]*$ ]]; then
+  printf 'object_nameは英字開始の英数字または_だけで指定してください: %s\n' "$object_name" >&2
   exit 2
 fi
 
-exec ros2 service call /save_object_gng_dataset ais_gng_msgs/srv/SaveObjectGngDataset \
-  "{dataset_id: ${dataset_id}}"
+exec ros2 service call /save_gng_data ais_gng_msgs/srv/SaveObjectGngDataset \
+  "{object_name: '${object_name}', output_dir: ''}"

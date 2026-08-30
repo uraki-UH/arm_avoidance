@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -30,7 +31,7 @@ namespace
 using json = nlohmann::json;
 using TopologicalMap = ais_gng_msgs::msg::TopologicalMap;
 
-bool isDatasetId(const std::string &value)
+bool is_object_name(const std::string &value)
 {
   if (value.empty() || !std::isalpha(static_cast<unsigned char>(value.front()))) {
     return false;
@@ -67,6 +68,45 @@ std::string currentTimestamp()
   return stream.str();
 }
 
+std::string current_dataset_id_base(const std::string &object_name)
+{
+  const std::time_t now = std::time(nullptr);
+  std::tm utc_time{};
+  gmtime_r(&now, &utc_time);
+  std::ostringstream stream;
+  stream << object_name << '_' << std::put_time(&utc_time, "%Y%m%d_%H%M%S");
+  return stream.str();
+}
+
+std::string automatic_dataset_id(
+  const std::filesystem::path &output_dir, const std::string &object_name)
+{
+  const std::regex file_name_pattern(
+    "^" + object_name +
+    R"(_[0-9]{8}_[0-9]{6}_([0-9]{3,9})_object_surface_dataset_v1\.json$)");
+  std::uint32_t max_dataset_num = 0;
+  if (std::filesystem::exists(output_dir)) {
+    for (const auto &entry : std::filesystem::directory_iterator(output_dir)) {
+      if (!entry.is_regular_file()) {
+        continue;
+      }
+      std::smatch match;
+      const std::string file_name = entry.path().filename().string();
+      if (std::regex_match(file_name, match, file_name_pattern)) {
+        max_dataset_num = std::max(
+          max_dataset_num, static_cast<std::uint32_t>(std::stoul(match.str(1))));
+      }
+    }
+  }
+  if (max_dataset_num >= 999999999U) {
+    throw std::runtime_error("自動採番できるdataset_idがありません。");
+  }
+  std::ostringstream id_stream;
+  id_stream << current_dataset_id_base(object_name) << '_' << std::setw(3) << std::setfill('0') <<
+    (max_dataset_num + 1U);
+  return id_stream.str();
+}
+
 float finiteOrZero(float value)
 {
   return std::isfinite(value) ? value : 0.0F;
@@ -81,7 +121,7 @@ public:
     output_dir_ = declare_parameter<std::string>("output_dir", "/datasets");
     const std::string map_topic = declare_parameter<std::string>("map_topic", "topological_map");
     const std::string save_service =
-      declare_parameter<std::string>("save_service", "save_object_gng_dataset");
+      declare_parameter<std::string>("save_service", "/save_gng_data");
     if (output_dir_.empty()) {
       throw std::runtime_error("output_dir の指定が必要です。");
     }
@@ -125,23 +165,25 @@ private:
     }
 
     try {
-      if (!isDatasetId(request->dataset_id)) {
-        throw std::runtime_error(
-                "dataset_id は英字開始の英数字または_だけで指定してください: " + request->dataset_id);
-      }
       const std::string output_dir = request->output_dir.empty() ? output_dir_ : request->output_dir;
       if (output_dir.empty()) {
         throw std::runtime_error("output_dir の指定が必要です。");
       }
+      if (!is_object_name(request->object_name)) {
+        throw std::runtime_error(
+                "object_name は英字開始の英数字または_だけで指定してください: " +
+                request->object_name);
+      }
+      const std::string dataset_id = automatic_dataset_id(output_dir, request->object_name);
       const std::filesystem::path output_path =
         std::filesystem::path(output_dir) /
-        (request->dataset_id + "_object_surface_dataset_v1.json");
+        (dataset_id + "_object_surface_dataset_v1.json");
       std::filesystem::create_directories(output_path.parent_path());
       std::ofstream stream(output_path);
       if (!stream) {
         throw std::runtime_error("保存先を開けません: " + output_path.string());
       }
-      stream << buildDataset(map, request->dataset_id).dump(2) << '\n';
+      stream << buildDataset(map, dataset_id, request->object_name).dump(2) << '\n';
       if (!stream) {
         throw std::runtime_error("データセット書込失敗: " + output_path.string());
       }
@@ -158,7 +200,9 @@ private:
     }
   }
 
-  json buildDataset(const TopologicalMap &map, const std::string &dataset_id) const
+  json buildDataset(
+    const TopologicalMap &map, const std::string &dataset_id,
+    const std::string &object_name) const
   {
     json nodes = json::array();
     std::unordered_map<std::uint16_t, std::size_t> node_indices;
@@ -237,7 +281,7 @@ private:
       {"schema_version", 1},
       {"kind", "object_template"},
       {"template_id", dataset_id},
-      {"display_name", dataset_id},
+      {"display_name", object_name},
       {"canonical_yaw_deg", 0.0},
       {"created_at", timestamp},
       {"source", source},
@@ -247,7 +291,7 @@ private:
       {"schema_version", 1},
       {"kind", "object_surface_dataset"},
       {"dataset_id", dataset_id},
-      {"display_name", dataset_id},
+      {"display_name", object_name},
       {"canonical_yaw_deg", 0.0},
       {"created_at", timestamp},
       {"source", source},
