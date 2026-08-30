@@ -702,7 +702,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           </div>
           <div class="section-title">登録済みオブジェクトGNG</div>
           <div class="full"><label>Object name</label><input id="object_name" type="text" value="" maxlength="120" placeholder="例: old_tyre"></div>
-          <div class="full"><label><input id="showObjectTemplate" type="checkbox" checked> 登録済みGNGを重ね描画</label></div>
           <div id="object_template_candidate_row" class="full hide"><label>一致候補</label><select id="object_template_candidate_select"></select></div>
           <input id="object_template_file" type="file" class="hide" accept=".json,.json.gz,application/json,application/gzip" multiple>
           <div class="full">
@@ -1942,7 +1941,6 @@ function v322SetupObjectTemplateControls(){
     }
     renderAll();
   });
-  $('showObjectTemplate').addEventListener('change',renderAll);
   fileEl.addEventListener('change',()=>v322_load_object_template_files(fileEl.files));
   v322UpdateObjectTemplateControls();
 }
@@ -5154,7 +5152,7 @@ function viewerLayerVisible(id,defaultValue=true){
 
 function drawObjectTemplate(ctx,c){
   const template=state.objectTemplate;
-  if(!template||!$('showObjectTemplate')?.checked) return;
+  if(!template) return;
   const graph=template.gng;
   if(!graph||!graph.nodes.length) return;
   ctx.save();
@@ -6714,7 +6712,7 @@ function robotRenderStatusText(){
 function renderAll(){const mode=viewerMode();render('viewTopo',mode==='grasp');$('topoOverlay').textContent=state.points.length?`Viewer: ${viewerMode()==='grasp'?'Grasp / 把持姿勢':'Mapping / 点群・GNG'}
 ${labelOf(state.sample)}
 points=${state.points.length}, GNG nodes=${state.nodes.length}, edges=${state.edges.length}
-Template: ${state.objectTemplate?`${state.objectTemplate.display_name} / nodes=${state.objectTemplate.gng.nodes.length}, edges=${state.objectTemplate.gng.edges.length}${$('showObjectTemplate')?.checked?' / overlay=on':' / overlay=off'}`:'none'}
+Template: ${state.objectTemplate?`${state.objectTemplate.display_name} / nodes=${state.objectTemplate.gng.nodes.length}, edges=${state.objectTemplate.gng.edges.length}`:'none'}
 defect: hole ${Math.round(+$('holeRatio').value*100)}%, missing ${Math.round(+$('missingRatio').value*100)}%, outlier ${Math.round(+$('outlierRatio').value*100)}%
 acquisition: ${$('motionPattern').selectedOptions[0].textContent}, jitter=${(+$('motionAmp').value).toFixed(4)} m, scan=${(+$('motionHz').value).toFixed(1)} Hz
 GNG mode: ${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / alg=${gngAlgorithmLabel()}${state.gng&&state.gng.mode==='offline'?`, offline training points=${(state.gng.trainingPoints||[]).length}`:''}
