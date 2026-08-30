@@ -776,7 +776,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full">
             <button id="gngLoadWasmBtn" class="primary" type="button">WASMを読み込む</button>
             <button id="gngRunWasmGngBtn" type="button">WASMでGNG実行</button>
-            <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNG-WASM実行時に gng_wasm_core/dist/gng_wasm_core.js を自動読込み。差し替え用のCMake成果物は gng_wasm_core.js と gng_wasm_core.wasm を同時選択。</div>
+            <div id="gngWasmStatus" class="readout" style="margin-top:6px">標準WASMを自動読込。差し替えはJSとWASMを同時選択。</div>
           </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
             <div><label>Motion duration [s]</label><input id="ikMotionDuration" type="range" min="0.2" max="6.0" step="0.1" value="2.0"><input id="ikMotionDurationNum" type="number" min="0.2" max="6.0" step="0.1" value="2.0"></div>
