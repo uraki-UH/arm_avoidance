@@ -707,8 +707,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="objectTemplateSaveBtn" class="primary" type="button">現在GNGをテンプレート保存</button>
-              <button id="objectSurfaceDatasetSaveBtn" class="go" type="button">完全表面点群データセット保存</button>
-              <button id="object_template_action_btn" type="button">登録GNGを選択</button>
+              <button id="objectSurfaceDatasetSaveBtn" class="primary" type="button">完全表面点群データセット保存</button>
+              <button id="object_template_action_btn" class="primary" type="button">登録GNGを選択</button>
             </div>
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
           </div>
@@ -1804,7 +1804,6 @@ function v322UpdateObjectTemplateControls(){
   const action_btn=$('object_template_action_btn');
   if(action_btn){
     action_btn.textContent=template?'登録GNGを解除':'登録GNGを選択';
-    action_btn.classList.toggle('warn',!!template);
   }
   v322_update_object_template_candidate_select();
   if(!template){
