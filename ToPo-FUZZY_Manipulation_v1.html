@@ -704,7 +704,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full"><label>Template name</label><input id="objectTemplateName" type="text" value="Object template" maxlength="120"></div>
           <div><label>Canonical yaw [deg]</label><input id="objectTemplateYawDeg" type="number" min="-180" max="180" step="1" value="0"></div>
           <div class="full"><label><input id="showObjectTemplate" type="checkbox" checked> 登録GNGテンプレートを重ね描画</label></div>
-          <input id="objectTemplateFile" type="file" class="hide" accept=".json,application/json">
+          <input id="objectTemplateFile" type="file" class="hide" accept=".json,.json.gz,application/json,application/gzip">
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="objectTemplateSaveBtn" class="primary" type="button">現在GNGをテンプレート保存</button>
@@ -1825,7 +1825,7 @@ async function v322LoadObjectTemplateFile(file){
   if(!file) return;
   v322SetObjectTemplateStatus(`テンプレート読込中: ${file.name}`);
   try{
-    const template=v322NormalizeObjectTemplate(JSON.parse(await file.text()));
+    const template=v322NormalizeObjectTemplate(JSON.parse(await v312ReadImportedFileText(file)));
     state.objectTemplate=template;
     v322UpdateObjectTemplateControls();
     renderAll();

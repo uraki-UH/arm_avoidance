@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-  printf '使用法: ros2 run ais_gng save_object_gng_dataset <object_name>\n' >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  printf '使用法: ros2 run ais_gng save_object_gng_dataset <object_name> [--with-points]\n' >&2
   exit 2
 fi
 
@@ -12,5 +12,14 @@ if [[ ! "$object_name" =~ ^[[:alpha:]][[:alnum:]_]*$ ]]; then
   exit 2
 fi
 
+enable_point_cloud_save=false
+if [ "$#" -eq 2 ]; then
+  if [ "$2" != "--with-points" ]; then
+    printf '不明なオプション: %s\n' "$2" >&2
+    exit 2
+  fi
+  enable_point_cloud_save=true
+fi
+
 exec ros2 service call /save_gng_data ais_gng_msgs/srv/SaveObjectGngDataset \
-  "{object_name: '${object_name}', output_dir: ''}"
+  "{object_name: '${object_name}', enable_point_cloud_save: ${enable_point_cloud_save}, output_dir: ''}"

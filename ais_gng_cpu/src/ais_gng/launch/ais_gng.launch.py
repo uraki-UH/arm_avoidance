@@ -33,6 +33,14 @@ def generate_launch_description():
         default_value='',
         description='入力PointCloud2トピックの上書き'
     )
+    declar_source_point_cloud_topic = DeclareLaunchArgument(
+        'source_point_cloud_topic',
+        default_value='auto',
+        description=(
+            '保存用元PointCloud2トピック。autoはinput_topicを使用し、'
+            '空文字は元点群保存を無効化'
+        )
+    )
     declar_plane_params_file = DeclareLaunchArgument(
         'plane_params_file',
         default_value=os.path.join(
@@ -95,6 +103,10 @@ def generate_launch_description():
         input_topic = LaunchConfiguration('input_topic').perform(context)
         if input_topic:
             parameters.append({'input.topic_names': [input_topic]})
+        source_point_cloud_topic = LaunchConfiguration(
+            'source_point_cloud_topic').perform(context)
+        if source_point_cloud_topic == 'auto':
+            source_point_cloud_topic = input_topic
 
         topological_map_topic = LaunchConfiguration(
             'topological_map_topic').perform(context)
@@ -125,7 +137,10 @@ def generate_launch_description():
             Node(
                 package='ais_gng',
                 executable='object_gng_dataset_exporter_node',
-                parameters=[{'map_topic': topological_map_topic}],
+                parameters=[{
+                    'map_topic': topological_map_topic,
+                    'point_cloud_topic': source_point_cloud_topic,
+                }],
                 output='screen',
             ),
         ]
@@ -162,6 +177,7 @@ def generate_launch_description():
         declar_lidar,
         declar_backend,
         declar_input_topic,
+        declar_source_point_cloud_topic,
         declar_plane_params_file,
         declar_start_plane_cluster,
         declar_topological_map_topic,

@@ -2,6 +2,7 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/msg/topological_node.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <zlib.h>
 
 #include <algorithm>
 #include <array>
@@ -147,6 +148,29 @@ public:
 private:
   static json readDataset(const std::string &dataset_path)
   {
+    if (dataset_path.size() >= 3U && dataset_path.substr(dataset_path.size() - 3U) == ".gz") {
+      gzFile file = gzopen(dataset_path.c_str(), "rb");
+      if (file == nullptr) {
+        throw std::runtime_error("データセットgzipを開けません: " + dataset_path);
+      }
+      std::string text;
+      std::array<char, 64U * 1024U> buffer{};
+      int read_byte_num = 0;
+      while ((read_byte_num = gzread(file, buffer.data(), buffer.size())) > 0) {
+        text.append(buffer.data(), static_cast<std::size_t>(read_byte_num));
+      }
+      const bool has_read_error = read_byte_num < 0;
+      const int close_result = gzclose(file);
+      if (has_read_error || close_result != Z_OK) {
+        throw std::runtime_error("データセットgzipの読込失敗: " + dataset_path);
+      }
+      try {
+        return json::parse(text);
+      } catch (const json::exception &error) {
+        throw std::runtime_error(
+                "データセットJSONの解析失敗: " + std::string(error.what()));
+      }
+    }
     std::ifstream stream(dataset_path);
     if (!stream) {
       throw std::runtime_error("データセットJSONを開けません: " + dataset_path);

@@ -1,4 +1,5 @@
 string object_name
+bool enable_point_cloud_save
 string output_dir
 ---
 bool success

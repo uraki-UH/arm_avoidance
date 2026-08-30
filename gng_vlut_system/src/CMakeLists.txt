@@ -110,6 +110,7 @@ add_executable(gazebo_entity_tf_follower_node nodes/bridge/gazebo_entity_tf_foll
 add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_robot_viewer_node.cpp)
 add_executable(voxel_to_vlut_node nodes/bridge/voxel_to_vlut_node.cpp)
 add_executable(object_template_map_publisher_node nodes/bridge/object_template_map_publisher_node.cpp)
+target_link_libraries(object_template_map_publisher_node ZLIB::ZLIB)
 add_executable(object_match_hypothesis_publisher_node nodes/bridge/object_match_hypothesis_publisher_node.cpp)
 # Grouped Nodes
 add_executable(robot_description_player_node nodes/self_recognition/robot_description_player.cpp)
