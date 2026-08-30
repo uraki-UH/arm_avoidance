@@ -697,7 +697,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
             <div id="evaluationMetricStatus" class="status evaluation-metric-status" style="margin-top:6px">評価入力: 未受信</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-              <button id="gngBundlePlayBtn" class="go" type="button">再生</button>
+              <button id="gngBundlePlayBtn" data-action-kind="play" type="button">再生</button>
             </div>
           </div>
           <div class="section-title">登録済みオブジェクトGNG</div>
@@ -706,9 +706,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <input id="object_template_file" type="file" class="hide" accept=".json,.json.gz,application/json,application/gzip" multiple>
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button id="objectTemplateSaveBtn" class="primary" type="button">現在GNGをテンプレート保存</button>
-              <button id="objectSurfaceDatasetSaveBtn" class="primary" type="button">完全表面点群データセット保存</button>
-              <button id="object_template_action_btn" class="primary" type="button">登録GNGを選択</button>
+              <button id="objectTemplateSaveBtn" data-action-kind="load" type="button">現在GNGをテンプレート保存</button>
+              <button id="objectSurfaceDatasetSaveBtn" data-action-kind="load" type="button">完全表面点群データセット保存</button>
+              <button id="object_template_action_btn" data-action-kind="load" type="button">登録GNGを選択</button>
             </div>
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
           </div>
@@ -1044,6 +1044,19 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-c
 'use strict';
 const $=id=>document.getElementById(id);
 const TAU=Math.PI*2;
+const action_button_class_by_kind=Object.freeze({load:'primary',play:'go'});
+function set_action_button_style(button,action_kind){
+  if(!button) return;
+  const class_name=action_button_class_by_kind[action_kind];
+  if(!class_name) return;
+  button.classList.remove(...Object.values(action_button_class_by_kind));
+  button.classList.add(class_name);
+}
+function sync_action_button_styles(root=document){
+  root.querySelectorAll('[data-action-kind]').forEach(button=>
+    set_action_button_style(button,button.dataset.actionKind)
+  );
+}
 function reportGngRuntimeError(context,err){console.warn('[GNG error]',context,err);}
 const state={
   objectSurfacePoints:[],basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
@@ -7633,7 +7646,7 @@ $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースを完全表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
-  bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
+  sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern','playbackSpeed'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
 setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
