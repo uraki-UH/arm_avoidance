@@ -133,3 +133,6 @@ ros2 run ais_gng ais_gng_node
 
 ## License
 MIT
+
+スタンドアロンHTMLでのMCAP直接再生については
+[`doc/STANDALONE_MCAP.md`](doc/STANDALONE_MCAP.md)を参照。

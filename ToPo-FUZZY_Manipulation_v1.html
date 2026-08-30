@@ -593,6 +593,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 }
 </style>
 <script src="libs/roslib.min.js"></script>
+<script src="topo_mcap_reader.js"></script>
 </head>
 <body>
 <header>
@@ -688,10 +689,10 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="gngBundleTopicList" class="bundle-topic-list"></div>
           </div>
-          <input id="gngDataFile" type="file" class="hide" accept=".json, .json.gz">
+          <input id="gngDataFile" type="file" class="hide" accept=".json,.json.gz,.mcap,application/json,application/gzip,application/octet-stream">
           <div class="full">
-            <button id="gngLoadDataBtn" class="primary" type="button">ROS bag JSON(json.gz)を読み込む</button>
-            <button id="gngClearDataBtn" class="warn" type="button" style="display:none">JSONを破棄</button>
+            <button id="gngLoadDataBtn" class="primary" type="button">MCAP / ROS bag JSONを読み込む</button>
+            <button id="gngClearDataBtn" class="warn" type="button" style="display:none">読込みデータを破棄</button>
             <div id="gngLoadDataStatus" class="status" style="margin-top:6px">未読み込みです。</div>
             <div id="gngSelectedFileName" class="readout" style="margin-top:6px">選択ファイル: なし</div>
             <div id="evaluationMetricStatus" class="status evaluation-metric-status" style="margin-top:6px">評価入力: 未受信</div>
@@ -1643,7 +1644,9 @@ function normalizeGraphNode(node, idx){
     };
   }
   if(!node||typeof node!=='object') return null;
-  const x=+node.x, y=+node.y, z=+node.z;
+  const position=node.pos||node.position||node;
+  const normal=node.normal||{};
+  const x=+position.x, y=+position.y, z=+position.z;
   if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
   return {
     x,y,z,
@@ -1651,10 +1654,12 @@ function normalizeGraphNode(node, idx){
     err:Number.isFinite(+node.err)?+node.err:0,
     win:Number.isFinite(+node.win)?+node.win:0,
     util:Number.isFinite(+node.util)?+node.util:0,
-    nx:Number.isFinite(+node.nx)?+node.nx:0,
-    ny:Number.isFinite(+node.ny)?+node.ny:0,
-    nz:Number.isFinite(+node.nz)?+node.nz:0,
+    nx:Number.isFinite(+node.nx)?+node.nx:Number.isFinite(+normal.x)?+normal.x:0,
+    ny:Number.isFinite(+node.ny)?+node.ny:Number.isFinite(+normal.y)?+normal.y:0,
+    nz:Number.isFinite(+node.nz)?+node.nz:Number.isFinite(+normal.z)?+normal.z:0,
     rho:Number.isFinite(+node.rho)?+node.rho:0,
+    semantic_label:Number.isFinite(+node.semantic_label)?+node.semantic_label:0,
+    semantic_reliability:Number.isFinite(+node.semantic_reliability)?+node.semantic_reliability:0,
     age:Number.isFinite(+node.age)?+node.age:0,
     frame:Number.isFinite(+node.frame)?+node.frame:0,
     inpcl_ids:Array.isArray(node.inpcl_ids)?node.inpcl_ids.map(v=>+v||0):[],
@@ -1859,6 +1864,9 @@ function normalizeImportedPoint(point, idx){
 function v312NormalizeAliasText(value){
   return String(value||'').trim();
 }
+function v312EscapeHtml(value){
+  return String(value??'').replace(/[&<>"']/g,(ch)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 function v312SetGngLoadStatus(text){
   const el=$('gngLoadDataStatus');
   const msg=String(text||'');
@@ -1885,9 +1893,10 @@ function v312UpdateBundleSelectionStatus(){
   }
   const entries=v312GetBundleTopicEntries(bundle);
   const selected=entries.filter((entry)=>state.bundleTopicSelection[entry.alias]).length;
-  el.textContent=`bundle JSON 読み込み済み: topics=${entries.length}, selected=${selected}`;
+  const sourceType=bundle.version==='topo_mcap_browser_v1'?'MCAP':'bundle JSON';
+  el.textContent=`${sourceType} 読み込み済み: topics=${entries.length}, selected=${selected}`;
   const topo=$('topoStatus');
-  if(topo) topo.textContent=`bundle JSON 読み込み済み: topics=${entries.length}, selected=${selected}`;
+  if(topo) topo.textContent=`${sourceType} 読み込み済み: topics=${entries.length}, selected=${selected}`;
   const toggleBtn=$('gngBundleToggleAllBtn');
   if(toggleBtn){
     if(selected===entries.length) toggleBtn.textContent='全解除';
@@ -2361,7 +2370,9 @@ function v312GetBundleTopicEntries(bundle){
     topic:v312NormalizeAliasText(entry&&entry.topic?entry.topic:entry&&entry.resolved_topic?entry.resolved_topic:alias),
     kind:v312NormalizeAliasText(entry&&entry.kind||'generic'),
     role:v312NormalizeAliasText(entry&&entry.role||'generic'),
-    message_count:Number.isFinite(+entry?.row_count)?+entry.row_count:v312NormalizeTopicMessages(entry).length,
+    message_count:Number.isFinite(+entry?.row_count)&&+entry.row_count>0?+entry.row_count:v312NormalizeTopicMessages(entry).length,
+    loaded_message_count:v312NormalizeTopicMessages(entry).length,
+    sample_stride:Number.isFinite(+entry?.sample_stride)?Math.max(1,+entry.sample_stride):1,
     selected:state.bundleTopicSelection[v312NormalizeAliasText(entry&&entry.alias?entry.alias:alias)] ?? true
   }));
 }
@@ -2381,23 +2392,28 @@ function v312ResolveBundleGraphEntry(bundle){
   }
   return null;
 }
-function v312ExtractBundleGraphMessages(bundle){
-  const resolved=v312ResolveBundleGraphEntry(bundle);
-  if(!resolved) return null;
-  const messages=v312NormalizeTopicMessages(resolved.entry);
-  if(!messages.length) return null;
-  const schema=Array.isArray(resolved.entry.schema)?resolved.entry.schema:[];
-  return {
-    alias:resolved.alias,
-    topic:resolved.entry.topic||resolved.alias,
-    messageCount:Number.isFinite(+resolved.entry.row_count)?+resolved.entry.row_count:messages.length,
-    schema,
-    messages:messages.map((row)=>({
-      stamp_ns:Array.isArray(row)?(Number.isFinite(+row[0])?+row[0]:0):Number.isFinite(+row?.stamp_ns)?+row.stamp_ns:Number.isFinite(+row?.stamp)?+row.stamp:0,
-      schema,
-      data:Array.isArray(row)?row:row&&typeof row==='object'&&'data' in row ? row.data : row,
-    })).filter((msg)=>msg.data).sort((a,b)=>(a.stamp_ns||0)-(b.stamp_ns||0)),
-  };
+function v312ExtractBundleFlowMessages(bundle){
+  const topics=v312ResolveBundleTopics(bundle);
+  if(!topics) return null;
+  const messages=[];
+  let messageCount=0;
+  for(const [alias,entry] of Object.entries(topics)){
+    if(!state.bundleTopicSelection[alias]) continue;
+    const kind=String(entry?.kind||'generic');
+    const role=String(entry?.role||'generic');
+    if(kind!=='topological_map'&&role!=='graph'&&kind!=='pointcloud2'&&role!=='pointcloud') continue;
+    const rows=v312NormalizeTopicMessages(entry);
+    const schema=Array.isArray(entry?.schema)?entry.schema:[];
+    messageCount+=Number.isFinite(+entry?.row_count)&&+entry.row_count>0?+entry.row_count:rows.length;
+    for(const row of rows){
+      const data=Array.isArray(row)?row:row&&typeof row==='object'&&'data' in row?row.data:row;
+      if(!data) continue;
+      const stampNs=Array.isArray(row)?+row[0]||0:Number.isFinite(+row?.stamp_ns)?+row.stamp_ns:Number.isFinite(+row?.stamp)?+row.stamp:0;
+      messages.push({alias,topic:entry?.topic||alias,kind,role,stamp_ns:stampNs,schema,data});
+    }
+  }
+  messages.sort((a,b)=>(a.stamp_ns||0)-(b.stamp_ns||0));
+  return {alias:'selected_topics',topic:'selected topics',messageCount,messages};
 }
 function v312LoadBundleGraphMessage(msg, opts={}){
   const payload=Array.isArray(msg)?msg[1]:msg&&typeof msg==='object'&&'data' in msg ? msg.data : msg;
@@ -2420,7 +2436,35 @@ function v312LoadBundleGraphMessage(msg, opts={}){
       },opts);
     }
   }
-  return v312LoadGraphSession(payload,opts);
+  const sourceNodes=Array.isArray(payload.nodes)?payload.nodes:[];
+  const nodeIdxById=new Map(sourceNodes.map((node,idx)=>[Number.isFinite(+node?.id)?+node.id:idx,idx]));
+  const sourceEdges=Array.isArray(payload.edges)?payload.edges:[];
+  const edges=sourceEdges.length&&sourceEdges.every(edge=>Number.isFinite(+edge))
+    ? Array.from({length:Math.floor(sourceEdges.length/2)},(_,idx)=>{
+        const aId=+sourceEdges[idx*2];
+        const bId=+sourceEdges[idx*2+1];
+        return {a:nodeIdxById.get(aId)??aId,b:nodeIdxById.get(bId)??bId};
+      })
+    : sourceEdges;
+  return v312LoadGraphSession({...payload,nodes:sourceNodes,edges},opts);
+}
+function v312LoadBundlePointcloudMessage(msg){
+  const payload=Array.isArray(msg)?msg[1]:msg&&typeof msg==='object'&&'data' in msg?msg.data:msg;
+  const frames=v312ExtractFramesFromPayload(payload);
+  if(!frames||!frames.length) return false;
+  const frame=frames[frames.length-1];
+  state.importedPointFrames=frames;
+  state.basePoints=frame.map((p,i)=>({...p,id:p.id??i}));
+  state.points=state.basePoints.map(p=>({...p}));
+  if($('pointCloudSource'))$('pointCloudSource').value='imported_frames';
+  updateMetrics();
+  renderAll();
+  return true;
+}
+function v312LoadBundleFlowMessage(msg,opts={}){
+  if(msg?.kind==='pointcloud2'||msg?.role==='pointcloud') return v312LoadBundlePointcloudMessage(msg);
+  if(msg?.kind==='topological_map'||msg?.role==='graph') return v312LoadBundleGraphMessage(msg,opts);
+  return false;
 }
 function v312StopBundleFlow(opts={}){
   if(state.bundleFlow){
@@ -2440,9 +2484,9 @@ function v312SetBundleFlowStatus(text){
   v312SetGngLoadStatus(text);
 }
 function v312PrepareBundleFlowFromBeginning(bundle){
-  const flow=v312ExtractBundleGraphMessages(bundle);
+  const flow=v312ExtractBundleFlowMessages(bundle);
   if(!flow || !flow.messages.length){
-    v312SetBundleFlowStatus('読み込み失敗: flow対象のgraphメッセージがありません。');
+    v312SetBundleFlowStatus('読み込み失敗: 選択topicに再生可能なPointCloud2またはTopologicalMapがありません。');
     return false;
   }
   state.bundleFlow={
@@ -2465,7 +2509,7 @@ function v312PrepareBundleFlowFromBeginning(bundle){
   state.pointPlaying=false;
   state.gngPlaying=false;
   updateHud();
-  v312LoadBundleGraphMessage(flow.messages[0],{preserveBundle:true});
+  v312LoadBundleFlowMessage(flow.messages[0],{preserveBundle:true});
   state.bundleFlow.started=true;
   state.bundleFlow.nextIndex=1;
   state.bundleFlow.lastAppliedStampNs=flow.messages[0].stamp_ns||0;
@@ -2512,7 +2556,7 @@ function v312AdvanceBundleFlow(now){
     const msg=flow.messages[flow.nextIndex];
     const relMs=((msg.stamp_ns||0)-flow.baseStampNs)/1e6;
     if(relMs>flow.elapsedMs) break;
-    v312LoadBundleGraphMessage(msg,{preserveBundle:true});
+    v312LoadBundleFlowMessage(msg,{preserveBundle:true});
     flow.index=flow.nextIndex;
     flow.lastAppliedStampNs=msg.stamp_ns||0;
     flow.nextIndex++;
@@ -2526,7 +2570,7 @@ function v312AdvanceBundleFlow(now){
       flow.elapsedMs=0;
       flow.lastNow=now;
       flow.ended=false;
-      v312LoadBundleGraphMessage(first,{preserveBundle:true});
+      v312LoadBundleFlowMessage(first,{preserveBundle:true});
       v312SetBundleFlowStatus(`flow loop: ${flow.topic} / messages=${flow.messages.length} / total=${flow.messageCount} / restart=0`);
       return true;
     }
@@ -2556,7 +2600,10 @@ function v312RenderBundleTopicList(bundle){
     '<div class="bundle-topic-head">Bundle topics</div>',
     ...entries.map((entry)=>{
       const checked=entry.selected?'checked':'';
-      return `<label><input type="checkbox" data-bundle-alias="${entry.alias.replace(/"/g,'&quot;')}" ${checked}><span>${entry.alias}</span><span class="bundle-topic-meta">${entry.role}/${entry.kind} ${entry.message_count} msg${entry.topic!==entry.alias?` · ${entry.topic}`:''}</span></label>`;
+      const sourceEntry=v312ResolveBundleTopics(bundle)?.[entry.alias];
+      const unsupported=sourceEntry?.unsupported_reason?` · 非対応: ${String(sourceEntry.unsupported_reason)}`:'';
+      const sampled=entry.loaded_message_count<entry.message_count?` · 読込=${entry.loaded_message_count}, 間引き=${entry.sample_stride}`:'';
+      return `<label><input type="checkbox" data-bundle-alias="${v312EscapeHtml(entry.alias)}" ${checked} ${unsupported?'disabled':''}><span>${v312EscapeHtml(entry.alias)}</span><span class="bundle-topic-meta">${v312EscapeHtml(entry.role)}/${v312EscapeHtml(entry.kind)} ${entry.message_count} msg${entry.topic!==entry.alias?` · ${v312EscapeHtml(entry.topic)}`:''}${v312EscapeHtml(sampled)}${v312EscapeHtml(unsupported)}</span></label>`;
     })
   ].join('');
   box.querySelectorAll('input[type=checkbox][data-bundle-alias]').forEach(el=>{
@@ -2578,7 +2625,8 @@ function v312SetBundleTopicSelectionDefaults(bundle){
   state.bundleTopicSelection={};
   for(const entry of v312GetBundleTopicEntries(bundle)){
     const key=entry.alias;
-    state.bundleTopicSelection[key]=true;
+    const sourceEntry=v312ResolveBundleTopics(bundle)?.[key];
+    state.bundleTopicSelection[key]=!sourceEntry?.unsupported_reason;
   }
   v312UpdateBundleSelectionStatus();
 }
@@ -2587,7 +2635,8 @@ function v312SetBundleTopicSelectionAll(bundle, enabled){
   const entries=v312GetBundleTopicEntries(bundle);
   if(!entries.length) return;
   for(const entry of entries){
-    state.bundleTopicSelection[entry.alias]=flag;
+    const sourceEntry=v312ResolveBundleTopics(bundle)?.[entry.alias];
+    state.bundleTopicSelection[entry.alias]=flag&&!sourceEntry?.unsupported_reason;
   }
   v312UpdateBundleSelectionStatus();
 }
@@ -6869,6 +6918,22 @@ function v312LoadGraphSession(session, opts={}){
   if(!ok) v312SetGngLoadStatus('graph-only JSON の読み込みに失敗しました。');
   return ok;
 }
+function v312RegisterImportedBundle(bundle,sourceLabel){
+  state.importedBundle=bundle;
+  v312SetBundleTopicSelectionDefaults(bundle);
+  v312RenderBundleTopicList(bundle);
+  v312ExtractGraspPosesFromBundle(bundle);
+  const metricInfo=v320ExtractEvaluationMetricsFromBundle(bundle);
+  const entries=v312GetBundleTopicEntries(bundle);
+  const topics=v312ResolveBundleTopics(bundle)||{};
+  const playable=entries.filter((entry)=>!topics[entry.alias]?.unsupported_reason&&(entry.kind==='pointcloud2'||entry.role==='pointcloud'||entry.kind==='topological_map'||entry.role==='graph')).length;
+  const poseCount=(state.graspPoseCandidates||[]).length;
+  const clearBtn=$('gngClearDataBtn');if(clearBtn)clearBtn.style.display='';
+  const metricText=(metricInfo.schemas||metricInfo.samples)?`, eval schema=${metricInfo.schemas}, eval sample=${metricInfo.samples}`:'';
+  const structuredText=metricInfo.structuredInputs?`, eval structured=${metricInfo.structuredInputs} input/${metricInfo.structuredMessages} msg`:'';
+  v312SetGngLoadStatus(`読み込み完了: ${sourceLabel} / topics=${entries.length}, playable=${playable}${poseCount?`, grasp poses=${poseCount}`:''}${metricText}${structuredText}. 再生でflowを開始します。`);
+  if(poseCount)renderAll();
+}
 function v312SetupGngInputFileLoader(){
   const el=$('gngDataFile')||$('pointCloudFile');
   if(!el||el.dataset.boundV312)return;
@@ -6881,8 +6946,14 @@ function v312SetupGngInputFileLoader(){
     }
     v312SetGngSelectedFileName(f.name);
     v312SetGngLoadStatus(`読み込み中: ${f.name}`);
-    const txt=await v312ReadImportedFileText(f);
     try{
+      if(/\.mcap$/i.test(f.name)){
+        if(!globalThis.TopoMcapReader||typeof globalThis.TopoMcapReader.readFile!=='function')throw new Error('topo_mcap_reader.js が読み込まれていません。');
+        const bundle=await globalThis.TopoMcapReader.readFile(f);
+        v312RegisterImportedBundle(bundle,'MCAP');
+        return;
+      }
+      const txt=await v312ReadImportedFileText(f);
       const parsed=v312ParseGngInputText(txt);
       if(!parsed){
         $('topoStatus').textContent='GNG input file load failed: empty file.';
@@ -6898,18 +6969,7 @@ function v312SetupGngInputFileLoader(){
         return;
       }
       if(parsed.kind==='bundle'){
-        state.importedBundle=parsed.payload;
-        v312SetBundleTopicSelectionDefaults(parsed.payload);
-        v312RenderBundleTopicList(parsed.payload);
-        v312ExtractGraspPosesFromBundle(parsed.payload);
-        const metricInfo=v320ExtractEvaluationMetricsFromBundle(parsed.payload);
-        const entries=v312GetBundleTopicEntries(parsed.payload);
-        const poseCount=(state.graspPoseCandidates||[]).length;
-        const _cb=$('gngClearDataBtn');if(_cb)_cb.style.display='';
-        const metricText=(metricInfo.schemas||metricInfo.samples)?`, eval schema=${metricInfo.schemas}, eval sample=${metricInfo.samples}`:'';
-        const structuredText=metricInfo.structuredInputs?`, eval structured=${metricInfo.structuredInputs} input/${metricInfo.structuredMessages} msg`:'';
-        v312SetGngLoadStatus(`読み込み完了: rosbag bundle JSON / topics=${entries.length}${poseCount?`, grasp poses=${poseCount}`:''}${metricText}${structuredText}. 再生で flow を開始します。`);
-        if(poseCount) renderAll();
+        v312RegisterImportedBundle(parsed.payload,'rosbag bundle JSON');
         return;
       }
       if(parsed.kind==='pointcloud' && parsed.payload && typeof parsed.payload==='object' && !Array.isArray(parsed.payload)){
@@ -6922,7 +6982,7 @@ function v312SetupGngInputFileLoader(){
         v312SetGngLoadStatus('読み込み失敗: point cloud を抽出できませんでした。');
       }
     }catch(e){
-      $('topoStatus').textContent='Point-cloud file load failed: '+(e&&e.message?e.message:e);
+      $('topoStatus').textContent='Data file load failed: '+(e&&e.message?e.message:e);
       v312SetGngLoadStatus('読み込み失敗: '+(e&&e.message?e.message:e));
     }
   });

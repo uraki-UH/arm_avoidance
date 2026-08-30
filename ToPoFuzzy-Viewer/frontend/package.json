@@ -6,10 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:mcap-reader": "esbuild src/standalone/mcap_reader.ts --bundle --format=iife --global-name=TopoMcapReader --platform=browser --target=es2020 --loader:.wasm=dataurl --external:fs --external:path --outfile=../../topo_mcap_reader.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@foxglove/rosmsg": "^5.0.5",
+    "@foxglove/rosmsg2-serialization": "^3.1.2",
+    "@mcap/browser": "^1.1.0",
+    "@mcap/core": "^2.2.1",
+    "@mcap/support": "^1.1.0",
     "@react-three/drei": "^9.120.0",
     "@react-three/fiber": "^8.17.10",
     "lucide-react": "^0.562.0",
