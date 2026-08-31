@@ -894,20 +894,73 @@ QoSは`reliable`、depth 1、`transient_local`とする。配信するnodeには
 
 ```bash
 ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
-  dataset_id:=mug_complete_v1
+  dataset_file:=mug_complete
 ```
 
-launchは既定の`/datasets`へ`<dataset_id>_gng_template.json.gz`を連結して読込先を組み立てる。
-上記の`dataset_id`が`mug_complete_v1`なら、読込先は
-`/datasets/mug_complete_v1_gng_template.json.gz`、出力topicは
-`/mug_complete_v1/topological_map_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
+launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結して読込先を組み立てる。
+上記の`dataset_file`が`mug_complete`なら、読込先は
+`/datasets/mug_complete_gng_template.json.gz`、出力topicは
+`/mug_complete/topological_map_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
 ない場合は`gng_template.template_id`を使用する。IDは英字開始の英数字と`_`だけを許可する。
 テストなどで読込先ディレクトリだけを変更する場合は、任意引数`dataset_dir`を使用する。
 
 このtopicは物体認識・照合用であり、ロボット関節空間の`/ToPoDualArm/topological_map_static`を
 置換しない。`gng_viewer_bridge.launch.py`が読むロボット用`gng.bin`と`vlut.bin`も変更しない。
 
-### 15.2 物体照合仮説の配信
+### 15.2 物体GNGテンプレート照合と確定配信
+
+`object_template_matching.launch.py`は、データセットファイルからテンプレートIDを読み、
+`object_template_matcher_node`、`object_template_match_validator_node`、
+`object_template_map_publisher_node`を一組で起動する。必要な物体指定は`dataset_file`だけであり、
+`template_id`やframeの指定は不要とする。
+
+照合器は環境側`TopologicalMap`とテンプレートJSONを読み、姿勢候補ごとに一対一のnode対応を作る。
+node評価は符号不変の回転後法線、`rho`、node次数の連続的なファジー評価、edge評価は対応済みnode間の
+接続一致率とする。テンプレートnodeが環境側で未対応の場合は遮蔽または視野外として扱い、
+対応済み構造だけを加点する。XY平行移動や位置レジストレーションは実行しない。
+
+対応済み環境nodeへ接続する未対応nodeについて、対応先テンプレートnodeの未対応隣接nodeの
+どれにも適合しない場合は、仮説を破壊する反証nodeとする。反証量は各nodeの
+`winner_point_count`を入力点群支持量として集計し、対応nodeの支持量との比
+`contradiction_point_ratio`で評価する。`max_contradiction_point_ratio`を超える姿勢候補は
+高scoreでも除外し、score順の次点候補を選ぶ。全姿勢候補が除外された場合は`no_hypothesis`を
+出力し、静的テンプレートは召喚しない。
+
+`confirmed`後に反証候補が到着した場合、検証器は見失い猶予時間を使わずに即時`pending`へ戻す。
+これにより`activation_state_topic`を読む静的マップ配信器はテンプレート配信を停止する。
+この反証はGNGへ関連付けられた入力点群数を用いる方式であり、生点群の座標対テンプレート座標の
+直接残差評価は、将来の位置レジストレーション導入後に追加する。
+
+既定ではyawだけを探索する。roll/pitch範囲と刻みは設定可能だが、
+`enable_roll_pitch_search`がfalseの間は0度の固定仮説を使う。姿勢仮説数は
+`max_orientation_hypothesis_num`で上限を設ける。
+
+平面およびGNG nodeの法線は表裏を区別しない方向特徴として扱う。法線評価は内積の絶対値を使い、
+観測方向や局所推定による符号反転では減点しない。
+
+検証器は候補スコア、対応node・edge比率、欠損node比率、連続フレーム数、継続時間で
+`pending`と`confirmed`を判定する。確定開始と解除には別のscore値を用い、境界値での
+配信点滅を抑制する。状態と候補詳細は次のtopicへ`std_msgs/msg/String`のJSONとして配信する。
+
+| topic | 内容 |
+|---|---|
+| `/<template_id>/object_template_match_candidates` | 最良姿勢候補、score、対応node、対応edge比率、欠損率、反証点群支持量 |
+| `/<template_id>/object_template_match_state` | `pending`または`confirmed`、連続確認状態、最新候補 |
+| `/<template_id>/topological_map_static` | `confirmed`時だけ配信する事前登録GNG |
+
+```bash
+ros2 launch gng_vlut_system object_template_matching.launch.py \
+  dataset_file:=mug_complete
+```
+
+環境側topicは既定で`/topological_map`であり、`environment_topological_map_topic`で変更する。
+設定は`config/object_template_matching.yaml`へ分離し、姿勢探索、法線・`rho`・次数の評価範囲、
+edge重み、遮蔽許容、確定・解除条件をテンプレートごとに切り替えられる。
+
+`object_template_map_publisher_node`へ`activation_state_topic`を設定しない既存の起動方法は、
+従来どおり起動直後から静的マップを配信する。
+
+### 15.3 物体照合仮説の配信
 
 `object_match_hypothesis_publisher_node`は、テンプレートGNGと環境側GNGが両方取得できた後に、
 照合候補の環境nodeを空間セルで集約して配信する。現段階では照合スコアを計算せず、

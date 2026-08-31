@@ -2,6 +2,7 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/msg/topological_node.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <zlib.h>
 
 #include <algorithm>
@@ -109,6 +110,7 @@ public:
     declare_parameter<std::string>("template_id", "");
     declare_parameter<std::string>("frame_id", "object_template");
     declare_parameter<double>("publish_hz", 1.0);
+    declare_parameter<std::string>("activation_state_topic", "");
 
     const std::string dataset_path = get_parameter("dataset_path").as_string();
     if (dataset_path.empty()) {
@@ -131,7 +133,17 @@ public:
     publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
       topic_name, rclcpp::QoS(1).reliable().transient_local());
 
-    publishMessage();
+    const std::string activation_state_topic = get_parameter("activation_state_topic").as_string();
+    is_active_ = activation_state_topic.empty();
+    if (!activation_state_topic.empty()) {
+      activation_subscription_ = create_subscription<std_msgs::msg::String>(
+        activation_state_topic, rclcpp::QoS(1).reliable().transient_local(),
+        std::bind(&ObjectTemplateMapPublisherNode::onActivationState, this, std::placeholders::_1));
+    }
+
+    if (is_active_) {
+      publishMessage();
+    }
     const double publish_hz = std::max(0.1, get_parameter("publish_hz").as_double());
     const auto period = std::chrono::duration<double>(1.0 / publish_hz);
     timer_ = create_wall_timer(
@@ -140,9 +152,10 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "物体GNGテンプレート配信開始: topic=%s nodes=%zu edges=%zu clusters=%zu frame=%s",
+      "物体GNGテンプレート配信準備: topic=%s nodes=%zu edges=%zu clusters=%zu frame=%s activation=%s",
       topic_name.c_str(), message_.nodes.size(), message_.edges.size() / 2,
-      message_.clusters.size(), message_.header.frame_id.c_str());
+      message_.clusters.size(), message_.header.frame_id.c_str(),
+      is_active_ ? "active" : "待機");
   }
 
 private:
@@ -392,13 +405,41 @@ private:
 
   void publishMessage()
   {
+    if (!is_active_) {
+      return;
+    }
     message_.header.stamp = now();
     publisher_->publish(message_);
   }
 
+  void onActivationState(const std_msgs::msg::String::SharedPtr message)
+  {
+    try {
+      const json state = json::parse(message->data);
+      if (state.value("template_id", "") != template_id_) {
+        return;
+      }
+      const bool next_is_active = state.value("state", "") == "confirmed";
+      if (next_is_active == is_active_) {
+        return;
+      }
+      is_active_ = next_is_active;
+      if (is_active_) {
+        RCLCPP_INFO(get_logger(), "物体GNGテンプレート配信開始: template=%s", template_id_.c_str());
+        publishMessage();
+      } else {
+        RCLCPP_INFO(get_logger(), "物体GNGテンプレート配信停止: template=%s", template_id_.c_str());
+      }
+    } catch (const json::exception &error) {
+      RCLCPP_WARN(get_logger(), "テンプレート配信状態JSONの解析失敗: %s", error.what());
+    }
+  }
+
   std::string template_id_;
+  bool is_active_ = true;
   ais_gng_msgs::msg::TopologicalMap message_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr activation_subscription_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

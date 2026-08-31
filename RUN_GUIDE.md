@@ -64,6 +64,25 @@ source /ros2_ws/install/setup.bash
 ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
   dataset_file:=mug_complete
 
+## 環境GNGとの照合後に物体テンプレートを配信
+
+照合が連続フレームで確定した場合だけ、`/<template_id>/topological_map_static`へ
+事前登録GNGを配信する。
+
+```bash
+source /ros2_ws/install/setup.bash
+ros2 launch gng_vlut_system object_template_matching.launch.py \
+  dataset_file:=mug_complete
+```
+
+環境側GNG topicは既定で`/topological_map`。変更する場合は
+`environment_topological_map_topic:=/topological_map/merged`を追加する。
+姿勢許容、特徴量のファジー評価、確定条件は
+`/ros2_ws/src/gng_vlut_system/config/object_template_matching.yaml`で設定する。
+`max_contradiction_point_ratio`は、仮説の隣接構造で説明できない点群支持量の許容率とする。
+この値を超える候補は破棄し、次点yaw候補を評価する。全候補が破棄された場合は
+`topological_map_static`を配信しない。
+
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
