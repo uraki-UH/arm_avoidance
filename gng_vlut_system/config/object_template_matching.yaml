@@ -17,6 +17,13 @@ object_template_matcher_node:
     enable_rho_evaluation: true
     max_rho_dev_full_ratio: 0.15
     max_rho_dev_partial_ratio: 0.45
+    enable_scale_evaluation: true
+    min_scale_allow_ratio: 0.70
+    min_scale_full_match_ratio: 0.95
+    max_scale_full_match_ratio: 1.05
+    max_scale_allow_ratio: 1.30
+    scale_weight: 0.20
+    min_scale_edge_num: 3
     max_degree_dev_full: 0.0
     max_degree_dev_partial: 2.0
     normal_weight: 0.55

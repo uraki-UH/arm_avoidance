@@ -955,7 +955,13 @@ ros2 launch gng_vlut_system object_template_matching.launch.py \
 
 環境側topicは既定で`/topological_map`であり、`environment_topological_map_topic`で変更する。
 設定は`config/object_template_matching.yaml`へ分離し、姿勢探索、法線・`rho`・次数の評価範囲、
-edge重み、遮蔽許容、確定・解除条件をテンプレートごとに切り替えられる。
+edge重み、全体スケールの許容域、遮蔽許容、確定・解除条件をテンプレートごとに切り替えられる。
+
+`enable_scale_evaluation`有効時は、対応済みGNG edgeの長さ比
+`environment_edge_length / template_edge_length`の中央値を`scale_ratio`として評価する。
+`min_scale_full_match_ratio`から`max_scale_full_match_ratio`は満点、外側の
+`min_scale_allow_ratio`から`max_scale_allow_ratio`までは連続的に減点し、その外側は候補を反証する。
+対応edgeが`min_scale_edge_num`未満のときは遮蔽などによる未観測として、スケール評価を行わない。
 
 `object_template_map_publisher_node`へ`activation_state_topic`を設定しない既存の起動方法は、
 従来どおり起動直後から静的マップを配信する。

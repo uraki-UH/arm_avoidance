@@ -38,6 +38,7 @@ struct Vec3
 struct TemplateNode
 {
   std::uint16_t id = 0;
+  Vec3 position;
   Vec3 normal;
   double rho = 0.0;
   std::size_t degree = 0;
@@ -57,6 +58,14 @@ struct PairScore
   std::size_t environment_index = 0;
   std::size_t template_index = 0;
   double score = 0.0;
+};
+
+struct ScaleEvaluation
+{
+  bool is_observed = false;
+  std::size_t edge_num = 0;
+  double ratio = 1.0;
+  double score = 1.0;
 };
 
 bool isFinite(double value)
@@ -114,6 +123,24 @@ double descendingMembership(double value, double full_match_max, double partial_
     return 0.0;
   }
   return (partial_match_max - value) / (partial_match_max - full_match_max);
+}
+
+double intervalMembership(
+  double value, double min_allow, double min_full_match,
+  double max_full_match, double max_allow)
+{
+  if (value >= min_full_match && value <= max_full_match) {
+    return 1.0;
+  }
+  if (value <= min_allow || value >= max_allow || min_allow >= min_full_match ||
+    max_full_match >= max_allow)
+  {
+    return 0.0;
+  }
+  if (value < min_full_match) {
+    return (value - min_allow) / (min_full_match - min_allow);
+  }
+  return (max_allow - value) / (max_allow - max_full_match);
 }
 
 std::uint32_t edgeKey(std::size_t first, std::size_t second)
@@ -189,7 +216,12 @@ TemplateGraph loadTemplateGraph(const std::string &dataset_path)
     }
     const Vec3 normal = normalize({
       node.value("nx", 0.0), node.value("ny", 0.0), node.value("nz", 1.0)});
-    graph.nodes.push_back({static_cast<std::uint16_t>(index), normal, node.value("rho", 0.0), 0U});
+    graph.nodes.push_back({
+      static_cast<std::uint16_t>(index),
+      {node.value("x", 0.0), node.value("y", 0.0), node.value("z", 0.0)},
+      normal,
+      node.value("rho", 0.0),
+      0U});
   }
   graph.neighbors.resize(graph.nodes.size());
 
@@ -248,6 +280,13 @@ public:
     enable_rho_evaluation_ = declare_parameter<bool>("enable_rho_evaluation", true);
     max_rho_dev_full_ratio_ = declare_parameter<double>("max_rho_dev_full_ratio", 0.15);
     max_rho_dev_partial_ratio_ = declare_parameter<double>("max_rho_dev_partial_ratio", 0.45);
+    enable_scale_evaluation_ = declare_parameter<bool>("enable_scale_evaluation", false);
+    min_scale_allow_ratio_ = declare_parameter<double>("min_scale_allow_ratio", 0.70);
+    min_scale_full_match_ratio_ = declare_parameter<double>("min_scale_full_match_ratio", 0.95);
+    max_scale_full_match_ratio_ = declare_parameter<double>("max_scale_full_match_ratio", 1.05);
+    max_scale_allow_ratio_ = declare_parameter<double>("max_scale_allow_ratio", 1.30);
+    scale_weight_ = declare_parameter<double>("scale_weight", 0.20);
+    min_scale_edge_num_ = declare_parameter<int>("min_scale_edge_num", 3);
     max_degree_dev_full_ = declare_parameter<double>("max_degree_dev_full", 0.0);
     max_degree_dev_partial_ = declare_parameter<double>("max_degree_dev_partial", 2.0);
     normal_weight_ = declare_parameter<double>("normal_weight", 0.55);
@@ -281,17 +320,22 @@ public:
 private:
   void validateParameters() const
   {
-    const std::array<double, 13> values = {
+    const std::array<double, 18> values = {
       yaw_min_deg_, yaw_max_deg_, yaw_step_deg_, roll_min_deg_, roll_max_deg_, roll_step_deg_,
       pitch_min_deg_, pitch_max_deg_, pitch_step_deg_, min_node_score_, edge_weight_,
-      contradiction_weight_, max_contradiction_point_ratio_};
+      contradiction_weight_, max_contradiction_point_ratio_, min_scale_allow_ratio_,
+      min_scale_full_match_ratio_, max_scale_full_match_ratio_, max_scale_allow_ratio_, scale_weight_};
     if (std::any_of(values.begin(), values.end(), [](double value) {return !isFinite(value);}) ||
       yaw_step_deg_ <= 0.0 || roll_step_deg_ <= 0.0 || pitch_step_deg_ <= 0.0 ||
       yaw_min_deg_ > yaw_max_deg_ || roll_min_deg_ > roll_max_deg_ || pitch_min_deg_ > pitch_max_deg_ ||
       max_orientation_hypothesis_num_ <= 0 || min_node_score_ < 0.0 || min_node_score_ > 1.0 ||
       edge_weight_ < 0.0 || edge_weight_ > 1.0 || normal_weight_ < 0.0 || rho_weight_ < 0.0 ||
       degree_weight_ < 0.0 || contradiction_weight_ < 0.0 || contradiction_weight_ > 1.0 ||
-      max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0)
+      max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0 ||
+      min_scale_allow_ratio_ <= 0.0 || min_scale_allow_ratio_ >= min_scale_full_match_ratio_ ||
+      min_scale_full_match_ratio_ > max_scale_full_match_ratio_ ||
+      max_scale_full_match_ratio_ >= max_scale_allow_ratio_ || scale_weight_ < 0.0 ||
+      scale_weight_ > 1.0 || min_scale_edge_num_ <= 0)
     {
       throw std::runtime_error("物体テンプレート照合パラメータが不正です。");
     }
@@ -406,7 +450,7 @@ private:
       {"score", 0.0},
       {"is_falsified", true},
       {"rejected_hypothesis_num", candidates.size()},
-      {"rejection_reason", "contradictory_point_support"}};
+      {"rejection_reason", "contradiction_or_scale_out_of_range"}};
     std::size_t rejected_hypothesis_num = 0U;
     bool has_selected_candidate = false;
     for (std::size_t index = 0; index < candidates.size(); ++index) {
@@ -477,6 +521,57 @@ private:
       neighbors[second].push_back(first);
     }
     return neighbors;
+  }
+
+  ScaleEvaluation evaluateScale(
+    const ais_gng_msgs::msg::TopologicalMap &environment,
+    const std::vector<int> &template_to_environment) const
+  {
+    std::vector<double> ratios;
+    ratios.reserve(template_graph_.edges.size());
+    for (const auto &[template_first, template_second] : template_graph_.edges) {
+      const int environment_first = template_to_environment[template_first];
+      const int environment_second = template_to_environment[template_second];
+      if (environment_first < 0 || environment_second < 0) {
+        continue;
+      }
+      const Vec3 &template_first_position = template_graph_.nodes[template_first].position;
+      const Vec3 &template_second_position = template_graph_.nodes[template_second].position;
+      const double template_dx = template_first_position.x - template_second_position.x;
+      const double template_dy = template_first_position.y - template_second_position.y;
+      const double template_dz = template_first_position.z - template_second_position.z;
+      const double template_length = std::sqrt(
+        template_dx * template_dx + template_dy * template_dy + template_dz * template_dz);
+      if (template_length <= 1e-6) {
+        continue;
+      }
+      const auto &environment_first_position = environment.nodes[environment_first].pos;
+      const auto &environment_second_position = environment.nodes[environment_second].pos;
+      const double environment_dx = static_cast<double>(environment_first_position.x) -
+        static_cast<double>(environment_second_position.x);
+      const double environment_dy = static_cast<double>(environment_first_position.y) -
+        static_cast<double>(environment_second_position.y);
+      const double environment_dz = static_cast<double>(environment_first_position.z) -
+        static_cast<double>(environment_second_position.z);
+      const double environment_length = std::sqrt(
+        environment_dx * environment_dx + environment_dy * environment_dy +
+        environment_dz * environment_dz);
+      ratios.push_back(environment_length / template_length);
+    }
+    if (ratios.size() < static_cast<std::size_t>(min_scale_edge_num_)) {
+      return {};
+    }
+    std::sort(ratios.begin(), ratios.end());
+    const std::size_t middle = ratios.size() / 2U;
+    const double ratio = ratios.size() % 2U == 0U ?
+      (ratios[middle - 1U] + ratios[middle]) * 0.5 : ratios[middle];
+    return {
+      true,
+      ratios.size(),
+      ratio,
+      intervalMembership(
+        ratio, min_scale_allow_ratio_, min_scale_full_match_ratio_,
+        max_scale_full_match_ratio_, max_scale_allow_ratio_)};
   }
 
   json evaluateOrientation(
@@ -601,11 +696,17 @@ private:
     const double contradiction_point_ratio = matched_point_num + contradiction_point_num == 0U ? 1.0 :
       static_cast<double>(contradiction_point_num) /
       static_cast<double>(matched_point_num + contradiction_point_num);
-    const double base_score = (1.0 - edge_weight_) * node_score + edge_weight_ * edge_score;
+    const ScaleEvaluation scale_evaluation = enable_scale_evaluation_ ?
+      evaluateScale(environment, template_to_environment) : ScaleEvaluation{};
+    const double graph_score = (1.0 - edge_weight_) * node_score + edge_weight_ * edge_score;
+    const double base_score = scale_evaluation.is_observed ?
+      (1.0 - scale_weight_) * graph_score + scale_weight_ * scale_evaluation.score : graph_score;
     const double score = enable_contradiction_evaluation_ ?
       std::max(0.0, base_score - contradiction_weight_ * contradiction_point_ratio) : base_score;
-    const bool is_falsified = enable_contradiction_evaluation_ &&
+    const bool is_contradiction_falsified = enable_contradiction_evaluation_ &&
       contradiction_point_ratio > max_contradiction_point_ratio_;
+    const bool is_scale_falsified = scale_evaluation.is_observed && scale_evaluation.score <= 0.0;
+    const bool is_falsified = is_contradiction_falsified || is_scale_falsified;
 
     json correspondences = json::array();
     for (std::size_t template_index = 0; template_index < template_to_environment.size(); ++template_index) {
@@ -630,6 +731,11 @@ private:
       {"missing_node_ratio", 1.0 - static_cast<double>(matched_node_num) / template_graph_.nodes.size()},
       {"matched_edge_num", matched_edge_num},
       {"matched_edge_ratio", supported_edge_num == 0U ? 0.0 : edge_score},
+      {"is_scale_observed", scale_evaluation.is_observed},
+      {"scale_edge_num", scale_evaluation.edge_num},
+      {"scale_ratio", scale_evaluation.is_observed ? json(scale_evaluation.ratio) : json(nullptr)},
+      {"scale_score", scale_evaluation.is_observed ? json(scale_evaluation.score) : json(nullptr)},
+      {"is_scale_falsified", is_scale_falsified},
       {"contradiction_node_num", contradiction_indices.size()},
       {"contradiction_edge_num", contradiction_edge_num},
       {"contradiction_point_num", contradiction_point_num},
@@ -659,6 +765,13 @@ private:
   bool enable_rho_evaluation_ = true;
   double max_rho_dev_full_ratio_ = 0.0;
   double max_rho_dev_partial_ratio_ = 1.0;
+  bool enable_scale_evaluation_ = false;
+  double min_scale_allow_ratio_ = 0.0;
+  double min_scale_full_match_ratio_ = 0.0;
+  double max_scale_full_match_ratio_ = 0.0;
+  double max_scale_allow_ratio_ = 0.0;
+  double scale_weight_ = 0.0;
+  int min_scale_edge_num_ = 0;
   double max_degree_dev_full_ = 0.0;
   double max_degree_dev_partial_ = 1.0;
   double normal_weight_ = 1.0;
