@@ -1067,7 +1067,7 @@ function randn(r){let u=1-r(),v=1-r();return Math.sqrt(-2*Math.log(u))*Math.cos(
 function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 function dist2(a,b){let dx=a.x-b.x,dy=a.y-b.y,dz=a.z-b.z;return dx*dx+dy*dy+dz*dz}
 function distance(a,b){return Math.sqrt(dist2(a,b))}
-function addNoise(p,n,r){return{x:p.x+randn(r)*n,y:p.y+randn(r)*n,z:p.z+randn(r)*n,label:p.label||'body'}}
+function addNoise(p,n,r){return{...p,x:p.x+randn(r)*n,y:p.y+randn(r)*n,z:p.z+randn(r)*n,label:p.label||'body'}}
 function key(a,b){return a<b?a+'_'+b:b+'_'+a}
 
 /* v297: fast spatial grid acceleration for GNG nearest-neighbor search */
@@ -1181,7 +1181,7 @@ function v297SetFastGngDefaults(){
 }
 
 function labelOf(t){const m={mug:'カップ / Mug',teacup:'ティーカップ / Teacup',beer_mug:'ビアジョッキ / Beer mug',measuring_cup:'計量カップ / Measuring cup',milk_jug:'ミルクジャグ / Milk jug',pitcher:'ピッチャー / Pitcher',watering_can:'じょうろ / Watering can',detergent:'洗剤ボトル / Detergent bottle',kettle:'ケトル / Kettle',spray:'スプレーボトル / Spray bottle',saucepan:'片手鍋 / Saucepan',basket:'バスケット / Basket',canister:'キャニスタ / Canister',carafe:'カラフェ / Carafe'};return m[t]||String(t||'-')}
-function pushNoisy(pts,p,noise,r){pts.push(addNoise({x:p.x,y:p.y,z:p.z,label:p.label||'body'},noise,r))}
+function pushNoisy(pts,p,noise,r){pts.push(addNoise(p,noise,r))}
 function generateLoopHandle(pts,count,noise,r,opt={}){
   const attachX=opt.attachX !== undefined ? opt.attachX : 0.056;
   const outerX=opt.outerX !== undefined ? opt.outerX : 0.088;
@@ -1335,17 +1335,18 @@ function genSphereBody(pts,n,noise,r,o){
 function genFlatBody(pts,n,noise,r,o){
   // o: {rad, scaleY, depth, rimRad}
   const rad=o.rad, sy=o.scaleY||1, depth=o.depth||0.055, rimRad=o.rimRad??rad*0.88;
+  const rim_height_ratio=Math.max(0,Math.min(1,rimRad/rad));
   const bottomN=Math.floor(n*(o.bottomFrac??0.12));
-  const topN=n-bottomN;
-  for(let i=0;i<topN;i++){
-    const th=r()*TAU, rv=Math.sqrt(r())*rad;
-    const z=depth*(rv/rad)*(rv/rad)+0.004*(r()-.5);
-    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z,label:rv>rimRad?'rim':'body'},noise,r);
-  }
   const bottomZ=-(o.bottomThickness??Math.max(0.003,depth*0.08));
+  const side_num=n-bottomN;
+  for(let i=0;i<side_num;i++){
+    const th=r()*TAU, height_ratio=r(), z=bottomZ+(depth-bottomZ)*height_ratio;
+    const side_rad=rad*(.94+.06*height_ratio);
+    pushNoisy(pts,{x:side_rad*Math.cos(th),y:(side_rad*sy)*Math.sin(th),z,label:height_ratio>rim_height_ratio?'rim':'body'},noise,r);
+  }
   for(let i=0;i<bottomN;i++){
     const th=r()*TAU, rv=Math.sqrt(r())*rad;
-    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z:bottomZ,label:'body'},noise,r);
+    pushNoisy(pts,{x:rv*Math.cos(th),y:(rv*sy)*Math.sin(th),z:bottomZ,label:'body',is_table_occluded:true},noise,r);
   }
 }
 function genCap(pts,n,noise,r,o){
@@ -1536,7 +1537,40 @@ function generateObject(key, n, noise, seed){
 // ── 特殊形状オブジェクト（独自ボディロジックのため個別実装） ──
 function generateDetergent(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.68),handleN=Math.floor(n*.22),capN=n-bodyN-handleN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.10,y=(r()-.5)*0.065,z=r()*0.24;if(face===0)x=-0.05;if(face===1)x=0.05;if(face===2)y=-0.032;if(face===3)y=0.032;if(face===4)z=0;if(face===5)z=0.24;let round=0.010*Math.sin(Math.PI*z/0.24);x+=Math.sign(x||1)*round*r()*.35;y+=Math.sign(y||1)*round*r()*.35;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.052,outerX:0.093,centerZ:0.142,rz:0.060,tubeR:0.0055,widthY:0.009,arc:1.55});for(let i=0;i<capN;i++){let th=r()*TAU,z=.245+r()*0.045,rad=.025;pushNoisy(pts,{x:rad*Math.cos(th),y:rad*Math.sin(th),z,label:'cap'},noise,r)}return pts}
 function generateSprayBottle(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),headN=Math.floor(n*.15),handleN=n-bodyN-headN,bottomN=Math.floor(bodyN*.14),sideN=bodyN-bottomN;for(let i=0;i<sideN;i++){let z=r()*0.23,th=r()*TAU,radx=0.035+(r()-.5)*.004,rady=0.026+(r()-.5)*.003;pushNoisy(pts,{x:radx*Math.cos(th),y:rady*Math.sin(th),z,label:'body'},noise,r)}for(let i=0;i<bottomN;i++){let th=r()*TAU,rv=Math.sqrt(r());pushNoisy(pts,{x:rv*.035*Math.cos(th),y:rv*.026*Math.sin(th),z:0,label:'body'},noise,r)}for(let i=0;i<headN;i++){let x=(r()-.5)*.055,y=(r()-.5)*.036,z=.225+r()*.055;if(r()<.45){x=-.02-r()*.06;y=(r()-.5)*.018;z=.252+r()*.025}pushNoisy(pts,{x,y,z,label:'cap'},noise,r)}for(let i=0;i<handleN;i++){let t=r(),x=.028+r()*.030,y=(r()-.5)*.018,z=.105+t*.120; if(r()<.45){x=.050+r()*.028;z=.125+r()*.065}pushNoisy(pts,{x,y,z,label:'handle'},noise,r)}return pts}
-function generateBasket(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.70),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let x=(r()-.5)*.14,y=(r()-.5)*.095,z=r()*.095;let f=Math.floor(r()*5);if(f===0)x=-.07;if(f===1)x=.07;if(f===2)y=-.048;if(f===3)y=.048;if(f===4)z=.095;pushNoisy(pts,{x,y,z,label:z>.085?'rim':'body'},noise,r)}for(let i=0;i<handleN;i++){let side=r()<.5?-1:1,t=(r()-.5)*Math.PI*1.15,cx=side*.077,cy=0,cz=.070,Rz=.052,Ry=.042,tube=.007*(.8+r()*.4),ph=r()*TAU;pushNoisy(pts,{x:cx+tube*Math.cos(ph),y:cy+Ry*Math.sin(t)+tube*Math.sin(ph)*.7,z:cz+Rz*Math.cos(t)+tube*Math.sin(ph)*.5,label:'handle'},noise,r)}return pts}
+function generateBasket(n,noise,seed){
+  const r=rng(seed),pts=[];
+  const body_num=Math.floor(n*.70),handle_num=n-body_num;
+  const bottom_num=Math.floor(body_num*.18),rim_num=Math.floor((body_num-bottom_num)*.12),side_num=body_num-bottom_num-rim_num;
+  const half_width=.070,half_depth=.048,height=.095;
+  for(let i=0;i<side_num;i++){
+    const face=Math.floor(r()*4);
+    let x=(r()-.5)*half_width*2,y=(r()-.5)*half_depth*2,z=r()*height;
+    if(face===0)x=-half_width;
+    if(face===1)x=half_width;
+    if(face===2)y=-half_depth;
+    if(face===3)y=half_depth;
+    pushNoisy(pts,{x,y,z,label:'body'},noise,r);
+  }
+  for(let i=0;i<rim_num;i++){
+    const edge=Math.floor(r()*4);
+    let x=(r()-.5)*half_width*2,y=(r()-.5)*half_depth*2;
+    if(edge===0)x=-half_width;
+    if(edge===1)x=half_width;
+    if(edge===2)y=-half_depth;
+    if(edge===3)y=half_depth;
+    pushNoisy(pts,{x,y,z:height,label:'rim'},noise,r);
+  }
+  for(let i=0;i<bottom_num;i++){
+    const x=(r()-.5)*half_width*2,y=(r()-.5)*half_depth*2;
+    pushNoisy(pts,{x,y,z:0,label:'body',is_table_occluded:true},noise,r);
+  }
+  for(let i=0;i<handle_num;i++){
+    const side=r()<.5?-1:1,t=(r()-.5)*Math.PI*1.15;
+    const center_x=side*.077,center_y=0,center_z=.070,radius_z=.052,radius_y=.042,tube=.007*(.8+r()*.4),ph=r()*TAU;
+    pushNoisy(pts,{x:center_x+tube*Math.cos(ph),y:center_y+radius_y*Math.sin(t)+tube*Math.sin(ph)*.7,z:center_z+radius_z*Math.cos(t)+tube*Math.sin(ph)*.5,label:'handle'},noise,r);
+  }
+  return pts;
+}
 function generateToolbox(n,noise,seed){const r=rng(seed),pts=[];const bodyN=Math.floor(n*.74),handleN=n-bodyN;for(let i=0;i<bodyN;i++){let face=Math.floor(r()*6),x=(r()-.5)*0.12,y=(r()-.5)*0.070,z=r()*0.090;if(face===0)x=-0.060;if(face===1)x=0.060;if(face===2)y=-0.035;if(face===3)y=0.035;if(face===4)z=0;if(face===5)z=0.090;pushNoisy(pts,{x,y,z,label:'body'},noise,r)}generateLoopHandle(pts,handleN,noise,r,{attachX:0.0,outerX:0.0,centerZ:0.118,rz:0.028,tubeR:0.0048,widthY:0.046,arc:3.14159,axis:'x'});return pts}
 
 // ── ラッパー: 既存コードの generate* 関数名を維持 ──
@@ -1561,7 +1595,7 @@ function addTabletopScene(raw,seed){
   if(mode==='off')return raw;
   const design=$('tableDesign')?$('tableDesign').value:'rect';
   const r=rng(seed+5521), size=+$('tableSize').value||0.42, h=+$('tableHeight').value||0, dens=+$('tableDensity').value||0.25;
-  const pts=raw.map(p=>({...p,z:p.z+h}));
+  const pts=raw.filter((point)=>!point.is_table_occluded).map(p=>({...p,z:p.z+h}));
   const tableN=Math.floor((+$('pointCount').value||4200)*dens);
   const pushTable=(x,y,z)=>pts.push({x,y,z,label:'table'});
   if(design==='round'){
