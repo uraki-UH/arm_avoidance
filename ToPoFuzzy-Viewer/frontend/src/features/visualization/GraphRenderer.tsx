@@ -591,7 +591,7 @@ function GraphRendererCore({
         const normalHead = normalHeadRef.current;
         if (!normalLine || !normalHead) return;
 
-        if (!showNormals || !showNodes || graph.nodes.length === 0 || graph.nodes.length > normalCapacity) {
+        if (!showNormals || graph.nodes.length === 0 || graph.nodes.length > normalCapacity) {
             normalLine.geometry.setDrawRange(0, 0);
             normalHead.count = 0;
             normalHead.instanceMatrix.needsUpdate = true;
@@ -650,13 +650,13 @@ function GraphRendererCore({
         normalHead.count = normalNum;
         normalHead.instanceMatrix.needsUpdate = true;
         invalidate();
-    }, [graph.nodes, showNormals, showNodes, normalScale, normalCapacity, normalLineGeometry, invalidate]);
+    }, [graph.nodes, showNormals, normalScale, normalCapacity, normalLineGeometry, invalidate]);
 
     if (!data || !visible) return null;
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
-    const canMountNormals = showNormals && canMountNodes;
+    const canMountNormals = showNormals && graph.nodes.length > 0 && normalCapacity >= graph.nodes.length;
     const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
     const canMountManipEllipsoids = showManipulabilityEllipsoids && manipulabilityEllipsoids.length > 0 && manipEllipsoidCapacity >= manipulabilityEllipsoids.length;
     const handleManipClick = (instanceId?: number) => {

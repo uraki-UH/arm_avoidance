@@ -114,13 +114,13 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
     }, [clusterEdges]);
 
     const normalHelpers = useMemo(() => {
-        if (!showNormals || !showNodes) return [];
+        if (!showNormals) return [];
         return clusterNodes.map(node => {
             const origin = new THREE.Vector3(node.x, node.y, node.z);
             const dir = new THREE.Vector3(node.nx, node.ny, node.nz).normalize();
             return new THREE.ArrowHelper(dir, origin, 0.2, 0x00FFFF);
         });
-    }, [clusterNodes, showNormals, showNodes]);
+    }, [clusterNodes, showNormals]);
 
     useEffect(() => {
         return () => {
@@ -256,7 +256,7 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                         ))}
 
                         {/* Normals */}
-                        {showNormals && showNodes && normalHelpers.map((helper, i) => (
+                        {showNormals && normalHelpers.map((helper, i) => (
                             <primitive key={`norm-${i}`} object={helper} />
                         ))}
 
