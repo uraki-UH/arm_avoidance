@@ -1230,6 +1230,50 @@ function generateTopHandle(pts,count,noise,r,opt={}){
     pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
   }
 }
+function generate_connected_top_handle(pts,count,noise,r,body,opt={}){
+  const center_x=opt.centerX !== undefined ? opt.centerX : 0;
+  const center_y=opt.centerY !== undefined ? opt.centerY : 0;
+  const attach_z=opt.centerZ !== undefined ? opt.centerZ : body.h||body.height;
+  const min_span_x=opt.spanX !== undefined ? opt.spanX : 0.055;
+  const rise_z=opt.riseZ !== undefined ? opt.riseZ : 0.06;
+  const tube_r=opt.tubeR !== undefined ? opt.tubeR : 0.005;
+  const mount_depth=opt.mount_depth??0.010;
+  const mount_height=opt.mount_height??0.015;
+  const mount_width_y=opt.mount_width_y??tube_r*2.2;
+  const span_x=Math.max(min_span_x,cylinder_surface_rad(body,attach_z)+mount_depth);
+  const mount_count=Math.min(count,Math.max(2,Math.round(count*.28)));
+  const handle_count=count-mount_count;
+  for(let i=0;i<handle_count;i++){
+    const t=(r()-.5)*Math.PI, ph=r()*TAU;
+    const core_x=center_x+span_x*Math.sin(t);
+    const core_z=attach_z+rise_z*Math.cos(t);
+    const x=core_x+tube_r*Math.cos(ph);
+    const y=center_y+tube_r*1.2*Math.sin(ph);
+    const z=core_z+tube_r*.5*Math.cos(ph);
+    pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
+  }
+  for(let i=0;i<mount_count;i++){
+    const side=r()<.5?-1:1, surface=r();
+    if(surface<.44){
+      const y=center_y+(r()-.5)*mount_width_y*2;
+      const x_surface=cylinder_surface_x_at_y(body,attach_z,y-center_y);
+      const x=center_x+side*(x_surface+r()*mount_depth);
+      pushNoisy(pts,{x,y,z:attach_z,label:'handle'},noise,r);
+    }else if(surface<.72){
+      const z=attach_z-mount_height+r()*mount_height;
+      const y=center_y+(r()-.5)*mount_width_y*2;
+      const x_surface=cylinder_surface_x_at_y(body,z,y-center_y);
+      const x=center_x+side*(x_surface+mount_depth);
+      pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
+    }else{
+      const z=attach_z-mount_height+r()*mount_height;
+      const y=center_y+(r()<.5?-1:1)*mount_width_y;
+      const x_surface=cylinder_surface_x_at_y(body,z,y-center_y);
+      const x=center_x+side*(x_surface+r()*mount_depth);
+      pushNoisy(pts,{x,y,z,label:'handle'},noise,r);
+    }
+  }
+}
 function generateSpout(pts,count,noise,r,opt={}){
   const x0=opt.x0 !== undefined ? opt.x0 : -0.04;
   const x1=opt.x1 !== undefined ? opt.x1 : -0.09;
@@ -1318,6 +1362,11 @@ function cylinder_surface_rad(body,z){
   if(body.radMod==='linear'||body.radMod==='flare') rad+=body.modAmt*ratio;
   if(body.radMod==='taper') rad+=body.modAmt*(1-ratio);
   return rad;
+}
+function cylinder_surface_x_at_y(body,z,y){
+  const rad=cylinder_surface_rad(body,z), y_rad=rad*(body.scaleY||1);
+  const y_ratio=Math.max(-1,Math.min(1,y/y_rad));
+  return rad*Math.sqrt(Math.max(0,1-y_ratio*y_ratio));
 }
 function gen_connected_cylindrical_cap(pts,n,noise,r,body,cap){
   const base_z=cap.z0??(body.h||body.height);
@@ -1417,7 +1466,7 @@ const OBJ_DEFS = {
   watering_can:{
     body:{type:'cyl',h:.16,rad:.070,radMod:'sin',modAmt:.010,scaleY:.88,rimH:.145},
     fracs:{body:.52,top:.18,loop:.12,spout:.12,cap:.06},
-    top:{centerX:0,centerZ:.145,spanX:.050,riseZ:.045,tubeR:.0055},
+    top:{centerX:0,centerZ:.145,spanX:.050,riseZ:.045,tubeR:.0055,is_connected:true,mount_depth:.010,mount_height:.015,mount_width_y:.012},
     loop:{attachX:.070,outerX:.100,centerZ:.090,rz:.040,tubeR:.0048,widthY:.010,arc:1.45},
     spout:{x0:-.070,x1:-.145,z0:.115,z1:.155,widthY:.028},
     cap:{rad:.018,z0:.165,dz:.020}
@@ -1459,7 +1508,10 @@ function generateObject(key, n, noise, seed){
 
   // handles & spout
   if(loopN>0) generateLoopHandle(pts,loopN,noise,r,def.loop);
-  if(topN>0)  generateTopHandle(pts,topN,noise,r,def.top);
+  if(topN>0){
+    if(def.top?.is_connected&&b.type==='cyl') generate_connected_top_handle(pts,topN,noise,r,b,def.top);
+    else generateTopHandle(pts,topN,noise,r,def.top);
+  }
   if(spoutN>0)generateSpout(pts,spoutN,noise,r,def.spout);
 
   // sideHandle (saucepan / frying_pan: 直棒ハンドル)
