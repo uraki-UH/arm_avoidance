@@ -356,7 +356,7 @@ public:
   {
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ = declare_parameter<std::string>(
-      "output_topic", "/topological_plane_clusters_incremental");
+      "output_topic", "/plane_clusters");
     clusters_input_topic_ = declare_parameter<std::string>("clusters_input_topic", "");
     hull_marker_topic_ = output_topic_ + "/markers/hull";
     normal_marker_topic_ = output_topic_ + "/markers/normal";

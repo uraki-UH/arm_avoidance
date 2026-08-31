@@ -321,7 +321,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         direct_plane_clusterizer_ =
         std::make_unique<topological_plane::incremental::Clusterizer>(options);
         const auto output_topic = this->declare_parameter<std::string>(
-            "plane_cluster.output_topic", "/topological_plane_clusters_incremental");
+            "plane_cluster.output_topic", "/plane_clusters");
         direct_plane_cluster_pub_ =
             this->create_publisher<ais_gng_msgs::msg::PlaneClusterArray>(
                 output_topic, rclcpp::QoS(1).reliable().transient_local());

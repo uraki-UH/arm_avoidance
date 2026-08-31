@@ -4,7 +4,7 @@
 
 - 状態: `basket`の遮蔽なし点群へZY並進とyaw回転を与え、CPU GNGで学習した環境側GNGとの比較記録
 - 対象テンプレート: `/datasets/basket_gng_template.json.gz`
-- 環境入力: `/semantic_points`、`/topological_map`、`/topological_plane_clusters_incremental`
+- 環境入力: `/semantic_points`、`/topological_map`、`/plane_clusters`
 - 非目的: 平行移動レジストレーションの仕様化
 
 位置中心合わせは、テンプレートと環境GNGが同一形状を表すかを確認する診断専用処理とする。

@@ -90,7 +90,7 @@ def generate_launch_description():
     )
     declar_plane_clusters_topic = DeclareLaunchArgument(
         'plane_clusters_topic',
-        default_value='/topological_plane_clusters_incremental',
+        default_value='/plane_clusters',
     )
     declar_plane_clusters_input_topic = DeclareLaunchArgument(
         'plane_clusters_input_topic',

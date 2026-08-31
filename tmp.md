@@ -81,8 +81,41 @@ Viewerでは同じ楕円体を表示できますが、照合本体は画像化�
 環境側は遮蔽、視野外、GNG node密度差、法線符号反転を含むため、テンプレート全体の完全一致を
 要求しない。観測された特徴からテンプレート仮説を起動し、観測済みの局所構造だけで検証する。
 
-当面の姿勢自由度はyawとする。平行移動は照合の探索対象に含めない。
-位置中心合わせは、テンプレートと環境データが同一形状を表すか確認する診断専用処理とする。
+当面はyawを主探索自由度とし、平行移動は照合の探索対象に含めない。
+roll・pitchはテンプレートごとの許容姿勢としてファジー評価する。位置中心合わせは、テンプレートと
+環境データが同一形状を表すか確認する診断専用処理とする。
+
+### 姿勢許容のファジー評価
+
+yaw候補ごとに、対応した平面法線と非平面特徴の局所座標系からテンプレートに対する相対姿勢を推定する。
+その相対姿勢を`R = R_z(yaw) R_y(pitch) R_x(roll)`として分解し、`abs(roll)`と`abs(pitch)`を
+独立に評価する。符号反転した法線を許容するため、roll・pitchの推定は単一法線では確定せず、
+複数平面または非平面特徴との整合から求める。
+
+船など水平設置を想定するテンプレートの初期設定は、次のようにする。
+
+```yaml
+pose_feature:
+  yaw:
+    enable_search: true
+    min_deg: -180.0
+    max_deg: 180.0
+    step_deg: 5.0
+  roll:
+    max_full_match_deg: 5.0
+    max_allow_deg: 20.0
+  pitch:
+    max_full_match_deg: 5.0
+    max_allow_deg: 20.0
+```
+
+- `max_full_match_deg`以内: 姿勢制約として満点
+- `max_full_match_deg`から`max_allow_deg`: 角度超過量に応じた連続的な減点
+- `max_allow_deg`超過: 姿勢制約による候補の反証
+
+roll・pitchの上限は物体種別ごとに変える。設置状態が不定な物体は大きな上限または評価無効を選び、
+船のように重力方向が意味を持つ物体は小さく設定する。姿勢推定に必要な特徴が欠損した場合は、
+未観測として姿勢制約の減点・反証を行わない。
 
 ### 現在の実測
 
@@ -159,6 +192,45 @@ normal_angle = acos(abs(dot(normal_template, normal_environment)))
 部分観測では平面extentが縮む。extentと面積は厳密一致にせず、片側欠損を許容する
 ファジー評価とする。環境にある無関係な平面を反証に使わないよう、対象GNG成分と接続する
 平面だけを仮説検証の対象にする。
+
+### 平面サイズの非対称ファジー評価
+
+環境平面のソート済みextentと面積相当値をテンプレート平面と比較する。比率は以下とする。
+
+```text
+extent_ratio_i = environment_sorted_extent_i / template_sorted_extent_i
+area_ratio = environment_extent_u * environment_extent_v
+             / (template_extent_u * template_extent_v)
+```
+
+部分観測では環境側が小さくなるため、小さい比率は未観測による弱い根拠として扱い、反証にはしない。
+一方、対応済みの環境平面がテンプレートより極端に大きい場合は、物体外の面を取り込んだ仮説として
+強く減点し、上限超過時は候補を反証する。
+
+初期値は`basket`の実測extent比0.645から1.206を踏まえ、次の設定から検証を始める。
+
+```yaml
+plane_feature:
+  extent_ratio:
+    min_observed_ratio: 0.20
+    min_full_match_ratio: 0.70
+    max_full_match_ratio: 1.05
+    max_overflow_ratio: 1.30
+  area_ratio:
+    min_observed_ratio: 0.15
+    min_full_match_ratio: 0.60
+    max_full_match_ratio: 1.10
+    max_overflow_ratio: 1.40
+```
+
+- `min_observed_ratio`未満: 未観測扱い。対応候補の生成と反証の両方から除外
+- `min_full_match_ratio`から`max_full_match_ratio`: サイズ一致として満点
+- `max_full_match_ratio`から`max_overflow_ratio`: 超過量に応じた連続的な減点
+- `max_overflow_ratio`超過: 平面サイズ超過による反証候補
+
+サイズ超過を反証に用いるのは、法線・yaw・平面間関係で対応済みであり、対象GNG成分または
+一致した非平面特徴へ接続し、かつ`planarity`・`residual_ratio`・支持node数が十分な平面だけとする。
+テーブルや背景の無関係平面、観測されなかったテンプレート平面は反証に使わない。
 
 ### 非平面部分グラフの抽出
 

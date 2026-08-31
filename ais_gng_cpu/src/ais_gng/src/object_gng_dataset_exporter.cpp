@@ -469,7 +469,7 @@ public:
     output_dir_ = declare_parameter<std::string>("output_dir", "/datasets");
     const std::string map_topic = declare_parameter<std::string>("map_topic", "topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>(
-      "plane_clusters_topic", "/topological_plane_clusters_incremental");
+      "plane_clusters_topic", "/plane_clusters");
     point_cloud_topic_ = declare_parameter<std::string>("point_cloud_topic", "");
     camera_info_topic_ = declare_parameter<std::string>("camera_info_topic", "");
     point_cloud_cache_num_ = static_cast<std::size_t>(std::max<std::int64_t>(

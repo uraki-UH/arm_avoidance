@@ -8,7 +8,7 @@
 ## 変更
 
 - ROSメッセージ型を`PlaneCluster`、`PlaneClusterArray`、`PlaneResidualBlob`、`PlaneResidualBlobArray`へ変更
-- 平面クラスタtopic既定値を`/topological_plane_clusters_incremental`へ変更
+- 平面クラスタtopic既定値を`/plane_clusters`へ変更
 - launch引数とexporter parameterを`plane_clusters_topic`へ変更
 - `object_gng_dataset_exporter_node`による一致frameの平面クラスタ保存
 - 保存JSONの`gng.plane_clusters`への圧縮表現
