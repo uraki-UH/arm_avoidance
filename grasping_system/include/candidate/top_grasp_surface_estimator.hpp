@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 
 #include <Eigen/Geometry>
@@ -68,7 +68,7 @@ public:
 
   TopGraspSurfaceResult estimate(
     const ais_gng_msgs::msg::TopologicalMap &map,
-    const ais_gng_msgs::msg::PlanarClusterArray &clusters) const
+    const ais_gng_msgs::msg::PlaneClusterArray &clusters) const
   {
     TopGraspSurfaceResult result;
     result.region_count = clusters.clusters.size();

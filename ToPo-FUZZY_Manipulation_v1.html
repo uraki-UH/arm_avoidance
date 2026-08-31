@@ -850,7 +850,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="ros-source-row">
             <div class="ros-source-head">
               <label class="topo-switch"><input id="topoPublishEnabled" type="checkbox"> topo_points</label>
-              <input id="topoTopicName" type="text" placeholder="topo_points">
+              <input id="topoTopicName" type="text" placeholder="topo_points" value="/topo_points">
             </div>
             <div id="topoPublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
@@ -862,21 +862,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           </div>
           <div class="ros-source-row">
             <div class="ros-source-head">
-              <label class="topo-switch"><input id="rawPublishEnabled" type="checkbox"> raw_points</label>
-              <input id="rawTopicName" type="text" placeholder="raw_points">
-            </div>
-            <div id="rawPublishDetail" class="ros-source-detail hide">
-              <div class="control-pair">
-                <input id="rawAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
-                <input id="rawAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
-              </div>
-              <div id="rawRosStatus" class="status">ROS raw: disconnected</div>
-            </div>
-          </div>
-          <div class="ros-source-row">
-            <div class="ros-source-head">
               <label class="topo-switch"><input id="handlePublishEnabled" type="checkbox"> handle_points</label>
-              <input id="handleTopicName" type="text" placeholder="handle_points">
+              <input id="handleTopicName" type="text" placeholder="handle_points" value="handle_points">
             </div>
             <div id="handlePublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
@@ -1324,6 +1311,36 @@ function genCap(pts,n,noise,r,o){
     pushNoisy(pts,{x:rv*Math.cos(th),y:rv*Math.sin(th),z,label:'cap'},noise,r);
   }
 }
+function cylinder_surface_rad(body,z){
+  const h=body.h||body.height, ratio=Math.max(0,Math.min(1,z/h));
+  let rad=body.rad;
+  if(body.radMod==='sin') rad+=body.modAmt*Math.sin(Math.PI*ratio);
+  if(body.radMod==='linear'||body.radMod==='flare') rad+=body.modAmt*ratio;
+  if(body.radMod==='taper') rad+=body.modAmt*(1-ratio);
+  return rad;
+}
+function gen_connected_cylindrical_cap(pts,n,noise,r,body,cap){
+  const base_z=cap.z0??(body.h||body.height);
+  const base_rad=cylinder_surface_rad(body,base_z), base_scale_y=body.scaleY||1;
+  const neck_rad=cap.rad, neck_scale_y=cap.scale_y||1;
+  const shoulder_h=Math.max(0,Math.min(cap.shoulder_h??cap.dz*.35,cap.dz));
+  const side_h=Math.max(0,cap.dz-shoulder_h);
+  const shoulder_area=Math.PI*(base_rad+neck_rad)*Math.hypot(base_rad-neck_rad,shoulder_h);
+  const side_area=TAU*neck_rad*side_h, top_area=Math.PI*neck_rad*neck_rad;
+  const area_sum=shoulder_area+side_area+top_area;
+  for(let i=0;i<n;i++){
+    const sample=r()*area_sum, th=r()*TAU;
+    if(sample<shoulder_area){
+      const t=r(), rad=base_rad+(neck_rad-base_rad)*t, scale_y=base_scale_y+(neck_scale_y-base_scale_y)*t;
+      pushNoisy(pts,{x:rad*Math.cos(th),y:rad*scale_y*Math.sin(th),z:base_z+shoulder_h*t,label:'cap'},noise,r);
+    }else if(sample<shoulder_area+side_area){
+      pushNoisy(pts,{x:neck_rad*Math.cos(th),y:neck_rad*neck_scale_y*Math.sin(th),z:base_z+shoulder_h+r()*side_h,label:'cap'},noise,r);
+    }else{
+      const rad=neck_rad*Math.sqrt(r());
+      pushNoisy(pts,{x:rad*Math.cos(th),y:rad*neck_scale_y*Math.sin(th),z:base_z+cap.dz,label:'cap'},noise,r);
+    }
+  }
+}
 
 // ── オブジェクト定義テーブル ──────────────────────────────────
 // fracs: [body, loopHandle?, topHandle?, spout?, cap?]  合計1.0
@@ -1352,7 +1369,7 @@ const OBJ_DEFS = {
     body:{type:'cyl',h:.185,rad:.047,radMod:'sin',modAmt:.015,scaleY:.86,rimH:.165},
     fracs:{body:.64,loop:.24,cap:.12},
     loop:{attachX:.056,outerX:.092,centerZ:.112,rz:.050,tubeR:.0052,widthY:.010,arc:1.62},
-    cap:{rad:.028,z0:.188,dz:.028}
+    cap:{rad:.028,z0:.185,dz:.028,shoulder_h:.010,is_connected:true}
   },
   canister:{
     body:{type:'cyl',h:.16,rad:.045,rimH:.145},
@@ -1456,7 +1473,10 @@ function generateObject(key, n, noise, seed){
   }
 
   // cap
-  if(capN>0 && def.cap) genCap(pts,capN,noise,r,def.cap);
+  if(capN>0 && def.cap){
+    if(def.cap.is_connected) gen_connected_cylindrical_cap(pts,capN,noise,r,b,def.cap);
+    else genCap(pts,capN,noise,r,def.cap);
+  }
 
   return pts;
 }
@@ -7945,14 +7965,6 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     if(st.nodes && st.nodes.length) return st.nodes.map(n=>({x:n.p[0],y:n.p[1],z:n.p[2]}));
     return null;
   }
-  function getCurrentRawPoints(){
-    const st = window.__topoState || window.state;
-    if(!st) return null;
-    if(st.basePoints && st.basePoints.length) return st.basePoints;
-    if(st.points && st.points.length) return st.points;
-    if(st.nodes && st.nodes.length) return st.nodes.map(n=>({x:n.p[0],y:n.p[1],z:n.p[2]}));
-    return null;
-  }
   function getCurrentHandlePoints(){
     const st = window.__topoState || window.state;
     if(!st) return null;
@@ -7961,7 +7973,6 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     return pts.filter(p => p && p.label === 'handle');
   }
   function getCurrentSemanticPoints(source='topo'){
-    if(source === 'raw') return getCurrentRawPoints();
     if(source === 'handle') return getCurrentHandlePoints();
     return getCurrentTopoPoints();
   }
@@ -8097,7 +8108,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     const onError = ()=>{
       setStatus(`${statusPrefix}: error`);
     };
-    if(topicEl && !topicEl.value){
+    if(topicEl){
       topicEl.value = defaultTopic;
     }
     if(enabledEl){
@@ -8368,17 +8379,6 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         defaultTopic: DEFAULT_TOPO_POINTS_TOPIC,
         statusPrefix: 'ROS topo',
         getPointsFn: ()=> getCurrentTopoPoints() || [],
-      },
-      {
-        enabledId: 'rawPublishEnabled',
-        detailId: 'rawPublishDetail',
-        topicId: 'rawTopicName',
-        hzId: 'rawAutoHz',
-        hzNumId: 'rawAutoHzNum',
-        statusId: 'rawRosStatus',
-        defaultTopic: 'raw_points',
-        statusPrefix: 'ROS raw',
-        getPointsFn: ()=> getCurrentRawPoints() || [],
       },
       {
         enabledId: 'handlePublishEnabled',

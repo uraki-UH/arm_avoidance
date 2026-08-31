@@ -1,6 +1,6 @@
 #include <candidate/top_grasp_surface_estimator.hpp>
 
-#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -53,9 +53,9 @@ public:
         map_ = std::move(map);
         processMatchedFrame();
       });
-    clusters_subscription_ = create_subscription<ais_gng_msgs::msg::PlanarClusterArray>(
+    clusters_subscription_ = create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
       clusters_topic_, output_qos,
-      [this](ais_gng_msgs::msg::PlanarClusterArray::SharedPtr clusters) {
+      [this](ais_gng_msgs::msg::PlaneClusterArray::SharedPtr clusters) {
         clusters_ = std::move(clusters);
         processMatchedFrame();
       });
@@ -207,9 +207,9 @@ private:
   std::uint32_t last_processed_frame_ = std::numeric_limits<std::uint32_t>::max();
   std::int64_t last_processed_stamp_ = std::numeric_limits<std::int64_t>::min();
   ais_gng_msgs::msg::TopologicalMap::SharedPtr map_;
-  ais_gng_msgs::msg::PlanarClusterArray::SharedPtr clusters_;
+  ais_gng_msgs::msg::PlaneClusterArray::SharedPtr clusters_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_subscription_;
-  rclcpp::Subscription<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr clusters_subscription_;
+  rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr clusters_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_publisher_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;

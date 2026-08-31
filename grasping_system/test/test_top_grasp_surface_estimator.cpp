@@ -1,6 +1,6 @@
 #include <candidate/top_grasp_surface_estimator.hpp>
 
-#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 
 #include <Eigen/Geometry>
@@ -14,8 +14,8 @@
 namespace
 {
 
-using ais_gng_msgs::msg::PlanarCluster;
-using ais_gng_msgs::msg::PlanarClusterArray;
+using ais_gng_msgs::msg::PlaneCluster;
+using ais_gng_msgs::msg::PlaneClusterArray;
 using ais_gng_msgs::msg::TopologicalMap;
 using grasping_system::candidate::TopGraspSurfaceConfig;
 using grasping_system::candidate::TopGraspSurfaceEstimator;
@@ -52,11 +52,11 @@ void addEdge(TopologicalMap &map, std::uint32_t first, std::uint32_t second)
   map.edges.push_back(static_cast<std::uint16_t>(second));
 }
 
-PlanarCluster makeCluster(
+PlaneCluster makeCluster(
   std::uint32_t id, const std::vector<std::uint32_t> &members,
   double x, double y, double z, const Eigen::Vector3d &normal)
 {
-  PlanarCluster cluster;
+  PlaneCluster cluster;
   cluster.id = id;
   cluster.node_indices = members;
   cluster.centroid.x = static_cast<float>(x);
@@ -87,7 +87,7 @@ TopGraspSurfaceConfig makeConfig()
 int main()
 {
   TopologicalMap map;
-  PlanarClusterArray clusters;
+  PlaneClusterArray clusters;
 
   const auto fitting_top = addRectangle(map, 0.0, 0.0, 0.10, 0.03, 0.04);
   const auto wall = addRectangle(map, -0.02, 0.0, 0.05, 0.20, 0.20);

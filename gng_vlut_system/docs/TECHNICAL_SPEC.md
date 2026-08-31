@@ -863,9 +863,13 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 ### 15.1 ROS 2静的マップ配信
 
 `ais_gng`の`object_gng_dataset_exporter_node`は、最新の`TopologicalMap`を
-`<物体名>_<UTC日時>_<通し番号>_gng_template_v1.json.gz`へcompact JSONのgzipとして保存する。
+`<物体名>_<UTC日時>_<通し番号>_gng_template.json.gz`へcompact JSONのgzipとして保存する。
 空配列と既定値は省略し、edgeはnode添字の2要素配列として格納する。保存サービスは
 `/save_gng_data`、サービス型は`ais_gng_msgs/srv/SaveObjectGngDataset`とする。
+
+保存CLIの`--replace`指定時は、`<物体名>_gng_template.json.gz`へ固定名で保存する。
+同じ物体名の時刻付き履歴と対応するPCD、depth PNG、color PNGは保存成功後に削除する。通常保存は
+履歴を残す。
 
 元点群保存を要求した場合は、GNG mapとstampが一致する`PointCloud2`を分離保存する。
 organized点群、対応する`CameraInfo`、無歪み投影、1 mm単位の深度、field保持条件をすべて満たす場合は、
@@ -893,9 +897,9 @@ ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
   dataset_id:=mug_complete_v1
 ```
 
-launchは既定の`/datasets`へ`<dataset_id>_gng_template_v1.json.gz`を連結して読込先を組み立てる。
+launchは既定の`/datasets`へ`<dataset_id>_gng_template.json.gz`を連結して読込先を組み立てる。
 上記の`dataset_id`が`mug_complete_v1`なら、読込先は
-`/datasets/mug_complete_v1_gng_template_v1.json.gz`、出力topicは
+`/datasets/mug_complete_v1_gng_template.json.gz`、出力topicは
 `/mug_complete_v1/topological_map_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
 ない場合は`gng_template.template_id`を使用する。IDは英字開始の英数字と`_`だけを許可する。
 テストなどで読込先ディレクトリだけを変更する場合は、任意引数`dataset_dir`を使用する。

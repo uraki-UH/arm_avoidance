@@ -49,7 +49,15 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 source /ros2_ws/install/setup.bash
 ros2 run ais_gng save_object_gng_dataset mug_complete --with-points
 
-保存先は`/datasets/設定名_<UTC日時>_<連番>_gng_template_v1.json.gz`。
+保存先は`/datasets/設定名_<UTC日時>_<連番>_gng_template.json.gz`。
+
+同名テンプレートを置換し、過去の同名保存と対応する点群・深度・色情報を削除する場合。
+
+```bash
+ros2 run ais_gng save_object_gng_dataset mug_complete --replace
+```
+
+置換保存先は`/datasets/mug_complete_gng_template.json.gz`。
 
 保存済みテンプレートは、保存名の接頭名だけで静的トピックへ配信。
 

@@ -294,7 +294,7 @@ std::string automatic_dataset_id(
 {
   const std::regex file_name_pattern(
     "^" + object_name +
-    R"(_[0-9]{8}_[0-9]{6}_([0-9]{3,9})_gng_template_v1\.json\.gz$)");
+    R"(_[0-9]{8}_[0-9]{6}_([0-9]{3,9})_gng_template\.json\.gz$)");
   std::uint32_t max_dataset_num = 0;
   if (std::filesystem::exists(output_dir)) {
     for (const auto &entry : std::filesystem::directory_iterator(output_dir)) {
@@ -316,6 +316,93 @@ std::string automatic_dataset_id(
   id_stream << current_dataset_id_base(object_name) << '_' << std::setw(3) << std::setfill('0') <<
     (max_dataset_num + 1U);
   return id_stream.str();
+}
+
+bool is_matching_dataset_file_name(const std::string &file_name, const std::string &object_name)
+{
+  if (file_name == object_name + "_gng_template.json.gz") {
+    return true;
+  }
+  const std::regex automatic_file_name_pattern(
+    "^" + object_name +
+    R"(_[0-9]{8}_[0-9]{6}_[0-9]{3,9}_gng_template\.json\.gz$)");
+  return std::regex_match(file_name, automatic_file_name_pattern);
+}
+
+std::string dataset_id_from_file_name(const std::string &file_name)
+{
+  constexpr const char *dataset_suffix = "_gng_template.json.gz";
+  const std::size_t suffix_size = std::char_traits<char>::length(dataset_suffix);
+  return file_name.substr(0U, file_name.size() - suffix_size);
+}
+
+void remove_file_if_exists(const std::filesystem::path &path)
+{
+  std::error_code error;
+  const bool removed = std::filesystem::remove(path, error);
+  if (error) {
+    throw std::runtime_error("保存ファイル削除失敗: " + path.string() + " " + error.message());
+  }
+  (void)removed;
+}
+
+void remove_dataset_sidecars(const std::filesystem::path &output_dir, const std::string &dataset_id)
+{
+  remove_file_if_exists(output_dir / (dataset_id + "_source.pcd"));
+  remove_file_if_exists(output_dir / (dataset_id + "_depth.png"));
+  remove_file_if_exists(output_dir / (dataset_id + "_color.png"));
+}
+
+void remove_replaced_datasets(
+  const std::filesystem::path &output_dir, const std::string &object_name,
+  const std::string &current_dataset_id, bool has_point_cloud_file,
+  bool has_depth_file, bool has_color_file)
+{
+  std::vector<std::pair<std::filesystem::path, std::string>> previous_datasets;
+  for (const auto &entry : std::filesystem::directory_iterator(output_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string file_name = entry.path().filename().string();
+    if (!is_matching_dataset_file_name(file_name, object_name)) {
+      continue;
+    }
+    const std::string dataset_id = dataset_id_from_file_name(file_name);
+    if (dataset_id == current_dataset_id) {
+      continue;
+    }
+    previous_datasets.emplace_back(entry.path(), dataset_id);
+  }
+  for (const auto &[dataset_path, dataset_id] : previous_datasets) {
+    remove_file_if_exists(dataset_path);
+    remove_dataset_sidecars(output_dir, dataset_id);
+  }
+  if (!has_point_cloud_file) {
+    remove_file_if_exists(output_dir / (current_dataset_id + "_source.pcd"));
+  }
+  if (!has_depth_file) {
+    remove_file_if_exists(output_dir / (current_dataset_id + "_depth.png"));
+  }
+  if (!has_color_file) {
+    remove_file_if_exists(output_dir / (current_dataset_id + "_color.png"));
+  }
+}
+
+void replace_file(const std::filesystem::path &temporary_path, const std::filesystem::path &output_path)
+{
+  std::error_code error;
+  std::filesystem::rename(temporary_path, output_path, error);
+  if (error) {
+    throw std::runtime_error(
+            "保存ファイル確定失敗: " + temporary_path.string() + " -> " + output_path.string() +
+            " " + error.message());
+  }
+}
+
+std::filesystem::path temporary_path_for_replace(
+  const std::filesystem::path &output_path, bool replace_existing)
+{
+  return replace_existing ? std::filesystem::path(output_path.string() + ".tmp") : output_path;
 }
 
 float finiteOrZero(float value)
@@ -523,25 +610,38 @@ private:
                 "object_name は英字開始の英数字または_だけで指定してください: " +
                 request->object_name);
       }
-      const std::string dataset_id = automatic_dataset_id(output_dir, request->object_name);
+      const std::filesystem::path output_dir_path(output_dir);
+      const bool replace_existing = request->replace_existing;
+      const std::string dataset_id = replace_existing ? request->object_name :
+        automatic_dataset_id(output_dir_path, request->object_name);
       const std::filesystem::path output_path =
-        std::filesystem::path(output_dir) /
-        (dataset_id + "_gng_template_v1.json.gz");
+        output_dir_path / (dataset_id + "_gng_template.json.gz");
       const std::filesystem::path point_cloud_path =
-        std::filesystem::path(output_dir) / (dataset_id + "_source.pcd");
+        output_dir_path / (dataset_id + "_source.pcd");
       const std::filesystem::path depth_path =
-        std::filesystem::path(output_dir) / (dataset_id + "_depth.png");
+        output_dir_path / (dataset_id + "_depth.png");
       const std::filesystem::path color_path =
-        std::filesystem::path(output_dir) / (dataset_id + "_color.png");
+        output_dir_path / (dataset_id + "_color.png");
+      const std::filesystem::path temporary_output_path =
+        temporary_path_for_replace(output_path, replace_existing);
+      const std::filesystem::path temporary_point_cloud_path =
+        temporary_path_for_replace(point_cloud_path, replace_existing);
+      const std::filesystem::path temporary_depth_path =
+        temporary_path_for_replace(depth_path, replace_existing);
+      const std::filesystem::path temporary_color_path =
+        temporary_path_for_replace(color_path, replace_existing);
       const std::optional<RgbdPngData> rgbd_png =
         point_cloud && camera_info ? make_rgbd_png_data(*point_cloud, *camera_info) : std::nullopt;
+      const bool has_point_cloud_file = point_cloud && !rgbd_png;
+      const bool has_depth_file = point_cloud && rgbd_png;
+      const bool has_color_file = has_depth_file && rgbd_png->has_color;
       json point_cloud_storage;
       std::filesystem::create_directories(output_path.parent_path());
       try {
         if (point_cloud) {
           if (rgbd_png) {
             write_png(
-              depth_path, point_cloud->width, point_cloud->height,
+              temporary_depth_path, point_cloud->width, point_cloud->height,
               PNG_FORMAT_LINEAR_Y, rgbd_png->depth.data());
             point_cloud_storage = {
               {"format", "rgbd_png"},
@@ -558,14 +658,14 @@ private:
             };
             if (rgbd_png->has_color) {
               write_png(
-                color_path, point_cloud->width, point_cloud->height,
+                temporary_color_path, point_cloud->width, point_cloud->height,
                 rgbd_png->has_alpha ? PNG_FORMAT_RGBA : PNG_FORMAT_RGB,
                 rgbd_png->color.data());
               point_cloud_storage["color_file_name"] = color_path.filename().string();
               point_cloud_storage["color_format"] = rgbd_png->has_alpha ? "rgba8" : "rgb8";
             }
           } else {
-            write_point_cloud(point_cloud_path, *point_cloud);
+            write_point_cloud(temporary_point_cloud_path, *point_cloud);
             point_cloud_storage = {
               {"format", "pcd_binary_compressed"},
               {"file_name", point_cloud_path.filename().string()},
@@ -573,16 +673,31 @@ private:
           }
         }
         write_gzip_json(
-          output_path,
+          temporary_output_path,
           buildDataset(
             map, has_matched_plane_clusters ? &plane_clusters : nullptr,
             dataset_id, request->object_name, point_cloud.get(), point_cloud_storage));
+        if (replace_existing) {
+          if (has_point_cloud_file) {
+            replace_file(temporary_point_cloud_path, point_cloud_path);
+          }
+          if (has_depth_file) {
+            replace_file(temporary_depth_path, depth_path);
+          }
+          if (has_color_file) {
+            replace_file(temporary_color_path, color_path);
+          }
+          replace_file(temporary_output_path, output_path);
+          remove_replaced_datasets(
+            output_dir_path, request->object_name, dataset_id, has_point_cloud_file,
+            has_depth_file, has_color_file);
+        }
       } catch (...) {
         std::error_code error;
-        std::filesystem::remove(output_path, error);
-        std::filesystem::remove(point_cloud_path, error);
-        std::filesystem::remove(depth_path, error);
-        std::filesystem::remove(color_path, error);
+        std::filesystem::remove(temporary_output_path, error);
+        std::filesystem::remove(temporary_point_cloud_path, error);
+        std::filesystem::remove(temporary_depth_path, error);
+        std::filesystem::remove(temporary_color_path, error);
         throw;
       }
       response->success = true;
@@ -592,6 +707,7 @@ private:
         " clusters=" + std::to_string(map.clusters.size()) +
         " plane_clusters=" + std::to_string(
           has_matched_plane_clusters ? plane_clusters.clusters.size() : 0U) +
+        (replace_existing ? " replaced=true" : "") +
         " bytes=" + std::to_string(std::filesystem::file_size(output_path));
       if (point_cloud) {
         if (rgbd_png) {

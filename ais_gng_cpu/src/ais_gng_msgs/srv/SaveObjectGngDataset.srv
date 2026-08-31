@@ -1,5 +1,7 @@
 string object_name
 bool enable_point_cloud_save
+# 同名の時刻付き保存履歴を削除し、固定dataset_idへ置換する指定
+bool replace_existing
 string output_dir
 ---
 bool success

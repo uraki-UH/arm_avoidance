@@ -12,7 +12,7 @@ binary-compressed PCDへ分離保存する方式へ変更。
 - `object_surface_dataset`の空ラッパーを廃止し、`object_template`を直接保存
 - 空配列、既定値、空の`inpcl_ids`を省略
 - edgeをnode添字の2要素配列として保存
-- テンプレートを`*_gng_template_v1.json.gz`へgzip保存
+- テンプレートを`*_gng_template.json.gz`へgzip保存
 - 投影整合性を満たすorganized RGB-Dを16-bit depth PNGとRGB/RGBA PNGへ分離保存
 - 完全表面、裏面を含む点群、unorganized点群、追加field付き点群を`*_source.pcd`へ自動退避
 - 点群の相対ファイル名、topic、frame、stamp、点数、field定義、色情報の有無をテンプレートへ記録

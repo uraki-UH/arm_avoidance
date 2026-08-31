@@ -1,6 +1,6 @@
 #include <candidate/grasp_voxel_matcher.hpp>
 
-#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -178,9 +178,9 @@ public:
         });
     }
     if (!planar_clusters_topic_.empty()) {
-      planar_clusters_sub_ = create_subscription<ais_gng_msgs::msg::PlanarClusterArray>(
+      planar_clusters_sub_ = create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
         planar_clusters_topic_, transient_qos,
-        [this](ais_gng_msgs::msg::PlanarClusterArray::SharedPtr msg) {
+        [this](ais_gng_msgs::msg::PlaneClusterArray::SharedPtr msg) {
           planar_clusters_ = std::move(msg);
           surface_normals_dirty_ = true;
           planar_collision_dirty_ = true;
@@ -1085,7 +1085,7 @@ private:
   ais_gng_msgs::msg::TopologicalMap::SharedPtr undersize_graph_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr forbidden_graph_;
   ais_gng_msgs::msg::TopologicalMap::SharedPtr topological_map_;
-  ais_gng_msgs::msg::PlanarClusterArray::SharedPtr planar_clusters_;
+  ais_gng_msgs::msg::PlaneClusterArray::SharedPtr planar_clusters_;
   sensor_msgs::msg::CameraInfo::SharedPtr camera_info_;
   std::map<std::int64_t, sensor_msgs::msg::Image::SharedPtr> depth_image_cache_;
 
@@ -1095,7 +1095,7 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr undersize_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr forbidden_graph_sub_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_sub_;
-  rclcpp::Subscription<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr planar_clusters_sub_;
+  rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr planar_clusters_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_pub_;

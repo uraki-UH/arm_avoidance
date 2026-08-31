@@ -18,9 +18,9 @@ def resolve_dataset_path(dataset_dir, dataset_file, dataset_id):
         candidates = [os.path.join(dataset_dir, dataset_key)]
     else:
         candidates = [
-            os.path.join(dataset_dir, f'{dataset_key}_gng_template_v1.json.gz'),
+            os.path.join(dataset_dir, f'{dataset_key}_gng_template.json.gz'),
             os.path.join(dataset_dir, f'{dataset_key}_object_surface_dataset_v1.json'),
-            os.path.join(dataset_dir, f'{dataset_key}_gng_template_v1.json'),
+            os.path.join(dataset_dir, f'{dataset_key}_gng_template.json'),
         ]
 
     for candidate in candidates:
@@ -29,9 +29,9 @@ def resolve_dataset_path(dataset_dir, dataset_file, dataset_id):
 
     if not os.path.isabs(dataset_key) and not dataset_key.endswith(('.json', '.json.gz')):
         matched_paths = sorted(set(
-            glob.glob(os.path.join(dataset_dir, f'{dataset_key}*_gng_template_v1.json.gz')) +
+            glob.glob(os.path.join(dataset_dir, f'{dataset_key}*_gng_template.json.gz')) +
             glob.glob(os.path.join(dataset_dir, f'{dataset_key}*_object_surface_dataset_v1.json')) +
-            glob.glob(os.path.join(dataset_dir, f'{dataset_key}*_gng_template_v1.json'))
+            glob.glob(os.path.join(dataset_dir, f'{dataset_key}*_gng_template.json'))
         ))
         if len(matched_paths) == 1:
             return matched_paths[0]
