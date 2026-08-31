@@ -14,10 +14,7 @@ services:
       "
     environment:
       - ROS_DOMAIN_ID
-    ports:
-      - "9001:9001"
-    networks:
-      - gng
+    network_mode: host
 
   frontend:
     image: topofuzzy-viewer:humble

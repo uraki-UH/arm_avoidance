@@ -42,10 +42,10 @@ COPY ToPoFuzzy-Viewer/backend/ /opt/topofuzzy/backend/
 COPY ToPoFuzzy-Viewer/config/ /opt/topofuzzy/config/
 COPY ToPoFuzzy-Viewer/common/ /opt/topofuzzy/common/
 
-# Prefer backend/src/ais_gng_msgs from ToPoFuzzy-Viewer and ignore the duplicate in external ais_gng.
-RUN if [ -d /opt/topofuzzy/backend/src/ais_gng/ais_gng_msgs ]; then \
-      touch /opt/topofuzzy/backend/src/ais_gng/ais_gng_msgs/COLCON_IGNORE; \
-    fi
+# GNG実行側と同一のTopologicalMapメッセージ定義。
+COPY ais_gng_cpu/src/ais_gng_msgs/ /opt/topofuzzy/backend/src/ais_gng_msgs/
+COPY MSG/ais_gng_feature_msgs/ /opt/topofuzzy/backend/src/ais_gng_feature_msgs/
+COPY MSG/voxel_msgs/ /opt/topofuzzy/backend/src/voxel_msgs/
 
 WORKDIR /opt/topofuzzy/backend
 RUN source /opt/ros/humble/setup.bash \

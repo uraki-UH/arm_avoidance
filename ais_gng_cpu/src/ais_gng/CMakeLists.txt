@@ -92,7 +92,7 @@ ament_auto_add_executable(
 target_link_libraries(nonplane_component_node nonplane_component_extractor)
 ament_target_dependencies(
   nonplane_component_node
-  ais_gng_msgs rclcpp visualization_msgs
+  ais_gng_msgs rclcpp std_msgs visualization_msgs
 )
 
 if(BUILD_TESTING)

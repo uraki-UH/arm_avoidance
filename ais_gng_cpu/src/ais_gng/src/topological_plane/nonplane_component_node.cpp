@@ -3,11 +3,13 @@
 #include <geometry_msgs/msg/point.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -70,6 +72,8 @@ public:
       "output_topic", "/nonplane_components");
     marker_topic_ = declare_parameter<std::string>(
       "marker_topic", output_topic_ + "/markers");
+    timing_topic_ = declare_parameter<std::string>(
+      "timing_topic", output_topic_ + "/timing");
     extractor_options_.min_component_nodes = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<std::int64_t>("min_component_nodes", 2)));
     marker_scale_m_ = declare_parameter<double>("marker_scale_m", 0.012);
@@ -78,6 +82,8 @@ public:
     const auto qos = rclcpp::QoS(1).reliable().transient_local();
     output_publisher_ = create_publisher<TopologicalMap>(output_topic_, qos);
     marker_publisher_ = create_publisher<MarkerArray>(marker_topic_, qos);
+    timing_publisher_ = create_publisher<std_msgs::msg::Float64MultiArray>(
+      timing_topic_, rclcpp::QoS(10).reliable());
     map_subscription_ = create_subscription<TopologicalMap>(
       input_topic_, qos,
       [this](const TopologicalMap::ConstSharedPtr &map) {
@@ -189,23 +195,36 @@ private:
     {
       return;
     }
+    const auto process_start = std::chrono::steady_clock::now();
     const auto result = fuzzrobo::topological_plane::nonplane::extract_components(
       *latest_map_, *latest_plane_clusters_, extractor_options_);
-    marker_publisher_->publish(make_markers(*latest_map_, result));
+    const auto markers = make_markers(*latest_map_, result);
+    marker_publisher_->publish(markers);
     output_publisher_->publish(result.map);
     last_published_frame_number_ = latest_map_->frame_number;
+
+    const auto total_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - process_start).count();
+    std_msgs::msg::Float64MultiArray timing;
+    timing.data = {
+      static_cast<double>(latest_map_->frame_number),
+      total_ms,
+    };
+    timing_publisher_->publish(std::move(timing));
   }
 
   std::string input_topic_;
   std::string plane_clusters_topic_;
   std::string output_topic_;
   std::string marker_topic_;
+  std::string timing_topic_;
   fuzzrobo::topological_plane::nonplane::extractor_options extractor_options_;
   double marker_scale_m_ = 0.012;
   double anchor_line_width_m_ = 0.004;
   std::uint32_t last_published_frame_number_ = std::numeric_limits<std::uint32_t>::max();
   rclcpp::Publisher<TopologicalMap>::SharedPtr output_publisher_;
   rclcpp::Publisher<MarkerArray>::SharedPtr marker_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr timing_publisher_;
   rclcpp::Subscription<TopologicalMap>::SharedPtr map_subscription_;
   rclcpp::Subscription<PlaneClusterArray>::SharedPtr plane_clusters_subscription_;
   TopologicalMap::ConstSharedPtr latest_map_;

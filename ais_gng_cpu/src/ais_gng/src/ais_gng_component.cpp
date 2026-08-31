@@ -97,7 +97,9 @@ void replayGngSummaryWithTime(
     const std::string &output,
     double gng_ms,
     bool plane_cluster_ran,
-    double plane_cluster_ms) {
+    double plane_cluster_ms,
+    bool nonplane_ran,
+    double nonplane_ms) {
     std::size_t line_start = 0;
     while (line_start < output.size()) {
         const std::size_t line_end = output.find('\n', line_start);
@@ -120,29 +122,38 @@ void replayGngSummaryWithTime(
                 &active_num,
                 &node_num,
                 &cluster_num) == 5) {
+            char nonplane_time_text[32]{};
+            if (nonplane_ran) {
+                std::snprintf(
+                    nonplane_time_text, sizeof(nonplane_time_text), "%.2f ms", nonplane_ms);
+            } else {
+                std::snprintf(nonplane_time_text, sizeof(nonplane_time_text), "off");
+            }
             if (plane_cluster_ran) {
                 std::fprintf(
                     stdout,
                     "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
-                    "GNG: %.2f ms, Plane: %.2f ms",
+                    "GNG: %.2f ms, Plane: %.2f ms, Nonplane: %s",
                     input_num,
                     voxel_num,
                     active_num,
                     node_num,
                     cluster_num,
                     gng_ms,
-                    plane_cluster_ms);
+                    plane_cluster_ms,
+                    nonplane_time_text);
             } else {
                 std::fprintf(
                     stdout,
                     "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
-                    "GNG: %.2f ms, Plane: off",
+                    "GNG: %.2f ms, Plane: off, Nonplane: %s",
                     input_num,
                     voxel_num,
                     active_num,
                     node_num,
                     cluster_num,
-                    gng_ms);
+                    gng_ms,
+                    nonplane_time_text);
             }
         } else {
             std::fwrite(line.data(), sizeof(char), line.size(), stdout);
@@ -328,6 +339,16 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         RCLCPP_INFO(
             this->get_logger(), "Direct plane clustering enabled: GNG -> %s",
             output_topic.c_str());
+    }
+    enable_nonplane_component_timing_ = this->declare_parameter<bool>(
+        "enable_nonplane_component_timing", false);
+    if (enable_nonplane_component_timing_) {
+        const auto timing_topic = this->declare_parameter<std::string>(
+            "nonplane_component_timing_topic", "/nonplane_components/timing");
+        nonplane_timing_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+            timing_topic,
+            rclcpp::QoS(10).reliable(),
+            std::bind(&AiSGNGComponent::nonplane_timing_cb, this, _1));
     }
 #endif
 
@@ -534,6 +555,36 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 AiSGNGComponent::~AiSGNGComponent() {
 
 }
+
+#if defined(AIS_GNG_BACKEND_CPU)
+void AiSGNGComponent::nonplane_timing_cb(
+    const std_msgs::msg::Float64MultiArray::ConstSharedPtr msg)
+{
+    if (msg->data.size() != 2U || !std::isfinite(msg->data[0]) ||
+        !std::isfinite(msg->data[1]) || msg->data[0] < 0.0 || msg->data[1] < 0.0)
+    {
+        return;
+    }
+    const auto frame_number = static_cast<uint32_t>(std::llround(msg->data[0]));
+    nonplane_summary_entry entry;
+    {
+        std::lock_guard<std::mutex> lock(nonplane_summary_mutex_);
+        const auto entry_it = nonplane_summary_by_frame_.find(frame_number);
+        if (entry_it == nonplane_summary_by_frame_.end()) {
+            return;
+        }
+        entry = std::move(entry_it->second);
+        nonplane_summary_by_frame_.erase(entry_it);
+    }
+    replayGngSummaryWithTime(
+        entry.output,
+        entry.gng_ms,
+        entry.plane_cluster_ran,
+        entry.plane_cluster_ms,
+        true,
+        msg->data[1]);
+}
+#endif
 
 rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::vector<rclcpp::Parameter> &params) {
     rcl_interfaces::msg::SetParametersResult result;
@@ -887,12 +938,40 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     constexpr bool plane_cluster_ran = false;
 #endif
     const auto plane_cluster_end = std::chrono::steady_clock::now();
+    const double gng_summary_ms = std::chrono::duration<double, std::milli>(
+        gng_end - input_end).count();
+    const double plane_cluster_summary_ms = std::chrono::duration<double, std::milli>(
+        plane_cluster_end - classification_end).count();
+#if defined(AIS_GNG_BACKEND_CPU)
+    if (enable_nonplane_component_timing_) {
+        std::lock_guard<std::mutex> lock(nonplane_summary_mutex_);
+        nonplane_summary_by_frame_[map_msg->frame_number] = {
+            gng_summary_output,
+            gng_summary_ms,
+            plane_cluster_ran,
+            plane_cluster_summary_ms,
+        };
+        while (nonplane_summary_by_frame_.size() > 16U) {
+            nonplane_summary_by_frame_.erase(nonplane_summary_by_frame_.begin());
+        }
+    } else {
+        replayGngSummaryWithTime(
+            gng_summary_output,
+            gng_summary_ms,
+            plane_cluster_ran,
+            plane_cluster_summary_ms,
+            false,
+            0.0);
+    }
+#else
     replayGngSummaryWithTime(
         gng_summary_output,
-        std::chrono::duration<double, std::milli>(gng_end - input_end).count(),
+        gng_summary_ms,
         plane_cluster_ran,
-        std::chrono::duration<double, std::milli>(
-            plane_cluster_end - classification_end).count());
+        plane_cluster_summary_ms,
+        false,
+        0.0);
+#endif
 
     // マップを先にPublishし、表示専用ノードが同じフレームのクラスタを描画できるようにする。
     topological_map_pub_->publish(std::move(map_msg));

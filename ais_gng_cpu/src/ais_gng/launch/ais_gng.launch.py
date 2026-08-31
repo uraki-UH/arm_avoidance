@@ -20,6 +20,16 @@ def configured_input_topic(config_path):
     return ''
 
 
+def configured_nonplane_component_timing(config_path):
+    with open(config_path, encoding='utf-8') as config_file:
+        config = yaml.safe_load(config_file)
+    params = config.get('nonplane_component_node', {}).get('ros__parameters', {})
+    return (
+        bool(params.get('enable_nonplane_component_extractor', False)),
+        str(params.get('timing_topic', '/nonplane_components/timing')),
+    )
+
+
 def automatic_camera_info_topic(point_cloud_topic):
     known_topics = {
         '/camera/camera/depth/color/points':
@@ -151,6 +161,13 @@ def generate_launch_description():
             plane_parameter_overrides = {
                 'plane_cluster.output_topic': plane_clusters_topic,
             }
+            enable_nonplane_timing, nonplane_timing_topic = (
+                configured_nonplane_component_timing(
+                    LaunchConfiguration('plane_params_file').perform(context)))
+            plane_parameter_overrides['enable_nonplane_component_timing'] = (
+                enable_nonplane_timing)
+            plane_parameter_overrides['nonplane_component_timing_topic'] = (
+                nonplane_timing_topic)
             rho_mode = LaunchConfiguration(
                 'use_node_rho_for_seed_order').perform(context)
             if rho_mode != 'auto':
