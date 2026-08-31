@@ -1599,6 +1599,39 @@ function addTabletopScene(raw,seed,is_remove_table_occluded=true){
   const pts=object_points.map(p=>({...p,z:p.z+h}));
   const tableN=Math.floor((+$('pointCount').value||4200)*dens);
   const pushTable=(x,y,z)=>pts.push({x,y,z,label:'table'});
+  const push_evenly_spaced_rectangle=(width,depth)=>{
+    if(tableN<=0)return;
+    const min_point_dist_th=Math.sqrt(width*depth/tableN)*.70;
+    const min_point_dist_sq_th=min_point_dist_th*min_point_dist_th;
+    const cell_size=min_point_dist_th;
+    const point_cells=new Map(),surface_points=[];
+    const max_attempt_num=tableN*32;
+    for(let attempt_num=0;attempt_num<max_attempt_num&&surface_points.length<tableN;attempt_num++){
+      const x=(r()-.5)*width,y=(r()-.5)*depth;
+      const cell_x=Math.floor((x+width*.5)/cell_size),cell_y=Math.floor((y+depth*.5)/cell_size);
+      let has_close_point=false;
+      for(let offset_x=-1;offset_x<=1&&!has_close_point;offset_x++){
+        for(let offset_y=-1;offset_y<=1&&!has_close_point;offset_y++){
+          const cell_points=point_cells.get((cell_x+offset_x)+'_'+(cell_y+offset_y))||[];
+          has_close_point=cell_points.some((point)=>{
+            const dx=point.x-x,dy=point.y-y;
+            return dx*dx+dy*dy<min_point_dist_sq_th;
+          });
+        }
+      }
+      if(has_close_point)continue;
+      const point={x,y};
+      surface_points.push(point);
+      const cell_key=cell_x+'_'+cell_y;
+      const cell_points=point_cells.get(cell_key)||[];
+      cell_points.push(point);
+      point_cells.set(cell_key,cell_points);
+    }
+    while(surface_points.length<tableN)surface_points.push({x:(r()-.5)*width,y:(r()-.5)*depth});
+    for(const point of surface_points){
+      pushTable(point.x,point.y,h-.006);
+    }
+  };
   if(design==='round'){
     for(let i=0;i<tableN;i++){const th=r()*TAU, rad=Math.sqrt(r())*size*0.48; pushTable(rad*Math.cos(th), rad*Math.sin(th), h-0.006+(r()-.5)*0.0015)}
     for(let i=0;i<Math.floor(tableN*0.18);i++){const th=r()*TAU, rad=0.030+0.012*r(), z=h-0.12*r(); pushTable(rad*Math.cos(th),rad*Math.sin(th),z)}
@@ -1618,7 +1651,11 @@ function addTabletopScene(raw,seed,is_remove_table_occluded=true){
     for(let i=0;i<Math.floor(tableN*0.20);i++){const x=(r()-.5)*0.06, y=(r()-.5)*0.06, z=h-0.16*r(); pushTable(x,y,z)}
     for(let i=0;i<Math.floor(tableN*0.16);i++){const x=(r()-.5)*0.18, y=(r()-.5)*0.18, z=h-0.16; pushTable(x,y,z)}
   } else {
-    for(let i=0;i<tableN;i++){let x=(r()-.5)*size, y=(r()-.5)*size*0.78, z=h-0.006+(r()-.5)*0.0015; pushTable(x,y,z); if(mode==='edge'&&r()<.24){pushTable((r()-.5)*size,-size*.39,h-0.030*r())}}
+    if(is_remove_table_occluded){
+      for(let i=0;i<tableN;i++){let x=(r()-.5)*size, y=(r()-.5)*size*0.78, z=h-0.006+(r()-.5)*0.0015; pushTable(x,y,z); if(mode==='edge'&&r()<.24){pushTable((r()-.5)*size,-size*.39,h-0.030*r())}}
+    } else {
+      push_evenly_spaced_rectangle(size,size*.78);
+    }
   }
   if(mode==='edge' && design!=='rect' && design!=='lab'){
     for(let i=0;i<Math.floor(tableN*0.18);i++)pushTable((r()-.5)*size,-size*.36,h-0.030*r());
