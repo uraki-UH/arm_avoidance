@@ -1043,7 +1043,7 @@ function sync_action_button_styles(root=document){
 }
 function reportGngRuntimeError(context,err){console.warn('[GNG error]',context,err);}
 const state={
-  objectSurfacePoints:[],basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
+  objectSurfacePoints:[],object_surface_scene_points:[],basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
@@ -1590,12 +1590,13 @@ function generateTeapot(n,noise,seed){return generateObject('teapot',n,noise,see
 function generateCoffeePot(n,noise,seed){return generateObject('coffee_pot',n,noise,seed)}
 function generateFryingPan(n,noise,seed){return generateObject('frying_pan',n,noise,seed)}
 function generateWateringPitcher(n,noise,seed){return generateObject('watering_pitcher',n,noise,seed)}
-function addTabletopScene(raw,seed){
+function addTabletopScene(raw,seed,is_remove_table_occluded=true){
   const mode=$('tableMode')?$('tableMode').value:'off';
   if(mode==='off')return raw;
   const design=$('tableDesign')?$('tableDesign').value:'rect';
   const r=rng(seed+5521), size=+$('tableSize').value||0.42, h=+$('tableHeight').value||0, dens=+$('tableDensity').value||0.25;
-  const pts=raw.filter((point)=>!point.is_table_occluded).map(p=>({...p,z:p.z+h}));
+  const object_points=is_remove_table_occluded?raw.filter((point)=>!point.is_table_occluded):raw;
+  const pts=object_points.map(p=>({...p,z:p.z+h}));
   const tableN=Math.floor((+$('pointCount').value||4200)*dens);
   const pushTable=(x,y,z)=>pts.push({x,y,z,label:'table'});
   if(design==='round'){
@@ -1684,10 +1685,14 @@ function transformPoint(p,t){
   }
   return {x,y,z,label:p.label,id:p.id};
 }
+function get_object_surface_scene_points(){
+  const points=state.object_surface_scene_points;
+  return Array.isArray(points)&&points.length?points:(state.objectSurfacePoints||[]);
+}
 function updateMovingPoints(){
   const source=$('pointCloudSource')?.value||'synthetic_depth';
   if(source==='object_surface'){
-    state.points=(state.objectSurfacePoints||[]).map(p=>transformPoint(p,state.time)).filter(Boolean);
+    state.points=get_object_surface_scene_points().map(p=>transformPoint(p,state.time)).filter(Boolean);
     return;
   }
   const pts=state.basePoints.map(p=>transformPoint(p,state.time)).filter(Boolean);
@@ -3439,7 +3444,7 @@ function buildOfflineBatchDataset(){
   // v307: Offline batch no longer has independent user parameters.
   // It uses one fixed snapshot from basePoints; per-frame learning count is controlled only by gngSamplesPerFrame.
   const source=$('pointCloudSource')?.value||'synthetic_depth';
-  const sourcePoints=source==='object_surface' ? state.objectSurfacePoints : state.basePoints;
+  const sourcePoints=source==='object_surface' ? get_object_surface_scene_points() : state.basePoints;
   const pts=[];
   for(const p of sourcePoints||[]){
     const q=source==='object_surface' ? p : transformPoint(p,0);
@@ -3460,7 +3465,8 @@ function v312GetGngWasmInputPoints(){
     return [];
   };
   const objectSurface=()=>{
-    if(Array.isArray(state.objectSurfacePoints) && state.objectSurfacePoints.length) return state.objectSurfacePoints.filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
+    const points=get_object_surface_scene_points();
+    if(Array.isArray(points) && points.length) return points.filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
     return [];
   };
   const importedFrame=()=>{
@@ -3525,6 +3531,7 @@ function generate(){
   const tableMode=$('tableMode')?$('tableMode').value:'off';
   const tableHeight=tableMode==='off'?0:(+$('tableHeight').value||0);
   state.objectSurfacePoints=raw.map((p,i)=>({...p,z:p.z+tableHeight,id:i}));
+  state.object_surface_scene_points=addTabletopScene(raw,seed,false).map((p,i)=>({...p,id:i}));
   raw=addTabletopScene(raw,seed);
   state.basePoints=applyDefects(raw,seed).map((p,i)=>({...p,id:i}));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
   updateMetrics();renderAll();
@@ -7214,7 +7221,7 @@ function v312SetupGngInputFileLoader(){
 
 function v311RealtimeVibratePoints(){
   const source=$('pointCloudSource')?.value||'synthetic_depth';
-  const sourcePoints=source==='object_surface' ? state.objectSurfacePoints : state.basePoints;
+  const sourcePoints=source==='object_surface' ? get_object_surface_scene_points() : state.basePoints;
   if(!sourcePoints||!sourcePoints.length)return;
   const amp=Math.max(0,+($('motionAmp')?.value||0.0012));
   const seed=(+$('seed')?.value||1);
