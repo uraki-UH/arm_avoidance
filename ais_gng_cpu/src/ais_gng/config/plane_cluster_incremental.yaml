@@ -94,3 +94,19 @@ plane_cluster_incremental_node:
 
     # true 時のOBBマーカーへのクラスタID・ノード数文字列の重畳表示。
     enable_text_marker: false
+
+nonplane_component_node:
+  ros__parameters:
+    # 平面クラスタ未所属nodeの連結成分出力の有効化。
+    enable_nonplane_component_extractor: false
+
+    # 既存GNG edgeで連結した成分として出力する最小node数。
+    min_component_nodes: 2
+
+    # 連結成分TopologicalMapと可視化MarkerArrayの出力先。
+    output_topic: /nonplane_components
+    marker_topic: /nonplane_components/markers
+
+    # 成分nodeと平面anchor edgeの描画サイズ[m]。
+    marker_scale_m: 0.012
+    anchor_line_width_m: 0.004

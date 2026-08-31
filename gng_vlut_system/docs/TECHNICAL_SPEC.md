@@ -914,7 +914,14 @@ launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結�
 `object_template_map_publisher_node`を一組で起動する。必要な物体指定は`dataset_file`だけであり、
 `template_id`やframeの指定は不要とする。
 
-照合器は環境側`TopologicalMap`とテンプレートJSONを読み、姿勢候補ごとに一対一のnode対応を作る。
+照合器は環境側`TopologicalMap`、`PlaneClusterArray`、テンプレートJSONを読み、姿勢候補ごとに
+まず平面クラスタを一対一対応させる。平面評価は符号不変の回転後法線と二つのextent比の
+連続的なファジー評価で構成する。平面根拠は対応score合計を飽和変換した`plane_support_score`で扱う。
+テンプレート平面数との比率は候補診断だけに使い、遮蔽で未観測となった平面を不一致にしない。
+1面だけより複数の独立平面が強い根拠になるが、可視平面数の割合を確定条件にしない形式とする。
+
+対応済みテンプレート平面の`idx`に属するnodeは、対応先環境平面の`node_indices`内だけを
+node対応候補とする。対応済み環境平面に属するnodeは、非平面テンプレートnodeの候補から除外する。
 node評価は符号不変の回転後法線、`rho`、node次数の連続的なファジー評価、edge評価は対応済みnode間の
 接続一致率とする。テンプレートnodeが環境側で未対応の場合は遮蔽または視野外として扱い、
 対応済み構造だけを加点する。XY平行移動や位置レジストレーションは実行しない。
@@ -938,9 +945,12 @@ node評価は符号不変の回転後法線、`rho`、node次数の連続的な�
 平面およびGNG nodeの法線は表裏を区別しない方向特徴として扱う。法線評価は内積の絶対値を使い、
 観測方向や局所推定による符号反転では減点しない。
 
-検証器は候補スコア、対応node・edge比率、欠損node比率、連続フレーム数、継続時間で
+検証器は候補スコア、対応node・edge比率、平面対応比率、欠損node比率、連続フレーム数、継続時間で
 `pending`と`confirmed`を判定する。確定開始と解除には別のscore値を用い、境界値での
-配信点滅を抑制する。状態と候補詳細は次のtopicへ`std_msgs/msg/String`のJSONとして配信する。
+配信点滅を抑制する。`enable_plane_cluster_evidence`有効時は、
+`min_plane_support_score`以上の平面根拠がある候補について、
+GNGの`matched_edge_ratio`不足だけでは除外しない。状態と候補詳細は次のtopicへ
+`std_msgs/msg/String`のJSONとして配信する。
 
 | topic | 内容 |
 |---|---|
@@ -962,6 +972,22 @@ edge重み、全体スケールの許容域、遮蔽許容、確定・解除条�
 `min_scale_full_match_ratio`から`max_scale_full_match_ratio`は満点、外側の
 `min_scale_allow_ratio`から`max_scale_allow_ratio`までは連続的に減点し、その外側は候補を反証する。
 対応edgeが`min_scale_edge_num`未満のときは遮蔽などによる未観測として、スケール評価を行わない。
+
+`enable_oversized_plane_filter`有効時は、テンプレートJSONの`gng.plane_clusters`と
+`plane_clusters_topic`を同一frame番号近傍で比較する。姿勢仮説に対して法線が許容内でありながら、
+環境平面の二つのextentのどちらかが全テンプレート平面の
+`max_plane_extent_overflow_ratio`を超える場合、その平面クラスタはテンプレートとの関係を作らない背景面として扱う。
+所属nodeと接続edgeはnode対応、edge対応、反証、スケール評価から除外する。これは平面対応の加点ではなく、
+床や台のような過大平面を物体不一致の根拠にしないための除外処理である。除外数は候補JSONの
+`ignored_plane_node_num`と`ignored_plane_cluster_ids`で確認できる。
+
+`enable_plane_cluster_evaluation`有効時は、過大平面を除いた環境平面とテンプレート平面を
+yaw仮説ごとに一対一対応させる。`min_plane_extent_allow_ratio`から
+`max_plane_extent_overflow_ratio`までをextent比の許容域とし、`plane_weight`でGNG node/edge評価との
+合成比率を設定する。`plane_support_score_scale`は平面対応score合計の飽和速度、
+`min_plane_support_score`は平面根拠によるedge評価代替と反証抑制に使う下限とする。
+候補JSONは`matched_plane_cluster_num`、`matched_plane_cluster_ratio`、`plane_score`、
+`plane_support_score`、`plane_correspondences`を出力する。
 
 `object_template_map_publisher_node`へ`activation_state_topic`を設定しない既存の起動方法は、
 従来どおり起動直後から静的マップを配信する。

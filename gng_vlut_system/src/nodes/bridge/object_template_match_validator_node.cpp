@@ -38,6 +38,8 @@ public:
     deactivate_score_th_ = declare_parameter<double>("deactivate_score_th", 0.40);
     min_matched_node_ratio_ = declare_parameter<double>("min_matched_node_ratio", 0.20);
     min_matched_edge_ratio_ = declare_parameter<double>("min_matched_edge_ratio", 0.15);
+    enable_plane_cluster_evidence_ = declare_parameter<bool>("enable_plane_cluster_evidence", true);
+    min_plane_support_score_ = declare_parameter<double>("min_plane_support_score", 0.60);
     max_missing_node_ratio_ = declare_parameter<double>("max_missing_node_ratio", 0.65);
     max_contradiction_point_ratio_ = declare_parameter<double>("max_contradiction_point_ratio", 0.20);
     min_confirmed_frame_num_ = declare_parameter<int>("min_confirmed_frame_num", 5);
@@ -73,11 +75,13 @@ private:
       min_confirm_duration_sec_ < 0.0 || max_lost_duration_sec_ < 0.0 ||
       !isFinite(activate_score_th_) || !isFinite(deactivate_score_th_) ||
       !isFinite(min_matched_node_ratio_) || !isFinite(min_matched_edge_ratio_) ||
+      !isFinite(min_plane_support_score_) ||
       !isFinite(max_missing_node_ratio_) || !isFinite(max_contradiction_point_ratio_) ||
       activate_score_th_ < 0.0 || activate_score_th_ > 1.0 ||
       deactivate_score_th_ < 0.0 || deactivate_score_th_ > activate_score_th_ ||
       min_matched_node_ratio_ < 0.0 || min_matched_node_ratio_ > 1.0 ||
       min_matched_edge_ratio_ < 0.0 || min_matched_edge_ratio_ > 1.0 ||
+      min_plane_support_score_ < 0.0 || min_plane_support_score_ > 1.0 ||
       max_missing_node_ratio_ < 0.0 || max_missing_node_ratio_ > 1.0 ||
       max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0)
     {
@@ -87,20 +91,24 @@ private:
 
   bool isActivationCandidate(const json &candidate) const
   {
+    const bool has_plane_cluster_evidence = enable_plane_cluster_evidence_ &&
+      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_;
     return !candidate.value("is_falsified", false) &&
       candidate.value("score", 0.0) >= activate_score_th_ &&
       candidate.value("matched_node_ratio", 0.0) >= min_matched_node_ratio_ &&
-      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
+      (candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ || has_plane_cluster_evidence) &&
       candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
       candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
   }
 
   bool isContinuationCandidate(const json &candidate) const
   {
+    const bool has_plane_cluster_evidence = enable_plane_cluster_evidence_ &&
+      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_;
     return !candidate.value("is_falsified", false) &&
       candidate.value("score", 0.0) >= deactivate_score_th_ &&
       candidate.value("matched_node_ratio", 0.0) >= min_matched_node_ratio_ &&
-      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
+      (candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ || has_plane_cluster_evidence) &&
       candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
       candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
   }
@@ -196,6 +204,8 @@ private:
   double deactivate_score_th_ = 0.0;
   double min_matched_node_ratio_ = 0.0;
   double min_matched_edge_ratio_ = 0.0;
+  bool enable_plane_cluster_evidence_ = true;
+  double min_plane_support_score_ = 1.0;
   double max_missing_node_ratio_ = 1.0;
   double max_contradiction_point_ratio_ = 1.0;
   int min_confirmed_frame_num_ = 1;

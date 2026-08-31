@@ -34,6 +34,18 @@ object_template_matcher_node:
     enable_contradiction_evaluation: true
     contradiction_weight: 0.40
     max_contradiction_point_ratio: 0.20
+    enable_oversized_plane_filter: true
+    plane_clusters_topic: /plane_clusters
+    max_plane_normal_angle_deg: 35.0
+    max_plane_extent_overflow_ratio: 1.30
+    max_plane_cluster_frame_lag: 5
+    enable_plane_cluster_evaluation: true
+    min_plane_extent_allow_ratio: 0.35
+    min_plane_extent_full_match_ratio: 0.70
+    max_plane_extent_full_match_ratio: 1.10
+    plane_weight: 0.65
+    plane_support_score_scale: 1.80
+    min_plane_support_score: 0.60
 
 object_template_match_validator_node:
   ros__parameters:
@@ -41,6 +53,8 @@ object_template_match_validator_node:
     deactivate_score_th: 0.40
     min_matched_node_ratio: 0.20
     min_matched_edge_ratio: 0.15
+    enable_plane_cluster_evidence: true
+    min_plane_support_score: 0.60
     max_missing_node_ratio: 0.80
     max_contradiction_point_ratio: 0.20
     min_confirmed_frame_num: 5

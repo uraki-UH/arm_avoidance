@@ -208,6 +208,22 @@ def generate_launch_description():
                 )
             )
 
+        nodes.append(
+            Node(
+                package='ais_gng',
+                executable='nonplane_component_node',
+                name='nonplane_component_node',
+                parameters=[
+                    LaunchConfiguration('plane_params_file'),
+                    {
+                        'input_topic': topological_map_topic,
+                        'plane_clusters_topic': plane_clusters_topic,
+                    },
+                ],
+                output='screen',
+            )
+        )
+
         return nodes
 
     return LaunchDescription([

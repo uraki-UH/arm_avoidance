@@ -55,6 +55,7 @@ def create_matching_nodes(context):
     template_id = read_template_id(dataset_path)
     profile_file = LaunchConfiguration("profile_file").perform(context)
     environment_topic = LaunchConfiguration("environment_topological_map_topic")
+    plane_clusters_topic = LaunchConfiguration("plane_clusters_topic")
     candidate_topic = f"/{template_id}/object_template_match_candidates"
     state_topic = f"/{template_id}/object_template_match_state"
     return [
@@ -67,6 +68,7 @@ def create_matching_nodes(context):
                 "template_id": template_id,
                 "template_dataset_path": dataset_path,
                 "environment_topological_map_topic": environment_topic,
+                "plane_clusters_topic": plane_clusters_topic,
                 "candidate_topic": candidate_topic,
             }],
         ),
@@ -107,6 +109,7 @@ def generate_launch_description():
             default_value=os.path.join(package_share, "config", "object_template_matching.yaml"),
         ),
         DeclareLaunchArgument("environment_topological_map_topic", default_value="/topological_map"),
+        DeclareLaunchArgument("plane_clusters_topic", default_value="/plane_clusters"),
         DeclareLaunchArgument("frame_id", default_value="object_template"),
         DeclareLaunchArgument("publish_hz", default_value="1.0"),
         OpaqueFunction(function=create_matching_nodes),

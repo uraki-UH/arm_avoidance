@@ -73,6 +73,28 @@ ament_target_dependencies(
   ais_gng_msgs rclcpp visualization_msgs Eigen3
 )
 
+# 平面クラスタ未所属nodeの連結成分抽出。
+ament_auto_add_library(
+  nonplane_component_extractor
+  SHARED
+  src/topological_plane/nonplane_component_extractor.cpp
+)
+target_include_directories(nonplane_component_extractor PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(nonplane_component_extractor ais_gng_msgs)
+
+ament_auto_add_executable(
+  nonplane_component_node
+  src/topological_plane/nonplane_component_node.cpp
+)
+target_link_libraries(nonplane_component_node nonplane_component_extractor)
+ament_target_dependencies(
+  nonplane_component_node
+  ais_gng_msgs rclcpp visualization_msgs
+)
+
 if(BUILD_TESTING)
   ament_add_gtest(
     test_plane_cluster_incremental
@@ -80,6 +102,13 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_plane_cluster_incremental plane_cluster_incremental)
   ament_target_dependencies(test_plane_cluster_incremental ais_gng_msgs Eigen3)
+
+  ament_add_gtest(
+    test_nonplane_component_extractor
+    test/test_nonplane_component_extractor.cpp
+  )
+  target_link_libraries(test_nonplane_component_extractor nonplane_component_extractor)
+  ament_target_dependencies(test_nonplane_component_extractor ais_gng_msgs)
 
   add_executable(
     benchmark_plane_cluster_incremental
