@@ -223,7 +223,7 @@
 /top_grasp_surface_estimator:
   ros__parameters:
     topological_map_topic: "/topological_map"
-    planar_clusters_topic: "/topological_planar_clusters_incremental"
+    plane_clusters_topic: "/topological_plane_clusters_incremental"
     candidate_topic: "/top_grasp_pose_cands"
     score_topic: "/top_grasp_pose_cand_scores"
     summary_topic: "/top_grasp_pose_cands/summary"

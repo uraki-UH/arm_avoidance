@@ -23,7 +23,7 @@
 
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
-#include "ais_gng_msgs/msg/planar_cluster_array.hpp"
+#include "ais_gng_msgs/msg/plane_cluster_array.hpp"
 #endif
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -59,7 +59,7 @@ class AiSGNGComponent : public rclcpp::Node {
 #if defined(AIS_GNG_BACKEND_CPU)
     bool direct_plane_cluster_enabled_{false};
     std::unique_ptr<topological_plane::incremental::Clusterizer> direct_plane_clusterizer_;
-    rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr direct_plane_cluster_pub_;
+    rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr direct_plane_cluster_pub_;
 #endif
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;

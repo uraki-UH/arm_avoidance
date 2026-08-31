@@ -88,9 +88,9 @@ def generate_launch_description():
         'topological_map_topic',
         default_value='/topological_map',
     )
-    declar_planar_clusters_topic = DeclareLaunchArgument(
-        'planar_clusters_topic',
-        default_value='/topological_planar_clusters_incremental',
+    declar_plane_clusters_topic = DeclareLaunchArgument(
+        'plane_clusters_topic',
+        default_value='/topological_plane_clusters_incremental',
     )
     declar_plane_clusters_input_topic = DeclareLaunchArgument(
         'plane_clusters_input_topic',
@@ -145,11 +145,11 @@ def generate_launch_description():
 
         topological_map_topic = LaunchConfiguration(
             'topological_map_topic').perform(context)
-        planar_clusters_topic = LaunchConfiguration(
-            'planar_clusters_topic').perform(context)
+        plane_clusters_topic = LaunchConfiguration(
+            'plane_clusters_topic').perform(context)
         if backend == 'cpu':
             plane_parameter_overrides = {
-                'plane_cluster.output_topic': planar_clusters_topic,
+                'plane_cluster.output_topic': plane_clusters_topic,
             }
             rho_mode = LaunchConfiguration(
                 'use_node_rho_for_seed_order').perform(context)
@@ -174,6 +174,7 @@ def generate_launch_description():
                 executable='object_gng_dataset_exporter_node',
                 parameters=[{
                     'map_topic': topological_map_topic,
+                    'plane_clusters_topic': plane_clusters_topic,
                     'point_cloud_topic': source_point_cloud_topic,
                     'camera_info_topic': source_camera_info_topic,
                 }],
@@ -189,7 +190,7 @@ def generate_launch_description():
                 'plane_clusters_input_topic').perform(context)
             if clusters_input_topic == 'auto':
                 clusters_input_topic = (
-                    planar_clusters_topic if backend == 'cpu' else '')
+                    plane_clusters_topic if backend == 'cpu' else '')
             nodes.append(
                 Node(
                     package='ais_gng',
@@ -199,7 +200,7 @@ def generate_launch_description():
                         LaunchConfiguration('plane_params_file'),
                         {
                             'input_topic': topological_map_topic,
-                            'output_topic': planar_clusters_topic,
+                            'output_topic': plane_clusters_topic,
                             'clusters_input_topic': clusters_input_topic,
                         },
                     ],
@@ -218,7 +219,7 @@ def generate_launch_description():
         declar_plane_params_file,
         declar_start_plane_cluster,
         declar_topological_map_topic,
-        declar_planar_clusters_topic,
+        declar_plane_clusters_topic,
         declar_plane_clusters_input_topic,
         declar_use_node_rho_for_seed_order,
         OpaqueFunction(function=launch_setup),

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ais_gng_msgs/msg/planar_cluster_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 
 #include <cstddef>
@@ -219,7 +219,7 @@ struct ClusterStatistics
 
 struct ClusterResult
 {
-  ais_gng_msgs::msg::PlanarClusterArray clusters;
+  ais_gng_msgs::msg::PlaneClusterArray clusters;
   ClusterStatistics statistics;
 };
 

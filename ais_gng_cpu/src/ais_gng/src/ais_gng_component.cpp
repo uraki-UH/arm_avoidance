@@ -319,11 +319,11 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         auto options = topological_plane::incremental::declareClusterOptions(
             *this, "plane_cluster.", true);
         direct_plane_clusterizer_ =
-            std::make_unique<topological_plane::incremental::Clusterizer>(options);
+        std::make_unique<topological_plane::incremental::Clusterizer>(options);
         const auto output_topic = this->declare_parameter<std::string>(
-            "plane_cluster.output_topic", "/topological_planar_clusters_incremental");
+            "plane_cluster.output_topic", "/topological_plane_clusters_incremental");
         direct_plane_cluster_pub_ =
-            this->create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(
+            this->create_publisher<ais_gng_msgs::msg::PlaneClusterArray>(
                 output_topic, rclcpp::QoS(1).reliable().transient_local());
         RCLCPP_INFO(
             this->get_logger(), "Direct plane clustering enabled: GNG -> %s",
@@ -875,12 +875,12 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const auto classification_end = std::chrono::steady_clock::now();
 
 #if defined(AIS_GNG_BACKEND_CPU)
-    std::unique_ptr<ais_gng_msgs::msg::PlanarClusterArray> direct_plane_clusters;
+    std::unique_ptr<ais_gng_msgs::msg::PlaneClusterArray> direct_plane_clusters;
     bool plane_cluster_ran = false;
     if (direct_plane_clusterizer_) {
         auto result = direct_plane_clusterizer_->update(*map_msg);
         direct_plane_clusters =
-            std::make_unique<ais_gng_msgs::msg::PlanarClusterArray>(std::move(result.clusters));
+            std::make_unique<ais_gng_msgs::msg::PlaneClusterArray>(std::move(result.clusters));
         plane_cluster_ran = true;
     }
 #else

@@ -5,11 +5,10 @@
 #
 # ノード添字は、このメッセージを生成した TopologicalMap.nodes 配列に対するもの。
 
-
 # 塊の識別子。フレーム間の追跡は行わないため、同一フレーム内でのみ一意。
 uint32 id
 
-# この塊のノードは PlanarResidualBlobArray.node_indices の
+# この塊のノードは PlaneResidualBlobArray.node_indices の
 # [node_begin, node_begin + node_num) に入る。
 #
 # 塊ごとに配列を持たせると1フレームあたり数十回のヒープ確保が走り、処理時間の

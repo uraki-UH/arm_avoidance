@@ -30,8 +30,8 @@ geometry_msgs::msg::Point markerPoint(const geometry_msgs::msg::Point32 &point)
 }
 
 // 平面内の (u, v) オフセットにある点を、クラスタの接平面基底から求める。
-geometry_msgs::msg::Point planarCorner(
-  const ais_gng_msgs::msg::PlanarCluster &cluster, const double u, const double v)
+geometry_msgs::msg::Point planeCorner(
+  const ais_gng_msgs::msg::PlaneCluster &cluster, const double u, const double v)
 {
   geometry_msgs::msg::Point result = markerPoint(cluster.centroid);
   result.x += cluster.tangent_u.x * u + cluster.tangent_v.x * v;
@@ -40,7 +40,7 @@ geometry_msgs::msg::Point planarCorner(
   return result;
 }
 
-struct PlanarPoint
+struct PlanePoint
 {
   double u = 0.0;
   double v = 0.0;
@@ -52,23 +52,23 @@ struct PlanarPoint
 // 実メンバーが存在しない領域まで枠がはみ出し、隣接クラスタの枠と重なって見える
 // (実測: 同一フレーム列60枚でノードの最大25%が2クラスタ以上の枠に同時に入っていた)。
 // 実分布に沿う凸包に替えるとこの重なりが目に見えて減る(実測で約2-3割減)。
-std::vector<PlanarPoint> convexHull(std::vector<PlanarPoint> points)
+std::vector<PlanePoint> convexHull(std::vector<PlanePoint> points)
 {
-  std::sort(points.begin(), points.end(), [](const PlanarPoint &a, const PlanarPoint &b) {
+  std::sort(points.begin(), points.end(), [](const PlanePoint &a, const PlanePoint &b) {
       return a.u != b.u ? a.u < b.u : a.v < b.v;
     });
   points.erase(
     std::unique(
       points.begin(), points.end(),
-      [](const PlanarPoint &a, const PlanarPoint &b) { return a.u == b.u && a.v == b.v; }),
+      [](const PlanePoint &a, const PlanePoint &b) { return a.u == b.u && a.v == b.v; }),
     points.end());
   if (points.size() < 3U) {
     return points;
   }
-  const auto cross = [](const PlanarPoint &o, const PlanarPoint &a, const PlanarPoint &b) {
+  const auto cross = [](const PlanePoint &o, const PlanePoint &a, const PlanePoint &b) {
       return (a.u - o.u) * (b.v - o.v) - (a.v - o.v) * (b.u - o.u);
     };
-  std::vector<PlanarPoint> hull(2U * points.size());
+  std::vector<PlanePoint> hull(2U * points.size());
   int k = 0;
   for (std::size_t i = 0U; i < points.size(); ++i) {
     while (k >= 2 && cross(hull[k - 2], hull[k - 1], points[i]) <= 0.0) { --k; }
@@ -127,7 +127,7 @@ visualization_msgs::msg::Marker baseMarker(
 // 毎フレーム DELETEALL を送ると、削除と再追加の間で表示が一瞬抜けて明滅する。
 // 生き残っているクラスタのマーカーは上書き更新に任せる。
 visualization_msgs::msg::MarkerArray makeHullMarkers(
-  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  const ais_gng_msgs::msg::PlaneClusterArray &clusters,
   const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes, const bool enable_text_marker,
   std::set<std::uint32_t> &published_ids,
   const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
@@ -162,7 +162,7 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
     // 実メンバーの接平面投影から凸包を取って描く。外接矩形(重心対称)と違い、
     // L字状など偏った分布でも実メンバーのいない領域まではみ出さない。凸包が
     // 作れない(メンバー3未満やほぼ一直線)場合だけ、従来の外接矩形にフォールバックする。
-    std::vector<PlanarPoint> projected;
+    std::vector<PlanePoint> projected;
     projected.reserve(cluster.node_indices.size());
     for (const std::uint32_t node_index : cluster.node_indices) {
       if (node_index >= nodes.size()) { continue; }
@@ -174,7 +174,7 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
         {dx * cluster.tangent_u.x + dy * cluster.tangent_u.y + dz * cluster.tangent_u.z,
           dx * cluster.tangent_v.x + dy * cluster.tangent_v.y + dz * cluster.tangent_v.z});
     }
-    const std::vector<PlanarPoint> hull = convexHull(std::move(projected));
+    const std::vector<PlanePoint> hull = convexHull(std::move(projected));
 
     auto bounds = baseMarker(clusters.header, "incremental_plane_hull", marker_id);
     bounds.type = visualization_msgs::msg::Marker::LINE_LIST;
@@ -186,17 +186,17 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
       bounds.points.reserve(hull.size() * 2U);
       for (std::size_t i = 0U; i < hull.size(); ++i) {
         const std::size_t next = (i + 1U) % hull.size();
-        bounds.points.push_back(planarCorner(cluster, hull[i].u, hull[i].v));
-        bounds.points.push_back(planarCorner(cluster, hull[next].u, hull[next].v));
+        bounds.points.push_back(planeCorner(cluster, hull[i].u, hull[i].v));
+        bounds.points.push_back(planeCorner(cluster, hull[next].u, hull[next].v));
       }
       markers.markers.push_back(std::move(bounds));
     } else if (cluster.extent_u > 0.0F || cluster.extent_v > 0.0F) {
       const double half_u = 0.5 * static_cast<double>(cluster.extent_u);
       const double half_v = 0.5 * static_cast<double>(cluster.extent_v);
-      const auto c0 = planarCorner(cluster, -half_u, -half_v);
-      const auto c1 = planarCorner(cluster, half_u, -half_v);
-      const auto c2 = planarCorner(cluster, half_u, half_v);
-      const auto c3 = planarCorner(cluster, -half_u, half_v);
+      const auto c0 = planeCorner(cluster, -half_u, -half_v);
+      const auto c1 = planeCorner(cluster, half_u, -half_v);
+      const auto c2 = planeCorner(cluster, half_u, half_v);
+      const auto c3 = planeCorner(cluster, -half_u, half_v);
       bounds.points = {c0, c1, c1, c2, c2, c3, c3, c0};
       markers.markers.push_back(std::move(bounds));
     }
@@ -216,7 +216,7 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
 }
 
 visualization_msgs::msg::MarkerArray makeNormalMarkers(
-  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  const ais_gng_msgs::msg::PlaneClusterArray &clusters,
   std::set<std::uint32_t> &published_ids,
   const std::unordered_map<std::uint32_t, std::uint32_t> &color_of)
 {
@@ -269,7 +269,7 @@ visualization_msgs::msg::MarkerArray makeNormalMarkers(
 // 現在のノード位置と食い違って見える。edge専用のpublished集合で追跡し、
 // 空に転じた回だけ明示的にDELETEする。
 visualization_msgs::msg::MarkerArray makeNodeMarkers(
-  const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+  const ais_gng_msgs::msg::PlaneClusterArray &clusters,
   const std::vector<ais_gng_msgs::msg::TopologicalNode> &nodes,
   std::set<std::uint32_t> &published_ids,
   std::set<std::uint32_t> &published_edge_ids,
@@ -356,7 +356,7 @@ public:
   {
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ = declare_parameter<std::string>(
-      "output_topic", "/topological_planar_clusters_incremental");
+      "output_topic", "/topological_plane_clusters_incremental");
     clusters_input_topic_ = declare_parameter<std::string>("clusters_input_topic", "");
     hull_marker_topic_ = output_topic_ + "/markers/hull";
     normal_marker_topic_ = output_topic_ + "/markers/normal";
@@ -386,12 +386,12 @@ public:
 
     if (clusters_input_topic_.empty()) {
       cluster_publisher_ =
-        create_publisher<ais_gng_msgs::msg::PlanarClusterArray>(output_topic_, output_qos);
+        create_publisher<ais_gng_msgs::msg::PlaneClusterArray>(output_topic_, output_qos);
     } else {
       cluster_subscription_ =
-        create_subscription<ais_gng_msgs::msg::PlanarClusterArray>(
+        create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
         clusters_input_topic_, input_qos,
-        [this](const ais_gng_msgs::msg::PlanarClusterArray::ConstSharedPtr &clusters) {
+        [this](const ais_gng_msgs::msg::PlaneClusterArray::ConstSharedPtr &clusters) {
           latest_clusters_ = clusters;
           onClusters(*clusters);
         });
@@ -414,7 +414,7 @@ private:
   // 毎フレーム貪欲彩色をやり直すと色が飛び回るので、前フレームの色を優先して保ち、
   // 隣接と衝突したときだけ空いている番号へ移す。処理量はノード数とエッジ数に比例する。
   void assignColors(
-    const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+    const ais_gng_msgs::msg::PlaneClusterArray &clusters,
     const ais_gng_msgs::msg::TopologicalMap &map)
   {
     const std::size_t node_count = map.nodes.size();
@@ -532,7 +532,7 @@ private:
       update_ms, publish_ms);
   }
 
-  void onClusters(const ais_gng_msgs::msg::PlanarClusterArray &clusters)
+  void onClusters(const ais_gng_msgs::msg::PlaneClusterArray &clusters)
   {
     if (!latest_map_) {
       RCLCPP_WARN_THROTTLE(
@@ -551,7 +551,7 @@ private:
   }
 
   void publishMarkers(
-    const ais_gng_msgs::msg::PlanarClusterArray &clusters,
+    const ais_gng_msgs::msg::PlaneClusterArray &clusters,
     const ais_gng_msgs::msg::TopologicalMap &map)
   {
     assignColors(clusters, map);
@@ -581,14 +581,14 @@ private:
   bool enable_text_marker_ = false;
 
   Clusterizer clusterizer_;
-  rclcpp::Publisher<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_publisher_;
+  rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr cluster_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr hull_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr normal_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_marker_publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr subscription_;
-  rclcpp::Subscription<ais_gng_msgs::msg::PlanarClusterArray>::SharedPtr cluster_subscription_;
+  rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr cluster_subscription_;
   ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr latest_map_;
-  ais_gng_msgs::msg::PlanarClusterArray::ConstSharedPtr latest_clusters_;
+  ais_gng_msgs::msg::PlaneClusterArray::ConstSharedPtr latest_clusters_;
 };
 
 }  // fuzzrobo::topological_plane::incremental 名前空間

@@ -17,7 +17,7 @@ def generate_launch_description():
     )
     input_topic = DeclareLaunchArgument("input_topic", default_value="/topological_map")
     output_topic = DeclareLaunchArgument(
-        "output_topic", default_value="/topological_planar_clusters_incremental"
+        "output_topic", default_value="/topological_plane_clusters_incremental"
     )
     return LaunchDescription(
         [

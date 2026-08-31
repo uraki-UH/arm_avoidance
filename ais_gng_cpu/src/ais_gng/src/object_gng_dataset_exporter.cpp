@@ -1,3 +1,4 @@
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_msgs/srv/save_object_gng_dataset.hpp>
 #include <pcl/PCLPointCloud2.h>
@@ -39,6 +40,7 @@ namespace
 {
 
 using json = nlohmann::json;
+using PlaneClusterArray = ais_gng_msgs::msg::PlaneClusterArray;
 using TopologicalMap = ais_gng_msgs::msg::TopologicalMap;
 using CameraInfo = sensor_msgs::msg::CameraInfo;
 using PointCloud2 = sensor_msgs::msg::PointCloud2;
@@ -379,6 +381,8 @@ public:
   {
     output_dir_ = declare_parameter<std::string>("output_dir", "/datasets");
     const std::string map_topic = declare_parameter<std::string>("map_topic", "topological_map");
+    plane_clusters_topic_ = declare_parameter<std::string>(
+      "plane_clusters_topic", "/topological_plane_clusters_incremental");
     point_cloud_topic_ = declare_parameter<std::string>("point_cloud_topic", "");
     camera_info_topic_ = declare_parameter<std::string>("camera_info_topic", "");
     point_cloud_cache_num_ = static_cast<std::size_t>(std::max<std::int64_t>(
@@ -393,6 +397,14 @@ public:
       map_topic,
       rclcpp::QoS(1).reliable().transient_local(),
       std::bind(&ObjectGngDatasetExporterNode::onMap, this, std::placeholders::_1));
+    if (!plane_clusters_topic_.empty()) {
+      plane_clusters_sub_ = create_subscription<PlaneClusterArray>(
+        plane_clusters_topic_,
+        rclcpp::QoS(1).reliable().transient_local(),
+        std::bind(
+          &ObjectGngDatasetExporterNode::on_plane_clusters, this,
+          std::placeholders::_1));
+    }
     if (!point_cloud_topic_.empty()) {
       point_cloud_sub_ = create_subscription<PointCloud2>(
         point_cloud_topic_, rclcpp::SensorDataQoS(),
@@ -415,8 +427,9 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "物体GNG保存待機: map=%s point_cloud=%s camera_info=%s service=%s output_dir=%s",
-      map_topic.c_str(), point_cloud_topic_.empty() ? "無効" : point_cloud_topic_.c_str(),
+      "物体GNG保存待機: map=%s plane_clusters=%s point_cloud=%s camera_info=%s service=%s output_dir=%s",
+      map_topic.c_str(), plane_clusters_topic_.empty() ? "無効" : plane_clusters_topic_.c_str(),
+      point_cloud_topic_.empty() ? "無効" : point_cloud_topic_.c_str(),
       camera_info_topic_.empty() ? "無効" : camera_info_topic_.c_str(), save_service.c_str(),
       output_dir_.c_str());
   }
@@ -447,6 +460,15 @@ private:
     }
   }
 
+  void on_plane_clusters(const PlaneClusterArray::ConstSharedPtr plane_clusters)
+  {
+    std::lock_guard<std::mutex> lock(data_mutex_);
+    plane_clusters_cache_.push_back(plane_clusters);
+    while (plane_clusters_cache_.size() > plane_clusters_cache_num_) {
+      plane_clusters_cache_.pop_front();
+    }
+  }
+
   void on_camera_info(const CameraInfo::ConstSharedPtr camera_info)
   {
     std::lock_guard<std::mutex> lock(data_mutex_);
@@ -458,6 +480,8 @@ private:
     std::shared_ptr<ais_gng_msgs::srv::SaveObjectGngDataset::Response> response)
   {
     TopologicalMap map;
+    PlaneClusterArray plane_clusters;
+    bool has_matched_plane_clusters = false;
     PointCloud2::ConstSharedPtr point_cloud;
     CameraInfo::ConstSharedPtr camera_info;
     {
@@ -468,6 +492,14 @@ private:
         return;
       }
       map = *latest_map_;
+      for (auto it = plane_clusters_cache_.rbegin(); it != plane_clusters_cache_.rend(); ++it) {
+        if ((*it)->frame_number == map.frame_number &&
+          has_same_stamp((*it)->header.stamp, map.header.stamp)) {
+          plane_clusters = **it;
+          has_matched_plane_clusters = true;
+          break;
+        }
+      }
       if (request->enable_point_cloud_save) {
         if (!latest_matched_point_cloud_) {
           response->success = false;
@@ -543,7 +575,8 @@ private:
         write_gzip_json(
           output_path,
           buildDataset(
-            map, dataset_id, request->object_name, point_cloud.get(), point_cloud_storage));
+            map, has_matched_plane_clusters ? &plane_clusters : nullptr,
+            dataset_id, request->object_name, point_cloud.get(), point_cloud_storage));
       } catch (...) {
         std::error_code error;
         std::filesystem::remove(output_path, error);
@@ -557,6 +590,8 @@ private:
         " nodes=" + std::to_string(map.nodes.size()) +
         " edges=" + std::to_string(map.edges.size() / 2U) +
         " clusters=" + std::to_string(map.clusters.size()) +
+        " plane_clusters=" + std::to_string(
+          has_matched_plane_clusters ? plane_clusters.clusters.size() : 0U) +
         " bytes=" + std::to_string(std::filesystem::file_size(output_path));
       if (point_cloud) {
         if (rgbd_png) {
@@ -581,7 +616,8 @@ private:
   }
 
   json buildDataset(
-    const TopologicalMap &map, const std::string &dataset_id,
+    const TopologicalMap &map, const PlaneClusterArray *plane_clusters,
+    const std::string &dataset_id,
     const std::string &object_name, const PointCloud2 *point_cloud,
     const json &point_cloud_storage) const
   {
@@ -707,6 +743,61 @@ private:
     if (!clusters.empty()) {
       graph["node_clusters"] = std::move(clusters);
     }
+    if (plane_clusters != nullptr) {
+      json compact_clusters = json::array();
+      for (const auto &source_cluster : plane_clusters->clusters) {
+        json member_indices = json::array();
+        for (const std::uint32_t member_index : source_cluster.node_indices) {
+          if (member_index < map.nodes.size()) {
+            member_indices.push_back(member_index);
+          }
+        }
+        if (member_indices.empty()) {
+          continue;
+        }
+        json compact_cluster = {
+          {"id", source_cluster.id},
+          {"idx", std::move(member_indices)},
+          {"label", nodeLabel(source_cluster.source_label)},
+          {"centroid", {
+              finiteOrZero(source_cluster.centroid.x),
+              finiteOrZero(source_cluster.centroid.y),
+              finiteOrZero(source_cluster.centroid.z)}},
+          {"normal", {
+              finiteOrZero(source_cluster.normal.x),
+              finiteOrZero(source_cluster.normal.y),
+              finiteOrZero(source_cluster.normal.z)}},
+          {"tangent_u", {
+              finiteOrZero(source_cluster.tangent_u.x),
+              finiteOrZero(source_cluster.tangent_u.y),
+              finiteOrZero(source_cluster.tangent_u.z)}},
+          {"extent", {
+              finiteOrZero(source_cluster.extent_u),
+              finiteOrZero(source_cluster.extent_v)}},
+          {"spacing", finiteOrZero(source_cluster.local_spacing)},
+          {"planarity", finiteOrZero(source_cluster.planarity)},
+          {"residual_ratio", finiteOrZero(source_cluster.residual_ratio)},
+        };
+        bool has_covariance = false;
+        for (const float value : source_cluster.position_covariance) {
+          has_covariance = has_covariance || std::fabs(value) > 0.0F;
+        }
+        if (has_covariance) {
+          compact_cluster["covariance_ut"] = {
+            finiteOrZero(source_cluster.position_covariance[0]),
+            finiteOrZero(source_cluster.position_covariance[1]),
+            finiteOrZero(source_cluster.position_covariance[2]),
+            finiteOrZero(source_cluster.position_covariance[4]),
+            finiteOrZero(source_cluster.position_covariance[5]),
+            finiteOrZero(source_cluster.position_covariance[8]),
+          };
+        }
+        compact_clusters.push_back(std::move(compact_cluster));
+      }
+      if (!compact_clusters.empty()) {
+        graph["plane_clusters"] = std::move(compact_clusters);
+      }
+    }
     return {
       {"schema_version", 1},
       {"kind", "object_template"},
@@ -720,15 +811,19 @@ private:
   }
 
   std::string output_dir_;
+  std::string plane_clusters_topic_;
   std::string point_cloud_topic_;
   std::string camera_info_topic_;
   std::size_t point_cloud_cache_num_ = 4;
+  static constexpr std::size_t plane_clusters_cache_num_ = 8U;
   std::mutex data_mutex_;
   std::optional<TopologicalMap> latest_map_;
   std::deque<PointCloud2::ConstSharedPtr> point_cloud_cache_;
+  std::deque<PlaneClusterArray::ConstSharedPtr> plane_clusters_cache_;
   PointCloud2::ConstSharedPtr latest_matched_point_cloud_;
   CameraInfo::ConstSharedPtr latest_camera_info_;
   rclcpp::Subscription<TopologicalMap>::SharedPtr map_sub_;
+  rclcpp::Subscription<PlaneClusterArray>::SharedPtr plane_clusters_sub_;
   rclcpp::Subscription<PointCloud2>::SharedPtr point_cloud_sub_;
   rclcpp::Subscription<CameraInfo>::SharedPtr camera_info_sub_;
   rclcpp::Service<ais_gng_msgs::srv::SaveObjectGngDataset>::SharedPtr save_service_;

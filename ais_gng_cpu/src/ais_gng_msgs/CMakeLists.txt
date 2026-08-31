@@ -19,10 +19,10 @@ if(BUILD_TESTING)
 endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/PlanarCluster.msg"
-  "msg/PlanarClusterArray.msg"
-  "msg/PlanarResidualBlob.msg"
-  "msg/PlanarResidualBlobArray.msg"
+  "msg/PlaneCluster.msg"
+  "msg/PlaneClusterArray.msg"
+  "msg/PlaneResidualBlob.msg"
+  "msg/PlaneResidualBlobArray.msg"
   "msg/TopologicalCluster.msg"
   "msg/TopologicalNode.msg"
   "msg/TopologicalMap.msg"

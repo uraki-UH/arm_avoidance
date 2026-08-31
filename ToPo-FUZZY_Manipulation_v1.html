@@ -678,8 +678,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><option value="wasm">GNG-WASM / C++ WebAssembly</option></select></div>
-          <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">完全表面点群（深度・遮蔽なし）</option><option value="imported_frames">取り込みフレーム</option></select></div>
-          <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="object_surface">Object surface / no depth・遮蔽なし</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
+          <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">オクルージョンなし表面点群</option><option value="imported_frames">取り込みフレーム</option></select></div>
+          <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="object_surface">オクルージョンなし表面点群 / 深度なし・遮蔽なし</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
           <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
           <div id="gngBundleTopicContainer" class="full hide">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -704,7 +704,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="objectTemplateSaveBtn" data-action-kind="load" type="button">現在GNGをテンプレート保存</button>
-              <button id="objectSurfaceDatasetSaveBtn" data-action-kind="load" type="button">完全表面点群データセット保存</button>
+              <button id="objectSurfaceDatasetSaveBtn" data-action-kind="load" type="button">オクルージョンなし表面点群データセット保存</button>
               <button id="object_template_action_btn" data-action-kind="load" type="button">登録GNGを選択</button>
             </div>
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
@@ -1776,7 +1776,7 @@ function v323ObjectSurfaceDatasetFileName(dataset){
 }
 function v323SaveObjectSurfaceDataset(){
   if(!(state.objectSurfacePoints||[]).length){
-    v322SetObjectTemplateStatus('保存不可: 完全表面点群がありません。');
+    v322SetObjectTemplateStatus('保存不可: オクルージョンなし表面点群がありません。');
     return;
   }
   const dataset=v323CreateObjectSurfaceDataset();
@@ -1787,7 +1787,7 @@ function v323SaveObjectSurfaceDataset(){
   anchor.click();
   setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
   const gngText=dataset.gng_template?`, GNG nodes=${dataset.gng_template.gng.nodes.length}`:', GNG未同梱';
-  v322SetObjectTemplateStatus(`完全表面点群データセット保存: points=${dataset.surface_points.length}${gngText}`);
+  v322SetObjectTemplateStatus(`オクルージョンなし表面点群データセット保存: points=${dataset.surface_points.length}${gngText}`);
 }
 function v322NormalizeObjectTemplate(value){
   if(!value||typeof value!=='object'||value.kind!=='object_template') throw new Error('object_template JSON ではありません。');
@@ -7657,7 +7657,7 @@ function bindDataModeControls(){
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
-  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースを完全表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}});
+  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);

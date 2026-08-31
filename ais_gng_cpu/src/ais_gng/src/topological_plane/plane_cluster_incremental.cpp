@@ -1317,7 +1317,7 @@ struct Clusterizer::Impl
       std::size_t terrain_nodes = 0U;
       std::size_t wall_nodes = 0U;
 
-      ais_gng_msgs::msg::PlanarCluster cluster;
+      ais_gng_msgs::msg::PlaneCluster cluster;
       cluster.id = state.id;
       cluster.node_indices.reserve(members.size());
       for (const std::uint32_t member : members) {

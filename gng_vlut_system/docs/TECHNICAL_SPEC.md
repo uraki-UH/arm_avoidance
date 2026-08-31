@@ -549,7 +549,7 @@ transient localでpublishする。
 
 上面把持だけを対象にする場合は、`top_grasp_surface_estimator_node`を別経路として使用する。
 同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
-`PlanarCluster.position_covariance`は所属GNGノード位置の母共分散`3×3`を`float32[9]`の行優先で保持する。
+`PlaneCluster.position_covariance`は所属GNGノード位置の母共分散`3×3`を`float32[9]`の行優先で保持する。
 平面フィット時に算出済みの空間共分散を再利用し、GNGノードの入力残差共分散とは区別する。
 法線方向では候補を除外せず、各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
 `footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
@@ -563,6 +563,11 @@ transient localでpublishする。
 上面把持launchのMarkerはこのローカル`+Z`を赤い主矢印として表示する。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
 最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。
+
+物体GNG保存では、`PlaneClusterArray`のうち`TopologicalMap`と`frame_number`およびheader stampが一致する
+クラスタだけを`gng.plane_clusters`へ保存する。各要素はGNG node配列への`idx`参照、重心、法線、
+`tangent_u`、位置共分散の上三角6値、extent、spacing、planarity、residual_ratioからなる。
+`tangent_v`は`normal × tangent_u`、support edgeはGNG edgeと`idx`集合から復元するため保存しない。
 
 | 入出力 | 既定topic | 型 |
 |---|---|---|
