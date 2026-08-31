@@ -668,7 +668,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Acquisition jitter [m]</label><input id="motionAmp" type="range" min="0" max="0.004" step="0.000001" value="0.0012"></div>
           <div><label>Scan update [Hz]</label><input id="motionHz" type="range" min="1" max="30" step="0.5" value="30"></div>
           <div><label>Acquisition mode</label><select id="motionPattern"><option value="scan">fixed object + scan noise</option><option value="flicker">fixed object + dropout flicker</option><option value="vibration" selected>sensor micro vibration</option><option value="drift">object drift optional</option><option value="none">static no jitter</option></select></div>
-          <div><label>Realtime playback speed / スロー再生</label><input id="playbackSpeed" type="range" min="0.1" max="1" step="0.05" value="0.5"></div>
           <div class="section-title">Tabletop Scene Option</div>
           <div><label>Table support</label><select id="tableMode"><option value="off">object only</option><option value="plane" selected>on table / tabletop</option><option value="edge">on table / tabletop + front edge</option></select></div>
           <div><label>Table design / 机デザイン</label><select id="tableDesign"><option value="rect" selected>Rect desk / 長方形机</option><option value="round">Round table / 丸机</option><option value="lab">Lab desk / 実験机</option><option value="corner">Corner desk / コーナー机</option><option value="pedestal">Pedestal table / 台座テーブル</option></select></div>
@@ -1718,9 +1717,14 @@ function v322ObjectTemplateFileName(template){
   const created_at=String(template?.created_at||'').replace(/[^0-9]/g,'').slice(0,14);
   return `${object_name}${created_at?`_${created_at}`:''}_gng_template_v1.json`;
 }
-function v322_create_template_id(){
-  if(globalThis.crypto&&typeof globalThis.crypto.randomUUID==='function') return globalThis.crypto.randomUUID();
-  return `object_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,10)}`;
+function v322_create_template_id(display_name){
+  const raw=String(display_name||'').trim().toLowerCase();
+  const base=(raw.replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'object').replace(/^[^a-z]+/,'object_').slice(0,48);
+  const created_at=new Date().toISOString().replace(/[^0-9]/g,'').slice(0,14);
+  const random=globalThis.crypto&&typeof globalThis.crypto.randomUUID==='function'
+    ?globalThis.crypto.randomUUID().replace(/-/g,'').slice(0,8)
+    :Math.random().toString(36).slice(2,10);
+  return `${base}_${created_at}_${random}`;
 }
 function v322CreateObjectTemplate(){
   const displayName=String($('object_name')?.value||'').trim()||'object';
@@ -1728,7 +1732,7 @@ function v322CreateObjectTemplate(){
   return {
     schema_version:1,
     kind:'object_template',
-    template_id:v322_create_template_id(),
+    template_id:v322_create_template_id(displayName),
     display_name:displayName,
     created_at:new Date().toISOString(),
     source:{sample:state.sample,point_cloud_source:$('pointCloudSource')?.value||'',gng_algorithm:gngAlgorithm()},
@@ -2663,7 +2667,7 @@ function v312AdvanceBundleFlow(now){
   if(flow.lastNow==null) flow.lastNow=now;
   const rawDt=Math.min(.05,(now-flow.lastNow)/1000);
   flow.lastNow=now;
-  flow.elapsedMs+=(rawDt*1000)*(+$('playbackSpeed')?.value||1);
+  flow.elapsedMs+=rawDt*1000;
   let applied=false;
   while(flow.nextIndex<flow.messages.length){
     const msg=flow.messages[flow.nextIndex];
@@ -3156,7 +3160,7 @@ function targetEdgeLengthForNode(n,stat){
   if(n&&Number.isFinite(n.targetEdgeLength)&&n.targetEdgeLength>0)return n.targetEdgeLength;
   return targetEdgeLengthForLabel(densityClassLabel(n&&n.densityClass));
 }
-function configuredPointPeriodMs(){const hz=Math.max(0.001,+($('motionHz')?.value||12)),spd=Math.max(0.001,+($('playbackSpeed')?.value||1));return 1000/(hz*spd)}
+function configuredPointPeriodMs(){const hz=Math.max(0.001,+($('motionHz')?.value||12));return 1000/hz}
 function currentGngBatchSize(){
   if(isGraphOnlyMode()) return 0;
   const el=$('gngSamplesPerFrame');
@@ -7363,7 +7367,7 @@ function setupTopologyStyleControls(){const redraw=()=>{updateLegendColors();ren
 
 function loop(now){
   const rawDt=Math.min(.05,(now-state.last)/1000);
-  const dt=rawDt*(+$('playbackSpeed').value);
+  const dt=rawDt;
   if(state.perf.lastRenderNow!=null)state.perf.renderPeriodMs=now-state.perf.lastRenderNow;
   state.perf.lastRenderNow=now;
   state.last=now;
@@ -7657,7 +7661,7 @@ $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
-['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern','playbackSpeed'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
+['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
 setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
 document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));
 
@@ -7989,12 +7993,38 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     const setStatus = (text)=>{
       if(statusEl) statusEl.textContent = text;
     };
-    const stop = ()=>{
+    const stop = (is_unadvertise=true)=>{
       if(intervalId){
         clearInterval(intervalId);
         intervalId = null;
       }
+      if(topicObj){
+        if(is_unadvertise){
+          try{ topicObj.unadvertise(); }catch(e){ console.warn(`${statusPrefix} unadvertise error`, e); }
+        }
+        topicObj = null;
+      }
       publishTimes = [];
+    };
+    const publish_once = ()=>{
+      if(!topicObj) return false;
+      try{
+        const msg = messageBuilder(getPointsFn() || []);
+        topicObj.publish(msg);
+        const now = performance.now();
+        publishTimes.push(now);
+        while(publishTimes.length>1 && now-publishTimes[0]>5000) publishTimes.shift();
+        const elapsedMs=now-publishTimes[0];
+        const actualHz=publishTimes.length>1 && elapsedMs>0
+          ? (publishTimes.length-1)*1000/elapsedMs
+          : 0;
+        setStatus(`${msg.width} pts ${actualHz.toFixed(1)} Hz`);
+        return true;
+      }catch(e){
+        console.error(`${statusPrefix} publish error`, e);
+        setStatus(`${statusPrefix}: publish error`);
+        return false;
+      }
     };
     const start = ()=>{
       if(!ros || !ros.isConnected){
@@ -8003,26 +8033,22 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         return false;
       }
       stop();
+      const topic_name = String(topicEl?.value || defaultTopic).trim() || defaultTopic;
       topicObj = new ROSLIB.Topic({
         ros,
-        name: topicEl?.value || defaultTopic,
-        messageType: 'sensor_msgs/PointCloud2',
+        name: topic_name.startsWith('/') ? topic_name : `/${topic_name}`,
+        messageType: 'sensor_msgs/msg/PointCloud2',
       });
+      try{
+        topicObj.advertise();
+      }catch(e){
+        console.error(`${statusPrefix} advertise error`, e);
+        setStatus(`${statusPrefix}: advertise error`);
+        return false;
+      }
+      publish_once();
       intervalId = setInterval(()=>{
-        try{
-          const msg = messageBuilder(getPointsFn() || []);
-          topicObj.publish(msg);
-          const now = performance.now();
-          publishTimes.push(now);
-          while(publishTimes.length>1 && now-publishTimes[0]>5000) publishTimes.shift();
-          const elapsedMs=now-publishTimes[0];
-          const actualHz=publishTimes.length>1 && elapsedMs>0
-            ? (publishTimes.length-1)*1000/elapsedMs
-            : 0;
-          setStatus(`${msg.width} pts ${actualHz.toFixed(1)} Hz`);
-        }catch(e){
-          console.error(`${statusPrefix} publish error`, e);
-        }
+        publish_once();
       }, Math.round(1000 / Math.max(0.1, Number(hzEl?.value) || 1)));
       return true;
     };
@@ -8064,7 +8090,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       }
     };
     const onClose = ()=>{
-      stop();
+      stop(false);
       setStatus(enabledEl?.checked ? `${statusPrefix}: waiting for connection`
                                    : `${statusPrefix}: disconnected`);
     };
@@ -8254,7 +8280,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       return out;
     }
     if(Array.isArray(points) && points.length && typeof points[0] === 'object'){
-      return points;
+      const object_points = points.filter(point=>point && typeof point === 'object');
+      if(object_points.length) return object_points;
     }
     return [{x:0,y:0,z:0,label:'default'}];
   }
@@ -8400,6 +8427,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       return createPointCloudPublisher(config);
     });
     rosPublishers.forEach((publisher)=>publisher.sync());
+    setRosBridgeStatus('ROS bridge: starting...');
+    ensureRos();
   });
 })();
 </script>

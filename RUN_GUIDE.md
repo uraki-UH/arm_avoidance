@@ -43,6 +43,19 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
+## HTML全点群からCPU GNGテンプレートを保存
+
+点群も保存
+source /ros2_ws/install/setup.bash
+ros2 run ais_gng save_object_gng_dataset mug_complete --with-points
+
+保存先は`/datasets/設定名_<UTC日時>_<連番>_gng_template_v1.json.gz`。
+
+保存済みテンプレートは、保存名の接頭名だけで静的トピックへ配信。
+
+source /ros2_ws/install/setup.bash
+ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
+  dataset_file:=mug_complete
 
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
