@@ -109,6 +109,11 @@ button{cursor:pointer;font-weight:900}
 .control-pair{display:grid;grid-template-columns:minmax(0,1fr) 82px;gap:8px;align-items:center}
 .control-pair input[type=range]{width:100%;min-width:0}
 .control-pair input[type=number],.color-code-input{font-family:Consolas,Menlo,monospace;font-size:12px;text-transform:uppercase}
+.point-pose-controls{margin-top:10px}
+.point-pose-nudge{grid-column:1/-1;display:grid;gap:7px;padding-top:2px}
+.point-pose-nudge-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.point-pose-nudge-row span{flex:1 1 110px;color:#93c5fd;font-size:11px;font-weight:900}
+.point-pose-nudge-row button{width:auto;min-width:42px;padding:7px 9px;font-size:11px}
 .ros-publish-stack{display:grid;gap:10px;margin-top:8px}
 .ros-source-row{border:1px solid rgba(148,163,184,.18);background:rgba(2,6,23,.34);border-radius:12px;padding:10px}
 .ros-source-head{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px;align-items:center}
@@ -668,6 +673,21 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Acquisition jitter [m]</label><input id="motionAmp" type="range" min="0" max="0.004" step="0.000001" value="0.0012"></div>
           <div><label>Scan update [Hz]</label><input id="motionHz" type="range" min="1" max="30" step="0.5" value="30"></div>
           <div><label>Acquisition mode</label><select id="motionPattern"><option value="scan">fixed object + scan noise</option><option value="flicker">fixed object + dropout flicker</option><option value="vibration" selected>sensor micro vibration</option><option value="drift">object drift optional</option><option value="none">static no jitter</option></select></div>
+          <details class="full gng-params-toggle">
+            <summary class="gng-params-summary"><span>点群配置（位置・姿勢）</span><span class="toggle-icon">▼</span></summary>
+            <div class="controls point-pose-controls">
+              <div><label>X [m]</label><div class="control-pair"><input id="point_pose_x" type="range" min="-1" max="1" step="0.005" value="0"><input id="point_pose_x_num" type="number" min="-1" max="1" step="0.005" value="0"></div></div>
+              <div><label>Y [m]</label><div class="control-pair"><input id="point_pose_y" type="range" min="-1" max="1" step="0.005" value="0"><input id="point_pose_y_num" type="number" min="-1" max="1" step="0.005" value="0"></div></div>
+              <div><label>Z [m]</label><div class="control-pair"><input id="point_pose_z" type="range" min="-1" max="1" step="0.005" value="0"><input id="point_pose_z_num" type="number" min="-1" max="1" step="0.005" value="0"></div></div>
+              <div><label>Roll [deg]</label><div class="control-pair"><input id="point_pose_roll_deg" type="range" min="-180" max="180" step="1" value="0"><input id="point_pose_roll_deg_num" type="number" min="-180" max="180" step="1" value="0"></div></div>
+              <div><label>Pitch [deg]</label><div class="control-pair"><input id="point_pose_pitch_deg" type="range" min="-180" max="180" step="1" value="0"><input id="point_pose_pitch_deg_num" type="number" min="-180" max="180" step="1" value="0"></div></div>
+              <div><label>Yaw [deg]</label><div class="control-pair"><input id="point_pose_yaw_deg" type="range" min="-180" max="180" step="1" value="0"><input id="point_pose_yaw_deg_num" type="number" min="-180" max="180" step="1" value="0"></div></div>
+              <div class="point-pose-nudge">
+                <div class="point-pose-nudge-row"><span>平行移動 0.01 m</span><button type="button" data-point-pose-axis="x" data-point-pose-step="-0.01">X−</button><button type="button" data-point-pose-axis="x" data-point-pose-step="0.01">X＋</button><button type="button" data-point-pose-axis="y" data-point-pose-step="-0.01">Y−</button><button type="button" data-point-pose-axis="y" data-point-pose-step="0.01">Y＋</button><button type="button" data-point-pose-axis="z" data-point-pose-step="-0.01">Z−</button><button type="button" data-point-pose-axis="z" data-point-pose-step="0.01">Z＋</button></div>
+                <div class="point-pose-nudge-row"><span>回転 5 deg</span><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="-5">R−</button><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="5">R＋</button><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="-5">P−</button><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="5">P＋</button><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="-5">Y−</button><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="5">Y＋</button><button id="point_pose_reset" type="button">リセット</button></div>
+              </div>
+            </div>
+          </details>
           <div class="section-title">Tabletop Scene Option</div>
           <div><label>Table support</label><select id="tableMode"><option value="off">object only</option><option value="plane" selected>on table / tabletop</option><option value="edge">on table / tabletop + front edge</option></select></div>
           <div><label>Table design / 机デザイン</label><select id="tableDesign"><option value="rect" selected>Rect desk / 長方形机</option><option value="round">Round table / 丸机</option><option value="lab">Lab desk / 実験机</option><option value="corner">Corner desk / コーナー机</option><option value="pedestal">Pedestal table / 台座テーブル</option></select></div>
@@ -1675,6 +1695,42 @@ function applyDefects(points,seed){
   const outN=Math.floor(points.length*outlier);
   for(let i=0;i<outN;i++){kept.push({x:(r()-.5)*0.28,y:(r()-.5)*0.22,z:-0.02+r()*0.34,label:'outlier'})}
   return kept;
+}
+function read_point_cloud_pose(){
+  const get_number=(id)=>{
+    const value=+($(id)?.value||0);
+    return Number.isFinite(value)?value:0;
+  };
+  const degree_to_rad=(degree)=>degree*Math.PI/180;
+  return {
+    x:get_number('point_pose_x'),
+    y:get_number('point_pose_y'),
+    z:get_number('point_pose_z'),
+    roll:degree_to_rad(get_number('point_pose_roll_deg')),
+    pitch:degree_to_rad(get_number('point_pose_pitch_deg')),
+    yaw:degree_to_rad(get_number('point_pose_yaw_deg')),
+  };
+}
+function apply_point_cloud_pose(point,pose){
+  const cos_roll=Math.cos(pose.roll),sin_roll=Math.sin(pose.roll);
+  const cos_pitch=Math.cos(pose.pitch),sin_pitch=Math.sin(pose.pitch);
+  const cos_yaw=Math.cos(pose.yaw),sin_yaw=Math.sin(pose.yaw);
+  const x_roll=point.x;
+  const y_roll=cos_roll*point.y-sin_roll*point.z;
+  const z_roll=sin_roll*point.y+cos_roll*point.z;
+  const x_pitch=cos_pitch*x_roll+sin_pitch*z_roll;
+  const y_pitch=y_roll;
+  const z_pitch=-sin_pitch*x_roll+cos_pitch*z_roll;
+  return {
+    ...point,
+    x:cos_yaw*x_pitch-sin_yaw*y_pitch+pose.x,
+    y:sin_yaw*x_pitch+cos_yaw*y_pitch+pose.y,
+    z:z_pitch+pose.z,
+  };
+}
+function apply_point_cloud_pose_points(points){
+  const pose=read_point_cloud_pose();
+  return points.map((point)=>apply_point_cloud_pose(point,pose));
 }
 function transformPoint(p,t){
   const amp=+$('motionAmp').value,hz=+$('motionHz').value,pat=$('motionPattern').value;
@@ -3567,10 +3623,10 @@ function generate(){
   else raw=generateMug(n,noise,seed);
   const tableMode=$('tableMode')?$('tableMode').value:'off';
   const tableHeight=tableMode==='off'?0:(+$('tableHeight').value||0);
-  state.objectSurfacePoints=raw.map((p,i)=>({...p,z:p.z+tableHeight,id:i}));
-  state.object_surface_scene_points=addTabletopScene(raw,seed,false).map((p,i)=>({...p,id:i}));
+  state.objectSurfacePoints=apply_point_cloud_pose_points(raw.map((p,i)=>({...p,z:p.z+tableHeight,id:i})));
+  state.object_surface_scene_points=apply_point_cloud_pose_points(addTabletopScene(raw,seed,false).map((p,i)=>({...p,id:i})));
   raw=addTabletopScene(raw,seed);
-  state.basePoints=applyDefects(raw,seed).map((p,i)=>({...p,id:i}));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
+  state.basePoints=apply_point_cloud_pose_points(applyDefects(raw,seed).map((p,i)=>({...p,id:i})));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
   updateMetrics();renderAll();
   const tableDesign=$('tableDesign')?$('tableDesign').value:'rect';
   $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
@@ -7362,6 +7418,56 @@ function setGngPlaying(v){
 }
 function updateHud(){const ptxt=state.pointPlaying?'3D停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
 function syncNumberPair(rangeId,numId,cb){const r=$(rangeId),n=$(numId);if(!r||!n)return;const applyFromRange=()=>{n.value=r.value;if(cb)cb();};const applyFromNumber=()=>{let v=clamp(+n.value||+r.value,+r.min,+r.max);r.value=v;n.value=v;if(cb)cb();};r.addEventListener('input',applyFromRange);n.addEventListener('input',applyFromNumber);applyFromRange();}
+function setup_point_pose_controls(){
+  const pose_axes=['x','y','z','roll_deg','pitch_deg','yaw_deg'];
+  for(const axis of pose_axes){
+    const range_el=$(`point_pose_${axis}`),number_el=$(`point_pose_${axis}_num`);
+    if(!range_el||!number_el||range_el.dataset.point_pose_bound)continue;
+    range_el.dataset.point_pose_bound='1';
+    range_el.value='0';
+    number_el.value='0';
+    const apply_from_range=()=>{
+      number_el.value=range_el.value;
+      generate();
+    };
+    const apply_from_number=()=>{
+      const requested_value=+number_el.value;
+      const value=clamp(Number.isFinite(requested_value)?requested_value:+range_el.value,+range_el.min,+range_el.max);
+      range_el.value=String(value);
+      number_el.value=String(value);
+      generate();
+    };
+    range_el.addEventListener('input',apply_from_range);
+    number_el.addEventListener('input',apply_from_number);
+    number_el.value=range_el.value;
+  }
+  document.querySelectorAll('[data-point-pose-axis]').forEach((button)=>{
+    if(button.getAttribute('data-point-pose-bound'))return;
+    button.setAttribute('data-point-pose-bound','1');
+    button.addEventListener('click',()=>{
+      const axis=button.getAttribute('data-point-pose-axis')||'';
+      const step=+(button.getAttribute('data-point-pose-step')||0);
+      const range_el=$(`point_pose_${axis}`),number_el=$(`point_pose_${axis}_num`);
+      if(!range_el||!number_el||!Number.isFinite(step))return;
+      const value=clamp(+range_el.value+step,+range_el.min,+range_el.max);
+      range_el.value=String(value);
+      number_el.value=String(value);
+      generate();
+    });
+  });
+  const reset_button=$('point_pose_reset');
+  if(reset_button&&!reset_button.dataset.point_pose_bound){
+    reset_button.dataset.point_pose_bound='1';
+    reset_button.addEventListener('click',()=>{
+      for(const axis of pose_axes){
+        const range_el=$(`point_pose_${axis}`),number_el=$(`point_pose_${axis}_num`);
+        if(range_el)range_el.value='0';
+        if(number_el)number_el.value='0';
+      }
+      generate();
+    });
+  }
+}
 function degToRad(v){return (+v||0)*Math.PI/180}
 function radToDeg(v){return (+v||0)*180/Math.PI}
 const V315_FIXED_BASE_STORAGE_KEY='topofuzzy.fixed_base_pose.v2';
@@ -7811,6 +7917,7 @@ $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
+setup_point_pose_controls();
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
 setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
 document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));
