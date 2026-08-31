@@ -111,9 +111,13 @@ button{cursor:pointer;font-weight:900}
 .control-pair input[type=number],.color-code-input{font-family:Consolas,Menlo,monospace;font-size:12px;text-transform:uppercase}
 .point-pose-controls{margin-top:10px}
 .point-pose-nudge{grid-column:1/-1;display:grid;gap:7px;padding-top:2px}
-.point-pose-nudge-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.point-pose-nudge-row span{flex:1 1 110px;color:#93c5fd;font-size:11px;font-weight:900}
-.point-pose-nudge-row button{width:auto;min-width:42px;padding:7px 9px;font-size:11px}
+.point-pose-nudge-row{display:grid;grid-template-columns:112px minmax(0,1fr);gap:8px;align-items:center}
+.point-pose-nudge-row span{color:#93c5fd;font-size:11px;font-weight:900}
+.point-pose-button-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.point-pose-axis-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.point-pose-axis-buttons button,.point-pose-reset-row button{width:100%;min-width:0;padding:7px 5px;font-size:11px}
+.point-pose-reset-row{display:flex;justify-content:flex-end}
+.point-pose-reset-row button{width:auto;padding-inline:14px}
 .ros-publish-stack{display:grid;gap:10px;margin-top:8px}
 .ros-source-row{border:1px solid rgba(148,163,184,.18);background:rgba(2,6,23,.34);border-radius:12px;padding:10px}
 .ros-source-head{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px;align-items:center}
@@ -683,8 +687,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>Pitch [deg]</label><div class="control-pair"><input id="point_pose_pitch_deg" type="range" min="-180" max="180" step="1" value="0"><input id="point_pose_pitch_deg_num" type="number" min="-180" max="180" step="1" value="0"></div></div>
               <div><label>Yaw [deg]</label><div class="control-pair"><input id="point_pose_yaw_deg" type="range" min="-180" max="180" step="1" value="0"><input id="point_pose_yaw_deg_num" type="number" min="-180" max="180" step="1" value="0"></div></div>
               <div class="point-pose-nudge">
-                <div class="point-pose-nudge-row"><span>平行移動 0.01 m</span><button type="button" data-point-pose-axis="x" data-point-pose-step="-0.01">X−</button><button type="button" data-point-pose-axis="x" data-point-pose-step="0.01">X＋</button><button type="button" data-point-pose-axis="y" data-point-pose-step="-0.01">Y−</button><button type="button" data-point-pose-axis="y" data-point-pose-step="0.01">Y＋</button><button type="button" data-point-pose-axis="z" data-point-pose-step="-0.01">Z−</button><button type="button" data-point-pose-axis="z" data-point-pose-step="0.01">Z＋</button></div>
-                <div class="point-pose-nudge-row"><span>回転 5 deg</span><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="-5">R−</button><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="5">R＋</button><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="-5">P−</button><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="5">P＋</button><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="-5">Y−</button><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="5">Y＋</button><button id="point_pose_reset" type="button">リセット</button></div>
+                <div class="point-pose-nudge-row"><span>平行移動 0.01 m</span><div class="point-pose-button-grid"><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="x" data-point-pose-step="-0.01">X−</button><button type="button" data-point-pose-axis="x" data-point-pose-step="0.01">X＋</button></div><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="y" data-point-pose-step="-0.01">Y−</button><button type="button" data-point-pose-axis="y" data-point-pose-step="0.01">Y＋</button></div><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="z" data-point-pose-step="-0.01">Z−</button><button type="button" data-point-pose-axis="z" data-point-pose-step="0.01">Z＋</button></div></div></div>
+                <div class="point-pose-nudge-row"><span>回転 5 deg</span><div class="point-pose-button-grid"><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="-5">R−</button><button type="button" data-point-pose-axis="roll_deg" data-point-pose-step="5">R＋</button></div><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="-5">P−</button><button type="button" data-point-pose-axis="pitch_deg" data-point-pose-step="5">P＋</button></div><div class="point-pose-axis-buttons"><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="-5">Y−</button><button type="button" data-point-pose-axis="yaw_deg" data-point-pose-step="5">Y＋</button></div></div></div>
+                <div class="point-pose-reset-row"><button id="point_pose_reset" type="button">配置をリセット</button></div>
               </div>
             </div>
           </details>
