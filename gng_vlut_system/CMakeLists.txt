@@ -40,6 +40,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(fcl QUIET)
 find_package(Eigen3 REQUIRED)
+find_package(nlohmann_json REQUIRED)
 find_package(voxel_idx REQUIRED)
 
 set(_eigen_include_dirs "${Eigen3_INCLUDE_DIRS}")
@@ -98,15 +99,17 @@ add_subdirectory(src)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(
-    test_voxelizer_engine
+    test_gng_vlut_system
     test/test_voxelizer_engine.cpp
+    test/test_world_point_bucket_index.cpp
+    test/test_reachability_voxel_accumulator.cpp
   )
-  if(TARGET test_voxelizer_engine)
+  if(TARGET test_gng_vlut_system)
     target_include_directories(
-      test_voxelizer_engine PRIVATE src src/core
+      test_gng_vlut_system PRIVATE src src/core
     )
     ament_target_dependencies(
-      test_voxelizer_engine Eigen3 sensor_msgs std_msgs voxel_msgs voxel_idx
+      test_gng_vlut_system Eigen3 sensor_msgs std_msgs voxel_msgs voxel_idx
     )
   endif()
 endif()

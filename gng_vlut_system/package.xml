@@ -21,6 +21,7 @@
   <depend>urdfdom</depend>
   <depend>urdfdom_headers</depend>
   <depend>eigen</depend>
+  <depend>nlohmann_json</depend>
   <depend>ament_index_cpp</depend>
   <depend>rclcpp_components</depend>
   <depend>tf2</depend>

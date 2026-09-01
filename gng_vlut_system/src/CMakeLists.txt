@@ -7,7 +7,7 @@ include_directories(
 )
 
 # Standard ROS 2 Dependencies
-set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs tf2 tf2_ros tf2_geometry_msgs tf2_eigen voxel_msgs ament_index_cpp)
+set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs tf2 tf2_ros tf2_geometry_msgs tf2_eigen voxel_msgs ament_index_cpp nlohmann_json)
 # System libraries
 set(EXTRA_LIBS m)
 
@@ -92,6 +92,9 @@ add_executable(robot_description_player_node nodes/self_recognition/robot_descri
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(voxel_to_vlut_node nodes/bridge/voxel_to_vlut_node.cpp)
 
+# 環境点群をbucketへ登録し、ROIの必要領域だけVLUTの解像度・座標系のvoxel IDへ変換
+add_executable(world_index_to_voxel_node nodes/bridge/world_index_to_voxel_node.cpp)
+
 # URDFからGNGとVLUTを構築するオフライン学習
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
 add_executable(offline_gng_main5_clean offline_tools/offline_gng_main5_clean.cpp)
@@ -103,6 +106,7 @@ set(NODES
     robot_description_player_node
     self_recognition_viz_node
     voxel_to_vlut_node
+    world_index_to_voxel_node
     offline_urdf_trainer
     offline_gng_main5_clean
     offline_gng_main6_island_pruning

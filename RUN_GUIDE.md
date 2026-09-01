@@ -79,6 +79,27 @@ ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   # (output_voxel_size:=0.02)
 ```
 
+## 環境点群をVLUTへ反映
+
+点群をworld座標のbucketへ登録し、ROIの必要領域だけをVLUTの解像度・座標系の
+voxel IDへ変換して`occupied_voxels`/`danger_voxels`へ流す。
+
+```bash
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
+
+内訳は`point_to_vlut.launch.py`（bucket→voxel→VLUT）と、その内側の
+`point_to_voxel.launch.py` / `world_index_to_voxel.launch.py`。
+bucket解像度やROIの設定は`config/world_index.yaml`。
+
+単体で起動する場合。
+
+```bash
+ros2 launch gng_vlut_system world_index_to_voxel.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/world_index.yaml
+```
+
 ## URDF準拠のダミー関節状態
 
 ```bash

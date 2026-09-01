@@ -54,13 +54,14 @@ launch経由の実行は [RUN_GUIDE.md](../RUN_GUIDE.md) を参照。
 | `offline_gng_main6_island_pruning` | 分離した「島」を除去し最大連結成分のみ保持 |
 | `offline_gng_status_updater` | 可操作性などの特徴量の再計算・上書き |
 
-## 3. 実行時のURDF→VLUT
+## 3. 実行時のVLUT構築
 
 | ノード | 役割 |
 | --- | --- |
 | `robot_description_player_node` | URDFを`/robot_description`へ配信 |
 | `self_recognition_viz_node` | URDFと関節角から自己認識ボクセルを生成しマスクをpublish |
 | `voxel_to_vlut_node` | 自己認識ボクセルを`occupied_voxels`/`danger_voxels`へ橋渡し |
+| `world_index_to_voxel_node` | 環境点群をworld bucketへ登録し、ROIの必要領域だけVLUTの解像度・座標系のvoxel IDへ変換 |
 
 ### トピック
 
@@ -70,7 +71,8 @@ launch経由の実行は [RUN_GUIDE.md](../RUN_GUIDE.md) を参照。
 | `/robot_description` | URDF |
 | `/self_recognition/voxel_mask` | 自己認識マスクの送信トピック |
 | `/self_mask_viz` | 自己認識マスクのマーカー |
-| `/occupied_voxels` | 自己認識ボクセルIDを渡すトピック |
+| `/<robot>/roi_voxel_ids` | ROI内の環境点群から変換したvoxel ID |
+| `/occupied_voxels` | 自己認識・環境のボクセルIDを渡すトピック |
 | `/danger_voxels` | occupiedを外側へ膨張したシェル |
 
 ## 4. 可視化スクリプト
