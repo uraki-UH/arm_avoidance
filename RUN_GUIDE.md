@@ -89,7 +89,7 @@ ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
 ## ロボットを座標変換
 
 ```bash
-python3 test_tf_publisher.py --world-frame world \
+ros2 run gng_vlut_system test_tf_publisher.py --world-frame world \
   --frame-id ToPoDualArm/base_link \
   --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 ```

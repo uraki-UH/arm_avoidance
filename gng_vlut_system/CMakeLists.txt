@@ -117,7 +117,9 @@ install(DIRECTORY urdf config launch gng_results
 )
 
 install(PROGRAMS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py
+  scripts/dummy_joint_pub.py
+  scripts/test_joint_state_publisher.py
+  scripts/test_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
