@@ -8,9 +8,9 @@ URDFのロボットモデルから、自己認識ボクセル・VLUT (Voxel Look
 
 - [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md)
 - [docs/RELEASE_NOTE_TEMPLATE.md](docs/RELEASE_NOTE_TEMPLATE.md)
-- [docs/releases/](docs/releases/)
 
-> docs配下には、本ブランチで削除した実行時・Viewer連携機能の記述も履歴として残存。
+> `docs/TECHNICAL_SPEC.md` は本ブランチで削除した把持計画・Viewer連携の記述を含む。
+> 本パッケージに対応するのは13章「可視化専用3次元GNG」と14章「姿勢VLUTのリンク収録範囲」。
 
 ## 依存ライブラリ
 

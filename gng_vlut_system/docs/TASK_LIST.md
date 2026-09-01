@@ -128,7 +128,7 @@
 
 既存の番号を動かさないため英字で採番する。目的は**先方に見せたときの分かりやすさとインパクト**であり、デバッグ用途とは基準が異なる。
 
-可視化専用3次元GNGによる集約、元angle-space edgeのFK補間、layer別配信、軌道変換、Viewer描画、双腕のcoord layer分離確認までは完了済み。現行仕様は[TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md#13-可視化専用3次元gng)、変更履歴は`releases/2026-08-03_visualization_*.md`を参照する。
+可視化専用3次元GNGによる集約、元angle-space edgeのFK補間、layer別配信、軌道変換、Viewer描画、双腕のcoord layer分離確認までは完了済み。現行仕様は[TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md#13-可視化専用3次元gng)を参照する。
 
 旧案のunion-find縮約とマージ列は可視化専用3次元GNGへ置き換えたため実装しない。マージ列を前提とした粒度スライダも現行タスクから除外する。
 
