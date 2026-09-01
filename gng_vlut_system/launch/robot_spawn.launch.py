@@ -45,7 +45,6 @@ def load_root_params(params_file: str) -> dict:
 def launch_setup(context, *args, **kwargs):
     robot_name = LaunchConfiguration("robot_name").perform(context)
     enable_joint_state_publisher = LaunchConfiguration("enable_joint_state_publisher").perform(context).lower() in ("true", "1", "yes", "on")
-    publish_initial_joint_state = LaunchConfiguration("publish_initial_joint_state").perform(context).lower() in ("true", "1", "yes", "on")
     joint_state_topic = LaunchConfiguration("joint_state_topic").perform(context).strip()
     robot_description_topic = LaunchConfiguration("robot_description_topic").perform(context).strip() or "robot_description"
     if not robot_description_topic.startswith("/"):
@@ -90,20 +89,6 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-    if publish_initial_joint_state:
-        nodes.append(
-            Node(
-                package="gng_vlut_system",
-                executable="initial_joint_state_publisher_node",
-                name="initial_joint_state_publisher_node",
-                namespace=robot_name,
-                parameters=[{
-                    "robot_description": ParameterValue(Command(xacro_cmd), value_type=str),
-                    "joint_state_topic": joint_state_topic or f"/{robot_name}/joint_states",
-                }],
-            )
-        )
-
     nodes.extend([
         Node(
             package="robot_state_publisher",
@@ -144,7 +129,6 @@ def generate_launch_description():
         DeclareLaunchArgument("resource_root_dir", default_value=""),
         DeclareLaunchArgument("mesh_root_dir", default_value=""),
         DeclareLaunchArgument("enable_joint_state_publisher", default_value="false"),
-        DeclareLaunchArgument("publish_initial_joint_state", default_value="false"),
         DeclareLaunchArgument("joint_state_topic", default_value=""),
         DeclareLaunchArgument("robot_description_topic", default_value="robot_description"),
         OpaqueFunction(function=launch_setup)

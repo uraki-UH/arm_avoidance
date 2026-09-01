@@ -1,6 +1,6 @@
-# URDF → 自己認識ボクセル / VLUT / GNG 実行ガイド
+# URDF → GNG / VLUT 構築ガイド
 
-URDFのロボットモデルから、自己認識ボクセル・VLUT・GNGを生成するまでの手順。
+URDFのロボットモデルからGNGとVLUTを構築するまでの手順。
 
 ## コンテナの起動
 
@@ -20,7 +20,7 @@ colcon build --symlink-install \
 source install/setup.bash
 ```
 
-## GNGの学習
+## GNGとVLUTのオフライン構築
 
 URDFから両腕分のGNGを学習。`gng_profile_names`で対象アームを指定。
 
@@ -59,7 +59,7 @@ ros2 launch gng_vlut_system offline_gng_status_updater.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-## 自己認識ボクセルの起動
+## 実行時のURDF→VLUT（自己認識ボクセル）
 
 ```bash
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
@@ -77,29 +77,6 @@ ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
   # (output_voxel_size:=0.02)
-```
-
-### 自己認識ボクセル内外で点群を分割してpublish
-
-```bash
-ros2 run gng_vlut_system self_recognition_filter_node
-# 自己認識ボクセル内の点群: /self_recognition_points
-# それ以外の点群:           /self_filtered_points
-```
-
-## 球体近似したロボット形状の可視化
-
-```bash
-ros2 launch gng_vlut_system voxel_spherized_robot_viewer.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
-
-## RVizでロボットを表示
-
-```bash
-ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  robot_name:=ToPoDualArm
 ```
 
 ## URDF準拠のダミー関節状態
