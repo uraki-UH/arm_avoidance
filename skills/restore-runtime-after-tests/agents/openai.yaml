@@ -1,4 +1,0 @@
-interface:
-  display_name: "Restore Runtime After Tests"
-  short_description: "テスト後にDockerとROS 2の実行状態を確実に復元"
-  default_prompt: "Use $restore-runtime-after-tests when running Docker or ROS 2 tests and restore the pre-test runtime state afterward."

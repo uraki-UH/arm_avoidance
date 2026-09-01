@@ -4,14 +4,6 @@ URDFのロボットモデルから、自己認識ボクセル・VLUT (Voxel Look
 を生成するオフライン学習パッケージ。角度空間と座標空間のデュアルスペース学習、および
 幾何学的な自己干渉判定が特徴。
 
-## 詳細仕様
-
-- [docs/TECHNICAL_SPEC.md](docs/TECHNICAL_SPEC.md)
-- [docs/RELEASE_NOTE_TEMPLATE.md](docs/RELEASE_NOTE_TEMPLATE.md)
-
-> `docs/TECHNICAL_SPEC.md` は本ブランチで削除した把持計画・Viewer連携の記述を含む。
-> 本パッケージに対応するのは13章「可視化専用3次元GNG」と14章「姿勢VLUTのリンク収録範囲」。
-
 ## 依存ライブラリ
 
 - **Eigen3**: 解析計算、ベクトル・行列演算。

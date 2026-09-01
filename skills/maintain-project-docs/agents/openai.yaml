@@ -1,4 +1,0 @@
-interface:
-  display_name: "Maintain Project Docs"
-  short_description: "Track project tasks, specifications, and releases"
-  default_prompt: "Use $maintain-project-docs to update only the project documentation required by the current work."
