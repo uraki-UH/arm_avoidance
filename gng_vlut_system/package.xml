@@ -3,7 +3,7 @@
 <package format="3">
   <name>gng_vlut_system</name>
   <version>0.1.0</version>
-  <description>GNG based real-time motion planning system for manipulators</description>
+  <description>URDFからロボット自己認識ボクセル・VLUT・GNGを生成するオフライン学習システム</description>
   <maintainer email="user@todo.todo">user</maintainer>
   <license>Apache-2.0</license>
 
@@ -11,9 +11,6 @@
 
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
-  <depend>libpcl-all-dev</depend>
-  <depend>pcl_conversions</depend>
-  <depend>vision_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
@@ -21,9 +18,6 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>tf2_eigen</depend>
   <depend>visualization_msgs</depend>
-  <depend>gazebo_msgs</depend>
-  <depend>ais_gng_msgs</depend>
-  <depend>ais_gng_feature_msgs</depend>
   <depend>voxel_msgs</depend>
   <depend>urdf</depend>
   <depend>urdfdom</depend>
@@ -31,23 +25,17 @@
   <depend>tinyxml2_vendor</depend>
   <depend>eigen</depend>
   <depend>nlohmann_json</depend>
-  <depend>zlib</depend>
   <depend>ament_index_cpp</depend>
   <depend>rclcpp_components</depend>
   <depend>tf2</depend>
   <depend>voxel_idx</depend>
-  <depend>grasping_system</depend>
-  <depend>gng_control_msgs</depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>rviz2</exec_depend>
-  <exec_depend>gazebo_ros</exec_depend>
-  <exec_depend>gazebo_plugins</exec_depend>
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>cv_bridge</exec_depend>
-  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>gng_control_msgs</exec_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>

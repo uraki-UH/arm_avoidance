@@ -1,7 +1,8 @@
-# Multi-Layer Geometric GNG Project
+# gng_vlut_system
 
-このプロジェクトは、Growing Neural Gas (GNG) アルゴリズムを用いたロボットアームの軌道計画および自己干渉回避システムです。
-角度空間と座標空間のデュアルスペース学習、および幾何学的な自己干渉判定を特徴としています。
+URDFのロボットモデルから、自己認識ボクセル・VLUT (Voxel Look-Up Table)・GNG (Growing Neural Gas)
+を生成するオフライン学習パッケージ。角度空間と座標空間のデュアルスペース学習、および
+幾何学的な自己干渉判定が特徴。
 
 ## 詳細仕様
 
@@ -9,198 +10,97 @@
 - [docs/RELEASE_NOTE_TEMPLATE.md](docs/RELEASE_NOTE_TEMPLATE.md)
 - [docs/releases/](docs/releases/)
 
-## 依存ライブラリ (Dependencies)
+> docs配下には、本ブランチで削除した実行時・Viewer連携機能の記述も履歴として残存。
 
-- **Eigen3**: 解析計算、ベクトル・行列演算に使用。
-- **urdfdom** / **urdfdom_headers**: URDFロボットモデルのパースに使用。
-- **tinyxml2**: XMLのパースに使用（urdfdomで使用）。
-- **console_bridge**: ロギングユーティリティ。
-- **ROS 2 Humble**: ROS 2関連のノード、ビルドシステム、可視化に使用。
+## 依存ライブラリ
 
----
-
-# GNG / VLUT オフライン処理 & ROS 2 ガイド
-
-このドキュメントは、GNG (自己増殖型ニューラルガス) と VLUT (Voxel Look-Up Table) のオフライン学習から、ROS 2環境での実行、可視化までをまとめた総合ガイドです。
+- **Eigen3**: 解析計算、ベクトル・行列演算。
+- **urdfdom** / **urdfdom_headers**: URDFロボットモデルのパース。
+- **tinyxml2**: XMLのパース（urdfdomが使用）。
+- **ROS 2 Humble**: ノード、ビルドシステム、可視化。
+- **voxel_idx** / **voxel_msgs**: ボクセルID表現とメッセージ定義。
 
 ## 1. ビルド
 
-まず、`gng_vlut_system` パッケージをビルドします。
-
 ```bash
-# ワークスペースのルートに移動
-cd ~/arm_avoidance 
-
-# ROS 2 環境をセットアップ
 source /opt/ros/humble/setup.bash
-
-# ビルド
-colcon build --symlink-install --packages-select gng_vlut_system
-
-# ビルド後の環境をセットアップ
+colcon build --symlink-install --packages-select voxel_msgs voxel_idx gng_control_msgs gng_vlut_system
 source install/setup.bash
 ```
 
 ## 2. オフライン学習
 
-`offline_urdf_trainer` を使って、URDF から GNG と VLUT を一貫して生成します。
-
-### 基本的な学習コマンド
+`offline_urdf_trainer` により、URDFからGNGとVLUTを一貫して生成。
 
 ```bash
 ros2 run gng_vlut_system offline_urdf_trainer --id my_robot_v1 --res 0.02
 ```
-- `--id`: 実験名を指定します。この名前で結果を保存するディレクトリが作成されます。
-- `--res`: VLUTのボクセル解像度 (m) を指定します。
 
-### VLUTのみ再構築
+- `--id`: 実験名。この名前で結果ディレクトリを作成。
+- `--res`: VLUTのボクセル解像度 (m)。
 
-GNGの学習は行わず、既存のGNGマップからVLUTの再構築だけを行いたい場合は `--vlut-only` オプションを使用します。
+GNGの学習を行わず、既存のGNGマップからVLUTだけ再構築する場合。
 
 ```bash
 ros2 run gng_vlut_system offline_urdf_trainer --id my_robot_v1 --vlut-only --res 0.03
 ```
 
+launch経由の実行は [RUN_GUIDE.md](../RUN_GUIDE.md) を参照。
+
 ### 出力ファイル
 
-学習が完了すると、`gng_results/<id>/` ディレクトリに以下のファイルが生成されます。
+`gng_results/<id>/` へ生成。
 
-- `gng.bin`: 学習済みのGNGマップ。
-- `vlut.bin`: 生成されたVLUT (Voxel Look-Up Table)。
+- `gng.bin`: 学習済みGNGマップ。
+- `vlut.bin`: 生成されたVLUT。
 
-### 補助ツール (任意)
+### 後処理ツール
 
-生成されたGNGマップを整理・検証するための補助ツールが用意されています。
+| 実行ファイル | 用途 |
+| --- | --- |
+| `offline_gng_main5_clean` | 非アクティブノードの完全削除によるファイル軽量化 |
+| `offline_gng_main6_island_pruning` | 分離した「島」を除去し最大連結成分のみ保持 |
+| `offline_gng_status_updater` | 可操作性などの特徴量の再計算・上書き |
+| `visualization_gng_trainer` | 可視化専用の3次元GNGと圧縮永続化形式の生成 |
 
-- **島の除去 (`offline_gng_main6_island_pruning`)**: GNGグラフが分離した「島」を持っている場合に、最大の連結成分のみを残します。
-- **データクリーンアップ (`offline_gng_main5_clean`)**: 非アクティブなノードを完全に削除し、ファイルを軽量化します。
-- **データ一貫性チェック (`inspect_gng_data`)**: GNGマップ内のデータに矛盾がないか検証します。
-- **特徴量再計算 (`offline_gng_status_updater`)**: GNGマップに可操作性などの特徴量を再計算・上書きします。
+### 検証ツール
 
-## 3. ROS 2での実行
+| 実行ファイル | 用途 |
+| --- | --- |
+| `voxel_spherizer_preview` | URDFリンクの球体近似結果のプレビュー |
+| `voxel_link_mask_validator` | リンク単位ボクセルマスクの検証 |
+| `voxel_status_test_publisher` | 仮想的な占有・危険ボクセルのpublishによる色変化確認 |
 
-### 基本的な可視化
-
-RVizでロボットモデルとGNGの安全状態を可視化します。
-
-```bash
-ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py
-```
-
-### 安全監視の有効化
-
-GNG/VLUTによる安全監視を有効にして、RVizで確認する場合。
-
-```bash
-ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
-  enable_safety_monitor:=true \
-```
-
-### 実機/Gazeboとの連携
-
-- **実機**の関節角度を使用する場合:
-  ```bash
-  ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py joint_state_source:=real
-  ```
-- **Gazebo**でシミュレーションを行う場合:
-  ```bash
-  # Gazeboサーバーとロボットを起動
-  ros2 launch gng_vlut_system robot_gazebo_sim.launch.py robot_name:=ToPoDualArm
-
-  # 別のターミナルでRVizを起動
-  ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py
-  ```
-  Docker内でGUIが不要なら `gui:=false` にできます。
-
-### ToPoFuzzy-Viewerへのブリッジ
-
-学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
-
-ToPoDualArmのロボット、GNG、左右グリッパーの最大把持体積graphと、
-全閉時の左右指に挟まれた内部の非占有領域graphをまとめて起動します。
-`ToPoDualArm.yaml`の`gripper_volume_graph.enabled`が`true`なら、対応する
-`L_tcp` / `R_tcp` graphも同じlaunchからpublishされます。
-
-```bash
-ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
-
-- **GNGマップを送信**:
-  ```bash
-  ros2 launch gng_vlut_system topofuzzy_bridge.launch.py
-  ```
-- **アーム姿勢を送信**:
-  ```bash
-  ros2 launch gng_vlut_system topoarm_viewer_bridge.launch.py
-  ```
-
-## 4. テストとデバッグ
-
-### ボクセル色変化テスト
-
-仮想的な占有・危険ボクセルをpublishして、RViz上での色の変化（安全:緑, 危険:黄, 衝突:赤）を確認します。
-
-デフォルトでは、ワールド座標 `(x=20, y=20, z=30)` cm を中心に半径10cmの球が生成されます。
-
-```bash
-# デフォルト設定で実行
-ros2 run gng_vlut_system voxel_status_test_publisher
-```
-
-中心座標や半径、オービット（周回）軌道などを変更したい場合は、パラメータで上書きできます。
-```bash
-# 例: 半径5cmの球を、Z=40cmの高さで、半径25cmの軌道上を20秒で周回させる
-ros2 run gng_vlut_system voxel_status_test_publisher --ros-args \
-  -p sphere_radius_cm:=5.0 \
-  -p sphere_center_world_cm:="[0.0, 0.0, 40.0]" \
-  -p sphere_orbit_radius_cm:=25.0 \
-  -p sphere_orbit_period_s:=20.0
-```
-
-### 可視化スクリプト
-
-学習結果をプロットして分析します。
-
-- **関節角度の分布**:
-  ```bash
-  python3 scripts/visualize_joint_angles.py
-  ```
-- **可操作性の分布**:
-  ```bash
-  python3 scripts/visualize_manipulability.py --file build/manipulability_data.csv
-  ```
-
-## 5. 主要なノードとトピック (リファレンス)
+## 3. 主要なノードとトピック
 
 ### ノード
-- `joint_state_mux_node`: RViz用と実機用の `JointState` を `/joint_states` に集約。
-- `safety_monitor_node`: GNG/VLUT の安全状態を `/gng_viz` に表示。
-- `self_recognition_viz_node`: 自己認識マスクを `/self_mask_viz` に表示。
-- `self_recognition_filter_node`: 自己認識ボクセル内の点群を `/self_recognition_points`、それ以外を `/self_filtered_points` に表示。
-- `topofuzzy_bridge_node`: `/topological_map` を Viewer 互換形式で publish。
-- ...など
+
+| ノード | 役割 |
+| --- | --- |
+| `robot_description_player_node` | URDFを`/robot_description`へ配信 |
+| `initial_joint_state_publisher_node` | 初期姿勢の`JointState`配信 |
+| `rviz_robot_visual_marker_node` | RVizへのロボット外形マーカー表示 |
+| `self_recognition_viz_node` | URDFから自己認識ボクセルを生成しマスクをpublish |
+| `self_recognition_filter_node` | 自己認識ボクセル内外で点群を分離 |
+| `self_voxel_filter_node` | 自己認識ボクセルによる点群フィルタ |
+| `voxel_spherized_robot_viewer_node` | 球体近似したロボット形状の可視化 |
+| `voxel_to_vlut_node` | 自己認識ボクセルを`occupied_voxels`/`danger_voxels`へ橋渡し |
 
 ### トピック
-- `/joint_states`: 現在のアーム姿勢。
-- `/gng_viz`: GNGノードとエッジのマーカー。
-- `/self_mask_viz`: 自己認識マスクのマーカー。
-- `/self_recognition_points`: 自己認識ボクセル内の点群。
-- `/self_filtered_points`: 自己認識ボクセル外の点群。
-- `/self_recognition/voxel_mask`: 自己認識マスクの送信トピック。
-- `/occupied_voxels`: self_recognition のボクセルIDを安全監視へ渡すトピック。
-- `/danger_voxels`: occupied を外側に膨張したシェルを渡すトピック。
-- ...など
 
+| トピック | 内容 |
+| --- | --- |
+| `/joint_states` | 現在のアーム姿勢 |
+| `/self_mask_viz` | 自己認識マスクのマーカー |
+| `/self_recognition/voxel_mask` | 自己認識マスクの送信トピック |
+| `/self_recognition_points` | 自己認識ボクセル内の点群 |
+| `/self_filtered_points` | 自己認識ボクセル外の点群 |
+| `/occupied_voxels` | 自己認識ボクセルIDを安全監視へ渡すトピック |
+| `/danger_voxels` | occupiedを外側へ膨張したシェル |
 
+## 4. 可視化スクリプト
 
-
-
-
-最新版
-
-
-
-ros2 launch gng_vlut_system gng_vlut_monitor.launch.py \robot_name:=topoarm \dir:=gng_results \id:=topoarm_full_v2 \mode:=STATIC \tag:=topoarm
-
-など
+```bash
+python3 scripts/plot_gng_stats.py --file gng_distance_stats.dat
+python3 scripts/plot_gng_edge_dist.py <gng.bin>
+```

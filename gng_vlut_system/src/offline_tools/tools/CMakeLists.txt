@@ -28,15 +28,3 @@ ament_target_dependencies(voxel_spherizer_preview
 target_link_libraries(voxel_spherizer_preview ${LIBS_ALL_CORE} ${EXTRA_LIBS})
 target_include_directories(voxel_spherizer_preview PRIVATE ${Eigen3_INCLUDE_DIRS})
 install(TARGETS voxel_spherizer_preview DESTINATION lib/${PROJECT_NAME})
-
-add_executable(gng_grasp_vlut_preview gng_grasp_vlut_preview.cpp)
-ament_target_dependencies(gng_grasp_vlut_preview
-    rclcpp
-    Eigen3
-    grasping_system
-    tf2
-    tf2_geometry_msgs
-)
-target_link_libraries(gng_grasp_vlut_preview ${LIBS_ALL_CORE} ${EXTRA_LIBS})
-target_include_directories(gng_grasp_vlut_preview PRIVATE ${Eigen3_INCLUDE_DIRS})
-install(TARGETS gng_grasp_vlut_preview DESTINATION lib/${PROJECT_NAME})

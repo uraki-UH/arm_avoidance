@@ -3,14 +3,11 @@ include_directories(
     core
     nodes
     offline_tools
-    legacy
     core/safety_engine # Base for internal includes
 )
 
-find_package(gazebo_msgs REQUIRED)
-
 # Standard ROS 2 Dependencies
-set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs gazebo_msgs ais_gng_msgs ais_gng_feature_msgs voxel_msgs ament_index_cpp nlohmann_json gng_control_msgs)
+set(DEPS_ROS rclcpp rclcpp_components sensor_msgs std_msgs geometry_msgs std_srvs tf2 tf2_ros tf2_geometry_msgs tf2_eigen visualization_msgs voxel_msgs ament_index_cpp nlohmann_json)
 # System libraries
 set(EXTRA_LIBS m OpenMP::OpenMP_CXX)
 
@@ -94,50 +91,46 @@ ament_target_dependencies(analysis_lib Eigen3)
 set(LIBS_ALL_CORE common_lib kinematics_lib robot_model_lib safety_engine visualization_gng_lib collision_lib metrics_lib analysis_lib safety_engine_offline)
 
 # --- 3. ROS 2 Nodes ---
-# Basic Nodes
-add_executable(robot_bridge_node nodes/bridge/robot_bridge_node.cpp)
-add_executable(joint_state_mux_node nodes/bridge/joint_state_mux_node.cpp)
-add_executable(topoarm_udp_bridge nodes/bridge/topoarm_udp_bridge.cpp)
-add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
-add_executable(world_index_to_voxel_node nodes/bridge/world_index_to_voxel_node.cpp)
-add_executable(depth_world_index_benchmark_node nodes/bridge/depth_world_index_benchmark_node.cpp)
-add_executable(voxel_topic_merger_node nodes/bridge/voxel_topic_merger_node.cpp)
-add_executable(grasp_pose_candidate_producer_node nodes/bridge/grasp_pose_candidate_producer_node.cpp)
-add_executable(grasp_pose_dummy_publisher_node nodes/bridge/grasp_pose_dummy_publisher_node.cpp)
-add_executable(grasp_pose_marker_bridge_node nodes/bridge/grasp_pose_marker_bridge_node.cpp)
-add_executable(robot_viewer_bridge_node nodes/bridge/robot_viewer_bridge_node.cpp)
-add_executable(gazebo_entity_tf_follower_node nodes/bridge/gazebo_entity_tf_follower_node.cpp)
-add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_robot_viewer_node.cpp)
-add_executable(voxel_to_vlut_node nodes/bridge/voxel_to_vlut_node.cpp)
-add_executable(object_template_map_publisher_node nodes/bridge/object_template_map_publisher_node.cpp)
-target_link_libraries(object_template_map_publisher_node ZLIB::ZLIB)
-add_executable(object_match_hypothesis_publisher_node nodes/bridge/object_match_hypothesis_publisher_node.cpp)
-add_executable(object_template_matcher_node nodes/bridge/object_template_matcher_node.cpp)
-target_link_libraries(object_template_matcher_node ZLIB::ZLIB)
-add_executable(object_template_match_validator_node nodes/bridge/object_template_match_validator_node.cpp)
-# Grouped Nodes
+# URDFモデルの配信・可視化
 add_executable(robot_description_player_node nodes/self_recognition/robot_description_player.cpp)
 add_executable(rviz_robot_visual_marker_node nodes/self_recognition/rviz_robot_visual_marker_node.cpp)
 add_executable(initial_joint_state_publisher_node nodes/self_recognition/initial_joint_state_publisher_node.cpp)
-add_executable(safety_monitor_node nodes/safety_monitor/safety_monitor_node.cpp)
+
+# 自己認識ボクセルの生成・フィルタ
 add_executable(self_recognition_viz_node nodes/self_recognition/self_recognition_viz_node.cpp)
 add_executable(self_recognition_filter_node nodes/self_recognition/self_recognition_filter_node.cpp)
 add_executable(self_voxel_filter_node nodes/self_recognition/self_voxel_filter_node.cpp)
-add_executable(topological_map_avoidance_node nodes/planning/topological_map_avoidance_node.cpp)
-add_executable(arm_avoid_node nodes/planning/arm_avoid_node.cpp)
-add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
-add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_state_driver_node.cpp)
+add_executable(voxel_spherized_robot_viewer_node nodes/bridge/voxel_spherized_robot_viewer_node.cpp)
 
-# Offline tools
+# ボクセルからVLUTへの橋渡し
+add_executable(voxel_to_vlut_node nodes/bridge/voxel_to_vlut_node.cpp)
+
+# オフライン学習ツール
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)
 add_executable(visualization_gng_trainer offline_tools/visualization_gng_trainer.cpp)
+add_executable(offline_gng_main5_clean offline_tools/offline_gng_main5_clean.cpp)
+add_executable(offline_gng_main6_island_pruning offline_tools/offline_gng_main6_island_pruning.cpp)
+add_executable(offline_gng_status_updater offline_tools/offline_gng_status_updater.cpp)
 
-# Offline validation tools
+# オフライン検証ツール
 add_subdirectory(offline_tools/tools)
 
-# Link & Installation for all nodes
-set(NODES robot_bridge_node joint_state_mux_node topoarm_udp_bridge topofuzzy_bridge_node world_index_to_voxel_node depth_world_index_benchmark_node voxel_topic_merger_node grasp_pose_candidate_producer_node grasp_pose_marker_bridge_node robot_viewer_bridge_node gazebo_entity_tf_follower_node voxel_spherized_robot_viewer_node voxel_to_vlut_node object_template_map_publisher_node object_match_hypothesis_publisher_node object_template_matcher_node object_template_match_validator_node safety_monitor_node robot_description_player_node rviz_robot_visual_marker_node initial_joint_state_publisher_node self_recognition_viz_node self_recognition_filter_node topological_map_avoidance_node arm_avoid_node target_joint_state_executor_node virtual_joint_state_driver_node offline_urdf_trainer visualization_gng_trainer)
-set(NODES ${NODES} grasp_pose_dummy_publisher_node self_voxel_filter_node)
+# 全ノードのリンクとインストール
+set(NODES
+    robot_description_player_node
+    rviz_robot_visual_marker_node
+    initial_joint_state_publisher_node
+    self_recognition_viz_node
+    self_recognition_filter_node
+    self_voxel_filter_node
+    voxel_spherized_robot_viewer_node
+    voxel_to_vlut_node
+    offline_urdf_trainer
+    visualization_gng_trainer
+    offline_gng_main5_clean
+    offline_gng_main6_island_pruning
+    offline_gng_status_updater
+)
 foreach(node ${NODES})
   target_link_libraries(${node} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${node} ${DEPS_ROS})
@@ -146,16 +139,14 @@ endforeach()
 
 target_link_libraries(voxel_spherized_robot_viewer_node ${LIBS_ALL_CORE} ${EXTRA_LIBS} tinyxml2)
 
-# Shared Components
-add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
+# 共有コンポーネント
 add_library(robot_description_player_component SHARED nodes/self_recognition/robot_description_player.cpp)
 
-set(COMPONENTS robot_viewer_bridge_node_component robot_description_player_component)
+set(COMPONENTS robot_description_player_component)
 foreach(comp ${COMPONENTS})
   target_link_libraries(${comp} ${LIBS_ALL_CORE} ${EXTRA_LIBS})
   ament_target_dependencies(${comp} ${DEPS_ROS})
   install(TARGETS ${comp} DESTINATION lib/${PROJECT_NAME})
 endforeach()
 
-rclcpp_components_register_nodes(robot_viewer_bridge_node_component "robot_sim::bridge::RobotViewerBridgeNode")
 rclcpp_components_register_nodes(robot_description_player_component "robot_sim::self_recognition::RobotDescriptionPlayer")
