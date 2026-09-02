@@ -15,6 +15,7 @@ interface ObjectTemplateMatchTunerProps {
     isConnected: boolean;
     getConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
     applyConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
+    layout?: 'sidebar' | 'dialog';
 }
 
 const sectionOrder = ['Orientation', 'Node', 'Plane', 'Graph & Scale', 'Contradiction', 'Validation'] as const;
@@ -35,13 +36,19 @@ function mergeConfig(current: TemplateMatchConfig, incoming: Partial<TemplateMat
     };
 }
 
-export function ObjectTemplateMatchTuner({ isConnected, getConfig, applyConfig }: ObjectTemplateMatchTunerProps) {
+export function ObjectTemplateMatchTuner({
+    isConnected,
+    getConfig,
+    applyConfig,
+    layout = 'sidebar',
+}: ObjectTemplateMatchTunerProps) {
     const [config, setConfig] = useState<TemplateMatchConfig>(() => makeDefaultTemplateMatchConfig());
     const [isBusy, setIsBusy] = useState(false);
     const [status, setStatus] = useState<{ kind: 'idle' | 'ok' | 'error'; text: string }>({
         kind: 'idle', text: 'Not loaded',
     });
     const profileInputRef = useRef<HTMLInputElement>(null);
+    const wasConnectedRef = useRef(false);
 
     const refresh = useCallback(async () => {
         if (!isConnected) return;
@@ -58,8 +65,9 @@ export function ObjectTemplateMatchTuner({ isConnected, getConfig, applyConfig }
     }, [config.matcherNode, config.validatorNode, getConfig, isConnected]);
 
     useEffect(() => {
-        if (isConnected) void refresh();
-    }, [isConnected]); // Load once for each connection.
+        if (isConnected && !wasConnectedRef.current) void refresh();
+        wasConnectedRef.current = isConnected;
+    }, [isConnected, refresh]);
 
     const definitionsBySection = useMemo(() => Object.fromEntries(sectionOrder.map((section) => [
         section,
@@ -154,10 +162,22 @@ export function ObjectTemplateMatchTuner({ isConnected, getConfig, applyConfig }
         );
     };
 
+    const isDialog = layout === 'dialog';
+    const sectionGrid = sectionOrder.map((section, index) => (
+        <CollapsibleSection
+            key={section}
+            title={section}
+            defaultOpen={isDialog || index < 2}
+            className={isDialog ? 'min-w-0' : ''}
+        >
+            <div className="surface-muted px-2 py-1">{definitionsBySection[section].map(renderControl)}</div>
+        </CollapsibleSection>
+    ));
+
     return (
-        <div className="space-y-3">
-            <div className="surface-soft space-y-2 p-3">
-                <div className="grid grid-cols-1 gap-2">
+        <div className={isDialog ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
+            <div className={`surface-soft space-y-2 p-3 ${isDialog ? 'shrink-0' : ''}`}>
+                <div className={`grid gap-2 ${isDialog ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
                     <label className="space-y-1">
                         <span className="panel-title">Matcher node</span>
                         <input type="text" value={config.matcherNode} onChange={(event) => setConfig((current) => ({ ...current, matcherNode: event.target.value }))} className="h-9 w-full rounded border border-white/10 bg-black/20 px-2 font-mono text-[11px] text-[var(--text-primary)]" />
@@ -167,7 +187,7 @@ export function ObjectTemplateMatchTuner({ isConnected, getConfig, applyConfig }
                         <input type="text" value={config.validatorNode} onChange={(event) => setConfig((current) => ({ ...current, validatorNode: event.target.value }))} className="h-9 w-full rounded border border-white/10 bg-black/20 px-2 font-mono text-[11px] text-[var(--text-primary)]" />
                     </label>
                 </div>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className={`grid grid-cols-4 gap-1.5 ${isDialog ? 'md:ml-auto md:w-[440px]' : ''}`}>
                     <button className="entity-btn" title="Reload parameters" disabled={!isConnected || isBusy} onClick={() => void refresh()}><RefreshCw size={14} className={isBusy ? 'animate-spin' : ''} /><span>Load</span></button>
                     <button className="entity-btn" title="Restore staged defaults" disabled={isBusy} onClick={handleReset}><RotateCcw size={14} /><span>Reset</span></button>
                     <button className="entity-btn" title="Import profile" disabled={isBusy} onClick={() => profileInputRef.current?.click()}><Upload size={14} /><span>Open</span></button>
@@ -176,17 +196,19 @@ export function ObjectTemplateMatchTuner({ isConnected, getConfig, applyConfig }
                 <input ref={profileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(event) => void handleImport(event)} />
             </div>
 
-            {sectionOrder.map((section, index) => (
-                <CollapsibleSection key={section} title={section} defaultOpen={index < 2}>
-                    <div className="surface-muted px-2 py-1">{definitionsBySection[section].map(renderControl)}</div>
-                </CollapsibleSection>
-            ))}
+            {isDialog ? (
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1 scrollbar-thin">
+                    <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+                        {sectionGrid}
+                    </div>
+                </div>
+            ) : sectionGrid}
 
-            <div className="sticky bottom-0 z-10 border-t border-white/10 bg-[rgba(8,19,29,0.94)] px-1 pb-1 pt-2 backdrop-blur-sm">
-                <button className="btn-primary flex w-full items-center justify-center gap-2 px-4 py-2 text-sm font-semibold" disabled={!isConnected || isBusy} onClick={() => void handleApply()}>
+            <div className={`${isDialog ? 'shrink-0' : 'sticky bottom-0 z-10'} border-t border-white/10 bg-[rgba(8,19,29,0.94)] px-1 pb-1 pt-2 backdrop-blur-sm`}>
+                <button className={`btn-primary flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold ${isDialog ? 'ml-auto w-full md:w-72' : 'w-full'}`} disabled={!isConnected || isBusy} onClick={() => void handleApply()}>
                     <Check size={16} />Apply
                 </button>
-                <div className={`mt-1.5 min-h-5 truncate text-center font-mono text-[10px] ${status.kind === 'error' ? 'text-red-300' : status.kind === 'ok' ? 'text-emerald-300' : 'text-[var(--text-secondary)]'}`} title={status.text}>
+                <div className={`mt-1.5 min-h-5 truncate font-mono text-[10px] ${isDialog ? 'text-right' : 'text-center'} ${status.kind === 'error' ? 'text-red-300' : status.kind === 'ok' ? 'text-emerald-300' : 'text-[var(--text-secondary)]'}`} title={status.text}>
                     {isConnected ? status.text : 'Viewer backend offline'}
                 </div>
             </div>

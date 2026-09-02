@@ -35,7 +35,7 @@ import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
 import { createDefaultGraphLayerSettings } from '../features/visualization/graphLayerSettings';
 import { is_fixed_frame } from '../utils/frame_utils';
-import { ObjectTemplateMatchTuner } from '../features/templateMatching/ObjectTemplateMatchTuner';
+import { ObjectTemplateMatchDialogLauncher } from '../features/templateMatching/ObjectTemplateMatchDialog';
 import {
     TemplateMatchConfig,
     TemplateMatchConfigResult,
@@ -729,7 +729,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     );
 
     const objectMatchTab = (
-        <ObjectTemplateMatchTuner
+        <ObjectTemplateMatchDialogLauncher
             isConnected={props.isConnected}
             getConfig={props.getTemplateMatchConfig}
             applyConfig={props.applyTemplateMatchConfig}

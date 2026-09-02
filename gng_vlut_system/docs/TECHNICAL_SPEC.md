@@ -938,9 +938,12 @@ node評価は符号不変の回転後法線、`rho`、node次数の連続的な�
 この反証はGNGへ関連付けられた入力点群数を用いる方式であり、生点群の座標対テンプレート座標の
 直接残差評価は、将来の位置レジストレーション導入後に追加する。
 
-既定ではyawだけを探索する。roll/pitch範囲と刻みは設定可能だが、
-`enable_roll_pitch_search`がfalseの間は0度の固定仮説を使う。姿勢仮説数は
-`max_orientation_hypothesis_num`で上限を設ける。
+yawは常に`0 <= yaw < 360`の全周を探索し、`yaw_step_deg`だけで分解能を設定する。
+yawの有効・無効や最小・最大角度は設定しない。roll/pitchは
+`roll_tolerance_deg`、`pitch_tolerance_deg`の対称な`±tolerance`内を
+`roll_pitch_step_deg`刻みで探索し、0度と許容端点を必ず候補へ含める。
+`enable_roll_pitch_search`がfalseの間はroll/pitchとも0度の固定仮説を使う。
+姿勢仮説数は`max_orientation_hypothesis_num`で上限を設ける。
 
 平面およびGNG nodeの法線は表裏を区別しない方向特徴として扱う。法線評価は内積の絶対値を使い、
 観測方向や局所推定による符号反転では減点しない。
@@ -991,6 +994,27 @@ yaw仮説ごとに一対一対応させる。`min_plane_extent_allow_ratio`か�
 
 `object_template_map_publisher_node`へ`activation_state_topic`を設定しない既存の起動方法は、
 従来どおり起動直後から静的マップを配信する。
+
+#### 15.2.1 Viewer Matchタブによる実行時調整
+
+TopoFuzzy Viewerは`Analyze`の右に独立した`Match`タブを持ち、
+`object_template_matcher_node`と`object_template_match_validator_node`の評価パラメータを
+実行中に取得・変更できる。姿勢探索、node、平面、graph・scale、反証、確定判定の各項目を
+グループ化して表示し、対象ノード名は既定の
+`/object_template_matcher_node`、`/object_template_match_validator_node`から変更可能とする。
+`Match`タブ選択時はviewport内の全画面モーダルを開き、広い画面では設定グループを3列、
+狭い画面では1列で表示する。ヘッダーと`Apply`は固定し、設定領域だけをスクロール対象とする。
+
+frontendは`templateMatch.getConfig`と`templateMatch.applyConfig` RPCを使用し、
+`viewer_template_match_node`が許可済みparameterだけをROS parameter serviceへ中継する。
+matcherとvalidatorは相互依存する範囲を各ノード内で一括検証し、
+`set_parameters_atomically`単位で反映する。matcher反映後にvalidatorが拒否した場合、
+Viewer側はmatcherを適用前の値へ戻す。`state_publish_hz`はタイマー再生成を伴わないため
+実行中変更を拒否し、ノード再起動を要求する。
+
+`Reset`はコード内既定値を編集状態へ戻し、`Apply`するまでROS parameterを変更しない。
+`Open`と`Save`は設定をローカルJSONとしてブラウザから入出力する。
+`/datasets/<template_id>_matching_profile.yaml`へのサーバ側保存・再読込は別機能とする。
 
 ### 15.3 物体照合仮説の配信
 

@@ -32,7 +32,7 @@ def generate_launch_description():
             DeclareLaunchArgument("topological_map_topic", default_value="/topological_map"),
             DeclareLaunchArgument(
                 "planar_clusters_topic",
-                default_value="/topological_planar_clusters_incremental",
+                default_value="/plane_clusters",
             ),
             DeclareLaunchArgument(
                 "plane_clusters_input_topic",

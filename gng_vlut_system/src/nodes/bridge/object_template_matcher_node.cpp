@@ -343,17 +343,11 @@ public:
       "environment_topological_map_topic", "/topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>("plane_clusters_topic", "/plane_clusters");
     candidate_topic_ = declare_parameter<std::string>("candidate_topic", "");
-    enable_yaw_search_ = declare_parameter<bool>("enable_yaw_search", true);
-    yaw_min_deg_ = declare_parameter<double>("yaw_min_deg", -180.0);
-    yaw_max_deg_ = declare_parameter<double>("yaw_max_deg", 180.0);
     yaw_step_deg_ = declare_parameter<double>("yaw_step_deg", 10.0);
     enable_roll_pitch_search_ = declare_parameter<bool>("enable_roll_pitch_search", false);
-    roll_min_deg_ = declare_parameter<double>("roll_min_deg", -8.0);
-    roll_max_deg_ = declare_parameter<double>("roll_max_deg", 8.0);
-    roll_step_deg_ = declare_parameter<double>("roll_step_deg", 4.0);
-    pitch_min_deg_ = declare_parameter<double>("pitch_min_deg", -8.0);
-    pitch_max_deg_ = declare_parameter<double>("pitch_max_deg", 8.0);
-    pitch_step_deg_ = declare_parameter<double>("pitch_step_deg", 4.0);
+    roll_tolerance_deg_ = declare_parameter<double>("roll_tolerance_deg", 8.0);
+    pitch_tolerance_deg_ = declare_parameter<double>("pitch_tolerance_deg", 8.0);
+    roll_pitch_step_deg_ = declare_parameter<double>("roll_pitch_step_deg", 4.0);
     max_orientation_hypothesis_num_ = declare_parameter<int>("max_orientation_hypothesis_num", 1000);
     max_normal_angle_full_deg_ = declare_parameter<double>("max_normal_angle_full_deg", 12.0);
     max_normal_angle_partial_deg_ = declare_parameter<double>("max_normal_angle_partial_deg", 35.0);
@@ -437,17 +431,11 @@ private:
     try {
       for (const auto &parameter : parameters) {
         const std::string &name = parameter.get_name();
-        if (name == "enable_yaw_search") stage(enable_yaw_search_, parameter.as_bool());
-        else if (name == "yaw_min_deg") stage(yaw_min_deg_, parameter.as_double());
-        else if (name == "yaw_max_deg") stage(yaw_max_deg_, parameter.as_double());
-        else if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
+        if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
         else if (name == "enable_roll_pitch_search") stage(enable_roll_pitch_search_, parameter.as_bool());
-        else if (name == "roll_min_deg") stage(roll_min_deg_, parameter.as_double());
-        else if (name == "roll_max_deg") stage(roll_max_deg_, parameter.as_double());
-        else if (name == "roll_step_deg") stage(roll_step_deg_, parameter.as_double());
-        else if (name == "pitch_min_deg") stage(pitch_min_deg_, parameter.as_double());
-        else if (name == "pitch_max_deg") stage(pitch_max_deg_, parameter.as_double());
-        else if (name == "pitch_step_deg") stage(pitch_step_deg_, parameter.as_double());
+        else if (name == "roll_tolerance_deg") stage(roll_tolerance_deg_, parameter.as_double());
+        else if (name == "pitch_tolerance_deg") stage(pitch_tolerance_deg_, parameter.as_double());
+        else if (name == "roll_pitch_step_deg") stage(roll_pitch_step_deg_, parameter.as_double());
         else if (name == "max_orientation_hypothesis_num") {
           stage(max_orientation_hypothesis_num_, parameter.as_int());
         } else if (name == "max_normal_angle_full_deg") {
@@ -517,17 +505,19 @@ private:
 
   void validateParameters() const
   {
-    const std::array<double, 26> values = {
-      yaw_min_deg_, yaw_max_deg_, yaw_step_deg_, roll_min_deg_, roll_max_deg_, roll_step_deg_,
-      pitch_min_deg_, pitch_max_deg_, pitch_step_deg_, min_node_score_, edge_weight_,
+    const std::array<double, 21> values = {
+      yaw_step_deg_, roll_tolerance_deg_, pitch_tolerance_deg_, roll_pitch_step_deg_,
+      min_node_score_, edge_weight_,
       contradiction_weight_, max_contradiction_point_ratio_, min_scale_allow_ratio_,
       min_scale_full_match_ratio_, max_scale_full_match_ratio_, max_scale_allow_ratio_, scale_weight_,
       max_plane_normal_angle_deg_, max_plane_extent_overflow_ratio_, min_plane_extent_allow_ratio_,
       min_plane_extent_full_match_ratio_, max_plane_extent_full_match_ratio_, plane_weight_,
       plane_support_score_scale_, min_plane_support_score_};
     if (std::any_of(values.begin(), values.end(), [](double value) {return !isFinite(value);}) ||
-      yaw_step_deg_ <= 0.0 || roll_step_deg_ <= 0.0 || pitch_step_deg_ <= 0.0 ||
-      yaw_min_deg_ > yaw_max_deg_ || roll_min_deg_ > roll_max_deg_ || pitch_min_deg_ > pitch_max_deg_ ||
+      yaw_step_deg_ <= 0.0 || yaw_step_deg_ > 90.0 ||
+      roll_pitch_step_deg_ <= 0.0 || roll_pitch_step_deg_ > 90.0 ||
+      roll_tolerance_deg_ < 0.0 || roll_tolerance_deg_ > 90.0 ||
+      pitch_tolerance_deg_ < 0.0 || pitch_tolerance_deg_ > 90.0 ||
       max_orientation_hypothesis_num_ <= 0 || min_node_score_ < 0.0 || min_node_score_ > 1.0 ||
       edge_weight_ < 0.0 || edge_weight_ > 1.0 || normal_weight_ < 0.0 || rho_weight_ < 0.0 ||
       degree_weight_ < 0.0 || contradiction_weight_ < 0.0 || contradiction_weight_ > 1.0 ||
@@ -562,17 +552,27 @@ private:
     latest_plane_clusters_ = plane_clusters;
   }
 
-  static std::vector<double> sampleAngles(double min_deg, double max_deg, double step_deg, bool enable)
+  static std::vector<double> sampleTolerance(double tolerance_deg, double step_deg, bool enable)
   {
-    if (!enable) {
+    if (!enable || tolerance_deg <= 1e-9) {
       return {0.0};
     }
-    std::vector<double> samples;
-    for (double value = min_deg; value <= max_deg + 1e-9; value += step_deg) {
-      samples.push_back(std::min(value, max_deg));
+    std::vector<double> samples{0.0};
+    for (double value = step_deg; value < tolerance_deg - 1e-9; value += step_deg) {
+      samples.push_back(-value);
+      samples.push_back(value);
     }
-    if (samples.empty() || samples.back() < max_deg - 1e-9) {
-      samples.push_back(max_deg);
+    samples.push_back(-tolerance_deg);
+    samples.push_back(tolerance_deg);
+    std::sort(samples.begin(), samples.end());
+    return samples;
+  }
+
+  static std::vector<double> sampleFullYaw(double step_deg)
+  {
+    std::vector<double> samples;
+    for (double value = 0.0; value < 360.0 - 1e-9; value += step_deg) {
+      samples.push_back(value);
     }
     return samples;
   }
@@ -622,11 +622,11 @@ private:
     }
     const auto id_to_index = buildIdToIndex(*environment);
     const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
-    const auto yaw_samples = sampleAngles(yaw_min_deg_, yaw_max_deg_, yaw_step_deg_, enable_yaw_search_);
-    const auto roll_samples = sampleAngles(
-      roll_min_deg_, roll_max_deg_, roll_step_deg_, enable_roll_pitch_search_);
-    const auto pitch_samples = sampleAngles(
-      pitch_min_deg_, pitch_max_deg_, pitch_step_deg_, enable_roll_pitch_search_);
+    const auto yaw_samples = sampleFullYaw(yaw_step_deg_);
+    const auto roll_samples = sampleTolerance(
+      roll_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
+    const auto pitch_samples = sampleTolerance(
+      pitch_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
     if (yaw_samples.size() * roll_samples.size() * pitch_samples.size() >
       static_cast<std::size_t>(max_orientation_hypothesis_num_))
     {
@@ -1201,17 +1201,11 @@ private:
   std::string environment_topic_;
   std::string plane_clusters_topic_;
   std::string candidate_topic_;
-  bool enable_yaw_search_ = true;
-  double yaw_min_deg_ = 0.0;
-  double yaw_max_deg_ = 0.0;
   double yaw_step_deg_ = 1.0;
   bool enable_roll_pitch_search_ = false;
-  double roll_min_deg_ = 0.0;
-  double roll_max_deg_ = 0.0;
-  double roll_step_deg_ = 1.0;
-  double pitch_min_deg_ = 0.0;
-  double pitch_max_deg_ = 0.0;
-  double pitch_step_deg_ = 1.0;
+  double roll_tolerance_deg_ = 0.0;
+  double pitch_tolerance_deg_ = 0.0;
+  double roll_pitch_step_deg_ = 1.0;
   int max_orientation_hypothesis_num_ = 1;
   double max_normal_angle_full_deg_ = 0.0;
   double max_normal_angle_partial_deg_ = 1.0;

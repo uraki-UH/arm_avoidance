@@ -1,16 +1,10 @@
 object_template_matcher_node:
   ros__parameters:
-    enable_yaw_search: true
-    yaw_min_deg: -180.0
-    yaw_max_deg: 180.0
     yaw_step_deg: 10.0
     enable_roll_pitch_search: false
-    roll_min_deg: -8.0
-    roll_max_deg: 8.0
-    roll_step_deg: 4.0
-    pitch_min_deg: -8.0
-    pitch_max_deg: 8.0
-    pitch_step_deg: 4.0
+    roll_tolerance_deg: 8.0
+    pitch_tolerance_deg: 8.0
+    roll_pitch_step_deg: 4.0
     max_orientation_hypothesis_num: 1000
     max_normal_angle_full_deg: 12.0
     max_normal_angle_partial_deg: 35.0

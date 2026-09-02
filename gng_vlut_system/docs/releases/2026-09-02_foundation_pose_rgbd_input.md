@@ -10,8 +10,8 @@
 - FoundationPose互換の`rgb/`、`depth/`、`masks/`、`cam_K.txt`出力
 - 入力由来、CAD mesh、マスク由来を記録する`foundation_pose_input.json`
 - `--allow-depth-mask`による単体撮影向け暫定マスク生成
-- ToPo-FUZZY深度カメラからの16-bit depth、semantic色RGB、物体mask、`cam_K.txt`のZIP出力
-- ToPo-FUZZYからrosbridge経由で送る`/foundation_pose/input/{color,depth,mask,camera_info}`の単発配信
+- ToPo-FUZZY深度カメラからの16-bit depth、固定グレーRGB、物体mask、`cam_K.txt`のZIP出力
+- ToPo-FUZZYの合成深度点群生成に連動するrosbridge経由の`/topo_fuzzy/rgbd/{color,depth,mask,camera_info}`自動配信
 
 ## 挙動
 
@@ -19,13 +19,15 @@
 
 FoundationPoseの6D姿勢は候補仮説として扱う。テンプレート召喚前に、既存GNGの平面、非平面成分、共分散評価による検証が必要。
 
-HTML出力のRGBはsemantic色であり、実写RGBによる推論精度の評価には使わない。HTML出力は入出力接続と遮蔽条件の検証用途とする。
+HTML出力のRGBは固定グレーであり、実写RGBによる推論精度の評価には使わない。HTML出力は入出力接続と遮蔽条件の検証用途とする。
 
-HTMLのROS配信は、設定可能なプレフィックス配下へ`rgb8` color、ミリメートル単位の`16UC1` depth、`mono8` mask、CameraInfoを同一stampで送る。`frame_id`は`foundation_pose_camera`で固定。
+RGB検証モードは固定グレー、白色ランダムノイズ、近似ピンクノイズを選べる。選択したmodeとnoise seedはZIP manifestへ記録し、色手掛かりへの依存度を比較するストレス試験に使う。
+
+HTMLのROS配信は、合成深度点群生成時に`/topo_fuzzy/rgbd`配下へ`rgb8` color、ミリメートル単位の`16UC1` depth、`mono8` mask、CameraInfoを同一stampで送る。`frame_id`は`foundation_pose_camera`で固定。深度カメラ設定の自動出力をOFFにするとPointCloud2だけを出力し、表面点群または取り込みフレームへの切替時もRGB-D topicを停止。
 
 ## API影響
 
-ROSのlaunch引数、message、serviceの変更なし。HTMLのrosbridge経由で、設定したプレフィックス配下にRGB-D入力4トピックを追加。
+ROSのlaunch引数、message、serviceの変更なし。HTMLのrosbridge経由で、`/topo_fuzzy/rgbd`配下にRGB-D入力4トピックを自動配信。
 
 ## 検証
 

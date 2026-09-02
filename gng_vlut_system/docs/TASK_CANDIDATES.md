@@ -170,10 +170,8 @@ C空間で一様にノードを置く手法ではこの自由度がノード列�
 - 物体ごとのスケール範囲をファジー数または上下限で設定し、照合scoreへ統合。
 - 対応node、未観測template node、候補yawをViewer上へ重ねるデバッグ表現の追加。
 - 位置レジストレーションを導入した後に、生`PointCloud2`のテンプレート面残差と遮蔽領域を使う反証評価を追加。
-- `ToPoFuzzy-Viewer`のAnalysisタブへ、姿勢・スケール・局所特徴・反証のファジー評価値を調整する`ObjectTemplateMatchTuner`を追加。
-- `object_template_matcher_node`へ、相互依存する評価範囲を検証して原子的に反映するROS parameter更新callbackを追加。
 - テンプレートIDごとの照合profileを`/datasets/<template_id>_matching_profile.yaml`へ保存・再読込する操作を追加。
-- `scale_ratio`、score、反証理由、姿勢候補、対応nodeをチューナーへ表示し、`Apply`、`Reset`、`Save profile`の各操作を用意。
+- `scale_ratio`、score、反証理由、姿勢候補、対応nodeをチューナーへ表示する。
 
 ### 今後の記入ルール
 

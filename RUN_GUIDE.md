@@ -43,6 +43,20 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
 
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
+## GNG平面クラスタから上方向把持候補を生成
+
+`ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
+
+```bash
+ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
+
+- 候補Pose: `/top_grasp_pose_cands`
+- 候補スコア: `/top_grasp_pose_cand_scores`
+- 判定概要: `/top_grasp_pose_cands/summary`
+- 可視化Marker: `/top_grasp_pose_markers`
+
 ## HTML全点群からCPU GNGテンプレートを保存
 
 点群も保存
@@ -234,13 +248,6 @@ ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py
 ```bash
 ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py \
   gazebo_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_pick_and_place.yaml
-```
-
-```bash
-ros2 launch ais_gng ais_gng.launch.py \
-  backend:=cpu \
-  lidar:=graspnet.yaml \
-  input_topic:=/lidar_points
 ```
 
 現在の`dual_arm_robot.urdf`には`gazebo_ros2_control`がないため、Gazebo内の関節と

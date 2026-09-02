@@ -706,10 +706,14 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>最短計測距離 [m]</label><div class="control-pair"><input id="depth_camera_min_dist" type="range" min="0.05" max="2" step="0.01" value="0.10"><input id="depth_camera_min_dist_num" type="number" min="0.05" max="2" step="0.01" value="0.10"></div></div>
               <div><label>最長計測距離 [m]</label><div class="control-pair"><input id="depth_camera_max_dist" type="range" min="0.10" max="3" step="0.01" value="1.40"><input id="depth_camera_max_dist_num" type="number" min="0.10" max="3" step="0.01" value="1.40"></div></div>
               <div><label>深度バッファ横解像度 [px]</label><div class="control-pair"><input id="depth_camera_grid" type="range" min="16" max="256" step="1" value="96"><input id="depth_camera_grid_num" type="number" min="16" max="256" step="1" value="96"></div></div>
-              <div class="full note">合成深度点群の遮蔽判定用です。姿勢はカメラの光軸方向を示し、視野角は垂直方向です。FoundationPose RGB-D保存のRGBはsemantic色であり、実写RGBではありません。</div>
+              <div><label>RGB検証モード</label><select id="rgbdColorMode"><option value="solid_gray" selected>固定グレー</option><option value="white_noise">白色ランダムノイズ</option><option value="pink_noise">近似ピンクノイズ</option></select></div>
+              <div><label>RGBノイズseed</label><input id="rgbdColorNoiseSeed" type="number" step="1" value="1"></div>
+              <div class="full"><label class="topo-switch"><input id="foundationPoseRgbdPublishEnabled" type="checkbox" checked> RGB-D camera topicを自動出力</label></div>
+              <div class="full note">OFF時は深度方式でもPointCloud2のみを出力します。</div>
+              <div class="full note"></div>
               <div class="full point-pose-reset-row"><button id="depth_camera_reset" type="button">深度カメラ設定をリセット</button></div>
               <div class="full point-pose-reset-row"><button id="foundationPoseRgbdExportBtn" data-action-kind="data" type="button">FoundationPose RGB-D ZIP保存</button></div>
-              <div id="foundationPoseRgbdExportStatus" class="full note">depth、semantic RGB、物体mask、cam_K.txtをZIPへ保存します。対応CAD meshは別途指定が必要です。</div>
+              <div id="foundationPoseRgbdExportStatus" class="full note">depth、単色RGB、物体mask、cam_K.txtをZIPへ保存します。対応CAD meshは別途指定が必要です。</div>
             </div>
           </details>
           <div class="section-title">Tabletop Scene Option</div>
@@ -928,16 +932,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
                 <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="semanticRosStatus" class="status">ROS semantic: disconnected</div>
-            </div>
-          </div>
-          <div class="ros-source-row">
-            <div class="ros-source-head">
-              <label>FoundationPose RGB-D topic prefix</label>
-              <input id="foundationPoseTopicPrefix" type="text" value="/foundation_pose/input">
-            </div>
-            <div class="ros-source-detail">
-              <button id="foundationPoseRosPublishBtn" data-action-kind="data" type="button">FoundationPose RGB-Dを1回publish</button>
-              <div id="foundationPoseRosStatus" class="status">ROS FoundationPose RGB-D: disconnected</div>
             </div>
           </div>
         </div>
@@ -3692,6 +3686,7 @@ function generate(){
   raw=addTabletopScene(raw,seed);
   state.basePoints=apply_point_cloud_pose_points(applyDefects(raw,seed).map((p,i)=>({...p,id:i})));updateMovingPoints();state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gng=null;state.candidates=[];state.best=null;state.gngTick=0;state.batchDataset=[];
   updateMetrics();renderAll();
+  window.__topoFoundationPoseRosApi?.request_publish?.();
   const tableDesign=$('tableDesign')?$('tableDesign').value:'rect';
   $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
 }
@@ -7241,18 +7236,50 @@ function v312ApplyDepthCameraVisibility(points){
   }
   return out;
 }
-function v316ColorBytes(label){
-  const text=String(colorFor(label)||'#dbeafe');
-  const match=/^#([0-9a-f]{6})$/i.exec(text);
-  if(!match)return[219,234,254];
-  const value=parseInt(match[1],16);
-  return[(value>>16)&255,(value>>8)&255,value&255];
+function v316ReadRgbdColorSettings(){
+  const mode=$('rgbdColorMode')?.value||'solid_gray';
+  const requested_seed=Math.trunc(+($('rgbdColorNoiseSeed')?.value||1));
+  const noise_seed=Number.isFinite(requested_seed)?requested_seed>>>0:1;
+  return {mode:mode==='white_noise'||mode==='pink_noise'?mode:'solid_gray',noise_seed};
+}
+function v316NoiseHash(x,y,seed){
+  let value=(Math.imul((x+1)>>>0,0x1f123bb5)^Math.imul((y+1)>>>0,0x6c8e9cf5)^(seed>>>0))>>>0;
+  value^=value>>>16;value=Math.imul(value,0x85ebca6b)>>>0;value^=value>>>13;value=Math.imul(value,0xc2b2ae35)>>>0;value^=value>>>16;
+  return value&255;
+}
+function v316RgbNoiseValue(x,y,settings){
+  if(settings.mode==='white_noise')return v316NoiseHash(x,y,settings.noise_seed);
+  let total=0;
+  for(let level=0;level<6;level++){
+    const cell_size=1<<level;
+    total+=v316NoiseHash(Math.floor(x/cell_size),Math.floor(y/cell_size),settings.noise_seed+level*0x9e3779b9);
+  }
+  return Math.round(total/6);
+}
+function v316FillRgbForValidation(rgb,width,height,settings){
+  if(settings.mode==='solid_gray'){
+    rgb.fill(128);
+    return;
+  }
+  for(let y=0;y<height;y++){
+    for(let x=0;x<width;x++){
+      const value=v316RgbNoiseValue(x,y,settings),index=(y*width+x)*3;
+      rgb[index]=value;rgb[index+1]=value;rgb[index+2]=value;
+    }
+  }
+}
+function v316ColorEncoding(settings){
+  if(settings.mode==='white_noise')return 'white_noise_gray';
+  if(settings.mode==='pink_noise')return 'pink_noise_gray';
+  return 'solid_gray_128';
 }
 function v316BuildFoundationPoseFrame(){
   const settings=read_depth_camera_settings(),pose=v312DepthCameraPose();
   const width=settings.grid,height=Math.max(1,Math.floor(width/(4/3)));
   const fov=settings.fov_deg*Math.PI/180,tan_y=Math.tan(fov/2),tan_x=tan_y*(width/height);
   const depth=new Uint16Array(width*height),rgb=new Uint8Array(width*height*3),mask=new Uint8Array(width*height);
+  const color_settings=v316ReadRgbdColorSettings();
+  v316FillRgbForValidation(rgb,width,height,color_settings);
   const z_buffer=new Float64Array(width*height);z_buffer.fill(Infinity);
   const is_object_label=label=>label!=='table'&&label!=='outlier';
   let valid_num=0,object_num=0;
@@ -7270,8 +7297,6 @@ function v316BuildFoundationPoseFrame(){
     if(depth_mm<1||depth_mm>65535)continue;
     if(!Number.isFinite(z_buffer[index]))valid_num++;
     z_buffer[index]=z;depth[index]=depth_mm;
-    const color=v316ColorBytes(point.label),color_index=index*3;
-    rgb[color_index]=color[0];rgb[color_index+1]=color[1];rgb[color_index+2]=color[2];
     const is_object=is_object_label(point.label);
     if(mask[index]!==0&&!is_object)object_num--;
     if(mask[index]===0&&is_object)object_num++;
@@ -7280,7 +7305,7 @@ function v316BuildFoundationPoseFrame(){
   if(!valid_num)throw new Error('深度カメラ視野内に有効点がありません。');
   if(!object_num)throw new Error('物体maskに使えるobject系ラベルの点がありません。');
   const fx=width/(2*tan_x),fy=height/(2*tan_y);
-  return {width,height,depth,rgb,mask,valid_num,object_num,camera:{
+  return {width,height,depth,rgb,mask,valid_num,object_num,color:{...color_settings,encoding:v316ColorEncoding(color_settings)},camera:{
     k:[fx,0,width/2,0,fy,height/2,0,0,1],
     pose_world:{position:pose.cam,x_axis:pose.right,y_axis:{x:-pose.up.x,y:-pose.up.y,z:-pose.up.z},z_axis:pose.forward}
   }};
@@ -7359,7 +7384,8 @@ async function v316SaveFoundationPoseRgbd(){
     const frame=v316BuildFoundationPoseFrame(),frame_id='000000';
     const manifest={
       format:'foundation_pose_single_frame_v1',frame_id,
-      color_encoding:'semantic_label_color',mask_encoding:'object_labels_except_table_and_outlier',depth_unit_m:0.001,
+      color_encoding:frame.color.encoding,color_mode:frame.color.mode,color_noise_seed:frame.color.noise_seed,
+      mask_encoding:'object_labels_except_table_and_outlier',depth_unit_m:0.001,
       template_mesh:'対応するCAD meshをFoundationPose実行時に指定',camera:frame.camera,
       files:{rgb:`rgb/${frame_id}.png`,depth:`depth/${frame_id}.png`,mask:`masks/${frame_id}.png`,camera_matrix:'cam_K.txt'}
     };
@@ -7373,7 +7399,7 @@ async function v316SaveFoundationPoseRgbd(){
     ];
     const sample=String(state.sample||'object').replace(/[^A-Za-z0-9_-]+/g,'_');
     v316DownloadBlob(v316CreateZip(files),`topo_fuzzy_${sample}_foundation_pose_rgbd.zip`);
-    if(status)status.textContent=`FoundationPose RGB-D ZIP保存: ${frame.width}x${frame.height}, depth=${frame.valid_num}px, mask=${frame.object_num}px / semantic RGB。対応CAD meshを別途指定してください。`;
+    if(status)status.textContent=`FoundationPose RGB-D ZIP保存: ${frame.width}x${frame.height}, depth=${frame.valid_num}px, mask=${frame.object_num}px / RGB=${frame.color.encoding}。対応CAD meshを別途指定してください。`;
   }catch(error){
     if(status)status.textContent='FoundationPose RGB-D保存失敗: '+(error&&error.message?error.message:error);
   }
@@ -7715,6 +7741,7 @@ function setup_depth_camera_controls(){
     updateMetrics();
     updateHud();
     renderAll();
+    window.__topoFoundationPoseRosApi?.request_publish?.();
     if($('topoStatus'))$('topoStatus').textContent='深度カメラ設定を更新しました。GNGは再実行してください。';
   };
   for(const field of depth_camera_fields){
@@ -8196,12 +8223,13 @@ function bindDataModeControls(){
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
-  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();});
+  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 setup_point_pose_controls();
 setup_depth_camera_controls();
+['rgbdColorMode','rgbdColorNoiseSeed'].forEach(id=>$(id)?.addEventListener('input',()=>window.__topoFoundationPoseRosApi?.request_publish?.()));
 ['sampleType','pointCount','noise','seed','holeRatio','missingRatio','outlierRatio','holeRadius','tableMode','tableSize','tableHeight','tableDensity'].forEach(id=>$(id).addEventListener('input',()=>{generate()}));['pointSize','pointColorMode','heatmapAxis','heatmapRangeMode','heatmapMin','heatmapMax','motionAmp','motionHz','motionPattern'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',()=>{updateMovingPoints();renderAll()})});
 setupTopologyStyleControls();syncFixedBaseControls();v314SyncIkMotionControls();v312SetupGngInputFileLoader();v309SyncClusterControlPair('clusterEdgeThreshold','clusterEdgeThresholdNum');
 document.querySelectorAll('[data-view-tools] button').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const tool=btn.dataset.tool,act=btn.dataset.action;if(tool)setViewTool(tool);if(act==='zoomIn')state.zoom=clamp(state.zoom*1.18,.55,9);if(act==='zoomOut')state.zoom=clamp(state.zoom/1.18,.55,9);if(act==='resetView')resetView();renderAll();}));
@@ -8443,6 +8471,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   };
   let ros = null;
   let rosConnecting = false;
+  let foundation_pose_publish_scheduled = false;
   const foundation_pose_topic_objects = new Map();
   function setRosBridgeStatus(text){
     const el = document.getElementById('rosBridgeStatus');
@@ -8764,6 +8793,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
             setRosBridgeStatus('ROS bridge: connected');
             rosPublishers.forEach(p=>p.onConnection());
             rosSubscribers.forEach(s=>s.onConnection());
+            sync_foundation_pose_rgbd_publish();
           });
           ros.on('close', ()=>{
             rosConnecting = false;
@@ -8798,16 +8828,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     return { secs: Math.floor(ms/1000), nsecs: (ms % 1000) * 1e6 };
   }
 
-  function set_foundation_pose_ros_status(text){
-    const status_el = document.getElementById('foundationPoseRosStatus');
-    if(status_el) status_el.textContent = text;
+  function get_foundation_pose_topic_prefix(){
+    return '/topo_fuzzy/rgbd';
   }
 
-  function get_foundation_pose_topic_prefix(){
-    const prefix_el = document.getElementById('foundationPoseTopicPrefix');
-    const raw_prefix = String(prefix_el?.value || '/foundation_pose/input').trim();
-    const normalized_prefix = raw_prefix.replace(/^\/+|\/+$/g, '');
-    return `/${normalized_prefix || 'foundation_pose/input'}`;
+  function is_foundation_pose_depth_source(){
+    const enabled = document.getElementById('foundationPoseRgbdPublishEnabled');
+    return document.getElementById('pointCloudSource')?.value === 'synthetic_depth' && enabled?.checked !== false;
   }
 
   function get_foundation_pose_topic(topic_name, message_type){
@@ -8822,6 +8849,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     topic.advertise();
     foundation_pose_topic_objects.set(topic_key, topic);
     return topic;
+  }
+
+  function stop_foundation_pose_rgbd_publish(){
+    for(const topic of foundation_pose_topic_objects.values()){
+      try{topic.unadvertise();}catch(error){console.warn('FoundationPose RGB-D unadvertise error', error);}
+    }
+    foundation_pose_topic_objects.clear();
   }
 
   function foundation_pose_depth_bytes(depth){
@@ -8865,13 +8899,12 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
 
   function publish_foundation_pose_rgbd_once(){
     if(!ros || !ros.isConnected){
-      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: 接続待機中。接続後に再実行');
       ensureRos();
       return false;
     }
     const frame = window.__topoFoundationPoseApi?.buildRgbdFrame?.();
     if(!frame || !frame.width || !frame.height){
-      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: RGB-Dフレーム生成失敗');
+      console.warn('FoundationPose RGB-D frame generation failed');
       return false;
     }
     try{
@@ -8889,14 +8922,43 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       get_foundation_pose_topic(`${topic_prefix}/camera_info`, 'sensor_msgs/msg/CameraInfo').publish(
         build_foundation_pose_camera_info_msg(frame, stamp)
       );
-      set_foundation_pose_ros_status(`${frame.width}x${frame.height} RGB-D: ${topic_prefix}/{color, depth, mask, camera_info}`);
       return true;
     }catch(error){
       console.error('FoundationPose RGB-D publish error', error);
-      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: publish error');
       return false;
     }
   }
+
+  function request_foundation_pose_rgbd_publish(){
+    if(!is_foundation_pose_depth_source()) return false;
+    if(!ros || !ros.isConnected){
+      ensureRos();
+      return false;
+    }
+    if(foundation_pose_publish_scheduled) return true;
+    foundation_pose_publish_scheduled = true;
+    const schedule = typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame.bind(window)
+      : callback=>setTimeout(callback, 0);
+    schedule(()=>{
+      foundation_pose_publish_scheduled = false;
+      if(is_foundation_pose_depth_source()) publish_foundation_pose_rgbd_once();
+    });
+    return true;
+  }
+
+  function sync_foundation_pose_rgbd_publish(){
+    if(!is_foundation_pose_depth_source()){
+      stop_foundation_pose_rgbd_publish();
+      return false;
+    }
+    return request_foundation_pose_rgbd_publish();
+  }
+
+  window.__topoFoundationPoseRosApi={
+    request_publish:request_foundation_pose_rgbd_publish,
+    sync:sync_foundation_pose_rgbd_publish,
+  };
 
   // Build PointCloud2 message from various point representations
   function normalizePointObjects(points){
@@ -8981,9 +9043,9 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         ensureRos();
       });
     }
-    const foundation_pose_ros_publish_btn = document.getElementById('foundationPoseRosPublishBtn');
-    if(foundation_pose_ros_publish_btn){
-      foundation_pose_ros_publish_btn.addEventListener('click', publish_foundation_pose_rgbd_once);
+    const foundation_pose_rgbd_publish_enabled = document.getElementById('foundationPoseRgbdPublishEnabled');
+    if(foundation_pose_rgbd_publish_enabled){
+      foundation_pose_rgbd_publish_enabled.addEventListener('change', sync_foundation_pose_rgbd_publish);
     }
     const bindRosTopicPanel = (toggleId, detailId)=>{
       const toggle = document.getElementById(toggleId);

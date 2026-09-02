@@ -34,11 +34,11 @@ export const DEFAULT_TEMPLATE_MATCH_TARGETS: TemplateMatchTargets = {
 };
 
 export const TEMPLATE_MATCH_PARAMETER_DEFINITIONS: TemplateMatchParameterDefinition[] = [
-    { key: 'enable_yaw_search', label: 'Yaw search', node: 'matcher', section: 'Orientation', type: 'boolean', defaultValue: true },
-    { key: 'yaw_min_deg', label: 'Yaw minimum', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: -180, min: -180, max: 180, step: 1 },
-    { key: 'yaw_max_deg', label: 'Yaw maximum', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 180, min: -180, max: 180, step: 1 },
-    { key: 'yaw_step_deg', label: 'Yaw step', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 10, min: 1, max: 90, step: 1 },
+    { key: 'yaw_step_deg', label: 'Yaw full-turn step', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 10, min: 1, max: 90, step: 1 },
     { key: 'enable_roll_pitch_search', label: 'Roll / pitch search', node: 'matcher', section: 'Orientation', type: 'boolean', defaultValue: false },
+    { key: 'roll_tolerance_deg', label: 'Roll tolerance (+/-)', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 8, min: 0, max: 45, step: 0.5 },
+    { key: 'pitch_tolerance_deg', label: 'Pitch tolerance (+/-)', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 8, min: 0, max: 45, step: 0.5 },
+    { key: 'roll_pitch_step_deg', label: 'Roll / pitch step', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 4, min: 0.5, max: 45, step: 0.5 },
     { key: 'max_orientation_hypothesis_num', label: 'Hypothesis limit', node: 'matcher', section: 'Orientation', type: 'number', defaultValue: 1000, min: 1, max: 5000, step: 1 },
 
     { key: 'max_normal_angle_full_deg', label: 'Normal full', node: 'matcher', section: 'Node', type: 'number', defaultValue: 12, min: 0, max: 45, step: 0.5 },

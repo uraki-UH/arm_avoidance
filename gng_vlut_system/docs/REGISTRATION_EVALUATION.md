@@ -107,9 +107,11 @@ python3 gng_vlut_system/tools/registration_eval/prepare_foundation_pose_input.py
 
 通常はセグメンテーション器またはユーザー指定の`--mask-file`を使う。`--allow-depth-mask`は、背景を含まない単体撮影で変換経路だけを確認する暫定用途であり、実環境の物体マスクとして使わない。準備後の実行例はスクリプトが表示する。`FoundationPose`の推定結果は6D姿勢仮説として扱い、現行GNGの平面・非平面・共分散評価で検証してからテンプレートを召喚する。
 
-`ToPo-FUZZY_Manipulation_v1.html`の深度カメラ設定には、`FoundationPose RGB-D ZIP保存`を用意する。遮蔽込みの16-bit depth、semantic色RGB、object系ラベルのmask、`cam_K.txt`、入力manifestをZIPへ出力する。ZIPを展開して`run_demo.py`の`--test_scene_dir`へ渡し、対応CAD meshを`--mesh_file`へ指定する。HTMLのRGBは実写ではないため、この経路はFoundationPoseの入出力接続と遮蔽条件の検証に限定する。
+`ToPo-FUZZY_Manipulation_v1.html`の深度カメラ設定には、`FoundationPose RGB-D ZIP保存`を用意する。遮蔽込みの16-bit depth、固定グレーのRGB、object系ラベルのmask、`cam_K.txt`、入力manifestをZIPへ出力する。ZIPを展開して`run_demo.py`の`--test_scene_dir`へ渡し、対応CAD meshを`--mesh_file`へ指定する。HTMLのRGBは実写ではないため、この経路はFoundationPoseの入出力接続と遮蔽条件の検証に限定する。
 
-同じパネルの`FoundationPose RGB-Dを1回publish`は、ブラウザ直結の`rosbridge_server`へ現在の投影を送る。プレフィックスの初期値は`/foundation_pose/input`であり、`/color`、`/depth`、`/mask`は`sensor_msgs/msg/Image`、`/camera_info`は`sensor_msgs/msg/CameraInfo`として配信する。`color`は`rgb8`、`depth`はミリメートル単位の`16UC1`、`mask`は`mono8`である。4トピックのheader stampとframe_idは一致し、frame_idは`foundation_pose_camera`となる。
+RGB検証モードは`固定グレー`、`白色ランダムノイズ`、`近似ピンクノイズ`から選ぶ。ノイズは全画素でグレースケール値を共有し、物体ラベル・深度・maskとは独立である。固定したseedごとに同一姿勢の推定結果を記録し、seed間の姿勢誤差と成功率を比較して色への依存度を評価する。これは色に対するストレス試験であり、FoundationPoseの深度専用方式を意味しない。
+
+`ToPo-FUZZY_Manipulation_v1.html`で`合成深度点群`を選び点群を生成すると、ブラウザ直結の`rosbridge_server`へ現在の投影を自動送信する。配信先は`/topo_fuzzy/rgbd`配下の`/color`、`/depth`、`/mask`、`/camera_info`であり、前3者は`sensor_msgs/msg/Image`、`camera_info`は`sensor_msgs/msg/CameraInfo`である。`color`は`rgb8`、`depth`はミリメートル単位の`16UC1`、`mask`は`mono8`である。4トピックのheader stampとframe_idは一致し、frame_idは`foundation_pose_camera`となる。深度カメラ設定の`RGB-D camera topicを自動出力`をOFFにすると、`semantic_points`などのPointCloud2だけを出力する。表面点群または取り込みフレームへ切り替えた場合もRGB-D topicを停止する。
 
 FilterRegはCUDA、PCL、OpenCV、glogへの依存があり、公開環境が旧Ubuntu・旧CUDAを前提とする。ホストのCUDA ToolkitとPCL版を確認し、Dockerまたは隔離環境で導入する。現時点では優先度を下げる。
 

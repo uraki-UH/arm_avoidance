@@ -33,11 +33,11 @@ struct ParameterSpec
 };
 
 const std::vector<ParameterSpec> kMatcherParameters{
-  {"enable_yaw_search", ParameterKind::Boolean},
-  {"yaw_min_deg", ParameterKind::Double},
-  {"yaw_max_deg", ParameterKind::Double},
   {"yaw_step_deg", ParameterKind::Double},
   {"enable_roll_pitch_search", ParameterKind::Boolean},
+  {"roll_tolerance_deg", ParameterKind::Double},
+  {"pitch_tolerance_deg", ParameterKind::Double},
+  {"roll_pitch_step_deg", ParameterKind::Double},
   {"max_orientation_hypothesis_num", ParameterKind::Integer},
   {"max_normal_angle_full_deg", ParameterKind::Double},
   {"max_normal_angle_partial_deg", ParameterKind::Double},
