@@ -3930,7 +3930,6 @@ function mfSvg(mf,opt={}){
     axis += `<line x1="${ml}" y1="${mt}" x2="${ml}" y2="${H-mb}" stroke="rgba(148,163,184,.55)" stroke-width="1"/>`;
     axis += xt.map(x=>`<g><line x1="${sx(x)}" y1="${sy(0)}" x2="${sx(x)}" y2="${sy(0)+4}" stroke="rgba(148,163,184,.55)"/><text x="${sx(x)}" y="${H-6}" text-anchor="middle" fill="#94a3b8" font-size="8">${x.toFixed(x===0||x===1?0:2).replace(/0$/,'')}</text></g>`).join('');
     axis += yt.map(y=>`<g><line x1="${ml-4}" y1="${sy(y)}" x2="${ml}" y2="${sy(y)}" stroke="rgba(148,163,184,.55)"/><text x="${ml-6}" y="${sy(y)+3}" text-anchor="end" fill="#94a3b8" font-size="8">${y}</text></g>`).join('');
-    axis += `<text x="${W-mr}" y="11" text-anchor="end" fill="#94a3b8" font-size="8">x [-]</text>`;
     axis += `<text x="4" y="${mt+4}" fill="#94a3b8" font-size="8">μ</text>`;
   }
   return `<svg class="${htmlEscape(cls)}"${attrs} viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="membership function">${axis}<polyline points="${pts.join(' ')}" fill="none" stroke="#00ff00" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/><polygon points="${ml},${sy(0)} ${pts.join(' ')} ${W-mr},${sy(0)}" fill="rgba(0,255,0,.10)"/></svg>`;
