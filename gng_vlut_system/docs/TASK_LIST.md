@@ -69,6 +69,14 @@
    7. 既存scoreへは`nonplane_weight`で加算。非平面証拠だけで`confirmed`にせず、対応平面または局所GNG edge構造の根拠を要求。
    8. `nonplane_component_score`、`nonplane_evidence_score`、`has_nonplane_evidence`、`nonplane_correspondences`を候補JSONへ出力し、調整と検証を可能化。
 
+   **分割された背景支持面の扱い**
+
+   1. 床や台が複数の小さい平面クラスタへ分割された場合、同一frameで法線、平面距離、GNG edge接続または境界近傍が整合するクラスタを、matcher内だけでunion-findにより背景支持面グループへ統合する。
+   2. 統合後の広がりがtemplate平面より十分大きいグループだけを背景支持面とし、その所属nodeとedgeをnode対応、反証、scale評価から除外する。水平かどうか、単一クラスタの大きさだけでは判定しない。
+   3. `/plane_clusters`の元クラスタ、可視化、非平面成分IDは変更しない。統合は物体照合の背景除外専用とする。
+   4. `TopologicalMap`と`PlaneClusterArray`が同一frameで得られない場合は、背景支持面除外と平面根拠評価を行わず、反証による仮説解除も保留する。
+   5. 床面を意図的に細分化した`basket`入力で、床由来nodeが`contradiction_point_ratio`へ加算されず、物体と接続する説明不能な局所構造だけが反証となることを確認する。
+
    **時間蓄積**
 
    1. テンプレートIDとyaw候補ごとに、直近`nonplane_evidence_window_sec`の加点を蓄積。
