@@ -49,3 +49,9 @@ ROS topic、launch引数、message、service、基幹GNGバイナリ形式の変
 ## 注意
 
 旧JavaScript GNGの初期化、逐次更新、再生ループは削除済み。グラフ可視化と読込み済みグラフの整合化に使う共通処理は残す。
+# 2026-09-02: HTML GNG-WASM realtime learning
+
+- `GNG学習再生` を継続学習・継続可視化モードへ変更
+- WASM ABIを3へ更新し、GNG状態を維持した点群更新 API を追加
+- 学習更新、描画更新、意味付け更新を別周期化
+- 表示用エッジ生成を空間バケット探索へ変更

@@ -3891,6 +3891,10 @@ function v312SyncRealtimeGraph(realtime,now){
   const edge_map=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
   state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',inputSource:realtime.input_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
   sanitizeGngGraph();
+  if(now-realtime.last_topology_now>=1000){
+    updateTopoSemantics();
+    realtime.last_topology_now=now;
+  }
   state.gngTick=state.gng.iter;
   updateCoreMetricsOnly();
   updateHud();
@@ -3942,7 +3946,7 @@ async function v312StartRealtimeGng(){
   state.edges=[];
   state.gng=null;
   state.gngTick=0;
-  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity};
+  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity,last_topology_now:-Infinity};
   state.gng_realtime=realtime;
   state.gngPlaying=true;
   updateHud();
