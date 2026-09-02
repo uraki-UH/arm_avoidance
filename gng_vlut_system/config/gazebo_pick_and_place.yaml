@@ -11,17 +11,17 @@ gazebo_pick_and_place:
     frame_id: world_lidar_link
     xyz: [1.20, 0.0, 0.95]
     rpy: [0.0, 0.75, 3.14159]
-    topic: /environment/lidar/points
+    topic: /lidar/points
 
   scan:
     update_hz: 10.0
     num_horizontal_samples: 720
     num_vertical_samples: 64
-    min_horizontal_angle: -3.14159265
-    max_horizontal_angle: 3.14159265
+    min_horizontal_angle: -0.65
+    max_horizontal_angle: 0.65
     min_vertical_angle: -0.35
     max_vertical_angle: 0.35
     min_range: 0.10
-    max_range: 20.0
+    max_range: 2.0
     noise_mean: 0.0
     noise_std_dev: 0.0

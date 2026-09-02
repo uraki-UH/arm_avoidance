@@ -77,7 +77,7 @@ def launch_setup(context, *args, **kwargs):
         "world_lidar_rpy": select_launch_value(
             context, "world_lidar_rpy", lidar.get("rpy", [0.0, 0.0, 0.0])),
         "world_lidar_topic": select_launch_value(
-            context, "world_lidar_topic", lidar.get("topic", "/environment/lidar/points")),
+            context, "world_lidar_topic", lidar.get("topic", "/lidar/points")),
     }
     scan_argument_names = {
         "update_hz": "lidar_update_hz",

@@ -29,4 +29,4 @@ world_lidar:
   frame_id: world_lidar_link
   xyz: [1.5, 0.0, 1.2]
   rpy: [0.0, 0.0, 0.0]
-  topic: /environment/lidar/points
+  topic: /lidar/points
