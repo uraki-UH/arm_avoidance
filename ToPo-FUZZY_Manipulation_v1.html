@@ -727,7 +727,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm" disabled><option value="wasm" selected>基幹GNG-WASM / C++ WebAssembly</option></select></div>
           <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">オクルージョンなし表面点群</option><option value="imported_frames">取り込みフレーム</option></select></div>
-          <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="object_surface">オクルージョンなし表面点群 / 深度なし・遮蔽なし</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
           <div class="full"><label>GNG learning samples per update / 1更新あたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
           <div><label>GNG training update [Hz]</label><input id="gng_training_hz" type="number" min="1" max="60" step="1" value="30"></div>
           <div><label>GNG visual update [Hz]</label><input id="gng_visual_hz" type="number" min="1" max="30" step="1" value="10"></div>
@@ -827,7 +826,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="full"><label>Region growing threshold</label><div class="control-pair"><input id="regionGrowThreshold" type="range" min="0.1" max="0.95" step="0.01" value="0.68"><input id="regionGrowThresholdNum" type="number" min="0.1" max="0.95" step="0.01" value="0.68"></div></div>
             </div>
           </details>
-        <div style="margin-top:12px"><button id="genBtn" data-action-kind="data">サンプル点群を生成</button></div>
         <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" data-action-kind="play">3D点群リアルタイム再生</button><button id="gngPlayBtn" data-action-kind="play">GNG再生</button></div>
         <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" data-action-kind="run">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
         <div class="grid2" style="margin-top:8px">
@@ -1045,7 +1043,6 @@ const state={
   evaluationMetrics:{schemas:{},samples:{},structuredInputs:{},metricEnabled:{},lastSchemaKey:'',lastSampleKey:'',receivedSchemas:0,receivedSamples:0,receivedStructuredInputs:0},
   gngLoadStatusText:'JSONが読み込まれていません。',evaluationMetricConnectionStatus:'',
   bundleFlow:null,
-  gngWasmInputSource:'visible_points',
   gngWasmFileUrls:null
 };
 window.__topoState=state;
@@ -3232,64 +3229,15 @@ function v305GngTrainingPoints(points){
   return src.length>=8 ? src : (points||[]);
 }
 function buildOfflineBatchDataset(){
-  if(!state.basePoints.length)generate();
-  // v307: Offline batch no longer has independent user parameters.
-  // It uses one fixed snapshot from basePoints; per-frame learning count is controlled only by gngSamplesPerFrame.
-  const source=$('pointCloudSource')?.value||'synthetic_depth';
-  const sourcePoints=source==='object_surface' ? get_object_surface_scene_points() : state.basePoints;
-  const pts=[];
-  for(const p of sourcePoints||[]){
-    const q=source==='object_surface' ? p : transformPoint(p,0);
-    if(q && v305IsGngTrainingPoint(q)) pts.push(q);
-  }
+  if(!state.points.length)generate();
+  // 現在表示中の点群を用いた固定スナップショット
+  const pts=v312GetGngWasmInputPoints().slice();
   state.batchDataset=pts;
   return pts;
 }
 function v312GetGngWasmInputPoints(){
-  const mode=$('gngWasmInputSource')?.value||state.gngWasmInputSource||'visible_points';
-  state.gngWasmInputSource=mode;
-  const current=()=>{
-    if(Array.isArray(state.points) && state.points.length) return state.points.filter((p)=>p&&p.label!=='outlier'&&[p.x,p.y,p.z].every(Number.isFinite));
-    return [];
-  };
-  const base=()=>{
-    if(Array.isArray(state.basePoints) && state.basePoints.length) return state.basePoints.map((p,i)=>transformPoint(p,state.time||0)||p).filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
-    return [];
-  };
-  const objectSurface=()=>{
-    const points=get_object_surface_scene_points();
-    if(Array.isArray(points) && points.length) return points.filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
-    return [];
-  };
-  const importedFrame=()=>{
-    if(!state.importedPointFrames || !state.importedPointFrames.length) return [];
-    const idx=Math.floor((state.time||0)*Math.max(1,+($('motionHz')?.value||12)))%state.importedPointFrames.length;
-    return (state.importedPointFrames[idx]||[]).filter((p)=>p&&[p.x,p.y,p.z].every(Number.isFinite));
-  };
-  const importedAll=()=>{
-    if(!state.importedPointFrames || !state.importedPointFrames.length) return [];
-    const pts=[];
-    for(const frame of state.importedPointFrames){
-      if(!Array.isArray(frame)) continue;
-      for(const p of frame){
-        if(p&&[p.x,p.y,p.z].every(Number.isFinite)) pts.push(p);
-      }
-    }
-    return pts;
-  };
-  switch(mode){
-    case 'object_surface':
-      return objectSurface();
-    case 'base_points':
-      return base();
-    case 'imported_frame':
-      return importedFrame();
-    case 'imported_all':
-      return importedAll();
-    case 'visible_points':
-    default:
-      return current();
-  }
+  if(!Array.isArray(state.points))return [];
+  return state.points.filter((point)=>point&&point.label!=='outlier'&&[point.x,point.y,point.z].every(Number.isFinite));
 }
 function activeTrainingPoints(g){
   if(g && g.mode==='offline') return g.trainingPoints||[];
@@ -3464,7 +3412,7 @@ function v312SyncRealtimeGraph(realtime,now,has_semantic_update=false){
   const raw_edge_num=(parsed.edges||[]).length;
   state.edges=v312WasmGraphEdges(parsed.edges,state.nodes.length);
   const edge_map=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
-  state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',inputSource:realtime.input_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
+  state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',point_cloud_source:realtime.point_cloud_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
   sanitizeGngGraph();
   if(has_semantic_update){
     updateTopoSemantics();
@@ -3529,7 +3477,7 @@ async function v312StartRealtimeGng(){
   state.edges=[];
   state.gng=null;
   state.gngTick=0;
-  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,batch_size:Math.min(currentGngBatchSize(),32),last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity,last_topology_now:-Infinity};
+  const realtime={ex,node_interval,node_grid,seed,point_cloud_source:$('pointCloudSource')?.value||'synthetic_depth',point_num:input.points.length,batch_size:Math.min(currentGngBatchSize(),32),last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity,last_topology_now:-Infinity};
   state.gng_realtime=realtime;
   state.gngPlaying=true;
   updateHud();
@@ -3663,12 +3611,12 @@ async function runGngWasmAccelerated(run_token){
   const wasmMode=v312WasmMode(ex);
   if(!wasmMode) return false;
   const mode=gngMode(),variant=gngAlgorithm();
-  const wasmInputMode=$('gngWasmInputSource')?.value||state.gngWasmInputSource||'visible_points';
+  const point_cloud_source=$('pointCloudSource')?.value||'synthetic_depth';
   const pts=mode==='offline'
     ? buildOfflineBatchDataset()
     : v312GetGngWasmInputPoints();
   const wasmStatus=$('topoStatus');
-  if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, input=${wasmInputMode}, points=${pts.length}, mode=${mode}, alg=${variant}`;
+  if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, source=${point_cloud_source}, points=${pts.length}, mode=${mode}, alg=${variant}`;
   if(pts.length<2)return false;
   const maxNodes=+$('gngMaxNodes').value||400;
   const iters=+$('gngIters').value||12000;
@@ -3702,10 +3650,10 @@ async function runGngWasmAccelerated(run_token){
       const raw_edges=v312WasmGraphEdges(parsed.edges,state.nodes.length);
       state.edges=raw_edges;
       const edgeMap=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
-      state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||iters,mode,variant,trainingPoints:mode==='offline'?pts:null,backend:'Emscripten GNG-WASM',inputSource:wasmInputMode,node_grid:nodeGrid,node_interval:nodeInterval,raw_edge_num:raw_edges.length};
+      state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||iters,mode,variant,trainingPoints:mode==='offline'?pts:null,backend:'Emscripten GNG-WASM',point_cloud_source,node_grid:nodeGrid,node_interval:nodeInterval,raw_edge_num:raw_edges.length};
       sanitizeGngGraph();
       state.gngTick+=(+parsed.iterations||iters);
-      if(wasmStatus) wasmStatus.textContent=`WASM GNG complete: input=${wasmInputMode}, points=${pts.length}, nodes=${state.nodes.length}, edges=${state.edges.length}, raw_edges=${raw_edges.length}, iter=${state.gng.iter}, node_grid=${nodeGrid.toFixed(3)} m, node_interval=${nodeInterval.toFixed(3)} m`;
+      if(wasmStatus) wasmStatus.textContent=`WASM GNG complete: source=${point_cloud_source}, points=${pts.length}, nodes=${state.nodes.length}, edges=${state.edges.length}, raw_edges=${raw_edges.length}, iter=${state.gng.iter}, node_grid=${nodeGrid.toFixed(3)} m, node_interval=${nodeInterval.toFixed(3)} m`;
       return true;
     }
   }catch(e){
@@ -7761,11 +7709,10 @@ function bindDataModeControls(){
     });
   }
 }
-$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
-  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
-  if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
+  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;resetGngRunState();if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
 setup_point_pose_controls();
