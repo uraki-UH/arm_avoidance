@@ -150,7 +150,6 @@ canvas.viewer{
   width:100%;height:min(68vh,720px);min-height:430px;
   border:1px solid transparent;border-radius:14px;
 }
-.overlay{position:absolute;left:14px;top:12px;max-width:min(620px,calc(100% - 28px));max-height:42%;overflow:auto;background:rgba(2,6,23,.70);border:1px solid rgba(148,163,184,.24);border-radius:10px;color:#dbeafe;padding:8px 10px;font-size:12px;line-height:1.45;pointer-events:none;white-space:pre-wrap}
 .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:#cbd5e1;font-size:12px}
 .chip{display:inline-flex;gap:5px;align-items:center}
 .chip i{display:inline-block;width:18px;height:4px;border-radius:99px}
@@ -203,14 +202,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 }
 .view-tools button.active{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
 
-/* ── Viewer corner note ── */
-.viewer-corner-note{
-  position:absolute;right:14px;bottom:14px;z-index:10;
-  padding:8px 10px;border-radius:12px;background:rgba(2,6,23,.62);
-  border:1px solid rgba(56,189,248,.26);color:#bfdbfe;
-  font:800 11px/1.35 Consolas,Menlo,monospace;text-align:right;pointer-events:none;
-}
-
 /* ── Viewer tabs ── */
 .viewer-tabs{
   position:absolute;left:12px;top:10px;z-index:420;
@@ -228,29 +219,14 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .viewer-tabs button.active{color:#fff;border-color:#00ff00;background:#2f5f1f;box-shadow:none}
 
 /* ── Collapsible viewer panels ── */
-.canvaswrap:not(.info-open) [data-view-panel="info"],
 .canvaswrap:not(.play-open) [data-view-panel="play"],
 .canvaswrap:not(.tools-open) [data-view-panel="tools"],
 .canvaswrap:not(.layers-open) [data-view-panel="layers"],
 .canvaswrap:not(.robot-open) [data-view-panel="robot"]{display:none!important}
-.canvaswrap.info-open .overlay{top:52px;max-height:36%}
-.canvaswrap.info-open .viewer-timing-panel{top:auto;left:14px;bottom:14px;min-width:230px}
-.canvaswrap.info-open .viewer-corner-note{right:14px;bottom:14px}
 .canvaswrap.play-open .neo-hud{left:12px;right:auto;top:52px;bottom:auto;max-width:min(720px,calc(100% - 24px))}
 .canvaswrap.tools-open .view-tools{top:52px;right:12px}
 .canvaswrap.layers-open .viewer-layer-panel{display:grid!important;top:52px;left:12px;z-index:410}
 .canvaswrap.robot-open .viewer-robot-tf-panel{display:grid!important;top:52px;right:12px;z-index:411}
-
-/* ── Viewer timing panel ── */
-.viewer-timing-panel{
-  position:absolute;left:14px;top:calc(42% + 20px);z-index:11;
-  min-width:260px;max-width:min(520px,calc(100% - 28px));
-  padding:8px 10px;border-radius:12px;
-  background:rgba(2,6,23,.68);border:1px solid rgba(0,255,0,.34);
-  color:#00ff00;font:900 11px/1.45 Consolas,Menlo,monospace;
-  pointer-events:none;white-space:pre-wrap;backdrop-filter:blur(5px);
-}
-.viewer-timing-panel span{color:#93c5fd}
 
 /* ── Viewer layer panel ── */
 .viewer-layer-panel{
@@ -499,17 +475,13 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .neo-hud{left:8px;right:8px;bottom:8px;padding:8px;gap:6px}
   .neo-hud button{flex:1 1 46%;min-width:0;font-size:11px;padding:8px 6px}
   .neo-hud .neo-readout{flex:1 1 100%;font-size:11px;min-width:0}
-  .viewer-corner-note{right:8px;bottom:104px;font-size:10px}
   .view-tools{right:8px;top:8px;max-width:calc(100% - 16px);gap:5px;padding:5px}
   .view-tools button{min-width:50px;font-size:10px;padding:6px 7px}
   .viewer-tabs{left:8px;top:8px;padding:4px;gap:4px}
   .viewer-tabs button{min-width:48px;font-size:10px;padding:6px 7px}
-  .viewer-timing-panel{left:8px;right:8px;top:auto;bottom:154px;min-width:0;font-size:10px}
   .viewer-layer-panel{left:8px;top:48px;min-width:160px;font-size:11px}
   .viewer-robot-tf-panel{left:8px;right:8px;width:auto;top:48px}
   .viewer-robot-tf-panel .mini-grid{grid-template-columns:1fr}
-  .canvaswrap.info-open .overlay{top:48px;max-height:34%}
-  .canvaswrap.info-open .viewer-timing-panel{left:8px;right:8px;bottom:8px;font-size:10px}
   .canvaswrap.play-open .neo-hud{left:8px;right:8px;top:48px;bottom:auto;max-width:none}
   .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
   .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
@@ -853,16 +825,15 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
         <div class="metric"><div class="t">Edges</div><div id="mEdges" class="v">0</div></div>
         <div class="metric"><div class="t">Object</div><div id="mObject" class="v">-</div></div>
       </div>
-      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div>
-<div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo" data-action-kind="play"> 3D再生</button><button id="fuzzy_grasp_run_btn" data-action-kind="run" type="button">ファジィ把持推定</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
+      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div>
+<div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo" data-action-kind="play"> 3D再生</button><button id="fuzzy_grasp_run_btn" data-action-kind="run" type="button">ファジィ把持推定</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
 <div><label>X [m]</label><div class="control-pair"><input id="viewerBaseTfX" type="range" min="-1.0" max="1.0" step="0.005" value="0.25"><input id="viewerBaseTfXNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.25"></div></div>
 <div><label>Y [m]</label><div class="control-pair"><input id="viewerBaseTfY" type="range" min="-1.0" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfYNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Z [m]</label><div class="control-pair"><input id="viewerBaseTfZ" type="range" min="-0.5" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfZNum" type="number" min="-0.5" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
-</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox"> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox"> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
-GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox"> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox"> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
 <div class="workspace">
@@ -903,8 +874,7 @@ GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="backg
         <div class="metric"><div class="t">Required Width</div><div id="gWidth" class="v">-</div></div>
         <div class="metric"><div class="t">Candidates</div><div id="gCandN" class="v">0</div></div>
       </div>
-      <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div id="graspOverlay" class="overlay" data-view-panel="info">No estimation yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div id="graspCornerNote" class="viewer-corner-note" data-view-panel="info">Gripper pose<br>Orbit / Pan / Zoom</div><div id="graspTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
-GNG Δt: -- ms</div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
+      <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
       <div class="panel fuzzy-rule-panel" id="explicitFuzzyRulePanel" style="margin-top:14px">
         <h2>明示的ファジィ IF-THEN ルールエディタ</h2>
         <div class="body">
@@ -3167,21 +3137,6 @@ function currentGngBatchSize(){
   return Math.max(1,Math.min(500,Math.floor(+(el&&el.value)||200)));
 }
 function fmtMs(v){return Number.isFinite(v)?v.toFixed(v<100?1:0):'--'}
-function viewerTimingText(){
-  const pCfg=configuredPointPeriodMs();
-  const pMeas=state.perf.pointPeriodMs;
-  const gMeas=state.perf.gngComputeMs;
-  const gBatch=currentGngBatchSize();
-  const pLine=`Point Δt <span>${fmtMs(state.pointPlaying?(pMeas||pCfg):pCfg)}</span> ms ${state.pointPlaying?'active':'paused'} / cfg ${fmtMs(pCfg)} ms`;
-  const gLine=`GNG Δt <span>${state.gngPlaying?fmtMs(gMeas||state.perf.renderPeriodMs):'--'}</span> ms ${state.gngPlaying?'active':'paused'} / samples/frame ${gBatch}`;
-  return [pLine,gLine].join('\n');
-}
-function updateViewerTimingPanels(){
-  const txt=viewerTimingText();
-  if(state._lastViewerTimingText===txt) return;
-  state._lastViewerTimingText=txt;
-  ['topoTimingPanel','graspTimingPanel'].forEach(id=>{const el=$(id);if(el)el.innerHTML=txt;});
-}
 
 
 /* v305: 学習対象点群の選別 */
@@ -4439,7 +4394,7 @@ function ikSolutionObj(sol){
   };
 }
 function semanticBadges(c){const ev=(c.semanticEvidence&&c.semanticEvidence.counts)||{};const pass=c.semanticFilterPass;return `<div class="semantic-badges"><span class="semantic-chip ${pass?'pass':'reject'}">${pass?'semantic PASS':'semantic REJECT'}</span><span class="semantic-chip safe">safe ${Math.round((c.topologySafe||0)*100)}% / ${ev.safe||0}</span><span class="semantic-chip unknown">unknown ${Math.round((c.topologyUnknown||0)*100)}% / ${ev.unknown||0}</span><span class="semantic-chip wall">wall ${Math.round((c.topologyWall||0)*100)}% / ${ev.wall||0}</span><span class="semantic-chip default">default ${Math.round((c.topologyDefault||0)*100)}% / ${ev.default||0}</span></div>`}
-function updateGraspUi(){const b=state.best;$('gBestScore').textContent=b?b.score.toFixed(1):'-';$('gBestType').textContent=b?b.type:'-';$('gWidth').textContent=b?b.requiredWidth.toFixed(3)+' m':'-';$('gCandN').textContent=state.candidates.length;$('poseJson').value=JSON.stringify(state.graspRenderMode==='ik'&&state.ikSolution?ikSolutionObj(state.ikSolution):poseObj(b),null,2);$('graspOverlay').textContent=b?`Best: ${b.type}\nScore: ${b.score.toFixed(1)}\nSemantic: ${b.semanticFilterPass?'PASS':'REJECT'} / support=${(b.semanticSupport||0).toFixed(2)} / safe=${(b.topologySafe||0).toFixed(2)} unknown=${(b.topologyUnknown||0).toFixed(2)} wall=${(b.topologyWall||0).toFixed(2)}\nCollision free: ${(b.collisionFree??1).toFixed(2)}\nPose: x=${b.x.toFixed(3)}, y=${b.y.toFixed(3)}, z=${b.z.toFixed(3)}, yaw=${b.yaw.toFixed(1)}°, pitch=${b.pitch.toFixed(1)}°\nRequired aperture: ${b.requiredWidth.toFixed(3)} m`:'No estimation yet.';const list=$('candidateList');list.innerHTML='';state.candidates.forEach((c,i)=>{let div=document.createElement('div');div.className='candidate '+(i===0?'best':'');div.innerHTML=`<b>${i+1}. ${c.type}</b><br><small>${c.explain}</small>${semanticBadges(c)}${bar('score',c.score/100)}${bar('semantic support',c.semanticSupport||0)}${bar('safe surface',c.topologySafe||0)}${bar('unknown object',c.topologyUnknown||0)}${bar('wall risk',c.topologyWall||0)}${bar('aperture',c.apertureFit)}${bar('handle',c.handleFit)}${bar('density',c.density)}${bar('rule fire',Math.max(...((c.ruleResult&&c.ruleResult.fired||[]).map(r=>r.activation)),0))}${bar('collision free',c.collisionFree??c.collisionFit??1)}<span class="collision-badge ${((c.collisionFree??1)>0.92)?'safe':''}">collision: ${((c.collision&&c.collision.collisions)||0)} pts / ${(c.collisionPenalty||0).toFixed(1)} penalty</span><br><small>fuzzy: ${(c.rawFuzzyScore??c.score).toFixed(1)} / classic: ${(c.classicScore||0).toFixed(1)} / semantic penalty: ${(c.semanticPenalty||0).toFixed(1)} / shift: ${(c.avoidanceShift||0).toFixed(3)} m / pose: (${c.x.toFixed(3)}, ${c.y.toFixed(3)}, ${c.z.toFixed(3)}), yaw ${c.yaw.toFixed(1)}°, width ${c.requiredWidth.toFixed(3)} m</small>`;list.appendChild(div)});$('graspStatus').textContent=b?`v288推定完了: feasible=${state.candidates.length}, rejected=${(state.rejectedCandidates||[]).length}. Best=${b.type}, score=${b.score.toFixed(1)}, collisionFree=${(b.collisionFree??1).toFixed(2)}, aperture=${b.requiredWidth.toFixed(3)}/${(+$('handAperture').value).toFixed(3)} m. 干渉/開口超過の最終姿勢は候補から除外済み。`:`候補なし: rejected=${(state.rejectedCandidates||[]).length}. collision/aperture制約を緩めるか物体・GNG設定を確認してください。`;if(viewerMode()==='grasp')renderAll();}
+function updateGraspUi(){const b=state.best;$('gBestScore').textContent=b?b.score.toFixed(1):'-';$('gBestType').textContent=b?b.type:'-';$('gWidth').textContent=b?b.requiredWidth.toFixed(3)+' m':'-';$('gCandN').textContent=state.candidates.length;$('poseJson').value=JSON.stringify(state.graspRenderMode==='ik'&&state.ikSolution?ikSolutionObj(state.ikSolution):poseObj(b),null,2);const list=$('candidateList');list.innerHTML='';state.candidates.forEach((c,i)=>{let div=document.createElement('div');div.className='candidate '+(i===0?'best':'');div.innerHTML=`<b>${i+1}. ${c.type}</b><br><small>${c.explain}</small>${semanticBadges(c)}${bar('score',c.score/100)}${bar('semantic support',c.semanticSupport||0)}${bar('safe surface',c.topologySafe||0)}${bar('unknown object',c.topologyUnknown||0)}${bar('wall risk',c.topologyWall||0)}${bar('aperture',c.apertureFit)}${bar('handle',c.handleFit)}${bar('density',c.density)}${bar('rule fire',Math.max(...((c.ruleResult&&c.ruleResult.fired||[]).map(r=>r.activation)),0))}${bar('collision free',c.collisionFree??c.collisionFit??1)}<span class="collision-badge ${((c.collisionFree??1)>0.92)?'safe':''}">collision: ${((c.collision&&c.collision.collisions)||0)} pts / ${(c.collisionPenalty||0).toFixed(1)} penalty</span><br><small>fuzzy: ${(c.rawFuzzyScore??c.score).toFixed(1)} / classic: ${(c.classicScore||0).toFixed(1)} / semantic penalty: ${(c.semanticPenalty||0).toFixed(1)} / shift: ${(c.avoidanceShift||0).toFixed(3)} m / pose: (${c.x.toFixed(3)}, ${c.y.toFixed(3)}, ${c.z.toFixed(3)}), yaw ${c.yaw.toFixed(1)}°, width ${c.requiredWidth.toFixed(3)} m</small>`;list.appendChild(div)});$('graspStatus').textContent=b?`v288推定完了: feasible=${state.candidates.length}, rejected=${(state.rejectedCandidates||[]).length}. Best=${b.type}, score=${b.score.toFixed(1)}, collisionFree=${(b.collisionFree??1).toFixed(2)}, aperture=${b.requiredWidth.toFixed(3)}/${(+$('handAperture').value).toFixed(3)} m. 干渉/開口超過の最終姿勢は候補から除外済み。`:`候補なし: rejected=${(state.rejectedCandidates||[]).length}. collision/aperture制約を緩めるか物体・GNG設定を確認してください。`;if(viewerMode()==='grasp')renderAll();}
 function bar(name,val){return`<div class="barrow"><span>${name}</span><div class="bar"><div class="fill" style="width:${clamp(val,0,1)*100}%"></div></div><span>${Math.round(clamp(val,0,1)*100)}</span></div>`}
 // v253 projection: Z is the vertical/up axis. The table plane remains horizontal,
 // and bottles/cups stand in the same upward direction as the tabletop scene.
@@ -4674,7 +4629,6 @@ function loadEmbeddedRules(){const el=document.getElementById('embedded-fuzzy-ru
 function resetView(){state.rot={x:0.58,y:0.78};state.zoom=2.35;state.pan={x:0,y:0};renderAll();}
 function setViewTool(tool){state.viewTool=tool;document.querySelectorAll('[data-view-tools] button[data-tool]').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));}
 function viewerPanelClass(panel){
-  if(panel==='info')return'info-open';
   if(panel==='play')return'play-open';
   if(panel==='layers')return'layers-open';
   if(panel==='robot')return'robot-open';
@@ -4682,7 +4636,7 @@ function viewerPanelClass(panel){
 }
 function closeViewerPopup(wrap){
   if(!wrap)return;
-  ['info-open','play-open','tools-open','layers-open','robot-open'].forEach(c=>wrap.classList.remove(c));
+  ['play-open','tools-open','layers-open','robot-open'].forEach(c=>wrap.classList.remove(c));
   const tabs=wrap.querySelector('[data-view-tabs]');
   if(tabs)tabs.querySelectorAll('[data-panel-toggle]').forEach(b=>b.classList.remove('active'));
 }
@@ -4807,7 +4761,7 @@ function setupViewerTabs(){
     document.addEventListener('click',e=>{
       if(!viewerOutsideClickShouldClose(e))return;
       document.querySelectorAll('.canvaswrap').forEach(wrap=>{
-        const active=wrap.classList.contains('info-open')||wrap.classList.contains('play-open')||wrap.classList.contains('tools-open')||wrap.classList.contains('layers-open')||wrap.classList.contains('robot-open');
+        const active=wrap.classList.contains('play-open')||wrap.classList.contains('tools-open')||wrap.classList.contains('layers-open')||wrap.classList.contains('robot-open');
         if(!active)return;
         closeViewerPopup(wrap);
       });
@@ -6509,17 +6463,7 @@ function robotRenderStatusText(){
   const layer=state.robotGl.layers.get('viewTopo');
   return layer?'WebGL robot layer':'WebGL ready';
 }
-function renderAll(){const mode=viewerMode();render('viewTopo',mode==='grasp');$('topoOverlay').textContent=state.points.length?`Viewer: ${viewerMode()==='grasp'?'Grasp / 把持姿勢':'Mapping / 点群・GNG'}
-${labelOf(state.sample)}
-points=${state.points.length}, GNG nodes=${state.nodes.length}, edges=${state.edges.length}
-Template: ${state.objectTemplate?`${state.objectTemplate.display_name} / nodes=${state.objectTemplate.gng.nodes.length}, edges=${state.objectTemplate.gng.edges.length}`:'none'}
-defect: hole ${Math.round(+$('holeRatio').value*100)}%, missing ${Math.round(+$('missingRatio').value*100)}%, outlier ${Math.round(+$('outlierRatio').value*100)}%
-acquisition: ${$('motionPattern').selectedOptions[0].textContent}, jitter=${(+$('motionAmp').value).toFixed(4)} m, scan=${(+$('motionHz').value).toFixed(1)} Hz
-GNG mode: ${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / alg=${gngAlgorithmLabel()}${state.gng&&state.gng.mode==='offline'?`, offline training points=${(state.gng.trainingPoints||[]).length}`:''}
-Point color: ${pointColorMode()==='heatmap'?`heatmap / axis=${heatmapAxis()}`:'semantic label'}
-Timing: point Δt=${fmtMs(configuredPointPeriodMs())} ms, GNG Δt=${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'} ms
-Robot render: ${robotRenderStatusText()}${state.stlError?` (${state.stlError})`:''}
-Drag: orbit / Shift or Pan mode: translate / Wheel or pinch: zoom`:'No point cloud yet.';updateViewerTimingPanels();}
+function renderAll(){render('viewTopo',viewerMode()==='grasp');}
 
 function objectScores(){
   const sample=state.sample||$('sampleType')?.value||'mug';
@@ -7148,7 +7092,7 @@ function setGngPlaying(v){
   }
   v312StopRealtimeGng();
 }
-function updateHud(){const ptxt=state.pointPlaying?'3D点群停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
+function updateHud(){const ptxt=state.pointPlaying?'3D点群停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg)}
 function syncNumberPair(rangeId,numId,cb){const r=$(rangeId),n=$(numId);if(!r||!n)return;const applyFromRange=()=>{n.value=r.value;if(cb)cb();};const applyFromNumber=()=>{let v=clamp(+n.value||+r.value,+r.min,+r.max);r.value=v;n.value=v;if(cb)cb();};r.addEventListener('input',applyFromRange);n.addEventListener('input',applyFromNumber);applyFromRange();}
 function setup_point_pose_controls(){
   const pose_axes=['x','y','z','roll_deg','pitch_deg','yaw_deg'];
@@ -7449,8 +7393,6 @@ function loop(now){
     catch(e){ console.error('Realtime render failed.',e); reportGngRuntimeError('renderAll',e); }
     try{ updateCoreMetricsOnly(); updateHud(); }
     catch(e){ console.error('Realtime HUD update failed.',e); reportGngRuntimeError('hud',e); }
-  }else{
-    updateViewerTimingPanels();
   }
   const active=!!(state.pointPlaying||state.gngPlaying||(state.bundleFlow&&state.bundleFlow.active)||state.ikMotion||(state.robotTrajectory&&state.robotTrajectory.active));
   if(active) requestAnimationFrame(loop);
