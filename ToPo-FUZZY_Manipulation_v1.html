@@ -887,7 +887,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>Defuzzification</label><select id="fzDefuzz"><option value="weighted_average">Weighted average / Sugeno singleton</option><option value="centroid_discrete">Discrete centroid</option><option value="max_membership">Max membership singleton</option></select></div>
               <div><label>Fallback</label><select id="fzFallback"><option value="classic">Classic weighted score</option><option value="zero">Zero score</option></select></div>
             </div></div>
-            <div class="fuzzy-editor-card"><h3>2. 入力特徴量の選択</h3><div id="fuzzyFeatureSelector" class="fuzzy-chip-list"></div><div class="fuzzy-small">選択した特徴量だけがルール条件の候補に出ます。特徴量値は各候補把持姿勢ごとに0〜1へ正規化して評価します。</div></div>
+            <div class="fuzzy-editor-card"><h3>2. 入力特徴量の選択</h3><div id="fuzzyFeatureSelector" class="fuzzy-chip-list"></div></div>
             <div class="fuzzy-editor-card"><h3>3. 把持推定評価指標</h3><div id="fuzzyEvaluationMetricSelector" class="fuzzy-chip-list evaluation-metric-selector"><span class="fuzzy-small">評価指標は未受信です。</span></div><div class="fuzzy-small">ROS / rosbagから認識した指標を選択すると、Membership Functionの入力候補として有効になります。</div></div>
             <div class="fuzzy-editor-card"><h3>4. 言語ラベル / Membership Function</h3><div class="fuzzy-mf-form">
               <div><label>Input feature</label><select id="fzMfFeature"></select></div><div><label>Label name</label><input id="fzMfLabel" type="text" value="High"></div><div><label>MF shape</label><select id="fzMfShape"><option value="triangular">三角型 / triangular</option><option value="gaussian">ガウス型 / Gaussian</option><option value="trapezoid">台形型 / trapezoid</option><option value="rbf">ラジアル基底関数型 / RBF</option></select></div>
@@ -3744,17 +3744,17 @@ function applySemanticGraspFeatures(c){
 }
 // 修正必要
 const FUZZY_FEATURES=[
-{key:'aperture_fit',name:'開口適合度 / aperture fit',prop:'apertureFit'},
-{key:'contact_depth',name:'接触奥行き / contact depth',prop:'depthFit'},
-{key:'handle_likeness',name:'持ち手らしさ / handle likeness',prop:'handleFit'},
-{key:'topological_density',name:'トポロジカル密度 / topology density',prop:'density'},
-{key:'topology_safe',name:'safe面支持 / safe surface support',prop:'topologySafe'},
-{key:'topology_unknown',name:'unknown物体表面支持 / unknown object-surface support',prop:'topologyUnknown'},
-{key:'topology_wall',name:'wall危険度 / wall risk',prop:'topologyWall'},
-{key:'topology_default',name:'default不確実度 / default uncertainty',prop:'topologyDefault'},
-{key:'height_fit',name:'高さ適合度 / height fit',prop:'heightFit'},
-{key:'approach_preference',name:'アプローチ選好 / approach preference',prop:'preference'},
-{key:'collision_free',name:'衝突自由度 / collision free',prop:'collisionFree'}];
+{key:'aperture_fit',name:'開口適合度',prop:'apertureFit'},
+{key:'contact_depth',name:'接触奥行き',prop:'depthFit'},
+{key:'handle_likeness',name:'持ち手らしさ',prop:'handleFit'},
+{key:'topological_density',name:'トポロジカル密度',prop:'density'},
+{key:'topology_safe',name:'safe面支持',prop:'topologySafe'},
+{key:'topology_unknown',name:'unknown物体表面支持',prop:'topologyUnknown'},
+{key:'topology_wall',name:'wall危険度',prop:'topologyWall'},
+{key:'topology_default',name:'default不確実度',prop:'topologyDefault'},
+{key:'height_fit',name:'高さ適合度',prop:'heightFit'},
+{key:'approach_preference',name:'アプローチ選好',prop:'preference'},
+{key:'collision_free',name:'衝突自由度',prop:'collisionFree'}];
 const EVALUATION_FEATURE_PREFIX='evaluation.';
 function v321EvaluationFeatureKey(metricId){return EVALUATION_FEATURE_PREFIX+String(metricId||'').trim()}
 function v321MetricSupported(def){return def&&def.value_type!=='string'}
