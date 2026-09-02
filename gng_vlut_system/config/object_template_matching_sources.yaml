@@ -1,6 +1,11 @@
 template_sources:
   # 個別読込対象
-  dataset_files: []
+  dataset_files:
+    - basket
+    - kettle
+    - milk_jug
+    - mug
+    - watering_can
   # 再帰読込対象フォルダ
   dataset_dirs: []
   # 再帰読込から除くフォルダ

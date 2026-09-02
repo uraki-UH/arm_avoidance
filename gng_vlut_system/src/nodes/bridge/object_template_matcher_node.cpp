@@ -11,6 +11,7 @@
 #include <fstream>
 #include <functional>
 #include <limits>
+#include <map>
 #include <memory>
 #include <queue>
 #include <stdexcept>
@@ -32,11 +33,12 @@ using json = nlohmann::json;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kMinShapePairScore = 0.55;
-constexpr std::size_t kMaxRefinementTemplateNum = 1U;
+constexpr std::size_t kMaxRefinementTemplateNum = 8U;
 constexpr std::size_t kMaxRetrievalCandidateNum = 8U;
 constexpr std::size_t kMaxTemplatesPerRetrievalKey = 4U;
 constexpr std::size_t kMaxNonplaneRetrievalNodeNum = 64U;
 constexpr std::size_t kMaxRetrievalNodeNum = 128U;
+constexpr std::size_t kMaxPendingSynchronizedFrameNum = 64U;
 constexpr int kNormalZBinNum = 12;
 constexpr int kRhoBinNum = 10;
 constexpr int kDegreeBinNum = 8;
@@ -1073,9 +1075,41 @@ private:
     }
   }
 
-  void onPlaneClusters(const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr plane_clusters)
+  template <typename MessagePointer>
+  static void limitPendingFrames(std::map<std::uint32_t, MessagePointer> &pending_messages)
+  {
+    while (pending_messages.size() > kMaxPendingSynchronizedFrameNum) {
+      pending_messages.erase(pending_messages.begin());
+    }
+  }
+
+  void evaluateSynchronizedEnvironment(
+    const ais_gng_msgs::msg::TopologicalMap::SharedPtr &environment,
+    const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr &plane_clusters)
   {
     latest_plane_clusters_ = plane_clusters;
+    const auto id_to_index = buildIdToIndex(*environment);
+    const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
+    const auto environment_neighbors = buildNeighbors(environment->nodes.size(), environment_edges);
+    for (const std::size_t template_index :
+      selectRefinementTemplateIndices(*environment, environment_neighbors))
+    {
+      activateTemplate(template_index);
+      evaluateActiveTemplate(environment, environment_edges);
+    }
+  }
+
+  void onPlaneClusters(const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr plane_clusters)
+  {
+    const auto environment = pending_environment_maps_.find(plane_clusters->frame_number);
+    if (environment != pending_environment_maps_.end()) {
+      const auto synchronized_environment = environment->second;
+      pending_environment_maps_.erase(environment);
+      evaluateSynchronizedEnvironment(synchronized_environment, plane_clusters);
+      return;
+    }
+    pending_plane_clusters_[plane_clusters->frame_number] = plane_clusters;
+    limitPendingFrames(pending_plane_clusters_);
   }
 
   static std::vector<double> sampleTolerance(double tolerance_deg, double step_deg, bool enable)
@@ -1138,15 +1172,15 @@ private:
     if (environment->nodes.empty()) {
       return;
     }
-    const auto id_to_index = buildIdToIndex(*environment);
-    const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
-    const auto environment_neighbors = buildNeighbors(environment->nodes.size(), environment_edges);
-    for (const std::size_t template_index :
-      selectRefinementTemplateIndices(*environment, environment_neighbors))
-    {
-      activateTemplate(template_index);
-      evaluateActiveTemplate(environment, environment_edges);
+    const auto plane_clusters = pending_plane_clusters_.find(environment->frame_number);
+    if (plane_clusters != pending_plane_clusters_.end()) {
+      const auto synchronized_plane_clusters = plane_clusters->second;
+      pending_plane_clusters_.erase(plane_clusters);
+      evaluateSynchronizedEnvironment(environment, synchronized_plane_clusters);
+      return;
     }
+    pending_environment_maps_[environment->frame_number] = environment;
+    limitPendingFrames(pending_environment_maps_);
   }
 
   void evaluateActiveTemplate(
@@ -1948,6 +1982,8 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr environment_subscription_;
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr plane_clusters_subscription_;
   ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_plane_clusters_;
+  std::map<std::uint32_t, ais_gng_msgs::msg::TopologicalMap::SharedPtr> pending_environment_maps_;
+  std::map<std::uint32_t, ais_gng_msgs::msg::PlaneClusterArray::SharedPtr> pending_plane_clusters_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 };
 
