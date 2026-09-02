@@ -313,8 +313,10 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-confirm-table{display:grid;gap:8px;margin-top:10px}
 .fuzzy-confirm-row{display:grid;grid-template-columns:70px minmax(0,1fr) 60px minmax(150px,.35fr) 70px;gap:8px;align-items:center;padding:9px 10px;border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);font-size:12px}
 .fuzzy-confirm-head{color:#93c5fd;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
-.fuzzy-if-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.fuzzy-if-chip{display:inline-flex;gap:5px;align-items:center;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.8);padding:4px 8px;font-size:11px}
+.fuzzy-if-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.fuzzy-if-chip{display:inline-flex;gap:5px;align-items:center;min-width:0;max-width:100%;border:1px solid rgba(148,163,184,.28);border-radius:999px;background:rgba(30,41,59,.8);padding:4px 8px;font-size:11px;overflow:hidden}
+.fuzzy-if-text{display:flex;flex:0 1 100%;flex-wrap:wrap;align-items:center;justify-content:center;gap:5px;min-width:0;width:100%;text-align:center}
+.fuzzy-if-chip .var,.fuzzy-if-chip .lbl{min-width:0;flex:0 1 auto;overflow-wrap:anywhere;word-break:break-word;white-space:normal}
 .fuzzy-if-chip .var{color:#93c5fd;font-weight:900}
 .fuzzy-if-chip .lbl{color:#fff;font-weight:900}
 .fuzzy-if-chip .not{color:#fca5a5;font-weight:900}
@@ -333,7 +335,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-condition-block .fuzzy-if-chip{max-width:100%;overflow:hidden}
 .fuzzy-condition-block.selected .fuzzy-if-chip{border-radius:12px!important;background:rgba(30,41,59,.92)!important;box-shadow:0 0 0 1px rgba(0,255,0,.28) inset!important}
 .fuzzy-condition-block.selected .fuzzy-inline-mf-editor{width:100%;min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;border-radius:14px;background:rgba(2,6,23,.78)}
-.fuzzy-confirm-mf-svg{display:block;width:min(260px,100%);height:82px;overflow:hidden;border-radius:8px;margin-top:5px;background:rgba(2,6,23,.58);border:1px solid rgba(148,163,184,.22);pointer-events:none}
+.fuzzy-confirm-mf-svg{display:block;width:min(260px,100%);min-width:0;flex:1 1 100%;height:82px;overflow:hidden;border-radius:8px;margin-top:5px;background:rgba(2,6,23,.58);border:1px solid rgba(148,163,184,.22);pointer-events:none}
 .fuzzy-inline-mf-editor{flex:1 1 100%;width:100%;min-width:min(560px,100%);margin-top:8px;border:1px solid rgba(0,255,0,.34);border-radius:14px;background:rgba(2,6,23,.68);padding:10px;cursor:default}
 .fuzzy-inline-mf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-bottom:8px}
 .fuzzy-inline-mf-title{color:#00ff00;font-size:13px;font-weight:950;line-height:1.25}
@@ -390,6 +392,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .topo-mf-chip b{font-size:10px;color:#93c5fd}
 .topo-mf-chip span{font-size:11px;color:#fff;font-weight:900}
 .topo-mf-svg{width:100%;height:34px;border-radius:6px;background:rgba(2,6,23,.58)}
+.fuzzy-if-chip .fuzzy-confirm-mf-svg{width:100%;height:112px;border:0;border-radius:0;background:transparent}
 .topo-and{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.08em}
 .node-label-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .node-label-legend .chip i{width:16px;height:10px;border-radius:2px}
@@ -488,7 +491,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
   .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
   .canvaswrap.robot-open .viewer-robot-tf-panel{top:48px;left:8px;right:8px;max-width:none}
-  .fuzzy-confirm-mf-svg{width:100%!important;height:78px!important}
+  .fuzzy-if-chip .fuzzy-confirm-mf-svg{width:100%!important;height:100px!important}
   .fuzzy-inline-mf-preview svg{height:138px!important}
   .fuzzy-inline-mf-editor{min-width:0}
   .fuzzy-inline-mf-head,.fuzzy-inline-mf-grid{grid-template-columns:1fr}
@@ -3935,7 +3938,6 @@ function mfSvg(mf,opt={}){
     axis += `<line x1="${ml}" y1="${mt}" x2="${ml}" y2="${H-mb}" stroke="rgba(148,163,184,.55)" stroke-width="1"/>`;
     axis += xt.map(x=>`<g><line x1="${sx(x)}" y1="${sy(0)}" x2="${sx(x)}" y2="${sy(0)+4}" stroke="rgba(148,163,184,.55)"/><text x="${sx(x)}" y="${H-6}" text-anchor="middle" fill="#94a3b8" font-size="8">${x.toFixed(x===0||x===1?0:2).replace(/0$/,'')}</text></g>`).join('');
     axis += yt.map(y=>`<g><line x1="${ml-4}" y1="${sy(y)}" x2="${ml}" y2="${sy(y)}" stroke="rgba(148,163,184,.55)"/><text x="${ml-6}" y="${sy(y)+3}" text-anchor="end" fill="#94a3b8" font-size="8">${y}</text></g>`).join('');
-    axis += `<text x="${ml}" y="11" fill="#bfdbfe" font-size="9">${htmlEscape(opt.feature||'feature')} : ${htmlEscape(opt.label||'MF')}</text>`;
     axis += `<text x="${W-mr}" y="11" text-anchor="end" fill="#94a3b8" font-size="8">x [-]</text>`;
     axis += `<text x="4" y="${mt+4}" fill="#94a3b8" font-size="8">μ</text>`;
   }
@@ -7419,7 +7421,7 @@ function loop(now){
 
 function renderFuzzyEditor(){const model=ensureFuzzyModel();v321SyncEvaluationMetricFeatures(false);const featureBox=$('fuzzyFeatureSelector');if(!featureBox)return;featureBox.innerHTML='';FUZZY_FEATURES.forEach(f=>{const fd=model.features[f.key];const lab=document.createElement('label');lab.className='fuzzy-chip';lab.innerHTML=`<input type="checkbox" ${fd&&fd.enabled!==false?'checked':''} data-fz-feature="${f.key}"><b>${f.key}</b> ${f.name}`;featureBox.appendChild(lab)});$('fzAndMethod').value=model.methods.and;$('fzOrMethod').value=model.methods.or;$('fzImplication').value=model.methods.implication;$('fzAggregation').value=model.methods.aggregation;$('fzDefuzz').value=model.methods.defuzz;$('fzFallback').value=model.methods.fallback;refreshFuzzyFeatureSelects();renderMfList();renderOutputList();renderRuleList();renderRuleConfirm();renderLiveMfEditor();updateRuleJson()}
 function refreshFuzzyFeatureSelects(){const model=ensureFuzzyModel(),select=$('fzMfFeature');if(!select)return;const current=select.value;select.innerHTML=fuzzyFeatureDefinitions().filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${htmlEscape(f.key)}">${htmlEscape(f.key)} — ${htmlEscape(f.name)}</option>`).join('');if([...select.options].some(option=>option.value===current))select.value=current}
-function renderMfList(){const model=ensureFuzzyModel(),box=$('fuzzyMfList');if(!box)return;const fkey=$('fzMfFeature').value||FUZZY_FEATURES[0].key;if(!$('fzMfFeature').value)$('fzMfFeature').value=fkey;const fd=model.features[fkey]||{labels:{}};box.innerHTML='';Object.entries(fd.labels||{}).forEach(([name,mf])=>{const row=document.createElement('div');row.className='fuzzy-mf-row';row.innerHTML=`<b>${name}</b><span>${mf.shape}</span><code>${(mf.params||[]).map(v=>(+v).toFixed(2)).join(', ')}</code><button data-mf-edit="${name}">編集</button>`;box.appendChild(row)});box.querySelectorAll('[data-mf-edit]').forEach(btn=>btn.onclick=()=>{const name=btn.dataset.mfEdit,mf=fd.labels[name];$('fzMfLabel').value=name;$('fzMfShape').value=mf.shape;['A','B','C','D'].forEach((k,i)=>{$('fzMf'+k).value=(mf.params||[])[i]??0})})}
+function renderMfList(){const model=ensureFuzzyModel(),box=$('fuzzyMfList');if(!box)return;const fkey=$('fzMfFeature').value||FUZZY_FEATURES[0].key;if(!$('fzMfFeature').value)$('fzMfFeature').value=fkey;const fd=model.features[fkey]||{labels:{}};box.innerHTML='';Object.entries(fd.labels||{}).forEach(([name,mf])=>{const row=document.createElement('div');row.className='fuzzy-mf-row';row.innerHTML=`<b>${name}</b><span>${mf.shape}</span><code>${(mf.params||[]).map(v=>(+v).toFixed(2)).join(', ')}</code>`;box.appendChild(row)})}
 function renderOutputList(){const model=ensureFuzzyModel(),box=$('fuzzyOutputList');if(!box)return;box.innerHTML='';Object.entries(model.outputs||{}).forEach(([name,o])=>{const row=document.createElement('div');row.className='fuzzy-output-row2';row.innerHTML=`<b>${name}</b><span>${o.value}</span><button data-out-edit="${name}">編集</button>`;box.appendChild(row)});box.querySelectorAll('[data-out-edit]').forEach(btn=>btn.onclick=()=>{const name=btn.dataset.outEdit,o=model.outputs[name];$('fzOutLabel').value=name;$('fzOutValue').value=o.value;$('fzOutMeaning').value=o.meaning||''})}
 function condEditorHtml(rule,ci,cond){const model=ensureFuzzyModel(),current=model.features[cond.feature];let fopts=fuzzyFeatureDefinitions().filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${htmlEscape(f.key)}" ${cond.feature===f.key?'selected':''}>${htmlEscape(f.key)}</option>`).join('');if(current&&current.enabled===false)fopts=`<option value="${htmlEscape(cond.feature)}" selected disabled>${htmlEscape(cond.feature)} (OFF)</option>`+fopts;const labels=Object.keys((current||{}).labels||{});const lopts=labels.map(l=>`<option value="${htmlEscape(l)}" ${cond.label===l?'selected':''}>${htmlEscape(l)}</option>`).join('');return `<div class="fuzzy-cond-grid" data-cond-index="${ci}"><div><label>connector</label><select data-cond-field="connector"><option value="AND" ${cond.connector!=='OR'?'selected':''}>AND</option><option value="OR" ${cond.connector==='OR'?'selected':''}>OR</option></select></div><div><label>input</label><select data-cond-field="feature">${fopts}</select></div><div><label>label</label><select data-cond-field="label">${lopts}</select></div><div><label>NOT</label><select data-cond-field="not"><option value="0" ${!cond.not?'selected':''}>no</option><option value="1" ${cond.not?'selected':''}>yes</option></select></div><button data-cond-delete="${ci}">削除</button></div>`}
 function renderRuleList(){const model=ensureFuzzyModel(),box=$('fuzzyRuleList');if(!box)return;box.innerHTML='';const outOpts=Object.keys(model.outputs||{}).map(o=>`<option value="${o}">${o}</option>`).join('');model.rules.forEach((r,ri)=>{const card=document.createElement('div');card.className='fuzzy-rule-card '+(!r.active?'inactive':'');card.dataset.ruleIndex=ri;card.innerHTML=`<div class="fuzzy-rule-card-head"><input data-rule-field="active" type="checkbox" ${r.active?'checked':''}><input data-rule-field="name" value="${r.name||r.id}"><button data-rule-dup="${ri}">複製</button><button data-rule-del="${ri}">削除</button></div><div class="fuzzy-rule-card-title">${r.id}: IF</div><div class="rule-conds">${(r.conditions||[]).map((c,i)=>condEditorHtml(r,i,c)).join('')}</div><div class="fuzzy-actions"><button data-rule-addcond="${ri}">条件追加</button></div><div class="fuzzy-rule-output-grid"><div><label>THEN output</label><select data-rule-field="output">${outOpts}</select></div><div><label>weight</label><input data-rule-field="weight" type="number" min="0" max="1" step="0.05" value="${r.weight??1}"></div><div><label>rule id</label><input data-rule-field="id" value="${r.id}"></div></div>`;box.appendChild(card);card.querySelector('[data-rule-field="output"]').value=r.output});box.querySelectorAll('.fuzzy-rule-card').forEach(card=>{const ri=+card.dataset.ruleIndex;card.querySelectorAll('[data-rule-field]').forEach(el=>{el.onchange=()=>{const r=model.rules[ri];const f=el.dataset.ruleField;if(f==='active')r.active=el.checked;else if(f==='weight')r.weight=clamp(+el.value||0,0,1);else r[f]=el.value;renderRuleList();renderRuleConfirm();updateRuleJson()}});card.querySelectorAll('[data-cond-field]').forEach(el=>{el.onchange=()=>{const ci=+el.closest('[data-cond-index]').dataset.condIndex;const cond=model.rules[ri].conditions[ci];const f=el.dataset.condField;cond[f]=f==='not'?el.value==='1':el.value;if(f==='feature'){const labs=Object.keys((model.features[cond.feature]||{}).labels||{});cond.label=labs[0]||''}renderRuleList();renderRuleConfirm();updateRuleJson()}})});box.querySelectorAll('[data-rule-addcond]').forEach(b=>b.onclick=()=>{const r=model.rules[+b.dataset.ruleAddcond];const f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false);const labs=Object.keys((model.features[f.key]||{}).labels||{});r.conditions.push({feature:f.key,label:labs[0]||'High',connector:'AND'});renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-cond-delete]').forEach(b=>b.onclick=()=>{const card=b.closest('.fuzzy-rule-card'),ri=+card.dataset.ruleIndex;model.rules[ri].conditions.splice(+b.dataset.condDelete,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-del]').forEach(b=>b.onclick=()=>{model.rules.splice(+b.dataset.ruleDel,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-dup]').forEach(b=>b.onclick=()=>{const src=JSON.parse(JSON.stringify(model.rules[+b.dataset.ruleDup]));src.id='R'+(model.rules.length+1);src.name=(src.name||'rule')+' copy';model.rules.splice(+b.dataset.ruleDup+1,0,src);renderRuleList();renderRuleConfirm();updateRuleJson()})}
@@ -7456,7 +7458,7 @@ function renderRuleConfirm(){
       const svg=mf?mfSvg(mf,{className:'fuzzy-confirm-mf-svg fuzzy-mf-axis-svg',data:{rule:ri,cond:ci},axes:true,feature:c.feature,label:c.label}):'';
       const editor=(selected&&mf)?inlineRuleMfEditorHtml(ruleMfAt(ri,ci)):'';
       const connector=ci?`<span class="fuzzy-connector">${htmlEscape(c.connector||'AND')}</span>`:'';
-      return `${connector}<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1"><div class="fuzzy-if-chip editable-mf ${selected?'selected':''} ${active?'':'inactive'}" data-rule-index="${ri}" data-cond-index="${ci}" title="${active?'クリックして条件部ファジィ集合をその場で編集':'評価指標がOFFのため推論から除外'}"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${active?'':'<span class="not">OFF</span>'}${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span>${svg}</div>${editor}</div>`;
+      return `${connector}<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1"><div class="fuzzy-if-chip editable-mf ${selected?'selected':''} ${active?'':'inactive'}" data-rule-index="${ri}" data-cond-index="${ci}" title="${active?'クリックして条件部ファジィ集合をその場で編集':'評価指標がOFFのため推論から除外'}"><span class="fuzzy-if-text"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${active?'':'<span class="not">OFF</span>'}${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span></span>${svg}</div>${editor}</div>`;
     }).join('');
     row.innerHTML=`<div class="fuzzy-confirm-head">${r.active?'ON':'OFF'} ${htmlEscape(r.id)}</div><div class="fuzzy-if-chips">${chips}</div><div class="fuzzy-confirm-head">THEN</div><div><b>${htmlEscape(r.output)}</b> <span class="fuzzy-small">w=${(+r.weight||0).toFixed(2)}</span></div><div class="fuzzy-small">${htmlEscape(r.name||'')}</div>`;
     box.appendChild(row);
@@ -7464,6 +7466,22 @@ function renderRuleConfirm(){
   box.querySelectorAll('.editable-mf').forEach(el=>{el.onclick=e=>{if(e.target.closest('.fuzzy-inline-mf-editor'))return;selectRuleConfirmMf(+el.dataset.ruleIndex,+el.dataset.condIndex)}});
   bindInlineRuleMfEditors(box);
   installRuleConfirmMfTapDelegation();
+  installRuleConfirmOutsideClick();
+}
+// ルール確認画面の外側クリックによる編集解除
+function installRuleConfirmOutsideClick(){
+  const root=document.documentElement;
+  if(!root||root.dataset.ruleConfirmOutsideClick==='1')return;
+  root.dataset.ruleConfirmOutsideClick='1';
+  document.addEventListener('pointerdown',event=>{
+    const editor=document.querySelector('#fuzzyRuleConfirm .fuzzy-inline-mf-editor');
+    if(!editor||editor.contains(event.target))return;
+    if(event.target.closest('#fuzzyRuleConfirm .editable-mf'))return;
+    if(!state.liveMfSel)return;
+    state.liveMfSel=null;
+    renderRuleConfirm();
+    renderLiveMfEditor();
+  },true);
 }
 function installRuleConfirmMfTapDelegation(){
   const box=$('fuzzyRuleConfirm');
