@@ -306,8 +306,12 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-output-row2{grid-template-columns:minmax(120px,1fr) 90px auto}
 .fuzzy-rule-list{display:grid;gap:8px}
 .fuzzy-rule-list.is-collapsed{display:none}
+.fuzzy-rule-structure-card.is-collapsed>.fuzzy-rule-structure-body{display:none}
 .fuzzy-rule-list-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fuzzy-rule-list-heading button{width:30px;height:28px;padding:0;text-align:center;line-height:1;font-size:16px}
+.fuzzy-confirm-card.is-collapsed>.fuzzy-rule-confirm-body{display:none}
+.fuzzy-confirm-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fuzzy-confirm-heading button{width:30px;height:28px;padding:0;text-align:center;line-height:1;font-size:16px}
 .fuzzy-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(15,23,42,.78);padding:10px}
 .fuzzy-rule-card.inactive{opacity:.58}
 .fuzzy-rule-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:8px;align-items:center;margin-bottom:8px}
@@ -675,8 +679,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Table size [m]</label><input id="tableSize" type="range" min="0.20" max="0.80" step="0.02" value="0.42"></div>
           <div><label>Table height [m]</label><input id="tableHeight" type="number" min="-0.05" max="0.08" step="0.005" value="0.000"></div>
           <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.25"></div>
-          <div class="section-title">GNG Learning Mode</div>
-          <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm" disabled><option value="wasm" selected>基幹GNG-WASM / C++ WebAssembly</option></select></div>
           <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">オクルージョンなし表面点群</option><option value="imported_frames">取り込みフレーム</option></select></div>
@@ -903,8 +905,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="fuzzy-param-grid"><div><label>a</label><input id="fzMfA" type="number" min="0" max="1" step="0.01" value="0.55"></div><div><label>b / center</label><input id="fzMfB" type="number" min="0" max="1" step="0.01" value="0.78"></div><div><label>c / sigma</label><input id="fzMfC" type="number" min="0" max="1" step="0.01" value="1.00"></div><div><label>d / radius</label><input id="fzMfD" type="number" min="0" max="1" step="0.01" value="1.00"></div></div>
             </div><div class="fuzzy-actions"><button id="fzAddMfBtn" data-action-kind="data">ラベル追加 / 更新</button><button id="fzDeleteMfBtn" class="warn">選択ラベル削除</button></div><div id="fuzzyMfList" class="fuzzy-mf-table"></div></div>
             <div class="fuzzy-editor-card"><h3>5. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" data-action-kind="data">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
-            <div class="fuzzy-editor-card full"><h3 class="fuzzy-rule-list-heading"><span>6. ルール構造エディタ</span><button id="fuzzyRuleListToggle" type="button" aria-expanded="true" aria-label="ルール一覧を折りたたむ" title="ルール一覧を折りたたむ">▲</button></h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" data-action-kind="data">ルール追加</button><button id="fzApplyRulesBtn" data-action-kind="run">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn" data-action-kind="data">JSONへ書き出し</button><button id="fzImportRulesBtn" data-action-kind="load">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
-            <div class="fuzzy-editor-card full"><h3>7. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" data-action-kind="data">確認画面を更新</button><button id="fzDownloadRulesBtn" data-action-kind="data">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
+            <div class="fuzzy-editor-card full fuzzy-rule-structure-card" id="fuzzyRuleStructurePanel"><h3 class="fuzzy-rule-list-heading"><span>6. ルール構造エディタ</span><button id="fuzzyRuleListToggle" type="button" aria-expanded="true" aria-label="ルール構造エディタを折りたたむ" title="ルール構造エディタを折りたたむ">▲</button></h3><div id="fuzzyRuleStructureBody" class="fuzzy-rule-structure-body"><div class="fuzzy-editor-note"></div><div class="fuzzy-actions"><button id="fzAddRuleBtn" data-action-kind="data">ルール追加</button><button id="fzApplyRulesBtn" data-action-kind="run">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn" data-action-kind="data">JSONへ書き出し</button><button id="fzImportRulesBtn" data-action-kind="load">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div></div>
+            <div class="fuzzy-editor-card full fuzzy-confirm-card" id="fuzzyRuleConfirmPanel"><h3 class="fuzzy-confirm-heading"><span>7. ルール確認画面 / JSON</span><button id="fuzzyRuleConfirmToggle" type="button" aria-expanded="true" aria-label="ルール確認画面を折りたたむ" title="ルール確認画面を折りたたむ">▲</button></h3><div id="fuzzyRuleConfirmBody" class="fuzzy-rule-confirm-body"><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" data-action-kind="data">確認画面を更新</button><button id="fzDownloadRulesBtn" data-action-kind="data">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div></div>
             <div class="fuzzy-editor-card full"><h3>8. 現在の候補に対するルール発火状況</h3><div id="fuzzyRuleDebug" class="fuzzy-rule-debug">No inference yet.</div></div>
           </div>
         </div>
@@ -1659,7 +1661,7 @@ function updateMovingPoints(){
   const pts=state.basePoints.map(p=>transformPoint(p,state.time)).filter(Boolean);
   state.points=v312ApplyDepthCameraVisibility(pts,state.time||0);
 }
-function gngMode(){const el=$('gngLearningMode');return el?el.value:'online'}
+function gngMode(){return 'online'}
 function gngAlgorithm(){return 'wasm'}
 function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
 function gngAlgorithmLabel(){return 'GNG-WASM'}
@@ -1675,12 +1677,10 @@ function updateGngDataSourceUi(){
   const fileEl=$('gngDataFile');
   const pointSourceEl=$('pointCloudSource');
   const samplesEl=$('gngSamplesPerFrame');
-  const modeEl=$('gngLearningMode');
   const algButtons=[...document.querySelectorAll('[data-gng-algorithm-buttons] button')];
   if(fileEl)fileEl.disabled=false;
   if(pointSourceEl)pointSourceEl.disabled=graphOnly;
   if(samplesEl)samplesEl.disabled=graphOnly;
-  if(modeEl)modeEl.disabled=graphOnly;
   algButtons.forEach(btn=>{btn.disabled=graphOnly;btn.title=graphOnly?'Graph-only mode':btn.title;});
   const play_btn=$('gngPlayBtn');
   if(play_btn){
@@ -3204,7 +3204,7 @@ function generate(){
   updateMetrics();renderAll();
   window.__topoFoundationPoseRosApi?.request_publish?.();
   const tableDesign=$('tableDesign')?$('tableDesign').value:'rect';
-  $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
+  $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Algorithm=${gngAlgorithmLabel()}。`;
 }
 function bbox(points){if(!points.length)return null;let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;for(const p of points){if(p.label==='outlier'||p.label==='table')continue;minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);minZ=Math.min(minZ,p.z);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);maxZ=Math.max(maxZ,p.z)}return{minX,minY,minZ,maxX,maxY,maxZ,cx:(minX+maxX)/2,cy:(minY+maxY)/2,cz:(minZ+maxZ)/2,sx:maxX-minX,sy:maxY-minY,sz:maxZ-minZ}}
 let GNG_WASM_EXPORTS=null;
@@ -3543,7 +3543,7 @@ async function runGngWasmAccelerated(run_token){
     ? buildOfflineBatchDataset()
     : v312GetGngWasmInputPoints();
   const wasmStatus=$('topoStatus');
-  if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, source=${point_cloud_source}, points=${pts.length}, mode=${mode}, alg=${variant}`;
+  if(wasmStatus) wasmStatus.textContent=`Running WASM GNG... backend=${wasmMode}, source=${point_cloud_source}, points=${pts.length}, alg=${variant}`;
   if(pts.length<2)return false;
   const maxNodes=+$('gngMaxNodes').value||400;
   const iters=+$('gngIters').value||12000;
@@ -3667,7 +3667,7 @@ async function runGng(){
   const backend=state.gng&&state.gng.backend?state.gng.backend:'基幹GNG-WASM';
   const nodeInterval=state.gng&&Number.isFinite(state.gng.node_interval)?`, node_interval=${state.gng.node_interval.toFixed(3)} m`:'';
   const nodeGrid=state.gng&&Number.isFinite(state.gng.node_grid)?`, node_grid=${state.gng.node_grid.toFixed(3)} m`:'';
-  $('topoStatus').textContent=`${mode} ${alg} complete. backend=${backend}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms${nodeInterval}${nodeGrid}. 1フレームあたり学習点数=${currentGngBatchSize()}。`;
+  $('topoStatus').textContent=`${alg} complete. backend=${backend}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms${nodeInterval}${nodeGrid}. 1フレームあたり学習点数=${currentGngBatchSize()}。`;
 }
 /* v298: fuzzy grasp candidate generation from topological map only */
 function topologyGraspNodesForFuzzy(){
@@ -7484,15 +7484,27 @@ function bindFuzzyRulePanelToggle(){
   };
 }
 function bindFuzzyRuleListToggle(){
-  const list=$('fuzzyRuleList'),toggle=$('fuzzyRuleListToggle');
-  if(!list||!toggle||toggle.dataset.bound==='1')return;
+  const panel=$('fuzzyRuleStructurePanel'),toggle=$('fuzzyRuleListToggle');
+  if(!panel||!toggle||toggle.dataset.bound==='1')return;
   toggle.dataset.bound='1';
   toggle.onclick=()=>{
-    const collapsed=list.classList.toggle('is-collapsed');
+    const collapsed=panel.classList.toggle('is-collapsed');
     toggle.textContent=collapsed?'▼':'▲';
     toggle.setAttribute('aria-expanded',String(!collapsed));
-    toggle.setAttribute('aria-label',collapsed?'ルール一覧を展開':'ルール一覧を折りたたむ');
-    toggle.title=collapsed?'ルール一覧を展開':'ルール一覧を折りたたむ';
+    toggle.setAttribute('aria-label',collapsed?'ルール構造エディタを展開':'ルール構造エディタを折りたたむ');
+    toggle.title=collapsed?'ルール構造エディタを展開':'ルール構造エディタを折りたたむ';
+  };
+}
+function bindFuzzyRuleConfirmToggle(){
+  const panel=$('fuzzyRuleConfirmPanel'),toggle=$('fuzzyRuleConfirmToggle');
+  if(!panel||!toggle||toggle.dataset.bound==='1')return;
+  toggle.dataset.bound='1';
+  toggle.onclick=()=>{
+    const collapsed=panel.classList.toggle('is-collapsed');
+    toggle.textContent=collapsed?'▼':'▲';
+    toggle.setAttribute('aria-expanded',String(!collapsed));
+    toggle.setAttribute('aria-label',collapsed?'ルール確認画面を展開':'ルール確認画面を折りたたむ');
+    toggle.title=collapsed?'ルール確認画面を展開':'ルール確認画面を折りたたむ';
   };
 }
 function ruleMfAt(ruleIndex,condIndex){
@@ -7558,6 +7570,7 @@ function installRuleConfirmOutsideClick(){
 function installRuleConfirmMfTapDelegation(){
   bindFuzzyRulePanelToggle();
   bindFuzzyRuleListToggle();
+  bindFuzzyRuleConfirmToggle();
   const box=$('fuzzyRuleConfirm');
   if(!box||box.dataset.v278MfTap==='1')return;
   box.dataset.v278MfTap='1';
@@ -7730,7 +7743,7 @@ function bindDataModeControls(){
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('fuzzy_grasp_run_btn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
-['gngLearningMode','gngAlgorithm','gngSamplesPerFrame'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
+['gngAlgorithm','gngSamplesPerFrame'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;resetGngRunState();if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
