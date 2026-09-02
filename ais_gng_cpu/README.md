@@ -58,7 +58,6 @@ nonplane_component_node:
 ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml input_topic:=/semantic_points
 ```
 
-- `/nonplane_components`: 残余連結成分ごとの`TopologicalMap`
-- `/nonplane_components/markers`: 成分node・成分内GNG edge・平面へのanchor edge
+- `/nonplane_components/markers`: 成分node・成分内GNG edge・平面へのanchor edgeを含む`MarkerArray`
 
 持ち手のように複数の平面クラスタを結ぶ成分は分割せず、各平面へのanchor edgeをすべて出力する。

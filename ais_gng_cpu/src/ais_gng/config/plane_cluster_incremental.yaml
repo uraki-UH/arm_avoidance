@@ -103,8 +103,7 @@ nonplane_component_node:
     # 既存GNG edgeで連結した成分として出力する最小node数。
     min_component_nodes: 2
 
-    # 連結成分TopologicalMap・可視化MarkerArray・計測値の出力先。
-    output_topic: /nonplane_components
+    # 可視化MarkerArrayと計測値の出力先。
     marker_topic: /nonplane_components/markers
     timing_topic: /nonplane_components/timing
 

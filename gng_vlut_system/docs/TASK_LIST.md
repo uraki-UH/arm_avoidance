@@ -39,7 +39,7 @@
 
    **現状と判断根拠**
 
-   1. `ais_gng`は`/topological_map`と`/plane_clusters`から、平面未所属nodeのGNG連結成分を`/nonplane_components`へ出力済み。
+   1. `ais_gng`は`/topological_map`と`/plane_clusters`から、平面未所属nodeのGNG連結成分を`/nonplane_components/markers`へ可視化出力済み。
    2. 同じ`basket`テンプレートでは、持ち手候補が16node、25内部edge、平面クラスタ2への15アンカーedgeを持つ成分として得られた。
    3. 環境20フレームでは、最大成分が9〜27node、8〜28内部edge、平面アンカーedgeが0〜2本と変動した。成分数、node数、edge数、アンカー数を単フレームの必須条件または反証条件にしてはならない。
    4. 形状比と法線二次モーメント固有値は部分観測の弱い加点特徴として利用可能。ただし環境最大成分の形状比は0.110〜0.713と変動するため、狭い一致範囲を要求しない。
@@ -53,7 +53,7 @@
 
    1. `ais_gng_msgs`へ`NonplaneComponentArray`、`NonplaneComponent`、`NonplanePlaneAnchor`を追加。
    2. `NonplaneComponentArray`には`header`、`frame_number`、元`TopologicalMap`のnode添字を使う`components`を格納。
-   3. `NonplaneComponent`には`id`、`node_indices`、`internal_edge_num`、`plane_anchors`を格納。表示用のコンパクト`TopologicalMap`は既存`/nonplane_components`として維持。
+   3. `NonplaneComponent`には`id`、`node_indices`、`internal_edge_num`、`plane_anchors`を格納。可視化は既存`/nonplane_components/markers`を使用。
    4. `NonplanePlaneAnchor`には`component_id`、`source_node_index`、`plane_node_index`、`plane_cluster_id`を格納。nodeの`id`ではなく元map配列の添字を使い、ID再採番への依存を除外。
    5. `nonplane_component_node`は新規の`/nonplane_component_features`を同一フレーム番号でpublish。`/nonplane_components/markers`は可視化専用のままとする。
    6. `object_template_matcher_node`は`nonplane_component_features_topic`を購読し、`/topological_map`、`/plane_clusters`、特徴配列のframe番号が一致したときだけ評価。

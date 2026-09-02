@@ -68,19 +68,16 @@ public:
     input_topic_ = declare_parameter<std::string>("input_topic", "/topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>(
       "plane_clusters_topic", "/plane_clusters");
-    output_topic_ = declare_parameter<std::string>(
-      "output_topic", "/nonplane_components");
     marker_topic_ = declare_parameter<std::string>(
-      "marker_topic", output_topic_ + "/markers");
+      "marker_topic", "/nonplane_components/markers");
     timing_topic_ = declare_parameter<std::string>(
-      "timing_topic", output_topic_ + "/timing");
+      "timing_topic", "/nonplane_components/timing");
     extractor_options_.min_component_nodes = static_cast<std::size_t>(
       std::max<std::int64_t>(1, declare_parameter<std::int64_t>("min_component_nodes", 2)));
     marker_scale_m_ = declare_parameter<double>("marker_scale_m", 0.012);
     anchor_line_width_m_ = declare_parameter<double>("anchor_line_width_m", 0.004);
 
     const auto qos = rclcpp::QoS(1).reliable().transient_local();
-    output_publisher_ = create_publisher<TopologicalMap>(output_topic_, qos);
     marker_publisher_ = create_publisher<MarkerArray>(marker_topic_, qos);
     timing_publisher_ = create_publisher<std_msgs::msg::Float64MultiArray>(
       timing_topic_, rclcpp::QoS(10).reliable());
@@ -99,9 +96,9 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Nonplane component extraction enabled: map=%s clusters=%s output=%s markers=%s min_nodes=%zu",
-      input_topic_.c_str(), plane_clusters_topic_.c_str(), output_topic_.c_str(),
-      marker_topic_.c_str(), extractor_options_.min_component_nodes);
+      "非平面成分抽出有効: map=%s clusters=%s markers=%s min_nodes=%zu",
+      input_topic_.c_str(), plane_clusters_topic_.c_str(), marker_topic_.c_str(),
+      extractor_options_.min_component_nodes);
   }
 
 private:
@@ -200,7 +197,6 @@ private:
       *latest_map_, *latest_plane_clusters_, extractor_options_);
     const auto markers = make_markers(*latest_map_, result);
     marker_publisher_->publish(markers);
-    output_publisher_->publish(result.map);
     last_published_frame_number_ = latest_map_->frame_number;
 
     const auto total_ms = std::chrono::duration<double, std::milli>(
@@ -215,14 +211,12 @@ private:
 
   std::string input_topic_;
   std::string plane_clusters_topic_;
-  std::string output_topic_;
   std::string marker_topic_;
   std::string timing_topic_;
   fuzzrobo::topological_plane::nonplane::extractor_options extractor_options_;
   double marker_scale_m_ = 0.012;
   double anchor_line_width_m_ = 0.004;
   std::uint32_t last_published_frame_number_ = std::numeric_limits<std::uint32_t>::max();
-  rclcpp::Publisher<TopologicalMap>::SharedPtr output_publisher_;
   rclcpp::Publisher<MarkerArray>::SharedPtr marker_publisher_;
   rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr timing_publisher_;
   rclcpp::Subscription<TopologicalMap>::SharedPtr map_subscription_;
