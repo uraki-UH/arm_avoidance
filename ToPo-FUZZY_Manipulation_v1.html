@@ -321,7 +321,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-if-chip .lbl{color:#fff;font-weight:900}
 .fuzzy-if-chip .not{color:#fca5a5;font-weight:900}
 .fuzzy-if-chip.inactive{opacity:.45}
-.fuzzy-connector{color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.1em}
+.fuzzy-connector{position:absolute;left:10px;top:0;z-index:2;transform:translateY(-50%);padding:0 4px;background:#020617;color:#00ff00;font-size:10px;font-weight:900;letter-spacing:.1em;line-height:1}
 .fuzzy-rule-debug{font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;white-space:pre-wrap;max-height:180px;overflow:auto}
 .fuzzy-small{font-size:11px;color:#94a3b8;line-height:1.45}
 #fuzzyLiveMfEditor{display:none!important}
@@ -330,7 +330,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-if-chip.editable-mf{cursor:pointer;user-select:none;transition:border-color .12s,background .12s,transform .12s;position:relative;align-items:flex-start;flex-wrap:wrap;max-width:100%}
 .fuzzy-if-chip.editable-mf:hover{border-color:#00ff00;background:rgba(47,95,31,.64);transform:translateY(-1px)}
 .fuzzy-if-chip.editable-mf.selected{border-color:#00ff00;background:rgba(47,95,31,.72);box-shadow:0 0 0 1px rgba(0,255,0,.28) inset}
-.fuzzy-condition-block{display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;min-width:0;vertical-align:top}
+.fuzzy-condition-block{position:relative;display:inline-flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:100%;min-width:0;vertical-align:top}
 .fuzzy-condition-block.selected{flex:1 1 100%;width:100%}
 .fuzzy-condition-block .fuzzy-if-chip{max-width:100%;overflow:hidden}
 .fuzzy-condition-block.selected .fuzzy-if-chip{border-radius:12px!important;background:rgba(30,41,59,.92)!important;box-shadow:0 0 0 1px rgba(0,255,0,.28) inset!important}
@@ -340,9 +340,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-inline-mf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-bottom:8px}
 .fuzzy-inline-mf-title{color:#00ff00;font-size:13px;font-weight:950;line-height:1.25}
 .fuzzy-inline-mf-meta{font-family:Consolas,Menlo,monospace;color:#bfdbfe;font-size:10px;white-space:pre-wrap;line-height:1.35;text-align:right}
-.fuzzy-inline-mf-grid{display:grid;grid-template-columns:minmax(180px,.38fr) minmax(280px,1fr);gap:10px;align-items:start}
-.fuzzy-inline-mf-preview{border:1px solid rgba(148,163,184,.22);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}
-.fuzzy-inline-mf-preview svg{width:100%;height:92px;border-radius:10px;background:rgba(2,6,23,.68)}
+.fuzzy-inline-mf-grid{display:block}
 .fuzzy-inline-mf-controls{display:grid;gap:8px}
 .fuzzy-inline-mf-shape-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center}
 .fuzzy-inline-mf-param-row{display:grid;grid-template-columns:58px minmax(0,1fr) 82px;gap:8px;align-items:center}
@@ -492,7 +490,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
   .canvaswrap.robot-open .viewer-robot-tf-panel{top:48px;left:8px;right:8px;max-width:none}
   .fuzzy-if-chip .fuzzy-confirm-mf-svg{width:100%!important;height:100px!important}
-  .fuzzy-inline-mf-preview svg{height:138px!important}
   .fuzzy-inline-mf-editor{min-width:0}
   .fuzzy-inline-mf-head,.fuzzy-inline-mf-grid{grid-template-columns:1fr}
   .fuzzy-inline-mf-meta{text-align:left}
@@ -7443,7 +7440,7 @@ function inlineRuleMfEditorHtml(s){
   const rows=[0,1,2,3].map(i=>`<div class="fuzzy-inline-mf-param-row"><label>${htmlEscape(labels[i])}</label><input type="range" min="0" max="1" step="0.001" value="${(+params[i]||0).toFixed(3)}" data-inline-mf-param="${i}"><input type="number" min="0" max="1" step="0.001" value="${(+params[i]||0).toFixed(3)}" data-inline-mf-param-num="${i}"></div>`).join('');
   return `<div class="fuzzy-inline-mf-editor" data-inline-editor="1" data-rule-index="${s.ruleIndex}" data-cond-index="${s.condIndex}">
     <div class="fuzzy-inline-mf-head"><div><div class="fuzzy-inline-mf-title">Inline MF Editor / その場で条件部を編集</div><div class="fuzzy-small">この図を見ながら、レバー操作と数値入力でリアルタイム変更します。</div></div><div class="fuzzy-inline-mf-meta">rule=${htmlEscape(s.rule.id)}\nfeature=${htmlEscape(s.feature)}\nlabel=${htmlEscape(s.label)}</div></div>
-    <div class="fuzzy-inline-mf-grid"><div class="fuzzy-inline-mf-preview"><label>Live preview</label><div data-inline-mf-preview>${mfSvg(s.mf,{className:'topo-mf-svg fuzzy-mf-axis-svg',axes:true,feature:s.feature,label:s.label})}</div></div><div class="fuzzy-inline-mf-controls"><div class="fuzzy-inline-mf-shape-row"><label>MF shape</label><select data-inline-mf-shape><option value="triangular">triangular</option><option value="gaussian">Gaussian</option><option value="trapezoid">trapezoid</option><option value="rbf">RBF</option></select></div>${rows}<div class="fuzzy-small">入力は即時に Rules Confirmation / JSON / 推論スコア / Viewer へ反映します。</div></div></div>
+    <div class="fuzzy-inline-mf-grid"><div class="fuzzy-inline-mf-controls"><div class="fuzzy-inline-mf-shape-row"><label>MF shape</label><select data-inline-mf-shape><option value="triangular">triangular</option><option value="gaussian">Gaussian</option><option value="trapezoid">trapezoid</option><option value="rbf">RBF</option></select></div>${rows}<div class="fuzzy-small">入力は即時に Rules Confirmation / JSON / 推論スコア / Viewer へ反映します。</div></div></div>
   </div>`;
 }
 function renderRuleConfirm(){
@@ -7458,7 +7455,7 @@ function renderRuleConfirm(){
       const svg=mf?mfSvg(mf,{className:'fuzzy-confirm-mf-svg fuzzy-mf-axis-svg',data:{rule:ri,cond:ci},axes:true,feature:c.feature,label:c.label}):'';
       const editor=(selected&&mf)?inlineRuleMfEditorHtml(ruleMfAt(ri,ci)):'';
       const connector=ci?`<span class="fuzzy-connector">${htmlEscape(c.connector||'AND')}</span>`:'';
-      return `${connector}<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1"><div class="fuzzy-if-chip editable-mf ${selected?'selected':''} ${active?'':'inactive'}" data-rule-index="${ri}" data-cond-index="${ci}" title="${active?'クリックして条件部ファジィ集合をその場で編集':'評価指標がOFFのため推論から除外'}"><span class="fuzzy-if-text"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${active?'':'<span class="not">OFF</span>'}${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span></span>${svg}</div>${editor}</div>`;
+      return `<div class="fuzzy-condition-block ${selected?'selected':''}" data-condition-block="1">${connector}<div class="fuzzy-if-chip editable-mf ${selected?'selected':''} ${active?'':'inactive'}" data-rule-index="${ri}" data-cond-index="${ci}" title="${active?'クリックして条件部ファジィ集合をその場で編集':'評価指標がOFFのため推論から除外'}"><span class="fuzzy-if-text"><span class="var">${htmlEscape(c.feature)}</span><span>is</span>${active?'':'<span class="not">OFF</span>'}${c.not?'<span class="not">NOT</span>':''}<span class="lbl">${htmlEscape(c.label)}</span></span>${svg}</div>${editor}</div>`;
     }).join('');
     row.innerHTML=`<div class="fuzzy-confirm-head">${r.active?'ON':'OFF'} ${htmlEscape(r.id)}</div><div class="fuzzy-if-chips">${chips}</div><div class="fuzzy-confirm-head">THEN</div><div><b>${htmlEscape(r.output)}</b> <span class="fuzzy-small">w=${(+r.weight||0).toFixed(2)}</span></div><div class="fuzzy-small">${htmlEscape(r.name||'')}</div>`;
     box.appendChild(row);
@@ -7516,8 +7513,6 @@ function updateInlineRuleMfDom(scope,cur){
   if(!cur)return;
   const params=cur.mf.params||[];
   scope.querySelectorAll('[data-inline-mf-param],[data-inline-mf-param-num]').forEach(el=>{const idx=+(el.dataset.inlineMfParam??el.dataset.inlineMfParamNum);if(Number.isFinite(idx))el.value=(+params[idx]||0).toFixed(3)});
-  const pv=scope.querySelector('[data-inline-mf-preview]');
-  if(pv)pv.innerHTML=mfSvg(cur.mf,{className:'topo-mf-svg fuzzy-mf-axis-svg',axes:true,feature:cur.feature,label:cur.label});
   const sel=`.fuzzy-confirm-mf-svg[data-rule="${cur.ruleIndex}"][data-cond="${cur.condIndex}"]`;
   document.querySelectorAll(sel).forEach(svg=>{svg.outerHTML=mfSvg(cur.mf,{className:'fuzzy-confirm-mf-svg fuzzy-mf-axis-svg',data:{rule:cur.ruleIndex,cond:cur.condIndex},axes:true,feature:cur.feature,label:cur.label})});
 }
