@@ -721,7 +721,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Table design / 机デザイン</label><select id="tableDesign"><option value="rect" selected>Rect desk / 長方形机</option><option value="round">Round table / 丸机</option><option value="lab">Lab desk / 実験机</option><option value="corner">Corner desk / コーナー机</option><option value="pedestal">Pedestal table / 台座テーブル</option></select></div>
           <div><label>Table size [m]</label><input id="tableSize" type="range" min="0.20" max="0.80" step="0.02" value="0.42"></div>
           <div><label>Table height [m]</label><input id="tableHeight" type="number" min="-0.05" max="0.08" step="0.005" value="0.000"></div>
-          <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.10"></div>
+          <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.25"></div>
           <div class="section-title">GNG Learning Mode</div>
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
@@ -1161,7 +1161,7 @@ function v297SetFastGngDefaults(){
     gng_training_hz:30,
     gng_visual_hz:10,
     densityPruneInterval:250,
-    tableDensity:0.10,
+    tableDensity:0.25,
     faceOpacity:0.020,
     faceOpacityNum:0.020,
     faceOpacityCap:0.030,
@@ -3632,48 +3632,13 @@ function v312WasmUpdatePoints(ex,flat){
     ex._free(ptr);
   }
 }
-function v312_build_local_graph_edges(nodes,node_interval){
-  if(!Array.isArray(nodes)||nodes.length<2)return[];
+function v312WasmGraphEdges(raw_edges,node_num){
   const edge_map=new Map();
-  const cell=0.020;
-  const max_dist=0.050;
-  const max_dist_sq=max_dist*max_dist;
-  const cell_range=Math.ceil(max_dist/cell);
-  const buckets=new Map();
-  const cell_key=(x,y,z)=>`${x}|${y}|${z}`;
-  const coords=nodes.map((node)=>({x:Math.floor(node.x/cell),y:Math.floor(node.y/cell),z:Math.floor(node.z/cell)}));
-  for(let i=0;i<coords.length;i++){
-    const c=coords[i],k=cell_key(c.x,c.y,c.z);
-    const bucket=buckets.get(k);
-    if(bucket)bucket.push(i);else buckets.set(k,[i]);
-  }
-  for(let i=0;i<nodes.length;i++){
-    const node=nodes[i],c=coords[i];
-    const nearest=[];
-    for(let dx=-cell_range;dx<=cell_range;dx++){
-      for(let dy=-cell_range;dy<=cell_range;dy++){
-        for(let dz=-cell_range;dz<=cell_range;dz++){
-          const bucket=buckets.get(cell_key(c.x+dx,c.y+dy,c.z+dz));
-          if(!bucket)continue;
-          for(const j of bucket){
-            if(j===i)continue;
-            const d_sq=dist2(node,nodes[j]);
-            if(d_sq>max_dist_sq)continue;
-            let pos=nearest.length;
-            while(pos>0&&d_sq<nearest[pos-1].d_sq)pos--;
-            if(pos<3)nearest.splice(pos,0,{idx:j,d_sq});
-            if(nearest.length>3)nearest.pop();
-          }
-        }
-      }
-    }
-    const local_dist=Math.sqrt(nearest[0]?.d_sq??(node_interval*node_interval));
-    const local_max=clamp(Math.max(node_interval*2.2,local_dist*2.6),0.018,max_dist);
-    for(const candidate of nearest){
-      if(Math.sqrt(candidate.d_sq)>local_max)continue;
-      const a=Math.min(i,candidate.idx),b=Math.max(i,candidate.idx),edge_key=key(a,b);
-      if(!edge_map.has(edge_key))edge_map.set(edge_key,{a,b,age:0});
-    }
+  for(const raw_edge of raw_edges||[]){
+    const a=Number(raw_edge?.a),b=Number(raw_edge?.b);
+    if(!Number.isInteger(a)||!Number.isInteger(b)||a<0||b<0||a>=node_num||b>=node_num||a===b)continue;
+    const edge={a:Math.min(a,b),b:Math.max(a,b),age:Math.max(0,Number(raw_edge.age)||0)};
+    edge_map.set(key(edge.a,edge.b),edge);
   }
   return [...edge_map.values()];
 }
@@ -3705,7 +3670,7 @@ function v312SyncRealtimeGraph(realtime,now){
   const parsed=JSON.parse(json_text);
   state.nodes=(parsed.nodes||[]).map((node)=>({x:+node.x||0,y:+node.y||0,z:+node.z||0,label:'gng',err:+node.error||0,win:+node.wins||0,util:+node.utility||0}));
   const raw_edge_num=(parsed.edges||[]).length;
-  state.edges=v312_build_local_graph_edges(state.nodes,realtime.node_interval);
+  state.edges=v312WasmGraphEdges(parsed.edges,state.nodes.length);
   const edge_map=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
   state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',inputSource:realtime.input_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
   sanitizeGngGraph();
@@ -3919,11 +3884,8 @@ function runGngWasmAccelerated(){
       if(!jsonText) return false;
       const parsed=JSON.parse(jsonText);
       state.nodes=(parsed.nodes||[]).map((n)=>({x:+n.x||0,y:+n.y||0,z:+n.z||0,label:'gng',err:+n.error||0,win:+n.wins||0,util:+n.utility||0}));
-      const raw_edges=(parsed.edges||[]).map((e)=>{
-        const edge={a:Math.min(+e.a||0,+e.b||0),b:Math.max(+e.a||0,+e.b||0),age:+e.age||0};
-        return edge;
-      });
-      state.edges=v312_build_local_graph_edges(state.nodes,nodeInterval);
+      const raw_edges=v312WasmGraphEdges(parsed.edges,state.nodes.length);
+      state.edges=raw_edges;
       const edgeMap=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
       state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||iters,mode,variant,trainingPoints:mode==='offline'?pts:null,backend:'Emscripten GNG-WASM',inputSource:wasmInputMode,node_grid:nodeGrid,node_interval:nodeInterval,raw_edge_num:raw_edges.length};
       sanitizeGngGraph();
@@ -8307,6 +8269,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   };
   let ros = null;
   let rosConnecting = false;
+  let ros_reconnect_timer = null;
+  let ros_reconnect_attempt = 0;
   let foundation_pose_publish_scheduled = false;
   const foundation_pose_topic_objects = new Map();
   function setRosBridgeStatus(text){
@@ -8344,6 +8308,22 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   }
   const rosPublishers = [];
   const rosSubscribers = [];
+  function cancel_ros_reconnect(){
+    if(ros_reconnect_timer){
+      clearTimeout(ros_reconnect_timer);
+      ros_reconnect_timer = null;
+    }
+    ros_reconnect_attempt = 0;
+  }
+  function schedule_ros_reconnect(){
+    if(ros_reconnect_timer || (ros && ros.isConnected)) return;
+    const delay_ms = Math.min(5000, 250 * (2 ** Math.min(ros_reconnect_attempt, 4)));
+    ros_reconnect_attempt++;
+    ros_reconnect_timer = setTimeout(()=>{
+      ros_reconnect_timer = null;
+      ensureRos();
+    }, delay_ms);
+  }
   function getCurrentTopoPoints(){
     const st = window.__topoState || window.state;
     if(!st) return null;
@@ -8383,18 +8363,19 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     const hzEl = document.getElementById(hzId);
     const hzNumEl = hzNumId ? document.getElementById(hzNumId) : null;
     const statusEl = document.getElementById(statusId);
-    let intervalId = null;
+    let publish_timer_id = null;
     let topicObj = null;
     let hzPairBound = false;
     let publishTimes = [];
+    let next_publish_at = 0;
 
     const setStatus = (text)=>{
       if(statusEl) statusEl.textContent = text;
     };
     const stop = (is_unadvertise=true)=>{
-      if(intervalId){
-        clearInterval(intervalId);
-        intervalId = null;
+      if(publish_timer_id){
+        clearTimeout(publish_timer_id);
+        publish_timer_id = null;
       }
       if(topicObj){
         if(is_unadvertise){
@@ -8403,6 +8384,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         topicObj = null;
       }
       publishTimes = [];
+      next_publish_at = 0;
     };
     const publish_once = ()=>{
       if(!topicObj) return false;
@@ -8423,6 +8405,18 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         setStatus(`${statusPrefix}: publish error`);
         return false;
       }
+    };
+    const schedule_next_publish = ()=>{
+      if(!topicObj) return;
+      const period_ms = 1000 / Math.max(0.1, Number(hzEl?.value) || 10);
+      const now = performance.now();
+      if(next_publish_at < now - period_ms) next_publish_at = now;
+      next_publish_at += period_ms;
+      publish_timer_id = setTimeout(()=>{
+        publish_timer_id = null;
+        publish_once();
+        schedule_next_publish();
+      }, Math.max(0, next_publish_at - now));
     };
     const start = ()=>{
       if(!ros || !ros.isConnected){
@@ -8445,9 +8439,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         return false;
       }
       publish_once();
-      intervalId = setInterval(()=>{
-        publish_once();
-      }, Math.round(1000 / Math.max(0.1, Number(hzEl?.value) || 10)));
+      next_publish_at = performance.now();
+      schedule_next_publish();
       return true;
     };
     const bindHzPair = ()=>{
@@ -8626,6 +8619,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
           ros = new ROSLIB.Ros();
           ros.on('connection', ()=>{
             rosConnecting = false;
+            cancel_ros_reconnect();
             setRosBridgeStatus('ROS bridge: connected');
             rosPublishers.forEach(p=>p.onConnection());
             rosSubscribers.forEach(s=>s.onConnection());
@@ -8637,6 +8631,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
             setRosBridgeStatus('ROS bridge: disconnected');
             rosPublishers.forEach(p=>p.onClose());
             rosSubscribers.forEach(s=>s.onClose());
+            schedule_ros_reconnect();
           });
           ros.on('error', (e)=>{
             rosConnecting = false;
@@ -8645,6 +8640,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
             rosPublishers.forEach(p=>p.onError());
             rosSubscribers.forEach(s=>s.onError());
             console.warn('ros error',e);
+            schedule_ros_reconnect();
           });
         }
         ros.connect(ROS_WS_URL);
