@@ -286,6 +286,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-rule-panel{grid-column:1/-1;border-color:rgba(147,197,253,.34);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
 .fuzzy-rule-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:0 16px 8px}
 .fuzzy-rule-heading h2{flex:1 1 auto;padding:14px 0 8px}
+.fuzzy-rule-panel.is-collapsed>.body{display:none}
+.fuzzy-panel-toggle{width:30px;height:28px;flex:0 0 auto;padding:0;text-align:center;line-height:1;font-size:16px}
 .fuzzy-rule-status{min-width:280px;margin-right:2px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
 .fuzzy-editor-grid{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(520px,1.18fr);gap:14px;align-items:start}
 .fuzzy-editor-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.36);padding:12px;min-width:0}
@@ -302,11 +304,23 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-mf-table,.fuzzy-output-table{display:grid;gap:8px;margin-top:10px}
 .fuzzy-mf-row,.fuzzy-output-row2{display:grid;grid-template-columns:minmax(100px,1fr) 90px minmax(160px,1.4fr) auto;gap:8px;align-items:center;border:1px solid rgba(148,163,184,.20);border-radius:12px;background:rgba(15,23,42,.72);padding:8px}
 .fuzzy-output-row2{grid-template-columns:minmax(120px,1fr) 90px auto}
-.fuzzy-rule-list{display:grid;gap:10px}
+.fuzzy-rule-list{display:grid;gap:8px}
+.fuzzy-rule-list.is-collapsed{display:none}
+.fuzzy-rule-list-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fuzzy-rule-list-heading button{width:30px;height:28px;padding:0;text-align:center;line-height:1;font-size:16px}
 .fuzzy-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(15,23,42,.78);padding:10px}
 .fuzzy-rule-card.inactive{opacity:.58}
-.fuzzy-rule-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center;margin-bottom:8px}
-.fuzzy-rule-card-title{color:#00ff00;font-weight:900;font-size:13px}
+.fuzzy-rule-card-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;gap:8px;align-items:center;margin-bottom:8px}
+.fuzzy-rule-active{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;margin:0;color:#93c5fd;font-size:10px;font-weight:900;line-height:1;letter-spacing:0;text-transform:none}
+.fuzzy-rule-active input{width:auto!important}
+.fuzzy-rule-card-head input[data-rule-field="name"]{min-width:0}
+.fuzzy-rule-card-title{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#00ff00;font-weight:900;font-size:13px}
+.fuzzy-rule-card-title button{width:30px;height:28px;flex:0 0 auto;padding:0;text-align:center;line-height:1;font-size:16px}
+.fuzzy-rule-card.is-collapsed .fuzzy-rule-card-title{display:none}
+.fuzzy-rule-card.is-collapsed .fuzzy-rule-card-head{margin-bottom:0}
+.fuzzy-rule-card-head [data-rule-del]{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border:1px solid rgba(248,113,113,.34);border-radius:.5rem;padding:0;color:#ffc8c8;background:rgba(248,113,113,.12)}
+.fuzzy-rule-card-head [data-rule-del]:hover{background:rgba(248,113,113,.2)}
+.fuzzy-rule-card.is-collapsed .rule-conds,.fuzzy-rule-card.is-collapsed>.fuzzy-actions,.fuzzy-rule-card.is-collapsed>.fuzzy-rule-output-grid{display:none}
 .fuzzy-cond-grid{display:grid;grid-template-columns:80px 1fr 1fr 64px 60px;gap:8px;align-items:end;margin:6px 0}
 .fuzzy-rule-output-grid{display:grid;grid-template-columns:1fr 100px 110px;gap:8px;align-items:end;margin-top:8px}
 .fuzzy-json{width:100%;min-height:160px;font-family:Consolas,Menlo,monospace;font-size:11px;color:#cbd5e1;background:#020617;border:1px solid rgba(148,163,184,.28);border-radius:10px;padding:10px}
@@ -420,7 +434,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .fuzzy-editor-grid{grid-template-columns:1fr}
   .fuzzy-rule-status{min-width:0}
   .fuzzy-cond-grid{grid-template-columns:1fr 1fr}
-  .fuzzy-rule-card-head{grid-template-columns:1fr 1fr}
+  .fuzzy-rule-card-head{grid-template-columns:auto minmax(0,1fr) auto auto auto}
   .fuzzy-confirm-row{grid-template-columns:1fr}
   .fuzzy-mf-row{grid-template-columns:1fr}
   .fuzzy-output-row2{grid-template-columns:1fr}
@@ -871,8 +885,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
       </div>
       <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
       <div class="panel fuzzy-rule-panel" id="explicitFuzzyRulePanel" style="margin-top:14px">
-        <div class="fuzzy-rule-heading"><h2>ファジィ IF-THEN ルールエディタ</h2><div id="fuzzyEditorStatus" class="fuzzy-rule-status">Rule editor ready.</div></div>
-        <div class="body">
+        <div class="fuzzy-rule-heading"><h2>ファジィ IF-THEN ルールエディタ</h2><button id="fuzzyRulePanelToggle" class="fuzzy-panel-toggle" type="button" aria-expanded="true" aria-label="ルールエディタを折りたたむ" title="ルールエディタを折りたたむ">▲</button><div id="fuzzyEditorStatus" class="fuzzy-rule-status">Rule editor ready.</div></div>
+        <div id="fuzzyRulePanelBody" class="body">
           <div class="fuzzy-editor-grid">
             <div class="fuzzy-editor-card"><h3>1. 推論・合成規則</h3><div class="fuzzy-method-grid">
               <div><label>AND / T-norm</label><select id="fzAndMethod"><option value="min">Minimum</option><option value="product">Algebraic product</option><option value="lukasiewicz">Lukasiewicz</option></select></div>
@@ -889,7 +903,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="fuzzy-param-grid"><div><label>a</label><input id="fzMfA" type="number" min="0" max="1" step="0.01" value="0.55"></div><div><label>b / center</label><input id="fzMfB" type="number" min="0" max="1" step="0.01" value="0.78"></div><div><label>c / sigma</label><input id="fzMfC" type="number" min="0" max="1" step="0.01" value="1.00"></div><div><label>d / radius</label><input id="fzMfD" type="number" min="0" max="1" step="0.01" value="1.00"></div></div>
             </div><div class="fuzzy-actions"><button id="fzAddMfBtn" data-action-kind="data">ラベル追加 / 更新</button><button id="fzDeleteMfBtn" class="warn">選択ラベル削除</button></div><div id="fuzzyMfList" class="fuzzy-mf-table"></div></div>
             <div class="fuzzy-editor-card"><h3>5. 出力ラベル / Singleton Consequent</h3><div class="fuzzy-output-form"><div><label>Output label</label><input id="fzOutLabel" type="text" value="VeryHigh"></div><div><label>Singleton score</label><input id="fzOutValue" type="number" min="0" max="100" step="1" value="95"></div><div><label>Meaning</label><input id="fzOutMeaning" type="text" value="強く推奨"></div></div><div class="fuzzy-actions"><button id="fzAddOutBtn" data-action-kind="data">出力追加 / 更新</button><button id="fzDeleteOutBtn" class="warn">出力削除</button></div><div id="fuzzyOutputList" class="fuzzy-output-table"></div></div>
-            <div class="fuzzy-editor-card full"><h3>6. ルール構造エディタ</h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" data-action-kind="data">ルール追加</button><button id="fzApplyRulesBtn" data-action-kind="run">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn" data-action-kind="data">JSONへ書き出し</button><button id="fzImportRulesBtn" data-action-kind="load">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
+            <div class="fuzzy-editor-card full"><h3 class="fuzzy-rule-list-heading"><span>6. ルール構造エディタ</span><button id="fuzzyRuleListToggle" type="button" aria-expanded="true" aria-label="ルール一覧を折りたたむ" title="ルール一覧を折りたたむ">▲</button></h3><div class="fuzzy-editor-note">各ルールは IF 条件列 THEN 出力ラベル という構造です。条件数は可変、AND/OR接続、NOT、重み、ON/OFF、複製が可能です。</div><div class="fuzzy-actions"><button id="fzAddRuleBtn" data-action-kind="data">ルール追加</button><button id="fzApplyRulesBtn" data-action-kind="run">ルールを把持推定へ適用</button><button id="fzResetRulesBtn" class="warn">デフォルトルール復元</button><button id="fzExportRulesBtn" data-action-kind="data">JSONへ書き出し</button><button id="fzImportRulesBtn" data-action-kind="load">JSONから読み込み</button></div><div id="fuzzyRuleList" class="fuzzy-rule-list"></div></div>
             <div class="fuzzy-editor-card full"><h3>7. ルール確認画面 / JSON</h3><div class="fuzzy-actions"><button id="fzRefreshConfirmBtn" data-action-kind="data">確認画面を更新</button><button id="fzDownloadRulesBtn" data-action-kind="data">ルールJSON保存</button></div><div id="fuzzyRuleConfirm" class="fuzzy-confirm-table"></div><div id="fuzzyLiveMfEditor" class="fuzzy-live-editor"><div class="fuzzy-live-empty">Rules Confirmation内の条件部ファジィ集合図をクリックすると、その図の直下にリアルタイム編集レバーが表示されます。</div></div><textarea id="fuzzyRuleJson" class="fuzzy-json" spellcheck="false"></textarea></div>
             <div class="fuzzy-editor-card full"><h3>8. 現在の候補に対するルール発火状況</h3><div id="fuzzyRuleDebug" class="fuzzy-rule-debug">No inference yet.</div></div>
           </div>
@@ -961,7 +975,7 @@ const state={
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],gng_realtime:null,_gng_realtime_raf:0,
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
-  stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSels:[],liveMfRaf:0,viewerMode:'mapping',
+  stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSels:[],fuzzyRuleCollapsed:{},liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,robotTrajectory:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
   robotGl:{layers:new Map(),unavailable:false,lastError:''},
@@ -7416,6 +7430,71 @@ function renderMfList(){const model=ensureFuzzyModel(),box=$('fuzzyMfList');if(!
 function renderOutputList(){const model=ensureFuzzyModel(),box=$('fuzzyOutputList');if(!box)return;box.innerHTML='';Object.entries(model.outputs||{}).forEach(([name,o])=>{const row=document.createElement('div');row.className='fuzzy-output-row2';row.innerHTML=`<b>${name}</b><span>${o.value}</span><button data-out-edit="${name}">編集</button>`;box.appendChild(row)});box.querySelectorAll('[data-out-edit]').forEach(btn=>btn.onclick=()=>{const name=btn.dataset.outEdit,o=model.outputs[name];$('fzOutLabel').value=name;$('fzOutValue').value=o.value;$('fzOutMeaning').value=o.meaning||''})}
 function condEditorHtml(rule,ci,cond){const model=ensureFuzzyModel(),current=model.features[cond.feature];let fopts=fuzzyFeatureDefinitions().filter(f=>model.features[f.key]&&model.features[f.key].enabled!==false).map(f=>`<option value="${htmlEscape(f.key)}" ${cond.feature===f.key?'selected':''}>${htmlEscape(f.key)}</option>`).join('');if(current&&current.enabled===false)fopts=`<option value="${htmlEscape(cond.feature)}" selected disabled>${htmlEscape(cond.feature)} (OFF)</option>`+fopts;const labels=Object.keys((current||{}).labels||{});const lopts=labels.map(l=>`<option value="${htmlEscape(l)}" ${cond.label===l?'selected':''}>${htmlEscape(l)}</option>`).join('');return `<div class="fuzzy-cond-grid" data-cond-index="${ci}"><div><label>connector</label><select data-cond-field="connector"><option value="AND" ${cond.connector!=='OR'?'selected':''}>AND</option><option value="OR" ${cond.connector==='OR'?'selected':''}>OR</option></select></div><div><label>input</label><select data-cond-field="feature">${fopts}</select></div><div><label>label</label><select data-cond-field="label">${lopts}</select></div><div><label>NOT</label><select data-cond-field="not"><option value="0" ${!cond.not?'selected':''}>no</option><option value="1" ${cond.not?'selected':''}>yes</option></select></div><button data-cond-delete="${ci}">削除</button></div>`}
 function renderRuleList(){const model=ensureFuzzyModel(),box=$('fuzzyRuleList');if(!box)return;box.innerHTML='';const outOpts=Object.keys(model.outputs||{}).map(o=>`<option value="${o}">${o}</option>`).join('');model.rules.forEach((r,ri)=>{const card=document.createElement('div');card.className='fuzzy-rule-card '+(!r.active?'inactive':'');card.dataset.ruleIndex=ri;card.innerHTML=`<div class="fuzzy-rule-card-head"><input data-rule-field="active" type="checkbox" ${r.active?'checked':''}><input data-rule-field="name" value="${r.name||r.id}"><button data-rule-dup="${ri}">複製</button><button data-rule-del="${ri}">削除</button></div><div class="fuzzy-rule-card-title">${r.id}: IF</div><div class="rule-conds">${(r.conditions||[]).map((c,i)=>condEditorHtml(r,i,c)).join('')}</div><div class="fuzzy-actions"><button data-rule-addcond="${ri}">条件追加</button></div><div class="fuzzy-rule-output-grid"><div><label>THEN output</label><select data-rule-field="output">${outOpts}</select></div><div><label>weight</label><input data-rule-field="weight" type="number" min="0" max="1" step="0.05" value="${r.weight??1}"></div><div><label>rule id</label><input data-rule-field="id" value="${r.id}"></div></div>`;box.appendChild(card);card.querySelector('[data-rule-field="output"]').value=r.output});box.querySelectorAll('.fuzzy-rule-card').forEach(card=>{const ri=+card.dataset.ruleIndex;card.querySelectorAll('[data-rule-field]').forEach(el=>{el.onchange=()=>{const r=model.rules[ri];const f=el.dataset.ruleField;if(f==='active')r.active=el.checked;else if(f==='weight')r.weight=clamp(+el.value||0,0,1);else r[f]=el.value;renderRuleList();renderRuleConfirm();updateRuleJson()}});card.querySelectorAll('[data-cond-field]').forEach(el=>{el.onchange=()=>{const ci=+el.closest('[data-cond-index]').dataset.condIndex;const cond=model.rules[ri].conditions[ci];const f=el.dataset.condField;cond[f]=f==='not'?el.value==='1':el.value;if(f==='feature'){const labs=Object.keys((model.features[cond.feature]||{}).labels||{});cond.label=labs[0]||''}renderRuleList();renderRuleConfirm();updateRuleJson()}})});box.querySelectorAll('[data-rule-addcond]').forEach(b=>b.onclick=()=>{const r=model.rules[+b.dataset.ruleAddcond];const f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false);const labs=Object.keys((model.features[f.key]||{}).labels||{});r.conditions.push({feature:f.key,label:labs[0]||'High',connector:'AND'});renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-cond-delete]').forEach(b=>b.onclick=()=>{const card=b.closest('.fuzzy-rule-card'),ri=+card.dataset.ruleIndex;model.rules[ri].conditions.splice(+b.dataset.condDelete,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-del]').forEach(b=>b.onclick=()=>{model.rules.splice(+b.dataset.ruleDel,1);renderRuleList();renderRuleConfirm();updateRuleJson()});box.querySelectorAll('[data-rule-dup]').forEach(b=>b.onclick=()=>{const src=JSON.parse(JSON.stringify(model.rules[+b.dataset.ruleDup]));src.id='R'+(model.rules.length+1);src.name=(src.name||'rule')+' copy';model.rules.splice(+b.dataset.ruleDup+1,0,src);renderRuleList();renderRuleConfirm();updateRuleJson()})}
+function enhanceRuleListCollapsibles(){
+  const box=$('fuzzyRuleList');if(!box)return;
+  const model=ensureFuzzyModel();
+  if(!state.fuzzyRuleCollapsed)state.fuzzyRuleCollapsed={};
+  box.querySelectorAll('.fuzzy-rule-card').forEach(card=>{
+    const ri=+card.dataset.ruleIndex,r=model.rules[ri],title=card.querySelector('.fuzzy-rule-card-title');
+    if(!r||!title)return;
+    const activeInput=card.querySelector('[data-rule-field="active"]');
+    if(activeInput&&!activeInput.closest('.fuzzy-rule-active')){
+      const activeWrap=document.createElement('label');activeWrap.className='fuzzy-rule-active';
+      const ruleId=document.createElement('span');ruleId.textContent=r.id;
+      activeInput.replaceWith(activeWrap);activeWrap.append(ruleId,activeInput);
+    }
+    let toggle=card.querySelector('[data-rule-toggle]');
+    if(!toggle){
+      toggle=document.createElement('button');toggle.type='button';toggle.dataset.ruleToggle='1';
+    }
+    const head=card.querySelector('.fuzzy-rule-card-head');
+    if(head&&!head.contains(toggle))head.appendChild(toggle);
+    const deleteButton=card.querySelector('[data-rule-del]');
+    if(deleteButton){deleteButton.type='button';deleteButton.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>';deleteButton.setAttribute('aria-label','ルールを削除');deleteButton.title='ルールを削除';}
+    const collapsed=state.fuzzyRuleCollapsed[r.id]!==false;
+    card.classList.toggle('is-collapsed',collapsed);
+    toggle.textContent=collapsed?'▼':'▲';
+    toggle.setAttribute('aria-label',collapsed?'ルールを展開':'ルールを折りたたむ');
+    toggle.title=collapsed?'ルールを展開':'ルールを折りたたむ';
+    toggle.setAttribute('aria-expanded',String(!collapsed));
+    if(toggle.dataset.bound==='1')return;
+    toggle.dataset.bound='1';
+    toggle.onclick=event=>{
+      event.preventDefault();event.stopPropagation();
+      const next=!card.classList.contains('is-collapsed');
+      state.fuzzyRuleCollapsed[r.id]=next;
+      card.classList.toggle('is-collapsed',next);
+      toggle.textContent=next?'▼':'▲';
+      toggle.setAttribute('aria-label',next?'ルールを展開':'ルールを折りたたむ');
+      toggle.title=next?'ルールを展開':'ルールを折りたたむ';
+      toggle.setAttribute('aria-expanded',String(!next));
+    };
+  });
+}
+function bindFuzzyRulePanelToggle(){
+  const panel=$('explicitFuzzyRulePanel'),toggle=$('fuzzyRulePanelToggle');
+  if(!panel||!toggle||toggle.dataset.bound==='1')return;
+  toggle.dataset.bound='1';
+  toggle.onclick=()=>{
+    const collapsed=panel.classList.toggle('is-collapsed');
+    toggle.textContent=collapsed?'▼':'▲';
+    toggle.setAttribute('aria-label',collapsed?'ルールエディタを展開':'ルールエディタを折りたたむ');
+    toggle.title=collapsed?'ルールエディタを展開':'ルールエディタを折りたたむ';
+    toggle.setAttribute('aria-expanded',String(!collapsed));
+  };
+}
+function bindFuzzyRuleListToggle(){
+  const list=$('fuzzyRuleList'),toggle=$('fuzzyRuleListToggle');
+  if(!list||!toggle||toggle.dataset.bound==='1')return;
+  toggle.dataset.bound='1';
+  toggle.onclick=()=>{
+    const collapsed=list.classList.toggle('is-collapsed');
+    toggle.textContent=collapsed?'▼':'▲';
+    toggle.setAttribute('aria-expanded',String(!collapsed));
+    toggle.setAttribute('aria-label',collapsed?'ルール一覧を展開':'ルール一覧を折りたたむ');
+    toggle.title=collapsed?'ルール一覧を展開':'ルール一覧を折りたたむ';
+  };
+}
 function ruleMfAt(ruleIndex,condIndex){
   const model=ensureFuzzyModel();
   const r=model.rules&&model.rules[ruleIndex];
@@ -7440,6 +7519,7 @@ function inlineRuleMfEditorHtml(s){
 function renderRuleConfirm(){
   const model=ensureFuzzyModel(),box=$('fuzzyRuleConfirm');if(!box)return;
   state.liveMfSels=(state.liveMfSels||[]).filter(sel=>ruleMfAt(sel.ruleIndex,sel.condIndex));
+  enhanceRuleListCollapsibles();
   box.innerHTML='';
   model.rules.forEach((r,ri)=>{
     const row=document.createElement('div');row.className='fuzzy-confirm-row';
@@ -7476,6 +7556,8 @@ function installRuleConfirmOutsideClick(){
   },true);
 }
 function installRuleConfirmMfTapDelegation(){
+  bindFuzzyRulePanelToggle();
+  bindFuzzyRuleListToggle();
   const box=$('fuzzyRuleConfirm');
   if(!box||box.dataset.v278MfTap==='1')return;
   box.dataset.v278MfTap='1';
