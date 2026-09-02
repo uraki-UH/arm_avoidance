@@ -220,6 +220,21 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   fixed_base_link:=base_footprint \
   world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
 
+## Gazeboの点群・GNG検証用起動
+ピックアンドプレースworld、環境固定LiDAR、LiDAR走査密度は
+`gng_vlut_system/config/gazebo_pick_and_place.yaml`で管理する。
+
+```bash
+ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py
+```
+
+設定ファイルだけを差し替える場合は次のとおり。
+
+```bash
+ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py \
+  gazebo_params_file:=/ros2_ws/src/gng_vlut_system/config/gazebo_pick_and_place.yaml
+```
+
 現在の`dual_arm_robot.urdf`には`gazebo_ros2_control`がないため、Gazebo内の関節と
 グリッパを指令して実際に把持するには、別途Gazebo用controller接続が必要。
 
