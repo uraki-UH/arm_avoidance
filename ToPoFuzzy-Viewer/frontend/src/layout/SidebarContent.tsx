@@ -35,7 +35,7 @@ import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
 import { createDefaultGraphLayerSettings } from '../features/visualization/graphLayerSettings';
 import { is_fixed_frame } from '../utils/frame_utils';
-import { ObjectTemplateMatchDialogLauncher } from '../features/templateMatching/ObjectTemplateMatchDialog';
+import { ObjectTemplateMatchDialog } from '../features/templateMatching/ObjectTemplateMatchDialog';
 import {
     TemplateMatchConfig,
     TemplateMatchConfigResult,
@@ -198,6 +198,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const hasGngLayer = Object.keys(props.graphData).length > 0;
     const isLayerActionDisabled = props.isEditMode;
     const [labelContext, setLabelContext] = useState<{ tag: string; title: string } | null>(null);
+    const [isObjectMatchDialogOpen, setIsObjectMatchDialogOpen] = useState(false);
 
     const layersTab = (
         <div className="space-y-3">
@@ -728,14 +729,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
         </div>
     );
 
-    const objectMatchTab = (
-        <ObjectTemplateMatchDialogLauncher
-            isConnected={props.isConnected}
-            getConfig={props.getTemplateMatchConfig}
-            applyConfig={props.applyTemplateMatchConfig}
-        />
-    );
-
     return (
         <>
             <Tabs
@@ -744,8 +737,22 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     { id: 'display', label: 'View', icon: <Eye size={14} />, content: displayTab },
                     { id: 'edit', label: 'Edit', icon: <Move size={14} />, content: editTab },
                     { id: 'analysis', label: 'Analyze', icon: <Activity size={14} />, content: analysisTab },
-                    { id: 'object-match', label: 'Match', icon: <ScanSearch size={14} />, content: objectMatchTab },
+                    {
+                        id: 'object-match',
+                        label: 'Match',
+                        icon: <ScanSearch size={14} />,
+                        content: null,
+                        onActivate: () => setIsObjectMatchDialogOpen(true),
+                    },
                 ]}
+            />
+
+            <ObjectTemplateMatchDialog
+                open={isObjectMatchDialogOpen}
+                onClose={() => setIsObjectMatchDialogOpen(false)}
+                isConnected={props.isConnected}
+                getConfig={props.getTemplateMatchConfig}
+                applyConfig={props.applyTemplateMatchConfig}
             />
 
             {labelContext && props.graphData[labelContext.tag] && props.layerSettings[labelContext.tag] && (

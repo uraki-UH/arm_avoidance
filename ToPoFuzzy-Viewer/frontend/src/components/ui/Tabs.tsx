@@ -5,6 +5,7 @@ interface Tab {
     label: string;
     icon?: React.ReactNode;
     content: React.ReactNode;
+    onActivate?: () => void;
 }
 
 interface TabsProps {
@@ -27,7 +28,10 @@ export function Tabs({ tabs, defaultTabId, className = '' }: TabsProps) {
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTabId(tab.id)}
+                            onClick={() => {
+                                setActiveTabId(tab.id);
+                                tab.onActivate?.();
+                            }}
                             className={`relative flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-all ${activeTabId === tab.id
                                 ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)] ring-1 ring-[var(--accent-color)]/40'
                                 : 'text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)]'

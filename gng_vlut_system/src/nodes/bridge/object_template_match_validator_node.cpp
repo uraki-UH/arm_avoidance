@@ -36,6 +36,9 @@ public:
     template_id_ = declare_parameter<std::string>("template_id", "");
     candidate_topic_ = declare_parameter<std::string>("candidate_topic", "");
     state_topic_ = declare_parameter<std::string>("state_topic", "");
+    min_visible_ratio_ = declare_parameter<double>("min_visible_ratio", 0.20);
+    recognition_threshold_ = declare_parameter<double>("recognition_threshold", 0.55);
+    confirmation_time_sec_ = declare_parameter<double>("confirmation_time_sec", 0.5);
     activate_score_th_ = declare_parameter<double>("activate_score_th", 0.65);
     deactivate_score_th_ = declare_parameter<double>("deactivate_score_th", 0.40);
     min_matched_node_ratio_ = declare_parameter<double>("min_matched_node_ratio", 0.20);
@@ -93,7 +96,10 @@ private:
     try {
       for (const auto &parameter : parameters) {
         const std::string &name = parameter.get_name();
-        if (name == "activate_score_th") stage(activate_score_th_, parameter.as_double());
+        if (name == "min_visible_ratio") stage(min_visible_ratio_, parameter.as_double());
+        else if (name == "recognition_threshold") stage(recognition_threshold_, parameter.as_double());
+        else if (name == "confirmation_time_sec") stage(confirmation_time_sec_, parameter.as_double());
+        else if (name == "activate_score_th") stage(activate_score_th_, parameter.as_double());
         else if (name == "deactivate_score_th") stage(deactivate_score_th_, parameter.as_double());
         else if (name == "min_matched_node_ratio") stage(min_matched_node_ratio_, parameter.as_double());
         else if (name == "min_matched_edge_ratio") stage(min_matched_edge_ratio_, parameter.as_double());
@@ -131,6 +137,9 @@ private:
   void validateParameters() const
   {
     if (template_id_.empty() || min_confirmed_frame_num_ <= 0 || state_publish_hz_ <= 0.0 ||
+      !isFinite(min_visible_ratio_) || !isFinite(recognition_threshold_) ||
+      !isFinite(confirmation_time_sec_) || min_visible_ratio_ < 0.0 || min_visible_ratio_ > 1.0 ||
+      recognition_threshold_ < 0.0 || recognition_threshold_ > 1.0 || confirmation_time_sec_ < 0.0 ||
       min_confirm_duration_sec_ < 0.0 || max_lost_duration_sec_ < 0.0 ||
       !isFinite(activate_score_th_) || !isFinite(deactivate_score_th_) ||
       !isFinite(min_matched_node_ratio_) || !isFinite(min_matched_edge_ratio_) ||
@@ -150,26 +159,17 @@ private:
 
   bool isActivationCandidate(const json &candidate) const
   {
-    const bool has_plane_cluster_evidence = enable_plane_cluster_evidence_ &&
-      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_;
     return !candidate.value("is_falsified", false) &&
-      candidate.value("score", 0.0) >= activate_score_th_ &&
-      candidate.value("matched_node_ratio", 0.0) >= min_matched_node_ratio_ &&
-      (candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ || has_plane_cluster_evidence) &&
-      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
-      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
+      candidate.value("score", 0.0) >= recognition_threshold_ &&
+      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_;
   }
 
   bool isContinuationCandidate(const json &candidate) const
   {
-    const bool has_plane_cluster_evidence = enable_plane_cluster_evidence_ &&
-      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_;
+    const double continuation_threshold = std::max(0.0, recognition_threshold_ - 0.15);
     return !candidate.value("is_falsified", false) &&
-      candidate.value("score", 0.0) >= deactivate_score_th_ &&
-      candidate.value("matched_node_ratio", 0.0) >= min_matched_node_ratio_ &&
-      (candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ || has_plane_cluster_evidence) &&
-      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
-      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
+      candidate.value("score", 0.0) >= continuation_threshold &&
+      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_;
   }
 
   void onCandidate(const std_msgs::msg::String::SharedPtr message)
@@ -211,7 +211,7 @@ private:
       ++consecutive_frame_num_;
       const double duration_sec = first_confirmable_time_ ?
         std::chrono::duration<double>(now_time - *first_confirmable_time_).count() : 0.0;
-      if (consecutive_frame_num_ >= min_confirmed_frame_num_ && duration_sec >= min_confirm_duration_sec_) {
+      if (duration_sec >= confirmation_time_sec_) {
         is_confirmed_ = true;
         last_supported_time_ = now_time;
         RCLCPP_INFO(
@@ -246,8 +246,9 @@ private:
       {"state", is_confirmed_ ? "confirmed" : "pending"},
       {"confirmed", is_confirmed_},
       {"consecutive_frame_num", consecutive_frame_num_},
-      {"min_confirmed_frame_num", min_confirmed_frame_num_},
-      {"max_contradiction_point_ratio", max_contradiction_point_ratio_}};
+      {"min_visible_ratio", min_visible_ratio_},
+      {"recognition_threshold", recognition_threshold_},
+      {"confirmation_time_sec", confirmation_time_sec_}};
     if (!last_candidate_.is_null()) {
       state["candidate"] = last_candidate_;
     }
@@ -259,6 +260,9 @@ private:
   std::string template_id_;
   std::string candidate_topic_;
   std::string state_topic_;
+  double min_visible_ratio_ = 0.20;
+  double recognition_threshold_ = 0.55;
+  double confirmation_time_sec_ = 0.5;
   double activate_score_th_ = 0.0;
   double deactivate_score_th_ = 0.0;
   double min_matched_node_ratio_ = 0.0;

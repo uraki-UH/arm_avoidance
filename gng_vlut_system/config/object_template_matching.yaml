@@ -1,7 +1,10 @@
 object_template_matcher_node:
   ros__parameters:
+    shape_tolerance: 0.35
+    scale_tolerance: 0.30
+    contradiction_limit: 0.20
     yaw_step_deg: 10.0
-    enable_roll_pitch_search: false
+    enable_roll_pitch_search: true
     roll_tolerance_deg: 8.0
     pitch_tolerance_deg: 8.0
     roll_pitch_step_deg: 4.0
@@ -43,6 +46,9 @@ object_template_matcher_node:
 
 object_template_match_validator_node:
   ros__parameters:
+    min_visible_ratio: 0.20
+    recognition_threshold: 0.55
+    confirmation_time_sec: 0.5
     activate_score_th: 0.65
     deactivate_score_th: 0.40
     min_matched_node_ratio: 0.20

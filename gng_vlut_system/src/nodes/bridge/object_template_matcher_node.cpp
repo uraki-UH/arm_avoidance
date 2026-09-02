@@ -30,6 +30,7 @@ namespace
 using json = nlohmann::json;
 
 constexpr double kPi = 3.14159265358979323846;
+constexpr double kMinShapePairScore = 0.55;
 
 struct Vec3
 {
@@ -343,8 +344,11 @@ public:
       "environment_topological_map_topic", "/topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>("plane_clusters_topic", "/plane_clusters");
     candidate_topic_ = declare_parameter<std::string>("candidate_topic", "");
+    shape_tolerance_ = declare_parameter<double>("shape_tolerance", 0.35);
+    scale_tolerance_ = declare_parameter<double>("scale_tolerance", 0.30);
+    contradiction_limit_ = declare_parameter<double>("contradiction_limit", 0.20);
     yaw_step_deg_ = declare_parameter<double>("yaw_step_deg", 10.0);
-    enable_roll_pitch_search_ = declare_parameter<bool>("enable_roll_pitch_search", false);
+    enable_roll_pitch_search_ = declare_parameter<bool>("enable_roll_pitch_search", true);
     roll_tolerance_deg_ = declare_parameter<double>("roll_tolerance_deg", 8.0);
     pitch_tolerance_deg_ = declare_parameter<double>("pitch_tolerance_deg", 8.0);
     roll_pitch_step_deg_ = declare_parameter<double>("roll_pitch_step_deg", 4.0);
@@ -431,7 +435,10 @@ private:
     try {
       for (const auto &parameter : parameters) {
         const std::string &name = parameter.get_name();
-        if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
+        if (name == "shape_tolerance") stage(shape_tolerance_, parameter.as_double());
+        else if (name == "scale_tolerance") stage(scale_tolerance_, parameter.as_double());
+        else if (name == "contradiction_limit") stage(contradiction_limit_, parameter.as_double());
+        else if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
         else if (name == "enable_roll_pitch_search") stage(enable_roll_pitch_search_, parameter.as_bool());
         else if (name == "roll_tolerance_deg") stage(roll_tolerance_deg_, parameter.as_double());
         else if (name == "pitch_tolerance_deg") stage(pitch_tolerance_deg_, parameter.as_double());
@@ -505,8 +512,9 @@ private:
 
   void validateParameters() const
   {
-    const std::array<double, 21> values = {
-      yaw_step_deg_, roll_tolerance_deg_, pitch_tolerance_deg_, roll_pitch_step_deg_,
+    const std::array<double, 24> values = {
+      shape_tolerance_, scale_tolerance_, contradiction_limit_, yaw_step_deg_,
+      roll_tolerance_deg_, pitch_tolerance_deg_, roll_pitch_step_deg_,
       min_node_score_, edge_weight_,
       contradiction_weight_, max_contradiction_point_ratio_, min_scale_allow_ratio_,
       min_scale_full_match_ratio_, max_scale_full_match_ratio_, max_scale_allow_ratio_, scale_weight_,
@@ -514,6 +522,9 @@ private:
       min_plane_extent_full_match_ratio_, max_plane_extent_full_match_ratio_, plane_weight_,
       plane_support_score_scale_, min_plane_support_score_};
     if (std::any_of(values.begin(), values.end(), [](double value) {return !isFinite(value);}) ||
+      shape_tolerance_ < 0.0 || shape_tolerance_ > 1.0 ||
+      scale_tolerance_ < 0.05 || scale_tolerance_ >= 1.0 ||
+      contradiction_limit_ < 0.0 || contradiction_limit_ > 1.0 ||
       yaw_step_deg_ <= 0.0 || yaw_step_deg_ > 90.0 ||
       roll_pitch_step_deg_ <= 0.0 || roll_pitch_step_deg_ > 90.0 ||
       roll_tolerance_deg_ < 0.0 || roll_tolerance_deg_ > 90.0 ||
@@ -580,7 +591,6 @@ private:
   double nodeScore(
     const TemplateNode &template_node,
     const ais_gng_msgs::msg::TopologicalNode &environment_node,
-    std::size_t environment_degree,
     double roll_deg,
     double pitch_deg,
     double yaw_deg) const
@@ -591,23 +601,16 @@ private:
       template_node.normal, roll_deg, pitch_deg, yaw_deg + template_graph_.canonical_yaw_deg);
     const double normal_angle_deg = std::acos(clampUnit(std::abs(dot(rotated_normal, environment_normal)))) *
       180.0 / kPi;
+    const double normal_reject_deg = 10.0 + 70.0 * shape_tolerance_;
     const double normal_score = descendingMembership(
-      normal_angle_deg, max_normal_angle_full_deg_, max_normal_angle_partial_deg_);
-    const double degree_score = descendingMembership(
-      std::abs(static_cast<double>(template_node.degree) - static_cast<double>(environment_degree)),
-      max_degree_dev_full_, max_degree_dev_partial_);
+      normal_angle_deg, normal_reject_deg / 3.0, normal_reject_deg);
     const double environment_rho = static_cast<double>(environment_node.rho);
     const double rho_scale = std::max({std::abs(template_node.rho), std::abs(environment_rho), 1e-4});
+    const double rho_reject_ratio = 0.10 + shape_tolerance_;
     const double rho_score = descendingMembership(
       std::abs(template_node.rho - environment_rho) / rho_scale,
-      max_rho_dev_full_ratio_, max_rho_dev_partial_ratio_);
-    const double enabled_rho_weight = enable_rho_evaluation_ ? rho_weight_ : 0.0;
-    const double weight_sum = normal_weight_ + enabled_rho_weight + degree_weight_;
-    if (weight_sum <= 1e-9) {
-      return 0.0;
-    }
-    return (normal_weight_ * normal_score + enabled_rho_weight * rho_score + degree_weight_ * degree_score) /
-      weight_sum;
+      rho_reject_ratio / 3.0, rho_reject_ratio);
+    return 0.75 * normal_score + 0.25 * rho_score;
   }
 
   static std::uint64_t pointSupport(const ais_gng_msgs::msg::TopologicalNode &node)
@@ -624,9 +627,9 @@ private:
     const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
     const auto yaw_samples = sampleFullYaw(yaw_step_deg_);
     const auto roll_samples = sampleTolerance(
-      roll_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
+      roll_tolerance_deg_, roll_pitch_step_deg_, roll_tolerance_deg_ > 0.0);
     const auto pitch_samples = sampleTolerance(
-      pitch_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
+      pitch_tolerance_deg_, roll_pitch_step_deg_, pitch_tolerance_deg_ > 0.0);
     if (yaw_samples.size() * roll_samples.size() * pitch_samples.size() >
       static_cast<std::size_t>(max_orientation_hypothesis_num_))
     {
@@ -965,8 +968,8 @@ private:
       ratios.size(),
       ratio,
       intervalMembership(
-        ratio, min_scale_allow_ratio_, min_scale_full_match_ratio_,
-        max_scale_full_match_ratio_, max_scale_allow_ratio_)};
+        ratio, 1.0 - scale_tolerance_, 0.95,
+        1.05, 1.0 + scale_tolerance_)};
   }
 
   json evaluateOrientation(
@@ -981,11 +984,6 @@ private:
     const auto filtered_environment_edges = filterEnvironmentEdges(
       environment_edges, plane_filter.ignored_node_indices);
     const auto environment_neighbors = buildNeighbors(environment.nodes.size(), filtered_environment_edges);
-    std::vector<std::size_t> environment_degrees(environment.nodes.size(), 0U);
-    for (const auto &[first, second] : filtered_environment_edges) {
-      ++environment_degrees[first];
-      ++environment_degrees[second];
-    }
     const PlaneEvaluation plane_evaluation = evaluatePlaneClusters(
       environment, plane_filter, roll_deg, pitch_deg, yaw_deg);
     std::vector<PairScore> pairs;
@@ -1013,8 +1011,8 @@ private:
         }
         const double score = nodeScore(
           template_graph_.nodes[template_index], environment.nodes[environment_index],
-          environment_degrees[environment_index], roll_deg, pitch_deg, yaw_deg);
-        if (score >= min_node_score_) {
+          roll_deg, pitch_deg, yaw_deg);
+        if (score >= kMinShapePairScore) {
           pairs.push_back({environment_index, template_index, score});
         }
       }
@@ -1101,7 +1099,7 @@ private:
           }
           if (nodeScore(
               template_graph_.nodes[template_neighbor_index], environment.nodes[environment_index],
-              environment_degrees[environment_index], roll_deg, pitch_deg, yaw_deg) >= min_node_score_)
+              roll_deg, pitch_deg, yaw_deg) >= kMinShapePairScore)
           {
             is_explainable = true;
             break;
@@ -1128,18 +1126,17 @@ private:
     const double contradiction_point_ratio = matched_point_num + contradiction_point_num == 0U ? 1.0 :
       static_cast<double>(contradiction_point_num) /
       static_cast<double>(matched_point_num + contradiction_point_num);
-    const ScaleEvaluation scale_evaluation = enable_scale_evaluation_ ?
-      evaluateScale(environment, template_to_environment, environment_edge_keys) : ScaleEvaluation{};
-    const double node_graph_score = (1.0 - edge_weight_) * node_score + edge_weight_ * edge_score;
-    const double graph_score = plane_evaluation.correspondences.empty() ? node_graph_score :
-      (1.0 - plane_weight_) * node_graph_score + plane_weight_ * plane_evaluation.support_score;
-    const double base_score = scale_evaluation.is_observed ?
-      (1.0 - scale_weight_) * graph_score + scale_weight_ * scale_evaluation.score : graph_score;
+    const ScaleEvaluation scale_evaluation =
+      evaluateScale(environment, template_to_environment, environment_edge_keys);
+    const double visible_ratio = static_cast<double>(matched_node_num) / template_graph_.nodes.size();
+    const bool has_edge_evidence = supported_edge_num > 0U;
+    const bool has_plane_evidence = !plane_evaluation.correspondences.empty();
+    const double relation_score = std::max(
+      has_edge_evidence ? edge_score : 0.0,
+      has_plane_evidence ? plane_evaluation.support_score : 0.0);
+    const double score = std::cbrt(std::max(0.0, node_score * relation_score * visible_ratio));
     const bool has_strong_plane_evidence = plane_evaluation.support_score >= min_plane_support_score_;
-    const double score = enable_contradiction_evaluation_ && !has_strong_plane_evidence ?
-      std::max(0.0, base_score - contradiction_weight_ * contradiction_point_ratio) : base_score;
-    const bool is_contradiction_falsified = enable_contradiction_evaluation_ && !has_strong_plane_evidence &&
-      contradiction_point_ratio > max_contradiction_point_ratio_;
+    const bool is_contradiction_falsified = contradiction_point_ratio > contradiction_limit_;
     const bool is_scale_falsified = scale_evaluation.is_observed && scale_evaluation.score <= 0.0;
     const bool is_falsified = is_contradiction_falsified || is_scale_falsified;
 
@@ -1165,7 +1162,10 @@ private:
       {"template_id", template_id_},
       {"state", "candidate"},
       {"score", score},
-      {"base_score", base_score},
+      {"base_score", score},
+      {"shape_score", node_score},
+      {"relation_score", relation_score},
+      {"visible_ratio", visible_ratio},
       {"roll_deg", roll_deg},
       {"pitch_deg", pitch_deg},
       {"yaw_deg", yaw_deg + template_graph_.canonical_yaw_deg},
@@ -1201,6 +1201,9 @@ private:
   std::string environment_topic_;
   std::string plane_clusters_topic_;
   std::string candidate_topic_;
+  double shape_tolerance_ = 0.35;
+  double scale_tolerance_ = 0.30;
+  double contradiction_limit_ = 0.20;
   double yaw_step_deg_ = 1.0;
   bool enable_roll_pitch_search_ = false;
   double roll_tolerance_deg_ = 0.0;

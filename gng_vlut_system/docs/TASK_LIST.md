@@ -35,11 +35,11 @@
    *暫定目標: 実センサ点群から妥当な候補群が安定して出る*
 
 2.1. **最優先: 非平面成分を用いるオクルージョン下の物体テンプレート照合**
-   `basket`の単一視点・床面なし・遮蔽あり環境で、平面クラスタだけでは物体固有の肯定証拠が不足した。既存の`nonplane_component_node`を、持ち手・フック・突起のような非平面構造を使う照合器入力へ拡張する。位置レジストレーションは導入せず、yaw探索と、平面対応に対する局所グラフ構造・法線分布・平面アンカー関係だけを評価する。
+   `basket`の単一視点・床面なし・遮蔽あり環境で、平面クラスタだけでは物体固有の肯定証拠が不足した。CPU版`ais_gng`が`TopologicalNode.nonplane_component_id`へ付与する、持ち手・フック・突起のような非平面構造を照合器入力として使う。位置レジストレーションは導入せず、yaw探索と、平面対応に対する局所グラフ構造・法線分布・平面アンカー関係だけを評価する。
 
    **現状と判断根拠**
 
-   1. `ais_gng`は`/topological_map`と`/plane_clusters`から、平面未所属nodeのGNG連結成分を`/nonplane_components/markers`へ可視化出力済み。
+   1. CPU版`ais_gng`は、平面未所属nodeのGNG連結成分IDを`/topological_map.nodes[].nonplane_component_id`へ付与し、同じframeのコンパクトな所属一覧を`/nonplane_components`へ出力済み。
    2. 同じ`basket`テンプレートでは、持ち手候補が16node、25内部edge、平面クラスタ2への15アンカーedgeを持つ成分として得られた。
    3. 環境20フレームでは、最大成分が9〜27node、8〜28内部edge、平面アンカーedgeが0〜2本と変動した。成分数、node数、edge数、アンカー数を単フレームの必須条件または反証条件にしてはならない。
    4. 形状比と法線二次モーメント固有値は部分観測の弱い加点特徴として利用可能。ただし環境最大成分の形状比は0.110〜0.713と変動するため、狭い一致範囲を要求しない。
@@ -51,13 +51,12 @@
 
    **入力と出力の契約**
 
-   1. `ais_gng_msgs`へ`NonplaneComponentArray`、`NonplaneComponent`、`NonplanePlaneAnchor`を追加。
-   2. `NonplaneComponentArray`には`header`、`frame_number`、元`TopologicalMap`のnode添字を使う`components`を格納。
-   3. `NonplaneComponent`には`id`、`node_indices`、`internal_edge_num`、`plane_anchors`を格納。可視化は既存`/nonplane_components/markers`を使用。
-   4. `NonplanePlaneAnchor`には`component_id`、`source_node_index`、`plane_node_index`、`plane_cluster_id`を格納。nodeの`id`ではなく元map配列の添字を使い、ID再採番への依存を除外。
-   5. `nonplane_component_node`は新規の`/nonplane_component_features`を同一フレーム番号でpublish。`/nonplane_components/markers`は可視化専用のままとする。
-   6. `object_template_matcher_node`は`nonplane_component_features_topic`を購読し、`/topological_map`、`/plane_clusters`、特徴配列のframe番号が一致したときだけ評価。
-   7. テンプレート側の非平面成分は、初期段階では保存形式を増やさず、`gng.edges`と`gng.plane_clusters[].idx`から読込時に導出。安定後にだけ`gng.nonplane_components`の保存を検討。
+   1. `ais_gng_msgs/TopologicalNode`へ`nonplane_component_id`と`NONPLANE_COMPONENT_NONE`を追加。
+   2. `NONPLANE_COMPONENT_NONE`は平面所属nodeと最小node数未満の成分、0以上の同一値は同一連結成分を表すID。
+   3. `/nonplane_components`は`std_msgs/UInt32MultiArray`で、`[frame_number, component_num, component_id, node_num, node_index..., ...]`の順に所属だけを出力。
+   4. 内部edgeと平面anchor edgeは、同一frameの`/topological_map`と`/plane_clusters`から復元。
+   5. `object_template_matcher_node`は`/topological_map`と`/plane_clusters`のframe番号が一致したときだけ評価。
+   6. テンプレート側の非平面成分は、初期段階では保存形式を増やさず、`gng.edges`と`gng.plane_clusters[].idx`から読込時に導出。安定後にだけ`gng.nonplane_components`の保存を検討。
 
    **照合方式**
 
@@ -80,7 +79,7 @@
    **初期パラメータ**
 
    1. `enable_nonplane_component_evaluation: true`
-   2. `nonplane_component_features_topic: /nonplane_component_features`
+   2. `nonplane_component.direct_enabled: true`
    3. `min_nonplane_component_nodes: 2`
    4. `nonplane_weight: 0.20`
    5. `nonplane_evidence_score_scale: 1.50`
@@ -91,8 +90,8 @@
 
    **実装順**
 
-   1. 新規メッセージ定義と`ais_gng_msgs`のbuild。
-   2. `nonplane_component_node`から構造化アンカー付き特徴topicのpublish。
+   1. `TopologicalNode.nonplane_component_id`と`NONPLANE_COMPONENT_NONE`の利用。
+   2. CPU版`ais_gng`内の平面クラスタ生成直後におけるID付与。
    3. 平面nodeをまたいで成分を併合しないこと、複数平面へのアンカー保持、元node添字の保存を確認する単体test追加。
    4. `object_template_matcher_node`でテンプレート非平面成分を読込時導出。
    5. yaw・平面対応で絞り込んだ成分候補と、加点専用の`nonplane_component_score`を実装。
@@ -103,12 +102,13 @@
 
    1. `docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && cd /ros2_ws && colcon build --packages-select ais_gng_msgs ais_gng gng_vlut_system --event-handlers console_direct+'` が成功。
    2. `docker exec gng_cpu_container bash -lc 'cd /ros2_ws && ./build/ais_gng/test_nonplane_component_extractor --gtest_color=no'` が成功。
-   3. `ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=<入力yaml>` 実行中に、`/topological_map`、`/plane_clusters`、`/nonplane_component_features`が同じ`frame_number`で出力。
-   4. `ros2 topic echo --once /nonplane_component_features`で、成分の元node添字と平面アンカーedgeを確認。
-   5. `basket`完全形、単一視点遮蔽あり床面なし、背景平面追加の各条件で、候補JSONの非平面score・対応・yaw帯を記録。
-   6. 単一視点遮蔽あり条件では、非平面特徴が欠落した1フレームだけで候補が`is_falsified: true`にならない。
-   7. 背景平面追加条件では、背景平面だけで`confirmed`にならず、非平面証拠または複数平面証拠がある候補だけを時間確認へ進める。
-   8. 既存の平面クラスタ照合を`enable_nonplane_component_evaluation: false`で従来どおり実行できる。
+   3. `ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=<入力yaml>` 実行中に、`/topological_map`と`/plane_clusters`が同じ`frame_number`で出力。
+   4. `ros2 topic echo --once /topological_map`で、nodeごとの`nonplane_component_id`を確認。
+   5. `ros2 topic echo --once /nonplane_components`で、同じframeの成分IDとnode添字一覧を確認。
+   6. `basket`完全形、単一視点遮蔽あり床面なし、背景平面追加の各条件で、候補JSONの非平面score・対応・yaw帯を記録。
+   7. 単一視点遮蔽あり条件では、非平面特徴が欠落した1フレームだけで候補が`is_falsified: true`にならない。
+   8. 背景平面追加条件では、背景平面だけで`confirmed`にならず、非平面証拠または複数平面証拠がある候補だけを時間確認へ進める。
+   9. 既存の平面クラスタ照合を`enable_nonplane_component_evaluation: false`で従来どおり実行できる。
 
    *暫定目標: 遮蔽を含む単一視点環境で、平面クラスタを仮説起点、非平面構造を物体固有の時間蓄積型肯定証拠として使い、テンプレート候補とyaw帯を安定して出せる*
 

@@ -61,6 +61,13 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
         return SEMANTIC_LABELS[(Math.trunc(node.semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
     }, [node.semanticLabel]);
 
+    const nonplaneComponentLabel = useMemo(() => {
+        if (node.nonplaneComponentId === undefined || node.nonplaneComponentId === 4294967295) {
+            return 'none';
+        }
+        return String(node.nonplaneComponentId);
+    }, [node.nonplaneComponentId]);
+
     const hasManipulabilityData = useMemo(() => (
         node.manipValid !== undefined ||
         node.manipValue !== undefined ||
@@ -110,6 +117,10 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
                     <div className="rounded-md border border-white/10 bg-black/20 p-2">
                         <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Goal</div>
                         <div className="mt-1 font-semibold">{node.isGoal ? 'yes' : 'no'}</div>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                        <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Non-plane component</div>
+                        <div className="mt-1 font-mono">{nonplaneComponentLabel}</div>
                     </div>
                     {hasManipulabilityData && (
                         <>

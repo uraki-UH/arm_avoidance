@@ -2,6 +2,7 @@
 #include <ais_gng/handle_label_utils.hpp>
 
 #if defined(AIS_GNG_BACKEND_CPU)
+#include <ais_gng/topological_plane/nonplane_component_extractor.hpp>
 #include <ais_gng/topological_plane/plane_cluster_parameters.hpp>
 #endif
 
@@ -340,15 +341,22 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
             this->get_logger(), "Direct plane clustering enabled: GNG -> %s",
             output_topic.c_str());
     }
-    enable_nonplane_component_timing_ = this->declare_parameter<bool>(
-        "enable_nonplane_component_timing", false);
-    if (enable_nonplane_component_timing_) {
-        const auto timing_topic = this->declare_parameter<std::string>(
-            "nonplane_component_timing_topic", "/nonplane_components/timing");
-        nonplane_timing_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
-            timing_topic,
-            rclcpp::QoS(10).reliable(),
-            std::bind(&AiSGNGComponent::nonplane_timing_cb, this, _1));
+    direct_nonplane_component_enabled_ = this->declare_parameter<bool>(
+        "nonplane_component.direct_enabled", true);
+    const auto nonplane_min_component_nodes = this->declare_parameter<int64_t>(
+        "nonplane_component.min_component_nodes", 2);
+    direct_nonplane_component_options_.min_component_nodes =
+        static_cast<std::size_t>(std::max<int64_t>(1, nonplane_min_component_nodes));
+    if (direct_nonplane_component_enabled_) {
+        const auto output_topic = this->declare_parameter<std::string>(
+            "nonplane_component.output_topic", "/nonplane_components");
+        direct_nonplane_component_pub_ =
+            this->create_publisher<std_msgs::msg::UInt32MultiArray>(
+                output_topic, rclcpp::QoS(1).reliable().transient_local());
+        RCLCPP_INFO(
+            this->get_logger(),
+            "Direct nonplane component extraction enabled: output=%s min_nodes=%zu",
+            output_topic.c_str(), direct_nonplane_component_options_.min_component_nodes);
     }
 #endif
 
@@ -555,36 +563,6 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 AiSGNGComponent::~AiSGNGComponent() {
 
 }
-
-#if defined(AIS_GNG_BACKEND_CPU)
-void AiSGNGComponent::nonplane_timing_cb(
-    const std_msgs::msg::Float64MultiArray::ConstSharedPtr msg)
-{
-    if (msg->data.size() != 2U || !std::isfinite(msg->data[0]) ||
-        !std::isfinite(msg->data[1]) || msg->data[0] < 0.0 || msg->data[1] < 0.0)
-    {
-        return;
-    }
-    const auto frame_number = static_cast<uint32_t>(std::llround(msg->data[0]));
-    nonplane_summary_entry entry;
-    {
-        std::lock_guard<std::mutex> lock(nonplane_summary_mutex_);
-        const auto entry_it = nonplane_summary_by_frame_.find(frame_number);
-        if (entry_it == nonplane_summary_by_frame_.end()) {
-            return;
-        }
-        entry = std::move(entry_it->second);
-        nonplane_summary_by_frame_.erase(entry_it);
-    }
-    replayGngSummaryWithTime(
-        entry.output,
-        entry.gng_ms,
-        entry.plane_cluster_ran,
-        entry.plane_cluster_ms,
-        true,
-        msg->data[1]);
-}
-#endif
 
 rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::vector<rclcpp::Parameter> &params) {
     rcl_interfaces::msg::SetParametersResult result;
@@ -938,31 +916,53 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     constexpr bool plane_cluster_ran = false;
 #endif
     const auto plane_cluster_end = std::chrono::steady_clock::now();
+#if defined(AIS_GNG_BACKEND_CPU)
+    bool nonplane_component_ran = false;
+    double nonplane_component_ms = 0.0;
+    std::unique_ptr<std_msgs::msg::UInt32MultiArray> direct_nonplane_components;
+    if (direct_nonplane_component_enabled_ && direct_plane_clusters) {
+        const auto nonplane_component_start = std::chrono::steady_clock::now();
+        const auto nonplane_components = topological_plane::nonplane::extract_components(
+            *map_msg, *direct_plane_clusters, direct_nonplane_component_options_);
+        direct_nonplane_components = std::make_unique<std_msgs::msg::UInt32MultiArray>();
+        std::size_t output_size = 2U;
+        for (const auto &component : nonplane_components.components) {
+            output_size += 2U + component.node_indices.size();
+        }
+        direct_nonplane_components->data.reserve(output_size);
+        direct_nonplane_components->data.push_back(map_msg->frame_number);
+        direct_nonplane_components->data.push_back(
+            static_cast<uint32_t>(nonplane_components.components.size()));
+        for (const auto &component : nonplane_components.components) {
+            direct_nonplane_components->data.push_back(component.id);
+            direct_nonplane_components->data.push_back(
+                static_cast<uint32_t>(component.node_indices.size()));
+            direct_nonplane_components->data.insert(
+                direct_nonplane_components->data.end(),
+                component.node_indices.begin(), component.node_indices.end());
+            for (const uint32_t node_index : component.node_indices) {
+                if (node_index < map_msg->nodes.size()) {
+                    map_msg->nodes[node_index].nonplane_component_id = component.id;
+                }
+            }
+        }
+        nonplane_component_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - nonplane_component_start).count();
+        nonplane_component_ran = true;
+    }
+#endif
     const double gng_summary_ms = std::chrono::duration<double, std::milli>(
         gng_end - input_end).count();
     const double plane_cluster_summary_ms = std::chrono::duration<double, std::milli>(
         plane_cluster_end - classification_end).count();
 #if defined(AIS_GNG_BACKEND_CPU)
-    if (enable_nonplane_component_timing_) {
-        std::lock_guard<std::mutex> lock(nonplane_summary_mutex_);
-        nonplane_summary_by_frame_[map_msg->frame_number] = {
-            gng_summary_output,
-            gng_summary_ms,
-            plane_cluster_ran,
-            plane_cluster_summary_ms,
-        };
-        while (nonplane_summary_by_frame_.size() > 16U) {
-            nonplane_summary_by_frame_.erase(nonplane_summary_by_frame_.begin());
-        }
-    } else {
-        replayGngSummaryWithTime(
-            gng_summary_output,
-            gng_summary_ms,
-            plane_cluster_ran,
-            plane_cluster_summary_ms,
-            false,
-            0.0);
-    }
+    replayGngSummaryWithTime(
+        gng_summary_output,
+        gng_summary_ms,
+        plane_cluster_ran,
+        plane_cluster_summary_ms,
+        nonplane_component_ran,
+        nonplane_component_ms);
 #else
     replayGngSummaryWithTime(
         gng_summary_output,
@@ -978,6 +978,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 #if defined(AIS_GNG_BACKEND_CPU)
     if (direct_plane_clusters) {
         direct_plane_cluster_pub_->publish(std::move(direct_plane_clusters));
+    }
+    if (direct_nonplane_components) {
+        direct_nonplane_component_pub_->publish(std::move(direct_nonplane_components));
     }
 #endif
 
@@ -1078,6 +1081,8 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         node_msg.semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
         node_msg.semantic_reliability = 0.0f;
         node_msg.frame = node.frame;
+        node_msg.nonplane_component_id =
+            ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE;
         // node_msg.is_goal = false;
         // node_msg.manip_valid = false;
         // node_msg.manip_orientation.w = 1.0;

@@ -71,8 +71,6 @@ extraction_result extract_components(
   const extractor_options &options)
 {
   extraction_result result;
-  result.map.header = map.header;
-  result.map.frame_number = map.frame_number;
   const std::size_t node_count = map.nodes.size();
   if (node_count == 0U) {
     return result;
@@ -107,8 +105,6 @@ extraction_result extract_components(
   const std::size_t min_component_nodes = std::max<std::size_t>(1U, options.min_component_nodes);
   const std::size_t invalid_component = std::numeric_limits<std::size_t>::max();
   std::vector<std::size_t> component_index_by_root(node_count, invalid_component);
-  std::vector<std::size_t> output_index_by_source(node_count, invalid_component);
-  result.map.nodes.reserve(node_count);
 
   for (std::size_t node_index = 0U; node_index < node_count; ++node_index) {
     if (plane_owner[node_index] >= 0) {
@@ -120,97 +116,17 @@ extraction_result extract_components(
     }
     std::size_t component_index = component_index_by_root[root];
     if (component_index == invalid_component) {
-      component_index = result.map.clusters.size();
+      component_index = result.components.size();
       component_index_by_root[root] = component_index;
-      result.map.clusters.emplace_back();
-      auto &cluster = result.map.clusters.back();
-      cluster.id = static_cast<std::uint32_t>(component_index);
-      cluster.label = ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT;
-      cluster.label_inferred = ais_gng_msgs::msg::TopologicalMap::UNKNOWN_OBJECT;
-      cluster.label_reliability = 1.0F;
-      cluster.semantic_label = ais_gng_msgs::msg::TopologicalMap::SEMANTIC_DEFAULT;
-      cluster.semantic_reliability = 0.0F;
-      cluster.frame = map.frame_number;
-      cluster.quat.w = 1.0;
-      cluster.match = 1.0F;
-      cluster.nodes.reserve(component_size[root]);
+      result.components.emplace_back();
+      auto &component = result.components.back();
+      component.id = static_cast<std::uint32_t>(component_index);
+      component.node_indices.reserve(component_size[root]);
     }
-    const std::size_t output_index = result.map.nodes.size();
-    output_index_by_source[node_index] = output_index;
-    result.map.nodes.push_back(map.nodes[node_index]);
-    result.map.clusters[component_index].nodes.push_back(
-      static_cast<std::uint16_t>(output_index));
+    result.components[component_index].node_indices.push_back(
+      static_cast<std::uint32_t>(node_index));
   }
 
-  for (std::size_t edge_index = 0U; edge_index + 1U < map.edges.size(); edge_index += 2U) {
-    const std::size_t first = map.edges[edge_index];
-    const std::size_t second = map.edges[edge_index + 1U];
-    if (!is_valid_edge(map, first, second)) {
-      continue;
-    }
-    const std::size_t first_output = output_index_by_source[first];
-    const std::size_t second_output = output_index_by_source[second];
-    if (first_output != invalid_component && second_output != invalid_component) {
-      result.map.edges.push_back(static_cast<std::uint16_t>(first_output));
-      result.map.edges.push_back(static_cast<std::uint16_t>(second_output));
-      continue;
-    }
-    const bool first_is_output = first_output != invalid_component;
-    const bool second_is_output = second_output != invalid_component;
-    if (first_is_output == second_is_output) {
-      continue;
-    }
-    const std::size_t source_index = first_is_output ? first : second;
-    const std::size_t plane_index = first_is_output ? second : first;
-    const int plane_cluster_index = plane_owner[plane_index];
-    if (plane_cluster_index < 0) {
-      continue;
-    }
-    const std::size_t root = components.find(source_index);
-    const std::size_t component_index = component_index_by_root[root];
-    if (component_index == invalid_component) {
-      continue;
-    }
-    result.plane_anchor_edges.push_back({
-      static_cast<std::uint32_t>(component_index),
-      static_cast<std::uint32_t>(source_index),
-      static_cast<std::uint32_t>(plane_index),
-      plane_clusters.clusters[static_cast<std::size_t>(plane_cluster_index)].id});
-  }
-
-  for (auto &cluster : result.map.clusters) {
-    if (cluster.nodes.empty()) {
-      continue;
-    }
-    double min_x = std::numeric_limits<double>::max();
-    double min_y = std::numeric_limits<double>::max();
-    double min_z = std::numeric_limits<double>::max();
-    double max_x = std::numeric_limits<double>::lowest();
-    double max_y = std::numeric_limits<double>::lowest();
-    double max_z = std::numeric_limits<double>::lowest();
-    double sum_x = 0.0;
-    double sum_y = 0.0;
-    double sum_z = 0.0;
-    for (const std::uint16_t node_index : cluster.nodes) {
-      const auto &node = result.map.nodes[node_index];
-      min_x = std::min(min_x, static_cast<double>(node.pos.x));
-      min_y = std::min(min_y, static_cast<double>(node.pos.y));
-      min_z = std::min(min_z, static_cast<double>(node.pos.z));
-      max_x = std::max(max_x, static_cast<double>(node.pos.x));
-      max_y = std::max(max_y, static_cast<double>(node.pos.y));
-      max_z = std::max(max_z, static_cast<double>(node.pos.z));
-      sum_x += node.pos.x;
-      sum_y += node.pos.y;
-      sum_z += node.pos.z;
-    }
-    const double count = static_cast<double>(cluster.nodes.size());
-    cluster.pos.x = static_cast<float>(sum_x / count);
-    cluster.pos.y = static_cast<float>(sum_y / count);
-    cluster.pos.z = static_cast<float>(sum_z / count);
-    cluster.scale.x = static_cast<float>(max_x - min_x);
-    cluster.scale.y = static_cast<float>(max_y - min_y);
-    cluster.scale.z = static_cast<float>(max_z - min_z);
-  }
   return result;
 }
 

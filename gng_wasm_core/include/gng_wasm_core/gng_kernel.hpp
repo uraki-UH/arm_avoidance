@@ -99,6 +99,7 @@ public:
   void set_config(const Config &config);
   bool set_parameter(const char *name, std::uint32_t index, float value);
   void set_points(const std::vector<Point3f> &points);
+  void update_points(const std::vector<Point3f> &points);
   void set_point_labels(const std::vector<std::uint8_t> &labels);
   bool run();
   bool exec(std::uint32_t steps);

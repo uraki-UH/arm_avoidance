@@ -8,6 +8,8 @@
 #include <rmw/types.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/u_int32_multi_array.hpp>
+#include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <ais_gng_feature_msgs/msg/topological_node_feature.hpp>
 #include <ais_gng_feature_msgs/msg/topological_cluster_feature.hpp>
@@ -18,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -55,12 +58,18 @@ namespace topic_utils {
     bool isBrowsableSourceType(const std::string& type) {
         return type == "pointcloud" ||
                type == "topological_map" ||
+               type == "nonplane_component" ||
                type == "marker" ||
                type == "voxel";
     }
-    std::string detectType(const std::vector<std::string>& types) {
+    std::string detectType(const std::string& topic, const std::vector<std::string>& types) {
         for (const auto& t : types) {
             if (t.find("PointCloud2") != std::string::npos) return "pointcloud";
+            if (topic.find("nonplane_components") != std::string::npos &&
+                t.find("UInt32MultiArray") != std::string::npos)
+            {
+                return "nonplane_component";
+            }
             if (t.find("TopologicalMap") != std::string::npos) return "topological_map";
             if (t.find("TopologicalNodeFeature") != std::string::npos) return "topological_node_feature";
             if (t.find("TopologicalClusterFeature") != std::string::npos) return "topological_cluster_feature";
@@ -103,6 +112,121 @@ namespace converter {
     }
     json to_json(const visualization_msgs::msg::MarkerArray::SharedPtr msg, const std::string& tag) {
         json markers = json::array(); for (auto& m : msg->markers) markers.push_back(marker_to_json(m));
+        return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
+    }
+    std::array<float, 3U> nonplane_component_color(const std::size_t component_index) {
+        constexpr std::array<std::array<float, 3U>, 8U> colors{{
+            {{0.93F, 0.33F, 0.31F}}, {{0.20F, 0.75F, 0.38F}},
+            {{0.24F, 0.56F, 0.95F}}, {{0.88F, 0.56F, 0.18F}},
+            {{0.69F, 0.36F, 0.90F}}, {{0.10F, 0.73F, 0.76F}},
+            {{0.94F, 0.44F, 0.67F}}, {{0.64F, 0.78F, 0.24F}},
+        }};
+        return colors[component_index % colors.size()];
+    }
+    json nonplane_marker(
+        const std::int32_t id, const std::string& marker_ns, const std::string& marker_type,
+        const std::array<float, 3U>& color, const std::array<double, 3U>& scale,
+        const std::string& frame_id)
+    {
+        return {
+            {"id", id}, {"ns", marker_ns}, {"type", marker_type}, {"action", 0},
+            {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
+            {"scale", {scale[0], scale[1], scale[2]}},
+            {"color", {color[0], color[1], color[2], 1.0F}}, {"frameId", frame_id},
+            {"points", json::array()},
+        };
+    }
+    json to_json(
+        const std_msgs::msg::UInt32MultiArray::SharedPtr msg,
+        const ais_gng_msgs::msg::TopologicalMap& map,
+        const ais_gng_msgs::msg::PlaneClusterArray* plane_clusters,
+        const std::string& tag)
+    {
+        if (msg->data.size() < 2U || msg->data[0] != map.frame_number) {
+            return json();
+        }
+
+        const std::size_t component_num = msg->data[1];
+        std::size_t data_index = 2U;
+        json markers = json::array();
+        std::vector<std::int32_t> component_by_node(map.nodes.size(), -1);
+        for (std::size_t component_index = 0U; component_index < component_num; ++component_index) {
+            if (data_index + 2U > msg->data.size()) {
+                return json();
+            }
+            const std::uint32_t component_id = msg->data[data_index++];
+            const std::size_t node_num = msg->data[data_index++];
+            if (node_num > msg->data.size() - data_index) {
+                return json();
+            }
+            const auto color = nonplane_component_color(component_index);
+            auto marker = nonplane_marker(
+                static_cast<std::int32_t>(component_id), "nonplane_components", "sphere_list",
+                color, {0.012, 0.012, 0.012}, map.header.frame_id);
+            for (std::size_t node_offset = 0U; node_offset < node_num; ++node_offset) {
+                const std::uint32_t node_index = msg->data[data_index++];
+                if (node_index >= map.nodes.size()) {
+                    continue;
+                }
+                component_by_node[node_index] = static_cast<std::int32_t>(component_index);
+                const auto& position = map.nodes[node_index].pos;
+                marker["points"].push_back({position.x, position.y, position.z});
+            }
+            markers.push_back(std::move(marker));
+        }
+        if (data_index != msg->data.size()) {
+            return json();
+        }
+
+        auto edges = nonplane_marker(
+            0, "nonplane_component_edges", "line_list", {0.92F, 0.92F, 0.92F},
+            {0.004, 0.0, 0.0}, map.header.frame_id);
+        for (std::size_t edge_index = 0U; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+            const std::size_t first = map.edges[edge_index];
+            const std::size_t second = map.edges[edge_index + 1U];
+            if (first >= map.nodes.size() || second >= map.nodes.size() ||
+                component_by_node[first] < 0 || component_by_node[first] != component_by_node[second])
+            {
+                continue;
+            }
+            const auto& first_position = map.nodes[first].pos;
+            const auto& second_position = map.nodes[second].pos;
+            edges["points"].push_back({first_position.x, first_position.y, first_position.z});
+            edges["points"].push_back({second_position.x, second_position.y, second_position.z});
+        }
+        markers.push_back(std::move(edges));
+
+        if (plane_clusters != nullptr && plane_clusters->frame_number == map.frame_number) {
+            std::vector<bool> is_plane_node(map.nodes.size(), false);
+            for (const auto& cluster : plane_clusters->clusters) {
+                for (const std::uint32_t node_index : cluster.node_indices) {
+                    if (node_index < is_plane_node.size()) {
+                        is_plane_node[node_index] = true;
+                    }
+                }
+            }
+            auto anchors = nonplane_marker(
+                0, "nonplane_component_plane_anchors", "line_list", {1.0F, 0.78F, 0.05F},
+                {0.004, 0.0, 0.0}, map.header.frame_id);
+            for (std::size_t edge_index = 0U; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+                const std::size_t first = map.edges[edge_index];
+                const std::size_t second = map.edges[edge_index + 1U];
+                if (first >= map.nodes.size() || second >= map.nodes.size()) {
+                    continue;
+                }
+                const bool is_anchor =
+                    (component_by_node[first] >= 0 && is_plane_node[second]) ||
+                    (component_by_node[second] >= 0 && is_plane_node[first]);
+                if (!is_anchor) {
+                    continue;
+                }
+                const auto& first_position = map.nodes[first].pos;
+                const auto& second_position = map.nodes[second].pos;
+                anchors["points"].push_back({first_position.x, first_position.y, first_position.z});
+                anchors["points"].push_back({second_position.x, second_position.y, second_position.z});
+            }
+            markers.push_back(std::move(anchors));
+        }
         return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
     }
     json to_json(const ais_gng_feature_msgs::msg::TopologicalNodeFeature& feature, const std::string& tag) {
@@ -158,6 +282,7 @@ namespace converter {
                 {"semanticReliability", n.semantic_reliability},
                 {"isGoal", n.is_goal},
                 {"age", age},
+                {"nonplaneComponentId", n.nonplane_component_id},
                 {"winnerPointCount", n.winner_point_count},
                 {"winnerPointCovariance", {
                     n.winner_point_covariance[0], n.winner_point_covariance[1], n.winner_point_covariance[2],
@@ -306,6 +431,20 @@ public:
                 }
                 broadcastText(payload);
             });
+        const auto nonplane_source_qos = rclcpp::QoS(1).reliable().transient_local();
+        nonplane_source_map_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+            "/topological_map", nonplane_source_qos,
+            [this](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
+                std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+                latest_nonplane_source_map_ = msg;
+            });
+        nonplane_source_plane_cluster_sub_ =
+            create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
+                "/plane_clusters", nonplane_source_qos,
+                [this](const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr msg) {
+                    std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+                    latest_nonplane_source_plane_clusters_ = msg;
+                });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
         graphWatchThread_ = std::thread([this]() { watchGraphChanges(); });
@@ -362,7 +501,7 @@ private:
         json sources = json::array();
         for (auto const& [topic, types] : topics) {
             if (topic_utils::isInternal(topic)) continue;
-            std::string st = topic_utils::detectType(types); if (st.empty()) continue;
+            std::string st = topic_utils::detectType(topic, types); if (st.empty()) continue;
             if (!topic_utils::isBrowsableSourceType(st)) continue;
             if (count_publishers(topic) == 0) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",active_sources.count(topic)>0}});
@@ -499,6 +638,32 @@ private:
         broadcastText(viewer_internal::makeOkResponse("sync_sources", {{"sources", sources}}));
     }
 
+    void broadcast_nonplane_components(
+        const std_msgs::msg::UInt32MultiArray::SharedPtr msg,
+        const std::string& source_id)
+    {
+        ais_gng_msgs::msg::TopologicalMap::SharedPtr map;
+        ais_gng_msgs::msg::PlaneClusterArray::SharedPtr plane_clusters;
+        {
+            std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+            map = latest_nonplane_source_map_;
+            plane_clusters = latest_nonplane_source_plane_clusters_;
+        }
+        if (!map) {
+            return;
+        }
+        const json payload = converter::to_json(msg, *map, plane_clusters.get(), source_id);
+        if (payload.is_null()) {
+            return;
+        }
+        const std::string serialized = payload.dump();
+        {
+            std::lock_guard<std::mutex> lock(markerMutex_);
+            lastMarkerPayloads_[source_id] = serialized;
+        }
+        broadcastText(serialized);
+    }
+
     void handleSourcesSetActive(WebSocket* ws, const std::string& id, const json& params) {
         std::string sid = params.value("sourceId", "");
         bool active = params.value("active", false);
@@ -511,7 +676,7 @@ private:
                 if (activeDynamicSubs_.count(sid)) return;
                 auto topics = get_topic_names_and_types();
                 if (topics.count(sid)) {
-                std::string st = topic_utils::detectType(topics[sid]);
+                std::string st = topic_utils::detectType(sid, topics[sid]);
                 if (!topic_utils::isBrowsableSourceType(st)) {
                     broadcastText(viewer_internal::makeErrorResponse(
                         id, "UNSUPPORTED_SOURCE_TYPE",
@@ -536,6 +701,13 @@ private:
                                 m->header.frame_id,
                                 utils::convertToProtocolMessage(
                                     utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
+                        });
+                } else if (st == "nonplane_component") {
+                    activeSubTypes_[sid] = "nonplane_component";
+                    activeDynamicSubs_[sid] = create_subscription<std_msgs::msg::UInt32MultiArray>(
+                        sid, rclcpp::QoS(1).reliable().transient_local(),
+                        [this, sid](const std_msgs::msg::UInt32MultiArray::SharedPtr m) {
+                            broadcast_nonplane_components(m, sid);
                         });
                 } else if (st == "topological_map") {
                     activeSubTypes_[sid] = "topological_map";
@@ -1036,6 +1208,8 @@ private:
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr rpcRequestPub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr rpcResponseSub_, jobEventSub_, robotDescSub_, robotPoseSub_;
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_, tfStaticSub_;
+    rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr nonplane_source_map_sub_;
+    rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr nonplane_source_plane_cluster_sub_;
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     std::unordered_map<std::string, std::string> active_source_publisher_signatures_;
@@ -1044,8 +1218,10 @@ private:
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
     std::string lastStaticTfPayload_;
     std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
+    ais_gng_msgs::msg::TopologicalMap::SharedPtr latest_nonplane_source_map_;
+    ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_nonplane_source_plane_clusters_;
     std::chrono::steady_clock::time_point lastTfTime_;
-    std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
+    std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_, nonplane_source_mutex_;
     std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_, voxelMutex_;
     std::unordered_map<std::string, VoxelStreamState> voxelStreamStates_;
     std::string lastSourcesSnapshot_;

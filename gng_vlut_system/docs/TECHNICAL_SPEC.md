@@ -922,14 +922,16 @@ launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結�
 
 対応済みテンプレート平面の`idx`に属するnodeは、対応先環境平面の`node_indices`内だけを
 node対応候補とする。対応済み環境平面に属するnodeは、非平面テンプレートnodeの候補から除外する。
-node評価は符号不変の回転後法線、`rho`、node次数の連続的なファジー評価、edge評価は対応済みnode間の
-接続一致率とする。テンプレートnodeが環境側で未対応の場合は遮蔽または視野外として扱い、
-対応済み構造だけを加点する。XY平行移動や位置レジストレーションは実行しない。
+node評価は符号不変の回転後法線と`rho`を固定比率で合成した`shape_score`とする。
+node次数はedge評価と重複するためscoreへ入れない。対応済みnode間の接続一致率と平面支持度の
+大きい方を`relation_score`、対応node率を`visible_ratio`とし、候補scoreは
+`cbrt(shape_score * relation_score * visible_ratio)`で求める。テンプレートnodeが環境側で
+未対応の場合は遮蔽または視野外として扱う。XY平行移動や位置レジストレーションは実行しない。
 
 対応済み環境nodeへ接続する未対応nodeについて、対応先テンプレートnodeの未対応隣接nodeの
 どれにも適合しない場合は、仮説を破壊する反証nodeとする。反証量は各nodeの
 `winner_point_count`を入力点群支持量として集計し、対応nodeの支持量との比
-`contradiction_point_ratio`で評価する。`max_contradiction_point_ratio`を超える姿勢候補は
+`contradiction_point_ratio`で評価する。`contradiction_limit`を超える姿勢候補は
 高scoreでも除外し、score順の次点候補を選ぶ。全姿勢候補が除外された場合は`no_hypothesis`を
 出力し、静的テンプレートは召喚しない。
 
@@ -942,17 +944,17 @@ yawは常に`0 <= yaw < 360`の全周を探索し、`yaw_step_deg`だけで分�
 yawの有効・無効や最小・最大角度は設定しない。roll/pitchは
 `roll_tolerance_deg`、`pitch_tolerance_deg`の対称な`±tolerance`内を
 `roll_pitch_step_deg`刻みで探索し、0度と許容端点を必ず候補へ含める。
-`enable_roll_pitch_search`がfalseの間はroll/pitchとも0度の固定仮説を使う。
+各toleranceが0度ならその軸を0度へ固定し、0度より大きければその軸を探索する。
+`enable_roll_pitch_search`は旧設定との互換用に受理するが、通常判定はtolerance自体を使用する。
 姿勢仮説数は`max_orientation_hypothesis_num`で上限を設ける。
 
 平面およびGNG nodeの法線は表裏を区別しない方向特徴として扱う。法線評価は内積の絶対値を使い、
 観測方向や局所推定による符号反転では減点しない。
 
-検証器は候補スコア、対応node・edge比率、平面対応比率、欠損node比率、連続フレーム数、継続時間で
-`pending`と`confirmed`を判定する。確定開始と解除には別のscore値を用い、境界値での
-配信点滅を抑制する。`enable_plane_cluster_evidence`有効時は、
-`min_plane_support_score`以上の平面根拠がある候補について、
-GNGの`matched_edge_ratio`不足だけでは除外しない。状態と候補詳細は次のtopicへ
+検証器は`recognition_threshold`、`min_visible_ratio`、`confirmation_time_sec`だけで
+`pending`と`confirmed`を判定する。scaleと反証はmatcherの`is_falsified`へ集約し、
+edge、平面、欠損率をvalidatorで重ねて判定しない。確定後は認識しきい値から0.15を引いた
+固定ヒステリシスを使い、境界値での配信点滅を抑制する。状態と候補詳細は次のtopicへ
 `std_msgs/msg/String`のJSONとして配信する。
 
 | topic | 内容 |
@@ -967,13 +969,13 @@ ros2 launch gng_vlut_system object_template_matching.launch.py \
 ```
 
 環境側topicは既定で`/topological_map`であり、`environment_topological_map_topic`で変更する。
-設定は`config/object_template_matching.yaml`へ分離し、姿勢探索、法線・`rho`・次数の評価範囲、
-edge重み、全体スケールの許容域、遮蔽許容、確定・解除条件をテンプレートごとに切り替えられる。
+設定は`config/object_template_matching.yaml`へ分離する。通常調整する評価parameterは
+`roll_tolerance_deg`、`pitch_tolerance_deg`、`shape_tolerance`、`min_visible_ratio`、
+`scale_tolerance`、`contradiction_limit`、`recognition_threshold`、`confirmation_time_sec`の
+8つとする。yaw分解能と平面抽出由来の内部閾値は実装設定としてYAMLに残す。
 
-`enable_scale_evaluation`有効時は、対応済みGNG edgeの長さ比
-`environment_edge_length / template_edge_length`の中央値を`scale_ratio`として評価する。
-`min_scale_full_match_ratio`から`max_scale_full_match_ratio`は満点、外側の
-`min_scale_allow_ratio`から`max_scale_allow_ratio`までは連続的に減点し、その外側は候補を反証する。
+対応済みGNG edgeの長さ比`environment_edge_length / template_edge_length`の中央値を
+`scale_ratio`として評価する。`0.95`から`1.05`は満点、`1 ± scale_tolerance`の外側は候補を反証する。
 対応edgeが`min_scale_edge_num`未満のときは遮蔽などによる未観測として、スケール評価を行わない。
 
 `enable_oversized_plane_filter`有効時は、テンプレートJSONの`gng.plane_clusters`と
@@ -986,9 +988,9 @@ edge重み、全体スケールの許容域、遮蔽許容、確定・解除条�
 
 `enable_plane_cluster_evaluation`有効時は、過大平面を除いた環境平面とテンプレート平面を
 yaw仮説ごとに一対一対応させる。`min_plane_extent_allow_ratio`から
-`max_plane_extent_overflow_ratio`までをextent比の許容域とし、`plane_weight`でGNG node/edge評価との
-合成比率を設定する。`plane_support_score_scale`は平面対応score合計の飽和速度、
-`min_plane_support_score`は平面根拠によるedge評価代替と反証抑制に使う下限とする。
+`max_plane_extent_overflow_ratio`までをextent比の許容域とする。`plane_support_score_scale`は
+平面対応score合計の飽和速度を決める。平面支持度はedge接続一致率と比較し、大きい方だけを
+`relation_score`として採用する。
 候補JSONは`matched_plane_cluster_num`、`matched_plane_cluster_ratio`、`plane_score`、
 `plane_support_score`、`plane_correspondences`を出力する。
 
@@ -999,14 +1001,14 @@ yaw仮説ごとに一対一対応させる。`min_plane_extent_allow_ratio`か�
 
 TopoFuzzy Viewerは`Analyze`の右に独立した`Match`タブを持ち、
 `object_template_matcher_node`と`object_template_match_validator_node`の評価パラメータを
-実行中に取得・変更できる。姿勢探索、node、平面、graph・scale、反証、確定判定の各項目を
+実行中に取得・変更できる。8項目を`Orientation`、`Evidence`、`Rejection`、`Decision`へ2項目ずつ
 グループ化して表示し、対象ノード名は既定の
 `/object_template_matcher_node`、`/object_template_match_validator_node`から変更可能とする。
 `Match`タブ選択時はviewport内の全画面モーダルを開き、広い画面では設定グループを3列、
 狭い画面では1列で表示する。ヘッダーと`Apply`は固定し、設定領域だけをスクロール対象とする。
 
 frontendは`templateMatch.getConfig`と`templateMatch.applyConfig` RPCを使用し、
-`viewer_template_match_node`が許可済みparameterだけをROS parameter serviceへ中継する。
+`viewer_template_match_node`が上記8 parameterだけをROS parameter serviceへ中継する。
 matcherとvalidatorは相互依存する範囲を各ノード内で一括検証し、
 `set_parameters_atomically`単位で反映する。matcher反映後にvalidatorが拒否した場合、
 Viewer側はmatcherを適用前の値へ戻す。`state_publish_hz`はタイマー再生成を伴わないため

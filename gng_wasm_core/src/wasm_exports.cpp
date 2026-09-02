@@ -44,7 +44,13 @@ struct GngWasmConfig {
   float eb;
   float en;
   std::uint32_t seed;
+  float node_grid;
+  float node_interval;
 };
+
+GNG_EXPORT std::uint32_t gng_wasm_abi_version() {
+  return 3;
+}
 
 GNG_EXPORT void *gng_wasm_create() {
   kernel().reset();
@@ -71,6 +77,8 @@ GNG_EXPORT void gng_wasm_set_config(const GngWasmConfig *config) {
   cfg.eb = config->eb;
   cfg.en = config->en;
   cfg.seed = config->seed;
+  cfg.grid = config->node_grid;
+  cfg.interval[0] = config->node_interval;
   kernel().set_config(cfg);
 }
 
@@ -91,6 +99,21 @@ GNG_EXPORT void gng_wasm_set_points(const float *xyz, std::uint32_t point_count)
     buffer.push_back(gng_wasm_core::Point3f{xyz[base], xyz[base + 1], xyz[base + 2]});
   }
   kernel().set_points(buffer);
+}
+
+GNG_EXPORT void gng_wasm_update_points(const float *xyz, std::uint32_t point_count) {
+  auto &buffer = points_buffer();
+  buffer.clear();
+  if (!xyz || point_count == 0) {
+    kernel().update_points(buffer);
+    return;
+  }
+  buffer.reserve(point_count);
+  for (std::uint32_t i = 0; i < point_count; ++i) {
+    const std::size_t base = static_cast<std::size_t>(i) * 3;
+    buffer.push_back(gng_wasm_core::Point3f{xyz[base], xyz[base + 1], xyz[base + 2]});
+  }
+  kernel().update_points(buffer);
 }
 
 GNG_EXPORT void gng_wasm_set_point_labels(const std::uint8_t *label_data, std::uint32_t count) {

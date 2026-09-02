@@ -319,6 +319,7 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.semanticLabel !== b.semanticLabel ||
             a.semanticReliability !== b.semanticReliability ||
             a.age !== b.age ||
+            a.nonplaneComponentId !== b.nonplaneComponentId ||
             a.winnerPointCount !== b.winnerPointCount ||
             a.isGoal !== b.isGoal ||
             a.manipValid !== b.manipValid ||
@@ -633,7 +634,7 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
         ): Promise<SetParameterResult> => sendRpc('params.set', { paramName, value }),
         getTemplateMatchConfig: (
             targets: TemplateMatchTargets
-        ): Promise<TemplateMatchConfigResult> => sendRpc('templateMatch.getConfig', { ...targets }),
+        ): Promise<TemplateMatchConfigResult> => sendRpc('templateMatch.getConfig', { ...targets }, 3000),
         applyTemplateMatchConfig: (
             config: TemplateMatchConfig
         ): Promise<TemplateMatchConfigResult> => sendRpc('templateMatch.applyConfig', {

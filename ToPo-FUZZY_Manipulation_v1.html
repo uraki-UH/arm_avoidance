@@ -717,7 +717,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
           </details>
           <div class="section-title">Tabletop Scene Option</div>
-          <div><label>Table support</label><select id="tableMode"><option value="off">object only</option><option value="plane" selected>on table / tabletop</option><option value="edge">on table / tabletop + front edge</option></select></div>
+          <div><label>Table support</label><select id="tableMode"><option value="off" selected>object only</option><option value="plane">on table / tabletop</option><option value="edge">on table / tabletop + front edge</option></select></div>
           <div><label>Table design / 机デザイン</label><select id="tableDesign"><option value="rect" selected>Rect desk / 長方形机</option><option value="round">Round table / 丸机</option><option value="lab">Lab desk / 実験机</option><option value="corner">Corner desk / コーナー机</option><option value="pedestal">Pedestal table / 台座テーブル</option></select></div>
           <div><label>Table size [m]</label><input id="tableSize" type="range" min="0.20" max="0.80" step="0.02" value="0.42"></div>
           <div><label>Table height [m]</label><input id="tableHeight" type="number" min="-0.05" max="0.08" step="0.005" value="0.000"></div>
@@ -725,10 +725,12 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="section-title">GNG Learning Mode</div>
           <div class="full"><label>GNG mode</label><select id="gngLearningMode"><option value="online">Online Sequential GNG / 逐次学習</option><option value="offline">Offline Batch GNG / バッチ学習</option></select></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
-          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm"><option value="standard" selected>GNG / 標準GNG</option><option value="gng_t">GNG-T / Triangulation</option><option value="density_gng_t">密度制御GNG-T / Density-Control GNG-T</option><option value="wasm">GNG-WASM / C++ WebAssembly</option></select></div>
+          <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm" disabled><option value="wasm" selected>基幹GNG-WASM / C++ WebAssembly</option></select></div>
           <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">オクルージョンなし表面点群</option><option value="imported_frames">取り込みフレーム</option></select></div>
           <div class="full"><label>GNG WASM input source</label><select id="gngWasmInputSource"><option value="visible_points" selected>Visible points / 現在表示中の点群</option><option value="object_surface">オクルージョンなし表面点群 / 深度なし・遮蔽なし</option><option value="base_points">Base points / 生成元の静的点群</option><option value="imported_frame">Imported frame / 取り込みフレーム1枚</option><option value="imported_all">Imported all frames / 取り込みフレーム全部</option></select></div>
-          <div class="full"><label>GNG learning samples per frame / 1フレームあたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
+          <div class="full"><label>GNG learning samples per update / 1更新あたり学習点数</label><input id="gngSamplesPerFrame" type="number" min="1" max="500" step="1" value="200"><input id="batchScans" type="hidden" value="1"><input id="batchCap" type="hidden" value="0"></div>
+          <div><label>GNG training update [Hz]</label><input id="gng_training_hz" type="number" min="1" max="60" step="1" value="30"></div>
+          <div><label>GNG visual update [Hz]</label><input id="gng_visual_hz" type="number" min="1" max="30" step="1" value="10"></div>
           <div id="gngBundleTopicContainer" class="full hide">
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
               <button id="gngBundleToggleAllBtn" type="button">全選択</button>
@@ -758,11 +760,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
           </div>
           <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
-          <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm,text/javascript" multiple>
           <div class="full">
-            <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">WASMでGNG実行</button>
-            <div id="gngWasmStatus" class="readout" style="margin-top:6px">GNGロジック差し替え用。gng_wasm_core/dist/ の `gng_wasm_core.js` を選択（WASM内蔵済み単一ファイル）。</div>
+            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">基幹GNG-WASMで実行</button>
+            <div id="gngWasmStatus" class="readout" style="margin-top:6px">内蔵 `gng_wasm_core/dist/gng_wasm_core.js` を自動読み込みします。JavaScript GNGへのフォールバックは行いません。</div>
           </div>
           <details id="wasmParamsSection" class="full gng-params-toggle" style="display:none">
             <summary class="gng-params-summary">
@@ -817,11 +817,14 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
           </details>
           旧WASMパラメータUIここまで -->
-          <input id="gngWasmFile" type="file" class="hide" accept=".js,application/javascript,text/javascript">
           <div class="full">
-            <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMを読み込む</button>
-            <button id="gngRunWasmGngBtn" class="gng-wasm-run" data-action-kind="run" type="button">WASMでGNG実行</button>
-            <div id="gngWasmStatus" class="readout" style="margin-top:6px">標準WASMを自動読込。差し替えはJSとWASMを同時選択。</div>
+            <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm" multiple>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="gngRunWasmGngBtn" class="gng-wasm-run" data-action-kind="run" type="button">基幹GNG-WASMで実行</button>
+              <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMファイルを読込み</button>
+              <button id="gngReloadBundledWasmBtn" data-action-kind="load" type="button">内蔵WASMを再読込み</button>
+            </div>
+            <div id="gngWasmStatus" class="readout" style="margin-top:6px">内蔵GNG-WASMを自動読込します。JavaScript GNGへのフォールバックは行いません。</div>
           </div>
           <div class="full"><label>Online IK motion generation / オンラインIK軌道生成</label><div class="mini-grid">
             <div><label>Motion duration [s]</label><input id="ikMotionDuration" type="range" min="0.2" max="6.0" step="0.1" value="2.0"><input id="ikMotionDurationNum" type="number" min="0.2" max="6.0" step="0.1" value="2.0"></div>
@@ -839,12 +842,14 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             <div class="gng-params-inner-grid">
               <div><label>GNG max nodes</label><input id="gngMaxNodes" type="number" min="30" max="10000" step="10" value="1200"></div>
               <div><label>GNG iterations</label><input id="gngIters" type="number" min="500" max="50000" step="500" value="12000"></div>
+              <div><label>Node coverage radius [m]</label><input id="gng_node_interval" type="number" min="0.001" max="0.300" step="0.001" value="0.010"></div>
               <div><label>Insertion λ</label><input id="gngLambda" type="number" min="20" max="300" step="5" value="70"></div>
               <div><label>Max edge age</label><input id="gngMaxAge" type="number" min="20" max="300" step="5" value="95"></div>
               <div><label>Winner εb</label><input id="gngEb" type="number" min="0.01" max="0.18" step="0.005" value="0.055"></div>
               <div><label>Neighbor εn</label><input id="gngEn" type="number" min="0.001" max="0.04" step="0.001" value="0.006"></div>
               <div><label>Cell competition radius</label><input id="densityCompRadius" type="number" min="0.002" max="0.080" step="0.001" value="0.018"></div>
               <div><label>Density prune interval</label><input id="densityPruneInterval" type="number" min="20" max="2000" step="10" value="250"></div>
+              <div class="full"><button id="gngApplyGraspnetProfileBtn" data-action-kind="load" type="button">graspnet.yaml 基本学習値を適用</button></div>
               <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">Target edge length thresholds (density-control)</label></div>
               <div><label>Target edge floor / 床面 [m]</label><input id="densityTargetFloor" type="number" min="0.005" max="1.000" step="0.005" value="0.250"></div>
               <div><label>Target edge wall / 壁面 [m]</label><input id="densityTargetWall" type="number" min="0.005" max="1.000" step="0.005" value="0.250"></div>
@@ -873,7 +878,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>Face overdraw grid [px]</label><div class="control-pair"><input id="faceTilePx" type="range" min="18" max="80" step="2" value="34"><input id="faceTilePxNum" type="number" min="18" max="80" step="2" value="34"></div></div>
               <div class="full"><label>Face color / code</label><div class="color-pair"><input id="faceColor" type="color" value="#00ff00"><input id="faceColorCode" class="color-code-input" type="text" value="#00FF00" maxlength="7"></div></div>
               
-              <label class="topo-switch full" style="border-top:1px solid rgba(148,163,184,.18);padding-top:8px"><input id="normalDrawEnabled" type="checkbox" checked> 法線ベクトルを描画</label>
+              <label class="topo-switch full" style="border-top:1px solid rgba(148,163,184,.18);padding-top:8px"><input id="normalDrawEnabled" type="checkbox"> 法線ベクトルを描画</label>
               <div><label>Normal arrow length</label><div class="control-pair"><input id="normalLength" type="range" min="0.005" max="0.12" step="0.002" value="0.035"><input id="normalLengthNum" type="number" min="0.005" max="0.12" step="0.002" value="0.035"></div></div>
               <div><label>Normal arrow width</label><div class="control-pair"><input id="normalWidth" type="range" min="0.4" max="6" step="0.1" value="1.8"><input id="normalWidthNum" type="number" min="0.4" max="6" step="0.1" value="1.8"></div></div>
               <div><label>Normal arrow opacity</label><div class="control-pair"><input id="normalOpacity" type="range" min="0" max="1" step="0.01" value="0.45"><input id="normalOpacityNum" type="number" min="0" max="1" step="0.01" value="0.45"></div></div>
@@ -955,7 +960,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 <div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
-</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" data-action-kind="run" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" data-action-kind="run" type="button">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox" checked> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox" checked> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" data-action-kind="run" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" data-action-kind="run" type="button">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox"> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox"> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
@@ -1093,7 +1098,7 @@ function reportGngRuntimeError(context,err){console.warn('[GNG error]',context,e
 const state={
   objectSurfacePoints:[],object_surface_scene_points:[],basePoints:[],points:[],nodes:[],edges:[],sample:'mug',candidates:[],best:null,
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
-  frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],
+  frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],gng_realtime:null,_gng_realtime_raf:0,
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
   stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,robotTrajectory:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
@@ -1209,8 +1214,11 @@ function v297SetFastGngDefaults(){
     pointCount:4200,
     gngMaxNodes:1200,
     gngIters:12000,
+    gng_node_interval:0.010,
     gngLambda:70,
     gngSamplesPerFrame:200,
+    gng_training_hz:30,
+    gng_visual_hz:10,
     densityPruneInterval:250,
     tableDensity:0.10,
     faceOpacity:0.020,
@@ -1225,7 +1233,24 @@ function v297SetFastGngDefaults(){
     if(el) el.value=String(val);
   }
   const alg=$('gngAlgorithm');
-  if(alg) alg.value='standard';
+  if(alg) alg.value='wasm';
+}
+
+function v312ApplyGraspnetGngProfile(){
+  const values={
+    gngMaxNodes:4096,
+    gngIters:5000,
+    gngMaxAge:100,
+    gngEb:0.08,
+    gngEn:0.008,
+    gng_node_interval:0.001
+  };
+  for(const [id,value] of Object.entries(values)){
+    const el=$(id);
+    if(el)el.value=String(value);
+  }
+  resetGngRunState();
+  if($('topoStatus'))$('topoStatus').textContent='graspnet.yaml 基本学習値を適用しました。未ラベルHTML点群はunknown interval=0.001 mとして次回GNG実行時に学習します。';
 }
 
 function labelOf(t){const m={mug:'カップ / Mug',teacup:'ティーカップ / Teacup',beer_mug:'ビアジョッキ / Beer mug',measuring_cup:'計量カップ / Measuring cup',milk_jug:'ミルクジャグ / Milk jug',pitcher:'ピッチャー / Pitcher',watering_can:'じょうろ / Watering can',detergent:'洗剤ボトル / Detergent bottle',kettle:'ケトル / Kettle',spray:'スプレーボトル / Spray bottle',saucepan:'片手鍋 / Saucepan',basket:'バスケット / Basket',canister:'キャニスタ / Canister',carafe:'カラフェ / Carafe'};return m[t]||String(t||'-')}
@@ -1820,7 +1845,7 @@ function updateMovingPoints(){
   state.points=v312ApplyDepthCameraVisibility(pts,state.time||0);
 }
 function gngMode(){const el=$('gngLearningMode');return el?el.value:'online'}
-function gngAlgorithm(){const el=$('gngAlgorithm');return el?el.value:'standard'}
+function gngAlgorithm(){return 'wasm'}
 function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
 function gngIsDensityAlgorithm(alg){return alg==='density_gng_t'||alg==='cell_density'}
 function gngUsesTriangulationAlgorithm(alg){return alg==='gng_t'||alg==='density_gng_t'}
@@ -3239,12 +3264,9 @@ function tryParseImportedAnalysisText(txt){
   return null;
 }
 const GNG_ALGORITHMS=[
-  {value:'standard',label:'GNG実行',short:'GNG'},
-  {value:'gng_t',label:'GNG-T実行',short:'GNG-T'},
-  {value:'density_gng_t',label:'密度制御GNG-T実行',short:'density-GNG-T'},
-  {value:'wasm',label:'GNG-WASM実行',short:'GNG-WASM'},
+  {value:'wasm',label:'基幹GNG-WASM実行',short:'基幹GNG-WASM'},
 ];
-function setGngAlgorithmValue(alg){const el=$('gngAlgorithm');if(el)el.value=alg;}
+function setGngAlgorithmValue(_alg){const el=$('gngAlgorithm');if(el)el.value='wasm';}
 function runGngAlgorithmFromViewer(alg){
   if(isGraphOnlyMode()){
     const s=$('topoStatus');
@@ -3252,8 +3274,7 @@ function runGngAlgorithmFromViewer(alg){
     return;
   }
   setGngAlgorithmValue(alg);
-  if(alg==='wasm'){runGngWasmFull();return;}
-  runGngAnimated();
+  void runGngWasmFull();
 }
 /* FROZEN: 現行WASM APIと互換性がない旧実行処理。
 function wasmSetParam(ex,name,index,value){
@@ -3352,18 +3373,19 @@ function runGngWasmFull_FROZEN(){
   }
 } // end FROZEN */
 async function v312LoadBundledGngWasm(){
-  if(v312WasmMode(GNG_WASM_EXPORTS)==='emscripten') return true;
+  if(v312HasCurrentGngWasm(GNG_WASM_EXPORTS)) return true;
+  GNG_WASM_EXPORTS=null;
   if(GNG_WASM_CORE_LOADING) return GNG_WASM_CORE_LOADING;
   const status=$('gngWasmStatus');
   if(status) status.textContent='基幹GNG学習コアWASMを読み込み中...';
   GNG_WASM_CORE_LOADING=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src='gng_wasm_core/dist/gng_wasm_core.js';
+    script.src='gng_wasm_core/dist/gng_wasm_core.js?v=20260902_realtime_abi3';
     script.onload=async()=>{
       try{
         if(typeof GngWasmCore!=='function') throw new Error('GngWasmCore factory was not found');
         GNG_WASM_EXPORTS=await GngWasmCore();
-        if(v312WasmMode(GNG_WASM_EXPORTS)!=='emscripten') throw new Error('基幹GNG学習コアWASM APIが不正です');
+        if(!v312HasCurrentGngWasm(GNG_WASM_EXPORTS)) throw new Error('基幹GNG学習コアWASMのABI版数が不正です');
         if(status) status.textContent='基幹GNG学習コアWASMを読み込みました。';
         resolve(true);
       }catch(error){reject(error);}
@@ -3382,6 +3404,7 @@ async function v312LoadBundledGngWasm(){
   }
 }
 async function runGngWasmFull(){
+  v312StopRealtimeGng(false);
   if(isGraphOnlyMode()){
     $('topoStatus').textContent='GNG-WASM: Graph-only modeでは実行できません。Point cloud -> GNGへ切り替えてください。';
     return;
@@ -3691,31 +3714,10 @@ function generate(){
   $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
 }
 function bbox(points){if(!points.length)return null;let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;for(const p of points){if(p.label==='outlier'||p.label==='table')continue;minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);minZ=Math.min(minZ,p.z);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);maxZ=Math.max(maxZ,p.z)}return{minX,minY,minZ,maxX,maxY,maxZ,cx:(minX+maxX)/2,cy:(minY+maxY)/2,cz:(minZ+maxZ)/2,sx:maxX-minX,sy:maxY-minY,sz:maxZ-minZ}}
-function nearest(nodes,p){let a=-1,b=-1,da=Infinity,db=Infinity;for(let i=0;i<nodes.length;i++){let d=dist2(p,nodes[i]);if(d<da){db=da;b=a;da=d;a=i}else if(d<db){db=d;b=i}}return[a,b,da,db]}
-function initGng(){
-  if(isGraphOnlyMode()){
-    if(state.importedGraphSession){
-      loadImportedGraphSession(state.importedGraphSession);
-      return;
-    }
-    state.gng=null;state.nodes=[];state.edges=[];
-    return;
-  }
-  if(!state.points.length)generate();
-  const mode=gngMode(),variant=gngAlgorithm();
-  const seed=((+$('seed').value||1)+7+(mode==='offline'?3001:0)+(gngIsDensityAlgorithm(variant)?7001:0))>>>0;
-  const r=rng(seed);
-  const valid=mode==='offline'?buildOfflineBatchDataset():v305GngTrainingPoints(state.points);
-  if(valid.length<2){state.gng=null;state.nodes=[];state.edges=[];return;}
-  const a=Math.floor(r()*valid.length);let b=Math.floor(r()*valid.length);if(b===a)b=(a+1)%valid.length;
-  state.gng={nodes:[{...valid[a],label:'gng',err:0,win:0,util:0,densityClass:pointDensityClass(valid[a]),targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass(valid[a])))},{...valid[b],label:'gng',err:0,win:0,util:0,densityClass:pointDensityClass(valid[b]),targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass(valid[b])))}],edges:new Map(),triangles:new Map(),rng:r,iter:0,mode,variant,trainingPoints:mode==='offline'?valid:null,backend:'JavaScript replay'};
-  state.nodes=state.gng.nodes;state.edges=[];
-}
-
 /* v259: C++ compiled WebAssembly accelerator for the inner GNG loop. */
 const GNG_WASM_BASE64='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BCAFIAYgB0EBIAggCSAKIAsgDBCXgICAAAsA/gMEbmFtZQAaGXRvcG9fZ25nX2tlcm5lbF92MjY2Lndhc20BxgMZABFfX3dhc21fY2FsbF9jdG9ycwEOZ25nX21heF9wb2ludHMCDWduZ19tYXhfbm9kZXMDDWduZ19tYXhfZWRnZXMEDGduZ19wb2ludHNfeAUMZ25nX3BvaW50c195BgxnbmdfcG9pbnRzX3oHDmduZ19wb2ludHNfY2xzCAtnbmdfbm9kZXNfeAkLZ25nX25vZGVzX3kKC2duZ19ub2Rlc196Cw1nbmdfbm9kZXNfZXJyDA1nbmdfbm9kZXNfd2luDQ5nbmdfbm9kZXNfdXRpbA4NZ25nX25vZGVzX2Nscw8LZ25nX2VkZ2VzX2EQC2duZ19lZGdlc19iEQ1nbmdfZWRnZXNfYWdlEg5nbmdfbm9kZV9jb3VudBMOZ25nX2VkZ2VfY291bnQUCGduZ19pdGVyFQlnbmdfcmVzZXQWB2duZ19ydW4XZ2duZ19ydW5faW1wbChpbnQsIGludCwgaW50LCBpbnQsIGludCwgZmxvYXQsIGZsb2F0LCB1bnNpZ25lZCBpbnQsIGludCwgZmxvYXQsIGludCwgZmxvYXQsIGZsb2F0LCBmbG9hdCkYFGduZ19ydW5fY2VsbF9kZW5zaXR5BxIBAA9fX3N0YWNrX3BvaW50ZXIAfwlwcm9kdWNlcnMBDHByb2Nlc3NlZC1ieQEFY2xhbmdfMTcuMC4wIChodHRwczovL2dpdGh1Yi5jb20vc3dpZnRsYW5nL2xsdm0tcHJvamVjdC5naXQgMTA5OTliNmQwMzRmZTMxOGYzZDU2YzgzYmRkYjY1NzI1OTNhOGJiMCkASQ90YXJnZXRfZmVhdHVyZXMEKwptdWx0aXZhbHVlKw9tdXRhYmxlLWdsb2JhbHMrD3JlZmVyZW5jZS10eXBlcysIc2lnbi1leHQ=';
 let GNG_WASM_EXPORTS=null;
-let GNG_WASM_UNAVAILABLE=false;
+let GNG_WASM_UNAVAILABLE=true;
 let GNG_WASM_CORE_LOADING=null;
 function decodeBase64ToBytes(b64){
   const bin=atob(b64), bytes=new Uint8Array(bin.length);
@@ -3743,8 +3745,23 @@ function v312WasmMode(ex){
   if(typeof ex.ccall==='function' && typeof ex.cwrap==='function') return 'emscripten';
   return null;
 }
-function v312BuildWasmConfigBytes(maxNodes,iterations,lambda,maxAge,eb,en,seed){
-  const buf=new ArrayBuffer(28);
+function v312HasCurrentGngWasm(ex){
+  if(v312WasmMode(ex)!=='emscripten') return false;
+  try{return ex.ccall('gng_wasm_abi_version','number',[],[])===3;}catch(_){return false;}
+}
+function v312EstimateGngNodeGrid(points,maxNodes){
+  if(!Array.isArray(points)||points.length<2)return 0.06;
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for(const p of points){
+    minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);minZ=Math.min(minZ,p.z);
+    maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);maxZ=Math.max(maxZ,p.z);
+  }
+  const sx=Math.max(0.002,maxX-minX),sy=Math.max(0.002,maxY-minY),sz=Math.max(0.002,maxZ-minZ);
+  const targetCellNum=Math.max(8,Math.min(512,Math.ceil(Math.max(2,maxNodes)/4)));
+  return clamp(Math.cbrt((sx*sy*sz)/targetCellNum),0.06,0.12);
+}
+function v312BuildWasmConfigBytes(maxNodes,iterations,lambda,maxAge,eb,en,seed,nodeGrid,nodeInterval){
+  const buf=new ArrayBuffer(36);
   const dv=new DataView(buf);
   dv.setUint32(0,maxNodes>>>0,true);
   dv.setUint32(4,iterations>>>0,true);
@@ -3753,20 +3770,220 @@ function v312BuildWasmConfigBytes(maxNodes,iterations,lambda,maxAge,eb,en,seed){
   dv.setFloat32(16,+eb,true);
   dv.setFloat32(20,+en,true);
   dv.setUint32(24,seed>>>0,true);
+  dv.setFloat32(28,+nodeGrid,true);
+  dv.setFloat32(32,+nodeInterval,true);
   return new Uint8Array(buf);
 }
 function v312ReadWasmJson(ex, jsonSize){
-  if(!ex||typeof ex.stackSave!=='function'||typeof ex.stackAlloc!=='function'||typeof ex.stackRestore!=='function'||!ex.HEAPU8) return null;
-  const save=ex.stackSave();
+  if(!ex||typeof ex._malloc!=='function'||typeof ex._free!=='function'||!ex.HEAPU8) return null;
+  const capacity=Math.max(1,jsonSize|0);
+  const ptr=ex._malloc(capacity);
+  if(!ptr) return null;
   try{
-    const ptr=ex.stackAlloc(Math.max(1,jsonSize|0));
-    const written=ex.ccall('gng_wasm_write_graph_json','number',['number','number'],[ptr,jsonSize|0]);
-    const length=Math.max(0,(written|0)||((jsonSize|0)-1));
+    const written=ex.ccall('gng_wasm_write_graph_json','number',['number','number'],[ptr,capacity]);
+    const length=Math.max(0,(written|0)||(capacity-1));
     const bytes=new Uint8Array(ex.HEAPU8.buffer,ptr,length);
     return new TextDecoder().decode(bytes).replace(/\0+$/,'');
   }finally{
-    ex.stackRestore(save);
+    ex._free(ptr);
   }
+}
+function v312WasmSetPoints(ex,flat){
+  if(!ex||typeof ex._malloc!=='function'||typeof ex._free!=='function'||!ex.HEAPU8) return false;
+  const bytes=new Uint8Array(flat.buffer,flat.byteOffset,flat.byteLength);
+  const ptr=ex._malloc(bytes.byteLength);
+  if(!ptr) return false;
+  try{
+    ex.HEAPU8.set(bytes,ptr);
+    ex.ccall('gng_wasm_set_points',null,['number','number'],[ptr,flat.length/3]);
+    return true;
+  }finally{
+    ex._free(ptr);
+  }
+}
+function v312WasmUpdatePoints(ex,flat){
+  if(!ex||typeof ex._malloc!=='function'||typeof ex._free!=='function'||!ex.HEAPU8) return false;
+  const bytes=new Uint8Array(flat.buffer,flat.byteOffset,flat.byteLength);
+  const ptr=ex._malloc(bytes.byteLength);
+  if(!ptr) return false;
+  try{
+    ex.HEAPU8.set(bytes,ptr);
+    ex.ccall('gng_wasm_update_points',null,['number','number'],[ptr,flat.length/3]);
+    return true;
+  }finally{
+    ex._free(ptr);
+  }
+}
+function v312_build_local_graph_edges(nodes,node_interval){
+  if(!Array.isArray(nodes)||nodes.length<2)return[];
+  const edge_map=new Map();
+  const cell=0.020;
+  const max_dist=0.050;
+  const max_dist_sq=max_dist*max_dist;
+  const cell_range=Math.ceil(max_dist/cell);
+  const buckets=new Map();
+  const cell_key=(x,y,z)=>`${x}|${y}|${z}`;
+  const coords=nodes.map((node)=>({x:Math.floor(node.x/cell),y:Math.floor(node.y/cell),z:Math.floor(node.z/cell)}));
+  for(let i=0;i<coords.length;i++){
+    const c=coords[i],k=cell_key(c.x,c.y,c.z);
+    const bucket=buckets.get(k);
+    if(bucket)bucket.push(i);else buckets.set(k,[i]);
+  }
+  for(let i=0;i<nodes.length;i++){
+    const node=nodes[i],c=coords[i];
+    const nearest=[];
+    for(let dx=-cell_range;dx<=cell_range;dx++){
+      for(let dy=-cell_range;dy<=cell_range;dy++){
+        for(let dz=-cell_range;dz<=cell_range;dz++){
+          const bucket=buckets.get(cell_key(c.x+dx,c.y+dy,c.z+dz));
+          if(!bucket)continue;
+          for(const j of bucket){
+            if(j===i)continue;
+            const d_sq=dist2(node,nodes[j]);
+            if(d_sq>max_dist_sq)continue;
+            let pos=nearest.length;
+            while(pos>0&&d_sq<nearest[pos-1].d_sq)pos--;
+            if(pos<3)nearest.splice(pos,0,{idx:j,d_sq});
+            if(nearest.length>3)nearest.pop();
+          }
+        }
+      }
+    }
+    const local_dist=Math.sqrt(nearest[0]?.d_sq??(node_interval*node_interval));
+    const local_max=clamp(Math.max(node_interval*2.2,local_dist*2.6),0.018,max_dist);
+    for(const candidate of nearest){
+      if(Math.sqrt(candidate.d_sq)>local_max)continue;
+      const a=Math.min(i,candidate.idx),b=Math.max(i,candidate.idx),edge_key=key(a,b);
+      if(!edge_map.has(edge_key))edge_map.set(edge_key,{a,b,age:0});
+    }
+  }
+  return [...edge_map.values()];
+}
+function v312GngRealtimeHz(id,max_hz,fallback){
+  const value=+($(id)?.value||fallback);
+  return Math.max(1,Math.min(max_hz,Math.floor(Number.isFinite(value)?value:fallback)));
+}
+function v312RealtimePointBuffer(){
+  const points=v312GetGngWasmInputPoints();
+  if(points.length<2)return null;
+  const flat=new Float32Array(points.length*3);
+  for(let i=0;i<points.length;i++){
+    const point=points[i];
+    flat[i*3]=point.x;
+    flat[i*3+1]=point.y;
+    flat[i*3+2]=point.z;
+  }
+  return {points,flat};
+}
+function v312SyncRealtimeGraph(realtime,now){
+  const ex=realtime.ex;
+  if(now-realtime.last_semantic_now>=1000){
+    ex.ccall('gng_wasm_update_graph',null,[],[]);
+    realtime.last_semantic_now=now;
+  }
+  const json_size=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
+  const json_text=v312ReadWasmJson(ex,json_size);
+  if(!json_text)return false;
+  const parsed=JSON.parse(json_text);
+  state.nodes=(parsed.nodes||[]).map((node)=>({x:+node.x||0,y:+node.y||0,z:+node.z||0,label:'gng',err:+node.error||0,win:+node.wins||0,util:+node.utility||0}));
+  const raw_edge_num=(parsed.edges||[]).length;
+  state.edges=v312_build_local_graph_edges(state.nodes,realtime.node_interval);
+  const edge_map=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
+  state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',inputSource:realtime.input_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
+  sanitizeGngGraph();
+  state.gngTick=state.gng.iter;
+  updateCoreMetricsOnly();
+  updateHud();
+  renderAll();
+  const status=$('topoStatus');
+  if(status)status.textContent=`GNG-WASM realtime: points=${realtime.point_num}, nodes=${state.nodes.length}, edges=${state.edges.length}, raw_edges=${raw_edge_num}, iter=${state.gng.iter}, training=${v312GngRealtimeHz('gng_training_hz',60,30)} Hz, visual=${v312GngRealtimeHz('gng_visual_hz',30,10)} Hz`;
+  return true;
+}
+function v312StopRealtimeGng(render=true){
+  if(state._gng_realtime_raf){
+    cancelAnimationFrame(state._gng_realtime_raf);
+    state._gng_realtime_raf=0;
+  }
+  state.gng_realtime=null;
+  state.gngPlaying=false;
+  if(render){
+    updateHud();
+    renderAll();
+  }
+}
+async function v312StartRealtimeGng(){
+  if(isGraphOnlyMode()){
+    $('topoStatus').textContent='GNG-WASM realtimeはGraph-only modeでは実行できません。';
+    return;
+  }
+  setGngAlgorithmValue('wasm');
+  if(!await v312LoadBundledGngWasm())return;
+  const ex=getGngWasmExports();
+  if(!v312HasCurrentGngWasm(ex))return;
+  const input=v312RealtimePointBuffer();
+  if(!input){
+    $('topoStatus').textContent='GNG-WASM realtime: 学習点が2点未満です。';
+    return;
+  }
+  v312StopRealtimeGng(false);
+  const max_nodes=+$('gngMaxNodes').value||400;
+  const lambda=Math.max(1,+$('gngLambda').value||100);
+  const max_age=+$('gngMaxAge').value||80;
+  const eb=+$('gngEb').value||0.05;
+  const en=+$('gngEn').value||0.006;
+  const node_interval=Math.max(0.001,+($('gng_node_interval')?.value||0.010));
+  const node_grid=v312EstimateGngNodeGrid(input.points,max_nodes);
+  const seed=((+$('seed').value||1)+7)>>>0;
+  const config_bytes=v312BuildWasmConfigBytes(max_nodes,0,lambda,max_age,eb,en,seed,node_grid,node_interval);
+  ex.ccall('gng_wasm_reset',null,[],[]);
+  ex.ccall('gng_wasm_set_config',null,['array'],[config_bytes]);
+  if(!v312WasmSetPoints(ex,input.flat))return;
+  state.nodes=[];
+  state.edges=[];
+  state.gng=null;
+  state.gngTick=0;
+  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity};
+  state.gng_realtime=realtime;
+  state.gngPlaying=true;
+  updateHud();
+  const tick=(now)=>{
+    if(!state.gngPlaying||state.gng_realtime!==realtime)return;
+    const train_period=1000/v312GngRealtimeHz('gng_training_hz',60,30);
+    const visual_period=1000/v312GngRealtimeHz('gng_visual_hz',30,10);
+    if(now-realtime.last_train_now>=train_period){
+      try{
+        const latest=v312RealtimePointBuffer();
+        if(latest){
+          realtime.point_num=latest.points.length;
+          v312WasmUpdatePoints(ex,latest.flat);
+          const compute_start=performance.now();
+          const ok=ex.ccall('gng_wasm_exec','number',['number'],[currentGngBatchSize()]);
+          state.perf.gngComputeMs=performance.now()-compute_start;
+          state.perf.gngPeriodMs=now-realtime.last_train_now;
+          realtime.last_train_now=now;
+          if(ok!==1)throw new Error('gng_wasm_exec failed');
+        }
+      }catch(error){
+        console.error('GNG-WASM realtime training failed.',error);
+        $('topoStatus').textContent=`GNG-WASM realtime error: ${error.message}`;
+        v312StopRealtimeGng();
+        return;
+      }
+    }
+    if(now-realtime.last_visual_now>=visual_period){
+      try{
+        v312SyncRealtimeGraph(realtime,now);
+        realtime.last_visual_now=now;
+      }catch(error){
+        console.error('GNG-WASM realtime visualization failed.',error);
+        $('topoStatus').textContent=`GNG-WASM realtime visualization error: ${error.message}`;
+        v312StopRealtimeGng();
+        return;
+      }
+    }
+    state._gng_realtime_raf=requestAnimationFrame(tick);
+  };
+  state._gng_realtime_raf=requestAnimationFrame(tick);
 }
 function v312ReleaseGngWasmFileUrls(){
   if(state.gngWasmFileUrls){
@@ -3818,6 +4035,7 @@ async function v312LoadGngWasmFromFiles(fileList){
         setTimeout(()=>reject(new Error('WASM load timeout (15s)')),15000);
       });
     }
+    if(!v312HasCurrentGngWasm(mod)) throw new Error('基幹GNG学習コアWASMのABI版数が不正です');
     GNG_WASM_EXPORTS=mod;
     if(status) status.textContent=`Loaded: ${jsFile.name}`;
     const sec=$('wasmParamsSection');if(sec) sec.style.display='';
@@ -3850,6 +4068,7 @@ function runGngWasmAccelerated(){
   const maxAge=+$('gngMaxAge').value||80;
   const eb=+$('gngEb').value||0.05;
   const en=+$('gngEn').value||0.006;
+  const nodeInterval=Math.max(0.001,+($('gng_node_interval')?.value||0.010));
   const seed=((+$('seed').value||1)+7+(mode==='offline'?3001:0)+(gngIsDensityAlgorithm(variant)?7001:0))>>>0;
   const compRadius=Math.max(0,+($('densityCompRadius')?.value||0.018));
   const pruneInterval=Math.max(10,+($('densityPruneInterval')?.value||250));
@@ -3918,11 +4137,11 @@ function runGngWasmAccelerated(){
         flat[i*3+1]=p.y;
         flat[i*3+2]=p.z;
       }
-      const cfgBytes=v312BuildWasmConfigBytes(maxNodes,iters,lambda,maxAge,eb,en,seed);
-      const pointsBytes=new Uint8Array(flat.buffer);
+      const nodeGrid=v312EstimateGngNodeGrid(pts,maxNodes);
+      const cfgBytes=v312BuildWasmConfigBytes(maxNodes,iters,lambda,maxAge,eb,en,seed,nodeGrid,nodeInterval);
       ex.ccall('gng_wasm_reset',null,[],[]);
       ex.ccall('gng_wasm_set_config',null,['array'],[cfgBytes]);
-      ex.ccall('gng_wasm_set_points',null,['array','number'],[pointsBytes,pts.length]);
+      if(!v312WasmSetPoints(ex,flat)) return false;
       const ok=ex.ccall('gng_wasm_run','number',[],[]);
       if(ok!==1) return false;
       const jsonSize=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
@@ -3930,16 +4149,16 @@ function runGngWasmAccelerated(){
       if(!jsonText) return false;
       const parsed=JSON.parse(jsonText);
       state.nodes=(parsed.nodes||[]).map((n)=>({x:+n.x||0,y:+n.y||0,z:+n.z||0,label:'gng',err:+n.error||0,win:+n.wins||0,util:+n.utility||0}));
-      const edgeMap=new Map();
-      state.edges=(parsed.edges||[]).map((e)=>{
+      const raw_edges=(parsed.edges||[]).map((e)=>{
         const edge={a:Math.min(+e.a||0,+e.b||0),b:Math.max(+e.a||0,+e.b||0),age:+e.age||0};
-        edgeMap.set(key(edge.a,edge.b),{...edge});
         return edge;
       });
-      state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||iters,mode,variant,trainingPoints:mode==='offline'?pts:null,backend:'Emscripten JS/WASM',inputSource:wasmInputMode};
+      state.edges=v312_build_local_graph_edges(state.nodes,nodeInterval);
+      const edgeMap=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
+      state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:+parsed.iterations||iters,mode,variant,trainingPoints:mode==='offline'?pts:null,backend:'Emscripten GNG-WASM',inputSource:wasmInputMode,node_grid:nodeGrid,node_interval:nodeInterval,raw_edge_num:raw_edges.length};
       sanitizeGngGraph();
       state.gngTick+=(+parsed.iterations||iters);
-      if(wasmStatus) wasmStatus.textContent=`WASM GNG complete: input=${wasmInputMode}, points=${pts.length}, nodes=${state.nodes.length}, edges=${state.edges.length}, iter=${state.gng.iter}`;
+      if(wasmStatus) wasmStatus.textContent=`WASM GNG complete: input=${wasmInputMode}, points=${pts.length}, nodes=${state.nodes.length}, edges=${state.edges.length}, raw_edges=${raw_edges.length}, iter=${state.gng.iter}, node_grid=${nodeGrid.toFixed(3)} m, node_interval=${nodeInterval.toFixed(3)} m`;
       return true;
     }
   }catch(e){
@@ -4016,62 +4235,10 @@ function densityCompetitionPruneJs(g,maxNodes){
     if(gngNodeDegree(g,i)<=1&&(g.nodes[i].win||0)<meanWin*.035&&(g.nodes[i].err||0)<meanErr*.35){removeGngNode(g,i);removed++;i--;}
   }
 }
-function resetGngRunState(){state.gngPlaying=false;state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
-function gngStep(batch,opts={}){
-  if(!state.gng) initGng();
-  const g=state.gng;
-  const pts=activeTrainingPoints(g);
-  if(!pts.length) return;
-  const variant=g.variant||gngAlgorithm();
-  const maxNodes=+$('gngMaxNodes').value;
-  const lambda=Math.max(1,+$('gngLambda').value);
-  const maxAge=+$('gngMaxAge').value;
-  const eb=+$('gngEb').value;
-  const en=+$('gngEn').value;
-  const pruneInterval=Math.max(10,+($('densityPruneInterval')?.value||250));
-  for(let k0=0;k0<batch;k0++){
-    g.iter++;
-    const p=pts[Math.floor(g.rng()*pts.length)];
-    let [s1,s2,d,d2]=nearest(g.nodes,p);
-    if(s1<0||s2<0) continue;
-    if(gngIsDensityAlgorithm(variant)){
-      for(const nd of g.nodes){nd.win=(nd.win||0)*.99935;nd.util=(nd.util||0)*.99910;}
-      g.nodes[s1].win=(g.nodes[s1].win||0)+1;
-      g.nodes[s1].util=(g.nodes[s1].util||0)+Math.max(0,(d2||d)-d);
-      if((g.iter&3)===0){g.nodes[s1].densityClass=pointDensityClass(p);g.nodes[s1].targetEdgeLength=targetEdgeLengthForLabel(densityClassLabel(g.nodes[s1].densityClass));}
-    }
-    let n1=g.nodes[s1];
-    n1.err=(n1.err||0)+d;
-    n1.x+=eb*(p.x-n1.x);n1.y+=eb*(p.y-n1.y);n1.z+=eb*(p.z-n1.z);
-    for(const e of g.edges.values()){
-      if(e.a===s1||e.b===s1){
-        e.age++;
-        let j=e.a===s1?e.b:e.a;
-        if(g.nodes[j]){g.nodes[j].x+=en*(p.x-g.nodes[j].x);g.nodes[j].y+=en*(p.y-g.nodes[j].y);g.nodes[j].z+=en*(p.z-g.nodes[j].z);}
-      }
-    }
-    if(s2>=0) setGngEdge(g,s1,s2,0);
-    for(const [kk,e] of Array.from(g.edges)){if(gngShouldDeleteEdge(g,e,maxAge)) g.edges.delete(kk);}pruneGngTTriangles(g);
-    if(g.iter%lambda===0 && g.nodes.length<maxNodes){
-      let q=0,bestScore=gngIsDensityAlgorithm(variant)?densityInsertScoreJs(g.nodes[0],g):(g.nodes[0].err||0);
-      for(let i=1;i<g.nodes.length;i++){const sc=gngIsDensityAlgorithm(variant)?densityInsertScoreJs(g.nodes[i],g):(g.nodes[i].err||0);if(sc>bestScore){bestScore=sc;q=i;}}
-      let neigh=[];for(const e of g.edges.values()){if(e.a===q)neigh.push(e.b);if(e.b===q)neigh.push(e.a);}
-      let f=neigh.length?neigh[0]:null,fScore=f!=null?(gngIsDensityAlgorithm(variant)?densityInsertScoreJs(g.nodes[f],g):(g.nodes[f].err||0)):-Infinity;
-      for(const j of neigh){const sc=gngIsDensityAlgorithm(variant)?densityInsertScoreJs(g.nodes[j],g):(g.nodes[j].err||0);if(f==null||sc>fScore){f=j;fScore=sc;}}
-      if(f!=null&&g.nodes[f]){
-        let cls=(g.nodes[q].densityClass===g.nodes[f].densityClass)?g.nodes[q].densityClass:((g.nodes[q].win||0)>=(g.nodes[f].win||0)?g.nodes[q].densityClass:g.nodes[f].densityClass);let nn={x:(g.nodes[q].x+g.nodes[f].x)/2,y:(g.nodes[q].y+g.nodes[f].y)/2,z:(g.nodes[q].z+g.nodes[f].z)/2,label:'gng',err:((g.nodes[q].err||0)+(g.nodes[f].err||0))/2,win:((g.nodes[q].win||0)+(g.nodes[f].win||0))/2,util:((g.nodes[q].util||0)+(g.nodes[f].util||0))/2,densityClass:cls,targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(cls))};
-        g.nodes.push(nn);let ni=g.nodes.length-1;g.edges.delete(key(q,f));setGngEdge(g,q,ni,0);setGngEdge(g,f,ni,0);g.nodes[q].err*=.55;g.nodes[f].err*=.55;if(gngIsDensityAlgorithm(variant)){g.nodes[q].win*=.75;g.nodes[f].win*=.75;}
-      }
-    }
-    if(gngIsDensityAlgorithm(variant)&&g.iter%pruneInterval===0)densityCompetitionPruneJs(g,maxNodes);
-    for(const nd of g.nodes)nd.err=(nd.err||0)*.995;
-  }
-  state.nodes=g.nodes;state.edges=[...g.edges.values()];state.gngTick+=batch;
-  if(opts.updateSemantics!==false)updateTopoSemantics();
-  if(opts.updateMetrics!==false)updateMetrics();else updateCoreMetricsOnly();
-}
+function resetGngRunState(){v312StopRealtimeGng(false);state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
 function runGng(){
-  if(gngAlgorithm()==='wasm'&&v312WasmMode(GNG_WASM_EXPORTS)!=='emscripten'){
+  setGngAlgorithmValue('wasm');
+  if(!v312HasCurrentGngWasm(GNG_WASM_EXPORTS)){
     void runGngWasmFull();
     return;
   }
@@ -4098,16 +4265,16 @@ function runGng(){
   const started=performance.now();
   let usedWasm=false;
   try{
-    if(gngAlgorithm()==='standard'||gngAlgorithm()==='wasm') usedWasm=runGngWasmAccelerated();
+    usedWasm=runGngWasmAccelerated();
   }catch(e){
-    console.warn('C++/WASM GNG failed; JavaScript fallback will run.',e);
+    console.warn('基幹GNG-WASMの実行失敗。',e);
     usedWasm=false;
   }
   if(!usedWasm){
-    initGng();
-    if(!state.gng){$('topoStatus').textContent='GNG学習失敗: 有効点群が不足しています。';return;}
-    gngStep(+$('gngIters').value,{updateSemantics:false,updateMetrics:false});
-    if(state.gng)state.gng.backend=gngIsDensityAlgorithm(state.gng.variant)?'JavaScript density-control GNG-T':'JavaScript GNG/GNG-T';
+    $('topoStatus').textContent='基幹GNG-WASMの学習に失敗しました。JavaScript GNGへのフォールバックは無効です。';
+    updateHud();
+    renderAll();
+    return;
   }
   sanitizeGngGraph();
   if(state.gng && gngUsesTriangulationAlgorithm(state.gng.variant)){
@@ -4122,59 +4289,10 @@ function runGng(){
   const alg=state.gng?gngAlgorithmLabel():'GNG';
   const ntrain=state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:v305GngTrainingPoints(state.points).length;
   const dt=(performance.now()-started).toFixed(1);
-  const backend=state.gng&&state.gng.backend?state.gng.backend:(usedWasm?'C++/WASM':'JavaScript fallback');
-  $('topoStatus').textContent=`${mode} ${alg} complete. backend=${backend}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms. 1フレームあたり学習点数=${currentGngBatchSize()}。`;
-}
-function stopGngAnimated(){
-  if(state._gngAnimRaf){cancelAnimationFrame(state._gngAnimRaf);state._gngAnimRaf=null;}
-}
-function runGngAnimated(){
-  if(isGraphOnlyMode()){runGng();return;}
-  if(!state.pointPlaying){runGng();return;}
-  if(!state.points.length)generate();
-  stopGngAnimated();
-  resetGngRunState();
-  initGng();
-  if(!state.gng){$('topoStatus').textContent='GNG学習失敗: 有効点群が不足しています。';return;}
-  state.gng.backend='JavaScript replay (animated)';
-  state.gngPlaying=true;
-  const totalIters=+$('gngIters').value||12000;
-  const batch=currentGngBatchSize();
-  const started=performance.now();
-  renderAll();updateHud();
-  function tick(){
-    try{
-      if(!state.gngPlaying){
-        state._gngAnimRaf=requestAnimationFrame(tick);
-        return;
-      }
-      if(!state.gng||state.gng.iter>=totalIters){
-        state._gngAnimRaf=null;
-        state.gngPlaying=false;
-        sanitizeGngGraph();
-        if(state.gng&&gngUsesTriangulationAlgorithm(state.gng.variant)){rebuildGngTTriangles(state.gng);detectGngFaces();}
-        updateTopoSemantics();updateMetrics();updateHud();renderAll();
-        const dt=(performance.now()-started).toFixed(1);
-        $('topoStatus').textContent=`GNG animated complete. nodes=${state.nodes.length}, edges=${state.edges.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms.`;
-        return;
-      }
-      const step=Math.min(batch,totalIters-state.gng.iter);
-      gngStep(step,{updateSemantics:false,updateMetrics:false});
-      if(state.gng&&state.gng.iter%1200<step)updateTopoSemantics();
-      sanitizeGngGraph();
-      updateCoreMetricsOnly();updateHud();renderAll();
-      $('topoStatus').textContent=`GNG learning... iterations=${state.gng.iter}/${totalIters}, nodes=${state.nodes.length}, edges=${state.edges.length}`;
-    }catch(e){
-      console.error('GNG animated tick error:',e);
-      state._gngAnimRaf=null;
-      state.gngPlaying=false;
-      updateHud();
-      $('topoStatus').textContent='GNG animated error: '+(e&&e.message?e.message:e);
-      return;
-    }
-    state._gngAnimRaf=requestAnimationFrame(tick);
-  }
-  state._gngAnimRaf=requestAnimationFrame(tick);
+  const backend=state.gng&&state.gng.backend?state.gng.backend:'基幹GNG-WASM';
+  const nodeInterval=state.gng&&Number.isFinite(state.gng.node_interval)?`, node_interval=${state.gng.node_interval.toFixed(3)} m`:'';
+  const nodeGrid=state.gng&&Number.isFinite(state.gng.node_grid)?`, node_grid=${state.gng.node_grid.toFixed(3)} m`:'';
+  $('topoStatus').textContent=`${mode} ${alg} complete. backend=${backend}, train=${ntrain}, nodes=${state.nodes.length}, edges=${state.edges.length}, faces=${state.faces.length}, iterations=${state.gng?state.gng.iter:0}, time=${dt} ms${nodeInterval}${nodeGrid}. 1フレームあたり学習点数=${currentGngBatchSize()}。`;
 }
 /* v298: fuzzy grasp candidate generation from topological map only */
 function topologyGraspNodesForFuzzy(){
@@ -7622,7 +7740,7 @@ function v301SetPointPlaying(v){
     if(amp && (+amp.value||0)<=0) amp.value='0.0012';
     $('topoStatus').textContent='3D再生中: 点群データ自体をリアルタイムに微小振動させています。Raw Noise値は変更しません。';
   }else{
-    if(wasGngPlaying) state.gngPlaying=false;
+    if(wasGngPlaying) v312StopRealtimeGng(false);
   }
   updateHud();
   renderAll();
@@ -7630,52 +7748,14 @@ function v301SetPointPlaying(v){
 
 function setPointPlaying(v){v301SetPointPlaying(v)}
 function restartGngReplayFromZero(){
-  if(!state.points.length)generate();
-  resetGngRunState();
-  state.gngPlaying=true;
-  updateHud();
-  try{
-    initGng();
-  }catch(e){
-    state.gngPlaying=false;
-    reportGngRuntimeError('initGng',e);
-    $('topoStatus').textContent='GNG replay failed during initGng: '+(e&&e.message?e.message:e)+'. 有効点群が不足しているか、GNG初期化に失敗しました。';
-    updateHud();
-    renderAll();
-    return;
-  }
-  if(!state.gng){
-    state.gngPlaying=false;
-    $('topoStatus').textContent='GNG replay failed: 有効点群が不足しています。';
-    updateHud();
-    renderAll();
-    return;
-  }
-  state.perf.lastGngNow=null;
-  state.perf.gngPeriodMs=null;
-  $('topoStatus').textContent=`Realtime GNG replay restarted from 2 initial nodes. mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. Edge update: standard GNG uses canonical age-based edges; GNG-T/density uses hysteresis to avoid connect/delete vibration.`;
-  updateHud();
-  renderAll();
+  void runGngWasmFull();
 }
 function setGngPlaying(v){
   if(v){
-    if(state._gngAnimRaf){
-      state.gngPlaying=true;
-      updateHud();
-      return;
-    }
-    if(state.gng){
-      state.gngPlaying=true;
-      updateHud();
-      renderAll();
-      return;
-    }
-    runGngAnimated();
+    void v312StartRealtimeGng();
     return;
   }
-  state.gngPlaying=false;
-  updateHud();
-  renderAll();
+  v312StopRealtimeGng();
 }
 function updateHud(){const ptxt=state.pointPlaying?'3D停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
 function syncNumberPair(rangeId,numId,cb){const r=$(rangeId),n=$(numId);if(!r||!n)return;const applyFromRange=()=>{n.value=r.value;if(cb)cb();};const applyFromNumber=()=>{let v=clamp(+n.value||+r.value,+r.min,+r.max);r.value=v;n.value=v;if(cb)cb();};r.addEventListener('input',applyFromRange);n.addEventListener('input',applyFromNumber);applyFromRange();}
@@ -7958,28 +8038,6 @@ function loop(now){
     }
   }
 
-  if(state.gngPlaying&&!state._gngAnimRaf){
-    try{
-      const t0=performance.now();
-      const batch=currentGngBatchSize();
-      gngStep(batch,{updateSemantics:false,updateMetrics:false});
-      state.perf.gngComputeMs=performance.now()-t0;
-      if((state._v298Frame%10)===0) sanitizeGngGraph();
-      if(state.gng && gngUsesTriangulationAlgorithm(state.gng.variant)){
-        rebuildGngTTriangles(state.gng);
-        detectGngFaces();
-      }
-      changed=true;
-      if(state.gng && state.gng.iter%1200<batch){
-        updateTopoSemantics();
-      }
-    }catch(e){
-      console.error('Realtime GNG replay stopped by error.',e);
-      reportGngRuntimeError('loop',e);
-      changed=true;
-    }
-  }
-
   if(state.bundleFlow && state.bundleFlow.active){
     try{
       changed = v312AdvanceBundleFlow(now) || changed;
@@ -7995,7 +8053,7 @@ function loop(now){
   if(v322UpdateRobotTrajectory(now)) changed=true;
 
   const tri=state.gngPlaying && state.gng && gngUsesTriangulationAlgorithm(state.gng.variant);
-  const renderDue=!state.gngPlaying || tri || (state._v298Frame%3===0);
+  const renderDue=!state.gngPlaying || tri || (!state.gng_realtime&&state._v298Frame%3===0);
   if(changed && renderDue){
     try{ renderAll(); }
     catch(e){ console.error('Realtime render failed.',e); reportGngRuntimeError('renderAll',e); }
@@ -8150,6 +8208,10 @@ function bindDataModeControls(){
     $('gngDataSourceMode').dataset.bound='1';
     $('gngDataSourceMode').onchange=()=>{setGngDataSourceMode($('gngDataSourceMode').value);updateHud();renderAll();};
   }
+  if($('gngApplyGraspnetProfileBtn')&&!$('gngApplyGraspnetProfileBtn').dataset.bound){
+    $('gngApplyGraspnetProfileBtn').dataset.bound='1';
+    $('gngApplyGraspnetProfileBtn').onclick=v312ApplyGraspnetGngProfile;
+  }
   if($('gngLoadDataBtn')&&!$('gngLoadDataBtn').dataset.bound){
     $('gngLoadDataBtn').dataset.bound='1';
     $('gngLoadDataBtn').onclick=()=>{
@@ -8171,6 +8233,14 @@ function bindDataModeControls(){
   if($('gngLoadWasmBtn')&&!$('gngLoadWasmBtn').dataset.bound){
     $('gngLoadWasmBtn').dataset.bound='1';
     $('gngLoadWasmBtn').onclick=()=>{const fileEl=$('gngWasmFile');if(fileEl)fileEl.click();};
+  }
+  if($('gngReloadBundledWasmBtn')&&!$('gngReloadBundledWasmBtn').dataset.bound){
+    $('gngReloadBundledWasmBtn').dataset.bound='1';
+    $('gngReloadBundledWasmBtn').onclick=async()=>{
+      v312ReleaseGngWasmFileUrls();
+      const ok=await v312LoadBundledGngWasm();
+      if(!ok&&$('gngWasmStatus'))$('gngWasmStatus').textContent='内蔵GNG-WASMの再読込みに失敗しました。';
+    };
   }
   if($('gngClearDataBtn')&&!$('gngClearDataBtn').dataset.bound){
     $('gngClearDataBtn').dataset.bound='1';
@@ -8220,7 +8290,7 @@ function bindDataModeControls(){
     });
   }
 }
-$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=()=>void runGngWasmFull();$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
@@ -8448,7 +8518,7 @@ document.addEventListener('click',(e)=>{
   });
 });
 
-loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();runGng();estimate();updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
+loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
 </script>
 

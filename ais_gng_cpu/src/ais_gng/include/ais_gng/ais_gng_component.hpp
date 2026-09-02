@@ -15,15 +15,15 @@
 #include <deque>
 #include <iomanip>
 #include <memory>
-#include <mutex>
 #include <sstream>
 
 #include "ais_gng_msgs/msg/topological_map.hpp"
 #include "ais_gng_msgs/msg/topological_node.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
-#include "std_msgs/msg/float64_multi_array.hpp"
+#include "std_msgs/msg/u_int32_multi_array.hpp"
 
 #if defined(AIS_GNG_BACKEND_CPU)
+#include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
 #include "ais_gng_msgs/msg/plane_cluster_array.hpp"
 #endif
@@ -56,23 +56,15 @@ struct SequentialNodeStats {
 class AiSGNGComponent : public rclcpp::Node {
     using PC2 = sensor_msgs::msg::PointCloud2;
 
-    struct nonplane_summary_entry {
-        std::string output;
-        double gng_ms{};
-        bool plane_cluster_ran{};
-        double plane_cluster_ms{};
-    };
-
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
 #if defined(AIS_GNG_BACKEND_CPU)
     bool direct_plane_cluster_enabled_{false};
     std::unique_ptr<topological_plane::incremental::Clusterizer> direct_plane_clusterizer_;
     rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr direct_plane_cluster_pub_;
-    bool enable_nonplane_component_timing_{false};
-    rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr nonplane_timing_sub_;
-    std::unordered_map<uint32_t, nonplane_summary_entry> nonplane_summary_by_frame_;
-    std::mutex nonplane_summary_mutex_;
+    bool direct_nonplane_component_enabled_{false};
+    topological_plane::nonplane::extractor_options direct_nonplane_component_options_;
+    rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr direct_nonplane_component_pub_;
 #endif
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;
@@ -121,9 +113,6 @@ class AiSGNGComponent : public rclcpp::Node {
     rcl_interfaces::msg::SetParametersResult param_cb(const std::vector<rclcpp::Parameter> &params);
     void process_clouds(const std::vector<PC2::ConstSharedPtr>& msg);
     void semseg_cb(const PC2::SharedPtr msg);
-#if defined(AIS_GNG_BACKEND_CPU)
-    void nonplane_timing_cb(const std_msgs::msg::Float64MultiArray::ConstSharedPtr msg);
-#endif
     void updateSemanticLabelHistory(ais_gng_msgs::msg::TopologicalMap &map_msg);
     std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> makeTopologicalMapMsg(
         const TopologicalMap &map,

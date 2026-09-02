@@ -95,6 +95,7 @@ export interface GraphNode {
     semanticLabel?: number;
     semanticReliability?: number;
     age: number;
+    nonplaneComponentId?: number;
     winnerPointCount?: number;
     winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
     isGoal?: boolean;
@@ -315,7 +316,7 @@ export interface VoxelSettings {
 export interface DataSource {
     id: string;
     name: string;
-    type: 'pointcloud' | 'topological_map' | 'marker' | 'voxel';
+    type: 'pointcloud' | 'topological_map' | 'nonplane_component' | 'marker' | 'voxel';
     active: boolean;
 }
 

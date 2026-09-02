@@ -85,16 +85,6 @@ target_include_directories(nonplane_component_extractor PUBLIC
 )
 ament_target_dependencies(nonplane_component_extractor ais_gng_msgs)
 
-ament_auto_add_executable(
-  nonplane_component_node
-  src/topological_plane/nonplane_component_node.cpp
-)
-target_link_libraries(nonplane_component_node nonplane_component_extractor)
-ament_target_dependencies(
-  nonplane_component_node
-  ais_gng_msgs rclcpp std_msgs visualization_msgs
-)
-
 if(BUILD_TESTING)
   ament_add_gtest(
     test_plane_cluster_incremental
@@ -180,7 +170,11 @@ foreach(_backend IN ITEMS cpu gpu)
     if(_backend STREQUAL "gpu")
       target_include_directories(${_library_target} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libgng/include)
     else()
-      target_link_libraries(${_library_target} plane_cluster_incremental)
+      target_link_libraries(
+        ${_library_target}
+        plane_cluster_incremental
+        nonplane_component_extractor
+      )
     endif()
     target_link_libraries(${_library_target} "${_backend_lib}" ykpiv ${TORCH_LIBRARIES})
     target_compile_definitions(${_library_target} PRIVATE AIS_GNG_BACKEND_${_backend_upper}=1)

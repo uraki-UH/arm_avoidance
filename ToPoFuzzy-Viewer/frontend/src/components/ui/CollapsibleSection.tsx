@@ -8,6 +8,7 @@ interface CollapsibleSectionProps {
     defaultOpen?: boolean;
     className?: string;
     headerClassName?: string;
+    titleClassName?: string;
 }
 
 export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
@@ -17,6 +18,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     defaultOpen = false,
     className = "",
     headerClassName = "",
+    titleClassName = "",
 }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
                     }`}
                 aria-expanded={isOpen}
             >
-                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <div className={`flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] ${titleClassName}`}>
                     {icon && <span className="text-[var(--text-secondary)]">{icon}</span>}
                     <span>{title}</span>
                 </div>

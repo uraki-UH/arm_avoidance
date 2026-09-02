@@ -20,13 +20,14 @@ def configured_input_topic(config_path):
     return ''
 
 
-def configured_nonplane_component_timing(config_path):
+def configured_nonplane_component_parameters(config_path):
     with open(config_path, encoding='utf-8') as config_file:
         config = yaml.safe_load(config_file)
-    params = config.get('nonplane_component_node', {}).get('ros__parameters', {})
+    params = config.get('ais_gng_node', {}).get('ros__parameters', {})
     return (
-        bool(params.get('enable_nonplane_component_extractor', False)),
-        str(params.get('timing_topic', '/nonplane_components/timing')),
+        bool(params.get('nonplane_component.direct_enabled', True)),
+        max(1, int(params.get('nonplane_component.min_component_nodes', 2))),
+        str(params.get('nonplane_component.output_topic', '/nonplane_components')),
     )
 
 
@@ -161,13 +162,15 @@ def generate_launch_description():
             plane_parameter_overrides = {
                 'plane_cluster.output_topic': plane_clusters_topic,
             }
-            enable_nonplane_timing, nonplane_timing_topic = (
-                configured_nonplane_component_timing(
+            enable_nonplane_component, nonplane_min_component_nodes, nonplane_output_topic = (
+                configured_nonplane_component_parameters(
                     LaunchConfiguration('plane_params_file').perform(context)))
-            plane_parameter_overrides['enable_nonplane_component_timing'] = (
-                enable_nonplane_timing)
-            plane_parameter_overrides['nonplane_component_timing_topic'] = (
-                nonplane_timing_topic)
+            plane_parameter_overrides['nonplane_component.direct_enabled'] = (
+                enable_nonplane_component)
+            plane_parameter_overrides['nonplane_component.min_component_nodes'] = (
+                nonplane_min_component_nodes)
+            plane_parameter_overrides['nonplane_component.output_topic'] = (
+                nonplane_output_topic)
             rho_mode = LaunchConfiguration(
                 'use_node_rho_for_seed_order').perform(context)
             if rho_mode != 'auto':
@@ -224,23 +227,6 @@ def generate_launch_description():
                     output='screen',
                 )
             )
-
-        nodes.append(
-            Node(
-                package='ais_gng',
-                executable='nonplane_component_node',
-                name='nonplane_component_node',
-                parameters=[
-                    LaunchConfiguration('plane_params_file'),
-                    {
-                        'input_topic': topological_map_topic,
-                        'plane_clusters_topic': plane_clusters_topic,
-                    },
-                ],
-                output='screen',
-            )
-        )
-
         return nodes
 
     return LaunchDescription([

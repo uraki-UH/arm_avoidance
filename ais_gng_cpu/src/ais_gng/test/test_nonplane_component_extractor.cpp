@@ -3,8 +3,6 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
-#include <set>
-
 namespace
 {
 
@@ -60,17 +58,8 @@ TEST(NonplaneComponentExtractor, PreservesBridgeAcrossMultiplePlaneClusters)
   options.min_component_nodes = 2U;
   const auto result = extract_components(map, plane_clusters, options);
 
-  ASSERT_EQ(result.map.nodes.size(), 3U);
-  ASSERT_EQ(result.map.edges.size(), 4U);
-  ASSERT_EQ(result.map.clusters.size(), 1U);
-  EXPECT_EQ(result.map.clusters.front().nodes.size(), 3U);
-  ASSERT_EQ(result.plane_anchor_edges.size(), 2U);
-  std::set<std::uint32_t> plane_cluster_ids;
-  for (const auto &anchor : result.plane_anchor_edges) {
-    EXPECT_EQ(anchor.component_id, 0U);
-    plane_cluster_ids.insert(anchor.plane_cluster_id);
-  }
-  EXPECT_EQ(plane_cluster_ids, (std::set<std::uint32_t>{101U, 202U}));
+  ASSERT_EQ(result.components.size(), 1U);
+  EXPECT_EQ(result.components.front().node_indices.size(), 3U);
 }
 
 // 平面nodeを通る2成分の誤った併合を防ぐ。
@@ -92,11 +81,7 @@ TEST(NonplaneComponentExtractor, DoesNotTraverseThroughPlaneClusterNode)
   options.min_component_nodes = 1U;
   const auto result = extract_components(map, plane_clusters, options);
 
-  ASSERT_EQ(result.map.nodes.size(), 2U);
-  ASSERT_EQ(result.map.clusters.size(), 2U);
-  EXPECT_TRUE(result.map.edges.empty());
-  ASSERT_EQ(result.plane_anchor_edges.size(), 2U);
-  EXPECT_NE(
-    result.plane_anchor_edges[0].component_id,
-    result.plane_anchor_edges[1].component_id);
+  ASSERT_EQ(result.components.size(), 2U);
+  EXPECT_EQ(result.components[0].node_indices.size(), 1U);
+  EXPECT_EQ(result.components[1].node_indices.size(), 1U);
 }

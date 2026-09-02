@@ -88,6 +88,23 @@ void GngKernel::set_points(const std::vector<Point3f> &points) {
   iter_ = 0;
 }
 
+void GngKernel::update_points(const std::vector<Point3f> &points) {
+  points_ = points;
+  if (!cpu_state_) {
+    return;
+  }
+
+  auto &input_points = cpu_state_->input_points;
+  input_points.clear();
+  input_points.reserve(points_.size());
+  for (const auto &point : points_) {
+    input_points.emplace_back(
+        finite_or(point.x, 0.0f),
+        finite_or(point.y, 0.0f),
+        finite_or(point.z, 0.0f));
+  }
+}
+
 void GngKernel::set_point_labels(const std::vector<std::uint8_t> &labels) {
   point_labels_ = labels;
 }
@@ -127,6 +144,14 @@ bool GngKernel::initialize_cpu_core() {
   state->param.node.learning_num = static_cast<int>(std::max(
       1U,
       config_.learning_num == 0 ? config_.iterations : config_.learning_num));
+  if (config_.grid > 0.0f) {
+    state->param.config.node_grid = finite_or(config_.grid, state->param.config.node_grid);
+  }
+  if (config_.interval[0] > 0.0f) {
+    for (std::uint32_t idx = 0; idx < LABEL_NUM; ++idx) {
+      state->param.setParameter("node.interval", idx, config_.interval[0]);
+    }
+  }
   if (config_.eb > 0.0f) {
     state->param.node.eta_s1 = finite_or(config_.eb, state->param.node.eta_s1);
   }
