@@ -18,9 +18,9 @@ robot_lidar:
   link: lidar_link
   xyz: [0.0, 0.0, 0.0]
   rpy: [0.0, 0.0, 0.0]
-  topic: /lidar/points
+  topic: /lidar_points
   frame_id: ""
-  transformed_topic: /lidar/points_world
+  transformed_topic: /lidar_points_world
   target_frame: world
 
 # Gazebo環境固定LiDARの設置設定
@@ -29,4 +29,4 @@ world_lidar:
   frame_id: world_lidar_link
   xyz: [1.5, 0.0, 1.2]
   rpy: [0.0, 0.0, 0.0]
-  topic: /lidar/points
+  topic: /lidar_points

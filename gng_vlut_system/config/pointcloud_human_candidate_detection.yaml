@@ -1,6 +1,6 @@
 pointcloud_human_candidate_detector_node:
   ros__parameters:
-    input_topic: /lidar/points
+    input_topic: /lidar_points
     detections_3d_topic: /perception/human_candidate/detections_3d
     candidate_points_topic: /perception/human_candidate/points
     human_candidate_detected_topic: /perception/human_candidate/is_detected

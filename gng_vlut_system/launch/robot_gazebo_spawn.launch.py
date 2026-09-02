@@ -488,7 +488,7 @@ def launch_setup(context, *args, **kwargs):
             "lidar_xyz": lidar_xyz,
             "lidar_rpy": lidar_rpy,
             "lidar_topic": resolve_lidar_value(
-                context, "lidar_topic", robot_lidar_params, "topic", "/lidar/points"
+                context, "lidar_topic", robot_lidar_params, "topic", "/lidar_points"
             ),
             "lidar_frame_id": lidar_frame_id,
             "transformed_topic": resolve_lidar_value(
@@ -496,7 +496,7 @@ def launch_setup(context, *args, **kwargs):
                 "lidar_transformed_topic",
                 robot_lidar_params,
                 "transformed_topic",
-                "/lidar/points_world",
+                "/lidar_points_world",
             ),
             "target_frame": resolve_lidar_value(
                 context, "lidar_target_frame", robot_lidar_params, "target_frame", "world"

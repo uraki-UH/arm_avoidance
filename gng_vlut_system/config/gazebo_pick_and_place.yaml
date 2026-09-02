@@ -11,7 +11,7 @@ gazebo_pick_and_place:
     frame_id: world_lidar_link
     xyz: [1.20, 0.0, 0.95]
     rpy: [0.0, 0.75, 3.14159]
-    topic: /lidar/points
+    topic: /lidar_points
 
   scan:
     update_hz: 10.0

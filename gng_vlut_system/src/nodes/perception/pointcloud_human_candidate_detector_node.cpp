@@ -31,7 +31,7 @@ public:
   pointcloud_human_candidate_detector_node()
   : Node("pointcloud_human_candidate_detector_node")
   {
-    const auto input_topic = declare_parameter<std::string>("input_topic", "/lidar/points");
+    const auto input_topic = declare_parameter<std::string>("input_topic", "/lidar_points");
     const auto detections_topic = declare_parameter<std::string>(
       "detections_3d_topic", "/perception/human_candidate/detections_3d");
     const auto candidate_points_topic = declare_parameter<std::string>(

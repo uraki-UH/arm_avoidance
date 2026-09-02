@@ -223,7 +223,7 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
 ## Gazeboの点群・GNG検証用起動
 ピックアンドプレースworld、環境固定LiDAR、LiDAR走査密度は
 `gng_vlut_system/config/gazebo_pick_and_place.yaml`で管理する。
-Gazeboの生PointCloud2は、実機・シミュレーション共通の`/lidar/points`へ出力する。
+Gazeboの生PointCloud2は、実機・シミュレーション共通の`/lidar_points`へ出力する。
 
 ```bash
 ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py
@@ -240,7 +240,7 @@ ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py \
 ros2 launch ais_gng ais_gng.launch.py \
   backend:=cpu \
   lidar:=graspnet.yaml \
-  input_topic:=/lidar/points
+  input_topic:=/lidar_points
 ```
 
 現在の`dual_arm_robot.urdf`には`gazebo_ros2_control`がないため、Gazebo内の関節と

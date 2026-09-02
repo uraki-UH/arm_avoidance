@@ -155,7 +155,7 @@ def launch_setup(context, *args, **kwargs):
         xyz=xyz,
         rpy=rpy,
         topic=resolve_lidar_value(
-            context, "world_lidar_topic", world_lidar_params, "topic", "/lidar/points"
+            context, "world_lidar_topic", world_lidar_params, "topic", "/lidar_points"
         ),
         update_hz=float(resolve_lidar_value(
             context, "lidar_update_hz", scan_params, "update_hz", 10.0

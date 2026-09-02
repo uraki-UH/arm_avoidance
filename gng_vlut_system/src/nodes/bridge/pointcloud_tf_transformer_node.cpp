@@ -18,9 +18,9 @@ public:
     tf_buffer_(get_clock()),
     tf_listener_(tf_buffer_)
   {
-    const auto input_topic = declare_parameter<std::string>("input_topic", "/lidar/points");
+    const auto input_topic = declare_parameter<std::string>("input_topic", "/lidar_points");
     const auto output_topic =
-      declare_parameter<std::string>("output_topic", "/lidar/points_world");
+      declare_parameter<std::string>("output_topic", "/lidar_points_world");
     target_frame_ = declare_parameter<std::string>("target_frame", "world");
 
     if (input_topic.empty() || output_topic.empty() || target_frame_.empty()) {
