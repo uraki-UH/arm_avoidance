@@ -961,7 +961,7 @@ const state={
   rot:{x:0.58,y:0.78},zoom:2.35,pan:{x:0,y:0},drag:null,viewTool:'orbit',pointers:new Map(),pinch:null,
   frame:0,time:0,last:performance.now(),pointPlaying:true,gngPlaying:false,gng:null,gngTick:0,batchDataset:[],gng_realtime:null,_gng_realtime_raf:0,
   perf:{lastPointNow:null,pointPeriodMs:null,lastPointScan:null,lastPointMotionScan:null,lastGngNow:null,gngPeriodMs:null,lastRenderNow:null,renderPeriodMs:null},
-  stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSel:null,liveMfRaf:0,viewerMode:'mapping',
+  stlMeshes:{},stlStatus:'not loaded',stlError:'',faces:[],nodeStats:[],nodeClusters:[],nodeLabelModel:null,clusterModel:null,liveMfSels:[],liveMfRaf:0,viewerMode:'mapping',
   graspRenderMode:'estimate',ikSolution:null,ikTarget:null,ikMotion:null,robotTrajectory:null,currentIkJoints:[0,0,0,0,0,0],currentIkOpening:0.055,
   robotMeshCache:{},robotUrdfRobot:null,robotUrdfSource:'',robotUrdfLoadError:'',robotUrdfTargetLink:'',robotUrdfBaseLink:'',
   robotGl:{layers:new Map(),unavailable:false,lastError:''},
@@ -7425,7 +7425,8 @@ function ruleMfAt(ruleIndex,condIndex){
   const mf=fd&&fd.enabled!==false&&fd.labels&&fd.labels[c.label];
   return mf?{model,rule:r,cond:c,mf,feature:c.feature,label:c.label,ruleIndex,condIndex}:null;
 }
-function selectedRuleMf(){const sel=state.liveMfSel;if(!sel)return null;return ruleMfAt(sel.ruleIndex,sel.condIndex)}
+function selectedRuleMf(){const sels=state.liveMfSels||[],sel=sels[sels.length-1];if(!sel)return null;return ruleMfAt(sel.ruleIndex,sel.condIndex)}
+function isRuleMfSelected(ruleIndex,condIndex){return(state.liveMfSels||[]).some(sel=>sel.ruleIndex===ruleIndex&&sel.condIndex===condIndex)}
 function mfParamLabels(shape){if(shape==='gaussian')return ['center','sigma','p3','p4'];if(shape==='rbf')return ['center','radius','p3','p4'];if(shape==='triangular')return ['a','b','c','p4'];return ['a','b','c','d']}
 function clampMfParam(v,shape,index){v=+v;if(!Number.isFinite(v))v=0;if((shape==='gaussian'||shape==='rbf')&&index===1)return clamp(v,0.001,1);return clamp(v,0,1)}
 function normalizeMfParams(mf){mf.params=Array.from({length:4},(_,i)=>clampMfParam((mf.params||[])[i]??0,mf.shape,i));if(mf.shape==='triangular'){let a=mf.params[0],b=mf.params[1],c=mf.params[2];if(a>b)[a,b]=[b,a];if(b>c)[b,c]=[c,b];if(a>b)[a,b]=[b,a];mf.params[0]=a;mf.params[1]=b;mf.params[2]=c}else if(mf.shape==='trapezoid'){let p=mf.params.slice(0,4).sort((x,y)=>x-y);mf.params=p}else if(mf.shape==='gaussian'||mf.shape==='rbf'){mf.params[0]=clamp(mf.params[0],0,1);mf.params[1]=clamp(Math.abs(mf.params[1]||.12),0.001,1);mf.params[2]=0;mf.params[3]=0}return mf}
@@ -7439,13 +7440,14 @@ function inlineRuleMfEditorHtml(s){
 }
 function renderRuleConfirm(){
   const model=ensureFuzzyModel(),box=$('fuzzyRuleConfirm');if(!box)return;
+  state.liveMfSels=(state.liveMfSels||[]).filter(sel=>ruleMfAt(sel.ruleIndex,sel.condIndex));
   box.innerHTML='';
   model.rules.forEach((r,ri)=>{
     const row=document.createElement('div');row.className='fuzzy-confirm-row';
     const chips=(r.conditions||[]).map((c,ci)=>{
       const fd=model.features[c.feature],active=fd&&fd.enabled!==false;
       const mf=active&&fd.labels&&fd.labels[c.label];
-      const selected=active&&state.liveMfSel&&state.liveMfSel.ruleIndex===ri&&state.liveMfSel.condIndex===ci;
+      const selected=active&&isRuleMfSelected(ri,ci);
       const svg=mf?mfSvg(mf,{className:'fuzzy-confirm-mf-svg fuzzy-mf-axis-svg',data:{rule:ri,cond:ci},axes:true,feature:c.feature,label:c.label}):'';
       const editor=(selected&&mf)?inlineRuleMfEditorHtml(ruleMfAt(ri,ci)):'';
       const connector=ci?`<span class="fuzzy-connector">${htmlEscape(c.connector||'AND')}</span>`:'';
@@ -7468,8 +7470,8 @@ function installRuleConfirmOutsideClick(){
     const editor=document.querySelector('#fuzzyRuleConfirm .fuzzy-inline-mf-editor');
     if(!editor||editor.contains(event.target))return;
     if(event.target.closest('#fuzzyRuleConfirm .editable-mf'))return;
-    if(!state.liveMfSel)return;
-    state.liveMfSel=null;
+    if(!(state.liveMfSels&&state.liveMfSels.length))return;
+    state.liveMfSels=[];
     renderRuleConfirm();
     renderLiveMfEditor();
   },true);
@@ -7497,7 +7499,9 @@ function installRuleConfirmMfTapDelegation(){
   box.addEventListener('touchend',pick,{capture:true,passive:false});
 }
 function selectRuleConfirmMf(ruleIndex,condIndex){
-  state.liveMfSel={ruleIndex,condIndex};
+  const sels=state.liveMfSels||[];
+  if(!sels.some(sel=>sel.ruleIndex===ruleIndex&&sel.condIndex===condIndex))sels.push({ruleIndex,condIndex});
+  state.liveMfSels=sels;
   renderRuleConfirm();
   renderLiveMfEditor();
   const s=selectedRuleMf();
@@ -7558,7 +7562,7 @@ function v321BindEvaluationMetricSelector(){
     if($('fuzzyEditorStatus'))$('fuzzyEditorStatus').textContent=`Evaluation metric ${metricId}: ${input.checked?'ON':'OFF'}`;
   });
 }
-function bindFuzzyEditor(){if(!$('explicitFuzzyRulePanel'))return;ensureFuzzyModel();renderFuzzyEditor();$('fuzzyFeatureSelector').addEventListener('change',e=>{if(e.target.dataset.fzFeature){ensureFuzzyModel().features[e.target.dataset.fzFeature].enabled=e.target.checked;refreshFuzzyFeatureSelects();renderRuleList();renderRuleConfirm();updateRuleJson()}});['fzAndMethod','fzOrMethod','fzImplication','fzAggregation','fzDefuzz','fzFallback'].forEach(id=>$(id).onchange=()=>{const m=ensureFuzzyModel().methods;m.and=$('fzAndMethod').value;m.or=$('fzOrMethod').value;m.implication=$('fzImplication').value;m.aggregation=$('fzAggregation').value;m.defuzz=$('fzDefuzz').value;m.fallback=$('fzFallback').value;updateRuleJson()});$('fzMfFeature').onchange=()=>renderMfList();$('fzAddMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim()||'Label';model.features[f].labels[name]={shape:$('fzMfShape').value,params:['A','B','C','D'].map(k=>clamp(+$('fzMf'+k).value||0,0,1))};renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim();if(name)delete model.features[f].labels[name];renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddOutBtn').onclick=()=>{const name=$('fzOutLabel').value.trim()||'Output';ensureFuzzyModel().outputs[name]={value:clamp(+$('fzOutValue').value||0,0,100),meaning:$('fzOutMeaning').value};renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteOutBtn').onclick=()=>{delete ensureFuzzyModel().outputs[$('fzOutLabel').value.trim()];renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddRuleBtn').onclick=()=>{const model=ensureFuzzyModel(),f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false),labs=Object.keys((model.features[f.key]||{}).labels||{}),outs=Object.keys(model.outputs);model.rules.push({id:'R'+(model.rules.length+1),active:true,name:'new rule',conditions:[{feature:f.key,label:labs[0]||'High',connector:'AND'}],output:outs[0]||'Medium',weight:1});renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzApplyRulesBtn').onclick=()=>{updateRuleJson();estimate();$('fuzzyEditorStatus').textContent='Applied editable IF-THEN rule base to current grasp estimation.'};$('fzResetRulesBtn').onclick=()=>{state.fuzzyModel=defaultFuzzyModel();state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Default fuzzy rule base restored.'};$('fzExportRulesBtn').onclick=updateRuleJson;$('fzImportRulesBtn').onclick=()=>{try{state.fuzzyModel=JSON.parse($('fuzzyRuleJson').value);state.liveMfSel=null;renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Rule JSON imported.'}catch(e){$('fuzzyEditorStatus').textContent='JSON import failed: '+e.message}};$('fzRefreshConfirmBtn').onclick=()=>{renderRuleConfirm();updateRuleJson()};$('fzDownloadRulesBtn').onclick=()=>{updateRuleJson();const blob=new Blob([$('fuzzyRuleJson').value],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='topofuzzy_grasp_ifthen_rules_v287.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
+function bindFuzzyEditor(){if(!$('explicitFuzzyRulePanel'))return;ensureFuzzyModel();renderFuzzyEditor();$('fuzzyFeatureSelector').addEventListener('change',e=>{if(e.target.dataset.fzFeature){ensureFuzzyModel().features[e.target.dataset.fzFeature].enabled=e.target.checked;refreshFuzzyFeatureSelects();renderRuleList();renderRuleConfirm();updateRuleJson()}});['fzAndMethod','fzOrMethod','fzImplication','fzAggregation','fzDefuzz','fzFallback'].forEach(id=>$(id).onchange=()=>{const m=ensureFuzzyModel().methods;m.and=$('fzAndMethod').value;m.or=$('fzOrMethod').value;m.implication=$('fzImplication').value;m.aggregation=$('fzAggregation').value;m.defuzz=$('fzDefuzz').value;m.fallback=$('fzFallback').value;updateRuleJson()});$('fzMfFeature').onchange=()=>renderMfList();$('fzAddMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim()||'Label';model.features[f].labels[name]={shape:$('fzMfShape').value,params:['A','B','C','D'].map(k=>clamp(+$('fzMf'+k).value||0,0,1))};renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteMfBtn').onclick=()=>{const model=ensureFuzzyModel(),f=$('fzMfFeature').value,name=$('fzMfLabel').value.trim();if(name)delete model.features[f].labels[name];renderMfList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddOutBtn').onclick=()=>{const name=$('fzOutLabel').value.trim()||'Output';ensureFuzzyModel().outputs[name]={value:clamp(+$('fzOutValue').value||0,0,100),meaning:$('fzOutMeaning').value};renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzDeleteOutBtn').onclick=()=>{delete ensureFuzzyModel().outputs[$('fzOutLabel').value.trim()];renderOutputList();renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzAddRuleBtn').onclick=()=>{const model=ensureFuzzyModel(),f=FUZZY_FEATURES.find(x=>model.features[x.key]&&model.features[x.key].enabled!==false),labs=Object.keys((model.features[f.key]||{}).labels||{}),outs=Object.keys(model.outputs);model.rules.push({id:'R'+(model.rules.length+1),active:true,name:'new rule',conditions:[{feature:f.key,label:labs[0]||'High',connector:'AND'}],output:outs[0]||'Medium',weight:1});renderRuleList();renderRuleConfirm();updateRuleJson()};$('fzApplyRulesBtn').onclick=()=>{updateRuleJson();estimate();$('fuzzyEditorStatus').textContent='Applied editable IF-THEN rule base to current grasp estimation.'};$('fzResetRulesBtn').onclick=()=>{state.fuzzyModel=defaultFuzzyModel();state.liveMfSels=[];renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Default fuzzy rule base restored.'};$('fzExportRulesBtn').onclick=updateRuleJson;$('fzImportRulesBtn').onclick=()=>{try{state.fuzzyModel=JSON.parse($('fuzzyRuleJson').value);state.liveMfSels=[];renderFuzzyEditor();$('fuzzyEditorStatus').textContent='Rule JSON imported.'}catch(e){$('fuzzyEditorStatus').textContent='JSON import failed: '+e.message}};$('fzRefreshConfirmBtn').onclick=()=>{renderRuleConfirm();updateRuleJson()};$('fzDownloadRulesBtn').onclick=()=>{updateRuleJson();const blob=new Blob([$('fuzzyRuleJson').value],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='topofuzzy_grasp_ifthen_rules_v287.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}}
 function bindDataModeControls(){
   const openGngDataFilePicker=(label)=>{const fileEl=$('gngDataFile')||$('pointCloudFile');if(fileEl){v312SetGngLoadStatus(label||'ファイル選択を開いています...');fileEl.value='';fileEl.click();}};
   if($('gngDataSourceMode')&&!$('gngDataSourceMode').dataset.bound){
