@@ -281,8 +281,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 /* ── Fuzzy rule editor ── */
 .fuzzy-rule-panel{grid-column:1/-1;border-color:rgba(147,197,253,.34);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
 .fuzzy-rule-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:12px}
-.fuzzy-rule-title{color:#00ff00;font-size:22px;font-weight:900;line-height:1.2}
-.fuzzy-rule-desc{color:#cbd5e1;font-size:12px;line-height:1.6;margin-top:4px}
 .fuzzy-rule-status{min-width:250px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
 .fuzzy-editor-grid{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(520px,1.18fr);gap:14px;align-items:start}
 .fuzzy-editor-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.36);padding:12px;min-width:0}
@@ -876,10 +874,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
       </div>
       <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
       <div class="panel fuzzy-rule-panel" id="explicitFuzzyRulePanel" style="margin-top:14px">
-        <h2>明示的ファジィ IF-THEN ルールエディタ</h2>
+        <h2>ファジィ IF-THEN ルールエディタ</h2>
         <div class="body">
           <div class="fuzzy-rule-head">
-            <div><div class="fuzzy-rule-title">Editable Fuzzy Rule Base for Grasp Pose Estimation</div><div class="fuzzy-rule-desc">入力特徴量、言語ラベル、メンバシップ関数、IF-THENルール、合成規則をGUIで編集します。推定スコアは候補把持姿勢ごとにこのルールベースで再計算されます。</div></div>
             <div id="fuzzyEditorStatus" class="fuzzy-rule-status">Rule editor ready.</div>
           </div>
           <div class="fuzzy-editor-grid">
