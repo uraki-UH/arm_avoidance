@@ -83,6 +83,9 @@ h1{margin:0;color:#00ff00;font-size:25px;line-height:1.15;text-shadow:none}
 /* ── Task panels ── */
 .task{display:none;padding:14px}.task.active{display:block}
 .workspace{display:grid;grid-template-columns:minmax(330px,430px) minmax(0,1fr);gap:14px}
+.grasp-layout-workspace{align-items:start}
+.grasp-control-column,.grasp-view-column{display:flex;flex-direction:column;gap:14px;min-width:0}
+.grasp-view-column>main{min-width:0}
 .panel{background:rgba(15,23,42,.96);border:1px solid rgba(148,163,184,.20);border-radius:16px;box-shadow:0 12px 26px rgba(0,0,0,.36);overflow:hidden}
 .panel h2{margin:0;padding:14px 16px 8px;color:#00ff00;font-size:18px}
 .panel h3{margin:0;padding:14px 16px 8px;color:#bfdbfe;font-size:15px}
@@ -280,8 +283,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 
 /* ── Fuzzy rule editor ── */
 .fuzzy-rule-panel{grid-column:1/-1;border-color:rgba(147,197,253,.34);background:linear-gradient(180deg,rgba(15,23,42,.94),rgba(8,13,24,.96))}
-.fuzzy-rule-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:12px}
-.fuzzy-rule-status{min-width:250px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
+.fuzzy-rule-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:0 16px 8px}
+.fuzzy-rule-heading h2{flex:1 1 auto;padding:14px 0 8px}
+.fuzzy-rule-status{min-width:280px;margin-right:2px;white-space:pre-wrap;color:#00ff00;border:1px solid rgba(0,255,0,.35);border-radius:12px;background:rgba(2,6,23,.46);padding:9px 11px;font-size:12px;line-height:1.45}
 .fuzzy-editor-grid{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(520px,1.18fr);gap:14px;align-items:start}
 .fuzzy-editor-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(2,6,23,.36);padding:12px;min-width:0}
 .fuzzy-editor-card.full{grid-column:1/-1}
@@ -415,7 +419,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 /* ── Responsive ── */
 @media(max-width:1100px){
   .fuzzy-editor-grid{grid-template-columns:1fr}
-  .fuzzy-rule-head{grid-template-columns:1fr}
   .fuzzy-rule-status{min-width:0}
   .fuzzy-cond-grid{grid-template-columns:1fr 1fr}
   .fuzzy-rule-card-head{grid-template-columns:1fr 1fr}
@@ -424,12 +427,12 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .fuzzy-output-row2{grid-template-columns:1fr}
 }
 @media(max-width:600px){
-  .workspace{grid-template-columns:1fr}
   .metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .grid2{grid-template-columns:1fr}
   canvas.viewer{height:58vh}
 }
 @media(max-width:900px){
+  .workspace{grid-template-columns:1fr}
   .app-header{grid-template-columns:1fr;align-items:start;gap:8px}
   .header-logo-row{justify-content:flex-start;gap:10px;min-width:0}
   .header-logo-frame.company,.header-logo-frame.fuzz{height:36px}
@@ -872,11 +875,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
       </div>
       <div class="panel unified-hidden-legacy-viewer" aria-hidden="true"><h2 class="mapping-view-title"><span>Legacy Grasp Pose View</span><span class="badge">hidden; unified into main Viewer</span></h2><div class="body"><div class="canvaswrap"><canvas id="viewGrasp" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="layers">表示</button></div><div class="neo-hud" data-view-panel="play"><span id="neoLedGrasp" class="neo-led"></span><button id="neoPointPlayGrasp" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutGrasp" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div></div><div class="legend"><span class="chip gripper-legend-chip"><i></i>ToPoArm STL gripper</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColorGrasp" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColorGrasp" style="background:#8b007a"></i>GNG node</span></div></div></div>
       <div class="panel fuzzy-rule-panel" id="explicitFuzzyRulePanel" style="margin-top:14px">
-        <h2>ファジィ IF-THEN ルールエディタ</h2>
+        <div class="fuzzy-rule-heading"><h2>ファジィ IF-THEN ルールエディタ</h2><div id="fuzzyEditorStatus" class="fuzzy-rule-status">Rule editor ready.</div></div>
         <div class="body">
-          <div class="fuzzy-rule-head">
-            <div id="fuzzyEditorStatus" class="fuzzy-rule-status">Rule editor ready.</div>
-          </div>
           <div class="fuzzy-editor-grid">
             <div class="fuzzy-editor-card"><h3>1. 推論・合成規則</h3><div class="fuzzy-method-grid">
               <div><label>AND / T-norm</label><select id="fzAndMethod"><option value="min">Minimum</option><option value="product">Algebraic product</option><option value="lukasiewicz">Lukasiewicz</option></select></div>
@@ -4764,6 +4764,28 @@ function setupViewerTabs(){
   }
 }
 
+// Viewer列と操作パネル列の分離
+function arrangeGraspLayout(){
+  const task=document.getElementById('taskGrasp');
+  const workspaces=task?task.querySelectorAll(':scope > .workspace'):[];
+  if(workspaces.length<2||workspaces[0].classList.contains('grasp-layout-workspace'))return;
+  const mappingWorkspace=workspaces[0],graspWorkspace=workspaces[1];
+  const mappingAside=mappingWorkspace.querySelector(':scope > aside');
+  const viewerMain=mappingWorkspace.querySelector(':scope > main');
+  const graspAside=graspWorkspace.querySelector(':scope > aside');
+  const graspMain=graspWorkspace.querySelector(':scope > main');
+  if(!mappingAside||!viewerMain||!graspAside||!graspMain)return;
+  const controlColumn=document.createElement('div');
+  controlColumn.className='grasp-control-column';
+  controlColumn.append(mappingAside,graspAside);
+  const viewColumn=document.createElement('div');
+  viewColumn.className='grasp-view-column';
+  viewColumn.append(viewerMain,graspMain);
+  mappingWorkspace.classList.add('grasp-layout-workspace');
+  mappingWorkspace.replaceChildren(controlColumn,viewColumn);
+  graspWorkspace.remove();
+}
+
 
 function drawTopoNormals(ctx,c){
   if(!viewerLayerVisible('showTopoNormals',true))return;
@@ -7712,7 +7734,7 @@ document.addEventListener('click',(e)=>{
   });
 });
 
-loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();setDefaultGngParameters();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();install_robot_tf_trajectory_buttons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
+loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();setDefaultGngParameters();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();install_robot_tf_trajectory_buttons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
 </script>
 
