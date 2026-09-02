@@ -759,68 +759,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
           </div>
-          <!-- FROZEN: 現行WASM APIと互換性がない旧パラメータUI
-          <div class="full">
-            <button id="gngRunWasmGngBtn" data-action-kind="run" type="button">基幹GNG-WASMで実行</button>
-            <div id="gngWasmStatus" class="readout" style="margin-top:6px">内蔵 `gng_wasm_core/dist/gng_wasm_core.js` を自動読み込みします。JavaScript GNGへのフォールバックは行いません。</div>
-          </div>
-          <details id="wasmParamsSection" class="full gng-params-toggle" style="display:none">
-            <summary class="gng-params-summary">
-              <span>GNG-WASM パラメータ (d435.yaml)</span>
-              <span class="toggle-icon">▼</span>
-            </summary>
-            <div class="gng-params-inner-grid">
-              <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">node.* / ノード設定</div>
-              <div><label>node.num_max</label><input id="wasmMaxNodes" type="number" min="30" max="65534" step="10" value="10000"></div>
-              <div><label>node.learning_num (1フレームあたり学習回数)</label><input id="wasmLearningNum" type="number" min="1" max="10000" step="1" value="400"></div>
-              <div><label>node.eta_s1 (εb)</label><input id="wasmEb" type="number" min="0.001" max="1.0" step="0.001" value="0.08"></div>
-              <div><label>node.eta_s2 (εn)</label><input id="wasmEn" type="number" min="0.001" max="0.1" step="0.001" value="0.008"></div>
-              <div><label>node.unknown_learning_rate</label><input id="wasmUnknownLR" type="number" min="0.1" max="2.0" step="0.05" value="0.8"></div>
-              <div><label>node.s1_reset_range (m)</label><input id="wasmS1ResetRange" type="number" min="0.001" max="0.5" step="0.001" value="0.01"></div>
-              <div><label>node.grid (m)</label><input id="wasmGrid" type="number" min="0.01" max="1.0" step="0.01" value="0.2"></div>
-              <div><label>node.static.age_min</label><input id="wasmStaticAgeMin" type="number" min="-1" max="10000" step="1" value="250"></div>
-              <div><label>edge.age_max</label><input id="wasmMaxAge" type="number" min="20" max="1000" step="5" value="100"></div>
-              <div><label>λ (node insertion interval)</label><input id="wasmLambda" type="number" min="1" max="1000" step="1" value="100"></div>
-              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.s1_age [default, safe, wall, unknown]</label></div>
-              <div><label>default</label><input id="wasmS1Age0" type="number" min="1" max="100" step="1" value="6"></div>
-              <div><label>safe</label><input id="wasmS1Age1" type="number" min="1" max="100" step="1" value="6"></div>
-              <div><label>wall</label><input id="wasmS1Age2" type="number" min="1" max="100" step="1" value="6"></div>
-              <div><label>unknown</label><input id="wasmS1Age3" type="number" min="1" max="100" step="1" value="3"></div>
-              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.clusted_s1_age [default, safe, wall, unknown]</label></div>
-              <div><label>default</label><input id="wasmClustS1Age0" type="number" min="1" max="100" step="1" value="20"></div>
-              <div><label>safe</label><input id="wasmClustS1Age1" type="number" min="1" max="100" step="1" value="20"></div>
-              <div><label>wall</label><input id="wasmClustS1Age2" type="number" min="1" max="100" step="1" value="6"></div>
-              <div><label>unknown</label><input id="wasmClustS1Age3" type="number" min="1" max="100" step="1" value="3"></div>
-              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">node.interval [default, safe, wall, unknown] (m) ※実環境値: 0.4/0.2/0.2/0.025, シミュ: 0推奨</label></div>
-              <div><label>default</label><input id="wasmInterval0" type="number" min="0" max="2.0" step="0.001" value="0"></div>
-              <div><label>safe</label><input id="wasmInterval1" type="number" min="0" max="2.0" step="0.001" value="0"></div>
-              <div><label>wall</label><input id="wasmInterval2" type="number" min="0" max="2.0" step="0.001" value="0"></div>
-              <div><label>unknown</label><input id="wasmInterval3" type="number" min="0" max="2.0" step="0.001" value="0"></div>
-              <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-top:1px solid rgba(148,163,184,.18);padding-top:6px;margin-top:4px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">label.fuzzy.* / ファジィラベル</div>
-              <div><label>label.fuzzy.unknown</label><input id="wasmFuzzyUnknown" type="number" min="0" max="1.0" step="0.05" value="0.6"></div>
-              <div><label>label.fuzzy.min</label><input id="wasmFuzzyMin" type="number" min="0" max="1.0" step="0.05" value="0.5"></div>
-              <div><label>label.fuzzy.lpf_time_constant</label><input id="wasmFuzzyLpf" type="number" min="0" max="5.0" step="0.1" value="0.5"></div>
-              <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-top:1px solid rgba(148,163,184,.18);padding-top:6px;margin-top:4px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">cluster.* / クラスタリング</div>
-              <div><label>cluster.num_min</label><input id="wasmClusterNumMin" type="number" min="1" max="100" step="1" value="10"></div>
-              <div><label>cluster.velocity.lpf</label><input id="wasmClusterVelLpf" type="number" min="0" max="5.0" step="0.1" value="0.5"></div>
-              <div><label>cluster.plane.volume (m²)</label><input id="wasmClusterPlaneVol" type="number" min="0" max="100" step="0.5" value="10.0"></div>
-              <div><label>cluster.unknown.edge_dist_max (m)</label><input id="wasmClusterUnkEdgeDist" type="number" min="0.01" max="2.0" step="0.01" value="0.1"></div>
-              <div><label>cluster.other.edge_dist_max (m)</label><input id="wasmClusterOtherEdgeDist" type="number" min="0.01" max="2.0" step="0.01" value="0.4"></div>
-              <div><label>cluster.human.radius (m)</label><input id="wasmClusterHumanRadius" type="number" min="0.1" max="3.0" step="0.1" value="0.6"></div>
-              <div><label>cluster.human.hysteresis_age</label><input id="wasmClusterHumanHyst" type="number" min="0" max="100" step="1" value="5"></div>
-              <div><label>cluster.human.confirmation_age</label><input id="wasmClusterHumanConf" type="number" min="0" max="100" step="1" value="5"></div>
-              <div class="full" style="color:#facc15;font-weight:950;font-size:12px;border-top:1px solid rgba(148,163,184,.18);padding-top:6px;margin-top:4px;border-bottom:1px solid rgba(148,163,184,.18);padding-bottom:6px;margin-bottom:4px">ds.* / ダウンサンプリング</div>
-              <div><label>ds.range_max (m)</label><input id="wasmDsRangeMax" type="number" min="0.01" max="2.0" step="0.01" value="0.2"></div>
-              <div><label>ds.all.num_max</label><input id="wasmDsAllNumMax" type="number" min="100" max="50000" step="100" value="4000"></div>
-              <div><label>ds.unknown.num_max</label><input id="wasmDsUnkNumMax" type="number" min="100" max="50000" step="100" value="2000"></div>
-              <div><label>ds.human.num_max</label><input id="wasmDsHumanNumMax" type="number" min="100" max="50000" step="100" value="3000"></div>
-            </div>
-          </details>
-          旧WASMパラメータUIここまで -->
           <div class="full">
             <input id="gngWasmFile" type="file" class="hide" accept=".js,.wasm,application/javascript,application/wasm" multiple>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button id="gngRunWasmGngBtn" class="gng-wasm-run" data-action-kind="run" type="button">基幹GNG-WASMで実行</button>
               <button id="gngLoadWasmBtn" data-action-kind="load" type="button">WASMファイルを読込み</button>
               <button id="gngReloadBundledWasmBtn" data-action-kind="load" type="button">内蔵WASMを再読込み</button>
             </div>
@@ -907,8 +848,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="topoPublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
-                <input id="topoAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
-                <input id="topoAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
+                <input id="topoAutoHz" type="range" min="0.1" max="50" step="0.1" value="10">
+                <input id="topoAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="10">
               </div>
               <div id="topoRosStatus" class="status">ROS topo: disconnected</div>
             </div>
@@ -920,8 +861,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="handlePublishDetail" class="ros-source-detail hide">
               <div class="control-pair">
-                <input id="handleAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
-                <input id="handleAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
+                <input id="handleAutoHz" type="range" min="0.1" max="50" step="0.1" value="10">
+                <input id="handleAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="10">
               </div>
               <div id="handleRosStatus" class="status">ROS handle: disconnected</div>
             </div>
@@ -933,8 +874,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
             <div id="semanticPublishDetail" class="ros-source-detail">
               <div class="control-pair">
-                <input id="semanticAutoHz" type="range" min="0.1" max="50" step="0.1" value="1">
-                <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
+                <input id="semanticAutoHz" type="range" min="0.1" max="50" step="0.1" value="10">
+                <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="10">
               </div>
               <div id="semanticRosStatus" class="status">ROS semantic: disconnected</div>
             </div>
@@ -3274,102 +3215,6 @@ function runGngAlgorithmFromViewer(alg){
   setGngAlgorithmValue(alg);
   void runGngWasmFull();
 }
-/* FROZEN: 現行WASM APIと互換性がない旧実行処理。
-function wasmSetParam(ex,name,index,value){
-  try{
-    const len=ex.lengthBytesUTF8(name)+1;
-    const ptr=ex._malloc(len);
-    ex.stringToUTF8(name,ptr,len);
-    const r=ex.ccall('gng_wasm_set_parameter','number',['number','number','number'],[ptr,index,value]);
-    ex._free(ptr);
-    if(!r) console.warn('wasmSetParam: unrecognized param:',name);
-  }catch(e){console.error('wasmSetParam failed:',name,e);}
-}
-function runGngWasmFull_FROZEN(){
-  const ex=getGngWasmExports();
-  const wasmMode=ex?v312WasmMode(ex):null;
-  if(wasmMode!=='emscripten'){
-    $('topoStatus').textContent='GNG-WASM: Emscripten WASM が読み込まれていません。gng_wasm_core.js ファイルを選択してください。';
-    return;
-  }
-  if(!state.points.length)generate();
-  stopGngAnimated();
-  resetGngRunState();
-  const w=(id,fb)=>{const el=$(id);return el?+el.value:fb;};
-  const maxNodes=w('wasmMaxNodes',10000);
-  const learningNum=Math.max(1,w('wasmLearningNum',400));
-  const lambda=Math.max(1,w('wasmLambda',100));
-  const maxAge=w('wasmMaxAge',100);
-  const eb=w('wasmEb',0.08);
-  const en=w('wasmEn',0.008);
-  const seed=((+$('seed').value||1)+7)>>>0;
-  $('topoStatus').textContent='GNG-WASM: 初期化中...';
-  try{
-    ex.ccall('gng_wasm_reset',null,[],[]);
-    const sp=(n,i,v)=>wasmSetParam(ex,n,i,v);
-    sp('node.num_max',0,maxNodes); sp('lambda',0,lambda);
-    sp('node.eta_s1',0,eb); sp('node.eta_s2',0,en);
-    sp('edge.age_max',0,maxAge); sp('seed',0,seed);
-    sp('node.unknown_learning_rate',0,w('wasmUnknownLR',0.8));
-    sp('node.s1_reset_range',0,w('wasmS1ResetRange',0.01));
-    sp('node.grid',0,w('wasmGrid',0.2));
-    sp('node.static.age_min',0,w('wasmStaticAgeMin',250));
-    sp('node.s1_age',0,w('wasmS1Age0',6));sp('node.s1_age',1,w('wasmS1Age1',6));sp('node.s1_age',2,w('wasmS1Age2',6));sp('node.s1_age',3,w('wasmS1Age3',3));
-    sp('node.clusted_s1_age',0,w('wasmClustS1Age0',20));sp('node.clusted_s1_age',1,w('wasmClustS1Age1',20));sp('node.clusted_s1_age',2,w('wasmClustS1Age2',6));sp('node.clusted_s1_age',3,w('wasmClustS1Age3',3));
-    sp('node.interval',0,w('wasmInterval0',0));sp('node.interval',1,w('wasmInterval1',0));sp('node.interval',2,w('wasmInterval2',0));sp('node.interval',3,w('wasmInterval3',0));
-    sp('label.fuzzy.unknown',0,w('wasmFuzzyUnknown',0.6)); sp('label.fuzzy.min',0,w('wasmFuzzyMin',0.5)); sp('label.fuzzy.lpf_time_constant',0,w('wasmFuzzyLpf',0.5));
-    sp('cluster.num_min',0,w('wasmClusterNumMin',10)); sp('cluster.unknown.edge_distance_max',0,w('wasmClusterUnkEdgeDist',0.1)); sp('cluster.other.edge_distance_max',0,w('wasmClusterOtherEdgeDist',0.4));
-    sp('ds.range_max',0,w('wasmDsRangeMax',0.2));
-    state.gngPlaying=true;
-    updateHud(); renderAll();
-    $('topoStatus').textContent=`GNG-WASM: 開始。毎フレーム ${learningNum} 回学習 (lambda=${lambda}, maxNodes=${maxNodes})`;
-    function wasmReadJson(){
-      try{
-        const sz=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
-        const ptr=ex._malloc(sz);
-        ex.ccall('gng_wasm_write_graph_json','number',['number','number'],[ptr,sz]);
-        const text=ex.UTF8ToString(ptr);
-        ex._free(ptr);
-        return text?JSON.parse(text):null;
-      }catch(e){console.warn('wasmReadJson error:',e);return null;}
-    }
-    let wasmFrame=0;
-    function wasmTick(){
-      if(!state._gngAnimRaf) return;
-      state._gngAnimRaf=requestAnimationFrame(wasmTick);
-      if(!state.gngPlaying) return;
-      try{
-        const pts2=gngMode()==='offline'?buildOfflineBatchDataset():v305GngTrainingPoints(state.points);
-        if(pts2.length>=2){
-          const flat=new Float32Array(pts2.length*3);
-          for(let i=0;i<pts2.length;i++){flat[i*3]=pts2[i].x;flat[i*3+1]=pts2[i].y;flat[i*3+2]=pts2[i].z;}
-          ex.ccall('gng_wasm_set_points',null,['array','number'],[new Uint8Array(flat.buffer),pts2.length]);
-          ex.ccall('gng_wasm_exec','number',['number'],[learningNum]);
-        }
-        wasmFrame++;
-        if(wasmFrame%30===0) ex.ccall('gng_wasm_update_graph',null,[],[]);
-        const parsed=wasmReadJson();
-        if(parsed){
-          state.nodes=(parsed.nodes||[]).map(n=>({x:+n.x||0,y:+n.y||0,z:+n.z||0,label:'gng',err:+n.error||0,win:+n.wins||0,util:+n.utility||0,semantic:n.label!=null?['default','safe','wall','unknown','human','car'][n.label]:'default',normal:n.nx!=null?{x:n.nx,y:n.ny,z:n.nz}:null,rho:n.rho||1}));
-          const edgeMap=new Map();
-          state.edges=(parsed.edges||[]).map(e=>{const edge={a:Math.min(+e.a||0,+e.b||0),b:Math.max(+e.a||0,+e.b||0),age:+e.age||0};edgeMap.set(key(edge.a,edge.b),{...edge});return edge;});
-          const iter=ex.ccall('gng_wasm_iteration','number',[],[]);
-          state.gng={nodes:state.nodes,edges:edgeMap,rng:null,iter,mode:gngMode(),variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM'};
-        }
-        updateCoreMetricsOnly();updateHud();renderAll();
-        $('topoStatus').textContent=`GNG-WASM running. nodes=${state.nodes.length}, edges=${state.edges.length}, total_iters=${ex.ccall('gng_wasm_iteration','number',[],[])}`;
-      }catch(e){
-        console.error('GNG-WASM tick error:',e);
-        $('topoStatus').textContent='GNG-WASM tick error: '+(e&&e.message?e.message:e);
-      }
-    }
-    state._gngAnimRaf=requestAnimationFrame(wasmTick);
-  }catch(e){
-    console.error('GNG-WASM init failed.',e);
-    state.gngPlaying=false; updateHud();
-    $('topoStatus').textContent='GNG-WASM init error: '+(e&&e.message?e.message:e);
-  }
-} // end FROZEN */
 async function v312LoadBundledGngWasm(){
   if(v312HasCurrentGngWasm(GNG_WASM_EXPORTS)) return true;
   GNG_WASM_EXPORTS=null;
@@ -3712,36 +3557,11 @@ function generate(){
   $('topoStatus').textContent=`Generated ${state.basePoints.length} base points from ${n}: ${labelOf(type)}. Table=${tableDesign}/${$('tableMode')?$('tableMode').value:'off'}. Fixed-pose scan replay: jitter/holes/outliers are re-sampled per frame. GNG未実行。Learning mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / Algorithm=${gngAlgorithmLabel()}。`;
 }
 function bbox(points){if(!points.length)return null;let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;for(const p of points){if(p.label==='outlier'||p.label==='table')continue;minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);minZ=Math.min(minZ,p.z);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);maxZ=Math.max(maxZ,p.z)}return{minX,minY,minZ,maxX,maxY,maxZ,cx:(minX+maxX)/2,cy:(minY+maxY)/2,cz:(minZ+maxZ)/2,sx:maxX-minX,sy:maxY-minY,sz:maxZ-minZ}}
-/* v259: C++ compiled WebAssembly accelerator for the inner GNG loop. */
-const GNG_WASM_BASE64='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BCAFIAYgB0EBIAggCSAKIAsgDBCXgICAAAsA/gMEbmFtZQAaGXRvcG9fZ25nX2tlcm5lbF92MjY2Lndhc20BxgMZABFfX3dhc21fY2FsbF9jdG9ycwEOZ25nX21heF9wb2ludHMCDWduZ19tYXhfbm9kZXMDDWduZ19tYXhfZWRnZXMEDGduZ19wb2ludHNfeAUMZ25nX3BvaW50c195BgxnbmdfcG9pbnRzX3oHDmduZ19wb2ludHNfY2xzCAtnbmdfbm9kZXNfeAkLZ25nX25vZGVzX3kKC2duZ19ub2Rlc196Cw1nbmdfbm9kZXNfZXJyDA1nbmdfbm9kZXNfd2luDQ5nbmdfbm9kZXNfdXRpbA4NZ25nX25vZGVzX2Nscw8LZ25nX2VkZ2VzX2EQC2duZ19lZGdlc19iEQ1nbmdfZWRnZXNfYWdlEg5nbmdfbm9kZV9jb3VudBMOZ25nX2VkZ2VfY291bnQUCGduZ19pdGVyFQlnbmdfcmVzZXQWB2duZ19ydW4XZ2duZ19ydW5faW1wbChpbnQsIGludCwgaW50LCBpbnQsIGludCwgZmxvYXQsIGZsb2F0LCB1bnNpZ25lZCBpbnQsIGludCwgZmxvYXQsIGludCwgZmxvYXQsIGZsb2F0LCBmbG9hdCkYFGduZ19ydW5fY2VsbF9kZW5zaXR5BxIBAA9fX3N0YWNrX3BvaW50ZXIAfwlwcm9kdWNlcnMBDHByb2Nlc3NlZC1ieQEFY2xhbmdfMTcuMC4wIChodHRwczovL2dpdGh1Yi5jb20vc3dpZnRsYW5nL2xsdm0tcHJvamVjdC5naXQgMTA5OTliNmQwMzRmZTMxOGYzZDU2YzgzYmRkYjY1NzI1OTNhOGJiMCkASQ90YXJnZXRfZmVhdHVyZXMEKwptdWx0aXZhbHVlKw9tdXRhYmxlLWdsb2JhbHMrD3JlZmVyZW5jZS10eXBlcysIc2lnbi1leHQ=';
 let GNG_WASM_EXPORTS=null;
-let GNG_WASM_UNAVAILABLE=true;
 let GNG_WASM_CORE_LOADING=null;
-function decodeBase64ToBytes(b64){
-  const bin=atob(b64), bytes=new Uint8Array(bin.length);
-  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-  return bytes;
-}
-function getGngWasmExports(){
-  if(GNG_WASM_EXPORTS)return GNG_WASM_EXPORTS;
-  if(GNG_WASM_UNAVAILABLE||typeof WebAssembly==='undefined')return null;
-  try{
-    const bytes=decodeBase64ToBytes(GNG_WASM_BASE64);
-    const mod=new WebAssembly.Module(bytes);
-    const inst=new WebAssembly.Instance(mod,{});
-    GNG_WASM_EXPORTS=inst.exports;
-    return GNG_WASM_EXPORTS;
-  }catch(e){
-    console.warn('GNG C++/WASM accelerator unavailable; falling back to JavaScript GNG.',e);
-    GNG_WASM_UNAVAILABLE=true;
-    return null;
-  }
-}
+function getGngWasmExports(){return GNG_WASM_EXPORTS;}
 function v312WasmMode(ex){
-  if(!ex) return null;
-  if(typeof ex.gng_run==='function' && ex.memory) return 'direct';
-  if(typeof ex.ccall==='function' && typeof ex.cwrap==='function') return 'emscripten';
-  return null;
+  return ex&&typeof ex.ccall==='function'&&typeof ex.cwrap==='function'?'emscripten':null;
 }
 function v312HasCurrentGngWasm(ex){
   if(v312WasmMode(ex)!=='emscripten') return false;
@@ -4075,58 +3895,6 @@ function runGngWasmAccelerated(){
   const compRadius=Math.max(0,+($('densityCompRadius')?.value||0.018));
   const pruneInterval=Math.max(10,+($('densityPruneInterval')?.value||250));
   try{
-    if(wasmMode==='direct'){
-      const directMaxNodes=typeof ex.gng_max_nodes==='function'?Math.min(maxNodes,ex.gng_max_nodes()):maxNodes;
-      const maxPoints=typeof ex.gng_max_points==='function'?ex.gng_max_points():Infinity;
-      if(gngIsDensityAlgorithm(variant)&&!ex.gng_run_cell_density)return false;
-      if(pts.length>maxPoints){
-        console.warn('GNG C++/WASM point cap exceeded. Falling back to JavaScript GNG.',pts.length,maxPoints);
-        return false;
-      }
-      const f32=new Float32Array(ex.memory.buffer);
-      const i32=new Int32Array(ex.memory.buffer);
-      const px=typeof ex.gng_points_x==='function'?(ex.gng_points_x()>>2):-1;
-      const py=typeof ex.gng_points_y==='function'?(ex.gng_points_y()>>2):-1;
-      const pz=typeof ex.gng_points_z==='function'?(ex.gng_points_z()>>2):-1;
-      const pcl=typeof ex.gng_points_cls==='function'?(ex.gng_points_cls()>>2):null;
-      if(px<0||py<0||pz<0) return false;
-      for(let i=0;i<pts.length;i++){
-        const p=pts[i];
-        f32[px+i]=p.x; f32[py+i]=p.y; f32[pz+i]=p.z;
-        if(pcl!=null)i32[pcl+i]=pointDensityClass(p);
-      }
-      const targets=densityTargetEdgeLengths();
-      const ok=gngIsDensityAlgorithm(variant)
-        ? ex.gng_run_cell_density(pts.length,directMaxNodes,iters,lambda,maxAge,eb,en,seed,compRadius,pruneInterval,targets.floor,targets.wall,targets.unknown)
-        : ex.gng_run(pts.length,directMaxNodes,iters,lambda,maxAge,eb,en,seed);
-      if(ok!==1)return false;
-      const nCount=ex.gng_node_count(), eCount=ex.gng_edge_count();
-      const nx=ex.gng_nodes_x()>>2, ny=ex.gng_nodes_y()>>2, nz=ex.gng_nodes_z()>>2, ne=ex.gng_nodes_err()>>2;
-      const nw=ex.gng_nodes_win?(ex.gng_nodes_win()>>2):null, nu=ex.gng_nodes_util?(ex.gng_nodes_util()>>2):null, nc=ex.gng_nodes_cls?(ex.gng_nodes_cls()>>2):null;
-      state.nodes=[];
-      for(let i=0;i<nCount;i++){
-        const cls=nc!=null?i32[nc+i]:2;
-        state.nodes.push({x:f32[nx+i],y:f32[ny+i],z:f32[nz+i],label:'gng',err:f32[ne+i]||0,win:nw!=null?(f32[nw+i]||0):0,util:nu!=null?(f32[nu+i]||0):0,densityClass:cls,targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(cls))});
-      }
-      const ea=ex.gng_edges_a()>>2, ebp=ex.gng_edges_b()>>2, eage=ex.gng_edges_age()>>2;
-      state.edges=[];
-      const edgeMap=new Map();
-      for(let i=0;i<eCount;i++){
-        const a=i32[ea+i],b=i32[ebp+i],age=i32[eage+i];
-        if(a>=0&&b>=0&&a<nCount&&b<nCount&&a!==b&&gngAllowEdgeCreate({variant,edges:new Map(),nodes:state.nodes},state.nodes[a],state.nodes[b])){
-          const edge={a:Math.min(a,b),b:Math.max(a,b),age};
-          state.edges.push(edge);
-          edgeMap.set(key(edge.a,edge.b),{...edge});
-        }
-      }
-      state.gng={nodes:state.nodes,edges:edgeMap,rng:rng(seed+17),iter:ex.gng_iter(),mode,variant,trainingPoints:mode==='offline'?pts:null,backend:gngIsDensityAlgorithm(variant)?'C++/WASM density-control v277 safe-prune':'C++/WASM standard',inputSource:wasmInputMode};
-      sanitizeGngGraph();
-      if(gngIsDensityAlgorithm(variant)&&!densityGraphLooksUsable()){console.warn('Density-control WASM produced too sparse a graph; falling back to JavaScript safe density-control.',{nodes:state.nodes.length,edges:state.edges.length});return false;}
-      state.gngTick+=iters;
-      if(wasmStatus) wasmStatus.textContent=`WASM GNG complete: input=${wasmInputMode}, points=${pts.length}, nodes=${state.nodes.length}, edges=${state.edges.length}, iter=${state.gng.iter}`;
-      return true;
-    }
-
     if(wasmMode==='emscripten'){
       if(gngIsDensityAlgorithm(variant)){
         if(wasmStatus) wasmStatus.textContent='Loaded Emscripten WASM only supports the standard GNG path. Falling back to JavaScript density-control.';
@@ -7759,7 +7527,7 @@ function setGngPlaying(v){
   }
   v312StopRealtimeGng();
 }
-function updateHud(){const ptxt=state.pointPlaying?'3D停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
+function updateHud(){const ptxt=state.pointPlaying?'3D点群停止':'3D再生',gtxt=state.gngPlaying?'GNG停止':'GNG再生';['neoPointPlayTopo','neoPointPlayGrasp','pointPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=ptxt;el.classList.toggle('running',state.pointPlaying)}});['gngPlayBtn'].forEach(id=>{const el=$(id);if(el){el.textContent=gtxt;el.classList.toggle('running',state.gngPlaying)}});updateGngAlgorithmButtonStates();['neoLedTopo','neoLedGrasp'].forEach(id=>$(id).classList.toggle('on',state.pointPlaying||state.gngPlaying));const flowTxt=state.bundleFlow&&state.bundleFlow.active?` / flow ${state.bundleFlow.nextIndex}/${state.bundleFlow.messages.length}`:'';const backend=state.gng&&state.gng.backend?` / <span style="color:#facc15">${state.gng.backend}</span>`:'';const clusterTxt=state.gng&&state.gng.backend&&state.gng.backend.includes('WASM')&&typeof ex!=='undefined'?` / clusters ${(state.nodeClusters||[]).length}`:'';const msg=`frame <span>${String(state.frame).padStart(4,'0')}</span> / GNG ${state.gngPlaying?'run':'idle'} / nodes ${state.nodes.length}${backend}${clusterTxt}${flowTxt}<br>point Δt <span>${fmtMs(configuredPointPeriodMs())}</span> ms / GNG Δt <span>${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'}</span> ms`;['neoReadoutTopo','neoReadoutGrasp'].forEach(id=>$(id).innerHTML=msg);updateViewerTimingPanels()}
 function syncNumberPair(rangeId,numId,cb){const r=$(rangeId),n=$(numId);if(!r||!n)return;const applyFromRange=()=>{n.value=r.value;if(cb)cb();};const applyFromNumber=()=>{let v=clamp(+n.value||+r.value,+r.min,+r.max);r.value=v;n.value=v;if(cb)cb();};r.addEventListener('input',applyFromRange);n.addEventListener('input',applyFromNumber);applyFromRange();}
 function setup_point_pose_controls(){
   const pose_axes=['x','y','z','roll_deg','pitch_deg','yaw_deg'];
@@ -8265,10 +8033,6 @@ function bindDataModeControls(){
       renderAll();updateHud();
     };
   }
-  if($('gngRunWasmGngBtn')&&!$('gngRunWasmGngBtn').dataset.bound){
-    $('gngRunWasmGngBtn').dataset.bound='1';
-    $('gngRunWasmGngBtn').onclick=()=>runGngWasmFull();
-  }
   if($('gngBundleToggleAllBtn')&&!$('gngBundleToggleAllBtn').dataset.bound){
     $('gngBundleToggleAllBtn').dataset.bound='1';
     $('gngBundleToggleAllBtn').onclick=()=>{
@@ -8683,7 +8447,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       publish_once();
       intervalId = setInterval(()=>{
         publish_once();
-      }, Math.round(1000 / Math.max(0.1, Number(hzEl?.value) || 1)));
+      }, Math.round(1000 / Math.max(0.1, Number(hzEl?.value) || 10)));
       return true;
     };
     const bindHzPair = ()=>{
@@ -8695,7 +8459,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       const applyFromNumber = ()=>{
         const min = Number.isFinite(+hzEl.min) ? +hzEl.min : 0.1;
         const max = Number.isFinite(+hzEl.max) ? +hzEl.max : 50;
-        const v = clamp(+hzNumEl.value || +hzEl.value || 1, min, max);
+        const v = clamp(+hzNumEl.value || +hzEl.value || 10, min, max);
         hzEl.value = String(v);
         hzNumEl.value = String(v);
         if(enabledEl?.checked) start();
