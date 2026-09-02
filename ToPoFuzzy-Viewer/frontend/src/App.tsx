@@ -189,6 +189,8 @@ function App() {
         listGngConfigs,
         getParameters,
         setParameter,
+        getTemplateMatchConfig,
+        applyTemplateMatchConfig,
         startContinuousPublish,
         stopContinuousPublish,
         getContinuousPublishStatus,
@@ -648,6 +650,8 @@ function App() {
                             listGngConfigs={listGngConfigs}
                             getParameters={getParameters}
                             setParameter={setParameter}
+                            getTemplateMatchConfig={getTemplateMatchConfig}
+                            applyTemplateMatchConfig={applyTemplateMatchConfig}
                             startContinuousPublish={startContinuousPublish}
                             stopContinuousPublish={stopContinuousPublish}
                             getContinuousPublishStatus={getContinuousPublishStatus}
@@ -737,8 +741,8 @@ function App() {
                                 ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
-                                data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any, tf: any) => (
-                                    <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} tf={tf} manualTransform={s.transform} />
+                                data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
+                                    <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {

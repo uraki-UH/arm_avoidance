@@ -10,7 +10,7 @@
 #include <tf2/LinearMath/Transform.h>
 #include <tf2/LinearMath/Vector3.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
+#include <tf2_msgs/msg/tf_message.hpp>
 
 #include <algorithm>
 #include <array>
@@ -118,8 +118,7 @@ class ViewerEditNode : public rclcpp::Node {
 public:
     ViewerEditNode()
         : rclcpp::Node("viewer_edit_node")
-        , tfBuffer_(get_clock())
-        , tfListener_(tfBuffer_) {
+        , tfBuffer_(get_clock()) {
         rpcRequestSub_ = create_subscription<std_msgs::msg::String>(
             viewer_internal::topics::kRpcRequest,
             50,
@@ -127,6 +126,19 @@ public:
 
         rpcResponsePub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kRpcResponse, 50);
         jobEventPub_ = create_publisher<std_msgs::msg::String>(viewer_internal::topics::kEditJobEvents, 100);
+
+        tfSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
+            "/tf",
+            rclcpp::QoS(100),
+            [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+                storeTransforms(msg, false);
+            });
+        tfStaticSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
+            "/tf_static",
+            rclcpp::QoS(100).reliable().transient_local(),
+            [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+                storeTransforms(msg, true);
+            });
 
         cleanupTimer_ = create_wall_timer(
             std::chrono::minutes(1),
@@ -136,6 +148,32 @@ public:
     }
 
 private:
+    void storeTransforms(
+        const tf2_msgs::msg::TFMessage::SharedPtr& msg,
+        const bool isStatic) {
+        std::lock_guard<std::mutex> lock(tfMutex_);
+
+        for (const auto& transform : msg->transforms) {
+            if (transform.child_frame_id.empty()) {
+                continue;
+            }
+
+            if (!isStatic) {
+                const rclcpp::Time stamp(transform.header.stamp);
+                const auto latestIt = latestTfStampByChildFrame_.find(transform.child_frame_id);
+                if (latestIt != latestTfStampByChildFrame_.end() && stamp <= latestIt->second) {
+                    continue;
+                }
+                if (tfBuffer_.setTransform(transform, get_name(), false)) {
+                    latestTfStampByChildFrame_[transform.child_frame_id] = stamp;
+                }
+                continue;
+            }
+
+            tfBuffer_.setTransform(transform, get_name(), true);
+        }
+    }
+
     std::string makeSessionId() {
         auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
@@ -746,7 +784,10 @@ private:
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr jobEventPub_;
 
     tf2_ros::Buffer tfBuffer_;
-    tf2_ros::TransformListener tfListener_;
+    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_;
+    rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfStaticSub_;
+    std::mutex tfMutex_;
+    std::unordered_map<std::string, rclcpp::Time> latestTfStampByChildFrame_;
 
     std::mutex topicMutex_;
     std::unordered_map<std::string, std::shared_ptr<TopicSnapshot>> topicSnapshots_;

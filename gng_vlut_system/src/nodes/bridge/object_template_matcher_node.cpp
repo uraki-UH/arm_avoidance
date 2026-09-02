@@ -9,10 +9,12 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -397,6 +399,8 @@ public:
       candidate_topic_ = "/" + template_id_ + "/object_template_match_candidates";
     }
     validateParameters();
+    parameter_callback_handle_ = add_on_set_parameters_callback(
+      std::bind(&ObjectTemplateMatcherNode::onSetParameters, this, std::placeholders::_1));
     template_graph_ = loadTemplateGraph(template_dataset_path_);
     candidate_publisher_ = create_publisher<std_msgs::msg::String>(
       candidate_topic_, rclcpp::QoS(1).reliable().transient_local());
@@ -413,6 +417,104 @@ public:
   }
 
 private:
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter> &parameters)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = false;
+    std::vector<std::function<void()>> rollbacks;
+    const auto stage = [&rollbacks](auto &field, const auto value) {
+        using Field = std::decay_t<decltype(field)>;
+        Field *target = &field;
+        const Field previous = field;
+        const Field next = static_cast<Field>(value);
+        if (previous != next) {
+          rollbacks.emplace_back([target, previous]() {*target = previous;});
+          field = next;
+        }
+      };
+
+    try {
+      for (const auto &parameter : parameters) {
+        const std::string &name = parameter.get_name();
+        if (name == "enable_yaw_search") stage(enable_yaw_search_, parameter.as_bool());
+        else if (name == "yaw_min_deg") stage(yaw_min_deg_, parameter.as_double());
+        else if (name == "yaw_max_deg") stage(yaw_max_deg_, parameter.as_double());
+        else if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
+        else if (name == "enable_roll_pitch_search") stage(enable_roll_pitch_search_, parameter.as_bool());
+        else if (name == "roll_min_deg") stage(roll_min_deg_, parameter.as_double());
+        else if (name == "roll_max_deg") stage(roll_max_deg_, parameter.as_double());
+        else if (name == "roll_step_deg") stage(roll_step_deg_, parameter.as_double());
+        else if (name == "pitch_min_deg") stage(pitch_min_deg_, parameter.as_double());
+        else if (name == "pitch_max_deg") stage(pitch_max_deg_, parameter.as_double());
+        else if (name == "pitch_step_deg") stage(pitch_step_deg_, parameter.as_double());
+        else if (name == "max_orientation_hypothesis_num") {
+          stage(max_orientation_hypothesis_num_, parameter.as_int());
+        } else if (name == "max_normal_angle_full_deg") {
+          stage(max_normal_angle_full_deg_, parameter.as_double());
+        } else if (name == "max_normal_angle_partial_deg") {
+          stage(max_normal_angle_partial_deg_, parameter.as_double());
+        } else if (name == "enable_rho_evaluation") stage(enable_rho_evaluation_, parameter.as_bool());
+        else if (name == "max_rho_dev_full_ratio") stage(max_rho_dev_full_ratio_, parameter.as_double());
+        else if (name == "max_rho_dev_partial_ratio") {
+          stage(max_rho_dev_partial_ratio_, parameter.as_double());
+        } else if (name == "enable_scale_evaluation") stage(enable_scale_evaluation_, parameter.as_bool());
+        else if (name == "min_scale_allow_ratio") stage(min_scale_allow_ratio_, parameter.as_double());
+        else if (name == "min_scale_full_match_ratio") {
+          stage(min_scale_full_match_ratio_, parameter.as_double());
+        } else if (name == "max_scale_full_match_ratio") {
+          stage(max_scale_full_match_ratio_, parameter.as_double());
+        } else if (name == "max_scale_allow_ratio") stage(max_scale_allow_ratio_, parameter.as_double());
+        else if (name == "scale_weight") stage(scale_weight_, parameter.as_double());
+        else if (name == "min_scale_edge_num") stage(min_scale_edge_num_, parameter.as_int());
+        else if (name == "max_degree_dev_full") stage(max_degree_dev_full_, parameter.as_double());
+        else if (name == "max_degree_dev_partial") stage(max_degree_dev_partial_, parameter.as_double());
+        else if (name == "normal_weight") stage(normal_weight_, parameter.as_double());
+        else if (name == "rho_weight") stage(rho_weight_, parameter.as_double());
+        else if (name == "degree_weight") stage(degree_weight_, parameter.as_double());
+        else if (name == "edge_weight") stage(edge_weight_, parameter.as_double());
+        else if (name == "min_node_score") stage(min_node_score_, parameter.as_double());
+        else if (name == "enable_contradiction_evaluation") {
+          stage(enable_contradiction_evaluation_, parameter.as_bool());
+        } else if (name == "contradiction_weight") stage(contradiction_weight_, parameter.as_double());
+        else if (name == "max_contradiction_point_ratio") {
+          stage(max_contradiction_point_ratio_, parameter.as_double());
+        } else if (name == "enable_oversized_plane_filter") {
+          stage(enable_oversized_plane_filter_, parameter.as_bool());
+        } else if (name == "max_plane_normal_angle_deg") {
+          stage(max_plane_normal_angle_deg_, parameter.as_double());
+        } else if (name == "max_plane_extent_overflow_ratio") {
+          stage(max_plane_extent_overflow_ratio_, parameter.as_double());
+        } else if (name == "max_plane_cluster_frame_lag") {
+          stage(max_plane_cluster_frame_lag_, parameter.as_int());
+        } else if (name == "enable_plane_cluster_evaluation") {
+          stage(enable_plane_cluster_evaluation_, parameter.as_bool());
+        } else if (name == "min_plane_extent_allow_ratio") {
+          stage(min_plane_extent_allow_ratio_, parameter.as_double());
+        } else if (name == "min_plane_extent_full_match_ratio") {
+          stage(min_plane_extent_full_match_ratio_, parameter.as_double());
+        } else if (name == "max_plane_extent_full_match_ratio") {
+          stage(max_plane_extent_full_match_ratio_, parameter.as_double());
+        } else if (name == "plane_weight") stage(plane_weight_, parameter.as_double());
+        else if (name == "plane_support_score_scale") {
+          stage(plane_support_score_scale_, parameter.as_double());
+        } else if (name == "min_plane_support_score") {
+          stage(min_plane_support_score_, parameter.as_double());
+        }
+      }
+      validateParameters();
+      result.successful = true;
+      result.reason = "success";
+      return result;
+    } catch (const std::exception &error) {
+      for (auto iterator = rollbacks.rbegin(); iterator != rollbacks.rend(); ++iterator) {
+        (*iterator)();
+      }
+      result.reason = error.what();
+      return result;
+    }
+  }
+
   void validateParameters() const
   {
     const std::array<double, 26> values = {
@@ -1149,6 +1251,7 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr environment_subscription_;
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr plane_clusters_subscription_;
   ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_plane_clusters_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 };
 
 }

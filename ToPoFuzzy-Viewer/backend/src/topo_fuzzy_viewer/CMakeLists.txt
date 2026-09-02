@@ -42,6 +42,7 @@ set(ROS2_DEPENDENCIES_GRAPH
   ament_index_cpp
   sensor_msgs
   std_msgs
+  geometry_msgs
   visualization_msgs
   pcl_conversions
   pcl_ros
@@ -57,6 +58,7 @@ set(ROS2_DEPENDENCIES_EDIT
   std_msgs
   tf2
   tf2_ros
+  tf2_msgs
   pcl_conversions
   pcl_ros
 )
@@ -148,6 +150,12 @@ target_include_directories(viewer_param_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(viewer_param_node Threads::Threads)
 ament_target_dependencies(viewer_param_node ${ROS2_DEPENDENCIES_BASE})
 
+add_executable(viewer_template_match_node
+  src/nodes/viewer_template_match_node.cpp
+)
+target_include_directories(viewer_template_match_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+ament_target_dependencies(viewer_template_match_node ${ROS2_DEPENDENCIES_BASE})
+
 add_executable(viewer_edit_node
   src/nodes/viewer_edit_node.cpp
   src/common/pcl_converter.cpp
@@ -167,6 +175,7 @@ install(TARGETS
   viewer_rosbag_node
   viewer_gng_node
   viewer_param_node
+  viewer_template_match_node
   viewer_edit_node
   DESTINATION lib/${PROJECT_NAME}
 )

@@ -107,6 +107,10 @@ python3 gng_vlut_system/tools/registration_eval/prepare_foundation_pose_input.py
 
 通常はセグメンテーション器またはユーザー指定の`--mask-file`を使う。`--allow-depth-mask`は、背景を含まない単体撮影で変換経路だけを確認する暫定用途であり、実環境の物体マスクとして使わない。準備後の実行例はスクリプトが表示する。`FoundationPose`の推定結果は6D姿勢仮説として扱い、現行GNGの平面・非平面・共分散評価で検証してからテンプレートを召喚する。
 
+`ToPo-FUZZY_Manipulation_v1.html`の深度カメラ設定には、`FoundationPose RGB-D ZIP保存`を用意する。遮蔽込みの16-bit depth、semantic色RGB、object系ラベルのmask、`cam_K.txt`、入力manifestをZIPへ出力する。ZIPを展開して`run_demo.py`の`--test_scene_dir`へ渡し、対応CAD meshを`--mesh_file`へ指定する。HTMLのRGBは実写ではないため、この経路はFoundationPoseの入出力接続と遮蔽条件の検証に限定する。
+
+同じパネルの`FoundationPose RGB-Dを1回publish`は、ブラウザ直結の`rosbridge_server`へ現在の投影を送る。プレフィックスの初期値は`/foundation_pose/input`であり、`/color`、`/depth`、`/mask`は`sensor_msgs/msg/Image`、`/camera_info`は`sensor_msgs/msg/CameraInfo`として配信する。`color`は`rgb8`、`depth`はミリメートル単位の`16UC1`、`mask`は`mono8`である。4トピックのheader stampとframe_idは一致し、frame_idは`foundation_pose_camera`となる。
+
 FilterRegはCUDA、PCL、OpenCV、glogへの依存があり、公開環境が旧Ubuntu・旧CUDAを前提とする。ホストのCUDA ToolkitとPCL版を確認し、Dockerまたは隔離環境で導入する。現時点では優先度を下げる。
 
 FlashRegの公開リポジトリは取得できるが、検証時点では内容が空で実行コードを確認できなかった。clone後に`git log --oneline`と`git status`で実装の有無を確認する。

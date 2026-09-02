@@ -176,9 +176,12 @@ namespace converter {
             {"node_features", node_features}, {"cluster_features", cluster_features}
         }}};
     }
-    json to_json(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
-        json tfs = json::array(); for (auto& ts : msg->transforms) tfs.push_back({{"frameId",ts.header.frame_id},{"childFrameId",ts.child_frame_id},{"pos",{ts.transform.translation.x,ts.transform.translation.y,ts.transform.translation.z}},{"quat",{ts.transform.rotation.x,ts.transform.rotation.y,ts.transform.rotation.z,ts.transform.rotation.w}}});
+    json to_json(const std::vector<geometry_msgs::msg::TransformStamped>& transforms) {
+        json tfs = json::array(); for (const auto& ts : transforms) tfs.push_back({{"frameId",ts.header.frame_id},{"childFrameId",ts.child_frame_id},{"pos",{ts.transform.translation.x,ts.transform.translation.y,ts.transform.translation.z}},{"quat",{ts.transform.rotation.x,ts.transform.rotation.y,ts.transform.rotation.z,ts.transform.rotation.w}}});
         return {{"type", "stream.tf"}, {"transforms", tfs}};
+    }
+    json to_json(const tf2_msgs::msg::TFMessage::SharedPtr msg) {
+        return to_json(msg->transforms);
     }
 
     json voxel_layout_to_json(const voxel_msgs::msg::Voxel& msg) {
@@ -283,9 +286,22 @@ public:
         tfStaticSub_ = create_subscription<tf2_msgs::msg::TFMessage>(
             "/tf_static", rclcpp::QoS(1).reliable().transient_local(),
             [this](const tf2_msgs::msg::TFMessage::SharedPtr msg) {
-                const std::string payload = converter::to_json(msg).dump();
+                std::string payload;
                 {
                     std::lock_guard<std::mutex> lock(tfMutex_);
+                    // 複数publisherの静的TFを子フレーム単位で統合するキャッシュ
+                    for (const auto& transform : msg->transforms) {
+                        if (!transform.child_frame_id.empty()) {
+                            staticTransforms_[transform.child_frame_id] = transform;
+                        }
+                    }
+                    std::vector<geometry_msgs::msg::TransformStamped> transforms;
+                    transforms.reserve(staticTransforms_.size());
+                    for (const auto& [child_frame_id, transform] : staticTransforms_) {
+                        (void)child_frame_id;
+                        transforms.push_back(transform);
+                    }
+                    payload = converter::to_json(transforms).dump();
                     lastStaticTfPayload_ = payload;
                 }
                 broadcastText(payload);
@@ -562,7 +578,14 @@ private:
                     });
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";
-                    activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) { broadcastText(converter::to_json(m, sid).dump()); });
+                    activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
+                        const std::string payload = converter::to_json(m, sid).dump();
+                        {
+                            std::lock_guard<std::mutex> lock(markerMutex_);
+                            lastMarkerPayloads_[sid] = payload;
+                        }
+                        broadcastText(payload);
+                    });
                 } else if (st == "voxel") {
                     activeSubTypes_[sid] = "voxel";
                     {
@@ -801,6 +824,10 @@ private:
             std::lock_guard<std::mutex> l(clusterFeatureMutex_);
             lastClusterFeaturePayloads_.erase(id);
         }
+        {
+            std::lock_guard<std::mutex> l(markerMutex_);
+            lastMarkerPayloads_.erase(id);
+        }
     }
 
     void sendCurrentState(WebSocket* ws) {
@@ -1016,6 +1043,7 @@ private:
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
     std::string lastStaticTfPayload_;
+    std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_;
     std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_, voxelMutex_;

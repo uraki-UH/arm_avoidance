@@ -66,6 +66,12 @@ def generate_launch_description():
         ),
         Node(
             package='topo_fuzzy_viewer',
+            executable='viewer_template_match_node',
+            name='viewer_template_match_node',
+            output='screen'
+        ),
+        Node(
+            package='topo_fuzzy_viewer',
             executable='viewer_edit_node',
             name='viewer_edit_node',
             output='screen'

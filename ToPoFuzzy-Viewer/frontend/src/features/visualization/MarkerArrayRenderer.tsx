@@ -3,13 +3,14 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { is_fixed_frame } from '../../utils/frame_utils';
 import { DirectionalArrow } from './utils/DirectionalArrow';
 
 interface MarkerArrayRendererProps {
     tag: string;
     data: MarkerArrayData;
     visible?: boolean;
-    tf?: { pos: number[]; quat: number[] } | null;
+    transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform?: Transform;
 }
 
@@ -71,6 +72,35 @@ function useMarkerFrame(tf: { pos: number[]; quat: number[] } | null) {
     }, [tf, invalidate]);
 
     return groupRef;
+}
+
+function MarkerFrame({
+    marker,
+    transforms,
+    manualTransform,
+}: {
+    marker: MarkerMessage;
+    transforms: Record<string, { pos: number[]; quat: number[] }>;
+    manualTransform: Transform;
+}) {
+    const frameId = marker.frameId || 'world';
+    const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
+    const groupRef = useMarkerFrame(tf);
+
+    // 座標変換を未受信のMarkerは誤った原点座標で描画しない方針
+    if (!is_fixed_frame(frameId) && !tf) return null;
+
+    return (
+        <group ref={groupRef}>
+            <group
+                position={manualTransform.position}
+                rotation={manualTransform.rotation}
+                scale={manualTransform.scale}
+            >
+                {renderMarker(marker)}
+            </group>
+        </group>
+    );
 }
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
@@ -371,25 +401,29 @@ export function MarkerArrayRenderer({
     tag,
     data,
     visible = true,
-    tf = null,
+    transforms,
     manualTransform,
 }: MarkerArrayRendererProps) {
-    const groupRef = useMarkerFrame(tf);
-    const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+    const transform: Transform = manualTransform || {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+    };
 
-    useDemandUpdate([tag, data, visible, tf, manualTransform]);
+    useDemandUpdate([tag, data, visible, transforms, manualTransform]);
 
     if (!visible || data.visible === false || data.markers.length === 0) return null;
 
     return (
-        <group ref={groupRef} name={`${tag}-markers`}>
-            <group
-                position={transform.position}
-                rotation={transform.rotation}
-                scale={transform.scale}
-            >
-                {data.markers.map(renderMarker)}
-            </group>
+        <group name={`${tag}-markers`}>
+            {data.markers.map((marker) => (
+                <MarkerFrame
+                    key={`${marker.ns}:${marker.id}`}
+                    marker={marker}
+                    transforms={transforms}
+                    manualTransform={transform}
+                />
+            ))}
         </group>
     );
 }

@@ -54,6 +54,7 @@ export interface MarkerArrayData {
     name: string;
     tag: string;
     frameId?: string;
+    frameIds?: string[];
     markers: MarkerMessage[];
     count: number;
     visible?: boolean;

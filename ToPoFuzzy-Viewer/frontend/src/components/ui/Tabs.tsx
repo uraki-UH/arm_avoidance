@@ -20,7 +20,10 @@ export function Tabs({ tabs, defaultTabId, className = '' }: TabsProps) {
     return (
         <div className={`flex h-full min-h-0 flex-col ${className}`}>
             <div className="sticky top-0 z-20 -mx-1 mb-3 rounded-xl bg-[rgba(8,19,29,0.7)] px-1 pb-2 pt-3 backdrop-blur-sm">
-                <div className="grid grid-cols-4 gap-1.5">
+                <div
+                    className="grid gap-1.5"
+                    style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+                >
                     {tabs.map(tab => (
                         <button
                             key={tab.id}

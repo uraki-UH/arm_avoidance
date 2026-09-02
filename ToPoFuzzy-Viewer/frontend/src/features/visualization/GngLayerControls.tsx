@@ -2,6 +2,7 @@ import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 import { LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 import { graphHasManipulabilityData } from './graphLayerSettings';
+import { is_fixed_frame } from '../../utils/frame_utils';
 
 const getStatusLabel = (mode?: string) => mode === 'static' ? 'Static Graph' : 'Dynamic Graph';
 
@@ -53,9 +54,9 @@ export function GngLayerControls({
                     <div className="flex items-center gap-2 whitespace-nowrap font-mono tabular-nums">
                         <span>{graphData.nodes.length} nodes</span>
                         {graphData.frameId && (() => {
-                            const isWorld = graphData.frameId === 'world';
-                            const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
-                            const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                            const isFixedFrame = is_fixed_frame(graphData.frameId) && !hasTf;
+                            const dotClass = isFixedFrame ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
+                            const dotTitle = isFixedFrame ? 'Fixed root frame' : hasTf ? 'TF active' : 'TF not yet received';
                             return (
                                 <span className="flex items-center gap-1">
                                     <span className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} title={dotTitle} />

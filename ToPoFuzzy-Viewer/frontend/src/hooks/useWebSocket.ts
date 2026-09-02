@@ -3,6 +3,7 @@ import { deserializePointCloud } from '../utils/protocol';
 import {
     PointCloudData,
     MarkerArrayData,
+    MarkerMessage,
     GraphData,
     RobotData,
     RobotPoseInstance,
@@ -23,6 +24,11 @@ import {
     VoxelData,
 } from '../types';
 import { generateUUID } from '../utils/uuid';
+import {
+    TemplateMatchConfig,
+    TemplateMatchConfigResult,
+    TemplateMatchTargets,
+} from '../features/templateMatching/types';
 
 /** Returns true for errors that are expected on component unmount (RPC cancelled). */
 const isUnmountCancellation = (e: unknown): boolean =>
@@ -148,6 +154,14 @@ type QueuedPointCloudUpdate = {
     frameId?: string;
     buffer: ArrayBuffer;
 };
+
+function marker_frame_ids(markers: MarkerMessage[]): string[] {
+    return Array.from(new Set(
+        markers
+            .map(marker => marker.frameId)
+            .filter((frameId): frameId is string => typeof frameId === 'string' && frameId.length > 0)
+    ));
+}
 
 const pointCloudTopicDecoder = new TextDecoder();
 
@@ -515,6 +529,8 @@ export interface UseWebSocketReturn {
 
     getParameters: () => Promise<NodeParameters>;
     setParameter: (paramName: string, value: number | string | boolean) => Promise<SetParameterResult>;
+    getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
+    applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
     startContinuousPublish: (topic: string, rateHz: number) => Promise<{ success: boolean; topic?: string; rateHz?: number }>;
     stopContinuousPublish: () => Promise<{ success: boolean }>;
@@ -615,6 +631,17 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
             paramName: string,
             value: number | string | boolean
         ): Promise<SetParameterResult> => sendRpc('params.set', { paramName, value }),
+        getTemplateMatchConfig: (
+            targets: TemplateMatchTargets
+        ): Promise<TemplateMatchConfigResult> => sendRpc('templateMatch.getConfig', { ...targets }),
+        applyTemplateMatchConfig: (
+            config: TemplateMatchConfig
+        ): Promise<TemplateMatchConfigResult> => sendRpc('templateMatch.applyConfig', {
+            matcherNode: config.matcherNode,
+            validatorNode: config.validatorNode,
+            matcher: config.matcher,
+            validator: config.validator,
+        }),
         startContinuousPublish: (
             topic: string,
             rateHz: number
@@ -961,24 +988,30 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.marker_array': (p) => {
                             if (!Array.isArray(p.markers)) return;
+                            const markers = p.markers as MarkerMessage[];
+                            const frameIds = marker_frame_ids(markers);
                             setMarkerData(prev => ({
                                 ...prev,
                                 [tag]: {
                                     id: tag, name: p.name || tag, tag,
-                                    frameId: p.frameId || undefined,
-                                    markers: p.markers, count: p.markers.length,
+                                    frameId: frameIds.length === 1 ? frameIds[0] : undefined,
+                                    frameIds,
+                                    markers, count: markers.length,
                                     visible: prev[tag]?.visible ?? true,
                                 } as MarkerArrayData,
                             }));
                         },
                         'stream.marker': (p) => {
                             if (!p.marker) return;
+                            const markers = [p.marker as MarkerMessage];
+                            const frameIds = marker_frame_ids(markers);
                             setMarkerData(prev => ({
                                 ...prev,
                                 [tag]: {
                                     id: tag, name: p.name || tag, tag,
-                                    frameId: p.frameId || undefined,
-                                    markers: [p.marker], count: 1,
+                                    frameId: frameIds.length === 1 ? frameIds[0] : undefined,
+                                    frameIds,
+                                    markers, count: 1,
                                     visible: prev[tag]?.visible ?? true,
                                 } as MarkerArrayData,
                             }));

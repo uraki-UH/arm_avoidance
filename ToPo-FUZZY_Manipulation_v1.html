@@ -748,7 +748,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div class="full">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="objectTemplateSaveBtn" data-action-kind="load" type="button">現在GNGをテンプレート保存</button>
-              <button id="objectSurfaceDatasetSaveBtn" data-action-kind="load" type="button">オクルージョンなし表面点群データセット保存</button>
+              <button id="objectSurfaceDatasetSaveBtn" data-action-kind="load" type="button">深度点群データセット保存</button>
               <button id="object_template_action_btn" data-action-kind="load" type="button">登録GNGを選択</button>
             </div>
             <div id="objectTemplateStatus" class="status" style="margin-top:6px">登録GNG: 未選択</div>
@@ -928,6 +928,16 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
                 <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="1">
               </div>
               <div id="semanticRosStatus" class="status">ROS semantic: disconnected</div>
+            </div>
+          </div>
+          <div class="ros-source-row">
+            <div class="ros-source-head">
+              <label>FoundationPose RGB-D topic prefix</label>
+              <input id="foundationPoseTopicPrefix" type="text" value="/foundation_pose/input">
+            </div>
+            <div class="ros-source-detail">
+              <button id="foundationPoseRosPublishBtn" data-action-kind="data" type="button">FoundationPose RGB-Dを1回publish</button>
+              <div id="foundationPoseRosStatus" class="status">ROS FoundationPose RGB-D: disconnected</div>
             </div>
           </div>
         </div>
@@ -1981,41 +1991,70 @@ function v323CopyObjectSurfacePoint(point, idx){
   }
   return value;
 }
-function v323CreateObjectSurfaceDataset(){
+function v323GetPointCloudDatasetDefinition(){
+  const point_cloud_source=$('pointCloudSource')?.value||'synthetic_depth';
+  if(point_cloud_source==='object_surface'){
+    return {
+      kind:'object_surface_dataset',point_key:'surface_points',points:state.objectSurfacePoints||[],
+      source_mesh:{format:'procedural_surface',file_name:null,checksum:null},
+      file_suffix:'object_surface_dataset',button_text:'オクルージョンなし表面点群データセット保存',status_label:'オクルージョンなし表面点群',
+    };
+  }
+  if(point_cloud_source==='synthetic_depth'){
+    return {
+      kind:'synthetic_depth_dataset',point_key:'visible_points',points:state.points||[],
+      depth_camera:{settings:read_depth_camera_settings(),pose:v312DepthCameraPose(),occlusion:'enabled'},
+      file_suffix:'synthetic_depth_dataset',button_text:'深度点群データセット保存',status_label:'深度点群',
+    };
+  }
+  return {
+    kind:'imported_pointcloud_dataset',point_key:'visible_points',points:state.points||[],
+    file_suffix:'imported_pointcloud_dataset',button_text:'取り込み点群データセット保存',status_label:'取り込み点群',
+  };
+}
+function v323CreatePointCloudDataset(){
   const template=v322CreateObjectTemplate();
-  const surfacePoints=(state.objectSurfacePoints||[]).map(v323CopyObjectSurfacePoint);
-  const hasSurfaceGng=$('pointCloudSource')?.value==='object_surface'&&(state.nodes||[]).length>=2;
+  const definition=v323GetPointCloudDatasetDefinition();
+  const points=definition.points.map(v323CopyObjectSurfacePoint);
+  const has_selected_source_gng=(state.nodes||[]).length>=2;
   return {
     schema_version:1,
-    kind:'object_surface_dataset',
+    kind:definition.kind,
     dataset_id:template.template_id,
     display_name:template.display_name,
     created_at:template.created_at,
-    source:{...template.source,source_mesh:{format:'procedural_surface',file_name:null,checksum:null}},
-    surface_points:surfacePoints,
-    gng_template:hasSurfaceGng?template:null
+    source:{...template.source,...(definition.source_mesh?{source_mesh:definition.source_mesh}:{}),...(definition.depth_camera?{depth_camera:definition.depth_camera}:{})},
+    [definition.point_key]:points,
+    gng_template:has_selected_source_gng?template:null
   };
 }
-function v323ObjectSurfaceDatasetFileName(dataset){
+function v323PointCloudDatasetFileName(dataset){
   const raw=String(dataset?.display_name||'object').trim().toLowerCase();
   const object_name=(raw.replace(/[^\p{L}\p{N}_-]+/gu,'_').replace(/^_+|_+$/g,'')||'object').slice(0,80);
   const created_at=String(dataset?.created_at||'').replace(/[^0-9]/g,'').slice(0,14);
-  return `${object_name}${created_at?`_${created_at}`:''}_object_surface_dataset_v1.json`;
+  const file_suffix=String(dataset?.kind||'pointcloud_dataset').replace(/[^a-z0-9_]+/g,'_');
+  return `${object_name}${created_at?`_${created_at}`:''}_${file_suffix}_v1.json`;
 }
-function v323SaveObjectSurfaceDataset(){
-  if(!(state.objectSurfacePoints||[]).length){
-    v322SetObjectTemplateStatus('保存不可: オクルージョンなし表面点群がありません。');
+function v323SyncPointCloudDatasetSaveUi(){
+  const button=$('objectSurfaceDatasetSaveBtn');
+  if(!button)return;
+  button.textContent=v323GetPointCloudDatasetDefinition().button_text;
+}
+function v323SavePointCloudDataset(){
+  const definition=v323GetPointCloudDatasetDefinition();
+  if(!definition.points.length){
+    v322SetObjectTemplateStatus(`保存不可: ${definition.status_label}がありません。`);
     return;
   }
-  const dataset=v323CreateObjectSurfaceDataset();
+  const dataset=v323CreatePointCloudDataset();
   const blob=new Blob([JSON.stringify(dataset,null,2)],{type:'application/json'});
   const anchor=document.createElement('a');
   anchor.href=URL.createObjectURL(blob);
-  anchor.download=v323ObjectSurfaceDatasetFileName(dataset);
+  anchor.download=v323PointCloudDatasetFileName(dataset);
   anchor.click();
   setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
   const gngText=dataset.gng_template?`, GNG nodes=${dataset.gng_template.gng.nodes.length}`:', GNG未同梱';
-  v322SetObjectTemplateStatus(`オクルージョンなし表面点群データセット保存: points=${dataset.surface_points.length}${gngText}`);
+  v322SetObjectTemplateStatus(`${definition.status_label}データセット保存: points=${definition.points.length}${gngText}`);
 }
 function v322NormalizeObjectTemplate(value){
   if(!value||typeof value!=='object'||value.kind!=='object_template') throw new Error('object_template JSON ではありません。');
@@ -2151,7 +2190,8 @@ function v322SetupObjectTemplateControls(){
   if(!fileEl||fileEl.dataset.boundV322) return;
   fileEl.dataset.boundV322='1';
   $('objectTemplateSaveBtn').onclick=v322SaveObjectTemplate;
-  $('objectSurfaceDatasetSaveBtn').onclick=v323SaveObjectSurfaceDataset;
+  $('objectSurfaceDatasetSaveBtn').onclick=v323SavePointCloudDataset;
+  v323SyncPointCloudDatasetSaveUi();
   $('object_template_action_btn').onclick=()=>{
     if(state.objectTemplate){
       state.objectTemplate=null;
@@ -7338,6 +7378,7 @@ async function v316SaveFoundationPoseRgbd(){
     if(status)status.textContent='FoundationPose RGB-D保存失敗: '+(error&&error.message?error.message:error);
   }
 }
+window.__topoFoundationPoseApi={buildRgbdFrame:v316BuildFoundationPoseFrame};
 function v312ParsePointCloudText(txt){
   txt=String(txt||'').trim();
   if(!txt)return[];
@@ -8155,7 +8196,7 @@ function bindDataModeControls(){
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
-  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}});
+  if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
 ['pointPlayBtn','neoPointPlayTopo','neoPointPlayGrasp'].forEach(id=>{const el=$(id);if(el)el.onclick=(e)=>{if(e)e.preventDefault();setPointPlaying(!state.pointPlaying);};});const gpb=$('gngPlayBtn');if(gpb)gpb.onclick=()=>setGngPlaying(!state.gngPlaying);
@@ -8402,6 +8443,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   };
   let ros = null;
   let rosConnecting = false;
+  const foundation_pose_topic_objects = new Map();
   function setRosBridgeStatus(text){
     const el = document.getElementById('rosBridgeStatus');
     if(el) el.textContent = text;
@@ -8725,12 +8767,14 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
           });
           ros.on('close', ()=>{
             rosConnecting = false;
+            foundation_pose_topic_objects.clear();
             setRosBridgeStatus('ROS bridge: disconnected');
             rosPublishers.forEach(p=>p.onClose());
             rosSubscribers.forEach(s=>s.onClose());
           });
           ros.on('error', (e)=>{
             rosConnecting = false;
+            foundation_pose_topic_objects.clear();
             setRosBridgeStatus('ROS bridge: error');
             rosPublishers.forEach(p=>p.onError());
             rosSubscribers.forEach(s=>s.onError());
@@ -8752,6 +8796,106 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   function nowRosTime(){
     const ms = Date.now();
     return { secs: Math.floor(ms/1000), nsecs: (ms % 1000) * 1e6 };
+  }
+
+  function set_foundation_pose_ros_status(text){
+    const status_el = document.getElementById('foundationPoseRosStatus');
+    if(status_el) status_el.textContent = text;
+  }
+
+  function get_foundation_pose_topic_prefix(){
+    const prefix_el = document.getElementById('foundationPoseTopicPrefix');
+    const raw_prefix = String(prefix_el?.value || '/foundation_pose/input').trim();
+    const normalized_prefix = raw_prefix.replace(/^\/+|\/+$/g, '');
+    return `/${normalized_prefix || 'foundation_pose/input'}`;
+  }
+
+  function get_foundation_pose_topic(topic_name, message_type){
+    const topic_key = `${topic_name}:${message_type}`;
+    const existing_topic = foundation_pose_topic_objects.get(topic_key);
+    if(existing_topic) return existing_topic;
+    const topic = new ROSLIB.Topic({
+      ros,
+      name: topic_name,
+      messageType: message_type,
+    });
+    topic.advertise();
+    foundation_pose_topic_objects.set(topic_key, topic);
+    return topic;
+  }
+
+  function foundation_pose_depth_bytes(depth){
+    const bytes = new Uint8Array(depth.length * 2);
+    for(let idx = 0; idx < depth.length; idx++){
+      const depth_mm = depth[idx];
+      bytes[idx * 2] = depth_mm & 0xff;
+      bytes[idx * 2 + 1] = (depth_mm >>> 8) & 0xff;
+    }
+    return Array.from(bytes);
+  }
+
+  function build_foundation_pose_image_msg(frame, stamp, encoding, step, data){
+    return {
+      header: {stamp, frame_id: 'foundation_pose_camera'},
+      height: frame.height,
+      width: frame.width,
+      encoding,
+      is_bigendian: 0,
+      step,
+      data,
+    };
+  }
+
+  function build_foundation_pose_camera_info_msg(frame, stamp){
+    const [fx, k_01, cx, k_10, fy, cy, k_20, k_21, k_22] = frame.camera.k;
+    return {
+      header: {stamp, frame_id: 'foundation_pose_camera'},
+      height: frame.height,
+      width: frame.width,
+      distortion_model: 'plumb_bob',
+      d: [0, 0, 0, 0, 0],
+      k: frame.camera.k,
+      r: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      p: [fx, k_01, cx, 0, k_10, fy, cy, 0, k_20, k_21, k_22, 0],
+      binning_x: 0,
+      binning_y: 0,
+      roi: {x_offset: 0, y_offset: 0, height: 0, width: 0, do_rectify: false},
+    };
+  }
+
+  function publish_foundation_pose_rgbd_once(){
+    if(!ros || !ros.isConnected){
+      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: 接続待機中。接続後に再実行');
+      ensureRos();
+      return false;
+    }
+    const frame = window.__topoFoundationPoseApi?.buildRgbdFrame?.();
+    if(!frame || !frame.width || !frame.height){
+      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: RGB-Dフレーム生成失敗');
+      return false;
+    }
+    try{
+      const topic_prefix = get_foundation_pose_topic_prefix();
+      const stamp = nowRosTime();
+      get_foundation_pose_topic(`${topic_prefix}/color`, 'sensor_msgs/msg/Image').publish(
+        build_foundation_pose_image_msg(frame, stamp, 'rgb8', frame.width * 3, Array.from(frame.rgb))
+      );
+      get_foundation_pose_topic(`${topic_prefix}/depth`, 'sensor_msgs/msg/Image').publish(
+        build_foundation_pose_image_msg(frame, stamp, '16UC1', frame.width * 2, foundation_pose_depth_bytes(frame.depth))
+      );
+      get_foundation_pose_topic(`${topic_prefix}/mask`, 'sensor_msgs/msg/Image').publish(
+        build_foundation_pose_image_msg(frame, stamp, 'mono8', frame.width, Array.from(frame.mask))
+      );
+      get_foundation_pose_topic(`${topic_prefix}/camera_info`, 'sensor_msgs/msg/CameraInfo').publish(
+        build_foundation_pose_camera_info_msg(frame, stamp)
+      );
+      set_foundation_pose_ros_status(`${frame.width}x${frame.height} RGB-D: ${topic_prefix}/{color, depth, mask, camera_info}`);
+      return true;
+    }catch(error){
+      console.error('FoundationPose RGB-D publish error', error);
+      set_foundation_pose_ros_status('ROS FoundationPose RGB-D: publish error');
+      return false;
+    }
   }
 
   // Build PointCloud2 message from various point representations
@@ -8836,6 +8980,10 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         setRosBridgeStatus(ros && ros.isConnected ? 'ROS bridge: connected' : 'ROS bridge: starting...');
         ensureRos();
       });
+    }
+    const foundation_pose_ros_publish_btn = document.getElementById('foundationPoseRosPublishBtn');
+    if(foundation_pose_ros_publish_btn){
+      foundation_pose_ros_publish_btn.addEventListener('click', publish_foundation_pose_rgbd_once);
     }
     const bindRosTopicPanel = (toggleId, detailId)=>{
       const toggle = document.getElementById(toggleId);

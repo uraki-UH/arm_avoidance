@@ -9,6 +9,7 @@ import {
     Layers,
     Move,
     PlayCircle,
+    ScanSearch,
     Scissors,
     Server,
     Trash2,
@@ -33,6 +34,13 @@ import { RosbagPlayer } from '../features/io/RosbagPlayer';
 import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
 import { createDefaultGraphLayerSettings } from '../features/visualization/graphLayerSettings';
+import { is_fixed_frame } from '../utils/frame_utils';
+import { ObjectTemplateMatchTuner } from '../features/templateMatching/ObjectTemplateMatchTuner';
+import {
+    TemplateMatchConfig,
+    TemplateMatchConfigResult,
+    TemplateMatchTargets,
+} from '../features/templateMatching/types';
 
 import {
     PointCloudData,
@@ -86,6 +94,8 @@ interface SidebarContentProps {
     listGngConfigs: () => Promise<{ name: string; path: string }[]>;
     getParameters: () => Promise<NodeParameters>;
     setParameter: (paramName: string, value: number | string | boolean) => Promise<SetParameterResult>;
+    getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
+    applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
     startContinuousPublish: (topic: string, rateHz: number) => Promise<{ success: boolean; topic?: string; rateHz?: number }>;
     stopContinuousPublish: () => Promise<{ success: boolean }>;
@@ -259,10 +269,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             >
                                 <p className="text-[11px] text-[var(--text-secondary)]">{pc.count.toLocaleString()} pts</p>
                                 {pc.frameId && (() => {
-                                    const isWorld = pc.frameId === 'world';
+                                    const isFixedFrame = is_fixed_frame(pc.frameId);
                                     const hasTf = !!props.transforms[pc.frameId];
-                                    const dotClass = isWorld ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
-                                    const dotTitle = isWorld ? 'Fixed world frame' : hasTf ? 'TF active' : 'TF not yet received';
+                                    const dotClass = isFixedFrame && !hasTf ? 'bg-white/30' : hasTf ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' : 'bg-yellow-400';
+                                    const dotTitle = isFixedFrame && !hasTf ? 'Fixed root frame' : hasTf ? 'TF active' : 'TF not yet received';
                                     return (
                                         <div className="mt-[1px] flex items-center gap-1 text-[10px] leading-none text-[var(--text-secondary)]">
                                             <span>Frame:</span>
@@ -383,6 +393,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                         ].map(({ type, data, settings, label, hasTf, extra }) => 
                             Object.entries(data).map(([tag, d]: [string, any]) => {
                                 const s = settings[tag] || {};
+                                const frameIds = Array.isArray(d.frameIds)
+                                    ? d.frameIds
+                                    : d.frameId ? [d.frameId] : [];
+                                const hasAllFrameTf = frameIds.length > 0 && frameIds.every(
+                                    (frameId: string) => is_fixed_frame(frameId) || !!props.transforms[frameId]);
+                                const frameLabel = frameIds.length === 0
+                                    ? 'unknown'
+                                    : frameIds.length === 1 ? frameIds[0] : `mixed (${frameIds.length})`;
                                 return (
                                     <LayerItem key={`${type}-${tag}`} id={tag} displayName={d.displayName} type={type as any} visible={s.visible !== false}
                                         onToggleVisibility={() => {
@@ -403,8 +421,8 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                             <div className="mt-[1px] flex items-center gap-1 text-[10px] leading-none text-[var(--text-secondary)]">
                                                 <span>Frame:</span>
                                                 <span className="flex items-center gap-1">
-                                                    <span className={`tf-dot ${d.frameId && d.frameId !== 'world' && props.transforms[d.frameId] ? 'active' : 'inactive'}`} />
-                                                    <span className="font-mono opacity-70">{d.frameId || 'world'}</span>
+                                                    <span className={`tf-dot ${hasAllFrameTf ? 'active' : 'inactive'}`} />
+                                                    <span className="font-mono opacity-70">{frameLabel}</span>
                                                 </span>
                                             </div>
                                         )}
@@ -710,6 +728,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
         </div>
     );
 
+    const objectMatchTab = (
+        <ObjectTemplateMatchTuner
+            isConnected={props.isConnected}
+            getConfig={props.getTemplateMatchConfig}
+            applyConfig={props.applyTemplateMatchConfig}
+        />
+    );
+
     return (
         <>
             <Tabs
@@ -718,6 +744,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     { id: 'display', label: 'View', icon: <Eye size={14} />, content: displayTab },
                     { id: 'edit', label: 'Edit', icon: <Move size={14} />, content: editTab },
                     { id: 'analysis', label: 'Analyze', icon: <Activity size={14} />, content: analysisTab },
+                    { id: 'object-match', label: 'Match', icon: <ScanSearch size={14} />, content: objectMatchTab },
                 ]}
             />
 

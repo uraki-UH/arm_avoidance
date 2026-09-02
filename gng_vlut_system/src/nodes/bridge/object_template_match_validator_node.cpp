@@ -8,6 +8,8 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -47,6 +49,8 @@ public:
     max_lost_duration_sec_ = declare_parameter<double>("max_lost_duration_sec", 1.0);
     state_publish_hz_ = declare_parameter<double>("state_publish_hz", 2.0);
     validateParameters();
+    parameter_callback_handle_ = add_on_set_parameters_callback(
+      std::bind(&ObjectTemplateMatchValidatorNode::onSetParameters, this, std::placeholders::_1));
     if (candidate_topic_.empty()) {
       candidate_topic_ = "/" + template_id_ + "/object_template_match_candidates";
     }
@@ -69,6 +73,61 @@ public:
   }
 
 private:
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter> &parameters)
+  {
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = false;
+    std::vector<std::function<void()>> rollbacks;
+    const auto stage = [&rollbacks](auto &field, const auto value) {
+        using Field = std::decay_t<decltype(field)>;
+        Field *target = &field;
+        const Field previous = field;
+        const Field next = static_cast<Field>(value);
+        if (previous != next) {
+          rollbacks.emplace_back([target, previous]() {*target = previous;});
+          field = next;
+        }
+      };
+
+    try {
+      for (const auto &parameter : parameters) {
+        const std::string &name = parameter.get_name();
+        if (name == "activate_score_th") stage(activate_score_th_, parameter.as_double());
+        else if (name == "deactivate_score_th") stage(deactivate_score_th_, parameter.as_double());
+        else if (name == "min_matched_node_ratio") stage(min_matched_node_ratio_, parameter.as_double());
+        else if (name == "min_matched_edge_ratio") stage(min_matched_edge_ratio_, parameter.as_double());
+        else if (name == "enable_plane_cluster_evidence") {
+          stage(enable_plane_cluster_evidence_, parameter.as_bool());
+        } else if (name == "min_plane_support_score") {
+          stage(min_plane_support_score_, parameter.as_double());
+        } else if (name == "max_missing_node_ratio") {
+          stage(max_missing_node_ratio_, parameter.as_double());
+        } else if (name == "max_contradiction_point_ratio") {
+          stage(max_contradiction_point_ratio_, parameter.as_double());
+        } else if (name == "min_confirmed_frame_num") {
+          stage(min_confirmed_frame_num_, parameter.as_int());
+        } else if (name == "min_confirm_duration_sec") {
+          stage(min_confirm_duration_sec_, parameter.as_double());
+        } else if (name == "max_lost_duration_sec") {
+          stage(max_lost_duration_sec_, parameter.as_double());
+        } else if (name == "state_publish_hz") {
+          throw std::runtime_error("state_publish_hzの変更にはノード再起動が必要です。");
+        }
+      }
+      validateParameters();
+      result.successful = true;
+      result.reason = "success";
+      return result;
+    } catch (const std::exception &error) {
+      for (auto iterator = rollbacks.rbegin(); iterator != rollbacks.rend(); ++iterator) {
+        (*iterator)();
+      }
+      result.reason = error.what();
+      return result;
+    }
+  }
+
   void validateParameters() const
   {
     if (template_id_.empty() || min_confirmed_frame_num_ <= 0 || state_publish_hz_ <= 0.0 ||
@@ -220,6 +279,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_publisher_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr candidate_subscription_;
   rclcpp::TimerBase::SharedPtr state_timer_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
 };
 
 }
