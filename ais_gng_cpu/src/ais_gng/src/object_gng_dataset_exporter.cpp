@@ -30,7 +30,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -738,7 +737,6 @@ private:
     const json &point_cloud_storage) const
   {
     json nodes = json::array();
-    std::unordered_map<std::uint16_t, std::size_t> node_indices;
     for (std::size_t index = 0; index < map.nodes.size(); ++index) {
       const auto &source = map.nodes.at(index);
       json node = {
@@ -770,23 +768,13 @@ private:
         node["winner_point_covariance"] = std::move(covariance);
       }
       nodes.push_back(std::move(node));
-      node_indices.emplace(source.id, index);
     }
-
-    const auto resolve_index = [&node_indices, &map](std::uint16_t value) {
-        const auto found = node_indices.find(value);
-        if (found != node_indices.end()) {
-          return found->second;
-        }
-        return static_cast<std::size_t>(value) < map.nodes.size() ?
-               static_cast<std::size_t>(value) : map.nodes.size();
-      };
 
     json edges = json::array();
     for (std::size_t index = 0; index + 1U < map.edges.size(); index += 2U) {
-      const std::size_t first = resolve_index(map.edges.at(index));
-      const std::size_t second = resolve_index(map.edges.at(index + 1U));
-      if (first == map.nodes.size() || second == map.nodes.size() || first == second) {
+      const std::size_t first = map.edges.at(index);
+      const std::size_t second = map.edges.at(index + 1U);
+      if (first >= map.nodes.size() || second >= map.nodes.size() || first == second) {
         continue;
       }
       edges.push_back({first, second});
@@ -795,9 +783,9 @@ private:
     json clusters = json::array();
     for (const auto &source : map.clusters) {
       json indices = json::array();
-      for (const std::uint16_t node_id : source.nodes) {
-        const std::size_t index = resolve_index(node_id);
-        if (index != map.nodes.size()) {
+      for (const std::uint16_t node_index : source.nodes) {
+        const std::size_t index = node_index;
+        if (index < map.nodes.size()) {
           indices.push_back(index);
         }
       }

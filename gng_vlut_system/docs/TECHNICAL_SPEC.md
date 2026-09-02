@@ -1036,3 +1036,33 @@ ros2 launch gng_vlut_system object_match_hypothesis_publisher.launch.py \
 `environment_cluster_id:=-1`なら環境マップ全体を候補として扱う。出力は
 `/<template_id>/hypotheses/<hypothesis_id>/topological_map`、AABBと候補名のMarkerArrayは同じprefixの
 `/markers`、候補ID・スコア・yaw・AABBを含むJSONは`/metadata`へ`transient_local`で配信する。
+
+### 15.4 仮物体仮説による登録グラフ召喚
+
+`object_hypothesis_summon.launch.py`は`dataset_dir`以下の`object_template`と、GNGを同梱した
+`object_surface_dataset`を再帰的に検出し、登録済みIDから仮の物体仮説を選ぶ。現段階のランダム選択は
+認識器接続前の動作確認用であり、`score`と`yaw_deg`も仮metadataとする。物体の位置変換や点群配信は行わず、
+選択したIDの登録済みGNGだけを
+`/object_hypothesis/<template_id>/topological_map`へ召喚する。環境GNGの`/topological_map`とは
+namespaceを分離する。単体テンプレート配信用の`/<template_id>/topological_map_static`は変更しない。
+
+```bash
+ros2 launch gng_vlut_system object_hypothesis_summon.launch.py \
+  dataset_dir:=/datasets \
+  switch_interval_sec:=5.0
+```
+
+選択状態は`/object_hypothesis/summon_state`へ`std_msgs/msg/String`のJSONとして、
+`reliable`、depth 1、`transient_local`で配信し、遅延購読者にも現在のIDだけを渡す。
+複数IDをランダム選択する場合、直前と同じIDは連続選択しない。ID切替時は旧IDの仮説マップtopicへ
+node、edge、clusterが空の`TopologicalMap`を一度配信し、Viewerに残っている旧グラフを消去する。
+対象を限定する場合は、カンマ区切りの`template_ids:=mug,bottle`を指定する。
+
+ランダム切替を止め、外部からIDを指定する場合は`switch_interval_sec:=0.0`を使用する。
+起動時のIDは`initial_template_id`で固定できる。実行中はID文字列、または`template_id`を持つJSONを
+`/object_hypothesis/select`へ送ると、そのIDへ即時切替する。
+
+```bash
+ros2 topic pub --once /object_hypothesis/select std_msgs/msg/String \
+  "{data: mug_complete}"
+```

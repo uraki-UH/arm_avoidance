@@ -47,6 +47,12 @@ public:
     min_plane_support_score_ = declare_parameter<double>("min_plane_support_score", 0.60);
     max_missing_node_ratio_ = declare_parameter<double>("max_missing_node_ratio", 0.65);
     max_contradiction_point_ratio_ = declare_parameter<double>("max_contradiction_point_ratio", 0.20);
+    enable_nonplane_component_evaluation_ = declare_parameter<bool>(
+      "enable_nonplane_component_evaluation", true);
+    min_nonplane_evidence_frame_num_ = declare_parameter<int>(
+      "min_nonplane_evidence_frame_num", 5);
+    min_nonplane_evidence_score_th_ = declare_parameter<double>(
+      "min_nonplane_evidence_score_th", 0.55);
     min_confirmed_frame_num_ = declare_parameter<int>("min_confirmed_frame_num", 5);
     min_confirm_duration_sec_ = declare_parameter<double>("min_confirm_duration_sec", 0.5);
     max_lost_duration_sec_ = declare_parameter<double>("max_lost_duration_sec", 1.0);
@@ -111,6 +117,12 @@ private:
           stage(max_missing_node_ratio_, parameter.as_double());
         } else if (name == "max_contradiction_point_ratio") {
           stage(max_contradiction_point_ratio_, parameter.as_double());
+        } else if (name == "enable_nonplane_component_evaluation") {
+          stage(enable_nonplane_component_evaluation_, parameter.as_bool());
+        } else if (name == "min_nonplane_evidence_frame_num") {
+          stage(min_nonplane_evidence_frame_num_, parameter.as_int());
+        } else if (name == "min_nonplane_evidence_score_th") {
+          stage(min_nonplane_evidence_score_th_, parameter.as_double());
         } else if (name == "min_confirmed_frame_num") {
           stage(min_confirmed_frame_num_, parameter.as_int());
         } else if (name == "min_confirm_duration_sec") {
@@ -145,23 +157,45 @@ private:
       !isFinite(min_matched_node_ratio_) || !isFinite(min_matched_edge_ratio_) ||
       !isFinite(min_plane_support_score_) ||
       !isFinite(max_missing_node_ratio_) || !isFinite(max_contradiction_point_ratio_) ||
+      !isFinite(min_nonplane_evidence_score_th_) ||
       activate_score_th_ < 0.0 || activate_score_th_ > 1.0 ||
       deactivate_score_th_ < 0.0 || deactivate_score_th_ > activate_score_th_ ||
       min_matched_node_ratio_ < 0.0 || min_matched_node_ratio_ > 1.0 ||
       min_matched_edge_ratio_ < 0.0 || min_matched_edge_ratio_ > 1.0 ||
       min_plane_support_score_ < 0.0 || min_plane_support_score_ > 1.0 ||
       max_missing_node_ratio_ < 0.0 || max_missing_node_ratio_ > 1.0 ||
-      max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0)
+      max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0 ||
+      min_nonplane_evidence_frame_num_ <= 0 || min_nonplane_evidence_score_th_ < 0.0 ||
+      min_nonplane_evidence_score_th_ > 1.0)
     {
       throw std::runtime_error("物体テンプレート照合検証パラメータが不正です。");
     }
   }
 
-  bool isActivationCandidate(const json &candidate) const
+  bool isBaseActivationCandidate(const json &candidate) const
   {
     return !candidate.value("is_falsified", false) &&
       candidate.value("score", 0.0) >= recognition_threshold_ &&
       candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_;
+  }
+
+  bool hasCurrentNonplaneEvidence(const json &candidate) const
+  {
+    return candidate.value("is_nonplane_component_observed", false) &&
+      candidate.value("nonplane_evidence_score", 0.0) >= min_nonplane_evidence_score_th_;
+  }
+
+  bool requiresNonplaneEvidence(const json &candidate) const
+  {
+    return enable_nonplane_component_evaluation_ &&
+      candidate.value("is_nonplane_component_observed", false);
+  }
+
+  bool isActivationCandidate(const json &candidate) const
+  {
+    return isBaseActivationCandidate(candidate) &&
+      (!requiresNonplaneEvidence(candidate) ||
+      nonplane_evidence_frame_num_ >= min_nonplane_evidence_frame_num_);
   }
 
   bool isContinuationCandidate(const json &candidate) const
@@ -185,6 +219,7 @@ private:
         if (candidate.value("is_falsified", false)) {
           is_confirmed_ = false;
           consecutive_frame_num_ = 0;
+          nonplane_evidence_frame_num_ = 0;
           first_confirmable_time_.reset();
           last_supported_time_.reset();
           RCLCPP_INFO(
@@ -199,9 +234,17 @@ private:
         }
         return;
       }
-      if (!isActivationCandidate(candidate)) {
+      if (!isBaseActivationCandidate(candidate)) {
         consecutive_frame_num_ = 0;
+        nonplane_evidence_frame_num_ = 0;
         first_confirmable_time_.reset();
+        publishState();
+        return;
+      }
+      if (hasCurrentNonplaneEvidence(candidate)) {
+        ++nonplane_evidence_frame_num_;
+      }
+      if (!isActivationCandidate(candidate)) {
         publishState();
         return;
       }
@@ -232,6 +275,7 @@ private:
       if (lost_duration_sec > max_lost_duration_sec_) {
         is_confirmed_ = false;
         consecutive_frame_num_ = 0;
+        nonplane_evidence_frame_num_ = 0;
         first_confirmable_time_.reset();
         RCLCPP_INFO(get_logger(), "物体テンプレート照合解除: template=%s", template_id_.c_str());
       }
@@ -246,6 +290,10 @@ private:
       {"state", is_confirmed_ ? "confirmed" : "pending"},
       {"confirmed", is_confirmed_},
       {"consecutive_frame_num", consecutive_frame_num_},
+      {"nonplane_evidence_frame_num", nonplane_evidence_frame_num_},
+      {"enable_nonplane_component_evaluation", enable_nonplane_component_evaluation_},
+      {"min_nonplane_evidence_frame_num", min_nonplane_evidence_frame_num_},
+      {"min_nonplane_evidence_score_th", min_nonplane_evidence_score_th_},
       {"min_visible_ratio", min_visible_ratio_},
       {"recognition_threshold", recognition_threshold_},
       {"confirmation_time_sec", confirmation_time_sec_}};
@@ -271,12 +319,16 @@ private:
   double min_plane_support_score_ = 1.0;
   double max_missing_node_ratio_ = 1.0;
   double max_contradiction_point_ratio_ = 1.0;
+  bool enable_nonplane_component_evaluation_ = true;
+  int min_nonplane_evidence_frame_num_ = 1;
+  double min_nonplane_evidence_score_th_ = 1.0;
   int min_confirmed_frame_num_ = 1;
   double min_confirm_duration_sec_ = 0.0;
   double max_lost_duration_sec_ = 0.0;
   double state_publish_hz_ = 1.0;
   bool is_confirmed_ = false;
   int consecutive_frame_num_ = 0;
+  int nonplane_evidence_frame_num_ = 0;
   json last_candidate_;
   std::optional<std::chrono::steady_clock::time_point> first_confirmable_time_;
   std::optional<std::chrono::steady_clock::time_point> last_supported_time_;

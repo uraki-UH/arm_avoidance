@@ -111,6 +111,11 @@ public:
     declare_parameter<std::string>("frame_id", "object_template");
     declare_parameter<double>("publish_hz", 1.0);
     declare_parameter<std::string>("activation_state_topic", "");
+    declare_parameter<std::string>("output_topic", "");
+    deactivate_on_other_template_ = declare_parameter<bool>(
+      "deactivate_on_other_template", false);
+    publish_empty_on_deactivate_ = declare_parameter<bool>(
+      "publish_empty_on_deactivate", false);
 
     const std::string dataset_path = get_parameter("dataset_path").as_string();
     if (dataset_path.empty()) {
@@ -129,7 +134,10 @@ public:
     }
 
     message_ = buildMessage(template_root, get_parameter("frame_id").as_string());
-    const std::string topic_name = "/" + template_id_ + "/topological_map_static";
+    std::string topic_name = get_parameter("output_topic").as_string();
+    if (topic_name.empty()) {
+      topic_name = "/" + template_id_ + "/topological_map_static";
+    }
     publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
       topic_name, rclcpp::QoS(1).reliable().transient_local());
 
@@ -412,11 +420,29 @@ private:
     publisher_->publish(message_);
   }
 
+  void publishEmptyMessage()
+  {
+    if (!publish_empty_on_deactivate_) {
+      return;
+    }
+    auto empty = message_;
+    empty.header.stamp = now();
+    empty.nodes.clear();
+    empty.edges.clear();
+    empty.clusters.clear();
+    publisher_->publish(empty);
+  }
+
   void onActivationState(const std_msgs::msg::String::SharedPtr message)
   {
     try {
       const json state = json::parse(message->data);
       if (state.value("template_id", "") != template_id_) {
+        if (deactivate_on_other_template_ && is_active_) {
+          is_active_ = false;
+          publishEmptyMessage();
+          RCLCPP_INFO(get_logger(), "物体GNGテンプレート配信停止: template=%s", template_id_.c_str());
+        }
         return;
       }
       const bool next_is_active = state.value("state", "") == "confirmed";
@@ -428,6 +454,7 @@ private:
         RCLCPP_INFO(get_logger(), "物体GNGテンプレート配信開始: template=%s", template_id_.c_str());
         publishMessage();
       } else {
+        publishEmptyMessage();
         RCLCPP_INFO(get_logger(), "物体GNGテンプレート配信停止: template=%s", template_id_.c_str());
       }
     } catch (const json::exception &error) {
@@ -437,6 +464,8 @@ private:
 
   std::string template_id_;
   bool is_active_ = true;
+  bool deactivate_on_other_template_ = false;
+  bool publish_empty_on_deactivate_ = false;
   ais_gng_msgs::msg::TopologicalMap message_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr activation_subscription_;

@@ -137,7 +137,6 @@ GNG_EXPORT std::int32_t gng_wasm_exec(std::uint32_t steps) {
 
 GNG_EXPORT void gng_wasm_update_graph() {
   auto &k = kernel();
-  k.prune_isolated_nodes_public();
   k.update_normals_public();
   k.assign_fuzzy_labels_public();
   k.build_clusters_public();
