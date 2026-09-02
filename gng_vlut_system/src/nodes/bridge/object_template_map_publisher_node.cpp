@@ -108,6 +108,10 @@ public:
   {
     declare_parameter<std::string>("dataset_path", "");
     declare_parameter<std::string>("template_id", "");
+    declare_parameter<std::vector<std::string>>(
+      "dataset_paths", std::vector<std::string>{});
+    declare_parameter<std::vector<std::string>>(
+      "template_ids", std::vector<std::string>{});
     declare_parameter<std::string>("frame_id", "object_template");
     declare_parameter<double>("publish_hz", 1.0);
     declare_parameter<std::string>("activation_state_topic", "");
@@ -117,32 +121,63 @@ public:
     publish_empty_on_deactivate_ = declare_parameter<bool>(
       "publish_empty_on_deactivate", false);
 
-    const std::string dataset_path = get_parameter("dataset_path").as_string();
-    if (dataset_path.empty()) {
-      throw std::runtime_error("dataset_path の指定が必要です。");
+    const std::string frame_id = get_parameter("frame_id").as_string();
+    const auto dataset_paths = get_parameter("dataset_paths").as_string_array();
+    const auto template_ids = get_parameter("template_ids").as_string_array();
+    multi_template_mode_ = !dataset_paths.empty();
+    if (multi_template_mode_) {
+      if (dataset_paths.size() != template_ids.size()) {
+        throw std::runtime_error("dataset_pathsとtemplate_idsの要素数が一致しません。");
+      }
+      for (std::size_t index = 0; index < dataset_paths.size(); ++index) {
+        if (!isTopicToken(template_ids[index])) {
+          throw std::runtime_error("不正なtemplate_idです: " + template_ids[index]);
+        }
+        const json root = readDataset(dataset_paths[index]);
+        const json &template_root = selectTemplate(root);
+        const std::string stored_id = root.value(
+          "dataset_id", template_root.value("template_id", ""));
+        if (stored_id != template_ids[index]) {
+          throw std::runtime_error(
+                  "データセット内template_idが指定と一致しません: " + dataset_paths[index]);
+        }
+        if (!template_messages_.emplace(
+            template_ids[index], buildMessage(template_root, frame_id)).second)
+        {
+          throw std::runtime_error("template_idが重複しています: " + template_ids[index]);
+        }
+      }
+    } else {
+      const std::string dataset_path = get_parameter("dataset_path").as_string();
+      if (dataset_path.empty()) {
+        throw std::runtime_error("dataset_path の指定が必要です。");
+      }
+      const json root = readDataset(dataset_path);
+      const json &template_root = selectTemplate(root);
+      template_id_ = get_parameter("template_id").as_string();
+      if (template_id_.empty()) {
+        template_id_ = root.value("dataset_id", template_root.value("template_id", ""));
+      }
+      if (!isTopicToken(template_id_)) {
+        throw std::runtime_error(
+                "template_id は英字開始の英数字または_だけで指定してください: " + template_id_);
+      }
+      message_ = buildMessage(template_root, frame_id);
     }
 
-    const json root = readDataset(dataset_path);
-    const json &template_root = selectTemplate(root);
-    template_id_ = get_parameter("template_id").as_string();
-    if (template_id_.empty()) {
-      template_id_ = root.value("dataset_id", template_root.value("template_id", ""));
-    }
-    if (!isTopicToken(template_id_)) {
-      throw std::runtime_error(
-              "template_id は英字開始の英数字または_だけで指定してください: " + template_id_);
-    }
-
-    message_ = buildMessage(template_root, get_parameter("frame_id").as_string());
     std::string topic_name = get_parameter("output_topic").as_string();
     if (topic_name.empty()) {
-      topic_name = "/" + template_id_ + "/topological_map_static";
+      topic_name = multi_template_mode_ ?
+        "/object_hypothesis/topological_map" : "/" + template_id_ + "/topological_map_static";
     }
     publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
       topic_name, rclcpp::QoS(1).reliable().transient_local());
 
     const std::string activation_state_topic = get_parameter("activation_state_topic").as_string();
-    is_active_ = activation_state_topic.empty();
+    if (multi_template_mode_ && activation_state_topic.empty()) {
+      throw std::runtime_error("複数テンプレート配信ではactivation_state_topicが必要です。");
+    }
+    is_active_ = activation_state_topic.empty() && !multi_template_mode_;
     if (!activation_state_topic.empty()) {
       activation_subscription_ = create_subscription<std_msgs::msg::String>(
         activation_state_topic, rclcpp::QoS(1).reliable().transient_local(),
@@ -158,12 +193,18 @@ public:
       std::chrono::duration_cast<std::chrono::nanoseconds>(period),
       std::bind(&ObjectTemplateMapPublisherNode::publishMessage, this));
 
-    RCLCPP_INFO(
-      get_logger(),
-      "物体GNGテンプレート配信準備: topic=%s nodes=%zu edges=%zu clusters=%zu frame=%s activation=%s",
-      topic_name.c_str(), message_.nodes.size(), message_.edges.size() / 2,
-      message_.clusters.size(), message_.header.frame_id.c_str(),
-      is_active_ ? "active" : "待機");
+    if (multi_template_mode_) {
+      RCLCPP_INFO(
+        get_logger(), "物体GNGテンプレート集約配信準備: topic=%s templates=%zu activation=待機",
+        topic_name.c_str(), template_messages_.size());
+    } else {
+      RCLCPP_INFO(
+        get_logger(),
+        "物体GNGテンプレート配信準備: topic=%s nodes=%zu edges=%zu clusters=%zu frame=%s activation=%s",
+        topic_name.c_str(), message_.nodes.size(), message_.edges.size() / 2,
+        message_.clusters.size(), message_.header.frame_id.c_str(),
+        is_active_ ? "active" : "待機");
+    }
   }
 
 private:
@@ -437,7 +478,37 @@ private:
   {
     try {
       const json state = json::parse(message->data);
-      if (state.value("template_id", "") != template_id_) {
+      const std::string state_template_id = state.value("template_id", "");
+      const bool next_is_active = state.value("state", "") == "confirmed";
+      if (multi_template_mode_) {
+        const auto found = template_messages_.find(state_template_id);
+        if (found == template_messages_.end()) {
+          RCLCPP_WARN(get_logger(), "未登録のtemplate_idです: %s", state_template_id.c_str());
+          return;
+        }
+        if (!next_is_active) {
+          if (is_active_) {
+            publishEmptyMessage();
+            is_active_ = false;
+          }
+          return;
+        }
+        if (is_active_ && template_id_ == state_template_id) {
+          return;
+        }
+        if (is_active_) {
+          publishEmptyMessage();
+        }
+        template_id_ = state_template_id;
+        message_ = found->second;
+        is_active_ = true;
+        publishMessage();
+        RCLCPP_INFO(
+          get_logger(), "物体GNGテンプレート切替: template=%s nodes=%zu edges=%zu",
+          template_id_.c_str(), message_.nodes.size(), message_.edges.size() / 2U);
+        return;
+      }
+      if (state_template_id != template_id_) {
         if (deactivate_on_other_template_ && is_active_) {
           is_active_ = false;
           publishEmptyMessage();
@@ -445,7 +516,6 @@ private:
         }
         return;
       }
-      const bool next_is_active = state.value("state", "") == "confirmed";
       if (next_is_active == is_active_) {
         return;
       }
@@ -463,10 +533,12 @@ private:
   }
 
   std::string template_id_;
+  bool multi_template_mode_ = false;
   bool is_active_ = true;
   bool deactivate_on_other_template_ = false;
   bool publish_empty_on_deactivate_ = false;
   ais_gng_msgs::msg::TopologicalMap message_;
+  std::unordered_map<std::string, ais_gng_msgs::msg::TopologicalMap> template_messages_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr publisher_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr activation_subscription_;
   rclcpp::TimerBase::SharedPtr timer_;

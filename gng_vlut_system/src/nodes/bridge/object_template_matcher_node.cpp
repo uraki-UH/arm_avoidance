@@ -32,6 +32,15 @@ using json = nlohmann::json;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kMinShapePairScore = 0.55;
+constexpr std::size_t kMaxRefinementTemplateNum = 1U;
+constexpr std::size_t kMaxRetrievalCandidateNum = 8U;
+constexpr std::size_t kMaxTemplatesPerRetrievalKey = 4U;
+constexpr std::size_t kMaxNonplaneRetrievalNodeNum = 64U;
+constexpr std::size_t kMaxRetrievalNodeNum = 128U;
+constexpr int kNormalZBinNum = 12;
+constexpr int kRhoBinNum = 10;
+constexpr int kDegreeBinNum = 8;
+constexpr int kNeighborNormalBinNum = 10;
 
 struct Vec3
 {
@@ -75,6 +84,33 @@ struct TemplateGraph
   std::vector<TemplatePlaneCluster> plane_clusters;
   std::vector<NonplaneComponent> nonplane_components;
   double canonical_yaw_deg = 0.0;
+};
+
+struct LoadedTemplate
+{
+  std::string id;
+  TemplateGraph graph;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_publisher;
+};
+
+struct RetrievalCandidate
+{
+  std::size_t template_index = 0U;
+  double score = 0.0;
+};
+
+struct RetrievalDescriptor
+{
+  int normal_z_bin = 0;
+  int rho_bin = 0;
+  int degree_bin = 0;
+  int neighbor_normal_bin = 0;
+};
+
+struct RetrievalProbe
+{
+  std::uint64_t key = 0U;
+  double score = 0.0;
 };
 
 struct PairScore
@@ -156,6 +192,106 @@ Vec3 normalize(const Vec3 &value)
 double dot(const Vec3 &first, const Vec3 &second)
 {
   return first.x * second.x + first.y * second.y + first.z * second.z;
+}
+
+int quantizeUnit(const double value, const int bin_num)
+{
+  const double bounded_value = std::max(0.0, std::min(1.0, value));
+  return std::min(
+    bin_num - 1,
+    static_cast<int>(std::floor(bounded_value * static_cast<double>(bin_num))));
+}
+
+int quantizeRho(const double rho)
+{
+  return quantizeUnit(
+    isFinite(rho) ? std::abs(rho) / (kPi * 0.5) : 0.0,
+    kRhoBinNum);
+}
+
+std::uint64_t makeRetrievalKey(
+  const std::uint8_t type, const int normal_z_bin, const int rho_bin,
+  const int degree_bin, const int neighbor_normal_bin)
+{
+  return (static_cast<std::uint64_t>(type) << 32U) |
+    (static_cast<std::uint64_t>(normal_z_bin) << 24U) |
+    (static_cast<std::uint64_t>(rho_bin) << 16U) |
+    (static_cast<std::uint64_t>(degree_bin) << 8U) |
+    static_cast<std::uint64_t>(neighbor_normal_bin);
+}
+
+RetrievalDescriptor makeRetrievalDescriptor(
+  const Vec3 &normal, const double rho, const std::size_t degree,
+  const double neighbor_normal_alignment)
+{
+  return {
+    quantizeUnit(std::abs(normalize(normal).z), kNormalZBinNum),
+    quantizeRho(rho),
+    std::min(static_cast<int>(degree), kDegreeBinNum - 1),
+    quantizeUnit(neighbor_normal_alignment, kNeighborNormalBinNum)};
+}
+
+std::array<std::uint64_t, 2U> makeTemplateRetrievalKeys(
+  const RetrievalDescriptor &descriptor)
+{
+  return {
+    makeRetrievalKey(
+      0U, descriptor.normal_z_bin, descriptor.rho_bin, descriptor.degree_bin, 0),
+    makeRetrievalKey(
+      1U, descriptor.normal_z_bin, 0, descriptor.degree_bin,
+      descriptor.neighbor_normal_bin)};
+}
+
+std::vector<RetrievalProbe> makeEnvironmentRetrievalProbes(
+  const RetrievalDescriptor &descriptor)
+{
+  std::vector<RetrievalProbe> probes;
+  probes.reserve(54U);
+  for (int normal_z_bin = std::max(0, descriptor.normal_z_bin - 1);
+    normal_z_bin <= std::min(kNormalZBinNum - 1, descriptor.normal_z_bin + 1);
+    ++normal_z_bin)
+  {
+    for (int degree_bin = std::max(0, descriptor.degree_bin - 1);
+      degree_bin <= std::min(kDegreeBinNum - 1, descriptor.degree_bin + 1);
+      ++degree_bin)
+    {
+      for (int rho_bin = std::max(0, descriptor.rho_bin - 1);
+        rho_bin <= std::min(kRhoBinNum - 1, descriptor.rho_bin + 1);
+        ++rho_bin)
+      {
+        const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
+          std::abs(rho_bin - descriptor.rho_bin) +
+          std::abs(degree_bin - descriptor.degree_bin);
+        probes.push_back({
+          makeRetrievalKey(0U, normal_z_bin, rho_bin, degree_bin, 0),
+          1.0 / (1.0 + static_cast<double>(bin_dev))});
+      }
+      for (int neighbor_normal_bin = std::max(0, descriptor.neighbor_normal_bin - 1);
+        neighbor_normal_bin <= std::min(
+          kNeighborNormalBinNum - 1, descriptor.neighbor_normal_bin + 1);
+        ++neighbor_normal_bin)
+      {
+        const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
+          std::abs(degree_bin - descriptor.degree_bin) +
+          std::abs(neighbor_normal_bin - descriptor.neighbor_normal_bin);
+        probes.push_back({
+          makeRetrievalKey(1U, normal_z_bin, 0, degree_bin, neighbor_normal_bin),
+          1.0 / (1.0 + static_cast<double>(bin_dev))});
+      }
+    }
+  }
+  std::sort(probes.begin(), probes.end(), [](const RetrievalProbe &first,
+    const RetrievalProbe &second) {return first.key < second.key;});
+  std::vector<RetrievalProbe> unique_probes;
+  unique_probes.reserve(probes.size());
+  for (const RetrievalProbe &probe : probes) {
+    if (!unique_probes.empty() && unique_probes.back().key == probe.key) {
+      unique_probes.back().score = std::max(unique_probes.back().score, probe.score);
+    } else {
+      unique_probes.push_back(probe);
+    }
+  }
+  return unique_probes;
 }
 
 Vec3 rotateRpy(const Vec3 &value, double roll_deg, double pitch_deg, double yaw_deg)
@@ -409,10 +545,16 @@ public:
   {
     template_id_ = declare_parameter<std::string>("template_id", "");
     template_dataset_path_ = declare_parameter<std::string>("template_dataset_path", "");
+    template_ids_ = declare_parameter<std::vector<std::string>>(
+      "template_ids", std::vector<std::string>{});
+    template_dataset_paths_ = declare_parameter<std::vector<std::string>>(
+      "template_dataset_paths", std::vector<std::string>{});
     environment_topic_ = declare_parameter<std::string>(
       "environment_topological_map_topic", "/topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>("plane_clusters_topic", "/plane_clusters");
     candidate_topic_ = declare_parameter<std::string>("candidate_topic", "");
+    candidate_topics_ = declare_parameter<std::vector<std::string>>(
+      "candidate_topics", std::vector<std::string>{});
     shape_tolerance_ = declare_parameter<double>("shape_tolerance", 0.35);
     scale_tolerance_ = declare_parameter<double>("scale_tolerance", 0.30);
     contradiction_limit_ = declare_parameter<double>("contradiction_limit", 0.20);
@@ -467,18 +609,13 @@ public:
     min_nonplane_evidence_score_th_ = declare_parameter<double>(
       "min_nonplane_evidence_score_th", 0.55);
 
-    if (template_id_.empty() || template_dataset_path_.empty() || environment_topic_.empty()) {
-      throw std::runtime_error("template_id、template_dataset_path、environment_topological_map_topicの指定が必要です。");
-    }
-    if (candidate_topic_.empty()) {
-      candidate_topic_ = "/" + template_id_ + "/object_template_match_candidates";
+    if (environment_topic_.empty()) {
+      throw std::runtime_error("environment_topological_map_topicの指定が必要です。");
     }
     validateParameters();
     parameter_callback_handle_ = add_on_set_parameters_callback(
       std::bind(&ObjectTemplateMatcherNode::onSetParameters, this, std::placeholders::_1));
-    template_graph_ = loadTemplateGraph(template_dataset_path_);
-    candidate_publisher_ = create_publisher<std_msgs::msg::String>(
-      candidate_topic_, rclcpp::QoS(1).reliable().transient_local());
+    initializeTemplates();
     environment_subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
       environment_topic_, rclcpp::QoS(1).reliable(),
       std::bind(&ObjectTemplateMatcherNode::onEnvironmentMap, this, std::placeholders::_1));
@@ -486,12 +623,296 @@ public:
       plane_clusters_topic_, rclcpp::QoS(1).reliable(),
       std::bind(&ObjectTemplateMatcherNode::onPlaneClusters, this, std::placeholders::_1));
     RCLCPP_INFO(
-      get_logger(), "物体テンプレート照合開始: template=%s nodes=%zu edges=%zu planes=%zu input=%s",
-      template_id_.c_str(), template_graph_.nodes.size(), template_graph_.edges.size(),
-      template_graph_.plane_clusters.size(), environment_topic_.c_str());
+      get_logger(), "物体テンプレート照合開始: templates=%zu input=%s",
+      loaded_templates_.size(), environment_topic_.c_str());
   }
 
 private:
+  void initializeTemplates()
+  {
+    const bool has_multi_template_parameters = !template_ids_.empty() ||
+      !template_dataset_paths_.empty() || !candidate_topics_.empty();
+    std::vector<std::string> ids = template_ids_;
+    std::vector<std::string> paths = template_dataset_paths_;
+    std::vector<std::string> topics = candidate_topics_;
+    if (has_multi_template_parameters) {
+      if (ids.empty() || paths.empty() || ids.size() != paths.size()) {
+        throw std::runtime_error("template_idsとtemplate_dataset_pathsの要素数一致が必要です。");
+      }
+    } else {
+      if (template_id_.empty() || template_dataset_path_.empty()) {
+        throw std::runtime_error(
+                "template_idとtemplate_dataset_path、または複数テンプレート指定が必要です。");
+      }
+      ids = {template_id_};
+      paths = {template_dataset_path_};
+    }
+    if (!topics.empty() && topics.size() != ids.size()) {
+      throw std::runtime_error("candidate_topicsとtemplate_idsの要素数一致が必要です。");
+    }
+    if (topics.empty()) {
+      topics.reserve(ids.size());
+      for (const std::string &id : ids) {
+        topics.push_back("/" + id + "/object_template_match_candidates");
+      }
+    }
+
+    std::unordered_set<std::string> seen_ids;
+    loaded_templates_.reserve(ids.size());
+    for (std::size_t index = 0U; index < ids.size(); ++index) {
+      if (ids[index].empty() || paths[index].empty() ||
+        !seen_ids.insert(ids[index]).second)
+      {
+        throw std::runtime_error("template_idまたはtemplate_dataset_pathが不正です。");
+      }
+      LoadedTemplate loaded_template;
+      loaded_template.id = ids[index];
+      loaded_template.graph = loadTemplateGraph(paths[index]);
+      loaded_template.candidate_publisher = create_publisher<std_msgs::msg::String>(
+        topics[index], rclcpp::QoS(1).reliable().transient_local());
+      RCLCPP_INFO(
+        get_logger(), "物体テンプレート読込: template=%s nodes=%zu edges=%zu planes=%zu",
+        loaded_template.id.c_str(), loaded_template.graph.nodes.size(),
+        loaded_template.graph.edges.size(), loaded_template.graph.plane_clusters.size());
+      loaded_templates_.push_back(std::move(loaded_template));
+    }
+    buildTemplateRetrievalIndex();
+    activateTemplate(0U);
+  }
+
+  static double templateNeighborNormalAlignment(
+    const TemplateGraph &graph, const std::size_t node_index)
+  {
+    const auto &neighbors = graph.neighbors[node_index];
+    if (neighbors.empty()) {
+      return 0.5;
+    }
+    double alignment_sum = 0.0;
+    for (const std::size_t neighbor_index : neighbors) {
+      alignment_sum += std::abs(dot(
+        graph.nodes[node_index].normal, graph.nodes[neighbor_index].normal));
+    }
+    return alignment_sum / static_cast<double>(neighbors.size());
+  }
+
+  static double environmentNeighborNormalAlignment(
+    const ais_gng_msgs::msg::TopologicalMap &environment,
+    const std::vector<std::vector<std::size_t>> &neighbors, const std::size_t node_index)
+  {
+    if (neighbors[node_index].empty()) {
+      return 0.5;
+    }
+    const Vec3 normal = normalize({
+      environment.nodes[node_index].normal.x,
+      environment.nodes[node_index].normal.y,
+      environment.nodes[node_index].normal.z});
+    double alignment_sum = 0.0;
+    for (const std::size_t neighbor_index : neighbors[node_index]) {
+      const Vec3 neighbor_normal = normalize({
+        environment.nodes[neighbor_index].normal.x,
+        environment.nodes[neighbor_index].normal.y,
+        environment.nodes[neighbor_index].normal.z});
+      alignment_sum += std::abs(dot(normal, neighbor_normal));
+    }
+    return alignment_sum / static_cast<double>(neighbors[node_index].size());
+  }
+
+  void buildTemplateRetrievalIndex()
+  {
+    template_retrieval_index_.clear();
+    template_retrieval_index_.reserve(loaded_templates_.size() * 32U);
+    for (std::size_t template_index = 0U; template_index < loaded_templates_.size(); ++template_index) {
+      const TemplateGraph &graph = loaded_templates_[template_index].graph;
+      std::unordered_set<std::uint64_t> unique_keys;
+      unique_keys.reserve(graph.nodes.size() * 2U);
+      for (std::size_t node_index = 0U; node_index < graph.nodes.size(); ++node_index) {
+        const TemplateNode &node = graph.nodes[node_index];
+        const RetrievalDescriptor descriptor = makeRetrievalDescriptor(
+          node.normal, node.rho, node.degree,
+          templateNeighborNormalAlignment(graph, node_index));
+        const auto keys = makeTemplateRetrievalKeys(descriptor);
+        unique_keys.insert(keys.begin(), keys.end());
+      }
+      for (const std::uint64_t key : unique_keys) {
+        template_retrieval_index_[key].push_back(template_index);
+      }
+    }
+    for (auto &[key, template_indices] : template_retrieval_index_) {
+      static_cast<void>(key);
+      std::sort(template_indices.begin(), template_indices.end());
+      template_indices.erase(
+        std::unique(template_indices.begin(), template_indices.end()), template_indices.end());
+    }
+  }
+
+  static void appendEvenlySample(
+    const std::vector<std::size_t> &source_indices, const std::size_t sample_num,
+    std::vector<std::size_t> &target_indices, std::vector<bool> &is_selected)
+  {
+    if (sample_num == 0U || source_indices.empty()) {
+      return;
+    }
+    for (std::size_t sample_index = 0U; sample_index < sample_num; ++sample_index) {
+      const std::size_t source_index = source_indices[
+        sample_index * source_indices.size() / sample_num];
+      if (!is_selected[source_index]) {
+        is_selected[source_index] = true;
+        target_indices.push_back(source_index);
+      }
+    }
+  }
+
+  static std::vector<std::size_t> selectEnvironmentRetrievalNodes(
+    const ais_gng_msgs::msg::TopologicalMap &environment)
+  {
+    std::vector<std::size_t> nonplane_indices;
+    nonplane_indices.reserve(environment.nodes.size());
+    std::vector<std::size_t> all_indices;
+    all_indices.reserve(environment.nodes.size());
+    for (std::size_t node_index = 0U; node_index < environment.nodes.size(); ++node_index) {
+      all_indices.push_back(node_index);
+      if (environment.nodes[node_index].nonplane_component_id !=
+        std::numeric_limits<std::uint32_t>::max())
+      {
+        nonplane_indices.push_back(node_index);
+      }
+    }
+
+    std::vector<std::size_t> selected_indices;
+    selected_indices.reserve(kMaxRetrievalNodeNum);
+    std::vector<bool> is_selected(environment.nodes.size(), false);
+    appendEvenlySample(
+      nonplane_indices,
+      std::min(kMaxNonplaneRetrievalNodeNum, nonplane_indices.size()),
+      selected_indices, is_selected);
+    appendEvenlySample(
+      all_indices,
+      std::min(kMaxRetrievalNodeNum - selected_indices.size(), all_indices.size()),
+      selected_indices, is_selected);
+    for (std::size_t node_index = 0U;
+      selected_indices.size() < kMaxRetrievalNodeNum && node_index < environment.nodes.size();
+      ++node_index)
+    {
+      if (!is_selected[node_index]) {
+        is_selected[node_index] = true;
+        selected_indices.push_back(node_index);
+      }
+    }
+    return selected_indices;
+  }
+
+  static void addRetrievalCandidate(
+    std::vector<RetrievalCandidate> &candidates, const std::size_t template_index,
+    const double score)
+  {
+    for (RetrievalCandidate &candidate : candidates) {
+      if (candidate.template_index == template_index) {
+        candidate.score += score;
+        return;
+      }
+    }
+    if (candidates.size() < kMaxRetrievalCandidateNum) {
+      candidates.push_back({template_index, score});
+      return;
+    }
+    const auto minimum = std::min_element(
+      candidates.begin(), candidates.end(), [](const RetrievalCandidate &first,
+      const RetrievalCandidate &second) {return first.score < second.score;});
+    minimum->template_index = template_index;
+    minimum->score += score;
+  }
+
+  static void addRetrievalCandidateMaximum(
+    std::vector<RetrievalCandidate> &candidates, const std::size_t template_index,
+    const double score)
+  {
+    for (RetrievalCandidate &candidate : candidates) {
+      if (candidate.template_index == template_index) {
+        candidate.score = std::max(candidate.score, score);
+        return;
+      }
+    }
+    if (candidates.size() < kMaxRetrievalCandidateNum) {
+      candidates.push_back({template_index, score});
+      return;
+    }
+    const auto minimum = std::min_element(
+      candidates.begin(), candidates.end(), [](const RetrievalCandidate &first,
+      const RetrievalCandidate &second) {return first.score < second.score;});
+    if (score > minimum->score) {
+      *minimum = {template_index, score};
+    }
+  }
+
+  std::vector<std::size_t> selectRefinementTemplateIndices(
+    const ais_gng_msgs::msg::TopologicalMap &environment,
+    const std::vector<std::vector<std::size_t>> &environment_neighbors) const
+  {
+    std::vector<RetrievalCandidate> candidates;
+    candidates.reserve(kMaxRetrievalCandidateNum);
+    const std::vector<std::size_t> environment_indices =
+      selectEnvironmentRetrievalNodes(environment);
+    for (const std::size_t environment_index : environment_indices) {
+      std::vector<RetrievalCandidate> local_candidates;
+      local_candidates.reserve(kMaxRetrievalCandidateNum);
+      const auto &node = environment.nodes[environment_index];
+      const RetrievalDescriptor descriptor = makeRetrievalDescriptor(
+        {node.normal.x, node.normal.y, node.normal.z}, static_cast<double>(node.rho),
+        environment_neighbors[environment_index].size(),
+        environmentNeighborNormalAlignment(environment, environment_neighbors, environment_index));
+      for (const RetrievalProbe &probe : makeEnvironmentRetrievalProbes(descriptor)) {
+        const auto lookup = template_retrieval_index_.find(probe.key);
+        if (lookup == template_retrieval_index_.end() || lookup->second.empty()) {
+          continue;
+        }
+        const std::vector<std::size_t> &template_indices = lookup->second;
+        const std::size_t sample_num = std::min(
+          kMaxTemplatesPerRetrievalKey, template_indices.size());
+        const std::uint64_t seed =
+          static_cast<std::uint64_t>(environment.frame_number) * 11400714819323198485ULL ^ probe.key;
+        const std::size_t start_index = static_cast<std::size_t>(seed % template_indices.size());
+        const double score = probe.score /
+          std::sqrt(static_cast<double>(template_indices.size()));
+        for (std::size_t offset = 0U; offset < sample_num; ++offset) {
+          addRetrievalCandidateMaximum(
+            local_candidates,
+            template_indices[(start_index + offset) % template_indices.size()], score);
+        }
+      }
+      for (const RetrievalCandidate &candidate : local_candidates) {
+        addRetrievalCandidate(candidates, candidate.template_index, candidate.score);
+      }
+    }
+    if (candidates.empty()) {
+      return {static_cast<std::size_t>(environment.frame_number) % loaded_templates_.size()};
+    }
+    std::sort(candidates.begin(), candidates.end(), [](
+      const RetrievalCandidate &first, const RetrievalCandidate &second) {
+        return first.score == second.score ? first.template_index < second.template_index :
+               first.score > second.score;
+      });
+    std::vector<std::size_t> selected_indices;
+    selected_indices.reserve(kMaxRefinementTemplateNum);
+    for (std::size_t index = 0U;
+      index < candidates.size() && index < kMaxRefinementTemplateNum; ++index)
+    {
+      selected_indices.push_back(candidates[index].template_index);
+    }
+    return selected_indices;
+  }
+
+  void activateTemplate(const std::size_t index)
+  {
+    if (has_active_template_) {
+      std::swap(template_graph_, loaded_templates_[active_template_index_].graph);
+    }
+    std::swap(template_graph_, loaded_templates_[index].graph);
+    active_template_index_ = index;
+    has_active_template_ = true;
+    template_id_ = loaded_templates_[index].id;
+    candidate_publisher_ = loaded_templates_[index].candidate_publisher;
+  }
+
   rcl_interfaces::msg::SetParametersResult onSetParameters(
     const std::vector<rclcpp::Parameter> &parameters)
   {
@@ -512,7 +933,11 @@ private:
     try {
       for (const auto &parameter : parameters) {
         const std::string &name = parameter.get_name();
-        if (name == "shape_tolerance") stage(shape_tolerance_, parameter.as_double());
+        if (name == "template_ids" || name == "template_dataset_paths" ||
+          name == "candidate_topics")
+        {
+          throw std::runtime_error("テンプレート読込設定の変更にはノード再起動が必要です。");
+        } else if (name == "shape_tolerance") stage(shape_tolerance_, parameter.as_double());
         else if (name == "scale_tolerance") stage(scale_tolerance_, parameter.as_double());
         else if (name == "contradiction_limit") stage(contradiction_limit_, parameter.as_double());
         else if (name == "yaw_step_deg") stage(yaw_step_deg_, parameter.as_double());
@@ -715,6 +1140,19 @@ private:
     }
     const auto id_to_index = buildIdToIndex(*environment);
     const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
+    const auto environment_neighbors = buildNeighbors(environment->nodes.size(), environment_edges);
+    for (const std::size_t template_index :
+      selectRefinementTemplateIndices(*environment, environment_neighbors))
+    {
+      activateTemplate(template_index);
+      evaluateActiveTemplate(environment, environment_edges);
+    }
+  }
+
+  void evaluateActiveTemplate(
+    const ais_gng_msgs::msg::TopologicalMap::SharedPtr &environment,
+    const std::vector<std::pair<std::size_t, std::size_t>> &environment_edges)
+  {
     const auto yaw_samples = sampleFullYaw(yaw_step_deg_);
     const auto roll_samples = sampleTolerance(
       roll_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
@@ -1448,9 +1886,12 @@ private:
 
   std::string template_id_;
   std::string template_dataset_path_;
+  std::vector<std::string> template_ids_;
+  std::vector<std::string> template_dataset_paths_;
   std::string environment_topic_;
   std::string plane_clusters_topic_;
   std::string candidate_topic_;
+  std::vector<std::string> candidate_topics_;
   double shape_tolerance_ = 0.35;
   double scale_tolerance_ = 0.30;
   double contradiction_limit_ = 0.20;
@@ -1499,6 +1940,10 @@ private:
   double nonplane_evidence_score_scale_ = 1.0;
   double min_nonplane_evidence_score_th_ = 1.0;
   TemplateGraph template_graph_;
+  std::vector<LoadedTemplate> loaded_templates_;
+  std::unordered_map<std::uint64_t, std::vector<std::size_t>> template_retrieval_index_;
+  std::size_t active_template_index_ = 0U;
+  bool has_active_template_ = false;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr environment_subscription_;
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr plane_clusters_subscription_;

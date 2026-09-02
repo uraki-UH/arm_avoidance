@@ -121,6 +121,24 @@ FlashRegの公開リポジトリは取得できるが、検証時点では内容
 
 G3Regは平面・クラスタ・線分をGaussian Ellipsoid Modelとして表し、Pyramid Compatibility Graphで複数姿勢仮説を検証するCPU方式。公式DockerfileはPCL 1.10、GTSAM 4.1.1、igraph 0.9.9をソースから構築するため、初回は時間とディスク容量を要する。
 
+### 2026-09-02時点の実測
+
+同梱Livoxデータをヘッドレス実行器で処理したところ、総時間は約79 msだった。内訳はグラフ構築31.6 ms、クリーク探索10.8 ms、姿勢解23.6 ms、検証4.3 msである。
+
+現在の物体テンプレート`mug_source.pcd`（4,280点）を生点群のままG3RegのLiDAR前処理へ入力すると、範囲・クラスタ・FPFHのパラメータを物体サイズ向けに調整しても前処理中に異常終了した。このため、現時点ではG3Regの生点群フロントエンドを採用しない。
+
+一方、既存のGNG候補から対応点を作ってG3Regの後段だけを呼ぶ評価器では、既知の回転・並進を正しく復元した。mugの対応点数別のPAGOR総時間は次の通り。
+
+| 対応点数 | 総時間 |
+| ---: | ---: |
+| 10 | 11.0 ms |
+| 50 | 10.8 ms |
+| 100 | 14.5 ms |
+| 500 | 34.6 ms |
+| 1,000 | 171.4 ms |
+
+したがって、現行の平面クラスタ・非平面成分から数十〜数百件の対応を作れるなら、G3RegはCPU後段の比較対象として有望。対応生成、遮蔽、誤対応を含む実データ評価は未完了であり、まだ本番の物体召喚経路には接続していない。
+
 ```bash
 docker build -t registration_eval_g3reg:local "$eval_root/G3Reg"
 support_root="$(pwd)/gng_vlut_system"
@@ -137,6 +155,10 @@ docker run --rm -it \
 ```bash
 git -C /G3Reg apply \
   /evaluation_support/tools/registration_eval/g3reg_headless.patch
+cp /evaluation_support/tools/registration_eval/g3reg_correspondence.cpp \
+  /G3Reg/examples/headless_corresp.cpp
+git -C /G3Reg apply \
+  /evaluation_support/tools/registration_eval/g3reg_correspondence.patch
 cmake -S /G3Reg -B /G3Reg/build
 cmake --build /G3Reg/build -j"$(nproc)"
 ```
@@ -148,6 +170,13 @@ cmake --build /G3Reg/build -j"$(nproc)"
   configs/hit_ms/gem_pagor.yaml \
   examples/data/livox/source.pcd \
   examples/data/livox/target.pcd
+```
+
+対応点ベースの後段だけを測る場合は、同じ順番の点を対応点として使う評価用ヘルパーを実行する。これは現在のmatcherを置き換えるものではなく、G3Regの姿勢解部分の単体評価用である。
+
+```bash
+/G3Reg/bin/headless_corresp \
+  /datasets/mug_source.pcd /datasets/mug_target.pcd 100 pagor
 ```
 
 ヘッドレス実行器では、入力点数、前処理、グラフ構築、クリーク探索、姿勢解、検証、総時間を出力する。小物体への適用では、`min_range`、`max_range`、平面・クラスタ抽出の分解能、ノイズ境界をメートル単位で再調整する。

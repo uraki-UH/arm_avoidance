@@ -201,7 +201,9 @@ install(
 )
 
 install(
-  PROGRAMS scripts/save_object_gng_dataset
+  PROGRAMS
+    scripts/repair_object_gng_edges
+    scripts/save_object_gng_dataset
   DESTINATION lib/${PROJECT_NAME}
 )
 

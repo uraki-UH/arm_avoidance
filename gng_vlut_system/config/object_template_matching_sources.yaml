@@ -1,0 +1,9 @@
+template_sources:
+  # 個別読込対象
+  dataset_files: []
+  # 再帰読込対象フォルダ
+  dataset_dirs: []
+  # 再帰読込から除くフォルダ
+  exclude_dirs: []
+  # 読込対象から除くtemplate_id
+  exclude_template_ids: []

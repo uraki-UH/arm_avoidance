@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -61,5 +61,9 @@
+ target_link_libraries(demo_seg ${PROJECT_NAME})
+ 
+ add_executable(headless_reg examples/headless_reg.cpp ${BACKWARD_ENABLE})
+ add_backward(headless_reg)
+ target_link_libraries(headless_reg ${PROJECT_NAME})
++
++add_executable(headless_corresp examples/headless_corresp.cpp ${BACKWARD_ENABLE})
++add_backward(headless_corresp)
++target_link_libraries(headless_corresp ${PROJECT_NAME})

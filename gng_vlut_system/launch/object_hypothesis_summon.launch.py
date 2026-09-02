@@ -74,40 +74,40 @@ def create_summon_nodes(context):
         raise RuntimeError(f"召喚可能な物体テンプレートがありません: {dataset_dir}")
 
     state_topic = LaunchConfiguration("state_topic")
+    template_ids = sorted(selected)
     nodes = [Node(
         package="gng_vlut_system",
         executable="object_hypothesis_summon_node",
         name="object_hypothesis_summon_node",
         output="screen",
         parameters=[{
-            "template_ids": sorted(selected),
+            "template_ids": template_ids,
             "initial_template_id": LaunchConfiguration("initial_template_id"),
             "state_topic": state_topic,
             "selection_topic": LaunchConfiguration("selection_topic"),
+            "map_topic": LaunchConfiguration("map_topic"),
             "switch_interval_sec": ParameterValue(
                 LaunchConfiguration("switch_interval_sec"), value_type=float),
             "random_seed": ParameterValue(LaunchConfiguration("random_seed"), value_type=int),
         }],
     )]
 
-    for template_id, dataset_path in sorted(selected.items()):
-        nodes.append(Node(
-            package="gng_vlut_system",
-            executable="object_template_map_publisher_node",
-            name=f"object_template_map_publisher_{template_id}",
-            output="screen",
-            parameters=[{
-                "dataset_path": dataset_path,
-                "template_id": template_id,
-                "frame_id": LaunchConfiguration("frame_id"),
-                "publish_hz": ParameterValue(
-                    LaunchConfiguration("publish_hz"), value_type=float),
-                "output_topic": f"/object_hypothesis/{template_id}/topological_map",
-                "activation_state_topic": state_topic,
-                "deactivate_on_other_template": True,
-                "publish_empty_on_deactivate": True,
-            }],
-        ))
+    nodes.append(Node(
+        package="gng_vlut_system",
+        executable="object_template_map_publisher_node",
+        name="object_hypothesis_map_publisher_node",
+        output="screen",
+        parameters=[{
+            "dataset_paths": [selected[template_id] for template_id in template_ids],
+            "template_ids": template_ids,
+            "frame_id": LaunchConfiguration("frame_id"),
+            "publish_hz": ParameterValue(
+                LaunchConfiguration("publish_hz"), value_type=float),
+            "output_topic": LaunchConfiguration("map_topic"),
+            "activation_state_topic": state_topic,
+            "publish_empty_on_deactivate": True,
+        }],
+    ))
     return nodes
 
 
@@ -120,6 +120,7 @@ def generate_launch_description():
         DeclareLaunchArgument("random_seed", default_value="0"),
         DeclareLaunchArgument("state_topic", default_value="/object_hypothesis/summon_state"),
         DeclareLaunchArgument("selection_topic", default_value="/object_hypothesis/select"),
+        DeclareLaunchArgument("map_topic", default_value="/object_hypothesis/topological_map"),
         DeclareLaunchArgument("frame_id", default_value="object_template"),
         DeclareLaunchArgument("publish_hz", default_value="1.0"),
         OpaqueFunction(function=create_summon_nodes),

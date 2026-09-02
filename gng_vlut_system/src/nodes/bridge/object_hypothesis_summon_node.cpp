@@ -53,12 +53,15 @@ public:
   explicit ObjectHypothesisSummonNode(const rclcpp::NodeOptions &options)
   : Node("object_hypothesis_summon_node", options)
   {
-    template_ids_ = declare_parameter<std::vector<std::string>>("template_ids", {});
+    template_ids_ = declare_parameter<std::vector<std::string>>(
+      "template_ids", std::vector<std::string>{});
     const std::string initial_template_id = declare_parameter<std::string>("initial_template_id", "");
     state_topic_ = declare_parameter<std::string>(
       "state_topic", "/object_hypothesis/summon_state");
     selection_topic_ = declare_parameter<std::string>(
       "selection_topic", "/object_hypothesis/select");
+    map_topic_ = declare_parameter<std::string>(
+      "map_topic", "/object_hypothesis/topological_map");
     const double switch_interval_sec = declare_parameter<double>("switch_interval_sec", 5.0);
     const auto random_seed = declare_parameter<std::int64_t>("random_seed", 0);
 
@@ -66,7 +69,7 @@ public:
     if (template_ids_.empty()) {
       throw std::runtime_error("template_idsが空です。");
     }
-    if (state_topic_.empty() || selection_topic_.empty() ||
+    if (state_topic_.empty() || selection_topic_.empty() || map_topic_.empty() ||
       !std::isfinite(switch_interval_sec) || switch_interval_sec < 0.0)
     {
       throw std::runtime_error("召喚topicまたはswitch_interval_secが不正です。");
@@ -103,8 +106,10 @@ public:
     }
 
     RCLCPP_INFO(
-      get_logger(), "物体仮説召喚準備: templates=%zu state=%s select=%s interval=%.3fs",
-      template_ids_.size(), state_topic_.c_str(), selection_topic_.c_str(), switch_interval_sec);
+      get_logger(),
+      "物体仮説召喚準備: templates=%zu map=%s state=%s select=%s interval=%.3fs",
+      template_ids_.size(), map_topic_.c_str(), state_topic_.c_str(), selection_topic_.c_str(),
+      switch_interval_sec);
   }
 
 private:
@@ -168,6 +173,7 @@ private:
       {"score", score_distribution(random_engine_)},
       {"yaw_deg", yaw_distribution(random_engine_)},
       {"sequence", sequence_},
+      {"map_topic", map_topic_},
       {"available_template_ids", template_ids_}
     }.dump();
     state_publisher_->publish(state);
@@ -202,6 +208,7 @@ private:
   std::string current_template_id_;
   std::string state_topic_;
   std::string selection_topic_;
+  std::string map_topic_;
   std::uint64_t sequence_ = 0U;
   std::mt19937_64 random_engine_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr state_publisher_;

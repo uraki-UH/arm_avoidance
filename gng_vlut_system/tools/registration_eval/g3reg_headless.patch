@@ -2,11 +2,16 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 9f6859e..b52ad49 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -60,0 +61,4 @@ target_link_libraries(demo_reg ${PROJECT_NAME})
+@@ -61,3 +61,7 @@ add_executable(demo_seg examples/demo_seg.cpp ${BACKWARD_ENABLE})
+ add_executable(demo_seg examples/demo_seg.cpp ${BACKWARD_ENABLE})
+ add_backward(demo_seg)
+-target_link_libraries(demo_seg ${PROJECT_NAME})
+\ No newline at end of file
++target_link_libraries(demo_seg ${PROJECT_NAME})
++
 +add_executable(headless_reg examples/headless_reg.cpp ${BACKWARD_ENABLE})
 +add_backward(headless_reg)
 +target_link_libraries(headless_reg ${PROJECT_NAME})
-+
 diff --git a/examples/headless_reg.cpp b/examples/headless_reg.cpp
 new file mode 100644
 index 0000000..713a5c9

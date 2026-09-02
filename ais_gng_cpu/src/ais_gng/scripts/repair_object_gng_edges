@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+
+import argparse
+import copy
+import datetime
+import gzip
+import json
+import math
+import os
+from pathlib import Path
+import shutil
+import statistics
+import tempfile
+
+
+def open_text(path, mode, compressed=None):
+    if compressed is None:
+        compressed = path.suffix == ".gz"
+    if compressed:
+        return gzip.open(path, mode + "t", encoding="utf-8")
+    return path.open(mode, encoding="utf-8")
+
+
+def find_graph(value):
+    if isinstance(value, dict):
+        if isinstance(value.get("nodes"), list) and isinstance(value.get("edges"), list):
+            return value
+        for child in value.values():
+            graph = find_graph(child)
+            if graph is not None:
+                return graph
+    return None
+
+
+def node_position(node):
+    return (float(node["x"]), float(node["y"]), float(node["z"]))
+
+
+def distance(first, second):
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(first, second)))
+
+
+def canonical_edges(graph):
+    node_count = len(graph["nodes"])
+    result = set()
+    for edge in graph["edges"]:
+        if not isinstance(edge, list) or len(edge) < 2:
+            continue
+        first, second = edge[0], edge[1]
+        if not isinstance(first, int) or not isinstance(second, int):
+            continue
+        if first == second or first < 0 or second < 0:
+            continue
+        if first >= node_count or second >= node_count:
+            continue
+        result.add((min(first, second), max(first, second)))
+    return result
+
+
+def edge_statistics(graph, outlier_factor):
+    positions = [node_position(node) for node in graph["nodes"]]
+    edges = canonical_edges(graph)
+    lengths = sorted(distance(positions[a], positions[b]) for a, b in edges)
+    if not lengths:
+        raise ValueError("graph has no valid edges")
+    median = statistics.median(lengths)
+    cutoff = median * outlier_factor
+    outliers = sum(length > cutoff for length in lengths)
+    return {
+        "edge_count": len(edges),
+        "median": median,
+        "cutoff": cutoff,
+        "maximum": lengths[-1],
+        "outliers": outliers,
+    }
+
+
+def topology_statistics(graph):
+    node_count = len(graph["nodes"])
+    adjacency = [set() for _ in range(node_count)]
+    for first, second in canonical_edges(graph):
+        adjacency[first].add(second)
+        adjacency[second].add(first)
+    degrees = [len(adjacent) for adjacent in adjacency]
+    remaining = set(range(node_count))
+    component_count = 0
+    while remaining:
+        component_count += 1
+        pending = [remaining.pop()]
+        while pending:
+            node = pending.pop()
+            discovered = adjacency[node] & remaining
+            remaining.difference_update(discovered)
+            pending.extend(discovered)
+    return {
+        "components": component_count,
+        "isolated": sum(degree == 0 for degree in degrees),
+        "minimum_degree": min(degrees, default=0),
+        "maximum_degree": max(degrees, default=0),
+    }
+
+
+def needs_repair(stats, minimum_outliers, minimum_fraction):
+    required = max(minimum_outliers, math.ceil(stats["edge_count"] * minimum_fraction))
+    return stats["outliers"] >= required
+
+
+def fill_edge_budget(
+    repaired, candidates, target_count, node_count, minimum_degree, maximum_degree
+):
+    degrees = [0] * node_count
+    for first, second in repaired:
+        degrees[first] += 1
+        degrees[second] += 1
+
+    for _, _, first, second in candidates:
+        if len(repaired) >= target_count:
+            return repaired
+        edge = (first, second)
+        if edge in repaired:
+            continue
+        if degrees[first] >= minimum_degree and degrees[second] >= minimum_degree:
+            continue
+        if degrees[first] >= maximum_degree or degrees[second] >= maximum_degree:
+            continue
+        repaired.add(edge)
+        degrees[first] += 1
+        degrees[second] += 1
+
+    for _, _, first, second in candidates:
+        if len(repaired) >= target_count:
+            return repaired
+        edge = (first, second)
+        if edge in repaired:
+            continue
+        if degrees[first] >= maximum_degree or degrees[second] >= maximum_degree:
+            continue
+        repaired.add(edge)
+        degrees[first] += 1
+        degrees[second] += 1
+
+    # The degree cap is a shape prior, not a reason to lose source edge count.
+    for _, _, first, second in candidates:
+        if len(repaired) >= target_count:
+            return repaired
+        edge = (first, second)
+        if edge not in repaired:
+            repaired.add(edge)
+    return repaired
+
+
+def reconstruct_edges(graph, outlier_factor, local_rank, minimum_degree, maximum_degree):
+    positions = [node_position(node) for node in graph["nodes"]]
+    node_count = len(positions)
+    original_edges = canonical_edges(graph)
+    target_count = len(original_edges)
+    if node_count < 2 or target_count == 0:
+        return sorted(original_edges)
+
+    pair_distances = []
+    neighbours = [[] for _ in range(node_count)]
+    for first in range(node_count):
+        for second in range(first + 1, node_count):
+            length = distance(positions[first], positions[second])
+            pair_distances.append((length, first, second))
+            neighbours[first].append((length, second))
+            neighbours[second].append((length, first))
+    for adjacent in neighbours:
+        adjacent.sort()
+
+    scales = []
+    for adjacent in neighbours:
+        rank = min(max(local_rank, 1), len(adjacent)) - 1
+        scales.append(max(adjacent[rank][0], 1.0e-9))
+
+    original_lengths = sorted(
+        distance(positions[first], positions[second]) for first, second in original_edges)
+    cutoff = statistics.median(original_lengths) * outlier_factor
+    repaired = {
+        edge for edge in original_edges
+        if distance(positions[edge[0]], positions[edge[1]]) <= cutoff
+    }
+
+    candidates = []
+    for length, first, second in pair_distances:
+        local_scale = math.sqrt(scales[first] * scales[second])
+        candidates.append((length / local_scale, length, first, second))
+    candidates.sort()
+
+    repaired = fill_edge_budget(
+        repaired, candidates, target_count, node_count, minimum_degree, maximum_degree
+    )
+
+    # Recompute the robust cutoff after filling because removing bad edges usually
+    # lowers the median. Repeat until the selected local graph is stable.
+    for _ in range(4):
+        lengths = sorted(
+            distance(positions[first], positions[second]) for first, second in repaired
+        )
+        stable_cutoff = statistics.median(lengths) * outlier_factor
+        filtered = {
+            edge
+            for edge in repaired
+            if distance(positions[edge[0]], positions[edge[1]]) <= stable_cutoff
+        }
+        if len(filtered) == len(repaired):
+            break
+        repaired = fill_edge_budget(
+            filtered, candidates, target_count, node_count, minimum_degree, maximum_degree
+        )
+
+    return sorted(repaired)
+
+
+def non_edge_snapshot(root):
+    snapshot = copy.deepcopy(root)
+    graph = find_graph(snapshot)
+    if graph is None:
+        raise ValueError("GNG graph was not found")
+    graph["edges"] = "__EDGE_DATA__"
+    return snapshot
+
+
+def write_verified(path, root, expected_non_edges):
+    temporary_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=path.name + ".", suffix=".tmp", dir=path.parent, delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+        temporary_path = Path(temporary_name)
+        compressed = path.suffix == ".gz"
+        with open_text(temporary_path, "w", compressed) as stream:
+            json.dump(root, stream, ensure_ascii=False, separators=(",", ":"))
+        with open_text(temporary_path, "r", compressed) as stream:
+            written = json.load(stream)
+        if non_edge_snapshot(written) != expected_non_edges:
+            raise RuntimeError("non-edge data changed during serialization")
+        os.chmod(temporary_path, path.stat().st_mode)
+        os.replace(temporary_path, path)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Repair object GNG JSON edges from node geometry without retraining GNG."
+    )
+    parser.add_argument("paths", nargs="+", type=Path)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--backup-dir", type=Path)
+    parser.add_argument("--outlier-factor", type=float, default=3.0)
+    parser.add_argument("--minimum-outliers", type=int, default=5)
+    parser.add_argument("--minimum-outlier-fraction", type=float, default=0.01)
+    parser.add_argument("--local-rank", type=int, default=6)
+    parser.add_argument("--minimum-degree", type=int, default=2)
+    parser.add_argument("--maximum-degree", type=int, default=10)
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
+    if args.apply and args.backup_dir is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        args.backup_dir = args.paths[0].parent / ("edge_repair_backup_" + timestamp)
+
+    repair_count = 0
+    for path in args.paths:
+        with open_text(path, "r") as stream:
+            root = json.load(stream)
+        graph = find_graph(root)
+        if graph is None:
+            raise ValueError(f"{path}: GNG graph was not found")
+        before = edge_statistics(graph, args.outlier_factor)
+        geometric_repair = needs_repair(
+            before, args.minimum_outliers, args.minimum_outlier_fraction)
+        normalization = len(graph["edges"]) != before["edge_count"]
+        flagged = geometric_repair or normalization
+        status = "REPAIR" if geometric_repair else "NORMAL" if normalization else "clean"
+        print(
+            f"{status:6s} {path.name}: edges={before['edge_count']} "
+            f"median={before['median']:.4f} max={before['maximum']:.4f} "
+            f"outliers={before['outliers']}"
+        )
+        if not flagged:
+            continue
+
+        expected_non_edges = non_edge_snapshot(root)
+        if geometric_repair:
+            repaired = reconstruct_edges(
+                graph,
+                args.outlier_factor,
+                args.local_rank,
+                args.minimum_degree,
+                args.maximum_degree,
+            )
+        else:
+            repaired = sorted(canonical_edges(graph))
+        graph["edges"] = [[first, second] for first, second in repaired]
+        after = edge_statistics(graph, args.outlier_factor)
+        topology = topology_statistics(graph)
+        print(
+            f"       candidate: edges={after['edge_count']} "
+            f"median={after['median']:.4f} max={after['maximum']:.4f} "
+            f"outliers={after['outliers']} components={topology['components']} "
+            f"isolated={topology['isolated']} degree="
+            f"{topology['minimum_degree']}..{topology['maximum_degree']}"
+        )
+        repair_count += 1
+        if not args.apply:
+            continue
+
+        args.backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = args.backup_dir / path.name
+        if backup_path.exists():
+            raise FileExistsError(f"backup already exists: {backup_path}")
+        shutil.copy2(path, backup_path)
+        write_verified(path, root, expected_non_edges)
+
+    action = "repaired" if args.apply else "would repair"
+    print(f"{action}: {repair_count} file(s)")
+    if args.apply and repair_count:
+        print(f"backup: {args.backup_dir}")
+
+
+if __name__ == "__main__":
+    main()

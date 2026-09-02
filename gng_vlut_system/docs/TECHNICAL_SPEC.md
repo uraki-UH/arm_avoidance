@@ -866,6 +866,13 @@ profileの`voxel_exclude`はこの自動収録後にも適用する。
 `<物体名>_<UTC日時>_<通し番号>_gng_template.json.gz`へcompact JSONのgzipとして保存する。
 空配列と既定値は省略し、edgeはnode添字の2要素配列として格納する。保存サービスは
 `/save_gng_data`、サービス型は`ais_gng_msgs/srv/SaveObjectGngDataset`とする。
+`TopologicalMap.edges`と`TopologicalCluster.nodes`は受信時点でnode配列添字であり、
+永続node IDとして再解決せず、そのまま範囲検査して保存する。
+
+修正前のエクスポータで保存したテンプレートは、`repair_object_gng_edges`でGNGを再学習せず
+edgeだけを修復できる。局所edge長の中央値に対する外れ値を検出し、既存node座標から局所近傍graphを
+再構成する。既存edge数とedge以外のJSONを維持し、自己edge、範囲外edge、重複edgeを正規化する。
+デフォルトはdry-runとし、`--apply`時は変更対象の原本をバックアップしてから原子的に置換する。
 
 保存CLIの`--replace`指定時は、`<物体名>_gng_template.json.gz`へ固定名で保存する。
 同じ物体名の時刻付き履歴と対応するPCD、depth PNG、color PNGは保存成功後に削除する。通常保存は
@@ -909,10 +916,14 @@ launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結�
 
 ### 15.2 物体GNGテンプレート照合と確定配信
 
-`object_template_matching.launch.py`は、データセットファイルからテンプレートIDを読み、
-`object_template_matcher_node`、`object_template_match_validator_node`、
-`object_template_map_publisher_node`を一組で起動する。必要な物体指定は`dataset_file`だけであり、
-`template_id`やframeの指定は不要とする。
+`object_template_matching.launch.py`は、`object_template_matching_sources.yaml`で選択した
+データセット群を1つの`object_template_matcher_node`へ読込む。
+matcherは入力`TopologicalMap`ごとに照合対象を順番に切り替え、全yaw探索は1テンプレート分だけ実行する。
+`object_template_match_validator_node`と`object_template_map_publisher_node`はtemplateごとに起動する。
+`dataset_files`は個別指定、`dataset_dirs`は再帰読込、`exclude_dirs`と
+`exclude_template_ids`は除外指定とする。
+空の初期YAMLはテンプレートを暗黙に読込まない。`dataset_file`は単体検証用の互換指定であり、
+指定時はYAMLの選択を使用しない。
 
 照合器は環境側`TopologicalMap`、`PlaneClusterArray`、テンプレートJSONを読み、姿勢候補ごとに
 まず平面クラスタを一対一対応させる。平面評価は符号不変の回転後法線と二つのextent比の
@@ -964,12 +975,12 @@ edge、平面、欠損率をvalidatorで重ねて判定しない。確定後は�
 | `/<template_id>/topological_map_static` | `confirmed`時だけ配信する事前登録GNG |
 
 ```bash
-ros2 launch gng_vlut_system object_template_matching.launch.py \
-  dataset_file:=mug_complete
+ros2 launch gng_vlut_system object_template_matching.launch.py
 ```
 
 環境側topicは既定で`/topological_map`であり、`environment_topological_map_topic`で変更する。
-設定は`config/object_template_matching.yaml`へ分離する。通常調整する評価parameterは
+評価設定は`config/object_template_matching.yaml`、読込対象は
+`config/object_template_matching_sources.yaml`へ分離する。通常調整する評価parameterは
 `roll_tolerance_deg`、`pitch_tolerance_deg`、`shape_tolerance`、`min_visible_ratio`、
 `scale_tolerance`、`contradiction_limit`、`recognition_threshold`、`confirmation_time_sec`の
 8つとする。yaw分解能と平面抽出由来の内部閾値は実装設定としてYAMLに残す。
@@ -1042,9 +1053,10 @@ ros2 launch gng_vlut_system object_match_hypothesis_publisher.launch.py \
 `object_hypothesis_summon.launch.py`は`dataset_dir`以下の`object_template`と、GNGを同梱した
 `object_surface_dataset`を再帰的に検出し、登録済みIDから仮の物体仮説を選ぶ。現段階のランダム選択は
 認識器接続前の動作確認用であり、`score`と`yaw_deg`も仮metadataとする。物体の位置変換や点群配信は行わず、
-選択したIDの登録済みGNGだけを
-`/object_hypothesis/<template_id>/topological_map`へ召喚する。環境GNGの`/topological_map`とは
-namespaceを分離する。単体テンプレート配信用の`/<template_id>/topological_map_static`は変更しない。
+選択したIDの登録済みGNGだけを、IDによらず固定の
+`/object_hypothesis/topological_map`へ召喚する。環境GNGの`/topological_map`とはnamespaceを分離する。
+物体IDはマップtopic名や`frame_id`へ埋め込まず、`summon_state`の`template_id`で管理する。
+単体テンプレート配信用の`/<template_id>/topological_map_static`は変更しない。
 
 ```bash
 ros2 launch gng_vlut_system object_hypothesis_summon.launch.py \
@@ -1054,13 +1066,16 @@ ros2 launch gng_vlut_system object_hypothesis_summon.launch.py \
 
 選択状態は`/object_hypothesis/summon_state`へ`std_msgs/msg/String`のJSONとして、
 `reliable`、depth 1、`transient_local`で配信し、遅延購読者にも現在のIDだけを渡す。
-複数IDをランダム選択する場合、直前と同じIDは連続選択しない。ID切替時は旧IDの仮説マップtopicへ
-node、edge、clusterが空の`TopologicalMap`を一度配信し、Viewerに残っている旧グラフを消去する。
+召喚マップも`reliable`、depth 1、`transient_local`とし、Viewerはこの固定topicだけを購読する。
+ID別の登録マップはlaunch内部で集約し、外部の可視化topicとして使用しない。
+複数IDをランダム選択する場合、直前と同じIDは連続選択しない。ID切替時は固定topicへ空の
+`TopologicalMap`を一度配信して旧グラフを消去した後、選択した登録グラフを同じtopicへ配信する。
 対象を限定する場合は、カンマ区切りの`template_ids:=mug,bottle`を指定する。
 
 ランダム切替を止め、外部からIDを指定する場合は`switch_interval_sec:=0.0`を使用する。
 起動時のIDは`initial_template_id`で固定できる。実行中はID文字列、または`template_id`を持つJSONを
 `/object_hypothesis/select`へ送ると、そのIDへ即時切替する。
+固定マップtopicはlaunch引数`map_topic`で変更できる。
 
 ```bash
 ros2 topic pub --once /object_hypothesis/select std_msgs/msg/String \
