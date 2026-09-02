@@ -307,9 +307,11 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-rule-list{display:grid;gap:8px}
 .fuzzy-rule-list.is-collapsed{display:none}
 .fuzzy-rule-structure-card.is-collapsed>.fuzzy-rule-structure-body{display:none}
+.fuzzy-rule-structure-card.is-collapsed{cursor:pointer}
 .fuzzy-rule-list-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fuzzy-rule-list-heading button{width:30px;height:28px;padding:0;text-align:center;line-height:1;font-size:16px}
 .fuzzy-confirm-card.is-collapsed>.fuzzy-rule-confirm-body{display:none}
+.fuzzy-confirm-card.is-collapsed{cursor:pointer}
 .fuzzy-confirm-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .fuzzy-confirm-heading button{width:30px;height:28px;padding:0;text-align:center;line-height:1;font-size:16px}
 .fuzzy-rule-card{border:1px solid rgba(148,163,184,.24);border-radius:14px;background:rgba(15,23,42,.78);padding:10px}
@@ -7487,25 +7489,39 @@ function bindFuzzyRuleListToggle(){
   const panel=$('fuzzyRuleStructurePanel'),toggle=$('fuzzyRuleListToggle');
   if(!panel||!toggle||toggle.dataset.bound==='1')return;
   toggle.dataset.bound='1';
-  toggle.onclick=()=>{
-    const collapsed=panel.classList.toggle('is-collapsed');
+  const setCollapsed=collapsed=>{
+    panel.classList.toggle('is-collapsed',collapsed);
     toggle.textContent=collapsed?'▼':'▲';
     toggle.setAttribute('aria-expanded',String(!collapsed));
     toggle.setAttribute('aria-label',collapsed?'ルール構造エディタを展開':'ルール構造エディタを折りたたむ');
     toggle.title=collapsed?'ルール構造エディタを展開':'ルール構造エディタを折りたたむ';
   };
+  toggle.onclick=()=>{
+    setCollapsed(!panel.classList.contains('is-collapsed'));
+  };
+  panel.addEventListener('click',event=>{
+    if(!panel.classList.contains('is-collapsed')||event.target.closest('button'))return;
+    setCollapsed(false);
+  });
 }
 function bindFuzzyRuleConfirmToggle(){
   const panel=$('fuzzyRuleConfirmPanel'),toggle=$('fuzzyRuleConfirmToggle');
   if(!panel||!toggle||toggle.dataset.bound==='1')return;
   toggle.dataset.bound='1';
-  toggle.onclick=()=>{
-    const collapsed=panel.classList.toggle('is-collapsed');
+  const setCollapsed=collapsed=>{
+    panel.classList.toggle('is-collapsed',collapsed);
     toggle.textContent=collapsed?'▼':'▲';
     toggle.setAttribute('aria-expanded',String(!collapsed));
     toggle.setAttribute('aria-label',collapsed?'ルール確認画面を展開':'ルール確認画面を折りたたむ');
     toggle.title=collapsed?'ルール確認画面を展開':'ルール確認画面を折りたたむ';
   };
+  toggle.onclick=()=>{
+    setCollapsed(!panel.classList.contains('is-collapsed'));
+  };
+  panel.addEventListener('click',event=>{
+    if(!panel.classList.contains('is-collapsed')||event.target.closest('button'))return;
+    setCollapsed(false);
+  });
 }
 function ruleMfAt(ruleIndex,condIndex){
   const model=ensureFuzzyModel();
