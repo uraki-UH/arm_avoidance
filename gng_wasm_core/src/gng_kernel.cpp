@@ -197,7 +197,6 @@ bool GngKernel::exec(std::uint32_t steps) {
       static_cast<int>(state.input_points.size()),
       state.attention_points,
       0);
-  state.core.check_edge_distance();
   state.core.check_age();
   state.core.check_delete_no_edge_and_decay_eta();
   state.core.calc_edge_distanceXY();

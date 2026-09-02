@@ -918,7 +918,8 @@ launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結�
 
 `object_template_matching.launch.py`は、`object_template_matching_sources.yaml`で選択した
 データセット群を1つの`object_template_matcher_node`へ読込む。
-matcherは入力`TopologicalMap`ごとに照合対象を順番に切り替え、全yaw探索は1テンプレート分だけ実行する。
+matcherは起動時にtemplate GNGの局所特徴から逆引き索引を構築し、入力ごとに固定数の索引候補から
+1templateだけを全yaw探索で精密照合する。template数に比例するのは起動時の読込・索引構築だけとする。
 `object_template_match_validator_node`と`object_template_map_publisher_node`はtemplateごとに起動する。
 `dataset_files`は個別指定、`dataset_dirs`は再帰読込、`exclude_dirs`と
 `exclude_template_ids`は除外指定とする。

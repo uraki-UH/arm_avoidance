@@ -29,9 +29,10 @@ template_sources:
 ## 挙動
 
 - 選択テンプレート群は1つの`object_template_matcher_node`が読込む。
-- matcherは入力`TopologicalMap`ごとに照合対象を順番に切り替えるため、全yaw探索は常に1テンプレート分だけ実行する。
+- matcherは起動時に、template GNG nodeの法線鉛直成分、`rho`、edge次数、隣接法線関係から逆引き索引を構築する。
+- 入力時は最大128個の環境nodeと各key最大4templateだけを参照し、索引候補のうち1templateだけを全yaw探索で精密照合する。
+- template数に比例する処理は起動時の読込・索引構築だけであり、入力frameごとの索引参照数と全yaw探索数は固定とする。
 - validatorと静的GNG配信器はtemplateごとに起動する。
-- validatorの未検出猶予は選択template数に比例させ、巡回中に照合済み状態が解除されないようにする。
 - 複数テンプレート時のnode名は`object_template_match_validator_node_<template_id>`、
   `object_template_map_publisher_node_<template_id>`となる。
 - candidate、state、静的GNG topicは従来どおり`template_id`ごとに分離する。

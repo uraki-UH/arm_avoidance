@@ -788,13 +788,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>Max edge age</label><input id="gngMaxAge" type="number" min="20" max="300" step="5" value="95"></div>
               <div><label>Winner εb</label><input id="gngEb" type="number" min="0.01" max="0.18" step="0.005" value="0.055"></div>
               <div><label>Neighbor εn</label><input id="gngEn" type="number" min="0.001" max="0.04" step="0.001" value="0.006"></div>
-              <div><label>Cell competition radius</label><input id="densityCompRadius" type="number" min="0.002" max="0.080" step="0.001" value="0.018"></div>
-              <div><label>Density prune interval</label><input id="densityPruneInterval" type="number" min="20" max="2000" step="10" value="250"></div>
               <div class="full"><button id="gngApplyGraspnetProfileBtn" data-action-kind="load" type="button">graspnet.yaml 基本学習値を適用</button></div>
-              <div class="full" style="border-top:1px solid rgba(148,163,184,.15);margin:4px 0 0;padding-top:6px"><label style="color:#60a5fa">Target edge length thresholds (density-control)</label></div>
-              <div><label>Target edge floor / 床面 [m]</label><input id="densityTargetFloor" type="number" min="0.005" max="1.000" step="0.005" value="0.250"></div>
-              <div><label>Target edge wall / 壁面 [m]</label><input id="densityTargetWall" type="number" min="0.005" max="1.000" step="0.005" value="0.250"></div>
-              <div class="full"><label>Target edge unknown / 未知物体 [m]</label><input id="densityTargetUnknown" type="number" min="0.005" max="1.000" step="0.005" value="0.050"></div>
             </div>
           </details>
           <details class="full gng-params-toggle">
@@ -1064,64 +1058,6 @@ function distance(a,b){return Math.sqrt(dist2(a,b))}
 function addNoise(p,n,r){return{...p,x:p.x+randn(r)*n,y:p.y+randn(r)*n,z:p.z+randn(r)*n,label:p.label||'body'}}
 function key(a,b){return a<b?a+'_'+b:b+'_'+a}
 
-/* v297: fast spatial grid acceleration for GNG nearest-neighbor search */
-const V297_GNG_GRID={
-  enabled:false,
-  cell:0.045,
-  nodesRef:null,
-  stamp:-1,
-  iter:-1,
-  map:new Map()
-};
-function v297GridKeyXYZ(x,y,z,cell){
-  return Math.floor(x/cell)+'|'+Math.floor(y/cell)+'|'+Math.floor(z/cell);
-}
-function v297BuildGngGrid(nodes){
-  const cell=V297_GNG_GRID.cell;
-  const map=new Map();
-  for(let i=0;i<nodes.length;i++){
-    const n=nodes[i];
-    const k=v297GridKeyXYZ(n.x,n.y,n.z,cell);
-    let a=map.get(k);
-    if(!a){a=[];map.set(k,a)}
-    a.push(i);
-  }
-  V297_GNG_GRID.nodesRef=nodes;
-  V297_GNG_GRID.stamp=nodes.length;
-  V297_GNG_GRID.map=map;
-}
-function v297Nearest2Grid(nodes,p){
-  if(!V297_GNG_GRID.enabled || !nodes || nodes.length<48) return null;
-  const iter=(state&&state.gng&&Number.isFinite(state.gng.iter))?state.gng.iter:0; if(V297_GNG_GRID.nodesRef!==nodes || V297_GNG_GRID.stamp!==nodes.length || V297_GNG_GRID.iter!==Math.floor(iter/80)) { v297BuildGngGrid(nodes); V297_GNG_GRID.iter=Math.floor(iter/80); }
-  const cell=V297_GNG_GRID.cell;
-  const cx=Math.floor(p.x/cell), cy=Math.floor(p.y/cell), cz=Math.floor(p.z/cell);
-  let best=-1, second=-1, bd=Infinity, sd=Infinity;
-  let checked=0;
-  for(let r=0;r<=3;r++){
-    for(let ix=cx-r;ix<=cx+r;ix++)for(let iy=cy-r;iy<=cy+r;iy++)for(let iz=cz-r;iz<=cz+r;iz++){
-      if(r>0 && ix>cx-r && ix<cx+r && iy>cy-r && iy<cy+r && iz>cz-r && iz<cz+r) continue;
-      const arr=V297_GNG_GRID.map.get(ix+'|'+iy+'|'+iz);
-      if(!arr)continue;
-      for(const ni of arr){
-        const n=nodes[ni];
-        const d=(n.x-p.x)*(n.x-p.x)+(n.y-p.y)*(n.y-p.y)+(n.z-p.z)*(n.z-p.z);
-        checked++;
-        if(d<bd){sd=bd;second=best;bd=d;best=ni}
-        else if(d<sd){sd=d;second=ni}
-      }
-    }
-    if(best>=0 && second>=0 && checked>=6) return {i1:best,i2:second,d1:bd,d2:sd};
-  }
-  return null;
-}
-function v297DownsampleForGng(points,cap){
-  if(!points || points.length<=cap) return points||[];
-  const out=[];
-  const stride=Math.max(1,Math.floor(points.length/cap));
-  for(let i=0;i<points.length && out.length<cap;i+=stride) out.push(points[i]);
-  return out;
-}
-
 function v300SetFixedLowNoiseInitials(){
   const vals={
     noise:'0.000004',
@@ -1150,7 +1086,7 @@ function v300SetFixedLowNoiseInitials(){
   if(pat)pat.value='none';
 }
 
-function v297SetFastGngDefaults(){
+function setDefaultGngParameters(){
   const vals={
     pointCount:4200,
     gngMaxNodes:1200,
@@ -1160,7 +1096,6 @@ function v297SetFastGngDefaults(){
     gngSamplesPerFrame:200,
     gng_training_hz:30,
     gng_visual_hz:10,
-    densityPruneInterval:250,
     tableDensity:0.25,
     faceOpacity:0.020,
     faceOpacityNum:0.020,
@@ -1788,9 +1723,7 @@ function updateMovingPoints(){
 function gngMode(){const el=$('gngLearningMode');return el?el.value:'online'}
 function gngAlgorithm(){return 'wasm'}
 function gngDataSourceMode(){const el=$('gngDataSourceMode');return el?el.value:(state.dataSourceMode||'pointcloud_to_gng')}
-function gngIsDensityAlgorithm(alg){return alg==='density_gng_t'||alg==='cell_density'}
-function gngUsesTriangulationAlgorithm(alg){return alg==='gng_t'||alg==='density_gng_t'}
-function gngAlgorithmLabel(){const a=gngAlgorithm();return a==='wasm'?'GNG-WASM':a==='density_gng_t'?'Density-Control GNG-T':a==='gng_t'?'GNG-T':'GNG'}
+function gngAlgorithmLabel(){return 'GNG-WASM'}
 function isGraphOnlyMode(){return gngDataSourceMode()==='graph_only'}
 function setGngDataSourceMode(mode){
   state.dataSourceMode=mode==='graph_only'?'graph_only':'pointcloud_to_gng';
@@ -1841,8 +1774,6 @@ function normalizeGraphNode(node, idx){
       inpcl_ids:Array.isArray(node[13])?node[13].map(v=>+v||0):[],
       winner_point_count:Number.isFinite(+node[14])?+node[14]:0,
       winner_point_covariance:Array.isArray(node[15])?node[15].map(v=>+v||0):[],
-      densityClass:Number.isFinite(+node[8])?pointDensityClass({x,y,z,label:node[8]}):pointDensityClass({x,y,z,label:'gng'}),
-      targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass({x,y,z,label:node[8]||'gng'}))),
       id
     };
   }
@@ -1868,8 +1799,6 @@ function normalizeGraphNode(node, idx){
     inpcl_ids:Array.isArray(node.inpcl_ids)?node.inpcl_ids.map(v=>+v||0):[],
     winner_point_count:Number.isFinite(+node.winner_point_count)?+node.winner_point_count:0,
     winner_point_covariance:Array.isArray(node.winner_point_covariance)?node.winner_point_covariance.map(v=>+v||0):[],
-    densityClass:Number.isFinite(+node.densityClass)?+node.densityClass:pointDensityClass(node),
-    targetEdgeLength:Number.isFinite(+node.targetEdgeLength)?+node.targetEdgeLength:targetEdgeLengthForLabel(densityClassLabel(pointDensityClass(node))),
     id:node.id??idx
   };
 }
@@ -1893,7 +1822,6 @@ function v322CopyObjectTemplateNode(node, idx){
     x:+n.x||0,y:+n.y||0,z:+n.z||0,
     label:n.label||'gng',
     err:+n.err||0,win:+n.win||0,util:+n.util||0,
-    densityClass:+n.densityClass||0,targetEdgeLength:+n.targetEdgeLength||0,
     nx:+n.nx||0,ny:+n.ny||0,nz:+n.nz||0,rho:+n.rho||0,
     age:+n.age||0,frame:+n.frame||0,
     winner_point_count:+n.winner_point_count||0,
@@ -3171,7 +3099,6 @@ function loadImportedGraphSession(session){
   state.gng={
     nodes:state.nodes,
     edges:new Map(state.edges.map(e=>[key(e.a,e.b),{...e}])),
-    triangles:new Map(),
     rng:rng(1),
     iter:Number.isFinite(+session.iter)?+session.iter:0,
     mode:'graph_only',
@@ -3213,7 +3140,7 @@ function runGngAlgorithmFromViewer(alg){
     return;
   }
   setGngAlgorithmValue(alg);
-  void runGngWasmFull();
+  void v312StartRealtimeGng();
 }
 async function v312LoadBundledGngWasm(){
   if(v312HasCurrentGngWasm(GNG_WASM_EXPORTS)) return true;
@@ -3247,6 +3174,10 @@ async function v312LoadBundledGngWasm(){
   }
 }
 async function runGngWasmFull(){
+  if(!state.gngPlaying){
+    $('topoStatus').textContent='GNG再生が開始されるまで学習しません。';
+    return;
+  }
   v312StopRealtimeGng(false);
   if(isGraphOnlyMode()){
     $('topoStatus').textContent='GNG-WASM: Graph-only modeでは実行できません。Point cloud -> GNGへ切り替えてください。';
@@ -3254,7 +3185,7 @@ async function runGngWasmFull(){
   }
   setGngAlgorithmValue('wasm');
   if(!await v312LoadBundledGngWasm()) return;
-  runGng();
+  await runGng();
 }
 function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-algorithm-buttons]').forEach(box=>{
@@ -3265,29 +3196,6 @@ function renderGngAlgorithmButtons(){
   updateGngAlgorithmButtonStates();
 }
 function updateGngAlgorithmButtonStates(){document.querySelectorAll('[data-gng-alg-run]').forEach(btn=>{const on=btn.dataset.gngAlgRun===gngAlgorithm();btn.classList.toggle('active',on);btn.classList.toggle('running',on&&state.gngPlaying);btn.textContent=(on&&state.gngPlaying?'':' ')+(GNG_ALGORITHMS.find(a=>a.value===btn.dataset.gngAlgRun)?.label||btn.textContent.replace(/^([]\s*)/,''));});}
-function densityTargetEdgeLengths(){
-  const num=(id,fb)=>{const el=$(id),v=el?+el.value:fb;return Number.isFinite(v)&&v>0?clamp(v,0.005,1.0):fb};
-  return {floor:num('densityTargetFloor',0.25),wall:num('densityTargetWall',0.25),unknown:num('densityTargetUnknown',0.05)};
-}
-function pointDensityClass(p){
-  const lab=String((p&&p.label)||'').toLowerCase();
-  if(lab==='table'||lab==='floor'||lab==='safe'||lab==='safe_area')return 0;
-  if(lab==='wall')return 1;
-  return 2;
-}
-function densityClassLabel(cls){return cls===0?'floor':cls===1?'wall':'unknown'}
-function targetEdgeLengthForLabel(label){
-  const t=densityTargetEdgeLengths();
-  const lab=String(label||'').toLowerCase();
-  if(lab==='safe'||lab==='safe_area'||lab==='floor'||lab==='table')return t.floor;
-  if(lab==='wall')return t.wall;
-  return t.unknown;
-}
-function targetEdgeLengthForNode(n,stat){
-  if(stat&&stat.label)return targetEdgeLengthForLabel(stat.label);
-  if(n&&Number.isFinite(n.targetEdgeLength)&&n.targetEdgeLength>0)return n.targetEdgeLength;
-  return targetEdgeLengthForLabel(densityClassLabel(n&&n.densityClass));
-}
 function configuredPointPeriodMs(){const hz=Math.max(0.001,+($('motionHz')?.value||12));return 1000/hz}
 function currentGngBatchSize(){
   if(isGraphOnlyMode()) return 0;
@@ -3300,11 +3208,9 @@ function viewerTimingText(){
   const pMeas=state.perf.pointPeriodMs;
   const gMeas=state.perf.gngComputeMs;
   const gBatch=currentGngBatchSize();
-  const t=densityTargetEdgeLengths();
   const pLine=`Point Δt <span>${fmtMs(state.pointPlaying?(pMeas||pCfg):pCfg)}</span> ms ${state.pointPlaying?'active':'paused'} / cfg ${fmtMs(pCfg)} ms`;
   const gLine=`GNG Δt <span>${state.gngPlaying?fmtMs(gMeas||state.perf.renderPeriodMs):'--'}</span> ms ${state.gngPlaying?'active':'paused'} / samples/frame ${gBatch}`;
-  const targetLine=gngIsDensityAlgorithm(gngAlgorithm())?`Target L floor=${t.floor.toFixed(3)} wall=${t.wall.toFixed(3)} unknown=${t.unknown.toFixed(3)} m`:'';
-  return [pLine,gLine,targetLine].filter(Boolean).join('\n');
+  return [pLine,gLine].join('\n');
 }
 function updateViewerTimingPanels(){
   const txt=viewerTimingText();
@@ -3314,9 +3220,7 @@ function updateViewerTimingPanels(){
 }
 
 
-/* v305: stable object-surface GNG.
-   Table/floor/outlier remain visible as raw points but are excluded from GNG training.
-   Long bridge edges are rejected so the map does not connect object and table regions. */
+/* v305: 学習対象点群の選別 */
 function v305IsGngTrainingPoint(p){
   // v309: floor/table are included in topological mapping.
   // Only explicit outliers are excluded from GNG learning.
@@ -3327,135 +3231,6 @@ function v305GngTrainingPoints(points){
   const src=(points||[]).filter(v305IsGngTrainingPoint);
   return src.length>=8 ? src : (points||[]);
 }
-function v305MaxGngEdgeLength(){
-  // Visualization/surface-topology guard: classic GNG can temporarily connect
-  // a winner and second-winner across separated surfaces.  For manipulation
-  // viewing, cap drawable/semantic edges to the object-scale target length so
-  // table/object bridge edges do not dominate the graph.
-  const unknown=$('densityTargetUnknown')?+$('densityTargetUnknown').value:0.050;
-  return Math.max(0.040,Math.min(0.120,(Number.isFinite(unknown)?unknown:0.050)*1.8));
-}
-function v305AllowGngEdge(a,b){
-  if(!a||!b)return false;
-  const la=String(a.label||'').toLowerCase(), lb=String(b.label||'').toLowerCase();
-  if(la==='outlier'||lb==='outlier')return false;
-  return distance(a,b)<=v305MaxGngEdgeLength();
-}
-
-/* v1.1 edge-stability repair.
-   Canonical GNG does NOT create/delete edges by a hard distance threshold every
-   frame.  The previous browser-side safety filter did that, so when moving
-   points crossed the threshold the same edge connected and disappeared
-   repeatedly.  Standard GNG is now kept canonical; local-length constraints are
-   used only for GNG-T / density variants, and deletion uses hysteresis. */
-function gngVariantIsStandardGraph(variant){return !gngUsesTriangulationAlgorithm(variant)&&!gngIsDensityAlgorithm(variant)}
-function gngEdgeBaseTarget(a,b){
-  const ta=Number.isFinite(a&&a.targetEdgeLength)?a.targetEdgeLength:v305MaxGngEdgeLength();
-  const tb=Number.isFinite(b&&b.targetEdgeLength)?b.targetEdgeLength:v305MaxGngEdgeLength();
-  return Math.max(0.035,Math.min(0.18,(ta+tb)*0.5));
-}
-function gngEdgeCreateLimit(g,a,b){
-  const variant=(g&&g.variant)||gngAlgorithm();
-  if(gngVariantIsStandardGraph(variant))return Infinity;
-  return Math.max(0.055,Math.min(0.22,gngEdgeBaseTarget(a,b)*2.10));
-}
-function gngEdgeDeleteLimit(g,a,b){
-  const variant=(g&&g.variant)||gngAlgorithm();
-  if(gngVariantIsStandardGraph(variant))return Infinity;
-  return Math.max(0.075,Math.min(0.30,gngEdgeBaseTarget(a,b)*3.10));
-}
-function gngAllowEdgeCreate(g,a,b){
-  if(!a||!b)return false;
-  const la=String(a.label||'').toLowerCase(), lb=String(b.label||'').toLowerCase();
-  if(la==='outlier'||lb==='outlier')return false;
-  return distance(a,b)<=gngEdgeCreateLimit(g,a,b);
-}
-function gngShouldDeleteEdge(g,e,maxAge){
-  if(!g||!e||!g.nodes[e.a]||!g.nodes[e.b])return true;
-  if(e.age>maxAge)return true;
-  const variant=g.variant||gngAlgorithm();
-  if(gngVariantIsStandardGraph(variant))return false;
-  const grace=Math.max(8,Math.floor(maxAge*0.22));
-  if((e.age||0)<grace)return false;
-  return distance(g.nodes[e.a],g.nodes[e.b])>gngEdgeDeleteLimit(g,g.nodes[e.a],g.nodes[e.b]);
-}
-function setGngEdge(g,a,b,age=0){
-  if(!g||a<0||b<0||a===b||!g.nodes[a]||!g.nodes[b])return false;
-  if(!gngAllowEdgeCreate(g,g.nodes[a],g.nodes[b]))return false;
-  const edge={a:Math.min(a,b),b:Math.max(a,b),age};
-  g.edges.set(key(edge.a,edge.b),edge);
-  addGngTTrianglesForEdge(g,edge.a,edge.b);
-  return true;
-}
-function triKey(a,b,c){return [a,b,c].sort((x,y)=>x-y).join('_')}
-function gngTriangleEdgeOk(g,a,b,c){
-  if(!g||!g.nodes[a]||!g.nodes[b]||!g.nodes[c])return false;
-  if(!v305AllowGngEdge(g.nodes[a],g.nodes[b])||!v305AllowGngEdge(g.nodes[b],g.nodes[c])||!v305AllowGngEdge(g.nodes[c],g.nodes[a]))return false;
-  const area=triangleArea3(g.nodes[a],g.nodes[b],g.nodes[c]);
-  return Number.isFinite(area)&&area>=1e-7;
-}
-function addGngTTrianglesForEdge(g,a,b){
-  if(!g||!gngUsesTriangulationAlgorithm(g.variant))return;
-  if(!g.triangles)g.triangles=new Map();
-  if(!g.nodes[a]||!g.nodes[b]||!v305AllowGngEdge(g.nodes[a],g.nodes[b]))return;
-
-  const adjA=[],adjB=[];
-  for(const e of g.edges.values()){
-    if(e.a===a)adjA.push(e.b); else if(e.b===a)adjA.push(e.a);
-    if(e.a===b)adjB.push(e.b); else if(e.b===b)adjB.push(e.a);
-  }
-
-  // 1) Standard GNG-T: if a and b share neighbors, close the simplex.
-  const setB=new Set(adjB);
-  const candidates=[];
-  for(const c of adjA){
-    if(c!==a&&c!==b&&setB.has(c))candidates.push({idx:c,source:'GNG-T-common-neighbor'});
-  }
-
-  // 2) Practical browser implementation: early GNG graphs are often sparse.
-  // Add local third-node candidates around the new edge so GNG-T visibly evolves
-  // before many closed cycles exist.  This does not change GNG node learning;
-  // it only creates triangulation faces in g.triangles.
-  const pa=g.nodes[a],pb=g.nodes[b];
-  const mid={x:(pa.x+pb.x)/2,y:(pa.y+pb.y)/2,z:(pa.z+pb.z)/2};
-  const maxD=v305MaxGngEdgeLength();
-  const local=g.nodes.map((n,i)=>{
-    if(i===a||i===b||!n)return null;
-    if(!v305AllowGngEdge(pa,n)||!v305AllowGngEdge(pb,n))return null;
-    return {idx:i,source:'GNG-T-local-third-node',d:dist2(n,mid)};
-  }).filter(Boolean).sort((u,v)=>u.d-v.d).slice(0,4);
-  for(const c of local)candidates.push(c);
-
-  const used=new Set();
-  for(const cand of candidates){
-    const c=cand.idx;
-    if(used.has(c))continue;
-    used.add(c);
-    if(!gTriangleEdgeOk(g,a,b,c))continue;
-    const area=triangleArea3(g.nodes[a],g.nodes[b],g.nodes[c]);
-    if(area<1e-7)continue;
-    const k=triKey(a,b,c);
-    g.triangles.set(k,{idx:k.split('_').map(Number),source:cand.source});
-  }
-}
-function rebuildGngTTriangles(g){
-  if(!g){return new Map()}
-  if(!g.triangles)g.triangles=new Map();
-  g.triangles.clear();
-  if(!gngUsesTriangulationAlgorithm(g.variant))return g.triangles;
-  const edges=[...g.edges.values()];
-  for(const e of edges)addGngTTrianglesForEdge(g,e.a,e.b);
-  return g.triangles;
-}
-function pruneGngTTriangles(g){
-  if(!g||!g.triangles)return;
-  for(const [k,t] of [...g.triangles.entries()]){
-    const idx=t.idx||k.split('_').map(Number);
-    if(idx.length<3||!gTriangleEdgeOk(g,idx[0],idx[1],idx[2]))g.triangles.delete(k);
-  }
-}
-
-
 function buildOfflineBatchDataset(){
   if(!state.basePoints.length)generate();
   // v307: Offline batch no longer has independent user parameters.
@@ -3646,6 +3421,23 @@ function v312GngRealtimeHz(id,max_hz,fallback){
   const value=+($(id)?.value||fallback);
   return Math.max(1,Math.min(max_hz,Math.floor(Number.isFinite(value)?value:fallback)));
 }
+function v312RealtimeGngBatchSize(realtime){
+  const configured_batch_size=currentGngBatchSize();
+  if(!Number.isFinite(realtime.batch_size)){
+    realtime.batch_size=Math.min(configured_batch_size,32);
+  }
+  return Math.max(1,Math.min(configured_batch_size,Math.floor(realtime.batch_size)));
+}
+function v312AdjustRealtimeGngBatchSize(realtime,batch_size,compute_ms){
+  const configured_batch_size=currentGngBatchSize();
+  if(compute_ms>12){
+    realtime.batch_size=Math.max(1,Math.floor(batch_size*12/compute_ms));
+    return;
+  }
+  if(compute_ms<6){
+    realtime.batch_size=Math.min(configured_batch_size,batch_size+4);
+  }
+}
 function v312RealtimePointBuffer(){
   const points=v312GetGngWasmInputPoints();
   if(points.length<2)return null;
@@ -3658,9 +3450,9 @@ function v312RealtimePointBuffer(){
   }
   return {points,flat};
 }
-function v312SyncRealtimeGraph(realtime,now){
+function v312SyncRealtimeGraph(realtime,now,has_semantic_update=false){
   const ex=realtime.ex;
-  if(now-realtime.last_semantic_now>=1000){
+  if(has_semantic_update){
     ex.ccall('gng_wasm_update_graph',null,[],[]);
     realtime.last_semantic_now=now;
   }
@@ -3674,7 +3466,7 @@ function v312SyncRealtimeGraph(realtime,now){
   const edge_map=new Map(state.edges.map((edge)=>[key(edge.a,edge.b),{...edge}]));
   state.gng={nodes:state.nodes,edges:edge_map,rng:rng(realtime.seed+17),iter:+parsed.iterations||0,mode:'online',variant:'wasm',trainingPoints:null,backend:'Emscripten GNG-WASM realtime',inputSource:realtime.input_source,node_grid:realtime.node_grid,node_interval:realtime.node_interval,raw_edge_num};
   sanitizeGngGraph();
-  if(now-realtime.last_topology_now>=1000){
+  if(has_semantic_update){
     updateTopoSemantics();
     realtime.last_topology_now=now;
   }
@@ -3691,8 +3483,16 @@ function v312StopRealtimeGng(render=true){
     cancelAnimationFrame(state._gng_realtime_raf);
     state._gng_realtime_raf=0;
   }
+  const realtime=state.gng_realtime;
   state.gng_realtime=null;
   state.gngPlaying=false;
+  if(realtime&&render){
+    try{
+      v312SyncRealtimeGraph(realtime,performance.now(),true);
+    }catch(error){
+      console.warn('GNG-WASM realtime semantic update failed.',error);
+    }
+  }
   if(render){
     updateHud();
     renderAll();
@@ -3729,7 +3529,7 @@ async function v312StartRealtimeGng(){
   state.edges=[];
   state.gng=null;
   state.gngTick=0;
-  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity,last_topology_now:-Infinity};
+  const realtime={ex,node_interval,node_grid,seed,input_source:$('gngWasmInputSource')?.value||'visible_points',point_num:input.points.length,batch_size:Math.min(currentGngBatchSize(),32),last_train_now:0,last_visual_now:0,last_semantic_now:-Infinity,last_topology_now:-Infinity};
   state.gng_realtime=realtime;
   state.gngPlaying=true;
   updateHud();
@@ -3743,9 +3543,11 @@ async function v312StartRealtimeGng(){
         if(latest){
           realtime.point_num=latest.points.length;
           v312WasmUpdatePoints(ex,latest.flat);
+          const batch_size=v312RealtimeGngBatchSize(realtime);
           const compute_start=performance.now();
-          const ok=ex.ccall('gng_wasm_exec','number',['number'],[currentGngBatchSize()]);
+          const ok=ex.ccall('gng_wasm_exec','number',['number'],[batch_size]);
           state.perf.gngComputeMs=performance.now()-compute_start;
+          v312AdjustRealtimeGngBatchSize(realtime,batch_size,state.perf.gngComputeMs);
           state.perf.gngPeriodMs=now-realtime.last_train_now;
           realtime.last_train_now=now;
           if(ok!==1)throw new Error('gng_wasm_exec failed');
@@ -3759,6 +3561,7 @@ async function v312StartRealtimeGng(){
     }
     if(now-realtime.last_visual_now>=visual_period){
       try{
+        // 再生中は軽量なノード・エッジ同期のみ
         v312SyncRealtimeGraph(realtime,now);
         realtime.last_visual_now=now;
       }catch(error){
@@ -3836,7 +3639,25 @@ async function v312LoadGngWasmFromFiles(fileList){
     return false;
   }
 }
-function runGngWasmAccelerated(){
+async function v312ExecGngWasmInChunks(ex,iterations,run_token,wasmStatus){
+  const chunk_size=64;
+  let completed=0;
+  while(completed<iterations){
+    if(run_token!==state.gng_wasm_run_token) return false;
+    const step_size=Math.min(chunk_size,iterations-completed);
+    const ok=ex.ccall('gng_wasm_exec','number',['number'],[step_size]);
+    if(ok!==1) return false;
+    completed+=step_size;
+    if(completed<iterations){
+      if(wasmStatus&&completed%512===0){
+        wasmStatus.textContent=`WASM GNG learning: ${completed}/${iterations}`;
+      }
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+  }
+  return true;
+}
+async function runGngWasmAccelerated(run_token){
   if(isGraphOnlyMode()) return false;
   const ex=getGngWasmExports();
   const wasmMode=v312WasmMode(ex);
@@ -3856,15 +3677,9 @@ function runGngWasmAccelerated(){
   const eb=+$('gngEb').value||0.05;
   const en=+$('gngEn').value||0.006;
   const nodeInterval=Math.max(0.001,+($('gng_node_interval')?.value||0.010));
-  const seed=((+$('seed').value||1)+7+(mode==='offline'?3001:0)+(gngIsDensityAlgorithm(variant)?7001:0))>>>0;
-  const compRadius=Math.max(0,+($('densityCompRadius')?.value||0.018));
-  const pruneInterval=Math.max(10,+($('densityPruneInterval')?.value||250));
+  const seed=((+$('seed').value||1)+7+(mode==='offline'?3001:0))>>>0;
   try{
     if(wasmMode==='emscripten'){
-      if(gngIsDensityAlgorithm(variant)){
-        if(wasmStatus) wasmStatus.textContent='Loaded Emscripten WASM only supports the standard GNG path. Falling back to JavaScript density-control.';
-        return false;
-      }
       const flat=new Float32Array(pts.length*3);
       for(let i=0;i<pts.length;i++){
         const p=pts[i];
@@ -3877,8 +3692,8 @@ function runGngWasmAccelerated(){
       ex.ccall('gng_wasm_reset',null,[],[]);
       ex.ccall('gng_wasm_set_config',null,['array'],[cfgBytes]);
       if(!v312WasmSetPoints(ex,flat)) return false;
-      const ok=ex.ccall('gng_wasm_run','number',[],[]);
-      if(ok!==1) return false;
+      const ok=await v312ExecGngWasmInChunks(ex,iters,run_token,wasmStatus);
+      if(!ok) return false;
       const jsonSize=ex.ccall('gng_wasm_get_graph_json_size','number',[],[]);
       const jsonText=v312ReadWasmJson(ex,jsonSize);
       if(!jsonText) return false;
@@ -3906,17 +3721,10 @@ function sanitizeGngGraph(){
   const nodes=[];
   for(let i=0;i<old.length;i++){const n=old[i];if(!n||![n.x,n.y,n.z].every(Number.isFinite))continue;map.set(i,nodes.length);nodes.push(n);}
   const edges=[];const seen=new Set();
-  const variant=(state.gng&&state.gng.variant)||gngAlgorithm();
-  const tmp={variant,nodes,edges:new Map()};
-  for(const e of state.edges||[]){let a=map.get(e.a),b=map.get(e.b);if(a==null||b==null||a===b)continue;const kk=key(a,b);if(seen.has(kk))continue;const ea={a:Math.min(a,b),b:Math.max(a,b),age:e.age||0};if(!gngAllowEdgeCreate(tmp,nodes[ea.a],nodes[ea.b])&& !gngVariantIsStandardGraph(variant))continue;seen.add(kk);edges.push(ea);}
+  for(const e of state.edges||[]){let a=map.get(e.a),b=map.get(e.b);if(a==null||b==null||a===b)continue;const kk=key(a,b);if(seen.has(kk))continue;const ea={a:Math.min(a,b),b:Math.max(a,b),age:e.age||0};seen.add(kk);edges.push(ea);}
   state.nodes=nodes;state.edges=edges;
   if(state.gng){state.gng.nodes=state.nodes;state.gng.edges=new Map(edges.map(e=>[key(e.a,e.b),{...e}]));}
   return nodes.length>=2;
-}
-function densityGraphLooksUsable(){
-  if(gngAlgorithm()!=='cell_density')return true;
-  const minExpected=Math.max(12,Math.min(80,Math.floor((+$('gngMaxNodes').value||1200)*0.08)));
-  return state.nodes.length>=minExpected && state.edges.length>=Math.max(1,state.nodes.length-1);
 }
 function updateCoreMetricsOnly(){
   if($('mPoints'))$('mPoints').textContent=state.points.length;
@@ -3925,50 +3733,12 @@ function updateCoreMetricsOnly(){
   if($('mObject'))$('mObject').textContent=state.points.length?labelOf(state.sample).split('/')[0].trim():'-';
 }
 
-function gngNodeDegree(g,idx){let d=0;for(const e of g.edges.values())if(e.a===idx||e.b===idx)d++;return d}
-function removeGngNode(g,idx){
-  if(!g||idx<0||idx>=g.nodes.length||g.nodes.length<=2)return false;
-  g.nodes.splice(idx,1);
-  const next=new Map();
-  for(const e of g.edges.values()){
-    if(e.a===idx||e.b===idx)continue;
-    let a=e.a>idx?e.a-1:e.a,b=e.b>idx?e.b-1:e.b;
-    if(a===b||!g.nodes[a]||!g.nodes[b])continue;
-    const edge={a:Math.min(a,b),b:Math.max(a,b),age:e.age||0};
-    next.set(key(edge.a,edge.b),edge);
+function resetGngRunState(){v312StopRealtimeGng(false);state.gng_wasm_run_token=(state.gng_wasm_run_token||0)+1;state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
+async function runGng(){
+  if(!state.gngPlaying){
+    $('topoStatus').textContent='GNG再生が開始されるまで学習しません。';
+    return;
   }
-  g.edges=next;
-  if(g.triangles)rebuildGngTTriangles(g);
-  return true;
-}
-function densityInsertScoreJs(n,g){const target=targetEdgeLengthForNode(n);let mean=target,count=0,sum=0;if(g){const idx=g.nodes.indexOf(n);if(idx>=0){for(const e of g.edges.values()){if(e.a===idx||e.b===idx){sum+=distance(g.nodes[e.a],g.nodes[e.b]);count++;}}if(count)mean=sum/count;}}const ratio=mean/Math.max(0.001,target);const pressure=ratio>1?ratio*ratio:(0.35+0.65*ratio);return (((n.err||0)+0.08*(n.util||0))*pressure)/(1+0.18*(n.win||0))}
-function densityKeepScoreJs(n){return (n.err||0)+0.18*(n.util||0)+0.015*(n.win||0)}
-function densityCompetitionPruneJs(g,maxNodes){
-  if(!g||!gngIsDensityAlgorithm(g.variant))return;
-  const radius=Math.max(0,+($('densityCompRadius')?.value||0.018));
-  const minNodes=Math.max(12,Math.min(80,Math.floor(maxNodes*.08)));
-  let removed=0,limit=4;
-  for(let i=0;i<g.nodes.length&&removed<limit;i++){
-    for(let j=i+1;j<g.nodes.length&&removed<limit;j++){
-      if(g.nodes.length<=minNodes)return;
-      const rr=Math.max(radius,Math.min(0.070,0.28*Math.min(targetEdgeLengthForNode(g.nodes[i]),targetEdgeLengthForNode(g.nodes[j]))));
-      if(dist2(g.nodes[i],g.nodes[j])<rr*rr){
-        const loser=densityKeepScoreJs(g.nodes[i])>=densityKeepScoreJs(g.nodes[j])?j:i;
-        removeGngNode(g,loser);removed++;
-        if(loser<=i){i--;break}else{j--}
-      }
-    }
-  }
-  if(g.nodes.length<=minNodes||removed>=limit)return;
-  const meanWin=g.nodes.reduce((s,n)=>s+(n.win||0),0)/Math.max(1,g.nodes.length);
-  const meanErr=g.nodes.reduce((s,n)=>s+(n.err||0),0)/Math.max(1,g.nodes.length);
-  for(let i=0;i<g.nodes.length&&removed<limit;i++){
-    if(g.nodes.length<=minNodes)return;
-    if(gngNodeDegree(g,i)<=1&&(g.nodes[i].win||0)<meanWin*.035&&(g.nodes[i].err||0)<meanErr*.35){removeGngNode(g,i);removed++;i--;}
-  }
-}
-function resetGngRunState(){v312StopRealtimeGng(false);state.gng=null;state.nodes=[];state.edges=[];state.faces=[];state.nodeStats=[];state.nodeClusters=[];state.nodeFeaturesById=null;state.clusterFeaturesById=null;state.gngTick=0;state.batchDataset=[];state.perf.lastGngNow=null;state.perf.gngPeriodMs=null;}
-function runGng(){
   setGngAlgorithmValue('wasm');
   if(!v312HasCurrentGngWasm(GNG_WASM_EXPORTS)){
     void runGngWasmFull();
@@ -3994,25 +3764,23 @@ function runGng(){
   }
   if(!state.points.length)generate();
   resetGngRunState();
+  const run_token=state.gng_wasm_run_token;
   const started=performance.now();
   let usedWasm=false;
   try{
-    usedWasm=runGngWasmAccelerated();
+    usedWasm=await runGngWasmAccelerated(run_token);
   }catch(e){
     console.warn('基幹GNG-WASMの実行失敗。',e);
     usedWasm=false;
   }
   if(!usedWasm){
+    if(run_token!==state.gng_wasm_run_token) return;
     $('topoStatus').textContent='基幹GNG-WASMの学習に失敗しました。JavaScript GNGへのフォールバックは無効です。';
     updateHud();
     renderAll();
     return;
   }
   sanitizeGngGraph();
-  if(state.gng && gngUsesTriangulationAlgorithm(state.gng.variant)){
-    rebuildGngTTriangles(state.gng);
-    detectGngFaces();
-  }
   updateTopoSemantics();
   updateMetrics();
   updateHud();
@@ -4893,35 +4661,13 @@ function vcross(a,b){return{x:a.y*b.z-a.z*b.y,y:a.z*b.x-a.x*b.z,z:a.x*b.y-a.y*b.
 function vnorm(a){const l=Math.sqrt(vdot(a,a))||1;return{x:a.x/l,y:a.y/l,z:a.z/l}}
 function edgeAdj(){const adj=Array.from({length:state.nodes.length},()=>[]);for(const e of state.edges){if(state.nodes[e.a]&&state.nodes[e.b]){adj[e.a].push(e.b);adj[e.b].push(e.a)}}return adj}
 function computeNodeGeometry(){const nodes=state.nodes,adj=edgeAdj();const stats=[];for(let i=0;i<nodes.length;i++){const n=nodes[i],ne=adj[i]||[];let normal={x:0,y:0,z:1};if(ne.length>=2){let acc={x:0,y:0,z:0};for(let a=0;a<ne.length;a++)for(let b=a+1;b<ne.length;b++){const u=vsub(nodes[ne[a]],n),v=vsub(nodes[ne[b]],n);let cr=vcross(u,v);if(cr.z<0)cr=vscale(cr,-1);acc=vadd(acc,cr)}if(Math.sqrt(vdot(acc,acc))>1e-8)normal=vnorm(acc)}else{let near=nodes.map((m,j)=>j===i?null:{j,d:dist2(n,m)}).filter(Boolean).sort((a,b)=>a.d-b.d).slice(0,6).map(o=>o.j);if(near.length>=2){let acc={x:0,y:0,z:0};for(let a=0;a<near.length;a++)for(let b=a+1;b<near.length;b++){let cr=vcross(vsub(nodes[near[a]],n),vsub(nodes[near[b]],n));if(cr.z<0)cr=vscale(cr,-1);acc=vadd(acc,cr)}if(Math.sqrt(vdot(acc,acc))>1e-8)normal=vnorm(acc)}}const dots=ne.map(j=>Math.abs(vdot(normal,vnorm(vsub(nodes[j],n)))));const curvature=ne.length?clamp(dots.reduce((a,b)=>a+b,0)/ne.length,0,1):0.35;stats[i]={normal,curvature,degree:ne.length,region:0,label:'default',scores:{}}}state.nodeStats=stats;return stats}
-function canonicalCycle(path){const n=path.length;let rots=[];for(const arr of [path,[...path].reverse()])for(let i=0;i<n;i++)rots.push(arr.slice(i).concat(arr.slice(0,i)).join('-'));return rots.sort()[0]}
-function faceSortKey(idx){return [...new Set(idx)].sort((a,b)=>a-b).join('-')}
-function triangleArea3(a,b,c){return Math.sqrt(vdot(vcross(vsub(b,a),vsub(c,a)),vcross(vsub(b,a),vsub(c,a))))*0.5}
-function faceFinalize(face){const pts=face.idx.map(i=>state.nodes[i]).filter(Boolean);face.center=pts.reduce((a,p)=>vadd(a,p),{x:0,y:0,z:0});face.center=vscale(face.center,1/Math.max(1,pts.length));face.depth=0;return face}
-function percentileSorted(arr,p){if(!arr.length)return 0;const i=Math.max(0,Math.min(arr.length-1,Math.floor((arr.length-1)*p)));return arr[i]}
-function tangentBasisFromNormal(n){let ref=Math.abs(n.z)<.9?{x:0,y:0,z:1}:{x:1,y:0,z:0};let t1=vnorm(vcross(n,ref));if(!Number.isFinite(t1.x)||Math.sqrt(vdot(t1,t1))<1e-6)t1={x:1,y:0,z:0};let t2=vnorm(vcross(n,t1));return[t1,t2]}
-function detectGngFaces(){
-  const nodes=state.nodes;
-  const faces=[];
-  if(!nodes || nodes.length<3){state.faces=[];return faces;}
-  const alg=state.gng?state.gng.variant:gngAlgorithm();
-  if(!gngUsesTriangulationAlgorithm(alg)){state.faces=[];return faces;}
-  if(!state.gng) {state.faces=[];return faces;}
-  rebuildGngTTriangles(state.gng);
-  const tri=state.gng.triangles||new Map();
-  for(const t of tri.values()){
-    const idx=(t.idx||[]).filter(i=>nodes[i]);
-    if(idx.length===3)faces.push(faceFinalize({idx,source:t.source||'GNG-T'}));
-  }
-  state.faces=faces;
-  return faces;
-}
 function defaultClusterModel(){return{methods:{and:'min',or:'max',defuzz:'weighted_average'},features:{normal_similarity:{labels:{Low:{shape:'trapezoid',params:[0,0,.45,.65]},High:{shape:'trapezoid',params:[.62,.82,1,1]}}},curvature_similarity:{labels:{Low:{shape:'trapezoid',params:[0,0,.35,.55]},High:{shape:'trapezoid',params:[.50,.75,1,1]}}},edge_length_fit:{labels:{Short:{shape:'trapezoid',params:[.55,.75,1,1]},Long:{shape:'trapezoid',params:[0,0,.35,.55]}}}},outputs:{Reject:{value:0},Connect:{value:1}},rules:[{id:'C1',active:true,name:'similar normals and short edge',conditions:[{feature:'normal_similarity',label:'High',connector:'AND'},{feature:'curvature_similarity',label:'High',connector:'AND'},{feature:'edge_length_fit',label:'Short',connector:'AND'}],output:'Connect',weight:1},{id:'C2',active:true,name:'low normal similarity rejects',conditions:[{feature:'normal_similarity',label:'Low',connector:'AND'}],output:'Reject',weight:1}]}}
 function defaultNodeLabelModel(){return{methods:{and:'min',or:'max',defuzz:'weighted_average'},features:{normal_up:{labels:{Low:{shape:'trapezoid',params:[0,0,.35,.55]},High:{shape:'trapezoid',params:[.70,.88,1,1]}}},normal_horizontal:{labels:{Low:{shape:'trapezoid',params:[0,0,.35,.55]},High:{shape:'trapezoid',params:[.62,.82,1,1]}}},curvature_high:{labels:{Low:{shape:'trapezoid',params:[0,0,.18,.38]},High:{shape:'trapezoid',params:[.38,.62,1,1]}}},region_size:{labels:{Small:{shape:'trapezoid',params:[0,0,.20,.42]},Large:{shape:'trapezoid',params:[.35,.60,1,1]}}},neighbor_normal_similarity:{labels:{Low:{shape:'trapezoid',params:[0,0,.45,.65]},High:{shape:'trapezoid',params:[.60,.82,1,1]}}}},outputs:{Default:{value:0,label:'default'},UnknownObject:{value:30,label:'unknown'},Wall:{value:65,label:'wall'},SafeArea:{value:100,label:'safe'}},rules:[{id:'N1',active:true,name:'horizontal upward safe floor/table',conditions:[{feature:'normal_up',label:'High',connector:'AND'},{feature:'curvature_high',label:'Low',connector:'AND'}],output:'SafeArea',weight:1},{id:'N2',active:true,name:'vertical low curvature large region wall',conditions:[{feature:'normal_horizontal',label:'High',connector:'AND'},{feature:'curvature_high',label:'Low',connector:'AND'},{feature:'region_size',label:'Large',connector:'AND'},{feature:'neighbor_normal_similarity',label:'High',connector:'AND'}],output:'Wall',weight:1},{id:'N3',active:true,name:'high curvature unknown object',conditions:[{feature:'curvature_high',label:'High',connector:'AND'}],output:'UnknownObject',weight:1},{id:'N4',active:true,name:'otherwise default',conditions:[{feature:'region_size',label:'Small',connector:'AND'}],output:'Default',weight:.45}]}}
 function ensureTopoModels(){if(!state.nodeLabelModel)state.nodeLabelModel=defaultNodeLabelModel();if(!state.clusterModel)state.clusterModel=defaultClusterModel();return{node:state.nodeLabelModel,cluster:state.clusterModel}}
 function evalGenericFuzzy(model,vals){const outs={};const fired=[];for(const r of model.rules||[]){if(!r.active)continue;let acc=null,details=[];for(const [i,c] of (r.conditions||[]).entries()){const fd=model.features[c.feature],mf=fd&&fd.labels&&fd.labels[c.label];let mu=mf?membership(vals[c.feature]||0,mf):0;if(c.not)mu=1-mu;details.push({...c,mu:+mu.toFixed(3)});if(acc==null)acc=mu;else acc=(c.connector==='OR')?snorm(acc,mu,model.methods&&model.methods.or||'max'):tnorm(acc,mu,model.methods&&model.methods.and||'min')}let act=clamp((acc??0)*(+r.weight||1),0,1);if(act>0){const out=model.outputs[r.output]||{value:0};outs[r.output]=Math.max(outs[r.output]||0,act);fired.push({id:r.id,name:r.name,output:r.output,activation:+act.toFixed(3),conditions:details})}}let num=0,den=0,bestLabel='Default',bestAct=-1;for(const [lab,act] of Object.entries(outs)){const v=(model.outputs[lab]||{}).value||0;num+=v*act;den+=act;if(act>bestAct){bestAct=act;bestLabel=lab}}return{score:den?num/den:0,label:bestLabel,outs,fired}}
 function clusterRegionGrowing(){const {cluster}=ensureTopoModels();const nodes=state.nodes,stats=state.nodeStats,edges=state.edges;if(!nodes.length||!stats.length){state.nodeClusters=[];return[]}const lens=edges.map(e=>distance(nodes[e.a],nodes[e.b]));const maxLen=Math.max(...lens,0.001);const adj=Array.from({length:nodes.length},()=>[]);edges.forEach((e,ei)=>{const a=e.a,b=e.b;if(!stats[a]||!stats[b])return;const vals={normal_similarity:clamp((Math.abs(vdot(stats[a].normal,stats[b].normal))+1)/1,0,1),curvature_similarity:1-clamp(Math.abs(stats[a].curvature-stats[b].curvature)/0.45,0,1),edge_length_fit:1-clamp(distance(nodes[a],nodes[b])/Math.max(.001,maxLen*.45),0,1)};const res=evalGenericFuzzy(cluster,vals);e.clusterScore=res.score;e.connect=res.score>=(+$('regionGrowThreshold')||{}).value||false;if(res.score>=((+$('regionGrowThreshold').value)||0.68)){adj[a].push(b);adj[b].push(a)}});const comp=Array(nodes.length).fill(-1),sizes=[];let cid=0;for(let i=0;i<nodes.length;i++){if(comp[i]>=0)continue;const q=[i];comp[i]=cid;let count=0;while(q.length){const u=q.pop();count++;for(const v of adj[u])if(comp[v]<0){comp[v]=cid;q.push(v)}}sizes[cid]=count;cid++}stats.forEach((s,i)=>{s.region=sizes[comp[i]]||1;s.clusterId=comp[i]});state.nodeClusters=sizes;return sizes}
 function updateNodeLabels(){const {node}=ensureTopoModels();const stats=state.nodeStats;if(!stats.length)return;const maxRegion=Math.max(...stats.map(s=>s.region||1),1);const adj=edgeAdj();for(let i=0;i<stats.length;i++){const st=stats[i],n=st.normal;const sim=(adj[i]||[]).length?(adj[i].reduce((a,j)=>a+Math.abs(vdot(n,stats[j].normal)),0)/(adj[i]||[]).length):0;const vals={normal_up:clamp(n.z,0,1),normal_horizontal:clamp(Math.sqrt(n.x*n.x+n.y*n.y),0,1),curvature_high:clamp(st.curvature/.55,0,1),region_size:clamp((st.region||1)/Math.max(6,maxRegion),0,1),neighbor_normal_similarity:clamp(sim,0,1)};const res=evalGenericFuzzy(node,vals);let out=node.outputs[res.label]||{};st.scores=vals;st.fuzzyResult=res;st.label=out.label||String(res.label||'Default').toLowerCase();}}
-function updateTopoSemantics(){if(!state.nodes.length){state.faces=[];state.nodeStats=[];return}computeNodeGeometry();detectGngFaces();clusterRegionGrowing();updateNodeLabels();computeRegionGrowingTopologicalClusters();updateTopoUi();}
+function updateTopoSemantics(){if(!state.nodes.length){state.faces=[];state.nodeStats=[];return}state.faces=[];computeNodeGeometry();clusterRegionGrowing();updateNodeLabels();computeRegionGrowingTopologicalClusters();updateTopoUi();}
 function labelColor(label){const map={safe:'labelColorSafe',safe_area:'labelColorSafe',wall:'labelColorWall',unknown:'labelColorUnknown',unknown_object:'labelColorUnknown',default:'labelColorDefault'};const id=map[label]||'labelColorDefault';return $(id)?$(id).value:'#9ca3af'}
 function drawArrow3(ctx,c,a,b,color,width,alpha){const pa=project(a,c),pb=project(b,c);const ang=Math.atan2(pb.y-pa.y,pb.x-pa.x);ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();const h=5+width*2;ctx.beginPath();ctx.moveTo(pb.x,pb.y);ctx.lineTo(pb.x-h*Math.cos(ang-.45),pb.y-h*Math.sin(ang-.45));ctx.lineTo(pb.x-h*Math.cos(ang+.45),pb.y-h*Math.sin(ang+.45));ctx.closePath();ctx.fill();ctx.restore()}
 function majorityLabelForFace(face){const count={};let best='default',bestN=-1;for(const i of face.idx||[]){const lab=(state.nodeStats[i]&&state.nodeStats[i].label)||'default';count[lab]=(count[lab]||0)+1;if(count[lab]>bestN){bestN=count[lab];best=lab}}return best}
@@ -6857,7 +6603,6 @@ acquisition: ${$('motionPattern').selectedOptions[0].textContent}, jitter=${(+$(
 GNG mode: ${gngMode()==='offline'?'Offline Batch':'Online Sequential'} / alg=${gngAlgorithmLabel()}${state.gng&&state.gng.mode==='offline'?`, offline training points=${(state.gng.trainingPoints||[]).length}`:''}
 Point color: ${pointColorMode()==='heatmap'?`heatmap / axis=${heatmapAxis()}`:'semantic label'}
 Timing: point Δt=${fmtMs(configuredPointPeriodMs())} ms, GNG Δt=${state.gngPlaying?fmtMs(state.perf.gngComputeMs||state.perf.gngPeriodMs||state.perf.renderPeriodMs):'--'} ms
-Target edge: floor=${densityTargetEdgeLengths().floor.toFixed(3)} m, wall=${densityTargetEdgeLengths().wall.toFixed(3)} m, unknown=${densityTargetEdgeLengths().unknown.toFixed(3)} m
 Robot render: ${robotRenderStatusText()}${state.stlError?` (${state.stlError})`:''}
 Drag: orbit / Shift or Pan mode: translate / Wheel or pinch: zoom`:'No point cloud yet.';updateViewerTimingPanels();}
 
@@ -6887,7 +6632,7 @@ async function saveJson(){
   const nodeFeatures=state.nodeFeaturesById?[...state.nodeFeaturesById.values()]:[];
   const clusterFeatures=state.clusterFeaturesById?[...state.clusterFeaturesById.values()]:[];
   const compactPoints=(state.points||[]).map((p,i)=>[+p.x||0,+p.y||0,+p.z||0,p.label||'body',p.id??i]);
-  const compactNodes=(state.nodes||[]).map((n,i)=>[+n.x||0,+n.y||0,+n.z||0,n.label||'gng',+n.err||0,+n.win||0,+n.util||0,+n.densityClass||0,+n.targetEdgeLength||0,n.id??i]);
+  const compactNodes=(state.nodes||[]).map((n,i)=>[+n.x||0,+n.y||0,+n.z||0,n.label||'gng',+n.err||0,+n.win||0,+n.util||0,n.id??i]);
   const compactEdges=(state.edges||[]).map((e,i)=>[e.a,e.b,+e.age||0,e.id??i]);
   const compactNodeFeatures=nodeFeatures.map((f)=>[
     f.id??f.node_id??0,
@@ -6915,11 +6660,10 @@ async function saveJson(){
     motion:{pattern:$('motionPattern').value,amplitude:+$('motionAmp').value,hz:+$('motionHz').value},
     depth_camera:read_depth_camera_settings(),
     visualization:{viewer_mode:viewerMode(),point_color_mode:pointColorMode(),heatmap_axis:heatmapAxis(),heatmap_range_mode:$('heatmapRangeMode')?$('heatmapRangeMode').value:'auto',heatmap_min_m:+($('heatmapMin')?.value||0),heatmap_max_m:+($('heatmapMax')?.value||0),point_size:+($('pointSize')?.value||1.2),face_opacity:+($('faceOpacity')?.value||0.045),face_opacity_cap:+($('faceOpacityCap')?.value||0.06),face_local_overdraw_cap:+($('faceLayerCap')?.value||2),face_overdraw_grid_px:+($('faceTilePx')?.value||34)},
-    gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),cell_competition_radius:+($('densityCompRadius')?.value||0.018),density_prune_interval:+($('densityPruneInterval')?.value||250),target_edge_lengths_m:densityTargetEdgeLengths(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},
+    gng_learning:{mode:gngMode(),algorithm:gngAlgorithm(),offline_batch_scans:+$('batchScans').value,batch_dataset_cap:+$('batchCap').value,batch_points:state.gng&&state.gng.mode==='offline'?(state.gng.trainingPoints||[]).length:0},
     points:compactPoints,
     nodes:compactNodes,
     edges:compactEdges,
-    triangles:state.gng&&state.gng.triangles?[...state.gng.triangles.values()]:[],
     faces:state.faces,
     node_attributes:state.nodeStats,
     node_clusters:state.nodeClusters,
@@ -7784,8 +7528,7 @@ function loop(now){
   if(v314UpdateIkMotion(now)) changed=true;
   if(v322UpdateRobotTrajectory(now)) changed=true;
 
-  const tri=state.gngPlaying && state.gng && gngUsesTriangulationAlgorithm(state.gng.variant);
-  const renderDue=!state.gngPlaying || tri || (!state.gng_realtime&&state._v298Frame%3===0);
+  const renderDue=!state.gngPlaying || (!state.gng_realtime&&state._v298Frame%3===0);
   if(changed && renderDue){
     try{ renderAll(); }
     catch(e){ console.error('Realtime render failed.',e); reportGngRuntimeError('renderAll',e); }
@@ -8020,7 +7763,7 @@ function bindDataModeControls(){
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
-['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
+['gngLearningMode','gngAlgorithm','gngSamplesPerFrame'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
   sync_action_button_styles();bindDataModeControls();updateGngDataSourceUi();v312SetupGngInputFileLoader();v322SetupObjectTemplateControls();
@@ -8246,7 +7989,7 @@ document.addEventListener('click',(e)=>{
   });
 });
 
-loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();v297SetFastGngDefaults();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
+loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();setDefaultGngParameters();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
 </script>
 
@@ -8273,6 +8016,63 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
   let ros_reconnect_attempt = 0;
   let foundation_pose_publish_scheduled = false;
   const foundation_pose_topic_objects = new Map();
+  const ROS_PUBLISH_LEASE_MS = 1500;
+  const ROS_PUBLISH_LEASE_RENEW_MS = 500;
+  const ROS_PUBLISH_RATE_WINDOW_MS = 1000;
+  const ros_publish_tab_id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  function createRosLease(lease_scope, getLeaseName, onLeaseStateChanged){
+    let storage_key = null;
+    let has_lease = false;
+    const getStorageKey = ()=>{
+      const lease_name = String(getLeaseName() || '').trim() || 'default';
+      return `topo_fuzzy_ros_lease:${location.origin}:${lease_scope}:${lease_name}`;
+    };
+    const setLeaseState = (next_has_lease)=>{
+      const is_changed = has_lease !== next_has_lease;
+      has_lease = next_has_lease;
+      if(is_changed) onLeaseStateChanged?.(has_lease);
+      return has_lease;
+    };
+    const release = ()=>{
+      if(!storage_key) return;
+      try{
+        const stored = JSON.parse(window.localStorage.getItem(storage_key) || 'null');
+        if(stored?.tab_id === ros_publish_tab_id){
+          window.localStorage.removeItem(storage_key);
+        }
+      }catch(_e){}
+      setLeaseState(false);
+    };
+    const update = ()=>{
+      const next_storage_key = getStorageKey();
+      if(storage_key && storage_key !== next_storage_key) release();
+      storage_key = next_storage_key;
+      try{
+        const now_ms = Date.now();
+        const stored = JSON.parse(window.localStorage.getItem(storage_key) || 'null');
+        if(stored?.tab_id !== ros_publish_tab_id && Number(stored?.expires_at_ms) > now_ms){
+          return setLeaseState(false);
+        }
+        window.localStorage.setItem(storage_key, JSON.stringify({
+          tab_id: ros_publish_tab_id,
+          expires_at_ms: now_ms + ROS_PUBLISH_LEASE_MS,
+        }));
+        const verified = JSON.parse(window.localStorage.getItem(storage_key) || 'null');
+        return setLeaseState(verified?.tab_id === ros_publish_tab_id);
+      }catch(_e){
+        // localStorage非対応環境での単一タブ互換動作
+        return setLeaseState(true);
+      }
+    };
+    const stop = ()=>{
+      release();
+    };
+    window.addEventListener('storage', (event)=>{
+      if(event.key === storage_key) update();
+    });
+    window.addEventListener('pagehide', stop);
+    return {stop, update, hasLease:()=>has_lease};
+  }
   function setRosBridgeStatus(text){
     const el = document.getElementById('rosBridgeStatus');
     if(el) el.textContent = text;
@@ -8307,7 +8107,22 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     tryNext(0);
   }
   const rosPublishers = [];
+  const ros_publishers_by_topic = new Map();
   const rosSubscribers = [];
+  function releaseRosBridgeConnection(){
+    cancel_ros_reconnect();
+    if(ros && (ros.isConnected || rosConnecting)){
+      try{ros.close();}catch(e){console.warn('ROS bridge close error', e);}
+    }
+    rosConnecting = false;
+    foundation_pose_topic_objects.clear();
+    rosPublishers.forEach(p=>p.onClose());
+    rosSubscribers.forEach(s=>s.onClose());
+    setRosBridgeStatus('ROS bridge: another tab active');
+  }
+  const ros_bridge_lease = createRosLease('bridge', ()=>ROS_WS_URL, (has_lease)=>{
+    if(!has_lease) releaseRosBridgeConnection();
+  });
   function cancel_ros_reconnect(){
     if(ros_reconnect_timer){
       clearTimeout(ros_reconnect_timer);
@@ -8368,6 +8183,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     let hzPairBound = false;
     let publishTimes = [];
     let next_publish_at = 0;
+    let active_topic_name = '';
+    const publisher_owner = {};
+    const getTopicName = ()=>{
+      const topic_name = String(topicEl?.value || defaultTopic).trim() || defaultTopic;
+      return topic_name.startsWith('/') ? topic_name : `/${topic_name}`;
+    };
+    const publish_lease = createRosLease('publish', getTopicName);
 
     const setStatus = (text)=>{
       if(statusEl) statusEl.textContent = text;
@@ -8383,8 +8205,12 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         }
         topicObj = null;
       }
+      if(active_topic_name && ros_publishers_by_topic.get(active_topic_name) === publisher_owner){
+        ros_publishers_by_topic.delete(active_topic_name);
+      }
       publishTimes = [];
       next_publish_at = 0;
+      active_topic_name = '';
     };
     const publish_once = ()=>{
       if(!topicObj) return false;
@@ -8393,7 +8219,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         topicObj.publish(msg);
         const now = performance.now();
         publishTimes.push(now);
-        while(publishTimes.length>1 && now-publishTimes[0]>5000) publishTimes.shift();
+        while(publishTimes.length>1 && now-publishTimes[0]>ROS_PUBLISH_RATE_WINDOW_MS) publishTimes.shift();
         const elapsedMs=now-publishTimes[0];
         const actualHz=publishTimes.length>1 && elapsedMs>0
           ? (publishTimes.length-1)*1000/elapsedMs
@@ -8418,23 +8244,59 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         schedule_next_publish();
       }, Math.max(0, next_publish_at - now));
     };
+    const restart_publish_schedule = ()=>{
+      publishTimes=[];
+      next_publish_at=performance.now();
+      if(publish_timer_id){
+        clearTimeout(publish_timer_id);
+        publish_timer_id=null;
+      }
+      if(!topicObj)return;
+      publish_once();
+      next_publish_at=performance.now();
+      schedule_next_publish();
+    };
     const start = ()=>{
+      if(!enabledEl?.checked){
+        publish_lease.stop();
+        stop();
+        setStatus(`${statusPrefix}: disabled`);
+        return false;
+      }
+      publish_lease.update();
+      if(!publish_lease.hasLease()){
+        stop();
+        setStatus('0 pts 0.0 Hz');
+        return false;
+      }
       if(!ros || !ros.isConnected){
         stop();
         setStatus(`${statusPrefix}: waiting for connection`);
         return false;
       }
+      const topic_name = getTopicName();
+      if(topicObj && active_topic_name === topic_name) return true;
+      const existing_owner = ros_publishers_by_topic.get(topic_name);
+      if(existing_owner && existing_owner !== publisher_owner){
+        stop();
+        setStatus('0 pts 0.0 Hz');
+        return false;
+      }
       stop();
-      const topic_name = String(topicEl?.value || defaultTopic).trim() || defaultTopic;
+      ros_publishers_by_topic.set(topic_name, publisher_owner);
       topicObj = new ROSLIB.Topic({
         ros,
-        name: topic_name.startsWith('/') ? topic_name : `/${topic_name}`,
+        name: topic_name,
         messageType: 'sensor_msgs/msg/PointCloud2',
+        reconnect_on_close: false,
       });
+      topicObj.callForSubscribeAndAdvertise = ros.callOnConnection.bind(ros);
+      active_topic_name = topic_name;
       try{
         topicObj.advertise();
       }catch(e){
         console.error(`${statusPrefix} advertise error`, e);
+        stop();
         setStatus(`${statusPrefix}: advertise error`);
         return false;
       }
@@ -8447,7 +8309,10 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       if(hzPairBound || !hzEl || !hzNumEl) return false;
       const applyFromRange = ()=>{
         hzNumEl.value = hzEl.value;
-        if(enabledEl?.checked) start();
+        if(enabledEl?.checked){
+          start();
+          restart_publish_schedule();
+        }
       };
       const applyFromNumber = ()=>{
         const min = Number.isFinite(+hzEl.min) ? +hzEl.min : 0.1;
@@ -8455,7 +8320,10 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         const v = clamp(+hzNumEl.value || +hzEl.value || 10, min, max);
         hzEl.value = String(v);
         hzNumEl.value = String(v);
-        if(enabledEl?.checked) start();
+        if(enabledEl?.checked){
+          start();
+          restart_publish_schedule();
+        }
       };
       hzEl.addEventListener('input', applyFromRange);
       hzNumEl.addEventListener('input', applyFromNumber);
@@ -8465,6 +8333,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     };
     const sync = ()=>{
       if(!enabledEl?.checked){
+        publish_lease.stop();
         stop();
         setStatus(`${statusPrefix}: disabled`);
         return;
@@ -8488,6 +8357,22 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     const onError = ()=>{
       setStatus(`${statusPrefix}: error`);
     };
+    const renewPublishLease = ()=>{
+      if(!enabledEl?.checked) return;
+      const was_owner = publish_lease.hasLease();
+      const is_owner = publish_lease.update();
+      if(!is_owner){
+        if(topicObj) stop();
+        setStatus('0 pts 0.0 Hz');
+        return;
+      }
+      if(!was_owner && ros?.isConnected) start();
+    };
+    const lease_renew_timer_id = setInterval(renewPublishLease, ROS_PUBLISH_LEASE_RENEW_MS);
+    window.addEventListener('pagehide', ()=>{
+      clearInterval(lease_renew_timer_id);
+      stop();
+    });
     if(topicEl){
       topicEl.value = defaultTopic;
     }
@@ -8600,6 +8485,11 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     return{start,stop,discover};
   }
   function ensureRos(){
+    if(!ros_bridge_lease.update()){
+      rosConnecting = false;
+      setRosBridgeStatus('ROS bridge: another tab active');
+      return;
+    }
     if(ros && ros.isConnected){
       setRosBridgeStatus('ROS bridge: connected');
       rosSubscribers.forEach(s=>s.onConnection());
@@ -8609,6 +8499,11 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
     rosConnecting = true;
     loadRoslib(()=>{
       try{
+        if(!ros_bridge_lease.update()){
+          rosConnecting = false;
+          setRosBridgeStatus('ROS bridge: another tab active');
+          return;
+        }
         if(!window.ROSLIB){
           rosConnecting = false;
           console.warn('ROSLIB still not available after load');
@@ -8618,6 +8513,10 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
         if(!ros){
           ros = new ROSLIB.Ros();
           ros.on('connection', ()=>{
+            if(!ros_bridge_lease.update()){
+              releaseRosBridgeConnection();
+              return;
+            }
             rosConnecting = false;
             cancel_ros_reconnect();
             setRosBridgeStatus('ROS bridge: connected');
@@ -8949,6 +8848,13 @@ loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedVi
       return createPointCloudPublisher(config);
     });
     rosPublishers.forEach((publisher)=>publisher.sync());
+    const renewRosBridgeLease = ()=>{
+      const had_lease = ros_bridge_lease.hasLease();
+      const has_lease = ros_bridge_lease.update();
+      if(has_lease && !had_lease) ensureRos();
+    };
+    const ros_bridge_lease_timer_id = setInterval(renewRosBridgeLease, ROS_PUBLISH_LEASE_RENEW_MS);
+    window.addEventListener('pagehide', ()=>clearInterval(ros_bridge_lease_timer_id));
     setRosBridgeStatus('ROS bridge: starting...');
     ensureRos();
   });
