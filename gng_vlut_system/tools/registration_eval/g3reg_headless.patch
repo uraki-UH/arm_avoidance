@@ -1,0 +1,62 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9f6859e..b52ad49 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -60,0 +61,4 @@ target_link_libraries(demo_reg ${PROJECT_NAME})
++add_executable(headless_reg examples/headless_reg.cpp ${BACKWARD_ENABLE})
++add_backward(headless_reg)
++target_link_libraries(headless_reg ${PROJECT_NAME})
++
+diff --git a/examples/headless_reg.cpp b/examples/headless_reg.cpp
+new file mode 100644
+index 0000000..713a5c9
+--- /dev/null
++++ b/examples/headless_reg.cpp
+@@ -0,0 +1,47 @@
++#include "back_end/reglib.h"
++#include "global_definition/global_definition.h"
++#include "utils/config.h"
++
++#include <chrono>
++#include <iostream>
++#include <string>
++
++#include <pcl/io/pcd_io.h>
++
++int main(int argc, char **argv)
++{
++  if (argc < 4) {
++    std::cerr << "使用法: headless_reg 設定ファイル 入力点群 参照点群" << std::endl;
++    return 1;
++  }
++
++  const std::string config_path = g3reg::config.project_path + "/" + argv[1];
++  g3reg::InitGLOG(config_path, argv);
++  g3reg::config.load_config(config_path, argv);
++
++  pcl::PointCloud<pcl::PointXYZ>::Ptr source(new pcl::PointCloud<pcl::PointXYZ>);
++  pcl::PointCloud<pcl::PointXYZ>::Ptr target(new pcl::PointCloud<pcl::PointXYZ>);
++  if (pcl::io::loadPCDFile<pcl::PointXYZ>(argv[2], *source) != 0 ||
++      pcl::io::loadPCDFile<pcl::PointXYZ>(argv[3], *target) != 0) {
++    std::cerr << "PCD読み込み失敗" << std::endl;
++    return 2;
++  }
++
++  const auto begin = std::chrono::steady_clock::now();
++  const FRGresult result = g3reg::GlobalRegistration(source, target);
++  const auto end = std::chrono::steady_clock::now();
++  const double elapsed_ms =
++    std::chrono::duration<double, std::milli>(end - begin).count();
++
++  std::cout << "source_points=" << source->size() << std::endl;
++  std::cout << "target_points=" << target->size() << std::endl;
++  std::cout << "feature_time_ms=" << result.feature_time << std::endl;
++  std::cout << "graph_time_ms=" << result.graph_time << std::endl;
++  std::cout << "clique_time_ms=" << result.clique_time << std::endl;
++  std::cout << "solver_time_ms=" << result.tf_solver_time << std::endl;
++  std::cout << "verify_time_ms=" << result.verify_time << std::endl;
++  std::cout << "total_time_ms=" << result.total_time << std::endl;
++  std::cout << "wall_time_ms=" << elapsed_ms << std::endl;
++  std::cout << "transform=" << std::endl << result.tf << std::endl;
++  return 0;
++}
