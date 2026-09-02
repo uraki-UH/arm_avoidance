@@ -45,6 +45,7 @@ eval_root=/tmp/registration_eval_$(date +%Y%m%d)
 | `build_teaser.sh` | TEASER++のビルドとCTest |
 | `setup_sc2_turboreg.sh` | CUDA対応PyTorch、SC2-PCR、TurboRegの導入確認 |
 | `g3reg_headless.patch` | G3RegへのGUIなし計測器追加 |
+| `prepare_foundation_pose_input.py` | `rgbd_png`保存済みGNGデータセットのFoundationPose単一フレーム入力化 |
 
 スクリプトはワークスペースのルートから実行する。GPUを使うSC2-PCRとTurboRegは、取得後に次で導入確認する。
 
@@ -92,6 +93,19 @@ PYTHONPATH="$eval_root/py_sc2" python3 -m pip install \
 ## FoundationPose・FilterReg・FlashReg
 
 FoundationPoseはRGB、深度、カメラ内部パラメータ、CAD、対象物マスク、学習済み重みを必要とする。環境構築前にGPUとCUDA Toolkit、重みとデモデータの取得可否を確認する。物体マスクを安定して供給できる場合にだけ、幾何方式とは別系統の比較対象として導入する。
+
+`ObjectGngDatasetExporter`は、organized RGB-D点群と対応する`CameraInfo`を受信して保存した場合、`rgbd_png`形式のdepth PNG、color PNG、内部パラメータをGNGデータセットへ記録する。次の準備器は、その保存物と外部マスクをFoundationPoseの`run_demo.py`が読む単一フレーム構成へ変換する。
+
+```bash
+python3 gng_vlut_system/tools/registration_eval/prepare_foundation_pose_input.py \
+  /datasets/basket_gng_template.json.gz \
+  --mesh-file /datasets/basket.obj \
+  --mask-file /datasets/basket_mask.png \
+  --output-dir /tmp/foundation_pose_basket \
+  --foundation-pose-dir "$eval_root/FoundationPose"
+```
+
+通常はセグメンテーション器またはユーザー指定の`--mask-file`を使う。`--allow-depth-mask`は、背景を含まない単体撮影で変換経路だけを確認する暫定用途であり、実環境の物体マスクとして使わない。準備後の実行例はスクリプトが表示する。`FoundationPose`の推定結果は6D姿勢仮説として扱い、現行GNGの平面・非平面・共分散評価で検証してからテンプレートを召喚する。
 
 FilterRegはCUDA、PCL、OpenCV、glogへの依存があり、公開環境が旧Ubuntu・旧CUDAを前提とする。ホストのCUDA ToolkitとPCL版を確認し、Dockerまたは隔離環境で導入する。現時点では優先度を下げる。
 

@@ -706,8 +706,10 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div><label>最短計測距離 [m]</label><div class="control-pair"><input id="depth_camera_min_dist" type="range" min="0.05" max="2" step="0.01" value="0.10"><input id="depth_camera_min_dist_num" type="number" min="0.05" max="2" step="0.01" value="0.10"></div></div>
               <div><label>最長計測距離 [m]</label><div class="control-pair"><input id="depth_camera_max_dist" type="range" min="0.10" max="3" step="0.01" value="1.40"><input id="depth_camera_max_dist_num" type="number" min="0.10" max="3" step="0.01" value="1.40"></div></div>
               <div><label>深度バッファ横解像度 [px]</label><div class="control-pair"><input id="depth_camera_grid" type="range" min="16" max="256" step="1" value="96"><input id="depth_camera_grid_num" type="number" min="16" max="256" step="1" value="96"></div></div>
-              <div class="full note">合成深度点群の遮蔽判定用です。姿勢はカメラの光軸方向を示し、視野角は垂直方向です。</div>
+              <div class="full note">合成深度点群の遮蔽判定用です。姿勢はカメラの光軸方向を示し、視野角は垂直方向です。FoundationPose RGB-D保存のRGBはsemantic色であり、実写RGBではありません。</div>
               <div class="full point-pose-reset-row"><button id="depth_camera_reset" type="button">深度カメラ設定をリセット</button></div>
+              <div class="full point-pose-reset-row"><button id="foundationPoseRgbdExportBtn" data-action-kind="data" type="button">FoundationPose RGB-D ZIP保存</button></div>
+              <div id="foundationPoseRgbdExportStatus" class="full note">depth、semantic RGB、物体mask、cam_K.txtをZIPへ保存します。対応CAD meshは別途指定が必要です。</div>
             </div>
           </details>
           <div class="section-title">Tabletop Scene Option</div>
@@ -7199,6 +7201,143 @@ function v312ApplyDepthCameraVisibility(points){
   }
   return out;
 }
+function v316ColorBytes(label){
+  const text=String(colorFor(label)||'#dbeafe');
+  const match=/^#([0-9a-f]{6})$/i.exec(text);
+  if(!match)return[219,234,254];
+  const value=parseInt(match[1],16);
+  return[(value>>16)&255,(value>>8)&255,value&255];
+}
+function v316BuildFoundationPoseFrame(){
+  const settings=read_depth_camera_settings(),pose=v312DepthCameraPose();
+  const width=settings.grid,height=Math.max(1,Math.floor(width/(4/3)));
+  const fov=settings.fov_deg*Math.PI/180,tan_y=Math.tan(fov/2),tan_x=tan_y*(width/height);
+  const depth=new Uint16Array(width*height),rgb=new Uint8Array(width*height*3),mask=new Uint8Array(width*height);
+  const z_buffer=new Float64Array(width*height);z_buffer.fill(Infinity);
+  const is_object_label=label=>label!=='table'&&label!=='outlier';
+  let valid_num=0,object_num=0;
+  for(const point of state.points||[]){
+    const view=v312VecSub(point,pose.cam),z=v312VecDot(view,pose.forward);
+    if(!Number.isFinite(z)||z<=settings.min_dist||z>settings.max_dist)continue;
+    const x=v312VecDot(view,pose.right)/z;
+    const y=-v312VecDot(view,pose.up)/z;
+    if(Math.abs(x)>tan_x||Math.abs(y)>tan_y)continue;
+    const column=Math.min(width-1,Math.max(0,Math.floor((x/tan_x*0.5+0.5)*width)));
+    const row=Math.min(height-1,Math.max(0,Math.floor((y/tan_y*0.5+0.5)*height)));
+    const index=row*width+column;
+    if(z>=z_buffer[index])continue;
+    const depth_mm=Math.round(z*1000);
+    if(depth_mm<1||depth_mm>65535)continue;
+    if(!Number.isFinite(z_buffer[index]))valid_num++;
+    z_buffer[index]=z;depth[index]=depth_mm;
+    const color=v316ColorBytes(point.label),color_index=index*3;
+    rgb[color_index]=color[0];rgb[color_index+1]=color[1];rgb[color_index+2]=color[2];
+    const is_object=is_object_label(point.label);
+    if(mask[index]!==0&&!is_object)object_num--;
+    if(mask[index]===0&&is_object)object_num++;
+    mask[index]=is_object?255:0;
+  }
+  if(!valid_num)throw new Error('深度カメラ視野内に有効点がありません。');
+  if(!object_num)throw new Error('物体maskに使えるobject系ラベルの点がありません。');
+  const fx=width/(2*tan_x),fy=height/(2*tan_y);
+  return {width,height,depth,rgb,mask,valid_num,object_num,camera:{
+    k:[fx,0,width/2,0,fy,height/2,0,0,1],
+    pose_world:{position:pose.cam,x_axis:pose.right,y_axis:{x:-pose.up.x,y:-pose.up.y,z:-pose.up.z},z_axis:pose.forward}
+  }};
+}
+const v316_crc_table=(()=>{
+  const table=new Uint32Array(256);
+  for(let index=0;index<256;index++){
+    let value=index;
+    for(let bit=0;bit<8;bit++)value=(value&1)?(0xedb88320^(value>>>1)):(value>>>1);
+    table[index]=value>>>0;
+  }
+  return table;
+})();
+function v316Crc32(bytes){
+  let value=0xffffffff;
+  for(const byte of bytes)value=v316_crc_table[(value^byte)&255]^(value>>>8);
+  return(value^0xffffffff)>>>0;
+}
+function v316ConcatBytes(parts){
+  const length=parts.reduce((sum,part)=>sum+part.length,0),result=new Uint8Array(length);
+  let offset=0;for(const part of parts){result.set(part,offset);offset+=part.length;}return result;
+}
+function v316WriteUint16Le(bytes,offset,value){bytes[offset]=value&255;bytes[offset+1]=(value>>>8)&255;}
+function v316WriteUint32Le(bytes,offset,value){bytes[offset]=value&255;bytes[offset+1]=(value>>>8)&255;bytes[offset+2]=(value>>>16)&255;bytes[offset+3]=(value>>>24)&255;}
+function v316WriteUint32Be(bytes,offset,value){bytes[offset]=(value>>>24)&255;bytes[offset+1]=(value>>>16)&255;bytes[offset+2]=(value>>>8)&255;bytes[offset+3]=value&255;}
+async function v316Deflate(bytes){
+  if(typeof CompressionStream!=='function')throw new Error('このブラウザはPNG圧縮に必要なCompressionStreamへ未対応です。');
+  const stream=new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+function v316PngChunk(type,data){
+  const type_bytes=new TextEncoder().encode(type),chunk=new Uint8Array(12+data.length);
+  v316WriteUint32Be(chunk,0,data.length);chunk.set(type_bytes,4);chunk.set(data,8);
+  v316WriteUint32Be(chunk,8+data.length,v316Crc32(chunk.subarray(4,8+data.length)));
+  return chunk;
+}
+async function v316EncodePng(width,height,bit_depth,color_type,pixels){
+  const bytes_per_sample=bit_depth===16?2:1;
+  const channel_num=color_type===2?3:1;
+  const row_bytes=width*channel_num*bytes_per_sample,raw=new Uint8Array((row_bytes+1)*height);
+  for(let row=0;row<height;row++){
+    const source_offset=row*width*channel_num,target_offset=row*(row_bytes+1)+1;
+    if(bit_depth===16){
+      for(let index=0;index<width*channel_num;index++){
+        const value=pixels[source_offset+index];raw[target_offset+index*2]=(value>>>8)&255;raw[target_offset+index*2+1]=value&255;
+      }
+    }else raw.set(pixels.subarray(source_offset,source_offset+width*channel_num),target_offset);
+  }
+  const header=new Uint8Array(13);v316WriteUint32Be(header,0,width);v316WriteUint32Be(header,4,height);
+  header[8]=bit_depth;header[9]=color_type;
+  return v316ConcatBytes([
+    new Uint8Array([137,80,78,71,13,10,26,10]),v316PngChunk('IHDR',header),
+    v316PngChunk('IDAT',await v316Deflate(raw)),v316PngChunk('IEND',new Uint8Array())
+  ]);
+}
+function v316CreateZip(files){
+  const encoder=new TextEncoder(),local_parts=[],central_parts=[];let offset=0;
+  for(const file of files){
+    const name=encoder.encode(file.name),data=file.data,crc=v316Crc32(data);
+    const local=new Uint8Array(30+name.length+data.length);
+    v316WriteUint32Le(local,0,0x04034b50);v316WriteUint16Le(local,4,20);v316WriteUint16Le(local,26,name.length);v316WriteUint32Le(local,14,crc);v316WriteUint32Le(local,18,data.length);v316WriteUint32Le(local,22,data.length);local.set(name,30);local.set(data,30+name.length);local_parts.push(local);
+    const central=new Uint8Array(46+name.length);
+    v316WriteUint32Le(central,0,0x02014b50);v316WriteUint16Le(central,4,20);v316WriteUint16Le(central,6,20);v316WriteUint16Le(central,28,name.length);v316WriteUint32Le(central,16,crc);v316WriteUint32Le(central,20,data.length);v316WriteUint32Le(central,24,data.length);v316WriteUint32Le(central,42,offset);central.set(name,46);central_parts.push(central);offset+=local.length;
+  }
+  const central= v316ConcatBytes(central_parts),end=new Uint8Array(22);
+  v316WriteUint32Le(end,0,0x06054b50);v316WriteUint16Le(end,8,files.length);v316WriteUint16Le(end,10,files.length);v316WriteUint32Le(end,12,central.length);v316WriteUint32Le(end,16,offset);
+  return new Blob([...local_parts,central,end],{type:'application/zip'});
+}
+function v316DownloadBlob(blob,file_name){
+  const anchor=document.createElement('a');anchor.href=URL.createObjectURL(blob);anchor.download=file_name;anchor.click();setTimeout(()=>URL.revokeObjectURL(anchor.href),1000);
+}
+async function v316SaveFoundationPoseRgbd(){
+  const status=$('foundationPoseRgbdExportStatus');
+  try{
+    if(status)status.textContent='FoundationPose RGB-D ZIPを生成中...';
+    const frame=v316BuildFoundationPoseFrame(),frame_id='000000';
+    const manifest={
+      format:'foundation_pose_single_frame_v1',frame_id,
+      color_encoding:'semantic_label_color',mask_encoding:'object_labels_except_table_and_outlier',depth_unit_m:0.001,
+      template_mesh:'対応するCAD meshをFoundationPose実行時に指定',camera:frame.camera,
+      files:{rgb:`rgb/${frame_id}.png`,depth:`depth/${frame_id}.png`,mask:`masks/${frame_id}.png`,camera_matrix:'cam_K.txt'}
+    };
+    const camera_text=frame.camera.k.slice(0,3).join(' ')+'\n'+frame.camera.k.slice(3,6).join(' ')+'\n'+frame.camera.k.slice(6,9).join(' ')+'\n';
+    const files=[
+      {name:`rgb/${frame_id}.png`,data:await v316EncodePng(frame.width,frame.height,8,2,frame.rgb)},
+      {name:`depth/${frame_id}.png`,data:await v316EncodePng(frame.width,frame.height,16,0,frame.depth)},
+      {name:`masks/${frame_id}.png`,data:await v316EncodePng(frame.width,frame.height,8,0,frame.mask)},
+      {name:'cam_K.txt',data:new TextEncoder().encode(camera_text)},
+      {name:'foundation_pose_input.json',data:new TextEncoder().encode(JSON.stringify(manifest,null,2)+'\n')}
+    ];
+    const sample=String(state.sample||'object').replace(/[^A-Za-z0-9_-]+/g,'_');
+    v316DownloadBlob(v316CreateZip(files),`topo_fuzzy_${sample}_foundation_pose_rgbd.zip`);
+    if(status)status.textContent=`FoundationPose RGB-D ZIP保存: ${frame.width}x${frame.height}, depth=${frame.valid_num}px, mask=${frame.object_num}px / semantic RGB。対応CAD meshを別途指定してください。`;
+  }catch(error){
+    if(status)status.textContent='FoundationPose RGB-D保存失敗: '+(error&&error.message?error.message:error);
+  }
+}
 function v312ParsePointCloudText(txt){
   txt=String(txt||'').trim();
   if(!txt)return[];
@@ -8014,6 +8153,7 @@ function bindDataModeControls(){
   }
 }
 $('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=runGngAnimated;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();runGng();estimate()};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}});
   if($('gngWasmInputSource'))$('gngWasmInputSource').addEventListener('change',()=>{state.gngWasmInputSource=$('gngWasmInputSource').value;const status=$('gngWasmStatus');if(status)status.textContent=`WASM input source: ${state.gngWasmInputSource}`;});
