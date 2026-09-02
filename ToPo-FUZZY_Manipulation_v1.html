@@ -892,8 +892,8 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
               <div class="full"><label>Region growing threshold</label><div class="control-pair"><input id="regionGrowThreshold" type="range" min="0.1" max="0.95" step="0.01" value="0.68"><input id="regionGrowThresholdNum" type="number" min="0.1" max="0.95" step="0.01" value="0.68"></div></div>
             </div>
           </details>
-        <div class="grid2" style="margin-top:12px"><button id="genBtn" data-action-kind="data">サンプル点群を生成</button><button id="gngBtn" data-action-kind="run">GNG学習を実行</button></div>
-        <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" data-action-kind="play">3D点群リアルタイム再生</button><button id="gngPlayBtn" data-action-kind="play">GNG学習再生</button></div>
+        <div style="margin-top:12px"><button id="genBtn" data-action-kind="data">サンプル点群を生成</button></div>
+        <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" data-action-kind="play">3D点群リアルタイム再生</button><button id="gngPlayBtn" data-action-kind="play">GNG再生</button></div>
         <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" data-action-kind="run">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
         <div class="grid2" style="margin-top:8px">
           <button id="rosBridgeStartBtn" data-action-kind="run">ROS2 ブリッジの起動</button>
@@ -1869,12 +1869,10 @@ function updateGngDataSourceUi(){
   if(samplesEl)samplesEl.disabled=graphOnly;
   if(modeEl)modeEl.disabled=graphOnly;
   algButtons.forEach(btn=>{btn.disabled=graphOnly;btn.title=graphOnly?'Graph-only mode':btn.title;});
-  const btn=$('gngBtn');
-  if(btn){
-    btn.textContent=graphOnly?'既存GNGを読み込む':'GNG学習を実行';
-    const action_kind=graphOnly?'load':'run';
-    btn.dataset.actionKind=action_kind;
-    set_action_button_style(btn,action_kind);
+  const play_btn=$('gngPlayBtn');
+  if(play_btn){
+    play_btn.disabled=graphOnly;
+    play_btn.title=graphOnly?'Graph-only modeではGNG再生を実行できません。':play_btn.title;
   }
   const status=$('topoStatus');
   if(status){
@@ -8294,7 +8292,7 @@ function bindDataModeControls(){
     });
   }
 }
-$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('gngBtn').onclick=()=>void runGngWasmFull();$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('genBtn').onclick=generate;$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame','densityCompRadius','densityPruneInterval','densityTargetFloor','densityTargetWall','densityTargetUnknown'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
