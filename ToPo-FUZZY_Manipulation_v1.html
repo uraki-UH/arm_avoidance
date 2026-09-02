@@ -237,7 +237,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .canvaswrap.info-open .viewer-timing-panel{top:auto;left:14px;bottom:14px;min-width:230px}
 .canvaswrap.info-open .viewer-corner-note{right:14px;bottom:14px}
 .canvaswrap.play-open .neo-hud{left:12px;right:auto;top:52px;bottom:auto;max-width:min(720px,calc(100% - 24px))}
-.canvaswrap.play-open .viewer-fuzzy-ik-panel{display:grid!important;left:12px;right:auto;top:150px;bottom:auto;width:min(280px,calc(100% - 24px));max-width:none;border-radius:14px;padding:7px}
 .canvaswrap.tools-open .view-tools{top:52px;right:12px}
 .canvaswrap.layers-open .viewer-layer-panel{display:grid!important;top:52px;left:12px;z-index:410}
 .canvaswrap.robot-open .viewer-robot-tf-panel{display:grid!important;top:52px;right:12px;z-index:411}
@@ -282,31 +281,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .viewer-robot-tf-panel .control-pair{grid-template-columns:minmax(0,1fr) 76px;gap:7px}
 .viewer-robot-tf-panel .readout{font:800 10px/1.35 Consolas,Menlo,monospace;color:#bbf7d0;background:rgba(2,6,23,.55);border:1px solid rgba(148,163,184,.22);border-radius:9px;padding:7px}
 .viewer-robot-tf-panel button{height:34px;padding:0 10px;border-radius:999px;border-color:rgba(0,255,0,.55);background:#13251a;color:#f8fafc;font-size:11px}
-
-/* ── Fuzzy IK panel ── */
-.viewer-fuzzy-ik-panel{
-  position:absolute;right:14px;bottom:14px;z-index:77;
-  display:flex;align-items:center;gap:5px;flex-wrap:wrap;
-  padding:4px;border-radius:999px;
-  background:rgba(2,6,23,.72);border:1px solid rgba(0,255,0,.52);
-  pointer-events:auto;touch-action:manipulation;
-  max-width:190px;
-}
-.viewer-fuzzy-ik-panel button{
-  width:auto;min-width:0;min-height:0;height:30px;padding:0 12px;border-radius:999px;
-  border:1px solid rgba(0,255,0,.78);background:rgba(22,101,52,.88);
-  color:#fff;font-weight:900;font-size:11px;line-height:1;
-  letter-spacing:0;white-space:nowrap;cursor:pointer;pointer-events:auto;touch-action:manipulation;
-}
-.viewer-fuzzy-ik-panel button.running{background:rgba(146,64,14,.92);border-color:#f59e0b}
-.viewer-fuzzy-ik-readout{display:none}
-.viewer-fuzzy-ik-panel.show-readout{border-radius:12px;display:grid;width:260px;max-width:calc(100% - 24px);padding:6px}
-.viewer-fuzzy-ik-panel.show-readout .viewer-fuzzy-ik-readout{
-  display:block;white-space:pre-wrap;
-  font:800 10px/1.25 Consolas,Menlo,monospace;color:#bbf7d0;
-  background:rgba(2,6,23,.62);border:1px solid rgba(148,163,184,.20);
-  border-radius:8px;padding:5px;max-height:74px;overflow:auto;
-}
 
 /* ── GNG algorithm buttons ── */
 .gng-algorithm-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -534,13 +508,9 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .viewer-layer-panel{left:8px;top:48px;min-width:160px;font-size:11px}
   .viewer-robot-tf-panel{left:8px;right:8px;width:auto;top:48px}
   .viewer-robot-tf-panel .mini-grid{grid-template-columns:1fr}
-  .viewer-fuzzy-ik-panel{right:8px;top:8px;left:auto;bottom:auto;max-width:150px;padding:3px}
-  .viewer-fuzzy-ik-panel button{height:28px;padding:0 8px;font-size:10px}
-  .viewer-fuzzy-ik-panel.show-readout{width:220px;max-width:calc(100% - 16px)}
   .canvaswrap.info-open .overlay{top:48px;max-height:34%}
   .canvaswrap.info-open .viewer-timing-panel{left:8px;right:8px;bottom:8px;font-size:10px}
   .canvaswrap.play-open .neo-hud{left:8px;right:8px;top:48px;bottom:auto;max-width:none}
-  .canvaswrap.play-open .viewer-fuzzy-ik-panel{left:8px;right:8px;top:160px;bottom:auto;width:auto}
   .canvaswrap.tools-open .view-tools{top:48px;right:8px;max-width:calc(100% - 16px)}
   .canvaswrap.layers-open .viewer-layer-panel{top:48px;left:8px;right:8px;max-width:none}
   .canvaswrap.robot-open .viewer-robot-tf-panel{top:48px;left:8px;right:8px;max-width:none}
@@ -827,7 +797,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
             </div>
           </details>
         <div class="grid2" style="margin-top:8px"><button id="pointPlayBtn" data-action-kind="play">3D点群リアルタイム再生</button><button id="gngPlayBtn" data-action-kind="play">GNG再生</button></div>
-        <div class="grid2" style="margin-top:8px"><button id="inferBtnTop" data-action-kind="run">この点群で把持推定</button><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
+        <div class="grid2" style="margin-top:8px"><button id="saveBtn" class="warn">点群 + GNG + 把持JSON保存</button></div>
         <div class="grid2" style="margin-top:8px">
           <button id="rosBridgeStartBtn" data-action-kind="run">ROS2 ブリッジの起動</button>
           <span id="rosBridgeStatus" class="status">ROS bridge: disconnected</span>
@@ -883,17 +853,15 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
         <div class="metric"><div class="t">Edges</div><div id="mEdges" class="v">0</div></div>
         <div class="metric"><div class="t">Object</div><div id="mObject" class="v">-</div></div>
       </div>
-      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div><div class="viewer-fuzzy-ik-panel" data-v292-viewer-fuzzy-grasp-button data-view-panel="play">
-  <button id="viewerFuzzyIkBtn" data-action-kind="run" type="button">ファジィ把持実行</button>
-  <div id="viewerFuzzyIkReadout" class="viewer-fuzzy-ik-readout">Ready: grasp + IK</div>
-</div><div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
+      <div class="panel"><h2 class="mapping-view-title"><span id="unifiedViewerTitle">Unified 3D Viewer</span><span id="unifiedViewerBadge" class="badge">Mapping mode</span></h2><div class="body"><div class="unified-viewer-modebar" aria-label="Viewer mode switch"><span class="mode-caption">Viewer Mode</span><button id="viewerModeMapping" type="button" class="active" aria-pressed="true">Mapping / 点群・GNG</button><button id="viewerModeGrasp" type="button" aria-pressed="false">Grasp / 把持姿勢</button></div><div class="canvaswrap"><canvas id="viewTopo" class="viewer" width="1200" height="720"></canvas><div class="viewer-tabs" data-view-tabs><button data-panel-toggle="info">Info</button><button data-panel-toggle="play">実行</button><button data-panel-toggle="tools">操作</button><button data-panel-toggle="robot">ロボットTF</button><button data-panel-toggle="layers">表示</button></div>
+<div id="topoOverlay" class="overlay" data-view-panel="info">No point cloud yet.</div><div class="neo-hud" data-view-panel="play"><span id="neoLedTopo" class="neo-led"></span><button id="neoPointPlayTopo" data-action-kind="play"> 3D再生</button><div class="gng-algorithm-buttons" data-gng-algorithm-buttons></div><div id="neoReadoutTopo" class="neo-readout">frame <span>0000</span> / GNG idle</div></div><div class="view-tools" data-view-tools data-view-panel="tools"><button data-tool="orbit" class="active">Orbit</button><button data-tool="pan">Pan</button><button data-tool="zoom">Zoom</button><button data-action="zoomIn">＋</button><button data-action="zoomOut">－</button><button data-action="resetView">Reset</button></div><div class="viewer-robot-tf-panel" data-view-panel="robot"><div class="layer-title">Robot Base TF</div><div class="mini-grid">
 <div><label>X [m]</label><div class="control-pair"><input id="viewerBaseTfX" type="range" min="-1.0" max="1.0" step="0.005" value="0.25"><input id="viewerBaseTfXNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.25"></div></div>
 <div><label>Y [m]</label><div class="control-pair"><input id="viewerBaseTfY" type="range" min="-1.0" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfYNum" type="number" min="-1.0" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Z [m]</label><div class="control-pair"><input id="viewerBaseTfZ" type="range" min="-0.5" max="1.0" step="0.005" value="0.00"><input id="viewerBaseTfZNum" type="number" min="-0.5" max="1.0" step="0.005" value="0.00"></div></div>
 <div><label>Roll [deg]</label><div class="control-pair"><input id="viewerBaseTfRoll" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfRollNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Pitch [deg]</label><div class="control-pair"><input id="viewerBaseTfPitch" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfPitchNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
 <div><label>Yaw [deg]</label><div class="control-pair"><input id="viewerBaseTfYaw" type="range" min="-180" max="180" step="1" value="0"><input id="viewerBaseTfYawNum" type="number" min="-180" max="180" step="1" value="0"></div></div>
-</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfEstimateBtn" data-action-kind="run" type="button">把持推定</button><button id="viewerRobotTfFuzzyEstimateBtn" data-action-kind="run" type="button">ファジィ把持推定</button></div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox"> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox"> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
+</div><div class="grid2" style="margin-top:8px"><button id="viewerRobotTfDummyTrajBtn" data-action-kind="play" type="button">ダミー軌道生成/再生</button><button id="viewerRobotTfStopTrajBtn" type="button">軌道停止</button></div><div id="viewerRobotTfResult" class="readout" style="margin-top:8px">推定結果: 未実行</div><button id="viewerBaseTfResetBtn" type="button">Reset robot TF</button><div id="viewerBaseTfStatus" class="readout">base TF ready</div></div><div class="viewer-layer-panel" data-view-panel="layers"><div class="layer-title">Visibility</div><label><input id="showRawPoints" type="checkbox" checked> Raw point</label><label><input id="showGngNodes" type="checkbox" checked> Node</label><label><input id="showGngEdges" type="checkbox" checked> Edge</label><label><input id="showTopoClusters" type="checkbox"> Cluster</label><label><input id="showTopoFaces" type="checkbox" checked> Face surface</label><label><input id="showTopoNormals" type="checkbox"> Normal</label><div class="layer-note">表示だけを切り替えます。GNG学習・把持推論の内部データは保持します。</div></div><div id="topoCornerNote" class="viewer-corner-note" data-view-panel="info">Orbit / Pan / Zoom<br>Wheel or pinch zoom</div><div id="topoTimingPanel" class="viewer-timing-panel" data-view-panel="info">Point Δt: -- ms
 GNG Δt: -- ms</div></div><div class="legend"><span class="chip"><i style="background:#38bdf8"></i>body/rim</span><span class="chip"><i style="background:#f472b6"></i>handle</span><span class="chip"><i id="legendEdgeColor" style="background:#00ff00"></i>GNG edge</span><span class="chip"><i id="legendNodeColor" style="background:#8b007a"></i>GNG node</span><span class="chip"><i style="background:#ef4444"></i>outlier</span><span class="chip"><i style="background:#6b7280"></i>table</span></div></div></div>
     </main>
   </div>
@@ -3127,7 +3095,7 @@ function tryParseImportedAnalysisText(txt){
   return null;
 }
 const GNG_ALGORITHMS=[
-  {value:'wasm',label:'基幹GNG-WASM実行',short:'基幹GNG-WASM'},
+  {value:'wasm',label:'GNG再生',short:'GNG-WASM'},
 ];
 function setGngAlgorithmValue(_alg){const el=$('gngAlgorithm');if(el)el.value='wasm';}
 function runGngAlgorithmFromViewer(alg){
@@ -3137,7 +3105,7 @@ function runGngAlgorithmFromViewer(alg){
     return;
   }
   setGngAlgorithmValue(alg);
-  void v312StartRealtimeGng();
+  setGngPlaying(!state.gngPlaying);
 }
 async function v312LoadBundledGngWasm(){
   if(v312HasCurrentGngWasm(GNG_WASM_EXPORTS)) return true;
@@ -3192,7 +3160,7 @@ function renderGngAlgorithmButtons(){
   document.querySelectorAll('[data-gng-alg-run]').forEach(btn=>{btn.onclick=e=>{e.preventDefault();runGngAlgorithmFromViewer(btn.dataset.gngAlgRun);};});
   updateGngAlgorithmButtonStates();
 }
-function updateGngAlgorithmButtonStates(){document.querySelectorAll('[data-gng-alg-run]').forEach(btn=>{const on=btn.dataset.gngAlgRun===gngAlgorithm();btn.classList.toggle('active',on);btn.classList.toggle('running',on&&state.gngPlaying);btn.textContent=(on&&state.gngPlaying?'':' ')+(GNG_ALGORITHMS.find(a=>a.value===btn.dataset.gngAlgRun)?.label||btn.textContent.replace(/^([]\s*)/,''));});}
+function updateGngAlgorithmButtonStates(){document.querySelectorAll('[data-gng-alg-run]').forEach(btn=>{const on=btn.dataset.gngAlgRun===gngAlgorithm();btn.classList.toggle('active',on);btn.classList.toggle('running',on&&state.gngPlaying);btn.textContent=state.gngPlaying?'GNG停止':'GNG再生';});}
 function configuredPointPeriodMs(){const hz=Math.max(0.001,+($('motionHz')?.value||12));return 1000/hz}
 function currentGngBatchSize(){
   if(isGraphOnlyMode()) return 0;
@@ -7709,7 +7677,7 @@ function bindDataModeControls(){
     });
   }
 }
-$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('inferBtnTop').onclick=estimate;$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
+$('btnObject').onclick=()=>showTask('object');$('btnGrasp').onclick=()=>showTask('grasp');$('inferBtn').onclick=estimate;if($('ikSolveBtn'))$('ikSolveBtn').onclick=runTopoIkSolve;if($('ikClearBtn'))$('ikClearBtn').onclick=clearTopoIkSolve;if($('ikRenderMode'))$('ikRenderMode').onchange=()=>{state.graspRenderMode=$('ikRenderMode').value;if(viewerMode()==='grasp')renderAll()};$('regenInferBtn').onclick=()=>{generate();void runGngWasmFull().then(()=>estimate());};$('saveBtn').onclick=saveJson;$('copyPoseBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('poseJson').value);$('graspStatus').textContent='Best Pose JSON copied.'}catch(e){$('graspStatus').textContent='Clipboard copy failed. テキストエリアから手動コピーしてください。'}};$('objectToGraspBtn').onclick=()=>showTask('grasp');$('objectRefreshBtn').onclick=()=>updateObjectIdentifier();$('objectSampleMirror').onchange=()=>{$('sampleType').value=$('objectSampleMirror').value;generate();updateObjectIdentifier();};['objectHandleConf','objectAmbiguity'].forEach(id=>$(id).addEventListener('input',updateObjectIdentifier));
 if($('foundationPoseRgbdExportBtn'))$('foundationPoseRgbdExportBtn').onclick=v316SaveFoundationPoseRgbd;
 ['gngLearningMode','gngAlgorithm','gngSamplesPerFrame'].forEach(id=>$(id)&&$(id).addEventListener('input',()=>{updateGngDataSourceUi();if(!isGraphOnlyMode())resetGngRunState();updateMetrics();updateHud();renderAll();if($('topoStatus'))$('topoStatus').textContent=`GNG setting changed: source=${gngDataSourceMode()==='graph_only'?'Graph only':'Point cloud -> GNG'}, mode=${gngMode()==='offline'?'Offline Batch':'Online Sequential'}, algorithm=${gngAlgorithmLabel()}. ${isGraphOnlyMode()?'Graph-only mode keeps the loaded graph intact.':'次回ボタン押下で再実行します。'}`;}));
   if($('pointCloudSource'))$('pointCloudSource').addEventListener('change',()=>{const source=$('pointCloudSource').value;resetGngRunState();if(source==='imported_frames'&&state.importedPointFrames&&state.importedPointFrames.length){state.basePoints=state.importedPointFrames[0].map((p,i)=>({...p,id:p.id??i}));state.points=state.basePoints.map(p=>({...p}));updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent='点群ソースを取り込みフレームへ切り替えました。';}else{updateMovingPoints();updateMetrics();renderAll();$('topoStatus').textContent=source==='object_surface'?'点群ソースをオクルージョンなし表面点群へ切り替えました。':'点群ソースを合成深度点群へ切り替えました。';}v323SyncPointCloudDatasetSaveUi();window.__topoFoundationPoseRosApi?.sync?.();});
@@ -7747,63 +7715,6 @@ function setupFixedHeaderV276(){
 setupFixedHeaderV276();
 window.addEventListener('beforeunload',()=>{try{v315SaveFixedBaseState();}catch(e){}});
 
-/* v291: Viewer one-shot exact fuzzy grasp pose + 7DOF IK */
-function v290SevenDofFromState(){
-  const s = state.ikSolution || {};
-  const b = state.best || {};
-  const joints = s.joints || s.q || s.angles || s.solution || [];
-  const arr = Array.isArray(joints) ? joints.slice(0,6) : [];
-  while(arr.length<6) arr.push(0);
-  const opening = (b.apertureCheck&&b.apertureCheck.opening) || b.requiredWidth || (+($('handAperture')?.value||0));
-  return {
-    joint_1_base_yaw_rad:+arr[0].toFixed(4),
-    joint_2_shoulder_rad:+arr[1].toFixed(4),
-    joint_3_elbow_rad:+arr[2].toFixed(4),
-    joint_4_wrist_pitch_rad:+arr[3].toFixed(4),
-    joint_5_wrist_yaw_rad:+arr[4].toFixed(4),
-    joint_6_wrist_roll_rad:+arr[5].toFixed(4),
-    joint_7_gripper_opening_m:+opening.toFixed(4)
-  };
-}
-function v290FormatSevenDof(){
-  const b=state.best||{};
-  const sol=state.ikSolution||{};
-  const q=v290SevenDofFromState();
-  const ok=!!state.best;
-  return [
-    ok?'DONE: fuzzy grasp + 7DOF IK':'No target yet',
-    `sample=${state.sample||'-'}`,
-    `grasp=${b.type||'-'} score=${b.score!=null?b.score.toFixed(1):'-'}`,
-    `target x=${b.x!=null?b.x.toFixed(3):'-'} y=${b.y!=null?b.y.toFixed(3):'-'} z=${b.z!=null?b.z.toFixed(3):'-'}`,
-    `yaw=${b.yaw!=null?b.yaw.toFixed(1):'-'} pitch=${b.pitch!=null?b.pitch.toFixed(1):'-'}`,
-    `IK=${sol.status||sol.message||sol.result||'solved/updated'}${sol.motionProgress!=null?' progress='+(sol.motionProgress*100).toFixed(0)+'%':''}`,
-    `q1=${q.joint_1_base_yaw_rad} q2=${q.joint_2_shoulder_rad} q3=${q.joint_3_elbow_rad}`,
-    `q4=${q.joint_4_wrist_pitch_rad} q5=${q.joint_5_wrist_yaw_rad} q6=${q.joint_6_wrist_roll_rad}`,
-    `gripper=${q.joint_7_gripper_opening_m} m`
-  ].join('\n');
-}
-
-function v293AutoHideViewerIkReadout(){
-  const el=$('viewerFuzzyIkReadout');
-  const panel=el&&el.closest('.viewer-fuzzy-ik-panel');
-  if(!panel)return;
-  clearTimeout(panel._v293HideTimer);
-  panel._v293HideTimer=setTimeout(()=>panel.classList.remove('show-readout'),6000);
-}
-
-function v290UpdateViewerIkHud(){
-  const el=$('viewerFuzzyIkReadout');
-  if(el){ el.textContent=v290FormatSevenDof(); el.closest('.viewer-fuzzy-ik-panel')?.classList.add('show-readout'); v293AutoHideViewerIkReadout(); }
-  const pj=$('poseJson');
-  if(pj && state.best){
-    try{
-      const obj=JSON.parse(pj.value||'{}');
-      obj.arm_7dof_final_pose=v290SevenDofFromState();
-      obj.viewer_button_pipeline='v291: generate -> GNG -> exact fuzzy grasp pose -> 7DOF IK -> final pose render';
-      pj.value=JSON.stringify(obj,null,2);
-    }catch(e){}
-  }
-}
 function viewerRobotTfResultText(label){
   const b=state.best||null;
   const sol=state.ikSolution||null;
@@ -7841,78 +7752,7 @@ function updateViewerRobotTfResult(label, error){
   }
   el.textContent=viewerRobotTfResultText(label);
 }
-function runViewerFuzzyGraspIk(){
-  const btn=$('viewerFuzzyIkBtn');
-  const robotBtn=$('viewerRobotTfFuzzyEstimateBtn');
-  const out=$('viewerFuzzyIkReadout');
-  try{
-    if(btn){btn.classList.add('running');btn.textContent='計算中';}
-    if(robotBtn){robotBtn.classList.add('running');robotBtn.textContent='計算中';}
-    if(out)out.textContent='Running pipeline...\n1) point cloud\n2) GNG\n3) fuzzy grasp\n4) 7DOF IK';
-    updateViewerRobotTfResult('ファジィ把持推定: 計算中');
-    if(!state.points || !state.points.length) generate();
-    if(!state.nodes || !state.nodes.length) runGng();
-    estimate();
-    if(state.best&&state.ikSolution&&!state.ikMotion?.active)v314StartIkMotionToCurrentSolution();
-    if(state.best){
-      if($('ikRenderMode')) $('ikRenderMode').value='ik';
-      state.graspRenderMode=state.ikSolution?'ik':'estimate';
-      if(typeof setUnifiedViewerMode==='function') setUnifiedViewerMode('grasp');
-      else state.viewerMode='grasp';
-      v290UpdateViewerIkHud();
-      updateViewerRobotTfResult('ファジィ把持推定');
-      renderAll();
-    }else{
-      if(out)out.textContent='衝突なし把持候補が見つかりませんでした。';
-      updateViewerRobotTfResult('ファジィ把持推定');
-    }
-  }catch(e){
-    if(out)out.textContent='ERROR: '+(e&&e.message?e.message:String(e));
-    updateViewerRobotTfResult('ファジィ把持推定',e);
-    console.error(e);
-  }finally{
-    if(btn){btn.classList.remove('running');btn.textContent='ファジィ把持実行';}
-    if(robotBtn){robotBtn.classList.remove('running');robotBtn.textContent='ファジィ把持推定';}
-  }
-}
-function installV290ViewerFuzzyIk(){
-  const btn=$('viewerFuzzyIkBtn');
-  if(btn && !btn.dataset.boundV290){
-    btn.dataset.boundV290='1';
-    btn.addEventListener('click',runViewerFuzzyGraspIk);
-  }
-  const panel=$('viewerFuzzyIkReadout')?.closest('.viewer-fuzzy-ik-panel'); if(panel)panel.classList.remove('show-readout');
-}
-function runViewerRobotTfGraspEstimate(){
-  const btn=$('viewerRobotTfEstimateBtn');
-  try{
-    if(btn){btn.classList.add('running');btn.textContent='計算中';}
-    updateViewerRobotTfResult('把持推定: 計算中');
-    estimate();
-    state.graspRenderMode='estimate';
-    if(typeof setUnifiedViewerMode==='function')setUnifiedViewerMode('grasp');
-    else if(typeof setViewerMode==='function')setViewerMode('grasp');
-    else state.viewerMode='grasp';
-    updateViewerRobotTfResult('把持推定');
-    renderAll();
-  }catch(e){
-    updateViewerRobotTfResult('把持推定',e);
-    console.error(e);
-  }finally{
-    if(btn){btn.classList.remove('running');btn.textContent='把持推定';}
-  }
-}
-function installViewerRobotTfEstimateButtons(){
-  const estimateBtn=$('viewerRobotTfEstimateBtn');
-  if(estimateBtn&&!estimateBtn.dataset.boundRobotTfEstimate){
-    estimateBtn.dataset.boundRobotTfEstimate='1';
-    estimateBtn.addEventListener('click',runViewerRobotTfGraspEstimate);
-  }
-  const fuzzyBtn=$('viewerRobotTfFuzzyEstimateBtn');
-  if(fuzzyBtn&&!fuzzyBtn.dataset.boundRobotTfFuzzy){
-    fuzzyBtn.dataset.boundRobotTfFuzzy='1';
-    fuzzyBtn.addEventListener('click',runViewerFuzzyGraspIk);
-  }
+function install_robot_tf_trajectory_buttons(){
   const dummyTrajBtn=$('viewerRobotTfDummyTrajBtn');
   if(dummyTrajBtn&&!dummyTrajBtn.dataset.boundRobotTfDummyTraj){
     dummyTrajBtn.dataset.boundRobotTfDummyTraj='1';
@@ -7936,7 +7776,7 @@ document.addEventListener('click',(e)=>{
   });
 });
 
-loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();setDefaultGngParameters();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();installV290ViewerFuzzyIk();installViewerRobotTfEstimateButtons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
+loadEmbeddedRules();renderGngAlgorithmButtons();setupViewerTabs();setupUnifiedViewerMode();bindView('viewTopo');bindView('viewGrasp');bindFuzzyEditor();installRuleConfirmMfTapDelegation();bindTopoSemanticEditor();syncRobotControls();loadTopoArmStlMeshes();setDefaultGngParameters();v300SetFixedLowNoiseInitials();syncFixedBaseControls();v314SyncIkMotionControls();v303SetReplayMicroVibrationDefaults();generate();void runGngWasmFull().then(()=>estimate());updateObjectIdentifier();install_robot_tf_trajectory_buttons();showTask('grasp');setPointPlaying(true);setGngPlaying(false);v312SetGngLoadStatus('JSONが読み込まれていません。');requestAnimationFrame(loop);
 })();
 </script>
 
