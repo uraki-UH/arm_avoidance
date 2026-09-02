@@ -337,9 +337,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
 .fuzzy-condition-block.selected .fuzzy-inline-mf-editor{width:100%;min-width:0;max-width:100%;box-sizing:border-box;overflow:hidden;border-radius:14px;background:rgba(2,6,23,.78)}
 .fuzzy-confirm-mf-svg{display:block;width:min(260px,100%);min-width:0;flex:1 1 100%;height:82px;overflow:hidden;border-radius:8px;margin-top:5px;background:rgba(2,6,23,.58);border:1px solid rgba(148,163,184,.22);pointer-events:none}
 .fuzzy-inline-mf-editor{flex:1 1 100%;width:100%;min-width:min(560px,100%);margin-top:8px;border:1px solid rgba(0,255,0,.34);border-radius:14px;background:rgba(2,6,23,.68);padding:10px;cursor:default}
-.fuzzy-inline-mf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;margin-bottom:8px}
-.fuzzy-inline-mf-title{color:#00ff00;font-size:13px;font-weight:950;line-height:1.25}
-.fuzzy-inline-mf-meta{font-family:Consolas,Menlo,monospace;color:#bfdbfe;font-size:10px;white-space:pre-wrap;line-height:1.35;text-align:right}
 .fuzzy-inline-mf-grid{display:block}
 .fuzzy-inline-mf-controls{display:grid;gap:8px}
 .fuzzy-inline-mf-shape-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:8px;align-items:center}
@@ -491,8 +488,6 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
   .canvaswrap.robot-open .viewer-robot-tf-panel{top:48px;left:8px;right:8px;max-width:none}
   .fuzzy-if-chip .fuzzy-confirm-mf-svg{width:100%!important;height:100px!important}
   .fuzzy-inline-mf-editor{min-width:0}
-  .fuzzy-inline-mf-head,.fuzzy-inline-mf-grid{grid-template-columns:1fr}
-  .fuzzy-inline-mf-meta{text-align:left}
   .fuzzy-inline-mf-param-row,.fuzzy-inline-mf-shape-row{grid-template-columns:1fr}
   .mini-grid{grid-template-columns:1fr}
 }
@@ -7439,8 +7434,7 @@ function inlineRuleMfEditorHtml(s){
   const labels=mfParamLabels(s.mf.shape),params=s.mf.params||[];
   const rows=[0,1,2,3].map(i=>`<div class="fuzzy-inline-mf-param-row"><label>${htmlEscape(labels[i])}</label><input type="range" min="0" max="1" step="0.001" value="${(+params[i]||0).toFixed(3)}" data-inline-mf-param="${i}"><input type="number" min="0" max="1" step="0.001" value="${(+params[i]||0).toFixed(3)}" data-inline-mf-param-num="${i}"></div>`).join('');
   return `<div class="fuzzy-inline-mf-editor" data-inline-editor="1" data-rule-index="${s.ruleIndex}" data-cond-index="${s.condIndex}">
-    <div class="fuzzy-inline-mf-head"><div><div class="fuzzy-inline-mf-title">Inline MF Editor / その場で条件部を編集</div><div class="fuzzy-small">この図を見ながら、レバー操作と数値入力でリアルタイム変更します。</div></div><div class="fuzzy-inline-mf-meta">rule=${htmlEscape(s.rule.id)}\nfeature=${htmlEscape(s.feature)}\nlabel=${htmlEscape(s.label)}</div></div>
-    <div class="fuzzy-inline-mf-grid"><div class="fuzzy-inline-mf-controls"><div class="fuzzy-inline-mf-shape-row"><label>MF shape</label><select data-inline-mf-shape><option value="triangular">triangular</option><option value="gaussian">Gaussian</option><option value="trapezoid">trapezoid</option><option value="rbf">RBF</option></select></div>${rows}<div class="fuzzy-small">入力は即時に Rules Confirmation / JSON / 推論スコア / Viewer へ反映します。</div></div></div>
+    <div class="fuzzy-inline-mf-grid"><div class="fuzzy-inline-mf-controls"><div class="fuzzy-inline-mf-shape-row"><label>MF shape</label><select data-inline-mf-shape><option value="triangular">triangular</option><option value="gaussian">Gaussian</option><option value="trapezoid">trapezoid</option><option value="rbf">RBF</option></select></div>${rows}</div></div>
   </div>`;
 }
 function renderRuleConfirm(){
