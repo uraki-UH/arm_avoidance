@@ -1030,8 +1030,10 @@ launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結�
 
 `object_template_matching.launch.py`は、`object_template_matching_sources.yaml`で選択した
 データセット群を1つの`object_template_matcher_node`へ読込む。
-matcherは起動時にtemplate GNGの局所特徴から逆引き索引を構築し、入力ごとに固定数の索引候補から
-1templateだけを全yaw探索で精密照合する。template数に比例するのは起動時の読込・索引構築だけとする。
+matcherは起動時にtemplate GNGの局所特徴から逆引き索引を構築し、入力ごとに固定数の索引候補の
+各templateを全yaw探索で精密照合する。候補はscore順に`template_rank`を付け、同一の環境地図に対する
+最上位だけを`is_template_winner=true`とする。下位候補も診断topicへ配信するが、検証器は確定させない。
+template数に比例するのは起動時の読込・索引構築だけとする。
 `object_template_match_validator_node`と`object_template_map_publisher_node`はtemplateごとに起動する。
 `dataset_files`は個別指定、`dataset_dirs`は再帰読込、`exclude_dirs`と
 `exclude_template_ids`は除外指定とする。
@@ -1084,10 +1086,21 @@ yawの有効・無効や最小・最大角度は設定しない。roll/pitchは
 `plane_relative_height_score`として平面根拠へ加える。平面が1つだけ、または重心が欠ける場合は
 相対高さを未観測として扱い、候補の不一致にはしない。
 
-検証器は`recognition_threshold`、`min_visible_ratio`、`confirmation_time_sec`だけで
-`pending`と`confirmed`を判定する。scaleと反証はmatcherの`is_falsified`へ集約し、
-edge、平面、欠損率をvalidatorで重ねて判定しない。確定後は認識しきい値から0.15を引いた
-固定ヒステリシスを使い、境界値での配信点滅を抑制する。状態と候補詳細は次のtopicへ
+非平面成分は次数や平均edge密度を比較しない。対応済み平面に接続する非平面成分と、その1-hopの
+平面nodeを接続patchとして扱い、内部edgeと平面への接続edgeを比較する。各観測edgeは、yaw回転後の
+方向、接続patch内の正規化長、対応平面法線との角度、両端の対応平面からの距離でテンプレートedge群へ
+ファジーに対応付ける。環境側の硬い平面所属はedge種別の一致条件にせず、非平面成分へ混入した
+平面の一部もテンプレート側の平面接続edgeと対応可能にする。テンプレートにあるが観測されないedgeは
+遮蔽として中立に扱い、観測edge群を説明できる割合だけを`nonplane_edge_fit_score`とする。
+対応平面の重心差から得る平行移動は、非平面nodeとedge中点の位置根拠へファジーに使う。平面重心は
+遮蔽で移動し得るため、位置関係をハードな一致条件にはしない。
+
+検証器は`recognition_threshold`、`min_visible_ratio`、edge根拠、平面根拠、欠損率、反証量を重ねて
+`pending`と`confirmed`を判定する。平面アンカー付き非平面根拠が十分な場合は、遮蔽で弱くなった
+通常のedge一致率および平面支持度の代替根拠として扱う。scaleと反証はmatcherの`is_falsified`へ集約する。
+複数templateを同時照合する場合は、`is_template_winner=true`かつ`template_score_margin`が
+`min_template_score_margin`を満たす候補だけを確定可能とし、近接した誤候補は`pending`に留める。
+確定後は認識しきい値から0.15を引いた固定ヒステリシスを使い、境界値での配信点滅を抑制する。状態と候補詳細は次のtopicへ
 `std_msgs/msg/String`のJSONとして配信する。
 
 | topic | 内容 |

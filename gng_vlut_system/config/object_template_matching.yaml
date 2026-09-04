@@ -21,11 +21,8 @@ object_template_matcher_node:
     max_scale_allow_ratio: 1.30
     scale_weight: 0.20
     min_scale_edge_num: 3
-    max_degree_dev_full: 0.0
-    max_degree_dev_partial: 2.0
     normal_weight: 0.55
     rho_weight: 0.20
-    degree_weight: 0.25
     edge_weight: 0.35
     min_node_score: 0.55
     enable_contradiction_evaluation: true
@@ -57,6 +54,7 @@ object_template_match_validator_node:
   ros__parameters:
     min_visible_ratio: 0.15
     recognition_threshold: 0.55
+    min_template_score_margin: 0.10
     confirmation_time_sec: 0.5
     activate_score_th: 0.65
     deactivate_score_th: 0.40

@@ -38,6 +38,7 @@ public:
     state_topic_ = declare_parameter<std::string>("state_topic", "");
     min_visible_ratio_ = declare_parameter<double>("min_visible_ratio", 0.20);
     recognition_threshold_ = declare_parameter<double>("recognition_threshold", 0.55);
+    min_template_score_margin_ = declare_parameter<double>("min_template_score_margin", 0.10);
     confirmation_time_sec_ = declare_parameter<double>("confirmation_time_sec", 0.5);
     activate_score_th_ = declare_parameter<double>("activate_score_th", 0.65);
     deactivate_score_th_ = declare_parameter<double>("deactivate_score_th", 0.40);
@@ -104,6 +105,9 @@ private:
         const std::string &name = parameter.get_name();
         if (name == "min_visible_ratio") stage(min_visible_ratio_, parameter.as_double());
         else if (name == "recognition_threshold") stage(recognition_threshold_, parameter.as_double());
+        else if (name == "min_template_score_margin") {
+          stage(min_template_score_margin_, parameter.as_double());
+        }
         else if (name == "confirmation_time_sec") stage(confirmation_time_sec_, parameter.as_double());
         else if (name == "activate_score_th") stage(activate_score_th_, parameter.as_double());
         else if (name == "deactivate_score_th") stage(deactivate_score_th_, parameter.as_double());
@@ -150,8 +154,10 @@ private:
   {
     if (template_id_.empty() || min_confirmed_frame_num_ <= 0 || state_publish_hz_ <= 0.0 ||
       !isFinite(min_visible_ratio_) || !isFinite(recognition_threshold_) ||
+      !isFinite(min_template_score_margin_) ||
       !isFinite(confirmation_time_sec_) || min_visible_ratio_ < 0.0 || min_visible_ratio_ > 1.0 ||
       recognition_threshold_ < 0.0 || recognition_threshold_ > 1.0 || confirmation_time_sec_ < 0.0 ||
+      min_template_score_margin_ < 0.0 || min_template_score_margin_ > 1.0 ||
       min_confirm_duration_sec_ < 0.0 || max_lost_duration_sec_ < 0.0 ||
       !isFinite(activate_score_th_) || !isFinite(deactivate_score_th_) ||
       !isFinite(min_matched_node_ratio_) || !isFinite(min_matched_edge_ratio_) ||
@@ -172,23 +178,33 @@ private:
     }
   }
 
-  bool isBaseActivationCandidate(const json &candidate) const
-  {
-    return !candidate.value("is_falsified", false) &&
-      candidate.value("score", 0.0) >= std::max(recognition_threshold_, activate_score_th_) &&
-      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_ &&
-      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
-      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
-      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_ &&
-      (!enable_plane_cluster_evidence_ ||
-      !candidate.value("is_plane_cluster_observed", false) ||
-      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_);
-  }
-
   bool hasCurrentNonplaneEvidence(const json &candidate) const
   {
     return candidate.value("is_nonplane_component_observed", false) &&
       candidate.value("nonplane_evidence_score", 0.0) >= min_nonplane_evidence_score_th_;
+  }
+
+  bool isBaseActivationCandidate(const json &candidate) const
+  {
+    const bool has_nonplane_evidence = enable_nonplane_component_evaluation_ &&
+      hasCurrentNonplaneEvidence(candidate);
+    const bool has_edge_evidence = candidate.value("matched_edge_ratio", 0.0) >=
+      min_matched_edge_ratio_ || has_nonplane_evidence;
+    const bool has_plane_evidence = !enable_plane_cluster_evidence_ ||
+      !candidate.value("is_plane_cluster_observed", false) ||
+      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_ ||
+      has_nonplane_evidence;
+    const bool has_template_margin = !candidate.contains("template_score_margin") ||
+      candidate.value("template_score_margin", 0.0) >= min_template_score_margin_;
+    return !candidate.value("is_falsified", false) &&
+      candidate.value("is_template_winner", true) &&
+      has_template_margin &&
+      candidate.value("score", 0.0) >= std::max(recognition_threshold_, activate_score_th_) &&
+      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_ &&
+      has_edge_evidence &&
+      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
+      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_ &&
+      has_plane_evidence;
   }
 
   bool requiresNonplaneEvidence(const json &candidate) const
@@ -206,10 +222,17 @@ private:
 
   bool isContinuationCandidate(const json &candidate) const
   {
+    const bool has_nonplane_evidence = enable_nonplane_component_evaluation_ &&
+      hasCurrentNonplaneEvidence(candidate);
+    const bool has_template_margin = !candidate.contains("template_score_margin") ||
+      candidate.value("template_score_margin", 0.0) >= min_template_score_margin_;
     return !candidate.value("is_falsified", false) &&
+      candidate.value("is_template_winner", true) &&
+      has_template_margin &&
       candidate.value("score", 0.0) >= deactivate_score_th_ &&
       candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_ &&
-      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
+      (candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ ||
+      has_nonplane_evidence) &&
       candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
       candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
   }
@@ -320,6 +343,7 @@ private:
   std::string state_topic_;
   double min_visible_ratio_ = 0.20;
   double recognition_threshold_ = 0.55;
+  double min_template_score_margin_ = 0.10;
   double confirmation_time_sec_ = 0.5;
   double activate_score_th_ = 0.0;
   double deactivate_score_th_ = 0.0;

@@ -42,7 +42,6 @@ constexpr std::size_t kMaxRetrievalNodeNum = 128U;
 constexpr std::size_t kMaxPendingSynchronizedFrameNum = 64U;
 constexpr int kNormalZBinNum = 12;
 constexpr int kRhoBinNum = 10;
-constexpr int kDegreeBinNum = 8;
 constexpr int kNeighborNormalBinNum = 10;
 constexpr double kPlaneScaleProbeRatio = 1.5;
 
@@ -59,7 +58,6 @@ struct TemplateNode
   Vec3 position;
   Vec3 normal;
   double rho = 0.0;
-  std::size_t degree = 0;
 };
 
 struct TemplatePlaneCluster
@@ -111,7 +109,6 @@ struct RetrievalDescriptor
 {
   int normal_z_bin = 0;
   int rho_bin = 0;
-  int degree_bin = 0;
   int neighbor_normal_bin = 0;
 };
 
@@ -175,7 +172,28 @@ struct NonplaneEvaluation
   bool is_observed = false;
   std::size_t environment_component_num = 0U;
   double evidence_score = 0.0;
+  double edge_fit_score = 0.0;
   json correspondences = json::array();
+};
+
+struct NonplaneEdgeFeature
+{
+  Vec3 direction;
+  Vec3 midpoint;
+  double length = 0.0;
+  double normalized_length = 0.0;
+  double normal_alignment = 0.0;
+  double first_plane_dist = 0.0;
+  double second_plane_dist = 0.0;
+  double plane_scale = 0.0;
+  bool has_plane_distances = false;
+};
+
+struct NonplaneEdgeFit
+{
+  double score = 0.0;
+  std::size_t edge_num = 0U;
+  std::size_t explained_edge_num = 0U;
 };
 
 bool isFinite(double value)
@@ -229,23 +247,20 @@ int quantizeRho(const double rho)
 
 std::uint64_t makeRetrievalKey(
   const std::uint8_t type, const int normal_z_bin, const int rho_bin,
-  const int degree_bin, const int neighbor_normal_bin)
+  const int neighbor_normal_bin)
 {
-  return (static_cast<std::uint64_t>(type) << 32U) |
-    (static_cast<std::uint64_t>(normal_z_bin) << 24U) |
-    (static_cast<std::uint64_t>(rho_bin) << 16U) |
-    (static_cast<std::uint64_t>(degree_bin) << 8U) |
+  return (static_cast<std::uint64_t>(type) << 24U) |
+    (static_cast<std::uint64_t>(normal_z_bin) << 16U) |
+    (static_cast<std::uint64_t>(rho_bin) << 8U) |
     static_cast<std::uint64_t>(neighbor_normal_bin);
 }
 
 RetrievalDescriptor makeRetrievalDescriptor(
-  const Vec3 &normal, const double rho, const std::size_t degree,
-  const double neighbor_normal_alignment)
+  const Vec3 &normal, const double rho, const double neighbor_normal_alignment)
 {
   return {
     quantizeUnit(std::abs(normalize(normal).z), kNormalZBinNum),
     quantizeRho(rho),
-    std::min(static_cast<int>(degree), kDegreeBinNum - 1),
     quantizeUnit(neighbor_normal_alignment, kNeighborNormalBinNum)};
 }
 
@@ -254,10 +269,9 @@ std::array<std::uint64_t, 2U> makeTemplateRetrievalKeys(
 {
   return {
     makeRetrievalKey(
-      0U, descriptor.normal_z_bin, descriptor.rho_bin, descriptor.degree_bin, 0),
+      0U, descriptor.normal_z_bin, descriptor.rho_bin, 0),
     makeRetrievalKey(
-      1U, descriptor.normal_z_bin, 0, descriptor.degree_bin,
-      descriptor.neighbor_normal_bin)};
+      1U, descriptor.normal_z_bin, 0, descriptor.neighbor_normal_bin)};
 }
 
 std::vector<RetrievalProbe> makeEnvironmentRetrievalProbes(
@@ -269,33 +283,26 @@ std::vector<RetrievalProbe> makeEnvironmentRetrievalProbes(
     normal_z_bin <= std::min(kNormalZBinNum - 1, descriptor.normal_z_bin + 1);
     ++normal_z_bin)
   {
-    for (int degree_bin = std::max(0, descriptor.degree_bin - 1);
-      degree_bin <= std::min(kDegreeBinNum - 1, descriptor.degree_bin + 1);
-      ++degree_bin)
+    for (int rho_bin = std::max(0, descriptor.rho_bin - 1);
+      rho_bin <= std::min(kRhoBinNum - 1, descriptor.rho_bin + 1);
+      ++rho_bin)
     {
-      for (int rho_bin = std::max(0, descriptor.rho_bin - 1);
-        rho_bin <= std::min(kRhoBinNum - 1, descriptor.rho_bin + 1);
-        ++rho_bin)
-      {
-        const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
-          std::abs(rho_bin - descriptor.rho_bin) +
-          std::abs(degree_bin - descriptor.degree_bin);
-        probes.push_back({
-          makeRetrievalKey(0U, normal_z_bin, rho_bin, degree_bin, 0),
-          1.0 / (1.0 + static_cast<double>(bin_dev))});
-      }
-      for (int neighbor_normal_bin = std::max(0, descriptor.neighbor_normal_bin - 1);
-        neighbor_normal_bin <= std::min(
-          kNeighborNormalBinNum - 1, descriptor.neighbor_normal_bin + 1);
-        ++neighbor_normal_bin)
-      {
-        const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
-          std::abs(degree_bin - descriptor.degree_bin) +
-          std::abs(neighbor_normal_bin - descriptor.neighbor_normal_bin);
-        probes.push_back({
-          makeRetrievalKey(1U, normal_z_bin, 0, degree_bin, neighbor_normal_bin),
-          1.0 / (1.0 + static_cast<double>(bin_dev))});
-      }
+      const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
+        std::abs(rho_bin - descriptor.rho_bin);
+      probes.push_back({
+        makeRetrievalKey(0U, normal_z_bin, rho_bin, 0),
+        1.0 / (1.0 + static_cast<double>(bin_dev))});
+    }
+    for (int neighbor_normal_bin = std::max(0, descriptor.neighbor_normal_bin - 1);
+      neighbor_normal_bin <= std::min(
+        kNeighborNormalBinNum - 1, descriptor.neighbor_normal_bin + 1);
+      ++neighbor_normal_bin)
+    {
+      const int bin_dev = std::abs(normal_z_bin - descriptor.normal_z_bin) +
+        std::abs(neighbor_normal_bin - descriptor.neighbor_normal_bin);
+      probes.push_back({
+        makeRetrievalKey(1U, normal_z_bin, 0, neighbor_normal_bin),
+        1.0 / (1.0 + static_cast<double>(bin_dev))});
     }
   }
   std::sort(probes.begin(), probes.end(), [](const RetrievalProbe &first,
@@ -490,8 +497,7 @@ TemplateGraph loadTemplateGraph(const std::string &dataset_path)
       static_cast<std::uint16_t>(index),
       {node.value("x", 0.0), node.value("y", 0.0), node.value("z", 0.0)},
       normal,
-      node.value("rho", 0.0),
-      0U});
+      node.value("rho", 0.0)});
   }
   graph.neighbors.resize(graph.nodes.size());
 
@@ -512,8 +518,6 @@ TemplateGraph loadTemplateGraph(const std::string &dataset_path)
       graph.edges.emplace_back(first, second);
       graph.neighbors[first].push_back(second);
       graph.neighbors[second].push_back(first);
-      ++graph.nodes[first].degree;
-      ++graph.nodes[second].degree;
     }
   }
   if (graph_json.contains("plane_clusters") && graph_json.at("plane_clusters").is_array()) {
@@ -630,11 +634,8 @@ public:
     max_scale_allow_ratio_ = declare_parameter<double>("max_scale_allow_ratio", 1.30);
     scale_weight_ = declare_parameter<double>("scale_weight", 0.20);
     min_scale_edge_num_ = declare_parameter<int>("min_scale_edge_num", 3);
-    max_degree_dev_full_ = declare_parameter<double>("max_degree_dev_full", 0.0);
-    max_degree_dev_partial_ = declare_parameter<double>("max_degree_dev_partial", 2.0);
     normal_weight_ = declare_parameter<double>("normal_weight", 0.55);
     rho_weight_ = declare_parameter<double>("rho_weight", 0.20);
-    degree_weight_ = declare_parameter<double>("degree_weight", 0.25);
     edge_weight_ = declare_parameter<double>("edge_weight", 0.35);
     min_node_score_ = declare_parameter<double>("min_node_score", 0.55);
     enable_contradiction_evaluation_ = declare_parameter<bool>("enable_contradiction_evaluation", true);
@@ -808,8 +809,7 @@ private:
       for (std::size_t node_index = 0U; node_index < graph.nodes.size(); ++node_index) {
         const TemplateNode &node = graph.nodes[node_index];
         const RetrievalDescriptor descriptor = makeRetrievalDescriptor(
-          node.normal, node.rho, node.degree,
-          templateNeighborNormalAlignment(graph, node_index));
+          node.normal, node.rho, templateNeighborNormalAlignment(graph, node_index));
         const auto keys = makeTemplateRetrievalKeys(descriptor);
         unique_keys.insert(keys.begin(), keys.end());
       }
@@ -1118,7 +1118,6 @@ private:
       const auto &node = environment.nodes[environment_index];
       const RetrievalDescriptor descriptor = makeRetrievalDescriptor(
         {node.normal.x, node.normal.y, node.normal.z}, static_cast<double>(node.rho),
-        environment_neighbors[environment_index].size(),
         environmentNeighborNormalAlignment(environment, environment_neighbors, environment_index));
       for (const RetrievalProbe &probe : makeEnvironmentRetrievalProbes(descriptor)) {
         const auto lookup = template_retrieval_index_.find(probe.key);
@@ -1225,11 +1224,8 @@ private:
         } else if (name == "max_scale_allow_ratio") stage(max_scale_allow_ratio_, parameter.as_double());
         else if (name == "scale_weight") stage(scale_weight_, parameter.as_double());
         else if (name == "min_scale_edge_num") stage(min_scale_edge_num_, parameter.as_int());
-        else if (name == "max_degree_dev_full") stage(max_degree_dev_full_, parameter.as_double());
-        else if (name == "max_degree_dev_partial") stage(max_degree_dev_partial_, parameter.as_double());
         else if (name == "normal_weight") stage(normal_weight_, parameter.as_double());
         else if (name == "rho_weight") stage(rho_weight_, parameter.as_double());
-        else if (name == "degree_weight") stage(degree_weight_, parameter.as_double());
         else if (name == "edge_weight") stage(edge_weight_, parameter.as_double());
         else if (name == "min_node_score") stage(min_node_score_, parameter.as_double());
         else if (name == "enable_contradiction_evaluation") {
@@ -1313,7 +1309,7 @@ private:
       pitch_tolerance_deg_ < 0.0 || pitch_tolerance_deg_ > 90.0 ||
       max_orientation_hypothesis_num_ <= 0 || min_node_score_ < 0.0 || min_node_score_ > 1.0 ||
       edge_weight_ < 0.0 || edge_weight_ > 1.0 || normal_weight_ < 0.0 || rho_weight_ < 0.0 ||
-      degree_weight_ < 0.0 || contradiction_weight_ < 0.0 || contradiction_weight_ > 1.0 ||
+      contradiction_weight_ < 0.0 || contradiction_weight_ > 1.0 ||
       max_contradiction_point_ratio_ < 0.0 || max_contradiction_point_ratio_ > 1.0 ||
       min_scale_allow_ratio_ <= 0.0 || min_scale_allow_ratio_ >= min_scale_full_match_ratio_ ||
       min_scale_full_match_ratio_ > max_scale_full_match_ratio_ ||
@@ -1339,8 +1335,7 @@ private:
     if (max_normal_angle_full_deg_ < 0.0 ||
       max_normal_angle_full_deg_ >= max_normal_angle_partial_deg_ ||
       max_rho_dev_full_ratio_ < 0.0 ||
-      max_rho_dev_full_ratio_ >= max_rho_dev_partial_ratio_ ||
-      max_degree_dev_full_ < 0.0 || max_degree_dev_full_ >= max_degree_dev_partial_)
+      max_rho_dev_full_ratio_ >= max_rho_dev_partial_ratio_)
     {
       throw std::runtime_error("ファジー評価範囲が不正です。");
     }
@@ -1362,11 +1357,30 @@ private:
     const auto id_to_index = buildIdToIndex(*environment);
     const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
     const auto environment_neighbors = buildNeighbors(environment->nodes.size(), environment_edges);
+    std::vector<std::pair<std::size_t, json>> candidates;
     for (const std::size_t template_index :
       selectRefinementTemplateIndices(*environment, environment_neighbors, *plane_clusters))
     {
       activateTemplate(template_index);
-      evaluateActiveTemplate(environment, environment_edges);
+      candidates.emplace_back(template_index, evaluateActiveTemplate(environment, environment_edges));
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const std::pair<std::size_t, json> &first,
+      const std::pair<std::size_t, json> &second) {
+      return first.second.at("score").get<double>() > second.second.at("score").get<double>();
+    });
+    const double second_score = candidates.size() > 1U ?
+      candidates[1U].second.at("score").get<double>() : 0.0;
+    for (std::size_t rank = 0U; rank < candidates.size(); ++rank) {
+      const std::size_t template_index = candidates[rank].first;
+      json &candidate = candidates[rank].second;
+      candidate["template_rank"] = rank + 1U;
+      candidate["is_template_winner"] = rank == 0U;
+      candidate["template_score_margin"] = rank == 0U ?
+        candidate.at("score").get<double>() - second_score :
+        candidate.at("score").get<double>() - candidates.front().second.at("score").get<double>();
+      std_msgs::msg::String message;
+      message.data = candidate.dump();
+      loaded_templates_[template_index].candidate_publisher->publish(message);
     }
   }
 
@@ -1454,7 +1468,7 @@ private:
     limitPendingFrames(pending_environment_maps_);
   }
 
-  void evaluateActiveTemplate(
+  json evaluateActiveTemplate(
     const ais_gng_msgs::msg::TopologicalMap::SharedPtr &environment,
     const std::vector<std::pair<std::size_t, std::size_t>> &environment_edges)
   {
@@ -1475,7 +1489,13 @@ private:
       RCLCPP_ERROR_THROTTLE(
         get_logger(), *get_clock(), 5000,
         "姿勢仮説数が上限を超えました: %zu", yaw_samples.size() * roll_samples.size() * pitch_samples.size());
-      return;
+      return {
+        {"template_id", template_id_},
+        {"state", "no_hypothesis"},
+        {"score", 0.0},
+        {"is_falsified", true},
+        {"rejected_hypothesis_num", 0U},
+        {"rejection_reason", "orientation_hypothesis_limit"}};
     }
 
     std::vector<json> candidates;
@@ -1528,9 +1548,7 @@ private:
       best_candidate["ignored_plane_cluster_ids"] =
         best_rejected_candidate.value("ignored_plane_cluster_ids", json::array());
     }
-    std_msgs::msg::String message;
-    message.data = best_candidate.dump();
-    candidate_publisher_->publish(message);
+    return best_candidate;
   }
 
   static std::unordered_map<std::uint16_t, std::size_t> buildIdToIndex(
@@ -1872,6 +1890,408 @@ private:
         1.05, 1.0 + scale_tolerance_)};
   }
 
+  static bool hasIntersectingPlaneIndex(
+    const std::unordered_set<std::size_t> &first,
+    const std::unordered_set<std::size_t> &second)
+  {
+    for (const std::size_t index : first) {
+      if (second.count(index) > 0U) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static std::unordered_set<std::size_t> makeAttachmentPatchNodeIndices(
+    const NonplaneComponent &component,
+    const std::vector<std::vector<std::size_t>> &neighbors,
+    const std::vector<std::unordered_set<std::size_t>> &node_plane_indices,
+    const std::unordered_set<std::size_t> &anchor_plane_indices)
+  {
+    std::unordered_set<std::size_t> patch_node_indices(
+      component.node_indices.begin(), component.node_indices.end());
+    for (const std::size_t node_index : component.node_indices) {
+      for (const std::size_t neighbor_index : neighbors[node_index]) {
+        if (hasIntersectingPlaneIndex(node_plane_indices[neighbor_index], anchor_plane_indices)) {
+          patch_node_indices.insert(neighbor_index);
+        }
+      }
+    }
+    return patch_node_indices;
+  }
+
+  static std::vector<std::pair<std::size_t, std::size_t>> makeAttachmentPatchEdges(
+    const std::vector<std::pair<std::size_t, std::size_t>> &edges,
+    const NonplaneComponent &component,
+    const std::unordered_set<std::size_t> &patch_node_indices)
+  {
+    const std::unordered_set<std::size_t> component_node_indices(
+      component.node_indices.begin(), component.node_indices.end());
+    std::vector<std::pair<std::size_t, std::size_t>> patch_edges;
+    patch_edges.reserve(edges.size());
+    for (const auto &[first, second] : edges) {
+      if (patch_node_indices.count(first) == 0U || patch_node_indices.count(second) == 0U ||
+        (component_node_indices.count(first) == 0U && component_node_indices.count(second) == 0U))
+      {
+        continue;
+      }
+      patch_edges.emplace_back(first, second);
+    }
+    return patch_edges;
+  }
+
+  static void normalizeNonplaneEdgeLengths(std::vector<NonplaneEdgeFeature> &features)
+  {
+    if (features.empty()) {
+      return;
+    }
+    std::vector<double> lengths;
+    lengths.reserve(features.size());
+    for (const NonplaneEdgeFeature &feature : features) {
+      lengths.push_back(feature.length);
+    }
+    std::sort(lengths.begin(), lengths.end());
+    const std::size_t middle = lengths.size() / 2U;
+    const double median_length = lengths.size() % 2U == 0U ?
+      (lengths[middle - 1U] + lengths[middle]) * 0.5 : lengths[middle];
+    const double scale = std::max(median_length, 1e-6);
+    for (NonplaneEdgeFeature &feature : features) {
+      feature.normalized_length = feature.length / scale;
+    }
+  }
+
+  std::pair<double, bool> templateAnchorPlaneDistance(
+    const Vec3 &position, const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double min_distance = std::numeric_limits<double>::infinity();
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      const TemplatePlaneCluster &plane = template_graph_.plane_clusters[plane_index];
+      if (!plane.has_centroid) {
+        continue;
+      }
+      const Vec3 difference{
+        position.x - plane.centroid.x,
+        position.y - plane.centroid.y,
+        position.z - plane.centroid.z};
+      min_distance = std::min(min_distance, std::abs(dot(difference, plane.normal)));
+    }
+    return {min_distance, std::isfinite(min_distance)};
+  }
+
+  std::pair<double, bool> environmentAnchorPlaneDistance(
+    const geometry_msgs::msg::Point32 &position,
+    const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double min_distance = std::numeric_limits<double>::infinity();
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      const auto &plane = latest_plane_clusters_->clusters[plane_index];
+      const Vec3 centroid{
+        static_cast<double>(plane.centroid.x), static_cast<double>(plane.centroid.y),
+        static_cast<double>(plane.centroid.z)};
+      if (!isFinite(centroid.x) || !isFinite(centroid.y) || !isFinite(centroid.z)) {
+        continue;
+      }
+      const Vec3 normal = normalize({
+        static_cast<double>(plane.normal.x), static_cast<double>(plane.normal.y),
+        static_cast<double>(plane.normal.z)});
+      const Vec3 difference{
+        static_cast<double>(position.x) - centroid.x,
+        static_cast<double>(position.y) - centroid.y,
+        static_cast<double>(position.z) - centroid.z};
+      min_distance = std::min(min_distance, std::abs(dot(difference, normal)));
+    }
+    return {min_distance, std::isfinite(min_distance)};
+  }
+
+  double templateAnchorPlaneScale(
+    const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double scale = 0.0;
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      scale = std::max(scale, template_graph_.plane_clusters[plane_index].max_extent);
+    }
+    return std::max(scale, 0.03);
+  }
+
+  double environmentAnchorPlaneScale(
+    const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double scale = 0.0;
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      const auto &plane = latest_plane_clusters_->clusters[plane_index];
+      scale = std::max(
+        scale,
+        std::max(std::abs(static_cast<double>(plane.extent_u)),
+          std::abs(static_cast<double>(plane.extent_v))));
+    }
+    return std::max(scale, 0.03);
+  }
+
+  double templateEdgePlaneNormalAlignment(
+    const Vec3 &direction, const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double alignment = 0.0;
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      alignment = std::max(
+        alignment, std::abs(dot(direction, template_graph_.plane_clusters[plane_index].normal)));
+    }
+    return alignment;
+  }
+
+  double environmentEdgePlaneNormalAlignment(
+    const Vec3 &direction, const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    double alignment = 0.0;
+    for (const std::size_t plane_index : anchor_plane_indices) {
+      const auto &plane = latest_plane_clusters_->clusters[plane_index];
+      const Vec3 normal = normalize({
+        static_cast<double>(plane.normal.x), static_cast<double>(plane.normal.y),
+        static_cast<double>(plane.normal.z)});
+      alignment = std::max(alignment, std::abs(dot(direction, normal)));
+    }
+    return alignment;
+  }
+
+  std::vector<NonplaneEdgeFeature> makeTemplateNonplaneEdgeFeatures(
+    const std::vector<std::pair<std::size_t, std::size_t>> &edges,
+    const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    std::vector<NonplaneEdgeFeature> features;
+    features.reserve(edges.size());
+    for (const auto &[first, second] : edges) {
+      const Vec3 &first_position = template_graph_.nodes[first].position;
+      const Vec3 &second_position = template_graph_.nodes[second].position;
+      const Vec3 difference{
+        second_position.x - first_position.x,
+        second_position.y - first_position.y,
+        second_position.z - first_position.z};
+      const double length = std::sqrt(
+        difference.x * difference.x + difference.y * difference.y + difference.z * difference.z);
+      if (length <= 1e-6) {
+        continue;
+      }
+      const auto [first_plane_distance, has_first_plane_distance] =
+        templateAnchorPlaneDistance(first_position, anchor_plane_indices);
+      const auto [second_plane_distance, has_second_plane_distance] =
+        templateAnchorPlaneDistance(second_position, anchor_plane_indices);
+      const Vec3 direction{difference.x / length, difference.y / length, difference.z / length};
+      features.push_back({
+        direction,
+        {(first_position.x + second_position.x) * 0.5,
+          (first_position.y + second_position.y) * 0.5,
+          (first_position.z + second_position.z) * 0.5},
+        length,
+        0.0,
+        templateEdgePlaneNormalAlignment(direction, anchor_plane_indices),
+        std::min(first_plane_distance, second_plane_distance),
+        std::max(first_plane_distance, second_plane_distance),
+        templateAnchorPlaneScale(anchor_plane_indices),
+        has_first_plane_distance && has_second_plane_distance});
+    }
+    normalizeNonplaneEdgeLengths(features);
+    return features;
+  }
+
+  std::vector<NonplaneEdgeFeature> makeEnvironmentNonplaneEdgeFeatures(
+    const ais_gng_msgs::msg::TopologicalMap &environment,
+    const std::vector<std::pair<std::size_t, std::size_t>> &edges,
+    const std::unordered_set<std::size_t> &anchor_plane_indices) const
+  {
+    std::vector<NonplaneEdgeFeature> features;
+    features.reserve(edges.size());
+    for (const auto &[first, second] : edges) {
+      const auto &first_position = environment.nodes[first].pos;
+      const auto &second_position = environment.nodes[second].pos;
+      const Vec3 difference{
+        static_cast<double>(second_position.x) - static_cast<double>(first_position.x),
+        static_cast<double>(second_position.y) - static_cast<double>(first_position.y),
+        static_cast<double>(second_position.z) - static_cast<double>(first_position.z)};
+      const double length = std::sqrt(
+        difference.x * difference.x + difference.y * difference.y + difference.z * difference.z);
+      if (length <= 1e-6) {
+        continue;
+      }
+      const auto [first_plane_distance, has_first_plane_distance] =
+        environmentAnchorPlaneDistance(first_position, anchor_plane_indices);
+      const auto [second_plane_distance, has_second_plane_distance] =
+        environmentAnchorPlaneDistance(second_position, anchor_plane_indices);
+      const Vec3 direction{difference.x / length, difference.y / length, difference.z / length};
+      features.push_back({
+        direction,
+        {(static_cast<double>(first_position.x) + static_cast<double>(second_position.x)) * 0.5,
+          (static_cast<double>(first_position.y) + static_cast<double>(second_position.y)) * 0.5,
+          (static_cast<double>(first_position.z) + static_cast<double>(second_position.z)) * 0.5},
+        length,
+        0.0,
+        environmentEdgePlaneNormalAlignment(direction, anchor_plane_indices),
+        std::min(first_plane_distance, second_plane_distance),
+        std::max(first_plane_distance, second_plane_distance),
+        environmentAnchorPlaneScale(anchor_plane_indices),
+        has_first_plane_distance && has_second_plane_distance});
+    }
+    normalizeNonplaneEdgeLengths(features);
+    return features;
+  }
+
+  std::pair<Vec3, bool> estimateAttachmentTranslation(
+    const std::unordered_set<std::size_t> &template_anchor_plane_indices,
+    const PlaneEvaluation &plane_evaluation,
+    double roll_deg,
+    double pitch_deg,
+    double yaw_deg) const
+  {
+    Vec3 translation;
+    std::size_t correspondence_num = 0U;
+    for (const PlaneCorrespondence &correspondence : plane_evaluation.correspondences) {
+      if (template_anchor_plane_indices.count(correspondence.template_index) == 0U) {
+        continue;
+      }
+      const TemplatePlaneCluster &template_plane =
+        template_graph_.plane_clusters[correspondence.template_index];
+      const auto &environment_plane = latest_plane_clusters_->clusters[correspondence.environment_index];
+      if (!template_plane.has_centroid || !isFinite(environment_plane.centroid.x) ||
+        !isFinite(environment_plane.centroid.y) || !isFinite(environment_plane.centroid.z))
+      {
+        continue;
+      }
+      const Vec3 rotated_centroid = rotateRpyRaw(
+        template_plane.centroid, roll_deg, pitch_deg, yaw_deg + template_graph_.canonical_yaw_deg);
+      translation.x += static_cast<double>(environment_plane.centroid.x) - rotated_centroid.x;
+      translation.y += static_cast<double>(environment_plane.centroid.y) - rotated_centroid.y;
+      translation.z += static_cast<double>(environment_plane.centroid.z) - rotated_centroid.z;
+      ++correspondence_num;
+    }
+    if (correspondence_num == 0U) {
+      return {{}, false};
+    }
+    const double inverse_correspondence_num = 1.0 / static_cast<double>(correspondence_num);
+    translation.x *= inverse_correspondence_num;
+    translation.y *= inverse_correspondence_num;
+    translation.z *= inverse_correspondence_num;
+    return {translation, true};
+  }
+
+  double matchingPlaneScale(const PlaneEvaluation &plane_evaluation) const
+  {
+    double scale = 0.0;
+    for (const PlaneCorrespondence &correspondence : plane_evaluation.correspondences) {
+      const TemplatePlaneCluster &template_plane =
+        template_graph_.plane_clusters[correspondence.template_index];
+      const auto &environment_plane = latest_plane_clusters_->clusters[correspondence.environment_index];
+      scale = std::max(scale, template_plane.max_extent);
+      scale = std::max(
+        scale,
+        std::max(std::abs(static_cast<double>(environment_plane.extent_u)),
+          std::abs(static_cast<double>(environment_plane.extent_v))));
+    }
+    return std::max(scale, 0.03);
+  }
+
+  double nonplaneNodePositionScore(
+    const TemplateNode &template_node,
+    const ais_gng_msgs::msg::TopologicalNode &environment_node,
+    const Vec3 &translation,
+    double plane_scale,
+    double roll_deg,
+    double pitch_deg,
+    double yaw_deg) const
+  {
+    const Vec3 rotated_position = rotateRpyRaw(
+      template_node.position, roll_deg, pitch_deg, yaw_deg + template_graph_.canonical_yaw_deg);
+    const double dx = rotated_position.x + translation.x - static_cast<double>(environment_node.pos.x);
+    const double dy = rotated_position.y + translation.y - static_cast<double>(environment_node.pos.y);
+    const double dz = rotated_position.z + translation.z - static_cast<double>(environment_node.pos.z);
+    return descendingMembership(
+      std::sqrt(dx * dx + dy * dy + dz * dz) / plane_scale,
+      0.05 + 0.10 * shape_tolerance_, 0.22 + 0.35 * shape_tolerance_);
+  }
+
+  double nonplaneEdgeFeatureScore(
+    const NonplaneEdgeFeature &template_feature,
+    const NonplaneEdgeFeature &environment_feature,
+    const Vec3 &translation,
+    bool has_translation,
+    double roll_deg,
+    double pitch_deg,
+    double yaw_deg) const
+  {
+    const Vec3 rotated_direction = rotateRpy(
+      template_feature.direction, roll_deg, pitch_deg, yaw_deg + template_graph_.canonical_yaw_deg);
+    const double direction_score = descendingMembership(
+      1.0 - std::abs(dot(rotated_direction, environment_feature.direction)),
+      0.04 + 0.10 * shape_tolerance_, 0.25 + 0.50 * shape_tolerance_);
+    const double length_score = descendingMembership(
+      std::abs(std::log(std::max(template_feature.normalized_length, 1e-6) /
+        std::max(environment_feature.normalized_length, 1e-6))),
+      0.08 + 0.20 * shape_tolerance_, 0.35 + 0.70 * shape_tolerance_);
+    const double normal_alignment_score = descendingMembership(
+      std::abs(template_feature.normal_alignment - environment_feature.normal_alignment),
+      0.04 + 0.10 * shape_tolerance_, 0.25 + 0.50 * shape_tolerance_);
+    double score_sum = 0.25 * direction_score + 0.15 * length_score +
+      0.15 * normal_alignment_score;
+    double weight_sum = 0.55;
+    if (has_translation) {
+      const Vec3 rotated_midpoint = rotateRpyRaw(
+        template_feature.midpoint, roll_deg, pitch_deg, yaw_deg + template_graph_.canonical_yaw_deg);
+      const double midpoint_dx = rotated_midpoint.x + translation.x - environment_feature.midpoint.x;
+      const double midpoint_dy = rotated_midpoint.y + translation.y - environment_feature.midpoint.y;
+      const double midpoint_dz = rotated_midpoint.z + translation.z - environment_feature.midpoint.z;
+      const double position_score = descendingMembership(
+        std::sqrt(midpoint_dx * midpoint_dx + midpoint_dy * midpoint_dy + midpoint_dz * midpoint_dz) /
+          std::max(template_feature.plane_scale, environment_feature.plane_scale),
+        0.08 + 0.12 * shape_tolerance_, 0.35 + 0.50 * shape_tolerance_);
+      score_sum += 0.25 * position_score;
+      weight_sum += 0.25;
+    }
+    if (!template_feature.has_plane_distances || !environment_feature.has_plane_distances) {
+      return score_sum / weight_sum;
+    }
+    const double first_distance_score = descendingMembership(
+      std::abs(template_feature.first_plane_dist - environment_feature.first_plane_dist) /
+        std::max(template_feature.plane_scale, environment_feature.plane_scale),
+      0.10 + 0.20 * shape_tolerance_, 0.45 + 0.75 * shape_tolerance_);
+    const double second_distance_score = descendingMembership(
+      std::abs(template_feature.second_plane_dist - environment_feature.second_plane_dist) /
+        std::max(template_feature.plane_scale, environment_feature.plane_scale),
+      0.10 + 0.20 * shape_tolerance_, 0.45 + 0.75 * shape_tolerance_);
+    score_sum += 0.225 * first_distance_score + 0.225 * second_distance_score;
+    weight_sum += 0.45;
+    return score_sum / weight_sum;
+  }
+
+  NonplaneEdgeFit evaluateNonplaneEdgeFit(
+    const std::vector<NonplaneEdgeFeature> &template_features,
+    const std::vector<NonplaneEdgeFeature> &environment_features,
+    const Vec3 &translation,
+    bool has_translation,
+    double roll_deg,
+    double pitch_deg,
+    double yaw_deg) const
+  {
+    NonplaneEdgeFit result;
+    result.edge_num = environment_features.size();
+    if (template_features.empty() || environment_features.empty()) {
+      return result;
+    }
+    double score_sum = 0.0;
+    for (const NonplaneEdgeFeature &environment_feature : environment_features) {
+      double best_score = 0.0;
+      for (const NonplaneEdgeFeature &template_feature : template_features) {
+        best_score = std::max(
+          best_score,
+          nonplaneEdgeFeatureScore(
+            template_feature, environment_feature, translation, has_translation,
+            roll_deg, pitch_deg, yaw_deg));
+      }
+      score_sum += best_score;
+      if (best_score >= kMinShapePairScore) {
+        ++result.explained_edge_num;
+      }
+    }
+    result.score = score_sum / static_cast<double>(environment_features.size());
+    return result;
+  }
+
   NonplaneEvaluation evaluateNonplaneComponents(
     const ais_gng_msgs::msg::TopologicalMap &environment,
     const std::vector<std::pair<std::size_t, std::size_t>> &environment_edges,
@@ -1886,11 +2306,20 @@ private:
     {
       return result;
     }
-    std::vector<std::unordered_set<std::size_t>> node_plane_indices(environment.nodes.size());
+    std::vector<std::unordered_set<std::size_t>> template_node_plane_indices(
+      template_graph_.nodes.size());
+    for (std::size_t plane_index = 0U; plane_index < template_graph_.plane_clusters.size(); ++plane_index) {
+      for (const std::size_t node_index : template_graph_.plane_clusters[plane_index].node_indices) {
+        if (node_index < template_node_plane_indices.size()) {
+          template_node_plane_indices[node_index].insert(plane_index);
+        }
+      }
+    }
+    std::vector<std::unordered_set<std::size_t>> environment_node_plane_indices(environment.nodes.size());
     for (std::size_t plane_index = 0U; plane_index < latest_plane_clusters_->clusters.size(); ++plane_index) {
       for (const std::uint32_t node_index : latest_plane_clusters_->clusters[plane_index].node_indices) {
-        if (node_index < node_plane_indices.size()) {
-          node_plane_indices[node_index].insert(plane_index);
+        if (node_index < environment_node_plane_indices.size()) {
+          environment_node_plane_indices[node_index].insert(plane_index);
         }
       }
     }
@@ -1921,11 +2350,11 @@ private:
       }
       if (first_component != component_index_by_id.end()) {
         environment_components[first_component->second].anchor_plane_indices.insert(
-          node_plane_indices[second].begin(), node_plane_indices[second].end());
+          environment_node_plane_indices[second].begin(), environment_node_plane_indices[second].end());
       }
       if (second_component != component_index_by_id.end()) {
         environment_components[second_component->second].anchor_plane_indices.insert(
-          node_plane_indices[first].begin(), node_plane_indices[first].end());
+          environment_node_plane_indices[first].begin(), environment_node_plane_indices[first].end());
       }
     }
     environment_components.erase(
@@ -1936,6 +2365,7 @@ private:
         }),
       environment_components.end());
     result.environment_component_num = environment_components.size();
+    const auto environment_neighbors = buildNeighbors(environment.nodes.size(), environment_edges);
 
     double evidence_sum = 0.0;
     for (const NonplaneComponent &template_component : template_graph_.nonplane_components) {
@@ -1953,10 +2383,24 @@ private:
       if (expected_environment_plane_indices.empty()) {
         continue;
       }
+      const auto template_patch_node_indices = makeAttachmentPatchNodeIndices(
+        template_component, template_graph_.neighbors, template_node_plane_indices,
+        template_component.anchor_plane_indices);
+      const auto template_patch_edges = makeAttachmentPatchEdges(
+        template_graph_.edges, template_component, template_patch_node_indices);
+      const auto template_features = makeTemplateNonplaneEdgeFeatures(
+        template_patch_edges, template_component.anchor_plane_indices);
+      if (template_features.empty()) {
+        continue;
+      }
+      const auto [translation, has_translation] = estimateAttachmentTranslation(
+        template_component.anchor_plane_indices, plane_evaluation, roll_deg, pitch_deg, yaw_deg);
 
       const NonplaneComponent *best_environment_component = nullptr;
+      NonplaneEdgeFit best_edge_fit;
       double best_component_score = 0.0;
       std::size_t best_anchor_num = 0U;
+      std::size_t best_environment_patch_edge_num = 0U;
       for (const NonplaneComponent &environment_component : environment_components) {
         std::size_t matching_anchor_num = 0U;
         for (const std::size_t anchor_plane_index : environment_component.anchor_plane_indices) {
@@ -1967,38 +2411,37 @@ private:
         if (matching_anchor_num == 0U) {
           continue;
         }
-        double node_score_sum = 0.0;
-        for (const std::size_t environment_node_index : environment_component.node_indices) {
-          double best_node_score = 0.0;
-          for (const std::size_t template_node_index : template_component.node_indices) {
-            best_node_score = std::max(
-              best_node_score,
-              nodeScore(
-                template_graph_.nodes[template_node_index], environment.nodes[environment_node_index],
-                roll_deg, pitch_deg, yaw_deg));
-          }
-          node_score_sum += best_node_score;
+        const auto environment_patch_node_indices = makeAttachmentPatchNodeIndices(
+          environment_component, environment_neighbors,
+          environment_node_plane_indices, expected_environment_plane_indices);
+        const auto environment_patch_edges = makeAttachmentPatchEdges(
+          environment_edges, environment_component, environment_patch_node_indices);
+        const auto environment_features = makeEnvironmentNonplaneEdgeFeatures(
+          environment, environment_patch_edges, expected_environment_plane_indices);
+        const NonplaneEdgeFit edge_fit = evaluateNonplaneEdgeFit(
+          template_features, environment_features, translation, has_translation,
+          roll_deg, pitch_deg, yaw_deg);
+        if (edge_fit.edge_num == 0U) {
+          continue;
         }
-        const double node_score = node_score_sum /
-          static_cast<double>(environment_component.node_indices.size());
-        const double template_density = 2.0 * static_cast<double>(template_component.internal_edge_num) /
-          static_cast<double>(template_component.node_indices.size());
-        const double environment_density = 2.0 * static_cast<double>(environment_component.internal_edge_num) /
-          static_cast<double>(environment_component.node_indices.size());
-        const double graph_score = template_density <= 1e-9 || environment_density <= 1e-9 ? 0.0 :
-          std::min(template_density, environment_density) /
-          std::max(template_density, environment_density);
-        const double component_score = std::min(1.0, node_score + 0.10 * graph_score);
+        const double anchor_score = static_cast<double>(matching_anchor_num) /
+          static_cast<double>(expected_environment_plane_indices.size());
+        const double edge_evidence_score = edge_fit.score *
+          (1.0 - std::exp(-static_cast<double>(edge_fit.edge_num) / 3.0));
+        const double component_score = anchor_score * edge_evidence_score;
         if (component_score > best_component_score) {
           best_component_score = component_score;
           best_environment_component = &environment_component;
+          best_edge_fit = edge_fit;
           best_anchor_num = matching_anchor_num;
+          best_environment_patch_edge_num = environment_patch_edges.size();
         }
       }
       if (best_environment_component == nullptr) {
         continue;
       }
       evidence_sum += best_component_score;
+      result.edge_fit_score = std::max(result.edge_fit_score, best_edge_fit.score);
       json environment_plane_cluster_ids = json::array();
       for (const std::size_t plane_index : best_environment_component->anchor_plane_indices) {
         if (expected_environment_plane_indices.count(plane_index) > 0U) {
@@ -2008,12 +2451,16 @@ private:
       result.correspondences.push_back({
         {"template_component_id", template_component.id},
         {"template_node_num", template_component.node_indices.size()},
-        {"template_internal_edge_num", template_component.internal_edge_num},
+        {"template_patch_edge_num", template_patch_edges.size()},
         {"environment_component_id", best_environment_component->id},
         {"environment_node_num", best_environment_component->node_indices.size()},
-        {"environment_internal_edge_num", best_environment_component->internal_edge_num},
+        {"environment_patch_edge_num", best_environment_patch_edge_num},
         {"matching_anchor_num", best_anchor_num},
         {"environment_plane_cluster_ids", std::move(environment_plane_cluster_ids)},
+        {"edge_fit_score", best_edge_fit.score},
+        {"explained_edge_num", best_edge_fit.explained_edge_num},
+        {"observed_edge_num", best_edge_fit.edge_num},
+        {"unexplained_edge_ratio", 1.0 - best_edge_fit.score},
         {"score", best_component_score}});
     }
     result.is_observed = !result.correspondences.empty();
@@ -2035,6 +2482,14 @@ private:
     const auto environment_neighbors = buildNeighbors(environment.nodes.size(), filtered_environment_edges);
     const PlaneEvaluation plane_evaluation = evaluatePlaneClusters(
       environment, plane_filter, roll_deg, pitch_deg, yaw_deg);
+    std::unordered_set<std::size_t> matched_template_plane_indices;
+    matched_template_plane_indices.reserve(plane_evaluation.correspondences.size());
+    for (const PlaneCorrespondence &correspondence : plane_evaluation.correspondences) {
+      matched_template_plane_indices.insert(correspondence.template_index);
+    }
+    const auto [plane_translation, has_plane_translation] = estimateAttachmentTranslation(
+      matched_template_plane_indices, plane_evaluation, roll_deg, pitch_deg, yaw_deg);
+    const double matching_plane_scale = matchingPlaneScale(plane_evaluation);
     const NonplaneEvaluation nonplane_evaluation = evaluateNonplaneComponents(
       environment, filtered_environment_edges, plane_evaluation, roll_deg, pitch_deg, yaw_deg);
     std::vector<PairScore> pairs;
@@ -2060,9 +2515,15 @@ private:
         {
           continue;
         }
-        const double score = nodeScore(
+        double score = nodeScore(
           template_graph_.nodes[template_index], environment.nodes[environment_index],
           roll_deg, pitch_deg, yaw_deg);
+        if (expected_environment_plane < 0 && has_plane_translation) {
+          const double position_score = nonplaneNodePositionScore(
+            template_graph_.nodes[template_index], environment.nodes[environment_index],
+            plane_translation, matching_plane_scale, roll_deg, pitch_deg, yaw_deg);
+          score = 0.40 * score + 0.60 * position_score;
+        }
         if (score >= kMinShapePairScore) {
           pairs.push_back({environment_index, template_index, score});
         }
@@ -2241,6 +2702,7 @@ private:
       {"template_nonplane_component_num", template_graph_.nonplane_components.size()},
       {"environment_nonplane_component_num", nonplane_evaluation.environment_component_num},
       {"nonplane_evidence_score", nonplane_evaluation.evidence_score},
+      {"nonplane_edge_fit_score", nonplane_evaluation.edge_fit_score},
       {"has_nonplane_evidence", has_nonplane_evidence},
       {"nonplane_correspondences", std::move(nonplane_evaluation.correspondences)},
       {"is_scale_observed", scale_evaluation.is_observed},
@@ -2290,11 +2752,8 @@ private:
   double max_scale_allow_ratio_ = 0.0;
   double scale_weight_ = 0.0;
   int min_scale_edge_num_ = 0;
-  double max_degree_dev_full_ = 0.0;
-  double max_degree_dev_partial_ = 1.0;
   double normal_weight_ = 1.0;
   double rho_weight_ = 0.0;
-  double degree_weight_ = 0.0;
   double edge_weight_ = 0.0;
   double min_node_score_ = 0.0;
   bool enable_contradiction_evaluation_ = true;
