@@ -219,7 +219,9 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
   camera_to_map_yaw_deg_ = this->declare_parameter<double>(
     "camera_to_map.yaw_deg", -3.4);
   const int depth_visibility_cache_size = this->declare_parameter<int>(
-    "depth_visibility_cache_size", 16);
+    // Keep a short history so map/depth callback ordering does not drop a
+    // matching frame, without retaining a long queue of full depth images.
+    "depth_visibility_cache_size", 3);
   normal_drift_filter_enabled_ = this->declare_parameter<bool>(
     "normal_drift_filter_enabled", true);
   pointcloud_timeout_sec_ = this->declare_parameter<double>("pointcloud_timeout_sec", 0.5);

@@ -43,6 +43,10 @@ object_template_matcher_node:
     plane_weight: 0.65
     plane_support_score_scale: 1.80
     min_plane_support_score: 0.60
+    enable_plane_relative_height_evaluation: true
+    max_plane_relative_height_dev_full: 0.015
+    max_plane_relative_height_dev_partial: 0.060
+    plane_relative_height_weight: 0.25
     enable_nonplane_component_evaluation: true
     min_nonplane_component_nodes: 2
     nonplane_weight: 0.30

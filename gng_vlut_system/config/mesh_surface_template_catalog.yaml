@@ -1,0 +1,37 @@
+mesh_surface_templates:
+  - template_id: kei_car_surface
+    display_name: "軽自動車"
+    category: "kei_car"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [3.4, 1.5, 1.7]
+  - template_id: car_surface
+    display_name: "普通自動車"
+    category: "car"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [4.6, 1.8, 1.5]
+  - template_id: truck_surface
+    display_name: "トラック"
+    category: "truck"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [8.0, 2.4, 3.2]
+  - template_id: motorcycle_surface
+    display_name: "バイク"
+    category: "motorcycle"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [2.1, 0.8, 1.2]
+  - template_id: bicycle_surface
+    display_name: "自転車"
+    category: "bicycle"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [1.8, 0.6, 1.1]
+  - template_id: boat_surface
+    display_name: "船"
+    category: "boat"
+    mesh_path: ""
+    unit_scale: 1.0
+    expected_size_m: [6.0, 2.0, 2.0]

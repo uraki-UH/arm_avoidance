@@ -613,33 +613,38 @@ flowchart TD
 ### 13.1 目的とデータ所有
 
 姿勢GNGのノードをそのまま描くと、異なる関節姿勢が同じ手先位置付近に重なり、
-状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerにある
-`weight_coords[layer]`だけを3次元サンプルとして別のGNGを事前学習し、描画点数を減らす。
+状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerの手先位置と、
+関節速度上限で正規化した関節移動時間を使って別のGNGを事前学習し、描画点数を減らす。
 
 coord layerは選択したGNG profileのEEF順に分離して学習・配信し、左右腕の手先位置を
 同じlayerへ混在させない。現行`ToPoDualArm.yaml`は`gng.profile_names: left_arm`なので、
 現在の`ToPoDualArm10000`はcoord layer 1個で、layer 0は`L_tcp`に対応する。右腕または
 双腕を対象にする場合は対象profileを選択して元GNGを学習し、各layerの可視化binを生成する。
 
-可視化GNGは関節姿勢を新規生成しない。各可視化ノードの`source_node_ids`が
-元姿勢GNGのノードを参照し、`weight_angle`、可操作性、衝突状態などは元GNGだけが保持する。
-したがって、関節角配列を可視化binへ重複保存しない。
+可視化GNGは関節姿勢を新規生成しない。各可視化ノードは所属元ノードのうち複合特徴量で
+最も近い1個を代表元に選び、代表元の手先位置、法線、状態label、関節角をbinへ保存する。
+これにより、static用途では元姿勢GNGをロードせずにグラフを召喚できる。一方、全所属元IDと
+元angle edge由来の遷移列も保存するため、既存bridgeは元GNGとの照合、動的状態集約、軌道変換を継続できる。
 
 | データ | 所有元 | 用途 |
 |---|---|---|
-| `VisualizationGngNode::position` | 可視化GNG | 所属する元手先位置の重心 |
+| `VisualizationGngNode::position` | 可視化GNG | 代表元ノードの手先位置 |
+| `VisualizationGngNode::normal` | 可視化GNG | 所属元ノードの手先方向を正規化加算した法線 |
+| `VisualizationGngNode::label` | 可視化GNG | 学習時点のsafe / danger / colliding集約値 |
+| `VisualizationGngNode::representative_source_node_id` | 可視化GNG | 可視化ノードを代表する元姿勢GNGノードID |
+| `VisualizationGngNode::representative_joint_angle` | 可視化GNG | static用途で保持する代表元の関節角 |
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
 | `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
 | `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
 | 可視化GNGエッジ | 事前計算 | angle-space edgeのFK補間列を可視化ノード間へ写像した遷移可能性 |
-| `transition_paths` | 可視化GNG | 直接接続では表せない元angle edgeごとの順序付き可視化ノード列 |
+| `transition_paths` | 可視化GNG | 元angle edgeごとの順序付き可視化ノード列と関節移動時間 |
 
 ### 13.2 学習変数
 
 | 変数 | 既定値 | 意味 |
 |---|---:|---|
 | `target_nodes` | 500 | 可視化GNGの目標ノード数。元ノード数以下へ制限 |
-| `iterations` | 200000 | 3次元サンプルの学習反復数 |
+| `iterations` | 200000 | 状態・手先位置の複合特徴量に対する学習反復数 |
 | `insertion_interval` | 200 | 誤差最大ノード間へ新ノードを追加する間隔 |
 | `max_edge_age` | 200 | 使用されないエッジを削除する年齢上限 |
 | `winner_learning_rate` | 0.05 | 最近傍ノードの学習率 |
@@ -651,35 +656,50 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 | `source_signature` | 自動計算 | 元ノードID、座標、関節角、coord/angle edgeのFNV-1a照合値 |
 | `max_joint_step` | 0.05 rad | 元angle edgeをFK補間するときの1区間あたり最大関節差 |
 | `max_samples_per_edge` | 256 | 元angle edge 1本あたりの補間サンプル上限 |
+| `attachment_knn` | 6 | 補間軌跡への接続半径を決める空間近傍数 |
+| `attachment_radius_scale` | 1.0 | 局所KNN距離中央値に掛ける接続半径倍率 |
+| `min_attachment_radius` | 0.02 m | 補間軌跡への接続半径下限 |
+| `max_edge_neighbors` | 6 | FK軌跡候補から各可視化nodeに残す最短edge数 |
+| `joint_motion_weight` | 1.0 | 関節移動時間特徴量の重み |
+| `workspace_motion_sec_per_m` | 1.0 s/m | 手先位置距離を時間相当へ換算する係数 |
+| `workspace_sample_resolution` | 0.05 m | 空間セル均等サンプリングの解像度。0で元ノード均等サンプリング |
+| `default_joint_max_velocity` | 0.6 rad/s | URDF速度上限がない関節の移動時間換算値 |
 
-学習後は、全元ノードを`weight_coords[layer]`の3次元距離だけで最近傍可視化ノードへ
-割り当てる。未所属の可視化ノードは除去し、残った各可視化ノードの位置を所属する
-元ノードの`weight_coords[layer]`の重心へ置き直す。遠い元ノードを空ノードへ強制割当
-しない。各元ノードIDはちょうど1回だけ`source_node_ids`へ格納される。
+学習には、各関節をURDFの速度上限で割り、その最大値を使う関節移動時間特徴量と、
+`workspace_motion_sec_per_m`で時間相当へ換算した`weight_coords[layer]`を連結して使う。
+これにより、手先位置が近くても関節移動時間が大きい折畳み姿勢を別状態として残す。
+さらに`workspace_sample_resolution`の空間セルを均等に選ぶため、入力点数が多い手先領域だけへ
+可視化ノードが偏ることを抑制する。各元ノードIDはちょうど1回だけ`source_node_ids`へ格納し、
+可視化ノードの位置は複合特徴量で最も近い所属元ノードの実在する手先位置へ置く。重心位置は使わない。
 その後、元angle-space edgeの両端にある`weight_angle`を線形補間し、各補間姿勢を
-URDFのFKで`weight_coords[layer]`と同じ手先位置へ変換する。補間位置に最も近い
-可視化ノードを3次元位置だけで選び、連続する同一IDを除去する。両端は必ず
-`source_node_ids`の所属先とし、生成した順序付き列の隣接関係を静的可視化edgeに使う。
-直接の所属先2点だけで表せる元edgeは経路表へ保存せず、3点以上になるedgeだけを
-`transition_paths`へ保存する。
-3次元GNGが学習中に作るedgeはノード配置の学習にだけ使い、binへは保存しない。
+URDFのFKで手先位置へ変換する。補間位置は、各可視化ノードの空間KNN距離中央値から求めた
+接続半径内にある最近傍nodeだけへ対応付ける。軌跡から離れたnodeへ飛ぶedgeは作らない。
+始点・終点だけの直結はedge化せず、途中の可視化nodeを経由した遷移だけを出力する。
+さらに、FK軌跡で裏付けられた候補だけを各可視化nodeの最短`max_edge_neighbors`本へ制限する。
+各元angle edgeについて順序付き列と`max_i(|dq_i| / max_velocity_i)`の移動時間を保存する。両端が同じ可視化ノードへ
+対応するedgeも状態遷移として保存する。静的可視化edgeは、この保存済み遷移列の隣接関係で構成する。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
   --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm3/gng.bin \
   --target-nodes 500 --iterations 200000 --seed 42 \
+  --joint-motion-weight 1.0 \
+  --workspace-motion-sec-per-m 1.0 \
+  --workspace-sample-resolution 0.05 \
   --interpolation-joint-step 0.05 \
+  --edge-attachment-knn 6 \
+  --edge-attachment-radius-scale 1.0 \
+  --edge-min-attachment-radius 0.02 \
+  --edge-max-neighbors 6 \
   --ros-args \
   --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
 `--output-prefix`省略時は、入力binと同じディレクトリへ
-`vis_gng_L<layer>.bin`を生成する。ToPoDualArm3の現モデルは
-coord layerが1つで、941元ノードから475可視化ノード、2,904遷移エッジを生成する。
-ToPoDualArm10000の現行可視化モデルは10,801元ノードから150可視化ノード、
-735遷移エッジを生成する。従来の500可視化ノード、3,251遷移エッジ版は
-`vis_gng_500nodes_L0.bin`として同じ実験ディレクトリに保持する。
-いずれも1連結成分、孤立ノード0である。
+`vis_gng_L<layer>.bin`を生成する。既存のToPoDualArm3およびToPoDualArm10000の
+`VIZGNG2`および`VIZGNG3`は新方式では読み込まない。元GNGを変えずにこのコマンドを再実行して
+`VIZGNG5`へ置き換える。ノード数、エッジ数、遷移数は関節速度上限、空間被覆パラメータ、
+目標ノード数により変化する。
 
 941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
 別の実験IDと学習規模だけをlaunch引数で指定する。
@@ -699,33 +719,39 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 `gng_results/ToPoDualArm10000/`で、既存の`ToPoDualArm3/`は変更しない。
 現環境での生成結果は10,801有効元ノードである。
 
-### 13.3 bin形式 version 2
+### 13.3 bin形式 version 5
 
 固定長整数とfloatはnative binary表現で保存する。現在の対象環境は
-x86_64 little-endianであり、異なるendian間の互換性はversion 2では保証しない。
+x86_64 little-endianであり、異なるendian間の互換性はversion 5では保証しない。
 
 | 順序 | 型 | 内容 |
 |---:|---|---|
-| 1 | `char[8]` | magic `VIZGNG2\0` |
+| 1 | `char[8]` | magic `VIZGNG5\0` |
 | 2 | `uint32` | format version |
 | 3 | `uint32` | coord layer |
-| 4 | `uint64` | source signature |
-| 5 | `uint32` | node count |
-| 6 | `uint32` | edge count |
-| 7 | `uint32` | transition override count |
-| 8 | nodeごと `float32[3]` | 3次元位置 |
-| 9 | nodeごと `uint32` | 対応する元ノードID数 |
-| 10 | nodeごと `int32[]` | 元ノードID列 |
-| 11 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
-| 12 | overrideごと `int32[2]` | 昇順の元angle edge両端ID |
-| 13 | overrideごと `uint16` | 中間可視化ノード数 |
-| 14 | overrideごと `uint16[]` | 順序付き中間可視化ノードID |
+| 4 | `uint32` | 代表関節角の次元数 |
+| 5 | `uint64` | source signature |
+| 6 | `uint32` | node count |
+| 7 | `uint32` | edge count |
+| 8 | `uint32` | transition override count |
+| 9 | nodeごと `float32[3]` | 3次元位置 |
+| 10 | nodeごと `float32[3]` | 法線 |
+| 11 | nodeごと `uint8` | 保存時点の状態label |
+| 12 | nodeごと `float32[]` | 代表関節角 |
+| 13 | nodeごと `int32` | 代表元ノードID |
+| 14 | nodeごと `uint32` | 対応する元ノードID数 |
+| 15 | nodeごと `int32[]` | 元ノードID列 |
+| 16 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
+| 17 | transitionごと `int32[2]` | 昇順の元angle edge両端ID |
+| 18 | transitionごと `uint16` | 両端を含む順序付き可視化ノード数 |
+| 19 | transitionごと `float32` | 関節速度上限に基づく移動時間 [s] |
+| 20 | transitionごと `uint8` | 補間軌跡が可視化nodeへ接続できたか |
+| 21 | transitionごと `uint16[]` | 両端を含む順序付き可視化ノードID |
 
-読み込み時はmagic、version、配列上限、エッジindex、末尾余剰データを検証する。
-経路両端の可視化ノードIDは`source_node_ids`から復元できるため重複保存しない。
+読み込み時はmagic、version、配列上限、代表元ノードの所属、エッジindex、遷移両端、末尾余剰データを検証する。
 さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、関節角、
 coord-space edge、angle-space edgeと照合し、古い組み合わせは配信しない。
-signature schemaは4である。version 1との読み込み互換性は持たないため、元GNGごとに
+signature schemaは4である。version 1からversion 4との読み込み互換性は持たないため、元GNGごとに
 `visualization_gng_trainer`で再生成する。
 
 ### 13.4 ROSパラメータとトピック
@@ -786,21 +812,101 @@ bridgeは最新の実行軌道と候補軌道を保持する。起動直後に�
 状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
 safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
 
-### 13.5 フロー
+### 13.5 元GNG非依存のstatic召喚
+
+`visualization_gng_static_node`は`VIZGST1`の`vis_gng_static_L<layer>.bin`だけを読み込み、
+保存済みの位置、法線、label、代表関節角、エッジを`ais_gng_msgs/msg/TopologicalMap`として
+1回publishする。`VIZGST1`には元ノードID対応表と元angle edge遷移列を保存しないため、
+static nodeの実行時には10,000ノード版も対応表もメモリへ展開しない。`gng.bin`、`vlut.bin`、
+`topofuzzy_bridge_node`は不要である。元姿勢GNGは`VIZGNG5`と`VIZGST1`を生成する
+オフライン処理だけで使う。
+
+```bash
+ros2 run gng_vlut_system visualization_gng_trainer \
+  --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin \
+  --output-prefix /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng \
+  --target-nodes 150 --iterations 200000 --seed 42 \
+  --joint-motion-weight 1.0 \
+  --workspace-motion-sec-per-m 1.0 \
+  --workspace-sample-resolution 0.05 \
+  --ros-args \
+  --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+ros2 launch gng_vlut_system visualization_gng_static.launch.py \
+  model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng_static_L0.bin \
+  topic_name:=/ToPoDualArm/topological_map_vis_static_L0 \
+  frame_id:=base_link
+```
+
+static nodeのlabelは学習保存時点の値であり、占有voxelなどによる動的更新はしない。
+また、元ノードIDで指定される既存の実行軌道・候補軌道を可視化ノード列へ変換する機能は
+`topofuzzy_bridge_node`だけが提供する。動的安全判定または既存軌道変換が必要な場合は、
+従来の`visualization_gng.enabled`を使う。
+
+### 13.6 GNG非依存の到達可能ボクセルmap
+
+`reachability_voxel_builder`は元GNGを読まず、URDFの関節可動範囲を低差異列で直接サンプルし、
+FKで得た手先位置を規則ボクセルへ登録する。自己衝突判定を有効にした場合、保存される各セルは
+少なくとも1個の自己衝突なし代表関節角を持つ。保存形式は軽量`VIZGST1`であり、元ノードID対応表、
+GNG edge、GNG遷移列を含まない。
+
+ボクセルの空間隣接edgeは可視化と領域連結性の確認用であり、アーム移動の無衝突性を表さない。
+軌道計画へ使う場合は、代表関節角間を既存の衝突判定で再検証する。
+
+未登録セルは到達不能の確定ではなく、指定したサンプル数で未確認のセルである。`max_sample_count`を
+増やし、`reachable_cells`が収束したことを確認して利用する。登録済みセルについては偽陽性を出さない。
+
+```bash
+ros2 launch gng_vlut_system reachability_voxel_builder.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  profile_name:=left_arm \
+  output_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/reachability_voxel_map.bin \
+  voxel_size:=0.05 \
+  max_sample_count:=2000000 \
+  max_no_new_voxel_samples:=200000
+
+ros2 launch gng_vlut_system visualization_gng_static.launch.py \
+  model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/reachability_voxel_map.bin \
+  topic_name:=/ToPoDualArm/reachability_voxel_map \
+  frame_id:=base_link
+```
+
+到達可能ボクセルmapをさらに描画用GNGへ圧縮する場合は、
+`reachability_voxel_visualization_gng_trainer`を使う。この処理も元GNGを読まず、
+ボクセルmapの代表関節角、法線、空間隣接候補edgeだけを入力にする。候補edgeの代表姿勢を
+URDF FKで補間し、途中の可視化nodeを経由したedgeだけを出力する。出力は`VIZGST1`であり、
+同じstatic launcherから配信できる。
+
+```bash
+ros2 run gng_vlut_system reachability_voxel_visualization_gng_trainer \
+  --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/reachability_voxel_map.bin \
+  --output /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/reachability_voxel_vis_gng.bin \
+  --target-nodes 150 \
+  --iterations 200000 \
+  --workspace-sample-resolution 0.05 \
+  --urdf-path /ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf \
+  --resource-root-dir /ros2_ws/src/dual_arm_urdf \
+  --mesh-root-dir /ros2_ws/src/dual_arm_urdf/meshes \
+  --root-link L_shoulder_mount \
+  --eef-link L_tcp \
+  --edge-max-neighbors 6
+```
+
+### 13.7 フロー
 
 ```mermaid
 flowchart TD
     A[元gng.bin] --> B[activeな元ノードを列挙]
     B --> C[layer別 weight_coords weight_angle angle edgeを収集]
-    C --> D[3次元GNGを学習]
-    D --> E[全元ノードIDを位置最近傍visual nodeへ割当]
-    E --> F[空visual nodeを除去し所属位置の重心へ更新]
+    C --> D[関節移動時間と手先位置の複合GNGを学習]
+    D --> E[全元ノードIDを複合特徴量最近傍visual nodeへ割当]
+    E --> F[空visual nodeを除去し代表元の位置 法線 label 関節角へ更新]
     F --> G[元angle edgeの関節角を事前補間]
     G --> H[URDF FKでlayer別手先位置を計算]
     H --> I[最近傍visual nodeの順序付き列へ変換]
-    I --> J[直接でない列だけcompact override保存]
-    J --> K[node 座標 関節角 両edgeのsignatureを計算]
-    K --> L[vis_gng_Ln.bin]
+    I --> J[全遷移列と移動時間を保存]
+    J --> K[node 座標 法線 label 関節角 edgeのsignatureを計算]
+    K --> L[VIZGNG5 vis_gng_Ln.bin]
     L --> M[保存直後に再読込して所属 edge 遷移列を検証]
 ```
 
@@ -899,6 +1005,12 @@ PNG判定では各点のXYZとCameraInfoによるピンホール投影を照合�
 QoSは`reliable`、depth 1、`transient_local`とする。配信するnodeには位置、法線、`rho`、
 入力点ID、勝者点群数、勝者点群共分散を設定し、edgeと`idx`形式のクラスタも変換する。
 
+任意のOBJ/STLから完全表面テンプレートを作る場合は、
+[`MESH_SURFACE_TEMPLATE.md`](MESH_SURFACE_TEMPLATE.md)の補助ツールを使う。面積比例の三角形面サンプルを
+`surface_points`へ保存し、`ais_gng` CPU backendで学習後に保存された`object_template`を同じ
+`object_surface_dataset`の`gng_template`へ統合する。mesh本体はデータセットへ複製せず、ファイル名、hash、
+単位倍率、座標正規化だけをmetadataとして残す。
+
 ```bash
 ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
   dataset_file:=mug_complete
@@ -959,9 +1071,18 @@ yawの有効・無効や最小・最大角度は設定しない。roll/pitchは
 各toleranceが0度ならその軸を0度へ固定し、0度より大きければその軸を探索する。
 `enable_roll_pitch_search`は旧設定との互換用に受理するが、通常判定はtolerance自体を使用する。
 姿勢仮説数は`max_orientation_hypothesis_num`で上限を設ける。
+`object_template_matching_sources.yaml`の`template_orientation_tolerances`には、template IDごとの
+`roll_tolerance_deg`と`pitch_tolerance_deg`を指定できる。`-1`は共通設定の使用、`0`は当該軸の固定とする。
+テンプレート別に0度より大きい許容角を指定した場合は、共通のroll/pitch探索が無効でも当該テンプレートだけ
+姿勢探索を有効にする。
 
 平面およびGNG nodeの法線は表裏を区別しない方向特徴として扱う。法線評価は内積の絶対値を使い、
 観測方向や局所推定による符号反転では減点しない。
+
+2つ以上の平面対応に有効な重心がある場合、回転済みテンプレート平面の重心差のz成分と環境平面の
+重心差のz成分を比較する。平行移動は重心差で相殺されるため、支持平面から甲板までのような相対高さを
+`plane_relative_height_score`として平面根拠へ加える。平面が1つだけ、または重心が欠ける場合は
+相対高さを未観測として扱い、候補の不一致にはしない。
 
 検証器は`recognition_threshold`、`min_visible_ratio`、`confirmation_time_sec`だけで
 `pending`と`confirmed`を判定する。scaleと反証はmatcherの`is_falsified`へ集約し、
@@ -985,6 +1106,8 @@ ros2 launch gng_vlut_system object_template_matching.launch.py
 `roll_tolerance_deg`、`pitch_tolerance_deg`、`shape_tolerance`、`min_visible_ratio`、
 `scale_tolerance`、`contradiction_limit`、`recognition_threshold`、`confirmation_time_sec`の
 8つとする。yaw分解能と平面抽出由来の内部閾値は実装設定としてYAMLに残す。
+相対高さのファジー範囲は`max_plane_relative_height_dev_full`、
+`max_plane_relative_height_dev_partial`、重みは`plane_relative_height_weight`で設定する。
 
 対応済みGNG edgeの長さ比`environment_edge_length / template_edge_length`の中央値を
 `scale_ratio`として評価する。`0.95`から`1.05`は満点、`1 ± scale_tolerance`の外側は候補を反証する。

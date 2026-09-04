@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -30,12 +31,14 @@ struct Options {
   std::filesystem::path output_prefix;
   robot_sim::visualization::VisualizationGngTrainingParams training;
   robot_sim::visualization::VisualizationGngInterpolationParams interpolation;
+  float default_joint_max_velocity = 0.6f;
   int layer = -1;
 };
 
 struct FkContext {
   std::unique_ptr<kinematics::KinematicChain> chain;
   std::vector<std::pair<std::size_t, int>> selected_dofs;
+  std::vector<float> selected_joint_max_velocities;
   int selected_dof_count = 0;
 
   Eigen::Vector3f position(const Eigen::VectorXf &selected_values,
@@ -76,7 +79,52 @@ bool transitionsEqual(
     if (lhs_path.source_node_id != rhs_path.source_node_id ||
         lhs_path.target_node_id != rhs_path.target_node_id ||
         lhs_path.path_offset != rhs_path.path_offset ||
-        lhs_path.path_size != rhs_path.path_size) {
+        lhs_path.path_size != rhs_path.path_size ||
+        lhs_path.motion_time_sec != rhs_path.motion_time_sec ||
+        lhs_path.has_visual_connection != rhs_path.has_visual_connection) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool nodesEqual(
+    const std::vector<robot_sim::visualization::VisualizationGngNode> &lhs,
+    const std::vector<robot_sim::visualization::VisualizationGngNode> &rhs) {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (std::size_t index = 0; index < lhs.size(); ++index) {
+    if (!(lhs[index].position.array() == rhs[index].position.array()).all() ||
+        !(lhs[index].normal.array() == rhs[index].normal.array()).all() ||
+        lhs[index].label != rhs[index].label ||
+        lhs[index].representative_source_node_id !=
+            rhs[index].representative_source_node_id ||
+        lhs[index].representative_joint_angle.size() !=
+            rhs[index].representative_joint_angle.size() ||
+        (lhs[index].representative_joint_angle.array() !=
+         rhs[index].representative_joint_angle.array()).any() ||
+        lhs[index].source_node_ids != rhs[index].source_node_ids) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool staticNodesEqual(
+    const std::vector<robot_sim::visualization::VisualizationGngStaticNode> &lhs,
+    const std::vector<robot_sim::visualization::VisualizationGngStaticNode> &rhs) {
+  if (lhs.size() != rhs.size()) {
+    return false;
+  }
+  for (std::size_t index = 0; index < lhs.size(); ++index) {
+    if (!(lhs[index].position.array() == rhs[index].position.array()).all() ||
+        !(lhs[index].normal.array() == rhs[index].normal.array()).all() ||
+        lhs[index].label != rhs[index].label ||
+        lhs[index].representative_joint_angle.size() !=
+            rhs[index].representative_joint_angle.size() ||
+        (lhs[index].representative_joint_angle.array() !=
+         rhs[index].representative_joint_angle.array()).any()) {
       return false;
     }
   }
@@ -128,6 +176,14 @@ void printUsage(const char *program) {
          " [--seed <n>] [--layer <n>]"
          " [--interpolation-joint-step <rad>]"
          " [--max-interpolation-samples <n>]"
+         " [--edge-attachment-knn <n>]"
+         " [--edge-attachment-radius-scale <scale>]"
+         " [--edge-min-attachment-radius <m>]"
+         " [--edge-max-neighbors <n>]"
+         " [--joint-motion-weight <weight>]"
+         " [--workspace-motion-sec-per-m <sec_per_m>]"
+         " [--workspace-sample-resolution <m>]"
+         " [--default-joint-max-velocity <rad_per_sec>]"
          " --ros-args --params-file <robot.yaml>\n";
 }
 
@@ -193,6 +249,22 @@ Options parseOptions(const std::vector<std::string> &arguments) {
       options.interpolation.max_joint_step = parseFloat(value, argument);
     } else if (argument == "--max-interpolation-samples") {
       options.interpolation.max_samples_per_edge = parseInt(value, argument);
+    } else if (argument == "--edge-attachment-knn") {
+      options.interpolation.attachment_knn = parseInt(value, argument);
+    } else if (argument == "--edge-attachment-radius-scale") {
+      options.interpolation.attachment_radius_scale = parseFloat(value, argument);
+    } else if (argument == "--edge-min-attachment-radius") {
+      options.interpolation.min_attachment_radius = parseFloat(value, argument);
+    } else if (argument == "--edge-max-neighbors") {
+      options.interpolation.max_edge_neighbors = parseInt(value, argument);
+    } else if (argument == "--joint-motion-weight") {
+      options.training.joint_motion_weight = parseFloat(value, argument);
+    } else if (argument == "--workspace-motion-sec-per-m") {
+      options.training.workspace_motion_sec_per_m = parseFloat(value, argument);
+    } else if (argument == "--workspace-sample-resolution") {
+      options.training.workspace_sample_resolution = parseFloat(value, argument);
+    } else if (argument == "--default-joint-max-velocity") {
+      options.default_joint_max_velocity = parseFloat(value, argument);
     } else {
       throw std::invalid_argument("unknown argument: " + argument);
     }
@@ -209,7 +281,15 @@ Options parseOptions(const std::vector<std::string> &arguments) {
     throw std::invalid_argument("numeric options are outside the valid range");
   }
   if (options.interpolation.max_joint_step <= 0.0f ||
-      options.interpolation.max_samples_per_edge < 2) {
+      options.interpolation.max_samples_per_edge < 2 ||
+      options.interpolation.attachment_knn < 1 ||
+      options.interpolation.attachment_radius_scale <= 0.0f ||
+      options.interpolation.min_attachment_radius < 0.0f ||
+      options.interpolation.max_edge_neighbors < 1 ||
+      options.training.joint_motion_weight <= 0.0f ||
+      options.training.workspace_motion_sec_per_m <= 0.0f ||
+      options.training.workspace_sample_resolution < 0.0f ||
+      options.default_joint_max_velocity <= 0.0f) {
     throw std::invalid_argument(
         "interpolation options are outside the valid range");
   }
@@ -266,7 +346,8 @@ void appendUnique(std::vector<std::string> &target,
   }
 }
 
-FkContext buildFkContext(const rclcpp::Node &node) {
+FkContext buildFkContext(const rclcpp::Node &node,
+                         float default_joint_max_velocity) {
   std::string urdf_path = getString(node, "urdf_path");
   if (urdf_path.empty()) {
     urdf_path = getString(node, "robot_urdf_path");
@@ -343,11 +424,24 @@ FkContext buildFkContext(const rclcpp::Node &node) {
     if (included && exclude_set.count(name) == 0) {
       context.selected_dofs.emplace_back(full_offset, dof);
       context.selected_dof_count += dof;
+      const auto *joint_props = model.getJoint(name);
+      const float max_velocity =
+          joint_props && std::isfinite(joint_props->limits.velocity) &&
+                  joint_props->limits.velocity > 0.0
+              ? static_cast<float>(joint_props->limits.velocity)
+              : default_joint_max_velocity;
+      for (int d = 0; d < dof; ++d) {
+        context.selected_joint_max_velocities.push_back(max_velocity);
+      }
     }
     full_offset += static_cast<std::size_t>(dof);
   }
   if (context.selected_dof_count <= 0) {
     throw std::runtime_error("FK joint selection is empty");
+  }
+  if (context.selected_joint_max_velocities.size() !=
+      static_cast<std::size_t>(context.selected_dof_count)) {
+    throw std::runtime_error("FK joint velocity setup is inconsistent");
   }
   return context;
 }
@@ -400,13 +494,31 @@ void trainLayer(const SourceGng &source, const Options &options, int layer,
   }
   if (loaded.source_signature != model.source_signature ||
       loaded.coord_layer != model.coord_layer ||
-      loaded.nodes.size() != model.nodes.size() ||
+      loaded.joint_angle_dimension != model.joint_angle_dimension ||
+      !nodesEqual(loaded.nodes, model.nodes) ||
       loaded.edges != model.edges ||
       !transitionsEqual(loaded, model) ||
       empty_node_count != 0 || mapped_source_count != source_points.size() ||
       mapped_source_ids.size() != mapped_source_count ||
       mapped_source_ids != expected_source_ids) {
     throw std::runtime_error("saved file verification found inconsistent data");
+  }
+  const auto static_output =
+      robot_sim::visualization::visualizationGngStaticLayerPath(
+          options.output_prefix, static_cast<std::uint32_t>(layer));
+  const auto static_model =
+      robot_sim::visualization::makeVisualizationGngStaticModel(loaded);
+  if (!static_model.save(static_output, &error)) {
+    throw std::runtime_error(error);
+  }
+  robot_sim::visualization::VisualizationGngStaticModel loaded_static_model;
+  if (!loaded_static_model.load(static_output, &error) ||
+      loaded_static_model.coord_layer != static_model.coord_layer ||
+      loaded_static_model.joint_angle_dimension !=
+          static_model.joint_angle_dimension ||
+      !staticNodesEqual(loaded_static_model.nodes, static_model.nodes) ||
+      loaded_static_model.edges != static_model.edges) {
+    throw std::runtime_error("static GNG file verification found inconsistent data");
   }
   const GraphStats graph_stats =
       computeGraphStats(loaded.nodes.size(), loaded.edges);
@@ -419,7 +531,8 @@ void trainLayer(const SourceGng &source, const Options &options, int layer,
             << " connected_components=" << graph_stats.connected_components
             << " isolated_nodes=" << graph_stats.isolated_nodes
             << " elapsed_sec=" << elapsed.count()
-            << " output=" << output << '\n';
+            << " output=" << output
+            << " static_output=" << static_output << '\n';
 }
 
 }  // namespace
@@ -428,12 +541,16 @@ int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
   try {
     const auto non_ros_arguments = rclcpp::remove_ros_arguments(argc, argv);
-    const Options options = parseOptions(non_ros_arguments);
+    Options options = parseOptions(non_ros_arguments);
     const auto node = std::make_shared<rclcpp::Node>(
         "visualization_gng_trainer", rclcpp::NodeOptions()
                                              .allow_undeclared_parameters(true)
                                              .automatically_declare_parameters_from_overrides(true));
-    auto fk_context = buildFkContext(*node);
+    auto fk_context = buildFkContext(*node, options.default_joint_max_velocity);
+    options.training.joint_max_velocities =
+        fk_context.selected_joint_max_velocities;
+    options.interpolation.joint_max_velocities =
+        fk_context.selected_joint_max_velocities;
     SourceGng source(fk_context.selected_dof_count, 3, nullptr);
     if (!source.load(options.input.string())) {
       throw std::runtime_error("failed to load source GNG: " +

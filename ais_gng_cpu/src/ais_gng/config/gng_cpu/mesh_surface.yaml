@@ -1,0 +1,58 @@
+ais_gng_node:
+  ros__parameters:
+    node.num_max: 5000
+    node.learning_num: 5000
+    node.unknown_learning_rate: 0.8
+    node.eta_s1: 0.08
+    node.eta_s2: 0.008
+    node.covariance_enabled: true
+    edge.age_max: 100
+    node.s1_reset_range: 0.1
+    node.grid: 0.2
+    node.s1_age_max: [6, 30, 12, 4]
+    node.clusted_s1_age: [20, 100, 30, 10]
+    node.interval: [0.1, 0.2, 0.2, 0.001]
+    node.static.age_min: 250
+
+    ds.transformed: true
+    ds.range_max: 0.2
+    ds.all.num_max: 10000
+    ds.unknown.num_max: 6000
+    ds.human.num_max: 3000
+
+    label.fuzzy.unknown: 0.9
+    label.fuzzy.min: 2.0
+    label.fuzzy.lpf_time_constant: 0.5
+
+    cluster.num_min: 10
+    cluster.velocity.lpf_time_constant: 0.5
+    cluster.plane.volume: 10.0
+    cluster.unknown.edge_distance_max: 0.2
+    cluster.other.edge_distance_max: 0.4
+    cluster.human.radius: 0.6
+    cluster.human.hysteresis_age: 5
+    cluster.human.confirmation_age: 5
+    cluster.car.hysteresis_age: 5
+    cluster.car.confirmation_age: 5
+
+    classify.human: false
+    classify.human.model: "NN_human.pt"
+    classify.car: false
+    classify.car.model: "NN_car.pt"
+    classify.threshold: 0.7
+
+    performance.log_interval_ms: 0
+
+    input.point_cloud_num: 100000
+    input.sampling_mode: "uniform"
+    input.base_frame_id: "object_template"
+    input.voxel_grid_unit: 0.02
+    input.visualize: true
+    input.local_coordinates: true
+    input.x_min: -15.
+    input.x_max: 15.
+    input.y_min: -15.
+    input.y_max: 15.
+    input.z_min: -2.
+    input.z_max: 8.
+    input.topic_names: ["/mesh_template_surface"]

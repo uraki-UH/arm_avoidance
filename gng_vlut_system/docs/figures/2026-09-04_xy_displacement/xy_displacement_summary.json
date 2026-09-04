@@ -1,0 +1,116 @@
+{
+  "basket": {
+    "point_histogram": {
+      "max_overlap": 1.0,
+      "best_yaw_deg": 0.0
+    },
+    "graph_histogram": {
+      "max_overlap": 1.0,
+      "best_yaw_deg": 0.0
+    },
+    "nonplane_histogram": {
+      "max_overlap": 1.0,
+      "best_yaw_deg": 0.0
+    },
+    "nonplane_node_pair_histogram": {
+      "max_overlap": 0.9999999999999999,
+      "best_yaw_deg": 0.0
+    }
+  },
+  "basket_occ": {
+    "point_histogram": {
+      "max_overlap": 0.7627669452181988,
+      "best_yaw_deg": 0.0
+    },
+    "graph_histogram": {
+      "max_overlap": 0.6141693123001942,
+      "best_yaw_deg": 0.0
+    },
+    "nonplane_histogram": {
+      "max_overlap": 0.6222629291982619,
+      "best_yaw_deg": 0.0
+    },
+    "nonplane_node_pair_histogram": {
+      "max_overlap": 0.45270359598096244,
+      "best_yaw_deg": 170.0
+    }
+  },
+  "cup": {
+    "point_histogram": {
+      "max_overlap": 0.6971525843392139,
+      "best_yaw_deg": 150.0
+    },
+    "graph_histogram": {
+      "max_overlap": 0.718270181719004,
+      "best_yaw_deg": 10.0
+    },
+    "nonplane_histogram": {
+      "max_overlap": 0.5180785123966942,
+      "best_yaw_deg": 160.0
+    },
+    "nonplane_node_pair_histogram": {
+      "max_overlap": 0.31398276156340676,
+      "best_yaw_deg": 100.0
+    }
+  },
+  "cup_occ": {
+    "point_histogram": {
+      "max_overlap": 0.5142680284741566,
+      "best_yaw_deg": 20.0
+    },
+    "graph_histogram": {
+      "max_overlap": 0.6030703268311887,
+      "best_yaw_deg": 60.0
+    },
+    "nonplane_histogram": {
+      "max_overlap": 0.606287029699234,
+      "best_yaw_deg": 100.0
+    },
+    "nonplane_node_pair_histogram": {
+      "max_overlap": 0.21696367443920905,
+      "best_yaw_deg": 110.0
+    }
+  },
+  "dataset_stats": {
+    "basket": {
+      "source_point_num": 4200,
+      "sampled_point_num": 360,
+      "graph_node_num": 279,
+      "nonplane_node_num": 32,
+      "point_pair_num": 129240,
+      "graph_pair_num": 3904,
+      "nonplane_graph_pair_num": 158,
+      "nonplane_node_pair_num": 992
+    },
+    "basket_occ": {
+      "source_point_num": 407,
+      "sampled_point_num": 360,
+      "graph_node_num": 198,
+      "nonplane_node_num": 62,
+      "point_pair_num": 129240,
+      "graph_pair_num": 1706,
+      "nonplane_graph_pair_num": 260,
+      "nonplane_node_pair_num": 3782
+    },
+    "cup": {
+      "source_point_num": 4314,
+      "sampled_point_num": 360,
+      "graph_node_num": 523,
+      "nonplane_node_num": 28,
+      "point_pair_num": 129240,
+      "graph_pair_num": 6442,
+      "nonplane_graph_pair_num": 106,
+      "nonplane_node_pair_num": 756
+    },
+    "cup_occ": {
+      "source_point_num": 468,
+      "sampled_point_num": 360,
+      "graph_node_num": 306,
+      "nonplane_node_num": 90,
+      "point_pair_num": 129240,
+      "graph_pair_num": 2390,
+      "nonplane_graph_pair_num": 284,
+      "nonplane_node_pair_num": 8010
+    }
+  }
+}

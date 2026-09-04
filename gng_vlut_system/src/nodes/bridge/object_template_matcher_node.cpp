@@ -36,6 +36,7 @@ constexpr double kMinShapePairScore = 0.55;
 constexpr std::size_t kMaxRefinementTemplateNum = 8U;
 constexpr std::size_t kMaxRetrievalCandidateNum = 8U;
 constexpr std::size_t kMaxTemplatesPerRetrievalKey = 4U;
+constexpr std::size_t kMaxPlaneTokenNumPerProbe = 24U;
 constexpr std::size_t kMaxNonplaneRetrievalNodeNum = 64U;
 constexpr std::size_t kMaxRetrievalNodeNum = 128U;
 constexpr std::size_t kMaxPendingSynchronizedFrameNum = 64U;
@@ -43,6 +44,7 @@ constexpr int kNormalZBinNum = 12;
 constexpr int kRhoBinNum = 10;
 constexpr int kDegreeBinNum = 8;
 constexpr int kNeighborNormalBinNum = 10;
+constexpr double kPlaneScaleProbeRatio = 1.5;
 
 struct Vec3
 {
@@ -64,6 +66,8 @@ struct TemplatePlaneCluster
 {
   std::uint32_t id = 0U;
   Vec3 normal;
+  Vec3 centroid;
+  bool has_centroid = false;
   double min_extent = 0.0;
   double max_extent = 0.0;
   std::vector<std::size_t> node_indices;
@@ -86,6 +90,8 @@ struct TemplateGraph
   std::vector<TemplatePlaneCluster> plane_clusters;
   std::vector<NonplaneComponent> nonplane_components;
   double canonical_yaw_deg = 0.0;
+  double roll_tolerance_deg = -1.0;
+  double pitch_tolerance_deg = -1.0;
 };
 
 struct LoadedTemplate
@@ -113,6 +119,13 @@ struct RetrievalProbe
 {
   std::uint64_t key = 0U;
   double score = 0.0;
+};
+
+struct PlaneRetrievalToken
+{
+  std::size_t template_index = 0U;
+  double min_extent = 0.0;
+  double max_extent = 0.0;
 };
 
 struct PairScore
@@ -152,6 +165,9 @@ struct PlaneEvaluation
   double score = 0.0;
   double matched_ratio = 0.0;
   double support_score = 0.0;
+  bool is_relative_height_observed = false;
+  std::size_t relative_height_pair_num = 0U;
+  double relative_height_score = 0.0;
 };
 
 struct NonplaneEvaluation
@@ -296,7 +312,7 @@ std::vector<RetrievalProbe> makeEnvironmentRetrievalProbes(
   return unique_probes;
 }
 
-Vec3 rotateRpy(const Vec3 &value, double roll_deg, double pitch_deg, double yaw_deg)
+Vec3 rotateRpyRaw(const Vec3 &value, double roll_deg, double pitch_deg, double yaw_deg)
 {
   const double roll = degreeToRad(roll_deg);
   const double pitch = degreeToRad(pitch_deg);
@@ -307,10 +323,15 @@ Vec3 rotateRpy(const Vec3 &value, double roll_deg, double pitch_deg, double yaw_
   const double pitch_x = std::cos(pitch) * roll_x + std::sin(pitch) * roll_z;
   const double pitch_y = roll_y;
   const double pitch_z = -std::sin(pitch) * roll_x + std::cos(pitch) * roll_z;
-  return normalize({
+  return {
     std::cos(yaw) * pitch_x - std::sin(yaw) * pitch_y,
     std::sin(yaw) * pitch_x + std::cos(yaw) * pitch_y,
-    pitch_z});
+    pitch_z};
+}
+
+Vec3 rotateRpy(const Vec3 &value, double roll_deg, double pitch_deg, double yaw_deg)
+{
+  return normalize(rotateRpyRaw(value, roll_deg, pitch_deg, yaw_deg));
 }
 
 double descendingMembership(double value, double full_match_max, double partial_match_max)
@@ -527,10 +548,37 @@ TemplateGraph loadTemplateGraph(const std::string &dataset_path)
           }
         }
       }
+      Vec3 centroid;
+      bool has_centroid = false;
+      if (plane_cluster.contains("centroid") && plane_cluster.at("centroid").is_array() &&
+        plane_cluster.at("centroid").size() >= 3U &&
+        plane_cluster.at("centroid").at(0).is_number() &&
+        plane_cluster.at("centroid").at(1).is_number() &&
+        plane_cluster.at("centroid").at(2).is_number())
+      {
+        centroid = {
+          plane_cluster.at("centroid").at(0).get<double>(),
+          plane_cluster.at("centroid").at(1).get<double>(),
+          plane_cluster.at("centroid").at(2).get<double>()};
+        has_centroid = isFinite(centroid.x) && isFinite(centroid.y) && isFinite(centroid.z);
+      }
+      if (!has_centroid && !node_indices.empty()) {
+        for (const std::size_t node_index : node_indices) {
+          const Vec3 &position = graph.nodes[node_index].position;
+          centroid.x += position.x;
+          centroid.y += position.y;
+          centroid.z += position.z;
+        }
+        const double node_num = static_cast<double>(node_indices.size());
+        centroid.x /= node_num;
+        centroid.y /= node_num;
+        centroid.z /= node_num;
+        has_centroid = isFinite(centroid.x) && isFinite(centroid.y) && isFinite(centroid.z);
+      }
       graph.plane_clusters.push_back({
         plane_cluster.value("id", static_cast<std::uint32_t>(index)),
         normalize({normal.at(0).get<double>(), normal.at(1).get<double>(), normal.at(2).get<double>()}),
-        extents[0], extents[1], std::move(node_indices)});
+        centroid, has_centroid, extents[0], extents[1], std::move(node_indices)});
     }
   }
   deriveTemplateNonplaneComponents(graph);
@@ -551,6 +599,10 @@ public:
       "template_ids", std::vector<std::string>{});
     template_dataset_paths_ = declare_parameter<std::vector<std::string>>(
       "template_dataset_paths", std::vector<std::string>{});
+    template_roll_tolerance_degs_ = declare_parameter<std::vector<double>>(
+      "template_roll_tolerance_degs", std::vector<double>{});
+    template_pitch_tolerance_degs_ = declare_parameter<std::vector<double>>(
+      "template_pitch_tolerance_degs", std::vector<double>{});
     environment_topic_ = declare_parameter<std::string>(
       "environment_topological_map_topic", "/topological_map");
     plane_clusters_topic_ = declare_parameter<std::string>("plane_clusters_topic", "/plane_clusters");
@@ -602,6 +654,14 @@ public:
     plane_weight_ = declare_parameter<double>("plane_weight", 0.65);
     plane_support_score_scale_ = declare_parameter<double>("plane_support_score_scale", 1.80);
     min_plane_support_score_ = declare_parameter<double>("min_plane_support_score", 0.60);
+    enable_plane_relative_height_evaluation_ = declare_parameter<bool>(
+      "enable_plane_relative_height_evaluation", true);
+    max_plane_relative_height_dev_full_ = declare_parameter<double>(
+      "max_plane_relative_height_dev_full", 0.015);
+    max_plane_relative_height_dev_partial_ = declare_parameter<double>(
+      "max_plane_relative_height_dev_partial", 0.060);
+    plane_relative_height_weight_ = declare_parameter<double>(
+      "plane_relative_height_weight", 0.25);
     enable_nonplane_component_evaluation_ = declare_parameter<bool>(
       "enable_nonplane_component_evaluation", true);
     min_nonplane_component_nodes_ = declare_parameter<int>("min_nonplane_component_nodes", 2);
@@ -633,9 +693,12 @@ private:
   void initializeTemplates()
   {
     const bool has_multi_template_parameters = !template_ids_.empty() ||
-      !template_dataset_paths_.empty() || !candidate_topics_.empty();
+      !template_dataset_paths_.empty() || !template_roll_tolerance_degs_.empty() ||
+      !template_pitch_tolerance_degs_.empty() || !candidate_topics_.empty();
     std::vector<std::string> ids = template_ids_;
     std::vector<std::string> paths = template_dataset_paths_;
+    std::vector<double> roll_tolerance_degs = template_roll_tolerance_degs_;
+    std::vector<double> pitch_tolerance_degs = template_pitch_tolerance_degs_;
     std::vector<std::string> topics = candidate_topics_;
     if (has_multi_template_parameters) {
       if (ids.empty() || paths.empty() || ids.size() != paths.size()) {
@@ -648,6 +711,15 @@ private:
       }
       ids = {template_id_};
       paths = {template_dataset_path_};
+    }
+    if (roll_tolerance_degs.empty()) {
+      roll_tolerance_degs.assign(ids.size(), -1.0);
+    }
+    if (pitch_tolerance_degs.empty()) {
+      pitch_tolerance_degs.assign(ids.size(), -1.0);
+    }
+    if (roll_tolerance_degs.size() != ids.size() || pitch_tolerance_degs.size() != ids.size()) {
+      throw std::runtime_error("テンプレート別roll/pitch許容角の要素数一致が必要です。");
     }
     if (!topics.empty() && topics.size() != ids.size()) {
       throw std::runtime_error("candidate_topicsとtemplate_idsの要素数一致が必要です。");
@@ -663,13 +735,18 @@ private:
     loaded_templates_.reserve(ids.size());
     for (std::size_t index = 0U; index < ids.size(); ++index) {
       if (ids[index].empty() || paths[index].empty() ||
-        !seen_ids.insert(ids[index]).second)
+        !seen_ids.insert(ids[index]).second || !isFinite(roll_tolerance_degs[index]) ||
+        !isFinite(pitch_tolerance_degs[index]) || roll_tolerance_degs[index] < -1.0 ||
+        roll_tolerance_degs[index] > 90.0 || pitch_tolerance_degs[index] < -1.0 ||
+        pitch_tolerance_degs[index] > 90.0)
       {
         throw std::runtime_error("template_idまたはtemplate_dataset_pathが不正です。");
       }
       LoadedTemplate loaded_template;
       loaded_template.id = ids[index];
       loaded_template.graph = loadTemplateGraph(paths[index]);
+      loaded_template.graph.roll_tolerance_deg = roll_tolerance_degs[index];
+      loaded_template.graph.pitch_tolerance_deg = pitch_tolerance_degs[index];
       loaded_template.candidate_publisher = create_publisher<std_msgs::msg::String>(
         topics[index], rclcpp::QoS(1).reliable().transient_local());
       RCLCPP_INFO(
@@ -679,6 +756,7 @@ private:
       loaded_templates_.push_back(std::move(loaded_template));
     }
     buildTemplateRetrievalIndex();
+    buildTemplatePlaneRetrievalIndex();
     activateTemplate(0U);
   }
 
@@ -745,6 +823,172 @@ private:
       template_indices.erase(
         std::unique(template_indices.begin(), template_indices.end()), template_indices.end());
     }
+  }
+
+  void buildTemplatePlaneRetrievalIndex()
+  {
+    template_plane_retrieval_tokens_.clear();
+    for (std::size_t template_index = 0U; template_index < loaded_templates_.size(); ++template_index) {
+      for (const TemplatePlaneCluster &plane_cluster : loaded_templates_[template_index].graph.plane_clusters) {
+        template_plane_retrieval_tokens_.push_back({
+          template_index, plane_cluster.min_extent, plane_cluster.max_extent});
+      }
+    }
+    template_plane_min_extent_order_.resize(template_plane_retrieval_tokens_.size());
+    template_plane_max_extent_order_.resize(template_plane_retrieval_tokens_.size());
+    for (std::size_t token_index = 0U;
+      token_index < template_plane_retrieval_tokens_.size(); ++token_index)
+    {
+      template_plane_min_extent_order_[token_index] = token_index;
+      template_plane_max_extent_order_[token_index] = token_index;
+    }
+    std::sort(
+      template_plane_min_extent_order_.begin(), template_plane_min_extent_order_.end(),
+      [this](const std::size_t first_index, const std::size_t second_index) {
+        return template_plane_retrieval_tokens_[first_index].min_extent <
+               template_plane_retrieval_tokens_[second_index].min_extent;
+      });
+    std::sort(
+      template_plane_max_extent_order_.begin(), template_plane_max_extent_order_.end(),
+      [this](const std::size_t first_index, const std::size_t second_index) {
+        return template_plane_retrieval_tokens_[first_index].max_extent <
+               template_plane_retrieval_tokens_[second_index].max_extent;
+      });
+  }
+
+  std::vector<std::size_t> findNearestPlaneTokenIndices(
+    const std::vector<std::size_t> &order, const double target_extent,
+    const bool use_min_extent) const
+  {
+    const auto lower = std::lower_bound(
+      order.begin(), order.end(), target_extent,
+      [this, use_min_extent](const std::size_t token_index, const double target) {
+        const PlaneRetrievalToken &token = template_plane_retrieval_tokens_[token_index];
+        return (use_min_extent ? token.min_extent : token.max_extent) < target;
+      });
+    std::ptrdiff_t left_index = std::distance(order.begin(), lower) - 1;
+    std::size_t right_index = static_cast<std::size_t>(std::distance(order.begin(), lower));
+    std::vector<std::size_t> nearest_indices;
+    nearest_indices.reserve(kMaxPlaneTokenNumPerProbe);
+    while (nearest_indices.size() < kMaxPlaneTokenNumPerProbe &&
+      (left_index >= 0 || right_index < order.size()))
+    {
+      const bool has_left = left_index >= 0;
+      const bool has_right = right_index < order.size();
+      double left_distance = std::numeric_limits<double>::infinity();
+      double right_distance = std::numeric_limits<double>::infinity();
+      if (has_left) {
+        const PlaneRetrievalToken &token = template_plane_retrieval_tokens_[
+          order[static_cast<std::size_t>(left_index)]];
+        left_distance = std::abs(std::log(
+          (use_min_extent ? token.min_extent : token.max_extent) / target_extent));
+      }
+      if (has_right) {
+        const PlaneRetrievalToken &token = template_plane_retrieval_tokens_[order[right_index]];
+        right_distance = std::abs(std::log(
+          (use_min_extent ? token.min_extent : token.max_extent) / target_extent));
+      }
+      if (left_distance <= right_distance) {
+        nearest_indices.push_back(order[static_cast<std::size_t>(left_index)]);
+        --left_index;
+      } else {
+        nearest_indices.push_back(order[right_index]);
+        ++right_index;
+      }
+    }
+    return nearest_indices;
+  }
+
+  std::vector<double> makePlaneScaleProbes() const
+  {
+    const double max_scale = 1.0 / min_plane_extent_allow_ratio_;
+    std::vector<double> probes{1.0};
+    for (double scale = kPlaneScaleProbeRatio;
+      scale < max_scale - 1e-9;
+      scale *= kPlaneScaleProbeRatio)
+    {
+      probes.push_back(scale);
+    }
+    if (probes.back() < max_scale) {
+      probes.push_back(max_scale);
+    }
+    return probes;
+  }
+
+  std::vector<std::size_t> selectPlaneRetrievalTemplateIndices(
+    const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters) const
+  {
+    if (template_plane_retrieval_tokens_.empty() || plane_clusters.clusters.empty()) {
+      return {};
+    }
+    std::unordered_map<std::size_t, double> template_score_sums;
+    const std::vector<double> probes = makePlaneScaleProbes();
+    for (const auto &environment_plane : plane_clusters.clusters) {
+      const auto environment_extents = sortedExtents(
+        static_cast<double>(environment_plane.extent_u), static_cast<double>(environment_plane.extent_v));
+      if (!isFinite(environment_extents[0]) || !isFinite(environment_extents[1]) ||
+        environment_extents[0] <= 0.0 || environment_extents[1] <= 0.0)
+      {
+        continue;
+      }
+      std::unordered_map<std::size_t, double> plane_template_scores;
+      for (const double scale : probes) {
+        const std::vector<std::size_t> min_indices = findNearestPlaneTokenIndices(
+          template_plane_min_extent_order_, environment_extents[0] * scale, true);
+        const std::vector<std::size_t> max_indices = findNearestPlaneTokenIndices(
+          template_plane_max_extent_order_, environment_extents[1] * scale, false);
+        std::unordered_set<std::size_t> nearby_token_indices(
+          min_indices.begin(), min_indices.end());
+        nearby_token_indices.insert(max_indices.begin(), max_indices.end());
+        for (const std::size_t token_index : nearby_token_indices) {
+          const PlaneRetrievalToken &token = template_plane_retrieval_tokens_[token_index];
+          if (environment_extents[0] > token.min_extent * max_plane_extent_overflow_ratio_ ||
+            environment_extents[1] > token.max_extent * max_plane_extent_overflow_ratio_)
+          {
+            continue;
+          }
+          const double min_score = intervalMembership(
+            environment_extents[0] / token.min_extent, min_plane_extent_allow_ratio_,
+            min_plane_extent_full_match_ratio_, max_plane_extent_full_match_ratio_,
+            max_plane_extent_overflow_ratio_);
+          const double max_score = intervalMembership(
+            environment_extents[1] / token.max_extent, min_plane_extent_allow_ratio_,
+            min_plane_extent_full_match_ratio_, max_plane_extent_full_match_ratio_,
+            max_plane_extent_overflow_ratio_);
+          const double score = 0.5 * (min_score + max_score);
+          if (score <= 0.0) {
+            continue;
+          }
+          auto insertion = plane_template_scores.emplace(token.template_index, score);
+          if (!insertion.second) {
+            insertion.first->second = std::max(insertion.first->second, score);
+          }
+        }
+      }
+      for (const auto &[template_index, score] : plane_template_scores) {
+        template_score_sums[template_index] += score;
+      }
+    }
+    std::vector<RetrievalCandidate> candidates;
+    candidates.reserve(template_score_sums.size());
+    const double plane_num = static_cast<double>(plane_clusters.clusters.size());
+    for (const auto &[template_index, score_sum] : template_score_sums) {
+      candidates.push_back({template_index, score_sum / plane_num});
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const RetrievalCandidate &first,
+      const RetrievalCandidate &second) {
+      return first.score == second.score ? first.template_index < second.template_index :
+             first.score > second.score;
+    });
+    if (candidates.size() > kMaxRefinementTemplateNum) {
+      candidates.resize(kMaxRefinementTemplateNum);
+    }
+    std::vector<std::size_t> template_indices;
+    template_indices.reserve(candidates.size());
+    for (const RetrievalCandidate &candidate : candidates) {
+      template_indices.push_back(candidate.template_index);
+    }
+    return template_indices;
   }
 
   static void appendEvenlySample(
@@ -848,8 +1092,22 @@ private:
 
   std::vector<std::size_t> selectRefinementTemplateIndices(
     const ais_gng_msgs::msg::TopologicalMap &environment,
-    const std::vector<std::vector<std::size_t>> &environment_neighbors) const
+    const std::vector<std::vector<std::size_t>> &environment_neighbors,
+    const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters) const
   {
+    if (loaded_templates_.size() <= kMaxRefinementTemplateNum) {
+      std::vector<std::size_t> indices;
+      indices.reserve(loaded_templates_.size());
+      for (std::size_t index = 0U; index < loaded_templates_.size(); ++index) {
+        indices.push_back(index);
+      }
+      return indices;
+    }
+    const std::vector<std::size_t> plane_indices =
+      selectPlaneRetrievalTemplateIndices(plane_clusters);
+    if (!plane_indices.empty()) {
+      return plane_indices;
+    }
     std::vector<RetrievalCandidate> candidates;
     candidates.reserve(kMaxRetrievalCandidateNum);
     const std::vector<std::size_t> environment_indices =
@@ -936,6 +1194,7 @@ private:
       for (const auto &parameter : parameters) {
         const std::string &name = parameter.get_name();
         if (name == "template_ids" || name == "template_dataset_paths" ||
+          name == "template_roll_tolerance_degs" || name == "template_pitch_tolerance_degs" ||
           name == "candidate_topics")
         {
           throw std::runtime_error("テンプレート読込設定の変更にはノード再起動が必要です。");
@@ -999,6 +1258,14 @@ private:
           stage(plane_support_score_scale_, parameter.as_double());
         } else if (name == "min_plane_support_score") {
           stage(min_plane_support_score_, parameter.as_double());
+        } else if (name == "enable_plane_relative_height_evaluation") {
+          stage(enable_plane_relative_height_evaluation_, parameter.as_bool());
+        } else if (name == "max_plane_relative_height_dev_full") {
+          stage(max_plane_relative_height_dev_full_, parameter.as_double());
+        } else if (name == "max_plane_relative_height_dev_partial") {
+          stage(max_plane_relative_height_dev_partial_, parameter.as_double());
+        } else if (name == "plane_relative_height_weight") {
+          stage(plane_relative_height_weight_, parameter.as_double());
         } else if (name == "enable_nonplane_component_evaluation") {
           stage(enable_nonplane_component_evaluation_, parameter.as_bool());
         } else if (name == "min_nonplane_component_nodes") {
@@ -1025,7 +1292,7 @@ private:
 
   void validateParameters() const
   {
-    const std::array<double, 27> values = {
+    const std::array<double, 30> values = {
       shape_tolerance_, scale_tolerance_, contradiction_limit_, yaw_step_deg_,
       roll_tolerance_deg_, pitch_tolerance_deg_, roll_pitch_step_deg_,
       min_node_score_, edge_weight_,
@@ -1033,7 +1300,8 @@ private:
       min_scale_full_match_ratio_, max_scale_full_match_ratio_, max_scale_allow_ratio_, scale_weight_,
       max_plane_normal_angle_deg_, max_plane_extent_overflow_ratio_, min_plane_extent_allow_ratio_,
       min_plane_extent_full_match_ratio_, max_plane_extent_full_match_ratio_, plane_weight_,
-      plane_support_score_scale_, min_plane_support_score_, nonplane_weight_,
+      plane_support_score_scale_, min_plane_support_score_, max_plane_relative_height_dev_full_,
+      max_plane_relative_height_dev_partial_, plane_relative_height_weight_, nonplane_weight_,
       nonplane_evidence_score_scale_, min_nonplane_evidence_score_th_};
     if (std::any_of(values.begin(), values.end(), [](double value) {return !isFinite(value);}) ||
       shape_tolerance_ < 0.0 || shape_tolerance_ > 1.0 ||
@@ -1058,6 +1326,9 @@ private:
       max_plane_extent_full_match_ratio_ >= max_plane_extent_overflow_ratio_ || plane_weight_ < 0.0 ||
       plane_weight_ > 1.0 || plane_support_score_scale_ <= 0.0 ||
       min_plane_support_score_ < 0.0 || min_plane_support_score_ > 1.0 ||
+      max_plane_relative_height_dev_full_ < 0.0 ||
+      max_plane_relative_height_dev_full_ >= max_plane_relative_height_dev_partial_ ||
+      plane_relative_height_weight_ < 0.0 || plane_relative_height_weight_ > 1.0 ||
       min_nonplane_component_nodes_ <= 0 || nonplane_weight_ < 0.0 || nonplane_weight_ > 1.0 ||
       nonplane_evidence_score_scale_ <= 0.0 || min_nonplane_evidence_score_th_ < 0.0 ||
       min_nonplane_evidence_score_th_ > 1.0 ||
@@ -1092,7 +1363,7 @@ private:
     const auto environment_edges = buildEnvironmentEdges(*environment, id_to_index);
     const auto environment_neighbors = buildNeighbors(environment->nodes.size(), environment_edges);
     for (const std::size_t template_index :
-      selectRefinementTemplateIndices(*environment, environment_neighbors))
+      selectRefinementTemplateIndices(*environment, environment_neighbors, *plane_clusters))
     {
       activateTemplate(template_index);
       evaluateActiveTemplate(environment, environment_edges);
@@ -1188,10 +1459,16 @@ private:
     const std::vector<std::pair<std::size_t, std::size_t>> &environment_edges)
   {
     const auto yaw_samples = sampleFullYaw(yaw_step_deg_);
+    const double roll_tolerance_deg = template_graph_.roll_tolerance_deg >= 0.0 ?
+      template_graph_.roll_tolerance_deg : roll_tolerance_deg_;
+    const double pitch_tolerance_deg = template_graph_.pitch_tolerance_deg >= 0.0 ?
+      template_graph_.pitch_tolerance_deg : pitch_tolerance_deg_;
+    const bool enable_template_roll_pitch_search = enable_roll_pitch_search_ ||
+      template_graph_.roll_tolerance_deg > 0.0 || template_graph_.pitch_tolerance_deg > 0.0;
     const auto roll_samples = sampleTolerance(
-      roll_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
+      roll_tolerance_deg, roll_pitch_step_deg_, enable_template_roll_pitch_search);
     const auto pitch_samples = sampleTolerance(
-      pitch_tolerance_deg_, roll_pitch_step_deg_, enable_roll_pitch_search_);
+      pitch_tolerance_deg, roll_pitch_step_deg_, enable_template_roll_pitch_search);
     if (yaw_samples.size() * roll_samples.size() * pitch_samples.size() >
       static_cast<std::size_t>(max_orientation_hypothesis_num_))
     {
@@ -1454,10 +1731,71 @@ private:
     if (result.correspondences.empty()) {
       return result;
     }
-    result.score = score_sum / static_cast<double>(result.correspondences.size());
+    const double geometric_score = score_sum / static_cast<double>(result.correspondences.size());
+    double relative_height_score_sum = 0.0;
+    if (enable_plane_relative_height_evaluation_) {
+      for (std::size_t first_index = 0U;
+        first_index < result.correspondences.size(); ++first_index)
+      {
+        const PlaneCorrespondence &first_correspondence = result.correspondences[first_index];
+        const TemplatePlaneCluster &first_template_plane =
+          template_graph_.plane_clusters[first_correspondence.template_index];
+        const auto &first_environment_plane =
+          latest_plane_clusters_->clusters[first_correspondence.environment_index];
+        if (!first_template_plane.has_centroid ||
+          !isFinite(first_environment_plane.centroid.x) ||
+          !isFinite(first_environment_plane.centroid.y) ||
+          !isFinite(first_environment_plane.centroid.z))
+        {
+          continue;
+        }
+        for (std::size_t second_index = first_index + 1U;
+          second_index < result.correspondences.size(); ++second_index)
+        {
+          const PlaneCorrespondence &second_correspondence = result.correspondences[second_index];
+          const TemplatePlaneCluster &second_template_plane =
+            template_graph_.plane_clusters[second_correspondence.template_index];
+          const auto &second_environment_plane =
+            latest_plane_clusters_->clusters[second_correspondence.environment_index];
+          if (!second_template_plane.has_centroid ||
+            !isFinite(second_environment_plane.centroid.x) ||
+            !isFinite(second_environment_plane.centroid.y) ||
+            !isFinite(second_environment_plane.centroid.z))
+          {
+            continue;
+          }
+          const Vec3 first_template_centroid = rotateRpyRaw(
+            first_template_plane.centroid, roll_deg, pitch_deg,
+            yaw_deg + template_graph_.canonical_yaw_deg);
+          const Vec3 second_template_centroid = rotateRpyRaw(
+            second_template_plane.centroid, roll_deg, pitch_deg,
+            yaw_deg + template_graph_.canonical_yaw_deg);
+          const double template_relative_height =
+            first_template_centroid.z - second_template_centroid.z;
+          const double environment_relative_height =
+            static_cast<double>(first_environment_plane.centroid.z) -
+            static_cast<double>(second_environment_plane.centroid.z);
+          relative_height_score_sum += descendingMembership(
+            std::abs(template_relative_height - environment_relative_height),
+            max_plane_relative_height_dev_full_, max_plane_relative_height_dev_partial_);
+          ++result.relative_height_pair_num;
+        }
+      }
+    }
+    if (result.relative_height_pair_num > 0U) {
+      result.is_relative_height_observed = true;
+      result.relative_height_score = relative_height_score_sum /
+        static_cast<double>(result.relative_height_pair_num);
+    }
+    result.score = result.is_relative_height_observed ?
+      (1.0 - plane_relative_height_weight_) * geometric_score +
+      plane_relative_height_weight_ * result.relative_height_score : geometric_score;
     result.matched_ratio = static_cast<double>(result.correspondences.size()) /
       static_cast<double>(template_graph_.plane_clusters.size());
-    result.support_score = 1.0 - std::exp(-score_sum / plane_support_score_scale_);
+    const double evidence_score_sum = result.is_relative_height_observed ?
+      score_sum * ((1.0 - plane_relative_height_weight_) +
+      plane_relative_height_weight_ * result.relative_height_score) : score_sum;
+    result.support_score = 1.0 - std::exp(-evidence_score_sum / plane_support_score_scale_);
     for (const PlaneCorrespondence &correspondence : result.correspondences) {
       const auto &template_plane = template_graph_.plane_clusters[correspondence.template_index];
       const auto &environment_plane = latest_plane_clusters_->clusters[correspondence.environment_index];
@@ -1895,6 +2233,9 @@ private:
       {"matched_plane_cluster_ratio", plane_evaluation.matched_ratio},
       {"plane_score", plane_evaluation.correspondences.empty() ? 0.0 : plane_evaluation.score},
       {"plane_support_score", plane_evaluation.support_score},
+      {"is_plane_relative_height_observed", plane_evaluation.is_relative_height_observed},
+      {"plane_relative_height_pair_num", plane_evaluation.relative_height_pair_num},
+      {"plane_relative_height_score", plane_evaluation.relative_height_score},
       {"has_strong_plane_evidence", has_strong_plane_evidence},
       {"is_nonplane_component_observed", nonplane_evaluation.is_observed},
       {"template_nonplane_component_num", template_graph_.nonplane_components.size()},
@@ -1922,6 +2263,8 @@ private:
   std::string template_dataset_path_;
   std::vector<std::string> template_ids_;
   std::vector<std::string> template_dataset_paths_;
+  std::vector<double> template_roll_tolerance_degs_;
+  std::vector<double> template_pitch_tolerance_degs_;
   std::string environment_topic_;
   std::string plane_clusters_topic_;
   std::string candidate_topic_;
@@ -1968,6 +2311,10 @@ private:
   double plane_weight_ = 0.0;
   double plane_support_score_scale_ = 1.0;
   double min_plane_support_score_ = 1.0;
+  bool enable_plane_relative_height_evaluation_ = true;
+  double max_plane_relative_height_dev_full_ = 0.0;
+  double max_plane_relative_height_dev_partial_ = 1.0;
+  double plane_relative_height_weight_ = 0.0;
   bool enable_nonplane_component_evaluation_ = true;
   int min_nonplane_component_nodes_ = 2;
   double nonplane_weight_ = 0.0;
@@ -1976,6 +2323,9 @@ private:
   TemplateGraph template_graph_;
   std::vector<LoadedTemplate> loaded_templates_;
   std::unordered_map<std::uint64_t, std::vector<std::size_t>> template_retrieval_index_;
+  std::vector<PlaneRetrievalToken> template_plane_retrieval_tokens_;
+  std::vector<std::size_t> template_plane_min_extent_order_;
+  std::vector<std::size_t> template_plane_max_extent_order_;
   std::size_t active_template_index_ = 0U;
   bool has_active_template_ = false;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr candidate_publisher_;

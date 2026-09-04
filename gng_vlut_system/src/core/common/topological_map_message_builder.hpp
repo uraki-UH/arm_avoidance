@@ -251,6 +251,9 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
     }
     const auto &transition =
         visualization_model.transition_paths[transition_it->second];
+    if (!transition.has_visual_connection) {
+      continue;
+    }
     const bool forward =
         source_node.id == transition.source_node_id &&
         target_node.id == transition.target_node_id;

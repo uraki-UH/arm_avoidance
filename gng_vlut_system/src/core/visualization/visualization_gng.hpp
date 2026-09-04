@@ -15,6 +15,8 @@ namespace robot_sim::visualization {
 struct VisualizationGngSourcePoint {
   int source_node_id = -1;
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::Vector3f direction = Eigen::Vector3f::Zero();
+  std::uint8_t label = 2;
   Eigen::VectorXf weight_angle;
   std::vector<int> angle_neighbor_source_node_ids;
   std::vector<int> coord_neighbor_source_node_ids;
@@ -22,6 +24,10 @@ struct VisualizationGngSourcePoint {
 
 struct VisualizationGngNode {
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::Vector3f normal = Eigen::Vector3f::UnitZ();
+  std::uint8_t label = 2;
+  int representative_source_node_id = -1;
+  Eigen::VectorXf representative_joint_angle;
   std::vector<int> source_node_ids;
 };
 
@@ -30,11 +36,18 @@ struct VisualizationGngTransitionPath {
   int target_node_id = -1;
   std::uint32_t path_offset = 0;
   std::uint16_t path_size = 0;
+  float motion_time_sec = 0.0f;
+  bool has_visual_connection = true;
 };
 
 struct VisualizationGngInterpolationParams {
   float max_joint_step = 0.05f;
   int max_samples_per_edge = 256;
+  int attachment_knn = 6;
+  float attachment_radius_scale = 1.0f;
+  float min_attachment_radius = 0.02f;
+  int max_edge_neighbors = 6;
+  std::vector<float> joint_max_velocities;
 };
 
 inline std::uint64_t visualizationGngSourceEdgeKey(int source_node_id,
@@ -55,11 +68,16 @@ struct VisualizationGngTrainingParams {
   float neighbor_learning_rate = 0.005f;
   float split_error_scale = 0.5f;
   float error_decay = 0.0005f;
+  float joint_motion_weight = 1.0f;
+  float workspace_motion_sec_per_m = 1.0f;
+  float workspace_sample_resolution = 0.05f;
+  std::vector<float> joint_max_velocities;
   std::uint32_t seed = 42;
 };
 
 struct VisualizationGngModel {
   std::uint32_t coord_layer = 0;
+  std::uint32_t joint_angle_dimension = 0;
   std::uint64_t source_signature = 0;
   std::vector<VisualizationGngNode> nodes;
   std::vector<std::pair<std::uint32_t, std::uint32_t>> edges;
@@ -70,8 +88,31 @@ struct VisualizationGngModel {
   bool load(const std::filesystem::path &path, std::string *error = nullptr);
 };
 
+struct VisualizationGngStaticNode {
+  Eigen::Vector3f position = Eigen::Vector3f::Zero();
+  Eigen::Vector3f normal = Eigen::Vector3f::UnitZ();
+  std::uint8_t label = 2;
+  Eigen::VectorXf representative_joint_angle;
+};
+
+struct VisualizationGngStaticModel {
+  std::uint32_t coord_layer = 0;
+  std::uint32_t joint_angle_dimension = 0;
+  std::vector<VisualizationGngStaticNode> nodes;
+  std::vector<std::pair<std::uint32_t, std::uint32_t>> edges;
+
+  bool save(const std::filesystem::path &path, std::string *error = nullptr) const;
+  bool load(const std::filesystem::path &path, std::string *error = nullptr);
+};
+
 std::filesystem::path visualizationGngLayerPath(
     const std::filesystem::path &path_prefix, std::uint32_t coord_layer);
+
+std::filesystem::path visualizationGngStaticLayerPath(
+    const std::filesystem::path &path_prefix, std::uint32_t coord_layer);
+
+VisualizationGngStaticModel makeVisualizationGngStaticModel(
+    const VisualizationGngModel &model);
 
 std::uint64_t computeVisualizationGngSourceSignature(
     const std::vector<VisualizationGngSourcePoint> &source_points);
@@ -126,7 +167,17 @@ std::vector<VisualizationGngSourcePoint> collectVisualizationGngSourcePoints(
     coord_neighbors.erase(
         std::unique(coord_neighbors.begin(), coord_neighbors.end()),
         coord_neighbors.end());
-    points.push_back({node.id, position, node.weight_angle.template cast<float>(),
+    const Eigen::Vector3f direction = node.status.ee_direction.allFinite()
+                                          ? node.status.ee_direction
+                                          : Eigen::Vector3f::Zero();
+    const bool is_usable = node.status.self_collision_free &&
+                           !node.status.is_colliding;
+    const std::uint8_t label = is_usable
+                                   ? static_cast<std::uint8_t>(
+                                         node.status.is_danger ? 3 : 1)
+                                   : static_cast<std::uint8_t>(2);
+    points.push_back({node.id, position, direction, label,
+                      node.weight_angle.template cast<float>(),
                       std::move(angle_neighbors),
                       std::move(coord_neighbors)});
   }

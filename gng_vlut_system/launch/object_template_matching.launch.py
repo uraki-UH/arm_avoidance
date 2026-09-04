@@ -70,6 +70,26 @@ def read_template_sources(source_file):
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise RuntimeError(f"template_sources.{key}は文字列配列で指定してください。")
         values[key] = value
+    orientation_tolerances = sources.get("template_orientation_tolerances", {})
+    if not isinstance(orientation_tolerances, dict):
+        raise RuntimeError("template_orientation_tolerancesはマッピングで指定してください。")
+    parsed_orientation_tolerances = {}
+    for template_id, tolerance in orientation_tolerances.items():
+        if not isinstance(template_id, str) or not template_id or not isinstance(tolerance, dict):
+            raise RuntimeError("template_orientation_tolerancesの形式が不正です。")
+        roll_tolerance_deg = tolerance.get("roll_tolerance_deg", -1.0)
+        pitch_tolerance_deg = tolerance.get("pitch_tolerance_deg", -1.0)
+        if (
+                isinstance(roll_tolerance_deg, bool) or
+                isinstance(pitch_tolerance_deg, bool) or
+                not isinstance(roll_tolerance_deg, (int, float)) or
+                not isinstance(pitch_tolerance_deg, (int, float)) or
+                not -1.0 <= roll_tolerance_deg <= 90.0 or
+                not -1.0 <= pitch_tolerance_deg <= 90.0):
+            raise RuntimeError("template_orientation_tolerancesの角度範囲が不正です。")
+        parsed_orientation_tolerances[template_id] = (
+            float(roll_tolerance_deg), float(pitch_tolerance_deg))
+    values["template_orientation_tolerances"] = parsed_orientation_tolerances
     return values
 
 
@@ -91,9 +111,15 @@ def resolve_matching_templates(dataset_dir, dataset_file, source_file):
         template_id = read_template_id(dataset_path)
         if not template_id:
             raise RuntimeError(f"物体テンプレートではありません: {dataset_path}")
-        return [(dataset_path, template_id)]
+        return [(dataset_path, template_id, -1.0, -1.0)]
 
     sources = read_template_sources(source_file)
+
+    def make_template_entry(dataset_path, template_id):
+        roll_tolerance_deg, pitch_tolerance_deg = sources["template_orientation_tolerances"].get(
+            template_id, (-1.0, -1.0))
+        return dataset_path, template_id, roll_tolerance_deg, pitch_tolerance_deg
+
     if not sources["dataset_files"] and not sources["dataset_dirs"]:
         raise RuntimeError(
             "template_sources_fileへdataset_filesまたはdataset_dirsを設定してください。")
@@ -135,7 +161,10 @@ def resolve_matching_templates(dataset_dir, dataset_file, source_file):
 
     if not template_paths:
         raise RuntimeError("有効な物体テンプレートが選択されていません。")
-    return [(path, template_id) for template_id, path in sorted(template_paths.items())]
+    return [
+        make_template_entry(path, template_id)
+        for template_id, path in sorted(template_paths.items())
+    ]
 
 
 def read_node_profile(profile_file, node_name):
@@ -158,8 +187,12 @@ def create_matching_nodes(context):
     validator_profile = read_node_profile(profile_file, "object_template_match_validator_node")
     environment_topic = LaunchConfiguration("environment_topological_map_topic")
     plane_clusters_topic = LaunchConfiguration("plane_clusters_topic")
-    template_ids = [template_id for _, template_id in templates]
-    dataset_paths = [dataset_path for dataset_path, _ in templates]
+    template_ids = [template_id for _, template_id, _, _ in templates]
+    dataset_paths = [dataset_path for dataset_path, _, _, _ in templates]
+    template_roll_tolerance_degs = [
+        roll_tolerance_deg for _, _, roll_tolerance_deg, _ in templates]
+    template_pitch_tolerance_degs = [
+        pitch_tolerance_deg for _, _, _, pitch_tolerance_deg in templates]
     candidate_topics = [
         f"/{template_id}/object_template_match_candidates"
         for template_id in template_ids
@@ -173,6 +206,8 @@ def create_matching_nodes(context):
             parameters=[matcher_profile, {
                 "template_ids": template_ids,
                 "template_dataset_paths": dataset_paths,
+                "template_roll_tolerance_degs": template_roll_tolerance_degs,
+                "template_pitch_tolerance_degs": template_pitch_tolerance_degs,
                 "environment_topological_map_topic": environment_topic,
                 "plane_clusters_topic": plane_clusters_topic,
                 "candidate_topics": candidate_topics,
@@ -180,7 +215,7 @@ def create_matching_nodes(context):
         ),
     ]
     has_multiple_templates = len(templates) > 1
-    for dataset_path, template_id in templates:
+    for dataset_path, template_id, _, _ in templates:
         candidate_topic = f"/{template_id}/object_template_match_candidates"
         state_topic = f"/{template_id}/object_template_match_state"
         node_suffix = f"_{template_id}" if has_multiple_templates else ""

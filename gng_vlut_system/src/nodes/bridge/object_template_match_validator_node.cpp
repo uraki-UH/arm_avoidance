@@ -175,8 +175,14 @@ private:
   bool isBaseActivationCandidate(const json &candidate) const
   {
     return !candidate.value("is_falsified", false) &&
-      candidate.value("score", 0.0) >= recognition_threshold_ &&
-      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_;
+      candidate.value("score", 0.0) >= std::max(recognition_threshold_, activate_score_th_) &&
+      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_ &&
+      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
+      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
+      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_ &&
+      (!enable_plane_cluster_evidence_ ||
+      !candidate.value("is_plane_cluster_observed", false) ||
+      candidate.value("plane_support_score", 0.0) >= min_plane_support_score_);
   }
 
   bool hasCurrentNonplaneEvidence(const json &candidate) const
@@ -200,10 +206,12 @@ private:
 
   bool isContinuationCandidate(const json &candidate) const
   {
-    const double continuation_threshold = std::max(0.0, recognition_threshold_ - 0.15);
     return !candidate.value("is_falsified", false) &&
-      candidate.value("score", 0.0) >= continuation_threshold &&
-      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_;
+      candidate.value("score", 0.0) >= deactivate_score_th_ &&
+      candidate.value("visible_ratio", candidate.value("matched_node_ratio", 0.0)) >= min_visible_ratio_ &&
+      candidate.value("matched_edge_ratio", 0.0) >= min_matched_edge_ratio_ &&
+      candidate.value("missing_node_ratio", 1.0) <= max_missing_node_ratio_ &&
+      candidate.value("contradiction_point_ratio", 1.0) <= max_contradiction_point_ratio_;
   }
 
   void onCandidate(const std_msgs::msg::String::SharedPtr message)
@@ -254,7 +262,9 @@ private:
       ++consecutive_frame_num_;
       const double duration_sec = first_confirmable_time_ ?
         std::chrono::duration<double>(now_time - *first_confirmable_time_).count() : 0.0;
-      if (duration_sec >= confirmation_time_sec_) {
+      if (consecutive_frame_num_ >= min_confirmed_frame_num_ &&
+        duration_sec >= std::max(confirmation_time_sec_, min_confirm_duration_sec_))
+      {
         is_confirmed_ = true;
         last_supported_time_ = now_time;
         RCLCPP_INFO(

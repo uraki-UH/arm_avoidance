@@ -12,3 +12,5 @@ template_sources:
   exclude_dirs: []
   # 読込対象から除くtemplate_id
   exclude_template_ids: []
+  # template_idごとのroll/pitch許容角[deg]。-1は共通設定の使用
+  template_orientation_tolerances: {}

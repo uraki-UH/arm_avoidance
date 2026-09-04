@@ -90,7 +90,9 @@
     camera_to_map.roll_deg: -103.8
     camera_to_map.pitch_deg: -28.9
     camera_to_map.yaw_deg: -3.4
-    depth_visibility_cache_size: 16
+    # Short synchronization history: enough for callback ordering jitter
+    # without retaining a long queue of full depth images.
+    depth_visibility_cache_size: 3
 
     # The expensive GNG-to-grid update is scheduled from point-cloud activity.
     point_activity_update_enabled: true

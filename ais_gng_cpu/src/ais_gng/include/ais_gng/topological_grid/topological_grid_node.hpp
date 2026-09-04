@@ -90,7 +90,7 @@ private:
   double camera_to_map_roll_deg_ = -103.8;
   double camera_to_map_pitch_deg_ = -28.9;
   double camera_to_map_yaw_deg_ = -3.4;
-  std::size_t depth_visibility_cache_size_ = 16;
+  std::size_t depth_visibility_cache_size_ = 3;
   bool normal_drift_filter_enabled_ = true;
   GridSpec grid_spec_;
   int x_shift_ = 42;
