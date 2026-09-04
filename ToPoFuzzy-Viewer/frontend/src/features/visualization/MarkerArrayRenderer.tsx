@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { is_fixed_frame } from '../../utils/frame_utils';
 import { DirectionalArrow } from './utils/DirectionalArrow';
 
 interface MarkerArrayRendererProps {
@@ -87,8 +86,7 @@ function MarkerFrame({
     const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
     const groupRef = useMarkerFrame(tf);
 
-    // 座標変換を未受信のMarkerは誤った原点座標で描画しない方針
-    if (!is_fixed_frame(frameId) && !tf) return null;
+    // TF未受信時はMarker座標をViewer固定座標として扱うフォールバック
 
     return (
         <group ref={groupRef}>
