@@ -155,10 +155,14 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     useEffect(() => {
         if (isCube || !instRef.current || pointsLen === 0) return;
         const dummy = new THREE.Object3D();
-        const sx = marker.scale[0] || 1, sy = marker.scale[1] || 1, sz = marker.scale[2] || 1;
+        // SPHERE_LISTの直径は先頭の有効なscale値で統一
+        const diameter = Math.max(
+            0.0001,
+            marker.scale[0] || marker.scale[1] || marker.scale[2] || 0.02,
+        );
         pts.forEach((pt, index) => {
             dummy.position.set(pt[0], pt[1], pt[2]);
-            dummy.scale.set(sx, sy, sz);
+            dummy.scale.set(diameter, diameter, diameter);
             dummy.updateMatrix();
             instRef.current?.setMatrixAt(index, dummy.matrix);
         });
