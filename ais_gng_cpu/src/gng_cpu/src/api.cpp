@@ -36,7 +36,24 @@ MY_API int gng_init() {
 }
 
 MY_API int gng_setParameter(const char *paramerter_name, const uint32_t index, const float value){
-    return gng.param.setParameter(paramerter_name, index, value);
+    const std::string name(paramerter_name);
+    auto &core = gng.n1;
+    if (!std::isfinite(value)) {return false;}
+    if (name == "node.covariance_enabled") {
+        core.enable_covariance = value != 0;
+        if (!core.enable_covariance) {for (auto &node : core.nodes) {node.winner_stats = {};}}
+    } else if (name == "node.enable_support") {
+        core.enable_support = value != 0;
+        if (!core.enable_support) {for (auto &node : core.nodes) {node.support_stats = {};}}
+    } else if (name == "node.covariance_winner_rank_max" && (value == 1 || value == 2)) {
+        core.max_covariance_winner_rank = static_cast<uint16_t>(value);
+    } else if (name == "node.support.sample_alpha" && value >= 0 && value <= 1) {
+        core.support_sample_alpha = value;
+    } else if (name == "node.support.second_weight" && value >= 0 && value <= 1) {
+        core.support_second_weight = value;
+    } else {return gng.param.setParameter(paramerter_name, index, value);}
+    core.support_second_alpha = 1 - std::pow(1 - core.support_sample_alpha, core.support_second_weight);
+    return true;
 }
 
 MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const LiDAR_Config *config){
@@ -63,6 +80,25 @@ MY_API void gng_setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
 
 MY_API const GngTrainingEvent* gng_getTrainingEvents(uint32_t *num) {
     return gng.n1.getTrainingEvents(num);
+}
+
+MY_API gng_node_statistics gng_get_node_statistics(uint16_t node_id) {
+    gng_node_statistics result;
+    if (node_id >= gng.n1.nodes.size() || gng.n1.nodes[node_id].id == NODE_NOID) {return result;}
+    const auto &node = gng.n1.nodes[node_id];
+    result.winner_point_count = node.winner_stats.count;
+    result.support_weight_sum = node.support_stats.count;
+    for (std::size_t row = 0; row < 3; ++row) {
+        for (std::size_t column = 0; column < 3; ++column) {
+            const auto idx = 3 * row + column;
+            result.winner_point_covariance[idx] = node.winner_stats.covariance[idx] / std::max(1.0, node.winner_stats.count - 1);
+            if (result.support_weight_sum > 0) {
+                result.support_moment[idx] = node.support_stats.covariance[idx] +
+                    (node.support_stats.mean[row] - node.pos.p[row]) * (node.support_stats.mean[column] - node.pos.p[column]);
+            }
+        }
+    }
+    return result;
 }
 
 MY_API TopologicalMap gng_getTopologicalMap(){

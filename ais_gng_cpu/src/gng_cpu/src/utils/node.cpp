@@ -8,6 +8,8 @@ Node::~Node() {
 }
 
 void Node::init(uint32_t _id, float _eta_s1, float _eta_s2) {
+    winner_stats = {};
+    support_stats = {};
     id = _id;
     edge_num = 0;
 

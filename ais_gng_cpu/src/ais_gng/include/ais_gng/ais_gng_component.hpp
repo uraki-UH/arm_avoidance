@@ -23,6 +23,8 @@
 #include "std_msgs/msg/u_int32_multi_array.hpp"
 
 #if defined(AIS_GNG_BACKEND_CPU)
+#include "ais_gng/node_support.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 #include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
 #include "ais_gng_msgs/msg/plane_cluster_array.hpp"
@@ -45,14 +47,6 @@ using namespace std::chrono_literals;
 
 namespace fuzzrobo {
 
-struct SequentialNodeStats {
-    uint32_t node_frame = 0;
-    bool has_node_frame = false;
-    double count = 0.0;
-    std::array<double, 3> mean{0.0, 0.0, 0.0};
-    std::array<double, 9> m2{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-};
-
 class AiSGNGComponent : public rclcpp::Node {
     using PC2 = sensor_msgs::msg::PointCloud2;
 
@@ -65,6 +59,9 @@ class AiSGNGComponent : public rclcpp::Node {
     bool direct_nonplane_component_enabled_{false};
     topological_plane::nonplane::extractor_options direct_nonplane_component_options_;
     rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr direct_nonplane_component_pub_;
+    node_support::options node_support_options_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_support_pub_;
+    void publish_node_support(const TopologicalMap &map, const std_msgs::msg::Header &header);
 #endif
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;
@@ -94,7 +91,6 @@ class AiSGNGComponent : public rclcpp::Node {
     std::vector<std::deque<uint8_t>> semantic_label_history_;
     bool node_covariance_enabled_{};
     uint16_t node_covariance_winner_rank_max_{1};
-    std::unordered_map<uint16_t, SequentialNodeStats> winner_point_stats_;
     int64_t performance_log_interval_ms_{0};
     std::chrono::steady_clock::time_point last_process_start_{};
     bool has_last_process_start_{false};

@@ -35,6 +35,12 @@ class CUGNG {
     uint16_t training_event_winner_rank_max = 1;
     vector<GngTrainingEvent> training_events;
     uint32_t training_event_num = 0;
+    bool enable_covariance = false;
+    bool enable_support = false;
+    uint16_t max_covariance_winner_rank = 1;
+    double support_sample_alpha = 0.01;
+    double support_second_weight = 0.5;
+    double support_second_alpha = 1 - std::sqrt(0.99);
     bool map_delta_capture_enabled = false;
 
     CUGNG();
@@ -94,6 +100,7 @@ class CUGNG {
         const Node &winner_node,
         const Vec3f &input_point);
     void recordTrainingEvents(const Node_d &winners, const Vec3f &input_point);
+    void update_winner_statistics(const Node_d &winners, const Vec3f &point);
     void recordEdgeDelta(const Node &first, const Node &second, uint8_t operation);
     static GngNodeKey nodeKey(const Node &node);
 

@@ -29,6 +29,11 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_lint_auto_find_test_dependencies()
 
+  ament_add_gtest(test_node_support test/test_node_support.cpp
+    ../gng_cpu/src/utils/node.cpp ../gng_cpu/src/utils/vec3f.cpp)
+  target_include_directories(test_node_support PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(test_node_support Eigen3::Eigen gng_cpu::gng_cpu)
+
   ament_add_gtest(
     test_topological_grid_assignment
     test/test_topological_grid_assignment.cpp

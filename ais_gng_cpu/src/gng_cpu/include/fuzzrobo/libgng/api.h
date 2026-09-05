@@ -189,6 +189,15 @@ void gng_setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
  */
 const GngTrainingEvent* gng_getTrainingEvents(uint32_t *num);
 
+// ROS出力・描画用のノード統計。入力イベントの保存とは独立。
+struct gng_node_statistics {
+    double winner_point_count = 0;
+    double winner_point_covariance[9]{};
+    double support_weight_sum = 0;
+    double support_moment[9]{};
+};
+gng_node_statistics gng_get_node_statistics(uint16_t node_id);
+
 /**
  * @brief GNGによるトポロジカルマップを返す
  * @return トポロジカルマップ

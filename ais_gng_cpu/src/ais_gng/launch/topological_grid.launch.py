@@ -24,7 +24,7 @@ def generate_launch_description():
         "input_topic", default_value="/topological_map/merged"
     )
     pointcloud_topic = DeclareLaunchArgument(
-        "pointcloud_topic", default_value="/downsampling/grasp_support"
+        "pointcloud_topic", default_value="/scan/transformed"
     )
     output_topic = DeclareLaunchArgument(
         "output_topic", default_value="/topological_grid_voxels"

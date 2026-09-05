@@ -204,116 +204,6 @@ bool fillSelectedPointCloud(
     return true;
 }
 
-#if defined(AIS_GNG_BACKEND_CPU)
-void updateSequentialNodeStats(SequentialNodeStats &stats, const std::array<double, 3> &point) {
-    stats.count += 1.0;
-    const double n = stats.count;
-
-    std::array<double, 3> delta{
-        point[0] - stats.mean[0],
-        point[1] - stats.mean[1],
-        point[2] - stats.mean[2],
-    };
-
-    stats.mean[0] += delta[0] / n;
-    stats.mean[1] += delta[1] / n;
-    stats.mean[2] += delta[2] / n;
-
-    std::array<double, 3> delta2{
-        point[0] - stats.mean[0],
-        point[1] - stats.mean[1],
-        point[2] - stats.mean[2],
-    };
-
-    stats.m2[0] += delta[0] * delta2[0];
-    stats.m2[1] += delta[0] * delta2[1];
-    stats.m2[2] += delta[0] * delta2[2];
-    stats.m2[3] += delta[1] * delta2[0];
-    stats.m2[4] += delta[1] * delta2[1];
-    stats.m2[5] += delta[1] * delta2[2];
-    stats.m2[6] += delta[2] * delta2[0];
-    stats.m2[7] += delta[2] * delta2[1];
-    stats.m2[8] += delta[2] * delta2[2];
-}
-
-void accumulateWinnerPointResidualStats(
-    const GngTrainingEvent *events,
-    uint32_t event_num,
-    uint16_t winner_rank_max,
-    std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
-    if (events == nullptr || event_num == 0) {
-        return;
-    }
-
-    for (uint32_t event_idx = 0; event_idx < event_num; ++event_idx) {
-        const auto &event = events[event_idx];
-        if (event.winner_rank == 0 || event.winner_rank > winner_rank_max) {
-            continue;
-        }
-        auto &stats = stats_by_node[event.winner_node_id];
-        if (!stats.has_node_frame || stats.node_frame != event.winner_node_frame) {
-            stats = SequentialNodeStats{};
-            stats.node_frame = event.winner_node_frame;
-            stats.has_node_frame = true;
-        }
-        updateSequentialNodeStats(stats, {
-            static_cast<double>(event.residual.x),
-            static_cast<double>(event.residual.y),
-            static_cast<double>(event.residual.z),
-        });
-    }
-}
-
-void removeInactiveWinnerPointStats(
-    const TopologicalMap &map,
-    std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
-    std::unordered_map<uint16_t, uint32_t> active_node_frames;
-    active_node_frames.reserve(map.node_num);
-    for (uint32_t node_idx = 0; node_idx < map.node_num; ++node_idx) {
-        const auto &node = map.nodes[node_idx];
-        active_node_frames.emplace(node.id, node.frame);
-    }
-
-    for (auto it = stats_by_node.begin(); it != stats_by_node.end();) {
-        const auto active_it = active_node_frames.find(it->first);
-        if (active_it == active_node_frames.end() ||
-            active_it->second != it->second.node_frame) {
-            it = stats_by_node.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void applySequentialWinnerStats(
-    ais_gng_msgs::msg::TopologicalMap &map_msg,
-    const TopologicalMap &map,
-    const std::unordered_map<uint16_t, SequentialNodeStats> &stats_by_node) {
-    const std::size_t node_num = std::min(map_msg.nodes.size(), static_cast<std::size_t>(map.node_num));
-    for (std::size_t i = 0; i < node_num; ++i) {
-        const auto &map_node = map.nodes[i];
-        auto &dst = map_msg.nodes[i];
-        const auto stats_it = stats_by_node.find(map_node.id);
-
-        if (stats_it == stats_by_node.end() ||
-            stats_it->second.node_frame != map_node.frame) {
-            dst.winner_point_count = 0;
-            dst.winner_point_covariance.fill(0.0f);
-            continue;
-        }
-
-        const auto &stats = stats_it->second;
-        const double count = stats.count;
-        dst.winner_point_count = static_cast<uint32_t>(std::lround(std::max(0.0, count)));
-
-        const double denom = count > 1 ? static_cast<double>(count - 1) : 1.0;
-        for (std::size_t j = 0; j < 9; ++j) {
-            dst.winner_point_covariance[j] = static_cast<float>(stats.m2[j] / denom);
-        }
-    }
-}
-#endif
-
 }  // namespace
 
 AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ais_gng_node", options) {
@@ -379,6 +269,25 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
             "node.covariance_winner_rank_max must be between 1 and 2");
     }
     node_covariance_winner_rank_max_ = static_cast<uint16_t>(covariance_winner_rank_max);
+#if defined(AIS_GNG_BACKEND_CPU)
+    rcl_interfaces::msg::ParameterDescriptor support_descriptor;
+    support_descriptor.read_only = true;
+    support_descriptor.description = "支持領域の起動時設定";
+    const bool enable_node_support = declare_parameter<bool>("node.enable_support", false, support_descriptor);
+    auto &support_options = node_support_options_;
+    support_options.sample_alpha = declare_parameter("node.support.sample_alpha", support_options.sample_alpha, support_descriptor);
+    support_options.second_weight = declare_parameter("node.support.second_weight", support_options.second_weight, support_descriptor);
+    support_options.min_axis_std = declare_parameter("node.support.min_axis_std", support_options.min_axis_std, support_descriptor);
+    support_options.base_scale = declare_parameter("node.support.base_scale", support_options.base_scale, support_descriptor);
+    support_options.validate();
+    gng_setParameter("node.enable_support", 0, enable_node_support);
+    gng_setParameter("node.support.sample_alpha", 0, support_options.sample_alpha);
+    gng_setParameter("node.support.second_weight", 0, support_options.second_weight);
+    if (enable_node_support) {
+        node_support_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+            "node_support_ellipsoids", rclcpp::QoS(1));
+    }
+#endif
     performance_log_interval_ms_ =
     this->declare_parameter<int64_t>("performance.log_interval_ms", 0);        // 詳細実行周期ログの間隔(ms)。0で無効
     this->declare_parameter("node.s1_reset_range", 0.1);                           // ノードの選択回数リセット範囲(cpu)
@@ -491,14 +400,14 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         case SUCCESS:
             RCLCPP_INFO(this->get_logger(), "Initialized successfully");
 #if defined(AIS_GNG_BACKEND_CPU)
-            gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
-            gng_setTrainingEventCapture(node_covariance_enabled_ ? 1 : 0);
+            gng_setParameter("node.covariance_enabled", 0, node_covariance_enabled_);
+            gng_setParameter("node.covariance_winner_rank_max", 0, node_covariance_winner_rank_max_);
 #endif
+
             break;
         default:
             break;
     }
-
 
     filter_.init(this);
     downsampling_.init(this);
@@ -573,6 +482,9 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
+        if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0) {
+            continue;
+        }
         auto type = p.get_type();
         if (type == rclcpp::ParameterType::PARAMETER_DOUBLE)
             value = p.as_double();
@@ -618,15 +530,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             success = true;
         } else if (name == "node.covariance_enabled") {
             node_covariance_enabled_ = p.as_bool();
-            if (!node_covariance_enabled_) {
-                winner_point_stats_.clear();
-            }
-#if defined(AIS_GNG_BACKEND_CPU)
-            if (initialized_) {
-                gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
-                gng_setTrainingEventCapture(node_covariance_enabled_ ? 1 : 0);
-            }
-#endif
+
             success = true;
         } else if (name == "node.covariance_winner_rank_max") {
             const auto winner_rank_max = p.as_int();
@@ -636,11 +540,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
                 return result;
             }
             node_covariance_winner_rank_max_ = static_cast<uint16_t>(winner_rank_max);
-#if defined(AIS_GNG_BACKEND_CPU)
-            if (initialized_) {
-                gng_setTrainingEventMaxWinnerRank(node_covariance_winner_rank_max_);
-            }
-#endif
+
             success = true;
 #if defined(AIS_GNG_BACKEND_CPU)
         } else if (name == "plane_cluster.use_node_rho_for_seed_order") {
@@ -864,18 +764,6 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const auto gng_end = std::chrono::steady_clock::now();
     const std::string gng_summary_output = gng_stdout_capture.takeOutput();
 
-#if defined(AIS_GNG_BACKEND_CPU)
-    if (node_covariance_enabled_) {
-        uint32_t event_num = 0;
-        const auto *events = gng_getTrainingEvents(&event_num);
-        accumulateWinnerPointResidualStats(
-            events,
-            event_num,
-            node_covariance_winner_rank_max_,
-            winner_point_stats_);
-    }
-#endif
-
     // GNGの結果を取得
     uint32_t label_num = 0, transformed_pcl_num = 0;
     auto map = gng_getTopologicalMap();// トポロジカルマップ
@@ -892,6 +780,10 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     auto transformed_msg = makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num);
     const std::size_t output_node_count = map_msg->nodes.size();
     const std::size_t output_edge_count = map_msg->edges.size() / 2;
+#if defined(AIS_GNG_BACKEND_CPU)
+    if (node_support_pub_) {publish_node_support(map, header);}
+
+#endif
     const auto conversion_end = std::chrono::steady_clock::now();
 
     // クラスタのラベルを分類
@@ -1039,6 +931,45 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     }
 }
 
+#if defined(AIS_GNG_BACKEND_CPU)
+void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_msgs::msg::Header &header) {
+    if (node_support_pub_->get_subscription_count() == 0) {return;}
+    visualization_msgs::msg::MarkerArray markers;
+    visualization_msgs::msg::Marker clear_marker;
+    clear_marker.header = header;
+    clear_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+    markers.markers.push_back(clear_marker);
+    for (uint32_t idx = 0; idx < map.node_num; ++idx) {
+        const auto &node = map.nodes[idx];
+        const auto shape = node_support::make_ellipsoid(gng_get_node_statistics(node.id), node_support_options_);
+        if (!shape.has_support) {continue;}
+        visualization_msgs::msg::Marker marker;
+        marker.header = header;
+        marker.ns = "node_support";
+        marker.id = node.id;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = node.pos.x;
+        marker.pose.position.y = node.pos.y;
+        marker.pose.position.z = node.pos.z;
+        const Eigen::Quaterniond orientation(shape.axes);
+        marker.pose.orientation.x = orientation.x();
+        marker.pose.orientation.y = orientation.y();
+        marker.pose.orientation.z = orientation.z();
+        marker.pose.orientation.w = orientation.w();
+        marker.scale.x = 2 * node_support_options_.base_scale * shape.axis_std.x();
+        marker.scale.y = 2 * node_support_options_.base_scale * shape.axis_std.y();
+        marker.scale.z = 2 * node_support_options_.base_scale * shape.axis_std.z();
+        marker.color.r = 0.2;
+        marker.color.g = 0.7;
+        marker.color.b = 0.9;
+        marker.color.a = 0.22;
+        markers.markers.push_back(std::move(marker));
+    }
+    node_support_pub_->publish(std::move(markers));
+}
+#endif
+
 void AiSGNGComponent::semseg_cb(const PC2::SharedPtr msg) {
     if(!initialized_ || ((msg->point_step) < (12 + sizeof(NodeSemSeg)))) {
         return;
@@ -1097,6 +1028,15 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
                 }
             }
         }
+#if defined(AIS_GNG_BACKEND_CPU)
+        if (node_covariance_enabled_) {
+            const auto stats = gng_get_node_statistics(node.id);
+            node_msg.winner_point_count = static_cast<uint32_t>(std::lround(stats.winner_point_count));
+            for (std::size_t idx = 0; idx < 9; ++idx) {
+                node_msg.winner_point_covariance[idx] = static_cast<float>(stats.winner_point_covariance[idx]);
+            }
+        }
+#endif
         topological_map_msg->nodes.emplace_back(node_msg);
     }
     topological_map_msg->edges.resize(map.edge_num);
@@ -1130,16 +1070,6 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         topological_map_msg->clusters.emplace_back(cluster_msg);
     }
 
-#if defined(AIS_GNG_BACKEND_CPU)
-    if (node_covariance_enabled_) {
-        removeInactiveWinnerPointStats(map, winner_point_stats_);
-        applySequentialWinnerStats(
-            *topological_map_msg,
-            map,
-            winner_point_stats_);
-    }
-#endif
-
     if (semantic_labels && !semantic_labels->empty()) {
         handle_label::applySemanticLabelsToMap(
             *topological_map_msg,
@@ -1156,19 +1086,10 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
 
     std::size_t nodes_with_winners = 0;
     std::size_t total_samples = 0;
-    std::size_t max_samples = 0;
     uint32_t max_winner_count = 0;
     float max_cov_abs = 0.0f;
     for (const auto &node : topological_map_msg->nodes) {
-        const auto stats_it = winner_point_stats_.find(node.id);
-        if (stats_it != winner_point_stats_.end()) {
-            total_samples += static_cast<std::size_t>(
-                std::lround(std::max(0.0, stats_it->second.count)));
-            max_samples = std::max<std::size_t>(
-                max_samples,
-                static_cast<std::size_t>(
-                    std::lround(std::max(0.0, stats_it->second.count))));
-        }
+        total_samples += node.winner_point_count;
         if (node.winner_point_count > 0) {
             ++nodes_with_winners;
             max_winner_count = std::max(max_winner_count, node.winner_point_count);
@@ -1184,7 +1105,7 @@ std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> AiSGNGComponent::makeTopologi
         "motion stats: nodes=%zu total_samples=%zu max_samples=%zu winners=%zu max_count=%u max_cov_abs=%.6f",
         topological_map_msg->nodes.size(),
         total_samples,
-        max_samples,
+        static_cast<std::size_t>(max_winner_count),
         nodes_with_winners,
         max_winner_count,
         max_cov_abs);

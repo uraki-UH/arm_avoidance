@@ -58,5 +58,9 @@
 | `cos` | cosine | 余弦値 | `cosine` |
 | `sin` | sine | 正弦値 | `sine` |
 | `dev` | deviation | 基準からの偏差 | `deviation` |
+| `std` | standard deviation | 共分散楕円体の軸標準偏差 | `standard_deviation`、`stddev` |
+| `rms` | root mean square | 入力残差の二乗平均平方根 | `root_mean_square` |
+| `sec` | second | 時刻・時間の秒単位 | `second`（時間単位） |
+| `ms` | millisecond | 実行時間のミリ秒単位 | `millisecond` |
 
 - 新しい省略形は、この辞書へ意味と用途を追加してから使用する。

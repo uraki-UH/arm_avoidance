@@ -9,6 +9,7 @@
     gng_setTrainingEventCapture;
     gng_setTrainingEventMaxWinnerRank;
     gng_getTrainingEvents;
+    gng_get_node_statistics;
     gng_getTopologicalMap;
     gng_getDownSampling;
     gng_getAffineTransformedInputPointCloud;

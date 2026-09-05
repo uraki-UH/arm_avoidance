@@ -223,6 +223,25 @@ void CUGNG::recordTrainingEvent(
     event.residual.z = input_point.p[2] - winner_node.pos.p[2];
 }
 
+void CUGNG::update_winner_statistics(const Node_d &winners, const Vec3f &point) {
+    if (!enable_covariance && !enable_support) {return;}
+    if (!std::isfinite(point.p[0]) || !std::isfinite(point.p[1]) || !std::isfinite(point.p[2])) {return;}
+    const uint32_t ids[]{winners.id1, winners.id2};
+    const uint16_t max_rank = enable_support ? 2 : max_covariance_winner_rank;
+    for (uint16_t rank = 1; rank <= max_rank; ++rank) {
+        if (ids[rank - 1] == NODE_NOID) {continue;}
+        auto &node = nodes[ids[rank - 1]];
+        if (enable_covariance && rank <= (enable_support ? 1 : max_covariance_winner_rank)) {
+            const Vec3f residual(point.p[0] - node.pos.p[0], point.p[1] - node.pos.p[1], point.p[2] - node.pos.p[2]);
+            node.winner_stats.add_residual(residual);
+        }
+        if (enable_support) {
+            node.support_stats.add_input(point, rank == 1 ? support_sample_alpha : support_second_alpha,
+                rank == 1 ? 1.0 : support_second_weight);
+        }
+    }
+}
+
 void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point) {
     if (winners.id1 != NODE_NOID) {
         recordTrainingEvent(1, nodes[winners.id1], input_point);
@@ -330,8 +349,8 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     frame_number++;
     beginTrainingEvents();
 
-    random_device rnd;  // 非決定的な乱数生成器を生成
-    mt19937 mt(rnd());  //  引数は初期シード値
+    random_device rnd;  // 非決定的な乱数生成器
+    mt19937 mt(rnd());  // 初期シード値
     int i, j;
     if (input_pcl_num == 0)
         return;
@@ -374,7 +393,8 @@ void CUGNG::learn_normal(Vec3f& p) {
     }
 
     auto &node0 = nodes[n.id1];
-    recordTrainingEvents(n, p);
+    update_winner_statistics(n, p);
+    if (training_event_capture_enabled) {recordTrainingEvents(n, p);}
     // ノードの移動
     // if (!node0.static_node){
     Vec3f new_pos = node0.pos.move(p, node0.eta_s1, 1.f - node0.eta_s1);

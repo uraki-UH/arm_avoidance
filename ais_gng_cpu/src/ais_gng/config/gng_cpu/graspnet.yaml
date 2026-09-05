@@ -6,6 +6,16 @@ ais_gng_node:
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.covariance_enabled: true
+    # 第一・第二勝者の入力統計による共分散楕円体
+    node.enable_support: false
+    # 勝者入力1サンプル当たりの更新率。0は忘却なしの累積統計
+    node.support.sample_alpha: 0.01
+    # 第二勝者サンプルの重み。第一勝者は1
+    node.support.second_weight: 0.5
+    # 楕円体の軸標準偏差[m]
+    node.support.min_axis_std: 0.002
+    # 半軸の標準偏差に対する倍率
+    node.support.base_scale: 2.0
     # 古い接続の削除年齢
     edge.age_max: 100
     node.s1_reset_range: 0.1
@@ -16,7 +26,7 @@ ais_gng_node:
 
     ds.transformed: true
     ds.range_max: 0.2
-    # 把持候補用点群の保持上限
+    # 未知・DEFAULT点群の配信点数枠
     ds.all.num_max: 10000
     ds.unknown.num_max: 6000
     ds.human.num_max: 3000

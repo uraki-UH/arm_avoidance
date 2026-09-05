@@ -178,7 +178,7 @@ TopologicalGridNode::TopologicalGridNode(const rclcpp::NodeOptions &options)
 {
   input_topic_ = this->declare_parameter<std::string>("input_topic", "/topological_map/merged");
   pointcloud_topic_ = this->declare_parameter<std::string>(
-    "pointcloud_topic", "/downsampling/grasp_support");
+    "pointcloud_topic", "/scan/transformed");
   output_topic_ = this->declare_parameter<std::string>(
     "output_topic", "/topological_grid_assignments");
   isolated_topic_ = this->declare_parameter<std::string>("isolated_topic", "");

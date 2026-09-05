@@ -21,3 +21,6 @@ build/
 *.deb
 
 ToPoDualArm/
+
+# 支持領域の実験入力・CSV・生成図。
+/artifacts/node_support_*/

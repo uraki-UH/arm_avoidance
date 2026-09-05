@@ -486,7 +486,7 @@ flowchart TD
 独立した禁止領域違反として扱う。評価結果は合否だけでなく、領域別サンプル数、占有数、違反理由を返す。
 
 `topological_grid_node`は、同一frame・同一timestampの`/topological_map`と現在点群
-`/downsampling/unknown`を照合し、既定で`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のノードと点群が
+`/scan/transformed`を照合し、既定で`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のノードと点群が
 同じセルにある場合を`0.01 m`セルへ量子化する。特定labelだけを許可するinclude条件は持たず、候補labelは
 `excluded_labels`だけで除外する。`DEFAULT`、`WALL`、`UNKNOWN_OBJECT`は同じ物体候補占有として扱う。
 各セルには直近100同期更新のリング履歴を持ち、非除外labelが存在した更新回数をlabel種別にかかわらず合算し、
