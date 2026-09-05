@@ -74,6 +74,7 @@ RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_c
     -f https://data.pyg.org/whl/torch-2.8.0+cpu.html
 
 # bashrc 設定
+COPY docker/ros2_pointcloud_defaults.sh /etc/profile.d/ros2_pointcloud_defaults.sh
 RUN echo '. /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'export ROS2_WS=ros2_ws' >> /root/.bashrc && \
     echo "alias sh='source /opt/ros/humble/setup.bash'" >> /root/.bashrc && \
@@ -85,6 +86,7 @@ RUN echo '. /opt/ros/humble/setup.bash' >> /root/.bashrc && \
     echo 'function ws() { if [ $1 ]; then ROS2_WS=$1_ws && echo "switch ${ROS2_WS}" && . /${ROS2_WS}/install/setup.bash; fi; }' >> /root/.bashrc && \
     echo "alias cl='cw && rm -rf ./build ./install ./log && cd -'" >> /root/.bashrc && \
     echo 'if [ -f /ros2_ws/install/setup.bash ]; then . /ros2_ws/install/setup.bash; fi' >> /root/.bashrc && \
+    echo '. /etc/profile.d/ros2_pointcloud_defaults.sh' >> /root/.bashrc && \
     mkdir -p /ros2_ws/src
 
 # ワークスペース

@@ -359,5 +359,45 @@ sudo sysctl -p /etc/sysctl.d/99-ros2-fastdds-udp-buffers.conf
 
 設定値は起動中のDDS socketへ遡及しない。`netstat -su`の`receive buffer errors`が増加しないことを確認する。
 
+### 大容量PointCloud2の共有メモリ設定とループ再生
+
+UDPバッファの拡張だけでは、Fast DDSの共有メモリ領域は拡張されない。
+`docker/fastdds_shm_large_pointcloud.xml`は共有メモリ領域を32 MiB、
+UDP送受信バッファを16 MiBに設定する。同一ホスト内では共有メモリ、別ホストとはUDPで通信する。
+この設定はゼロコピーの有効化ではない。
+
+`gng_cpu`のCompose環境変数とBash起動設定へ登録済み。
+現在のコンテナにも自動設定を導入済みで、新しく開くBashターミナルでは手動exportが不要。
+別PCでイメージをビルドした場合も同じ設定が適用される。
+設定前から開いていたコンテナ内のターミナルは、一度だけ開き直す。
+
+```bash
+docker compose exec gng_cpu bash
+```
+
+`docker/ros2_pointcloud_defaults.sh`のBash関数が、対象bagのループ再生に限って
+`--read-ahead-queue-size 50`を補う。明示した先読み値やFast DDSプロファイルは優先。
+他のbag・ROSコマンドの引数は変更しない。Bash関数を通らないPython launch等では、
+再生引数に`--read-ahead-queue-size 50`を明示する。
+
+PCの再起動は不要。既存のROSプロセスには後から反映されないため、対象プロセスを再起動する。
+別PCでもリポジトリ内の同じCompose設定を使用できる。同一ホストのコンテナ間通信には、
+共有されたIPC領域とアクセス可能な共有メモリが必要。
+
+先読みキューの単位はバイトではなくメッセージ数。数MiBの点群では数千件で数GiBとなり、
+ループ時の再充填により停止後の追いつき配送が発生する可能性がある。
+対象bagの通常起動コマンドは次のとおり。先読み値の指定は不要。
+
+```bash
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed \
+  --loop
+```
+
+平均Hzだけでなく、ループ境界を含む最大間隔と短時間の一括配送を確認する。
+`Message queue starved`警告が出る環境では、メモリ使用量と停止時間を見ながらキュー数を調整する。
+
+参考: [Fast DDS共有メモリ](https://fast-dds.docs.eprosima.com/en/2.6.x/fastdds/transport/shared_memory/shared_memory.html)、
+[Humble・大容量PointCloud2の再生欠落報告](https://github.com/ros2/rosbag2/issues/1152)。
+
 ros2 launch graspnet_ros2 play_scene.launch.py scene_id:=3 camera:=realsense start:=10 end:=20 h
 z:=20.0

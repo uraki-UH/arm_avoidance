@@ -19,6 +19,8 @@ services:
       - QT_X11_NO_MITSHM=1
       - XDG_RUNTIME_DIR=/tmp/runtime/
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      # 大容量点群向け共有メモリ領域とUDPバッファの設定
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/ros2_ws/src/docker/fastdds_shm_large_pointcloud.xml
       - HISTFILE=/dev/null
       - HISTSIZE=10000
       - HISTFILESIZE=0
