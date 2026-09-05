@@ -347,5 +347,17 @@ ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
 
 ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
+### 大容量PointCloud2再生用UDPバッファ
+
+Fast DDSで数MiBのPointCloud2を再生する前に、PC全体のUDPバッファを一度だけ設定する。設定後はbag playerとAIS-GNGを再起動する。
+
+```bash
+sudo install -m 0644 docker/ros2_fastdds_udp_buffers.conf \
+  /etc/sysctl.d/99-ros2-fastdds-udp-buffers.conf
+sudo sysctl -p /etc/sysctl.d/99-ros2-fastdds-udp-buffers.conf
+```
+
+設定値は起動中のDDS socketへ遡及しない。`netstat -su`の`receive buffer errors`が増加しないことを確認する。
+
 ros2 launch graspnet_ros2 play_scene.launch.py scene_id:=3 camera:=realsense start:=10 end:=20 h
 z:=20.0
