@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
@@ -102,6 +102,7 @@ function MarkerFrame({
 }
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
+    const { invalidate } = useThree();
     const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
     const pts = useMemo(() => marker.points || [], [marker.points]);
     const pointsLen = pts.length;
@@ -152,7 +153,7 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     }), [color, opacity, isCube]);
 
     const instRef = useRef<THREE.InstancedMesh>(null);
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (isCube || !instRef.current || pointsLen === 0) return;
         const dummy = new THREE.Object3D();
         // SPHERE_LISTの直径は先頭の有効なscale値で統一
@@ -168,7 +169,10 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
         });
         instRef.current.count = pointsLen;
         instRef.current.instanceMatrix.needsUpdate = true;
-    }, [isCube, pts, marker.scale, pointsLen]);
+        instRef.current.computeBoundingSphere();
+        invalidate();
+        // 個数・材質変更によるメッシュ再生成時も描画前に行列を初期化
+    }, [isCube, pts, marker.scale, pointsLen, meshGeometry, meshMaterial, invalidate]);
 
     useEffect(() => () => {
         lineMaterial.dispose();
@@ -195,7 +199,8 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
             key={pointsLen}
             ref={instRef}
             args={[meshGeometry!, meshMaterial!, Math.max(1, pointsLen)]}
-            count={pointsLen}
+            // 行列初期化前の単位サイズ球の描画防止
+            count={0}
             position={position}
             rotation={rotation}
             renderOrder={MARKER_RENDER_ORDER}
