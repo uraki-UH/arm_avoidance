@@ -28,7 +28,6 @@ class VoxelGrid {
         vector<Vec3f> filtered_pcl;  // フィルタリング後の点群
         uint32_t filtered_pcl_num;
         uint32_t voxel_index_num;
-        vector<Vec3f> sorted_inpcl; // ソートされた入力点群
 
         void init(GridConfig *_grid_config, OtherConfig *_other_config);
         void applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels);

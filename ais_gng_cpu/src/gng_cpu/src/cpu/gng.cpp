@@ -263,13 +263,12 @@ void GNG::attention(){
             continue;
         for (j = vg.voxel_range[i].start; j < vg.voxel_range[i].end; ++j) {
             map.inpcl_labels[vg.voxel_index[j].raw_index] = voxel_labels[i];
-            attention_pcl[attention_pcl_num] = vg.sorted_inpcl[j];
+            attention_pcl[attention_pcl_num] = map.input_pcl[vg.voxel_index[j].raw_index];
             attention_pcl_num++;
-            // memcpy(&, &vg.sorted_inpcl[j*3], sizeof(float) * 3);
         }
     }
-    boost::sort::spreadsort::integer_sort(voxel2node_ids.begin(),
-    voxel2node_ids.begin() + voxel2node_ids_num, voxel_rightshift_func);
+    boost::sort::spreadsort::integer_sort(voxel2node_ids.data(),
+    voxel2node_ids.data() + voxel2node_ids_num, voxel_rightshift_func);
 }
 
 void GNG::makeResult(){

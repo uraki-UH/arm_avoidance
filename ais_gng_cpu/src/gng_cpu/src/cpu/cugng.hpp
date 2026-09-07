@@ -23,6 +23,9 @@ class CUGNG {
     vector<Node> nodes;
     vector<uint8_t> edge_count;
     vector<array<uint32_t, NODE_GRID_NODE_NUM_NAX>> grid;
+    // 使用セルを含む256セル単位の遅延確保。未使用ページの印はUINT32_MAX。
+    static constexpr uint32_t grid_page_size = 256;
+    vector<uint32_t> grid_page_offsets;
     vector<uint8_t> grid_node_num;
     vector<uint16_t> tn_id;
     NodeConfig gng_config;
@@ -93,6 +96,14 @@ class CUGNG {
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
 
    private:
+    array<uint32_t, NODE_GRID_NODE_NUM_NAX> &grid_cell(uint32_t idx) {
+        auto &offset = grid_page_offsets.data()[idx / grid_page_size];
+        if (offset == UINT32_MAX) {
+            offset = grid.size();
+            grid.resize(static_cast<size_t>(offset) + grid_page_size);
+        }
+        return grid.data()[offset + idx % grid_page_size];
+    }
     void beginTrainingEvents();
     void resizeTrainingEventBuffer();
     void recordTrainingEvent(

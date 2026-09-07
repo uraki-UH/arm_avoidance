@@ -41,6 +41,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     // tn_id.clear();
     edge_count.clear();
     grid.clear();
+    grid_page_offsets.clear();
     grid_node_num.clear();
 
     // malloc
@@ -49,7 +50,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     edge_count.resize(node_num_max * node_num_max);
     memset(edge_count.data(), 0, sizeof(uint8_t) * node_num_max * node_num_max);
     edge_distance.resize(node_num_max * node_num_max);
-    grid.resize(grid_config.maxXYZ);
+    grid_page_offsets.assign((static_cast<size_t>(grid_config.maxXYZ) + grid_page_size - 1) / grid_page_size, UINT32_MAX);
     grid_node_num.resize(grid_config.maxXYZ, 0);
     for (auto& node : nodes)
         node.init(NODE_NOID, 0.f, 0.f);
@@ -73,6 +74,7 @@ void CUGNG::clear() {
     tn_id.clear();
     edge_count.clear();
     grid.clear();
+    grid_page_offsets.clear();
     grid_node_num.clear();
     training_events.clear();
     training_event_num = 0;
@@ -475,9 +477,9 @@ bool CUGNG::getMinGrid(Vec3f& p, Node_d& n){
     float norm2;
     uint32_t grid_index;
 
-    grid_mid_i = (int)((p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p[2] - grid_config.z_min) * grid_config.unit_1);
+    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
+    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
+    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
 
     grid_min_i = MAX(0, grid_mid_i - 1);
     grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
@@ -496,13 +498,19 @@ bool CUGNG::getMinGrid(Vec3f& p, Node_d& n){
     for (i = grid_min_i; i <= grid_max_i; ++i)
         for (j = grid_min_j; j <= grid_max_j; ++j)
             for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = grid_config.getIndex(i, j, k);
+                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
                 if (grid_index >= grid_config.maxXYZ)
                     continue;
-                for (uint32_t grid_node_i = 0; grid_node_i < grid_node_num[grid_index]; ++grid_node_i) {
-                    auto id = grid[grid_index][grid_node_i];
+                const auto num = grid_node_num[grid_index];
+                if (num == 0) {continue;}
+                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
+                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
+                    const auto id = ids[grid_node_i];
                     auto &node = nodes[id];
-                    norm2 = p.squaredNorm(node.pos);  // input-nodeベクトル
+                    const float x = p.p[0] - node.pos.p[0];
+                    const float y = p.p[1] - node.pos.p[1];
+                    const float z = p.p[2] - node.pos.p[2];
+                    norm2 = x * x + y * y + z * z;
                     if (norm2 < n.id2_d2) {
                         if (norm2 < n.id1_d2) {
                             n.id2 = n.id1,
@@ -527,9 +535,9 @@ bool CUGNG::getDownSamplingGrid(Vec3f& p, uint8_t& label, Node_d &n){
     float norm2;
     uint32_t grid_index;
 
-    grid_mid_i = (int)((p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p[2] - grid_config.z_min) * grid_config.unit_1);
+    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
+    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
+    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
 
     grid_min_i = MAX(0, grid_mid_i - 1);
     grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
@@ -550,13 +558,19 @@ bool CUGNG::getDownSamplingGrid(Vec3f& p, uint8_t& label, Node_d &n){
     for (i = grid_min_i; i <= grid_max_i; ++i)
         for (j = grid_min_j; j <= grid_max_j; ++j)
             for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = grid_config.getIndex(i, j, k);
+                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
                 if (grid_index >= grid_config.maxXYZ)
                     continue;
-                for (uint32_t grid_node_i = 0; grid_node_i < grid_node_num[grid_index]; ++grid_node_i) {
-                    auto id = grid[grid_index][grid_node_i];
+                const auto num = grid_node_num[grid_index];
+                if (num == 0) {continue;}
+                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
+                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
+                    const auto id = ids[grid_node_i];
                     auto &node = nodes[id];
-                    norm2 = p.squaredNorm(node.pos);  // input-nodeベクトル
+                    const float x = p.p[0] - node.pos.p[0];
+                    const float y = p.p[1] - node.pos.p[1];
+                    const float z = p.p[2] - node.pos.p[2];
+                    norm2 = x * x + y * y + z * z;
                     if(norm2 < gng_config.s1_reset_range2){
                         node.age_s1 = 0;
                     }
@@ -590,7 +604,7 @@ void CUGNG::delete_node(uint32_t idx) {
         return;
     recordNodeDelta(node, GNG_DELTA_REMOVE);
     // gridから削除
-    auto& g1 = grid[node.grid_i];
+    auto& g1 = grid_cell(node.grid_i);
     uint32_t last = --grid_node_num[node.grid_i];
     if (node.grid_vec_i != last) {
         nodes[g1[last]].grid_vec_i = node.grid_vec_i;
@@ -639,7 +653,7 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
 
     // グリッドの更新
     // 削除
-    auto& g1 = grid[node.grid_i];
+    auto& g1 = grid_cell(node.grid_i);
     if(grid_node_num[node.grid_i] == 0){
         assert(node_num);
     }
@@ -651,7 +665,7 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
     }
     g1[last] = NODE_NOID;
 
-    auto& g2 = grid[new_index];
+    auto& g2 = grid_cell(new_index);
     node.grid_i = new_index;
     node.grid_vec_i = grid_node_num[new_index]++;
     g2[node.grid_vec_i] = node.id;
@@ -675,7 +689,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
             node.frame = frame_number;
             node.grid_i = grid_i;
-            auto& g1 = grid[grid_i];
+            auto& g1 = grid_cell(grid_i);
             node.grid_vec_i = grid_node_num[grid_i]++;
             g1[node.grid_vec_i] = i;
             node_num++;

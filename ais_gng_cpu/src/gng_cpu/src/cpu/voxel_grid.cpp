@@ -18,7 +18,6 @@ void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) {
     voxel_index.resize(_other_config->point_cloud_num);
     voxel_range.resize(_other_config->point_cloud_num);
     filtered_pcl.resize(_other_config->point_cloud_num);
-    sorted_inpcl.resize(_other_config->point_cloud_num);
 }
 
 void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
@@ -42,7 +41,8 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
     voxel_index_num = n;
 
     // ボクセルグリッドのソート
-    boost::sort::spreadsort::integer_sort(voxel_index.begin(), voxel_index.begin() + voxel_index_num, voxel_rightshift_func);
+    boost::sort::spreadsort::integer_sort(voxel_index.data(), voxel_index.data() + voxel_index_num,
+        [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });
 
     uint32_t now_index = voxel_index[0].voxel_index;
     voxel_range[0].start = 0;
@@ -52,19 +52,24 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
             voxel_range[n].end = i;
             voxel_range[++n].start = i;
         }
-        sorted_inpcl[i] = input_pcl[voxel_index[i].raw_index];
     }
     voxel_range[n].end = voxel_index_num;
     filtered_pcl_num = n;
 
     // ボクセルグリッドのフィルタリング
     for (i = 0; i < filtered_pcl_num; ++i){
-        filtered_pcl[i].zero();
+        float x = 0, y = 0, z = 0;
+        const auto *points = input_pcl.data();
+        const auto *indices = voxel_index.data();
         for (n = voxel_range[i].start; n < voxel_range[i].end; ++n) {
-            filtered_pcl[i] += sorted_inpcl[n];
+            x += points[indices[n].raw_index].p[0];
+            y += points[indices[n].raw_index].p[1];
+            z += points[indices[n].raw_index].p[2];
         }
         uint32_t voxel_num = voxel_range[i].end - voxel_range[i].start;
         float num_1 = (1.f) / (float)voxel_num;
-        filtered_pcl[i] *= num_1; // 平均化
+        filtered_pcl[i].p[0] = x * num_1;
+        filtered_pcl[i].p[1] = y * num_1;
+        filtered_pcl[i].p[2] = z * num_1;
     }
 }
