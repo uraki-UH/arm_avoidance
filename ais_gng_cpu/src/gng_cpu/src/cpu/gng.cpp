@@ -268,7 +268,8 @@ void GNG::attention(){
         }
     }
     boost::sort::spreadsort::integer_sort(voxel2node_ids.data(),
-    voxel2node_ids.data() + voxel2node_ids_num, voxel_rightshift_func);
+    voxel2node_ids.data() + voxel2node_ids_num,
+        [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });
 }
 
 void GNG::makeResult(){

@@ -36,6 +36,12 @@ file(GLOB_RECURSE SRC_FILES
     src/*.hpp
 )
 
+# ターゲット作成時のLTO設定の適用
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  cmake_policy(SET CMP0069 NEW)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
+
 add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
 target_include_directories(${PROJECT_NAME}
     PUBLIC
@@ -50,10 +56,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
     POST_BUILD
     COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${PROJECT_NAME}>
   )
-  # LTOの新しい挙動を有効にするポリシーを設定
-  cmake_policy(SET CMP0069 NEW)
-  #  LTO有効化
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 endif()
 
 # ステップ1 & 3のコンパイラオプション
