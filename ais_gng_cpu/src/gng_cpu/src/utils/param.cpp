@@ -32,10 +32,7 @@ bool GridConfig::init(GridConfig _c){
 }
 
 bool GridConfig::isRange(Vec3f &p){
-    if (p[0] < x_min || p[0] > x_max) return false;
-    if (p[1] < y_min || p[1] > y_max) return false;
-    if (p[2] < z_min || p[2] > z_max) return false;
-    return true;
+    return isRange(p.p);
 }
 
 bool GridConfig::isRange(float *pos){
@@ -50,12 +47,7 @@ uint32_t GridConfig::getIndex(int i, int j, int k) {
 }
 
 uint32_t GridConfig::getIndex(Vec3f &p){
-    if(!isRange(p))
-        return UINT32_MAX; // 範囲外
-    int i = (int)((p[0] - x_min) * unit_1);
-    int j = (int)((p[1] - y_min) * unit_1);
-    int k = (int)((p[2] - z_min) * unit_1);
-    return getIndex(i, j, k);
+    return getIndex(p.p);
 }
 
 uint32_t GridConfig::getIndex(float *p){

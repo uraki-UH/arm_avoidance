@@ -127,9 +127,9 @@ Vec3f Vec3f::normalized() {
 }
 Vec3f Vec3f::move(Vec3f& vec, float eta, float eta_2) {
     Vec3f v;
-    v[0] = vec[0] * eta + p[0] * eta_2;
-    v[1] = vec[1] * eta + p[1] * eta_2;
-    v[2] = vec[2] * eta + p[2] * eta_2;
+    v.p[0] = vec.p[0] * eta + p[0] * eta_2;
+    v.p[1] = vec.p[1] * eta + p[1] * eta_2;
+    v.p[2] = vec.p[2] * eta + p[2] * eta_2;
     return v;
 }
 void Vec3f::zero() {

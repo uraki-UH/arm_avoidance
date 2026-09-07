@@ -624,11 +624,11 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
         return;
     }
 
-    if(!voxel_config.isRange(new_pos)){
+    if(!voxel_config.isRange(new_pos.p)){
         return;
     }
 
-    uint32_t new_index = grid_config.getIndex(new_pos);
+    uint32_t new_index = grid_config.getIndex(new_pos.p);
     if(new_index >= grid_config.maxXYZ){
         // 何もしない
         return;
@@ -637,11 +637,11 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
         return;
     }
     const bool position_changed = map_delta_capture_enabled &&
-        (node.pos[0] != new_pos[0] || node.pos[1] != new_pos[1] ||
-         node.pos[2] != new_pos[2]);
-    node.pos[0] = new_pos[0];
-    node.pos[1] = new_pos[1];
-    node.pos[2] = new_pos[2];
+        (node.pos.p[0] != new_pos.p[0] || node.pos.p[1] != new_pos.p[1] ||
+         node.pos.p[2] != new_pos.p[2]);
+    node.pos.p[0] = new_pos.p[0];
+    node.pos.p[1] = new_pos.p[1];
+    node.pos.p[2] = new_pos.p[2];
     if (position_changed) {
         recordNodeDelta(node, GNG_DELTA_UPDATE);
     }
