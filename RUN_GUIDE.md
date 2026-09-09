@@ -354,10 +354,7 @@ sudo install -m 0644 docker/ros2_fastdds_udp_buffers.conf \
 sudo sysctl -p /etc/sysctl.d/99-ros2-fastdds-udp-buffers.conf
 ```
 
-```bash
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed \
-  --loop
-```
+ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed  --loop
 
 ros2 launch graspnet_ros2 play_scene.launch.py scene_id:=3 camera:=realsense start:=10 end:=20 h
 z:=20.0

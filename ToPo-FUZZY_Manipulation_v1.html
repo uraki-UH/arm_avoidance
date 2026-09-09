@@ -7983,7 +7983,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
     }
     rosConnecting = false;
     foundation_pose_topic_objects.clear();
-    rosPublishers.forEach(p=>p.onClose());
+    rosPublishers.forEach(p=>p.onBridgeLeaseLost?.());
     rosSubscribers.forEach(s=>s.onClose());
     setRosBridgeStatus('ROS bridge: another tab active');
   }
@@ -8130,10 +8130,16 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
         setStatus(`${statusPrefix}: disabled`);
         return false;
       }
+      if(!ros_bridge_lease.hasLease()){
+        publish_lease.stop();
+        stop();
+        setStatus(`${statusPrefix}: another tab active`);
+        return false;
+      }
       publish_lease.update();
       if(!publish_lease.hasLease()){
         stop();
-        setStatus('0 pts 0.0 Hz');
+        setStatus(`${statusPrefix}: another tab owns topic`);
         return false;
       }
       if(!ros || !ros.isConnected){
@@ -8224,13 +8230,22 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
     const onError = ()=>{
       setStatus(`${statusPrefix}: error`);
     };
+    const onBridgeLeaseLost = ()=>{
+      publish_lease.stop();
+      stop();
+      setStatus(`${statusPrefix}: another tab active`);
+    };
     const renewPublishLease = ()=>{
       if(!enabledEl?.checked) return;
+      if(!ros_bridge_lease.hasLease()){
+        onBridgeLeaseLost();
+        return;
+      }
       const was_owner = publish_lease.hasLease();
       const is_owner = publish_lease.update();
       if(!is_owner){
         if(topicObj) stop();
-        setStatus('0 pts 0.0 Hz');
+        setStatus(`${statusPrefix}: another tab owns topic`);
         return;
       }
       if(!was_owner && ros?.isConnected) start();
@@ -8251,7 +8266,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
         if(enabledEl?.checked) start();
       });
     }
-    rosPublishers.push({onConnection, onClose, onError});
+    rosPublishers.push({onConnection, onClose, onError, onBridgeLeaseLost});
     return {sync, stop};
   }
   function applyRosTopicSubscribeQos(topicObj,qos){
