@@ -15,7 +15,6 @@ import {
     GngStatus,
     GngParams,
     GngConfigInfo,
-    ContinuousPublishStatus,
     NodeParameters,
     SetParameterResult,
     EditRegion,
@@ -94,7 +93,6 @@ export type {
     GngStatus,
     GngParams,
     GngConfigInfo,
-    ContinuousPublishStatus,
     NodeParameters,
     SetParameterResult,
     EditRegion,
@@ -533,10 +531,6 @@ export interface UseWebSocketReturn {
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
     applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
-    startContinuousPublish: (topic: string, rateHz: number) => Promise<{ success: boolean; topic?: string; rateHz?: number }>;
-    stopContinuousPublish: () => Promise<{ success: boolean }>;
-    getContinuousPublishStatus: () => Promise<ContinuousPublishStatus>;
-
     openEditSession: (sourceTopic: string, targetFrame?: string) => Promise<EditSessionInfo>;
     addEditRegion: (
         sessionId: string,
@@ -643,22 +637,6 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
             matcher: config.matcher,
             validator: config.validator,
         }),
-        startContinuousPublish: (
-            topic: string,
-            rateHz: number
-        ): Promise<{ success: boolean; topic?: string; rateHz?: number }> =>
-            sendRpc('publish.startContinuous', { topic, rateHz }),
-        stopContinuousPublish: (): Promise<{ success: boolean }> => sendRpc('publish.stopContinuous'),
-        getContinuousPublishStatus: async (): Promise<ContinuousPublishStatus> => {
-            try {
-                return await sendRpc<ContinuousPublishStatus>('publish.status');
-            } catch (rpcError) {
-                if (!isUnmountCancellation(rpcError)) {
-                    console.error('Failed to get continuous publish status:', rpcError);
-                }
-                return { isPublishing: false, topic: '', rateHz: 0, pointCount: 0 };
-            }
-        },
         openEditSession: (
             sourceTopic: string,
             targetFrame = 'map'

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ContinuousPublishStatus } from '../../hooks/useWebSocket';
 
 export interface PointCloudFileInfo {
     path: string;
@@ -13,26 +12,17 @@ interface ServerFileBrowserProps {
     isConnected: boolean;
     listPointCloudFiles: () => Promise<PointCloudFileInfo[]>;
     loadPointCloudFile: (path: string) => Promise<{ success: boolean; pointCount?: number }>;
-    startContinuousPublish: (topic: string, rateHz: number) => Promise<{ success: boolean; topic?: string; rateHz?: number }>;
-    stopContinuousPublish: () => Promise<{ success: boolean }>;
-    getContinuousPublishStatus: () => Promise<ContinuousPublishStatus>;
 }
 
 export function ServerFileBrowser({
     isConnected,
     listPointCloudFiles,
-    loadPointCloudFile,
-    startContinuousPublish,
-    stopContinuousPublish,
-    getContinuousPublishStatus
+    loadPointCloudFile
 }: ServerFileBrowserProps) {
     const [files, setFiles] = useState<PointCloudFileInfo[]>([]);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loadStatus, setLoadStatus] = useState<{ success: boolean; message?: string } | null>(null);
-    const [publishTopic, setPublishTopic] = useState('/offline_pointcloud');
-    const [publishRate, setPublishRate] = useState(10);
-    const [continuousStatus, setContinuousStatus] = useState<ContinuousPublishStatus | null>(null);
 
     const refreshFiles = useCallback(async () => {
         if (!isConnected) return;
@@ -47,28 +37,11 @@ export function ServerFileBrowser({
         }
     }, [isConnected, listPointCloudFiles]);
 
-    const refreshContinuousStatus = useCallback(async () => {
-        if (!isConnected) return;
-        try {
-            const status = await getContinuousPublishStatus();
-            setContinuousStatus(status);
-        } catch (e) {
-            console.error('Failed to get continuous publish status:', e);
-        }
-    }, [isConnected, getContinuousPublishStatus]);
-
     useEffect(() => {
         if (isConnected) {
             refreshFiles();
-            refreshContinuousStatus();
         }
-    }, [isConnected, refreshFiles, refreshContinuousStatus]);
-
-    useEffect(() => {
-        if (!isConnected) return;
-        const interval = setInterval(refreshContinuousStatus, 3000);
-        return () => clearInterval(interval);
-    }, [isConnected, refreshContinuousStatus]);
+    }, [isConnected, refreshFiles]);
 
     const handleLoad = async () => {
         if (!selectedFile) return;
@@ -86,30 +59,6 @@ export function ServerFileBrowser({
                 success: false,
                 message: e instanceof Error ? e.message : 'Load failed'
             });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleStartContinuous = async () => {
-        setIsLoading(true);
-        try {
-            await startContinuousPublish(publishTopic, publishRate);
-            await refreshContinuousStatus();
-        } catch (e) {
-            console.error('Failed to start continuous publish:', e);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleStopContinuous = async () => {
-        setIsLoading(true);
-        try {
-            await stopContinuousPublish();
-            await refreshContinuousStatus();
-        } catch (e) {
-            console.error('Failed to stop continuous publish:', e);
         } finally {
             setIsLoading(false);
         }
@@ -167,30 +116,6 @@ export function ServerFileBrowser({
                 )}
             </div>
 
-            <div className="surface-muted grid grid-cols-3 gap-2 p-3">
-                <div className="col-span-2 space-y-1">
-                    <label className="control-label">Publish Topic</label>
-                    <input
-                        type="text"
-                        value={publishTopic}
-                        onChange={(e) => setPublishTopic(e.target.value)}
-                        placeholder="/offline_pointcloud"
-                        className="input-field"
-                    />
-                </div>
-                <div className="space-y-1">
-                    <label className="control-label">Rate (Hz)</label>
-                    <input
-                        type="number"
-                        value={publishRate}
-                        onChange={(e) => setPublishRate(Number(e.target.value))}
-                        min={1}
-                        max={100}
-                        className="input-field"
-                    />
-                </div>
-            </div>
-
             <button
                 onClick={handleLoad}
                 disabled={!selectedFile || isLoading}
@@ -198,28 +123,6 @@ export function ServerFileBrowser({
             >
                 {isLoading ? 'Loading...' : 'Load Selected File'}
             </button>
-
-            {loadStatus?.success && (
-                <div className="space-y-2">
-                    {continuousStatus?.isPublishing ? (
-                        <button
-                            onClick={handleStopContinuous}
-                            disabled={isLoading}
-                            className="btn-danger w-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                            Stop Continuous Publish
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleStartContinuous}
-                            disabled={isLoading}
-                            className="btn-secondary w-full border-green-400/40 bg-green-500/20 px-4 py-2 text-sm font-semibold text-green-100 hover:bg-green-500/30 disabled:opacity-50"
-                        >
-                            Start Continuous Publish ({publishRate} Hz)
-                        </button>
-                    )}
-                </div>
-            )}
 
             {loadStatus && (
                 <div className={`rounded-md border px-3 py-2 text-xs ${loadStatus.success
@@ -230,12 +133,6 @@ export function ServerFileBrowser({
                 </div>
             )}
 
-            {continuousStatus?.isPublishing && (
-                <div className="rounded-md border border-sky-400/40 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
-                    Publishing to <span className="font-mono">{continuousStatus.topic}</span> at {continuousStatus.rateHz} Hz
-                    <div className="mt-0.5 text-[10px] text-sky-100/75">{continuousStatus.pointCount.toLocaleString()} points</div>
-                </div>
-            )}
         </div>
     );
 }

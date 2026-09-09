@@ -359,13 +359,6 @@ export interface GngConfigInfo {
     path: string;
 }
 
-export interface ContinuousPublishStatus {
-    isPublishing: boolean;
-    topic: string;
-    rateHz: number;
-    pointCount: number;
-}
-
 export interface EditRegion {
     regionId: string;
     frameId: string;

@@ -87,11 +87,6 @@ Published before each binary cloud frame.
 - `files.list`
 - `files.load` (`{ path }`)
 
-## Continuous Publish
-- `publish.startContinuous` (`{ topic, rateHz }`)
-- `publish.stopContinuous`
-- `publish.status`
-
 ## Rosbag
 - `rosbag.list`
 - `rosbag.play` (`{ path, remaps, loop }`)

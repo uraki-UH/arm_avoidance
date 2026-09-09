@@ -53,7 +53,6 @@ import {
     PointCloudFileInfo,
     GngStatus,
     GngParams,
-    ContinuousPublishStatus,
     NodeParameters,
     SetParameterResult,
     LayerSettings,
@@ -96,10 +95,6 @@ interface SidebarContentProps {
     setParameter: (paramName: string, value: number | string | boolean) => Promise<SetParameterResult>;
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
     applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
-
-    startContinuousPublish: (topic: string, rateHz: number) => Promise<{ success: boolean; topic?: string; rateHz?: number }>;
-    stopContinuousPublish: () => Promise<{ success: boolean }>;
-    getContinuousPublishStatus: () => Promise<ContinuousPublishStatus>;
 
     totalPoints: number;
     pointClouds: PointCloudData[];
@@ -445,9 +440,6 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     isConnected={props.isConnected}
                     listPointCloudFiles={props.listPointCloudFiles}
                     loadPointCloudFile={props.loadPointCloudFile}
-                    startContinuousPublish={props.startContinuousPublish}
-                    stopContinuousPublish={props.stopContinuousPublish}
-                    getContinuousPublishStatus={props.getContinuousPublishStatus}
                 />
             </CollapsibleSection>
 

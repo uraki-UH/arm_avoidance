@@ -191,9 +191,6 @@ function App() {
         setParameter,
         getTemplateMatchConfig,
         applyTemplateMatchConfig,
-        startContinuousPublish,
-        stopContinuousPublish,
-        getContinuousPublishStatus,
     } = useWebSocket(wsUrl);
 
     useEffect(() => {
@@ -652,9 +649,6 @@ function App() {
                             setParameter={setParameter}
                             getTemplateMatchConfig={getTemplateMatchConfig}
                             applyTemplateMatchConfig={applyTemplateMatchConfig}
-                            startContinuousPublish={startContinuousPublish}
-                            stopContinuousPublish={stopContinuousPublish}
-                            getContinuousPublishStatus={getContinuousPublishStatus}
                             robotData={robotData}
                             robotSettings={robotSettings}
                             markerData={markerData}
