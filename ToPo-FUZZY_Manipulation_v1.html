@@ -680,7 +680,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>Table design / 机デザイン</label><select id="tableDesign"><option value="rect" selected>Rect desk / 長方形机</option><option value="round">Round table / 丸机</option><option value="lab">Lab desk / 実験机</option><option value="corner">Corner desk / コーナー机</option><option value="pedestal">Pedestal table / 台座テーブル</option></select></div>
           <div><label>Table size [m]</label><input id="tableSize" type="range" min="0.20" max="0.80" step="0.02" value="0.42"></div>
           <div><label>Table height [m]</label><input id="tableHeight" type="number" min="-0.05" max="0.08" step="0.005" value="0.000"></div>
-          <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.25"></div>
+          <div><label>Table point density</label><input id="tableDensity" type="range" min="0" max="1" step="0.01" value="0.4"></div>
           <div class="full"><label>GNG data source</label><select id="gngDataSourceMode"><option value="pointcloud_to_gng" selected>Point cloud -> GNG / 点群から学習</option><option value="graph_only">Graph only / 既存GNGを読む</option></select></div>
           <div class="full"><label>GNG algorithm</label><select id="gngAlgorithm" disabled><option value="wasm" selected>基幹GNG-WASM / C++ WebAssembly</option></select></div>
           <div class="full"><label>点群ソース</label><select id="pointCloudSource"><option value="synthetic_depth" selected>合成深度点群</option><option value="object_surface">オクルージョンなし表面点群</option><option value="imported_frames">取り込みフレーム</option></select></div>
@@ -1039,7 +1039,7 @@ function setDefaultGngParameters(){
     gngSamplesPerFrame:200,
     gng_training_hz:30,
     gng_visual_hz:10,
-    tableDensity:0.25,
+    tableDensity:0.4,
     faceOpacity:0.020,
     faceOpacityNum:0.020,
     faceOpacityCap:0.030,
@@ -1486,7 +1486,7 @@ function addTabletopScene(raw,seed,is_remove_table_occluded=true){
   const mode=$('tableMode')?$('tableMode').value:'off';
   if(mode==='off')return raw;
   const design=$('tableDesign')?$('tableDesign').value:'rect';
-  const r=rng(seed+5521), size=+$('tableSize').value||0.42, h=+$('tableHeight').value||0, dens=+$('tableDensity').value||0.25;
+  const r=rng(seed+5521), size=+$('tableSize').value||0.42, h=+$('tableHeight').value||0, dens=+$('tableDensity').value||0.4;
   const object_points=is_remove_table_occluded?raw.filter((point)=>!point.is_table_occluded):raw;
   const pts=object_points.map(p=>({...p,z:p.z+h}));
   const tableN=Math.floor((+$('pointCount').value||4200)*dens);
