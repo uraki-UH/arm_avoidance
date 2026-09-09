@@ -10,6 +10,12 @@
     gng_setTrainingEventMaxWinnerRank;
     gng_getTrainingEvents;
     gng_get_node_statistics;
+    gng_set_observation_origin;
+    gng_get_observation_angle_range;
+    gng_get_observation_frame;
+    gng_set_observation_pixels;
+    gng_set_observation_pixel_view;
+    gng_get_observation_lookup_statistics;
     gng_getTopologicalMap;
     gng_getDownSampling;
     gng_getAffineTransformedInputPointCloud;

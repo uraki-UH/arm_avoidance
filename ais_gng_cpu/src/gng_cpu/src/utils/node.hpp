@@ -2,6 +2,7 @@
 
 #include "utils.hpp"
 #include "vec3f.hpp"
+#include <fuzzrobo/libgng/observation_angle_range.hpp>
 
 // 勝者残差と入力座標の逐次統計。ノード初期化時の履歴破棄。
 struct node_moments {
@@ -48,6 +49,7 @@ class Node{
         void init(uint32_t id, float eta_s1, float eta_s2);
         void init(uint32_t id, float eta_s1, float eta_s2, Vec3f &pos);
         node_moments winner_stats, support_stats;
+        gng_observation::angle_range observation_range;
         uint32_t id;
         Vec3f pos;
         // Vec3f pos_prev;

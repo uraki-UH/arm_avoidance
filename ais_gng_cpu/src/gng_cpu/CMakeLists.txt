@@ -128,6 +128,14 @@ ament_export_include_directories(include)
 ament_export_dependencies(Boost OpenSSL)
 
 if(GNG_BUILD_BENCHMARKS)
+  enable_testing()
+  add_executable(observation_angle_range_test test/observation_angle_range_test.cpp)
+  target_include_directories(observation_angle_range_test PRIVATE include)
+  add_test(NAME observation_angle_range_test COMMAND observation_angle_range_test)
+  add_executable(gng_observation_api_test test/gng_observation_api_test.cpp)
+  target_link_libraries(gng_observation_api_test PRIVATE gng_cpu)
+  add_test(NAME gng_observation_api_test COMMAND gng_observation_api_test)
+
   add_executable(
     gng_training_event_benchmark
     test/gng_training_event_benchmark.cpp

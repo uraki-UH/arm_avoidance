@@ -5,6 +5,8 @@ CUGNG::CUGNG(){
 }
 
 bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
+    observation_touched_ids.clear();
+    observation_pixel_source = {};
     GridConfig c;
     // 範囲 (大きい)
     c.x_min = _other_config->x_min;
@@ -69,6 +71,8 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     return true;
 }
 void CUGNG::clear() {
+    observation_touched_ids.clear();
+    observation_pixel_source = {};
     node_num = 0;
     nodes.clear();
     tn_id.clear();
@@ -346,10 +350,32 @@ void CUGNG::check_edge_distance() {
 //         }
 //     }
 // }
-void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num){
+void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num,
+    const vector<Vec3f> *observation_points,
+    const vector<uint32_t> *voxel_raw_ids, const vector<uint32_t> *attention_raw_ids,
+    const vector<Vec3f> *raw_points, const VoxelGrid *source_voxels,
+    const vector<observation_attention_span> *attention_spans, const vector<uint32_t> *attention_blocks){
     // frame
     frame_number++;
     beginTrainingEvents();
+    has_observation_frame_origin = enable_observation_support && has_observation_origin;
+    observation_pixel_hit_num = observation_ray_num = 0;
+    observation_frame_origin = has_observation_frame_origin ? observation_origin : Vec3f{};
+    // 支持更新済みノードのみの初期化。削除・再利用されたIDの重複クリアも同値。
+    for (const auto id : observation_touched_ids) {
+        if (id < nodes.size()) {nodes[id].observation_range.clear();}
+    }
+    observation_touched_ids.clear();
+    const auto learn_input = [&](int idx) {
+        if (raw_points && source_voxels && has_observation_frame_origin) {
+            // voxel作成済みの対応から選択点だけの実測代表点・元番号参照。
+            const auto raw_idx = source_voxels->voxel_index[source_voxels->voxel_range[idx].start].raw_index;
+            learn_normal(inpcl[idx], &(*raw_points)[raw_idx], raw_idx);
+            return;
+        }
+        learn_normal(inpcl[idx], observation_points ? &(*observation_points)[idx] : nullptr,
+            voxel_raw_ids ? (*voxel_raw_ids)[idx] : UINT32_MAX);
+    };
 
     random_device rnd;  // 非決定的な乱数生成器
     mt19937 mt(rnd());  // 初期シード値
@@ -360,22 +386,41 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     if (attention_pcl_num == 0){
         for(i=0; i< gng_config.learning_num; ++i){
             // 学習
-            learn_normal(inpcl[rA(mt)]);
+            learn_input(rA(mt));
         }
     }else{
         uniform_int_distribution<> rA_Attention(0, attention_pcl_num - 1);//一様乱数
         for(i=j=0; i< gng_config.learning_num; ++i){
             // j: 0 ~ 9
             if(++j == gng_config.unknown_learning_rate){
-                learn_normal(inpcl[rA(mt)]);
+                learn_input(rA(mt));
                 j = 0; // リセット
             } else {
-                learn_normal(attention_pcl[rA_Attention(mt)]);
+                const auto idx = rA_Attention(mt);
+                if (attention_raw_ids && raw_points) {
+                    // 全attention点のXYZ複製なし。選択点の元番号からの直接参照。
+                    const auto raw_idx = (*attention_raw_ids)[idx];
+                    auto point = (*raw_points)[raw_idx];
+                    learn_normal(point, nullptr, raw_idx);
+                } else if (attention_spans && attention_blocks && raw_points && source_voxels) {
+                    // 大入力時の圧縮索引。選択点だけの区間検索と実測XYZの読み出し。
+                    const auto block = static_cast<uint32_t>(idx) / 64;
+                    const auto begin = attention_spans->begin() + (*attention_blocks)[block];
+                    const auto end = attention_spans->begin() + std::min<std::size_t>(
+                        static_cast<std::size_t>((*attention_blocks)[block + 1]) + 1, attention_spans->size());
+                    const auto span = idx < begin->end ? begin : std::upper_bound(begin + 1, end, idx,
+                        [](uint32_t value, const auto &entry) {return value < entry.end;});
+                    const auto raw_idx = source_voxels->voxel_index[span->source_begin + idx - span->begin].raw_index;
+                    auto point = (*raw_points)[raw_idx];
+                    learn_normal(point, nullptr, raw_idx);
+                } else {
+                    learn_normal(attention_pcl[idx], nullptr, attention_raw_ids ? (*attention_raw_ids)[idx] : UINT32_MAX);
+                }
             }
         }
     }
 }
-void CUGNG::learn_normal(Vec3f& p) {
+void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx) {
     static Node_d n;
     int i;
     // 全探索
@@ -395,6 +440,22 @@ void CUGNG::learn_normal(Vec3f& p) {
     }
 
     auto &node0 = nodes[n.id1];
+    if (enable_observation_support && has_observation_origin) {
+        if (!node0.observation_range.has_support) {observation_touched_ids.push_back(n.id1);}
+        const auto &point = observation_point ? *observation_point : p;
+        const auto pixel_idx = observation_pixel_ids && raw_idx < observation_point_num ?
+            observation_pixel_ids[raw_idx] : observation_pixel_source.get(raw_idx);
+        if (observation_angle_table && pixel_idx < observation_table_num) {
+            node0.observation_range.add(observation_angle_table[pixel_idx]);
+            ++observation_pixel_hit_num;
+        } else {
+            node0.observation_range.add_ray(
+                static_cast<double>(point.p[0]) - observation_origin.p[0],
+                static_cast<double>(point.p[1]) - observation_origin.p[1],
+                static_cast<double>(point.p[2]) - observation_origin.p[2]);
+            ++observation_ray_num;
+        }
+    }
     update_winner_statistics(n, p);
     if (training_event_capture_enabled) {recordTrainingEvents(n, p);}
     // ノードの移動

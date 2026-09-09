@@ -24,6 +24,7 @@
 
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/node_support.hpp"
+#include "ais_gng/observation_pixels.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
@@ -62,6 +63,27 @@ class AiSGNGComponent : public rclcpp::Node {
     node_support::options node_support_options_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_support_pub_;
     void publish_node_support(const TopologicalMap &map, const std_msgs::msg::Header &header);
+    bool enable_observation_support_{false};
+    bool has_observation_origin_{false};
+    bool has_observation_cloud_transform_{false};
+    std::vector<double> observation_origin_;
+    std::string observation_origin_frame_;
+    std::string observation_sensor_frame_;
+    std::string observation_camera_info_topic_;
+    bool enable_observation_organized_{false};
+    bool has_observation_rotation_{false};
+    std::vector<double> observation_camera_rotation_;
+    std::array<double, 9> observation_rotation_{};
+    std::deque<sensor_msgs::msg::CameraInfo::ConstSharedPtr> observation_camera_infos_;
+    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr observation_camera_info_sub_;
+    observation_pixels::angle_table observation_angle_table_;
+    void set_observation_pixels(const PC2::ConstSharedPtr &msg, const std::vector<uint32_t> *selected_ids, uint32_t point_num);
+    std::unique_ptr<tf2_ros::Buffer> observation_transform_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> observation_transform_listener_;
+    rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr observation_support_pub_;
+    rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr observation_lookup_pub_;
+    void set_observation_origin(const PC2::ConstSharedPtr &msg, const LiDAR_Config &config, bool has_single_sensor);
+    void publish_observation_support(const TopologicalMap &map, const std_msgs::msg::Header &header);
 #endif
 
     rclcpp::Subscription<PC2>::SharedPtr pcl_sub_;

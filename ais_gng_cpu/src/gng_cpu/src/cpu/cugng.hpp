@@ -8,6 +8,7 @@
 #include "define.h"
 
 #include <cstdint>
+#include <fuzzrobo/libgng/observation_pixel_view.hpp>
 
 struct Node_d{
     uint32_t id1;
@@ -15,6 +16,9 @@ struct Node_d{
     uint32_t id2;
     float id2_d2;
 };
+
+// attention配列の連続区間と、既存voxel順序内の開始位置との対応。
+struct observation_attention_span {uint32_t begin, end, source_begin;};
 
 class CUGNG {
    public:
@@ -45,13 +49,32 @@ class CUGNG {
     double support_second_weight = 0.5;
     double support_second_alpha = 1 - std::sqrt(0.99);
     bool map_delta_capture_enabled = false;
+    bool enable_observation_support = false;
+    bool has_observation_origin = false;
+    Vec3f observation_origin;
+    bool has_observation_frame_origin = false;
+    Vec3f observation_frame_origin;
+    const uint32_t *observation_pixel_ids = nullptr;
+    gng_observation::pixel_view observation_pixel_source;
+    // 前フレームで支持を記録したノードのみのクリア対象。
+    vector<uint32_t> observation_touched_ids;
+    uint32_t observation_point_num = 0;
+    const gng_observation::ray_angles *observation_angle_table = nullptr;
+    uint32_t observation_table_num = 0;
+    uint32_t observation_pixel_hit_num = 0;
+    uint32_t observation_ray_num = 0;
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
     void clear();
     // void learnBatch(vector<Vec3f> &inpcl, int input_pcl_num);
-    void learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num);
-    void learn_normal(Vec3f& input_point);
+    void learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num,
+        const vector<Vec3f> *observation_points = nullptr,
+        const vector<uint32_t> *voxel_raw_ids = nullptr, const vector<uint32_t> *attention_raw_ids = nullptr,
+        const vector<Vec3f> *raw_points = nullptr, const VoxelGrid *source_voxels = nullptr,
+        const vector<observation_attention_span> *attention_spans = nullptr,
+        const vector<uint32_t> *attention_blocks = nullptr);
+    void learn_normal(Vec3f& input_point, const Vec3f *observation_point = nullptr, uint32_t raw_idx = UINT32_MAX);
     void setTrainingEventCapture(bool enable);
     void setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
     const GngTrainingEvent* getTrainingEvents(uint32_t *num) const;

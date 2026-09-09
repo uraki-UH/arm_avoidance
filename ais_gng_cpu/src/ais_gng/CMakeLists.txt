@@ -33,6 +33,10 @@ if(BUILD_TESTING)
     ../gng_cpu/src/utils/node.cpp ../gng_cpu/src/utils/vec3f.cpp)
   target_include_directories(test_node_support PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(test_node_support Eigen3::Eigen gng_cpu::gng_cpu)
+  ament_add_gtest(test_observation_pixels test/test_observation_pixels.cpp)
+  target_include_directories(test_observation_pixels PRIVATE include)
+  target_link_libraries(test_observation_pixels gng_cpu::gng_cpu)
+  ament_target_dependencies(test_observation_pixels sensor_msgs)
 
   ament_add_gtest(
     test_topological_grid_assignment
@@ -207,6 +211,7 @@ install(
 
 install(
   PROGRAMS
+    scripts/depth_pixel_points.py
     scripts/repair_object_gng_edges
     scripts/save_object_gng_dataset
   DESTINATION lib/${PROJECT_NAME}

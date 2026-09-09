@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 #include <cstddef>
+#include <fuzzrobo/libgng/observation_angle_range.hpp>
+#include <fuzzrobo/libgng/observation_pixel_view.hpp>
 
 #ifdef __cplusplus
 extern "C" {
@@ -197,6 +199,34 @@ struct gng_node_statistics {
     double support_moment[9]{};
 };
 gng_node_statistics gng_get_node_statistics(uint16_t node_id);
+
+// gng_setPointCloud後、gng_exec前のセンサ原点指定。GNG点群と同じ座標系。
+// 原点の有効期間は一回のgng_exec。非有限値の場合は無効。
+void gng_set_observation_origin(Vec3 origin, uint8_t has_origin);
+
+// 入力点順の画素番号と、GNG座標系の整数角度表。借用配列の寿命は次のgng_exec完了まで。
+// 無効画素はUINT32_MAX。個数不一致は全体無効化、画素範囲外はその点だけレイ計算へ復帰。
+uint8_t gng_set_observation_pixels(const uint32_t *pixel_ids, uint32_t point_num,
+    const gng_observation::ray_angles *angle_table, uint32_t table_num);
+// 元点群と間引き番号への直接参照。借用メモリの寿命は次のgng_exec完了まで。
+uint8_t gng_set_observation_pixel_view(const gng_observation::pixel_view *view,
+    const gng_observation::ray_angles *angle_table, uint32_t table_num);
+struct gng_observation_lookup_statistics {
+    uint32_t pixel_hit_num = 0;
+    uint32_t ray_num = 0;
+};
+gng_observation_lookup_statistics gng_get_observation_lookup_statistics();
+
+// 一学習フレームの第一勝者レイ範囲。値返却による次回更新からの独立。
+gng_observation::angle_range gng_get_observation_angle_range(uint16_t node_id);
+
+// 直近の学習出力に対応する原点。次フレーム用の原点指定とは独立。
+struct gng_observation_frame {
+    Vec3 origin{};
+    uint32_t frame_number = 0;
+    uint8_t has_origin = 0;
+};
+gng_observation_frame gng_get_observation_frame();
 
 /**
  * @brief GNGによるトポロジカルマップを返す

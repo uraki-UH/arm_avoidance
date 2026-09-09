@@ -114,6 +114,10 @@ class GNG{
     vector<Vec3f> attention_pcl;
     vector<uint8_t> voxel_labels;
     int attention_pcl_num = 0; // 注意点群数
+    vector<uint32_t> observation_attention_raw_ids;
+    vector<observation_attention_span> observation_attention_spans;
+    vector<uint32_t> observation_attention_blocks;
+    bool enable_observation_attention_compact = false;
     vector<Voxel> voxel2node_ids;
     uint32_t voxel2node_ids_num = 0; // ボクセルグリッドのノードID
 

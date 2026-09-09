@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -287,6 +288,68 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         node_support_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
             "node_support_ellipsoids", rclcpp::QoS(1));
     }
+    auto legacy_descriptor = support_descriptor;
+    legacy_descriptor.dynamic_typing = true;
+    legacy_descriptor.description = "旧観測支持設定の混在検出専用";
+    for (const auto *name : {"node.observation.horizontal_step_deg", "node.observation.vertical_step_deg",
+        "node.observation.max_interval_num", "node.observation.half_angle_deg", "node.observation.max_direction_num",
+        "node.observation.max_cell_angle_deg", "node.observation.max_block_num", "node.observation.max_point_num"}) {
+        const auto &value = declare_parameter(name, rclcpp::ParameterValue{}, legacy_descriptor);
+        if (value.get_type() != rclcpp::ParameterType::PARAMETER_NOT_SET) {
+            throw std::invalid_argument("Observation legacy parameters removed; angle range uses fixed 16-bit bins");
+        }
+    }
+    enable_observation_support_ = declare_parameter<bool>(
+        "node.enable_observation_support", false, support_descriptor);
+    observation_sensor_frame_ = declare_parameter<std::string>(
+        "input.observation_sensor_frame", "", support_descriptor);
+    observation_origin_ = declare_parameter<std::vector<double>>(
+        "input.observation_origin", std::vector<double>{}, support_descriptor);
+    observation_origin_frame_ = declare_parameter<std::string>(
+        "input.observation_origin_frame", "", support_descriptor);
+    observation_camera_info_topic_ = declare_parameter<std::string>(
+        "input.observation_camera_info_topic", "", support_descriptor);
+    enable_observation_organized_ = declare_parameter<bool>(
+        "input.enable_observation_organized", false, support_descriptor);
+    observation_camera_rotation_ = declare_parameter<std::vector<double>>(
+        "input.observation_camera_rotation", std::vector<double>{}, support_descriptor);
+    if (!observation_camera_rotation_.empty()) {
+        if (observation_camera_rotation_.size() != 4 || observation_origin_.empty() ||
+            !std::all_of(observation_camera_rotation_.begin(), observation_camera_rotation_.end(), [](double value) {return std::isfinite(value);})) {
+            throw std::invalid_argument("Fixed camera rotation requires an explicit origin and four finite quaternion values");
+        }
+        const auto &q = observation_camera_rotation_;
+        if (std::abs(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3] - 1) > 1e-6) {
+            throw std::invalid_argument("Fixed camera rotation quaternion is not normalized");
+        }
+    }
+    if (!observation_origin_.empty() && (observation_origin_.size() != 3 || observation_origin_frame_.empty() ||
+        !std::all_of(observation_origin_.begin(), observation_origin_.end(), [](double value) {return std::isfinite(value);}) ||
+        !observation_sensor_frame_.empty())) {
+        throw std::invalid_argument("Observation fixed origin requires three finite values and a frame, without sensor_frame");
+    }
+    if (observation_origin_.empty() && !observation_origin_frame_.empty()) {
+        throw std::invalid_argument("Observation origin_frame requires observation_origin");
+    }
+    if (enable_observation_support_ && observation_sensor_frame_.empty() && observation_origin_.empty()) {
+        throw std::invalid_argument("Observation support requires sensor_frame or explicit fixed origin");
+    }
+    gng_setParameter("node.enable_observation_support", 0, enable_observation_support_);
+    if (enable_observation_support_) {
+        observation_transform_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+        observation_transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*observation_transform_buffer_);
+        observation_support_pub_ = create_publisher<std_msgs::msg::UInt32MultiArray>(
+            "node_observation_support", rclcpp::QoS(1));
+        if (!observation_camera_info_topic_.empty()) {
+            observation_lookup_pub_ = create_publisher<std_msgs::msg::UInt32MultiArray>("node_observation_lookup_statistics", rclcpp::QoS(1));
+            observation_camera_info_sub_ = create_subscription<sensor_msgs::msg::CameraInfo>(
+                observation_camera_info_topic_, rclcpp::SensorDataQoS(),
+                [this](sensor_msgs::msg::CameraInfo::ConstSharedPtr info) {
+                    observation_camera_infos_.push_back(std::move(info));
+                    if (observation_camera_infos_.size() > 8) {observation_camera_infos_.pop_front();}
+                });
+        }
+    }
 #endif
     performance_log_interval_ms_ =
     this->declare_parameter<int64_t>("performance.log_interval_ms", 0);        // 詳細実行周期ログの間隔(ms)。0で無効
@@ -482,7 +545,9 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
-        if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0) {
+        if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
+            name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
+            name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
             continue;
         }
         auto type = p.get_type();
@@ -691,9 +756,10 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         }
         processed_raw_point_count += point_count;
 
+        // 一様間引きまたは行余白のある点群の連続配置。
         const bool requires_repacking =
-            input_sampling_mode_ == PointSamplingMode::Uniform &&
-            point_count > input_point_cloud_num_;
+            (input_sampling_mode_ == PointSamplingMode::Uniform && point_count > input_point_cloud_num_) ||
+            static_cast<uint64_t>(msg->row_step) != static_cast<uint64_t>(msg->width) * msg->point_step;
         if (requires_repacking) {
             if (!sampled_indices_valid_ ||
                 sampled_source_point_count_ != point_count ||
@@ -741,10 +807,18 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             gng_input_msg->data.data(),
             gng_input_msg->width * gng_input_msg->height,
             &lidar_config);
+#if defined(AIS_GNG_BACKEND_CPU)
+        if (enable_observation_support_) {
+            set_observation_origin(gng_input_msg, lidar_config, clouds.size() == 1);
+            set_observation_pixels(msg, requires_repacking ? &sampled_point_indices_ : nullptr,
+                static_cast<uint32_t>(std::min<uint64_t>(
+                    static_cast<uint64_t>(gng_input_msg->width) * gng_input_msg->height, input_point_cloud_num_)));
+        }
+#endif
         if (requires_repacking) {
             RCLCPP_DEBUG_THROTTLE(
                 this->get_logger(), *this->get_clock(), 5000,
-                "Uniformly sampled GNG input from %u to %u points",
+                "Repacked GNG input from %u to %u points",
                 point_count, gng_input_msg->width * gng_input_msg->height);
         }
     }
@@ -782,6 +856,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const std::size_t output_edge_count = map_msg->edges.size() / 2;
 #if defined(AIS_GNG_BACKEND_CPU)
     if (node_support_pub_) {publish_node_support(map, header);}
+    if (observation_support_pub_) {publish_observation_support(map, header);}
 
 #endif
     const auto conversion_end = std::chrono::steady_clock::now();
@@ -932,6 +1007,154 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 }
 
 #if defined(AIS_GNG_BACKEND_CPU)
+void AiSGNGComponent::set_observation_origin(
+    const PC2::ConstSharedPtr &msg, const LiDAR_Config &config, bool has_single_sensor) {
+    has_observation_origin_ = false;
+    has_observation_rotation_ = false;
+    gng_set_observation_origin({0, 0, 0}, 0);
+    if (!has_observation_cloud_transform_) {return;}
+    if (!has_single_sensor) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "Observation support skipped: multiple input clouds");
+        return;
+    }
+    tf2::Vector3 origin(0, 0, 0);
+    tf2::Quaternion sensor_rotation(0, 0, 0, 1);
+    try {
+        if (!observation_origin_.empty()) {
+            if (msg->header.frame_id != observation_origin_frame_) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                    "Observation support skipped: fixed origin frame differs from input cloud frame");
+                return;
+            }
+            origin = tf2::Vector3(observation_origin_[0], observation_origin_[1], observation_origin_[2]);
+            if (observation_camera_rotation_.size() == 4) {
+                const auto &q = observation_camera_rotation_;
+                sensor_rotation = tf2::Quaternion(q[0], q[1], q[2], q[3]);
+                has_observation_rotation_ = true;
+            }
+        } else if (msg->header.frame_id != observation_sensor_frame_) {
+            if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                    "Observation support skipped: missing acquisition timestamp");
+                return;
+            }
+            const auto transform = observation_transform_buffer_->lookupTransform(
+                msg->header.frame_id, observation_sensor_frame_, rclcpp::Time(msg->header.stamp));
+            const auto &position = transform.transform.translation;
+            origin = tf2::Vector3(position.x, position.y, position.z);
+            const auto &q = transform.transform.rotation;
+            sensor_rotation = tf2::Quaternion(q.x, q.y, q.z, q.w);
+            has_observation_rotation_ = true;
+        } else {has_observation_rotation_ = true;}
+    } catch (const tf2::TransformException &error) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "Observation support skipped: %s", error.what());
+        return;
+    }
+    // 実入力点と同一の座標変換。観測時刻のセンサ原点を入力座標からGNG座標へ変換。
+    if (!local_coordinates_) {
+        const tf2::Quaternion rotation(config.quat.x, config.quat.y, config.quat.z, config.quat.w);
+        constexpr double max_rotation_norm_dev = 1e-3;
+        if (!std::isfinite(rotation.length2()) || std::abs(rotation.length2() - 1) > max_rotation_norm_dev) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                "Observation support skipped: invalid cloud rotation quaternion");
+            return;
+        }
+        origin = tf2::quatRotate(rotation, origin) + tf2::Vector3(config.pos.x, config.pos.y, config.pos.z);
+        sensor_rotation = rotation * sensor_rotation;
+    }
+    const Vec3 position{static_cast<float>(origin.x()), static_cast<float>(origin.y()), static_cast<float>(origin.z())};
+    has_observation_origin_ = std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z);
+    gng_set_observation_origin(position, has_observation_origin_);
+    if (!std::isfinite(sensor_rotation.length2()) || std::abs(sensor_rotation.length2() - 1) > 1e-6) {
+        has_observation_rotation_ = false;
+    }
+    if (has_observation_rotation_) {
+        const tf2::Matrix3x3 rotation(sensor_rotation);
+        for (uint32_t row = 0; row < 3; ++row) {
+            for (uint32_t column = 0; column < 3; ++column) {observation_rotation_[row*3+column] = rotation[row][column];}
+        }
+    }
+}
+
+void AiSGNGComponent::set_observation_pixels(const PC2::ConstSharedPtr &msg,
+    const std::vector<uint32_t> *selected_ids, uint32_t point_num) {
+    if (observation_camera_info_topic_.empty() || !has_observation_origin_) {return;}
+    sensor_msgs::msg::CameraInfo::ConstSharedPtr info;
+    for (auto candidate = observation_camera_infos_.rbegin(); candidate != observation_camera_infos_.rend(); ++candidate) {
+        if ((*candidate)->header.stamp == msg->header.stamp) {info = *candidate; break;}
+    }
+    // 異なる撮影フレームや校正情報との混在防止。非一致時は従来レイ計算への復帰。
+    if (!info || !has_observation_rotation_ || info->header.stamp != msg->header.stamp ||
+        (!observation_sensor_frame_.empty() && info->header.frame_id != observation_sensor_frame_)) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Pixel lookup fallback: missing matching CameraInfo or camera rotation");
+        return;
+    }
+    // 画素番号がないフレームでの不要な表構築の回避。
+    gng_observation::pixel_view view;
+    if (!observation_pixels::make_view(*msg, info->width, info->height, enable_observation_organized_,
+        selected_ids, point_num, view)) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Pixel lookup fallback: no usable original pixel ids");
+        return;
+    }
+    const auto previous_build_num = observation_angle_table_.build_num;
+    const auto start = std::chrono::steady_clock::now();
+    if (!observation_angle_table_.prepare(*info, observation_rotation_)) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Pixel lookup fallback: unsupported camera calibration");
+        return;
+    }
+    if (observation_angle_table_.build_num != previous_build_num) {
+        RCLCPP_INFO(get_logger(), "Pixel angle table rebuilt: %ux%u bytes=%zu build_ms=%.3f",
+            info->width, info->height, observation_angle_table_.values.size() * sizeof(gng_observation::ray_angles),
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+    }
+    gng_set_observation_pixel_view(&view,
+        observation_angle_table_.values.data(), static_cast<uint32_t>(observation_angle_table_.values.size()));
+}
+
+void AiSGNGComponent::publish_observation_support(
+    const TopologicalMap &map, const std_msgs::msg::Header &header) {
+    if (observation_lookup_pub_ && observation_lookup_pub_->get_subscription_count() != 0) {
+        const auto stats = gng_get_observation_lookup_statistics();
+        std_msgs::msg::UInt32MultiArray message;
+        message.data = {map.frame_number, static_cast<uint32_t>(header.stamp.sec), header.stamp.nanosec,
+            stats.pixel_hit_num, stats.ray_num, observation_angle_table_.build_num};
+        observation_lookup_pub_->publish(message);
+    }
+    if (observation_support_pub_->get_subscription_count() == 0) {return;}
+    std_msgs::msg::UInt32MultiArray message;
+    // 固定長ノードレコードのフラット配列。座標系はlabel、仕様はdocs/observation_support.md。
+    message.layout.dim.resize(1);
+    message.layout.dim[0].label = header.frame_id;
+    const auto frame = gng_get_observation_frame();
+    const auto float_bits = [](float value) {
+        uint32_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return bits;
+    };
+    // version=5。原点はフレーム共通。角度端点は下位min、上位maxの16ビット整数。
+    message.data = {5, map.frame_number, static_cast<uint32_t>(header.stamp.sec), header.stamp.nanosec,
+        frame.has_origin, float_bits(frame.origin.x), float_bits(frame.origin.y), float_bits(frame.origin.z), map.node_num};
+    for (uint32_t idx = 0; idx < map.node_num; ++idx) {
+        const auto &node = map.nodes[idx];
+        const auto support = gng_get_observation_angle_range(node.id);
+        message.data.insert(message.data.end(),
+            {node.id, node.frame, static_cast<uint32_t>(support.has_support) | (static_cast<uint32_t>(support.has_yaw) << 1),
+             static_cast<uint32_t>(support.min_yaw) | (static_cast<uint32_t>(support.max_yaw) << 16),
+             static_cast<uint32_t>(support.min_pitch) | (static_cast<uint32_t>(support.max_pitch) << 16)});
+    }
+    message.layout.dim[0].size = message.data.size();
+    message.layout.dim[0].stride = message.data.size();
+    observation_support_pub_->publish(std::move(message));
+    if (!observation_camera_info_topic_.empty()) {
+        const auto stats = gng_get_observation_lookup_statistics();
+        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Observation lookup: pixel_hits=%u ray_updates=%u table_builds=%u",
+            stats.pixel_hit_num, stats.ray_num, observation_angle_table_.build_num);
+    }
+}
+
 void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_msgs::msg::Header &header) {
     if (node_support_pub_->get_subscription_count() == 0) {return;}
     visualization_msgs::msg::MarkerArray markers;
@@ -1182,12 +1405,28 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
     lidar_config.quat.z = 0;
     lidar_config.quat.w = 1;
     lidar_config.point_step = msg->point_step;
+#if defined(AIS_GNG_BACKEND_CPU)
+    has_observation_cloud_transform_ = true;
+#endif
     if(local_coordinates_ || base_frame_id_.empty() || base_frame_id_ == msg->header.frame_id){
         return lidar_config;
     }
     try {
-        geometry_msgs::msg::TransformStamped tf_msg =
-            tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, tf2::TimePointZero);
+        geometry_msgs::msg::TransformStamped tf_msg;
+#if defined(AIS_GNG_BACKEND_CPU)
+        if (enable_observation_support_) {
+            if (msg->header.stamp.sec == 0 && msg->header.stamp.nanosec == 0) {
+                has_observation_cloud_transform_ = false;
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                    "Observation support skipped: missing cloud transform timestamp");
+                return lidar_config;
+            }
+            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, rclcpp::Time(msg->header.stamp));
+        } else
+#endif
+        {
+            tf_msg = tf_buffer_->lookupTransform(base_frame_id_, msg->header.frame_id, tf2::TimePointZero);
+        }
         auto q = tf_msg.transform.rotation;
         auto t = tf_msg.transform.translation;
         lidar_config.pos.x = t.x;
@@ -1198,6 +1437,9 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
         lidar_config.quat.z = q.z;
         lidar_config.quat.w = q.w;
     } catch (const tf2::TransformException &ex) {
+#if defined(AIS_GNG_BACKEND_CPU)
+        has_observation_cloud_transform_ = false;
+#endif
         RCLCPP_WARN_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
             "Could not transform %s to %s: %s",

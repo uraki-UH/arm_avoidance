@@ -115,6 +115,11 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     if (!initialized) return;
     n1.beginMapDeltaFrame();
     // 入力点群の確保
+    n1.has_observation_origin = false;
+    n1.observation_pixel_source = {};
+    n1.observation_pixel_ids = nullptr;
+    n1.observation_angle_table = nullptr;
+    n1.observation_point_num = n1.observation_table_num = 0;
     int i;
 
     // 入力点群の最大値制限
@@ -196,6 +201,11 @@ void GNG::exec() {
 #endif
 
     auto t0 = std::chrono::system_clock::now();
+    if (!n1.enable_observation_support || !n1.has_observation_origin) {
+        n1.observation_pixel_source = {};
+        n1.observation_pixel_ids = nullptr;
+        n1.observation_angle_table = nullptr;
+    }
     // クラスタリング（CPU）
     vg.applyFilter(map.input_pcl, input_pcl_num, map.inpcl_labels);
     auto t1 = std::chrono::system_clock::now();
@@ -204,7 +214,16 @@ void GNG::exec() {
     auto t2 = std::chrono::system_clock::now();
     // 学習
     // n1.learn_normal(input_pcl, input_pcl_num);// 元点群
-    n1.learn(vg.filtered_pcl, vg.filtered_pcl_num, attention_pcl, attention_pcl_num);
+    // 全voxelの実測代表点・元番号の別配列なし。学習時の直接参照。
+    n1.learn(vg.filtered_pcl, vg.filtered_pcl_num, attention_pcl, attention_pcl_num,
+        nullptr, nullptr, n1.observation_angle_table && !enable_observation_attention_compact ? &observation_attention_raw_ids : nullptr,
+        &map.input_pcl, &vg, enable_observation_attention_compact ? &observation_attention_spans : nullptr,
+        enable_observation_attention_compact ? &observation_attention_blocks : nullptr);
+    n1.has_observation_origin = false;
+    n1.observation_pixel_source = {};
+    n1.observation_pixel_ids = nullptr;
+    n1.observation_angle_table = nullptr;
+    n1.observation_point_num = n1.observation_table_num = 0;
     auto t3 = std::chrono::system_clock::now();
     // ラベリング
     la.labelling_fuzzy();
@@ -256,17 +275,42 @@ void GNG::exec() {
 }
 
 void GNG::attention(){
+    // 元番号配列を256 KiBに抑える自動切替の目安。実入力点数を使用。
+    constexpr uint32_t max_observation_direct_point_num = 65536;
+    enable_observation_attention_compact = n1.observation_angle_table && input_pcl_num > max_observation_direct_point_num;
+    observation_attention_spans.clear();
+    observation_attention_blocks.clear();
+    if (n1.observation_angle_table && !enable_observation_attention_compact) {observation_attention_raw_ids.resize(input_pcl_num);}
     n1.getDownSampling(vg.filtered_pcl, vg.filtered_pcl_num, voxel_labels, voxel2node_ids, voxel2node_ids_num);
     int i, j;
     for (i = attention_pcl_num = 0; i < vg.filtered_pcl_num; ++i){
         if (voxel_labels[i] == 0)
             continue;
-        for (j = vg.voxel_range[i].start; j < vg.voxel_range[i].end; ++j) {
-            map.inpcl_labels[vg.voxel_index[j].raw_index] = voxel_labels[i];
-            attention_pcl[attention_pcl_num] = map.input_pcl[vg.voxel_index[j].raw_index];
-            attention_pcl_num++;
+        if (enable_observation_attention_compact) {
+            const auto begin = static_cast<uint32_t>(attention_pcl_num);
+            attention_pcl_num += vg.voxel_range[i].end - vg.voxel_range[i].start;
+            observation_attention_spans.push_back({begin, static_cast<uint32_t>(attention_pcl_num), vg.voxel_range[i].start});
+            while (observation_attention_blocks.size() * 64 < static_cast<uint32_t>(attention_pcl_num)) {
+                observation_attention_blocks.push_back(observation_attention_spans.size() - 1);
+            }
+            for (j = vg.voxel_range[i].start; j < vg.voxel_range[i].end; ++j) {
+                map.inpcl_labels[vg.voxel_index[j].raw_index] = voxel_labels[i];
+            }
+        } else if (n1.observation_angle_table) {
+            for (j = vg.voxel_range[i].start; j < vg.voxel_range[i].end; ++j) {
+                const auto raw_idx = vg.voxel_index[j].raw_index;
+                map.inpcl_labels[raw_idx] = voxel_labels[i];
+                observation_attention_raw_ids[attention_pcl_num++] = raw_idx;
+            }
+        } else {
+            for (j = vg.voxel_range[i].start; j < vg.voxel_range[i].end; ++j) {
+                map.inpcl_labels[vg.voxel_index[j].raw_index] = voxel_labels[i];
+                attention_pcl[attention_pcl_num] = map.input_pcl[vg.voxel_index[j].raw_index];
+                attention_pcl_num++;
+            }
         }
     }
+    if (enable_observation_attention_compact) {observation_attention_blocks.push_back(observation_attention_spans.size());}
     boost::sort::spreadsort::integer_sort(voxel2node_ids.data(),
     voxel2node_ids.data() + voxel2node_ids_num,
         [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });

@@ -30,10 +30,17 @@ TEST(node_support, reuse_resets_both_statistics)
   Node node;
   node.winner_stats.add_residual(Vec3f(1, 2, 3));
   node.support_stats.add_input(Vec3f(1, 2, 3), 0.01, 1);
+  node.observation_range.add_ray(1, 0, 0);
+  node.observation_range.add_ray(0, 1, 0);
+  ASSERT_TRUE(node.observation_range.has_support);
   node.init(1, 0.08f, 0.008f);
   EXPECT_DOUBLE_EQ(node.winner_stats.count, 0);
   EXPECT_DOUBLE_EQ(node.support_stats.count, 0);
   EXPECT_DOUBLE_EQ(node.support_stats.mean[0], 0);
+  EXPECT_FALSE(node.observation_range.has_support);
+  EXPECT_FALSE(node.observation_range.has_yaw);
+  EXPECT_EQ(node.observation_range.min_yaw, 0U);
+  EXPECT_EQ(node.observation_range.max_pitch, 0U);
 }
 
 TEST(node_support, fixed_scale_and_degenerate_axes)
