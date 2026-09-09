@@ -239,6 +239,8 @@ TEST(SurfaceModel, ExactlyTwoPlanePatchesCanMergeIntoVisibleCylinder)
   const auto data=nlohmann::json::parse(serialize(r,s.map,s.planes));
   EXPECT_EQ(data["models"][0]["plane_patch_num"],2);
   EXPECT_EQ(data["models"][0]["is_display_candidate"],true);
+  EXPECT_EQ(data["patches"][0]["curvature"]["method"],"position_quadratic");
+  EXPECT_TRUE(data["patches"][0]["curvature"].contains("position_rms_m"));
 }
 
 TEST(SurfaceModel, CurvedRegionCanContainOrthogonalPlanePatches)
@@ -473,7 +475,8 @@ TEST(PatchCurvature, CylinderRetainsDirectionalBendingInsidePlanePatch)
     if (patch.plane_cluster_idx<0) { EXPECT_FALSE(patch.curvature.valid); continue; }
     const auto &c=patch.curvature;
     ASSERT_TRUE(c.valid);
-    EXPECT_NEAR(c.kappa.x(),-10.0,1e-4);
+    // 円弧の二次近似による有限幅誤差と、世界座標基準の法線符号。
+    EXPECT_NEAR(std::abs(c.kappa.x()),10.0,0.1);
     EXPECT_NEAR(c.kappa.y(),0,1e-4);
     EXPECT_LT(c.plane_rms,0.001);
     EXPECT_LT(c.fit_error,1e-6);
@@ -506,15 +509,15 @@ TEST(PatchCurvature, PlaneSphereAndSaddleAreDistinguished)
     ASSERT_TRUE(c.valid);
     if (type==0) { EXPECT_LT(c.kappa.norm(),1e-8); }
     if (type==1) {
-      EXPECT_NEAR(c.kappa.x(),-5.0,1e-4);
-      EXPECT_NEAR(c.kappa.y(),-5.0,1e-4);
+      EXPECT_NEAR(c.kappa.x(),-5.0,0.02);
+      EXPECT_NEAR(c.kappa.y(),-5.0,0.02);
     }
     if (type==2) { EXPECT_LT(c.kappa.x()*c.kappa.y(),-24.0); }
     EXPECT_GT(c.confidence,0.99);
   }
 }
 
-TEST(PatchCurvature, MissingNormalsAndLineSupportAreInvalidNotFlat)
+TEST(PatchCurvature, LineSupportIsInvalidNotFlat)
 {
   map_type map;
   local_patch patch;
@@ -525,6 +528,151 @@ TEST(PatchCurvature, MissingNormalsAndLineSupportAreInvalidNotFlat)
   EXPECT_FALSE(estimate_curvature(patch,map).valid);
   for (auto &node:map.nodes) node.normal=geometry_msgs::msg::Point32();
   EXPECT_FALSE(estimate_curvature(patch,map).valid);
+}
+
+TEST(PatchCurvature, PositionsAloneRecoverQuadraticWithArbitraryNormals)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-5;i<=5;++i) for (int j=-5;j<=5;++j) {
+    const double x=0.004*i,y=0.004*j;
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(x,y,3*x*x-y*y),vec::Zero());
+  }
+  const auto original=estimate_curvature(patch,map);
+  ASSERT_TRUE(original.valid);
+  EXPECT_NEAR(original.kappa.x(),6,1e-4);
+  EXPECT_NEAR(original.kappa.y(),-2,1e-4);
+  EXPECT_GT(original.confidence,0.99);
+  for (std::size_t i=0;i<map.nodes.size();++i) {
+    auto &n=map.nodes[i].normal;
+    n.x=std::sin(i); n.y=std::cos(i); n.z=std::numeric_limits<float>::quiet_NaN();
+  }
+  const auto changed=estimate_curvature(patch,map);
+  ASSERT_TRUE(changed.valid);
+  EXPECT_NEAR((changed.tensor-original.tensor).norm(),0,1e-12);
+  const vec point(0.013,-0.007,0);
+  const vec expected=vec(-6*point.x(),2*point.y(),1).normalized();
+  EXPECT_GT(patch_normal_at(changed,point).dot(expected),0.999999);
+}
+
+TEST(PatchCurvature, RotationTranslationAndDensityPreserveGeometry)
+{
+  const Eigen::Matrix3d rotation=Eigen::AngleAxisd(0.8,vec(1,2,3).normalized()).toRotationMatrix();
+  const vec offset(0.2,-0.3,0.4);
+  for (int count:{7,11,19}) {
+    map_type map;
+    local_patch patch;
+    for (int i=0;i<count;++i) for (int j=0;j<count;++j) {
+      const double x=0.02*(2.0*i/(count-1)-1),y=0.02*(2.0*j/(count-1)-1);
+      patch.node_indices.push_back(map.nodes.size());
+      add_node(map,rotation*vec(x,y,3*x*x-y*y)+offset,vec::Zero());
+    }
+    const auto c=estimate_curvature(patch,map);
+    ASSERT_TRUE(c.valid);
+    EXPECT_NEAR(std::abs(c.kappa.x()),6,0.001);
+    EXPECT_NEAR(std::abs(c.kappa.y()),2,0.001);
+    EXPECT_LT(c.kappa.prod(),0);
+    EXPECT_GT(std::abs(patch_normal_at(c,offset).dot(rotation*vec::UnitZ())),0.999999);
+  }
+}
+
+TEST(PatchCurvature, RobustFitLimitsIsolatedHeightOutlier)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-6;i<=6;++i) for (int j=-6;j<=6;++j) {
+    const double x=0.004*i,y=0.004*j;
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(x,y,3*x*x+(i==2 && j==1 ? 0.006:0)),vec::Zero());
+  }
+  const auto c=estimate_curvature(patch,map);
+  ASSERT_TRUE(c.valid);
+  EXPECT_NEAR(std::abs(c.kappa.x()),6,0.1);
+  EXPECT_LT(std::abs(c.kappa.y()),0.1);
+}
+
+TEST(PatchCurvature, DenseSubregionDoesNotDominatePositionFit)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-5;i<=5;++i) for (int j=-5;j<=5;++j) {
+    const double x=0.004*i,y=0.004*j;
+    const int repeats=(i>1 && j>1) ? 12:1;
+    for (int copy=0;copy<repeats;++copy) {
+      patch.node_indices.push_back(map.nodes.size());
+      add_node(map,vec(x,y,3*x*x+0.00001*std::sin(i+3*j)),vec::Zero());
+    }
+  }
+  const auto c=estimate_curvature(patch,map);
+  ASSERT_TRUE(c.valid);
+  EXPECT_NEAR(std::abs(c.kappa.x()),6,0.15);
+  EXPECT_LT(std::abs(c.kappa.y()),0.1);
+  EXPECT_GT(std::abs(patch_normal_at(c,vec::Zero()).dot(vec::UnitZ())),0.9999);
+}
+
+TEST(PatchCurvature, UnstructuredHeightNoiseHasLowConfidence)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-5;i<=5;++i) for (int j=-5;j<=5;++j) {
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(0.004*i,0.004*j,0.002*std::sin(17*i+13*j)),vec::UnitZ());
+  }
+  const auto c=estimate_curvature(patch,map);
+  ASSERT_TRUE(c.valid);
+  EXPECT_LT(c.confidence,0.5);
+}
+
+TEST(PatchCurvature, InvalidPositionsDoNotContaminateFit)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-2;i<=2;++i) for (int j=-2;j<=2;++j) {
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(0.01*i,0.01*j,0),vec::Zero());
+  }
+  patch.node_indices.push_back(map.nodes.size());
+  add_node(map,vec(std::numeric_limits<double>::infinity(),0,0),vec::Zero());
+  patch.node_indices.push_back(9999);
+  const auto c=estimate_curvature(patch,map);
+  ASSERT_TRUE(c.valid);
+  EXPECT_EQ(c.sample_num,25U);
+  EXPECT_LT(c.kappa.norm(),1e-8);
+}
+
+TEST(PatchCurvature, RingAndInsufficientSamplesDoNotDetermineQuadratic)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=0;i<20;++i) {
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(0.02*std::cos(2*pi*i/20),0.02*std::sin(2*pi*i/20),0),vec::UnitZ());
+  }
+  EXPECT_FALSE(estimate_curvature(patch,map).valid);
+  patch.node_indices.resize(7);
+  EXPECT_FALSE(estimate_curvature(patch,map).valid);
+}
+
+TEST(SurfaceModel, PositionBoundaryTangentsJoinWideCylinderPatches)
+{
+  scene s;
+  s.planes.clusters.resize(2);
+  for (int t=0;t<24;++t) for (int z=0;z<8;++z) {
+    const double angle=(t-11.5)*pi/36;
+    const vec n(std::cos(angle),std::sin(angle),0);
+    const auto idx=s.map.nodes.size();
+    s.planes.clusters[t/12].node_indices.push_back(idx);
+    // パッチ中心では約60度差、境界ノードでは連続する円筒面。
+    add_node(s.map,0.06*n+vec(0,0,0.008*z),((t+z)%2 ? -1:1)*n);
+    if (z) edge(s.map,idx,idx-1);
+    if (t) edge(s.map,idx,idx-8);
+  }
+  const auto r=extract(s.map,s.planes);
+  EXPECT_TRUE(r.sharp_edges.empty());
+  ASSERT_EQ(r.smooth_edges.size(),1U);
+  ASSERT_EQ(r.regions.size(),1U);
+  EXPECT_EQ(r.regions[0].shape.type,"cylinder");
 }
 
 TEST(SurfaceTracking, DisconnectedEdgesKeepCurrentNodesAndStableId)

@@ -34,15 +34,22 @@ struct patch_curvature
   Eigen::Vector3d normal = Eigen::Vector3d::Zero();
   Eigen::Vector3d axis_u = Eigen::Vector3d::Zero();
   Eigen::Vector3d axis_v = Eigen::Vector3d::Zero();
-  // r = -K q。単位は1/m、符号は代表法線の向きに依存。
+  // r = -K q。実接平面上の曲率、単位は1/m、符号は代表法線の向きに依存。
   Eigen::Matrix2d tensor = Eigen::Matrix2d::Zero();
   Eigen::Vector2d kappa = Eigen::Vector2d::Zero();
   Eigen::Matrix2d directions_uv = Eigen::Matrix2d::Identity();
   Eigen::Matrix2d support_cov = Eigen::Matrix2d::Zero();
   Eigen::Matrix3d normal_scatter = Eigen::Matrix3d::Zero();
   double plane_rms = 0.0;
+  // 正規化PCA座標の高さ式。係数順はuu,uv,vv,u,v,1。
+  Eigen::Vector3d height_origin = Eigen::Vector3d::Zero();
+  Eigen::Matrix3d height_basis = Eigen::Matrix3d::Identity();
+  double height_scale = 1.0;
+  Eigen::Matrix<double,6,1> height_coeff = Eigen::Matrix<double,6,1>::Zero();
+  double position_rms = 0.0;
+  // 重み付き高さ残差から面内広がりで換算した法線変化誤差。無次元。
   double fit_error = 0.0;
-  // 条件数と法線予測残差による品質指標。確率としての解釈は不可。
+  // 位置支持・条件数・高さ残差による品質指標。確率としての解釈は不可。
   double confidence = 0.0;
 };
 
@@ -56,6 +63,8 @@ struct local_patch
 
 patch_curvature estimate_curvature(
   const local_patch &patch, const ais_gng_msgs::msg::TopologicalMap &map);
+
+Eigen::Vector3d patch_normal_at(const patch_curvature &curvature, const Eigen::Vector3d &point);
 
 struct model
 {

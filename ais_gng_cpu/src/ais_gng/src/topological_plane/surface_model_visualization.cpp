@@ -228,7 +228,8 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
       {"node_indices",p.node_indices},{"center",vector_json(p.center)}};
     if (p.plane_cluster_idx>=0) patch["plane_cluster_id"]=planes.clusters[p.plane_cluster_idx].id;
     const auto &c = p.curvature;
-    patch["curvature"] = {{"valid",c.valid},{"sample_num",c.sample_num}};
+    patch["curvature"] = {{"valid",c.valid},{"sample_num",c.sample_num},
+      {"method","position_quadratic"}};
     if (c.valid) {
       patch["curvature"].update({{"normal",vector_json(c.normal)},
         {"axis_u",vector_json(c.axis_u)},{"axis_v",vector_json(c.axis_v)},
@@ -241,7 +242,8 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
         {"normal_scatter",{{c.normal_scatter(0,0),c.normal_scatter(0,1),c.normal_scatter(0,2)},
           {c.normal_scatter(1,0),c.normal_scatter(1,1),c.normal_scatter(1,2)},
           {c.normal_scatter(2,0),c.normal_scatter(2,1),c.normal_scatter(2,2)}}},
-        {"plane_rms_m",c.plane_rms},{"fit_error",c.fit_error},{"confidence",c.confidence}});
+        {"plane_rms_m",c.plane_rms},{"position_rms_m",c.position_rms},
+        {"fit_error",c.fit_error},{"confidence",c.confidence}});
     }
     out["patches"].push_back(std::move(patch));
   }

@@ -128,6 +128,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_surface_model surface_model)
   ament_target_dependencies(test_surface_model ais_gng_msgs rclcpp visualization_msgs Eigen3 nlohmann_json)
 
+  add_executable(replay_surface_models test/replay_surface_models.cpp)
+  target_link_libraries(replay_surface_models surface_model)
+  ament_target_dependencies(replay_surface_models ais_gng_msgs Eigen3 nlohmann_json)
+
   add_executable(
     benchmark_plane_cluster_incremental
     test/benchmark_plane_cluster_incremental.cpp

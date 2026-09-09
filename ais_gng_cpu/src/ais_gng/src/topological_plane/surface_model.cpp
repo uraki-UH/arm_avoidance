@@ -346,7 +346,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   std::set<std::array<std::uint32_t,2>> edges, smooth, sharp;
   const auto curvature_begin = std::chrono::steady_clock::now();
   for (auto &patch : output.patches) {
-    if (patch.node_indices.size() >= 6) patch.curvature = estimate_curvature(patch, map);
+    if (patch.node_indices.size() >= 8) patch.curvature = estimate_curvature(patch, map);
   }
   output.curvature_ms = std::chrono::duration<double, std::milli>(
     std::chrono::steady_clock::now() - curvature_begin).count();
@@ -361,14 +361,9 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   const auto boundary_normal=[&](std::uint32_t idx,const vec &boundary) {
     const auto &patch=output.patches[owner[idx]];
     const auto &c=patch.curvature;
+    if (c.valid && c.confidence>=0.5) return patch_normal_at(c,boundary);
     vec n=patch_normals[owner[idx]];
     if (n.squaredNorm()<0.5) return normals[idx];
-    if (c.valid && c.confidence>=0.5) {
-      const vec delta=boundary-patch.center;
-      const Eigen::Vector2d change=c.tensor*Eigen::Vector2d(c.axis_u.dot(delta),c.axis_v.dot(delta));
-      const double sign=c.normal.dot(n)>=0 ? 1.0:-1.0;
-      n-=sign*(c.axis_u*change.x()+c.axis_v*change.y());
-    }
     return normal(n);
   };
   const double min_link_cos = std::cos(config.max_link_normal_deg*pi/180.0);
