@@ -200,31 +200,33 @@ struct gng_node_statistics {
 };
 gng_node_statistics gng_get_node_statistics(uint16_t node_id);
 
-// gng_setPointCloud後、gng_exec前のセンサ原点指定。GNG点群と同じ座標系。
-// 原点の有効期間は一回のgng_exec。非有限値の場合は無効。
-void gng_set_observation_origin(Vec3 origin, uint8_t has_origin);
+// 学習グラフ全体の既存隣接数。無効ノードの返値はUINT32_MAX。再集計なし。
+uint32_t gng_get_node_num_neighbors(uint16_t node_id);
 
-// 入力点順の画素番号と、GNG座標系の整数角度表。借用配列の寿命は次のgng_exec完了まで。
-// 無効画素はUINT32_MAX。個数不一致は全体無効化、画素範囲外はその点だけレイ計算へ復帰。
-uint8_t gng_set_observation_pixels(const uint32_t *pixel_ids, uint32_t point_num,
-    const gng_observation::ray_angles *angle_table, uint32_t table_num);
-// 元点群と間引き番号への直接参照。借用メモリの寿命は次のgng_exec完了まで。
-uint8_t gng_set_observation_pixel_view(const gng_observation::pixel_view *view,
-    const gng_observation::ray_angles *angle_table, uint32_t table_num);
-struct gng_observation_lookup_statistics {
-    uint32_t pixel_hit_num = 0;
-    uint32_t ray_num = 0;
+// 一学習入力の観測情報。原点と整数角度表はGNG点群と同じ座標系。
+struct gng_observation_input {
+    Vec3 origin{};
+    uint8_t has_origin = 0;
+    gng_observation::pixel_view pixels{};
+    const gng_observation::ray_angles *angle_table = nullptr;
+    uint32_t table_num = 0;
 };
-gng_observation_lookup_statistics gng_get_observation_lookup_statistics();
+// gng_setPointCloud後、gng_exec前の一括置換。nullptrは入力観測情報の解除。
+// 構造体は値コピー、画素・間引き番号・角度表の借用メモリはgng_exec完了まで有効なもの。
+// 返値1は受付成功、0は無効入力または機能OFF。非有限原点は観測全体の無効化。
+// pixels未指定はレイ計算。無効ビュー・表は返値0かつ有効原点によるレイ計算への復帰。
+uint8_t gng_set_observation_input(const gng_observation_input *input);
 
 // 一学習フレームの第一勝者レイ範囲。値返却による次回更新からの独立。
 gng_observation::angle_range gng_get_observation_angle_range(uint16_t node_id);
 
-// 直近の学習出力に対応する原点。次フレーム用の原点指定とは独立。
+// 直近の学習出力に対応する原点と参照件数。次フレーム用の入力指定とは独立。
 struct gng_observation_frame {
     Vec3 origin{};
     uint32_t frame_number = 0;
     uint8_t has_origin = 0;
+    uint32_t pixel_hit_num = 0;
+    uint32_t ray_num = 0;
 };
 gng_observation_frame gng_get_observation_frame();
 

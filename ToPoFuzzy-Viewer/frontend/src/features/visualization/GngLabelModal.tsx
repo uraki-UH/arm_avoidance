@@ -1,14 +1,15 @@
 import { createPortal } from 'react-dom';
-import { Layers, X } from 'lucide-react';
+import { ChevronDown, Layers, X } from 'lucide-react';
 import { LAYER_COLORS, LAYER_LABELS } from '../../types';
+import { get_node_label_groups, reorder_node_label_subset, node_label_definitions, normalize_node_label_settings } from './nodeLabelRegistry';
+import type { node_label_options } from './nodeLabelRegistry';
+import { LabelPriorityList } from './LabelPriorityList';
 
 interface GngLabelModalProps {
     open: boolean;
     title?: string;
     subtitle?: string;
-    visibleSemanticLabels: {
-        handle: boolean;
-    };
+    label_settings?: node_label_options;
     visibleLabels: {
         0: boolean;
         1: boolean;
@@ -19,9 +20,9 @@ interface GngLabelModalProps {
     };
     onClose: () => void;
     onUpdate: (updates: {
-        visibleSemanticLabels?: {
-            handle: boolean;
-        };
+        node_label_visibility?: Record<string, boolean>;
+        node_label_priority?: string[];
+        node_label_colors?: Record<string, string>;
         visibleLabels?: {
             0: boolean;
             1: boolean;
@@ -55,12 +56,14 @@ export function GngLabelModal({
     open,
     title = 'Visible Labels',
     subtitle = '',
-    visibleSemanticLabels,
+    label_settings,
     visibleLabels,
     onClose,
     onUpdate,
 }: GngLabelModalProps) {
     if (!open) return null;
+    const settings = normalize_node_label_settings(label_settings);
+    const ordered_labels = get_node_label_groups(settings.node_label_priority);
 
     const setAll = (value: boolean) => {
         onUpdate({
@@ -73,14 +76,6 @@ export function GngLabelModal({
             visibleLabels: {
                 ...visibleLabels,
                 [labelIndex]: !visibleLabels[labelIndex],
-            },
-        });
-    };
-    const toggleSemanticHandle = () => {
-        onUpdate({
-            visibleSemanticLabels: {
-                ...visibleSemanticLabels,
-                handle: !visibleSemanticLabels.handle,
             },
         });
     };
@@ -134,18 +129,75 @@ export function GngLabelModal({
                         </div>
 
                         <div className="space-y-2">
-                            <div className="mb-2 flex items-center justify-between rounded-md border border-white/10 bg-black/20 px-3 py-2">
-                                <span className="text-xs font-semibold text-[var(--text-primary)]">Semantic labels</span>
-                                <button
-                                    onClick={toggleSemanticHandle}
-                                    className={`rounded-md border px-3 py-1 text-[10px] font-semibold transition-colors ${
-                                        visibleSemanticLabels.handle
-                                            ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)] opacity-75 hover:bg-white/10'
-                                    }`}
-                                >
-                                    HANDLE {visibleSemanticLabels.handle ? 'ON' : 'OFF'}
-                                </button>
+                            <div role="group" aria-label="重複ラベル"
+                                className="mb-2 flex flex-col gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <span className="shrink-0 text-xs font-semibold text-[var(--text-primary)]">重複ラベル</span>
+                                    <span className="text-[10px] text-[var(--text-secondary)]">複数選択可・上ほど色を優先</span>
+                                </div>
+                                <LabelPriorityList ids={ordered_labels.map((item) => item.id)} names={ordered_labels.map((item) => item.name)}
+                                    title="重複ラベルの優先順位"
+                                    on_reorder={(ids) => onUpdate({ node_label_priority: reorder_node_label_subset(settings.node_label_priority, ids) })}>
+                                    {ordered_labels.map((item) => {
+                                        const is_enabled = settings.node_label_visibility[item.id];
+                                        const children = settings.node_label_priority
+                                            .map((id) => node_label_definitions.find((definition) => definition.id === id)!)
+                                            .filter((definition) => definition.parent_id === item.id);
+                                        return (
+                                            <div key={item.id}>
+                                                <div className="flex min-h-[32px] items-center gap-1 pl-7 pr-12">
+                                                    <button
+                                                        aria-label={item.name + 'の色分け'}
+                                                        aria-pressed={is_enabled}
+                                                        onClick={() => onUpdate({ node_label_visibility: {
+                                                            ...settings.node_label_visibility, [item.id]: !is_enabled,
+                                                        } })}
+                                                        className={`flex flex-1 items-center gap-2 rounded-md border px-3 py-1 text-[10px] font-semibold transition-colors ${is_enabled
+                                                            ? 'border-[var(--accent-color)]/30 bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                                            : 'border-white/10 bg-black/20 text-[var(--text-secondary)] opacity-75 hover:bg-white/10'}`}
+                                                    >
+                                                        <span className="h-2.5 w-2.5 rounded" style={{ backgroundColor: item.color }} aria-hidden="true" />
+                                                        <span className="flex-1 text-left">{item.name}</span>
+                                                        {is_enabled ? 'ON' : 'OFF'}
+                                                    </button>
+                                                </div>
+                                                {children.length > 0 && (
+                                                    <details className="group mt-2 rounded-md border border-white/10 bg-black/20 text-[10px]">
+                                                        <summary className="flex min-h-[44px] w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-color)] [&::-webkit-details-marker]:hidden">
+                                                            <span>原因別の表示・色</span>
+                                                            <ChevronDown size={16} className="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+                                                        </summary>
+                                                        <fieldset disabled={!is_enabled} className="space-y-2 px-2 pb-2 disabled:opacity-40">
+                                                            <legend className="sr-only">{item.name}の原因別設定</legend>
+                                                            <p className="text-[var(--text-secondary)]">複数選択可。証拠が重なる場合は上の色を優先。</p>
+                                                            <LabelPriorityList ids={children.map((child) => child.id)} names={children.map((child) => child.name)}
+                                                                title={item.name + 'の原因別優先順位'}
+                                                                on_reorder={(ids) => onUpdate({ node_label_priority: reorder_node_label_subset(settings.node_label_priority, ids) })}>
+                                                                {children.map((child) => (
+                                                                    <div key={child.id} className="flex min-h-[32px] items-center gap-2 pl-7 pr-12">
+                                                                        <label className="flex flex-1 cursor-pointer items-center gap-2 text-[var(--text-primary)]">
+                                                                            <input type="checkbox" checked={settings.node_label_visibility[child.id]}
+                                                                                onChange={(event) => onUpdate({ node_label_visibility: {
+                                                                                    ...settings.node_label_visibility, [child.id]: event.target.checked,
+                                                                                } })} />
+                                                                            {child.name}
+                                                                        </label>
+                                                                        <input type="color" aria-label={child.name + 'の色'}
+                                                                            value={settings.node_label_colors[child.id]}
+                                                                            onChange={(event) => onUpdate({ node_label_colors: {
+                                                                                ...settings.node_label_colors, [child.id]: event.target.value,
+                                                                            } })}
+                                                                            className="h-6 w-8 cursor-pointer rounded border border-white/10 bg-transparent p-0" />
+                                                                    </div>
+                                                                ))}
+                                                            </LabelPriorityList>
+                                                        </fieldset>
+                                                    </details>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </LabelPriorityList>
                             </div>
                             {LAYER_LABELS.map((label, index) => {
                                 const labelIndex = index as 0 | 1 | 2 | 3 | 4 | 5;

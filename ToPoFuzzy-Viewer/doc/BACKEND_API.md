@@ -5,7 +5,7 @@ This document describes the **v2** WebSocket API exposed by `viewer_ws_gateway_n
 ## Endpoint
 - URL: `ws://<host>:9001`
 - Transport:
-  - Binary: point cloud stream (`common/protocol.md`)
+  - Binary: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
   - Text: JSON request/response + async events
 
 ## Request/Response Format
@@ -44,9 +44,17 @@ Published before each binary cloud frame.
 `frameId`は入力`PointCloud2.header.frame_id`。後続のbinary cloud frameの座標系。
 
 ### `stream.graph`
+
+現行配信は `TMG1` バイナリ。以下は互換JSON表現。
+
 ```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false }], "edges": [], "clusters": [] } }
+{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true }], "edges": [], "clusters": [] } }
 ```
+
+`is_boundary_candidate` はGNGからの境界候補フラグ。専用トピック・Viewer側での次数再集計は不要。
+`boundary_evidence` はGNG実行側からの観測証拠ビット（遮蔽1・自由空間2・視野端4、0は不明）。併存可能。
+実測レイと局所面延長の比較結果であり、真の物体境界の確定情報ではない。Viewerは受信属性の表示のみ。
+バイナリでは候補フラグがノードレコード内オフセット5、証拠がオフセット6の各1バイト。詳細は `common/ws_protocol_v2.md` を参照。
 
 ### `job.progress`
 ```json

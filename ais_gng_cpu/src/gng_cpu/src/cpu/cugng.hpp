@@ -54,11 +54,9 @@ class CUGNG {
     Vec3f observation_origin;
     bool has_observation_frame_origin = false;
     Vec3f observation_frame_origin;
-    const uint32_t *observation_pixel_ids = nullptr;
     gng_observation::pixel_view observation_pixel_source;
     // 前フレームで支持を記録したノードのみのクリア対象。
     vector<uint32_t> observation_touched_ids;
-    uint32_t observation_point_num = 0;
     const gng_observation::ray_angles *observation_angle_table = nullptr;
     uint32_t observation_table_num = 0;
     uint32_t observation_pixel_hit_num = 0;

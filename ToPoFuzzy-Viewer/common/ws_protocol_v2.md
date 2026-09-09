@@ -2,7 +2,7 @@
 
 ## Transport
 - Endpoint: `ws://<host>:9001`
-- Binary frames: point cloud payload (`common/protocol.md`)
+- Binary frames: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
 - Text frames: JSON request/response and asynchronous events
 
 ## Request
@@ -39,9 +39,20 @@
 `frameId`は入力`PointCloud2.header.frame_id`。フロントエンドで固定座標系へのTF適用と状態表示に使用。
 
 ### Graph Stream
+
+現行のグラフ配信は `TMG1` バイナリ。以下は互換JSON表現。
+
 ```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false }], "edges": [], "clusters": [] } }
+{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true }], "edges": [], "clusters": [] } }
 ```
+
+`is_boundary_candidate` は `TopologicalNode` のGNG側境界候補属性。Viewer内での次数判定なし。
+`boundary_evidence` は候補付近の観測証拠ビット。1=遮蔽、2=自由空間、4=視野端、0=不明。複数ビットの併存が可能。
+バイナリでは同レコードのオフセット6、レコード長84バイトは維持。属性欠落・旧予約値0は不明。
+局所面延長との比較による証拠であり、物体の真の境界や仮説全体の棄却の確定情報ではない。
+バイナリでは84バイトのノードレコード先頭から5バイト目（0起点）に格納、0がfalse、1がtrue。
+予約領域1バイトの利用によるレコード長・バージョンの維持。旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
+ROSメッセージ定義の互換性とは別のため、ROS送受信側には同一定義での再ビルド・再起動が必要。
 
 ### Stream Reset
 ```json

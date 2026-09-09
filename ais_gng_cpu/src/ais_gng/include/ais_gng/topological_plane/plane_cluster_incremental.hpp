@@ -196,6 +196,11 @@ struct ClusterStatistics
   std::size_t removed_cluster_count = 0;
   std::size_t maintenance_iter_num = 0;
 
+  // 全域木の維持によって連結探索を省略したクラスタ数。
+  std::size_t num_connectivity_reused_clusters = 0;
+  // 連結成分の再探索で訪問したノード数。
+  std::size_t num_connectivity_scanned_nodes = 0;
+
   // 隣接クラスタ対が併合判定のどこで止まったかを示す診断値。
   std::size_t merge_adjacent_pair_count = 0;
   std::size_t merge_insufficient_edge_pair_count = 0;

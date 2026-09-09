@@ -95,6 +95,10 @@ plane_cluster_incremental_node:
     # true 時のOBBマーカーへのクラスタID・ノード数文字列の重畳表示。
     enable_text_marker: false
 
+    # 非平面成分のMarkerArray。CPU直結の/nonplane_components利用時はlaunch側で無効化。
+    surface_marker_topic: /nonplane_components/markers
+    surface_component.min_nodes: 2
+
 ais_gng_node:
   ros__parameters:
     # 平面クラスタ未所属nodeの連結成分ID付与の有効化。

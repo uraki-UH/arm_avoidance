@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
+import { deserializeTopologicalMap, isTopologicalMapPacket } from '../utils/topologicalMapProtocol';
 import {
     PointCloudData,
     MarkerArrayData,
@@ -318,6 +319,8 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.semanticReliability !== b.semanticReliability ||
             a.age !== b.age ||
             a.nonplaneComponentId !== b.nonplaneComponentId ||
+            a.is_boundary_candidate !== b.is_boundary_candidate ||
+            a.boundary_evidence !== b.boundary_evidence ||
             a.winnerPointCount !== b.winnerPointCount ||
             a.isGoal !== b.isGoal ||
             a.manipValid !== b.manipValid ||
@@ -694,6 +697,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const pointCloudFrameIdsRef = useRef<Map<string, string>>(new Map());
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
+    const pendingTopologicalMapAppliedRef = useRef<Set<string>>(new Set());
+    const topologicalMapReceivedAtRef = useRef<Map<string, number>>(new Map());
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
     const voxelStreamSnapshotsRef = useRef<Map<string, VoxelStreamSnapshot>>(new Map());
     const pendingRobotPoseUpdatesRef = useRef<Map<string, QueuedRobotPoseUpdate>>(new Map());
@@ -742,6 +747,31 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 }
 
                 return changed ? next : prev;
+            });
+        }
+
+        if (pendingTopologicalMapAppliedRef.current.size > 0) {
+            const appliedTopics = Array.from(pendingTopologicalMapAppliedRef.current);
+            pendingTopologicalMapAppliedRef.current.clear();
+            window.requestAnimationFrame(() => {
+                const expectedSocket = wsRef.current;
+                const now = performance.now();
+                const delayMs = Math.max(
+                    0,
+                    ...appliedTopics.map((topic) => now - (topologicalMapReceivedAtRef.current.get(topic) ?? now)),
+                );
+                window.setTimeout(() => {
+                    if (expectedSocket !== wsRef.current || expectedSocket?.readyState !== WebSocket.OPEN) {
+                        return;
+                    }
+                    for (const topic of appliedTopics) {
+                        topologicalMapReceivedAtRef.current.delete(topic);
+                        expectedSocket.send(JSON.stringify({
+                            type: 'stream.topological_map.applied',
+                            topic,
+                        }));
+                    }
+                }, delayMs);
             });
         }
 
@@ -818,6 +848,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     const clearGraphLayer = useCallback((tag: string) => {
         pendingGraphUpdatesRef.current.delete(tag);
+        pendingTopologicalMapAppliedRef.current.delete(tag);
+        topologicalMapReceivedAtRef.current.delete(tag);
         setGraphData((prev) => {
             if (!prev[tag]) {
                 return prev;
@@ -854,6 +886,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             pointCloudFrameIdsRef.current.clear();
             flushPendingWithError('WebSocket reconnected');
             pendingGraphUpdatesRef.current.clear();
+            pendingTopologicalMapAppliedRef.current.clear();
+            topologicalMapReceivedAtRef.current.clear();
             pendingVoxelUpdatesRef.current.clear();
             pendingRobotPoseUpdatesRef.current.clear();
             pendingPointCloudUpdatesRef.current.clear();
@@ -902,6 +936,17 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 if (event.data instanceof ArrayBuffer) {
                     try {
                         const buffer = event.data;
+                        if (isTopologicalMapPacket(buffer)) {
+                            const packet = deserializeTopologicalMap(buffer);
+                            pendingGraphUpdatesRef.current.set(packet.tag, {
+                                tag: packet.tag,
+                                graph: mergeGraphFeatures(packet.graph),
+                            });
+                            pendingTopologicalMapAppliedRef.current.add(packet.tag);
+                            topologicalMapReceivedAtRef.current.set(packet.tag, performance.now());
+                            scheduleStreamFlush();
+                            return;
+                        }
                         const layerId = readPointCloudLayerId(buffer);
 
                         // Sync the queue just in case other logic depends on it
@@ -916,7 +961,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         });
                         scheduleStreamFlush();
                     } catch (parseError) {
-                        console.error('Failed to parse binary point cloud:', parseError);
+                        console.error('Failed to parse binary stream:', parseError);
                     }
                     return;
                 }
@@ -1159,6 +1204,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 pendingTopicQueueRef.current = [];
                 pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
+                pendingTopologicalMapAppliedRef.current.clear();
+                topologicalMapReceivedAtRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
                 voxelStreamSnapshotsRef.current.clear();
                 pendingRobotPoseUpdatesRef.current.clear();
@@ -1204,6 +1251,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     useEffect(() => {
         const pendingGraphUpdates = pendingGraphUpdatesRef.current;
+        const pendingTopologicalMapApplied = pendingTopologicalMapAppliedRef.current;
+        const topologicalMapReceivedAt = topologicalMapReceivedAtRef.current;
         const pendingVoxelUpdates = pendingVoxelUpdatesRef.current;
         const pendingRobotPoseUpdates = pendingRobotPoseUpdatesRef.current;
         const pendingPointCloudUpdates = pendingPointCloudUpdatesRef.current;
@@ -1212,6 +1261,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
             pendingGraphUpdates.clear();
+            pendingTopologicalMapApplied.clear();
+            topologicalMapReceivedAt.clear();
             pendingVoxelUpdates.clear();
             pendingRobotPoseUpdates.clear();
             pendingPointCloudUpdates.clear();

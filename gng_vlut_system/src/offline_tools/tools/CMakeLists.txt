@@ -40,3 +40,8 @@ ament_target_dependencies(gng_grasp_vlut_preview
 target_link_libraries(gng_grasp_vlut_preview ${LIBS_ALL_CORE} ${EXTRA_LIBS})
 target_include_directories(gng_grasp_vlut_preview PRIVATE ${Eigen3_INCLUDE_DIRS})
 install(TARGETS gng_grasp_vlut_preview DESTINATION lib/${PROJECT_NAME})
+
+add_executable(shape_patch_analyzer ../shape_patch_analyzer.cpp)
+target_link_libraries(shape_patch_analyzer ${PCL_LIBRARIES} ZLIB::ZLIB)
+target_include_directories(shape_patch_analyzer PRIVATE ${PCL_INCLUDE_DIRS} ${Eigen3_INCLUDE_DIRS})
+install(TARGETS shape_patch_analyzer DESTINATION lib/${PROJECT_NAME})

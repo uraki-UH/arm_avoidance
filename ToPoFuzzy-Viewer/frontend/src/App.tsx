@@ -132,8 +132,6 @@ type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: stri
 function App() {
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [isWebGlContextLost, setIsWebGlContextLost] = useState(false);
-
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
     const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
     const [heatmapSettings, setHeatmapSettings] = useState<HeatmapSettings>({
@@ -673,26 +671,23 @@ function App() {
                 }
             >
                 <div className="w-full h-full relative bg-gradient-to-br from-[var(--bg-primary)] to-black">
-                    <WebGLErrorBoundary failed={isWebGlContextLost}>
+                    <WebGLErrorBoundary>
                     <Canvas
                         frameloop="demand"
                         dpr={1}
                         camera={{ position: [5, 5, 5], up: [0, 0, 1], fov: 50 }}
                         gl={canvasGl}
-                        onCreated={({ gl }) => {
-                            if (import.meta.hot) {
-                                import.meta.hot.dispose(() => gl.dispose());
-                            }
-                            // コンテキスト喪失後はCanvasを外し、GPUへの描画要求を止める。
+                        onCreated={({ gl, invalidate }) => {
                             gl.domElement.addEventListener('webglcontextlost', (e) => {
-                                console.error('[WebGL] context lost', {
+                                e.preventDefault();
+                                console.warn('[WebGL] context lost; waiting for browser restoration', {
                                     time: new Date().toISOString(),
                                     statusMessage: (e as WebGLContextEvent).statusMessage,
                                 });
-                                setIsWebGlContextLost(true);
                             });
                             gl.domElement.addEventListener('webglcontextrestored', () => {
-                                console.warn('[WebGL] context restored event fired (not expected to recover automatically)', new Date().toISOString());
+                                console.info('[WebGL] context restored', new Date().toISOString());
+                                invalidate();
                             });
                         }}
                     >
@@ -758,7 +753,6 @@ function App() {
                             if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             const common = {
-                                key: tag,
                                 tag,
                                 data,
                                 visible: true,
@@ -767,6 +761,7 @@ function App() {
                                 tf,
                                 manualTransform: settings.graphTransform,
                                 nodeColor: settings.nodeColor,
+                                label_settings: settings,
                                 edgeColor: settings.edgeColor,
                                 nodeEmissiveIntensity: settings.emissiveIntensity,
                                 edgeEmissiveIntensity: settings.emissiveIntensity,
@@ -778,7 +773,6 @@ function App() {
                                 showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
                                 manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
                                 manipEllipsoidType: settings.manipEllipsoidType ?? 'translational',
-                                visibleSemanticLabels: settings.visibleSemanticLabels,
                                 normalScale: settings.normalScale ?? 0.075,
                                 velocityScale: settings.velocityScale ?? 0.25,
                                 covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
@@ -787,8 +781,8 @@ function App() {
                                 covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
                             return data.mode === 'static'
-                                ? <StaticGraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} />
-                                : <GraphRenderer {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                                ? <StaticGraphRenderer key={tag} {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} />
+                                : <GraphRenderer key={tag} {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />

@@ -42,9 +42,18 @@ export function resolveGraphNodeColor(
     return palette[safeIndex] ?? palette[0];
 }
 
-/**
- * Updates the instance matrices and colors for a GNG node InstancedMesh.
- */
+/** 追加メッシュなしのノード色分け用マテリアル設定。発光色にもインスタンス色を適用。 */
+export function configure_node_material(material: THREE.MeshStandardMaterial) {
+    material.color.set('#ffffff');
+    material.emissive.set('#ffffff');
+    material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>',
+            '#include <color_fragment>\n#ifdef USE_COLOR\n totalEmissiveRadiance *= vColor.rgb;\n#endif');
+    };
+    return material;
+}
+
+/** GNGノードInstancedMeshの姿勢・色の更新。 */
 export function updateNodeInstances(
     mesh: THREE.InstancedMesh,
     nodes: GraphData['nodes'],
@@ -55,6 +64,7 @@ export function updateNodeInstances(
         palette?: string[];
         baseColor?: string;
         useSemanticColors?: boolean;
+        node_colors?: ReadonlyMap<GraphData['nodes'][number], string>;
     }
 ) {
     if (!mesh) return;
@@ -70,11 +80,11 @@ export function updateNodeInstances(
         tempMatrix.scale(tempVec3);
         mesh.setMatrixAt(i, tempMatrix);
 
-        const colorHex = colorMode === 'uniform'
+        const colorHex = options?.node_colors?.get(node) ?? (colorMode === 'uniform'
             ? uniformColor
             : (() => {
                 return resolveGraphNodeColor(node, palette, i, useSemanticColors);
-            })();
+            })());
         tempColor.set(colorHex);
         mesh.setColorAt(i, tempColor);
     });
@@ -86,13 +96,14 @@ export function updateNodeInstances(
 }
 
 /**
- * Updates the instance matrices for GNG edge InstancedMesh (using Cylinders).
+ * GNG edgeの姿勢と任意のクラスタ所属色の更新。
  */
 export function updateEdgeInstances(
     mesh: THREE.InstancedMesh,
     edges: number[],
     nodes: GraphData['nodes'],
-    edgeWidth: number
+    edgeWidth: number,
+    node_colors?: ReadonlyMap<number, string>,
 ) {
     if (!mesh) return;
     const safeEdgeWidth = Number.isFinite(edgeWidth)
@@ -113,6 +124,10 @@ export function updateEdgeInstances(
 
         const srcNode = nodes[srcIdx];
         const tgtNode = nodes[tgtIdx];
+        if (node_colors || mesh.instanceColor) {
+            tempColor.set(node_colors?.get(srcNode.id ?? srcIdx) ?? '#ffffff');
+            mesh.setColorAt(i, tempColor);
+        }
 
         startVec.set(srcNode.x, srcNode.y, srcNode.z);
         endVec.set(tgtNode.x, tgtNode.y, tgtNode.z);
@@ -132,4 +147,5 @@ export function updateEdgeInstances(
     }
 
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 }

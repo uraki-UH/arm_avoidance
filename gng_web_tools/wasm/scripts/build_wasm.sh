@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${1:-${ROOT_DIR}/dist}"
+gng_cpu_dir="${ROOT_DIR}/../../ais_gng_cpu/src/gng_cpu"
 
 if ! command -v em++ >/dev/null 2>&1; then
   echo "em++ not found. Install Emscripten first." >&2
@@ -15,15 +16,15 @@ em++ \
   -std=c++17 \
   -O3 \
   -I"${ROOT_DIR}/include" \
-  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/include" \
-  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu" \
-  -I"${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils" \
+  -I"${gng_cpu_dir}/include" \
+  -I"${gng_cpu_dir}/src/cpu" \
+  -I"${gng_cpu_dir}/src/utils" \
   "${ROOT_DIR}/src/gng_kernel.cpp" \
   "${ROOT_DIR}/src/wasm_exports.cpp" \
-  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp" \
-  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp" \
-  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp" \
-  "${ROOT_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp" \
+  "${gng_cpu_dir}/src/cpu/cugng.cpp" \
+  "${gng_cpu_dir}/src/utils/node.cpp" \
+  "${gng_cpu_dir}/src/utils/param.cpp" \
+  "${gng_cpu_dir}/src/utils/vec3f.cpp" \
   -DGNG_VERSION=0 \
   -sMODULARIZE=1 \
   -sEXPORT_ES6=0 \

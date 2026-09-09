@@ -11,6 +11,13 @@ docker compose --profile manual up  frontend
 
 chrome://restart
 
+### AMD GPUでWebGLコンテキスト喪失が発生する場合
+
+ホスト側のNVIDIA GPUを使う専用Chromeの起動:ビューアー安定化版
+
+bash scripts/open_viewer_nvidia.sh
+
+
 ##  backendの起動
 ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 
@@ -39,8 +46,6 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 
 
 ## AISGNG実行
-ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=topo_points.yaml
-
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
 ## GNG平面クラスタから上方向把持候補を生成

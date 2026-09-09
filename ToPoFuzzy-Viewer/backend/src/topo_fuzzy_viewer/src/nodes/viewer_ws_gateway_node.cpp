@@ -1,6 +1,7 @@
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
+#include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 
 #include <rclcpp/rclcpp.hpp>
@@ -47,6 +48,16 @@ struct VoxelStreamState {
     std::unordered_map<std::int64_t, std::uint8_t> labels;
     bool has_labels = false;
     std::uint64_t sequence = 0;
+};
+
+struct TopologicalMapPacket {
+    std::shared_ptr<std::vector<std::uint8_t>> data;
+    std::uint64_t version = 0;
+};
+
+struct TopologicalMapClientState {
+    std::unordered_map<std::string, std::uint64_t> sent_versions;
+    std::unordered_set<std::string> awaiting_topics;
 };
 
 namespace topic_utils {
@@ -281,6 +292,8 @@ namespace converter {
                 {"semanticLabel", n.semantic_label},
                 {"semanticReliability", n.semantic_reliability},
                 {"isGoal", n.is_goal},
+                {"is_boundary_candidate", n.is_boundary_candidate},
+                {"boundary_evidence", n.boundary_evidence},
                 {"age", age},
                 {"nonplaneComponentId", n.nonplane_component_id},
                 {"winnerPointCount", n.winner_point_count},
@@ -450,7 +463,7 @@ public:
         graphWatchThread_ = std::thread([this]() { watchGraphChanges(); });
         RCLCPP_INFO(
             get_logger(),
-            "Gateway initialized on port %d (point cloud: max %zu points, %.1f Hz)",
+                "Gateway initialized on port %d (point cloud: max %zu points, %.1f Hz; topological map: browser-paced)",
             port, pointCloudMaxPoints_, pointCloudMaxHz_);
     }
     ~ViewerWsGatewayNode() override {
@@ -478,6 +491,10 @@ private:
         json in = json::parse(msg, nullptr, false); if (in.is_discarded()) return;
         std::string type = in.value("type", ""), method = in.value("method", ""), id = in.value("id", ""), tag = in.value("tag", "");
         if (type == "request.state") { sendCurrentState(ws); return; }
+        if (type == "stream.topological_map.applied") {
+            handleTopologicalMapApplied(ws, in.value("topic", tag));
+            return;
+        }
         if (type.find(".delete") != std::string::npos || type.find(".remove") != std::string::npos) { 
             std::string target = tag.empty() ? in.value("topic", "") : tag;
             if (!target.empty()) sendStreamDelete(target); return; 
@@ -711,24 +728,12 @@ private:
                         });
                 } else if (st == "topological_map") {
                     activeSubTypes_[sid] = "topological_map";
-                    activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
-                        std::vector<json> node_features;
-                        std::vector<json> cluster_features;
-                        {
-                            std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
-                            node_features.reserve(lastNodeFeaturePayloads_.size());
-                            for (const auto& [_, payload] : lastNodeFeaturePayloads_) {
-                                node_features.push_back(payload);
-                            }
+                    activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
+                        try {
+                            broadcastTopologicalMap(sid, topological_map_protocol::serialize(*m, sid));
+                        } catch (const std::exception& error) {
+                            RCLCPP_ERROR(get_logger(), "TopologicalMap binary serialization failed: %s", error.what());
                         }
-                        {
-                            std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
-                            cluster_features.reserve(lastClusterFeaturePayloads_.size());
-                            for (const auto& [_, payload] : lastClusterFeaturePayloads_) {
-                                cluster_features.push_back(payload);
-                            }
-                        }
-                        broadcastText(converter::to_json(m, sid, node_features, cluster_features).dump());
                     });
                 } else if (st == "topological_node_feature") {
                     activeSubTypes_[sid] = "topological_node_feature";
@@ -844,6 +849,74 @@ private:
         }
         if (schedule_flush) {
             loop_->defer([this]() { flushPendingPointClouds(); });
+        }
+    }
+
+    void broadcastTopologicalMap(const std::string& topic, std::vector<std::uint8_t> packet) {
+        bool schedule_flush = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            auto& latest = pendingTopologicalMapPackets_[topic];
+            latest.data = std::make_shared<std::vector<std::uint8_t>>(std::move(packet));
+            ++latest.version;
+            if (!topologicalMapFlushScheduled_) {
+                topologicalMapFlushScheduled_ = true;
+                schedule_flush = true;
+            }
+        }
+        if (schedule_flush) {
+            loop_->defer([this]() { flushPendingTopologicalMaps(); });
+        }
+    }
+
+    void flushPendingTopologicalMaps() {
+        std::scoped_lock lock(pendingTopologicalMapMutex_, connectionMutex_);
+        topologicalMapFlushScheduled_ = false;
+        for (const auto& [topic, packet] : pendingTopologicalMapPackets_) {
+            if (!packet.data) {
+                continue;
+            }
+            for (auto* ws : connections_) {
+                auto& client = topologicalMapClientStates_[ws];
+                if (client.awaiting_topics.find(topic) != client.awaiting_topics.end()) {
+                    continue;
+                }
+                if (client.sent_versions[topic] >= packet.version) {
+                    continue;
+                }
+                if (ws->getBufferedAmount() < websocketMaxBackpressureBytes_) {
+                    ws->send(
+                        std::string_view(
+                            reinterpret_cast<const char*>(packet.data->data()), packet.data->size()),
+                        uWS::OpCode::BINARY);
+                    client.sent_versions[topic] = packet.version;
+                    client.awaiting_topics.insert(topic);
+                }
+            }
+        }
+    }
+
+    void handleTopologicalMapApplied(WebSocket* ws, const std::string& topic) {
+        if (topic.empty()) {
+            return;
+        }
+        bool schedule_flush = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            const auto client = topologicalMapClientStates_.find(ws);
+            if (client == topologicalMapClientStates_.end()) {
+                return;
+            }
+            if (client->second.awaiting_topics.erase(topic) == 0) {
+                return;
+            }
+            if (!topologicalMapFlushScheduled_) {
+                topologicalMapFlushScheduled_ = true;
+                schedule_flush = true;
+            }
+        }
+        if (schedule_flush) {
+            loop_->defer([this]() { flushPendingTopologicalMaps(); });
         }
     }
 
@@ -1034,9 +1107,10 @@ private:
         behavior.open = [this](auto* ws) {
             bool start_streaming = false;
             {
-                std::lock_guard<std::mutex> lock(connectionMutex_);
+                std::scoped_lock lock(pendingTopologicalMapMutex_, connectionMutex_);
                 start_streaming = connections_.empty();
                 connections_.push_back(ws);
+                topologicalMapClientStates_.try_emplace(ws);
             }
             if (start_streaming) subscribeStreamingTopics();
             sendCurrentState(ws);
@@ -1045,7 +1119,18 @@ private:
             sendSourcesSnapshot(ws);
         };
         behavior.message = [this](auto* ws, std::string_view msg, uWS::OpCode op) { if (op == uWS::OpCode::TEXT) onWsMessage(ws, msg); };
-        behavior.close = [this](auto* ws, int, std::string_view) { std::lock_guard<std::mutex> lock(connectionMutex_); connections_.erase(std::remove(connections_.begin(), connections_.end(), ws), connections_.end()); if (connections_.empty()) unsubscribeStreamingTopics(); };
+        behavior.close = [this](auto* ws, int, std::string_view) {
+            bool stop_streaming = false;
+            {
+                std::scoped_lock lock(pendingTopologicalMapMutex_, connectionMutex_);
+                connections_.erase(std::remove(connections_.begin(), connections_.end(), ws), connections_.end());
+                topologicalMapClientStates_.erase(ws);
+                stop_streaming = connections_.empty();
+            }
+            if (stop_streaming) {
+                unsubscribeStreamingTopics();
+            }
+        };
         uWS::App().get("/*", [this](auto* res, auto* req) { meshServer_.handle(res, req); }).ws<PerSocketData>("/*", std::move(behavior)).listen(port, [this, port](auto* s) { if (s) { listenSocket_ = s; RCLCPP_INFO(get_logger(), "WS Server on %d", port); } }).run();
     }
 
@@ -1071,6 +1156,12 @@ private:
         {
             std::lock_guard<std::mutex> lock(pointCloudRateMutex_);
             lastPointCloudForwardTime_.clear();
+        }
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            pendingTopologicalMapPackets_.clear();
+            topologicalMapClientStates_.clear();
+            topologicalMapFlushScheduled_ = false;
         }
         {
             std::lock_guard<std::mutex> lock(voxelMutex_);
@@ -1216,13 +1307,15 @@ private:
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
+    std::unordered_map<std::string, TopologicalMapPacket> pendingTopologicalMapPackets_;
+    std::unordered_map<WebSocket*, TopologicalMapClientState> topologicalMapClientStates_;
     std::string lastStaticTfPayload_;
     std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
     ais_gng_msgs::msg::TopologicalMap::SharedPtr latest_nonplane_source_map_;
     ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_nonplane_source_plane_clusters_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_, nonplane_source_mutex_;
-    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingRobotPoseMutex_, voxelMutex_;
+    std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingTopologicalMapMutex_, pendingRobotPoseMutex_, voxelMutex_;
     std::unordered_map<std::string, VoxelStreamState> voxelStreamStates_;
     std::string lastSourcesSnapshot_;
     std::shared_ptr<const std::string> pendingRobotPosePayload_;
@@ -1234,6 +1327,7 @@ private:
     double pointCloudMaxHz_ = 10.0;
     unsigned int websocketMaxBackpressureBytes_ = 8 * 1024 * 1024;
     bool pointCloudFlushScheduled_ = false;
+    bool topologicalMapFlushScheduled_ = false;
     bool robotPoseFlushScheduled_ = false;
 };
 }

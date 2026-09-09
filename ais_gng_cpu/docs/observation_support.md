@@ -116,14 +116,24 @@ half_angle_deg、max_direction_num、max_cell_angle_deg、max_block_num、およ
 ```cpp
 gng_setParameter("node.enable_observation_support", 0, 1);
 gng_setPointCloud(data, point_num, &config);
-gng_set_observation_origin(sensor_origin_in_gng_frame, 1);
+gng_observation_input input;
+input.origin = sensor_origin_in_gng_frame;
+input.has_origin = 1;
+gng_set_observation_input(&input);
 gng_exec();
 const auto frame = gng_get_observation_frame();
 const auto range = gng_get_observation_angle_range(node_id);
 ```
 
 範囲は値返却。無効なノードIDはhas_support=false。
-frameは原点、has_origin、frame_number。呼び出しの並列実行は不可。
+frameは原点、has_origin、frame_number、pixel_hit_num、ray_num。呼び出しの並列実行は不可。
+観測入力は一括置換。任意のpixels・angle_table・table_num指定で画素表参照が可能。
+pixels未指定はレイ計算。無効なビュー・表は受付結果0かつ有効原点によるレイ計算へ復帰。
+nullptrまたは無効原点は観測入力全体の解除。次入力・学習完了・支持設定変更でも失効。
+入力構造体は値コピー。参照先の画素・間引き番号・角度表はgng_exec完了まで保持。
+次入力の設定では直近出力の原点・参照件数に変更なし。
+旧原点・画素配列・画素ビュー設定API、独立した参照件数取得APIは廃止。
+gng_observation_frameの構造変更を含むため、ライブラリと利用側の双方の再ビルドが必要。
 旧get_observation_cellsと途中案get_observation_pointsのエクスポートはなし。
 
 ## ROS出力 version=5

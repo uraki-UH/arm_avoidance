@@ -117,9 +117,8 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     // 入力点群の確保
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
-    n1.observation_pixel_ids = nullptr;
     n1.observation_angle_table = nullptr;
-    n1.observation_point_num = n1.observation_table_num = 0;
+    n1.observation_table_num = 0;
     int i;
 
     // 入力点群の最大値制限
@@ -203,7 +202,6 @@ void GNG::exec() {
     auto t0 = std::chrono::system_clock::now();
     if (!n1.enable_observation_support || !n1.has_observation_origin) {
         n1.observation_pixel_source = {};
-        n1.observation_pixel_ids = nullptr;
         n1.observation_angle_table = nullptr;
     }
     // クラスタリング（CPU）
@@ -221,9 +219,8 @@ void GNG::exec() {
         enable_observation_attention_compact ? &observation_attention_blocks : nullptr);
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
-    n1.observation_pixel_ids = nullptr;
     n1.observation_angle_table = nullptr;
-    n1.observation_point_num = n1.observation_table_num = 0;
+    n1.observation_table_num = 0;
     auto t3 = std::chrono::system_clock::now();
     // ラベリング
     la.labelling_fuzzy();

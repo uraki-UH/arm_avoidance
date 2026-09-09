@@ -101,7 +101,10 @@ void replayGngSummaryWithTime(
     bool plane_cluster_ran,
     double plane_cluster_ms,
     bool nonplane_ran,
-    double nonplane_ms) {
+    double nonplane_ms,
+    bool has_boundary_candidates = false,
+    double boundary_ms = 0.0,
+    std::size_t num_boundary_candidates = 0) {
     std::size_t line_start = 0;
     while (line_start < output.size()) {
         const std::size_t line_end = output.find('\n', line_start);
@@ -156,6 +159,9 @@ void replayGngSummaryWithTime(
                     cluster_num,
                     gng_ms,
                     nonplane_time_text);
+            }
+            if (has_boundary_candidates) {
+                std::fprintf(stdout, ", Boundary: %.2f ms (%zu)", boundary_ms, num_boundary_candidates);
             }
         } else {
             std::fwrite(line.data(), sizeof(char), line.size(), stdout);
@@ -274,6 +280,31 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     rcl_interfaces::msg::ParameterDescriptor support_descriptor;
     support_descriptor.read_only = true;
     support_descriptor.description = "支持領域の起動時設定";
+    auto boundary_descriptor = support_descriptor;
+    boundary_descriptor.description = "隣接数による境界候補の起動時設定";
+    enable_boundary_candidates_ = declare_parameter<bool>(
+        "boundary.enable_candidates", false, boundary_descriptor);
+    const auto max_boundary_neighbors = declare_parameter<int64_t>(
+        "boundary.max_neighbors", 4, boundary_descriptor);
+    if (max_boundary_neighbors < 0 || max_boundary_neighbors > 65534) {
+        throw std::invalid_argument("境界候補の隣接数上限の不正値");
+    }
+    max_boundary_neighbors_ = static_cast<uint32_t>(max_boundary_neighbors);
+    enable_boundary_evidence_ = declare_parameter<bool>("boundary.enable_evidence", true, boundary_descriptor);
+    boundary_classifier_.min_range_gap_th = declare_parameter<double>("boundary.min_range_gap_th", 0.03, boundary_descriptor);
+    boundary_classifier_.max_anchor_dist = declare_parameter<double>("boundary.max_anchor_dist", 0.05, boundary_descriptor);
+    boundary_lidar_angles_deg_ = declare_parameter<std::vector<double>>(
+        "boundary.lidar_angles_deg", std::vector<double>{}, boundary_descriptor);
+    if (!std::isfinite(boundary_classifier_.min_range_gap_th) || boundary_classifier_.min_range_gap_th <= 0 ||
+        !std::isfinite(boundary_classifier_.max_anchor_dist) || boundary_classifier_.max_anchor_dist <= 0) {
+        throw std::invalid_argument("境界証拠の距離設定の不正値");
+    }
+    if (!boundary_lidar_angles_deg_.empty()) {
+        const auto &a = boundary_lidar_angles_deg_;
+        if (a.size() != 6 || !boundary_classifier_.lidar(a[0], a[1], a[2], a[3], a[4], a[5])) {
+            throw std::invalid_argument("境界証拠のLiDAR角度設定の不正値");
+        }
+    }
     const bool enable_node_support = declare_parameter<bool>("node.enable_support", false, support_descriptor);
     auto &support_options = node_support_options_;
     support_options.sample_alpha = declare_parameter("node.support.sample_alpha", support_options.sample_alpha, support_descriptor);
@@ -809,10 +840,12 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
             &lidar_config);
 #if defined(AIS_GNG_BACKEND_CPU)
         if (enable_observation_support_) {
-            set_observation_origin(gng_input_msg, lidar_config, clouds.size() == 1);
-            set_observation_pixels(msg, requires_repacking ? &sampled_point_indices_ : nullptr,
+            gng_observation_input input;
+            prepare_observation_origin(gng_input_msg, lidar_config, clouds.size() == 1, input);
+            prepare_observation_pixels(msg, requires_repacking ? &sampled_point_indices_ : nullptr,
                 static_cast<uint32_t>(std::min<uint64_t>(
-                    static_cast<uint64_t>(gng_input_msg->width) * gng_input_msg->height, input_point_cloud_num_)));
+                    static_cast<uint64_t>(gng_input_msg->width) * gng_input_msg->height, input_point_cloud_num_)), input);
+            gng_set_observation_input(&input);
         }
 #endif
         if (requires_repacking) {
@@ -923,13 +956,29 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const double plane_cluster_summary_ms = std::chrono::duration<double, std::milli>(
         plane_cluster_end - classification_end).count();
 #if defined(AIS_GNG_BACKEND_CPU)
+    const auto boundary_start = std::chrono::steady_clock::now();
+    std::size_t num_boundary_candidates = 0;
+    if (enable_boundary_candidates_) {
+        for (auto &node : map_msg->nodes) {
+            node.is_boundary_candidate = gng_get_node_num_neighbors(node.id) <= max_boundary_neighbors_;
+            num_boundary_candidates += node.is_boundary_candidate ? 1U : 0U;
+        }
+        if (enable_boundary_evidence_ && num_boundary_candidates > 0) {
+            classify_boundary_evidence(*map_msg, transformed_pcl, transformed_pcl_num);
+        }
+    }
+    const double boundary_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - boundary_start).count();
     replayGngSummaryWithTime(
         gng_summary_output,
         gng_summary_ms,
         plane_cluster_ran,
         plane_cluster_summary_ms,
         nonplane_component_ran,
-        nonplane_component_ms);
+        nonplane_component_ms,
+        enable_boundary_candidates_,
+        boundary_ms,
+        num_boundary_candidates);
 #else
     replayGngSummaryWithTime(
         gng_summary_output,
@@ -1007,11 +1056,50 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 }
 
 #if defined(AIS_GNG_BACKEND_CPU)
-void AiSGNGComponent::set_observation_origin(
-    const PC2::ConstSharedPtr &msg, const LiDAR_Config &config, bool has_single_sensor) {
+void AiSGNGComponent::classify_boundary_evidence(
+    ais_gng_msgs::msg::TopologicalMap &map, const float *points, uint32_t point_num) {
+    boundary_classifier_.clear();
+    const auto frame = gng_get_observation_frame();
+    if (!enable_observation_support_ || !frame.has_origin || !has_observation_rotation_ ||
+        frame.frame_number != map.frame_number || !points) {return;}
+    bool has_view = false;
+    if (!boundary_lidar_angles_deg_.empty()) {
+        const auto &a = boundary_lidar_angles_deg_;
+        has_view = boundary_classifier_.lidar(a[0], a[1], a[2], a[3], a[4], a[5]);
+    } else {
+        for (auto item = observation_camera_infos_.rbegin(); item != observation_camera_infos_.rend(); ++item) {
+            const auto &info = **item;
+            if (info.header.stamp != map.header.stamp ||
+                (!observation_sensor_frame_.empty() && info.header.frame_id != observation_sensor_frame_)) {continue;}
+            if (observation_angle_table_.prepare(info, observation_rotation_)) {
+                has_view = boundary_classifier_.camera(info.width, info.height, info.k[0], info.k[4], info.k[2], info.k[5]);
+            }
+            break;
+        }
+    }
+    if (!has_view) {return;}
+    const auto rotate = [&](boundary_evidence::point p) {
+        const auto &r = observation_rotation_;
+        return boundary_evidence::point{r[0]*p.x+r[3]*p.y+r[6]*p.z,
+            r[1]*p.x+r[4]*p.y+r[7]*p.z, r[2]*p.x+r[5]*p.y+r[8]*p.z};
+    };
+    const boundary_evidence::point origin{frame.origin.x, frame.origin.y, frame.origin.z};
+    // 同一フレームの実入力のみ。角度範囲のmin/maxやグラフエッジからのレイ補間なし。
+    for (uint32_t idx = 0; idx < point_num; ++idx) {
+        boundary_classifier_.add(rotate(boundary_evidence::point{points[idx*3], points[idx*3+1], points[idx*3+2]}-origin));
+    }
+    for (auto &node : map.nodes) {
+        if (!node.is_boundary_candidate) {continue;}
+        node.boundary_evidence = boundary_classifier_.classify(
+            rotate(boundary_evidence::point{node.pos.x, node.pos.y, node.pos.z}-origin),
+            rotate({node.normal.x, node.normal.y, node.normal.z}));
+    }
+}
+
+void AiSGNGComponent::prepare_observation_origin(
+    const PC2::ConstSharedPtr &msg, const LiDAR_Config &config, bool has_single_sensor, gng_observation_input &input) {
     has_observation_origin_ = false;
     has_observation_rotation_ = false;
-    gng_set_observation_origin({0, 0, 0}, 0);
     if (!has_observation_cloud_transform_) {return;}
     if (!has_single_sensor) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
@@ -1066,7 +1154,8 @@ void AiSGNGComponent::set_observation_origin(
     }
     const Vec3 position{static_cast<float>(origin.x()), static_cast<float>(origin.y()), static_cast<float>(origin.z())};
     has_observation_origin_ = std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z);
-    gng_set_observation_origin(position, has_observation_origin_);
+    input.origin = position;
+    input.has_origin = has_observation_origin_;
     if (!std::isfinite(sensor_rotation.length2()) || std::abs(sensor_rotation.length2() - 1) > 1e-6) {
         has_observation_rotation_ = false;
     }
@@ -1078,8 +1167,8 @@ void AiSGNGComponent::set_observation_origin(
     }
 }
 
-void AiSGNGComponent::set_observation_pixels(const PC2::ConstSharedPtr &msg,
-    const std::vector<uint32_t> *selected_ids, uint32_t point_num) {
+void AiSGNGComponent::prepare_observation_pixels(const PC2::ConstSharedPtr &msg,
+    const std::vector<uint32_t> *selected_ids, uint32_t point_num, gng_observation_input &input) {
     if (observation_camera_info_topic_.empty() || !has_observation_origin_) {return;}
     sensor_msgs::msg::CameraInfo::ConstSharedPtr info;
     for (auto candidate = observation_camera_infos_.rbegin(); candidate != observation_camera_infos_.rend(); ++candidate) {
@@ -1109,17 +1198,18 @@ void AiSGNGComponent::set_observation_pixels(const PC2::ConstSharedPtr &msg,
             info->width, info->height, observation_angle_table_.values.size() * sizeof(gng_observation::ray_angles),
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
     }
-    gng_set_observation_pixel_view(&view,
-        observation_angle_table_.values.data(), static_cast<uint32_t>(observation_angle_table_.values.size()));
+    input.pixels = view;
+    input.angle_table = observation_angle_table_.values.data();
+    input.table_num = static_cast<uint32_t>(observation_angle_table_.values.size());
 }
 
 void AiSGNGComponent::publish_observation_support(
     const TopologicalMap &map, const std_msgs::msg::Header &header) {
+    const auto frame = gng_get_observation_frame();
     if (observation_lookup_pub_ && observation_lookup_pub_->get_subscription_count() != 0) {
-        const auto stats = gng_get_observation_lookup_statistics();
         std_msgs::msg::UInt32MultiArray message;
         message.data = {map.frame_number, static_cast<uint32_t>(header.stamp.sec), header.stamp.nanosec,
-            stats.pixel_hit_num, stats.ray_num, observation_angle_table_.build_num};
+            frame.pixel_hit_num, frame.ray_num, observation_angle_table_.build_num};
         observation_lookup_pub_->publish(message);
     }
     if (observation_support_pub_->get_subscription_count() == 0) {return;}
@@ -1127,7 +1217,6 @@ void AiSGNGComponent::publish_observation_support(
     // 固定長ノードレコードのフラット配列。座標系はlabel、仕様はdocs/observation_support.md。
     message.layout.dim.resize(1);
     message.layout.dim[0].label = header.frame_id;
-    const auto frame = gng_get_observation_frame();
     const auto float_bits = [](float value) {
         uint32_t bits;
         std::memcpy(&bits, &value, sizeof(bits));
@@ -1148,10 +1237,9 @@ void AiSGNGComponent::publish_observation_support(
     message.layout.dim[0].stride = message.data.size();
     observation_support_pub_->publish(std::move(message));
     if (!observation_camera_info_topic_.empty()) {
-        const auto stats = gng_get_observation_lookup_statistics();
         RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 2000,
             "Observation lookup: pixel_hits=%u ray_updates=%u table_builds=%u",
-            stats.pixel_hit_num, stats.ray_num, observation_angle_table_.build_num);
+            frame.pixel_hit_num, frame.ray_num, observation_angle_table_.build_num);
     }
 }
 

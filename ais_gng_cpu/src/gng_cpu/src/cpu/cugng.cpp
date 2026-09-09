@@ -443,8 +443,7 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     if (enable_observation_support && has_observation_origin) {
         if (!node0.observation_range.has_support) {observation_touched_ids.push_back(n.id1);}
         const auto &point = observation_point ? *observation_point : p;
-        const auto pixel_idx = observation_pixel_ids && raw_idx < observation_point_num ?
-            observation_pixel_ids[raw_idx] : observation_pixel_source.get(raw_idx);
+        const auto pixel_idx = observation_pixel_source.get(raw_idx);
         if (observation_angle_table && pixel_idx < observation_table_num) {
             node0.observation_range.add(observation_angle_table[pixel_idx]);
             ++observation_pixel_hit_num;

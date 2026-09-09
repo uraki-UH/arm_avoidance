@@ -2,11 +2,14 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, STATIC_GNG_DEFAULTS, SEMANTIC_COLORS, isTrajectoryGraphTag } from '../../types';
+import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, STATIC_GNG_DEFAULTS, isTrajectoryGraphTag } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { buildNodePalette, updateNodeInstances, updateEdgeInstances } from './utils/gngGraphics';
+import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material } from './utils/gngGraphics';
 import { DirectionalArrow } from './utils/DirectionalArrow';
+import { build_cluster_node_colors } from './utils/clusterColors';
 import { updateEllipsoidInstances } from './utils/ellipsoid';
+import { get_active_node_labels, resolve_node_label } from './nodeLabelRegistry';
+import type { node_label_options } from './nodeLabelRegistry';
 
 const EMPTY_GRAPH: GraphData = {
     timestamp: 0,
@@ -26,6 +29,8 @@ interface GraphRendererProps {
     data: GraphData | null;
     visible?: boolean;
     showNodes?: boolean;
+    enable_cluster_colors?: boolean;
+    label_settings?: node_label_options;
     showEdges?: boolean;
     showClusters?: boolean;
     showClusterText?: boolean;
@@ -47,9 +52,6 @@ interface GraphRendererProps {
         3: boolean;
         4: boolean;
         5: boolean;
-    };
-    visibleSemanticLabels?: {
-        handle: boolean;
     };
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
@@ -78,6 +80,8 @@ function GraphRendererCore({
     data,
     visible = true,
     showNodes = true,
+    enable_cluster_colors = /(^|\/)curved_surface_clusters$/.test(tag),
+    label_settings,
     showEdges = true,
     showClusters = true,
     showClusterText = false,
@@ -108,7 +112,6 @@ function GraphRendererCore({
     nodeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
     edgeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.edgeEmissiveIntensity,
     manualTransform = null,
-    visibleSemanticLabels,
 }: GraphRendererCoreProps) {
     const manipDisplayScale = 0.25;
     const { invalidate } = useThree();
@@ -126,22 +129,14 @@ function GraphRendererCore({
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
-    const semanticColorEnabled = visibleSemanticLabels?.handle ?? true;
+    const cluster_node_colors = useMemo(
+        () => enable_cluster_colors ? build_cluster_node_colors(graph) : undefined,
+        [enable_cluster_colors, graph],
+    );
+    const active_labels = useMemo(() => get_active_node_labels(label_settings), [label_settings]);
+    const label_signature = active_labels.map((item) => item.id).join('|');
     const isTrajectoryGraph = isTrajectoryGraphTag(tag);
     const highlightGoalNodes = variant === 'static' || isTrajectoryGraph;
-    const goalNodes = useMemo(() => {
-        if (!highlightGoalNodes) return [];
-        return graph.nodes.filter((node) => {
-            if (!node.isGoal) return false;
-            const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
-            const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
-            return !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
-        });
-    }, [graph.nodes, highlightGoalNodes, visibleLabels]);
-    const goalNodeSignature = useMemo(
-        () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
-        [goalNodes]
-    );
     const semanticLabelText = (semanticLabel?: number) => {
         if (!Number.isFinite(semanticLabel) || (semanticLabel ?? 0) <= 0) return '';
         return SEMANTIC_LABELS[(Math.trunc(semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
@@ -159,39 +154,43 @@ function GraphRendererCore({
         }
         return labels;
     }, [graph.clusters]);
-    const nodeBuckets = useMemo(() => {
-        const buckets = Array.from({ length: LAYER_COLORS.length }, () => ({
-            base: [] as GraphData['nodes'],
-            semantic: [] as GraphData['nodes'],
-        }));
+    const { buckets: nodeBuckets, goal_nodes: goalNodes, node_colors } = useMemo(() => {
+        const buckets = Array.from({ length: LAYER_COLORS.length }, () => [] as GraphData['nodes']);
+        const goal_nodes: GraphData['nodes'] = [];
+        const node_colors = new Map<GraphNode, string>();
         graph.nodes.forEach((node, nodeIndex) => {
-            if (highlightGoalNodes && node.isGoal) return;
             const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             const semanticLabel = Number.isFinite(node.semanticLabel)
                 ? Math.trunc(node.semanticLabel as number)
                 : (Number.isFinite(node.id) ? (nodeSemanticLabels.get(node.id as number) || 0) : (nodeSemanticLabels.get(nodeIndex) || 0));
-            if (visibleLabels && !visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5]) {
-                return;
-            }
-            const nextNode = {
-                ...node,
-                semanticLabel: semanticColorEnabled && semanticLabel > 0 ? semanticLabel : undefined,
-            };
-            if (semanticColorEnabled && semanticLabel > 0) {
-                buckets[labelIndex].semantic.push(nextNode);
+            const nextNode = { ...node, semanticLabel };
+            const selected_label = resolve_node_label(nextNode, active_labels);
+            // 通常分類と有効な属性ラベルのOR判定。goalノードも共通処理。
+            const is_label_visible = !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
+            if (!is_label_visible && !selected_label) return;
+            const cluster_color = cluster_node_colors?.get(node.id ?? nodeIndex);
+            if (cluster_color) node_colors.set(nextNode, cluster_color);
+            else if (selected_label) node_colors.set(nextNode, selected_label.color);
+            if (highlightGoalNodes && node.isGoal) {
+                goal_nodes.push(nextNode);
             } else {
-                buckets[labelIndex].base.push(nextNode);
+                buckets[labelIndex].push(nextNode);
             }
         });
-        return buckets;
-    }, [graph.nodes, nodeSemanticLabels, visibleLabels, semanticColorEnabled, highlightGoalNodes]);
+        return { buckets, goal_nodes, node_colors };
+    }, [graph.nodes, nodeSemanticLabels, visibleLabels, highlightGoalNodes, active_labels, cluster_node_colors]);
+    const goalNodeSignature = useMemo(
+        () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
+        [goalNodes]
+    );
 
     // Trigger re-render in demand mode for any visual changes
     useDemandUpdate([
         graph,
         visible,
         showNodes,
+        label_signature,
         showEdges,
         showClusters,
         showNormals,
@@ -208,7 +207,6 @@ function GraphRendererCore({
         edgeOpacity,
         tf,
         visibleLabels,
-        visibleSemanticLabels,
         selectedClusterId,
         nodeColor,
         edgeColor,
@@ -255,7 +253,7 @@ function GraphRendererCore({
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
-    const nodeMaterials = useMemo(() => nodePalette.map((color) => new THREE.MeshStandardMaterial({
+    const nodeMaterials = useMemo(() => nodePalette.map((color) => configure_node_material(new THREE.MeshStandardMaterial({
         color,
         emissive: new THREE.Color(color),
         emissiveIntensity: nodeEmissiveIntensity,
@@ -266,20 +264,8 @@ function GraphRendererCore({
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    })), [nodePalette, nodeOpacity, nodeEmissiveIntensity]);
-    const semanticMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: SEMANTIC_COLORS[0] ?? '#00d1ff',
-        emissive: new THREE.Color(SEMANTIC_COLORS[0] ?? '#00d1ff'),
-        emissiveIntensity: nodeEmissiveIntensity,
-        transparent: nodeOpacity < 1,
-        opacity: nodeOpacity,
-        depthTest: false,
-        depthWrite: false,
-        roughness: 0.85,
-        metalness: 0.0,
-        toneMapped: false,
-    }), [nodeOpacity, nodeEmissiveIntensity]);
-    const goalNodeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+    }))), [nodePalette, nodeOpacity, nodeEmissiveIntensity]);
+    const goalNodeMaterial = useMemo(() => configure_node_material(new THREE.MeshStandardMaterial({
         color: CANDIDATE_GOAL_COLOR,
         emissive: new THREE.Color(CANDIDATE_GOAL_COLOR),
         emissiveIntensity: nodeEmissiveIntensity,
@@ -290,7 +276,7 @@ function GraphRendererCore({
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    }), [nodeOpacity, nodeEmissiveIntensity]);
+    })), [nodeOpacity, nodeEmissiveIntensity]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const normalHeadGeometry = useMemo(() => new THREE.ConeGeometry(0.5, 1, 6), []);
@@ -323,16 +309,19 @@ function GraphRendererCore({
         metalness: 0.0,
         toneMapped: false,
     }), [covarianceEllipsoidColor, nodeOpacity]);
-    const edgeMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: edgeColor,
-        emissive: new THREE.Color(edgeColor),
-        emissiveIntensity: edgeEmissiveIntensity,
-        transparent: edgeOpacity < 1,
-        opacity: edgeOpacity,
-        depthTest: variant === 'static',
-        depthWrite: false,
-        toneMapped: false,
-    }), [edgeOpacity, edgeColor, edgeEmissiveIntensity, variant]);
+    const edgeMaterial = useMemo(() => {
+        const material = new THREE.MeshStandardMaterial({
+            color: edgeColor,
+            emissive: new THREE.Color(edgeColor),
+            emissiveIntensity: edgeEmissiveIntensity,
+            transparent: edgeOpacity < 1,
+            opacity: edgeOpacity,
+            depthTest: variant === 'static',
+            depthWrite: false,
+            toneMapped: false,
+        });
+        return enable_cluster_colors ? configure_node_material(material) : material;
+    }, [edgeOpacity, edgeColor, edgeEmissiveIntensity, variant, enable_cluster_colors]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
@@ -413,17 +402,17 @@ function GraphRendererCore({
         return [
             graph.nodes.length,
             showNodes ? 1 : 0,
+            label_signature,
             nodeScale,
             nodeCapacity,
             nodeOpacity,
             nodeColor,
             nodeEmissiveIntensity,
             graph.timestamp,
-            semanticColorEnabled ? 1 : 0,
             goalNodeSignature,
             variant,
         ].join(':');
-    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, semanticColorEnabled, variant]);
+    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, variant, label_signature]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
@@ -491,24 +480,21 @@ function GraphRendererCore({
         if (graph.nodes.length > nodeCapacity) return;
 
         nodeBuckets.forEach((bucket, labelIndex) => {
-            const baseMesh = nodeMeshRefs.current[labelIndex * 2];
-            const semanticMesh = nodeMeshRefs.current[labelIndex * 2 + 1];
+            const baseMesh = nodeMeshRefs.current[labelIndex];
             if (baseMesh) {
-                updateNodeInstances(baseMesh, bucket.base, nodeScale);
-            }
-            if (semanticMesh) {
-                updateNodeInstances(semanticMesh, bucket.semantic, nodeScale);
+                updateNodeInstances(baseMesh, bucket, nodeScale, { node_colors, palette: nodePalette, useSemanticColors: false });
             }
         });
         if (goalNodeMeshRef.current) {
             updateNodeInstances(goalNodeMeshRef.current, goalNodes, nodeScale, {
                 colorMode: 'uniform',
                 uniformColor: CANDIDATE_GOAL_COLOR,
+                node_colors,
             });
         }
         setNodeReadySignature(nodeRenderSignature);
         invalidate();
-    }, [graph.nodes, nodeBuckets, goalNodes, showNodes, nodeScale, nodeCapacity, nodeRenderSignature, invalidate, semanticColorEnabled]);
+    }, [graph.nodes, nodeBuckets, goalNodes, showNodes, nodeScale, nodeCapacity, nodeRenderSignature, invalidate, nodePalette, node_colors]);
 
     useLayoutEffect(() => {
         if (showNodes) return;
@@ -530,10 +516,10 @@ function GraphRendererCore({
         if (!edgesRef.current || !showEdges || edgePairCount === 0) return;
         if (edgePairCount > edgeCapacity) return;
 
-        updateEdgeInstances(edgesRef.current, graph.edges, graph.nodes, edgeWidth);
+        updateEdgeInstances(edgesRef.current, graph.edges, graph.nodes, edgeWidth, cluster_node_colors);
         setEdgeReadySignature(edgeRenderSignature);
         invalidate();
-    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgeCapacity, edgePairCount, edgeRenderSignature, invalidate]);
+    }, [graph.edges, graph.nodes, showEdges, edgeWidth, edgeCapacity, edgePairCount, edgeRenderSignature, invalidate, cluster_node_colors]);
 
     useLayoutEffect(() => {
         if (showEdges) return;
@@ -673,22 +659,12 @@ function GraphRendererCore({
                 <group key={`${variant}-node-label-${labelIndex}`}>
                     <instancedMesh
                         key={`${variant}-nodes-base-${labelIndex}-${nodeCapacity}`}
-                        ref={(el) => { nodeMeshRefs.current[labelIndex * 2] = el; }}
+                        ref={(el) => { nodeMeshRefs.current[labelIndex] = el; }}
                         args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
-                        count={nodeRenderReady ? nodeBuckets[labelIndex].base.length : 0}
+                        count={nodeRenderReady ? nodeBuckets[labelIndex].length : 0}
                         frustumCulled={false}
                         renderOrder={10}
                     />
-                    {semanticColorEnabled && (
-                        <instancedMesh
-                            key={`${variant}-nodes-semantic-${labelIndex}-${nodeCapacity}`}
-                            ref={(el) => { nodeMeshRefs.current[labelIndex * 2 + 1] = el; }}
-                            args={[nodeSphereGeometry, semanticMaterial, nodeCapacity]}
-                            count={nodeRenderReady ? nodeBuckets[labelIndex].semantic.length : 0}
-                            frustumCulled={false}
-                            renderOrder={11}
-                        />
-                    )}
                 </group>
             ))}
 
@@ -763,9 +739,7 @@ function GraphRendererCore({
             .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
             .map((cluster) => {
                 const isSelected = selectedClusterId === cluster.id;
-                const semanticColor = semanticColorEnabled && Number.isFinite(cluster.semanticLabel) && (cluster.semanticLabel ?? 0) > 0
-                    ? SEMANTIC_COLORS[(cluster.semanticLabel ?? 0) % SEMANTIC_COLORS.length] ?? SEMANTIC_COLORS[0]
-                    : null;
+                const semanticColor = resolve_node_label({ semanticLabel: cluster.semanticLabel }, active_labels)?.color;
                 const color = isSelected ? '#FFFFFF' : (semanticColor || LAYER_COLORS[cluster.label % LAYER_COLORS.length]);
                 const isHuman = cluster.label === 4;
                 const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {

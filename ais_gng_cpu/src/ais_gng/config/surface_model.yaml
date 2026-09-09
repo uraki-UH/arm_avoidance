@@ -1,0 +1,40 @@
+/**:
+  ros__parameters:
+    surface_model.enable: true
+    surface_model.output_topic: /curved_surface_clusters
+    surface_model.hz: 2.0
+    # 球ノード・線分edgeのMarker表示が既定。TopologicalMapは比較・外部利用時のみ。
+    surface_model.enable_markers: true
+    surface_model.enable_graph: false
+    # 新規曲面の表示に必要な元平面クラスタ数。維持中は生成時の枚数を参照。
+    surface_model.min_display_plane_patches: 2
+    # 同じモデル所属のノード・edgeへの共通色と種別・誤差ラベル。
+    surface_model.enable_labels: false
+    # PlanePatchとNonPlaneNodeを圧縮した上位グラフの重畳表示。
+    surface_model.enable_patch_graph: false
+    surface_model.max_link_length: 0.08
+    # 隣接ノード法線と、曲率で境界位置へ補正した平面パッチ法線の接続角[deg]。
+    surface_model.max_link_normal_deg: 45.0
+    # 各入力パッチのRMS残差[m]と各点の近似表面距離[m]。
+    surface_model.max_patch_rms: 0.004
+    surface_model.max_point_residual: 0.012
+    surface_model.max_normal_deg: 35.0
+    # 推定KとモデルKの差を担当範囲内の法線差へ換算した許容値。
+    surface_model.max_curvature_normal_error: 0.03
+    # 候補領域以上の分散を持つ高品質な平坦パッチの曲面への吸収抑止。
+    surface_model.protect_dominant_flat_patches: true
+    # score = RMS^2 + complexity_penalty^2 * モデル自由度。
+    surface_model.complexity_penalty: 0.001
+    surface_model.max_radius: 5.0
+    surface_model.min_fit_nodes: 12
+    surface_model.max_fit_samples: 256
+    surface_model.max_model_fits: 128
+    # 生成済み曲面の維持判定。接続切れではなく現在ノードの位置・法線・支持率による判定。
+    surface_model.retention.enable: true
+    surface_model.retention.max_point_residual: 0.012
+    surface_model.retention.max_normal_deg: 45.0
+    surface_model.retention.max_rms: 0.006
+    # 生成時の所属ノードに対する適合ノードの比率。消失IDも不適合に算入。
+    surface_model.retention.min_inlier_ratio: 0.6
+    # ID再利用時の誤対応を抑える、前回適合位置からの移動量[m]。
+    surface_model.retention.max_node_displacement: 0.05

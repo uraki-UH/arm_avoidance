@@ -37,6 +37,9 @@ if(BUILD_TESTING)
   target_include_directories(test_observation_pixels PRIVATE include)
   target_link_libraries(test_observation_pixels gng_cpu::gng_cpu)
   ament_target_dependencies(test_observation_pixels sensor_msgs)
+  add_executable(test_boundary_evidence test/test_boundary_evidence.cpp)
+  target_include_directories(test_boundary_evidence PRIVATE include)
+  add_test(NAME test_boundary_evidence COMMAND test_boundary_evidence)
 
   ament_add_gtest(
     test_topological_grid_assignment
@@ -93,6 +96,18 @@ target_include_directories(nonplane_component_extractor PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(nonplane_component_extractor ais_gng_msgs)
+target_link_libraries(plane_cluster_incremental_node nonplane_component_extractor)
+
+ament_auto_add_library(surface_model SHARED
+  src/topological_plane/patch_curvature.cpp
+  src/topological_plane/surface_model.cpp
+  src/topological_plane/surface_model_tracking.cpp
+  src/topological_plane/surface_model_visualization.cpp)
+target_include_directories(surface_model PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(surface_model ais_gng_msgs rclcpp std_msgs visualization_msgs Eigen3 nlohmann_json)
+target_link_libraries(plane_cluster_incremental_node surface_model)
 
 if(BUILD_TESTING)
   ament_add_gtest(
@@ -108,6 +123,10 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_nonplane_component_extractor nonplane_component_extractor)
   ament_target_dependencies(test_nonplane_component_extractor ais_gng_msgs)
+
+  ament_add_gtest(test_surface_model test/test_surface_model.cpp)
+  target_link_libraries(test_surface_model surface_model)
+  ament_target_dependencies(test_surface_model ais_gng_msgs rclcpp visualization_msgs Eigen3 nlohmann_json)
 
   add_executable(
     benchmark_plane_cluster_incremental

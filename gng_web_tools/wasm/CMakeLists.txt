@@ -10,24 +10,25 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+set(gng_cpu_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../ais_gng_cpu/src/gng_cpu")
 set(GNG_WASM_OUTPUT_DIR "" CACHE PATH "Optional output directory for Emscripten-generated JS/WASM artifacts")
 
 add_library(gng_wasm_core
   src/gng_kernel.cpp
   src/wasm_exports.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp
+  ${gng_cpu_dir}/src/cpu/cugng.cpp
+  ${gng_cpu_dir}/src/utils/node.cpp
+  ${gng_cpu_dir}/src/utils/param.cpp
+  ${gng_cpu_dir}/src/utils/vec3f.cpp
 )
 target_include_directories(gng_wasm_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 target_include_directories(gng_wasm_core PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/include
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu
-  ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils
+  ${gng_cpu_dir}/include
+  ${gng_cpu_dir}/src/cpu
+  ${gng_cpu_dir}/src/utils
 )
 target_compile_definitions(gng_wasm_core PRIVATE GNG_VERSION=0)
 
@@ -45,16 +46,16 @@ if(EMSCRIPTEN)
   add_executable(gng_wasm_core_wasm
     src/gng_kernel.cpp
     src/wasm_exports.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu/cugng.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/node.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/param.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils/vec3f.cpp
+    ${gng_cpu_dir}/src/cpu/cugng.cpp
+    ${gng_cpu_dir}/src/utils/node.cpp
+    ${gng_cpu_dir}/src/utils/param.cpp
+    ${gng_cpu_dir}/src/utils/vec3f.cpp
   )
   target_include_directories(gng_wasm_core_wasm PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/cpu
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ais_gng_cpu/src/gng_cpu/src/utils
+    ${gng_cpu_dir}/include
+    ${gng_cpu_dir}/src/cpu
+    ${gng_cpu_dir}/src/utils
   )
   target_compile_definitions(gng_wasm_core_wasm PRIVATE GNG_VERSION=0)
   target_compile_options(gng_wasm_core_wasm PRIVATE -fno-exceptions -fno-rtti)

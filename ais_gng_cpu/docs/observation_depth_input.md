@@ -125,11 +125,11 @@ frame_number, stamp_sec, stamp_nanosec, pixel_hit_num, ray_num, table_build_num
 購読者がいるときだけ出力。ray_num=0かつpixel_hit_num>0が学習時の逆レイ計算なしの状態。
 表生成時には全画素の角度計算を実行するため、「全処理で三角関数がない」という意味ではない。
 
-core APIでは、入力設定と原点設定の後にgng_set_observation_pixel_viewを呼び出し、gng_execまで
-元点群・間引き番号配列・角度表を生存させること。ビュー構造体自体は値コピー。
-原点の再設定・次入力・学習完了・支持設定変更で失効。
-旧gng_set_observation_pixelsも互換APIとして維持。連続した画素番号配列を別途用意する場合の入口。
-gng_get_observation_lookup_statisticsで参照件数を取得。
+core APIでは、gng_setPointCloudの後にgng_set_observation_inputで原点と任意の画素ビュー・角度表を一括設定。
+gng_execまで元点群・間引き番号配列・角度表を生存させること。入力構造体自体は値コピー。
+観測入力の再設定・次入力・学習完了・支持設定変更で借用は失効。
+連続した画素番号配列もpixel形式のビューで指定。専用の配列設定APIは廃止。
+gng_get_observation_frameのpixel_hit_num・ray_numで参照件数を取得。ROS統計トピックの形式は変更なし。
 元の配列は借用であり、並行更新・再確保は禁止。
 
 ## 実点群での検証結果

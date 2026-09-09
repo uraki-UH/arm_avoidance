@@ -70,8 +70,8 @@
 `gng_bundle_exporter` パッケージを使用して、ROS 2 bagからメトリクスデータをJSONとしてエクスポートすることができます。
 
 ### 3.1 設定ファイルの準備
-`gng_bundle_exporter/config/` 配下に以下のようなYAML構成ファイルを指定します。
-例として `gng_bundle_exporter/config/export_topics.example.yaml` が用意されています。
+`gng_web_tools/exporter/config/` 配下に以下のようなYAML構成ファイルを指定します。
+例として `gng_web_tools/exporter/config/export_topics.example.yaml` が用意されています。
 
 ```yaml
 topics:

@@ -112,6 +112,10 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     );
     
     const isCube = marker.type === 'cube_list';
+    // 個数の揺れによるInstancedMesh再生成の抑止。容量不足時のみ倍増。
+    const capacity_ref = useRef(1);
+    const capacity = Math.max(capacity_ref.current, 2 ** Math.ceil(Math.log2(Math.max(1, pointsLen))));
+    capacity_ref.current = capacity;
     
     const lineGeometry = useMemo(() => {
         if (!isCube || pointsLen === 0) return null;
@@ -144,17 +148,26 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     }, [isCube, pts, marker.scale, pointsLen]);
 
     const lineMaterial = useMemo(() => new THREE.LineBasicMaterial({
-        color, transparent: true, opacity, depthTest: false, depthWrite: false,
-    }), [color, opacity]);
+        transparent: true, depthTest: false, depthWrite: false,
+    }), []);
 
     const meshGeometry = useMemo(() => isCube ? null : new THREE.SphereGeometry(0.5, 12, 8), [isCube]);
     const meshMaterial = useMemo(() => isCube ? null : new THREE.MeshLambertMaterial({
-        color, transparent: true, opacity, depthTest: false, depthWrite: false,
-    }), [color, opacity, isCube]);
+        transparent: true, depthTest: false, depthWrite: false,
+    }), [isCube]);
+
+    useLayoutEffect(() => {
+        for (const material of [lineMaterial, meshMaterial]) {
+            if (!material) continue;
+            material.color.copy(color);
+            material.opacity = opacity;
+        }
+        invalidate();
+    }, [lineMaterial, meshMaterial, color, opacity, invalidate]);
 
     const instRef = useRef<THREE.InstancedMesh>(null);
     useLayoutEffect(() => {
-        if (isCube || !instRef.current || pointsLen === 0) return;
+        if (isCube || !instRef.current) return;
         const dummy = new THREE.Object3D();
         // SPHERE_LISTの直径は先頭の有効なscale値で統一
         const diameter = Math.max(
@@ -172,14 +185,13 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
         instRef.current.computeBoundingSphere();
         invalidate();
         // 個数・材質変更によるメッシュ再生成時も描画前に行列を初期化
-    }, [isCube, pts, marker.scale, pointsLen, meshGeometry, meshMaterial, invalidate]);
+    }, [isCube, pts, marker.scale, pointsLen, meshGeometry, meshMaterial, capacity, invalidate]);
 
-    useEffect(() => () => {
-        lineMaterial.dispose();
-        lineGeometry?.dispose();
-        meshMaterial?.dispose();
-        meshGeometry?.dispose();
-    }, [lineMaterial, lineGeometry, meshMaterial, meshGeometry]);
+    // 各リソース自身の交換・アンマウント時のみ解放。生存中geometryの巻き込み破棄防止。
+    useEffect(() => () => lineMaterial.dispose(), [lineMaterial]);
+    useEffect(() => () => lineGeometry?.dispose(), [lineGeometry]);
+    useEffect(() => () => meshMaterial?.dispose(), [meshMaterial]);
+    useEffect(() => () => meshGeometry?.dispose(), [meshGeometry]);
 
     if (isCube) {
         if (!lineGeometry) return null;
@@ -196,9 +208,9 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
 
     return (
         <instancedMesh
-            key={pointsLen}
+            key={capacity}
             ref={instRef}
-            args={[meshGeometry!, meshMaterial!, Math.max(1, pointsLen)]}
+            args={[meshGeometry!, meshMaterial!, capacity]}
             // 行列初期化前の単位サイズ球の描画防止
             count={0}
             position={position}
@@ -264,6 +276,7 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
 }
 
 function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
+    const { invalidate } = useThree();
     const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
     const { position, rotation } = useMemo(
         () => getPose({ pos: marker.pos, quat: marker.quat }),
@@ -271,33 +284,40 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     );
     
     const material = useMemo(() => new THREE.LineBasicMaterial({
-        color, transparent: true, opacity, depthTest: false, depthWrite: false,
-    }), [color, opacity]);
+        transparent: true, depthTest: false, depthWrite: false,
+    }), []);
+
+    const points = marker.points;
+    const point_num = points?.length ?? 0;
+    const capacity_ref = useRef(1);
+    const capacity = Math.max(capacity_ref.current, 2 ** Math.ceil(Math.log2(Math.max(1, point_num))));
+    capacity_ref.current = capacity;
 
     const geometry = useMemo(() => {
-        // pts: [number, number, number][] -> Float32Array: [x, y, z, x, y, z, ...]
-        const pts = marker.points || [];
-        const positions = new Float32Array(pts.length * 3);
-        for (let i = 0; i < pts.length; i++) {
-            positions[i * 3 + 0] = pts[i][0];
-            positions[i * 3 + 1] = pts[i][1];
-            positions[i * 3 + 2] = pts[i][2];
-        }
         const geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage));
+        geom.setDrawRange(0, 0);
         return geom;
-    }, [marker.points]);
+    }, [capacity]);
 
-    const lineObject = useMemo(() => {
-        const obj = strip ? new THREE.Line(geometry, material) : new THREE.LineSegments(geometry, material);
-        obj.computeLineDistances();
-        return obj;
-    }, [strip, geometry, material]);
+    useLayoutEffect(() => {
+        const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
+        points?.forEach((point, idx) => positions.setXYZ(idx, point[0], point[1], point[2]));
+        positions.clearUpdateRanges();
+        if (point_num > 0) positions.addUpdateRange(0, point_num * 3);
+        positions.needsUpdate = true;
+        geometry.setDrawRange(0, point_num);
+        geometry.computeBoundingSphere();
+        material.color.copy(color);
+        material.opacity = opacity;
+        invalidate();
+    }, [geometry, points, point_num, material, color, opacity, invalidate]);
 
-    useEffect(() => () => {
-        material.dispose();
-        geometry.dispose();
-    }, [material, geometry]);
+    const lineObject = useMemo(() => strip ? new THREE.Line(geometry, material) : new THREE.LineSegments(geometry, material),
+        [strip, geometry, material]);
+
+    useEffect(() => () => material.dispose(), [material]);
+    useEffect(() => () => geometry.dispose(), [geometry]);
 
     return (
         <primitive

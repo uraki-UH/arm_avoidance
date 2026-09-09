@@ -43,11 +43,10 @@ MY_API int gng_setParameter(const char *paramerter_name, const uint32_t index, c
         core.enable_observation_support = value != 0;
         core.has_observation_origin = false;
         core.has_observation_frame_origin = false;
-        core.observation_pixel_ids = nullptr;
         core.observation_pixel_source = {};
         core.observation_touched_ids.clear();
         core.observation_angle_table = nullptr;
-        core.observation_point_num = core.observation_table_num = 0;
+        core.observation_table_num = 0;
         core.observation_pixel_hit_num = core.observation_ray_num = 0;
         for (auto &node : core.nodes) {node.observation_range.clear();}
     } else if (name.rfind("node.observation.", 0) == 0) {
@@ -75,16 +74,26 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
-MY_API void gng_set_observation_origin(Vec3 origin, uint8_t has_origin) {
-    gng.n1.observation_pixel_source = {};
-    gng.n1.observation_pixel_ids = nullptr;
-    gng.n1.observation_angle_table = nullptr;
-    gng.n1.observation_point_num = gng.n1.observation_table_num = 0;
-    gng.n1.has_observation_origin = has_origin != 0 &&
-        std::isfinite(origin.x) && std::isfinite(origin.y) && std::isfinite(origin.z);
-    gng.n1.observation_origin.p[0] = origin.x;
-    gng.n1.observation_origin.p[1] = origin.y;
-    gng.n1.observation_origin.p[2] = origin.z;
+MY_API uint8_t gng_set_observation_input(const gng_observation_input *input) {
+    auto &core = gng.n1;
+    core.has_observation_origin = false;
+    core.observation_origin = Vec3f{};
+    core.observation_pixel_source = {};
+    core.observation_angle_table = nullptr;
+    core.observation_table_num = 0;
+    if (!input || !core.enable_observation_support || !input->has_origin ||
+        !std::isfinite(input->origin.x) || !std::isfinite(input->origin.y) || !std::isfinite(input->origin.z)) {return 0;}
+    core.has_observation_origin = true;
+    core.observation_origin.p[0] = input->origin.x;
+    core.observation_origin.p[1] = input->origin.y;
+    core.observation_origin.p[2] = input->origin.z;
+    if (input->pixels.mode == gng_observation::pixel_view::format::none) {return 1;}
+    if (!input->pixels.is_valid() || input->pixels.point_num != static_cast<uint32_t>(gng.input_pcl_num) ||
+        !input->angle_table || !input->table_num) {return 0;}
+    core.observation_pixel_source = input->pixels;
+    core.observation_angle_table = input->angle_table;
+    core.observation_table_num = input->table_num;
+    return 1;
 }
 
 MY_API gng_observation::angle_range gng_get_observation_angle_range(uint16_t node_id) {
@@ -92,45 +101,12 @@ MY_API gng_observation::angle_range gng_get_observation_angle_range(uint16_t nod
     return gng.n1.nodes[node_id].observation_range;
 }
 
-MY_API uint8_t gng_set_observation_pixels(const uint32_t *pixel_ids, uint32_t point_num,
-    const gng_observation::ray_angles *angle_table, uint32_t table_num) {
-    auto &core = gng.n1;
-    core.observation_pixel_source = {};
-    core.observation_pixel_ids = nullptr;
-    core.observation_angle_table = nullptr;
-    core.observation_point_num = core.observation_table_num = 0;
-    if (!pixel_ids || !angle_table || table_num == 0 || point_num == 0 || point_num != static_cast<uint32_t>(gng.input_pcl_num) ||
-        !core.enable_observation_support || !core.has_observation_origin) {return 0;}
-    core.observation_pixel_ids = pixel_ids;
-    core.observation_point_num = point_num;
-    core.observation_angle_table = angle_table;
-    core.observation_table_num = table_num;
-    return 1;
-}
-
-MY_API uint8_t gng_set_observation_pixel_view(const gng_observation::pixel_view *view,
-    const gng_observation::ray_angles *angle_table, uint32_t table_num) {
-    auto &core = gng.n1;
-    core.observation_pixel_source = {};
-    core.observation_pixel_ids = nullptr;
-    core.observation_angle_table = nullptr;
-    core.observation_point_num = core.observation_table_num = 0;
-    if (!view || !view->is_valid() || view->point_num != static_cast<uint32_t>(gng.input_pcl_num) ||
-        !angle_table || !table_num || !core.enable_observation_support || !core.has_observation_origin) {return 0;}
-    core.observation_pixel_source = *view;
-    core.observation_angle_table = angle_table;
-    core.observation_table_num = table_num;
-    return 1;
-}
-
-MY_API gng_observation_lookup_statistics gng_get_observation_lookup_statistics() {
-    return {gng.n1.observation_pixel_hit_num, gng.n1.observation_ray_num};
-}
-
 MY_API gng_observation_frame gng_get_observation_frame() {
     gng_observation_frame result;
     result.frame_number = gng.n1.frame_number;
     result.has_origin = gng.n1.has_observation_frame_origin;
+    result.pixel_hit_num = gng.n1.observation_pixel_hit_num;
+    result.ray_num = gng.n1.observation_ray_num;
     if (result.has_origin) {
         const auto &origin = gng.n1.observation_frame_origin;
         result.origin = {origin.p[0], origin.p[1], origin.p[2]};
@@ -175,6 +151,13 @@ MY_API gng_node_statistics gng_get_node_statistics(uint16_t node_id) {
         }
     }
     return result;
+}
+
+MY_API uint32_t gng_get_node_num_neighbors(uint16_t node_id) {
+    if (node_id >= gng.n1.nodes.size() || gng.n1.nodes[node_id].id == NODE_NOID) {
+        return UINT32_MAX;
+    }
+    return gng.n1.nodes[node_id].edge_num;
 }
 
 MY_API TopologicalMap gng_getTopologicalMap(){

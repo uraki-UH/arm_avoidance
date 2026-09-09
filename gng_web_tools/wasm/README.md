@@ -32,7 +32,7 @@
 ### 2. wasm を生成する
 
 ```bash
-cd ~/uraki_ws/gng_wasm_core
+cd ~/uraki_ws/gng_web_tools/wasm
 bash scripts/build_wasm.sh
 ```
 
@@ -51,4 +51,4 @@ bash scripts/build_wasm.sh dist
 
 - 通常の `colcon build` は基幹GNG学習コアをリンクしたnative C++アダプタを生成
 - wasm 用のビルドは `scripts/build_wasm.sh` を使ってください
-- もしローカルに Emscripten がなければ、`docker run --rm -v ~/uraki_ws:/work -w /work/gng_wasm_core emscripten/emsdk:latest bash scripts/build_wasm.sh` でも生成できます
+- もしローカルに Emscripten がなければ、`docker run --rm -v ~/uraki_ws:/work -w /work/gng_web_tools/wasm emscripten/emsdk:latest bash scripts/build_wasm.sh` でも生成できます

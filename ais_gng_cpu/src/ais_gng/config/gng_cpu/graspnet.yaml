@@ -1,11 +1,23 @@
 ais_gng_node:
   ros__parameters:
-    node.num_max: 5000
+    node.num_max: 3000
     node.learning_num: 5000
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.covariance_enabled: true
+    # 学習グラフ全体の隣接数に基づく境界候補
+    boundary.enable_candidates: true
+    # 境界候補の隣接数上限
+    boundary.max_neighbors: 4
+    # 実測レイと明示視野による追加証拠。観測原点・姿勢・視野不足時は不明
+    boundary.enable_evidence: true
+    # 局所平面への期待距離と実測距離の誤差余裕[m]
+    boundary.min_range_gap_th: 0.03
+    # ノードと同一セル内の実測点との対応距離[m]
+    boundary.max_anchor_dist: 0.05
+    # boundary.lidar_angles_degは未指定でCameraInfo利用。空配列の明示はROS 2で読込不可。
+    # LiDAR利用時の指定内容: [開始yaw, 終了yaw, 開始pitch, 終了pitch, yaw間隔, pitch間隔][deg]
     # 第一・第二勝者の入力統計による共分散楕円体
     node.enable_support: false
     # 勝者入力1サンプル当たりの更新率。0は忘却なしの累積統計
@@ -21,7 +33,7 @@ ais_gng_node:
     node.s1_reset_range: 0.1
     node.s1_age_max: [6, 30, 12, 4] # [標準, 安全, 壁面, unknown]
     node.clusted_s1_age: [20, 100, 30, 10] # [標準, 安全, 壁面, unknown]
-    node.interval: [0.1, 0.2, 0.2, 0.001] # [標準, 安全, 壁面, unknown]
+    node.interval: [0.1, 0.2, 0.2, 0.01] # [標準, 安全, 壁面, unknown]
     node.static.age_min: 250 # 長期記憶の年齢
 
     ds.transformed: true

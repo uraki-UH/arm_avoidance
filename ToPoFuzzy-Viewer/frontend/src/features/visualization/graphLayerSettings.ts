@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { normalize_node_label_settings } from './nodeLabelRegistry';
 import {
     DYNAMIC_GNG_DEFAULTS,
     GraphData,
@@ -36,9 +37,7 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         showNodes: true,
         showEdges: !isStatic,
         showClusters: false,
-        visibleSemanticLabels: {
-            handle: true,
-        },
+        ...normalize_node_label_settings(),
         visibleLabels: {
             0: true,
             1: true,
@@ -122,14 +121,6 @@ export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
                             3: true,
                             4: true,
                             5: true,
-                        },
-                    };
-                    changed = true;
-                } else if (!nextSettings[tag].visibleSemanticLabels) {
-                    nextSettings[tag] = {
-                        ...nextSettings[tag],
-                        visibleSemanticLabels: {
-                            handle: true,
                         },
                     };
                     changed = true;

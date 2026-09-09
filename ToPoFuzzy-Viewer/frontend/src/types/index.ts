@@ -96,6 +96,8 @@ export interface GraphNode {
     semanticReliability?: number;
     age: number;
     nonplaneComponentId?: number;
+    is_boundary_candidate?: boolean;
+    boundary_evidence?: number;
     winnerPointCount?: number;
     winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
     isGoal?: boolean;
@@ -151,6 +153,13 @@ export interface Transform {
 export interface LayerSettings {
     visible: boolean;
     showNodes: boolean;
+    // 旧ラベル設定の読み込み互換
+    enable_boundary_highlight?: boolean;
+    overlap_label_priority?: 'boundary' | 'handle';
+    // 重複可能なラベルの表示状態と優先順位
+    node_label_visibility?: Record<string, boolean>;
+    node_label_priority?: string[];
+    node_label_colors?: Record<string, string>;
     showEdges: boolean;
     showClusters: boolean;
     visibleSemanticLabels?: {

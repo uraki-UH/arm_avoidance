@@ -1,5 +1,7 @@
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
 #include "ais_gng/topological_plane/plane_cluster_parameters.hpp"
+#include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
+#include "ais_gng/topological_plane/surface_model_visualization.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker.hpp>
@@ -341,6 +343,108 @@ visualization_msgs::msg::MarkerArray makeNodeMarkers(
   return markers;
 }
 
+std_msgs::msg::ColorRGBA surfaceComponentColor(const std::uint32_t component_id)
+{
+  std_msgs::msg::ColorRGBA color;
+  color.r = 1.0F;
+  color.g = 0.15F + 0.10F * static_cast<float>(component_id % 3U);
+  color.b = 0.85F;
+  color.a = 1.0F;
+  return color;
+}
+
+// 非平面連結成分を曲面候補として描く。内部edgeと平面クラスタへの接続edgeを分ける。
+visualization_msgs::msg::MarkerArray makeSurfaceComponentMarkers(
+  const ais_gng_msgs::msg::PlaneClusterArray &clusters,
+  const ais_gng_msgs::msg::TopologicalMap &map,
+  const std::size_t min_component_nodes,
+  std::set<std::uint32_t> &published_ids)
+{
+  visualization_msgs::msg::MarkerArray markers;
+  const auto result = fuzzrobo::topological_plane::nonplane::extract_components(
+    map, clusters, {min_component_nodes});
+  std::set<std::uint32_t> current_ids;
+  for (const auto &component : result.components) {
+    current_ids.insert(component.id);
+  }
+  for (const std::uint32_t id : published_ids) {
+    if (current_ids.count(id) != 0U) continue;
+    for (const char *name_space : {
+      "surface_component_nodes", "surface_component_edges", "surface_component_anchors"})
+    {
+      visualization_msgs::msg::Marker remove;
+      remove.ns = name_space;
+      remove.id = static_cast<std::int32_t>(id);
+      remove.action = visualization_msgs::msg::Marker::DELETE;
+      markers.markers.push_back(std::move(remove));
+    }
+  }
+  published_ids = std::move(current_ids);
+
+  const std::size_t node_count = map.nodes.size();
+  std::vector<int> component_of_node(node_count, -1);
+  for (std::size_t component_index = 0; component_index < result.components.size(); ++component_index) {
+    for (const std::uint32_t node_index : result.components[component_index].node_indices) {
+      if (node_index < node_count) component_of_node[node_index] = static_cast<int>(component_index);
+    }
+  }
+  std::vector<int> plane_owner(node_count, -1);
+  for (std::size_t cluster_index = 0; cluster_index < clusters.clusters.size(); ++cluster_index) {
+    for (const std::uint32_t node_index : clusters.clusters[cluster_index].node_indices) {
+      if (node_index < node_count) plane_owner[node_index] = static_cast<int>(cluster_index);
+    }
+  }
+
+  for (std::size_t component_index = 0; component_index < result.components.size(); ++component_index) {
+    const auto &component = result.components[component_index];
+    const auto marker_id = static_cast<std::int32_t>(component.id);
+    const auto color = surfaceComponentColor(component.id);
+
+    auto nodes = baseMarker(map.header, "surface_component_nodes", marker_id);
+    nodes.type = visualization_msgs::msg::Marker::POINTS;
+    nodes.scale.x = 0.012;
+    nodes.scale.y = 0.012;
+    nodes.color = color;
+    for (const std::uint32_t node_index : component.node_indices) {
+      if (node_index < node_count) nodes.points.push_back(markerPoint(map.nodes[node_index].pos));
+    }
+    markers.markers.push_back(std::move(nodes));
+
+    auto internal_edges = baseMarker(map.header, "surface_component_edges", marker_id);
+    internal_edges.type = visualization_msgs::msg::Marker::LINE_LIST;
+    internal_edges.scale.x = 0.005;
+    internal_edges.color = color;
+    internal_edges.color.a = 0.95F;
+    auto anchors = baseMarker(map.header, "surface_component_anchors", marker_id);
+    anchors.type = visualization_msgs::msg::Marker::LINE_LIST;
+    anchors.scale.x = 0.003;
+    anchors.color = color;
+    anchors.color.a = 0.55F;
+    for (std::size_t edge_index = 0; edge_index + 1U < map.edges.size(); edge_index += 2U) {
+      const std::uint16_t first = map.edges[edge_index];
+      const std::uint16_t second = map.edges[edge_index + 1U];
+      if (first >= node_count || second >= node_count) continue;
+      const int first_component = component_of_node[first];
+      const int second_component = component_of_node[second];
+      if (first_component == static_cast<int>(component_index) &&
+        second_component == static_cast<int>(component_index))
+      {
+        internal_edges.points.push_back(markerPoint(map.nodes[first].pos));
+        internal_edges.points.push_back(markerPoint(map.nodes[second].pos));
+      } else if (first_component == static_cast<int>(component_index) && plane_owner[second] >= 0) {
+        anchors.points.push_back(markerPoint(map.nodes[first].pos));
+        anchors.points.push_back(markerPoint(map.nodes[second].pos));
+      } else if (second_component == static_cast<int>(component_index) && plane_owner[first] >= 0) {
+        anchors.points.push_back(markerPoint(map.nodes[second].pos));
+        anchors.points.push_back(markerPoint(map.nodes[first].pos));
+      }
+    }
+    if (!internal_edges.points.empty()) markers.markers.push_back(std::move(internal_edges));
+    if (!anchors.points.empty()) markers.markers.push_back(std::move(anchors));
+  }
+  return markers;
+}
+
 }  // 無名名前空間
 
 namespace fuzzrobo::topological_plane::incremental
@@ -361,15 +465,28 @@ public:
     hull_marker_topic_ = output_topic_ + "/markers/hull";
     normal_marker_topic_ = output_topic_ + "/markers/normal";
     node_marker_topic_ = output_topic_ + "/markers/nodes";
+    surface_marker_topic_ = declare_parameter<std::string>(
+      "surface_marker_topic", "/nonplane_components/markers");
+    min_surface_component_nodes_ = static_cast<std::size_t>(std::max<int64_t>(
+        1, declare_parameter<int64_t>("surface_component.min_nodes", 2)));
     enable_text_marker_ = declare_parameter<bool>("enable_text_marker", false);
+    enable_plane_markers_ = declare_parameter<bool>("enable_plane_markers", true);
+    enable_nonplane_markers_ = declare_parameter<bool>("enable_nonplane_markers", true);
+    surface_models_ = std::make_unique<fuzzrobo::surface_model::publisher>(*this);
 
     const auto output_qos = rclcpp::QoS(1).transient_local();
-    hull_marker_publisher_ =
-      create_publisher<visualization_msgs::msg::MarkerArray>(hull_marker_topic_, output_qos);
-    normal_marker_publisher_ =
-      create_publisher<visualization_msgs::msg::MarkerArray>(normal_marker_topic_, output_qos);
-    node_marker_publisher_ =
-      create_publisher<visualization_msgs::msg::MarkerArray>(node_marker_topic_, output_qos);
+    if (enable_plane_markers_) {
+      hull_marker_publisher_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>(hull_marker_topic_, output_qos);
+      normal_marker_publisher_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>(normal_marker_topic_, output_qos);
+      node_marker_publisher_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>(node_marker_topic_, output_qos);
+    }
+    if (enable_nonplane_markers_) {
+      surface_marker_publisher_ =
+        create_publisher<visualization_msgs::msg::MarkerArray>(surface_marker_topic_, output_qos);
+    }
     const auto input_qos = rclcpp::QoS(1).reliable().transient_local();
     subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
       input_topic_, input_qos,
@@ -406,6 +523,11 @@ public:
       (clusters_input_topic_.empty() ? output_topic_ : clusters_input_topic_).c_str(),
       hull_marker_topic_.c_str(),
       normal_marker_topic_.c_str(), node_marker_topic_.c_str());
+    if (enable_nonplane_markers_) {
+      RCLCPP_INFO(
+        get_logger(), "nonplane component markers: %s (min_nodes=%zu)",
+        surface_marker_topic_.c_str(), min_surface_component_nodes_);
+    }
   }
 
 private:
@@ -554,17 +676,25 @@ private:
     const ais_gng_msgs::msg::PlaneClusterArray &clusters,
     const ais_gng_msgs::msg::TopologicalMap &map)
   {
-    assignColors(clusters, map);
-    hull_marker_publisher_->publish(
-      makeHullMarkers(
-        clusters, map.nodes, enable_text_marker_, published_hull_marker_ids_,
-        cluster_color_));
-    normal_marker_publisher_->publish(
-      makeNormalMarkers(clusters, published_normal_marker_ids_, cluster_color_));
-    node_marker_publisher_->publish(
-      makeNodeMarkers(
-        clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
-        cluster_color_));
+    surface_models_->update(map, clusters);
+    if (enable_plane_markers_) {
+      assignColors(clusters, map);
+      hull_marker_publisher_->publish(
+        makeHullMarkers(
+          clusters, map.nodes, enable_text_marker_, published_hull_marker_ids_,
+          cluster_color_));
+      normal_marker_publisher_->publish(
+        makeNormalMarkers(clusters, published_normal_marker_ids_, cluster_color_));
+      node_marker_publisher_->publish(
+        makeNodeMarkers(
+          clusters, map.nodes, published_node_marker_ids_, published_edge_marker_ids_,
+          cluster_color_));
+    }
+    if (enable_nonplane_markers_) {
+      surface_marker_publisher_->publish(
+        makeSurfaceComponentMarkers(
+          clusters, map, min_surface_component_nodes_, published_surface_marker_ids_));
+    }
   }
 
   std::set<std::uint32_t> published_hull_marker_ids_;
@@ -578,17 +708,24 @@ private:
   std::string hull_marker_topic_;
   std::string normal_marker_topic_;
   std::string node_marker_topic_;
+  std::string surface_marker_topic_;
   bool enable_text_marker_ = false;
+  bool enable_plane_markers_ = true;
+  bool enable_nonplane_markers_ = true;
+  std::size_t min_surface_component_nodes_ = 2U;
 
   Clusterizer clusterizer_;
+  std::unique_ptr<fuzzrobo::surface_model::publisher> surface_models_;
   rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr cluster_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr hull_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr normal_marker_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_marker_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr surface_marker_publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr subscription_;
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr cluster_subscription_;
   ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr latest_map_;
   ais_gng_msgs::msg::PlaneClusterArray::ConstSharedPtr latest_clusters_;
+  std::set<std::uint32_t> published_surface_marker_ids_;
 };
 
 }  // fuzzrobo::topological_plane::incremental 名前空間

@@ -25,6 +25,7 @@
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/node_support.hpp"
 #include "ais_gng/observation_pixels.hpp"
+#include "ais_gng/boundary_evidence.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
@@ -54,6 +55,12 @@ class AiSGNGComponent : public rclcpp::Node {
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
 #if defined(AIS_GNG_BACKEND_CPU)
+    uint32_t max_boundary_neighbors_{4};
+    bool enable_boundary_candidates_{false};
+    bool enable_boundary_evidence_{true};
+    boundary_evidence::classifier boundary_classifier_;
+    std::vector<double> boundary_lidar_angles_deg_;
+    void classify_boundary_evidence(ais_gng_msgs::msg::TopologicalMap &map, const float *points, uint32_t point_num);
     bool direct_plane_cluster_enabled_{false};
     std::unique_ptr<topological_plane::incremental::Clusterizer> direct_plane_clusterizer_;
     rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr direct_plane_cluster_pub_;
@@ -77,12 +84,14 @@ class AiSGNGComponent : public rclcpp::Node {
     std::deque<sensor_msgs::msg::CameraInfo::ConstSharedPtr> observation_camera_infos_;
     rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr observation_camera_info_sub_;
     observation_pixels::angle_table observation_angle_table_;
-    void set_observation_pixels(const PC2::ConstSharedPtr &msg, const std::vector<uint32_t> *selected_ids, uint32_t point_num);
+    void prepare_observation_pixels(const PC2::ConstSharedPtr &msg, const std::vector<uint32_t> *selected_ids,
+        uint32_t point_num, gng_observation_input &input);
     std::unique_ptr<tf2_ros::Buffer> observation_transform_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> observation_transform_listener_;
     rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr observation_support_pub_;
     rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr observation_lookup_pub_;
-    void set_observation_origin(const PC2::ConstSharedPtr &msg, const LiDAR_Config &config, bool has_single_sensor);
+    void prepare_observation_origin(const PC2::ConstSharedPtr &msg, const LiDAR_Config &config,
+        bool has_single_sensor, gng_observation_input &input);
     void publish_observation_support(const TopologicalMap &map, const std_msgs::msg::Header &header);
 #endif
 

@@ -109,14 +109,6 @@ export function GngLayerControls({
                                 className="col-span-3 w-[90%] justify-self-start"
                             />
                         )}
-                        <CompactToggle
-                            icon={<Share2 size={12} />}
-                            label="Velocity"
-                            isOn={settings.showVelocity ?? false}
-                            onToggle={() => onUpdate({ showVelocity: !(settings.showVelocity ?? false) })}
-                            className="col-span-3 w-[90%] justify-self-start"
-                        />
-
                         {hasManipulabilityData && settings.showManipulabilityEllipsoids && (
                             <div className="col-span-8 mt-1 flex flex-col gap-1.5 rounded-md border border-white/5 bg-black/20 px-2 py-1.5 text-[10px] text-[var(--text-secondary)]">
                                 <div className="flex items-center gap-2">

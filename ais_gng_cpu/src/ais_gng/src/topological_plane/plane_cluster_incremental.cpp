@@ -307,6 +307,9 @@ struct Clusterizer::Impl
     std::size_t disconnected_frames = 0U;
     std::size_t confirmed_frames = 0U;
     bool is_healthy = false;
+    // 前回確認した全域木の有効性と、その時点の所属数。
+    bool has_connectivity_tree = false;
+    std::size_t connectivity_member_count = 0U;
   };
 
   ClusterOptions options;
@@ -363,6 +366,14 @@ struct Clusterizer::Impl
   std::vector<ClusterState> kept_clusters;
   std::vector<std::vector<std::uint32_t>> member_lists;
   std::vector<PlaneAccumulator> merge_accumulators;
+  std::vector<PlaneFit> merge_fits;
+  std::vector<std::uint16_t> previous_node_ids;
+  std::vector<std::uint32_t> connectivity_parent;
+  std::vector<std::uint32_t> connectivity_owner_ids;
+  std::vector<std::size_t> connectivity_parent_slots;
+  std::vector<std::uint8_t> can_reuse_connectivity;
+  std::vector<std::size_t> connectivity_member_counts;
+  bool has_same_node_order = false;
 
   // 隣接リスト(CSR)と局所量を作る。ここが唯一の O(N + E) 主走査になる。
   void prepareFrame(const ais_gng_msgs::msg::TopologicalMap &map, ClusterStatistics &statistics)
@@ -373,6 +384,7 @@ struct Clusterizer::Impl
     spacings.assign(node_count, 0.0);
     seed_scores.assign(node_count, 0.0);
     usable.assign(node_count, 0U);
+    node_ids.swap(previous_node_ids);
     node_ids.assign(node_count, 0U);
 
     for (std::size_t index = 0U; index < node_count; ++index) {
@@ -385,6 +397,10 @@ struct Clusterizer::Impl
       usable[index] = 1U;
       ++statistics.valid_node_count;
     }
+
+    // 添字変更時は証明木を無効化。ノードID再配置を古い親添字として扱わないための条件。
+    has_same_node_order = node_ids == previous_node_ids &&
+      connectivity_parent.size() == node_count && connectivity_owner_ids.size() == node_count;
 
     // 次数を数えてから CSR を確定する。vector<vector> を毎フレーム作らない。
     adjacency_offsets.assign(node_count + 1U, 0U);
@@ -943,10 +959,70 @@ struct Clusterizer::Impl
       return false;
     }
     bool changed = false;
+    connectivity_member_counts.assign(clusters.size(), 0U);
+    can_reuse_connectivity.resize(clusters.size());
+    connectivity_parent.resize(label.size());
+    connectivity_parent_slots.resize(label.size(), 0U);
+    connectivity_owner_ids.resize(label.size(), 0U);
+    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+      can_reuse_connectivity[idx] = has_same_node_order && clusters[idx].has_connectivity_tree;
+    }
+    for (std::size_t idx = 0U; idx < label.size(); ++idx) {
+      if (label[idx] == kUnassigned) {
+        connectivity_owner_ids[idx] = 0U;
+        continue;
+      }
+      const auto cluster_idx = static_cast<std::size_t>(label[idx]);
+      ++connectivity_member_counts[cluster_idx];
+      if (connectivity_owner_ids[idx] != clusters[cluster_idx].id) {
+        can_reuse_connectivity[cluster_idx] = 0U;
+      }
+      connectivity_owner_ids[idx] = clusters[cluster_idx].id;
+      if (can_reuse_connectivity[cluster_idx] == 0U || connectivity_parent[idx] == idx) {
+        continue;
+      }
+      // 前回のCSR位置を優先し、位置変更時だけ親エッジを行内探索。
+      auto &parent_slot = connectivity_parent_slots[idx];
+      const auto begin = adjacency_offsets[idx];
+      const auto end = adjacency_offsets[idx + 1U];
+      if (parent_slot >= begin && parent_slot < end &&
+        adjacency_values[parent_slot] == connectivity_parent[idx])
+      {
+        continue;
+      }
+      parent_slot = begin;
+      while (parent_slot < end && adjacency_values[parent_slot] != connectivity_parent[idx]) {
+        ++parent_slot;
+      }
+      if (parent_slot == end) {
+        can_reuse_connectivity[cluster_idx] = 0U;
+      }
+    }
+    bool can_reuse_all_connectivity = true;
+    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+      // 全メンバーの旧所属一致と個数一致による、所属集合の厳密な同一性確認。
+      if (connectivity_member_counts[idx] != clusters[idx].connectivity_member_count) {
+        can_reuse_connectivity[idx] = 0U;
+      }
+      if (connectivity_member_counts[idx] != 0U && can_reuse_connectivity[idx] == 0U) {
+        can_reuse_all_connectivity = false;
+      }
+    }
+    // 全クラスタの連結確認済みフレームでは、成分配列の生成自体を省略。
+    if (can_reuse_all_connectivity) {
+      for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+        auto &cluster = clusters[idx];
+        cluster.disconnected_frames = 0U;
+        cluster.connectivity_member_count = connectivity_member_counts[idx];
+        cluster.has_connectivity_tree = connectivity_member_counts[idx] != 0U;
+        statistics.num_connectivity_reused_clusters += cluster.has_connectivity_tree ? 1U : 0U;
+      }
+      return false;
+    }
+
     component_of.assign(label.size(), kUnassigned);
     cluster_best_component.assign(clusters.size(), kUnassigned);
     cluster_best_size.assign(clusters.size(), 0U);
-
     // 成分ごとの所属クラスタとサイズ。ノード列は component_of から引き直す。
     std::vector<std::pair<int, std::size_t>> component_info;
 
@@ -955,10 +1031,23 @@ struct Clusterizer::Impl
       if (cluster_index == kUnassigned || component_of[index] != kUnassigned) {
         continue;
       }
+      const auto cluster_idx = static_cast<std::size_t>(cluster_index);
+      if (can_reuse_connectivity[cluster_idx] != 0U) {
+        // 所属が同じで全域木が残る場合は、追加エッジや非木エッジの削除があっても連結。
+        if (cluster_best_component[cluster_idx] == kUnassigned) {
+          cluster_best_component[cluster_idx] = static_cast<int>(component_info.size());
+          cluster_best_size[cluster_idx] = connectivity_member_counts[cluster_idx];
+          component_info.emplace_back(cluster_index, connectivity_member_counts[cluster_idx]);
+          ++statistics.num_connectivity_reused_clusters;
+        }
+        component_of[index] = cluster_best_component[cluster_idx];
+        continue;
+      }
       const int component_index = static_cast<int>(component_info.size());
       frontier.clear();
       frontier.push_back(index);
       component_of[index] = component_index;
+      connectivity_parent[index] = static_cast<std::uint32_t>(index);
       for (std::size_t frontier_index = 0U; frontier_index < frontier.size(); ++frontier_index) {
         const std::size_t current = frontier[frontier_index];
         for (std::size_t cursor = adjacency_offsets[current];
@@ -969,6 +1058,7 @@ struct Clusterizer::Impl
             continue;
           }
           component_of[neighbour] = component_index;
+          connectivity_parent[neighbour] = static_cast<std::uint32_t>(current);
           frontier.push_back(neighbour);
         }
       }
@@ -978,6 +1068,7 @@ struct Clusterizer::Impl
         cluster_best_component[cluster] = component_index;
       }
       component_info.emplace_back(cluster_index, frontier.size());
+      statistics.num_connectivity_scanned_nodes += frontier.size();
     }
 
     // クラスタごとの成分数を数え、接続が切れた状態が続いた場合だけ実際に分割する。
@@ -987,7 +1078,10 @@ struct Clusterizer::Impl
       ++component_count[static_cast<std::size_t>(cluster_index)];
     }
     std::vector<std::uint8_t> allow_split(clusters.size(), 0U);
+    bool has_confirmed_split = false;
     for (std::size_t index = 0U; index < clusters.size(); ++index) {
+      clusters[index].has_connectivity_tree = component_count[index] == 1U;
+      clusters[index].connectivity_member_count = connectivity_member_counts[index];
       if (component_count[index] <= 1U) {
         clusters[index].disconnected_frames = 0U;
         continue;
@@ -995,8 +1089,14 @@ struct Clusterizer::Impl
       ++clusters[index].disconnected_frames;
       if (clusters[index].disconnected_frames > options.split_confirm_frames) {
         allow_split[index] = 1U;
+        has_confirmed_split = true;
         clusters[index].disconnected_frames = 0U;
       }
+    }
+
+    // 確認待ちカウンタ更新後、分割不要フレームのID投票・所属再割当を省略。
+    if (!has_confirmed_split) {
+      return false;
     }
 
     // 分かれた成分が前フレームに持っていたIDを多数決で調べる。分裂と再結合を
@@ -1100,19 +1200,19 @@ struct Clusterizer::Impl
       return false;
     }
 
-    // 各クラスタの累積共分散を1回だけ作る。候補対ごとのノード走査を避け、
-    // 結合平面を一定量の累積値合成と3x3固有値分解で判定する。
-    // メンバーの索引一覧も同じ1パスで作り、少数側単体をunion平面へ当てはめる
-    // チェックに使う(buildOutputのmember_listsとは別に、ここで作り直す)。
+    // ノード位置からの累積統計。勝者入力の誤差共分散への依存なし。
+    // 統合済み成分の統計と平面を保持し、候補対ごとのメンバー再走査を省略。
     merge_accumulators.assign(clusters.size(), PlaneAccumulator{});
-    member_lists.assign(clusters.size(), std::vector<std::uint32_t>{});
     for (std::size_t index = 0U; index < label.size(); ++index) {
       if (label[index] != kUnassigned) {
         const auto cluster_index = static_cast<std::size_t>(label[index]);
         merge_accumulators[cluster_index].add(
           positions[index], normals[index], spacings[index]);
-        member_lists[cluster_index].push_back(static_cast<std::uint32_t>(index));
       }
+    }
+    merge_fits.resize(clusters.size());
+    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+      merge_fits[idx] = merge_accumulators[idx].solve();
     }
 
     merge_sets.reset(clusters.size());
@@ -1122,17 +1222,20 @@ struct Clusterizer::Impl
         ++statistics.merge_insufficient_edge_pair_count;
         continue;
       }
-      const std::size_t first = static_cast<std::size_t>(key & 0xFFFFFFFFULL);
-      const std::size_t second = static_cast<std::size_t>(key >> 32);
-      const ClusterState &first_cluster = clusters[first];
-      const ClusterState &second_cluster = clusters[second];
-      if (first_cluster.member_count < 3U || second_cluster.member_count < 3U) {
+      const std::size_t first = merge_sets.find(static_cast<std::size_t>(key & 0xFFFFFFFFULL));
+      const std::size_t second = merge_sets.find(static_cast<std::size_t>(key >> 32));
+      if (first == second) {
         continue;
       }
-      // 結合したら1枚の平面として成立するかを、そのまま確かめる。
-      //
-      // 局所クラスタ法線は小さいパッチでは揺れるため、事前の法線一致では棄却しない。
-      // GNG edgeで接続された対を、結合後の共分散平面そのもので判定する。
+      const PlaneAccumulator &first_accumulator = merge_accumulators[first];
+      const PlaneAccumulator &second_accumulator = merge_accumulators[second];
+      const PlaneFit &first_fit = merge_fits[first];
+      const PlaneFit &second_fit = merge_fits[second];
+      if (!first_fit.is_valid || !second_fit.is_valid) {
+        ++statistics.merge_invalid_fit_pair_count;
+        continue;
+      }
+      // 元の隣接対ではなく、統合済み成分全体に対する平面判定。
       PlaneAccumulator merged_fit = merge_accumulators[first];
       merged_fit.mergeFrom(merge_accumulators[second]);
       const PlaneFit union_fit = merged_fit.solve();
@@ -1141,8 +1244,7 @@ struct Clusterizer::Impl
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
-      // 確定条件(min_cluster_planarity)より緩い専用しきい値を使う。誤併合を防ぐのは
-      // 次の絶対残差条件の役目で、平面性は鎖状のまま結合されるのだけを防げばよい。
+      // 連鎖統合による線状化を防ぐ、統合後全体の面内広がり比。
       if (union_fit.planarity < options.merge_min_planarity) {
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
@@ -1154,9 +1256,9 @@ struct Clusterizer::Impl
       // つないだ結果、元より当てはめが悪くなっていないことも確かめる。
       // 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
       const double first_residual_ratio =
-        first_cluster.residual / std::max(first_cluster.spacing, kEpsilon);
+        first_fit.residual / std::max(first_accumulator.meanSpacing(), kEpsilon);
       const double second_residual_ratio =
-        second_cluster.residual / std::max(second_cluster.spacing, kEpsilon);
+        second_fit.residual / std::max(second_accumulator.meanSpacing(), kEpsilon);
       const double allowed_residual = std::max(
         options.merge_residual_growth_ratio *
         std::max(first_residual_ratio, second_residual_ratio),
@@ -1165,38 +1267,33 @@ struct Clusterizer::Impl
         ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
       }
-      // union_fitは全メンバーの平均統計なので、大きい側に小さい側を混ぜても
-      // 全体の当てはめはほとんど動かず、小さい側だけが実際にはunion平面から
-      // 離れているケースを見逃す。少数側の点群をunion平面へ個別に当てはめ、
-      // RMS残差比で確かめる。
+      // 大きな平面への小面の誤吸収防止。少数側の位置共分散C・重心muから
+      // RMS^2 = n^T C n + (n・(mu-c))^2 を算出し、全点走査を省略。
       {
-        const std::size_t smaller = first_cluster.member_count <= second_cluster.member_count ?
+        const std::size_t smaller = first_accumulator.count <= second_accumulator.count ?
           first : second;
-        const ClusterState &smaller_cluster = clusters[smaller];
-        const auto &smaller_members = member_lists[smaller];
-        double sum_sq = 0.0;
-        for (const std::uint32_t member : smaller_members) {
-          const double d = union_fit.normal.dot(positions[member] - union_fit.centroid);
-          sum_sq += d * d;
-        }
-        const double smaller_rms = smaller_members.empty() ?
-          0.0 : std::sqrt(sum_sq / static_cast<double>(smaller_members.size()));
+        const PlaneFit &smaller_fit = merge_fits[smaller];
+        const double offset = union_fit.normal.dot(smaller_fit.centroid - union_fit.centroid);
+        const double smaller_rms = std::sqrt(std::max(0.0,
+          union_fit.normal.dot(smaller_fit.covariance * union_fit.normal) + offset * offset));
         const double smaller_spacing = std::min(
-          std::max({smaller_cluster.spacing, union_spacing, kEpsilon}),
+          std::max({merge_accumulators[smaller].meanSpacing(), union_spacing, kEpsilon}),
           options.max_effective_spacing);
         if (smaller_rms / smaller_spacing > options.merge_smaller_side_residual_ratio) {
           ++statistics.merge_smaller_side_rejected_pair_count;
           continue;
         }
       }
-      // ノード数の多い側のIDを残す。少数側へ吸収されると、画面上は大きなクラスタが
-      // 消えて別IDへ置き換わったように見える。同数なら若いID(古い方)を残す。
+      // 統合済み成分のノード数によるID選択。同数時は古いIDを優先。
       merge_sets.unite(first, second, [this](const std::size_t a, const std::size_t b) {
-          if (clusters[a].member_count != clusters[b].member_count) {
-            return clusters[a].member_count > clusters[b].member_count;
+          if (merge_accumulators[a].count != merge_accumulators[b].count) {
+            return merge_accumulators[a].count > merge_accumulators[b].count;
           }
           return clusters[a].id < clusters[b].id;
         });
+      const std::size_t root_idx = merge_sets.find(first);
+      merge_accumulators[root_idx] = merged_fit;
+      merge_fits[root_idx] = union_fit;
     }
 
     std::size_t absorbed = 0U;
@@ -1227,6 +1324,7 @@ struct Clusterizer::Impl
     // ノード単位の逸脱判定の仕事であり、逸脱ノードを外せば集約値は自然に収まる。
     // 集約値で切ると、実在する面が集約残差の一時的な悪化だけで丸ごと消える。
     // 平面性と残差は、生成時と併合時の条件としてのみ使う。
+    bool has_removed_cluster = false;
     for (ClusterState &cluster : clusters) {
       cluster.is_healthy = cluster.member_count >= options.min_cluster_nodes;
       if (cluster.is_healthy) {
@@ -1235,6 +1333,13 @@ struct Clusterizer::Impl
       } else {
         ++cluster.weak_frames;
       }
+      has_removed_cluster = has_removed_cluster ||
+        cluster.member_count < 3U || cluster.weak_frames > options.weak_frame_allowance;
+    }
+
+    // 生存・確認カウンタ更新後、削除なしの場合のクラスタコピーと全所属の再採番を省略。
+    if (!has_removed_cluster) {
+      return;
     }
 
     remap.assign(clusters.size(), kUnassigned);

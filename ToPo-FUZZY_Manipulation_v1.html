@@ -3091,7 +3091,7 @@ async function v312LoadBundledGngWasm(){
   if(status) status.textContent='基幹GNG学習コアWASMを読み込み中...';
   GNG_WASM_CORE_LOADING=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src='gng_wasm_core/dist/gng_wasm_core.js?v=20260902_realtime_abi3';
+    script.src='gng_web_tools/wasm/dist/gng_wasm_core.js?v=20260902_realtime_abi3';
     script.onload=async()=>{
       try{
         if(typeof GngWasmCore!=='function') throw new Error('GngWasmCore factory was not found');

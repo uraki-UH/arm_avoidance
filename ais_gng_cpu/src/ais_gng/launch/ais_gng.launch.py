@@ -158,6 +158,7 @@ def generate_launch_description():
             'topological_map_topic').perform(context)
         plane_clusters_topic = LaunchConfiguration(
             'plane_clusters_topic').perform(context)
+        enable_nonplane_component = False
         if backend == 'cpu':
             plane_parameter_overrides = {
                 'plane_cluster.output_topic': plane_clusters_topic,
@@ -218,10 +219,13 @@ def generate_launch_description():
                     name='plane_cluster_visualization_node',
                     parameters=[
                         LaunchConfiguration('plane_params_file'),
+                        os.path.join(package_dir, 'config', 'surface_model.yaml'),
                         {
                             'input_topic': topological_map_topic,
                             'output_topic': plane_clusters_topic,
                             'clusters_input_topic': clusters_input_topic,
+                            # CPU直結の所属情報をViewerで描画。MarkerArrayによる二重生成の抑止。
+                            'enable_nonplane_markers': not enable_nonplane_component,
                         },
                     ],
                     output='screen',

@@ -616,7 +616,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_export = sub.add_parser("export", help="Export selected topics to JSON")
     p_export.add_argument("--bag", required=True, help="Bag directory or bag file")
     p_export.add_argument("--config", required=True, help="YAML config that defines selected topics")
-    p_export.add_argument("--output", help="Output JSON path. If omitted, write into gng_bundle_exporter/results/")
+    p_export.add_argument("--output", help="Output JSON path. If omitted, write into this package's results/ directory")
     p_export.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
     p_export.add_argument("--gzip", action="store_true", help="Write gzip-compressed JSON")
     p_export.set_defaults(func=cmd_export)

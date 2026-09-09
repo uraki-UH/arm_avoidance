@@ -20,7 +20,7 @@ ros2 run gng_bundle_exporter gng-bundle-export export \
 ```
 
 If `--output` is omitted, the exporter writes into
-`gng_bundle_exporter/results/` with a timestamped filename. Existing files are
+`gng_web_tools/exporter/results/` when using the source tree, with a timestamped filename. Existing files are
 never overwritten; name collisions get a new suffix.
 
 Use `--gzip` or a `.gz` output path for compressed export. The HTML viewer can
