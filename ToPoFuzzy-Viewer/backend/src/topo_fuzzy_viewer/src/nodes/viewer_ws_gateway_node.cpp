@@ -2,13 +2,13 @@
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
 #include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
-#include "topo_fuzzy_viewer/protocol/pose_array_protocol.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/event.hpp>
 #include <rmw/types.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32_multi_array.hpp>
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
@@ -25,6 +25,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <fstream>
@@ -127,6 +128,34 @@ namespace converter {
         json markers = json::array(); for (auto& m : msg->markers) markers.push_back(marker_to_json(m));
         return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
     }
+
+    // PoseArrayのローカルZ軸矢印への変換。空配列を含む毎回の全置換
+    json to_json(const geometry_msgs::msg::PoseArray& poses, const std::string& tag) {
+        json markers = json::array();
+        for (std::size_t idx = 0; idx < poses.poses.size(); ++idx) {
+            const auto& pose = poses.poses[idx];
+            const auto& p = pose.position;
+            const auto& q = pose.orientation;
+            const double norm = std::hypot(std::hypot(q.x, q.y), std::hypot(q.z, q.w));
+            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+                !std::isfinite(norm) || norm < 1.0e-12) continue;
+            const double x = q.x / norm, y = q.y / norm, z = q.z / norm, w = q.w / norm;
+            constexpr double length = 0.08;
+            markers.push_back({
+                {"id", idx}, {"ns", "pose_array"}, {"type", "arrow"}, {"action", 0},
+                {"frameId", poses.header.frame_id},
+                {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
+                {"scale", {0.008, 0.016, 0.02}}, {"color", {0.15, 0.8, 1.0, 1.0}},
+                {"points", {{p.x, p.y, p.z},
+                    {p.x + length * 2.0 * (x * z + w * y),
+                     p.y + length * 2.0 * (y * z - w * x),
+                     p.z + length * (1.0 - 2.0 * (x * x + y * y))}}}
+            });
+        }
+        return {{"type", "stream.marker_array"}, {"tag", tag},
+                {"source_type", "pose_array"}, {"markers", std::move(markers)}};
+    }
+
     std::array<float, 3U> nonplane_component_color(const std::size_t component_index) {
         constexpr std::array<std::array<float, 3U>, 8U> colors{{
             {{0.93F, 0.33F, 0.31F}}, {{0.20F, 0.75F, 0.38F}},
@@ -675,6 +704,10 @@ private:
         if (payload.is_null()) {
             return;
         }
+        broadcast_markers(source_id, payload);
+    }
+
+    void broadcast_markers(const std::string& source_id, const json& payload) {
         const std::string serialized = payload.dump();
         {
             std::lock_guard<std::mutex> lock(markerMutex_);
@@ -773,22 +806,12 @@ private:
                         if (is_transient_local) qos.transient_local();
                         activeDynamicSubs_[sid] = create_subscription<geometry_msgs::msg::PoseArray>(
                             sid, qos, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
-                                const auto payload = pose_array_protocol::serialize(*m, sid).dump();
-                                {
-                                    std::lock_guard<std::mutex> lock(markerMutex_);
-                                    lastMarkerPayloads_[sid] = payload;
-                                }
-                                broadcastText(payload);
+                                broadcast_markers(sid, converter::to_json(*m, sid));
                             });
                     } else {
-                    activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
-                        const std::string payload = converter::to_json(m, sid).dump();
-                        {
-                            std::lock_guard<std::mutex> lock(markerMutex_);
-                            lastMarkerPayloads_[sid] = payload;
-                        }
-                        broadcastText(payload);
-                    });
+                        activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
+                            broadcast_markers(sid, converter::to_json(m, sid));
+                        });
                     }
                 } else if (st == "voxel") {
                     activeSubTypes_[sid] = "voxel";

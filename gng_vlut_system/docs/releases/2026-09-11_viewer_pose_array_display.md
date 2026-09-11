@@ -14,7 +14,7 @@
 
 ## Added
 
-- PoseArrayから描画パケットへの変換ヘッダー。
+- 既存converter内のPoseArray変換。Marker・PoseArray・非平面クラスタのキャッシュ保存と送信を共通化。
 - React Three Fiberの描画ツリーによるTF・方向・空配列・TF欠落の検査1件。
 - Docker内の入力ノード・gatewayとホスト側WebSocketクライアントによる結合テスト。
 
