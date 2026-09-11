@@ -271,9 +271,9 @@ $$
 | `/grasp_pose_cands` | `geometry_msgs/msg/PoseArray` | 候補TCP位置・姿勢。入力グラフのheaderを継承 |
 | `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | PoseArrayと同順の面積比 |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/reachability_markers` | `visualization_msgs/msg/MarkerArray` | 任意の追加評価。両レイヤー表示時は同じ更新・姿勢の色だけを統合 |
+| `/grasp_pose_cands/reachability_markers` | `visualization_msgs/msg/MarkerArray` | 任意の到達性評価。重複を避ける場合は候補PoseをOFFにして表示 |
 
-候補生成launch自体からのMarker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。元の座標系と更新時刻を維持し、空候補は旧表示を消去。
+候補生成launch自体からのMarker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。元の座標系を維持し、空候補は旧表示を消去。
 
 summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
 

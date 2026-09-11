@@ -20,7 +20,6 @@ import { GraphRenderer, StaticGraphRenderer } from './features/visualization/Gra
 import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
-import { pose_marker_layers } from './features/visualization/pose_marker_layers';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
 import { VoxelRenderer } from './features/visualization/VoxelRenderer';
@@ -731,7 +730,7 @@ function App() {
                                 ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
-                                data: pose_marker_layers(markerData, markerSettings, disabledSourceIds), settings: markerSettings, component: (tag: string, d: any, s: any) => (
+                                data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
                                     <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },

@@ -587,7 +587,7 @@ Viewerは候補PoseArrayを直接受信し、ローカル`+Z`を水色の矢印�
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複Marker配信はなし。
 可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
-到達性評価Markerも表示ONの場合、同じ更新・姿勢の色だけを統合して二重描画を抑制。
+到達性評価Markerとは独立表示。色付き評価を表示する場合は候補PoseをOFF、評価MarkerをON。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

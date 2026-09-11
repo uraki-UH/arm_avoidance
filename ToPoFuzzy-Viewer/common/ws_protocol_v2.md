@@ -63,14 +63,13 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 {"type":"stream.marker_array","tag":"/grasp_pose_cands","source_type":"pose_array","markers":[]}
 ```
 
-- 1姿勢につき1本のローカル+Z矢印。長さ0.08 m、未評価色は水色。
+- 1姿勢につき1本のローカル+Z矢印。長さ0.08 m、表示色は水色。
 - `markers`は毎回全置換。空配列は旧候補の消去。
-- Markerの`frameId`は入力座標系、`header_stamp: [sec, nanosec]`は入力更新時刻。
+- Markerの`frameId`は入力座標系。
 - 非有限位置・無効クォータニオンは除外。入力配列添字をMarker IDとして維持。
 - 入力publisherに合わせたreliability・durabilityを購読開始時に選択。
-- 計画処理は不要。固定座標系へのTFは描画側で従来どおり必要。
-- `<tag>/reachability_markers`も表示ONの場合、同じID・時刻・座標系・両端点の評価色だけを候補へ統合し、評価側の重複矢印は非描画。
-- 候補レイヤーを非表示にした場合、評価側は独立表示。異なる名前へremapした評価トピックは自動統合の対象外。
+- 計画処理は不要。PoseArrayは座標系不明・固定座標系へのTF欠落時に非表示。座標をworldとみなす代替描画はなし。
+- 他のMarkerレイヤーとの自動照合・色統合なし。重複を避ける場合は表示レイヤーを選択。
 
 ### Stream Reset
 ```json

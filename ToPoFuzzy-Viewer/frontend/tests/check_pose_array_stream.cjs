@@ -71,7 +71,6 @@ async function main() {
         assert.equal(first.source_type, 'pose_array');
         assert.equal(first.markers.length, 1);
         assert.equal(first.markers[0].frameId, 'graspnet_table');
-        assert.deepEqual(first.markers[0].header_stamp, [11, 0]);
         assert.deepEqual(first.markers[0].points[0], [1, 2, 3]);
         assert.ok(Math.abs(first.markers[0].points[1][2] - 2.92) < 1e-9);
         fixture.stdin.write(JSON.stringify({ stamp: 12, poses: [] }) + '\n');

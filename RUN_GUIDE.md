@@ -63,10 +63,10 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 - 候補スコア: `/grasp_pose_cand_scores`
 - 判定概要: `/grasp_pose_cands/summary`
 - 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
-- 到達性の色を追加する場合: `/grasp_pose_cands/reachability_markers`もON（計画側の起動が必要）
+- 到達性を色付きで見る場合: `/grasp_pose_cands`をOFF、`/grasp_pose_cands/reachability_markers`をON（計画側の起動が必要）
 
 ViewerがPoseArrayを直接受信し、ローカルZ軸の矢印を表示。候補表示だけなら`grasp_goal_planning.launch.py`は不要。
-到達性評価もONの場合、同一更新・姿勢の色だけを統合して重複表示を抑制。ROS側の`/grasp_pose_markers`は不要。
+各レイヤーは独立表示。自動の色統合・重複抑制なし。ROS側の`/grasp_pose_markers`は不要。
 変更適用には`viewer_stack.launch.py`の再起動とブラウザ再読み込みが必要。`graspnet_table`など入力座標系からViewer固定座標系へのTFも必要。
 
 `grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。

@@ -94,7 +94,7 @@ Published before each binary cloud frame.
 `PoseArray`も表示対象。`sources.list`の型は`marker`で、元のROSトピック名をsource IDとして使用。
 例: `/grasp_pose_cands`を有効化すると`source_type: "pose_array"`付きの`stream.marker_array`を配信。
 外部のMarker変換ノード・把持計画launchへの依存なし。空候補、再接続キャッシュ、購読解除も既存ストリーム契約に準拠。
-Markerの`header_stamp`は到達性評価色の更新整合用。詳細は`common/ws_protocol_v2.md`を参照。
+他のMarkerとの自動照合・色統合なし。詳細は`common/ws_protocol_v2.md`を参照。
 
 ## File
 - `files.list`

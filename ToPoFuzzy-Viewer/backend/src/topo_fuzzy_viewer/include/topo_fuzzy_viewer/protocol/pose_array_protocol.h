@@ -27,7 +27,6 @@ inline nlohmann::json serialize(
         markers.push_back({
             {"id", idx}, {"ns", "pose_array"}, {"type", "arrow"}, {"action", 0},
             {"frameId", poses.header.frame_id},
-            {"header_stamp", {poses.header.stamp.sec, poses.header.stamp.nanosec}},
             {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
             {"scale", {0.008, 0.016, 0.02}}, {"color", {0.15, 0.8, 1.0, 1.0}},
             {"points", {{p.x, p.y, p.z},

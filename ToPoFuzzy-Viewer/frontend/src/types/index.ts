@@ -31,7 +31,6 @@ export interface MarkerPose {
 }
 
 export interface MarkerMessage {
-    header_stamp?: [number, number];
     ns: string;
     id: number;
     type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
