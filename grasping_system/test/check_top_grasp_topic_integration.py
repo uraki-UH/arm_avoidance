@@ -1,6 +1,7 @@
 """上方把持launchの共通トピック出力と個別指定の結合確認。"""
 
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -17,6 +18,17 @@ from std_msgs.msg import Float32MultiArray, String
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 import yaml
+
+
+def has_marker_color(marker, color):
+    return all(
+        abs(value - expected) < 1.0e-6
+        for value, expected in zip(
+            (marker.color.r, marker.color.g, marker.color.b, marker.color.a), color))
+
+
+def has_node_color(markers, color):
+    return len(markers) == 3 and all(has_marker_color(marker, color) for marker in markers[1:])
 
 
 def check_case(node, qos, root, enable_override, candidate_frame="topic_contract_candidate_frame"):
@@ -41,6 +53,8 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
 
     map_pub = node.create_publisher(TopologicalMap, "/topological_map", qos)
     cluster_pub = node.create_publisher(PlaneClusterArray, "/plane_clusters", qos)
+    reach_map_topic = prefix + "/test/reach_map"
+    reach_map_pub = node.create_publisher(TopologicalMap, reach_map_topic, qos)
     graph = TopologicalMap()
     graph.header.frame_id = "topic_contract_frame"
     cluster = PlaneCluster()
@@ -72,9 +86,15 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
         max_surface_tilt_deg=25.0,
         enable_nonplane_attachment=True,
         enable_approach_check=True,
+        candidate_confirm_updates=3,
+        candidate_missing_update_allowance=2,
+        candidate_position_ema_alpha=1.0,
+        candidate_orientation_ema_alpha=1.0,
     )
     config_parameters["candidate_frame"] = candidate_frame
     config_parameters["tcp_frame"] = "test_tcp"
+    config_parameters["reachability_map_topic"] = reach_map_topic
+    config_parameters["reachability_voxel_size"] = 0.05
     params_path = Path(config_dir.name) / "params.yaml"
     params_path.write_text(yaml.safe_dump(config))
     command = [
@@ -91,6 +111,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                 command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 deadline = time.monotonic() + 25.0
+                observed_unconfirmed_candidate = False
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         raise RuntimeError("launchの予期しない終了")
@@ -107,12 +128,17 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     poses = received["candidate_topic"]
                     scores = received["score_topic"]
                     if not poses.candidates:
+                        observed_unconfirmed_candidate = True
                         continue
                     markers = received["candidate_nodes_topic"].markers
-                    if len(markers) != 3:
+                    if len(scores.data) != 1 or len(markers) != 3:
+                        continue
+                    if (summary["candidate_count"] != 1 or
+                            summary["raw_candidate_count"] != 1):
                         continue
                     assert len(poses.candidates) == len(scores.data) == 1
                     assert summary["candidate_count"] == 1
+                    assert summary["raw_candidate_count"] == 1
                     assert summary["candidates"][0]["cluster_id"] == 1
                     assert summary["candidates"][0]["attached_node_num"] == 1
                     assert summary["candidates"][0]["attached_component_num"] == 1
@@ -123,8 +149,10 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     assert poses.tcp_frame == "test_tcp"
                     assert 0.0 < scores.data[0] <= 1.0
                     assert poses.update_id > 0
-                    assert poses.candidates[0].id == 0
+                    assert observed_unconfirmed_candidate
+                    assert poses.candidates[0].id == 1
                     assert poses.candidates[0].state == GraspCandidate.UNKNOWN
+                    assert has_node_color(markers, (0.1, 0.85, 1.0, 1.0))
                     assert poses.candidates[0].shape_score == scores.data[0]
                     expected_offset = (0.2, -0.1, 0.3) if candidate_frame else (0.0, 0.0, 0.0)
                     assert abs(poses.candidates[0].pose.position.x - expected_offset[0]) < 1.0e-6
@@ -169,6 +197,45 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                         assert late_markers and len(late_markers[-1].markers) == 3
                     finally:
                         node.destroy_subscription(late_subscription)
+                    # 学習入力なしでの到達map更新。位置・候補IDを維持した色だけの遷移
+                    deadline = time.monotonic() + 0.2
+                    while time.monotonic() < deadline:
+                        rclpy.spin_once(node, timeout_sec=0.02)
+                    held_poses = received["candidate_topic"]
+                    held_markers = received["candidate_nodes_topic"].markers
+                    reach_node = TopologicalNode()
+                    point = held_poses.candidates[0].pose.position
+                    reach_node.pos.x = (math.floor(point.x / 0.05) + 0.5) * 0.05
+                    reach_node.pos.y = (math.floor(point.y / 0.05) + 0.5) * 0.05
+                    reach_node.pos.z = (math.floor(point.z / 0.05) + 0.5) * 0.05
+                    for state, color in (
+                        (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
+                        (GraspCandidate.OUTSIDE, (0.1, 0.85, 1.0, 1.0)),
+                        (GraspCandidate.UNKNOWN, (0.1, 0.85, 1.0, 1.0)),
+                        (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
+                    ):
+                        reach_map = TopologicalMap()
+                        reach_map.header.frame_id = (
+                            "missing_reach_frame" if state == GraspCandidate.UNKNOWN else expected_frame)
+                        reach_map.nodes = [] if state == GraspCandidate.OUTSIDE else [reach_node]
+                        reach_map_pub.publish(reach_map)
+                        deadline = time.monotonic() + 5.0
+                        while time.monotonic() < deadline:
+                            rclpy.spin_once(node, timeout_sec=0.1)
+                            poses = received["candidate_topic"]
+                            markers = received["candidate_nodes_topic"].markers
+                            if poses.candidates[0].state == state and has_node_color(markers, color):
+                                assert poses.update_id == held_poses.update_id
+                                assert poses.candidates[0].id == held_poses.candidates[0].id
+                                assert poses.candidates[0].pose == held_poses.candidates[0].pose
+                                for marker, held in zip(markers, held_markers):
+                                    assert marker.header == held.header
+                                    assert marker.points == held.points
+                                    assert marker.id == held.id
+                                break
+                        else:
+                            raise TimeoutError(f"採用ノードの到達性色待機の時間超過: {state}")
+                    print("到達mapだけの更新によるHANDLE色・候補色の切り替え確認", flush=True)
                     # 上方障害物で空候補へ遷移し、除去後に同じ平面から再生成
                     for is_blocked in (True, False):
                         graph.nodes[4].pos.z = 0.15 if is_blocked else 0.08
@@ -198,10 +265,19 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                                     markers[0].header.stamp.sec * 1000000000 +
                                     markers[0].header.stamp.nanosec < start_stamp):
                                 continue
+                            expected_candidate_num = 0 if is_blocked else 1
+                            expected_marker_num = 1 if is_blocked else 3
+                            if (len(markers) != expected_marker_num or
+                                    len(poses.candidates) != expected_candidate_num):
+                                continue
+                            expected_raw_candidate_num = 0 if is_blocked else 1
+                            if (summary["candidate_count"] != expected_candidate_num or
+                                    summary["raw_candidate_count"] != expected_raw_candidate_num or
+                                    summary["rejected_approach_obstacle"] != int(is_blocked)):
+                                continue
                             assert markers[0].action == Marker.DELETEALL
-                            assert len(markers) == (1 if is_blocked else 3)
-                            assert len(poses.candidates) == (0 if is_blocked else 1)
                             assert summary["candidate_count"] == len(poses.candidates)
+                            assert summary["raw_candidate_count"] == expected_raw_candidate_num
                             assert summary["rejected_approach_obstacle"] == int(is_blocked)
                             if not is_blocked:
                                 assert summary["candidates"][0]["attached_node_num"] == 1
@@ -209,6 +285,39 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                             break
                         else:
                             raise TimeoutError("障害物変更後の候補待機の時間超過")
+                    # 異なる状態の候補が同居する場合のID対応。高い別平面は範囲外
+                    other = PlaneCluster()
+                    other.id = 2
+                    other.centroid.x, other.centroid.z = 0.3, 0.12
+                    other.normal.z = 1.0
+                    for original in graph.nodes[:4]:
+                        point = TopologicalNode()
+                        point.pos.x = original.pos.x + 0.3
+                        point.pos.y, point.pos.z = original.pos.y, 0.12
+                        other.node_indices.append(len(graph.nodes))
+                        graph.nodes.append(point)
+                    clusters.clusters.append(other)
+                    deadline = time.monotonic() + 5.0
+                    while time.monotonic() < deadline:
+                        graph.frame_number += 1
+                        graph.header.stamp = node.get_clock().now().to_msg()
+                        clusters.header, clusters.frame_number = graph.header, graph.frame_number
+                        map_pub.publish(graph)
+                        cluster_pub.publish(clusters)
+                        rclpy.spin_once(node, timeout_sec=0.1)
+                        poses = received["candidate_topic"]
+                        markers = received["candidate_nodes_topic"].markers
+                        if len(poses.candidates) != 2 or len(markers) != 4:
+                            continue
+                        assert poses.candidates[0].state == GraspCandidate.OUTSIDE
+                        assert poses.candidates[1].state == GraspCandidate.INSIDE
+                        for marker in markers[1:]:
+                            expected = (0.1, 0.85, 1.0, 1.0) if marker.id == 2 else (0.0, 0.6375969, 1.0, 1.0)
+                            assert has_marker_color(marker, expected)
+                        print("異なる候補IDのHANDLE色・候補色の同時表示確認", flush=True)
+                        break
+                    else:
+                        raise TimeoutError("複数候補の色分け待機の時間超過")
                     if not candidate_frame:
                         return
                     # TF欠落時の空候補配信による過去候補の明示的な無効化
@@ -270,6 +379,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
             node.destroy_subscription(subscription)
         node.destroy_publisher(map_pub)
         node.destroy_publisher(cluster_pub)
+        node.destroy_publisher(reach_map_pub)
         config_dir.cleanup()
 
 

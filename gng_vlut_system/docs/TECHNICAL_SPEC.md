@@ -586,15 +586,22 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
 上方方式の採用環境ノードは`candidate_nodes_topic`（既定`/grasp_pose_cands/nodes`）で別表示。
-平面を水色、付属非平面をオレンジのSPHERE_LISTで表示し、idは同じ更新の候補idに対応する。
+平面・付属非平面をSPHERE_LISTで表示し、idは平面クラスタID由来の候補idに対応する。
+色の判定には候補stateを使用し、位置到達範囲内はHANDLE既定色`#00d1ff`、範囲外・未評価は従来の青系候補色。
+HANDLE色はViewerの線形RGBへ変換して適用。矢印側の配色と、ユーザーがGUIで変更したHANDLE色への自動追従は対象外。
+共通publisherの配信通知で候補IDと対応付け、状態だけの更新にも追従する。保存したノード位置の再抽出なし。
+各ノードの個別到達性や実把持成功ではなく、所属候補TCPの位置到達性の表示。
 `candidate_node_diameter`の既定は0.012 m。候補評価座標系で配信し、空候補・TF欠落ではDELETEALLのみを配信する。
 可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
 候補生成側の共通publisherが`update_id`と候補`id`を管理し、同じ配列の`state`を更新する。
-状態更新だけではIDを維持、新規候補集合では`update_id`を増加。配信元の再起動では番号を再初期化。
+上方方式は平面クラスタIDを候補IDに用い、連続5更新で確定、2更新の短期欠測を保持する。位置・姿勢は指数移動平均と把持対称を考慮したSlerpで平滑化し、TCP位置が0.10 mを超えて変わる場合は再確認へ戻す。状態更新だけではIDを維持、新規候補集合では`update_id`を増加。配信元の再起動では番号を再初期化。
 到達map・TFがない場合は未評価。候補生成ノードの`reachability_map_topic`、`reachability_voxel_size`、
-`reachability_voxel_origin`、`reachability_publish_hz`で設定。計画側には`candidate_topic`で接続し、
+`reachability_voxel_origin`、`reachability_publish_hz`で設定。
+観測時刻のTF遅着には`reachability_tf_timeout_sec`（既定0.05秒）の範囲で待機。TF取得済み・同一座標系・空候補の待機なし。
+時間切れは未評価で、古い状態や最新TFへの代替なし。時刻ゼロの候補のみ従来どおり最新TFを使用。
+計画側には`candidate_topic`で接続し、
 範囲内候補と同じ到達セルに所属する計画GNGのノードだけを選択する。独立mapのIDは計画IDとして使用しない。
-別のreachability・候補矢印Markerトピックは配信しない。互換用スコア配列は残すが、形状スコアの正規情報は候補内の値。
+別のreachability・候補矢印Markerトピックは配信しない。互換用スコア配列は残すが、形状スコアの正規情報は候補内の値。上方方式のsummaryは時系列確定前の`raw_candidate_count`と公開中の`candidate_count`を併記。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

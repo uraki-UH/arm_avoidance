@@ -191,6 +191,8 @@ $R$ を正規化クォータニオンへ変換して出力。最初のサイズ�
 
 `GraspCandidateArray.header` は `candidate_frame` と入力観測時刻、`tcp_frame` は全候補が目標とする TCP link を示す。ToPoDualArm の既定は `L_tcp`。候補の `Pose` はこの TCP の目標姿勢であり、配列を受け取る側は `header.frame_id` と `tcp_frame` の両方を確認して IK・可視化・軌道評価へ渡す。
 
+上方把持の候補IDは、入力の平面クラスタが持つ永続的な `PlaneCluster.id`。同じIDの生候補が`candidate_confirm_updates`回連続で有効になってから公開し、公開済み候補は`candidate_missing_update_allowance`更新の短期欠測を保持する。位置は指数移動平均、姿勢は把持対称の180 deg yawを同一視したSlerpで平滑化する。TCP位置差が`candidate_track_reset_dist`を超えた候補、入力座標系の変更、TF取得失敗は保持せず再確認または即時消去の対象。
+
 ### 3.7 スコアと出力順序
 
 候補に付く数値スコア:
@@ -207,7 +209,7 @@ $$
 2. 高さが等しい場合のみ `footprint_fill_ratio` の降順。
 3. `maximum_candidates` 件まで保持。
 
-したがって出力先頭が面積比最大とは限らない。現在は固定条件による棄却と並べ替えであり、ファジーメンバーシップや複数根拠のファジー統合は未導入。同じ高さ・面積比の候補間の順序固定も保証なし。
+したがって出力先頭が面積比最大とは限らない。現在は固定条件による棄却と並べ替えであり、ファジーメンバーシップや複数根拠のファジー統合は未導入。同じ高さ・面積比の候補間の順序固定も保証なし。ただし同一平面クラスタが継続する間は配列順が変わっても候補IDを維持。
 
 ### 3.8 非平面付属部分と上方障害物
 
@@ -253,6 +255,10 @@ GNGエッジからクラスタ隣接集合を構築
 | `minimum_protrusion_distance` | `0.01 m` | 隣接平面距離の下限 |
 | `tcp_standoff` | `0 m` | 最高位置からの上方オフセット |
 | `maximum_candidates` | `20` | 出力件数上限 |
+| `candidate_confirm_updates` | `5` | 公開前の連続有効更新数 |
+| `candidate_missing_update_allowance` | `2` | 確定候補の短期欠測保持更新数 |
+| `candidate_position_ema_alpha`, `candidate_orientation_ema_alpha` | 各 `0.35` | TCP位置・姿勢の平滑化係数 |
+| `candidate_track_reset_dist` | `0.10 m` | 再確認へ戻すTCP位置差 |
 | `max_surface_tilt_deg` | `90 deg` | 上方向に対する平面傾斜角 |
 | `enable_nonplane_attachment` | `false` | 非平面付属部分の探索・包含判定 |
 | `nonplane_margin` | `0.03 m` | 平面OBB外側の付属探索余白 |
@@ -288,27 +294,30 @@ $$
 - 各領域は投影点の平均・2次元共分散・射影範囲を数回走査するだけで、反復最適化は不要。
 - クラスタ全対比較ではなく、既存GNGエッジを隣接関係として再利用。
 - 空間内の位置・姿勢の総当たり探索は不要。
-- 現在は更新ごとの再計算。変更クラスタだけを処理する差分更新や、候補の時間追跡は未実装。
+- 平面・OBB・障害物判定は更新ごとの再計算。候補公開層だけは平面クラスタIDで時系列追跡し、短期欠測保持と姿勢・位置平滑化を行う。
 - ROS受信・シリアライズ、前段GNG・クラスタ生成、Marker・Viewer描画のコストは上記推定器とは別。
 
 ## 6. ROS出力と起動
 
 | トピック | 型 | 内容 |
 | --- | --- | --- |
-| `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_idと候補ごとのid・pose・shape_score・state。入力グラフのheaderを継承 |
+| `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_id、平面クラスタID由来の候補id、pose、shape_score、state。入力グラフのheaderを継承 |
 | `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | 互換用の同順面積比。正規の値は候補内のshape_score |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/nodes` | `visualization_msgs/msg/MarkerArray` | 採用候補の平面ノード（水色）と非平面付属ノード（オレンジ） |
+| `/grasp_pose_cands/nodes` | `visualization_msgs/msg/MarkerArray` | 採用候補の平面・非平面付属ノード。候補の位置到達性で色分け |
 
 候補矢印の重複Marker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。候補評価座標系を維持し、空候補は旧表示を消去。
 
-対象ノードは別ソース`/grasp_pose_cands/nodes`をConnection StreamsでONにして表示。`candidate_nodes_topic`で出力先、`candidate_node_diameter`で球直径を指定（既定0.012 m）。候補ごとに`SPHERE_LIST`でまとめ、`grasp_plane`と`grasp_nonplane`のnamespaceで区別。Markerのidは同じ更新の候補idに対応し、ノード単体IDではない。到達性や把持成功の色分けではなく、採用部分の表示。
-ノード位置は候補計算に使った座標系のグラフから取得し、headerも同じ座標系。二重変換なし。毎回DELETEALLと現在のノードを一括配信し、空候補・TF取得失敗時はDELETEALLのみ。QoSはreliable/transient_local・depth 1で、遅延購読でも最新集合を取得。入力停止時の自動失効は従来どおりなし。
+対象ノードは別ソース`/grasp_pose_cands/nodes`をConnection StreamsでONにして表示。`candidate_nodes_topic`で出力先、`candidate_node_diameter`で球直径を指定（既定0.012 m）。候補ごとに`SPHERE_LIST`でまとめ、`grasp_plane`と`grasp_nonplane`のnamespaceで区別。Markerのidは平面クラスタID由来の候補idに対応し、ノード単体IDではない。
+色の判定には`/grasp_pose_cands`のstateを使用し、範囲内はHANDLE既定色の水色`#00d1ff`、範囲外・未評価は従来の候補色（線形RGB `[0.1, 0.85, 1.0]`）。平面・非平面とも所属候補の状態を適用。共通候補publisherの配信通知で色を更新し、入力グラフが停止中でも到達mapやTFによる状態変更を反映。状態のみの変更では保存したノード位置を再利用し、把持候補の再推定は不要。各ノード位置そのものの到達性ではなく、所属候補TCP位置の到達性であり、姿勢・衝突・把持成功の保証ではない。矢印側の配色は変更なし。
+ノード位置は候補計算に使った座標系のグラフから取得し、headerも同じ座標系。二重変換なし。ViewerがMarkerArrayを更新ごとの完全スナップショットとして扱うため、毎回DELETEALLと現在のノードを一括配信。確定候補の短期欠測中は直前スナップショットを再配信し、空候補・TF取得失敗時はDELETEALLのみ。QoSはreliable/transient_local・depth 1で、遅延購読でも最新集合を取得。入力停止時の自動失効は従来どおりなし。
 現在の`enable_nonplane_attachment=false`設定では非平面ノードは追加されず、平面ノードのみ表示。
 
-到達性は候補生成側の共通処理で評価。`state`は未評価=0（黄）、範囲内=1（緑）、範囲外=2（灰）。`reachability_map_topic`のTCP登録セルと最新TFを使用し、状態だけの変化では`update_id`と候補`id`を維持。新規候補集合は`update_id`を増加し、IDはその集合内でのみ有効。位置の到達範囲であり、姿勢到達性や把持成功の保証ではない。
+到達性は候補生成側の共通処理で評価。`state`は未評価=0（黄）、範囲内=1（緑）、範囲外=2（灰）。`reachability_map_topic`のTCP登録セルと候補観測時刻のTFを使用し、状態だけの変化では`update_id`と候補`id`を維持。上方把持方式の候補IDは同一平面クラスタの存続中に維持し、他方式のID規約は各候補生成器に従う。位置の到達範囲であり、姿勢到達性や把持成功の保証ではない。
 
-summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`に加え、`attached_node_num`、`attached_component_num`、`target_extent_x/y`。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
+TFの遅着対策として、`reachability_tf_timeout_sec`（既定0.05秒）を上限とする観測時刻の変換待機。TF受信は専用スレッドで継続。TFが既に揃った場合、同一座標系、空候補では待機不要。時間切れは未評価であり、過去の到達状態の流用や最新TFへの代替なし。時刻ゼロの入力だけは従来どおり最新TFを使用。既定の待機を無効化する場合は0を指定。
+
+summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`に加え、`attached_node_num`、`attached_component_num`、`target_extent_x/y`。`raw_candidate_count`は時系列確定前の生候補数、`candidate_count`は確定・短期欠測保持後の公開候補数。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
 
 `processing_ms` は `estimate()` の実行時間。publish、JSON整形、前段処理、通信、描画を含まない。
 
@@ -365,7 +374,7 @@ ROSノードは最新のグラフとクラスタを各1件保持する方式。�
 | GNGエッジの切断 | 隣接平面による棄却根拠が消失。孤立候補として通過する可能性 |
 | 側面や細い帯 | 側面は法線傾斜で除外。上向きの細い帯は専用の最小幅条件なし |
 | 凹形状や穴 | OBBは空隙も包含。矩形中心が実表面・接触可能位置に載る保証なし |
-| 円形・正方形に近い分布 | PCA軸が安定しにくく、yawの揺らぎが発生し得る |
+| 円形・正方形に近い分布 | PCA軸が安定しにくく、平滑化後も再確認・クラスタID切替時にyawが変化し得る |
 | サンプリング密度の変化 | ノード位置PCAの主軸や矩形中心・寸法に影響。密度不変ではない |
 | 高さ方向の外れ値 | 最大高さを使うためTCP位置に直接影響 |
 | 隣接しない障害物 | 簡易上方矩形柱内の観測ノードは棄却根拠。実ハンド基部や未観測部分の衝突は未評価 |

@@ -25,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -50,6 +51,17 @@ public:
     if (!std::isfinite(candidate_node_diameter_) || candidate_node_diameter_ <= 0.0) {
       throw std::invalid_argument("candidate_node_diameter must be finite and positive");
     }
+    candidate_confirm_updates_ = positiveSizeParameter("candidate_confirm_updates", 5);
+    candidate_missing_update_allowance_ = nonnegativeSizeParameter(
+      "candidate_missing_update_allowance", 2);
+    candidate_position_ema_alpha_ = unitIntervalParameter(
+      "candidate_position_ema_alpha", 0.35);
+    candidate_orientation_ema_alpha_ = unitIntervalParameter(
+      "candidate_orientation_ema_alpha", 0.35);
+    candidate_track_reset_dist_ = declare_parameter<double>("candidate_track_reset_dist", 0.10);
+    if (!std::isfinite(candidate_track_reset_dist_) || candidate_track_reset_dist_ <= 0.0) {
+      throw std::invalid_argument("candidate_track_reset_dist must be finite and positive");
+    }
     const std::string score_topic = declare_parameter<std::string>(
       "score_topic", "/grasp_pose_cand_scores");
     const std::string summary_topic = declare_parameter<std::string>(
@@ -63,9 +75,13 @@ public:
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this, true);
 
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
-    candidate_publisher_ = std::make_unique<candidate::grasp_candidate_publisher>(*this, candidate_topic);
     candidate_nodes_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       candidate_nodes_topic, output_qos);
+    candidate_publisher_ = std::make_unique<candidate::grasp_candidate_publisher>(
+      *this, candidate_topic,
+      [this](const gng_control_msgs::msg::GraspCandidateArray &poses) {
+        publish_candidate_node_states(poses);
+      });
     score_publisher_ = create_publisher<std_msgs::msg::Float32MultiArray>(
       score_topic, output_qos);
     summary_publisher_ = create_publisher<std_msgs::msg::String>(summary_topic, output_qos);
@@ -85,9 +101,10 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "Top-grasp surface estimator ready: map=%s planes=%s candidates=%s frame=%s tcp=%s",
+      "Top-grasp surface estimator ready: map=%s planes=%s candidates=%s frame=%s tcp=%s confirm=%zu hold=%zu",
       map_topic_.c_str(), clusters_topic_.c_str(), candidate_topic.c_str(),
-      candidate_frame_.empty() ? "input" : candidate_frame_.c_str(), tcp_frame_.c_str());
+      candidate_frame_.empty() ? "input" : candidate_frame_.c_str(), tcp_frame_.c_str(),
+      candidate_confirm_updates_, candidate_missing_update_allowance_);
   }
 
 private:
@@ -109,6 +126,7 @@ private:
     config.footprint_padding = declare_parameter<double>("footprint_padding", 0.005);
     config.tcp_standoff = declare_parameter<double>("tcp_standoff", 0.0);
     config.maximum_candidates = positiveSizeParameter("maximum_candidates", 20);
+    maximum_candidates_ = config.maximum_candidates;
     config.max_surface_tilt_deg = declare_parameter<double>("max_surface_tilt_deg", 25.0);
     config.enable_nonplane_attachment = declare_parameter<bool>("enable_nonplane_attachment", true);
     config.nonplane_margin = declare_parameter<double>("nonplane_margin", 0.03);
@@ -128,6 +146,24 @@ private:
       throw std::invalid_argument(name + " must be positive");
     }
     return static_cast<std::size_t>(value);
+  }
+
+  std::size_t nonnegativeSizeParameter(const std::string &name, int default_value)
+  {
+    const int value = declare_parameter<int>(name, default_value);
+    if (value < 0) {
+      throw std::invalid_argument(name + " must not be negative");
+    }
+    return static_cast<std::size_t>(value);
+  }
+
+  double unitIntervalParameter(const std::string &name, double default_value)
+  {
+    const double value = declare_parameter<double>(name, default_value);
+    if (!std::isfinite(value) || value <= 0.0 || value > 1.0) {
+      throw std::invalid_argument(name + " must be within (0, 1]");
+    }
+    return value;
   }
 
   void processMatchedFrame()
@@ -151,22 +187,30 @@ private:
     }
 
     const auto started = std::chrono::steady_clock::now();
-    const auto result = estimator_.estimate(candidate_map, candidate_clusters);
+    const auto raw_result = estimator_.estimate(candidate_map, candidate_clusters);
     const double processing_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - started).count();
     last_processed_frame_ = map_->frame_number;
     last_processed_stamp_ = stampNanoseconds(map_->header.stamp);
-    publishCandidates(result, candidate_map.header);
-    publish_candidate_nodes(result, candidate_map);
-    publishSummary(result, processing_ms);
+    const auto stable_candidates = updateCandidateTracks(raw_result, candidate_map);
+    auto output_result = raw_result;
+    output_result.candidates.clear();
+    output_result.candidates.reserve(stable_candidates.size());
+    for (const auto &candidate : stable_candidates) {
+      output_result.candidates.push_back(candidate.surface);
+    }
+    prepare_candidate_nodes(stable_candidates, candidate_map.header);
+    publishCandidates(stable_candidates, candidate_map.header);
+    publishSummary(output_result, processing_ms, raw_result.candidates.size());
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 2000,
-      "Top grasp: regions=%zu adjacent=%zu accepted=%zu small=%zu invalid=%zu oversize=%zu low_protrusion=%zu tilt=%zu attached_oversize=%zu approach_obstacle=%zu calc=%.2fms",
-      result.region_count, result.adjacent_region_pair_count, result.candidates.size(),
-      result.rejected_small_region, result.rejected_invalid_region,
-      result.rejected_oversize_region, result.rejected_low_protrusion_region,
-      result.rejected_surface_tilt, result.rejected_attached_oversize,
-      result.rejected_approach_obstacle,
+      "Top grasp: regions=%zu adjacent=%zu raw=%zu stable=%zu small=%zu invalid=%zu oversize=%zu low_protrusion=%zu tilt=%zu attached_oversize=%zu approach_obstacle=%zu calc=%.2fms",
+      raw_result.region_count, raw_result.adjacent_region_pair_count,
+      raw_result.candidates.size(), output_result.candidates.size(),
+      raw_result.rejected_small_region, raw_result.rejected_invalid_region,
+      raw_result.rejected_oversize_region, raw_result.rejected_low_protrusion_region,
+      raw_result.rejected_surface_tilt, raw_result.rejected_attached_oversize,
+      raw_result.rejected_approach_obstacle,
       processing_ms);
   }
 
@@ -266,19 +310,172 @@ private:
     return true;
   }
 
+  struct CandidateSnapshot
+  {
+    std::uint32_t id = 0U;
+    candidate::TopGraspSurfaceCandidate surface;
+    std::vector<geometry_msgs::msg::Point> plane_points;
+    std::vector<geometry_msgs::msg::Point> attached_points;
+  };
+
+  struct CandidateTrack
+  {
+    CandidateSnapshot snapshot;
+    std::size_t valid_update_num = 0U;
+    std::size_t missing_update_num = 0U;
+    bool is_observed = false;
+    bool is_confirmed = false;
+  };
+
+  static std::vector<geometry_msgs::msg::Point> snapshotPoints(
+    const ais_gng_msgs::msg::TopologicalMap &map,
+    const std::vector<std::uint32_t> &node_indices)
+  {
+    std::vector<geometry_msgs::msg::Point> points;
+    points.reserve(node_indices.size());
+    for (const auto node_idx : node_indices) {
+      if (node_idx >= map.nodes.size()) {
+        continue;
+      }
+      const auto &source = map.nodes[node_idx].pos;
+      if (!std::isfinite(source.x) || !std::isfinite(source.y) || !std::isfinite(source.z)) {
+        continue;
+      }
+      geometry_msgs::msg::Point point;
+      point.x = source.x;
+      point.y = source.y;
+      point.z = source.z;
+      points.push_back(point);
+    }
+    return points;
+  }
+
+  static Eigen::Quaterniond alignGripperYaw(
+    const Eigen::Quaterniond &reference, Eigen::Quaterniond observed)
+  {
+    const Eigen::Quaterniond yaw_reversed = observed * Eigen::AngleAxisd(
+      std::acos(-1.0), Eigen::Vector3d::UnitZ());
+    if (std::abs(reference.dot(yaw_reversed)) > std::abs(reference.dot(observed))) {
+      observed = yaw_reversed;
+    }
+    if (reference.dot(observed) < 0.0) {
+      observed.coeffs() *= -1.0;
+    }
+    return observed;
+  }
+
+  CandidateSnapshot makeCandidateSnapshot(
+    const candidate::TopGraspSurfaceCandidate &surface,
+    const ais_gng_msgs::msg::TopologicalMap &map) const
+  {
+    CandidateSnapshot snapshot;
+    snapshot.id = surface.cluster_id;
+    snapshot.surface = surface;
+    snapshot.plane_points = snapshotPoints(map, surface.node_indices);
+    snapshot.attached_points = snapshotPoints(map, surface.attached_node_indices);
+    return snapshot;
+  }
+
+  void updateTrackSnapshot(CandidateTrack &track, CandidateSnapshot observed)
+  {
+    const auto &previous = track.snapshot.surface;
+    const double position_dist = (
+      observed.surface.tcp_position - previous.tcp_position).norm();
+    if (!std::isfinite(position_dist) || position_dist > candidate_track_reset_dist_) {
+      track.snapshot = std::move(observed);
+      track.valid_update_num = 1U;
+      track.missing_update_num = 0U;
+      track.is_confirmed = false;
+      return;
+    }
+    observed.surface.tcp_position = previous.tcp_position *
+      (1.0 - candidate_position_ema_alpha_) + observed.surface.tcp_position *
+      candidate_position_ema_alpha_;
+    const Eigen::Quaterniond aligned = alignGripperYaw(
+      previous.tcp_orientation, observed.surface.tcp_orientation);
+    observed.surface.tcp_orientation = previous.tcp_orientation.slerp(
+      candidate_orientation_ema_alpha_, aligned).normalized();
+    track.snapshot = std::move(observed);
+    ++track.valid_update_num;
+    track.missing_update_num = 0U;
+  }
+
+  std::vector<CandidateSnapshot> updateCandidateTracks(
+    const candidate::TopGraspSurfaceResult &raw_result,
+    const ais_gng_msgs::msg::TopologicalMap &map)
+  {
+    if (candidate_track_frame_id_ != map.header.frame_id) {
+      candidate_tracks_.clear();
+      candidate_track_frame_id_ = map.header.frame_id;
+    }
+    for (auto &[id, track] : candidate_tracks_) {
+      (void)id;
+      track.is_observed = false;
+    }
+    for (const auto &surface : raw_result.candidates) {
+      const auto id = surface.cluster_id;
+      const auto observed = makeCandidateSnapshot(surface, map);
+      const auto [it, is_inserted] = candidate_tracks_.try_emplace(id);
+      auto &track = it->second;
+      if (is_inserted) {
+        track.snapshot = observed;
+        track.valid_update_num = 1U;
+      } else {
+        updateTrackSnapshot(track, observed);
+      }
+      track.is_observed = true;
+      if (track.valid_update_num >= candidate_confirm_updates_) {
+        track.is_confirmed = true;
+      }
+    }
+
+    std::vector<CandidateSnapshot> output;
+    output.reserve(candidate_tracks_.size());
+    for (auto it = candidate_tracks_.begin(); it != candidate_tracks_.end();) {
+      auto &track = it->second;
+      if (!track.is_observed) {
+        ++track.missing_update_num;
+        if (!track.is_confirmed) {
+          track.valid_update_num = 0U;
+        }
+      }
+      if (track.missing_update_num > candidate_missing_update_allowance_) {
+        it = candidate_tracks_.erase(it);
+        continue;
+      }
+      if (track.is_confirmed) {
+        output.push_back(track.snapshot);
+      }
+      ++it;
+    }
+    std::sort(
+      output.begin(), output.end(),
+      [](const CandidateSnapshot &first, const CandidateSnapshot &second) {
+        if (first.surface.surface_height != second.surface.surface_height) {
+          return first.surface.surface_height > second.surface.surface_height;
+        }
+        return first.surface.footprint_fill_ratio > second.surface.footprint_fill_ratio;
+      });
+    if (output.size() > maximum_candidates_) {
+      output.resize(maximum_candidates_);
+    }
+    return output;
+  }
+
   void publishCandidates(
-    const candidate::TopGraspSurfaceResult &result,
+    const std::vector<CandidateSnapshot> &candidates,
     const std_msgs::msg::Header &header)
   {
     gng_control_msgs::msg::GraspCandidateArray poses;
     poses.header = header;
     poses.tcp_frame = tcp_frame_;
-    poses.candidates.reserve(result.candidates.size());
+    poses.candidates.reserve(candidates.size());
     std_msgs::msg::Float32MultiArray scores;
-    scores.data.reserve(result.candidates.size());
-    for (const auto &surface : result.candidates) {
+    scores.data.reserve(candidates.size());
+    for (const auto &candidate : candidates) {
+      const auto &surface = candidate.surface;
       gng_control_msgs::msg::GraspCandidate entry;
-      entry.id = poses.candidates.size();
+      entry.id = candidate.id;
       entry.shape_score = static_cast<float>(surface.footprint_fill_ratio);
       auto &pose = entry.pose;
       pose.position.x = surface.tcp_position.x();
@@ -295,59 +492,72 @@ private:
     score_publisher_->publish(std::move(scores));
   }
 
-  void publish_candidate_nodes(
-    const candidate::TopGraspSurfaceResult &result,
-    const ais_gng_msgs::msg::TopologicalMap &candidate_map)
+  void prepare_candidate_nodes(
+    const std::vector<CandidateSnapshot> &candidates,
+    const std_msgs::msg::Header &header)
   {
     using marker_msg = visualization_msgs::msg::Marker;
     visualization_msgs::msg::MarkerArray markers;
-    markers.markers.reserve(1U + 2U * result.candidates.size());
+    markers.markers.reserve(1U + 2U * candidates.size());
     marker_msg clear;
-    clear.header = candidate_map.header;
+    clear.header = header;
     clear.action = marker_msg::DELETEALL;
     markers.markers.push_back(std::move(clear));
     // 毎回の全置換により、候補減少・空配信・遅延購読時の旧ノード残留を防止
-    for (std::size_t candidate_idx = 0; candidate_idx < result.candidates.size(); ++candidate_idx) {
-      const auto &surface = result.candidates[candidate_idx];
+    for (const auto &candidate : candidates) {
       for (const bool is_nonplane : {false, true}) {
-        const auto &node_indices = is_nonplane ? surface.attached_node_indices : surface.node_indices;
+        const auto &points = is_nonplane ? candidate.attached_points : candidate.plane_points;
         marker_msg marker;
-        marker.header = candidate_map.header;
+        marker.header = header;
         marker.ns = is_nonplane ? "grasp_nonplane" : "grasp_plane";
-        marker.id = static_cast<std::int32_t>(candidate_idx);
+        marker.id = static_cast<std::int32_t>(candidate.id);
         marker.type = marker_msg::SPHERE_LIST;
         marker.action = marker_msg::ADD;
         marker.pose.orientation.w = 1.0;
         marker.scale.x = marker.scale.y = marker.scale.z = candidate_node_diameter_;
-        marker.color.r = is_nonplane ? 1.0F : 0.1F;
-        marker.color.g = is_nonplane ? 0.55F : 0.85F;
-        marker.color.b = is_nonplane ? 0.1F : 1.0F;
-        marker.color.a = 1.0F;
-        marker.points.reserve(node_indices.size());
-        for (const auto node_idx : node_indices) {
-          if (node_idx >= candidate_map.nodes.size()) {
-            continue;
-          }
-          const auto &pos = candidate_map.nodes[node_idx].pos;
-          if (!std::isfinite(pos.x) || !std::isfinite(pos.y) || !std::isfinite(pos.z)) {
-            continue;
-          }
-          geometry_msgs::msg::Point point;
-          point.x = pos.x;
-          point.y = pos.y;
-          point.z = pos.z;
-          marker.points.push_back(point);
-        }
+        marker.points = points;
         if (!marker.points.empty()) {
           markers.markers.push_back(std::move(marker));
         }
       }
     }
-    candidate_nodes_publisher_->publish(std::move(markers));
+    candidate_node_markers_ = std::move(markers);
+  }
+
+  void publish_candidate_node_states(const gng_control_msgs::msg::GraspCandidateArray &poses)
+  {
+    using candidate_msg = gng_control_msgs::msg::GraspCandidate;
+    using marker_msg = visualization_msgs::msg::Marker;
+    if (poses.candidates.empty()) {
+      candidate_node_markers_.markers.resize(1);
+      auto &clear = candidate_node_markers_.markers.front();
+      clear = marker_msg();
+      clear.header = poses.header;
+      clear.action = marker_msg::DELETEALL;
+    }
+    std::unordered_map<std::uint32_t, std::uint8_t> state_by_id;
+    for (const auto &entry : poses.candidates) {
+      state_by_id.emplace(entry.id, entry.state);
+    }
+    // 採用ノード位置は再抽出せず、候補IDに対応する到達性状態だけを更新
+    for (auto &marker : candidate_node_markers_.markers) {
+      if (marker.action != marker_msg::ADD) continue;
+      const auto it = state_by_id.find(static_cast<std::uint32_t>(marker.id));
+      const auto state = it == state_by_id.end() ? candidate_msg::UNKNOWN : it->second;
+      const bool is_inside = state == candidate_msg::INSIDE;
+      // ViewerのHANDLE既定色#00d1ffに対応する線形RGB。未評価・範囲外は従来の候補色
+      marker.color.r = is_inside ? 0.0F : 0.1F;
+      marker.color.g = is_inside ? 0.6375969F : 0.85F;
+      marker.color.b = 1.0F;
+      marker.color.a = 1.0F;
+    }
+    candidate_nodes_publisher_->publish(candidate_node_markers_);
   }
 
   void publishTfUnavailable()
   {
+    candidate_tracks_.clear();
+    candidate_track_frame_id_.clear();
     gng_control_msgs::msg::GraspCandidateArray poses;
     poses.header = map_->header;
     poses.header.frame_id = outputFrame();
@@ -355,9 +565,6 @@ private:
     candidate_publisher_->publish(std::move(poses));
     std_msgs::msg::Float32MultiArray scores;
     score_publisher_->publish(std::move(scores));
-    auto marker_map = *map_;
-    marker_map.header.frame_id = outputFrame();
-    publish_candidate_nodes({}, marker_map);
 
     std_msgs::msg::String summary;
     std::ostringstream stream;
@@ -372,7 +579,8 @@ private:
   }
 
   void publishSummary(
-    const candidate::TopGraspSurfaceResult &result, double processing_ms)
+    const candidate::TopGraspSurfaceResult &result, double processing_ms,
+    std::size_t raw_candidate_count)
   {
     std_msgs::msg::String message;
     std::ostringstream stream;
@@ -382,6 +590,7 @@ private:
            << ",\"tcp_frame\":\"" << tcp_frame_ << '\"'
            << ",\"region_count\":" << result.region_count
            << ",\"adjacent_region_pair_count\":" << result.adjacent_region_pair_count
+           << ",\"raw_candidate_count\":" << raw_candidate_count
            << ",\"candidate_count\":" << result.candidates.size()
            << ",\"rejected_small_region\":" << result.rejected_small_region
            << ",\"rejected_invalid_region\":" << result.rejected_invalid_region
@@ -439,6 +648,14 @@ private:
   std::string clusters_topic_;
   std::string candidate_frame_;
   std::string tcp_frame_;
+  std::size_t maximum_candidates_ = 20U;
+  std::size_t candidate_confirm_updates_ = 5U;
+  std::size_t candidate_missing_update_allowance_ = 2U;
+  double candidate_position_ema_alpha_ = 0.35;
+  double candidate_orientation_ema_alpha_ = 0.35;
+  double candidate_track_reset_dist_ = 0.10;
+  std::string candidate_track_frame_id_;
+  std::unordered_map<std::uint32_t, CandidateTrack> candidate_tracks_;
   std::uint32_t last_processed_frame_ = std::numeric_limits<std::uint32_t>::max();
   std::int64_t last_processed_stamp_ = std::numeric_limits<std::int64_t>::min();
   ais_gng_msgs::msg::TopologicalMap::SharedPtr map_;
@@ -448,6 +665,7 @@ private:
   std::unique_ptr<candidate::grasp_candidate_publisher> candidate_publisher_;
   double candidate_node_diameter_ = 0.012;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr candidate_nodes_publisher_;
+  visualization_msgs::msg::MarkerArray candidate_node_markers_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;

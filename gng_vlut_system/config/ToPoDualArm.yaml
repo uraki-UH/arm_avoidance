@@ -232,6 +232,15 @@
     candidate_nodes_topic: "/grasp_pose_cands/nodes"
     # 採用ノードの表示直径 [m]
     candidate_node_diameter: 0.012
+    # 同一平面クラスタ候補の公開前連続有効更新数
+    candidate_confirm_updates: 5
+    # 確定候補の短期欠測保持更新数
+    candidate_missing_update_allowance: 2
+    # TCP位置・姿勢の指数移動平均係数
+    candidate_position_ema_alpha: 0.35
+    candidate_orientation_ema_alpha: 0.35
+    # 同一候補トラックを再確認扱いへ戻すTCP位置差 [m]
+    candidate_track_reset_dist: 0.10
     score_topic: "/grasp_pose_cand_scores"
     reachability_map_topic: "/ToPoDualArm/topological_map_static"
     reachability_voxel_size: 0.05

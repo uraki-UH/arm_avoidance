@@ -11,6 +11,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -28,21 +29,27 @@ class grasp_candidate_publisher
   using cell = std::array<double, 3>;
 
 public:
-  grasp_candidate_publisher(rclcpp::Node &node, const std::string &topic)
-  : node_(node), tf_buffer_(node.get_clock()), tf_listener_(tf_buffer_, &node, true)
+  grasp_candidate_publisher(
+    rclcpp::Node &node, const std::string &topic,
+    std::function<void(const array_msg &)> on_publish = {})
+  : node_(node), tf_buffer_(node.get_clock()), tf_listener_(tf_buffer_, &node, true),
+    on_publish_(std::move(on_publish))
   {
     const auto map_topic = node.declare_parameter<std::string>("reachability_map_topic", "");
     latest_.voxel_size = node.declare_parameter<double>("reachability_voxel_size", 0.05);
     const auto origin = node.declare_parameter<std::vector<double>>(
       "reachability_voxel_origin", {0.0, 0.0, 0.0});
     const double publish_hz = node.declare_parameter<double>("reachability_publish_hz", 5.0);
+    const double tf_timeout_sec = node.declare_parameter<double>("reachability_tf_timeout_sec", 0.05);
     if (!std::isfinite(latest_.voxel_size) || latest_.voxel_size <= 0.0 ||
       origin.size() != 3 || !std::all_of(origin.begin(), origin.end(),
       [](double value) { return std::isfinite(value); }) ||
-      !std::isfinite(publish_hz) || publish_hz <= 0.0)
+      !std::isfinite(publish_hz) || publish_hz <= 0.0 ||
+      !std::isfinite(tf_timeout_sec) || tf_timeout_sec < 0.0)
     {
-      throw std::invalid_argument("到達セルの寸法・原点・更新周期が不正です");
+      throw std::invalid_argument("到達セルの寸法・原点・更新周期・TF待機時間が不正です");
     }
+    tf_timeout_ = rclcpp::Duration::from_seconds(tf_timeout_sec);
     latest_.voxel_origin.x = origin[0];
     latest_.voxel_origin.y = origin[1];
     latest_.voxel_origin.z = origin[2];
@@ -95,17 +102,19 @@ private:
     geometry_msgs::msg::TransformStamped transform;
     bool has_transform = !map_frame_.empty() && !latest_.header.frame_id.empty();
     const bool is_same_frame = map_frame_ == latest_.header.frame_id;
-    if (has_transform && !is_same_frame) {
+    if (has_transform && !is_same_frame && !latest_.candidates.empty()) {
       try {
         const auto candidate_time = rclcpp::Time(latest_.header.stamp);
         if (candidate_time.nanoseconds() == 0) {
           transform = tf_buffer_.lookupTransform(
             map_frame_, latest_.header.frame_id, tf2::TimePointZero);
         } else {
+          // 専用TF受信スレッドによる観測時刻の変換待機。最新TFへの代替なし
           transform = tf_buffer_.lookupTransform(
-            map_frame_, latest_.header.frame_id, candidate_time);
+            map_frame_, latest_.header.frame_id, candidate_time, tf_timeout_);
         }
-      } catch (const tf2::TransformException &) {
+      } catch (const tf2::TransformException &error) {
+        RCLCPP_DEBUG(node_.get_logger(), "Reachability TF unavailable: %s", error.what());
         has_transform = false;
       }
     }
@@ -125,17 +134,21 @@ private:
     latest_.evaluation_header.frame_id = map_frame_;
     latest_.evaluation_header.stamp = node_.now();
     publisher_->publish(latest_);
+    // 状態のみの更新も含めた、同一候補集合に対する表示側への通知
+    if (on_publish_) on_publish_(latest_);
   }
 
   rclcpp::Node &node_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
+  rclcpp::Duration tf_timeout_{0, 0};
   array_msg latest_;
   std::string map_frame_;
   std::set<cell> cells_;
   rclcpp::Publisher<array_msg>::SharedPtr publisher_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  std::function<void(const array_msg &)> on_publish_;
 };
 
 }  // grasping_system::candidate 名前空間
