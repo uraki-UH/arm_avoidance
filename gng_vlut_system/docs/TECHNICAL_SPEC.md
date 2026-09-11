@@ -579,9 +579,14 @@ transient localでpublishする。
 | 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 候補TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
-| 上面把持TCP Pose群 | `/top_grasp_pose_cands` | `geometry_msgs/PoseArray` |
-| 上面把持面積スコア | `/top_grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
-| 上面把持判定内訳 | `/top_grasp_pose_cands/summary` | `std_msgs/String` |
+| 上面把持TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
+| 上面把持面積スコア | `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
+| 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
+
+上面把持とボクセル照合の既定出力を共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
+共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
+自動排他・候補統合は対象外。候補生成launchからの重複Marker配信はなし。
+可視化は到達性評価側の`/grasp_pose_cands/reachability_markers`を利用。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

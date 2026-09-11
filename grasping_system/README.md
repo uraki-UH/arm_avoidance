@@ -218,7 +218,11 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 
 Pass `start_plane_cluster:=false` when no plane-cluster marker process is needed.
 
-- Candidates: `/top_grasp_pose_cands`
-- Footprint fill ratios: `/top_grasp_pose_cand_scores`
-- Selection summary: `/top_grasp_pose_cands/summary`
-- Markers: `/top_grasp_pose_markers`
+- 候補Pose: `/grasp_pose_cands`
+- 把持面に対するOBB面積比: `/grasp_pose_cand_scores`
+- 判定概要: `/grasp_pose_cands/summary`
+- 到達性評価付きの可視化: `/grasp_pose_cands/reachability_markers`（`grasp_goal_planning.launch.py`側）
+
+上方方式・ボクセル方式の候補生成launchからの姿勢Marker自動配信はなし。候補だけの起動ではPoseArrayの出力のみで、矢印表示には別途可視化側の起動が必要。
+
+`grasp_goal_planning.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。

@@ -582,10 +582,12 @@ void SelfRecognitionVizNode::updateAndPublish() {
         mask_msg->data.assign(vids.begin(), vids.end());
         mask_pub_->publish(*mask_msg);
 
-        // 毎フレームログ出力（学習検討用）
-        RCLCPP_INFO(get_logger(), "Voxel Gen [%s]: Total %.2f ms | Vids: %zu (Pre: %zu)", 
-                    target_frame.c_str(), recognition_manager_->getLastCalcTimeMs(), 
-                    vids.size(), recognition_manager_->getLastPreUniqueCount());
+        // デバッグ時のフレーム処理計測値
+        RCLCPP_DEBUG_THROTTLE(
+            get_logger(), *get_clock(), 5000,
+            "Voxel Gen [%s]: Total %.2f ms | Vids: %zu (Pre: %zu)",
+            target_frame.c_str(), recognition_manager_->getLastCalcTimeMs(),
+            vids.size(), recognition_manager_->getLastPreUniqueCount());
 
     } catch (const std::exception & e) {
         RCLCPP_ERROR(this->get_logger(), "Error in updateAndPublish: %s", e.what());

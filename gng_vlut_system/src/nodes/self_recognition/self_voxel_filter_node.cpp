@@ -146,11 +146,6 @@ private:
       mask_snapshot_ = std::move(snapshot);
     }
 
-    RCLCPP_INFO_THROTTLE(
-        get_logger(), *get_clock(), 2000,
-        "自己ボクセルマスク更新: source=%zu exclusion=%zu frame=%s voxel_size=%.6g",
-        msg->data.size(), excluded.size(), msg->header.frame_id.c_str(),
-        static_cast<double>(msg->voxel_size));
   }
 
   void environmentVoxelCallback(const voxel_msgs::msg::Voxel::SharedPtr msg) {

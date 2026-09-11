@@ -52,15 +52,17 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
 `ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
 
-```bash
 ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
 
-- 候補Pose: `/top_grasp_pose_cands`
-- 候補スコア: `/top_grasp_pose_cand_scores`
-- 判定概要: `/top_grasp_pose_cands/summary`
-- 可視化Marker: `/top_grasp_pose_markers`
+- 候補Pose: `/grasp_pose_cands`
+- 候補スコア: `/grasp_pose_cand_scores`
+- 判定概要: `/grasp_pose_cands/summary`
+- 到達性評価付きの可視化: `/grasp_pose_cands/reachability_markers`（`grasp_goal_planning.launch.py`側）
+
+候補生成launchからの重複Marker配信はなし。候補生成だけを起動した場合、PoseArrayは出力するが可視化矢印は出力しない。
+
+`grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
 ## HTML全点群からCPU GNGテンプレートを保存
 
@@ -158,6 +160,9 @@ ros2 run gng_vlut_system self_recognition_filter_node
 # URDF準拠のダミー関節状態
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
+
+  ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+  urdf_path:=/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
 
 ## realsenseのrosbag + 点群座標変換
 # ターミナル1: raw点群を /camera/camera/depth/color/points_raw へ　リマップして再生

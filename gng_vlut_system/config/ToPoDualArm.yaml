@@ -224,9 +224,9 @@
   ros__parameters:
     topological_map_topic: "/topological_map"
     plane_clusters_topic: "/plane_clusters"
-    candidate_topic: "/top_grasp_pose_cands"
-    score_topic: "/top_grasp_pose_cand_scores"
-    summary_topic: "/top_grasp_pose_cands/summary"
+    candidate_topic: "/grasp_pose_cands"
+    score_topic: "/grasp_pose_cand_scores"
+    summary_topic: "/grasp_pose_cands/summary"
     # 各平面クラスタをXY投影OBBと隣接平面からの突出距離で判定する。
     up_axis: [0.0, 0.0, 1.0]
     minimum_protrusion_distance: 0.01
@@ -238,8 +238,3 @@
     footprint_padding: 0.003
     tcp_standoff: 0.0
     maximum_candidates: 20
-
-/grasp_pose_marker_bridge_node:
-  ros__parameters:
-    input_topic: "/grasp_pose_cands"
-    output_topic: "/grasp_pose_markers"

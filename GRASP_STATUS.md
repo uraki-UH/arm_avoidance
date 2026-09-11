@@ -34,13 +34,15 @@
 | ハンド形状の表現 | 最大把持領域、最小把持領域、基部・開閉時の禁止領域のグラフ生成 | 指の内側と干渉領域の区別 |
 | ボクセルによる候補生成 | 対象占有、両側の接触候補、最小領域外の支持、禁止領域占有の照合 | 形状とハンドの関係に基づく候補比較 |
 | 候補の根拠出力 | 候補数、棄却理由、サイズ、占有率、接触法線の整合など | 「なぜ候補になったか」の表示 |
-| 可視化 | GNG、平面領域、ハンド領域、候補姿勢のMarker出力とViewer表示経路 | 画面収録による処理段階の比較 |
+| 可視化 | GNG、平面領域、ハンド領域と、到達性評価側の候補MarkerのViewer表示経路 | 画面収録による処理段階の比較 |
 
 いずれも「実装が存在する」の意味であり、任意物体への頑健性や実機把持成功の保証ではない。
 
 ## 3. 把持位置推定
 
 ### 平面クラスタ方式: 今回の主デモ候補
+
+アルゴリズム・数式・設定・制約の詳細は、[局所平面クラスタを利用した上方把持候補推定](grasping_system/docs/top_grasp_surface_estimation.md)を参照。
 
 1. 各平面クラスタの所属ノードを、上方向に直交する平面へ投影。
 2. 主軸に沿った外接矩形（OBB）から、幅・奥行きと向きを算出。
@@ -70,7 +72,7 @@
 | `footprint_fill_ratio` | 使用可能な把持面積に対するOBB面積比 | 点群の充填率や把持成功確率ではない |
 | 最大・最小把持領域との照合 | 観測形状に対するハンド適合の幾何評価 | 物体全体の実寸復元とは異なる |
 
-- 上記の局所寸法は `/top_grasp_pose_cands/summary` の採用候補ごとに出力。
+- 上記の局所寸法は `/grasp_pose_cands/summary` の採用候補ごとに出力。
 - 別系統の計画用評価メッセージにある `gripper_width` と `grasp_region_score` は、現在の生成処理ではNaN。完成済みの開口幅推定として紹介しない。
 - 欠損による過小評価、ノード密度・平面分割による寸法変動、既知寸法に対する誤差は、撮影前に確認したい項目。
 - テンプレート照合による未観測部分の補完や、物体全体のサイズ推定精度は、本資料では検証済み成果に含めない。
@@ -111,14 +113,14 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-主な確認トピックは `/topological_map`、`/plane_clusters`、`/top_grasp_pose_cands`、`/top_grasp_pose_markers`。サイズ・棄却理由の確認:
+主な確認トピックは `/topological_map`、`/plane_clusters`、`/grasp_pose_cands`。候補の可視化は `grasp_goal_planning.launch.py` 側の `/grasp_pose_cands/reachability_markers` を利用し、候補生成側からの重複Marker配信はなし。上方方式とボクセル方式の候補生成は同じ出力先のため、どちらか一方だけ起動。サイズ・棄却理由の確認:
 
 ```bash
-ros2 topic echo /top_grasp_pose_cands/summary \
+ros2 topic echo /grasp_pose_cands/summary \
   --qos-durability transient_local --once
 ```
 
-この2つのlaunchは軌道生成用launchを必要としない。撮影終了時は自分で起動したノードを各端末のCtrl+Cで停止。
+この2つのlaunchは候補計算に軌道生成用launchを必要としないが、単独では候補の矢印表示を出力しない。到達性評価付き表示を使う場合は `grasp_goal_planning.launch.py enable_motion:=false` を別途起動。この場合、動作指令は無効でも経路計算は有効。撮影終了時は自分で起動したノードを各端末のCtrl+Cで停止。
 
 ## 7. スライドの骨子と未検証事項
 

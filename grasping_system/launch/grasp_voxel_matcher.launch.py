@@ -20,13 +20,6 @@ def _launch_matcher(context):
             output="screen",
             parameters=parameters,
         ),
-        Node(
-            package="gng_vlut_system",
-            executable="grasp_pose_marker_bridge_node",
-            name="grasp_pose_marker_bridge_node",
-            output="screen",
-            parameters=parameters,
-        ),
     ]
 
 

@@ -34,11 +34,11 @@ public:
     clusters_topic_ = declare_parameter<std::string>(
       "planar_clusters_topic", "/topological_planar_clusters_incremental");
     const std::string candidate_topic = declare_parameter<std::string>(
-      "candidate_topic", "/top_grasp_pose_cands");
+      "candidate_topic", "/grasp_pose_cands");
     const std::string score_topic = declare_parameter<std::string>(
-      "score_topic", "/top_grasp_pose_cand_scores");
+      "score_topic", "/grasp_pose_cand_scores");
     const std::string summary_topic = declare_parameter<std::string>(
-      "summary_topic", "/top_grasp_pose_cands/summary");
+      "summary_topic", "/grasp_pose_cands/summary");
 
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
     candidate_publisher_ = create_publisher<geometry_msgs::msg::PoseArray>(

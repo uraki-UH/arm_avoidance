@@ -39,16 +39,13 @@ def generate_launch_description():
                 default_value=LaunchConfiguration("planar_clusters_topic"),
             ),
             DeclareLaunchArgument(
-                "candidate_topic", default_value="/top_grasp_pose_cands"
+                "candidate_topic", default_value="/grasp_pose_cands"
             ),
             DeclareLaunchArgument(
-                "score_topic", default_value="/top_grasp_pose_cand_scores"
+                "score_topic", default_value="/grasp_pose_cand_scores"
             ),
             DeclareLaunchArgument(
-                "summary_topic", default_value="/top_grasp_pose_cands/summary"
-            ),
-            DeclareLaunchArgument(
-                "marker_topic", default_value="/top_grasp_pose_markers"
+                "summary_topic", default_value="/grasp_pose_cands/summary"
             ),
             Node(
                 package="ais_gng",
@@ -85,23 +82,6 @@ def generate_launch_description():
                         "score_topic": LaunchConfiguration("score_topic"),
                         "summary_topic": LaunchConfiguration("summary_topic"),
                     },
-                ],
-            ),
-            Node(
-                package="gng_vlut_system",
-                executable="grasp_pose_marker_bridge_node",
-                name="top_grasp_pose_marker_bridge",
-                output="screen",
-                parameters=[
-                    {
-                        "input_topic": LaunchConfiguration("candidate_topic"),
-                        "score_topic": LaunchConfiguration("score_topic"),
-                        "output_topic": LaunchConfiguration("marker_topic"),
-                        "marker_namespace": "top_grasp_pose",
-                        # Top-grasp poses define local +Z as the downward approach axis.
-                        "primary_axis_idx": 2,
-                        "primary_axis_sign": 1.0,
-                    }
                 ],
             ),
         ]
