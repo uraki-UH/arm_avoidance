@@ -65,7 +65,6 @@ class AiSGNGComponent : public rclcpp::Node {
     std::unique_ptr<topological_plane::incremental::Clusterizer> direct_plane_clusterizer_;
     rclcpp::Publisher<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr direct_plane_cluster_pub_;
     bool direct_nonplane_component_enabled_{false};
-    topological_plane::nonplane::extractor_options direct_nonplane_component_options_;
     rclcpp::Publisher<std_msgs::msg::UInt32MultiArray>::SharedPtr direct_nonplane_component_pub_;
     node_support::options node_support_options_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_support_pub_;

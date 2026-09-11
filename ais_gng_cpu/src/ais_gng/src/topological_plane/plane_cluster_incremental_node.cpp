@@ -353,7 +353,7 @@ std_msgs::msg::ColorRGBA surfaceComponentColor(const std::uint32_t component_id)
   return color;
 }
 
-// 非平面連結成分を曲面候補として描く。内部edgeと平面クラスタへの接続edgeを分ける。
+// 非平面連結成分の表示。内部edgeと平面接続edgeの区別、表示対象数と全成分保持の分離。
 visualization_msgs::msg::MarkerArray makeSurfaceComponentMarkers(
   const ais_gng_msgs::msg::PlaneClusterArray &clusters,
   const ais_gng_msgs::msg::TopologicalMap &map,
@@ -362,9 +362,10 @@ visualization_msgs::msg::MarkerArray makeSurfaceComponentMarkers(
 {
   visualization_msgs::msg::MarkerArray markers;
   const auto result = fuzzrobo::topological_plane::nonplane::extract_components(
-    map, clusters, {min_component_nodes});
+    map, clusters);
   std::set<std::uint32_t> current_ids;
   for (const auto &component : result.components) {
+    if (component.node_indices.size() < min_component_nodes) continue;
     current_ids.insert(component.id);
   }
   for (const std::uint32_t id : published_ids) {
@@ -397,6 +398,7 @@ visualization_msgs::msg::MarkerArray makeSurfaceComponentMarkers(
 
   for (std::size_t component_index = 0; component_index < result.components.size(); ++component_index) {
     const auto &component = result.components[component_index];
+    if (component.node_indices.size() < min_component_nodes) continue;
     const auto marker_id = static_cast<std::int32_t>(component.id);
     const auto color = surfaceComponentColor(component.id);
 

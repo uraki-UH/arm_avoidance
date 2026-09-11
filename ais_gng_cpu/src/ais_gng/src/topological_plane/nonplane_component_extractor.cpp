@@ -67,8 +67,7 @@ bool is_valid_edge(
 
 extraction_result extract_components(
   const ais_gng_msgs::msg::TopologicalMap &map,
-  const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters,
-  const extractor_options &options)
+  const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters)
 {
   extraction_result result;
   const std::size_t node_count = map.nodes.size();
@@ -102,7 +101,6 @@ extraction_result extract_components(
     }
   }
 
-  const std::size_t min_component_nodes = std::max<std::size_t>(1U, options.min_component_nodes);
   const std::size_t invalid_component = std::numeric_limits<std::size_t>::max();
   std::vector<std::size_t> component_index_by_root(node_count, invalid_component);
 
@@ -111,9 +109,6 @@ extraction_result extract_components(
       continue;
     }
     const std::size_t root = components.find(node_index);
-    if (component_size[root] < min_component_nodes) {
-      continue;
-    }
     std::size_t component_index = component_index_by_root[root];
     if (component_index == invalid_component) {
       component_index = result.components.size();

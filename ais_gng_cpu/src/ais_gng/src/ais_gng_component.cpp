@@ -240,10 +240,11 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     }
     direct_nonplane_component_enabled_ = this->declare_parameter<bool>(
         "nonplane_component.direct_enabled", true);
-    const auto nonplane_min_component_nodes = this->declare_parameter<int64_t>(
-        "nonplane_component.min_component_nodes", 2);
-    direct_nonplane_component_options_.min_component_nodes =
-        static_cast<std::size_t>(std::max<int64_t>(1, nonplane_min_component_nodes));
+    // 旧設定の読込互換。単独ノードを含む全成分の保持を優先。
+    if (this->declare_parameter<int64_t>("nonplane_component.min_component_nodes", 1) != 1) {
+        RCLCPP_WARN(this->get_logger(),
+            "nonplane_component.min_component_nodesは廃止済み。単独ノードを含む全成分を保持");
+    }
     if (direct_nonplane_component_enabled_) {
         const auto output_topic = this->declare_parameter<std::string>(
             "nonplane_component.output_topic", "/nonplane_components");
@@ -252,8 +253,8 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
                 output_topic, rclcpp::QoS(1).reliable().transient_local());
         RCLCPP_INFO(
             this->get_logger(),
-            "Direct nonplane component extraction enabled: output=%s min_nodes=%zu",
-            output_topic.c_str(), direct_nonplane_component_options_.min_component_nodes);
+            "非平面成分抽出: output=%s（単独ノードを含む全成分）",
+            output_topic.c_str());
     }
 #endif
 
@@ -923,7 +924,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     if (direct_nonplane_component_enabled_ && direct_plane_clusters) {
         const auto nonplane_component_start = std::chrono::steady_clock::now();
         const auto nonplane_components = topological_plane::nonplane::extract_components(
-            *map_msg, *direct_plane_clusters, direct_nonplane_component_options_);
+            *map_msg, *direct_plane_clusters);
         direct_nonplane_components = std::make_unique<std_msgs::msg::UInt32MultiArray>();
         std::size_t output_size = 2U;
         for (const auto &component : nonplane_components.components) {

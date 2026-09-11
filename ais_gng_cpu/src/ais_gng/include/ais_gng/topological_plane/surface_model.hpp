@@ -21,6 +21,8 @@ struct options
   double max_support_gap = 0.02;
   // 局所ノード間隔に対する小欠損補完距離の倍率。
   double max_support_spacing_ratio = 2.5;
+  // 曲面の核となる元平面の使用率。0は使用率検査なし。
+  double min_plane_usage_ratio = 0.5;
   double max_patch_rms = 0.004;
   double max_point_residual = 0.012;
   double max_normal_deg = 35.0;

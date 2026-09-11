@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""隔離ROSドメインでのtopological_map境界属性・Viewer転送・入力停止の検証。"""
+"""隔離ROSドメインでの境界属性・平面と非平面の全被覆・Viewer転送・入力停止の検証。"""
 
 import argparse
 import asyncio
@@ -12,14 +12,40 @@ import tempfile
 import time
 
 import rclpy
-from ais_gng_msgs.msg import TopologicalMap
+from ais_gng_msgs.msg import PlaneClusterArray, TopologicalMap, TopologicalNode
 from sensor_msgs.msg import PointCloud2, PointField
+from std_msgs.msg import UInt32MultiArray
 from tornado.websocket import websocket_connect
 
 
 def require(is_valid, message):
     if not is_valid:
         raise RuntimeError(message)
+
+
+def check_partition(graph, planes, data):
+    """同一フレームの全被覆・重複なし・ノード属性との一致。"""
+    counts = [0] * len(graph.nodes)
+    for plane in planes.clusters:
+        for idx in plane.node_indices:
+            require(idx < len(counts), '平面添字の範囲外')
+            counts[idx] += 1
+            require(graph.nodes[idx].nonplane_component_id ==
+                    TopologicalNode.NONPLANE_COMPONENT_NONE, '平面と非平面の重複')
+    require(len(data) >= 2 and data[0] == graph.frame_number, '非平面フレーム不一致')
+    offset = 2
+    for _ in range(data[1]):
+        require(offset + 2 <= len(data), '成分ヘッダ不足')
+        component_id, num = data[offset:offset + 2]
+        offset += 2
+        require(num > 0 and offset + num <= len(data), '成分サイズ不正')
+        for idx in data[offset:offset + num]:
+            require(idx < len(counts), '非平面添字の範囲外')
+            counts[idx] += 1
+            require(graph.nodes[idx].nonplane_component_id == component_id, '非平面ID不一致')
+        offset += num
+    require(offset == len(data), '非平面配列の余剰データ')
+    require(all(count == 1 for count in counts), '未所属または重複所属ノード')
 
 
 def decode_graph_packet(payload):
@@ -60,7 +86,8 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
         'node.num_max:=1024', 'node.learning_num:=4000',
         'input.topic_names:=[/boundary_test_points]', 'input.point_cloud_num:=2000',
         'input.local_coordinates:=true', 'classify.human:=false', 'classify.car:=false',
-        'plane_cluster.direct_enabled:=false', 'nonplane_component.direct_enabled:=false',
+        'plane_cluster.direct_enabled:=true', 'nonplane_component.direct_enabled:=true',
+        'nonplane_component.min_component_nodes:=100000',  # 旧設定によるデータ欠落なし。
         f'boundary.enable_candidates:={str(enable_candidates).lower()}',
         f'boundary.max_neighbors:={max_neighbors}',
     ]:
@@ -77,6 +104,12 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
             node = rclpy.create_node('boundary_test_driver')
             maps = []
             subscription = node.create_subscription(TopologicalMap, '/topological_map', maps.append, 10)
+            planes, components, checked_partitions = {}, {}, set()
+            num_components = 0
+            node.create_subscription(PlaneClusterArray, '/plane_clusters',
+                lambda msg: planes.update({msg.frame_number: msg}), 10)
+            node.create_subscription(UInt32MultiArray, '/nonplane_components',
+                lambda msg: components.update({msg.data[0]: msg.data}) if msg.data else None, 10)
             publisher = node.create_publisher(PointCloud2, '/boundary_test_points', 10)
             cloud = PointCloud2()
             cloud.header.frame_id = 'boundary_test_world'
@@ -84,7 +117,8 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
             cloud.fields = [PointField(name=name, offset=4 * idx, datatype=PointField.FLOAT32, count=1)
                             for idx, name in enumerate(('x', 'y', 'z'))]
             cloud.point_step, cloud.row_step, cloud.is_dense = 12, 10800, True
-            cloud.data = b''.join(struct.pack('<fff', 1.0 + 0.04 * x, -0.6 + 0.04 * y, 0.2)
+            cloud.data = b''.join(struct.pack('<fff', 1.0 + 0.04 * x, -0.6 + 0.04 * y,
+                                             0.2 if x < 20 else 0.2 + 0.01 * (x - 20)**2)
                                   for y in range(30) for x in range(30))
             deadline = time.monotonic() + 20
             next_publish = next_subscribe = 0
@@ -108,6 +142,12 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
                     publisher.publish(cloud)
                     next_publish = time.monotonic() + 0.06
                 rclpy.spin_once(node, timeout_sec=0)
+                for graph in maps:
+                    frame = graph.frame_number
+                    if graph.nodes and frame in planes and frame in components and frame not in checked_partitions:
+                        check_partition(graph, planes[frame], components[frame])
+                        checked_partitions.add(frame)
+                        num_components += components[frame][1]
                 for graph in maps[checked_maps:]:
                     require(graph.header.frame_id == cloud.header.frame_id, '座標系の不一致')
                     neighbors = [set() for _ in graph.nodes]
@@ -151,11 +191,12 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
                         await connection.write_message(json.dumps({
                             'type': 'stream.topological_map.applied', 'topic': '/topological_map'}))
                     pending_message = connection.read_message()
-                if checked_maps >= 8 and num_streams >= 3:
+                if checked_maps >= 8 and num_streams >= 3 and len(checked_partitions) >= 8 and num_components > 0:
                     break
                 await asyncio.sleep(0.005)
             require(checked_maps >= 8 and num_streams >= 3,
                     f'ROSまたはViewer検証フレーム不足: ROS={checked_maps}, WS={num_streams}')
+            require(len(checked_partitions) >= 8 and num_components > 0, '全被覆の検証フレーム・非平面成分不足')
             if enable_candidates and max_neighbors == 4:
                 require(has_candidate, '境界候補未検出')
             topics = dict(node.get_topic_names_and_types())
@@ -172,7 +213,8 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
                 await asyncio.sleep(0.01)
             require(len(maps) == num_maps, '入力停止中の学習出力増加')
             require(subscription is not None, '購読保持の失敗')
-            print(f'検証成功: enable={enable_candidates}, max_neighbors={max_neighbors}, ROS={checked_maps}, WS={num_streams}', flush=True)
+            print(f'検証成功: enable={enable_candidates}, max_neighbors={max_neighbors}, '
+                  f'ROS={checked_maps}, WS={num_streams}, coverage={len(checked_partitions)}', flush=True)
         finally:
             if connection is not None:
                 connection.close()

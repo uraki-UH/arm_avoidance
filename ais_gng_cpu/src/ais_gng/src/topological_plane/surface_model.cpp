@@ -7,7 +7,6 @@
 #include <chrono>
 #include <cmath>
 #include <map>
-#include <numeric>
 #include <set>
 #include <stdexcept>
 
@@ -298,6 +297,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     !(config.max_radius > 0) || !(config.max_curvature_normal_error > 0) ||
     !std::isfinite(config.max_support_gap) || config.max_support_gap<0 ||
     !std::isfinite(config.max_support_spacing_ratio) || config.max_support_spacing_ratio<1 ||
+    !std::isfinite(config.min_plane_usage_ratio) || config.min_plane_usage_ratio<0 || config.min_plane_usage_ratio>1 ||
     config.min_fit_nodes < 10 || config.max_fit_samples < config.min_fit_nodes ||
     config.max_model_fits == 0 || !(config.max_link_normal_deg > 0 && config.max_link_normal_deg < 90) ||
     !(config.max_normal_deg > 0 && config.max_normal_deg < 90)) {
@@ -413,66 +413,68 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     return std::isfinite(dev) && dev<=max_support_dev;
   };
   const double min_link_cos = std::cos(config.max_link_normal_deg*pi/180.0);
-  for (std::size_t i = 0; i+1 < map.edges.size(); i += 2) {
-    const auto a = map.edges[i], b = map.edges[i+1];
-    if (a >= owner.size() || b >= owner.size() || owner[a] < 0 || owner[b] < 0 || owner[a] == owner[b]) continue;
-    const std::array<std::uint32_t,2> pair = {
-      static_cast<std::uint32_t>(std::min(owner[a],owner[b])),
-      static_cast<std::uint32_t>(std::max(owner[a],owner[b]))};
-    edges.insert(pair);
-    if ((points[a]-points[b]).norm()>config.max_link_length) continue;
+  enum class link_kind { none, smooth, sharp, uncertain };
+  const auto classify_boundary = [&](const patch_curvature *a,const patch_curvature *b,const vec &point) {
+    if (!a || !b || !a->valid || !b->valid ||
+      !(a->confidence>=min_boundary_confidence) || !(b->confidence>=min_boundary_confidence) ||
+      !can_evaluate_boundary(*a,point) || !can_evaluate_boundary(*b,point)) return link_kind::uncertain;
+    return std::abs(patch_normal_at(*a,point).dot(patch_normal_at(*b,point)))<min_link_cos ?
+      link_kind::sharp:link_kind::smooth;
+  };
+  // 初回構築・部分分割に共通の実エッジ走査と境界優先順位。分類規則だけを呼出側で指定。
+  const auto rebuild_links = [&](const auto &classify) {
+    edges.clear(); smooth.clear(); sharp.clear(); uncertain.clear();
+    for (std::size_t i=0;i+1<map.edges.size();i+=2) {
+      const auto a=map.edges[i],b=map.edges[i+1];
+      if (a>=owner.size() || b>=owner.size() || owner[a]<0 || owner[b]<0 || owner[a]==owner[b]) continue;
+      const std::array<std::uint32_t,2> pair={static_cast<std::uint32_t>(std::min(owner[a],owner[b])),
+        static_cast<std::uint32_t>(std::max(owner[a],owner[b]))};
+      edges.insert(pair);
+      if ((points[a]-points[b]).norm()>config.max_link_length) continue;
+      switch (classify(pair,a,b)) {
+        case link_kind::smooth: smooth.insert(pair); break;
+        case link_kind::sharp: sharp.insert(pair); break;
+        case link_kind::uncertain: uncertain.insert(pair); break;
+        case link_kind::none: break;
+      }
+    }
+    for (const auto &pair:sharp) { smooth.erase(pair); uncertain.erase(pair); }
+    for (const auto &pair:smooth) uncertain.erase(pair);
+  };
+  rebuild_links([&](const auto &pair,auto a,auto b) {
     const auto support=boundaries.find(pair);
     if (support!=boundaries.end()) {
       const auto &selected=support->second.selected;
-      const vec boundary=(points[a]+points[b])*0.5;
-      if (!selected[0] || !selected[1] || !can_evaluate_boundary(*selected[0],boundary) ||
-        !can_evaluate_boundary(*selected[1],boundary)) {
-        uncertain.insert(pair);
-        continue;
-      }
       // 信頼できる位置由来の接平面同士の比較。入力法線による二重拒否なし。
-      const vec na=patch_normal_at(*selected[0],boundary), nb=patch_normal_at(*selected[1],boundary);
-      if (std::abs(na.dot(nb))<min_link_cos) sharp.insert(pair);
-      else smooth.insert(pair);
-    } else if (std::abs(normals[a].dot(normals[b]))>=min_link_cos) {
-      smooth.insert(pair);
+      return classify_boundary(selected[0],selected[1],(points[a]+points[b])*0.5);
     }
-  }
-  for (const auto &pair:sharp) { smooth.erase(pair); uncertain.erase(pair); }
-  for (const auto &pair:smooth) uncertain.erase(pair);
-  output.patch_edges.assign(edges.begin(),edges.end());
-  output.smooth_edges.assign(smooth.begin(),smooth.end());
-  output.sharp_edges.assign(sharp.begin(),sharp.end());
-  output.uncertain_edges.assign(uncertain.begin(),uncertain.end());
+    return std::abs(normals[a].dot(normals[b]))>=min_link_cos ? link_kind::smooth:link_kind::none;
+  });
   output.boundary_ms=std::chrono::duration<double,std::milli>(
     std::chrono::steady_clock::now()-boundary_begin).count();
   std::vector<std::vector<std::uint32_t>> adjacency(output.patches.size());
   std::vector<std::vector<std::uint32_t>> conflicts(output.patches.size());
-  for (const auto &edge : smooth) {
-    adjacency[edge[0]].push_back(edge[1]);
-    adjacency[edge[1]].push_back(edge[0]);
-  }
-  // 不明境界は探索候補のみ。新規統合には既存のモデル残差・法線・退化検査が必要。
-  for (const auto &edge : uncertain) {
-    adjacency[edge[0]].push_back(edge[1]);
-    adjacency[edge[1]].push_back(edge[0]);
-  }
-  std::vector<bool> has_owner(output.patches.size(), false), has_visited(output.patches.size(), false);
-  for (const auto &edge:sharp) {
-    conflicts[edge[0]].push_back(edge[1]);
-    conflicts[edge[1]].push_back(edge[0]);
-  }
-  std::vector<bool> is_proposed(output.patches.size(),false);
-  const auto fit = [&](const std::vector<std::uint32_t> &ids) {
-    if (output.model_fits >= config.max_model_fits) return model{};
-    // 非平面ノード等を経由して接続しても、既知の鋭い境界をまたぐモデル候補は不採用。
-    for (auto idx:ids) is_proposed[idx]=true;
-    bool has_conflict=false;
-    for (auto idx:ids) for (auto neighbor:conflicts[idx]) {
-      if (is_proposed[neighbor]) has_conflict=true;
+  const auto append_neighbors = [](auto &neighbors,const auto &links) {
+    for (const auto &pair:links) {
+      neighbors[pair[0]].push_back(pair[1]); neighbors[pair[1]].push_back(pair[0]);
     }
+  };
+  append_neighbors(adjacency,smooth);
+  // 不明境界は探索候補のみ。新規統合には既存のモデル残差・法線・退化検査が必要。
+  append_neighbors(adjacency,uncertain);
+  std::vector<bool> has_owner(output.patches.size(), false), has_visited(output.patches.size(), false);
+  append_neighbors(conflicts,sharp);
+  std::vector<bool> is_proposed(output.patches.size(),false);
+  const auto has_conflict = [&](const std::vector<std::uint32_t> &ids) {
+    for (auto idx:ids) is_proposed[idx]=true;
+    bool has_sharp_edge=false;
+    for (auto idx:ids) for (auto neighbor:conflicts[idx]) if (is_proposed[neighbor]) has_sharp_edge=true;
     for (auto idx:ids) is_proposed[idx]=false;
-    if (has_conflict) return model{};
+    return has_sharp_edge;
+  };
+  const auto fit = [&](const std::vector<std::uint32_t> &ids) {
+    // 新規・保持曲面に共通の鋭い境界の保護。迂回接続による境界横断の禁止。
+    if (output.model_fits>=config.max_model_fits || has_conflict(ids)) return model{};
     ++output.model_fits;
     return fit_best(ids, output.patches, points, normals, config);
   };
@@ -506,6 +508,73 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     output.regions.push_back(std::move(surface));
   };
 
+  // 同じ元平面内で接続する領域の再評価。履歴だけによる分断の解消、全点検査による異曲面の保護。
+  const auto merge_plane_fragments = [&]() {
+    std::vector<std::size_t> region_owner(output.patches.size(),output.regions.size());
+    for (std::size_t i=0;i<output.regions.size();++i)
+      for (auto idx:output.regions[i].patch_indices) region_owner[idx]=i;
+    std::set<std::array<std::size_t,2>> tested;
+    for (const auto &pair:edges) {
+      if (output.model_fits>=config.max_model_fits) break;
+      const int plane=output.patches[pair[0]].plane_cluster_idx;
+      if (plane<0 || plane!=output.patches[pair[1]].plane_cluster_idx ||
+        (!smooth.count(pair) && !uncertain.count(pair))) continue;
+      auto a=region_owner[pair[0]],b=region_owner[pair[1]];
+      if (a==output.regions.size() || b==output.regions.size()) continue;
+      if (a>b) std::swap(a,b);
+      if (a==b || !tested.insert({a,b}).second) continue;
+      auto ids=output.regions[a].patch_indices;
+      ids.insert(ids.end(),output.regions[b].patch_indices.begin(),output.regions[b].patch_indices.end());
+      auto shape=fit(ids);
+      if (shape.type=="unknown") continue;
+      const bool has_single_track=output.regions[a].is_retained!=output.regions[b].is_retained;
+      const region previous=output.regions[output.regions[a].is_retained ? a:b];
+      if (has_single_track) {
+        // 既存核への追加では係数・参照集合の維持。新規IDによる追跡支持率の水増し防止。
+        shape=previous.shape;
+        double sum=0;
+        std::size_t num=0;
+        bool can_keep=true;
+        shape.max_patch_rms=0;
+        const double min_cos=std::cos(config.max_normal_deg*pi/180.0);
+        for (auto idx:ids) {
+          double patch_sum=0;
+          for (auto node_idx:output.patches[idx].node_indices) {
+            const auto dev=model_dev(shape,map.nodes[node_idx]);
+            if (dev.dist>config.max_point_residual ||
+              (normals[node_idx].squaredNorm()>0.5 && dev.normal_cos<min_cos)) can_keep=false;
+            patch_sum+=dev.dist*dev.dist; ++num;
+          }
+          sum+=patch_sum;
+          shape.max_patch_rms=std::max(shape.max_patch_rms,
+            std::sqrt(patch_sum/output.patches[idx].node_indices.size()));
+        }
+        if (!can_keep || shape.max_patch_rms>config.max_patch_rms) continue;
+        shape.score+=sum/num-shape.rms*shape.rms;
+        shape.rms=std::sqrt(sum/num);
+      }
+      auto &merged=output.regions[a];
+      merged.patch_indices=std::move(ids);
+      merged.node_indices.insert(merged.node_indices.end(),
+        output.regions[b].node_indices.begin(),output.regions[b].node_indices.end());
+      merged.shape=std::move(shape);
+      // 再推定後は新規追跡核。旧片側だけの参照集合による再分裂の防止。
+      merged.is_retained=false;
+      merged.id=*std::min_element(merged.node_indices.begin(),merged.node_indices.end());
+      merged.seed_plane_patch_num=std::max(merged.seed_plane_patch_num,output.regions[b].seed_plane_patch_num);
+      if (has_single_track) {
+        merged.is_retained=true; merged.id=previous.id;
+        merged.seed_plane_patch_num=previous.seed_plane_patch_num;
+        merged.rejected_node_num=previous.rejected_node_num;
+      }
+      for (auto idx:output.regions[b].patch_indices) region_owner[idx]=a;
+      output.regions[b].node_indices.clear();
+      tested.clear();
+    }
+    output.regions.erase(std::remove_if(output.regions.begin(),output.regions.end(),
+      [](const auto &surface) { return surface.node_indices.empty(); }),output.regions.end());
+  };
+
   // 既存曲面は接続成分に依存せず維持。ただし現在フレームの明確な鋭い境界は維持対象外。
   std::vector<std::vector<std::uint32_t>> retained_patches(retained.size());
   for (std::size_t i=0; i<output.patches.size(); ++i) {
@@ -515,12 +584,89 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   for (std::size_t i=0; i<retained.size(); ++i) {
     const auto &ids=retained_patches[i];
     std::size_t node_num=0;
-    for (auto idx:ids) { is_proposed[idx]=true; node_num+=output.patches[idx].node_indices.size(); }
-    bool has_conflict=false;
-    for (auto idx:ids) for (auto neighbor:conflicts[idx]) if (is_proposed[neighbor]) has_conflict=true;
-    for (auto idx:ids) is_proposed[idx]=false;
-    if (!has_conflict && node_num>=config.min_fit_nodes) finish(ids,retained[i].shape,&retained[i]);
+    for (auto idx:ids) node_num+=output.patches[idx].node_indices.size();
+    if (!has_conflict(ids) && node_num>=config.min_fit_nodes) finish(ids,retained[i].shape,&retained[i]);
   }
+  merge_plane_fragments();
+
+  // 全体不適合の平面由来パッチだけを、成立済み曲面から到達可能な適合点と残余へ分離。
+  std::vector<std::vector<std::uint32_t>> neighbors;
+  const double min_node_cos=std::cos(config.max_normal_deg*pi/180.0);
+  const auto can_attach_node = [&](const model &shape,std::uint32_t idx) {
+    const auto dev=model_dev(shape,map.nodes[idx]);
+    return dev.dist<=std::min(config.max_patch_rms,config.max_point_residual) &&
+      (normals[idx].squaredNorm()<0.5 || dev.normal_cos>=min_node_cos);
+  };
+  const auto fit_partial_patch = [&](const std::vector<std::uint32_t> &members,
+    std::uint32_t next,const model &current) -> std::pair<std::uint32_t,model> {
+    const auto rejected=std::make_pair(next,model{});
+    if (current.type=="plane" || current.type=="unknown" ||
+      output.patches[next].plane_cluster_idx<0 || output.model_fits>=config.max_model_fits) return rejected;
+    std::vector<bool> can_join(points.size(),false),is_reached(points.size(),false);
+    for (auto idx:output.patches[next].node_indices) can_join[idx]=can_attach_node(current,idx);
+    if (neighbors.empty()) {
+      neighbors.resize(points.size());
+      for (std::size_t i=0;i+1<map.edges.size();i+=2) {
+        const auto a=map.edges[i],b=map.edges[i+1];
+        if (a>=points.size() || b>=points.size() ||
+          (points[a]-points[b]).norm()>config.max_link_length) continue;
+        neighbors[a].push_back(b); neighbors[b].push_back(a);
+      }
+    }
+    std::vector<std::uint32_t> reached;
+    for (auto idx:members) for (auto node_idx:output.patches[idx].node_indices) reached.push_back(node_idx);
+    for (std::size_t i=0;i<reached.size();++i) for (auto idx:neighbors[reached[i]]) {
+      if (can_join[idx] && !is_reached[idx]) { is_reached[idx]=true; reached.push_back(idx); }
+    }
+    local_patch selected,remaining;
+    selected.plane_cluster_idx=remaining.plane_cluster_idx=output.patches[next].plane_cluster_idx;
+    for (auto idx:output.patches[next].node_indices)
+      (is_reached[idx] ? selected:remaining).node_indices.push_back(idx);
+    constexpr std::size_t min_partial_nodes=3;
+    if (selected.node_indices.size()<min_partial_nodes || remaining.node_indices.empty()) return rejected;
+    const auto update_patch = [&](local_patch &patch) {
+      for (auto idx:patch.node_indices) patch.center+=points[idx];
+      patch.center/=static_cast<double>(patch.node_indices.size());
+      patch.curvature=estimate_curvature(patch,map);
+    };
+    const auto partial_curvature_begin=std::chrono::steady_clock::now();
+    update_patch(selected); update_patch(remaining);
+    output.curvature_ms+=std::chrono::duration<double,std::milli>(
+      std::chrono::steady_clock::now()-partial_curvature_begin).count();
+    const auto selected_idx=static_cast<std::uint32_t>(output.patches.size());
+    output.patches.push_back(std::move(selected));
+    auto ids=members; ids.push_back(selected_idx);
+    // 混入部分除去後の実接続位置での境界再検査。元パッチ全体の誤った鋭角判定からの回復。
+    const auto &selected_curvature=output.patches.back().curvature;
+    for (auto idx:members) for (auto a:output.patches[idx].node_indices) for (auto b:neighbors[a]) {
+      if (!is_reached[b]) continue;
+      if (classify_boundary(&output.patches[idx].curvature,&selected_curvature,
+        (points[a]+points[b])*0.5)==link_kind::sharp) {
+        output.patches.pop_back(); return rejected;
+      }
+    }
+    ++output.model_fits;
+    auto shape=fit_best(ids,output.patches,points,normals,config);
+    if (shape.type=="unknown") { output.patches.pop_back(); return rejected; }
+    output.patches[next]=std::move(remaining);
+    for (auto idx:output.patches[selected_idx].node_indices) owner[idx]=selected_idx;
+    has_owner.push_back(false); has_visited.push_back(true); is_proposed.push_back(false);
+    // 分割前の境界分類を継承し、実エッジの接続先だけを更新。存在しないパッチ接続の防止。
+    const auto old_smooth=smooth,old_sharp=sharp,old_uncertain=uncertain;
+    rebuild_links([&](const auto &pair,auto a,auto b) {
+      if (pair[0]==selected_idx || pair[1]==selected_idx || pair[0]==next || pair[1]==next) {
+        return classify_boundary(&output.patches[pair[0]].curvature,&output.patches[pair[1]].curvature,
+          (points[a]+points[b])*0.5);
+      }
+      if (old_sharp.count(pair)) return link_kind::sharp;
+      if (old_smooth.count(pair)) return link_kind::smooth;
+      return old_uncertain.count(pair) ? link_kind::uncertain:link_kind::none;
+    });
+    adjacency.assign(output.patches.size(),{}); conflicts.assign(output.patches.size(),{});
+    auto traversable=smooth; traversable.insert(uncertain.begin(),uncertain.end());
+    append_neighbors(adjacency,traversable); append_neighbors(conflicts,sharp);
+    return {selected_idx,std::move(shape)};
+  };
 
   for (std::size_t start = 0; start < output.patches.size(); ++start) {
     if (has_visited[start] || has_owner[start]) continue;
@@ -537,6 +683,11 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
 
     // 全体不適合時の局所成長。平面パッチと未所属ノードに共通の追加・再推定判定。
     std::stable_sort(connected.begin(),connected.end(),[&](auto a, auto b) {
+      // 混入で大きくなった低品質パッチより、位置支持の確かな核を優先。
+      const auto &ca=output.patches[a].curvature,&cb=output.patches[b].curvature;
+      const bool has_quality_a=ca.valid && ca.confidence>=0.5;
+      const bool has_quality_b=cb.valid && cb.confidence>=0.5;
+      if (has_quality_a!=has_quality_b) return has_quality_a;
       return output.patches[a].node_indices.size() > output.patches[b].node_indices.size();
     });
     for (auto seed : connected) {
@@ -561,13 +712,38 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
         for (auto member : members) for (auto next : adjacency[member]) {
           if (!has_owner[next] && !included.count(next)) candidates.insert(next);
         }
+        for (auto member:members) for (auto next:conflicts[member]) {
+          if (!has_owner[next] && !included.count(next)) candidates.insert(next);
+        }
+        // 現モデルに十分適合する隣接パッチの一括検査。ノード単位の再推定による予算消費の抑制。
+        auto batch=members;
+        for (auto next:candidates) {
+          const auto &nodes=output.patches[next].node_indices;
+          if (std::all_of(nodes.begin(),nodes.end(),[&](auto idx) {
+            return can_attach_node(current,idx);
+          })) batch.push_back(next);
+        }
+        if (batch.size()>members.size()+1) {
+          auto shape=fit(batch);
+          if (shape.type!="unknown") {
+            members=std::move(batch); included.insert(members.begin(),members.end());
+            current=std::move(shape); has_growth=true;
+            continue;
+          }
+        }
         for (auto next : candidates) {
           auto proposal = members;
           proposal.push_back(next);
           auto shape = fit(proposal);
+          auto accepted=next;
+          if (shape.type=="unknown") {
+            auto partial=fit_partial_patch(members,next,current);
+            accepted=partial.first; shape=std::move(partial.second);
+            proposal.back()=accepted;
+          }
           if (shape.type != "unknown") {
             members = std::move(proposal);
-            included.insert(next);
+            included.insert(accepted);
             current = std::move(shape);
             has_growth = true;
           }
@@ -580,7 +756,34 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   for (std::size_t i = 0; i < output.patches.size(); ++i) {
     if (!has_owner[i]) finish({static_cast<std::uint32_t>(i)}, model{});
   }
+  merge_plane_fragments();
+  output.patch_edges.assign(edges.begin(),edges.end());
+  output.smooth_edges.assign(smooth.begin(),smooth.end());
+  output.sharp_edges.assign(sharp.begin(),sharp.end());
+  output.uncertain_edges.assign(uncertain.begin(),uncertain.end());
   split_support_regions(output,map,config);
+  if (config.min_plane_usage_ratio>0) {
+    // 分母は現在フレームの有効な元平面所属。分割パッチの使用数は同じ元平面ごとに合算。
+    std::vector<std::size_t> plane_sizes(planes.clusters.size(),0);
+    for (const auto &patch:output.patches) if (patch.plane_cluster_idx>=0)
+      plane_sizes[patch.plane_cluster_idx]+=patch.node_indices.size();
+    for (auto &surface:output.regions) {
+      if (surface.shape.type=="unknown" || surface.shape.type=="plane") continue;
+      std::map<int,std::size_t> used;
+      for (auto idx:surface.patch_indices) {
+        const auto &patch=output.patches[idx];
+        if (patch.plane_cluster_idx>=0) used[patch.plane_cluster_idx]+=patch.node_indices.size();
+      }
+      const bool has_plane_core=std::any_of(used.begin(),used.end(),[&](const auto &entry) {
+        return entry.second>=config.min_plane_usage_ratio*plane_sizes[entry.first];
+      });
+      if (!has_plane_core) {
+        // ノード被覆は保持し、曲面仮説と追跡資格だけを棄却。
+        surface.shape=model{}; surface.is_retained=false; surface.seed_plane_patch_num=0;
+        surface.id=*std::min_element(surface.node_indices.begin(),surface.node_indices.end());
+      }
+    }
+  }
   output.update_ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
   return output;
 }

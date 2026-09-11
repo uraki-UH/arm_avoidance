@@ -294,6 +294,8 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   config_.max_support_gap=node.declare_parameter("surface_model.max_support_gap",config_.max_support_gap);
   config_.max_support_spacing_ratio=node.declare_parameter(
     "surface_model.max_support_spacing_ratio",config_.max_support_spacing_ratio);
+  config_.min_plane_usage_ratio=node.declare_parameter(
+    "surface_model.min_plane_usage_ratio",config_.min_plane_usage_ratio);
   config_.max_patch_rms=node.declare_parameter("surface_model.max_patch_rms",config_.max_patch_rms);
   config_.max_point_residual=node.declare_parameter("surface_model.max_point_residual",config_.max_point_residual);
   config_.max_normal_deg=node.declare_parameter("surface_model.max_normal_deg",config_.max_normal_deg);

@@ -21,6 +21,8 @@
     surface_model.max_support_gap: 0.02
     # 局所ノード間隔に対する小欠損補完距離の倍率。
     surface_model.max_support_spacing_ratio: 2.5
+    # 曲面の核となる元平面の使用率。新規・追跡・支持領域分割後に共通。0は検査なし。
+    surface_model.min_plane_usage_ratio: 0.5
     # 各入力パッチのRMS残差[m]と各点の近似表面距離[m]。
     surface_model.max_patch_rms: 0.004
     surface_model.max_point_residual: 0.012

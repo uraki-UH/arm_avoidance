@@ -26,7 +26,6 @@ def configured_nonplane_component_parameters(config_path):
     params = config.get('ais_gng_node', {}).get('ros__parameters', {})
     return (
         bool(params.get('nonplane_component.direct_enabled', True)),
-        max(1, int(params.get('nonplane_component.min_component_nodes', 2))),
         str(params.get('nonplane_component.output_topic', '/nonplane_components')),
     )
 
@@ -168,13 +167,11 @@ def generate_launch_description():
             plane_parameter_overrides = {
                 'plane_cluster.output_topic': plane_clusters_topic,
             }
-            enable_nonplane_component, nonplane_min_component_nodes, nonplane_output_topic = (
+            enable_nonplane_component, nonplane_output_topic = (
                 configured_nonplane_component_parameters(
                     LaunchConfiguration('plane_params_file').perform(context)))
             plane_parameter_overrides['nonplane_component.direct_enabled'] = (
                 enable_nonplane_component)
-            plane_parameter_overrides['nonplane_component.min_component_nodes'] = (
-                nonplane_min_component_nodes)
             plane_parameter_overrides['nonplane_component.output_topic'] = (
                 nonplane_output_topic)
             rho_mode = LaunchConfiguration(

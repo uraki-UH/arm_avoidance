@@ -10,11 +10,6 @@
 namespace fuzzrobo::topological_plane::nonplane
 {
 
-struct extractor_options
-{
-  std::size_t min_component_nodes = 2U;
-};
-
 struct component
 {
   std::uint32_t id = 0U;
@@ -26,10 +21,9 @@ struct extraction_result
   std::vector<component> components;
 };
 
-// 平面クラスタ未所属nodeの連結成分抽出。
+// 単独nodeを含む全平面クラスタ未所属nodeの連結成分抽出。表示条件との分離。
 extraction_result extract_components(
   const ais_gng_msgs::msg::TopologicalMap &map,
-  const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters,
-  const extractor_options &options);
+  const ais_gng_msgs::msg::PlaneClusterArray &plane_clusters);
 
 }  // namespace fuzzrobo::topological_plane::nonplane

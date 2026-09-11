@@ -152,12 +152,16 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
       }
     } else {
       const auto plane_num=plane_patch_num(out,surface);
-      if (plane_num<min_seed_plane_patches) continue;
+      // 成立済み曲面の再統合では表示資格を継承し、係数・参照集合を新しい核へ更新。
+      const bool has_retained_seed=surface.seed_plane_patch_num>0 &&
+        surface.seed_plane_patch_num>=min_seed_plane_patches;
+      if (plane_num<min_seed_plane_patches && !has_retained_seed) continue;
       if (next_id_>=static_cast<std::uint32_t>(std::numeric_limits<int>::max())) {
         throw std::overflow_error("surface tracking ID exhausted");
       }
       surface.id=next_id_++;
-      surface.seed_plane_patch_num=plane_num;
+      surface.seed_plane_patch_num=std::max(plane_num,surface.seed_plane_patch_num);
+      surface.is_retained=has_retained_seed;
       for (auto idx:surface.node_indices) {
         const auto &node=map.nodes[idx];
         entry.reference.push_back({node.id,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});

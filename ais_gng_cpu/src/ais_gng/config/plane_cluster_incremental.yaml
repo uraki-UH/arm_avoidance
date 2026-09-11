@@ -97,15 +97,13 @@ plane_cluster_incremental_node:
 
     # 非平面成分のMarkerArray。CPU直結の/nonplane_components利用時はlaunch側で無効化。
     surface_marker_topic: /nonplane_components/markers
+    # Marker表示の構成ノード数。非平面成分データの保持とは独立。
     surface_component.min_nodes: 2
 
 ais_gng_node:
   ros__parameters:
-    # 平面クラスタ未所属nodeの連結成分ID付与の有効化。
+    # 単独nodeを含む全平面クラスタ未所属nodeへの連結成分ID付与。
     nonplane_component.direct_enabled: true
-
-    # 既存GNG edgeで連結した成分としてID付与する最小node数。
-    nonplane_component.min_component_nodes: 2
 
     # 非平面成分のnode所属情報topic。
     nonplane_component.output_topic: /nonplane_components

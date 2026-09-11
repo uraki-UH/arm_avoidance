@@ -87,12 +87,117 @@ TEST(SurfaceModel, EllipticCylinderSurvivesRotationTranslationAndDensityChange)
   }
 }
 
-TEST(SurfaceModel, NoPlanarSeedIsRequired)
+TEST(SurfaceModel, plane_core_check_can_be_disabled_for_nonplane_only_curve)
 {
   const auto s=cylinder(0.1,0.1,48,false);
-  const auto r=extract(s.map,s.planes);
-  ASSERT_EQ(r.regions.size(),1U);
-  EXPECT_EQ(r.regions[0].shape.type,"cylinder");
+  for (double ratio:{0.0,0.5}) {
+    options config; config.min_plane_usage_ratio=ratio;
+    const auto r=extract(s.map,s.planes,config);
+    ASSERT_EQ(r.regions.size(),1U);
+    EXPECT_EQ(r.regions[0].shape.type,ratio==0 ? "cylinder":"unknown");
+    coverage(r,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceModel, connected_history_fragments_of_one_plane_reunite)
+{
+  auto s=cylinder(0.1,0.1);
+  const auto first=extract(s.map,s.planes);
+  ASSERT_EQ(first.regions.size(),1U);
+  std::vector<region> retained(2,first.regions[0]);
+  for (std::size_t i=0;i<retained.size();++i) {
+    retained[i].id=1000+i;
+    retained[i].node_indices.clear();
+    for (std::size_t idx=0;idx<s.map.nodes.size();++idx)
+      if ((idx%6<3)==(i==0)) retained[i].node_indices.push_back(idx);
+  }
+  options config; config.min_plane_usage_ratio=1.0;
+  const auto merged=extract(s.map,s.planes,config,retained);
+  ASSERT_EQ(merged.regions.size(),1U);
+  EXPECT_EQ(merged.regions[0].shape.type,"cylinder");
+  EXPECT_FALSE(merged.regions[0].is_retained);
+  EXPECT_LE(merged.model_fits,2U);
+  coverage(merged,s.map.nodes.size());
+}
+
+TEST(SurfaceTracking, reconnected_plane_fragments_do_not_split_again)
+{
+  auto s=cylinder(0.1,0.1);
+  const auto original_edges=s.map.edges;
+  s.map.edges.clear();
+  for (std::size_t i=0;i+1<original_edges.size();i+=2) {
+    const auto a=original_edges[i],b=original_edges[i+1];
+    if ((a%6<3)==(b%6<3)) edge(s.map,a,b);
+  }
+  tracker tracking;
+  const auto separated=tracking.update(s.map,s.planes);
+  ASSERT_EQ(separated.regions.size(),2U);
+  s.map.edges=original_edges;
+  // 現在の元平面数が減っても、成立済み曲面の統合による表示消失なし。
+  s.planes.clusters.resize(1);
+  s.planes.clusters[0].node_indices.clear();
+  for (std::size_t idx=0;idx<s.map.nodes.size();++idx) s.planes.clusters[0].node_indices.push_back(idx);
+  std::uint32_t merged_id=0;
+  for (int iter=0;iter<4;++iter) {
+    ++s.map.frame_number; s.planes.frame_number=s.map.frame_number;
+    const auto current=tracking.update(s.map,s.planes);
+    ASSERT_EQ(current.regions.size(),1U);
+    EXPECT_TRUE(current.regions[0].is_retained);
+    EXPECT_GE(current.regions[0].seed_plane_patch_num,2U);
+    if (iter==0) merged_id=current.regions[0].id;
+    else { EXPECT_EQ(current.regions[0].id,merged_id); EXPECT_TRUE(current.regions[0].is_retained); }
+    coverage(current,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceModel, mixed_plane_root_does_not_block_two_distinct_curves)
+{
+  auto s=cylinder(0.1,0.1);
+  const auto body_num=s.map.nodes.size();
+  const auto handle=cylinder(0.04,0.04,48,true,
+    Eigen::AngleAxisd(pi/2,vec::UnitX()).toRotationMatrix(),vec(0.16,0,0));
+  for (const auto &node:handle.map.nodes)
+    add_node(s.map,vec(node.pos.x,node.pos.y,node.pos.z),vec(node.normal.x,node.normal.y,node.normal.z));
+  for (std::size_t i=0;i+1<handle.map.edges.size();i+=2)
+    edge(s.map,body_num+handle.map.edges[i],body_num+handle.map.edges[i+1]);
+  for (auto plane:handle.planes.clusters) {
+    plane.id+=100;
+    for (auto &idx:plane.node_indices) idx+=body_num;
+    if (plane.id==145) {
+      // 胴体の元平面へ混入した取っ手内側の根元。元の所属自体は変更対象外。
+      s.planes.clusters[0].node_indices.insert(s.planes.clusters[0].node_indices.end(),
+        plane.node_indices.begin(),plane.node_indices.end());
+    } else s.planes.clusters.push_back(plane);
+  }
+  edge(s.map,3,body_num+24*6+3);
+  options config;
+  const auto r=extract(s.map,s.planes,config);
+  std::string summary="fits="+std::to_string(r.model_fits);
+  for (const auto &surface:r.regions) summary+=" "+surface.shape.type+":"+std::to_string(surface.node_indices.size());
+  SCOPED_TRACE(summary);
+  std::set<std::size_t> body_regions,handle_regions;
+  for (std::size_t i=0;i<r.regions.size();++i) {
+    const auto &surface=r.regions[i];
+    if (surface.shape.type!="cylinder") continue;
+    for (auto idx:surface.node_indices) {
+      if (idx<body_num) body_regions.insert(i);
+      else handle_regions.insert(i);
+    }
+  }
+  ASSERT_EQ(body_regions.size(),1U);
+  ASSERT_EQ(handle_regions.size(),1U);
+  EXPECT_NE(*body_regions.begin(),*handle_regions.begin());
+  EXPECT_EQ(r.regions[*body_regions.begin()].node_indices.size(),body_num);
+  EXPECT_EQ(r.regions[*handle_regions.begin()].node_indices.size(),handle.map.nodes.size());
+  for (auto idx:s.planes.clusters[0].node_indices) {
+    const auto &surface=r.regions[idx<body_num ? *body_regions.begin():*handle_regions.begin()];
+    EXPECT_NE(std::find(surface.node_indices.begin(),surface.node_indices.end(),idx),surface.node_indices.end());
+  }
+  coverage(r,s.map.nodes.size());
+  const auto retained=extract(s.map,s.planes,config,r.regions);
+  ASSERT_EQ(retained.regions.size(),2U);
+  for (const auto &surface:retained.regions) EXPECT_TRUE(surface.is_retained);
+  coverage(retained,s.map.nodes.size());
 }
 
 TEST(SurfaceModel, OrthogonalPlanesRemainSeparate)
@@ -289,7 +394,8 @@ TEST(SurfaceModel, SpherePreferredToMoreComplexQuadric)
     if (t) edge(s.map,idx,idx-1);
     if (latitude>1) edge(s.map,idx,idx-24);
   }
-  const auto r=extract(s.map,s.planes);
+  options config; config.min_plane_usage_ratio=0;
+  const auto r=extract(s.map,s.planes,config);
   ASSERT_EQ(r.regions.size(),1U);
   EXPECT_EQ(r.regions[0].shape.type,"sphere");
 }
@@ -415,7 +521,8 @@ TEST(SurfaceModel, SinglePlaneWithNonplaneNodesIsHiddenAndDeletesPreviousMarkers
 TEST(SurfaceModel, NonplaneOnlyCurveNeedsExplicitDisplayOverride)
 {
   const auto s=cylinder(0.1,0.1,48,false);
-  const auto r=extract(s.map,s.planes);
+  options config; config.min_plane_usage_ratio=0;
+  const auto r=extract(s.map,s.planes,config);
   ASSERT_EQ(r.regions.size(),1U);
   EXPECT_EQ(r.regions[0].shape.type,"cylinder");
   std::set<std::pair<std::string,int>> published;
@@ -1003,6 +1110,58 @@ TEST(SurfaceModel, invalid_support_options_are_rejected)
   EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
   config.max_support_gap=0.02; config.max_support_spacing_ratio=0.5;
   EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
+  config=options{};
+  for (double ratio:{-0.1,1.1,std::numeric_limits<double>::quiet_NaN()}) {
+    config.min_plane_usage_ratio=ratio;
+    EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
+  }
+}
+
+TEST(SurfaceModel, small_plane_fractions_are_rejected_after_support_split)
+{
+  auto s=cylinder(0.1,0.1);
+  const auto original=s.map.edges;
+  s.map.edges.clear();
+  for (std::size_t i=0;i+1<original.size();i+=2)
+    if (original[i]%6==original[i+1]%6) edge(s.map,original[i],original[i+1]);
+  for (double ratio:{0.0,0.5}) {
+    options config; config.min_plane_usage_ratio=ratio;
+    const auto r=extract(s.map,s.planes,config);
+    ASSERT_EQ(r.regions.size(),6U);
+    for (const auto &surface:r.regions) EXPECT_EQ(surface.shape.type,ratio==0 ? "cylinder":"unknown");
+    coverage(r,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceTracking, current_plane_usage_requires_one_core_and_releases_track)
+{
+  for (int extra_num:{24,48}) for (bool has_core:{false,true}) {
+    auto s=cylinder(0.1,0.1);
+    tracker tracking;
+    const auto first=tracking.update(s.map,s.planes);
+    ASSERT_EQ(first.regions.size(),1U);
+    // 各元平面へ遠方の観測を追加。旧追跡核は全点適合のまま、元平面の使用率だけが低下。
+    for (std::size_t i=has_core ? 1:0;i<s.planes.clusters.size();++i) {
+      for (int j=0;j<extra_num;++j) {
+        s.planes.clusters[i].node_indices.push_back(s.map.nodes.size());
+        add_node(s.map,vec(10+i,0.01*(j%8),0.01*(j/8)),vec::UnitX());
+      }
+    }
+    ++s.map.frame_number; s.planes.frame_number=s.map.frame_number;
+    const auto r=tracking.update(s.map,s.planes);
+    const auto core=std::find_if(r.regions.begin(),r.regions.end(),[](const auto &surface) {
+      return std::find(surface.node_indices.begin(),surface.node_indices.end(),0)!=surface.node_indices.end();
+    });
+    ASSERT_NE(core,r.regions.end());
+    const bool can_keep=has_core || extra_num==24;
+    EXPECT_EQ(core->is_retained,can_keep);
+    EXPECT_EQ(core->shape.type,can_keep ? "cylinder":"unknown");
+    coverage(r,s.map.nodes.size());
+    if (!can_keep) {
+      const auto next=tracking.update(s.map,s.planes);
+      for (const auto &surface:next.regions) EXPECT_FALSE(surface.is_retained);
+    }
+  }
 }
 
 TEST(SurfaceModel, insufficient_support_is_not_a_visible_curve)
