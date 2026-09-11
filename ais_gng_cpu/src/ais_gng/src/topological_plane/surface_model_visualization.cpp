@@ -217,9 +217,11 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     {"frame_number",map.frame_number},{"stamp",{{"sec",map.header.stamp.sec},{"nanosec",map.header.stamp.nanosec}}},
     {"sample_source","gng_node_positions_and_normals"},{"update_ms",surfaces.update_ms},
     {"model_fits",surfaces.model_fits},{"curvature_ms",surfaces.curvature_ms},
+    {"boundary_ms",surfaces.boundary_ms},{"boundary_fit_num",surfaces.boundary_fit_num},
     {"retention_ms",surfaces.retention_ms},
     {"patch_edges",surfaces.patch_edges},{"smooth_edges",surfaces.smooth_edges},
     {"sharp_edges",surfaces.sharp_edges},
+    {"uncertain_edges",surfaces.uncertain_edges},
     {"min_display_plane_patches",min_display_plane_patches},
     {"patches",json::array()},{"models",json::array()}};
   for (std::size_t i=0; i<surfaces.patches.size(); ++i) {
@@ -230,6 +232,8 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     const auto &c = p.curvature;
     patch["curvature"] = {{"valid",c.valid},{"sample_num",c.sample_num},
       {"method","position_quadratic"}};
+    patch["curvature"].update({{"fit_iter",c.fit_iter},
+      {"has_svd_fallback",c.has_svd_fallback}});
     if (c.valid) {
       patch["curvature"].update({{"normal",vector_json(c.normal)},
         {"axis_u",vector_json(c.axis_u)},{"axis_v",vector_json(c.axis_v)},
@@ -293,6 +297,7 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   config_.min_fit_nodes=std::max<std::int64_t>(10,node.declare_parameter("surface_model.min_fit_nodes",12));
   config_.max_fit_samples=std::max<std::int64_t>(10,node.declare_parameter("surface_model.max_fit_samples",256));
   config_.max_model_fits=std::max<std::int64_t>(1,node.declare_parameter("surface_model.max_model_fits",128));
+  config_.max_boundary_fits=std::max<std::int64_t>(0,node.declare_parameter("surface_model.max_boundary_fits",32));
   retention_.enable_retention=node.declare_parameter("surface_model.retention.enable",true);
   retention_.max_point_residual=node.declare_parameter(
     "surface_model.retention.max_point_residual",retention_.max_point_residual);

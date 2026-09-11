@@ -13,7 +13,7 @@
     # PlanePatchとNonPlaneNodeを圧縮した上位グラフの重畳表示。
     surface_model.enable_patch_graph: false
     surface_model.max_link_length: 0.08
-    # 隣接ノード法線と、曲率で境界位置へ補正した平面パッチ法線の接続角[deg]。
+    # 位置由来の境界接平面、または非平面ノード法線の接続角[deg]。
     surface_model.max_link_normal_deg: 45.0
     # 各入力パッチのRMS残差[m]と各点の近似表面距離[m]。
     surface_model.max_patch_rms: 0.004
@@ -29,6 +29,8 @@
     surface_model.min_fit_nodes: 12
     surface_model.max_fit_samples: 256
     surface_model.max_model_fits: 128
+    # 不明境界に対する追加局所フィットの回数。0は追加推定なし。
+    surface_model.max_boundary_fits: 32
     # 生成済み曲面の維持判定。接続切れではなく現在ノードの位置・法線・支持率による判定。
     surface_model.retention.enable: true
     surface_model.retention.max_point_residual: 0.012

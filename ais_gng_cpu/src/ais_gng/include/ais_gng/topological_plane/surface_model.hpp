@@ -25,6 +25,7 @@ struct options
   std::size_t min_fit_nodes = 12;
   std::size_t max_fit_samples = 256;
   std::size_t max_model_fits = 128;
+  std::size_t max_boundary_fits = 32;
 };
 
 struct patch_curvature
@@ -51,6 +52,8 @@ struct patch_curvature
   double fit_error = 0.0;
   // 位置支持・条件数・高さ残差による品質指標。確率としての解釈は不可。
   double confidence = 0.0;
+  std::size_t fit_iter = 0;
+  bool has_svd_fallback = false;
 };
 
 struct local_patch
@@ -101,10 +104,14 @@ struct result
   std::vector<std::array<std::uint32_t, 2>> smooth_edges;
   // 近接する平面パッチ間の法線不連続。迂回接続による同一曲面への再統合も禁止。
   std::vector<std::array<std::uint32_t, 2>> sharp_edges;
+  // 接平面の支持不足・品質不足。統合の確定ではなくモデル適合検査の候補。
+  std::vector<std::array<std::uint32_t, 2>> uncertain_edges;
   std::vector<region> regions;
   std::size_t model_fits = 0;
   double update_ms = 0.0;
   double curvature_ms = 0.0;
+  double boundary_ms = 0.0;
+  std::size_t boundary_fit_num = 0;
   double retention_ms = 0.0;
 };
 

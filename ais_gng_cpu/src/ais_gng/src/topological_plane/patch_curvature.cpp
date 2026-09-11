@@ -2,6 +2,7 @@
 
 #include <Eigen/Eigenvalues>
 #include <Eigen/Geometry>
+#include <Eigen/QR>
 #include <Eigen/SVD>
 #include <algorithm>
 #include <cmath>
@@ -74,23 +75,45 @@ patch_curvature estimate_curvature(
   for (std::size_t i=0; i<num; ++i) density_weights(i)=1.0/counts[cells[i]];
   weights=density_weights;
   double condition_ratio=0;
-  // 正規化座標の6係数SVDとHuber重みの反復。入力ノード法線の参照なし。
-  for (int iter=0; iter<4; ++iter) {
-    const Eigen::VectorXd root_weights=weights.array().sqrt();
-    const Eigen::MatrixXd weighted_design=root_weights.asDiagonal()*design;
-    Eigen::JacobiSVD<Eigen::MatrixXd> solver(weighted_design,Eigen::ComputeThinU|Eigen::ComputeThinV);
-    condition_ratio=solver.singularValues()(5)/solver.singularValues()(0);
-    if (condition_ratio<1e-5) return out;
-    out.height_coeff=solver.solve(root_weights.cwiseProduct(heights));
-    if (!out.height_coeff.allFinite()) return out;
-    if (iter==3) break;
-    const Eigen::VectorXd residual=(design*out.height_coeff-heights).cwiseAbs();
-    std::vector<double> ordered(residual.data(),residual.data()+num);
+  Eigen::MatrixXd weighted_design(num,6);
+  Eigen::VectorXd root_weights(num),weighted_heights(num),residual(num);
+  std::vector<double> ordered(num);
+  Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr;
+  const auto update_weights=[&]() {
+    residual=(design*out.height_coeff-heights).cwiseAbs();
+    std::copy(residual.data(),residual.data()+num,ordered.begin());
     std::nth_element(ordered.begin(),ordered.begin()+num/2,ordered.end());
     const double huber_th=std::max(1e-6,1.345*1.4826*ordered[num/2]);
     for (std::size_t i=0; i<num; ++i) {
       weights(i)=density_weights(i)*std::min(1.0,huber_th/std::max(1e-15,residual(i)));
     }
+  };
+  // QRによる解と小さいR行列での条件検査。悪条件時のみ全体SVDへ切替。
+  constexpr double min_condition_ratio=1e-5;
+  constexpr double min_qr_condition_ratio=1e-3;
+  constexpr double max_coeff_change=1e-5;
+  for (int iter=0; iter<4; ++iter) {
+    root_weights=weights.array().sqrt();
+    weighted_design=design.array().colwise()*root_weights.array();
+    weighted_heights=root_weights.cwiseProduct(heights);
+    qr.compute(weighted_design);
+    const Eigen::Matrix<double,6,6> triangular=qr.matrixR().topLeftCorner<6,6>().triangularView<Eigen::Upper>();
+    const Eigen::JacobiSVD<Eigen::Matrix<double,6,6>> condition(triangular);
+    condition_ratio=condition.singularValues()(5)/condition.singularValues()(0);
+    if (!std::isfinite(condition_ratio) || condition_ratio<min_condition_ratio) return out;
+    const auto last_coeff=out.height_coeff;
+    if (condition_ratio<min_qr_condition_ratio) {
+      const Eigen::JacobiSVD<Eigen::MatrixXd> solver(weighted_design,Eigen::ComputeThinU|Eigen::ComputeThinV);
+      out.height_coeff=solver.solve(weighted_heights);
+      out.has_svd_fallback=true;
+    } else {
+      out.height_coeff=qr.solve(weighted_heights);
+    }
+    ++out.fit_iter;
+    if (!out.height_coeff.allFinite()) return out;
+    if (iter==3 || (iter>0 && (out.height_coeff-last_coeff).norm()<=
+      max_coeff_change*(1+out.height_coeff.norm()))) break;
+    update_weights();
   }
   const auto &c=out.height_coeff;
   out.normal=(out.height_basis*vec(-c(3),-c(4),1)).normalized();

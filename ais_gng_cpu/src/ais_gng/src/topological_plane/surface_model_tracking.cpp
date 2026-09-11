@@ -70,6 +70,50 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
     claimed.insert(candidate.node_indices.begin(),candidate.node_indices.end());
     proposals.push_back(std::move(candidate));
   }
+  if (!proposals.empty()) {
+    std::vector<bool> is_blocked(map.nodes.size(),false);
+    for (const auto &previous:tracks_) for (const auto &reference:previous.reference) {
+      const auto found=indices.find(reference.id);
+      if (found!=indices.end()) is_blocked[found->second]=true;
+    }
+    for (const auto &plane:planes.clusters) for (auto idx:plane.node_indices) {
+      if (idx<map.nodes.size()) is_blocked[idx]=true;
+    }
+    std::vector<std::vector<std::uint32_t>> neighbors(map.nodes.size());
+    for (std::size_t i=0; i+1<map.edges.size(); i+=2) {
+      const auto a=map.edges[i],b=map.edges[i+1];
+      if (a>=map.nodes.size() || b>=map.nodes.size() || (is_blocked[a] && is_blocked[b])) continue;
+      const auto &pa=map.nodes[a].pos;
+      const auto &pb=map.nodes[b].pos;
+      const Eigen::Vector3d delta(pa.x-pb.x,pa.y-pb.y,pa.z-pb.z);
+      if (!delta.allFinite() || delta.squaredNorm()>config.max_link_length*config.max_link_length) continue;
+      neighbors[a].push_back(b); neighbors[b].push_back(a);
+    }
+    // 新規所属・維持の両方を満たす距離と法線条件。追加後RMSの許容範囲も維持。
+    const double min_growth_cos=std::max(min_cos,std::cos(config.max_normal_deg*3.14159265358979323846/180.0));
+    const double max_growth_dist=std::min({config.max_patch_rms,config.max_point_residual,
+      retention.max_point_residual,retention.max_rms});
+    for (auto &candidate:proposals) {
+      const double old_rms=candidate.shape.rms;
+      double error_sum=old_rms*old_rms*candidate.node_indices.size();
+      std::vector<bool> has_visited(map.nodes.size(),false);
+      // 成立済みの追跡核からの非平面ノード成長。逸脱した参照IDの再取込みなし。
+      for (std::size_t i=0; i<candidate.node_indices.size(); ++i) {
+        for (auto idx:neighbors[candidate.node_indices[i]]) {
+          if (is_blocked[idx] || has_visited[idx]) continue;
+          has_visited[idx]=true;
+          const auto dev=model_dev(candidate.shape,map.nodes[idx]);
+          if (!std::isfinite(dev.dist) || dev.dist>max_growth_dist || dev.normal_cos<min_growth_cos) continue;
+          candidate.node_indices.push_back(idx);
+          is_blocked[idx]=true;
+          error_sum+=dev.dist*dev.dist;
+        }
+      }
+      // 追加点は当該フレームの所属のみ。追跡成立の参照集合・支持率の分母は維持。
+      candidate.shape.rms=std::sqrt(error_sum/candidate.node_indices.size());
+      candidate.shape.score+=candidate.shape.rms*candidate.shape.rms-old_rms*old_rms;
+    }
+  }
   const double retention_ms=std::chrono::duration<double,std::milli>(
     std::chrono::steady_clock::now()-begin).count();
   auto out=extract(map,planes,config,proposals);

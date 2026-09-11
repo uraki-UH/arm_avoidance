@@ -343,28 +343,72 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
       add_patch(std::move(patch));
     }
   }
-  std::set<std::array<std::uint32_t,2>> edges, smooth, sharp;
+  std::set<std::array<std::uint32_t,2>> edges, smooth, sharp, uncertain;
   const auto curvature_begin = std::chrono::steady_clock::now();
   for (auto &patch : output.patches) {
-    if (patch.node_indices.size() >= 8) patch.curvature = estimate_curvature(patch, map);
+    if (patch.node_indices.size()<8 || patch.plane_cluster_idx<0) continue;
+    patch.curvature=estimate_curvature(patch,map);
   }
   output.curvature_ms = std::chrono::duration<double, std::milli>(
     std::chrono::steady_clock::now() - curvature_begin).count();
-  // 境界ノードの混合法線だけで平面同士を接続しないための、パッチ側の境界法線。
-  std::vector<vec> patch_normals(output.patches.size(),vec::Zero());
-  for (std::size_t i=0; i<output.patches.size(); ++i) {
-    const auto &patch=output.patches[i];
-    if (patch.plane_cluster_idx<0) continue;
-    patch_normals[i]=normal(position(planes.clusters[patch.plane_cluster_idx].normal));
-    if (patch_normals[i].squaredNorm()<0.5) patch_normals[i]=normal(patch.curvature.normal);
+  const auto boundary_begin=std::chrono::steady_clock::now();
+  struct boundary_support {
+    vec center=vec::Zero();
+    double link_length=0;
+    std::size_t num=0;
+    std::array<patch_curvature,2> local;
+    std::array<const patch_curvature *,2> selected{nullptr,nullptr};
+  };
+  std::map<std::array<std::uint32_t,2>,boundary_support> boundaries;
+  // 原GNGの短い境界エッジごとの集合。パッチ対・片側ごとに一度だけの追加推定。
+  for (std::size_t i=0; i+1<map.edges.size(); i+=2) {
+    const auto a=map.edges[i],b=map.edges[i+1];
+    if (a>=owner.size() || b>=owner.size() || owner[a]<0 || owner[b]<0 || owner[a]==owner[b]) continue;
+    const auto left=output.patches[owner[a]].plane_cluster_idx;
+    const auto right=output.patches[owner[b]].plane_cluster_idx;
+    const double dist=(points[a]-points[b]).norm();
+    if (left<0 || right<0 || left==right || dist>config.max_link_length) continue;
+    auto &support=boundaries[{static_cast<std::uint32_t>(std::min(owner[a],owner[b])),
+      static_cast<std::uint32_t>(std::max(owner[a],owner[b]))}];
+    support.center+=(points[a]+points[b])*0.5;
+    support.link_length+=dist;
+    ++support.num;
   }
-  const auto boundary_normal=[&](std::uint32_t idx,const vec &boundary) {
-    const auto &patch=output.patches[owner[idx]];
-    const auto &c=patch.curvature;
-    if (c.valid && c.confidence>=0.5) return patch_normal_at(c,boundary);
-    vec n=patch_normals[owner[idx]];
-    if (n.squaredNorm()<0.5) return normals[idx];
-    return normal(n);
+  constexpr double min_boundary_confidence=0.5;
+  for (auto &[pair,support]:boundaries) {
+    support.center/=static_cast<double>(support.num);
+    support.link_length/=static_cast<double>(support.num);
+    for (std::size_t side=0; side<2; ++side) {
+      const auto &patch=output.patches[pair[side]];
+      const auto &c=patch.curvature;
+      if (c.valid && c.confidence>=min_boundary_confidence) {
+        support.selected[side]=&c;
+        continue;
+      }
+      if (output.boundary_fit_num>=config.max_boundary_fits) continue;
+      const double radius=std::max(2*support.link_length,0.75*std::sqrt(c.support_cov.trace()));
+      local_patch local;
+      for (auto idx:patch.node_indices) {
+        if ((points[idx]-support.center).squaredNorm()<=radius*radius) local.node_indices.push_back(idx);
+      }
+      if (local.node_indices.size()<8 || local.node_indices.size()==patch.node_indices.size()) continue;
+      ++output.boundary_fit_num;
+      support.local[side]=estimate_curvature(local,map);
+      if (support.local[side].valid && support.local[side].confidence>=min_boundary_confidence) {
+        support.selected[side]=&support.local[side];
+      }
+    }
+  }
+  const auto can_evaluate_boundary=[](const patch_curvature &c,const vec &point) {
+    // 面内支持範囲から離れた境界における、二次式の過大な外挿の抑止。
+    constexpr double max_support_dev=16;
+    const vec delta=point-c.height_origin;
+    const double u=c.axis_u.dot(delta),v=c.axis_v.dot(delta);
+    const auto &s=c.support_cov;
+    const double determinant=s(0,0)*s(1,1)-s(0,1)*s(1,0);
+    if (!(determinant>0)) return false;
+    const double dev=(s(1,1)*u*u-2*s(0,1)*u*v+s(0,0)*v*v)/determinant;
+    return std::isfinite(dev) && dev<=max_support_dev;
   };
   const double min_link_cos = std::cos(config.max_link_normal_deg*pi/180.0);
   for (std::size_t i = 0; i+1 < map.edges.size(); i += 2) {
@@ -375,24 +419,39 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
       static_cast<std::uint32_t>(std::max(owner[a],owner[b]))};
     edges.insert(pair);
     if ((points[a]-points[b]).norm()>config.max_link_length) continue;
-    double link_cos=1.0;
-    if (output.patches[owner[a]].plane_cluster_idx>=0 && output.patches[owner[b]].plane_cluster_idx>=0 &&
-      output.patches[owner[a]].plane_cluster_idx!=output.patches[owner[b]].plane_cluster_idx) {
-      // 両パッチを同じ境界位置で比較。円柱の離れたパッチ間の角度差とは区別。
+    const auto support=boundaries.find(pair);
+    if (support!=boundaries.end()) {
+      const auto &selected=support->second.selected;
       const vec boundary=(points[a]+points[b])*0.5;
-      const vec na=boundary_normal(a,boundary), nb=boundary_normal(b,boundary);
-      link_cos=std::abs(na.dot(nb));
-      if (na.squaredNorm()>0.5 && nb.squaredNorm()>0.5 && link_cos<min_link_cos) sharp.insert(pair);
+      if (!selected[0] || !selected[1] || !can_evaluate_boundary(*selected[0],boundary) ||
+        !can_evaluate_boundary(*selected[1],boundary)) {
+        uncertain.insert(pair);
+        continue;
+      }
+      // 信頼できる位置由来の接平面同士の比較。入力法線による二重拒否なし。
+      const vec na=patch_normal_at(*selected[0],boundary), nb=patch_normal_at(*selected[1],boundary);
+      if (std::abs(na.dot(nb))<min_link_cos) sharp.insert(pair);
+      else smooth.insert(pair);
+    } else if (std::abs(normals[a].dot(normals[b]))>=min_link_cos) {
+      smooth.insert(pair);
     }
-    if (std::abs(normals[a].dot(normals[b]))>=min_link_cos && link_cos>=min_link_cos) smooth.insert(pair);
   }
-  for (const auto &pair:sharp) smooth.erase(pair);
+  for (const auto &pair:sharp) { smooth.erase(pair); uncertain.erase(pair); }
+  for (const auto &pair:smooth) uncertain.erase(pair);
   output.patch_edges.assign(edges.begin(),edges.end());
   output.smooth_edges.assign(smooth.begin(),smooth.end());
   output.sharp_edges.assign(sharp.begin(),sharp.end());
+  output.uncertain_edges.assign(uncertain.begin(),uncertain.end());
+  output.boundary_ms=std::chrono::duration<double,std::milli>(
+    std::chrono::steady_clock::now()-boundary_begin).count();
   std::vector<std::vector<std::uint32_t>> adjacency(output.patches.size());
   std::vector<std::vector<std::uint32_t>> conflicts(output.patches.size());
   for (const auto &edge : smooth) {
+    adjacency[edge[0]].push_back(edge[1]);
+    adjacency[edge[1]].push_back(edge[0]);
+  }
+  // 不明境界は探索候補のみ。新規統合には既存のモデル残差・法線・退化検査が必要。
+  for (const auto &edge : uncertain) {
     adjacency[edge[0]].push_back(edge[1]);
     adjacency[edge[1]].push_back(edge[0]);
   }

@@ -18,16 +18,21 @@ json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClus
 {
   json out={{"update_ms",result.update_ms},{"curvature_ms",result.curvature_ms},
     {"fits",result.model_fits},{"patches",json::array()},
-    {"sharp",json::array()},{"smooth",json::array()},{"shown",json::array()}};
+    {"sharp",json::array()},{"smooth",json::array()},{"uncertain",json::array()},
+    {"boundary_ms",result.boundary_ms},{"boundary_fit_num",result.boundary_fit_num},
+    {"shown",json::array()}};
   for (const auto &patch:result.patches) {
     if (patch.plane_cluster_idx<0) continue;
     const auto &c=patch.curvature;
     out["patches"].push_back({{"plane",planes.clusters[patch.plane_cluster_idx].id},
       {"nodes",patch.node_indices.size()},{"valid",c.valid},{"confidence",c.confidence},
+      {"fit_iter",c.fit_iter},
+      {"has_svd_fallback",c.has_svd_fallback},
       {"fit_error",c.fit_error},{"kappa",{c.kappa.x(),c.kappa.y()}}});
   }
-  for (const auto &kind:{"sharp","smooth"}) {
-    const auto &edges=std::string(kind)=="sharp" ? result.sharp_edges:result.smooth_edges;
+  for (const auto &kind:{"sharp","smooth","uncertain"}) {
+    const auto &edges=std::string(kind)=="sharp" ? result.sharp_edges:
+      (std::string(kind)=="smooth" ? result.smooth_edges:result.uncertain_edges);
     for (const auto &edge:edges) {
       const auto a=result.patches[edge[0]].plane_cluster_idx;
       const auto b=result.patches[edge[1]].plane_cluster_idx;

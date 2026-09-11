@@ -654,6 +654,119 @@ TEST(PatchCurvature, RingAndInsufficientSamplesDoNotDetermineQuadratic)
   EXPECT_FALSE(estimate_curvature(patch,map).valid);
 }
 
+TEST(PatchCurvature, ConvergedFitStopsEarly)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-5;i<=5;++i) for (int j=-5;j<=5;++j) {
+    const double x=0.004*i,y=0.004*j;
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(x,y,3*x*x-y*y),vec::Zero());
+  }
+  const auto first=estimate_curvature(patch,map);
+  ASSERT_TRUE(first.valid);
+  EXPECT_LT(first.fit_iter,4U);
+  EXPECT_FALSE(first.has_svd_fallback);
+}
+
+TEST(PatchCurvature, IllConditionedTwoDimensionalSupportUsesSvdFallback)
+{
+  map_type map;
+  local_patch patch;
+  for (int i=-5;i<=5;++i) for (int j=-5;j<=5;++j) {
+    const double x=0.004*i,y=0.00006*j;
+    patch.node_indices.push_back(map.nodes.size());
+    add_node(map,vec(x,y,0),vec::Zero());
+  }
+  const auto c=estimate_curvature(patch,map);
+  ASSERT_TRUE(c.valid);
+  EXPECT_TRUE(c.has_svd_fallback);
+  EXPECT_LT(c.kappa.norm(),1e-8);
+}
+
+TEST(SurfaceModel, UncertainBoundaryIsNotAConfirmedSharpOrSmoothEdge)
+{
+  scene s;
+  s.planes.clusters.resize(2);
+  for (int side=0;side<2;++side) for (int i=0;i<7;++i) {
+    const double x=0.04*(i%3),y=0.04*(i/3);
+    s.planes.clusters[side].node_indices.push_back(s.map.nodes.size());
+    add_node(s.map,side ? vec(0,x,y):vec(x,y,0),side ? vec::UnitX():vec::UnitZ());
+  }
+  edge(s.map,0,7);
+  const auto r=extract(s.map,s.planes);
+  ASSERT_EQ(r.uncertain_edges.size(),1U);
+  EXPECT_TRUE(r.sharp_edges.empty());
+  EXPECT_TRUE(r.smooth_edges.empty());
+  // 不明境界だけを根拠にした、直交する2面の曲面化の禁止。
+  for (const auto &region:r.regions) EXPECT_TRUE(region.shape.type=="unknown" || region.shape.type=="plane");
+  coverage(r,s.map.nodes.size());
+  const auto data=nlohmann::json::parse(serialize(r,s.map,s.planes));
+  EXPECT_EQ(data["uncertain_edges"].size(),1U);
+}
+
+TEST(SurfaceModel, BoundaryFitBudgetLimitsAdditionalWork)
+{
+  scene s;
+  s.planes.clusters.resize(2);
+  for (int side=0;side<2;++side) for (int i=0;i<10;++i) for (int j=0;j<10;++j) {
+    s.planes.clusters[side].node_indices.push_back(s.map.nodes.size());
+    add_node(s.map,vec((side ? -1:1)*(0.002+0.006*i),0.006*(j-4.5),
+      0.003*std::sin(17*i+13*j)),vec::UnitZ());
+  }
+  edge(s.map,4,104);
+  options config;
+  config.max_boundary_fits=0;
+  const auto disabled=extract(s.map,s.planes,config);
+  EXPECT_EQ(disabled.boundary_fit_num,0U);
+  EXPECT_EQ(disabled.uncertain_edges.size(),1U);
+  config.max_boundary_fits=1;
+  const auto limited=extract(s.map,s.planes,config);
+  EXPECT_EQ(limited.boundary_fit_num,1U);
+  EXPECT_EQ(limited.uncertain_edges.size(),1U);
+  config.max_boundary_fits=32;
+  const auto full=extract(s.map,s.planes,config);
+  EXPECT_EQ(full.boundary_fit_num,2U);
+  coverage(full,s.map.nodes.size());
+}
+
+TEST(SurfaceModel, FarExtrapolationOfTinyPatchesRemainsUncertain)
+{
+  scene s;
+  s.planes.clusters.resize(2);
+  for (int side=0;side<2;++side) for (int i=-1;i<=1;++i) for (int j=-1;j<=1;++j) {
+    s.planes.clusters[side].node_indices.push_back(s.map.nodes.size());
+    add_node(s.map,side ? vec(0.04,0.001*i,0.001*j):vec(0.001*i,0.001*j,0),
+      side ? vec::UnitX():vec::UnitZ());
+  }
+  edge(s.map,4,13);
+  const auto r=extract(s.map,s.planes);
+  EXPECT_TRUE(r.sharp_edges.empty());
+  EXPECT_EQ(r.uncertain_edges.size(),1U);
+}
+
+TEST(SurfaceModel, LocalBoundaryFitProtectsCornerDespiteRemoteNoise)
+{
+  scene s;
+  s.planes.clusters.resize(2);
+  for (int side=0;side<2;++side) for (int i=0;i<10;++i) for (int j=0;j<10;++j) {
+    const double along=0.002+0.01*i,y=0.006*(j-4.5);
+    const double noise=i>=5 ? 0.015*std::sin(13*i+7*j):0;
+    s.planes.clusters[side].node_indices.push_back(s.map.nodes.size());
+    add_node(s.map,side ? vec(noise,y,along):vec(along,y,noise),
+      side ? vec::UnitX():vec::UnitZ());
+  }
+  edge(s.map,4,104);
+  const auto r=extract(s.map,s.planes);
+  ASSERT_EQ(r.patches.size(),2U);
+  for (const auto &p:r.patches) EXPECT_LT(p.curvature.confidence,0.5);
+  EXPECT_EQ(r.boundary_fit_num,2U);
+  EXPECT_EQ(r.sharp_edges.size(),1U);
+  EXPECT_TRUE(r.uncertain_edges.empty());
+  EXPECT_TRUE(r.smooth_edges.empty());
+  for (const auto &region:r.regions) EXPECT_EQ(region.patch_indices.size(),1U);
+}
+
 TEST(SurfaceModel, PositionBoundaryTangentsJoinWideCylinderPatches)
 {
   scene s;
@@ -673,6 +786,15 @@ TEST(SurfaceModel, PositionBoundaryTangentsJoinWideCylinderPatches)
   ASSERT_EQ(r.smooth_edges.size(),1U);
   ASSERT_EQ(r.regions.size(),1U);
   EXPECT_EQ(r.regions[0].shape.type,"cylinder");
+  // 境界ノード法線だけの乱れによる、位置由来の連続面の二重拒否の防止。
+  for (std::size_t i=11*8;i<12*8;++i) {
+    s.map.nodes[i].normal.x=0; s.map.nodes[i].normal.y=0; s.map.nodes[i].normal.z=1;
+  }
+  const auto noisy=extract(s.map,s.planes);
+  EXPECT_TRUE(noisy.sharp_edges.empty());
+  EXPECT_EQ(noisy.smooth_edges.size(),1U);
+  ASSERT_EQ(noisy.regions.size(),1U);
+  EXPECT_EQ(noisy.regions[0].shape.type,"cylinder");
 }
 
 TEST(SurfaceTracking, DisconnectedEdgesKeepCurrentNodesAndStableId)
@@ -718,6 +840,66 @@ TEST(SurfaceTracking, OutlierNodeIsRemovedAndCanRejoin)
   EXPECT_TRUE(restored.regions[0].is_retained);
   EXPECT_EQ(restored.regions[0].rejected_node_num,0U);
   coverage(restored,s.map.nodes.size());
+}
+
+TEST(SurfaceTracking, ConnectedNewNonplaneNodesJoinWithoutRefitting)
+{
+  auto s=cylinder(0.1,0.1);
+  tracker tracking;
+  const auto first=tracking.update(s.map,s.planes);
+  ASSERT_EQ(first.regions.size(),1U);
+  const auto begin=s.map.nodes.size();
+  add_node(s.map,vec(0.1,0,0.12),vec::UnitX());
+  add_node(s.map,vec(0.1,0,0.14),vec::UnitX());
+  add_node(s.map,vec(0.13,0,0.14),vec::UnitX());
+  add_node(s.map,vec(0.1,0,0.16),vec::UnitZ());
+  add_node(s.map,vec(-0.1,0,0.12),-vec::UnitX());
+  edge(s.map,5,begin); edge(s.map,begin,begin+1);
+  edge(s.map,begin+1,begin+2); edge(s.map,begin+1,begin+3);
+  const auto next=tracking.update(s.map,s.planes);
+  const auto retained=std::find_if(next.regions.begin(),next.regions.end(),[](const auto &r) {return r.is_retained;});
+  ASSERT_NE(retained,next.regions.end());
+  EXPECT_EQ(retained->id,first.regions[0].id);
+  EXPECT_EQ(retained->node_indices.size(),begin+2);
+  EXPECT_NE(std::find(retained->node_indices.begin(),retained->node_indices.end(),begin+1),retained->node_indices.end());
+  EXPECT_EQ(retained->shape.q,first.regions[0].shape.q);
+  EXPECT_EQ(retained->rejected_node_num,0U);
+  coverage(next,s.map.nodes.size());
+  // 追加点は接続消失で除外、元の追跡核は接続消失だけでは破棄なし。
+  s.map.edges.clear();
+  const auto disconnected=tracking.update(s.map,s.planes);
+  const auto core=std::find_if(disconnected.regions.begin(),disconnected.regions.end(),[](const auto &r) {return r.is_retained;});
+  ASSERT_NE(core,disconnected.regions.end());
+  EXPECT_EQ(core->node_indices.size(),begin);
+  EXPECT_EQ(core->id,first.regions[0].id);
+  // 維持側のRMS設定が厳しい場合にも、追加点による条件逸脱なし。
+  s.map.nodes[begin].pos.x=0.101;
+  edge(s.map,5,begin);
+  retention_options strict;
+  strict.max_rms=0.0001;
+  const auto limited=tracking.update(s.map,s.planes,{},strict);
+  const auto strict_core=std::find_if(limited.regions.begin(),limited.regions.end(),[](const auto &r) {return r.is_retained;});
+  ASSERT_NE(strict_core,limited.regions.end());
+  EXPECT_EQ(strict_core->node_indices.size(),begin);
+}
+
+TEST(SurfaceTracking, AdditionalNodesDoNotRescueLostReferenceSupport)
+{
+  auto s=cylinder(0.1,0.1);
+  tracker tracking;
+  const auto first=tracking.update(s.map,s.planes);
+  const auto begin=s.map.nodes.size();
+  for (int i=0;i<20;++i) {
+    add_node(s.map,vec(0.1,0,0.105+0.001*i),vec::UnitX());
+    edge(s.map,5,begin+i);
+  }
+  tracking.update(s.map,s.planes);
+  for (std::size_t i=0;i<begin;++i) s.map.nodes[i].pos.x+=0.5;
+  const auto next=tracking.update(s.map,s.planes);
+  for (const auto &r:next.regions) {
+    EXPECT_FALSE(r.is_retained);
+    EXPECT_NE(r.id,first.regions[0].id);
+  }
 }
 
 TEST(SurfaceTracking, NodeNormalAndNonfinitePositionRejectOnlyThoseNodes)
