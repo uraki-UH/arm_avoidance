@@ -37,9 +37,9 @@ GNG学習・局所平面クラスタ生成（前段）
    -> TCP位置・姿勢の生成
    -> 高さ優先の並べ替え・件数制限
    |
-   +-- 候補PoseArray
+   +-- 候補GraspCandidateArray（ID・姿勢・到達性状態）
    +-- 面積比・診断summary
-   +-- Viewerが候補PoseArrayを直接受信して矢印表示
+   +-- Viewerが同じ候補IDの矢印を状態に応じて色分け
 ```
 
 平面クラスタの分割・成長・統合は前段処理。本方式は受信した分割結果を利用し、再クラスタリングしない。CPU版GNGの直接クラスタ出力と接続可能。ボクセル方式の把持照合や軌道生成とは独立した経路。
@@ -268,12 +268,13 @@ $$
 
 | トピック | 型 | 内容 |
 | --- | --- | --- |
-| `/grasp_pose_cands` | `geometry_msgs/msg/PoseArray` | 候補TCP位置・姿勢。入力グラフのheaderを継承 |
-| `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | PoseArrayと同順の面積比 |
+| `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_idと候補ごとのid・pose・shape_score・state。入力グラフのheaderを継承 |
+| `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | 互換用の同順面積比。正規の値は候補内のshape_score |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/reachability_markers` | `visualization_msgs/msg/MarkerArray` | 任意の到達性評価。重複を避ける場合は候補PoseをOFFにして表示 |
 
 候補生成launch自体からのMarker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。元の座標系を維持し、空候補は旧表示を消去。
+
+到達性は候補生成側の共通処理で評価。`state`は未評価=0（黄）、範囲内=1（緑）、範囲外=2（灰）。`reachability_map_topic`のTCP登録セルと最新TFを使用し、状態だけの変化では`update_id`と候補`id`を維持。新規候補集合は`update_id`を増加し、IDはその集合内でのみ有効。位置の到達範囲であり、姿勢到達性や把持成功の保証ではない。
 
 summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
 
@@ -304,7 +305,7 @@ ros2 topic echo /grasp_pose_cands/summary \
 
 候補出力は `grasp_goal_planning.launch.py` の既定入力と共通。候補生成方式は上方方式かボクセル方式の一方だけ起動し、比較時はトピックを分離。名前付きYAMLの出力値がlaunch引数より優先されるため、個別トピック指定時は両者を同じ値へ変更。自動的な発行者排他や候補統合は未実装。計画側の `enable_motion:=false` は動作指令の抑制であり、経路計算の停止ではない。
 
-ROSノードは最新のグラフとクラスタを各1件保持する方式。更新番号不一致では待機し、履歴を探索して組み合わせない。入力停止や不一致だけでは旧候補の失効出力は行わないため、撮影時は時刻・更新番号も確認。スコア配列はheaderを持たず、PoseArrayとの厳密な時刻同期情報はない。
+ROSノードは最新のグラフとクラスタを各1件保持する方式。更新番号不一致では待機し、履歴を探索して組み合わせない。入力停止や不一致だけでは旧候補の失効出力は行わないため、撮影時は時刻・更新番号も確認。互換用スコア配列はheaderを持たないため、厳密な対応には候補内の`shape_score`を使用。
 
 ## 7. 検証済み範囲と注意点
 

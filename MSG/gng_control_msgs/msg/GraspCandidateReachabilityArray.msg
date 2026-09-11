@@ -1,9 +1,0 @@
-# 元のPoseArrayの座標系と観測時刻
-std_msgs/Header header
-# 現在配置での評価座標系と評価時刻
-std_msgs/Header evaluation_header
-# 登録セルの寸法・原点と入力トピック
-float64 voxel_size
-geometry_msgs/Point voxel_origin
-string reachability_map_topic
-GraspCandidateReachability[] candidates

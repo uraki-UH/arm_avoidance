@@ -9,6 +9,7 @@
 #include <rmw/types.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
+#include <gng_control_msgs/msg/grasp_candidate_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32_multi_array.hpp>
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
@@ -87,6 +88,7 @@ namespace topic_utils {
             if (t.find("TopologicalNodeFeature") != std::string::npos) return "topological_node_feature";
             if (t.find("TopologicalClusterFeature") != std::string::npos) return "topological_cluster_feature";
             if (t == "geometry_msgs/msg/PoseArray") return "marker";
+            if (t == "gng_control_msgs/msg/GraspCandidateArray") return "marker";
             if (t.find("Marker") != std::string::npos) return "marker";
             if (t.find("Voxel") != std::string::npos) return "voxel";
         }
@@ -129,30 +131,49 @@ namespace converter {
         return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
     }
 
-    // PoseArrayのローカルZ軸矢印への変換。空配列を含む毎回の全置換
-    json to_json(const geometry_msgs::msg::PoseArray& poses, const std::string& tag) {
-        json markers = json::array();
-        for (std::size_t idx = 0; idx < poses.poses.size(); ++idx) {
-            const auto& pose = poses.poses[idx];
+    // 汎用姿勢と状態付き候補に共通のローカルZ軸矢印
+    json pose_marker(const geometry_msgs::msg::Pose& pose, const std::string& frame,
+                     std::uint32_t id, const std::array<double, 4>& color) {
             const auto& p = pose.position;
             const auto& q = pose.orientation;
             const double norm = std::hypot(std::hypot(q.x, q.y), std::hypot(q.z, q.w));
             if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
-                !std::isfinite(norm) || norm < 1.0e-12) continue;
+                !std::isfinite(norm) || norm < 1.0e-12) return nullptr;
             const double x = q.x / norm, y = q.y / norm, z = q.z / norm, w = q.w / norm;
             constexpr double length = 0.08;
-            markers.push_back({
-                {"id", idx}, {"ns", "pose_array"}, {"type", "arrow"}, {"action", 0},
-                {"frameId", poses.header.frame_id},
+            return {
+                {"id", id}, {"ns", "pose_array"}, {"type", "arrow"}, {"action", 0},
+                {"frameId", frame},
                 {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
-                {"scale", {0.008, 0.016, 0.02}}, {"color", {0.15, 0.8, 1.0, 1.0}},
+                {"scale", {0.008, 0.016, 0.02}}, {"color", color},
                 {"points", {{p.x, p.y, p.z},
                     {p.x + length * 2.0 * (x * z + w * y),
                      p.y + length * 2.0 * (y * z - w * x),
                      p.z + length * (1.0 - 2.0 * (x * x + y * y))}}}
-            });
+            };
+    }
+
+    json to_json(const geometry_msgs::msg::PoseArray& poses, const std::string& tag) {
+        json markers = json::array();
+        for (std::size_t idx = 0; idx < poses.poses.size(); ++idx) {
+            auto marker = pose_marker(poses.poses[idx], poses.header.frame_id, idx, {0.15, 0.8, 1.0, 1.0});
+            if (!marker.is_null()) markers.push_back(std::move(marker));
         }
         return {{"type", "stream.marker_array"}, {"tag", tag},
+                {"source_type", "pose_array"}, {"markers", std::move(markers)}};
+    }
+
+    json to_json(const gng_control_msgs::msg::GraspCandidateArray& msg, const std::string& tag) {
+        using candidate_msg = gng_control_msgs::msg::GraspCandidate;
+        json markers = json::array();
+        for (const auto& candidate : msg.candidates) {
+            const std::array<double, 4> color = candidate.state == candidate_msg::INSIDE
+                ? std::array<double, 4>{0.2, 0.85, 0.25, 1.0} : candidate.state == candidate_msg::OUTSIDE
+                ? std::array<double, 4>{0.55, 0.55, 0.55, 1.0} : std::array<double, 4>{0.9, 0.7, 0.1, 1.0};
+            auto marker = pose_marker(candidate.pose, msg.header.frame_id, candidate.id, color);
+            if (!marker.is_null()) markers.push_back(std::move(marker));
+        }
+        return {{"type", "stream.marker_array"}, {"tag", tag}, {"update_id", msg.update_id},
                 {"source_type", "pose_array"}, {"markers", std::move(markers)}};
     }
 
@@ -791,6 +812,13 @@ private:
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";
                     if (std::find(topics[sid].begin(), topics[sid].end(),
+                                  "gng_control_msgs/msg/GraspCandidateArray") != topics[sid].end()) {
+                        activeDynamicSubs_[sid] = create_subscription<gng_control_msgs::msg::GraspCandidateArray>(
+                            sid, rclcpp::QoS(1).reliable().transient_local(),
+                            [this, sid](const gng_control_msgs::msg::GraspCandidateArray::SharedPtr msg) {
+                                broadcast_markers(sid, converter::to_json(*msg, sid));
+                            });
+                    } else if (std::find(topics[sid].begin(), topics[sid].end(),
                                   "geometry_msgs/msg/PoseArray") != topics[sid].end()) {
                         auto qos = rclcpp::QoS(1).reliable();
                         const auto publishers = get_publishers_info_by_topic(sid);

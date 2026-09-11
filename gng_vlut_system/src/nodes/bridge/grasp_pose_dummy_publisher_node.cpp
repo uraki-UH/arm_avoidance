@@ -1,8 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
+#include <candidate/grasp_candidate_publisher.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +22,6 @@ public:
   {
     declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
     declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
-    declare_parameter<std::string>("marker_topic", "/grasp_pose_markers");
     declare_parameter<std::string>("frame_id", "world");
     declare_parameter<double>("publish_rate_hz", 1.0);
     declare_parameter<int>("candidate_count", 6);
@@ -37,7 +35,6 @@ public:
 
     pose_topic_ = get_parameter("pose_topic").as_string();
     score_topic_ = get_parameter("score_topic").as_string();
-    marker_topic_ = get_parameter("marker_topic").as_string();
     frame_id_ = get_parameter("frame_id").as_string();
     publish_rate_hz_ = std::max(0.1, get_parameter("publish_rate_hz").as_double());
     candidate_count_ = std::max(1, static_cast<int>(get_parameter("candidate_count").as_int()));
@@ -49,12 +46,9 @@ public:
     spread_z_ = get_parameter("spread_z").as_double();
     base_yaw_deg_ = get_parameter("base_yaw_deg").as_double();
 
-    pose_pub_ = create_publisher<geometry_msgs::msg::PoseArray>(
-      pose_topic_, rclcpp::QoS(1).reliable().transient_local());
+    pose_pub_ = std::make_unique<grasping_system::candidate::grasp_candidate_publisher>(*this, pose_topic_);
     score_pub_ = create_publisher<std_msgs::msg::Float32MultiArray>(
       score_topic_, rclcpp::QoS(1).reliable().transient_local());
-    marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-      marker_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     const auto period = std::chrono::duration<double>(1.0 / publish_rate_hz_);
     timer_ = create_wall_timer(
@@ -75,10 +69,10 @@ private:
   void publishDummyPoses()
   {
     constexpr double kPi = 3.14159265358979323846;
-    geometry_msgs::msg::PoseArray pose_array;
+    gng_control_msgs::msg::GraspCandidateArray pose_array;
     pose_array.header.stamp = now();
     pose_array.header.frame_id = frame_id_;
-    pose_array.poses.reserve(static_cast<std::size_t>(candidate_count_));
+    pose_array.candidates.reserve(static_cast<std::size_t>(candidate_count_));
 
     std_msgs::msg::Float32MultiArray scores;
     scores.data.reserve(static_cast<std::size_t>(candidate_count_));
@@ -105,19 +99,21 @@ private:
       pose.orientation.z = orientation.z();
       pose.orientation.w = orientation.w();
 
-      pose_array.poses.push_back(pose);
       const double radial_bias = 1.0 - std::abs(std::sin(theta));
       scores.data.push_back(static_cast<float>(0.5 + 0.5 * radial_bias));
+      gng_control_msgs::msg::GraspCandidate entry;
+      entry.id = i;
+      entry.pose = pose;
+      entry.shape_score = scores.data.back();
+      pose_array.candidates.push_back(std::move(entry));
     }
 
     pose_pub_->publish(pose_array);
     score_pub_->publish(scores);
-    marker_pub_->publish(robot_sim::common::grasp::buildPoseAxisMarkerArray(pose_array));
   }
 
   std::string pose_topic_;
   std::string score_topic_;
-  std::string marker_topic_;
   std::string frame_id_;
   double publish_rate_hz_ = 1.0;
   int candidate_count_ = 6;
@@ -129,9 +125,8 @@ private:
   double spread_z_ = 0.0;
   double base_yaw_deg_ = 0.0;
 
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_pub_;
+  std::unique_ptr<grasping_system::candidate::grasp_candidate_publisher> pose_pub_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_pub_;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

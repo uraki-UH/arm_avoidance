@@ -9,10 +9,10 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/EvaluationMetrics.msg"
+  "msg/GraspCandidate.msg"
+  "msg/GraspCandidateArray.msg"
   "msg/GraspCandidateMetric.msg"
   "msg/GraspCandidateMetricArray.msg"
-  "msg/GraspCandidateReachability.msg"
-  "msg/GraspCandidateReachabilityArray.msg"
   "msg/GraspState.msg"
   "msg/JointControlClaim.msg"
   DEPENDENCIES geometry_msgs sensor_msgs std_msgs

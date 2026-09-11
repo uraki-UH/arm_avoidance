@@ -1,4 +1,4 @@
-"""隔離ドメインのPoseArray入力とViewer gatewayの有限時間起動。"""
+"""隔離ドメインの候補・PoseArray入力とViewer gatewayの有限時間起動。"""
 
 import json
 import os
@@ -11,6 +11,7 @@ import time
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray
+from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray
 from rclpy.qos import DurabilityPolicy, QoSProfile
 
 
@@ -19,7 +20,9 @@ def main():
         raise RuntimeError("この検証にはROS_DOMAIN_ID=217が必要")
     rclpy.init()
     node = rclpy.create_node("pose_array_stream_fixture")
-    publisher = node.create_publisher(PoseArray, "/grasp_pose_cands", QoSProfile(
+    publisher = node.create_publisher(GraspCandidateArray, "/grasp_pose_cands", QoSProfile(
+        depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    pose_publisher = node.create_publisher(PoseArray, "/test/poses", QoSProfile(
         depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
     command = ["/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_ws_gateway_node",
                "--ros-args", "-p", "port:=19091", "-r", "__node:=pose_array_stream_test_gateway"]
@@ -38,16 +41,21 @@ def main():
                 if not line or line.strip() == "STOP":
                     break
                 data = json.loads(line)
-                msg = PoseArray()
+                msg = GraspCandidateArray(update_id=data.get("update_id", 1))
                 msg.header.frame_id = "graspnet_table"
                 msg.header.stamp.sec = data["stamp"]
-                for position, quaternion in data["poses"]:
+                for idx, (position, quaternion) in enumerate(data["poses"]):
                     pose = Pose()
                     pose.position.x, pose.position.y, pose.position.z = map(float, position)
                     (pose.orientation.x, pose.orientation.y, pose.orientation.z,
                      pose.orientation.w) = map(float, quaternion)
-                    msg.poses.append(pose)
-                publisher.publish(msg)
+                    msg.candidates.append(GraspCandidate(
+                        id=data.get("ids", list(range(len(data["poses"]))))[idx],
+                        pose=pose, state=data.get("state", GraspCandidate.UNKNOWN)))
+                if data.get("kind") == "poses":
+                    pose_publisher.publish(PoseArray(header=msg.header, poses=[c.pose for c in msg.candidates]))
+                else:
+                    publisher.publish(msg)
                 print("PUBLISHED", flush=True)
         finally:
             try:

@@ -223,7 +223,7 @@ Pass `start_plane_cluster:=false` when no plane-cluster marker process is needed
 - 判定概要: `/grasp_pose_cands/summary`
 - 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
 
-ViewerによるPoseArrayの直接表示。計画launch・ROS Marker変換ノードへの依存なし。
-到達性を色付きで見る場合は候補PoseをOFF、到達性評価MarkerをON。両レイヤーの自動統合なし。
+`GraspCandidateArray`によるID・姿勢・状態の一括配信。Viewerでは未評価=黄・範囲内=緑・範囲外=灰の単一矢印表示。
+到達性は候補生成側で評価。`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を生成ノードに設定。計画launch・別Markerへの依存なし。
 
 `grasp_goal_planning.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。

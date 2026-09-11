@@ -8,6 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(gng_control_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -34,13 +35,13 @@ ament_target_dependencies(
 add_executable(grasp_voxel_matcher_node src/grasp_voxel_matcher_node.cpp)
 ament_target_dependencies(
   grasp_voxel_matcher_node
-  ais_gng_msgs geometry_msgs rclcpp sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros
+  ais_gng_msgs geometry_msgs gng_control_msgs rclcpp sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros
   voxel_idx voxel_msgs Eigen3
 )
 add_executable(top_grasp_surface_estimator_node src/top_grasp_surface_estimator_node.cpp)
 ament_target_dependencies(
   top_grasp_surface_estimator_node
-  ais_gng_msgs geometry_msgs rclcpp std_msgs Eigen3
+  ais_gng_msgs geometry_msgs gng_control_msgs rclcpp std_msgs tf2 tf2_geometry_msgs tf2_ros Eigen3
 )
 install(TARGETS
   test_rigid_grasp_vlut
@@ -57,6 +58,12 @@ install(DIRECTORY config docs launch
 
 if(BUILD_TESTING)
   enable_testing()
+  add_executable(test_grasp_candidate_publisher test/test_grasp_candidate_publisher.cpp)
+  ament_target_dependencies(test_grasp_candidate_publisher
+    ais_gng_msgs gng_control_msgs geometry_msgs rclcpp tf2 tf2_geometry_msgs tf2_ros)
+  add_test(NAME grasp_candidate_publisher COMMAND test_grasp_candidate_publisher)
+  set_tests_properties(grasp_candidate_publisher PROPERTIES
+    ENVIRONMENT "ROS_DOMAIN_ID=217;ROS_LOCALHOST_ONLY=1")
   add_executable(test_gripper_volume_graph test/test_gripper_volume_graph.cpp)
   ament_target_dependencies(
     test_gripper_volume_graph
@@ -106,7 +113,7 @@ endif()
 
 ament_export_include_directories(include)
 ament_export_dependencies(
-  ais_gng_msgs geometry_msgs sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros voxel_idx
+  ais_gng_msgs geometry_msgs gng_control_msgs rclcpp sensor_msgs std_msgs tf2 tf2_geometry_msgs tf2_ros voxel_idx
   voxel_msgs Eigen3
 )
 

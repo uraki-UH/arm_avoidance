@@ -10,7 +10,7 @@ import time
 
 import rclpy
 from ais_gng_msgs.msg import PlaneCluster, PlaneClusterArray, TopologicalMap, TopologicalNode
-from geometry_msgs.msg import PoseArray
+from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_msgs.msg import Float32MultiArray, String
 import yaml
@@ -26,7 +26,7 @@ def check_case(node, qos, root, enable_override):
     received = {}
     subscriptions = []
     for key, msg_type in (
-        ("candidate_topic", PoseArray),
+        ("candidate_topic", GraspCandidateArray),
         ("score_topic", Float32MultiArray),
         ("summary_topic", String),
     ):
@@ -87,14 +87,21 @@ def check_case(node, qos, root, enable_override):
                     summary = json.loads(received["summary_topic"].data)
                     poses = received["candidate_topic"]
                     scores = received["score_topic"]
-                    if not poses.poses:
+                    if not poses.candidates:
                         continue
-                    assert len(poses.poses) == len(scores.data) == 1
+                    assert len(poses.candidates) == len(scores.data) == 1
                     assert summary["candidate_count"] == 1
                     assert summary["candidates"][0]["cluster_id"] == 1
                     assert poses.header.frame_id == graph.header.frame_id
                     assert 0.0 < scores.data[0] <= 1.0
-                    assert abs(poses.poses[0].position.z - 0.1) < 1.0e-6
+                    assert poses.update_id > 0
+                    assert poses.candidates[0].id == 0
+                    assert poses.candidates[0].state == GraspCandidate.UNKNOWN
+                    assert poses.candidates[0].shape_score == scores.data[0]
+                    assert abs(poses.candidates[0].pose.position.z - 0.1) < 1.0e-6
+                    assert node.count_publishers(topics["candidate_topic"]) == 1
+                    assert node.count_publishers("/grasp_pose_cands/reachability") == 0
+                    assert node.count_publishers("/grasp_pose_cands/reachability_markers") == 0
                     assert node.count_publishers("/grasp_pose_markers") == 0
                     assert not any(
                         "grasp_pose_marker_bridge" in name

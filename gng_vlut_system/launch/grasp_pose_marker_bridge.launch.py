@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("input_topic", default_value="/grasp_pose_cands"),
+        DeclareLaunchArgument("input_topic", default_value="/pose_array"),
         DeclareLaunchArgument("output_topic", default_value="/grasp_pose_markers"),
         DeclareLaunchArgument("marker_namespace", default_value="grasp_pose"),
         DeclareLaunchArgument("arrow_length", default_value="0.12"),

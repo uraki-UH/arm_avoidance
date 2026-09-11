@@ -62,7 +62,7 @@ async function main() {
         }
         assert.equal(has_source, true);
         // 購読前の1回配信をtransient-localで受信
-        fixture.stdin.write(JSON.stringify({ stamp: 11, poses: [
+        fixture.stdin.write(JSON.stringify({ stamp: 11, ids: [42, 7], poses: [
             [[1, 2, 3], [2, 0, 0, 0]], [[0, 0, 0], [0, 0, 0, 0]],
         ] }) + '\n');
         await wait_for(() => stdout.includes('PUBLISHED'), '候補配信');
@@ -70,10 +70,26 @@ async function main() {
         const first = await wait_for(() => messages.find(is_pose_packet), '候補ストリーム');
         assert.equal(first.source_type, 'pose_array');
         assert.equal(first.markers.length, 1);
+        assert.equal(first.markers[0].id, 42);
+        assert.equal(first.update_id, 1);
+        assert.deepEqual(first.markers[0].color, [0.9, 0.7, 0.1, 1]);
         assert.equal(first.markers[0].frameId, 'graspnet_table');
         assert.deepEqual(first.markers[0].points[0], [1, 2, 3]);
         assert.ok(Math.abs(first.markers[0].points[1][2] - 2.92) < 1e-9);
-        fixture.stdin.write(JSON.stringify({ stamp: 12, poses: [] }) + '\n');
+        for (const [state, color] of [[1, [0.2, 0.85, 0.25, 1]], [2, [0.55, 0.55, 0.55, 1]]]) {
+            fixture.stdin.write(JSON.stringify({ stamp: 11, ids: [42], state,
+                poses: [[[1, 2, 3], [2, 0, 0, 0]]] }) + '\n');
+            const packet = await wait_for(() => messages.find(msg => is_pose_packet(msg) &&
+                JSON.stringify(msg.markers[0]?.color) === JSON.stringify(color)), '同一IDの色更新');
+            assert.equal(packet.markers.length, 1);
+            assert.equal(packet.markers[0].id, 42);
+            assert.equal(packet.update_id, 1);
+        }
+        await rpc('sources.setActive', { sourceId: '/test/poses', active: true });
+        fixture.stdin.write(JSON.stringify({ kind: 'poses', stamp: 11, poses: [[[1, 2, 3], [2, 0, 0, 0]]] }) + '\n');
+        const generic = await wait_for(() => messages.find(msg => msg.tag === '/test/poses' && msg.markers?.length), '汎用PoseArray');
+        assert.deepEqual(generic.markers[0].color, [0.15, 0.8, 1, 1]);
+        fixture.stdin.write(JSON.stringify({ stamp: 12, update_id: 2, poses: [] }) + '\n');
         await wait_for(() => messages.find(msg => is_pose_packet(msg) && msg.markers.length === 0), '空候補');
         socket.close();
         await once(socket, 'close');

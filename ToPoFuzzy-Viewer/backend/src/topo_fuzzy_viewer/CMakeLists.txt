@@ -14,6 +14,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(gng_control_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -43,6 +44,7 @@ set(ROS2_DEPENDENCIES_GRAPH
   sensor_msgs
   std_msgs
   geometry_msgs
+  gng_control_msgs
   visualization_msgs
   pcl_conversions
   pcl_ros

@@ -3,131 +3,32 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
 
 
-def _truthy(value: str) -> bool:
-    return str(value).strip().lower() in ("1", "true", "yes", "on")
-
-
 def launch_setup(context, *args, **kwargs):
     script = PathJoinSubstitution(
-        [ThisLaunchFileDir(), "topological_map_goal_selector_node.py"]
-    ).perform(context)
-
-    topological_map_topic = LaunchConfiguration("topological_map_topic").perform(context)
-    output_topic = LaunchConfiguration("output_topic").perform(context)
-    marker_topic = LaunchConfiguration("marker_topic").perform(context)
-    candidate_count = LaunchConfiguration("candidate_count").perform(context)
-    non_collision_only = LaunchConfiguration("non_collision_only").perform(context)
-    orientation_weight = LaunchConfiguration("orientation_weight").perform(context)
-    target_pose_topic = LaunchConfiguration("target_pose_topic").perform(context)
-    target_point_topic = LaunchConfiguration("target_point_topic").perform(context)
-    target_pose_array_topic = LaunchConfiguration("target_pose_array_topic").perform(context)
-    target_score_topic = LaunchConfiguration("target_score_topic").perform(context)
-    goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
-    node_feature_topic = LaunchConfiguration("node_feature_topic").perform(context)
-    manipulability_weight = LaunchConfiguration("manipulability_weight").perform(context)
-    allow_untransformed_target = LaunchConfiguration("allow_untransformed_target").perform(context)
-
-    cmd = [
-        "python3",
-        script,
-        "--topological-map-topic",
-        topological_map_topic,
-        "--output-topic",
-        output_topic,
-        "--marker-topic",
-        marker_topic,
-        "--candidate-count",
-        candidate_count,
-        "--orientation-weight",
-        orientation_weight,
-        "--target-pose-array-topic",
-        target_pose_array_topic,
-        "--target-score-topic",
-        target_score_topic,
-        "--goal-candidate-ids-topic",
-        goal_candidate_ids_topic,
-    ]
-
-    for name in ("reachability_map_topic", "reachability_topic", "reachability_marker_topic",
-                 "reachability_voxel_size", "reachability_publish_hz"):
+        [ThisLaunchFileDir(), "topological_map_goal_selector_node.py"]).perform(context)
+    cmd = ["python3", script]
+    for name in ("topological_map_topic", "output_topic", "marker_topic", "candidate_topic",
+                 "candidate_count", "orientation_weight", "goal_candidate_ids_topic",
+                 "node_feature_topic", "manipulability_weight", "goal_update_hz"):
         value = LaunchConfiguration(name).perform(context)
-        if value:
-            cmd.extend(["--" + name.replace("_", "-"), value])
-    cmd.extend(["--reachability-voxel-origin", *[
-        LaunchConfiguration("reachability_voxel_origin_" + axis).perform(context)
-        for axis in ("x", "y", "z")]])
-
-    if node_feature_topic.strip():
-        cmd.extend(["--node-feature-topic", node_feature_topic])
-    if manipulability_weight.strip():
-        cmd.extend(["--manipulability-weight", manipulability_weight])
-
-    if _truthy(non_collision_only):
-        cmd.append("--non-collision-only")
-    else:
-        cmd.append("--no-non-collision-only")
-
-    if _truthy(allow_untransformed_target):
-        cmd.append("--allow-untransformed-target")
-    else:
-        cmd.append("--no-allow-untransformed-target")
-
-    if target_pose_topic.strip():
-        cmd.extend(["--target-pose-topic", target_pose_topic])
-    if target_point_topic.strip():
-        cmd.extend(["--target-point-topic", target_point_topic])
-
-    return [
-        ExecuteProcess(
-            cmd=cmd,
-            output="screen",
-        )
-    ]
+        cmd.extend(["--" + name.replace("_", "-"), value])
+    is_non_collision_only = LaunchConfiguration("non_collision_only").perform(context).lower() in ("1", "true", "yes", "on")
+    cmd.append("--non-collision-only" if is_non_collision_only else "--no-non-collision-only")
+    return [ExecuteProcess(cmd=cmd, output="screen")]
 
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument(
-            "topological_map_topic",
-            default_value="/ToPoDualArm/topological_map_static",
-        ),
+        DeclareLaunchArgument("topological_map_topic", default_value="/ToPoDualArm/topological_map_static"),
         DeclareLaunchArgument("output_topic", default_value="/selected_topological_map"),
-        DeclareLaunchArgument(
-            "marker_topic",
-            default_value="/selected_topological_map_markers",
-        ),
+        DeclareLaunchArgument("marker_topic", default_value="/selected_topological_map_markers"),
+        DeclareLaunchArgument("candidate_topic", default_value="/grasp_pose_cands"),
+        DeclareLaunchArgument("goal_update_hz", default_value="5.0"),
         DeclareLaunchArgument("candidate_count", default_value="8"),
         DeclareLaunchArgument("non_collision_only", default_value="true"),
         DeclareLaunchArgument("orientation_weight", default_value="0.25"),
-        DeclareLaunchArgument("target_pose_topic", default_value=""),
-        DeclareLaunchArgument("target_point_topic", default_value=""),
-        DeclareLaunchArgument(
-            "target_pose_array_topic",
-            default_value="/grasp_pose_cands",
-        ),
-        DeclareLaunchArgument(
-            "target_score_topic",
-            default_value="/grasp_pose_cand_scores",
-        ),
-        DeclareLaunchArgument(
-            "goal_candidate_ids_topic",
-            default_value="/selected_goal_candidate_ids",
-        ),
-        DeclareLaunchArgument(
-            "node_feature_topic",
-            default_value="/ToPoDualArm/topological_node_features",
-        ),
+        DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
+        DeclareLaunchArgument("node_feature_topic", default_value="/ToPoDualArm/topological_node_features"),
         DeclareLaunchArgument("manipulability_weight", default_value="0.25"),
-        DeclareLaunchArgument("allow_untransformed_target", default_value="true"),
-        DeclareLaunchArgument("reachability_map_topic", default_value="",
-                              description="到達セル用TopologicalMap。空欄時は計画用GNGのTCP位置"),
-        DeclareLaunchArgument("reachability_topic", default_value="/grasp_pose_cands/reachability"),
-        DeclareLaunchArgument("reachability_marker_topic", default_value="/grasp_pose_cands/reachability_markers"),
-        DeclareLaunchArgument("reachability_voxel_size", default_value="0.05",
-                              description="到達セル寸法 [m]。独立map指定時は生成時の値"),
-        DeclareLaunchArgument("reachability_voxel_origin_x", default_value="0.0"),
-        DeclareLaunchArgument("reachability_voxel_origin_y", default_value="0.0"),
-        DeclareLaunchArgument("reachability_voxel_origin_z", default_value="0.0"),
-        DeclareLaunchArgument("reachability_publish_hz", default_value="5.0"),
         OpaqueFunction(function=launch_setup),
     ])

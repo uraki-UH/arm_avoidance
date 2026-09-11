@@ -1,8 +1,8 @@
 #include <candidate/grasp_voxel_matcher.hpp>
+#include <candidate/grasp_candidate_publisher.hpp>
 
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
@@ -101,8 +101,7 @@ public:
     orientations_ = loadOrientations();
 
     const auto transient_qos = rclcpp::QoS(1).reliable().transient_local();
-    candidate_pub_ = create_publisher<geometry_msgs::msg::PoseArray>(
-      candidate_topic, transient_qos);
+    candidate_pub_ = std::make_unique<candidate::grasp_candidate_publisher>(*this, candidate_topic);
     candidate_voxels_pub_ = create_publisher<voxel_msgs::msg::Voxel>(
       candidate_voxels_topic, transient_qos);
     summary_pub_ = create_publisher<std_msgs::msg::String>(summary_topic, transient_qos);
@@ -901,11 +900,14 @@ private:
 
   void publishCandidates(const candidate::GraspVoxelMatchResult &result)
   {
-    geometry_msgs::msg::PoseArray msg;
+    gng_control_msgs::msg::GraspCandidateArray msg;
     msg.header = object_voxels_->header;
-    msg.poses.reserve(result.candidates.size());
+    msg.candidates.reserve(result.candidates.size());
     for (const auto &candidate_result : result.candidates) {
-      geometry_msgs::msg::Pose pose;
+      gng_control_msgs::msg::GraspCandidate entry;
+      entry.id = msg.candidates.size();
+      entry.shape_score = static_cast<float>(candidate_result.score);
+      auto &pose = entry.pose;
       pose.position.x = candidate_result.tcp_position.x();
       pose.position.y = candidate_result.tcp_position.y();
       pose.position.z = candidate_result.tcp_position.z();
@@ -913,7 +915,7 @@ private:
       pose.orientation.y = candidate_result.tcp_orientation.y();
       pose.orientation.z = candidate_result.tcp_orientation.z();
       pose.orientation.w = candidate_result.tcp_orientation.w();
-      msg.poses.push_back(std::move(pose));
+      msg.candidates.push_back(std::move(entry));
     }
     candidate_pub_->publish(msg);
   }
@@ -1098,7 +1100,7 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr planar_clusters_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_sub_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_sub_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_pub_;
+  std::unique_ptr<candidate::grasp_candidate_publisher> candidate_pub_;
   rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr candidate_voxels_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
   rclcpp::TimerBase::SharedPtr timer_;

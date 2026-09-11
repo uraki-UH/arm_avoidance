@@ -54,13 +54,13 @@
 予約領域1バイトの利用によるレコード長・バージョンの維持。旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
 ROSメッセージ定義の互換性とは別のため、ROS送受信側には同一定義での再ビルド・再起動が必要。
 
-### PoseArray表示
+### 姿勢配列・候補表示
 
-`geometry_msgs/msg/PoseArray`は`sources.list`で`type: "marker"`として公開。
+`geometry_msgs/msg/PoseArray`と`gng_control_msgs/msg/GraspCandidateArray`は`sources.list`で`type: "marker"`として公開。
 `sources.setActive`で選択後、ROS Markerトピックを経由せず、gateway内でローカルZ軸の矢印へ変換。
 
 ```json
-{"type":"stream.marker_array","tag":"/grasp_pose_cands","source_type":"pose_array","markers":[]}
+{"type":"stream.marker_array","tag":"/grasp_pose_cands","source_type":"pose_array","update_id":1,"markers":[]}
 ```
 
 - 1姿勢につき1本のローカル+Z矢印。長さ0.08 m、表示色は水色。
@@ -70,6 +70,11 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 - 入力publisherに合わせたreliability・durabilityを購読開始時に選択。
 - 計画処理は不要。PoseArrayは座標系不明・固定座標系へのTF欠落時に非表示。座標をworldとみなす代替描画はなし。
 - 他のMarkerレイヤーとの自動照合・色統合なし。重複を避ける場合は表示レイヤーを選択。
+
+候補配列ではMarker IDに候補の`id`を使用し、`state`は未評価=黄、範囲内=緑、範囲外=灰へ変換。
+`source_type: "pose_array"`は既存の姿勢描画・TF必須経路の識別用。新しい描画コンポーネントの追加なし。
+`update_id`は候補集合の更新番号。同一集合の状態更新では維持、空配列を含む全置換で旧候補を消去。
+配信元は候補生成ノードだけ。Viewerで別トピックの状態を突き合わせる処理はなし。
 
 ### Stream Reset
 ```json

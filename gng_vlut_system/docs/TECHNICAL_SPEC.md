@@ -59,10 +59,8 @@ flowchart TD
 | `candidate_count` | int | `8` | 候補ノード数 |
 | `non_collision_only` | bool | `true` | 衝突ノードを候補から除外 |
 | `orientation_weight` | float | `0.0` | 向き一致度の重み |
-| `target_pose_topic` | topic | 空 | 単一目標姿勢入力 |
-| `target_point_topic` | topic | 空 | 単一目標位置入力 |
-| `target_pose_array_topic` | topic | `/grasp_pose_cands` | 目標姿勢配列入力 |
-| `target_score_topic` | topic | `/grasp_pose_cand_scores` | 目標姿勢のスコア配列 |
+| `candidate_topic` | topic | `/grasp_pose_cands` | ID・姿勢・状態付き候補配列 |
+| `goal_update_hz` | float | `5.0` | TF変化時の計画目標更新周期 [Hz] |
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
 | `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
@@ -97,14 +95,11 @@ flowchart TD
 | `candidate_count` | int | `8` | 抽出ノード数 |
 | `non_collision_only` | bool | `true` | 衝突ノードを除外 |
 | `orientation_weight` | float | `0.25` | 姿勢整合重み |
-| `target_pose_topic` | topic | 空 | 単一目標姿勢 |
-| `target_point_topic` | topic | 空 | 単一目標位置 |
-| `target_pose_array_topic` | topic | `/grasp_pose_cands` | 候補姿勢群 |
-| `target_score_topic` | topic | `/grasp_pose_cand_scores` | 姿勢スコア群 |
+| `candidate_topic` | topic | `/grasp_pose_cands` | ID・姿勢・状態付き候補配列 |
+| `goal_update_hz` | float | `5.0` | TF変化時の計画目標更新周期 [Hz] |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 選定ノード ID の出力 |
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | manipulability 補正用特徴量 |
 | `manipulability_weight` | float | `0.25` | 可操作性補正重み |
-| `allow_untransformed_target` | bool | `true` | TF が無くても target を使うか |
 
 ### 3.3 `topological_map_avoidance.launch.py` の引数
 
@@ -162,7 +157,7 @@ flowchart TD
 | `/ToPoDualArm/topological_map_static` | `ais_gng_msgs/TopologicalMap` | 元の GNG マップ |
 | `/selected_topological_map` | `ais_gng_msgs/TopologicalMap` | target に応じて選ばれたマップ |
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
-| `/grasp_pose_cands` | `geometry_msgs/PoseArray` | 候補姿勢群 |
+| `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` | ID・姿勢・形状スコア・到達性状態 |
 | `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
 | `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
 | `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
@@ -544,8 +539,8 @@ transient localでpublishする。
 照合は姿勢ごとにgraph点を整数ボクセルoffsetへ事前量子化し、対象ボクセルをアンカーとしてhash照会する。
 全量snapshotを受けるたびに`required_occupied`、`optional_not_sole_support`、`required_empty`を再評価する。
 既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
-明示的な3次元姿勢群は`orientation_rpy`の`roll,pitch,yaw`列で指定できる。結果は新規messageを増やさず、
-`geometry_msgs/PoseArray`と、占有率・各ゲートの棄却数・処理時間を持つ`std_msgs/String` JSON summaryでpublishする。
+明示的な3次元姿勢群は`orientation_rpy`の`roll,pitch,yaw`列で指定できる。結果は状態付きの
+`gng_control_msgs/GraspCandidateArray`と、占有率・各ゲートの棄却数・処理時間を持つ`std_msgs/String` JSON summaryでpublishする。
 
 上面把持だけを対象にする場合は、`top_grasp_surface_estimator_node`を別経路として使用する。
 同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
@@ -560,9 +555,9 @@ transient localでpublishする。
 壁に接した対象でも壁全体を含む巨大なOBBにはならない。同一平面上の細かな分割領域は平面距離が
 ほぼ0となるため除外される。TCP位置は単体OBB中心の最高Z、
 姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
-Viewerは候補PoseArrayを直接受信し、ローカル`+Z`を水色の矢印として表示する。
+Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を未評価=黄・範囲内=緑・範囲外=灰で表示する。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
-最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。
+位置到達性は生成側で評価し、最終的な指接触・グリッパ基部衝突・姿勢到達性は後段の対象とする。
 
 物体GNG保存では、`PlaneClusterArray`のうち`TopologicalMap`と`frame_number`およびheader stampが一致する
 クラスタだけを`gng.plane_clusters`へ保存する。各要素はGNG node配列への`idx`参照、重心、法線、
@@ -577,9 +572,9 @@ Viewerは候補PoseArrayを直接受信し、ローカル`+Z`を水色の矢印�
 | 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |
 | 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
-| 候補TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
+| 候補TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
-| 上面把持TCP Pose群 | `/grasp_pose_cands` | `geometry_msgs/PoseArray` |
+| 上面把持TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 上面把持面積スコア | `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 
@@ -587,7 +582,12 @@ Viewerは候補PoseArrayを直接受信し、ローカル`+Z`を水色の矢印�
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複Marker配信はなし。
 可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
-到達性評価Markerとは独立表示。色付き評価を表示する場合は候補PoseをOFF、評価MarkerをON。
+候補生成側の共通publisherが`update_id`と候補`id`を管理し、同じ配列の`state`を更新する。
+状態更新だけではIDを維持、新規候補集合では`update_id`を増加。配信元の再起動では番号を再初期化。
+到達map・TFがない場合は未評価。候補生成ノードの`reachability_map_topic`、`reachability_voxel_size`、
+`reachability_voxel_origin`、`reachability_publish_hz`で設定。計画側には`candidate_topic`で接続し、
+範囲内候補と同じ到達セルに所属する計画GNGのノードだけを選択する。独立mapのIDは計画IDとして使用しない。
+別のreachability・候補Markerトピックは配信しない。互換用スコア配列は残すが、形状スコアの正規情報は候補内の値。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

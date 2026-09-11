@@ -52,6 +52,12 @@ test('候補PoseのZ軸・TF適用・空配列・TF欠落を描画ツリーで�
         const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(
             arrows[0].getWorldQuaternion(new THREE.Quaternion()));
         assert.ok(axis.distanceTo(new THREE.Vector3(0, 0, -1)) < 1e-9);
+        for (const color of [[0.9, 0.7, 0.1, 1], [0.2, 0.85, 0.25, 1], [0.55, 0.55, 0.55, 1]]) {
+            const updated = await render([{ ...marker, color }], transforms);
+            assert.equal(updated.length, 1);
+            assert.equal(updated[0], arrows[0]);
+            assert.equal(updated[0].line.material.color.getHexString(), new THREE.Color(...color.slice(0, 3)).getHexString());
+        }
         assert.equal((await render([], transforms)).length, 0);
         assert.equal((await render([marker], transforms)).length, 1);
         assert.equal((await render([marker], {})).length, 0);

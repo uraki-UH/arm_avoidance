@@ -11,32 +11,17 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import rclpy
 from rclpy.node import Node
 
-from geometry_msgs.msg import Point, PointStamped, PoseArray, PoseStamped
+from geometry_msgs.msg import Point, PointStamped
 from std_msgs.msg import Int32MultiArray
-from std_msgs.msg import Float32MultiArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
-from ais_gng_feature_msgs.msg import TopologicalNodeFeature, TopologicalNodeFeatureArray
-from gng_control_msgs.msg import GraspCandidateReachability, GraspCandidateReachabilityArray
+from ais_gng_feature_msgs.msg import TopologicalNodeFeatureArray
+from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray
 
-try:
-    from tf2_ros import Buffer, TransformException, TransformListener
-    from tf2_geometry_msgs import do_transform_point, do_transform_pose
-except Exception:  # pragma: no cover - optional at runtime
-    Buffer = None  # type: ignore[assignment]
-    TransformException = Exception  # type: ignore[assignment]
-    TransformListener = None  # type: ignore[assignment]
-    do_transform_point = None  # type: ignore[assignment]
-    do_transform_pose = None  # type: ignore[assignment]
-
-try:
-    from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
-except Exception:  # pragma: no cover - runtime fallback
-    QoSDurabilityPolicy = None  # type: ignore[assignment]
-    QoSHistoryPolicy = None  # type: ignore[assignment]
-    QoSProfile = None  # type: ignore[assignment]
-    QoSReliabilityPolicy = None  # type: ignore[assignment]
+from tf2_ros import Buffer, TransformException, TransformListener
+from tf2_geometry_msgs import do_transform_point
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
 
 
 COLLISION_LABEL = int(getattr(TopologicalNode, "WALL", 2))
@@ -83,17 +68,6 @@ def _copy_point(point: Point) -> Point:
     return out
 
 
-def _copy_pose(point: Point, quat: Optional[Tuple[float, float, float, float]]) -> PoseStamped:
-    msg = PoseStamped()
-    msg.pose.position = _copy_point(point)
-    if quat is not None:
-        msg.pose.orientation.x = float(quat[0])
-        msg.pose.orientation.y = float(quat[1])
-        msg.pose.orientation.z = float(quat[2])
-        msg.pose.orientation.w = float(quat[3])
-    else:
-        msg.pose.orientation.w = 1.0
-    return msg
 
 
 def _quat_multiply(
@@ -113,187 +87,49 @@ def _quat_multiply(
 class TopologicalMapGoalSelector(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("topological_map_goal_selector_node")
-
         self.topological_map_topic = args.topological_map_topic
         self.output_topic = args.output_topic
         self.marker_topic = args.marker_topic
         self.candidate_count = max(1, int(args.candidate_count))
         self.non_collision_only = bool(args.non_collision_only)
         self.orientation_weight = float(args.orientation_weight)
-
-        self.target_pose_topic = args.target_pose_topic
-        self.target_point_topic = args.target_point_topic
-        self.target_pose_array_topic = args.target_pose_array_topic
-        self.target_score_topic = args.target_score_topic
-        self.goal_candidate_ids_topic = args.goal_candidate_ids_topic
-        self.node_feature_topic = args.node_feature_topic
         self.manipulability_weight = float(args.manipulability_weight)
-        self.allow_untransformed_target = bool(args.allow_untransformed_target)
-        self.reachability_map_topic = args.reachability_map_topic or self.topological_map_topic
-        self.reachability_voxel_size = args.reachability_voxel_size
-        self.reachability_origin = tuple(args.reachability_voxel_origin)
-        if not math.isfinite(self.reachability_voxel_size) or self.reachability_voxel_size <= 0.0:
-            raise ValueError("reachability_voxel_sizeには正の有限値が必要です")
-        if not all(math.isfinite(value) for value in self.reachability_origin):
-            raise ValueError("reachability_voxel_originには有限値が必要です")
-        if not math.isfinite(args.reachability_publish_hz) or args.reachability_publish_hz <= 0.0:
-            raise ValueError("reachability_publish_hzには正の有限値が必要です")
-        self.reachability_map = None
-        self.reachability_cells = set()
-
-        self.map_msg: Optional[TopologicalMap] = None
-        self.map_revision: int = -1
-        self.latest_pose_array: Optional[PoseArray] = None
-        self.latest_pose_scores: Optional[Float32MultiArray] = None
-        self.latest_node_features: Dict[int, TopologicalNodeFeature] = {}
-
+        self.map_msg = None
+        self.latest_candidates = None
+        self.latest_node_features = {}
+        qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                         durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.output_pub = self.create_publisher(TopologicalMap, self.output_topic, 10)
         self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
-        if (
-            QoSProfile is not None
-            and QoSHistoryPolicy is not None
-            and QoSReliabilityPolicy is not None
-            and QoSDurabilityPolicy is not None
-        ):
-            goal_ids_qos = QoSProfile(
-                history=QoSHistoryPolicy.KEEP_LAST,
-                depth=1,
-                reliability=QoSReliabilityPolicy.RELIABLE,
-                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            )
-        else:
-            goal_ids_qos = 10
-
         self.goal_candidate_ids_pub = self.create_publisher(
-            Int32MultiArray, self.goal_candidate_ids_topic, goal_ids_qos
-        )
+            Int32MultiArray, args.goal_candidate_ids_topic, qos)
         self.goal_candidate_ids_pub.publish(Int32MultiArray(data=[]))
-        self.reachability_pub = self.create_publisher(
-            GraspCandidateReachabilityArray, args.reachability_topic, goal_ids_qos
-        )
-        self.reachability_marker_pub = self.create_publisher(
-            MarkerArray, args.reachability_marker_topic, goal_ids_qos
-        )
-
-        if (
-            QoSProfile is not None
-            and QoSHistoryPolicy is not None
-            and QoSReliabilityPolicy is not None
-            and QoSDurabilityPolicy is not None
-        ):
-            snapshot_qos = QoSProfile(
-                history=QoSHistoryPolicy.KEEP_LAST,
-                depth=1,
-                reliability=QoSReliabilityPolicy.RELIABLE,
-                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            )
-        else:
-            snapshot_qos = 10
-
-        self.map_sub = self.create_subscription(TopologicalMap, self.topological_map_topic, self._on_map, snapshot_qos)
-        self.reachability_sub = None
-        if self.reachability_map_topic != self.topological_map_topic:
-            self.reachability_sub = self.create_subscription(
-                TopologicalMap, self.reachability_map_topic, self._on_reachability_map, snapshot_qos
-            )
-
-        self.pose_sub = None
-        if self.target_pose_topic:
-            self.pose_sub = self.create_subscription(
-                PoseStamped,
-                self.target_pose_topic,
-                self._on_pose,
-                10,
-            )
-
-        self.point_sub = None
-        if self.target_point_topic:
-            self.point_sub = self.create_subscription(
-                PointStamped,
-                self.target_point_topic,
-                self._on_point,
-                10,
-            )
-
-        self.pose_array_sub = None
-        if self.target_pose_array_topic:
-            self.pose_array_sub = self.create_subscription(
-                PoseArray,
-                self.target_pose_array_topic,
-                self._on_pose_array,
-                snapshot_qos,
-            )
-
-        self.score_sub = None
-        if self.target_score_topic:
-            self.score_sub = self.create_subscription(
-                Float32MultiArray,
-                self.target_score_topic,
-                self._on_pose_scores,
-                snapshot_qos,
-            )
-
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.map_sub = self.create_subscription(
+            TopologicalMap, self.topological_map_topic, self._on_map, qos)
+        self.candidate_sub = self.create_subscription(
+            GraspCandidateArray, args.candidate_topic, self._on_candidates, qos)
         self.node_feature_sub = None
-        if self.node_feature_topic:
+        if args.node_feature_topic:
             self.node_feature_sub = self.create_subscription(
-                TopologicalNodeFeatureArray,
-                self.node_feature_topic,
-                self._on_node_feature_array,
-                10,
-            )
-
-        self.tf_buffer = None
-        self.tf_listener = None
-        if Buffer is not None and TransformListener is not None:
-            self.tf_buffer = Buffer()
-            self.tf_listener = TransformListener(self.tf_buffer, self)
-        # 候補の再受信がない台車移動時にも現在配置での再評価
-        self.reachability_timer = self.create_timer(
-            1.0 / args.reachability_publish_hz, self._maybe_publish
-        )
+                TopologicalNodeFeatureArray, args.node_feature_topic,
+                self._on_node_feature_array, 10)
+        # 静止候補のTF変化にも追従する計画目標の更新
+        if not math.isfinite(args.goal_update_hz) or args.goal_update_hz <= 0.0:
+            raise ValueError("goal_update_hzには正の有限値が必要です")
+        self.timer = self.create_timer(1.0 / args.goal_update_hz, self._maybe_publish)
 
     def _on_map(self, msg: TopologicalMap) -> None:
         self.map_msg = msg
-        self.map_revision = int(msg.frame_number)
-        if self.reachability_map_topic == self.topological_map_topic:
-            self._set_reachability_map(msg)
         self._maybe_publish()
 
-    def _voxel_cell(self, position):
-        return tuple(math.floor((value - origin) / self.reachability_voxel_size)
-                     for value, origin in zip(position, self.reachability_origin))
-
-    def _set_reachability_map(self, msg):
-        self.reachability_map = msg
-        # 動的衝突ラベルと位置到達性を分離した登録TCPセル集合
-        self.reachability_cells = {
-            self._voxel_cell(_point_xyz(node.pos)) for node in msg.nodes
-            if all(math.isfinite(value) for value in _point_xyz(node.pos))
-        }
-
-    def _on_reachability_map(self, msg):
-        self._set_reachability_map(msg)
-        self._maybe_publish()
-
-    def _on_pose(self, msg: PoseStamped) -> None:
-        self._on_pose_array(PoseArray(header=msg.header, poses=[msg.pose]))
-
-    def _on_point(self, msg: PointStamped) -> None:
-        pose = _copy_pose(msg.point, None).pose
-        self._on_pose_array(PoseArray(header=msg.header, poses=[pose]))
-
-    def _on_pose_array(self, msg: PoseArray) -> None:
-        self.latest_pose_array = msg
-        self._maybe_publish()
-
-    def _on_pose_scores(self, msg: Float32MultiArray) -> None:
-        self.latest_pose_scores = msg
+    def _on_candidates(self, msg: GraspCandidateArray) -> None:
+        self.latest_candidates = msg
         self._maybe_publish()
 
     def _on_node_feature_array(self, msg: TopologicalNodeFeatureArray) -> None:
-        self.latest_node_features = {
-            int(feature.node_id): feature for feature in msg.features
-        }
+        self.latest_node_features = {int(feature.node_id): feature for feature in msg.features}
         self._maybe_publish()
 
     def _transform_target(self, target: TargetPose, source_frame: str,
@@ -350,113 +186,57 @@ class TopologicalMapGoalSelector(Node):
         return None
 
     def _maybe_publish(self) -> None:
-        if self.latest_pose_array is None:
+        source = self.latest_candidates
+        if source is None:
             return
         self.transform_cache = {}
-        source = self.latest_pose_array
-        out = GraspCandidateReachabilityArray()
-        out.header = copy.deepcopy(source.header)
-        out.evaluation_header.stamp = self.get_clock().now().to_msg()
-        reach_frame = self.reachability_map.header.frame_id if self.reachability_map else ""
-        out.evaluation_header.frame_id = reach_frame
-        out.voxel_size = self.reachability_voxel_size
-        out.voxel_origin.x, out.voxel_origin.y, out.voxel_origin.z = self.reachability_origin
-        out.reachability_map_topic = self.reachability_map_topic
-        scores = list(self.latest_pose_scores.data) if self.latest_pose_scores else []
+        selected_ids = set()
+        reach_frame = source.evaluation_header.frame_id
+        origin = _point_xyz(source.voxel_origin)
+        size = source.voxel_size
+        can_match = bool(self.map_msg is not None and reach_frame and
+                         math.isfinite(size) and size > 0.0 and
+                         all(math.isfinite(value) for value in origin))
 
-        # 到達mapのセルと計画用GNGノードIDの対応。可視化用mapのIDは計画に不使用
+        def voxel_cell(position):
+            return tuple(math.floor((value - offset) / size)
+                         for value, offset in zip(position, origin))
+
+        # 到達mapのIDではなく、計画GNGのIDのみをセルへ登録
         goal_cells = {}
-        if self.map_msg is not None and reach_frame:
+        if can_match:
             for node in self.map_msg.nodes:
                 if not all(math.isfinite(value) for value in _point_xyz(node.pos)):
                     continue
                 target = TargetPose(_point_xyz(node.pos), None, self.map_msg.header.frame_id)
                 resolved = self._transform_target(target, target.frame_id, reach_frame)
                 if resolved is not None:
-                    goal_cells.setdefault(self._voxel_cell(resolved.position), set()).add(int(node.id))
-
-        selected_ids = set()
-        for candidate_idx, pose in enumerate(source.poses):
-            result = GraspCandidateReachability()
-            result.candidate_idx = candidate_idx
-            result.pose = copy.deepcopy(pose)
-            result.shape_score = float(scores[candidate_idx]) if len(scores) == len(source.poses) else float("nan")
-            result.reason = "unknown_map"
-            quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
-            target = TargetPose(_point_xyz(pose.position), quat, source.header.frame_id)
-            if not all(math.isfinite(value) for value in (*target.position, *quat)) or sum(value * value for value in quat) <= 1e-12:
-                result.reason = "invalid_pose"
-            elif self.reachability_map is not None:
+                    goal_cells.setdefault(voxel_cell(resolved.position), set()).add(int(node.id))
+            for candidate in source.candidates:
+                if candidate.state != GraspCandidate.INSIDE:
+                    continue
+                pose = candidate.pose
+                quat = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+                target = TargetPose(_point_xyz(pose.position), quat, source.header.frame_id)
+                if not all(math.isfinite(value) for value in (*target.position, *quat)) or math.hypot(*quat) <= 1e-12:
+                    continue
                 resolved = self._transform_target(target, target.frame_id, reach_frame)
-                if resolved is None:
-                    result.reason = "unknown_transform"
-                else:
-                    result.has_evaluation = True
-                    result.evaluated_pose.position.x, result.evaluated_pose.position.y, result.evaluated_pose.position.z = resolved.position
-                    (result.evaluated_pose.orientation.x, result.evaluated_pose.orientation.y,
-                     result.evaluated_pose.orientation.z, result.evaluated_pose.orientation.w) = resolved.orientation
-                    cell = self._voxel_cell(resolved.position)
-                    result.is_in_reachability = cell in self.reachability_cells
-                    result.reason = "outside_skip_planning"
-                    if result.is_in_reachability:
-                        result.reason = "inside_no_goal_nodes"
-                        if self.map_msg is not None:
-                            planning_target = self._transform_target(target, target.frame_id, self.map_msg.header.frame_id)
-                            if planning_target is None:
-                                result.reason = "inside_unknown_planning_transform"
-                            else:
-                                _, _, goal_ids = self._build_selected_map(
-                                    self.map_msg, planning_target, goal_cells.get(cell, set()))
-                                result.goal_node_ids = goal_ids
-                                result.can_plan = bool(goal_ids)
-                                if result.can_plan:
-                                    result.reason = "inside_plan_eligible"
-                                    selected_ids.update(goal_ids)
-            out.candidates.append(result)
+                planning_target = self._transform_target(target, target.frame_id, self.map_msg.header.frame_id)
+                if resolved is not None and planning_target is not None:
+                    _, _, goal_ids = self._build_selected_map(
+                        self.map_msg, planning_target, goal_cells.get(voxel_cell(resolved.position), set()))
+                    selected_ids.update(goal_ids)
 
         selected_map = TopologicalMap()
         if self.map_msg is not None:
             selected_map.header = copy.deepcopy(self.map_msg.header)
             selected_map.frame_number = self.map_msg.frame_number
             selected_map.nodes = [copy.deepcopy(node) for node in self.map_msg.nodes if int(node.id) in selected_ids]
-        self.reachability_pub.publish(out)
-        self.reachability_marker_pub.publish(self._build_reachability_markers(out))
         self.output_pub.publish(selected_map)
         markers = self._build_markers(selected_map, {})
         markers.markers.insert(0, Marker(action=Marker.DELETEALL))
         self.marker_pub.publish(markers)
         self.goal_candidate_ids_pub.publish(Int32MultiArray(data=sorted(selected_ids)))
-
-    def _build_reachability_markers(self, result):
-        markers = MarkerArray(markers=[Marker(action=Marker.DELETEALL)])
-        for candidate in result.candidates:
-            if candidate.reason == "invalid_pose":
-                continue
-            marker = Marker()
-            marker.header = copy.deepcopy(result.header)
-            marker.ns = "grasp_reachability"
-            marker.id = candidate.candidate_idx
-            marker.type = Marker.ARROW
-            marker.action = Marker.ADD
-            # 把持姿勢のローカルZ軸を表す候補ベクトル
-            start = copy.deepcopy(candidate.pose.position)
-            axis = _quat_to_axis_z((candidate.pose.orientation.x, candidate.pose.orientation.y,
-                                   candidate.pose.orientation.z, candidate.pose.orientation.w))
-            axis = _normalize(axis)
-            end = Point(x=start.x + 0.08 * axis[0], y=start.y + 0.08 * axis[1], z=start.z + 0.08 * axis[2])
-            marker.points = [start, end]
-            marker.pose.orientation.w = 1.0
-            marker.scale.x, marker.scale.y, marker.scale.z = 0.008, 0.016, 0.02
-            if not candidate.has_evaluation:
-                color = (0.9, 0.7, 0.1)
-            elif candidate.is_in_reachability:
-                color = (0.2, 0.85, 0.25)
-            else:
-                color = (0.55, 0.55, 0.55)
-            marker.color.r, marker.color.g, marker.color.b = color
-            marker.color.a = 1.0
-            markers.markers.append(marker)
-        return markers
 
     def _build_selected_map(
         self, map_msg: TopologicalMap, target: TargetPose, allowed_node_ids=None
@@ -557,24 +337,11 @@ def main() -> None:
         default=True,
     )
     parser.add_argument("--orientation-weight", type=float, default=0.25)
-    parser.add_argument("--target-pose-topic", default="")
-    parser.add_argument("--target-point-topic", default="")
-    parser.add_argument("--target-pose-array-topic", default="/grasp_pose_cands")
-    parser.add_argument("--target-score-topic", default="/grasp_pose_cand_scores")
+    parser.add_argument("--candidate-topic", default="/grasp_pose_cands")
+    parser.add_argument("--goal-update-hz", type=float, default=5.0)
     parser.add_argument("--goal-candidate-ids-topic", default="/selected_goal_candidate_ids")
     parser.add_argument("--node-feature-topic", default="/ToPoDualArm/topological_node_features")
     parser.add_argument("--manipulability-weight", type=float, default=0.25)
-    parser.add_argument(
-        "--allow-untransformed-target",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-    )
-    parser.add_argument("--reachability-map-topic", default="")
-    parser.add_argument("--reachability-topic", default="/grasp_pose_cands/reachability")
-    parser.add_argument("--reachability-marker-topic", default="/grasp_pose_cands/reachability_markers")
-    parser.add_argument("--reachability-voxel-size", type=float, default=0.05)
-    parser.add_argument("--reachability-voxel-origin", type=float, nargs=3, default=[0.0, 0.0, 0.0])
-    parser.add_argument("--reachability-publish-hz", type=float, default=5.0)
     args = parser.parse_args()
 
     rclpy.init()

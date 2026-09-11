@@ -1,8 +1,8 @@
 #include <candidate/top_grasp_surface_estimator.hpp>
+#include <candidate/grasp_candidate_publisher.hpp>
 
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -41,8 +41,7 @@ public:
       "summary_topic", "/grasp_pose_cands/summary");
 
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
-    candidate_publisher_ = create_publisher<geometry_msgs::msg::PoseArray>(
-      candidate_topic, output_qos);
+    candidate_publisher_ = std::make_unique<candidate::grasp_candidate_publisher>(*this, candidate_topic);
     score_publisher_ = create_publisher<std_msgs::msg::Float32MultiArray>(
       score_topic, output_qos);
     summary_publisher_ = create_publisher<std_msgs::msg::String>(summary_topic, output_qos);
@@ -135,13 +134,16 @@ private:
 
   void publishCandidates(const candidate::TopGraspSurfaceResult &result)
   {
-    geometry_msgs::msg::PoseArray poses;
+    gng_control_msgs::msg::GraspCandidateArray poses;
     poses.header = map_->header;
-    poses.poses.reserve(result.candidates.size());
+    poses.candidates.reserve(result.candidates.size());
     std_msgs::msg::Float32MultiArray scores;
     scores.data.reserve(result.candidates.size());
     for (const auto &surface : result.candidates) {
-      geometry_msgs::msg::Pose pose;
+      gng_control_msgs::msg::GraspCandidate entry;
+      entry.id = poses.candidates.size();
+      entry.shape_score = static_cast<float>(surface.footprint_fill_ratio);
+      auto &pose = entry.pose;
       pose.position.x = surface.tcp_position.x();
       pose.position.y = surface.tcp_position.y();
       pose.position.z = surface.tcp_position.z();
@@ -149,7 +151,7 @@ private:
       pose.orientation.y = surface.tcp_orientation.y();
       pose.orientation.z = surface.tcp_orientation.z();
       pose.orientation.w = surface.tcp_orientation.w();
-      poses.poses.push_back(std::move(pose));
+      poses.candidates.push_back(std::move(entry));
       scores.data.push_back(static_cast<float>(surface.footprint_fill_ratio));
     }
     candidate_publisher_->publish(std::move(poses));
@@ -210,7 +212,7 @@ private:
   ais_gng_msgs::msg::PlaneClusterArray::SharedPtr clusters_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr map_subscription_;
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr clusters_subscription_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr candidate_publisher_;
+  std::unique_ptr<candidate::grasp_candidate_publisher> candidate_publisher_;
   rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;
 };

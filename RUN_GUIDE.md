@@ -59,15 +59,14 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-- 候補Pose: `/grasp_pose_cands`
+- ID・姿勢・到達性状態: `/grasp_pose_cands` (`gng_control_msgs/msg/GraspCandidateArray`)
 - 候補スコア: `/grasp_pose_cand_scores`
 - 判定概要: `/grasp_pose_cands/summary`
 - 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
-- 到達性を色付きで見る場合: `/grasp_pose_cands`をOFF、`/grasp_pose_cands/reachability_markers`をON（計画側の起動が必要）
 
-ViewerがPoseArrayを直接受信し、ローカルZ軸の矢印を表示。候補表示だけなら`grasp_goal_planning.launch.py`は不要。
-各レイヤーは独立表示。自動の色統合・重複抑制なし。ROS側の`/grasp_pose_markers`は不要。
-変更適用には`viewer_stack.launch.py`の再起動とブラウザ再読み込みが必要。`graspnet_table`など入力座標系からViewer固定座標系へのTFも必要。
+Viewerは同じ候補IDのローカルZ軸矢印を、未評価=黄・到達範囲内=緑・範囲外=灰で表示。計画launch・別のreachability/Markerトピックは不要。
+到達性は候補生成側で評価。YAMLの各生成ノードにある`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を設定。map未受信・TF不明なら未評価。
+変更適用にはメッセージと各ノードの再ビルド、候補生成・計画・Viewerの再起動とブラウザ再読み込みが必要。入力座標系からロボット／ViewerへのTFも必要。
 
 `grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
@@ -118,14 +117,6 @@ ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
 
 
 ==============================================================
-
-## 把持ノードから接続構造を追って、指定距離以内のノードを抽出する (今の所未使用)
-ros2 launch ais_gng topological_query.launch.py \
-  input_topic:=/topological_map/merged \
-  relation_mode:=graph_edges \
-  semantic_label:=1 \
-  max_euclidean_distance:=0.5 \
-  max_hops:=-1
 
 ##　dynamixel handlerの起動（使えない可能性が高い）
 ros2 launch dynamixel_handler dynamixel_handler_launch.xml
@@ -223,10 +214,6 @@ ros2 launch ais_gng topological_grid.launch.py \
 ros2 launch grasping_system grasp_voxel_matcher.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-## realsense 
-ros2 launch realsense2_camera rs_launch.py \
-  align_depth.enable:=true \
-  pointcloud.enable:=true
 
 ## Gazeboに召喚
 ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
@@ -315,7 +302,6 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py \
 
 docker compose --profile manual up -d --build frontend
 
-
 ## GNGエッジから差分方式で平面クラスタを作る
 ros2 launch ais_gng plane_cluster_incremental.launch.py \
   input_topic:=/topological_map
@@ -345,13 +331,11 @@ ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41 \
     /camera/camera/depth/camera_info
 
 
-## ダミー把持姿勢をPoseArrayで流す
+## ダミー把持候補を状態付き配列で流す
 ros2 launch gng_vlut_system grasp_pose_dummy_publisher.launch.py \
   frame_id:=world \
   candidate_count:=1
 
-
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41_transformed --loop
 
 ### 大容量PointCloud2再生用UDPバッファ
 ```bash

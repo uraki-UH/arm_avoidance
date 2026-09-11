@@ -5,14 +5,15 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import tempfile
 import time
 
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from geometry_msgs.msg import Pose, PoseArray
+from geometry_msgs.msg import Pose
 from std_msgs.msg import Int32MultiArray
 from ais_gng_msgs.msg import TopologicalMap
-from gng_control_msgs.msg import GraspCandidateReachabilityArray, GraspCandidateMetricArray
+from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray, GraspCandidateMetricArray
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
     ]
     processes = []
     logs = []
+    log_dir = tempfile.TemporaryDirectory(prefix="grasp_candidate_integration_")
     node = None
     rclpy.init()
     try:
@@ -38,14 +40,14 @@ def main():
         received = {}
         for topic, msg_type, key in [
             ("/ToPoDualArm/topological_map_static", TopologicalMap, "map"),
-            ("/grasp_pose_cands/reachability", GraspCandidateReachabilityArray, "reachability"),
+            ("/grasp_pose_cands", GraspCandidateArray, "candidates"),
             ("/selected_goal_candidate_ids", Int32MultiArray, "goals"),
             ("/ToPoDualArm/grasp_candidate_metrics", GraspCandidateMetricArray, "metrics"),
             ("/ToPoDualArm/plan_topological_map", TopologicalMap, "plan"),
             ("/ToPoDualArm/cand_topological_map", TopologicalMap, "candidate_plan"),
         ]:
             node.create_subscription(msg_type, topic, lambda msg, key=key: received.update({key: msg}), qos)
-        publisher = node.create_publisher(PoseArray, "/grasp_pose_cands", qos)
+        publisher = node.create_publisher(GraspCandidateArray, "/grasp_pose_cands", qos)
 
         def wait_for(predicate, label, max_sec=30.0):
             end = time.monotonic() + max_sec
@@ -58,7 +60,7 @@ def main():
             raise AssertionError(f"待機時間超過: {label}; received={list(received)}")
 
         for idx, command in enumerate(commands):
-            log = Path(f"/tmp/grasp_reachability_integration_{idx}.log").open("w")
+            log = (Path(log_dir.name) / f"process_{idx}.log").open("w")
             logs.append(log)
             print("起動:", " ".join(command), flush=True)
             processes.append(subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -73,40 +75,46 @@ def main():
         inside.orientation.w = 1.0
         outside = copy.deepcopy(inside)
         outside.position.x += 100.0
-        source = PoseArray(header=copy.deepcopy(map_msg.header), poses=[outside, inside])
+        source = GraspCandidateArray(header=copy.deepcopy(map_msg.header), update_id=1,
+            evaluation_header=copy.deepcopy(map_msg.header), voxel_size=0.05, candidates=[
+                GraspCandidate(id=42, pose=outside, state=GraspCandidate.OUTSIDE),
+                GraspCandidate(id=7, pose=inside, state=GraspCandidate.INSIDE)])
         publisher.publish(source)
-        wait_for(lambda: "reachability" in received and len(received["reachability"].candidates) == 2,
-                 "全候補の評価")
-        rows = received["reachability"].candidates
-        assert rows[0].has_evaluation and not rows[0].is_in_reachability and not rows[0].can_plan
-        assert rows[1].is_in_reachability and rows[1].can_plan
-        allowed_ids = set(rows[1].goal_node_ids)
+        wait_for(lambda: "goals" in received and received["goals"].data, "領域内候補の目標選択")
+        allowed_ids = set(received["goals"].data)
+        assert selected_node.id in allowed_ids
         wait_for(lambda: "metrics" in received and received["metrics"].candidates, "領域内候補の計画評価")
         assert all(item.goal_node_id in allowed_ids for item in received["metrics"].candidates)
         print("混在入力: 全候補保持・領域内目標だけの計画評価を確認", flush=True)
 
-        source.poses = [outside]
+        source.update_id += 1
+        source.candidates = [GraspCandidate(id=42, pose=outside, state=GraspCandidate.OUTSIDE)]
         publisher.publish(source)
         wait_for(lambda: "goals" in received and not received["goals"].data
-                 and "reachability" in received and len(received["reachability"].candidates) == 1
+                 and "candidates" in received and received["candidates"].update_id == source.update_id
                  and "metrics" in received and not received["metrics"].candidates
                  and "plan" in received and not received["plan"].edges
                  and all(item.id == 65535 for item in received["plan"].nodes)
                  and "candidate_plan" in received and not received["candidate_plan"].nodes,
                  "全領域外での旧計画失効")
-        assert received["reachability"].candidates[0].pose == outside
+        assert received["candidates"].candidates[0].pose == outside
         print("全領域外: 候補保持・目標ID/旧経路/旧評価のクリアを確認", flush=True)
 
-        source.poses = [inside]
+        source.update_id += 1
+        source.candidates = [GraspCandidate(id=7, pose=inside, state=GraspCandidate.INSIDE)]
         received.pop("metrics", None)
         publisher.publish(source)
         wait_for(lambda: "metrics" in received and received["metrics"].candidates, "領域内復帰後の再計画")
         print("領域内復帰: 再計画を確認", flush=True)
-        source.poses = []
+        source.update_id += 1
+        source.candidates = []
         publisher.publish(source)
-        wait_for(lambda: not received["reachability"].candidates and not received["goals"].data
+        wait_for(lambda: not received["candidates"].candidates and not received["goals"].data
                  and not received["metrics"].candidates, "空入力")
         assert node.count_publishers("/ToPoDualArm/target_joint_states") == 0
+        assert node.count_publishers("/grasp_pose_cands") == 1
+        assert node.count_publishers("/grasp_pose_cands/reachability") == 0
+        assert node.count_publishers("/grasp_pose_cands/reachability_markers") == 0
         print("空入力のクリア・関節目標配信なしを確認", flush=True)
     finally:
         for process in reversed(processes):
@@ -119,6 +127,7 @@ def main():
                     process.wait()
         for log in logs:
             log.close()
+        log_dir.cleanup()
         if node is not None:
             node.destroy_node()
         rclpy.shutdown()

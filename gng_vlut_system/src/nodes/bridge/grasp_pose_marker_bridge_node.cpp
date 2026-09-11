@@ -26,7 +26,7 @@ public:
   explicit GraspPoseMarkerBridgeNode(const rclcpp::NodeOptions &options)
   : Node("grasp_pose_marker_bridge_node", options)
   {
-    declare_parameter<std::string>("input_topic", "/grasp_pose_cands");
+    declare_parameter<std::string>("input_topic", "/pose_array");
     declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
     declare_parameter<std::string>("output_topic", "/grasp_pose_markers");
     declare_parameter<std::string>("marker_namespace", "grasp_pose");

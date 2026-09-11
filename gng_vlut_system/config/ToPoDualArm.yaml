@@ -206,6 +206,10 @@
     forbidden_graph_topic: "/ToPoDualArm/L_grip_sweptV_topological_map"
     candidate_topic: "/grasp_pose_cands"
     candidate_voxels_topic: "/grasp_pose_cand_cells"
+    reachability_map_topic: "/ToPoDualArm/topological_map_static"
+    reachability_voxel_size: 0.05
+    reachability_voxel_origin: [0.0, 0.0, 0.0]
+    reachability_publish_hz: 5.0
     summary_topic: "/grasp_pose_cands/summary"
     enable_depth_visibility: false
     minimum_required_occupancy_ratio: 0.1
@@ -226,6 +230,10 @@
     plane_clusters_topic: "/plane_clusters"
     candidate_topic: "/grasp_pose_cands"
     score_topic: "/grasp_pose_cand_scores"
+    reachability_map_topic: "/ToPoDualArm/topological_map_static"
+    reachability_voxel_size: 0.05
+    reachability_voxel_origin: [0.0, 0.0, 0.0]
+    reachability_publish_hz: 5.0
     summary_topic: "/grasp_pose_cands/summary"
     # 各平面クラスタをXY投影OBBと隣接平面からの突出距離で判定する。
     up_axis: [0.0, 0.0, 1.0]
