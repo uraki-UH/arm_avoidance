@@ -1,5 +1,7 @@
 # 入力座標系と観測時刻。配信元の生存期間内で単調増加する候補集合ID
 std_msgs/Header header
+# 配列内全候補が目標とするTCP link。候補Poseの座標系はheader.frame_id
+string tcp_frame
 uint64 update_id
 GraspCandidate[] candidates
 

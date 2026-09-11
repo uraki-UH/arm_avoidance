@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <stdexcept>
 
 namespace fuzzrobo
 {
@@ -14,6 +15,12 @@ std::optional<PointSamplingMode> parsePointSamplingMode(const std::string & valu
   if (value == "uniform") {
     return PointSamplingMode::Uniform;
   }
+  if (value == "stratified") {
+    return PointSamplingMode::Stratified;
+  }
+  if (value == "random") {
+    return PointSamplingMode::Random;
+  }
   return std::nullopt;
 }
 
@@ -22,6 +29,9 @@ std::vector<uint32_t> selectPointIndices(
   uint32_t max_points,
   PointSamplingMode mode)
 {
+  if (mode == PointSamplingMode::Stratified || mode == PointSamplingMode::Random) {
+    throw std::invalid_argument("Random sampling requires PointCloud2 with XYZ fields");
+  }
   const uint32_t selected_count = std::min(point_count, max_points);
   std::vector<uint32_t> indices(selected_count);
   if (selected_count == 0) {

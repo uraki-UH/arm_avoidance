@@ -12,6 +12,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(pointcloud_sampling REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(gng_control_msgs REQUIRED)
@@ -31,6 +32,7 @@ set(ROS2_DEPENDENCIES_BASE
 )
 
 set(ROS2_DEPENDENCIES_PC
+  pointcloud_sampling
   rclcpp
   sensor_msgs
   std_msgs
@@ -39,6 +41,7 @@ set(ROS2_DEPENDENCIES_PC
 )
 
 set(ROS2_DEPENDENCIES_GRAPH
+  pointcloud_sampling
   rclcpp
   ament_index_cpp
   sensor_msgs
@@ -55,6 +58,7 @@ set(ROS2_DEPENDENCIES_GRAPH
 )
 
 set(ROS2_DEPENDENCIES_EDIT
+  pointcloud_sampling
   rclcpp
   sensor_msgs
   std_msgs
@@ -167,6 +171,11 @@ target_link_libraries(viewer_edit_node ${PCL_LIBRARIES} Threads::Threads)
 ament_target_dependencies(viewer_edit_node ${ROS2_DEPENDENCIES_EDIT})
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_pointcloud_sampling test/test_pointcloud_sampling.cpp src/common/pcl_converter.cpp)
+  target_include_directories(test_pointcloud_sampling PRIVATE include)
+  target_link_libraries(test_pointcloud_sampling ${PCL_LIBRARIES})
+  ament_target_dependencies(test_pointcloud_sampling ${ROS2_DEPENDENCIES_PC})
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()

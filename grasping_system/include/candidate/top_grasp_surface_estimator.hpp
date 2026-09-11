@@ -9,8 +9,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
+#include <queue>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -29,12 +32,26 @@ struct TopGraspSurfaceConfig
   double footprint_padding = 0.005;
   double tcp_standoff = 0.0;
   std::size_t maximum_candidates = 20U;
+  double max_surface_tilt_deg = 25.0;
+  bool enable_nonplane_attachment = true;
+  double nonplane_margin = 0.03;
+  double max_nonplane_graph_dist = 0.15;
+  double max_nonplane_depth = 0.08;
+  double max_nonplane_height = 0.01;
+  bool enable_approach_check = true;
+  double approach_height = 0.10;
+  double approach_margin = 0.01;
 };
 
 struct TopGraspSurfaceCandidate
 {
   std::uint32_t cluster_id = 0U;
   std::vector<std::uint32_t> node_indices;
+  // 平面OBBとは独立した、同一フレーム内の付属ノード添字と局所外形
+  std::vector<std::uint32_t> attached_node_indices;
+  std::size_t attached_component_num = 0U;
+  double target_extent_x = 0.0;
+  double target_extent_y = 0.0;
   Eigen::Vector3d tcp_position = Eigen::Vector3d::Zero();
   Eigen::Quaterniond tcp_orientation = Eigen::Quaterniond::Identity();
   double extent_x = 0.0;
@@ -54,6 +71,9 @@ struct TopGraspSurfaceResult
   std::size_t rejected_invalid_region = 0U;
   std::size_t rejected_oversize_region = 0U;
   std::size_t rejected_low_protrusion_region = 0U;
+  std::size_t rejected_surface_tilt = 0U;
+  std::size_t rejected_attached_oversize = 0U;
+  std::size_t rejected_approach_obstacle = 0U;
   std::vector<TopGraspSurfaceCandidate> candidates;
 };
 
@@ -72,7 +92,10 @@ public:
   {
     TopGraspSurfaceResult result;
     result.region_count = clusters.clusters.size();
-    if (map.nodes.empty() || clusters.clusters.empty()) {
+    if (map.frame_number != clusters.frame_number ||
+      map.header.frame_id != clusters.header.frame_id ||
+      map.nodes.empty() || clusters.clusters.empty())
+    {
       return result;
     }
 
@@ -102,6 +125,18 @@ public:
         ++result.rejected_small_region;
         continue;
       }
+      const Eigen::Vector3d normal(cluster.normal.x, cluster.normal.y, cluster.normal.z);
+      if (!normal.allFinite() || normal.norm() < 1.0e-12) {
+        ++result.rejected_invalid_region;
+        continue;
+      }
+      // 法線の符号に依存しない、上方向との傾斜角判定
+      if (std::abs(normal.normalized().dot(config_.up_axis)) + 1.0e-12 <
+        std::cos(config_.max_surface_tilt_deg * std::acos(-1.0) / 180.0))
+      {
+        ++result.rejected_surface_tilt;
+        continue;
+      }
       footprints[region_index] = fitFootprint(
         cluster.node_indices, map, basis_u, basis_v);
       if (!footprints[region_index].valid) {
@@ -114,6 +149,21 @@ public:
     }
 
     std::vector<std::unordered_set<std::size_t>> adjacency(region_count);
+    std::vector<std::vector<std::uint32_t>> node_adjacency(
+      config_.enable_nonplane_attachment ? map.nodes.size() : 0U);
+    std::unordered_map<std::uint32_t, int> component_owner;
+    const auto register_owner = [&](std::size_t node_idx, int plane_idx) {
+        const auto component_id = map.nodes[node_idx].nonplane_component_id;
+        if (plane_idx < 0 || owner_by_node[node_idx] >= 0 ||
+          component_id == ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE)
+        {
+          return;
+        }
+        const auto [it, is_inserted] = component_owner.emplace(component_id, plane_idx);
+        if (!is_inserted && it->second != plane_idx) {
+          it->second = -2;
+        }
+      };
     for (std::size_t edge = 0U; edge + 1U < map.edges.size(); edge += 2U) {
       const std::size_t first_node = map.edges[edge];
       const std::size_t second_node = map.edges[edge + 1U];
@@ -122,6 +172,12 @@ public:
       }
       const int first_owner = owner_by_node[first_node];
       const int second_owner = owner_by_node[second_node];
+      if (config_.enable_nonplane_attachment) {
+        node_adjacency[first_node].push_back(second_node);
+        node_adjacency[second_node].push_back(first_node);
+        register_owner(first_node, second_owner);
+        register_owner(second_node, first_owner);
+      }
       if (first_owner < 0 || second_owner < 0 || first_owner == second_owner) {
         continue;
       }
@@ -195,6 +251,11 @@ public:
       if (has_plane_distance) {
         candidate.minimum_neighbor_plane_distance = minimum_plane_distance;
       }
+      if (!evaluate_nonplane(
+          map, region_index, owner_by_node, node_adjacency, component_owner, candidate, result))
+      {
+        continue;
+      }
       result.candidates.push_back(std::move(candidate));
     }
 
@@ -213,6 +274,111 @@ public:
   }
 
 private:
+  bool evaluate_nonplane(
+    const ais_gng_msgs::msg::TopologicalMap &map, std::size_t plane_idx,
+    const std::vector<int> &owner_by_node,
+    const std::vector<std::vector<std::uint32_t>> &node_adjacency,
+    const std::unordered_map<std::uint32_t, int> &component_owner,
+    TopGraspSurfaceCandidate &candidate, TopGraspSurfaceResult &result) const
+  {
+    const Eigen::Matrix3d rotation = candidate.tcp_orientation.toRotationMatrix();
+    const auto local_point = [&](std::size_t node_idx) -> Eigen::Vector3d {
+        const auto &p = map.nodes[node_idx].pos;
+        const Eigen::Vector3d delta = Eigen::Vector3d(p.x, p.y, p.z) -
+          (candidate.tcp_position - config_.up_axis * config_.tcp_standoff);
+        return {delta.dot(rotation.col(0)), delta.dot(rotation.col(1)),
+          delta.dot(config_.up_axis)};
+      };
+    candidate.target_extent_x = candidate.extent_x;
+    candidate.target_extent_y = candidate.extent_y;
+
+    // 接続・クラスタ所属によらない観測障害物の確認。未観測空間の安全保証なし
+    if (config_.enable_approach_check) {
+      for (std::size_t node_idx = 0; node_idx < map.nodes.size(); ++node_idx) {
+        const Eigen::Vector3d p = local_point(node_idx);
+        if (p.allFinite() && p.z() > config_.max_nonplane_height &&
+          p.z() <= config_.approach_height + std::max(0.0, config_.tcp_standoff) &&
+          std::abs(p.x()) <= 0.5 * config_.grasp_size_x + config_.approach_margin &&
+          std::abs(p.y()) <= 0.5 * config_.grasp_size_y + config_.approach_margin)
+        {
+          ++result.rejected_approach_obstacle;
+          return false;
+        }
+      }
+    }
+    if (!config_.enable_nonplane_attachment) {
+      return true;
+    }
+
+    // 距離上限付きDijkstra。ノード密度に依存するhop数ではなくエッジ長の累積
+    using entry = std::pair<double, std::uint32_t>;
+    std::priority_queue<entry, std::vector<entry>, std::greater<entry>> queue;
+    std::vector<double> graph_dist(map.nodes.size(), std::numeric_limits<double>::infinity());
+    for (const auto node_idx : candidate.node_indices) {
+      graph_dist[node_idx] = 0.0;
+      queue.emplace(0.0, node_idx);
+    }
+    std::unordered_set<std::uint32_t> attached_components;
+    Eigen::Vector2d min_target(-0.5 * candidate.extent_x, -0.5 * candidate.extent_y);
+    Eigen::Vector2d max_target = -min_target;
+    const double usable_x = 0.5 * config_.grasp_size_x - config_.footprint_margin;
+    const double usable_y = 0.5 * config_.grasp_size_y - config_.footprint_margin;
+    while (!queue.empty()) {
+      const auto [dist, node_idx] = queue.top();
+      queue.pop();
+      if (dist != graph_dist[node_idx]) {
+        continue;
+      }
+      const auto &node = map.nodes[node_idx];
+      const Eigen::Vector3d p = local_point(node_idx);
+      if (owner_by_node[node_idx] < 0) {
+        candidate.attached_node_indices.push_back(node_idx);
+        attached_components.insert(node.nonplane_component_id);
+        min_target = min_target.cwiseMin(
+          (p.head<2>().array() - config_.footprint_padding).matrix());
+        max_target = max_target.cwiseMax(
+          (p.head<2>().array() + config_.footprint_padding).matrix());
+        if (std::abs(p.x()) + config_.footprint_padding > usable_x ||
+          std::abs(p.y()) + config_.footprint_padding > usable_y)
+        {
+          ++result.rejected_attached_oversize;
+          return false;
+        }
+      }
+      if (node.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) {
+        continue;
+      }
+      for (const auto next_idx : node_adjacency[node_idx]) {
+        const auto &next = map.nodes[next_idx];
+        const auto it = component_owner.find(next.nonplane_component_id);
+        if (owner_by_node[next_idx] >= 0 || it == component_owner.end() ||
+          it->second != static_cast<int>(plane_idx) ||
+          (next.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) ||
+          (owner_by_node[node_idx] < 0 &&
+          node.nonplane_component_id != next.nonplane_component_id))
+        {
+          continue;
+        }
+        const Eigen::Vector3d next_p = local_point(next_idx);
+        const double next_dist = dist + (next_p - p).norm();
+        if (!next_p.allFinite() || next_dist > config_.max_nonplane_graph_dist ||
+          next_dist >= graph_dist[next_idx] ||
+          std::abs(next_p.x()) > 0.5 * candidate.extent_x + config_.nonplane_margin ||
+          std::abs(next_p.y()) > 0.5 * candidate.extent_y + config_.nonplane_margin ||
+          next_p.z() < -config_.max_nonplane_depth || next_p.z() > config_.max_nonplane_height)
+        {
+          continue;
+        }
+        graph_dist[next_idx] = next_dist;
+        queue.emplace(next_dist, next_idx);
+      }
+    }
+    candidate.attached_component_num = attached_components.size();
+    candidate.target_extent_x = max_target.x() - min_target.x();
+    candidate.target_extent_y = max_target.y() - min_target.y();
+    return true;
+  }
+
   struct Footprint
   {
     bool valid = false;
@@ -227,6 +393,27 @@ private:
 
   void validateConfig()
   {
+    if (!std::isfinite(config_.max_surface_tilt_deg) ||
+      config_.max_surface_tilt_deg < 0.0 || config_.max_surface_tilt_deg > 90.0)
+    {
+      throw std::invalid_argument("max_surface_tilt_deg must be within [0, 90]");
+    }
+    for (const double value : {config_.nonplane_margin, config_.max_nonplane_graph_dist,
+        config_.max_nonplane_depth, config_.max_nonplane_height,
+        config_.approach_height, config_.approach_margin})
+    {
+      if (!std::isfinite(value) || value < 0.0) {
+        throw std::invalid_argument("nonplane and approach dimensions must be finite and non-negative");
+      }
+    }
+    if (config_.enable_approach_check && config_.approach_height <= config_.max_nonplane_height) {
+      throw std::invalid_argument("approach_height must exceed max_nonplane_height");
+    }
+    if (!std::isfinite(config_.tcp_standoff) || !std::isfinite(config_.footprint_margin) ||
+      !std::isfinite(config_.footprint_padding))
+    {
+      throw std::invalid_argument("footprint offsets must be finite");
+    }
     if (!config_.up_axis.allFinite() || config_.up_axis.norm() < 1.0e-12) {
       throw std::invalid_argument("up_axis must be finite and non-zero");
     }

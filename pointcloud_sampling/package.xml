@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>pointcloud_sampling</name>
+  <version>0.1.0</version>
+  <description>元画素番号を保持する有効点の層化抽出</description>
+  <maintainer email="nagashima@fuzzrobo.com">FuzzRoBo</maintainer>
+  <license>FuzzRoBo</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>sensor_msgs</depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

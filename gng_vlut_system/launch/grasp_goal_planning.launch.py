@@ -89,7 +89,6 @@ def launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "topological_map_topic": LaunchConfiguration("topological_map_topic"),
                 "output_topic": LaunchConfiguration("output_topic"),
-                "marker_topic": LaunchConfiguration("marker_topic"),
                 "candidate_count": LaunchConfiguration("candidate_count"),
                 "non_collision_only": LaunchConfiguration("non_collision_only"),
                 "orientation_weight": LaunchConfiguration("orientation_weight"),
@@ -159,7 +158,6 @@ def generate_launch_description():
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm2.yaml")),
         DeclareLaunchArgument("topological_map_topic", default_value="/ToPoDualArm/topological_map_static"),
         DeclareLaunchArgument("output_topic", default_value="/selected_topological_map"),
-        DeclareLaunchArgument("marker_topic", default_value="/selected_topological_map_markers"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),

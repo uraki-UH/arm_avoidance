@@ -41,6 +41,8 @@ int main(int argc, char **argv)
     };
     array input;
     input.header.frame_id = "world";
+    input.header.stamp = source->now();
+    input.tcp_frame = "test_tcp";
     for (const double x : {-0.1, -0.10001, 0.09999, 0.1}) {
       candidate entry;
       entry.id = 42 + input.candidates.size();
@@ -69,7 +71,8 @@ int main(int argc, char **argv)
     tf.transform.rotation.w = 1.0;
     broadcaster.sendTransform(tf);
     wait_for([&]() { return latest.candidates[0].state == candidate::INSIDE; });
-    require(latest.update_id == update_id && latest.candidates[0].id == 42);
+    require(latest.update_id == update_id && latest.candidates[0].id == 42 &&
+      latest.tcp_frame == "test_tcp");
     require(latest.candidates[1].state == candidate::OUTSIDE);
     require(latest.candidates[2].state == candidate::INSIDE);
     require(latest.candidates[3].state == candidate::OUTSIDE);

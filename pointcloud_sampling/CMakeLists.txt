@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.8)
+project(pointcloud_sampling)
+find_package(ament_cmake REQUIRED)
+find_package(sensor_msgs REQUIRED)
+install(DIRECTORY include/ DESTINATION include)
+ament_export_include_directories(include)
+ament_export_dependencies(sensor_msgs)
+ament_package()

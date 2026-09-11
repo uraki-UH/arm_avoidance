@@ -55,12 +55,12 @@ class test_grasp_candidate_reachability(unittest.TestCase):
     def setUp(self):
         args = argparse.Namespace(
             topological_map_topic="/test/map", output_topic="/test/selected",
-            marker_topic="/test/selected_markers", candidate_count=8,
+            candidate_count=8,
             non_collision_only=True, orientation_weight=0.0,
             candidate_topic="/test/candidates", goal_candidate_ids_topic="/test/goals",
             node_feature_topic="", manipulability_weight=0.0, goal_update_hz=5.0)
         self.node = selector_module.TopologicalMapGoalSelector(args)
-        for name in ("output_pub", "marker_pub", "goal_candidate_ids_pub"):
+        for name in ("output_pub", "goal_candidate_ids_pub"):
             setattr(self.node, name, capture_publisher())
 
     def tearDown(self):
@@ -77,6 +77,8 @@ class test_grasp_candidate_reachability(unittest.TestCase):
         self.assertEqual(source, before)
         self.assertFalse(hasattr(self.node, "reachability_pub"))
         self.assertFalse(hasattr(self.node, "reachability_marker_pub"))
+        self.assertFalse(hasattr(self.node, "marker_pub"))
+        self.assertEqual([node.id for node in self.node.output_pub.latest.nodes], [1])
 
     def test_unknown_outside_and_empty_clear_old_goals(self):
         self.node._on_map(make_map([0.01]))
@@ -88,7 +90,6 @@ class test_grasp_candidate_reachability(unittest.TestCase):
             self.node._on_candidates(source)
             self.assertFalse(self.node.goal_candidate_ids_pub.latest.data)
             self.assertFalse(self.node.output_pub.latest.nodes)
-            self.assertEqual(self.node.marker_pub.latest.markers[0].action, 3)
 
     def test_missing_map_and_tf_and_invalid_pose(self):
         self.node._on_candidates(make_candidates([0.02]))

@@ -1,5 +1,6 @@
 #include <ais_gng/ais_gng_component.hpp>
 #include <ais_gng/handle_label_utils.hpp>
+#include <pointcloud_sampling/stratified.hpp>
 
 #if defined(AIS_GNG_BACKEND_CPU)
 #include <ais_gng/topological_plane/nonplane_component_extractor.hpp>
@@ -452,11 +453,11 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     }
     input_point_cloud_num_ = static_cast<uint32_t>(input_point_cloud_num);
     const auto sampling_mode = this->declare_parameter<std::string>(
-        "input.sampling_mode", "head");
+        "input.sampling_mode", "random");
     const auto parsed_sampling_mode = parsePointSamplingMode(sampling_mode);
     if (!parsed_sampling_mode) {
         throw std::invalid_argument(
-            "input.sampling_mode must be either 'head' or 'uniform'");
+            "input.sampling_mode must be 'head', 'uniform', 'stratified' or 'random'");
     }
     input_sampling_mode_ = *parsed_sampling_mode;
     this->declare_parameter("input.base_frame_id", "map");                         // 入力点群の基準フレームID (cpu/gpu)
@@ -676,7 +677,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
             const auto mode = parsePointSamplingMode(p.as_string());
             if (!mode) {
                 result.successful = false;
-                result.reason = "input.sampling_mode must be either 'head' or 'uniform'";
+                result.reason = "input.sampling_mode must be 'head', 'uniform', 'stratified' or 'random'";
                 return result;
             }
             input_sampling_mode_ = *mode;
@@ -788,12 +789,27 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         }
         processed_raw_point_count += point_count;
 
-        // 一様間引きまたは行余白のある点群の連続配置。
+        // ランダム抽出・層化抽出・一様間引き・行余白のある点群の連続配置。
         const bool requires_repacking =
+            input_sampling_mode_ == PointSamplingMode::Random ||
+            input_sampling_mode_ == PointSamplingMode::Stratified ||
             (input_sampling_mode_ == PointSamplingMode::Uniform && point_count > input_point_cloud_num_) ||
             static_cast<uint64_t>(msg->row_step) != static_cast<uint64_t>(msg->width) * msg->point_step;
         if (requires_repacking) {
-            if (!sampled_indices_valid_ ||
+            if (input_sampling_mode_ == PointSamplingMode::Stratified ||
+                input_sampling_mode_ == PointSamplingMode::Random) {
+                try {
+                    const auto select_points = input_sampling_mode_ == PointSamplingMode::Random
+                        ? pointcloud_sampling::select_random : pointcloud_sampling::select_stratified;
+                    sampled_point_indices_ = select_points(*msg, input_point_cloud_num_, ++sampling_frame_);
+                } catch (const std::invalid_argument &error) {
+                    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "%s", error.what());
+                    return;
+                }
+                sampled_indices_valid_ = false;
+                // 有効点のないフレームでの残存入力による学習防止。
+                if (sampled_point_indices_.empty()) return;
+            } else if (!sampled_indices_valid_ ||
                 sampled_source_point_count_ != point_count ||
                 sampled_max_point_count_ != input_point_cloud_num_ ||
                 sampled_mode_ != input_sampling_mode_)

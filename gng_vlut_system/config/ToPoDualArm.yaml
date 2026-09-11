@@ -227,19 +227,40 @@
 /top_grasp_surface_estimator:
   ros__parameters:
     topological_map_topic: "/topological_map"
-    plane_clusters_topic: "/plane_clusters"
+    planar_clusters_topic: "/plane_clusters"
     candidate_topic: "/grasp_pose_cands"
+    candidate_nodes_topic: "/grasp_pose_cands/nodes"
+    # 採用ノードの表示直径 [m]
+    candidate_node_diameter: 0.012
     score_topic: "/grasp_pose_cand_scores"
     reachability_map_topic: "/ToPoDualArm/topological_map_static"
     reachability_voxel_size: 0.05
     reachability_voxel_origin: [0.0, 0.0, 0.0]
     reachability_publish_hz: 5.0
     summary_topic: "/grasp_pose_cands/summary"
-    # 各平面クラスタをXY投影OBBと隣接平面からの突出距離で判定する。
+    # 空文字は入力グラフ座標系のまま。変換時のみ目標座標系を指定
+    candidate_frame: ""
+    # 配列内全候補の目標TCP link
+    tcp_frame: "L_tcp"
+    # 各平面クラスタのXY投影OBBと隣接平面からの突出距離による判定
     up_axis: [0.0, 0.0, 1.0]
+    # 法線符号に依存しない上方向との傾斜角 [deg]
+    max_surface_tilt_deg: 90.0
+    enable_nonplane_attachment: false
+    # 付属探索の平面OBB外側余白 [m]
+    nonplane_margin: 0.03
+    # 平面から付属ノードまでの累積エッジ長 [m]
+    max_nonplane_graph_dist: 0.15
+    # 平面最高位置からの付属探索深さと上方許容幅 [m]
+    max_nonplane_depth: 0.08
+    max_nonplane_height: 0.01
+    enable_approach_check: false
+    # 簡易進入領域の高さと把持開口外側余白 [m]。実グリッパ形状とは別の近似
+    approach_height: 0.10
+    approach_margin: 0.01
     minimum_protrusion_distance: 0.01
     minimum_region_nodes: 4
-    # ToPoDualArmの開口内部寸法。余白とGNG点間の補正を両側へ適用する。
+    # ToPoDualArmの開口内部寸法。両側余白とGNG点間の補正
     grasp_size_x: 0.15
     grasp_size_y: 0.15
     footprint_margin: 0.002

@@ -1,0 +1,8 @@
+# 外部センサ固定TF一覧。空配列時はTF配信なし
+sensor_static_transforms: []
+# 設置値の記述例
+# sensor_static_transforms:
+#   - parent_frame: "ToPoDualArm/base_link"
+#     child_frame: "camera_link"
+#     translation_m: [0.0, 0.0, 0.0]
+#     rpy_deg: [0.0, 0.0, 0.0]

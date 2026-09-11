@@ -12,6 +12,8 @@ enum class PointSamplingMode
 {
   Head,
   Uniform,
+  Stratified,
+  Random,
 };
 
 std::optional<PointSamplingMode> parsePointSamplingMode(const std::string & value);

@@ -111,6 +111,7 @@ class AiSGNGComponent : public rclcpp::Node {
     uint32_t sampled_max_point_count_{};
     PointSamplingMode sampled_mode_{PointSamplingMode::Head};
     bool sampled_indices_valid_{false};
+    uint32_t sampling_frame_{};
     std::vector<uint8_t> semantic_label_buffer_;
     std::vector<uint32_t> source_point_index_buffer_;
 

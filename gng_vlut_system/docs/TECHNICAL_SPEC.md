@@ -27,7 +27,6 @@ flowchart TD
 
     B --> G[selected_goal_candidate_ids]
     B --> H[selected_topological_map]
-    B --> I[selected_topological_map_markers]
     B --> J[grasp_pose_candidates / grasp_pose_scores]
 
     D --> K[cand_topological_map]
@@ -50,7 +49,6 @@ flowchart TD
 | `params_file` | path | `config/ToPoDualArm2.yaml` | URDF と各種パラメータの参照元 |
 | `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 目標候補選定の入力マップ |
 | `output_topic` | topic | `/selected_topological_map` | 選定後マップ |
-| `marker_topic` | topic | `/selected_topological_map_markers` | 選定後のマーカ |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 把持候補として採択したノード ID 群 |
 | `robot_name` | string | `ToPoDualArm` | namespace と topic 接頭辞 |
 | `urdf_path` | path | 空 | ロボットモデル参照 |
@@ -91,7 +89,6 @@ flowchart TD
 |---|---:|---|---|
 | `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 元マップ入力 |
 | `output_topic` | topic | `/selected_topological_map` | 選定後マップ |
-| `marker_topic` | topic | `/selected_topological_map_markers` | 可視化用マーカ |
 | `candidate_count` | int | `8` | 抽出ノード数 |
 | `non_collision_only` | bool | `true` | 衝突ノードを除外 |
 | `orientation_weight` | float | `0.25` | 姿勢整合重み |
@@ -183,7 +180,6 @@ flowchart TD
     D[Node features] --> B
     B --> E[selected_goal_candidate_ids]
     B --> F[selected_topological_map]
-    B --> G[selected_topological_map_markers]
 
     E --> H[TopologicalMapAvoidance]
     F --> H
@@ -546,7 +542,8 @@ transient localでpublishする。
 同ノードは各GNGノードの平面クラスタ所属と`TopologicalMap.edges`から、平面クラスタ間の隣接graphを作る。
 `PlaneCluster.position_covariance`は所属GNGノード位置の母共分散`3×3`を`float32[9]`の行優先で保持する。
 平面フィット時に算出済みの空間共分散を再利用し、GNGノードの入力残差共分散とは区別する。
-法線方向では候補を除外せず、各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
+法線と`up_axis`の内積絶対値から傾斜角を判定し、`max_surface_tilt_deg`の範囲の面だけを候補とする。
+各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
 `footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
 `grasp_size_x × grasp_size_y`へ90度回転のどちらかで全体が収まる場合だけ候補にする。
 さらに候補クラスタの重心から各隣接クラスタ平面までの絶対距離を求め、その最小値が
@@ -557,6 +554,12 @@ transient localでpublishする。
 姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
 Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を未評価=黄・範囲内=緑・範囲外=灰で表示する。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
+`enable_nonplane_attachment`で、同じ平面だけにedge接続する非平面成分を距離制限付きで探索する。
+平面OBB・TCPは変更せず、局所付属ノードの開口包含を評価する。別平面への橋渡し成分や
+`BOUNDARY_FREE_SPACE`の端点を経由する探索は除外する。成分IDは同一フレーム内だけで有効。
+`enable_approach_check`では所属・接続に関係なく上方矩形柱内の観測ノードで候補を棄却する。
+付属数・局所外形・棄却理由はsummaryへ追加。矩形柱は実グリッパ体積ではなく、未観測空間の安全性も保証しない。
+寸法・探索範囲は[上方把持資料](../../grasping_system/docs/top_grasp_surface_estimation.md)を参照。
 位置到達性は生成側で評価し、最終的な指接触・グリッパ基部衝突・姿勢到達性は後段の対象とする。
 
 物体GNG保存では、`PlaneClusterArray`のうち`TopologicalMap`と`frame_number`およびheader stampが一致する
@@ -577,17 +580,21 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 上面把持TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 上面把持面積スコア | `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
+| 上面把持の採用環境ノード | `/grasp_pose_cands/nodes` | `visualization_msgs/MarkerArray` |
 
 上面把持とボクセル照合の既定出力を共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
-自動排他・候補統合は対象外。候補生成launchからの重複Marker配信はなし。
+自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
+上方方式の採用環境ノードは`candidate_nodes_topic`（既定`/grasp_pose_cands/nodes`）で別表示。
+平面を水色、付属非平面をオレンジのSPHERE_LISTで表示し、idは同じ更新の候補idに対応する。
+`candidate_node_diameter`の既定は0.012 m。候補評価座標系で配信し、空候補・TF欠落ではDELETEALLのみを配信する。
 可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
 候補生成側の共通publisherが`update_id`と候補`id`を管理し、同じ配列の`state`を更新する。
 状態更新だけではIDを維持、新規候補集合では`update_id`を増加。配信元の再起動では番号を再初期化。
 到達map・TFがない場合は未評価。候補生成ノードの`reachability_map_topic`、`reachability_voxel_size`、
 `reachability_voxel_origin`、`reachability_publish_hz`で設定。計画側には`candidate_topic`で接続し、
 範囲内候補と同じ到達セルに所属する計画GNGのノードだけを選択する。独立mapのIDは計画IDとして使用しない。
-別のreachability・候補Markerトピックは配信しない。互換用スコア配列は残すが、形状スコアの正規情報は候補内の値。
+別のreachability・候補矢印Markerトピックは配信しない。互換用スコア配列は残すが、形状スコアの正規情報は候補内の値。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま

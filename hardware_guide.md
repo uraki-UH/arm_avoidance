@@ -26,3 +26,6 @@ ros2 launch realsense2_camera rs_launch.py \
   pointcloud.ordered_pc:=true \
   pointcloud.allow_no_texture_points:=true \
   align_depth.enable:=false
+
+
+ros2 launch realsense2_camera rs_launch.py   align_depth.enable:=true   pointcloud.enable:=true   pointcloud.ordered_pc:=true

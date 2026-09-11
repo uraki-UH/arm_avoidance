@@ -66,7 +66,10 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 
 Viewerは同じ候補IDのローカルZ軸矢印を、未評価=黄・到達範囲内=緑・範囲外=灰で表示。計画launch・別のreachability/Markerトピックは不要。
 到達性は候補生成側で評価。YAMLの各生成ノードにある`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を設定。map未受信・TF不明なら未評価。
-変更適用にはメッセージと各ノードの再ビルド、候補生成・計画・Viewerの再起動とブラウザ再読み込みが必要。入力座標系からロボット／ViewerへのTFも必要。
+`candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合だけ `candidate_frame: "ToPoDualArm/base_link"` とし、[`sensor_static_tf.yaml`](gng_vlut_system/config/sensor_static_tf.yaml) に外部センサTFを記述して次を起動。
+
+ros2 launch gng_vlut_system sensor_static_tf.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/sensor_static_tf.yaml
 
 `grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 

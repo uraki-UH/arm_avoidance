@@ -13,7 +13,6 @@ from rclpy.node import Node
 
 from geometry_msgs.msg import Point, PointStamped
 from std_msgs.msg import Int32MultiArray
-from visualization_msgs.msg import Marker, MarkerArray
 
 from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
 from ais_gng_feature_msgs.msg import TopologicalNodeFeatureArray
@@ -60,16 +59,6 @@ def _safe_label(label: int) -> bool:
     return int(label) != COLLISION_LABEL
 
 
-def _copy_point(point: Point) -> Point:
-    out = Point()
-    out.x = float(point.x)
-    out.y = float(point.y)
-    out.z = float(point.z)
-    return out
-
-
-
-
 def _quat_multiply(
     a: Tuple[float, float, float, float],
     b: Tuple[float, float, float, float],
@@ -89,7 +78,6 @@ class TopologicalMapGoalSelector(Node):
         super().__init__("topological_map_goal_selector_node")
         self.topological_map_topic = args.topological_map_topic
         self.output_topic = args.output_topic
-        self.marker_topic = args.marker_topic
         self.candidate_count = max(1, int(args.candidate_count))
         self.non_collision_only = bool(args.non_collision_only)
         self.orientation_weight = float(args.orientation_weight)
@@ -100,7 +88,6 @@ class TopologicalMapGoalSelector(Node):
         qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
                          durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.output_pub = self.create_publisher(TopologicalMap, self.output_topic, 10)
-        self.marker_pub = self.create_publisher(MarkerArray, self.marker_topic, 10)
         self.goal_candidate_ids_pub = self.create_publisher(
             Int32MultiArray, args.goal_candidate_ids_topic, qos)
         self.goal_candidate_ids_pub.publish(Int32MultiArray(data=[]))
@@ -233,9 +220,6 @@ class TopologicalMapGoalSelector(Node):
             selected_map.frame_number = self.map_msg.frame_number
             selected_map.nodes = [copy.deepcopy(node) for node in self.map_msg.nodes if int(node.id) in selected_ids]
         self.output_pub.publish(selected_map)
-        markers = self._build_markers(selected_map, {})
-        markers.markers.insert(0, Marker(action=Marker.DELETEALL))
-        self.marker_pub.publish(markers)
         self.goal_candidate_ids_pub.publish(Int32MultiArray(data=sorted(selected_ids)))
 
     def _build_selected_map(
@@ -291,45 +275,12 @@ class TopologicalMapGoalSelector(Node):
 
         return out, selected_lookup, selected_ids
 
-    def _build_markers(self, map_msg: TopologicalMap, selected_indices: Dict[int, int]) -> MarkerArray:
-        _ = selected_indices
-        markers = MarkerArray()
-        frame_id = map_msg.header.frame_id
-
-        sphere_ns = "selected_nodes"
-        node_color_table = {
-            1: (0.20, 0.85, 0.25, 1.0),
-            2: (0.95, 0.70, 0.10, 1.0),
-            3: (0.90, 0.25, 0.20, 1.0),
-            4: (0.55, 0.70, 1.00, 1.0),
-            5: (0.65, 0.35, 0.95, 1.0),
-        }
-
-        for idx, node in enumerate(map_msg.nodes):
-            marker = Marker()
-            marker.header.frame_id = frame_id
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = sphere_ns
-            marker.id = idx
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            marker.pose.position = _copy_point(node.pos)
-            marker.pose.orientation.w = 1.0
-            marker.scale.x = marker.scale.y = marker.scale.z = 0.08
-            r, g, b, a = node_color_table.get(int(node.label), (0.7, 0.7, 0.7, 1.0))
-            marker.color.r = r
-            marker.color.g = g
-            marker.color.b = b
-            marker.color.a = a
-            markers.markers.append(marker)
-        return markers
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Select topological map nodes near a grasp target.")
     parser.add_argument("--topological-map-topic", default="/ToPoDualArm/topological_map_static")
     parser.add_argument("--output-topic", default="/selected_topological_map")
-    parser.add_argument("--marker-topic", default="/selected_topological_map_markers")
     parser.add_argument("--candidate-count", type=int, default=8)
     parser.add_argument(
         "--non-collision-only",

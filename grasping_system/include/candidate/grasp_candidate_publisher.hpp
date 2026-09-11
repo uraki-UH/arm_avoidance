@@ -29,7 +29,7 @@ class grasp_candidate_publisher
 
 public:
   grasp_candidate_publisher(rclcpp::Node &node, const std::string &topic)
-  : node_(node), tf_buffer_(node.get_clock()), tf_listener_(tf_buffer_, &node, false)
+  : node_(node), tf_buffer_(node.get_clock()), tf_listener_(tf_buffer_, &node, true)
   {
     const auto map_topic = node.declare_parameter<std::string>("reachability_map_topic", "");
     latest_.voxel_size = node.declare_parameter<double>("reachability_voxel_size", 0.05);
@@ -69,6 +69,7 @@ public:
   void publish(array_msg msg)
   {
     latest_.header = std::move(msg.header);
+    latest_.tcp_frame = std::move(msg.tcp_frame);
     latest_.candidates = std::move(msg.candidates);
     ++latest_.update_id;
     evaluate(true);
@@ -96,7 +97,14 @@ private:
     const bool is_same_frame = map_frame_ == latest_.header.frame_id;
     if (has_transform && !is_same_frame) {
       try {
-        transform = tf_buffer_.lookupTransform(map_frame_, latest_.header.frame_id, tf2::TimePointZero);
+        const auto candidate_time = rclcpp::Time(latest_.header.stamp);
+        if (candidate_time.nanoseconds() == 0) {
+          transform = tf_buffer_.lookupTransform(
+            map_frame_, latest_.header.frame_id, tf2::TimePointZero);
+        } else {
+          transform = tf_buffer_.lookupTransform(
+            map_frame_, latest_.header.frame_id, candidate_time);
+        }
       } catch (const tf2::TransformException &) {
         has_transform = false;
       }

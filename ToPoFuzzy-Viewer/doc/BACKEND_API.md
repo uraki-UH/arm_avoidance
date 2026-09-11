@@ -43,6 +43,8 @@ Published before each binary cloud frame.
 
 `frameId`は入力`PointCloud2.header.frame_id`。後続のbinary cloud frameの座標系。
 
+点数制限はバックエンドで有効XYZ点へ適用。上限超過時のみ領域分けなしの全有効点シャッフルと先頭抽出、受信ごとの選択更新。上限以下・無制限設定では元順序のまま全有効点を配信。RGB・intensityの対応維持。配信形式の変更なし。
+
 ### `stream.graph`
 
 現行配信は `TMG1` バイナリ。以下は互換JSON表現。

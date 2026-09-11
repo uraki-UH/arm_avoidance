@@ -15,6 +15,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(voxel_idx REQUIRED)
 find_package(voxel_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -41,7 +42,8 @@ ament_target_dependencies(
 add_executable(top_grasp_surface_estimator_node src/top_grasp_surface_estimator_node.cpp)
 ament_target_dependencies(
   top_grasp_surface_estimator_node
-  ais_gng_msgs geometry_msgs gng_control_msgs rclcpp std_msgs tf2 tf2_geometry_msgs tf2_ros Eigen3
+  ais_gng_msgs geometry_msgs gng_control_msgs rclcpp std_msgs tf2 tf2_geometry_msgs tf2_ros
+  visualization_msgs Eigen3
 )
 install(TARGETS
   test_rigid_grasp_vlut

@@ -7,7 +7,7 @@ def launch_setup(context, *args, **kwargs):
     script = PathJoinSubstitution(
         [ThisLaunchFileDir(), "topological_map_goal_selector_node.py"]).perform(context)
     cmd = ["python3", script]
-    for name in ("topological_map_topic", "output_topic", "marker_topic", "candidate_topic",
+    for name in ("topological_map_topic", "output_topic", "candidate_topic",
                  "candidate_count", "orientation_weight", "goal_candidate_ids_topic",
                  "node_feature_topic", "manipulability_weight", "goal_update_hz"):
         value = LaunchConfiguration(name).perform(context)
@@ -21,7 +21,6 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("topological_map_topic", default_value="/ToPoDualArm/topological_map_static"),
         DeclareLaunchArgument("output_topic", default_value="/selected_topological_map"),
-        DeclareLaunchArgument("marker_topic", default_value="/selected_topological_map_markers"),
         DeclareLaunchArgument("candidate_topic", default_value="/grasp_pose_cands"),
         DeclareLaunchArgument("goal_update_hz", default_value="5.0"),
         DeclareLaunchArgument("candidate_count", default_value="8"),

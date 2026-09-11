@@ -1,7 +1,47 @@
 #include <ais_gng/observation_pixels.hpp>
+#include <pointcloud_sampling/stratified.hpp>
 #include <gtest/gtest.h>
 
 namespace pixels = fuzzrobo::observation_pixels;
+
+TEST(observation_pixels, random_selection_keeps_original_pixel_ids) {
+    sensor_msgs::msg::PointCloud2 cloud;
+    cloud.width = 32; cloud.height = 32; cloud.point_step = 16; cloud.row_step = 32 * 16 + 8;
+    cloud.data.resize(cloud.row_step * cloud.height);
+    for (uint32_t axis = 0; axis < 3; ++axis) {
+        sensor_msgs::msg::PointField field;
+        field.name = std::string(1, "xyz"[axis]); field.offset = axis * 4;
+        field.datatype = field.FLOAT32; field.count = 1; cloud.fields.push_back(field);
+    }
+    for (uint32_t idx = 0; idx < 1024; ++idx) {
+        const float xyz[] = {float(idx), 0, idx % 3 ? 1.0F : NAN};
+        auto *point = cloud.data.data() + idx / 32 * cloud.row_step + idx % 32 * 16;
+        std::memcpy(point, xyz, 12);
+        const uint32_t pixel_idx = 1023 - idx;
+        std::memcpy(point + 12, &pixel_idx, 4);
+    }
+    const auto selected = pointcloud_sampling::select_random(cloud, 100, 1);
+    ASSERT_EQ(selected.size(), 100U);
+    auto sorted = selected;
+    std::sort(sorted.begin(), sorted.end());
+    EXPECT_EQ(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    EXPECT_EQ(selected, pointcloud_sampling::select_random(cloud, 100, 1));
+    EXPECT_NE(selected, pointcloud_sampling::select_random(cloud, 100, 2));
+    const auto complete = pointcloud_sampling::select_random(cloud, 2000, 1);
+    EXPECT_EQ(complete.size(), 682U);
+    EXPECT_FALSE(std::is_sorted(complete.begin(), complete.end()));
+    EXPECT_NE(complete, pointcloud_sampling::select_random(cloud, 2000, 2));
+    EXPECT_EQ(complete, pointcloud_sampling::select_random(cloud, 0, 1));
+    for (const auto idx : complete) EXPECT_NE(idx % 3, 0U);
+    gng_observation::pixel_view view;
+    ASSERT_TRUE(pixels::make_view(cloud, 32, 32, true, &selected, selected.size(), view));
+    for (uint32_t idx = 0; idx < selected.size(); ++idx) EXPECT_EQ(view.get(idx), selected[idx]);
+    sensor_msgs::msg::PointField field;
+    field.name = "pixel_idx"; field.offset = 12; field.datatype = field.UINT32; field.count = 1;
+    cloud.fields.push_back(field);
+    ASSERT_TRUE(pixels::make_view(cloud, 32, 32, false, &selected, selected.size(), view));
+    for (uint32_t idx = 0; idx < selected.size(); ++idx) EXPECT_EQ(view.get(idx), 1023 - selected[idx]);
+}
 
 TEST(observation_pixels, borrowed_view_with_sampling_and_row_padding) {
     sensor_msgs::msg::PointCloud2 cloud;
