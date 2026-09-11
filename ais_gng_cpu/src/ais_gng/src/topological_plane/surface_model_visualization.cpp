@@ -219,6 +219,8 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     {"model_fits",surfaces.model_fits},{"curvature_ms",surfaces.curvature_ms},
     {"boundary_ms",surfaces.boundary_ms},{"boundary_fit_num",surfaces.boundary_fit_num},
     {"retention_ms",surfaces.retention_ms},
+    {"support_ms",surfaces.support_ms},{"support_split_num",surfaces.support_split_num},
+    {"support_gap_links",surfaces.support_gap_links},
     {"patch_edges",surfaces.patch_edges},{"smooth_edges",surfaces.smooth_edges},
     {"sharp_edges",surfaces.sharp_edges},
     {"uncertain_edges",surfaces.uncertain_edges},
@@ -258,6 +260,8 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     model["is_retained"]=r.is_retained;
     model["seed_plane_patch_num"]=r.seed_plane_patch_num;
     model["rejected_node_num"]=r.rejected_node_num;
+    if (r.support_parent_id!=std::numeric_limits<std::uint32_t>::max())
+      model["support_parent_id"]=r.support_parent_id;
     model["is_display_candidate"]=is_display_candidate(surfaces,r,min_display_plane_patches);
     if (s.type!="unknown") {
       model["fit"]={{"origin",vector_json(s.origin)},{"coordinate_scale",s.scale},
@@ -285,6 +289,9 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   period_=1.0/hz;
   config_.max_link_length=node.declare_parameter("surface_model.max_link_length",config_.max_link_length);
   config_.max_link_normal_deg=node.declare_parameter("surface_model.max_link_normal_deg",config_.max_link_normal_deg);
+  config_.max_support_gap=node.declare_parameter("surface_model.max_support_gap",config_.max_support_gap);
+  config_.max_support_spacing_ratio=node.declare_parameter(
+    "surface_model.max_support_spacing_ratio",config_.max_support_spacing_ratio);
   config_.max_patch_rms=node.declare_parameter("surface_model.max_patch_rms",config_.max_patch_rms);
   config_.max_point_residual=node.declare_parameter("surface_model.max_point_residual",config_.max_point_residual);
   config_.max_normal_deg=node.declare_parameter("surface_model.max_normal_deg",config_.max_normal_deg);

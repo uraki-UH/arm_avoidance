@@ -100,6 +100,11 @@ def launch_setup(context, *args, **kwargs):
                 "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
                 "node_feature_topic": node_feature_topic,
                 "manipulability_weight": manipulability_weight,
+                **{name: LaunchConfiguration(name) for name in (
+                    "reachability_map_topic", "reachability_topic", "reachability_marker_topic",
+                    "reachability_voxel_size", "reachability_voxel_origin_x",
+                    "reachability_voxel_origin_y", "reachability_voxel_origin_z",
+                    "reachability_publish_hz")},
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -205,6 +210,16 @@ def generate_launch_description():
         DeclareLaunchArgument("virtual_joint_state_max_joint_velocity", default_value="0.6"),
         DeclareLaunchArgument("virtual_joint_state_position_tolerance", default_value="0.01"),
         DeclareLaunchArgument("virtual_joint_state_use_wraparound", default_value="true"),
+        DeclareLaunchArgument("reachability_map_topic", default_value="",
+                              description="到達セル用TopologicalMap。空欄時は計画用GNGのTCP位置"),
+        DeclareLaunchArgument("reachability_topic", default_value="/grasp_pose_cands/reachability"),
+        DeclareLaunchArgument("reachability_marker_topic", default_value="/grasp_pose_cands/reachability_markers"),
+        DeclareLaunchArgument("reachability_voxel_size", default_value="0.05",
+                              description="到達セル寸法 [m]。独立map指定時は生成時の値"),
+        DeclareLaunchArgument("reachability_voxel_origin_x", default_value="0.0"),
+        DeclareLaunchArgument("reachability_voxel_origin_y", default_value="0.0"),
+        DeclareLaunchArgument("reachability_voxel_origin_z", default_value="0.0"),
+        DeclareLaunchArgument("reachability_publish_hz", default_value="5.0"),
         DeclareLaunchArgument("publish_world_tf", default_value="false"),
         OpaqueFunction(function=launch_setup),
     ])

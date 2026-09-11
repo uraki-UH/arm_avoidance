@@ -470,10 +470,23 @@ public:
         goal_candidate_ids_topic_, rclcpp::QoS(1).reliable().transient_local(),
           [this](const std_msgs::msg::Int32MultiArray::SharedPtr msg) {
             std::lock_guard<std::mutex> lock(mutex_);
+            const std::vector<int> goal_ids(msg->data.begin(), msg->data.end());
+            if (goal_ids == latest_goal_candidate_ids_) {
+              return;
+            }
             latest_goal_candidate_ids_.clear();
             latest_goal_candidate_ids_.reserve(msg->data.size());
             for (const auto id : msg->data) {
               latest_goal_candidate_ids_.push_back(static_cast<int>(id));
+            }
+            // 到達領域の変化による旧経路・旧評価の失効と、新しい候補への再計画
+            if (!trial_mode_) {
+              requestReplanLocked();
+              const Eigen::VectorXf current_q = have_joint_state_
+                  ? currentJointVectorLocked()
+                  : Eigen::VectorXf::Zero(chain_->getTotalDOF());
+              publishTrajectoryPathLocked(current_q, {});
+              publishGraspCandidateMetricsLocked(current_q, -1, {}, {});
             }
             RCLCPP_INFO(
                 get_logger(),

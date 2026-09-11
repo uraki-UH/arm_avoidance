@@ -20,6 +20,8 @@ json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClus
     {"fits",result.model_fits},{"patches",json::array()},
     {"sharp",json::array()},{"smooth",json::array()},{"uncertain",json::array()},
     {"boundary_ms",result.boundary_ms},{"boundary_fit_num",result.boundary_fit_num},
+    {"support_ms",result.support_ms},{"support_split_num",result.support_split_num},
+    {"support_gap_links",result.support_gap_links},
     {"shown",json::array()}};
   for (const auto &patch:result.patches) {
     if (patch.plane_cluster_idx<0) continue;
@@ -76,6 +78,7 @@ int main(int argc, char **argv)
       for (const auto &raw:raw_map.at("nodes")) {
         ais_gng_msgs::msg::TopologicalNode node;
         node.id=raw.at("id");
+        node.boundary_evidence=raw.value("boundary_evidence",0);
         read_vector(raw.at("pos"),node.pos); read_vector(raw.at("normal"),node.normal);
         map.nodes.push_back(node);
       }

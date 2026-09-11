@@ -48,6 +48,15 @@ def launch_setup(context, *args, **kwargs):
         goal_candidate_ids_topic,
     ]
 
+    for name in ("reachability_map_topic", "reachability_topic", "reachability_marker_topic",
+                 "reachability_voxel_size", "reachability_publish_hz"):
+        value = LaunchConfiguration(name).perform(context)
+        if value:
+            cmd.extend(["--" + name.replace("_", "-"), value])
+    cmd.extend(["--reachability-voxel-origin", *[
+        LaunchConfiguration("reachability_voxel_origin_" + axis).perform(context)
+        for axis in ("x", "y", "z")]])
+
     if node_feature_topic.strip():
         cmd.extend(["--node-feature-topic", node_feature_topic])
     if manipulability_weight.strip():
@@ -110,5 +119,15 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("manipulability_weight", default_value="0.25"),
         DeclareLaunchArgument("allow_untransformed_target", default_value="true"),
+        DeclareLaunchArgument("reachability_map_topic", default_value="",
+                              description="到達セル用TopologicalMap。空欄時は計画用GNGのTCP位置"),
+        DeclareLaunchArgument("reachability_topic", default_value="/grasp_pose_cands/reachability"),
+        DeclareLaunchArgument("reachability_marker_topic", default_value="/grasp_pose_cands/reachability_markers"),
+        DeclareLaunchArgument("reachability_voxel_size", default_value="0.05",
+                              description="到達セル寸法 [m]。独立map指定時は生成時の値"),
+        DeclareLaunchArgument("reachability_voxel_origin_x", default_value="0.0"),
+        DeclareLaunchArgument("reachability_voxel_origin_y", default_value="0.0"),
+        DeclareLaunchArgument("reachability_voxel_origin_z", default_value="0.0"),
+        DeclareLaunchArgument("reachability_publish_hz", default_value="5.0"),
         OpaqueFunction(function=launch_setup),
     ])

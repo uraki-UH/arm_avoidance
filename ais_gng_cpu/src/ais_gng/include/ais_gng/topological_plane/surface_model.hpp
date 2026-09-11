@@ -15,6 +15,10 @@ struct options
 {
   double max_link_length = 0.08;
   double max_link_normal_deg = 45.0;
+  // 曲面支持領域の小欠損補完距離[m]。0は補完なし。
+  double max_support_gap = 0.02;
+  // 局所ノード間隔に対する小欠損補完距離の倍率。
+  double max_support_spacing_ratio = 2.5;
   double max_patch_rms = 0.004;
   double max_point_residual = 0.012;
   double max_normal_deg = 35.0;
@@ -94,6 +98,8 @@ struct region
   bool is_retained = false;
   std::size_t seed_plane_patch_num = 0;
   std::size_t rejected_node_num = 0;
+  // 支持領域分割の直前のID。未分割時は未設定値。
+  std::uint32_t support_parent_id = std::numeric_limits<std::uint32_t>::max();
 };
 
 struct result
@@ -113,6 +119,9 @@ struct result
   double boundary_ms = 0.0;
   std::size_t boundary_fit_num = 0;
   double retention_ms = 0.0;
+  double support_ms = 0.0;
+  std::size_t support_split_num = 0;
+  std::size_t support_gap_links = 0;
 };
 
 struct node_dev
@@ -123,6 +132,10 @@ struct node_dev
 
 node_dev model_dev(const model &shape, const ais_gng_msgs::msg::TopologicalNode &node);
 std::size_t plane_patch_num(const result &surfaces, const region &surface);
+
+// 曲面上の観測支持領域の分離。新規・保持曲面の双方に共通の連続性検査。
+void split_support_regions(result &surfaces,
+  const ais_gng_msgs::msg::TopologicalMap &map, const options &config);
 
 // retainedはtrackerによる現在ノードの距離・法線・支持率検証済みの候補。
 result extract(

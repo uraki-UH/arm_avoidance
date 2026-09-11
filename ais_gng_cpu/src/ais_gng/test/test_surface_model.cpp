@@ -797,9 +797,11 @@ TEST(SurfaceModel, PositionBoundaryTangentsJoinWideCylinderPatches)
   EXPECT_EQ(noisy.regions[0].shape.type,"cylinder");
 }
 
-TEST(SurfaceTracking, DisconnectedEdgesKeepCurrentNodesAndStableId)
+TEST(SurfaceTracking, small_missing_edges_keep_current_nodes_and_stable_id)
 {
   auto s=cylinder(0.1,0.1);
+  // 1 cm間隔の小欠損。2 cmの物理上限内での支持領域保持。
+  for (auto &node:s.map.nodes) node.pos.z*=0.25;
   tracker tracking;
   const auto first=tracking.update(s.map,s.planes);
   ASSERT_EQ(first.regions.size(),1U);
@@ -818,6 +820,150 @@ TEST(SurfaceTracking, DisconnectedEdgesKeepCurrentNodesAndStableId)
   ASSERT_EQ(markers.markers.size(),1U);
   EXPECT_FLOAT_EQ(markers.markers[0].points[0].z,s.map.nodes[0].pos.z);
   EXPECT_EQ(markers.markers[0].points.size(),s.map.nodes.size());
+}
+
+TEST(SurfaceTracking, distant_bands_on_same_cylinder_get_stable_separate_ids)
+{
+  auto s=cylinder(0.1,0.1);
+  tracker tracking;
+  const auto first=tracking.update(s.map,s.planes);
+  ASSERT_EQ(first.regions.size(),1U);
+  std::vector<std::uint16_t> edges;
+  for (std::size_t idx=0;idx+1<s.map.edges.size();idx+=2) {
+    const auto a=s.map.edges[idx],b=s.map.edges[idx+1];
+    if ((a%6<3)!=(b%6<3)) continue;
+    edges.push_back(a); edges.push_back(b);
+  }
+  s.map.edges=edges;
+  for (std::size_t idx=0;idx<s.map.nodes.size();++idx) if (idx%6>=3) s.map.nodes[idx].pos.z+=0.03;
+  ++s.map.frame_number; s.planes.frame_number=s.map.frame_number;
+  const auto split=tracking.update(s.map,s.planes);
+  ASSERT_EQ(split.regions.size(),2U);
+  EXPECT_EQ(split.support_split_num,1U);
+  EXPECT_NE(split.regions[0].id,split.regions[1].id);
+  std::set<std::uint32_t> ids;
+  for (const auto &region:split.regions) {
+    ids.insert(region.id);
+    EXPECT_TRUE(region.is_retained);
+    EXPECT_EQ(region.support_parent_id,first.regions[0].id);
+    EXPECT_EQ(region.shape.q,first.regions[0].shape.q);
+    EXPECT_EQ(region.node_indices.size(),s.map.nodes.size()/2);
+    const bool is_upper=region.node_indices.front()%6>=3;
+    for (auto idx:region.node_indices) EXPECT_EQ(idx%6>=3,is_upper);
+    std::set<std::uint32_t> patch_nodes;
+    for (auto idx:region.patch_indices) for (auto node_idx:split.patches[idx].node_indices) patch_nodes.insert(node_idx);
+    EXPECT_EQ(patch_nodes,std::set<std::uint32_t>(region.node_indices.begin(),region.node_indices.end()));
+  }
+  EXPECT_TRUE(ids.count(first.regions[0].id));
+  coverage(split,s.map.nodes.size());
+  for (int iter=0;iter<3;++iter) {
+    ++s.map.frame_number; s.planes.frame_number=s.map.frame_number;
+    const auto next=tracking.update(s.map,s.planes);
+    std::set<std::uint32_t> next_ids;
+    for (const auto &region:next.regions) { next_ids.insert(region.id); EXPECT_TRUE(region.is_retained); }
+    EXPECT_EQ(next_ids,ids);
+    EXPECT_EQ(next.support_split_num,0U);
+    coverage(next,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceTracking, free_space_prevents_small_gap_completion)
+{
+  for (bool has_free_space:{false,true}) {
+    auto s=cylinder(0.1,0.1);
+    for (auto &node:s.map.nodes) node.pos.z*=0.25;
+    tracker tracking;
+    const auto first=tracking.update(s.map,s.planes);
+    ASSERT_EQ(first.regions.size(),1U);
+    std::vector<std::uint16_t> edges;
+    for (std::size_t idx=0;idx+1<s.map.edges.size();idx+=2) {
+      const auto a=s.map.edges[idx],b=s.map.edges[idx+1];
+      if ((a%6<3)!=(b%6<3)) continue;
+      edges.push_back(a); edges.push_back(b);
+    }
+    s.map.edges=edges;
+    if (has_free_space) for (auto &node:s.map.nodes)
+      node.boundary_evidence=ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE;
+    const auto next=tracking.update(s.map,s.planes);
+    EXPECT_EQ(next.regions.size(),has_free_space ? 2U:1U);
+    EXPECT_EQ(next.support_gap_links>0,!has_free_space);
+    coverage(next,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceModel, support_gap_does_not_cross_opposite_cylinder_sides)
+{
+  scene s;
+  result surfaces;
+  region surface;
+  surface.id=0; surface.shape.type="cylinder";
+  surface.shape.q<<1,1,0,0,0,0,0,0,0,-0.005*0.005;
+  surface.shape.score=0;
+  local_patch patch;
+  for (int side=0;side<2;++side) for (int along=0;along<4;++along) for (int row=0;row<4;++row) {
+    const double angle=side*pi+0.04*along;
+    const vec normal(std::cos(angle),std::sin(angle),0);
+    const auto idx=s.map.nodes.size();
+    add_node(s.map,0.005*normal+vec(0,0,0.001*row),normal);
+    surface.node_indices.push_back(idx); patch.node_indices.push_back(idx);
+    if (row) edge(s.map,idx,idx-1);
+    if (along) edge(s.map,idx,idx-4);
+  }
+  surfaces.patches.push_back(patch); surface.patch_indices={0}; surfaces.regions.push_back(surface);
+  split_support_regions(surfaces,s.map,{});
+  ASSERT_EQ(surfaces.regions.size(),2U);
+  EXPECT_NE(surfaces.regions[0].id,surfaces.regions[1].id);
+  EXPECT_EQ(surfaces.support_gap_links,0U);
+  EXPECT_EQ(surfaces.patches.size(),2U);
+  coverage(surfaces,s.map.nodes.size());
+}
+
+TEST(SurfaceTracking, local_spacing_limits_gap_completion)
+{
+  for (double ratio:{1.0,2.5}) {
+    auto s=cylinder(0.1,0.1);
+    for (auto &node:s.map.nodes) node.pos.z*=0.25;
+    tracker tracking;
+    tracking.update(s.map,s.planes);
+    std::vector<std::uint16_t> edges;
+    for (std::size_t idx=0;idx+1<s.map.edges.size();idx+=2) {
+      const auto a=s.map.edges[idx],b=s.map.edges[idx+1];
+      if ((a%6<3)!=(b%6<3)) continue;
+      edges.push_back(a); edges.push_back(b);
+    }
+    s.map.edges=edges;
+    for (std::size_t idx=0;idx<s.map.nodes.size();++idx) if (idx%6>=3) s.map.nodes[idx].pos.z+=0.005;
+    options config;
+    config.max_support_spacing_ratio=ratio;
+    const auto next=tracking.update(s.map,s.planes,config);
+    EXPECT_EQ(next.regions.size(),ratio==1.0 ? 2U:1U);
+    coverage(next,s.map.nodes.size());
+  }
+}
+
+TEST(SurfaceModel, invalid_support_options_are_rejected)
+{
+  const auto s=cylinder(0.1,0.1);
+  options config;
+  config.max_support_gap=-0.01;
+  EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
+  config.max_support_gap=std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
+  config.max_support_gap=0.02; config.max_support_spacing_ratio=0.5;
+  EXPECT_THROW(extract(s.map,s.planes,config),std::invalid_argument);
+}
+
+TEST(SurfaceModel, insufficient_support_is_not_a_visible_curve)
+{
+  auto s=cylinder(0.1,0.1);
+  auto surfaces=extract(s.map,s.planes);
+  s.map.edges.clear();
+  options config;
+  config.max_support_gap=0;
+  split_support_regions(surfaces,s.map,config);
+  EXPECT_EQ(surfaces.regions.size(),s.map.nodes.size());
+  for (const auto &region:surfaces.regions) EXPECT_EQ(region.shape.type,"unknown");
+  coverage(surfaces,s.map.nodes.size());
 }
 
 TEST(SurfaceTracking, OutlierNodeIsRemovedAndCanRejoin)
@@ -845,15 +991,16 @@ TEST(SurfaceTracking, OutlierNodeIsRemovedAndCanRejoin)
 TEST(SurfaceTracking, ConnectedNewNonplaneNodesJoinWithoutRefitting)
 {
   auto s=cylinder(0.1,0.1);
+  for (auto &node:s.map.nodes) node.pos.z*=0.25;
   tracker tracking;
   const auto first=tracking.update(s.map,s.planes);
   ASSERT_EQ(first.regions.size(),1U);
   const auto begin=s.map.nodes.size();
-  add_node(s.map,vec(0.1,0,0.12),vec::UnitX());
-  add_node(s.map,vec(0.1,0,0.14),vec::UnitX());
-  add_node(s.map,vec(0.13,0,0.14),vec::UnitX());
-  add_node(s.map,vec(0.1,0,0.16),vec::UnitZ());
-  add_node(s.map,vec(-0.1,0,0.12),-vec::UnitX());
+  add_node(s.map,vec(0.1,0,0.045),vec::UnitX());
+  add_node(s.map,vec(0.1,0,0.065),vec::UnitX());
+  add_node(s.map,vec(0.13,0,0.065),vec::UnitX());
+  add_node(s.map,vec(0.1,0,0.085),vec::UnitZ());
+  add_node(s.map,vec(-0.1,0,0.045),-vec::UnitX());
   edge(s.map,5,begin); edge(s.map,begin,begin+1);
   edge(s.map,begin+1,begin+2); edge(s.map,begin+1,begin+3);
   const auto next=tracking.update(s.map,s.planes);
@@ -1006,6 +1153,8 @@ TEST(SurfaceTracking, CoordinateAndSequenceResetsDoNotReuseOldTrack)
 TEST(SurfaceTracking, EstablishedModelDoesNotRequireTwoCurrentPlanes)
 {
   auto s=cylinder(0.1,0.1);
+  // 接続消失の補完範囲内での、現在平面数と表示資格の独立性。
+  for (auto &node:s.map.nodes) node.pos.z*=0.25;
   tracker tracking;
   tracking.update(s.map,s.planes);
   s.planes.clusters.resize(1);
@@ -1042,6 +1191,8 @@ TEST(SurfaceTracking, DisabledRetentionKeepsStatelessBehavior)
 TEST(SurfaceTracking, ModelFitBudgetDoesNotDiscardRetainedRegion)
 {
   auto s=cylinder(0.1,0.1);
+  // 小欠損の補完とモデル再フィット予算の独立性。
+  for (auto &node:s.map.nodes) node.pos.z*=0.25;
   tracker tracking;
   tracking.update(s.map,s.planes);
   s.map.edges.clear();

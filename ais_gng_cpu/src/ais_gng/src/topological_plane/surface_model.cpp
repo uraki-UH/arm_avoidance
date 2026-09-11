@@ -296,6 +296,8 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   if (!(config.max_link_length > 0) || !(config.max_patch_rms > 0) ||
     !(config.max_point_residual > 0) || !(config.complexity_penalty >= 0) ||
     !(config.max_radius > 0) || !(config.max_curvature_normal_error > 0) ||
+    !std::isfinite(config.max_support_gap) || config.max_support_gap<0 ||
+    !std::isfinite(config.max_support_spacing_ratio) || config.max_support_spacing_ratio<1 ||
     config.min_fit_nodes < 10 || config.max_fit_samples < config.min_fit_nodes ||
     config.max_model_fits == 0 || !(config.max_link_normal_deg > 0 && config.max_link_normal_deg < 90) ||
     !(config.max_normal_deg > 0 && config.max_normal_deg < 90)) {
@@ -578,6 +580,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   for (std::size_t i = 0; i < output.patches.size(); ++i) {
     if (!has_owner[i]) finish({static_cast<std::uint32_t>(i)}, model{});
   }
+  split_support_regions(output,map,config);
   output.update_ms = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
   return output;
 }

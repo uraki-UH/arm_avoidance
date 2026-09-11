@@ -45,6 +45,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
   std::set<std::size_t> claimed;
   for (const auto &previous:tracks_) {
     region candidate=previous.surface;
+    candidate.support_parent_id=std::numeric_limits<std::uint32_t>::max();
     candidate.node_indices.clear();
     candidate.patch_indices.clear();
     candidate.is_retained=true;
@@ -120,12 +121,28 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
   std::vector<track> next;
   for (auto &surface:out.regions) {
     if (surface.shape.type=="unknown" || surface.shape.type=="plane") continue;
+    const bool has_support_split=surface.support_parent_id!=std::numeric_limits<std::uint32_t>::max();
+    const auto source_id=has_support_split ? surface.support_parent_id:surface.id;
     const auto previous=std::find_if(tracks_.begin(),tracks_.end(),[&](const auto &entry) {
-      return entry.surface.id==surface.id;
+      return entry.surface.id==source_id;
     });
     track entry;
     if (surface.is_retained && previous!=tracks_.end()) {
       entry=*previous;
+      if (has_support_split) {
+        // 分割後は各領域だけを参照集合に採用。離れた旧領域の再吸収の防止。
+        entry.reference.clear();
+        for (auto idx:surface.node_indices) {
+          const auto &node=map.nodes[idx];
+          entry.reference.push_back({node.id,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});
+        }
+        surface.rejected_node_num=0;
+        if (surface.id!=previous->surface.id) {
+          if (next_id_>=static_cast<std::uint32_t>(std::numeric_limits<int>::max()))
+            throw std::overflow_error("surface tracking ID exhausted");
+          surface.id=next_id_++;
+        }
+      }
       std::set<std::uint16_t> accepted;
       for (auto idx:surface.node_indices) accepted.insert(map.nodes[idx].id);
       // 外れたノードの再検証候補を保持。表示する座標・所属は当該フレームの適合点だけ。

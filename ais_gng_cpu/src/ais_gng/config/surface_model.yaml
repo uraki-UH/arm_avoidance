@@ -15,6 +15,10 @@
     surface_model.max_link_length: 0.08
     # 位置由来の境界接平面、または非平面ノード法線の接続角[deg]。
     surface_model.max_link_normal_deg: 45.0
+    # 曲面上の小欠損補完距離[m]。0は補完なし。
+    surface_model.max_support_gap: 0.02
+    # 局所ノード間隔に対する小欠損補完距離の倍率。
+    surface_model.max_support_spacing_ratio: 2.5
     # 各入力パッチのRMS残差[m]と各点の近似表面距離[m]。
     surface_model.max_patch_rms: 0.004
     surface_model.max_point_residual: 0.012
@@ -31,7 +35,7 @@
     surface_model.max_model_fits: 128
     # 不明境界に対する追加局所フィットの回数。0は追加推定なし。
     surface_model.max_boundary_fits: 32
-    # 生成済み曲面の維持判定。接続切れではなく現在ノードの位置・法線・支持率による判定。
+    # 生成済み曲面の維持判定。位置・法線・支持率と、観測支持領域の分離検査。
     surface_model.retention.enable: true
     surface_model.retention.max_point_residual: 0.012
     surface_model.retention.max_normal_deg: 45.0

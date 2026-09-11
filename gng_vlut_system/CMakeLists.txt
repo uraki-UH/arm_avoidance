@@ -114,6 +114,11 @@ add_subdirectory(src)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_grasp_candidate_reachability
+    test/test_grasp_candidate_reachability.py
+    ENV ROS_DOMAIN_ID=217 ROS_LOCALHOST_ONLY=1
+  )
   ament_add_gtest(
     test_reachability_voxel_accumulator
     test/test_reachability_voxel_accumulator.cpp

@@ -101,6 +101,7 @@ target_link_libraries(plane_cluster_incremental_node nonplane_component_extracto
 ament_auto_add_library(surface_model SHARED
   src/topological_plane/patch_curvature.cpp
   src/topological_plane/surface_model.cpp
+  src/topological_plane/surface_model_support.cpp
   src/topological_plane/surface_model_tracking.cpp
   src/topological_plane/surface_model_visualization.cpp)
 target_include_directories(surface_model PUBLIC
@@ -131,6 +132,11 @@ if(BUILD_TESTING)
   add_executable(replay_surface_models test/replay_surface_models.cpp)
   target_link_libraries(replay_surface_models surface_model)
   ament_target_dependencies(replay_surface_models ais_gng_msgs Eigen3 nlohmann_json)
+
+  # 曲面統合ゲートの有限オフライン比較。稼働用アルゴリズムへの適用なし。
+  add_executable(benchmark_surface_merge test/benchmark_surface_merge.cpp)
+  target_link_libraries(benchmark_surface_merge surface_model)
+  ament_target_dependencies(benchmark_surface_merge ais_gng_msgs Eigen3 nlohmann_json)
 
   add_executable(
     benchmark_plane_cluster_incremental
