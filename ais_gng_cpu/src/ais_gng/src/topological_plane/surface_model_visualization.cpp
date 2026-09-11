@@ -289,6 +289,8 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   period_=1.0/hz;
   config_.max_link_length=node.declare_parameter("surface_model.max_link_length",config_.max_link_length);
   config_.max_link_normal_deg=node.declare_parameter("surface_model.max_link_normal_deg",config_.max_link_normal_deg);
+  config_.enable_support_regions=node.declare_parameter(
+    "surface_model.enable_support_regions",config_.enable_support_regions);
   config_.max_support_gap=node.declare_parameter("surface_model.max_support_gap",config_.max_support_gap);
   config_.max_support_spacing_ratio=node.declare_parameter(
     "surface_model.max_support_spacing_ratio",config_.max_support_spacing_ratio);

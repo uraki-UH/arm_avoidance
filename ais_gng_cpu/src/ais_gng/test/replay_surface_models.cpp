@@ -58,7 +58,12 @@ json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClus
 
 int main(int argc, char **argv)
 {
-  if (argc!=2) { std::cerr<<"usage: replay_surface_models observed.json\n"; return 2; }
+  if (argc<2 || argc>3 || (argc==3 && std::string(argv[2])!="--disable-support-regions")) {
+    std::cerr<<"usage: replay_surface_models observed.json [--disable-support-regions]\n";
+    return 2;
+  }
+  surface::options config;
+  config.enable_support_regions=argc!=3;
   try {
     std::ifstream input(argv[1]);
     const auto records=json::parse(input);
@@ -89,8 +94,8 @@ int main(int argc, char **argv)
         plane.node_indices=raw.at("node_indices").get<decltype(plane.node_indices)>();
         planes.clusters.push_back(plane);
       }
-      const auto independent=surface::extract(map,planes);
-      const auto tracked=tracking.update(map,planes);
+      const auto independent=surface::extract(map,planes,config);
+      const auto tracked=tracking.update(map,planes,config);
       std::cout<<json({{"frame",map.frame_number},
         {"independent",summarize(independent,planes)},
         {"tracked",summarize(tracked,planes)}}).dump()<<'\n';

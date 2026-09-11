@@ -48,12 +48,28 @@
 ## 設定・診断情報
 
 ```yaml
+surface_model.enable_support_regions: true
 surface_model.max_support_gap: 0.02
 surface_model.max_support_spacing_ratio: 2.5
 ```
 
-`max_support_gap: 0.0`は小欠損補完だけの無効化。離れた成分の分離は継続。
-保持機能OFFでも、新規抽出に対する支持領域検査は継続。
+`enable_support_regions: false`は領域分離導入前の動作。新規抽出・追跡保持ともに支持領域検査・分離・小欠損補完の省略。検査用配列の確保・近傍探索なし。`support_ms`・`support_split_num`・`support_gap_links`は0。
+曲面式に適合する離れた領域の同一クラスタ保持も復活。過去のプログラム全体への巻き戻しではなく、支持領域処理の切替。
+
+`max_support_gap: 0.0`は小欠損補完だけの無効化。支持領域処理ON時は、離れた成分の分離を継続。
+保持機能OFFでも、支持領域処理ON時は新規抽出に対する支持領域検査を継続。
+
+起動時の明示切替：
+
+```bash
+# 領域分離導入前の動作
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml enable_support_regions:=false
+# 現行の領域分離あり
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml enable_support_regions:=true
+```
+
+引数省略時は`auto`による`config/surface_model.yaml`の参照。既定はON。
+常用時は同YAMLの`surface_model.enable_support_regions`の変更のみ。実行中の動的変更は未対応、切替にはlaunch再起動が必要。既存追跡IDの引継ぎなし。
 
 `/curved_surface_clusters/models`への追加項目：
 
@@ -73,7 +89,9 @@ surface_model.max_support_spacing_ratio: 2.5
 - 支持不足成分の曲面表示抑止、無効パラメータの拒否
 - 従来の外れ値復帰・配列並替え・追跡予算・表示色の回帰試験
 
-曲面関連56テスト、平面クラスタ21テスト、非平面成分2テストの成功。
+曲面関連58テスト、平面クラスタ21テスト、非平面成分2テストの成功。
+支持領域処理OFF時の直接呼出しの省略、エッジ消失後3フレームの全ノード・曲面係数・追跡ID保持、支持診断値0の回帰試験。
+起動引数`auto`・`false`・`true`の上書き内容と不正値拒否の確認。ROSノード起動なし。
 
 旧テストの「全エッジが消えても無条件に同一領域」という前提は廃止。小欠損保持を検証する4テストは軸方向間隔を40 mmから10 mmへ変更。大きな離隔の分離は別テストでの検証。
 
@@ -91,6 +109,13 @@ surface_model.max_support_spacing_ratio: 2.5
 大規模記録は入力同期済みフレームのみの疎な抜粋であり、連続運転時の追跡精度の評価ではない結果。
 画像の問題領域の正解ID・空隙寸法は未測定。上記を実画像での誤統合解消の証明とは扱わない検証範囲。
 
+### OFF切替の旧版互換確認
+
+上記3記録・計42フレームについて、保存済み旧ライブラリ＋旧replayerと、現行版の`--disable-support-regions`を比較。
+新規抽出・追跡の両出力で、処理時間と追加の`support_*`診断項目を除く全JSON項目の完全一致。比較対象は表示ID・形状種別・所属ノード数・元平面ID・RMS・保持状態・パッチ曲率・境界分類・フィット回数。
+OFF側の`support_ms`・`support_split_num`・`support_gap_links`は全フレームで0。
+ON/OFF間では42フレーム中35フレームで時間・支持診断項目以外にも差異。保存旧版の対象は支持領域分離の導入直前であり、さらに古い変更の復元保証なし。
+
 ## 反映・再実行
 
 ```bash
@@ -99,6 +124,8 @@ colcon build --packages-select ais_gng --symlink-install --cmake-args -DBUILD_TE
 source install/setup.bash
 build/ais_gng/test_surface_model
 build/ais_gng/replay_surface_models observed.json
+# 領域分離導入前の動作による有限オフライン評価
+build/ais_gng/replay_surface_models observed.json --disable-support-regions
 ```
 
 既存の`ais_gng` launch再起動で新しい共有ライブラリ・パラメータを反映。GNG学習状態の初期化に注意。

@@ -822,6 +822,58 @@ TEST(SurfaceTracking, small_missing_edges_keep_current_nodes_and_stable_id)
   EXPECT_EQ(markers.markers[0].points.size(),s.map.nodes.size());
 }
 
+TEST(SurfaceTracking, disabled_support_regions_keep_disconnected_nodes_and_stable_id)
+{
+  for (bool enable_support_regions:{false,true}) {
+    auto s=cylinder(0.1,0.1);
+    options config;
+    config.enable_support_regions=enable_support_regions;
+    tracker tracking;
+    const auto first=tracking.update(s.map,s.planes,config);
+    ASSERT_EQ(first.regions.size(),1U);
+    s.map.edges.clear();
+    for (int iter=0;iter<3;++iter) {
+      ++s.map.frame_number; s.planes.frame_number=s.map.frame_number;
+      const auto next=tracking.update(s.map,s.planes,config);
+      coverage(next,s.map.nodes.size());
+      if (enable_support_regions) {
+        EXPECT_GT(next.regions.size(),1U);
+        continue;
+      }
+      ASSERT_EQ(next.regions.size(),1U);
+      EXPECT_TRUE(next.regions[0].is_retained);
+      EXPECT_EQ(next.regions[0].id,first.regions[0].id);
+      EXPECT_EQ(std::set<std::uint32_t>(next.regions[0].node_indices.begin(),next.regions[0].node_indices.end()),
+        std::set<std::uint32_t>(first.regions[0].node_indices.begin(),first.regions[0].node_indices.end()));
+      EXPECT_EQ(next.regions[0].shape.q,first.regions[0].shape.q);
+      EXPECT_EQ(next.model_fits,0U);
+      EXPECT_DOUBLE_EQ(next.support_ms,0.0);
+      EXPECT_EQ(next.support_split_num,0U);
+      EXPECT_EQ(next.support_gap_links,0U);
+    }
+  }
+}
+
+TEST(SurfaceModel, disabled_support_regions_skip_direct_split)
+{
+  auto s=cylinder(0.1,0.1);
+  options config;
+  config.enable_support_regions=false;
+  auto surfaces=extract(s.map,s.planes,config);
+  ASSERT_EQ(surfaces.regions.size(),1U);
+  EXPECT_DOUBLE_EQ(surfaces.support_ms,0.0);
+  const auto before=surfaces;
+  s.map.edges.clear();
+  split_support_regions(surfaces,s.map,config);
+  ASSERT_EQ(surfaces.regions.size(),1U);
+  EXPECT_EQ(surfaces.regions[0].node_indices,before.regions[0].node_indices);
+  EXPECT_EQ(surfaces.regions[0].shape.q,before.regions[0].shape.q);
+  EXPECT_EQ(surfaces.patches.size(),before.patches.size());
+  EXPECT_DOUBLE_EQ(surfaces.support_ms,0.0);
+  EXPECT_EQ(surfaces.support_split_num,0U);
+  EXPECT_EQ(surfaces.support_gap_links,0U);
+}
+
 TEST(SurfaceTracking, distant_bands_on_same_cylinder_get_stable_separate_ids)
 {
   auto s=cylinder(0.1,0.1);

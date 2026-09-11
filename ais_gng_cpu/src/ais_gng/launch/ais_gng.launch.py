@@ -87,6 +87,11 @@ def generate_launch_description():
             package_dir, 'config', 'plane_cluster_incremental.yaml'),
         description='平面クラスタと可視化の設定ファイル'
     )
+    declar_enable_support_regions = DeclareLaunchArgument(
+        'enable_support_regions',
+        default_value='auto',
+        description='曲面の支持領域分離。trueは有効、falseは旧動作、autoはYAML設定'
+    )
     declar_start_plane_cluster = DeclareLaunchArgument(
         'start_plane_cluster',
         default_value='true',
@@ -207,6 +212,11 @@ def generate_launch_description():
             LaunchConfiguration('start_plane_cluster').perform(context),
             'start_plane_cluster')
         if start_plane_cluster:
+            surface_parameter_overrides = {}
+            support_mode = LaunchConfiguration('enable_support_regions').perform(context)
+            if support_mode != 'auto':
+                surface_parameter_overrides['surface_model.enable_support_regions'] = (
+                    parse_bool(support_mode, 'enable_support_regions'))
             clusters_input_topic = LaunchConfiguration(
                 'plane_clusters_input_topic').perform(context)
             if clusters_input_topic == 'auto':
@@ -220,6 +230,7 @@ def generate_launch_description():
                     parameters=[
                         LaunchConfiguration('plane_params_file'),
                         os.path.join(package_dir, 'config', 'surface_model.yaml'),
+                        surface_parameter_overrides,
                         {
                             'input_topic': topological_map_topic,
                             'output_topic': plane_clusters_topic,
@@ -240,6 +251,7 @@ def generate_launch_description():
         declar_source_point_cloud_topic,
         declar_source_camera_info_topic,
         declar_plane_params_file,
+        declar_enable_support_regions,
         declar_start_plane_cluster,
         declar_topological_map_topic,
         declar_plane_clusters_topic,

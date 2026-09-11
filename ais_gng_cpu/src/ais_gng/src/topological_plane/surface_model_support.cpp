@@ -46,6 +46,7 @@ vec model_normal(const model &shape,const vec &point)
 void split_support_regions(result &surfaces,
   const ais_gng_msgs::msg::TopologicalMap &map,const options &config)
 {
+  if (!config.enable_support_regions) return;
   const auto begin=std::chrono::steady_clock::now();
   const auto num=map.nodes.size();
   const double max_gap=std::min(config.max_support_gap,config.max_link_length);

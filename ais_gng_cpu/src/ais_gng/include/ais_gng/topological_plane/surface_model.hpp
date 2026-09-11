@@ -15,6 +15,8 @@ struct options
 {
   double max_link_length = 0.08;
   double max_link_normal_deg = 45.0;
+  // 観測支持領域の分離・小欠損補完。falseは領域分離導入前の動作。
+  bool enable_support_regions = true;
   // 曲面支持領域の小欠損補完距離[m]。0は補完なし。
   double max_support_gap = 0.02;
   // 局所ノード間隔に対する小欠損補完距離の倍率。
