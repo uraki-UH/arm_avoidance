@@ -2,6 +2,7 @@
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
 #include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
+#include "topo_fuzzy_viewer/protocol/pose_array_protocol.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
 
 #include <rclcpp/rclcpp.hpp>
@@ -84,6 +85,7 @@ namespace topic_utils {
             if (t.find("TopologicalMap") != std::string::npos) return "topological_map";
             if (t.find("TopologicalNodeFeature") != std::string::npos) return "topological_node_feature";
             if (t.find("TopologicalClusterFeature") != std::string::npos) return "topological_cluster_feature";
+            if (t == "geometry_msgs/msg/PoseArray") return "marker";
             if (t.find("Marker") != std::string::npos) return "marker";
             if (t.find("Voxel") != std::string::npos) return "voxel";
         }
@@ -116,7 +118,8 @@ namespace converter {
                   {"quat", {m.pose.orientation.x, m.pose.orientation.y, m.pose.orientation.z, m.pose.orientation.w}},
                   {"scale", {m.scale.x, m.scale.y, m.scale.z}},
                   {"color", {m.color.r, m.color.g, m.color.b, m.color.a}},
-                  {"frameId", m.header.frame_id}};
+                  {"frameId", m.header.frame_id},
+                  {"header_stamp", {m.header.stamp.sec, m.header.stamp.nanosec}}};
         if (!m.points.empty()) { json pts = json::array(); for (auto& p : m.points) pts.push_back({p.x, p.y, p.z}); j["points"] = pts; }
         if (!m.colors.empty()) { json cols = json::array(); for (auto& c : m.colors) cols.push_back({c.r, c.g, c.b, c.a}); j["colors"] = cols; }
         return j;
@@ -755,6 +758,30 @@ private:
                     });
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";
+                    if (std::find(topics[sid].begin(), topics[sid].end(),
+                                  "geometry_msgs/msg/PoseArray") != topics[sid].end()) {
+                        auto qos = rclcpp::QoS(1).reliable();
+                        const auto publishers = get_publishers_info_by_topic(sid);
+                        if (std::any_of(publishers.begin(), publishers.end(), [](const auto& publisher) {
+                            return publisher.qos_profile().get_rmw_qos_profile().reliability ==
+                                   RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
+                        })) qos.best_effort();
+                        const bool is_transient_local = !publishers.empty() && std::all_of(
+                            publishers.begin(), publishers.end(), [](const auto& publisher) {
+                                return publisher.qos_profile().get_rmw_qos_profile().durability ==
+                                       RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+                            });
+                        if (is_transient_local) qos.transient_local();
+                        activeDynamicSubs_[sid] = create_subscription<geometry_msgs::msg::PoseArray>(
+                            sid, qos, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
+                                const auto payload = pose_array_protocol::serialize(*m, sid).dump();
+                                {
+                                    std::lock_guard<std::mutex> lock(markerMutex_);
+                                    lastMarkerPayloads_[sid] = payload;
+                                }
+                                broadcastText(payload);
+                            });
+                    } else {
                     activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
                         const std::string payload = converter::to_json(m, sid).dump();
                         {
@@ -763,6 +790,7 @@ private:
                         }
                         broadcastText(payload);
                     });
+                    }
                 } else if (st == "voxel") {
                     activeSubTypes_[sid] = "voxel";
                     {
@@ -774,8 +802,9 @@ private:
                 active_source_publisher_signatures_[sid] = publisher_signature(sid);
                 }
             } else {
+                // 再接続後に購読がなくても、保持された表示キャッシュを消去
+                if (remove_layer) sendStreamDelete(sid);
                 if (activeDynamicSubs_.count(sid)) {
-                    if (remove_layer) sendStreamDelete(sid);
                     activeDynamicSubs_.erase(sid);
                     activeSubTypes_.erase(sid);
                     active_source_publisher_signatures_.erase(sid);

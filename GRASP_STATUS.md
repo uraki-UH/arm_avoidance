@@ -34,7 +34,7 @@
 | ハンド形状の表現 | 最大把持領域、最小把持領域、基部・開閉時の禁止領域のグラフ生成 | 指の内側と干渉領域の区別 |
 | ボクセルによる候補生成 | 対象占有、両側の接触候補、最小領域外の支持、禁止領域占有の照合 | 形状とハンドの関係に基づく候補比較 |
 | 候補の根拠出力 | 候補数、棄却理由、サイズ、占有率、接触法線の整合など | 「なぜ候補になったか」の表示 |
-| 可視化 | GNG、平面領域、ハンド領域と、到達性評価側の候補MarkerのViewer表示経路 | 画面収録による処理段階の比較 |
+| 可視化 | GNG、平面領域、ハンド領域と、候補PoseArrayのViewer直接表示 | 画面収録による処理段階の比較 |
 
 いずれも「実装が存在する」の意味であり、任意物体への頑健性や実機把持成功の保証ではない。
 
@@ -89,7 +89,7 @@
 
 撮影前の確認事項:
 
-- 入力点群、GNG、平面クラスタ、候補Markerの継続受信と、Viewerの安定表示。
+- 入力点群、GNG、平面クラスタ、候補PoseArrayの継続受信と、Viewerの安定表示。
 - 座標系・TF・長さ単位、および上方向の一致。
 - `ToPoDualArm.yaml`の現設定は把持面 `0.15 x 0.15 m`、内側余白 `0.002 m`、点間補正 `0.003 m`。使用ハンドとデモの想定寸法との整合確認。
 - 同じ静止対象での候補位置・寸法の揺らぎ、既知寸法との差の記録。
@@ -113,14 +113,14 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-主な確認トピックは `/topological_map`、`/plane_clusters`、`/grasp_pose_cands`。候補の可視化は `grasp_goal_planning.launch.py` 側の `/grasp_pose_cands/reachability_markers` を利用し、候補生成側からの重複Marker配信はなし。上方方式とボクセル方式の候補生成は同じ出力先のため、どちらか一方だけ起動。サイズ・棄却理由の確認:
+主な確認トピックは `/topological_map`、`/plane_clusters`、`/grasp_pose_cands`。ViewerのConnection Streamsで `/grasp_pose_cands` をONにすると候補を直接表示。上方方式とボクセル方式の候補生成は同じ出力先のため、どちらか一方だけ起動。サイズ・棄却理由の確認:
 
 ```bash
 ros2 topic echo /grasp_pose_cands/summary \
   --qos-durability transient_local --once
 ```
 
-この2つのlaunchは候補計算に軌道生成用launchを必要としないが、単独では候補の矢印表示を出力しない。到達性評価付き表示を使う場合は `grasp_goal_planning.launch.py enable_motion:=false` を別途起動。この場合、動作指令は無効でも経路計算は有効。撮影終了時は自分で起動したノードを各端末のCtrl+Cで停止。
+Viewerが稼働していれば、この2つのlaunchで候補の計算・矢印表示が可能。計画launchは不要。到達性評価の色を追加する場合だけ計画側と評価Markerの購読を有効化。この場合、`enable_motion:=false`でも経路計算は有効。撮影終了時は自分で起動したノードを各端末のCtrl+Cで停止。
 
 ## 7. スライドの骨子と未検証事項
 

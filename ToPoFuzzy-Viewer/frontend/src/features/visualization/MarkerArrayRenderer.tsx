@@ -77,16 +77,19 @@ function MarkerFrame({
     marker,
     transforms,
     manualTransform,
+    allow_untransformed,
 }: {
     marker: MarkerMessage;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform: Transform;
+    allow_untransformed: boolean;
 }) {
     const frameId = marker.frameId || 'world';
     const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
     const groupRef = useMarkerFrame(tf);
 
-    // TF未受信時はMarker座標をViewer固定座標として扱うフォールバック
+    // 候補PoseはTF不明時に非表示。通常Markerの既存フォールバックは維持
+    if (!allow_untransformed && (!marker.frameId || (frameId !== 'world' && !tf))) return null;
 
     return (
         <group ref={groupRef}>
@@ -449,6 +452,7 @@ export function MarkerArrayRenderer({
                     marker={marker}
                     transforms={transforms}
                     manualTransform={transform}
+                    allow_untransformed={data.source_type !== 'pose_array'}
                 />
             ))}
         </group>

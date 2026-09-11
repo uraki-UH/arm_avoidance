@@ -28,6 +28,10 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 
+graspnet用
+python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.15  --y 0.0 --z -0.2 --yaw 3.2
+
+
 
 ## 把持候補姿勢、軌道、動く
 ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
@@ -58,9 +62,12 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 - 候補Pose: `/grasp_pose_cands`
 - 候補スコア: `/grasp_pose_cand_scores`
 - 判定概要: `/grasp_pose_cands/summary`
-- 到達性評価付きの可視化: `/grasp_pose_cands/reachability_markers`（`grasp_goal_planning.launch.py`側）
+- 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
+- 到達性の色を追加する場合: `/grasp_pose_cands/reachability_markers`もON（計画側の起動が必要）
 
-候補生成launchからの重複Marker配信はなし。候補生成だけを起動した場合、PoseArrayは出力するが可視化矢印は出力しない。
+ViewerがPoseArrayを直接受信し、ローカルZ軸の矢印を表示。候補表示だけなら`grasp_goal_planning.launch.py`は不要。
+到達性評価もONの場合、同一更新・姿勢の色だけを統合して重複表示を抑制。ROS側の`/grasp_pose_markers`は不要。
+変更適用には`viewer_stack.launch.py`の再起動とブラウザ再読み込みが必要。`graspnet_table`など入力座標系からViewer固定座標系へのTFも必要。
 
 `grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 

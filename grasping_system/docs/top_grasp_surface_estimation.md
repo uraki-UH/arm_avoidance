@@ -4,7 +4,7 @@
 
 2026-09-11追記: 上方方式の既定出力を `/grasp_pose_cands` 系へ統一。候補推定アルゴリズムの変更なし。
 
-同日追記: 候補生成側の重複Marker配信を削除。表示は到達性評価側の `/grasp_pose_cands/reachability_markers` を利用。
+同日追記: Viewerが `/grasp_pose_cands` を直接受信して表示。ROS Marker変換と計画launchへの表示依存を解消。
 
 本資料は、現行コードに基づく発表・デモ用のアルゴリズム説明。新方式の提案や実機把持成功の報告ではない。今回の作業ではコード変更、実行再検証、動画撮影は未実施。
 
@@ -39,7 +39,7 @@ GNG学習・局所平面クラスタ生成（前段）
    |
    +-- 候補PoseArray
    +-- 面積比・診断summary
-   +-- 可視化は到達性評価側のMarkerを利用（別途起動）
+   +-- Viewerが候補PoseArrayを直接受信して矢印表示
 ```
 
 平面クラスタの分割・成長・統合は前段処理。本方式は受信した分割結果を利用し、再クラスタリングしない。CPU版GNGの直接クラスタ出力と接続可能。ボクセル方式の把持照合や軌道生成とは独立した経路。
@@ -271,9 +271,9 @@ $$
 | `/grasp_pose_cands` | `geometry_msgs/msg/PoseArray` | 候補TCP位置・姿勢。入力グラフのheaderを継承 |
 | `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | PoseArrayと同順の面積比 |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/reachability_markers` | `visualization_msgs/msg/MarkerArray` | 別途起動する到達性評価側の表示。候補のローカルZ軸と到達性を表示 |
+| `/grasp_pose_cands/reachability_markers` | `visualization_msgs/msg/MarkerArray` | 任意の追加評価。両レイヤー表示時は同じ更新・姿勢の色だけを統合 |
 
-候補生成launch自体からのMarker配信はなし。PoseArrayの生成と、Viewerでの矢印表示は別の処理。
+候補生成launch自体からのMarker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。元の座標系と更新時刻を維持し、空候補は旧表示を消去。
 
 summaryの候補別情報は `cluster_id`、`node_count`、`adjacent_region_count`、`minimum_neighbor_plane_distance`、`extent_x/y`、`surface_height`、`footprint_fill_ratio`。有効な隣接平面がない場合の距離は `null`。棄却された領域は理由別の総数のみで、個別候補としては出力しない。件数上限による切り捨て数も独立した棄却項目ではない。
 
@@ -341,7 +341,7 @@ ROSノードは最新のグラフとクラスタを各1件保持する方式。�
 5. **結果**: TCP位置・下向き姿勢、局所寸法、採用・棄却件数の表示。
 6. **限界**: 欠損・分割・接続への依存、実機把持成功とは異なることの説明。
 
-撮影例は「採用候補」「過大領域」「隣接する同一平面の小片」「孤立領域」を比較。誤採用し得る孤立領域も含めることで、隣接関係の役割と現状の限界を説明可能。候補計算には軌道生成・ロボット駆動は不要。ただし到達性評価Markerを使う現行の `grasp_goal_planning.launch.py` は、`enable_motion:=false` でも経路計算を含む。
+撮影例は「採用候補」「過大領域」「隣接する同一平面の小片」「孤立領域」を比較。誤採用し得る孤立領域も含めることで、隣接関係の役割と現状の限界を説明可能。候補計算・Viewer表示に軌道生成・ロボット駆動は不要。ただし任意で到達性評価を追加する現行の `grasp_goal_planning.launch.py` は、`enable_motion:=false` でも経路計算を含む。
 
 発表用の短い説明:
 

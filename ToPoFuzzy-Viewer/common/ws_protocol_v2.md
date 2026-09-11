@@ -54,6 +54,24 @@
 予約領域1バイトの利用によるレコード長・バージョンの維持。旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
 ROSメッセージ定義の互換性とは別のため、ROS送受信側には同一定義での再ビルド・再起動が必要。
 
+### PoseArray表示
+
+`geometry_msgs/msg/PoseArray`は`sources.list`で`type: "marker"`として公開。
+`sources.setActive`で選択後、ROS Markerトピックを経由せず、gateway内でローカルZ軸の矢印へ変換。
+
+```json
+{"type":"stream.marker_array","tag":"/grasp_pose_cands","source_type":"pose_array","markers":[]}
+```
+
+- 1姿勢につき1本のローカル+Z矢印。長さ0.08 m、未評価色は水色。
+- `markers`は毎回全置換。空配列は旧候補の消去。
+- Markerの`frameId`は入力座標系、`header_stamp: [sec, nanosec]`は入力更新時刻。
+- 非有限位置・無効クォータニオンは除外。入力配列添字をMarker IDとして維持。
+- 入力publisherに合わせたreliability・durabilityを購読開始時に選択。
+- 計画処理は不要。固定座標系へのTFは描画側で従来どおり必要。
+- `<tag>/reachability_markers`も表示ONの場合、同じID・時刻・座標系・両端点の評価色だけを候補へ統合し、評価側の重複矢印は非描画。
+- 候補レイヤーを非表示にした場合、評価側は独立表示。異なる名前へremapした評価トピックは自動統合の対象外。
+
 ### Stream Reset
 ```json
 { "type": "stream.reset", "topic": "/points", "tag": "/points" }

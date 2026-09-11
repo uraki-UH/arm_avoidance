@@ -560,7 +560,7 @@ transient localでpublishする。
 壁に接した対象でも壁全体を含む巨大なOBBにはならない。同一平面上の細かな分割領域は平面距離が
 ほぼ0となるため除外される。TCP位置は単体OBB中心の最高Z、
 姿勢はローカルZ軸を常に下向きへ固定し、ローカルY軸を採用したOBB軸へ合わせる。
-上面把持launchのMarkerはこのローカル`+Z`を赤い主矢印として表示する。
+Viewerは候補PoseArrayを直接受信し、ローカル`+Z`を水色の矢印として表示する。
 この経路は物体ボクセルとグリッパ体積graphを必要とせず、上面把持対象の粗い選別に使う。
 最終的な指接触・グリッパ基部衝突・ロボット到達性は後段で評価する。
 
@@ -586,7 +586,8 @@ transient localでpublishする。
 上面把持とボクセル照合の既定出力を共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複Marker配信はなし。
-可視化は到達性評価側の`/grasp_pose_cands/reachability_markers`を利用。
+可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
+到達性評価Markerも表示ONの場合、同じ更新・姿勢の色だけを統合して二重描画を抑制。
 
 チェックONでは既定の `Low`、`Medium`、`High` Membership Functionを生成し、
 MF入力候補とルール条件候補へ追加する。チェックOFFでは特徴量の定義と編集値を保持したまま
