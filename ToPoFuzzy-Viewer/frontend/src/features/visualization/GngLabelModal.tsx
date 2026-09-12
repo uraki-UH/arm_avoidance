@@ -1,8 +1,8 @@
 import { createPortal } from 'react-dom';
 import { ChevronDown, Layers, X } from 'lucide-react';
 import { LAYER_COLORS, LAYER_LABELS } from '../../types';
-import { get_node_label_groups, reorder_node_label_subset, node_label_definitions, normalize_node_label_settings } from './nodeLabelRegistry';
-import type { node_label_options } from './nodeLabelRegistry';
+import { get_node_label_groups, reorder_node_label_subset, node_label_definitions, normalize_node_label_settings } from './graphLayerSettings';
+import type { node_label_options } from './graphLayerSettings';
 import { LabelPriorityList } from './LabelPriorityList';
 
 interface GngLabelModalProps {

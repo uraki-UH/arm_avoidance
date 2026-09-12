@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, Move, Trash2, Minus, Plus } from 'lucide-react';
 
 const fmt = (id: string, type: string) => {
@@ -55,6 +55,101 @@ export const ControlSlider: React.FC<ControlSliderProps> = ({ label, value, min,
                 <input disabled={disabled} type="range" min={min} max={max} step={step} value={value} onChange={e => !disabled && onChange(parseFloat(e.target.value))} onPointerUp={onPointerUp} className="flex-1 accent-[var(--accent-color)] h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer disabled:opacity-50" />
                 <button disabled={disabled} onPointerDown={() => !disabled && st(step)} onPointerUp={sp} onPointerLeave={sp} className={`h-6 w-6 flex items-center justify-center rounded border border-white/10 bg-white/5 text-[var(--text-secondary)] hover:bg-white/10 ${disabled ? 'opacity-40 cursor-not-allowed hover:bg-white/5' : ''}`}><Plus size={12} /></button>
             </div>
+        </div>
+    );
+};
+
+interface DualRangeSliderProps {
+    min: number;
+    max: number;
+    step?: number;
+    value: [number, number];
+    onChange: (value: [number, number]) => void;
+    className?: string;
+}
+
+export const DualRangeSlider: React.FC<DualRangeSliderProps> = ({
+    min,
+    max,
+    step = 1,
+    value,
+    onChange,
+    className = ''
+}) => {
+    const [localValue, setLocalValue] = useState(value);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const isDraggingRef = useRef<'min' | 'max' | null>(null);
+
+    useEffect(() => {
+        setLocalValue(value);
+    }, [value]);
+
+    const getPercentage = (val: number) => ((val - min) / (max - min)) * 100;
+
+    const handlePointerDown = (thumb: 'min' | 'max') => (e: React.PointerEvent) => {
+        e.preventDefault();
+        isDraggingRef.current = thumb;
+        document.addEventListener('pointermove', handlePointerMove);
+        document.addEventListener('pointerup', handlePointerUp);
+        // 要素外へ移動した場合のイベント受信継続
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+        if (!isDraggingRef.current || !containerRef.current) return;
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const percentage = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+        let newValue = min + percentage * (max - min);
+
+        // 操作刻みへの丸め
+        newValue = Math.round(newValue / step) * step;
+
+        setLocalValue(prev => {
+            const next = [...prev] as [number, number];
+            if (isDraggingRef.current === 'min') {
+                next[0] = Math.min(newValue, prev[1] - step);
+            } else {
+                next[1] = Math.max(newValue, prev[0] + step);
+            }
+            onChange(next);
+            return next;
+        });
+    };
+
+    const handlePointerUp = () => {
+        isDraggingRef.current = null;
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    const minPos = getPercentage(localValue[0]);
+    const maxPos = getPercentage(localValue[1]);
+
+    return (
+        <div className={`relative w-full h-6 flex items-center select-none ${className}`} ref={containerRef}>
+            {/* スライダーの背景 */}
+            <div className="absolute w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                {/* 選択範囲 */}
+                <div
+                    className="absolute h-full bg-[var(--accent-color)]"
+                    style={{ left: `${minPos}%`, width: `${maxPos - minPos}%` }}
+                />
+            </div>
+
+            {/* 下限ハンドル */}
+            <div
+                className="absolute w-4 h-4 bg-white rounded-full shadow-md cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
+                style={{ left: `${minPos}%`, transform: 'translateX(-50%)' }}
+                onPointerDown={handlePointerDown('min')}
+            />
+
+            {/* 上限ハンドル */}
+            <div
+                className="absolute w-4 h-4 bg-white rounded-full shadow-md cursor-grab active:cursor-grabbing hover:scale-110 transition-transform"
+                style={{ left: `${maxPos}%`, transform: 'translateX(-50%)' }}
+                onPointerDown={handlePointerDown('max')}
+            />
         </div>
     );
 };

@@ -9,12 +9,14 @@
 各用途の変換処理による表示属性の決定と、共通描画部による同一仕様での描画。
 矢印表示のためだけの専用ROSメッセージ追加は不要。
 
-`arrows/geometry.ts`で端点・寸法を計算し、`ArrowBatch`の円柱・円錐インスタンスで描画。
+`arrows.ts`で端点・寸法を計算し、`ArrowBatch`の円柱・円錐インスタンスで描画。
 未使用の`NormalVectorRenderer`と単体ラッパー`DirectionalArrow`は削除。
-姿勢・始点終点の入力変換と設定UIの解釈は`arrows/marker_input.ts`へ集約。
+姿勢・始点終点の入力変換と設定UIの解釈は`arrows.ts`へ集約。
 ROS Markerも座標系・設定ごとの一括描画。
-矢印・通常Markerの色変換は`marker_input.ts`の`marker_color`へ集約。
-TF・手動変換・通常Markerの姿勢適用は`MarkerFrame`へ集約。姿勢のEuler角への変換と形状ごとの重複処理は不要。
+`DisplayFrame`・`EllipsoidBatch`・`ArrowBatch`・`ArrowStyleControls`は`SharedRenderers.tsx`に同居。
+矢印・通常Markerの色変換は`arrows.ts`の`marker_color`へ集約。
+TF・手動変換はグラフ・ロボット・Marker共通の`DisplayFrame`へ集約。通常Markerの姿勢適用は`MarkerFrame`に保持。
+ロボットのTF欠落時は基準姿勢、候補のTF欠落時は非表示という入力別の条件は呼出元で管理。
 
 ## 共通フィールド
 
@@ -85,8 +87,9 @@ Viewerは同じ定義を`arrow_styles.candidate_state.state_colors`として受�
 
 Marker・姿勢・把持候補の表示設定はレイヤーID単位でブラウザの`localStorage`に保存。キーは`topofuzzy.arrow.v1:<layer>`。
 共通の「矢印表示」パネルから編集。初期値・ROS Marker解釈も描画とUIで共用。
+グラフ設定の既定値は`createDefaultGraphLayerSettings`へ集約し、描画時の未指定値は同じ定義で補完。
 グラフのノード法線・速度とクラスタ詳細の法線は表示ON/OFFのみ。詳細設定GUIは非表示。
-色・寸法は`arrows/geometry.ts`の共通値を使用。旧グラフ専用の色・倍率設定と、旧法線・速度のブラウザ保存値は参照対象外。
+色・寸法は`arrows.ts`の共通値を使用。旧グラフ専用の色・倍率設定と、旧法線・速度のブラウザ保存値は参照対象外。
 優先順位は「共通既定値 → 用途別／入力値 → ブラウザ上書き」。リセットで入力値へ復帰。
 表示設定の操作によるROSメッセージ・候補座標の変更なし。
 

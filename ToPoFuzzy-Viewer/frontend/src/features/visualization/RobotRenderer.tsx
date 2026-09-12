@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createPortal, useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { RobotData, RobotPoseInstance, Transform } from '../../types';
+import { DisplayFrame } from './SharedRenderers';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface RobotRendererProps {
@@ -87,7 +88,6 @@ function RobotInstanceRenderer({
     onManipClick,
 }: RobotRendererProps) {
     const manipDisplayScale = 0.25;
-    const groupRef = useRef<THREE.Group>(null);
     const [robot, setRobot] = useState<any>(null);
     const lastLoadSignatureRef = useRef<string | null>(null);
     const lastJointSignatureRef = useRef<string | null>(null);
@@ -346,67 +346,43 @@ function RobotInstanceRenderer({
         });
     }, [robot, data?.jointNames, data?.jointValues, jointValuesOverride]);
 
-    const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
-
-    // --- TF-based Positioning ---
-    useEffect(() => {
-        if (!groupRef.current) return;
-        if (tf) {
-            groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            groupRef.current.position.set(
-                data.basePosition?.[0] || 0,
-                data.basePosition?.[1] || 0,
-                data.basePosition?.[2] || 0
-            );
-            const orient = data.baseOrientation || [0, 0, 0, 1];
-            groupRef.current.quaternion.set(orient[0], orient[1], orient[2], orient[3]);
-        }
-    }, [tf, data.basePosition, data.baseOrientation]);
-
     if (!visible || !robot) return null;
 
     return (
-        <group ref={groupRef} name={tag} visible={visible}>
-            <group 
-                position={effectiveTransform.position} 
-                rotation={effectiveTransform.rotation} 
-                scale={effectiveTransform.scale}
-            >
-                {robot && <primitive key={tag} object={robot} />}
-                {showManipulabilityEllipsoid && selectedManipInfo && selectedManipInfo.map((info) => {
-                    const scaleVec: [number, number, number] = [
-                        info.scale[0] * manipDisplayScale,
-                        info.scale[1] * manipDisplayScale,
-                        info.scale[2] * manipDisplayScale,
-                    ];
-                    const mesh = (
-                        <mesh
-                            key={info.key}
-                            geometry={manipGeometry}
-                            material={info.material}
-                            position={info.linkAnchored ? [0, 0, 0] : info.center}
-                            quaternion={new THREE.Quaternion(
-                                info.orientation?.[0] ?? 0,
-                                info.orientation?.[1] ?? 0,
-                                info.orientation?.[2] ?? 0,
-                                info.orientation?.[3] ?? 1
-                            )}
-                            scale={scaleVec}
-                            frustumCulled={false}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onManipClick?.(selectedManipLinkName);
-                            }}
-                        />
-                    );
-                    return info.linkAnchored && selectedManipFrame
-                        ? createPortal(mesh, selectedManipFrame)
-                        : mesh;
-                })}
-            </group>
-        </group>
+        <DisplayFrame name={tag} tf={tf ?? { pos: data.basePosition ?? [0, 0, 0],
+            quat: data.baseOrientation ?? [0, 0, 0, 1] }} manual_transform={manualTransform}>
+            {robot && <primitive key={tag} object={robot} />}
+            {showManipulabilityEllipsoid && selectedManipInfo && selectedManipInfo.map((info) => {
+                const scaleVec: [number, number, number] = [
+                    info.scale[0] * manipDisplayScale,
+                    info.scale[1] * manipDisplayScale,
+                    info.scale[2] * manipDisplayScale,
+                ];
+                const mesh = (
+                    <mesh
+                        key={info.key}
+                        geometry={manipGeometry}
+                        material={info.material}
+                        position={info.linkAnchored ? [0, 0, 0] : info.center}
+                        quaternion={new THREE.Quaternion(
+                            info.orientation?.[0] ?? 0,
+                            info.orientation?.[1] ?? 0,
+                            info.orientation?.[2] ?? 0,
+                            info.orientation?.[3] ?? 1
+                        )}
+                        scale={scaleVec}
+                        frustumCulled={false}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onManipClick?.(selectedManipLinkName);
+                        }}
+                    />
+                );
+                return info.linkAnchored && selectedManipFrame
+                    ? createPortal(mesh, selectedManipFrame)
+                    : mesh;
+            })}
+        </DisplayFrame>
     );
 }
 
@@ -426,63 +402,44 @@ function RobotRenderer({
     manipLinkName = '',
     onManipClick,
 }: RobotRendererProps) {
-    const outerGroupRef = useRef<THREE.Group>(null);
     const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
-    const effectiveTransform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
 
     useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType]);
-
-    useEffect(() => {
-        if (!hasInstances || !outerGroupRef.current) return;
-        if (tf) {
-            outerGroupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            outerGroupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            outerGroupRef.current.position.set(0, 0, 0);
-            outerGroupRef.current.quaternion.set(0, 0, 0, 1);
-        }
-    }, [hasInstances, tf]);
 
     if (hasInstances) {
         const instances = data.instances as RobotPoseInstance[];
         return (
-            <group ref={outerGroupRef} name={tag} visible={visible}>
-                <group
-                    position={effectiveTransform.position}
-                    rotation={effectiveTransform.rotation}
-                    scale={effectiveTransform.scale}
-                >
-                    {instances.map((instance, index) => {
-                        const instanceData: RobotData = {
-                            ...data,
-                            ...instance,
-                            instances: undefined,
-                            basePosition: [0, 0, 0],
-                            baseOrientation: [0, 0, 0, 1],
-                            opacity: instance.opacity ?? data.opacity ?? opacity,
-                        };
-                        return (
-                            <RobotInstanceRenderer
-                                key={`${tag}-${index}`}
-                                tag={`${tag}-${index}`}
-                                data={instanceData}
-                                visible={visible}
-                                color={color}
-                                useUrdfColors={useUrdfColors}
-                                emissiveIntensity={emissiveIntensity}
-                                opacity={instance.opacity ?? data.opacity ?? opacity}
-                                jointValuesOverride={jointValuesOverride}
-                                tf={null}
-                                manualTransform={undefined}
-                                showManipulabilityEllipsoid={showManipulabilityEllipsoid}
-                                manipEllipsoidType={manipEllipsoidType}
-                                manipLinkName={manipLinkName}
-                                onManipClick={onManipClick}
-                            />
-                        );
-                    })}
-                </group>
-            </group>
+            <DisplayFrame name={tag} tf={tf} manual_transform={manualTransform} is_visible={visible}>
+                {instances.map((instance, index) => {
+                    const instanceData: RobotData = {
+                        ...data,
+                        ...instance,
+                        instances: undefined,
+                        basePosition: [0, 0, 0],
+                        baseOrientation: [0, 0, 0, 1],
+                        opacity: instance.opacity ?? data.opacity ?? opacity,
+                    };
+                    return (
+                        <RobotInstanceRenderer
+                            key={`${tag}-${index}`}
+                            tag={`${tag}-${index}`}
+                            data={instanceData}
+                            visible={visible}
+                            color={color}
+                            useUrdfColors={useUrdfColors}
+                            emissiveIntensity={emissiveIntensity}
+                            opacity={instance.opacity ?? data.opacity ?? opacity}
+                            jointValuesOverride={jointValuesOverride}
+                            tf={null}
+                            manualTransform={undefined}
+                            showManipulabilityEllipsoid={showManipulabilityEllipsoid}
+                            manipEllipsoidType={manipEllipsoidType}
+                            manipLinkName={manipLinkName}
+                            onManipClick={onManipClick}
+                        />
+                    );
+                })}
+            </DisplayFrame>
         );
     }
 

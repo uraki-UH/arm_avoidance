@@ -1,11 +1,10 @@
+import { useArrowSettings, marker_arrow_batches, marker_color } from './arrows';
+import { DisplayFrame, ArrowBatch } from './SharedRenderers';
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { useArrowSettings } from './arrows/settings';
-import { ArrowBatch } from './arrows/ArrowBatch';
-import { marker_arrow_batches, marker_color } from './arrows/marker_input';
 
 interface MarkerArrayRendererProps {
     tag: string;
@@ -28,7 +27,7 @@ function MarkerFrame({
 }: {
     marker: MarkerMessage;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
-    manualTransform: Transform;
+    manualTransform?: Transform;
     allow_untransformed: boolean;
     children: ReactNode;
 }) {
@@ -38,20 +37,11 @@ function MarkerFrame({
     // 候補PoseはTF不明時に非表示。通常Markerの既存フォールバックは維持
     if (!allow_untransformed && (!marker.frameId || (frameId !== 'world' && !tf))) return null;
 
-    return (
-        <group position={tf ? [tf.pos[0], tf.pos[1], tf.pos[2]] : [0, 0, 0]}
-            quaternion={tf ? [tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]] : [0, 0, 0, 1]}>
-            <group
-                position={manualTransform.position}
-                rotation={manualTransform.rotation}
-                scale={manualTransform.scale}
-            >
-                {/* 矢印の姿勢は入力変換済み。通常Markerの姿勢は共通フレームで適用 */}
-                {marker.type === 'arrow' ? children :
-                    <group position={marker.pos ?? [0, 0, 0]} quaternion={marker.quat ?? [0, 0, 0, 1]}>{children}</group>}
-            </group>
-        </group>
-    );
+    return <DisplayFrame tf={tf} manual_transform={manualTransform}>
+        {/* 矢印の姿勢は入力変換済み。通常Markerの姿勢は共通フレームで適用 */}
+        {marker.type === 'arrow' ? children :
+            <group position={marker.pos ?? [0, 0, 0]} quaternion={marker.quat ?? [0, 0, 0, 1]}>{children}</group>}
+    </DisplayFrame>;
 }
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
@@ -270,12 +260,6 @@ export function MarkerArrayRenderer({
 }: MarkerArrayRendererProps) {
     const effective_style = useArrowSettings(tag);
     const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style), [data, effective_style]);
-    const transform: Transform = manualTransform || {
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1],
-    };
-
     useDemandUpdate([tag, data, visible, transforms, manualTransform, effective_style]);
 
     if (!visible || data.visible === false || data.markers.length === 0) return null;
@@ -283,12 +267,12 @@ export function MarkerArrayRenderer({
     return (
         <group name={`${tag}-markers`}>
             {arrow_batches.map(([key, batch]) => <MarkerFrame key={key} marker={batch.marker}
-                transforms={transforms} manualTransform={transform} allow_untransformed={data.source_type !== 'pose_array'}>
+                transforms={transforms} manualTransform={manualTransform} allow_untransformed={data.source_type !== 'pose_array'}>
                 <ArrowBatch samples={batch.samples} style={batch.style} />
             </MarkerFrame>)}
             {data.markers.filter(marker => marker.type !== 'arrow').map(marker => <MarkerFrame
                 key={`${marker.ns}:${marker.id}`} marker={marker} transforms={transforms}
-                manualTransform={transform} allow_untransformed={data.source_type !== 'pose_array'}>
+                manualTransform={manualTransform} allow_untransformed={data.source_type !== 'pose_array'}>
                 {renderMarker(marker)}
             </MarkerFrame>)}
         </group>

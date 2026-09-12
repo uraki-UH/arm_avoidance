@@ -16,7 +16,7 @@ import {
     ClippingPlane,
     ClippingAxis
 } from './types';
-import { GraphRenderer, StaticGraphRenderer } from './features/visualization/GraphRenderer';
+import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
@@ -116,12 +116,11 @@ function ClippingPlaneSync({ planes }: { planes: THREE.Plane[] }) {
 import { ZoneVisualizer } from './features/analysis/ZoneVisualizer';
 import { ClusterDetailPanel, ClusterSnapshot } from './features/visualization/ClusterDetailPanel';
 import { GraphNodeDetailPanel, GraphNodeDetailSnapshot } from './features/visualization/GraphNodeDetailPanel';
-import { GenericTransformModal } from './features/manipulation/GenericTransformModal';
+import { GenericTransformModal } from './features/manipulation/GenericTransformPanel';
 import { RobotJointModal } from './features/manipulation/RobotJointModal';
 import { EntityColorModal } from './features/manipulation/EntityColorModal';
 
-import { Sidebar } from './layout/Sidebar';
-import { MainLayout } from './layout/MainLayout';
+import { Sidebar, MainLayout } from './layout/MainLayout';
 import { calculateBounds } from './utils/bounds';
 import { EditAabbTool } from './features/manipulation/EditAabbTool';
 import { useEditSession } from './features/manipulation/editSession';
@@ -752,33 +751,10 @@ function App() {
                             const settings = layerSettings[tag];
                             if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
-                            const common = {
-                                tag,
-                                data,
-                                visible: true,
-                                nodeOpacity: settings.nodeOpacity,
-                                edgeOpacity: settings.edgeOpacity,
-                                tf,
-                                manualTransform: settings.graphTransform,
-                                nodeColor: settings.nodeColor,
-                                label_settings: settings,
-                                edgeColor: settings.edgeColor,
-                                nodeEmissiveIntensity: settings.emissiveIntensity,
-                                edgeEmissiveIntensity: settings.emissiveIntensity,
-                                nodeScale: settings.nodeScale ?? 0.01,
-                                edgeWidth: settings.edgeWidth ?? 0.002,
-                                showNormals: settings.showNormals ?? true,
-                                showVelocity: settings.showVelocity ?? false,
-                                showCovarianceEllipsoids: settings.showCovarianceEllipsoids ?? false,
-                                showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
-                                manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
-                                manipEllipsoidType: settings.manipEllipsoidType ?? 'translational',
-                                covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
-                                covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
-                            };
-                            return data.mode === 'static'
-                                ? <StaticGraphRenderer key={tag} {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} />
-                                : <GraphRenderer key={tag} {...common} showNodes={settings.showNodes} showEdges={settings.showEdges} showClusters={settings.showClusters} visibleLabels={settings.visibleLabels} selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null} onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)} enableClusterSelection={!zoneMonitor.isDrawing} />;
+                            return <GraphRenderer key={tag} tag={tag} data={data} settings={settings} tf={tf}
+                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
+                                onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)}
+                                enableClusterSelection={data.mode === 'static' || !zoneMonitor.isDrawing} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />

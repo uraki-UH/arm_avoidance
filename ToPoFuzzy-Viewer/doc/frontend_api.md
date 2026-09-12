@@ -7,7 +7,7 @@ This document provides an overview of the frontend architecture, including direc
 ```
 frontend/src/
 ├── components/         # Reusable UI components
-│   └── ui/             # Core UI elements (Tabs, CollapsibleSection, etc.)
+│   └── ui/             # 共通入力部品（レイヤー操作、トグル、スライダー）
 ├── features/           # Feature-specific components
 │   ├── analysis/       # Analysis tools (Zone monitoring)
 │   ├── io/             # Input/Output (File loading, ROS integration)
@@ -33,7 +33,8 @@ The main application component that orchestrates:
 
 ### Layout
 - **SidebarContent.tsx**: Manages the content within the sidebar tabs. It orchestrates sub-components for layers, display settings, editing tools, and analysis features.
-- **MainLayout.tsx**: Provides the structural frame for the application, handling the sidebar and main content area positioning.
+- **MainLayout.tsx**: 画面・パネル構成。`MainLayout`、`Sidebar`、`Tabs`、`CollapsibleSection`を同居。
+- **components/ui/SharedControls.tsx**: 共通入力部品。レイヤー操作、トグル、単値・範囲スライダーを同居。
 
 ## Features
 
@@ -42,11 +43,14 @@ The main application component that orchestrates:
 - **GraphRenderer.tsx**: Renders the GNG (Growing Neural Gas) topological graph, including nodes, edges, and clusters.
 - **GngLayerControls.tsx**: Controls for the GNG layer, including visibility toggles for graph elements, clusters, normals, and label filtering.
 - **HeatmapControls.tsx**: UI controls for configuring heatmap color schemes and value ranges.
-- **NormalVectorRenderer.tsx**: Visualizes normal vectors for graph nodes/clusters.
+- **SharedRenderers.tsx**: 共通座標系、矢印・楕円体描画、矢印設定UI。
+- **arrows.ts**: 矢印の寸法・姿勢計算、入力変換、設定保存。
+- **graphLayerSettings.ts**: グラフ表示設定とラベル定義・優先順位・配色規則。
+- **utils/gngGraphics.ts**: ノード・辺の描画計算とクラスタ所属色。
 
 ### Manipulation
 - **SelectionHandler.tsx**: Handles the logic for selecting points within the 3D scene using a selection rectangle.
-- **TransformPanel.tsx**: Provides UI controls for translating, rotating, and scaling point clouds.
+- **GenericTransformPanel.tsx**: 位置・回転・縮尺の操作パネルと、そのダイアログ。
 - **ClippingControls.tsx**: Manages clipping planes to slice the view of the point cloud.
 - **SelectionToolbar.tsx**: Toolbar for selection-related actions (Select Rectangle, Delete, Clear).
 
@@ -55,6 +59,10 @@ The main application component that orchestrates:
 - **ServerFileBrowser.tsx**: Interface for browsing and loading point cloud files from the server.
 - **RosbagPlayer.tsx**: Controls for playing back ROS bag files.
 - **ExportPanel.tsx**: Functionality to export point cloud data to various formats (PCD, PLY, LAS).
+
+### Template Matching
+- **ObjectTemplateMatchTuner.tsx**: テンプレート照合の設定パネルと、そのダイアログ。
+- **types.ts**: 通信とUIで共有する設定型・既定値。
 
 ### Analysis
 - **ZoneMonitorPanel.tsx**: UI for defining monitoring zones and displaying cluster counts within those zones.

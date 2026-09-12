@@ -767,20 +767,22 @@ private:
                 } else if (st == "topological_node_feature") {
                     activeSubTypes_[sid] = "topological_node_feature";
                     activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalNodeFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalNodeFeature::SharedPtr m) {
+                        const auto payload = converter::to_json(*m, sid);
                         {
                             std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
-                            lastNodeFeaturePayloads_[sid] = converter::to_json(*m, sid);
+                            lastNodeFeaturePayloads_[sid] = payload;
                         }
-                        broadcastText(converter::to_json(*m, sid).dump());
+                        broadcastText(payload.dump());
                     });
                 } else if (st == "topological_cluster_feature") {
                     activeSubTypes_[sid] = "topological_cluster_feature";
                     activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalClusterFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalClusterFeature::SharedPtr m) {
+                        const auto payload = converter::to_json(*m, sid);
                         {
                             std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
-                            lastClusterFeaturePayloads_[sid] = converter::to_json(*m, sid);
+                            lastClusterFeaturePayloads_[sid] = payload;
                         }
-                        broadcastText(converter::to_json(*m, sid).dump());
+                        broadcastText(payload.dump());
                     });
                 } else if (st == "marker") {
                     activeSubTypes_[sid] = "marker";

@@ -1,5 +1,5 @@
-import { marker_arrow_options } from '../features/visualization/arrows/marker_input';
-import { ArrowStyleControls } from '../features/visualization/arrows/ArrowStyleControls';
+import { marker_arrow_options } from '../features/visualization/arrows';
+import { ArrowStyleControls } from '../features/visualization/SharedRenderers';
 import React, { useState } from 'react';
 import {
     Activity,
@@ -19,8 +19,7 @@ import {
     Wifi,
     WifiOff,
 } from 'lucide-react';
-import { Tabs } from '../components/ui/Tabs';
-import { CollapsibleSection } from '../components/ui/CollapsibleSection';
+import { Tabs, CollapsibleSection } from '../layout/MainLayout';
 import { ServerFileBrowser } from '../features/io/ServerFileBrowser';
 import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
@@ -37,7 +36,7 @@ import { LayerItem, ControlSlider } from '../components/ui/SharedControls';
 import { TfCalibrationPanel } from '../features/manipulation/TfCalibrationPanel';
 import { createDefaultGraphLayerSettings } from '../features/visualization/graphLayerSettings';
 import { is_fixed_frame } from '../utils/frame_utils';
-import { ObjectTemplateMatchDialog } from '../features/templateMatching/ObjectTemplateMatchDialog';
+import { ObjectTemplateMatchDialog } from '../features/templateMatching/ObjectTemplateMatchTuner';
 import {
     TemplateMatchConfig,
     TemplateMatchConfigResult,

@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
-import { DualRangeSlider } from '../../components/ui/DualRangeSlider';
+import { DualRangeSlider } from '../../components/ui/SharedControls';
 import { ClippingPlane, ClippingAxis } from '../../types';
 
 interface ClippingBounds {

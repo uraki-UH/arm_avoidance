@@ -3,10 +3,10 @@
 ## 変更内容
 
 把持候補、PoseArray、ROS Marker、法線、クラスタ速度、クラスタ詳細の矢印を共通化。
-`arrows/geometry.ts`で位置基準・実寸・姿勢・色を解釈し、`ArrowBatch`で円柱と円錐を描画。
+`arrows.ts`で位置基準・実寸・姿勢・色を解釈し、`ArrowBatch`で円柱と円錐を描画。
 姿勢配列・標準Marker・法線は一括描画。既存の独立したArrowHelper・法線専用円錐生成を削除。
 追加整理で未使用`NormalVectorRenderer`と`DirectionalArrow`ラッパーも削除。
-Viewerの矢印処理は`visualization/arrows/`の5ファイルへ集約。把持専用の姿勢矢印生成を`arrow_visualization::make_pose_arrows`へ移管。
+Viewerの矢印データ処理は`visualization/arrows.ts`、共通描画部品と設定UIは`visualization/SharedRenderers.tsx`へ集約。把持専用の姿勢矢印生成を`arrow_visualization::make_pose_arrows`へ移管。
 クラスタ速度の二重位置変換も修正。
 
 - 共通設定: 色、状態別配色、不透明度、全長、軸直径、矢先長・直径、前面表示、根元／矢先／中点、主軸、補助2軸。
@@ -115,3 +115,22 @@ ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_topic
 
 一時的なfrontend実行でも、共通色の描画反映、寸法・色・点列の省略、未定義状態、辞書欠落を確認。
 Dockerイメージ自体の再構築は未実施。
+
+## グラフ・楕円体・座標変換の共通化
+
+グラフ設定の既定値は`graphLayerSettings.ts`へ集約し、Appからは設定オブジェクトを直接受渡し。
+静的・動的描画の薄いラッパーと未使用のクラスタ文字表示設定を削除。法線の未指定時はGUIと同じOFF、静的グラフのクラスタ表示も設定に従う構成。
+共分散・可操作性楕円体は`EllipsoidBatch`で容量・更新・選択を共用。共通geometry・materialの解放は親で管理。
+グラフ・ロボット・MarkerのTFと手動変換は`DisplayFrame`へ集約。ロボットの基準姿勢への復帰と候補のTF欠落時非表示は維持。
+Gatewayのノード・クラスタ特徴量は1回のJSON変換結果をキャッシュと送信で共用。
+削除済みラベルテストを参照していたnpmスクリプトも削除。
+
+backendビルド、frontend lint・build・既存Markerテスト成功。
+一時検証で静的・動的グラフ20条件の変更前後一致、ロボット・候補7条件のTF・手動変換と共有リソースの寿命を確認。
+ロボット検証ではURDF読込をローカルの形状に代替。常設テストの追加なし。
+以下の検証コマンドは終了済み。ROS常駐ノードの新規起動なし。
+
+```bash
+docker compose exec -T frontend node --input-type=module < /tmp/viewer_shared_check_run.mjs
+docker compose exec -T frontend node --input-type=module < /tmp/viewer_frame_check.mjs
+```

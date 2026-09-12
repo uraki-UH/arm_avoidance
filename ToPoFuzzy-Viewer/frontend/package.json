@@ -9,7 +9,6 @@
     "build:mcap-reader": "esbuild src/standalone/mcap_reader.ts --bundle --format=iife --global-name=TopoMcapReader --platform=browser --target=es2020 --loader:.wasm=dataurl --external:fs --external:path --outfile=../../topo_mcap_reader.js",
     "lint": "eslint .",
     "test:markers": "node --test tests/marker_array_renderer.test.mjs",
-    "test:labels": "node tests/graph_labels.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

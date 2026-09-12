@@ -1,137 +1,51 @@
+import { ArrowBatch, EllipsoidBatch, DisplayFrame } from './SharedRenderers';
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
-import { Billboard, Text } from '@react-three/drei';
-import { GraphData, GraphNode, Transform, LAYER_COLORS, LAYER_LABELS, SEMANTIC_LABELS, DYNAMIC_GNG_DEFAULTS, STATIC_GNG_DEFAULTS, isTrajectoryGraphTag } from '../../types';
+import { GraphData, GraphNode, LayerSettings, LAYER_COLORS, isTrajectoryGraphTag } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material } from './utils/gngGraphics';
-import { ArrowBatch } from './arrows/ArrowBatch';
-import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows/geometry';
-import { build_cluster_node_colors } from './utils/clusterColors';
-import { updateEllipsoidInstances } from './utils/ellipsoid';
-import { get_active_node_labels, resolve_node_label } from './nodeLabelRegistry';
-import type { node_label_options } from './nodeLabelRegistry';
-
-const EMPTY_GRAPH: GraphData = {
-    timestamp: 0,
-    nodes: [],
-    edges: [],
-    clusters: [],
-    clusterLabels: []
-};
+import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors } from './utils/gngGraphics';
+import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows';
+import { get_active_node_labels, resolve_node_label, resolve_graph_layer_settings } from './graphLayerSettings';
 
 const CANDIDATE_GOAL_COLOR = '#a855f7';
 
-// removed
-
-
 interface GraphRendererProps {
     tag: string;
-    data: GraphData | null;
-    visible?: boolean;
-    showNodes?: boolean;
-    enable_cluster_colors?: boolean;
-    label_settings?: node_label_options;
-    showEdges?: boolean;
-    showClusters?: boolean;
-    showClusterText?: boolean;
-    showNormals?: boolean;
-    showVelocity?: boolean;
-    showCovarianceEllipsoids?: boolean;
-    showManipulabilityEllipsoids?: boolean;
-    manipEllipsoidMode?: 'all' | 'goal';
-    manipEllipsoidType?: 'translational' | 'rotational' | 'both';
-    nodeScale?: number;
-    edgeWidth?: number;
-    covarianceEllipsoidScale?: number;
-    visibleLabels?: {
-        0: boolean;
-        1: boolean;
-        2: boolean;
-        3: boolean;
-        4: boolean;
-        5: boolean;
-    };
+    data: GraphData;
+    settings: LayerSettings;
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
     onManipSelect?: (node: GraphNode) => void;
     enableClusterSelection?: boolean;
-    nodeOpacity?: number;
-    edgeOpacity?: number;
     tf?: { pos: number[]; quat: number[] } | null;
-    nodeColor?: string;
-    edgeColor?: string;
-    covarianceEllipsoidColor?: string;
-    nodeEmissiveIntensity?: number;
-    edgeEmissiveIntensity?: number;
-    manualTransform?: Transform | null;
 }
 
-interface GraphRendererCoreProps extends GraphRendererProps {
-    variant: 'dynamic' | 'static';
-}
-
-function GraphRendererCore({
-    variant,
-    tag,
-    data,
-    visible = true,
-    showNodes = true,
-    enable_cluster_colors = /(^|\/)curved_surface_clusters$/.test(tag),
-    label_settings,
-    showEdges = true,
-    showClusters = true,
-    showClusterText = false,
-    showNormals = false,
-    showVelocity = false,
-    showCovarianceEllipsoids = false,
-    showManipulabilityEllipsoids = false,
-    manipEllipsoidMode = 'all',
-    manipEllipsoidType = 'translational',
-    nodeScale = 0.005,
-    edgeWidth = 0.003,
-    covarianceEllipsoidScale = 2.0,
-    visibleLabels,
-    selectedClusterId = null,
-    onClusterSelect,
-    onManipSelect,
-    enableClusterSelection = true,
-    nodeOpacity = DYNAMIC_GNG_DEFAULTS.nodeOpacity,
-    edgeOpacity = DYNAMIC_GNG_DEFAULTS.edgeOpacity,
-    tf = null,
-    nodeColor = '#81c720',
-    edgeColor = '#08d408',
-    covarianceEllipsoidColor = '#aefeff',
-    nodeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
-    edgeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.edgeEmissiveIntensity,
-    manualTransform = null,
-}: GraphRendererCoreProps) {
-    const manipDisplayScale = 0.25;
+export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = null,
+    onClusterSelect, onManipSelect, enableClusterSelection = true, tf = null }: GraphRendererProps) {
+    const variant = graph.mode === 'static' ? 'static' : 'dynamic';
+    const enable_cluster_colors = /(^|\/)curved_surface_clusters$/.test(tag);
+    const { visible, showNodes, showEdges, showClusters, showNormals, showVelocity,
+        showCovarianceEllipsoids, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType,
+        nodeScale, edgeWidth, covarianceEllipsoidScale, visibleLabels, nodeOpacity, edgeOpacity,
+        nodeColor, edgeColor, covarianceEllipsoidColor, emissiveIntensity,
+        graphTransform: transform } = resolve_graph_layer_settings(tag, graph, settings);
     const { invalidate } = useThree();
-    const groupRef = useRef<THREE.Group>(null);
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
     const goalNodeMeshRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
-    const ellipsoidRef = useRef<THREE.InstancedMesh>(null);
-    const manipEllipsoidRef = useRef<THREE.InstancedMesh>(null);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
 
-    const graph = data ?? EMPTY_GRAPH;
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
-    const transform = manualTransform || { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
     const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
     const cluster_node_colors = useMemo(
         () => enable_cluster_colors ? build_cluster_node_colors(graph) : undefined,
         [enable_cluster_colors, graph],
     );
-    const active_labels = useMemo(() => get_active_node_labels(label_settings), [label_settings]);
+    const active_labels = useMemo(() => get_active_node_labels(settings), [settings]);
     const label_signature = active_labels.map((item) => item.id).join('|');
     const isTrajectoryGraph = isTrajectoryGraphTag(tag);
     const highlightGoalNodes = variant === 'static' || isTrajectoryGraph;
-    const semanticLabelText = (semanticLabel?: number) => {
-        if (!Number.isFinite(semanticLabel) || (semanticLabel ?? 0) <= 0) return '';
-        return SEMANTIC_LABELS[(Math.trunc(semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
-    };
     const nodeSemanticLabels = useMemo(() => {
         const labels = new Map<number, number>();
         for (const cluster of graph.clusters) {
@@ -176,48 +90,7 @@ function GraphRendererCore({
         [goalNodes]
     );
 
-    // Trigger re-render in demand mode for any visual changes
-    useDemandUpdate([
-        graph,
-        visible,
-        showNodes,
-        label_signature,
-        showEdges,
-        showClusters,
-        showNormals,
-        showVelocity,
-        showCovarianceEllipsoids,
-        showManipulabilityEllipsoids,
-        manipEllipsoidMode,
-        nodeScale,
-        edgeWidth,
-        covarianceEllipsoidScale,
-        nodeOpacity,
-        edgeOpacity,
-        tf,
-        visibleLabels,
-        selectedClusterId,
-        nodeColor,
-        edgeColor,
-        covarianceEllipsoidColor,
-        nodeEmissiveIntensity,
-        edgeEmissiveIntensity,
-        transform,
-        variant,
-        goalNodeSignature,
-    ]);
-
-    // --- TF-based Positioning ---
-    useLayoutEffect(() => {
-        if (!groupRef.current) return;
-        if (!tf) {
-            groupRef.current.position.set(0, 0, 0);
-            groupRef.current.quaternion.set(0, 0, 0, 1);
-            return;
-        }
-        groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-        groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-    }, [tf]);
+    useDemandUpdate([graph, settings, tf, selectedClusterId, variant, goalNodeSignature]);
 
     // Handle cluster click with drag filtering
     const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {
@@ -243,7 +116,7 @@ function GraphRendererCore({
     const nodeMaterials = useMemo(() => nodePalette.map((color) => configure_node_material(new THREE.MeshStandardMaterial({
         color,
         emissive: new THREE.Color(color),
-        emissiveIntensity: nodeEmissiveIntensity,
+        emissiveIntensity,
         transparent: nodeOpacity < 1,
         opacity: nodeOpacity,
         depthTest: false,
@@ -251,11 +124,11 @@ function GraphRendererCore({
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    }))), [nodePalette, nodeOpacity, nodeEmissiveIntensity]);
+    }))), [nodePalette, nodeOpacity, emissiveIntensity]);
     const goalNodeMaterial = useMemo(() => configure_node_material(new THREE.MeshStandardMaterial({
         color: CANDIDATE_GOAL_COLOR,
         emissive: new THREE.Color(CANDIDATE_GOAL_COLOR),
-        emissiveIntensity: nodeEmissiveIntensity,
+        emissiveIntensity,
         transparent: nodeOpacity < 1,
         opacity: nodeOpacity,
         depthTest: false,
@@ -263,7 +136,7 @@ function GraphRendererCore({
         roughness: 0.85,
         metalness: 0.0,
         toneMapped: false,
-    })), [nodeOpacity, nodeEmissiveIntensity]);
+    })), [nodeOpacity, emissiveIntensity]);
 
     const edgeCylinderGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 6), []);
     const ellipsoidGeometry = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
@@ -279,11 +152,13 @@ function GraphRendererCore({
         metalness: 0.0,
         toneMapped: false,
     }), [covarianceEllipsoidColor, nodeOpacity]);
+    useEffect(() => () => ellipsoidGeometry.dispose(), [ellipsoidGeometry]);
+    useEffect(() => () => ellipsoidMaterial.dispose(), [ellipsoidMaterial]);
     const edgeMaterial = useMemo(() => {
         const material = new THREE.MeshStandardMaterial({
             color: edgeColor,
             emissive: new THREE.Color(edgeColor),
-            emissiveIntensity: edgeEmissiveIntensity,
+            emissiveIntensity,
             transparent: edgeOpacity < 1,
             opacity: edgeOpacity,
             depthTest: variant === 'static',
@@ -291,17 +166,13 @@ function GraphRendererCore({
             toneMapped: false,
         });
         return enable_cluster_colors ? configure_node_material(material) : material;
-    }, [edgeOpacity, edgeColor, edgeEmissiveIntensity, variant, enable_cluster_colors]);
+    }, [edgeOpacity, edgeColor, emissiveIntensity, variant, enable_cluster_colors]);
 
     const [nodeCapacity, setNodeCapacity] = useState(graph.nodes.length);
     const edgePairCount = useMemo(() => Math.floor(graph.edges.length / 2), [graph.edges]);
     const [edgeCapacity, setEdgeCapacity] = useState(edgePairCount);
-    const [ellipsoidCapacity, setEllipsoidCapacity] = useState(graph.nodes.length);
-    const [manipEllipsoidCapacity, setManipEllipsoidCapacity] = useState(graph.nodes.length);
     const [nodeReadySignature, setNodeReadySignature] = useState<string | null>(null);
     const [edgeReadySignature, setEdgeReadySignature] = useState<string | null>(null);
-    const [ellipsoidReadySignature, setEllipsoidReadySignature] = useState<string | null>(null);
-    const [manipEllipsoidReadySignature, setManipEllipsoidReadySignature] = useState<string | null>(null);
     const covarianceEllipsoids = useMemo(() => {
         if (!showCovarianceEllipsoids) return [];
         return graph.nodes
@@ -321,7 +192,7 @@ function GraphRendererCore({
         if (!showManipulabilityEllipsoids) return [];
         const type = manipEllipsoidType ?? 'translational';
         const list: Array<{
-            node: any;
+            node: GraphNode;
             center: [number, number, number];
             scale: [number, number, number];
             quaternion: [number, number, number, number];
@@ -351,7 +222,7 @@ function GraphRendererCore({
                         center: [node.x, node.y, node.z] as [number, number, number],
                         scale: node.rotationalManipScale as [number, number, number],
                         quaternion: node.rotationalManipOrientation as [number, number, number, number],
-                        color: '#ff7f50', // coral for rotational
+                        color: '#ff7f50', // 回転可操作性の配色
                     });
                 }
             });
@@ -367,12 +238,12 @@ function GraphRendererCore({
             nodeCapacity,
             nodeOpacity,
             nodeColor,
-            nodeEmissiveIntensity,
+            emissiveIntensity,
             graph.timestamp,
             goalNodeSignature,
             variant,
         ].join(':');
-    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, nodeEmissiveIntensity, graph.timestamp, variant, label_signature]);
+    }, [graph.nodes, goalNodeSignature, showNodes, nodeScale, nodeCapacity, nodeOpacity, nodeColor, emissiveIntensity, graph.timestamp, variant, label_signature]);
 
     const edgeRenderSignature = useMemo(() => {
         return [
@@ -382,38 +253,12 @@ function GraphRendererCore({
             edgeCapacity,
             edgeOpacity,
             edgeColor,
-            edgeEmissiveIntensity,
+            emissiveIntensity,
             graph.timestamp,
         ].join(':');
-    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, edgeOpacity, edgeColor, edgeEmissiveIntensity, graph.timestamp]);
+    }, [edgePairCount, showEdges, edgeWidth, edgeCapacity, edgeOpacity, edgeColor, emissiveIntensity, graph.timestamp]);
     const nodeRenderReady = nodeReadySignature === nodeRenderSignature;
     const edgeRenderReady = edgeReadySignature === edgeRenderSignature;
-    const ellipsoidRenderSignature = useMemo(() => {
-        return [
-            covarianceEllipsoids.length,
-            showCovarianceEllipsoids ? 1 : 0,
-            covarianceEllipsoidScale,
-            ellipsoidCapacity,
-            nodeOpacity,
-            covarianceEllipsoidColor,
-            graph.timestamp,
-        ].join(':');
-    }, [covarianceEllipsoids.length, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, nodeOpacity, covarianceEllipsoidColor, graph.timestamp]);
-    const ellipsoidRenderReady = ellipsoidReadySignature === ellipsoidRenderSignature;
-    const manipEllipsoidRenderSignature = useMemo(() => {
-        return [
-            manipulabilityEllipsoids.length,
-            showManipulabilityEllipsoids ? 1 : 0,
-            manipEllipsoidMode,
-            manipEllipsoidType,
-            manipEllipsoidCapacity,
-            nodeOpacity,
-            covarianceEllipsoidColor,
-            graph.timestamp,
-        ].join(':');
-    }, [manipulabilityEllipsoids.length, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType, manipEllipsoidCapacity, nodeOpacity, covarianceEllipsoidColor, graph.timestamp]);
-    const manipEllipsoidRenderReady = manipEllipsoidReadySignature === manipEllipsoidRenderSignature;
-
     useEffect(() => {
         if (graph.nodes.length > nodeCapacity) setNodeCapacity(graph.nodes.length);
     }, [graph.nodes.length, nodeCapacity]);
@@ -421,16 +266,6 @@ function GraphRendererCore({
     useEffect(() => {
         if (edgePairCount > edgeCapacity) setEdgeCapacity(edgePairCount);
     }, [edgePairCount, edgeCapacity]);
-
-    useEffect(() => {
-        if (covarianceEllipsoids.length > ellipsoidCapacity) setEllipsoidCapacity(covarianceEllipsoids.length);
-    }, [covarianceEllipsoids.length, ellipsoidCapacity]);
-
-    useEffect(() => {
-        if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) setManipEllipsoidCapacity(manipulabilityEllipsoids.length);
-    }, [manipulabilityEllipsoids.length, manipEllipsoidCapacity]);
-
-
 
     // --- Node Instances ---
     useLayoutEffect(() => {
@@ -488,66 +323,16 @@ function GraphRendererCore({
         invalidate();
     }, [showEdges, invalidate]);
 
-    useLayoutEffect(() => {
-        if (!ellipsoidRef.current || !showCovarianceEllipsoids || covarianceEllipsoids.length === 0) return;
-        if (covarianceEllipsoids.length > ellipsoidCapacity) return;
-
-        updateEllipsoidInstances(ellipsoidRef.current, covarianceEllipsoids, {
-            defaultColor: covarianceEllipsoidColor,
-            sigmaMultiplier: covarianceEllipsoidScale,
-        });
-        setEllipsoidReadySignature(ellipsoidRenderSignature);
-        invalidate();
-    }, [covarianceEllipsoids, showCovarianceEllipsoids, covarianceEllipsoidScale, ellipsoidCapacity, covarianceEllipsoidColor, ellipsoidRenderSignature, invalidate]);
-
-    useLayoutEffect(() => {
-        if (!manipEllipsoidRef.current || !showManipulabilityEllipsoids || manipulabilityEllipsoids.length === 0) return;
-        if (manipulabilityEllipsoids.length > manipEllipsoidCapacity) return;
-
-        updateEllipsoidInstances(manipEllipsoidRef.current, manipulabilityEllipsoids, {
-            defaultColor: covarianceEllipsoidColor,
-            sigmaMultiplier: manipDisplayScale,
-        });
-        setManipEllipsoidReadySignature(manipEllipsoidRenderSignature);
-        invalidate();
-    }, [manipulabilityEllipsoids, showManipulabilityEllipsoids, manipEllipsoidCapacity, covarianceEllipsoidColor, manipEllipsoidRenderSignature, invalidate]);
-
-    useLayoutEffect(() => {
-        if (showCovarianceEllipsoids) return;
-        setEllipsoidReadySignature(null);
-        if (!ellipsoidRef.current) return;
-        ellipsoidRef.current.count = 0;
-        ellipsoidRef.current.instanceMatrix.needsUpdate = true;
-        invalidate();
-    }, [showCovarianceEllipsoids, invalidate]);
-
-    useLayoutEffect(() => {
-        if (showManipulabilityEllipsoids) return;
-        setManipEllipsoidReadySignature(null);
-        if (!manipEllipsoidRef.current) return;
-        manipEllipsoidRef.current.count = 0;
-        manipEllipsoidRef.current.instanceMatrix.needsUpdate = true;
-        invalidate();
-    }, [showManipulabilityEllipsoids, invalidate]);
-
     const normal_samples = useMemo<arrow_sample[]>(() => graph.nodes.map(node => ({
         position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
         length: Math.min(0.175, Math.hypot(node.nx, node.ny, node.nz) * normal_arrow_style.length),
     })), [graph.nodes]);
 
-    if (!data || !visible) return null;
+    if (!visible) return null;
 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
     const canMountNormals = showNormals && graph.nodes.length > 0;
-    const canMountCovarianceEllipsoids = showCovarianceEllipsoids && covarianceEllipsoids.length > 0 && ellipsoidCapacity >= covarianceEllipsoids.length;
-    const canMountManipEllipsoids = showManipulabilityEllipsoids && manipulabilityEllipsoids.length > 0 && manipEllipsoidCapacity >= manipulabilityEllipsoids.length;
-    const handleManipClick = (instanceId?: number) => {
-        if (instanceId === undefined || instanceId === null) return;
-        const picked = manipulabilityEllipsoids[instanceId];
-        if (!picked?.node || !onManipSelect) return;
-        onManipSelect(picked.node);
-    };
     const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
@@ -587,30 +372,10 @@ function GraphRendererCore({
                 />
             )}
 
-            {canMountCovarianceEllipsoids && (
-                <instancedMesh
-                    key={`${variant}-cov-ellipsoids-${ellipsoidCapacity}`}
-                    ref={ellipsoidRef}
-                    args={[ellipsoidGeometry, ellipsoidMaterial, ellipsoidCapacity]}
-                    count={ellipsoidRenderReady ? covarianceEllipsoids.length : 0}
-                    frustumCulled={false}
-                    renderOrder={8}
-                />
-            )}
-            {canMountManipEllipsoids && (
-                <instancedMesh
-                    key={`${variant}-manip-ellipsoids-${manipEllipsoidCapacity}`}
-                    ref={manipEllipsoidRef}
-                    args={[ellipsoidGeometry, ellipsoidMaterial, manipEllipsoidCapacity]}
-                    count={manipEllipsoidRenderReady ? manipulabilityEllipsoids.length : 0}
-                    frustumCulled={false}
-                    renderOrder={7}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleManipClick(e.instanceId);
-                    }}
-                />
-            )}
+            <EllipsoidBatch instances={covarianceEllipsoids} geometry={ellipsoidGeometry} material={ellipsoidMaterial}
+                sigma_multiplier={covarianceEllipsoidScale} default_color={covarianceEllipsoidColor} render_order={8} />
+            <EllipsoidBatch instances={manipulabilityEllipsoids} geometry={ellipsoidGeometry} material={ellipsoidMaterial}
+                default_color={covarianceEllipsoidColor} render_order={7} on_pick={instance => onManipSelect?.(instance.node)} />
 
             {canMountNormals && <ArrowBatch samples={normal_samples} style={normal_arrow_style} />}
 
@@ -644,13 +409,6 @@ function GraphRendererCore({
                             />
                         </mesh>
 
-                        {showClusterText && (
-                            <Billboard position={[0, 0, cluster.scale[2] / 2 + 0.2]}>
-                                <Text fontSize={0.2} color="#FFFFFF" anchorX="center" anchorY="bottom">
-                                {`${LAYER_LABELS[cluster.label] || 'obj'}${semanticLabelText(cluster.semanticLabel) ? ` / ${semanticLabelText(cluster.semanticLabel)}` : ''}\nR:${cluster.reliability.toFixed(2)}${Number.isFinite(cluster.semanticReliability) ? ` S:${cluster.semanticReliability!.toFixed(2)}` : ''}`}
-                            </Text>
-                        </Billboard>
-                    )}
 
                     </group>
                         {canMountVelocity && (
@@ -665,34 +423,5 @@ function GraphRendererCore({
         </>
     );
 
-    return (
-        <group ref={groupRef} name={tag}>
-            <group
-                position={transform.position}
-                rotation={transform.rotation}
-                scale={transform.scale}
-            >
-                {content}
-            </group>
-        </group>
-    );
-}
-
-export function GraphRenderer(props: GraphRendererProps) {
-    return <GraphRendererCore {...props} variant="dynamic" />;
-}
-
-export function StaticGraphRenderer(props: GraphRendererProps) {
-    return (
-        <GraphRendererCore
-            {...props}
-            variant="static"
-            nodeOpacity={props.nodeOpacity ?? STATIC_GNG_DEFAULTS.nodeOpacity}
-            edgeOpacity={props.edgeOpacity ?? STATIC_GNG_DEFAULTS.edgeOpacity}
-            nodeColor={props.nodeColor ?? STATIC_GNG_DEFAULTS.nodeColor}
-            edgeColor={props.edgeColor ?? STATIC_GNG_DEFAULTS.edgeColor}
-            nodeEmissiveIntensity={props.nodeEmissiveIntensity ?? STATIC_GNG_DEFAULTS.nodeEmissiveIntensity}
-            edgeEmissiveIntensity={props.edgeEmissiveIntensity ?? STATIC_GNG_DEFAULTS.edgeEmissiveIntensity}
-        />
-    );
+    return <DisplayFrame name={tag} tf={tf} manual_transform={transform}>{content}</DisplayFrame>;
 }

@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef, memo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { ArrowBatch } from './arrows/ArrowBatch';
-import { arrow_sample, normal_arrow_style } from './arrows/geometry';
+import { ArrowBatch } from './SharedRenderers';
+import { arrow_sample, normal_arrow_style } from './arrows';
 import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS, SEMANTIC_COLORS, SEMANTIC_LABELS } from '../../types';
 
 export interface ClusterSnapshot {

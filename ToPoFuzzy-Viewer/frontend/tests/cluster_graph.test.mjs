@@ -15,7 +15,6 @@ test('曲面所属色のノードID参照・edgeとの一致・未所属・通�
         const outfile = resolve(directory, 'helpers.mjs');
         await build({
             stdin: { contents: `
-                export * from './src/features/visualization/utils/clusterColors';
                 export * from './src/features/visualization/utils/gngGraphics';
             `, resolveDir: resolve('.') },
             outfile, bundle: true, packages: 'external', platform: 'node', format: 'esm',

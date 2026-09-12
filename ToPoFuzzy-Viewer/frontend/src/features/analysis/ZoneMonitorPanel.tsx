@@ -1,5 +1,5 @@
 import { Play, Square, Trash2, AlertCircle } from 'lucide-react';
-import { DualRangeSlider } from '../../components/ui/DualRangeSlider';
+import { DualRangeSlider } from '../../components/ui/SharedControls';
 import { LAYER_LABELS, LAYER_COLORS } from '../../types';
 
 interface ZoneMonitorPanelProps {

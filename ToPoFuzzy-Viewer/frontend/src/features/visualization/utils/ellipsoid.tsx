@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import * as THREE from 'three';
 
 export interface EllipsoidInstance {
@@ -253,8 +252,4 @@ export function updateEllipsoidInstances(
     if (mesh.instanceColor) {
         mesh.instanceColor.needsUpdate = true;
     }
-}
-
-export function useEllipsoidGeometry() {
-    return useMemo(() => new THREE.SphereGeometry(1, 16, 12), []);
 }

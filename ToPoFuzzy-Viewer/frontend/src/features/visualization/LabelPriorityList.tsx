@@ -1,7 +1,7 @@
 import { Children, useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import { HandGrab } from 'lucide-react';
-import { get_node_label_overlap_target, insert_node_label } from './nodeLabelRegistry';
+import { get_node_label_overlap_target, insert_node_label } from './graphLayerSettings';
 
 interface label_priority_list_props {
     ids: string[];

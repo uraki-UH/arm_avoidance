@@ -7,7 +7,7 @@ import { build } from 'esbuild';
 const temporary_directory = await mkdtemp(resolve('tests/.boundary-evidence-'));
 try {
     const output = resolve(temporary_directory, 'test.mjs');
-    await build({ stdin: { contents: "export * from './src/utils/topologicalMapProtocol'; export * from './src/features/visualization/nodeLabelRegistry';",
+    await build({ stdin: { contents: "export * from './src/utils/topologicalMapProtocol'; export * from './src/features/visualization/graphLayerSettings';",
         resolveDir: process.cwd() }, outfile: output, bundle: true, platform: 'node', format: 'esm' });
     const module = await import(pathToFileURL(output).href);
     const buffer = new ArrayBuffer(36+84);
