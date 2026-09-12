@@ -128,9 +128,9 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     
     const lineGeometry = useMemo(() => {
         if (!isCube || pointsLen === 0) return null;
-        const sx = Math.max(0.0001, marker.scale[0] || 0.02);
-        const sy = Math.max(0.0001, marker.scale[1] || 0.02);
-        const sz = Math.max(0.0001, marker.scale[2] || 0.02);
+        const sx = Math.max(0.0001, marker.scale?.[0] || 0.02);
+        const sy = Math.max(0.0001, marker.scale?.[1] || 0.02);
+        const sz = Math.max(0.0001, marker.scale?.[2] || 0.02);
         const hx = sx / 2, hy = sy / 2, hz = sz / 2;
         
         const positions = new Float32Array(pts.length * 24 * 3);
@@ -181,7 +181,7 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
         // SPHERE_LISTの直径は先頭の有効なscale値で統一
         const diameter = Math.max(
             0.0001,
-            marker.scale[0] || marker.scale[1] || marker.scale[2] || 0.02,
+            marker.scale?.[0] || marker.scale?.[1] || marker.scale?.[2] || 0.02,
         );
         pts.forEach((pt, index) => {
             dummy.position.set(pt[0], pt[1], pt[2]);
@@ -254,9 +254,9 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
     }, [material, geometry]);
 
     const scale: [number, number, number] = [
-        Math.max(0.0001, marker.scale[0] || 1),
-        Math.max(0.0001, marker.scale[1] || 1),
-        Math.max(0.0001, marker.scale[2] || 1),
+        Math.max(0.0001, marker.scale?.[0] || 1),
+        Math.max(0.0001, marker.scale?.[1] || 1),
+        Math.max(0.0001, marker.scale?.[2] || 1),
     ];
 
     if (isCube) {

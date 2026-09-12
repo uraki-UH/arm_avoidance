@@ -68,6 +68,8 @@ ROS Markerも座標系・設定ごとの一括描画。
 補助X・Y軸の追加により、主矢印だけでは区別できないグリッパの水平回転も表示可能。
 到達状態の判定は候補生成側の責務。表示側は受信したstateと設定済みパレットを対応付け。
 既定値は未評価=黄、範囲内=緑、範囲外=灰。`enable_state_colors=false`で固定色へ切替。
+配色の正規定義は`arrow_visualization/state_colors.hpp`のsRGB値。ROS Markerへはlinear RGBに変換。
+Viewerは同じ定義を`arrow_styles.candidate_state.state_colors`として受信し、独立した既定パレットを持たない。
 
 ## 入力・設定・送信頻度
 
@@ -77,14 +79,16 @@ ROS Markerも座標系・設定ごとの一括描画。
 | `PoseArray` | 配列添字、位置、正規化姿勢。既定主軸+Z | 有効な姿勢の場合のみ |
 | ROS Markerのpose方式 | ローカル+X、scaleから全長・軸直径・矢先直径 | 有効な姿勢の場合のみ |
 | ROS Markerの始点終点方式 | pointsから方向、scaleから軸直径・矢先直径・矢先長。poseは配置変換 | 不可 |
-| グラフ法線・速度 | 位置・方向。元の大きさによる表示長は用途別設定 | 不可 |
+| グラフ法線・速度 | 位置・方向。元の大きさによる表示長は用途別の固定値 | 不可 |
 
-表示設定はレイヤーID単位でブラウザの`localStorage`に保存。キーは`topofuzzy.arrow.v1:<layer>`。
-共通の「矢印表示」パネルから編集。法線・速度は別設定キー。初期値・ROS Marker解釈も描画とUIで共用。
+Marker・姿勢・把持候補の表示設定はレイヤーID単位でブラウザの`localStorage`に保存。キーは`topofuzzy.arrow.v1:<layer>`。
+共通の「矢印表示」パネルから編集。初期値・ROS Marker解釈も描画とUIで共用。
+グラフのノード法線・速度とクラスタ詳細の法線は表示ON/OFFのみ。詳細設定GUIは非表示。
+色・寸法は`arrows/geometry.ts`の共通値を使用。旧グラフ専用の色・倍率設定と、旧法線・速度のブラウザ保存値は参照対象外。
 優先順位は「共通既定値 → 用途別／入力値 → ブラウザ上書き」。リセットで入力値へ復帰。
 表示設定の操作によるROSメッセージ・候補座標の変更なし。
 
-姿勢入力のWSエントリは`pos`、`orientation`、`state`等のデータだけ。色・寸法・矢先座標の毎回送信なし。
+姿勢入力のWSエントリは`pos`、`orientation`、`state`等のデータ。候補には状態パレットの辞書参照を付与。色・寸法・矢先座標の毎回送信なし。
 標準ROS Marker入力は`color`・`scale`を`arrow_styles`辞書へ集約し、各矢印には`arrow_style_id`だけを付与。
 辞書は初回・変更時・再接続時に送信。省略時は前回の辞書を保持、空辞書は明示的な解除。
 辞書参照が解決できない矢印は非表示。新しいROS型やスタイル変更RPCの追加なし。
@@ -98,11 +102,38 @@ ROS Marker自体の定義では色・寸法が必須のため、既存ROS Marker
 ## ROS送信側の共通実装
 
 `arrow_visualization/include/arrow_visualization/arrow_marker.hpp`の`make_arrow`と`make_pose_arrows`を共用。
-対象は平面法線、クラスタ速度、PoseArrayのRViz向けブリッジ。標準Markerの始点終点方式に統一。
+対象は平面法線、クラスタ速度、PoseArray／把持候補のRViz向けブリッジ。標準Markerの始点終点方式に統一。
 無効方向・寸法・位置・色は同一IDのDELETE。座標基準と寸法は上記と同じ規約。
 姿勢ブリッジは共通`make_pose_arrows`を呼び出すだけ。把持専用の軸生成コードは削除。
 完全なクォータニオンから主軸と補助軸を生成し、無効姿勢では代替方向を生成しない。
 候補生成側は既存の`grasp_candidate_publisher.hpp`による候補配列の共通配信を継続。
+
+## Markerブリッジの起動
+
+launchの未指定引数はノード既定値を使用。直接の`ros2 run`と同一設定。
+`input_type=pose_array`（既定）は`/pose_array`・主軸−X、`grasp_candidates`は`/grasp_pose_cands`・主軸+Z。
+全長0.12 m、軸直径0.006 m、矢先直径0.012 m、根元基準、補助軸あり。
+入力型の自動判別はなし。`input_topic`は同じ型の別トピックへの切替用。
+
+```bash
+ros2 launch gng_vlut_system grasp_pose_marker_bridge.launch.py input_type:=grasp_candidates
+ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_type:=grasp_candidates
+```
+
+`primary_axis_idx`（0=X、1=Y、2=Z）、`primary_axis_sign`、`anchor`、`head_length`、
+`helper_axis_length_ratio`、`enable_transverse_axes`等はlaunchとrunの両方で指定可能。
+設定は起動時に読込。候補IDは各軸namespaceの末尾に保持し、範囲外候補も配信。
+候補状態の既定色は未評価=黄、範囲内=緑、範囲外=灰。
+固定色を使う場合は`enable_state_colors=false`。空入力はDELETEALLで旧表示を消去。
+入力QoSは送信元に追従。全送信元がreliableの場合のみreliable、全送信元がtransient_localの場合のみtransient_local。
+未検出時はbest_effort・volatile。500 msごとの確認で、必要なQoSが変わった場合だけ再購読。
+出力はreliable・transient_localの標準MarkerArray。ViewerのMarker・PoseArray・候補配列購読も同じ共通処理。
+通常のViewer表示は候補トピックを直接購読可能で、このRViz向けブリッジの起動は不要。
+
+単独`ais_gng_cpu/docker-compose.yaml`は`arrow_visualization`、`pointcloud_sampling`、`voxel_msgs`もマウント。
+新環境では`colcon build --packages-up-to ais_gng --symlink-install`で依存を含めて構築。
+Dockerfileの`cb`・`cbd`も依存を含めたビルドへ統一。変更の適用はイメージ再構築後。
+Viewer単独イメージ・ソース配布には`gng_control_msgs`と`pointcloud_sampling`も同梱。
 
 ## 受け入れ条件
 

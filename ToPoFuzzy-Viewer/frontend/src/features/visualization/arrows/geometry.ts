@@ -37,7 +37,7 @@ export const default_arrow_style: arrow_style = {
     color: '#00d1ff', opacity: 1, anchor: 'tail', primary_axis: 'z', depth_mode: 'scene',
     is_visible: true, enable_transverse_axes: false, enable_state_colors: true,
     transverse_axes: { x: axis_style('#ff4444'), y: axis_style('#44dd44'), z: axis_style('#4488ff') },
-    state_colors: { 0: '#f3da59', 1: '#7ceeb6', 2: '#c4c4c4' },
+    state_colors: {},
 };
 export function resolve_arrow_style(style: Partial<arrow_style> = {}): arrow_style {
     return { ...default_arrow_style, ...style,
@@ -92,7 +92,7 @@ export function build_arrow_parts(sample: arrow_sample, style: arrow_style): arr
         });
     };
     const color = style.enable_state_colors && sample.state !== undefined
-        ? style.state_colors[sample.state] ?? style.color : style.color;
+        ? style.state_colors[sample.state] ?? style.state_colors[0] ?? style.color : style.color;
     append(direction, { ...style, length: sample.length ?? style.length, color }, style.anchor);
     if (parts.length && orientation && style.enable_transverse_axes) {
         for (const axis of ['x', 'y', 'z'] as const) {
@@ -102,12 +102,15 @@ export function build_arrow_parts(sample: arrow_sample, style: arrow_style): arr
     return parts;
 }
 
-// グラフ表示と設定UIで共用する用途別初期値
-export function normal_arrow_style(scale = 0.075, color = '#4fa3a5'): Partial<arrow_style> {
-    return { length: Math.min(0.35, scale), color, opacity: 0.65, shaft_diameter: 0.003,
-        head_length: Math.min(0.02, scale * 0.24), head_diameter: 0.012, depth_mode: 'overlay' };
-}
-export function velocity_arrow_style(length = 0.25, color = '#ffb347'): Partial<arrow_style> {
-    return { length: Math.min(0.5, length), color, shaft_diameter: 0.008,
+// グラフ・クラスタ詳細の補助表示用共通値。GUIによる上書き対象外
+export const normal_arrow_style = {
+    length: 0.0375, color: '#4fa3a5', opacity: 0.65, shaft_diameter: 0.003,
+    head_length: 0.009, head_diameter: 0.006, depth_mode: 'overlay',
+} satisfies Partial<arrow_style>;
+
+// 速度の大きさに応じた表示長。速度の単位はm/s、表示倍率は0.25秒相当
+export function velocity_arrow_style(speed: number): Partial<arrow_style> {
+    const length = Math.min(0.5, speed * 0.25);
+    return { length, color: '#ffb347', shaft_diameter: 0.008,
         head_length: Math.min(0.02, length * 0.28) };
 }

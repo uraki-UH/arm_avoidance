@@ -3,6 +3,9 @@
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <gng_control_msgs/msg/grasp_candidate_array.hpp>
 #include <nlohmann/json.hpp>
+#include <arrow_visualization/state_colors.hpp>
+#include <iomanip>
+#include <sstream>
 #include <cmath>
 #include <map>
 #include <string>
@@ -32,21 +35,32 @@ inline json pose_stream(const geometry_msgs::msg::PoseArray &msg, const std::str
             {"markers", std::move(markers)}};
 }
 inline json pose_stream(const gng_control_msgs::msg::GraspCandidateArray &msg, const std::string &tag) {
+    static const json state_palette = [] {
+        json colors = json::object();
+        for (std::size_t idx = 0; idx < arrow_visualization::state_colors_srgb.size(); ++idx) {
+            std::ostringstream color;
+            color << '#' << std::hex << std::setw(6) << std::setfill('0')
+                  << arrow_visualization::state_colors_srgb[idx];
+            colors[std::to_string(idx)] = color.str();
+        }
+        return json{{"candidate_state", {{"state_colors", colors}}}};
+    }();
     json markers = json::array();
     for (const auto &candidate : msg.candidates) {
         auto entry = pose_entry(candidate.pose, msg.header.frame_id, candidate.id);
         if (!entry.is_null()) {
             entry["state"] = candidate.state;
+            entry["arrow_style_id"] = "candidate_state";
             markers.push_back(std::move(entry));
         }
     }
     return {{"type", "stream.marker_array"}, {"tag", tag}, {"source_type", "pose_array"},
-            {"update_id", msg.update_id}, {"markers", std::move(markers)}};
+            {"update_id", msg.update_id}, {"arrow_styles", state_palette}, {"markers", std::move(markers)}};
 }
 
 // 標準ROS Markerの矢印スタイルを配列内で共有。辞書は変更時と再接続時だけ送信
 inline json with_shared_styles(json payload) {
-    json styles = json::object();
+    json styles = payload.value("arrow_styles", json::object());
     std::map<std::string, std::string> ids;
     for (auto &marker : payload["markers"]) {
         if (marker.value("type", "") != "arrow" || marker.value("action", 0) >= 2) continue;

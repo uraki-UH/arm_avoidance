@@ -36,15 +36,16 @@ export interface MarkerMessage {
     orientation?: [number, number, number, number];
     state?: number;
     arrow_style_id?: string;
+    state_colors?: Record<number, string>;
     type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
     action: number;
     frameId?: string;
     pos?: [number, number, number];
     quat?: [number, number, number, number];
     pose?: MarkerPose; // Keep for compatibility but prioritize pos/quat
-    scale: [number, number, number];
-    color: [number, number, number, number] | MarkerColor;
-    points: [number, number, number][];
+    scale?: [number, number, number];
+    color?: [number, number, number, number] | MarkerColor;
+    points?: [number, number, number][];
     colors?: ([number, number, number, number] | MarkerColor)[];
     text?: string;
     meshResource?: string;
@@ -53,7 +54,7 @@ export interface MarkerMessage {
 }
 
 export interface MarkerArrayData {
-    arrow_styles?: Record<string, Pick<MarkerMessage, 'scale' | 'color'>>;
+    arrow_styles?: Record<string, Pick<MarkerMessage, 'scale' | 'color' | 'state_colors'>>;
     source_type?: 'pose_array';
     id: string;
     name: string;
@@ -188,14 +189,10 @@ export interface LayerSettings {
     edgeOpacity: number;
     nodeColor?: string;
     edgeColor?: string;
-    normalColor?: string;
-    velocityColor?: string;
     covarianceEllipsoidColor?: string;
     emissiveIntensity?: number;
     nodeScale?: number;
     edgeWidth?: number;
-    normalScale?: number;
-    velocityScale?: number;
     covarianceEllipsoidScale?: number;
     graphTransform?: Transform;
 }

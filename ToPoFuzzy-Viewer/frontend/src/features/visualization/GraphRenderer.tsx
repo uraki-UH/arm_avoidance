@@ -7,7 +7,6 @@ import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material } from './utils/gngGraphics';
 import { ArrowBatch } from './arrows/ArrowBatch';
 import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows/geometry';
-import { useArrowSettings } from './arrows/settings';
 import { build_cluster_node_colors } from './utils/clusterColors';
 import { updateEllipsoidInstances } from './utils/ellipsoid';
 import { get_active_node_labels, resolve_node_label } from './nodeLabelRegistry';
@@ -44,8 +43,6 @@ interface GraphRendererProps {
     manipEllipsoidType?: 'translational' | 'rotational' | 'both';
     nodeScale?: number;
     edgeWidth?: number;
-    normalScale?: number;
-    velocityScale?: number;
     covarianceEllipsoidScale?: number;
     visibleLabels?: {
         0: boolean;
@@ -64,8 +61,6 @@ interface GraphRendererProps {
     tf?: { pos: number[]; quat: number[] } | null;
     nodeColor?: string;
     edgeColor?: string;
-    normalColor?: string;
-    velocityColor?: string;
     covarianceEllipsoidColor?: string;
     nodeEmissiveIntensity?: number;
     edgeEmissiveIntensity?: number;
@@ -95,8 +90,6 @@ function GraphRendererCore({
     manipEllipsoidType = 'translational',
     nodeScale = 0.005,
     edgeWidth = 0.003,
-    normalScale = 0.075,
-    velocityScale = 0.25,
     covarianceEllipsoidScale = 2.0,
     visibleLabels,
     selectedClusterId = null,
@@ -108,8 +101,6 @@ function GraphRendererCore({
     tf = null,
     nodeColor = '#81c720',
     edgeColor = '#08d408',
-    normalColor = '#4fa3a5',
-    velocityColor = '#ffb347',
     covarianceEllipsoidColor = '#aefeff',
     nodeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.nodeEmissiveIntensity,
     edgeEmissiveIntensity = DYNAMIC_GNG_DEFAULTS.edgeEmissiveIntensity,
@@ -200,8 +191,6 @@ function GraphRendererCore({
         manipEllipsoidMode,
         nodeScale,
         edgeWidth,
-        normalScale,
-        velocityScale,
         covarianceEllipsoidScale,
         nodeOpacity,
         edgeOpacity,
@@ -210,8 +199,6 @@ function GraphRendererCore({
         selectedClusterId,
         nodeColor,
         edgeColor,
-        normalColor,
-        velocityColor,
         covarianceEllipsoidColor,
         nodeEmissiveIntensity,
         edgeEmissiveIntensity,
@@ -543,12 +530,10 @@ function GraphRendererCore({
         invalidate();
     }, [showManipulabilityEllipsoids, invalidate]);
 
-    const normal_style = useArrowSettings(tag + '/normals');
-    const velocity_style = useArrowSettings(tag + '/velocity');
     const normal_samples = useMemo<arrow_sample[]>(() => graph.nodes.map(node => ({
         position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
-        length: normal_style.length ?? Math.min(0.35, Math.hypot(node.nx, node.ny, node.nz) * normalScale),
-    })), [graph.nodes, normalScale, normal_style.length]);
+        length: Math.min(0.175, Math.hypot(node.nx, node.ny, node.nz) * normal_arrow_style.length),
+    })), [graph.nodes]);
 
     if (!data || !visible) return null;
 
@@ -627,9 +612,7 @@ function GraphRendererCore({
                 />
             )}
 
-            {canMountNormals && <ArrowBatch samples={normal_samples} style={{
-                ...normal_arrow_style(normalScale, normalColor), ...normal_style,
-            }} />}
+            {canMountNormals && <ArrowBatch samples={normal_samples} style={normal_arrow_style} />}
 
             {showClusters && graph.clusters
             .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
@@ -673,8 +656,7 @@ function GraphRendererCore({
                         {canMountVelocity && (
                             <ArrowBatch
                                 samples={[{ position: cluster.pos, direction: cluster.velocity }]}
-                                style={{ ...velocity_arrow_style(Math.hypot(...cluster.velocity) * velocityScale, velocityColor),
-                                    is_visible: showVelocity, ...velocity_style }}
+                                style={velocity_arrow_style(Math.hypot(...cluster.velocity))}
                             />
                         )}
                     </group>

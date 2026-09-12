@@ -10,6 +10,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(arrow_visualization REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(pointcloud_sampling REQUIRED)
@@ -41,6 +42,7 @@ set(ROS2_DEPENDENCIES_PC
 )
 
 set(ROS2_DEPENDENCIES_GRAPH
+  arrow_visualization
   pointcloud_sampling
   rclcpp
   ament_index_cpp

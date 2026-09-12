@@ -1,3 +1,4 @@
+#include <arrow_visualization/subscription.hpp>
 #include "topo_fuzzy_viewer/protocol/arrow_protocol.h"
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
@@ -649,6 +650,10 @@ private:
             sendStreamDelete(source_id);
         }
         for (const auto& source_id : restarted_source_ids) {
+            {
+                std::lock_guard<std::mutex> lock(markerMutex_);
+                last_arrow_styles_.erase(source_id);
+            }
             broadcastText(json({
                 {"type", "stream.reset"}, {"id", source_id},
                 {"tag", source_id}, {"topic", source_id}
@@ -781,31 +786,19 @@ private:
                     activeSubTypes_[sid] = "marker";
                     if (std::find(topics[sid].begin(), topics[sid].end(),
                                   "gng_control_msgs/msg/GraspCandidateArray") != topics[sid].end()) {
-                        activeDynamicSubs_[sid] = create_subscription<gng_control_msgs::msg::GraspCandidateArray>(
-                            sid, rclcpp::QoS(1).reliable().transient_local(),
+                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<gng_control_msgs::msg::GraspCandidateArray>(
+                            *this, sid,
                             [this, sid](const gng_control_msgs::msg::GraspCandidateArray::SharedPtr msg) {
                                 broadcast_markers(sid, converter::to_json(*msg, sid));
                             });
                     } else if (std::find(topics[sid].begin(), topics[sid].end(),
                                   "geometry_msgs/msg/PoseArray") != topics[sid].end()) {
-                        auto qos = rclcpp::QoS(1).reliable();
-                        const auto publishers = get_publishers_info_by_topic(sid);
-                        if (std::any_of(publishers.begin(), publishers.end(), [](const auto& publisher) {
-                            return publisher.qos_profile().get_rmw_qos_profile().reliability ==
-                                   RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
-                        })) qos.best_effort();
-                        const bool is_transient_local = !publishers.empty() && std::all_of(
-                            publishers.begin(), publishers.end(), [](const auto& publisher) {
-                                return publisher.qos_profile().get_rmw_qos_profile().durability ==
-                                       RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
-                            });
-                        if (is_transient_local) qos.transient_local();
-                        activeDynamicSubs_[sid] = create_subscription<geometry_msgs::msg::PoseArray>(
-                            sid, qos, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
+                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<geometry_msgs::msg::PoseArray>(
+                            *this, sid, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
                                 broadcast_markers(sid, converter::to_json(*m, sid));
                             });
                     } else {
-                        activeDynamicSubs_[sid] = create_subscription<visualization_msgs::msg::MarkerArray>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
+                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<visualization_msgs::msg::MarkerArray>(*this, sid, [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
                             broadcast_markers(sid, converter::to_json(m, sid));
                         });
                     }
@@ -1349,7 +1342,7 @@ private:
     rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tfSub_, tfStaticSub_;
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr nonplane_source_map_sub_;
     rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr nonplane_source_plane_cluster_sub_;
-    std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
+    std::unordered_map<std::string, std::shared_ptr<void>> activeDynamicSubs_;
     std::unordered_map<std::string, std::string> last_arrow_styles_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     std::unordered_map<std::string, std::string> active_source_publisher_signatures_;

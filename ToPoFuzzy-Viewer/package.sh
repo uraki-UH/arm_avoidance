@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 # Configuration
 APP_NAME="ToPoFuzzyViewer_Source"
@@ -19,6 +21,10 @@ echo "Copying Backend..."
 mkdir -p "$STAGING_DIR/backend"
 # Copy src, but exclude any potential build artifacts if they exist inside src (unlikely but safe)
 cp -r backend/src "$STAGING_DIR/backend/"
+# 単独配布で必要なワークスペース内の依存パッケージ
+for dependency in ../ais_gng_cpu/src/ais_gng_msgs ../MSG/ais_gng_feature_msgs ../MSG/voxel_msgs ../MSG/gng_control_msgs ../pointcloud_sampling ../arrow_visualization; do
+    cp -r "$dependency" "$STAGING_DIR/backend/src/"
+done
 # Copy CMakeLists.txt if it exists in backend root (it usually does for colcon workspace level, but often it's just src)
 # Checking project structure: usually backend/src contains packages.
 # Let's copy backend/src and any other top-level config files if necessary. 
@@ -78,7 +84,7 @@ npm install
 cd backend
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 run topo_fuzzy_viewer pc_server
+ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 \`\`\`
 
 ### Start Frontend

@@ -1,5 +1,3 @@
-import { normal_arrow_style, velocity_arrow_style } from './arrows/geometry';
-import { ArrowStyleControls } from './arrows/ArrowStyleControls';
 import { Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 import { LayerItem, CompactToggle } from '../../components/ui/SharedControls';
@@ -73,8 +71,6 @@ export function GngLayerControls({
 
             {settings.visible && (
                 <div className="mt-1">
-                    <ArrowStyleControls style_key={tag + '/normals'} can_have_orientation={false} title="法線の矢印表示" base_style={normal_arrow_style(settings.normalScale, settings.normalColor)} />
-                    <ArrowStyleControls style_key={tag + '/velocity'} can_have_orientation={false} title="速度の矢印表示" base_style={velocity_arrow_style(settings.velocityScale, settings.velocityColor)} />
                     <div className="-ml-1 grid grid-cols-8 gap-1">
                         <CompactToggle
                             icon={<Square size={12} />}

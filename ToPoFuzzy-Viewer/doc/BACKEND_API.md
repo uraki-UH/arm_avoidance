@@ -100,6 +100,8 @@ Published before each binary cloud frame.
 候補配列はID・位置・完全な姿勢・状態を配信。別のreachability購読なし。
 色・寸法・基準位置・補助軸はブラウザの共通矢印設定。姿勢入力に描画設定を毎回付加する処理はなし。
 標準Markerの矢印は`arrow_style_id`で共有`arrow_styles`辞書を参照。辞書は初回・変更・再接続時に配信し、省略時は前回値を保持。
+候補状態色も同じ辞書の`candidate_state.state_colors`で配信し、ROSとViewerで共通のsRGB定義を使用。
+Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再起動時も必要に応じて再購読。
 詳細は[WS v2](../common/ws_protocol_v2.md)と[矢印共通仕様](../common/arrow_visual_spec.md)を参照。
 
 ## File

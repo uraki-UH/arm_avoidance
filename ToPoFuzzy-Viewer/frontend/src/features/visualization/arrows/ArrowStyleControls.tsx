@@ -39,7 +39,7 @@ export function ArrowStyleControls({ style_key, can_have_orientation, title = '�
             <label className="block">状態による色<input type="checkbox" checked={style.enable_state_colors}
                 onChange={event => update({ enable_state_colors: event.target.checked })} /></label>
             {style.enable_state_colors && (['未評価', '範囲内', '範囲外']).map((label, state) =>
-                <label key={state} className="flex justify-between">{label}<input type="color" value={style.state_colors[state]}
+                <label key={state} className="flex justify-between">{label}<input type="color" value={style.state_colors[state] ?? style.color}
                     onChange={event => update({ state_colors: { ...style.state_colors, [state]: event.target.value } })} /></label>)}
             <label className="block">補助2軸<input type="checkbox" disabled={!can_have_orientation}
                 checked={can_have_orientation && style.enable_transverse_axes}

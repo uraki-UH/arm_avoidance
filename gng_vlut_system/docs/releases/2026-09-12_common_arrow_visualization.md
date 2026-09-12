@@ -81,3 +81,37 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py params_file:=/
 個別出力ケースでは上記launchに`candidate_topic:=/topic_contract/grasp_pose_cands`、
 `candidate_nodes_topic:=/topic_contract/grasp_pose_cands/nodes`、`summary_topic:=/topic_contract/grasp_pose_cands/summary`を追加。
 共通publisherの回帰テストは`/ros2_ws/build/grasping_system/test_grasp_candidate_publisher`から有限時間のノードを起動し、終了済み。
+
+## 起動経路の追加修正
+
+- Markerブリッジの既定値をノード側へ一本化し、launchに入力型・主軸・向き・矢先長の引数を追加。
+- `input_type=grasp_candidates`で`GraspCandidateArray`を購読し、候補ID・状態・範囲外候補を保持。
+- 単独Composeの共通パッケージ不足と未定義の重複ボリューム参照を修正。
+- ViewerのDockerfile・ソース配布に不足していた依存を追加し、配布案内の旧`pc_server`を`viewer_stack.launch.py`へ更新。
+- ビルド補助`cb`・`cbd`を`--packages-up-to`へ変更し、初回ビルドでの依存取りこぼしを解消。
+
+起動コマンドは[共通仕様](../../../ToPoFuzzy-Viewer/common/arrow_visual_spec.md#markerブリッジの起動)を参照。
+検証用ROS_DOMAIN_ID=219で、上記launch/runを`input_type`未指定・`grasp_candidates`指定の双方で起動。
+追加でlaunchに`primary_axis_idx:=1 primary_axis_sign:=-1.0 anchor:=tip head_length:=0.01 enable_transverse_axes:=false enable_state_colors:=false color_r:=0.3`を指定。
+全プロセスは検証後に停止。常設のテストファイル追加なし。
+
+## QoS・通信型・状態色の追加修正
+
+共通`subscription.hpp`で全送信元に接続可能なQoSを選択し、500 msごとに必要な変更だけを反映。
+ブリッジとViewerのMarker・PoseArray・把持候補購読へ適用。省略可能な`scale`・`color`・`points`をTypeScriptにも反映。
+状態色は共通`state_colors.hpp`のsRGB定義へ統一。ROS Markerへはlinear RGBに変換し、Viewerへは既存スタイル辞書で配信。
+publisher再起動による`stream.reset`後も辞書を再送。配布用Dockerfile・package.shにも共通パッケージを追加。
+
+ROS・backendビルド、frontend lint・build成功。常設テスト追加なし。
+一時コマンド`node /tmp/arrow_qos_verify.cjs`（ROS_DOMAIN_ID=220）でvolatile/best_effort、送信元遅着・再起動・混在、QoS追従、両出力の色一致、辞書省略・再接続を確認。
+切替検出までの短いQoS不一致警告後、受信再開と購読QoSを確認。入力型3種類で実施。
+以下の検証プロセスはすべて停止済み。
+
+```bash
+/ros2_ws/src/ToPoFuzzy-Viewer/backend/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_ws_gateway_node --ros-args -p port:=19092 -r __node:=qos_gateway
+ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_type:=grasp_candidates -p input_topic:=/qos/candidates -p output_topic:=/qos/bridge -r __node:=qos_candidate_bridge
+ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_topic:=/qos/poses -p output_topic:=/qos/pose_bridge -r __node:=qos_pose_bridge
+```
+
+一時的なfrontend実行でも、共通色の描画反映、寸法・色・点列の省略、未定義状態、辞書欠落を確認。
+Dockerイメージ自体の再構築は未実施。

@@ -11,10 +11,12 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
         marker = { ...marker, ...shared };
     }
     const sample: arrow_sample = { position: marker.pos ?? [0, 0, 0], state: marker.state };
-    let style: Partial<arrow_style> = { primary_axis: 'z', depth_mode: 'overlay' };
+    let style: Partial<arrow_style> = { primary_axis: 'z', depth_mode: 'overlay', state_colors: marker.state_colors };
     if (marker.orientation) sample.orientation = marker.orientation;
     else {
-        const is_endpoints = (marker.points?.length ?? 0) >= 2;
+        const points = marker.points ?? [];
+        const head_length = marker.scale?.[2] ?? 0;
+        const is_endpoints = points.length >= 2;
         const rgba = Array.isArray(marker.color) ? marker.color :
             [marker.color?.r ?? 1, marker.color?.g ?? 1, marker.color?.b ?? 1, marker.color?.a ?? 1];
         const rotation = new THREE.Quaternion(...(marker.quat ?? [0, 0, 0, 1]));
@@ -22,8 +24,8 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
         rotation.normalize();
         let length = marker.scale?.[0] ?? 0.08;
         if (is_endpoints) {
-            const start = new THREE.Vector3(...marker.points[0]);
-            const direction = new THREE.Vector3(...marker.points[1]).sub(start);
+            const start = new THREE.Vector3(...points[0]);
+            const direction = new THREE.Vector3(...points[1]).sub(start);
             length = direction.length();
             sample.position = start.applyQuaternion(rotation).add(new THREE.Vector3(...sample.position)).toArray();
             sample.direction = direction.applyQuaternion(rotation).toArray();
@@ -32,7 +34,7 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
             color: '#' + new THREE.Color(rgba[0], rgba[1], rgba[2]).getHexString(), opacity: rgba[3] ?? 1,
             shaft_diameter: marker.scale?.[is_endpoints ? 0 : 1] ?? 0.008,
             head_diameter: marker.scale?.[is_endpoints ? 1 : 2] ?? 0.016,
-            head_length: is_endpoints && marker.scale?.[2] > 0 ? marker.scale[2] : length * 0.23 };
+            head_length: is_endpoints && head_length > 0 ? head_length : length * 0.23 };
     }
     return { sample, style };
 }

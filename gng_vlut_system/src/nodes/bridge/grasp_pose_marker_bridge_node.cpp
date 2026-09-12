@@ -1,132 +1,106 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
-#include <visualization_msgs/msg/marker_array.hpp>
-#include <visualization_msgs/msg/marker.hpp>
-
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <mutex>
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-
+#include <gng_control_msgs/msg/grasp_candidate_array.hpp>
 #include <arrow_visualization/arrow_marker.hpp>
+#include <algorithm>
+#include <arrow_visualization/subscription.hpp>
+#include <arrow_visualization/state_colors.hpp>
+#include <stdexcept>
 
 namespace robot_sim::bridge
 {
-
 class GraspPoseMarkerBridgeNode : public rclcpp::Node
 {
 public:
   explicit GraspPoseMarkerBridgeNode(const rclcpp::NodeOptions &options)
   : Node("grasp_pose_marker_bridge_node", options)
   {
-    declare_parameter<std::string>("input_topic", "/pose_array");
-    declare_parameter<std::string>("output_topic", "/grasp_pose_markers");
-    declare_parameter<std::string>("marker_namespace", "grasp_pose");
-    declare_parameter<double>("arrow_length", 0.04);
-    declare_parameter<double>("shaft_diameter", 0.006);
-    declare_parameter<double>("head_diameter", 0.008);
-    declare_parameter<double>("color_a", 1.0);
-    declare_parameter<double>("color_r", 1.0);
-    declare_parameter<double>("color_g", 0.2);
-    declare_parameter<double>("color_b", 0.2);
-    declare_parameter<std::string>("anchor", "tail");
-    declare_parameter<bool>("enable_transverse_axes", true);
-    declare_parameter<int>("primary_axis_idx", 0);
-    declare_parameter<double>("primary_axis_sign", -1.0);
-
-    input_topic_ = get_parameter("input_topic").as_string();
-    output_topic_ = get_parameter("output_topic").as_string();
-    marker_namespace_ = get_parameter("marker_namespace").as_string();
-    arrow_length_ = std::max(0.0001, get_parameter("arrow_length").as_double());
-    shaft_diameter_ = std::max(0.0001, get_parameter("shaft_diameter").as_double());
-    head_diameter_ = std::max(0.0001, get_parameter("head_diameter").as_double());
-    color_a_ = std::clamp(get_parameter("color_a").as_double(), 0.0, 1.0);
-    const int primary_axis_idx = get_parameter("primary_axis_idx").as_int();
+    const auto input_type = declare_parameter<std::string>("input_type", "pose_array");
+    const bool has_candidates = input_type == "grasp_candidates";
+    if (!has_candidates && input_type != "pose_array") {
+      throw std::invalid_argument("input_type must be pose_array or grasp_candidates");
+    }
+    const auto input_topic = declare_parameter<std::string>(
+      "input_topic", has_candidates ? "/grasp_pose_cands" : "/pose_array");
+    const auto output_topic = declare_parameter<std::string>("output_topic", "/grasp_pose_markers");
+    style_.marker_namespace = declare_parameter<std::string>("marker_namespace", "grasp_pose");
+    style_.primary.length = declare_parameter<double>("arrow_length", 0.12);
+    style_.primary.shaft_diameter = declare_parameter<double>("shaft_diameter", 0.006);
+    style_.primary.head_diameter = declare_parameter<double>("head_diameter", 0.012);
+    style_.primary.head_length = declare_parameter<double>(
+      "head_length", std::min(style_.primary.length, style_.primary.head_diameter * 1.5));
+    style_.primary.color.r = declare_parameter<double>("color_r", 0.0);
+    style_.primary.color.g = declare_parameter<double>("color_g", 0.8);
+    style_.primary.color.b = declare_parameter<double>("color_b", 0.2);
+    style_.primary.color.a = declare_parameter<double>("color_a", 1.0);
+    style_.primary.anchor = declare_parameter<std::string>("anchor", "tail");
+    style_.enable_transverse_axes = declare_parameter<bool>("enable_transverse_axes", true);
+    style_.helper_axis_length_ratio = declare_parameter<double>("helper_axis_length_ratio", 0.5);
+    const int primary_axis_idx = declare_parameter<int>("primary_axis_idx", has_candidates ? 2 : 0);
     if (primary_axis_idx < 0 || primary_axis_idx > 2) {
       throw std::invalid_argument("primary_axis_idx must be 0 (X), 1 (Y), or 2 (Z)");
     }
-    primary_axis_idx_ = static_cast<std::size_t>(primary_axis_idx);
-    primary_axis_sign_ = get_parameter("primary_axis_sign").as_double() < 0.0 ? -1.0 : 1.0;
-
-    subscription_ = create_subscription<geometry_msgs::msg::PoseArray>(
-      input_topic_, rclcpp::QoS(1).reliable().transient_local(),
-      std::bind(&GraspPoseMarkerBridgeNode::poseArrayCallback, this, std::placeholders::_1));
-
-
-    publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-      output_topic_, rclcpp::QoS(1).reliable().transient_local());
-    publishDeleteAll();
-
-    RCLCPP_INFO(
-      get_logger(),
-      "GraspPoseMarkerBridgeNode initialized. input=%s output=%s arrow_length=%.4f axis=%zu sign=%.0f",
-      input_topic_.c_str(), output_topic_.c_str(), arrow_length_, primary_axis_idx_,
-      primary_axis_sign_);
+    style_.primary_axis_idx = static_cast<std::size_t>(primary_axis_idx);
+    style_.primary_axis_sign = declare_parameter<double>("primary_axis_sign", has_candidates ? 1.0 : -1.0);
+    enable_state_colors_ = declare_parameter<bool>("enable_state_colors", true);
+    const auto qos = rclcpp::QoS(1).reliable().transient_local();
+    publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(output_topic, qos);
+    if (has_candidates) {
+      subscription_ = arrow_visualization::subscribe_adaptive<gng_control_msgs::msg::GraspCandidateArray>(
+        *this, input_topic, [this](gng_control_msgs::msg::GraspCandidateArray::ConstSharedPtr msg) {
+          geometry_msgs::msg::PoseArray poses;
+          poses.header = msg->header;
+          poses.poses.reserve(msg->candidates.size());
+          for (const auto &candidate : msg->candidates) poses.poses.push_back(candidate.pose);
+          publish_markers(poses, msg.get());
+        });
+    } else {
+      subscription_ = arrow_visualization::subscribe_adaptive<geometry_msgs::msg::PoseArray>(
+        *this, input_topic, [this](geometry_msgs::msg::PoseArray::ConstSharedPtr msg) {
+          publish_markers(*msg);
+        });
+    }
+    publish_markers(geometry_msgs::msg::PoseArray{});
+    RCLCPP_INFO(get_logger(), "input=%s (%s) output=%s", input_topic.c_str(),
+      input_type.c_str(), output_topic.c_str());
   }
 
 private:
-  void publishDeleteAll()
+  void publish_markers(const geometry_msgs::msg::PoseArray &poses,
+    const gng_control_msgs::msg::GraspCandidateArray *candidates = nullptr)
   {
-    visualization_msgs::msg::MarkerArray out;
-    visualization_msgs::msg::Marker marker;
-    marker.action = visualization_msgs::msg::Marker::DELETEALL;
-    out.markers.push_back(std::move(marker));
-    publisher_->publish(std::move(out));
-  }
-
-  void poseArrayCallback(const geometry_msgs::msg::PoseArray::SharedPtr msg)
-  {
-    visualization_msgs::msg::MarkerArray out;
-    arrow_visualization::pose_arrow_style options;
-    options.marker_namespace = marker_namespace_;
-    options.primary.length = arrow_length_;
-    options.primary_axis_idx = primary_axis_idx_;
-    options.primary_axis_sign = primary_axis_sign_;
-    options.helper_axis_length_ratio = 0.5;
-    options.primary.shaft_diameter = shaft_diameter_;
-    options.primary.head_diameter = head_diameter_;
-    options.primary.color.a = color_a_;
-    options.primary.anchor = get_parameter("anchor").as_string();
-    options.enable_transverse_axes = get_parameter("enable_transverse_axes").as_bool();
-    options.primary.color.r = get_parameter("color_r").as_double();
-    options.primary.color.g = get_parameter("color_g").as_double();
-    options.primary.color.b = get_parameter("color_b").as_double();
-    options.primary.head_length = std::min(arrow_length_, head_diameter_ * 1.5);
-    out = arrow_visualization::make_pose_arrows(*msg, options);
+    auto out = arrow_visualization::make_pose_arrows(poses, style_);
+    if (candidates) {
+      for (auto &marker : out.markers) {
+        const auto &candidate = candidates->candidates[marker.id / 3];
+        // uint32候補IDのnamespace保持。Marker IDは軸番号
+        marker.ns += "/" + std::to_string(candidate.id);
+        marker.id %= 3;
+        if (enable_state_colors_ && static_cast<std::size_t>(marker.id) == style_.primary_axis_idx) {
+          marker.color = arrow_visualization::state_color(candidate.state, marker.color.a);
+        }
+      }
+    }
     visualization_msgs::msg::Marker clear;
+    clear.header = poses.header;
     clear.action = visualization_msgs::msg::Marker::DELETEALL;
     out.markers.insert(out.markers.begin(), clear);
     publisher_->publish(std::move(out));
   }
 
-  std::string input_topic_;
-  std::string output_topic_;
-  std::string marker_namespace_;
-  double arrow_length_ = 0.04;
-  double shaft_diameter_ = 0.006;
-  double head_diameter_ = 0.008;
-  double color_a_ = 1.0;
-  std::size_t primary_axis_idx_ = 0U;
-  double primary_axis_sign_ = -1.0;
-  rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr subscription_;
+  arrow_visualization::pose_arrow_style style_;
+  bool enable_state_colors_ = true;
+  std::shared_ptr<void> subscription_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr publisher_;
 };
-
-}  // namespace robot_sim::bridge
+}  // robot_sim::bridge 名前空間
 
 RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::bridge::GraspPoseMarkerBridgeNode)
 
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<robot_sim::bridge::GraspPoseMarkerBridgeNode>(
-    rclcpp::NodeOptions());
-  rclcpp::spin(node);
+  rclcpp::spin(std::make_shared<robot_sim::bridge::GraspPoseMarkerBridgeNode>(rclcpp::NodeOptions()));
   rclcpp::shutdown();
   return 0;
 }

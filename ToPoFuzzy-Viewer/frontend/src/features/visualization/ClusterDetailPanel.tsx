@@ -2,10 +2,8 @@ import { useMemo, useState, useEffect, useRef, memo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { ArrowStyleControls } from './arrows/ArrowStyleControls';
-import { useArrowSettings } from './arrows/settings';
 import { ArrowBatch } from './arrows/ArrowBatch';
-import { arrow_sample } from './arrows/geometry';
+import { arrow_sample, normal_arrow_style } from './arrows/geometry';
 import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS, SEMANTIC_COLORS, SEMANTIC_LABELS } from '../../types';
 
 export interface ClusterSnapshot {
@@ -117,7 +115,6 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
         });
     }, [clusterEdges]);
 
-    const normal_style = useArrowSettings('cluster_detail/normals');
     const normal_samples = useMemo<arrow_sample[]>(() => clusterNodes.map(node => ({
         position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
     })), [clusterNodes]);
@@ -201,7 +198,6 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                     <input type="checkbox" checked={showNormals} onChange={e => setShowNormals(e.target.checked)} />
                     Normals
                 </label>
-                <ArrowStyleControls style_key="cluster_detail/normals" can_have_orientation={false} base_style={{ length: 0.2 }} />
             </div>
 
             {/* Canvas */}
@@ -244,7 +240,7 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                         ))}
 
                         {/* Normals */}
-                        {showNormals && <ArrowBatch samples={normal_samples} style={{ length: 0.2, ...normal_style }} />}
+                        {showNormals && <ArrowBatch samples={normal_samples} style={normal_arrow_style} />}
 
 
                         {/* Bounding Box & Dimensions */}

@@ -70,7 +70,7 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 - `markers`は毎回全置換。空配列は旧候補の消去。
 - Markerの`frameId`は入力座標系。
 - 非有限位置・無効クォータニオンは除外。入力配列添字をMarker IDとして維持。
-- 入力publisherに合わせたreliability・durabilityを購読開始時に選択。
+- 入力publisherに合わせたreliability・durabilityを選択。500 msごとに確認し、遅着・再起動・送信元混在にも追従。
 - 計画処理は不要。PoseArrayは座標系不明・固定座標系へのTF欠落時に非表示。座標をworldとみなす代替描画はなし。
 - 他のMarkerレイヤーとの自動照合・色統合なし。重複を避ける場合は表示レイヤーを選択。
 
@@ -88,11 +88,22 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 {"type":"stream.marker_array","tag":"/arrows","arrow_styles":{"0":{"scale":[0.008,0.016,0.02],"color":[0.2,0.8,1,1]}},"markers":[{"id":1,"ns":"normal","type":"arrow","action":0,"frameId":"world","pos":[0,0,0],"quat":[0,0,0,1],"points":[[0,0,0],[0,0,0.08]],"arrow_style_id":"0"}]}
 ```
 
+候補配列は`arrow_style_id: "candidate_state"`を持ち、次の辞書を参照。
+
+```json
+{"candidate_state":{"state_colors":{"0":"#f3da59","1":"#7ceeb6","2":"#c4c4c4"}}}
+```
+
+状態パレットは`arrow_visualization/state_colors.hpp`の共通sRGB定義から生成。
+ROS Marker用には同じ値をlinear RGBへ変換。辞書は他の矢印スタイルと同じ送信省略・再接続規約。
+
 - 同一設定の矢印は同じ`arrow_style_id`を参照。
 - `arrow_styles`の省略は直前の辞書を保持。存在する場合は辞書全体を置換。`{}`は空辞書への更新。
 - 初回・設定変更時・`request.state`・再接続時には完全な辞書を送信。レイヤー削除時は辞書も破棄。
 - `markers`は従来どおり全置換。辞書の省略とは独立。
-- `orientation`形式の姿勢入力には矢印ごとの描画設定なし。
+- `orientation`形式の姿勢入力には矢印ごとの描画設定なし。候補の状態色は辞書を参照。
+- `scale`・`color`・`points`は省略可能。形式に応じて姿勢または端点を使用。
+- publisher再起動の`stream.reset`後も次の配信で辞書を再送。
 - 旧形式のインライン`scale`・`color`も入力可能。矢印以外のMarker規約は変更なし。
 - 補助軸、anchor、ブラウザ設定の詳細は[共通仕様](arrow_visual_spec.md)を参照。
 

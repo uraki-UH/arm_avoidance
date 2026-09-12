@@ -773,11 +773,7 @@ function App() {
                                 showManipulabilityEllipsoids: settings.showManipulabilityEllipsoids ?? false,
                                 manipEllipsoidMode: settings.manipEllipsoidMode ?? 'all',
                                 manipEllipsoidType: settings.manipEllipsoidType ?? 'translational',
-                                normalScale: settings.normalScale ?? 0.075,
-                                velocityScale: settings.velocityScale ?? 0.25,
                                 covarianceEllipsoidScale: settings.covarianceEllipsoidScale ?? 2.0,
-                                normalColor: settings.normalColor ?? '#4fa3a5',
-                                velocityColor: settings.velocityColor ?? '#ffb347',
                                 covarianceEllipsoidColor: settings.covarianceEllipsoidColor ?? '#7fd9ff',
                             };
                             return data.mode === 'static'
