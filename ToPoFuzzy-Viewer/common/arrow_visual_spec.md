@@ -13,6 +13,8 @@
 未使用の`NormalVectorRenderer`と単体ラッパー`DirectionalArrow`は削除。
 姿勢・始点終点の入力変換と設定UIの解釈は`arrows/marker_input.ts`へ集約。
 ROS Markerも座標系・設定ごとの一括描画。
+矢印・通常Markerの色変換は`marker_input.ts`の`marker_color`へ集約。
+TF・手動変換・通常Markerの姿勢適用は`MarkerFrame`へ集約。姿勢のEuler角への変換と形状ごとの重複処理は不要。
 
 ## 共通フィールド
 

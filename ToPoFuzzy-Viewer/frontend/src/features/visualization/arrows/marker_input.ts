@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { MarkerArrayData, MarkerMessage } from '../../../types';
 import { arrow_sample, arrow_style } from './geometry';
 
+// 矢印・通常Marker共通のlinear RGB色と不透明度
+export function marker_color(value: MarkerMessage['color']) {
+    const rgba = Array.isArray(value) ? value : [value?.r ?? 1, value?.g ?? 1, value?.b ?? 1, value?.a ?? 1];
+    return { color: new THREE.Color(rgba[0], rgba[1], rgba[2]), opacity: rgba[3] ?? 1 };
+}
+
 // 姿勢方式・始点終点方式の解釈を描画と設定UIで共用
 function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styles']) {
     if (marker.type !== 'arrow' || marker.action === 2 || marker.action === 3) return;
@@ -17,8 +23,7 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
         const points = marker.points ?? [];
         const head_length = marker.scale?.[2] ?? 0;
         const is_endpoints = points.length >= 2;
-        const rgba = Array.isArray(marker.color) ? marker.color :
-            [marker.color?.r ?? 1, marker.color?.g ?? 1, marker.color?.b ?? 1, marker.color?.a ?? 1];
+        const { color, opacity } = marker_color(marker.color);
         const rotation = new THREE.Quaternion(...(marker.quat ?? [0, 0, 0, 1]));
         if (!rotation.toArray().every(Number.isFinite) || rotation.lengthSq() <= 1e-16) return;
         rotation.normalize();
@@ -31,7 +36,7 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
             sample.direction = direction.applyQuaternion(rotation).toArray();
         } else sample.orientation = rotation.toArray();
         style = { ...style, primary_axis: is_endpoints ? 'z' : 'x', length,
-            color: '#' + new THREE.Color(rgba[0], rgba[1], rgba[2]).getHexString(), opacity: rgba[3] ?? 1,
+            color: '#' + color.getHexString(), opacity,
             shaft_diameter: marker.scale?.[is_endpoints ? 0 : 1] ?? 0.008,
             head_diameter: marker.scale?.[is_endpoints ? 1 : 2] ?? 0.016,
             head_length: is_endpoints && head_length > 0 ? head_length : length * 0.23 };

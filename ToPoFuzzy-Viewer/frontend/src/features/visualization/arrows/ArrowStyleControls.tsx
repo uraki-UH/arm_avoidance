@@ -1,8 +1,8 @@
 import { arrow_dimensions, arrow_style, resolve_arrow_style } from './geometry';
 import { update_arrow_settings, useArrowSettings } from './settings';
 
-export function ArrowStyleControls({ style_key, can_have_orientation, title = '矢印表示', base_style }: {
-    style_key: string; can_have_orientation: boolean; title?: string; base_style?: Partial<arrow_style>;
+export function ArrowStyleControls({ style_key, can_have_orientation, base_style }: {
+    style_key: string; can_have_orientation: boolean; base_style?: Partial<arrow_style>;
 }) {
     const overrides = useArrowSettings(style_key);
     const style = resolve_arrow_style({ ...base_style, ...overrides });
@@ -20,7 +20,7 @@ export function ArrowStyleControls({ style_key, can_have_orientation, title = '�
             onChange={event => change({ color: event.target.value })} /></label>
     </>;
     return <details className="mt-1 text-xs" onClick={event => event.stopPropagation()}>
-        <summary>{title}</summary>
+        <summary>矢印表示</summary>
         <div className="space-y-1 p-1">
             <label className="flex justify-between">基準位置<select value={style.anchor} className="bg-black/20"
                 onChange={event => update({ anchor: event.target.value as arrow_style['anchor'] })}>

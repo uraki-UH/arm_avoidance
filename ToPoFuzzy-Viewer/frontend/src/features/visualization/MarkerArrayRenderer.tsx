@@ -3,10 +3,9 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { arrow_style } from './arrows/geometry';
 import { useArrowSettings } from './arrows/settings';
 import { ArrowBatch } from './arrows/ArrowBatch';
-import { marker_arrow_batches } from './arrows/marker_input';
+import { marker_arrow_batches, marker_color } from './arrows/marker_input';
 
 interface MarkerArrayRendererProps {
     tag: string;
@@ -14,68 +13,11 @@ interface MarkerArrayRendererProps {
     visible?: boolean;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform?: Transform;
-    arrow_settings?: Partial<arrow_style>;
 }
 
 const MARKER_RENDER_ORDER = 1000;
 
 const is_delete_action = (marker: MarkerMessage) => marker.action === 2 || marker.action === 3;
-
-const getPose = (marker: any) => {
-    const pos = marker.pos || [0, 0, 0];
-    const quat = marker.quat || [0, 0, 0, 1];
-    
-    // Fallback for object format if needed
-    const px = pos.x ?? pos[0] ?? 0;
-    const py = pos.y ?? pos[1] ?? 0;
-    const pz = pos.z ?? pos[2] ?? 0;
-    
-    const qx = quat.x ?? quat[0] ?? 0;
-    const qy = quat.y ?? quat[1] ?? 0;
-    const qz = quat.z ?? quat[2] ?? 0;
-    const qw = quat.w ?? quat[3] ?? 1;
-
-    const position = [px, py, pz] as [number, number, number];
-    const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
-    const euler = new THREE.Euler().setFromQuaternion(quaternion);
-    const rotation = [euler.x, euler.y, euler.z] as [number, number, number];
-    
-    return { position, rotation };
-};
-
-const getColor = (color: any) => {
-    if (Array.isArray(color)) {
-        return {
-            color: new THREE.Color(color[0], color[1], color[2]),
-            opacity: color[3] ?? 1,
-            transparent: (color[3] ?? 1) < 1,
-        };
-    }
-    return {
-        color: new THREE.Color(color?.r ?? 1, color?.g ?? 1, color?.b ?? 1),
-        opacity: color?.a ?? 1,
-        transparent: (color?.a ?? 1) < 1,
-    };
-};
-
-function useMarkerFrame(tf: { pos: number[]; quat: number[] } | null) {
-    const groupRef = useRef<THREE.Group>(null);
-    const { invalidate } = useThree();
-
-    useEffect(() => {
-        if (!groupRef.current) return;
-        if (tf) {
-            groupRef.current.position.set(tf.pos[0], tf.pos[1], tf.pos[2]);
-            groupRef.current.quaternion.set(tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]);
-        } else {
-            groupRef.current.position.set(0, 0, 0);
-            groupRef.current.quaternion.set(0, 0, 0, 1);
-        }
-        invalidate();
-    }, [tf, invalidate]);
-
-    return groupRef;
-}
 
 function MarkerFrame({
     marker,
@@ -92,19 +34,21 @@ function MarkerFrame({
 }) {
     const frameId = marker.frameId || 'world';
     const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
-    const groupRef = useMarkerFrame(tf);
 
     // 候補PoseはTF不明時に非表示。通常Markerの既存フォールバックは維持
     if (!allow_untransformed && (!marker.frameId || (frameId !== 'world' && !tf))) return null;
 
     return (
-        <group ref={groupRef}>
+        <group position={tf ? [tf.pos[0], tf.pos[1], tf.pos[2]] : [0, 0, 0]}
+            quaternion={tf ? [tf.quat[0], tf.quat[1], tf.quat[2], tf.quat[3]] : [0, 0, 0, 1]}>
             <group
                 position={manualTransform.position}
                 rotation={manualTransform.rotation}
                 scale={manualTransform.scale}
             >
-                {children}
+                {/* 矢印の姿勢は入力変換済み。通常Markerの姿勢は共通フレームで適用 */}
+                {marker.type === 'arrow' ? children :
+                    <group position={marker.pos ?? [0, 0, 0]} quaternion={marker.quat ?? [0, 0, 0, 1]}>{children}</group>}
             </group>
         </group>
     );
@@ -112,13 +56,9 @@ function MarkerFrame({
 
 function ListMarker({ marker }: { marker: MarkerMessage }) {
     const { invalidate } = useThree();
-    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
+    const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
     const pts = useMemo(() => marker.points || [], [marker.points]);
     const pointsLen = pts.length;
-    const { position, rotation } = useMemo(
-        () => getPose({ pos: marker.pos, quat: marker.quat }),
-        [marker.pos, marker.quat]
-    );
     
     const isCube = marker.type === 'cube_list';
     // 個数の揺れによるInstancedMesh再生成の抑止。容量不足時のみ倍増。
@@ -208,8 +148,6 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
             <lineSegments
                 geometry={lineGeometry}
                 material={lineMaterial}
-                position={position}
-                rotation={rotation}
                 renderOrder={MARKER_RENDER_ORDER}
             />
         );
@@ -222,36 +160,28 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
             args={[meshGeometry!, meshMaterial!, capacity]}
             // 行列初期化前の単位サイズ球の描画防止
             count={0}
-            position={position}
-            rotation={rotation}
             renderOrder={MARKER_RENDER_ORDER}
         />
     );
 }
 
 function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
-    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, rotation } = useMemo(
-        () => getPose({ pos: marker.pos, quat: marker.quat }),
-        [marker.pos, marker.quat]
-    );
+    const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
     const isCube = marker.type === 'cube';
 
     const geometry = useMemo(() => {
         if (marker.type === 'sphere') return new THREE.SphereGeometry(0.5, 16, 12);
         if (marker.type === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
-        return isCube ? new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)) : new THREE.BoxGeometry(1, 1, 1);
-    }, [marker.type, isCube]);
+        return new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    }, [marker.type]);
 
     const material = useMemo(() => {
         if (isCube) return new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
         return new THREE.MeshLambertMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
     }, [isCube, color, opacity]);
 
-    useEffect(() => () => {
-        material.dispose();
-        geometry.dispose();
-    }, [material, geometry]);
+    useEffect(() => () => material.dispose(), [material]);
+    useEffect(() => () => geometry.dispose(), [geometry]);
 
     const scale: [number, number, number] = [
         Math.max(0.0001, marker.scale?.[0] || 1),
@@ -259,38 +189,14 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
         Math.max(0.0001, marker.scale?.[2] || 1),
     ];
 
-    if (isCube) {
-        return (
-            <lineSegments
-                geometry={geometry}
-                material={material as THREE.LineBasicMaterial}
-                position={position}
-                rotation={rotation}
-                scale={scale}
-                renderOrder={MARKER_RENDER_ORDER}
-            />
-        );
-    }
-
-    return (
-        <mesh
-            geometry={geometry}
-            material={material}
-            position={position}
-            rotation={rotation}
-            scale={scale}
-            renderOrder={MARKER_RENDER_ORDER}
-        />
-    );
+    const object = useMemo(() => isCube ? new THREE.LineSegments(geometry, material as THREE.LineBasicMaterial)
+        : new THREE.Mesh(geometry, material), [isCube, geometry, material]);
+    return <primitive object={object} scale={scale} renderOrder={MARKER_RENDER_ORDER} />;
 }
 
 function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
     const { invalidate } = useThree();
-    const { color, opacity } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, rotation } = useMemo(
-        () => getPose({ pos: marker.pos, quat: marker.quat }),
-        [marker.pos, marker.quat]
-    );
+    const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
     
     const material = useMemo(() => new THREE.LineBasicMaterial({
         transparent: true, depthTest: false, depthWrite: false,
@@ -331,8 +237,6 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     return (
         <primitive
             object={lineObject}
-            position={position}
-            rotation={rotation}
             renderOrder={MARKER_RENDER_ORDER}
         />
     );
@@ -345,14 +249,13 @@ function renderMarker(marker: MarkerMessage) {
     case 'cube':
     case 'sphere':
     case 'cylinder':
-        return <MarkerPrimitive key={`${marker.ns}:${marker.id}`} marker={marker} />;
+        return <MarkerPrimitive marker={marker} />;
     case 'line_strip':
-        return <LineMarker key={`${marker.ns}:${marker.id}`} marker={marker} strip={true} />;
     case 'line_list':
-        return <LineMarker key={`${marker.ns}:${marker.id}`} marker={marker} strip={false} />;
+        return <LineMarker marker={marker} strip={marker.type === 'line_strip'} />;
     case 'cube_list':
     case 'sphere_list':
-        return <ListMarker key={`${marker.ns}:${marker.id}`} marker={marker} />;
+        return <ListMarker marker={marker} />;
     default:
         return null;
     }
@@ -364,10 +267,8 @@ export function MarkerArrayRenderer({
     visible = true,
     transforms,
     manualTransform,
-    arrow_settings,
 }: MarkerArrayRendererProps) {
-    const saved_style = useArrowSettings(tag);
-    const effective_style = useMemo(() => ({ ...saved_style, ...arrow_settings }), [saved_style, arrow_settings]);
+    const effective_style = useArrowSettings(tag);
     const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style), [data, effective_style]);
     const transform: Transform = manualTransform || {
         position: [0, 0, 0],
