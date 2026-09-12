@@ -43,7 +43,9 @@ inline std::string buildChainScopedUrdf(
   }
 
   std::unordered_map<std::string, std::string> child_to_parent;
+  std::unordered_map<std::string, std::vector<std::string>> parent_to_children;
   std::unordered_set<std::string> keep_links;
+  std::unordered_set<std::string> display_links;
   for (auto *joint = robot->FirstChildElement("joint"); joint;
        joint = joint->NextSiblingElement("joint")) {
     const auto *parent = joint->FirstChildElement("parent");
@@ -54,6 +56,7 @@ inline std::string buildChainScopedUrdf(
       continue;
     }
     child_to_parent[child_name] = parent_name;
+    parent_to_children[parent_name].push_back(child_name);
   }
 
   // KinematicChainは各セグメントの子リンクを保持するため、そこから
@@ -62,6 +65,7 @@ inline std::string buildChainScopedUrdf(
     const std::string link_name = chain.getLinkName(idx);
     if (!link_name.empty()) {
       keep_links.insert(link_name);
+      display_links.insert(link_name);
     }
   }
   if (keep_links.empty()) {
@@ -78,28 +82,57 @@ inline std::string buildChainScopedUrdf(
     }
   }
 
-  // 選択経路の末端に付く手先サブツリー（グリッパ本体・左右指・TCPなど）の保持。
-  // 可動ジョイント配下の視覚リンクも含め、候補URDFで手先形状を欠落させない構成。
-  std::vector<std::string> end_effector_subtree;
+  // チェーン末端に最も近い分岐から手先サブツリーを保持
+  // （グリッパ本体・左右指など。基部リンクの別腕・胴体側分岐は除外）。
+  std::vector<std::string> end_effector_anchors;
   for (const auto &link_name : keep_links) {
-    const bool has_unkept_child = std::any_of(
-        child_to_parent.begin(), child_to_parent.end(),
-        [&](const auto &entry) {
-          return entry.second == link_name &&
-                 keep_links.count(entry.first) == 0;
-        });
-    if (has_unkept_child) {
-      end_effector_subtree.push_back(link_name);
+    const auto children_it = parent_to_children.find(link_name);
+    const bool has_kept_child =
+        children_it != parent_to_children.end() &&
+        std::any_of(children_it->second.begin(), children_it->second.end(),
+                    [&](const auto &child_name) {
+                      return keep_links.count(child_name) > 0;
+                    });
+    if (has_kept_child) {
+      continue;
+    }
+
+    std::string cursor = link_name;
+    while (!cursor.empty()) {
+      const auto cursor_children_it = parent_to_children.find(cursor);
+      const bool has_unkept_child =
+          cursor_children_it != parent_to_children.end() &&
+          std::any_of(cursor_children_it->second.begin(),
+                      cursor_children_it->second.end(),
+                      [&](const auto &child_name) {
+                        return keep_links.count(child_name) == 0;
+                      });
+      if (has_unkept_child) {
+        end_effector_anchors.push_back(cursor);
+        display_links.insert(cursor);
+        break;
+      }
+      const auto parent_it = child_to_parent.find(cursor);
+      if (parent_it == child_to_parent.end()) {
+        break;
+      }
+      cursor = parent_it->second;
     }
   }
-  for (std::size_t idx = 0; idx < end_effector_subtree.size(); ++idx) {
-    const auto parent_name = end_effector_subtree[idx];
-    for (const auto &[child_name, mapped_parent] : child_to_parent) {
-      if (mapped_parent != parent_name || keep_links.count(child_name) > 0) {
+
+  std::vector<std::string> pending_subtree_links = end_effector_anchors;
+  for (std::size_t idx = 0; idx < pending_subtree_links.size(); ++idx) {
+    const auto children_it = parent_to_children.find(pending_subtree_links[idx]);
+    if (children_it == parent_to_children.end()) {
+      continue;
+    }
+    for (const auto &child_name : children_it->second) {
+      if (keep_links.count(child_name) > 0) {
         continue;
       }
       if (keep_links.insert(child_name).second) {
-        end_effector_subtree.push_back(child_name);
+        display_links.insert(child_name);
+        pending_subtree_links.push_back(child_name);
       }
     }
   }
@@ -114,6 +147,21 @@ inline std::string buildChainScopedUrdf(
   }
   for (auto *link : links_to_remove) {
     robot->DeleteChild(link);
+  }
+
+  // TF経路だけに必要な基部リンクから表示形状を除去
+  for (auto *link = robot->FirstChildElement("link"); link;
+       link = link->NextSiblingElement("link")) {
+    const char *name = link->Attribute("name");
+    if (!name || display_links.count(name) > 0) {
+      continue;
+    }
+    if (auto *visual = link->FirstChildElement("visual")) {
+      link->DeleteChild(visual);
+    }
+    if (auto *collision = link->FirstChildElement("collision")) {
+      link->DeleteChild(collision);
+    }
   }
 
   std::vector<tinyxml2::XMLElement *> joints_to_remove;
