@@ -70,7 +70,7 @@ TF・手動変換はグラフ・ロボット・Marker共通の`DisplayFrame`へ�
 入力位置の移動や、矢印表示による把持候補の書換えはなし。
 補助X・Y軸の追加により、主矢印だけでは区別できないグリッパの水平回転も表示可能。
 到達状態の判定は候補生成側の責務。表示側は受信したstateと設定済みパレットを対応付け。
-既定値は未評価=黄、範囲内=HANDLEと同じ水色、範囲外=灰。`enable_state_colors=false`で固定色へ切替。
+既定値は未評価=黄、範囲内=明るい薄緑水色、範囲外=灰。`enable_state_colors=false`で固定色へ切替。
 配色の正規定義は`arrow_visualization/state_colors.hpp`のsRGB値。ROS Markerへはlinear RGBに変換。
 Viewerは同じ定義を`arrow_styles.candidate_state.state_colors`として受信し、独立した既定パレットを持たない。
 
@@ -128,7 +128,7 @@ ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_type:
 `primary_axis_idx`（0=X、1=Y、2=Z）、`primary_axis_sign`、`anchor`、`head_length`、
 `helper_axis_length_ratio`、`enable_transverse_axes`等はlaunchとrunの両方で指定可能。
 設定は起動時に読込。候補IDは各軸namespaceの末尾に保持し、範囲外候補も配信。
-候補状態の既定色は未評価=黄、範囲内=HANDLEと同じ水色、範囲外=灰。
+候補状態の既定色は未評価=黄、範囲内=明るい薄緑水色、範囲外=灰。
 固定色を使う場合は`enable_state_colors=false`。空入力はDELETEALLで旧表示を消去。
 入力QoSは送信元に追従。全送信元がreliableの場合のみreliable、全送信元がtransient_localの場合のみtransient_local。
 未検出時はbest_effort・volatile。500 msごとの確認で、必要なQoSが変わった場合だけ再購読。

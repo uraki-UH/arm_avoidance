@@ -550,15 +550,15 @@ private:
       if (marker.action != marker_msg::ADD) continue;
       const auto it = state_by_id.find(static_cast<std::uint32_t>(marker.id));
       const auto state = it == state_by_id.end() ? candidate_msg::UNKNOWN : it->second;
-      // 到達性状態の識別色。到達範囲外は従来の候補色、未評価は灰青色
+      // 到達性状態の識別色。到達範囲内は水色、範囲外は中暗度の青、未評価は灰青色
       if (state == candidate_msg::INSIDE) {
         marker.color.r = 0.0F;
         marker.color.g = 0.6375969F;
         marker.color.b = 1.0F;
       } else if (state == candidate_msg::OUTSIDE) {
-        marker.color.r = 0.1F;
-        marker.color.g = 0.85F;
-        marker.color.b = 1.0F;
+        marker.color.r = 0.02315337F;
+        marker.color.g = 0.1878208F;
+        marker.color.b = 0.3139887F;
       } else {
         marker.color.r = 0.1620294F;
         marker.color.g = 0.2158605F;

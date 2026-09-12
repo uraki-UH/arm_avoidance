@@ -64,7 +64,7 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 - 判定概要: `/grasp_pose_cands/summary`
 - 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
 
-Viewerは同じ候補IDのローカルZ軸矢印を、未評価=黄・到達範囲内=HANDLEと同じ水色・範囲外=灰で表示。計画launch・別のreachability/Markerトピックは不要。
+Viewerは同じ候補IDのローカルZ軸矢印を、未評価=黄・到達範囲内=明るい薄緑水色・範囲外=灰で表示。計画launch・別のreachability/Markerトピックは不要。
 上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。調整は`ToPoDualArm.yaml`の`candidate_*`設定。
 到達性は候補生成側で評価。YAMLの各生成ノードにある`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を設定。map未受信・TF不明なら未評価。
 `candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合だけ `candidate_frame: "ToPoDualArm/base_link"` とし、[`sensor_static_tf.yaml`](gng_vlut_system/config/sensor_static_tf.yaml) に外部センサTFを記述して次を起動。

@@ -206,7 +206,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     reach_node.pos.z = (math.floor(point.z / 0.05) + 0.5) * 0.05
                     for state, color in (
                         (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
-                        (GraspCandidate.OUTSIDE, (0.1, 0.85, 1.0, 1.0)),
+                        (GraspCandidate.OUTSIDE, (0.02315337, 0.1878208, 0.3139887, 1.0)),
                         (GraspCandidate.UNKNOWN, (0.1620294, 0.2158605, 0.2788943, 1.0)),
                         (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
                     ):
@@ -309,7 +309,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                         assert poses.candidates[1].state == GraspCandidate.INSIDE
                         for marker in markers[1:]:
                             expected = (
-                                (0.1, 0.85, 1.0, 1.0)
+                                (0.02315337, 0.1878208, 0.3139887, 1.0)
                                 if marker.id == 2 else (0.0, 0.6375969, 1.0, 1.0))
                             assert has_marker_color(marker, expected)
                         print("異なる候補IDのHANDLE色・候補色の同時表示確認", flush=True)

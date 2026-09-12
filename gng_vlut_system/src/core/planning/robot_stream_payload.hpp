@@ -97,26 +97,31 @@ inline std::string buildChainScopedUrdf(
       continue;
     }
 
-    std::string cursor = link_name;
-    while (!cursor.empty()) {
-      const auto cursor_children_it = parent_to_children.find(cursor);
-      const bool has_unkept_child =
-          cursor_children_it != parent_to_children.end() &&
-          std::any_of(cursor_children_it->second.begin(),
-                      cursor_children_it->second.end(),
-                      [&](const auto &child_name) {
-                        return keep_links.count(child_name) == 0;
-                      });
-      if (has_unkept_child) {
-        end_effector_anchors.push_back(cursor);
-        display_links.insert(cursor);
-        break;
+    auto has_unkept_child = [&](const std::string &parent_name) {
+      const auto parent_children_it = parent_to_children.find(parent_name);
+      return parent_children_it != parent_to_children.end() &&
+             std::any_of(parent_children_it->second.begin(),
+                         parent_children_it->second.end(),
+                         [&](const auto &child_name) {
+                           return keep_links.count(child_name) == 0;
+                         });
+    };
+
+    // 手先リンク自身に指枝がある構成
+    std::string anchor;
+    if (has_unkept_child(link_name)) {
+      anchor = link_name;
+    } else {
+      // TCPの直親にグリッパ本体・左右指が接続される構成
+      const auto parent_it = child_to_parent.find(link_name);
+      if (parent_it != child_to_parent.end() &&
+          has_unkept_child(parent_it->second)) {
+        anchor = parent_it->second;
       }
-      const auto parent_it = child_to_parent.find(cursor);
-      if (parent_it == child_to_parent.end()) {
-        break;
-      }
-      cursor = parent_it->second;
+    }
+    if (!anchor.empty()) {
+      end_effector_anchors.push_back(anchor);
+      display_links.insert(anchor);
     }
   }
 

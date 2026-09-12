@@ -90,8 +90,8 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
     }), []);
 
     const meshGeometry = useMemo(() => isCube ? null : new THREE.SphereGeometry(0.5, 12, 8), [isCube]);
-    const meshMaterial = useMemo(() => isCube ? null : new THREE.MeshLambertMaterial({
-        transparent: true, depthTest: false, depthWrite: false,
+    const meshMaterial = useMemo(() => isCube ? null : new THREE.MeshBasicMaterial({
+        transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
     }), [isCube]);
 
     useLayoutEffect(() => {
