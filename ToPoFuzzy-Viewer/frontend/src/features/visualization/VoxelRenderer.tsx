@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { useDemandUpdate } from './SharedRenderers';
 import { LAYER_COLORS, VoxelSettings, Transform } from '../../types';
 
 interface VoxelLayout {

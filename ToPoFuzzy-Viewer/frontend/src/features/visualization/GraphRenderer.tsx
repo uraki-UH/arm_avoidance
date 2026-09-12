@@ -1,10 +1,9 @@
-import { ArrowBatch, EllipsoidBatch, DisplayFrame } from './SharedRenderers';
+import { ArrowBatch, EllipsoidBatch, DisplayFrame, useDemandUpdate } from './SharedRenderers';
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { GraphData, GraphNode, LayerSettings, LAYER_COLORS, isTrajectoryGraphTag } from '../../types';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors } from './utils/gngGraphics';
+import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors } from './gngGraphics';
 import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows';
 import { get_active_node_labels, resolve_node_label, resolve_graph_layer_settings } from './graphLayerSettings';
 

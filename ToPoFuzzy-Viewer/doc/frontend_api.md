@@ -43,10 +43,11 @@ The main application component that orchestrates:
 - **GraphRenderer.tsx**: Renders the GNG (Growing Neural Gas) topological graph, including nodes, edges, and clusters.
 - **GngLayerControls.tsx**: Controls for the GNG layer, including visibility toggles for graph elements, clusters, normals, and label filtering.
 - **HeatmapControls.tsx**: UI controls for configuring heatmap color schemes and value ranges.
-- **SharedRenderers.tsx**: 共通座標系、矢印・楕円体描画、矢印設定UI。
+- **SharedRenderers.tsx**: 共通座標系、矢印・楕円体描画、矢印設定UI、再描画要求フック。
 - **arrows.ts**: 矢印の寸法・姿勢計算、入力変換、設定保存。
 - **graphLayerSettings.ts**: グラフ表示設定とラベル定義・優先順位・配色規則。
-- **utils/gngGraphics.ts**: ノード・辺の描画計算とクラスタ所属色。
+- **gngGraphics.ts**: ノード・辺の描画計算とクラスタ所属色。
+- **ellipsoid.ts**: 共分散・姿勢からの楕円体変換と描画行列の更新。
 
 ### Manipulation
 - **SelectionHandler.tsx**: Handles the logic for selecting points within the 3D scene using a selection rectangle.

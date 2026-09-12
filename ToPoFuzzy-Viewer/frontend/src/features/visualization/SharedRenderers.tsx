@@ -1,10 +1,20 @@
-import { ReactNode, useLayoutEffect, useMemo, useRef } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Transform } from '../../types';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { EllipsoidInstance, updateEllipsoidInstances } from './utils/ellipsoid';
+import { EllipsoidInstance, updateEllipsoidInstances } from './ellipsoid';
 import { arrow_sample, arrow_style, arrow_dimensions, build_arrow_parts, resolve_arrow_style, update_arrow_settings, useArrowSettings } from './arrows';
+
+// 描画部品と共用の再描画要求。フック変更時は上位モジュールへ更新を伝播
+// eslint-disable-next-line react-refresh/only-export-components
+export function useDemandUpdate(dependencies: readonly unknown[]) {
+    const { invalidate } = useThree();
+    useEffect(() => {
+        invalidate();
+        // 呼出元による表示依存値の指定
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [...dependencies, invalidate]);
+}
 
 // 共通の表示座標系。適用順はTFまたは基準姿勢、手動変換、子要素の姿勢
 export function DisplayFrame({ tf, manual_transform, name, is_visible = true, children }: {

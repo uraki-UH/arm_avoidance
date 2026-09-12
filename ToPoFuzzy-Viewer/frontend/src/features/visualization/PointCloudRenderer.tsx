@@ -4,7 +4,7 @@ import { PointCloudData, HeatmapSettings } from '../../types';
 import { heatmapVertexShader, heatmapFragmentShader } from '../../utils/heatmapShaders';
 import { useFrame, useThree } from '@react-three/fiber';
 import { TransformControls } from '@react-three/drei';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { useDemandUpdate } from './SharedRenderers';
 
 interface PointCloudRendererProps {
     data: PointCloudData;

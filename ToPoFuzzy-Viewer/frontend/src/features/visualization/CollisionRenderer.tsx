@@ -2,7 +2,7 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import URDFLoader from 'urdf-loader';
 import { RobotData, Transform } from '../../types';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { useDemandUpdate } from './SharedRenderers';
 
 interface CollisionRendererProps {
     tag: string;

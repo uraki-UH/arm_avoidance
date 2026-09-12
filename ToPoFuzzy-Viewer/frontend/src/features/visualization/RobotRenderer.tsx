@@ -3,8 +3,7 @@ import * as THREE from 'three';
 import { createPortal, useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { RobotData, RobotPoseInstance, Transform } from '../../types';
-import { DisplayFrame } from './SharedRenderers';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
+import { DisplayFrame, useDemandUpdate } from './SharedRenderers';
 
 interface RobotRendererProps {
     tag: string;

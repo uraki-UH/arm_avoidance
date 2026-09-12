@@ -1,10 +1,9 @@
 import { useArrowSettings, marker_arrow_batches, marker_color } from './arrows';
-import { DisplayFrame, ArrowBatch } from './SharedRenderers';
+import { DisplayFrame, ArrowBatch, useDemandUpdate } from './SharedRenderers';
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
-import { useDemandUpdate } from '../../hooks/useDemandUpdate';
 
 interface MarkerArrayRendererProps {
     tag: string;

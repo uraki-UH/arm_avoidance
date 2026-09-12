@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GraphData, LAYER_COLORS, SEMANTIC_COLORS } from '../../../types';
+import { GraphData, LAYER_COLORS, SEMANTIC_COLORS } from '../../types';
 
 const tempMatrix = new THREE.Matrix4();
 const tempColor = new THREE.Color();
@@ -107,8 +107,8 @@ export function updateEdgeInstances(
 ) {
     if (!mesh) return;
     const safeEdgeWidth = Number.isFinite(edgeWidth)
-        ? Math.max(0.0005, Math.min(edgeWidth, 0.06))
-        : 0.003;
+        ? Math.max(0.0003, Math.min(edgeWidth, 0.06))
+        : 0.001;
     const edgePairCount = Math.floor(edges.length / 2);
     mesh.count = edgePairCount;
 
