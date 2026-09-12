@@ -219,20 +219,20 @@ export function EntityColorModal({
                                 <ControlSlider
                                     label="Node Size"
                                     value={layerSettings.nodeScale ?? 0.003}
-                                    min={0.001}
-                                    max={0.08}
-                                    step={0.001}
+                                    min={0.0001}
+                                    max={0.05}
+                                    step={0.0001}
                                     onChange={(v) => onUpdate({ nodeScale: v })}
-                                    formatValue={(v) => v.toFixed(3)}
+                                    formatValue={(v) => v.toFixed(4)}
                                 />
                                 <ControlSlider
                                     label="Edge Width"
                                     value={layerSettings.edgeWidth ?? 0.001}
-                                    min={0.0003}
-                                    max={0.06}
-                                    step={0.0001}
+                                    min={0.00002}
+                                    max={0.01}
+                                    step={0.00001}
                                     onChange={(v) => onUpdate({ edgeWidth: v })}
-                                    formatValue={(v) => v.toFixed(4)}
+                                    formatValue={(v) => v.toFixed(5)}
                                 />
                             </div>
 
