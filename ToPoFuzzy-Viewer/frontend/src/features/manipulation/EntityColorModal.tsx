@@ -131,7 +131,7 @@ export function EntityColorModal({
                             </div>
                             <ControlSlider
                                 label="Opacity"
-                                value={robotSettings.opacity ?? 0.8}
+                                value={robotSettings.opacity ?? 1}
                                 min={0}
                                 max={1}
                                 step={0.01}

@@ -43,7 +43,10 @@ inline json pose_stream(const gng_control_msgs::msg::GraspCandidateArray &msg, c
                   << arrow_visualization::state_colors_srgb[idx];
             colors[std::to_string(idx)] = color.str();
         }
-        return json{{"candidate_state", {{"state_colors", colors}}}};
+        return json{{"candidate_state", {
+            {"anchor", "tip"},
+            {"enable_transverse_axes", false},
+            {"state_colors", colors}}}};
     }();
     json markers = json::array();
     for (const auto &candidate : msg.candidates) {

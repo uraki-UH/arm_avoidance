@@ -132,7 +132,7 @@ export function ArrowStyleControls({ style_key, can_have_orientation, base_style
         <div className="space-y-1 p-1">
             <label className="flex justify-between">基準位置<select value={style.anchor} className="bg-black/20"
                 onChange={event => update({ anchor: event.target.value as arrow_style['anchor'] })}>
-                <option value="tail">根元</option><option value="tip">矢先</option><option value="center">中点</option>
+                <option value="tail">根元</option><option value="tip">矢先</option>
             </select></label>
             {can_have_orientation && <label className="flex justify-between">主軸<select value={style.primary_axis}
                 className="bg-black/20" onChange={event => update({ primary_axis: event.target.value as arrow_style['primary_axis'] })}>

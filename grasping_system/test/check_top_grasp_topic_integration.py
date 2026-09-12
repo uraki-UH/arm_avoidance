@@ -149,7 +149,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     assert observed_unconfirmed_candidate
                     assert poses.candidates[0].id == 1
                     assert poses.candidates[0].state == GraspCandidate.UNKNOWN
-                    assert has_node_color(markers, (0.1, 0.85, 1.0, 1.0))
+                    assert has_node_color(markers, (0.1620294, 0.2158605, 0.2788943, 1.0))
                     expected_offset = (0.2, -0.1, 0.3) if candidate_frame else (0.0, 0.0, 0.0)
                     assert abs(poses.candidates[0].pose.position.x - expected_offset[0]) < 1.0e-6
                     assert abs(poses.candidates[0].pose.position.y - expected_offset[1]) < 1.0e-6
@@ -207,7 +207,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     for state, color in (
                         (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
                         (GraspCandidate.OUTSIDE, (0.1, 0.85, 1.0, 1.0)),
-                        (GraspCandidate.UNKNOWN, (0.1, 0.85, 1.0, 1.0)),
+                        (GraspCandidate.UNKNOWN, (0.1620294, 0.2158605, 0.2788943, 1.0)),
                         (GraspCandidate.INSIDE, (0.0, 0.6375969, 1.0, 1.0)),
                     ):
                         reach_map = TopologicalMap()
@@ -308,7 +308,9 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                         assert poses.candidates[0].state == GraspCandidate.OUTSIDE
                         assert poses.candidates[1].state == GraspCandidate.INSIDE
                         for marker in markers[1:]:
-                            expected = (0.1, 0.85, 1.0, 1.0) if marker.id == 2 else (0.0, 0.6375969, 1.0, 1.0)
+                            expected = (
+                                (0.1, 0.85, 1.0, 1.0)
+                                if marker.id == 2 else (0.0, 0.6375969, 1.0, 1.0))
                             assert has_marker_color(marker, expected)
                         print("異なる候補IDのHANDLE色・候補色の同時表示確認", flush=True)
                         break

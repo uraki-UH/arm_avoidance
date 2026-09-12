@@ -59,6 +59,11 @@
             - "L_gripper_mimic"
           dof: 7
 
+    # シミュレーション点群の基準座標系。入力点群をworld座標で発行する場合はTF変換なし
+    input:
+      base_frame_id: "world"
+      local_coordinates: false
+
     # --- Robot Settings ---
     robot:
       eef_link_names: "L_tcp,R_tcp"
@@ -246,8 +251,10 @@
     reachability_voxel_origin: [0.0, 0.0, 0.0]
     reachability_publish_hz: 5.0
     summary_topic: "/grasp_pose_cands/summary"
-    # 空文字は入力グラフ座標系のまま。変換時のみ目標座標系を指定
-    candidate_frame: ""
+    # シミュレーション候補の出力座標系。入力グラフもworldの場合はTF変換なし
+    candidate_frame: "world"
+    # 入力グラフの座標値を候補座標系として扱うモード
+    enable_candidate_frame_passthrough: true
     # 配列内全候補の目標TCP link
     tcp_frame: "L_tcp"
     # 各平面クラスタのXY投影OBBと隣接平面からの突出距離による判定

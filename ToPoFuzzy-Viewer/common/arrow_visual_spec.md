@@ -29,7 +29,7 @@ TF・手動変換はグラフ・ロボット・Marker共通の`DisplayFrame`へ�
 | `position` | `anchor`で指定した基準位置、`[x,y,z]` |
 | `orientation` | ローカル座標系から`frame_id`へのクォータニオン、`[x,y,z,w]` |
 | `primary_axis` | 主矢印のローカル正方向。`x` / `y` / `z` |
-| `anchor` | `tail`=根元、`tip`=矢先、`center`=全長の中点。既定値`tail` |
+| `anchor` | `tail`=根元、`tip`=矢先。共通既定値`tail`、把持候補既定値`tip` |
 | `length` | 矢先を含む主矢印の全長 |
 | `shaft_diameter` | 軸の直径。ピクセル幅ではなく空間寸法 |
 | `head_length` | 矢先の軸方向長さ |
@@ -53,7 +53,6 @@ TF・手動変換はグラフ・ロボット・Marker共通の`DisplayFrame`へ�
 | --- | --- | --- |
 | `tail` | `p` | `p + L*d` |
 | `tip` | `p - L*d` | `p` |
-| `center` | `p - L*d/2` | `p + L*d/2` |
 
 補助2軸は常に指定位置`p`を根元とする右手系。
 `primary_axis=z`なら補助はローカル+X、+Y。クォータニオンによる回転後も直交性を維持。
@@ -71,7 +70,7 @@ TF・手動変換はグラフ・ロボット・Marker共通の`DisplayFrame`へ�
 入力位置の移動や、矢印表示による把持候補の書換えはなし。
 補助X・Y軸の追加により、主矢印だけでは区別できないグリッパの水平回転も表示可能。
 到達状態の判定は候補生成側の責務。表示側は受信したstateと設定済みパレットを対応付け。
-既定値は未評価=黄、範囲内=緑、範囲外=灰。`enable_state_colors=false`で固定色へ切替。
+既定値は未評価=黄、範囲内=HANDLEと同じ水色、範囲外=灰。`enable_state_colors=false`で固定色へ切替。
 配色の正規定義は`arrow_visualization/state_colors.hpp`のsRGB値。ROS Markerへはlinear RGBに変換。
 Viewerは同じ定義を`arrow_styles.candidate_state.state_colors`として受信し、独立した既定パレットを持たない。
 
@@ -79,7 +78,7 @@ Viewerは同じ定義を`arrow_styles.candidate_state.state_colors`として受�
 
 | 入力 | 共通描画への変換 | 補助2軸 |
 | --- | --- | --- |
-| `GraspCandidateArray` | ID、位置、正規化姿勢、state。既定主軸+Z | 有効な姿勢の場合のみ |
+| `GraspCandidateArray` | ID、位置、正規化姿勢、state。既定主軸+Z、矢先位置基準 | 既定OFF。設定時は有効な姿勢の場合のみ |
 | `PoseArray` | 配列添字、位置、正規化姿勢。既定主軸+Z | 有効な姿勢の場合のみ |
 | ROS Markerのpose方式 | ローカル+X、scaleから全長・軸直径・矢先直径 | 有効な姿勢の場合のみ |
 | ROS Markerの始点終点方式 | pointsから方向、scaleから軸直径・矢先直径・矢先長。poseは配置変換 | 不可 |
@@ -116,8 +115,9 @@ ROS Marker自体の定義では色・寸法が必須のため、既存ROS Marker
 ## Markerブリッジの起動
 
 launchの未指定引数はノード既定値を使用。直接の`ros2 run`と同一設定。
-`input_type=pose_array`（既定）は`/pose_array`・主軸−X、`grasp_candidates`は`/grasp_pose_cands`・主軸+Z。
-全長0.12 m、軸直径0.006 m、矢先直径0.012 m、根元基準、補助軸あり。
+`input_type=pose_array`（既定）は`/pose_array`・主軸−X・根元基準・補助軸あり。
+`grasp_candidates`は`/grasp_pose_cands`・主軸+Z・矢先位置基準・補助軸なし。
+全長0.12 m、軸直径0.006 m、矢先直径0.012 m。
 入力型の自動判別はなし。`input_topic`は同じ型の別トピックへの切替用。
 
 ```bash
@@ -128,7 +128,7 @@ ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_type:
 `primary_axis_idx`（0=X、1=Y、2=Z）、`primary_axis_sign`、`anchor`、`head_length`、
 `helper_axis_length_ratio`、`enable_transverse_axes`等はlaunchとrunの両方で指定可能。
 設定は起動時に読込。候補IDは各軸namespaceの末尾に保持し、範囲外候補も配信。
-候補状態の既定色は未評価=黄、範囲内=緑、範囲外=灰。
+候補状態の既定色は未評価=黄、範囲内=HANDLEと同じ水色、範囲外=灰。
 固定色を使う場合は`enable_state_colors=false`。空入力はDELETEALLで旧表示を消去。
 入力QoSは送信元に追従。全送信元がreliableの場合のみreliable、全送信元がtransient_localの場合のみtransient_local。
 未検出時はbest_effort・volatile。500 msごとの確認で、必要なQoSが変わった場合だけ再購読。

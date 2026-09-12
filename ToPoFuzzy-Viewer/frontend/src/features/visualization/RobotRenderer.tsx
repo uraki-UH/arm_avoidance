@@ -77,7 +77,7 @@ function RobotInstanceRenderer({
     color = 'blue',
     useUrdfColors = true,
     emissiveIntensity = 0.2,
-    opacity = 0.8,
+    opacity = 1,
     jointValuesOverride = [],
     tf = null,
     manualTransform,
@@ -211,12 +211,17 @@ function RobotInstanceRenderer({
             const anyMaterial = m as THREE.Material & {
                 transparent?: boolean;
                 opacity?: number;
+                depthTest?: boolean;
+                depthWrite?: boolean;
                 emissive?: THREE.Color;
                 color?: THREE.Color;
             };
 
-            anyMaterial.transparent = effectiveOpacity < 1;
+            const is_transparent = effectiveOpacity < 1;
+            anyMaterial.transparent = is_transparent;
             anyMaterial.opacity = effectiveOpacity;
+            anyMaterial.depthTest = true;
+            anyMaterial.depthWrite = !is_transparent;
 
             if (anyMaterial.emissive && anyMaterial.color) {
                 anyMaterial.emissive.copy(anyMaterial.color).multiplyScalar(Math.max(0, emissiveIntensity));
@@ -392,7 +397,7 @@ function RobotRenderer({
     color = 'blue',
     useUrdfColors = true,
     emissiveIntensity = 0.2,
-    opacity = 0.8,
+    opacity = 1,
     jointValuesOverride = [],
     tf = null,
     manualTransform,

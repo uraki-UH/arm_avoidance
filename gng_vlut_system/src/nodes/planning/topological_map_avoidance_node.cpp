@@ -519,11 +519,22 @@ public:
         "/viewer/internal/stream/robot/pose",
         rclcpp::QoS(1).reliable().transient_local());
 
-    if (!loadRobotDescription(candidate_robot_urdf_content_, urdf_path)) {
+    std::string full_robot_urdf_content;
+    if (!loadRobotDescription(full_robot_urdf_content, urdf_path)) {
       RCLCPP_WARN(
           get_logger(),
           "Failed to load robot description text for candidate robot preview: %s",
           urdf_path.c_str());
+    } else {
+      candidate_robot_urdf_content_ = buildChainScopedUrdf(
+          full_robot_urdf_content, *chain_);
+      if (candidate_robot_urdf_content_.empty()) {
+        // XML解析に失敗した場合でも、候補プレビュー自体は完全URDFで継続
+        candidate_robot_urdf_content_ = std::move(full_robot_urdf_content);
+        RCLCPP_WARN(
+            get_logger(),
+            "Failed to build chain-scoped URDF; using full URDF for candidate preview");
+      }
     }
 
     if (publish_target_joint_states) {
@@ -701,6 +712,13 @@ private:
 
   void publishTargetLocked() {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (publish_candidate_robot_preview_) {
+      if (latest_goal_candidate_ids_.empty()) {
+        clearCandidateRobotPreviewLocked();
+      } else {
+        candidate_preview_empty_sent_ = false;
+      }
+    }
     if (!gng_ || (!have_joint_state_ && !trial_mode_ && !allow_zero_initial_joint_state_)) {
       RCLCPP_INFO_THROTTLE(
           get_logger(), *get_clock(), 5000,
@@ -965,6 +983,7 @@ private:
   std::vector<int> cached_safe_goal_ids_;
   std::vector<int> latest_goal_candidate_ids_;
   std::unordered_set<std::string> last_candidate_robot_tags_;
+  bool candidate_preview_empty_sent_ = false;
   bool trial_mode_ = false;
   double trial_goal_interval_sec_ = 4.0;
   bool trial_safe_only_ = true;
@@ -1672,15 +1691,7 @@ private:
         latest_goal_candidate_ids_, gng_, chain_, this->now().seconds());
 
     if (!preview_payload) {
-      for (const auto &old_tag : last_candidate_robot_tags_) {
-        std_msgs::msg::String delete_msg;
-        delete_msg.data = nlohmann::json({
-            {"type", "stream.robot.delete"},
-            {"tag", old_tag},
-        }).dump();
-        candidate_robot_pose_pub_->publish(delete_msg);
-      }
-      last_candidate_robot_tags_.clear();
+      clearCandidateRobotPreviewLocked();
       return;
     }
 
@@ -1706,6 +1717,26 @@ private:
       candidate_robot_pose_pub_->publish(delete_msg);
     }
     last_candidate_robot_tags_ = std::move(next_tags);
+    candidate_preview_empty_sent_ = false;
+  }
+
+  void clearCandidateRobotPreviewLocked() {
+    if (!candidate_robot_pose_pub_ || candidate_preview_empty_sent_) {
+      return;
+    }
+
+    std::unordered_set<std::string> tags = last_candidate_robot_tags_;
+    tags.insert("candidate_goal_preview");
+    for (const auto &tag : tags) {
+      std_msgs::msg::String delete_msg;
+      delete_msg.data = nlohmann::json({
+          {"type", "stream.robot.delete"},
+          {"tag", tag},
+      }).dump();
+      candidate_robot_pose_pub_->publish(delete_msg);
+    }
+    last_candidate_robot_tags_.clear();
+    candidate_preview_empty_sent_ = true;
   }
 };
 

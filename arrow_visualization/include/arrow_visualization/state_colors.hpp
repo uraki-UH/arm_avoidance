@@ -5,8 +5,8 @@
 #include <cstdint>
 
 namespace arrow_visualization {
-// 未評価・範囲内・範囲外の共通sRGB配色。Viewerもこの定義を辞書として受信
-inline constexpr std::array<std::uint32_t, 3> state_colors_srgb{{0xf3da59, 0x7ceeb6, 0xc4c4c4}};
+// 未評価・範囲内・範囲外の共通sRGB配色。範囲内はHANDLEと同じ水色
+inline constexpr std::array<std::uint32_t, 3> state_colors_srgb{{0xf3da59, 0x00d1ff, 0xc4c4c4}};
 
 inline std_msgs::msg::ColorRGBA state_color(std::uint8_t state, float alpha = 1.0F) {
   const auto rgb = state_colors_srgb[state < state_colors_srgb.size() ? state : 0];

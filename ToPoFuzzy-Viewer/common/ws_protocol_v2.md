@@ -75,7 +75,7 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 - 他のMarkerレイヤーとの自動照合・色統合なし。重複を避ける場合は表示レイヤーを選択。
 
 候補配列ではMarker IDに候補の`id`を使用し、`state`を数値のまま付与。
-表示側の既定パレットは未評価=黄、範囲内=緑、範囲外=灰。ブラウザで変更可能。
+表示側の既定パレットは未評価=黄、範囲内=HANDLEと同じ水色、範囲外=灰。ブラウザで変更可能。
 `source_type: "pose_array"`は既存の姿勢描画・TF必須経路の識別用。新しい描画コンポーネントの追加なし。
 `update_id`は候補集合の更新番号。同一集合の状態更新では維持、空配列を含む全置換で旧候補を消去。
 配信元は候補生成ノードだけ。Viewerで別トピックの状態を突き合わせる処理はなし。
@@ -91,7 +91,7 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 候補配列は`arrow_style_id: "candidate_state"`を持ち、次の辞書を参照。
 
 ```json
-{"candidate_state":{"state_colors":{"0":"#f3da59","1":"#7ceeb6","2":"#c4c4c4"}}}
+{"candidate_state":{"anchor":"tip","enable_transverse_axes":false,"state_colors":{"0":"#f3da59","1":"#00d1ff","2":"#c4c4c4"}}}
 ```
 
 状態パレットは`arrow_visualization/state_colors.hpp`の共通sRGB定義から生成。

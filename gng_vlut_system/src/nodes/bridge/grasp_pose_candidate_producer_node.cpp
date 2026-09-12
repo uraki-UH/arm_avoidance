@@ -38,6 +38,7 @@ public:
     declare_parameter<std::string>("input_topic", "/topo_points");
     declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
     declare_parameter<std::string>("target_frame_id", "world");
+    declare_parameter<bool>("enable_input_frame_passthrough", false);
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<int>("x_shift", 42);
     declare_parameter<int>("y_shift", 21);
@@ -50,6 +51,8 @@ public:
     input_topic_ = get_parameter("input_topic").as_string();
     pose_topic_ = get_parameter("pose_topic").as_string();
     target_frame_id_ = get_parameter("target_frame_id").as_string();
+    enable_input_frame_passthrough_ =
+      get_parameter("enable_input_frame_passthrough").as_bool();
     codec_.setVoxelSize(get_parameter("voxel_size").as_double());
     codec_.setIndexingParams(
       get_parameter("x_shift").as_int(),
@@ -76,6 +79,12 @@ public:
       "GraspPoseCandidateProducerNode initialized. input=%s pose=%s target_frame=%s voxel_size=%.4f",
       input_topic_.c_str(), pose_topic_.c_str(),
       target_frame_id_.c_str(), codec_.voxelSize());
+    if (enable_input_frame_passthrough_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Input frame passthrough enabled: point coordinates are treated as target frame '%s'",
+        target_frame_id_.empty() ? "input frame" : target_frame_id_.c_str());
+    }
   }
 
 private:
@@ -90,7 +99,9 @@ private:
 
     Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
     const std::string source_frame = msg->header.frame_id;
-    if (!target_frame_id_.empty() && target_frame_id_ != source_frame) {
+    if (!enable_input_frame_passthrough_ &&
+      !target_frame_id_.empty() && target_frame_id_ != source_frame)
+    {
       try {
         const auto tf_msg = tf_buffer_->lookupTransform(
           target_frame_id_, source_frame, tf2::TimePointZero);
@@ -200,6 +211,7 @@ private:
   std::string input_topic_;
   std::string pose_topic_;
   std::string target_frame_id_;
+  bool enable_input_frame_passthrough_ = false;
   std::size_t max_candidates_ = 256;
   std::size_t min_points_per_voxel_ = 1;
   double approach_offset_ = 0.06;

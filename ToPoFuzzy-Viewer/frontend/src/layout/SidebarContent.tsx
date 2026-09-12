@@ -305,6 +305,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                             { type: 'robot', data: props.robotData, settings: props.robotSettings, label: 'Source ID', hasTf: true, 
                               extra: (tag: string, s: any) => {
                                 const robot = props.robotData[tag];
+                                const is_candidate_robot = /(^|[/_-])candidate(?:[/_-]|$)/i.test(tag);
                                 const hasManipulabilityData = Boolean(
                                     robot &&
                                     (
@@ -339,12 +340,14 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                                 ]}
                                                 onClick={() => props.onOpenColorSettings('robot', tag, `Robot colors: ${tag}`)}
                                             />
-                                            <button
-                                                onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
-                                                className="entity-btn w-full justify-center px-3 py-1 text-[10px]"
-                                            >
-                                                Joint
-                                            </button>
+                                            {!is_candidate_robot && (
+                                                <button
+                                                    onClick={() => props.onOpenRobotJoints(tag, `Robot joints: ${tag}`)}
+                                                    className="entity-btn w-full justify-center px-3 py-1 text-[10px]"
+                                                >
+                                                    Joint
+                                                </button>
+                                            )}
                                         </div>
                                         {hasManipulabilityData && s.showManipulabilityEllipsoid && (
                                             <div className="flex items-center gap-1.5 rounded-md border border-white/5 bg-black/20 px-2 py-1 text-[10px] text-[var(--text-secondary)] mt-1 justify-between">
@@ -366,7 +369,7 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 );
                               }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true,
-                              extra: (tag: string, _s: any, d: any) => d.markers?.some((m: any) => m.type === 'arrow') ? (
+                              extra: (tag: string, _s: any, d: any) => d.markers?.some((m: any) => m.type === 'arrow' && m.action !== 2 && m.action !== 3) ? (
                                 <ArrowStyleControls style_key={tag} {...marker_arrow_options(d)} />
                               ) : null },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID', hasTf: true,

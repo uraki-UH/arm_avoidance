@@ -33,8 +33,10 @@ public:
     style_.primary.color.g = declare_parameter<double>("color_g", 0.8);
     style_.primary.color.b = declare_parameter<double>("color_b", 0.2);
     style_.primary.color.a = declare_parameter<double>("color_a", 1.0);
-    style_.primary.anchor = declare_parameter<std::string>("anchor", "tail");
-    style_.enable_transverse_axes = declare_parameter<bool>("enable_transverse_axes", true);
+    style_.primary.anchor = declare_parameter<std::string>(
+      "anchor", has_candidates ? "tip" : "tail");
+    style_.enable_transverse_axes = declare_parameter<bool>(
+      "enable_transverse_axes", !has_candidates);
     style_.helper_axis_length_ratio = declare_parameter<double>("helper_axis_length_ratio", 0.5);
     const int primary_axis_idx = declare_parameter<int>("primary_axis_idx", has_candidates ? 2 : 0);
     if (primary_axis_idx < 0 || primary_axis_idx > 2) {

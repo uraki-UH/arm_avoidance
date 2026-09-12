@@ -42,11 +42,11 @@ inline visualization_msgs::msg::Marker make_arrow(
     if (!std::isfinite(value) || value <= 0.0) return marker;
   }
   if (style.head_length > style.length ||
-      (style.anchor != "tail" && style.anchor != "tip" && style.anchor != "center")) return marker;
+      (style.anchor != "tail" && style.anchor != "tip")) return marker;
   for (const float value : {style.color.r, style.color.g, style.color.b, style.color.a}) {
     if (!std::isfinite(value) || value < 0.0F || value > 1.0F) return marker;
   }
-  const double offset = style.anchor == "tip" ? -style.length : style.anchor == "center" ? -style.length * 0.5 : 0.0;
+  const double offset = style.anchor == "tip" ? -style.length : 0.0;
   geometry_msgs::msg::Point tail = position;
   tail.x += direction.x / norm * offset;
   tail.y += direction.y / norm * offset;

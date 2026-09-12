@@ -64,6 +64,8 @@ public:
     const std::string summary_topic = declare_parameter<std::string>(
       "summary_topic", "/grasp_pose_cands/summary");
     candidate_frame_ = declare_parameter<std::string>("candidate_frame", "");
+    enable_candidate_frame_passthrough_ = declare_parameter<bool>(
+      "enable_candidate_frame_passthrough", false);
     tcp_frame_ = declare_parameter<std::string>("tcp_frame", "L_tcp");
     if (tcp_frame_.empty()) {
       throw std::invalid_argument("tcp_frame is invalid");
@@ -100,6 +102,12 @@ public:
       map_topic_.c_str(), clusters_topic_.c_str(), candidate_topic.c_str(),
       candidate_frame_.empty() ? "input" : candidate_frame_.c_str(), tcp_frame_.c_str(),
       candidate_confirm_updates_, candidate_missing_update_allowance_);
+    if (enable_candidate_frame_passthrough_) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Candidate frame passthrough enabled: input coordinates are treated as '%s'",
+        candidate_frame_.empty() ? "input frame" : candidate_frame_.c_str());
+    }
   }
 
 private:
@@ -245,6 +253,13 @@ private:
   {
     candidate_map = *map_;
     candidate_clusters = *clusters_;
+    if (enable_candidate_frame_passthrough_) {
+      if (!candidate_frame_.empty()) {
+        candidate_map.header.frame_id = candidate_frame_;
+        candidate_clusters.header.frame_id = candidate_frame_;
+      }
+      return true;
+    }
     if (map_->header.frame_id.empty()) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
@@ -535,11 +550,20 @@ private:
       if (marker.action != marker_msg::ADD) continue;
       const auto it = state_by_id.find(static_cast<std::uint32_t>(marker.id));
       const auto state = it == state_by_id.end() ? candidate_msg::UNKNOWN : it->second;
-      const bool is_inside = state == candidate_msg::INSIDE;
-      // ViewerのHANDLE既定色#00d1ffに対応する線形RGB。未評価・範囲外は従来の候補色
-      marker.color.r = is_inside ? 0.0F : 0.1F;
-      marker.color.g = is_inside ? 0.6375969F : 0.85F;
-      marker.color.b = 1.0F;
+      // 到達性状態の識別色。到達範囲外は従来の候補色、未評価は灰青色
+      if (state == candidate_msg::INSIDE) {
+        marker.color.r = 0.0F;
+        marker.color.g = 0.6375969F;
+        marker.color.b = 1.0F;
+      } else if (state == candidate_msg::OUTSIDE) {
+        marker.color.r = 0.1F;
+        marker.color.g = 0.85F;
+        marker.color.b = 1.0F;
+      } else {
+        marker.color.r = 0.1620294F;
+        marker.color.g = 0.2158605F;
+        marker.color.b = 0.2788943F;
+      }
       marker.color.a = 1.0F;
     }
     candidate_nodes_publisher_->publish(candidate_node_markers_);
@@ -636,6 +660,7 @@ private:
   std::string map_topic_;
   std::string clusters_topic_;
   std::string candidate_frame_;
+  bool enable_candidate_frame_passthrough_ = false;
   std::string tcp_frame_;
   std::size_t maximum_candidates_ = 20U;
   std::size_t candidate_confirm_updates_ = 5U;

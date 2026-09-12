@@ -10,17 +10,132 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <nlohmann/json.hpp>
+#include <tinyxml2.h>
 
 #include "core/kinematics/kinematic_chain.hpp"
 #include "core/metrics/manipulability.hpp"
 
 namespace robot_sim::planning {
+
+// 選択チェーンとその基底までの経路だけを残した候補プレビュー用URDFの生成
+inline std::string buildChainScopedUrdf(
+    const std::string &urdf_content,
+    const ::kinematics::KinematicChain &chain) {
+  if (urdf_content.empty()) {
+    return {};
+  }
+
+  tinyxml2::XMLDocument doc;
+  if (doc.Parse(urdf_content.c_str()) != tinyxml2::XML_SUCCESS) {
+    return {};
+  }
+  auto *robot = doc.FirstChildElement("robot");
+  if (!robot) {
+    return {};
+  }
+
+  std::unordered_map<std::string, std::string> child_to_parent;
+  std::unordered_set<std::string> keep_links;
+  for (auto *joint = robot->FirstChildElement("joint"); joint;
+       joint = joint->NextSiblingElement("joint")) {
+    const auto *parent = joint->FirstChildElement("parent");
+    const auto *child = joint->FirstChildElement("child");
+    const char *parent_name = parent ? parent->Attribute("link") : nullptr;
+    const char *child_name = child ? child->Attribute("link") : nullptr;
+    if (!parent_name || !child_name) {
+      continue;
+    }
+    child_to_parent[child_name] = parent_name;
+  }
+
+  // KinematicChainは各セグメントの子リンクを保持するため、そこから
+  // 親リンクをたどって固定リンクを含む基底経路を復元
+  for (int idx = 0; idx < chain.getNumJoints(); ++idx) {
+    const std::string link_name = chain.getLinkName(idx);
+    if (!link_name.empty()) {
+      keep_links.insert(link_name);
+    }
+  }
+  if (keep_links.empty()) {
+    return {};
+  }
+  std::vector<std::string> pending_links(keep_links.begin(), keep_links.end());
+  for (std::size_t idx = 0; idx < pending_links.size(); ++idx) {
+    const auto parent_it = child_to_parent.find(pending_links[idx]);
+    if (parent_it == child_to_parent.end()) {
+      continue;
+    }
+    if (keep_links.insert(parent_it->second).second) {
+      pending_links.push_back(parent_it->second);
+    }
+  }
+
+  // 選択経路の末端に付く手先サブツリー（グリッパ本体・左右指・TCPなど）の保持。
+  // 可動ジョイント配下の視覚リンクも含め、候補URDFで手先形状を欠落させない構成。
+  std::vector<std::string> end_effector_subtree;
+  for (const auto &link_name : keep_links) {
+    const bool has_unkept_child = std::any_of(
+        child_to_parent.begin(), child_to_parent.end(),
+        [&](const auto &entry) {
+          return entry.second == link_name &&
+                 keep_links.count(entry.first) == 0;
+        });
+    if (has_unkept_child) {
+      end_effector_subtree.push_back(link_name);
+    }
+  }
+  for (std::size_t idx = 0; idx < end_effector_subtree.size(); ++idx) {
+    const auto parent_name = end_effector_subtree[idx];
+    for (const auto &[child_name, mapped_parent] : child_to_parent) {
+      if (mapped_parent != parent_name || keep_links.count(child_name) > 0) {
+        continue;
+      }
+      if (keep_links.insert(child_name).second) {
+        end_effector_subtree.push_back(child_name);
+      }
+    }
+  }
+
+  std::vector<tinyxml2::XMLElement *> links_to_remove;
+  for (auto *link = robot->FirstChildElement("link"); link;
+       link = link->NextSiblingElement("link")) {
+    const char *name = link->Attribute("name");
+    if (name && keep_links.count(name) == 0) {
+      links_to_remove.push_back(link);
+    }
+  }
+  for (auto *link : links_to_remove) {
+    robot->DeleteChild(link);
+  }
+
+  std::vector<tinyxml2::XMLElement *> joints_to_remove;
+  for (auto *joint = robot->FirstChildElement("joint"); joint;
+       joint = joint->NextSiblingElement("joint")) {
+    const auto *parent = joint->FirstChildElement("parent");
+    const auto *child = joint->FirstChildElement("child");
+    const char *parent_name = parent ? parent->Attribute("link") : nullptr;
+    const char *child_name = child ? child->Attribute("link") : nullptr;
+    if (!parent_name || !child_name || keep_links.count(parent_name) == 0 ||
+        keep_links.count(child_name) == 0) {
+      joints_to_remove.push_back(joint);
+    }
+  }
+  for (auto *joint : joints_to_remove) {
+    robot->DeleteChild(joint);
+  }
+
+  tinyxml2::XMLPrinter printer;
+  doc.Print(&printer);
+  return printer.CStr();
+}
 
 inline std::string detectLocalMeshPackageName(const std::string &source_path) {
   std::filesystem::path current(source_path);

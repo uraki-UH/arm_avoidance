@@ -37,6 +37,8 @@ export interface MarkerMessage {
     state?: number;
     arrow_style_id?: string;
     state_colors?: Record<number, string>;
+    anchor?: 'tail' | 'tip';
+    enable_transverse_axes?: boolean;
     type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
     action: number;
     frameId?: string;
@@ -54,7 +56,8 @@ export interface MarkerMessage {
 }
 
 export interface MarkerArrayData {
-    arrow_styles?: Record<string, Pick<MarkerMessage, 'scale' | 'color' | 'state_colors'>>;
+    arrow_styles?: Record<string, Pick<MarkerMessage,
+        'scale' | 'color' | 'state_colors' | 'anchor' | 'enable_transverse_axes'>>;
     source_type?: 'pose_array';
     id: string;
     name: string;

@@ -13,7 +13,7 @@ export interface arrow_dimensions {
     color: string;
 }
 export interface arrow_style extends arrow_dimensions {
-    anchor: 'tail' | 'tip' | 'center';
+    anchor: 'tail' | 'tip';
     primary_axis: arrow_axis;
     opacity: number;
     depth_mode: 'scene' | 'overlay';
@@ -43,7 +43,7 @@ export const default_arrow_style: arrow_style = {
 };
 export function resolve_arrow_style(style: Partial<arrow_style> = {}): arrow_style {
     return { ...default_arrow_style, ...style,
-        anchor: ['tail', 'tip', 'center'].includes(style.anchor ?? '') ? style.anchor! : 'tail',
+        anchor: ['tail', 'tip'].includes(style.anchor ?? '') ? style.anchor! : 'tail',
         primary_axis: ['x', 'y', 'z'].includes(style.primary_axis ?? '') ? style.primary_axis! : 'z',
         transverse_axes: {
             x: { ...default_arrow_style.transverse_axes.x, ...style.transverse_axes?.x },
@@ -82,7 +82,7 @@ export function build_arrow_parts(sample: arrow_sample, style: arrow_style): arr
     const append = (dir: THREE.Vector3, dimensions: arrow_dimensions, anchor: arrow_style['anchor']) => {
         const { length, shaft_diameter, head_length, head_diameter } = dimensions;
         if (![length, shaft_diameter, head_length, head_diameter].every(v => Number.isFinite(v) && v > 0) || head_length > length) return;
-        const tail = position.clone().addScaledVector(dir, anchor === 'tip' ? -length : anchor === 'center' ? -length / 2 : 0);
+        const tail = position.clone().addScaledVector(dir, anchor === 'tip' ? -length : 0);
         const rotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
         const shaft_length = length - head_length;
         parts.push({
@@ -132,7 +132,10 @@ function marker_arrow(marker: MarkerMessage, styles: MarkerArrayData['arrow_styl
         marker = { ...marker, ...shared };
     }
     const sample: arrow_sample = { position: marker.pos ?? [0, 0, 0], state: marker.state };
-    let style: Partial<arrow_style> = { primary_axis: 'z', depth_mode: 'overlay', state_colors: marker.state_colors };
+    let style: Partial<arrow_style> = {
+        primary_axis: 'z', depth_mode: 'overlay', state_colors: marker.state_colors,
+        anchor: marker.anchor, enable_transverse_axes: marker.enable_transverse_axes,
+    };
     if (marker.orientation) sample.orientation = marker.orientation;
     else {
         const points = marker.points ?? [];
@@ -193,7 +196,10 @@ function read(key: string): Partial<arrow_style> {
     if (!cache.has(key)) {
         try {
             const parsed = JSON.parse(localStorage.getItem(prefix + key) ?? '{}');
-            cache.set(key, parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {});
+            const settings = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            // 廃止済み中点基準の保存値を除外し、入力用途ごとの基準位置へ復帰
+            if (settings.anchor === 'center') delete settings.anchor;
+            cache.set(key, settings);
         } catch { cache.set(key, {}); }
     }
     return cache.get(key) ?? empty;

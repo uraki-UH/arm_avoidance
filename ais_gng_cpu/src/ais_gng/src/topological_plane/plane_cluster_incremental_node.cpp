@@ -248,8 +248,8 @@ visualization_msgs::msg::MarkerArray makeNormalMarkers(
 
     arrow_visualization::arrow_style style;
     style.length = std::max(0.05, 2.0 * static_cast<double>(cluster.local_spacing));
-    style.shaft_diameter = 0.25 * style.length;
-    style.head_diameter = 0.5 * style.shaft_diameter;
+    style.shaft_diameter = 0.08 * style.length;
+    style.head_diameter = 2.0 * style.shaft_diameter;
     style.head_length = 0.23 * style.length;
     style.color = color;
     auto normal = arrow_visualization::make_arrow(clusters.header, "incremental_plane_normal",

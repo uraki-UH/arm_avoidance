@@ -113,6 +113,7 @@ def main():
                  and not received["metrics"].candidates, "空入力")
         assert node.count_publishers("/ToPoDualArm/target_joint_states") == 0
         assert node.count_publishers("/grasp_pose_cands") == 1
+        assert node.count_publishers("/grasp_pose_markers") == 0
         assert node.count_publishers("/grasp_pose_cands/reachability") == 0
         assert node.count_publishers("/grasp_pose_cands/reachability_markers") == 0
         print("空入力のクリア・関節目標配信なしを確認", flush=True)

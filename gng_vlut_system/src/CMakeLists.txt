@@ -149,6 +149,7 @@ foreach(node ${NODES})
 endforeach()
 
 target_link_libraries(voxel_spherized_robot_viewer_node ${LIBS_ALL_CORE} ${EXTRA_LIBS} tinyxml2)
+target_link_libraries(topological_map_avoidance_node tinyxml2)
 
 # Shared Components
 add_library(robot_viewer_bridge_node_component SHARED nodes/bridge/robot_viewer_bridge_node.cpp)
