@@ -1,46 +1,5 @@
+#include <arrow_visualization/arrow_marker.hpp>
 #include <ais_gng/visualizar.hpp>
-
-geometry_msgs::msg::Quaternion quaternionFromXAxisTo(const geometry_msgs::msg::Point32& to)
-{
-    geometry_msgs::msg::Point32 v_from;
-    v_from.x = 1.0; v_from.y = 0.0; v_from.z = 0.0;
-    geometry_msgs::msg::Point32 v_to = to;
-    geometry_msgs::msg::Quaternion q; // 計算結果のクォータニオン
-    // 数値計算用の定数
-    const double EPSILON_PURE = 1e-6;
-
-    /* Norm */
-    double n = std::sqrt(v_to.x * v_to.x + v_to.y * v_to.y + v_to.z * v_to.z);
-    if (n < EPSILON_PURE) {
-        q.w = 1.0; // 単位クォータニオンを返す
-        return q;
-    }
-    /* 正規化 */
-    v_to.x /= n; v_to.y /= n; v_to.z /= n;
-    /* 内積 */
-    double cos_theta = v_from.x * v_to.x + v_from.y * v_to.y + v_from.z * v_to.z;
-    if (cos_theta > 1.0 - EPSILON_PURE) {
-        q.w = 1.0; q.x = 0.0; q.y = 0.0; q.z = 0.0;
-    } 
-    else if (cos_theta < -1.0 + EPSILON_PURE) {
-        q.w = 0.0; q.x = 0.0; q.y = 0.0; q.z = 1.0;
-    }
-    else {
-        geometry_msgs::msg::Point32 axis;
-        /* 外積 */
-        axis.x = v_from.y * v_to.z - v_from.z * v_to.y;
-        axis.y = v_from.z * v_to.x - v_from.x * v_to.z;
-        axis.z = v_from.x * v_to.y - v_from.y * v_to.x;
-        double s = std::sqrt((1.0 + cos_theta) * 2.0);
-        double inv_s = 1.0 / s;
-        
-        q.w = s * 0.5;
-        q.x = axis.x * inv_s;
-        q.y = axis.y * inv_s;
-        q.z = axis.z * inv_s;
-    }
-    return q;
-}
 
 Visualizar::Visualizar() : Node("visualizar") {
     this->declare_parameter("marker_size", 0.025);
@@ -190,20 +149,17 @@ void Visualizar::topological_map_cb(const ais_gng_msgs::msg::TopologicalMap::Sha
             (cluster.velocity.x != 0) &&
             (cluster.velocity.y != 0) && 
             (cluster.velocity.z != 0)) {
-            vel_marker.type = visualization_msgs::msg::Marker::ARROW;
-            vel_marker.action = visualization_msgs::msg::Marker::ADD;
-            vel_marker.ns = "cluster_vel";
-            vel_marker.color.r = 1.0;
-            vel_marker.color.g = 0.0;
-            vel_marker.color.b = 0.0;
-            vel_marker.color.a = 0.5;
-            vel_marker.pose.position.x = cluster.pos.x;
-            vel_marker.pose.position.y = cluster.pos.y;
-            vel_marker.pose.position.z = cluster.pos.z;
-            vel_marker.pose.orientation = quaternionFromXAxisTo(cluster.velocity);
-            vel_marker.scale.x = std::sqrt(cluster.velocity.x*cluster.velocity.x + cluster.velocity.y*cluster.velocity.y + cluster.velocity.z*cluster.velocity.z);
-            vel_marker.scale.y = vel_marker.scale.z = 0.1;
-            vel_marker.id = i++;
+            arrow_visualization::arrow_style style;
+            style.length = std::sqrt(cluster.velocity.x * cluster.velocity.x +
+                cluster.velocity.y * cluster.velocity.y + cluster.velocity.z * cluster.velocity.z);
+            style.shaft_diameter = style.head_diameter = 0.1;
+            style.head_length = style.length * 0.23;
+            style.color.r = 1.0F; style.color.g = style.color.b = 0.0F; style.color.a = 0.5F;
+            geometry_msgs::msg::Point position;
+            position.x = cluster.pos.x; position.y = cluster.pos.y; position.z = cluster.pos.z;
+            geometry_msgs::msg::Vector3 direction;
+            direction.x = cluster.velocity.x; direction.y = cluster.velocity.y; direction.z = cluster.velocity.z;
+            vel_marker = arrow_visualization::make_arrow(vel_marker.header, "cluster_vel", i++, position, direction, style);
             ma_.markers.emplace_back(vel_marker);
         }
     }

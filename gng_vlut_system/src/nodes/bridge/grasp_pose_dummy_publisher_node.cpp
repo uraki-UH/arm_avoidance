@@ -1,7 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 #include <candidate/grasp_candidate_publisher.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -21,7 +20,6 @@ public:
   : Node("grasp_pose_dummy_publisher_node", options)
   {
     declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
-    declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
     declare_parameter<std::string>("frame_id", "world");
     declare_parameter<double>("publish_rate_hz", 1.0);
     declare_parameter<int>("candidate_count", 6);
@@ -34,7 +32,6 @@ public:
     declare_parameter<double>("base_yaw_deg", 0.0);
 
     pose_topic_ = get_parameter("pose_topic").as_string();
-    score_topic_ = get_parameter("score_topic").as_string();
     frame_id_ = get_parameter("frame_id").as_string();
     publish_rate_hz_ = std::max(0.1, get_parameter("publish_rate_hz").as_double());
     candidate_count_ = std::max(1, static_cast<int>(get_parameter("candidate_count").as_int()));
@@ -47,8 +44,6 @@ public:
     base_yaw_deg_ = get_parameter("base_yaw_deg").as_double();
 
     pose_pub_ = std::make_unique<grasping_system::candidate::grasp_candidate_publisher>(*this, pose_topic_);
-    score_pub_ = create_publisher<std_msgs::msg::Float32MultiArray>(
-      score_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     const auto period = std::chrono::duration<double>(1.0 / publish_rate_hz_);
     timer_ = create_wall_timer(
@@ -57,9 +52,8 @@ public:
 
     RCLCPP_INFO(
       get_logger(),
-      "GraspPoseDummyPublisherNode initialized. pose=%s score=%s frame=%s count=%d rate=%.2f",
+      "GraspPoseDummyPublisherNode initialized. pose=%s frame=%s count=%d rate=%.2f",
       pose_topic_.c_str(),
-      score_topic_.c_str(),
       frame_id_.c_str(),
       candidate_count_,
       publish_rate_hz_);
@@ -74,8 +68,6 @@ private:
     pose_array.header.frame_id = frame_id_;
     pose_array.candidates.reserve(static_cast<std::size_t>(candidate_count_));
 
-    std_msgs::msg::Float32MultiArray scores;
-    scores.data.reserve(static_cast<std::size_t>(candidate_count_));
 
     const double yaw_base = base_yaw_deg_ * kPi / 180.0;
     const double angle_step = candidate_count_ > 0 ? (2.0 * kPi / static_cast<double>(candidate_count_)) : 0.0;
@@ -100,20 +92,17 @@ private:
       pose.orientation.w = orientation.w();
 
       const double radial_bias = 1.0 - std::abs(std::sin(theta));
-      scores.data.push_back(static_cast<float>(0.5 + 0.5 * radial_bias));
       gng_control_msgs::msg::GraspCandidate entry;
       entry.id = i;
       entry.pose = pose;
-      entry.shape_score = scores.data.back();
+      entry.shape_score = static_cast<float>(0.5 + 0.5 * radial_bias);
       pose_array.candidates.push_back(std::move(entry));
     }
 
     pose_pub_->publish(pose_array);
-    score_pub_->publish(scores);
   }
 
   std::string pose_topic_;
-  std::string score_topic_;
   std::string frame_id_;
   double publish_rate_hz_ = 1.0;
   int candidate_count_ = 6;
@@ -126,7 +115,6 @@ private:
   double base_yaw_deg_ = 0.0;
 
   std::unique_ptr<grasping_system::candidate::grasp_candidate_publisher> pose_pub_;
-  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

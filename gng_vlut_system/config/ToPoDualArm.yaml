@@ -241,7 +241,6 @@
     candidate_orientation_ema_alpha: 0.35
     # 同一候補トラックを再確認扱いへ戻すTCP位置差 [m]
     candidate_track_reset_dist: 0.10
-    score_topic: "/grasp_pose_cand_scores"
     reachability_map_topic: "/ToPoDualArm/topological_map_static"
     reachability_voxel_size: 0.05
     reachability_voxel_origin: [0.0, 0.0, 0.0]

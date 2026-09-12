@@ -2,6 +2,10 @@ import { useMemo, useState, useEffect, useRef, memo } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import { ArrowStyleControls } from './arrows/ArrowStyleControls';
+import { useArrowSettings } from './arrows/settings';
+import { ArrowBatch } from './arrows/ArrowBatch';
+import { arrow_sample } from './arrows/geometry';
 import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS, SEMANTIC_COLORS, SEMANTIC_LABELS } from '../../types';
 
 export interface ClusterSnapshot {
@@ -113,29 +117,12 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
         });
     }, [clusterEdges]);
 
-    const normalHelpers = useMemo(() => {
-        if (!showNormals) return [];
-        return clusterNodes.map(node => {
-            const origin = new THREE.Vector3(node.x, node.y, node.z);
-            const dir = new THREE.Vector3(node.nx, node.ny, node.nz).normalize();
-            return new THREE.ArrowHelper(dir, origin, 0.2, 0x00FFFF);
-        });
-    }, [clusterNodes, showNormals]);
+    const normal_style = useArrowSettings('cluster_detail/normals');
+    const normal_samples = useMemo<arrow_sample[]>(() => clusterNodes.map(node => ({
+        position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
+    })), [clusterNodes]);
 
-    useEffect(() => {
-        return () => {
-            normalHelpers.forEach(helper => {
-                helper.line.geometry.dispose();
-                (helper.line.material as THREE.Material).dispose();
-                helper.cone.geometry.dispose();
-                (helper.cone.material as THREE.Material).dispose();
-            });
-        };
-    }, [normalHelpers]);
-
-
-
-    // Dimensions
+    // 寸法
     const dimensions = useMemo(() => {
         if (!cluster) return null;
         // Calculate bounding box from nodes + raw points if available
@@ -214,6 +201,7 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                     <input type="checkbox" checked={showNormals} onChange={e => setShowNormals(e.target.checked)} />
                     Normals
                 </label>
+                <ArrowStyleControls style_key="cluster_detail/normals" can_have_orientation={false} base_style={{ length: 0.2 }} />
             </div>
 
             {/* Canvas */}
@@ -256,9 +244,7 @@ function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps)
                         ))}
 
                         {/* Normals */}
-                        {showNormals && normalHelpers.map((helper, i) => (
-                            <primitive key={`norm-${i}`} object={helper} />
-                        ))}
+                        {showNormals && <ArrowBatch samples={normal_samples} style={{ length: 0.2, ...normal_style }} />}
 
 
                         {/* Bounding Box & Dimensions */}

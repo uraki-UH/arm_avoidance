@@ -14,7 +14,7 @@ from ais_gng_msgs.msg import PlaneCluster, PlaneClusterArray, TopologicalMap, To
 from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray
 from geometry_msgs.msg import TransformStamped
 from rclpy.qos import DurabilityPolicy, QoSProfile
-from std_msgs.msg import Float32MultiArray, String
+from std_msgs.msg import String
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 import yaml
@@ -36,14 +36,12 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
     topics = {
         "candidate_topic": prefix + "/grasp_pose_cands",
         "candidate_nodes_topic": prefix + "/grasp_pose_cands/nodes",
-        "score_topic": prefix + "/grasp_pose_cand_scores",
         "summary_topic": prefix + "/grasp_pose_cands/summary",
     }
     received = {}
     subscriptions = []
     for key, msg_type in (
         ("candidate_topic", GraspCandidateArray),
-        ("score_topic", Float32MultiArray),
         ("summary_topic", String),
         ("candidate_nodes_topic", MarkerArray),
     ):
@@ -126,17 +124,16 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                         continue
                     summary = json.loads(received["summary_topic"].data)
                     poses = received["candidate_topic"]
-                    scores = received["score_topic"]
                     if not poses.candidates:
                         observed_unconfirmed_candidate = True
                         continue
                     markers = received["candidate_nodes_topic"].markers
-                    if len(scores.data) != 1 or len(markers) != 3:
+                    if len(poses.candidates) != 1 or len(markers) != 3:
                         continue
                     if (summary["candidate_count"] != 1 or
                             summary["raw_candidate_count"] != 1):
                         continue
-                    assert len(poses.candidates) == len(scores.data) == 1
+                    assert len(poses.candidates) == 1
                     assert summary["candidate_count"] == 1
                     assert summary["raw_candidate_count"] == 1
                     assert summary["candidates"][0]["cluster_id"] == 1
@@ -147,13 +144,12 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     assert summary["tcp_frame"] == "test_tcp"
                     assert poses.header.frame_id == expected_frame
                     assert poses.tcp_frame == "test_tcp"
-                    assert 0.0 < scores.data[0] <= 1.0
+                    assert 0.0 < poses.candidates[0].shape_score <= 1.0
                     assert poses.update_id > 0
                     assert observed_unconfirmed_candidate
                     assert poses.candidates[0].id == 1
                     assert poses.candidates[0].state == GraspCandidate.UNKNOWN
                     assert has_node_color(markers, (0.1, 0.85, 1.0, 1.0))
-                    assert poses.candidates[0].shape_score == scores.data[0]
                     expected_offset = (0.2, -0.1, 0.3) if candidate_frame else (0.0, 0.0, 0.0)
                     assert abs(poses.candidates[0].pose.position.x - expected_offset[0]) < 1.0e-6
                     assert abs(poses.candidates[0].pose.position.y - expected_offset[1]) < 1.0e-6
@@ -349,7 +345,6 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                             continue
                         assert summary["status"] == "tf_unavailable"
                         assert not poses.candidates
-                        assert not received["score_topic"].data
                         assert poses.header.frame_id == "topic_contract_candidate_frame"
                         assert poses.tcp_frame == "test_tcp"
                         assert len(markers) == 1 and markers[0].action == Marker.DELETEALL

@@ -1019,6 +1019,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                                 [tag]: {
                                     id: tag, name: p.name || tag, tag,
                                     source_type: p.source_type === 'pose_array' ? 'pose_array' : undefined,
+                                    arrow_styles: p.arrow_styles ?? prev[tag]?.arrow_styles ?? {},
                                     frameId: frameIds.length === 1 ? frameIds[0] : undefined,
                                     frameIds,
                                     markers, count: markers.length,

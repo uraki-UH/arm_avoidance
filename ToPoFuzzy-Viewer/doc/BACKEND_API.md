@@ -97,7 +97,10 @@ Published before each binary cloud frame.
 例: `/grasp_pose_cands`を有効化すると`source_type: "pose_array"`付きの`stream.marker_array`を配信。
 外部のMarker変換ノード・把持計画launchへの依存なし。空候補、再接続キャッシュ、購読解除も既存ストリーム契約に準拠。
 他のMarkerとの自動照合・色統合なし。詳細は`common/ws_protocol_v2.md`を参照。
-候補配列は自身のIDと状態から矢印色を決定。別のreachability購読なし。
+候補配列はID・位置・完全な姿勢・状態を配信。別のreachability購読なし。
+色・寸法・基準位置・補助軸はブラウザの共通矢印設定。姿勢入力に描画設定を毎回付加する処理はなし。
+標準Markerの矢印は`arrow_style_id`で共有`arrow_styles`辞書を参照。辞書は初回・変更・再接続時に配信し、省略時は前回値を保持。
+詳細は[WS v2](../common/ws_protocol_v2.md)と[矢印共通仕様](../common/arrow_visual_spec.md)を参照。
 
 ## File
 - `files.list`

@@ -3,7 +3,6 @@
 #include <candidate/grasp_candidate_publisher.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +37,6 @@ public:
   {
     declare_parameter<std::string>("input_topic", "/topo_points");
     declare_parameter<std::string>("pose_topic", "/grasp_pose_cands");
-    declare_parameter<std::string>("score_topic", "/grasp_pose_cand_scores");
     declare_parameter<std::string>("target_frame_id", "world");
     declare_parameter<double>("voxel_size", ::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE);
     declare_parameter<int>("x_shift", 42);
@@ -51,7 +49,6 @@ public:
 
     input_topic_ = get_parameter("input_topic").as_string();
     pose_topic_ = get_parameter("pose_topic").as_string();
-    score_topic_ = get_parameter("score_topic").as_string();
     target_frame_id_ = get_parameter("target_frame_id").as_string();
     codec_.setVoxelSize(get_parameter("voxel_size").as_double());
     codec_.setIndexingParams(
@@ -73,13 +70,11 @@ public:
       std::bind(&GraspPoseCandidateProducerNode::pointCloudCallback, this, std::placeholders::_1));
 
     pose_publisher_ = std::make_unique<grasping_system::candidate::grasp_candidate_publisher>(*this, pose_topic_);
-    score_publisher_ = create_publisher<std_msgs::msg::Float32MultiArray>(
-      score_topic_, rclcpp::QoS(1).reliable().transient_local());
 
     RCLCPP_INFO(
       get_logger(),
-      "GraspPoseCandidateProducerNode initialized. input=%s pose=%s score=%s target_frame=%s voxel_size=%.4f",
-      input_topic_.c_str(), pose_topic_.c_str(), score_topic_.c_str(),
+      "GraspPoseCandidateProducerNode initialized. input=%s pose=%s target_frame=%s voxel_size=%.4f",
+      input_topic_.c_str(), pose_topic_.c_str(),
       target_frame_id_.c_str(), codec_.voxelSize());
   }
 
@@ -146,8 +141,6 @@ private:
     pose_array.header.frame_id = target_frame_id_.empty() ? source_frame : target_frame_id_;
     pose_array.candidates.reserve(candidates.size());
 
-    std_msgs::msg::Float32MultiArray scores;
-    scores.data.reserve(candidates.size());
 
     for (const auto &candidate : candidates) {
       geometry_msgs::msg::Pose pose;
@@ -164,11 +157,9 @@ private:
       entry.pose = pose;
       entry.shape_score = static_cast<float>(candidate.score);
       pose_array.candidates.push_back(std::move(entry));
-      scores.data.push_back(static_cast<float>(candidate.score));
     }
 
     pose_publisher_->publish(pose_array);
-    score_publisher_->publish(scores);
 
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
@@ -203,14 +194,11 @@ private:
     pose_array.header.frame_id = target_frame_id_.empty() ? header.frame_id : target_frame_id_;
     pose_publisher_->publish(pose_array);
 
-    std_msgs::msg::Float32MultiArray scores;
-    score_publisher_->publish(scores);
 
   }
 
   std::string input_topic_;
   std::string pose_topic_;
-  std::string score_topic_;
   std::string target_frame_id_;
   std::size_t max_candidates_ = 256;
   std::size_t min_points_per_voxel_ = 1;
@@ -221,7 +209,6 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
   std::unique_ptr<grasping_system::candidate::grasp_candidate_publisher> pose_publisher_;
-  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
 };
 
 }  // namespace robot_sim::bridge

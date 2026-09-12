@@ -7,7 +7,6 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/float32_multi_array.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <tf2/exceptions.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -62,8 +61,6 @@ public:
     if (!std::isfinite(candidate_track_reset_dist_) || candidate_track_reset_dist_ <= 0.0) {
       throw std::invalid_argument("candidate_track_reset_dist must be finite and positive");
     }
-    const std::string score_topic = declare_parameter<std::string>(
-      "score_topic", "/grasp_pose_cand_scores");
     const std::string summary_topic = declare_parameter<std::string>(
       "summary_topic", "/grasp_pose_cands/summary");
     candidate_frame_ = declare_parameter<std::string>("candidate_frame", "");
@@ -82,8 +79,6 @@ public:
       [this](const gng_control_msgs::msg::GraspCandidateArray &poses) {
         publish_candidate_node_states(poses);
       });
-    score_publisher_ = create_publisher<std_msgs::msg::Float32MultiArray>(
-      score_topic, output_qos);
     summary_publisher_ = create_publisher<std_msgs::msg::String>(summary_topic, output_qos);
 
     map_subscription_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
@@ -470,8 +465,6 @@ private:
     poses.header = header;
     poses.tcp_frame = tcp_frame_;
     poses.candidates.reserve(candidates.size());
-    std_msgs::msg::Float32MultiArray scores;
-    scores.data.reserve(candidates.size());
     for (const auto &candidate : candidates) {
       const auto &surface = candidate.surface;
       gng_control_msgs::msg::GraspCandidate entry;
@@ -486,10 +479,8 @@ private:
       pose.orientation.z = surface.tcp_orientation.z();
       pose.orientation.w = surface.tcp_orientation.w();
       poses.candidates.push_back(std::move(entry));
-      scores.data.push_back(static_cast<float>(surface.footprint_fill_ratio));
     }
     candidate_publisher_->publish(std::move(poses));
-    score_publisher_->publish(std::move(scores));
   }
 
   void prepare_candidate_nodes(
@@ -563,8 +554,6 @@ private:
     poses.header.frame_id = outputFrame();
     poses.tcp_frame = tcp_frame_;
     candidate_publisher_->publish(std::move(poses));
-    std_msgs::msg::Float32MultiArray scores;
-    score_publisher_->publish(std::move(scores));
 
     std_msgs::msg::String summary;
     std::ostringstream stream;
@@ -666,7 +655,6 @@ private:
   double candidate_node_diameter_ = 0.012;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr candidate_nodes_publisher_;
   visualization_msgs::msg::MarkerArray candidate_node_markers_;
-  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr score_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

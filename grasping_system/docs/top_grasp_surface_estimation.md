@@ -302,7 +302,6 @@ $$
 | トピック | 型 | 内容 |
 | --- | --- | --- |
 | `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_id、平面クラスタID由来の候補id、pose、shape_score、state。入力グラフのheaderを継承 |
-| `/grasp_pose_cand_scores` | `std_msgs/msg/Float32MultiArray` | 互換用の同順面積比。正規の値は候補内のshape_score |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
 | `/grasp_pose_cands/nodes` | `visualization_msgs/msg/MarkerArray` | 採用候補の平面・非平面付属ノード。候補の位置到達性で色分け |
 

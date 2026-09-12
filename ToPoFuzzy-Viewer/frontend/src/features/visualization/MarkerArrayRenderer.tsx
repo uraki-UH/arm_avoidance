@@ -1,9 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { MarkerArrayData, MarkerMessage, Transform } from '../../types';
 import { useDemandUpdate } from '../../hooks/useDemandUpdate';
-import { DirectionalArrow } from './utils/DirectionalArrow';
+import { arrow_style } from './arrows/geometry';
+import { useArrowSettings } from './arrows/settings';
+import { ArrowBatch } from './arrows/ArrowBatch';
+import { marker_arrow_batches } from './arrows/marker_input';
 
 interface MarkerArrayRendererProps {
     tag: string;
@@ -11,6 +14,7 @@ interface MarkerArrayRendererProps {
     visible?: boolean;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform?: Transform;
+    arrow_settings?: Partial<arrow_style>;
 }
 
 const MARKER_RENDER_ORDER = 1000;
@@ -78,11 +82,13 @@ function MarkerFrame({
     transforms,
     manualTransform,
     allow_untransformed,
+    children,
 }: {
     marker: MarkerMessage;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform: Transform;
     allow_untransformed: boolean;
+    children: ReactNode;
 }) {
     const frameId = marker.frameId || 'world';
     const tf = frameId === 'world' ? null : (transforms[frameId] ?? null);
@@ -98,7 +104,7 @@ function MarkerFrame({
                 rotation={manualTransform.rotation}
                 scale={manualTransform.scale}
             >
-                {renderMarker(marker)}
+                {children}
             </group>
         </group>
     );
@@ -332,85 +338,10 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     );
 }
 
-function ArrowMarker({ marker }: { marker: MarkerMessage }) {
-    const { color } = useMemo(() => getColor(marker.color), [marker.color]);
-    const { position, direction, lengthScale, maxLength, shaftWidth, head_length, head_width } = useMemo(() => {
-        const pos = marker.pos || [0, 0, 0];
-        const quat = marker.quat || [0, 0, 0, 1];
-        const px = pos[0] ?? 0;
-        const py = pos[1] ?? 0;
-        const pz = pos[2] ?? 0;
-
-        const qx = quat[0] ?? 0;
-        const qy = quat[1] ?? 0;
-        const qz = quat[2] ?? 0;
-        const qw = quat[3] ?? 1;
-
-        const origin: [number, number, number] = [px, py, pz];
-        let dir = new THREE.Vector3(1, 0, 0);
-
-        if ((marker.points || []).length >= 2) {
-            const p0 = marker.points[0];
-            const p1 = marker.points[1];
-            dir = new THREE.Vector3(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
-            origin[0] = p0[0];
-            origin[1] = p0[1];
-            origin[2] = p0[2];
-            const length = dir.length();
-            const shaft_diameter = marker.scale?.[0] ?? 0;
-            const head_diameter = marker.scale?.[1] ?? 0;
-            const marker_head_length = marker.scale?.[2] ?? 0;
-            return {
-                position: origin,
-                direction: [dir.x, dir.y, dir.z] as [number, number, number],
-                lengthScale: 1.0,
-                maxLength: Math.max(0.2, length * 1.5),
-                shaftWidth: shaft_diameter > 0 && shaft_diameter < length * 0.5
-                    ? shaft_diameter
-                    : Math.max(0.003, length * 0.06),
-                head_length: marker_head_length > 0
-                    ? Math.min(length, marker_head_length)
-                    : length * 0.24,
-                head_width: head_diameter > 0 ? head_diameter : length * 0.12,
-            };
-        } else {
-            const quaternion = new THREE.Quaternion(qx, qy, qz, qw);
-            dir.applyQuaternion(quaternion);
-        }
-
-        const scale = Math.max(0.0001, marker.scale?.[0] || 0.15);
-        return {
-            position: origin,
-            direction: [dir.x, dir.y, dir.z] as [number, number, number],
-            lengthScale: scale,
-            maxLength: Math.max(0.2, scale * 1.5),
-            shaftWidth: Math.max(0.005, scale * 0.06),
-            head_length: scale * 0.28,
-            head_width: scale * 0.18,
-        };
-    }, [marker.pos, marker.quat, marker.points, marker.scale]);
-
-    return (
-        <DirectionalArrow
-            origin={position}
-            direction={direction}
-            lengthScale={lengthScale}
-            color={color.getStyle()}
-            maxLength={maxLength}
-            shaftWidth={shaftWidth}
-            head_length={head_length}
-            head_width={head_width}
-            overlayRenderOrder={MARKER_RENDER_ORDER}
-        />
-    );
-}
-
 function renderMarker(marker: MarkerMessage) {
     if (is_delete_action(marker)) return null;
 
     switch (marker.type) {
-    case 'arrow':
-        return <ArrowMarker key={`${marker.ns}:${marker.id}`} marker={marker} />;
     case 'cube':
     case 'sphere':
     case 'cylinder':
@@ -433,28 +364,32 @@ export function MarkerArrayRenderer({
     visible = true,
     transforms,
     manualTransform,
+    arrow_settings,
 }: MarkerArrayRendererProps) {
+    const saved_style = useArrowSettings(tag);
+    const effective_style = useMemo(() => ({ ...saved_style, ...arrow_settings }), [saved_style, arrow_settings]);
+    const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style), [data, effective_style]);
     const transform: Transform = manualTransform || {
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: [1, 1, 1],
     };
 
-    useDemandUpdate([tag, data, visible, transforms, manualTransform]);
+    useDemandUpdate([tag, data, visible, transforms, manualTransform, effective_style]);
 
     if (!visible || data.visible === false || data.markers.length === 0) return null;
 
     return (
         <group name={`${tag}-markers`}>
-            {data.markers.map((marker) => (
-                <MarkerFrame
-                    key={`${marker.ns}:${marker.id}`}
-                    marker={marker}
-                    transforms={transforms}
-                    manualTransform={transform}
-                    allow_untransformed={data.source_type !== 'pose_array'}
-                />
-            ))}
+            {arrow_batches.map(([key, batch]) => <MarkerFrame key={key} marker={batch.marker}
+                transforms={transforms} manualTransform={transform} allow_untransformed={data.source_type !== 'pose_array'}>
+                <ArrowBatch samples={batch.samples} style={batch.style} />
+            </MarkerFrame>)}
+            {data.markers.filter(marker => marker.type !== 'arrow').map(marker => <MarkerFrame
+                key={`${marker.ns}:${marker.id}`} marker={marker} transforms={transforms}
+                manualTransform={transform} allow_untransformed={data.source_type !== 'pose_array'}>
+                {renderMarker(marker)}
+            </MarkerFrame>)}
         </group>
     );
 }

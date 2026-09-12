@@ -1,3 +1,4 @@
+#include <arrow_visualization/arrow_marker.hpp>
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
 #include "ais_gng/topological_plane/plane_cluster_parameters.hpp"
 #include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
@@ -245,19 +246,14 @@ visualization_msgs::msg::MarkerArray makeNormalMarkers(
     const auto color = clusterColor(
       color_it != color_of.end() ? color_it->second : cluster.id);
 
-    auto normal = baseMarker(clusters.header, "incremental_plane_normal", marker_id);
-    normal.type = visualization_msgs::msg::Marker::ARROW;
-    const double length = std::max(0.05, 2.0 * static_cast<double>(cluster.local_spacing));
-    normal.scale.x = 0.25 * length;
-    normal.scale.y = 0.5 * normal.scale.x;
-    normal.scale.z = 0.0;
-    normal.color = color;
-    normal.points.push_back(markerPoint(cluster.centroid));
-    geometry_msgs::msg::Point tip = markerPoint(cluster.centroid);
-    tip.x += cluster.normal.x * length;
-    tip.y += cluster.normal.y * length;
-    tip.z += cluster.normal.z * length;
-    normal.points.push_back(tip);
+    arrow_visualization::arrow_style style;
+    style.length = std::max(0.05, 2.0 * static_cast<double>(cluster.local_spacing));
+    style.shaft_diameter = 0.25 * style.length;
+    style.head_diameter = 0.5 * style.shaft_diameter;
+    style.head_length = 0.23 * style.length;
+    style.color = color;
+    auto normal = arrow_visualization::make_arrow(clusters.header, "incremental_plane_normal",
+      marker_id, markerPoint(cluster.centroid), cluster.normal, style);
     markers.markers.push_back(std::move(normal));
   }
   return markers;

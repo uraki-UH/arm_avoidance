@@ -1,3 +1,4 @@
+#include "topo_fuzzy_viewer/protocol/arrow_protocol.h"
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
@@ -131,50 +132,11 @@ namespace converter {
         return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
     }
 
-    // 汎用姿勢と状態付き候補に共通のローカルZ軸矢印
-    json pose_marker(const geometry_msgs::msg::Pose& pose, const std::string& frame,
-                     std::uint32_t id, const std::array<double, 4>& color) {
-            const auto& p = pose.position;
-            const auto& q = pose.orientation;
-            const double norm = std::hypot(std::hypot(q.x, q.y), std::hypot(q.z, q.w));
-            if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
-                !std::isfinite(norm) || norm < 1.0e-12) return nullptr;
-            const double x = q.x / norm, y = q.y / norm, z = q.z / norm, w = q.w / norm;
-            constexpr double length = 0.08;
-            return {
-                {"id", id}, {"ns", "pose_array"}, {"type", "arrow"}, {"action", 0},
-                {"frameId", frame},
-                {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
-                {"scale", {0.008, 0.016, 0.02}}, {"color", color},
-                {"points", {{p.x, p.y, p.z},
-                    {p.x + length * 2.0 * (x * z + w * y),
-                     p.y + length * 2.0 * (y * z - w * x),
-                     p.z + length * (1.0 - 2.0 * (x * x + y * y))}}}
-            };
+    json to_json(const geometry_msgs::msg::PoseArray& msg, const std::string& tag) {
+        return arrow_protocol::pose_stream(msg, tag);
     }
-
-    json to_json(const geometry_msgs::msg::PoseArray& poses, const std::string& tag) {
-        json markers = json::array();
-        for (std::size_t idx = 0; idx < poses.poses.size(); ++idx) {
-            auto marker = pose_marker(poses.poses[idx], poses.header.frame_id, idx, {0.15, 0.8, 1.0, 1.0});
-            if (!marker.is_null()) markers.push_back(std::move(marker));
-        }
-        return {{"type", "stream.marker_array"}, {"tag", tag},
-                {"source_type", "pose_array"}, {"markers", std::move(markers)}};
-    }
-
     json to_json(const gng_control_msgs::msg::GraspCandidateArray& msg, const std::string& tag) {
-        using candidate_msg = gng_control_msgs::msg::GraspCandidate;
-        json markers = json::array();
-        for (const auto& candidate : msg.candidates) {
-            const std::array<double, 4> color = candidate.state == candidate_msg::INSIDE
-                ? std::array<double, 4>{0.2, 0.85, 0.25, 1.0} : candidate.state == candidate_msg::OUTSIDE
-                ? std::array<double, 4>{0.55, 0.55, 0.55, 1.0} : std::array<double, 4>{0.9, 0.7, 0.1, 1.0};
-            auto marker = pose_marker(candidate.pose, msg.header.frame_id, candidate.id, color);
-            if (!marker.is_null()) markers.push_back(std::move(marker));
-        }
-        return {{"type", "stream.marker_array"}, {"tag", tag}, {"update_id", msg.update_id},
-                {"source_type", "pose_array"}, {"markers", std::move(markers)}};
+        return arrow_protocol::pose_stream(msg, tag);
     }
 
     std::array<float, 3U> nonplane_component_color(const std::size_t component_index) {
@@ -729,12 +691,18 @@ private:
     }
 
     void broadcast_markers(const std::string& source_id, const json& payload) {
-        const std::string serialized = payload.dump();
-        {
-            std::lock_guard<std::mutex> lock(markerMutex_);
-            lastMarkerPayloads_[source_id] = serialized;
+        auto snapshot = arrow_protocol::with_shared_styles(payload);
+        std::lock_guard<std::mutex> lock(markerMutex_);
+        // 再接続用キャッシュは辞書を含む完全な状態
+        lastMarkerPayloads_[source_id] = snapshot.dump();
+        const auto signature = snapshot["arrow_styles"].dump();
+        const auto previous = last_arrow_styles_.find(source_id);
+        if (previous != last_arrow_styles_.end() && previous->second == signature) {
+            snapshot.erase("arrow_styles");
+        } else {
+            last_arrow_styles_[source_id] = signature;
         }
-        broadcastText(serialized);
+        broadcastText(snapshot.dump());
     }
 
     void handleSourcesSetActive(WebSocket* ws, const std::string& id, const json& params) {
@@ -1151,6 +1119,7 @@ private:
         {
             std::lock_guard<std::mutex> l(markerMutex_);
             lastMarkerPayloads_.erase(id);
+            last_arrow_styles_.erase(id);
         }
     }
 
@@ -1381,6 +1350,7 @@ private:
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr nonplane_source_map_sub_;
     rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr nonplane_source_plane_cluster_sub_;
     std::unordered_map<std::string, rclcpp::SubscriptionBase::SharedPtr> activeDynamicSubs_;
+    std::unordered_map<std::string, std::string> last_arrow_styles_;
     std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
     std::unordered_map<std::string, std::string> active_source_publisher_signatures_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;

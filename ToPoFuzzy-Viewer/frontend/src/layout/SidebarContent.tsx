@@ -1,3 +1,5 @@
+import { marker_arrow_options } from '../features/visualization/arrows/marker_input';
+import { ArrowStyleControls } from '../features/visualization/arrows/ArrowStyleControls';
 import React, { useState } from 'react';
 import {
     Activity,
@@ -364,7 +366,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                     </div>
                                 );
                               }},
-                            { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true },
+                            { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true,
+                              extra: (tag: string, _s: any, d: any) => d.markers?.some((m: any) => m.type === 'arrow') ? (
+                                <ArrowStyleControls style_key={tag} {...marker_arrow_options(d)} />
+                              ) : null },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID', hasTf: true,
                               extra: (tag: string, _s: any, d: any) => (
                                 <div className="relative mt-0.5">

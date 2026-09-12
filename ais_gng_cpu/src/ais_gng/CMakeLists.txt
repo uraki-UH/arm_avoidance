@@ -16,6 +16,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(arrow_visualization REQUIRED)
+include_directories(${arrow_visualization_INCLUDE_DIRS})
 find_package(voxel_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(gng_cpu REQUIRED)

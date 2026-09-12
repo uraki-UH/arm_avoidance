@@ -59,13 +59,14 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 ### 姿勢配列・候補表示
 
 `geometry_msgs/msg/PoseArray`と`gng_control_msgs/msg/GraspCandidateArray`は`sources.list`で`type: "marker"`として公開。
-`sources.setActive`で選択後、ROS Markerトピックを経由せず、gateway内でローカルZ軸の矢印へ変換。
+`sources.setActive`で選択後、ROS Markerトピックを経由せず、gatewayから完全な姿勢を配信。
 
 ```json
 {"type":"stream.marker_array","tag":"/grasp_pose_cands","source_type":"pose_array","update_id":1,"markers":[]}
 ```
 
-- 1姿勢につき1本のローカル+Z矢印。長さ0.08 m、表示色は水色。
+- エントリは`id, ns, type:"arrow", action:0, frameId, pos:[x,y,z], orientation:[x,y,z,w]`。
+- 色・寸法はブラウザのレイヤー設定。既定はローカル+Z、全長0.08 m、水色。完全な姿勢がある場合は補助2軸の表示が可能。
 - `markers`は毎回全置換。空配列は旧候補の消去。
 - Markerの`frameId`は入力座標系。
 - 非有限位置・無効クォータニオンは除外。入力配列添字をMarker IDとして維持。
@@ -73,10 +74,27 @@ ROSメッセージ定義の互換性とは別のため、ROS送受信側には�
 - 計画処理は不要。PoseArrayは座標系不明・固定座標系へのTF欠落時に非表示。座標をworldとみなす代替描画はなし。
 - 他のMarkerレイヤーとの自動照合・色統合なし。重複を避ける場合は表示レイヤーを選択。
 
-候補配列ではMarker IDに候補の`id`を使用し、`state`は未評価=黄、範囲内=緑、範囲外=灰へ変換。
+候補配列ではMarker IDに候補の`id`を使用し、`state`を数値のまま付与。
+表示側の既定パレットは未評価=黄、範囲内=緑、範囲外=灰。ブラウザで変更可能。
 `source_type: "pose_array"`は既存の姿勢描画・TF必須経路の識別用。新しい描画コンポーネントの追加なし。
 `update_id`は候補集合の更新番号。同一集合の状態更新では維持、空配列を含む全置換で旧候補を消去。
 配信元は候補生成ノードだけ。Viewerで別トピックの状態を突き合わせる処理はなし。
+
+### 共通矢印スタイル
+
+標準Markerの矢印では、`scale`と`color`をレイヤー内の`arrow_styles`辞書に集約。
+
+```json
+{"type":"stream.marker_array","tag":"/arrows","arrow_styles":{"0":{"scale":[0.008,0.016,0.02],"color":[0.2,0.8,1,1]}},"markers":[{"id":1,"ns":"normal","type":"arrow","action":0,"frameId":"world","pos":[0,0,0],"quat":[0,0,0,1],"points":[[0,0,0],[0,0,0.08]],"arrow_style_id":"0"}]}
+```
+
+- 同一設定の矢印は同じ`arrow_style_id`を参照。
+- `arrow_styles`の省略は直前の辞書を保持。存在する場合は辞書全体を置換。`{}`は空辞書への更新。
+- 初回・設定変更時・`request.state`・再接続時には完全な辞書を送信。レイヤー削除時は辞書も破棄。
+- `markers`は従来どおり全置換。辞書の省略とは独立。
+- `orientation`形式の姿勢入力には矢印ごとの描画設定なし。
+- 旧形式のインライン`scale`・`color`も入力可能。矢印以外のMarker規約は変更なし。
+- 補助軸、anchor、ブラウザ設定の詳細は[共通仕様](arrow_visual_spec.md)を参照。
 
 ### Stream Reset
 ```json

@@ -33,6 +33,9 @@ export interface MarkerPose {
 export interface MarkerMessage {
     ns: string;
     id: number;
+    orientation?: [number, number, number, number];
+    state?: number;
+    arrow_style_id?: string;
     type: 'arrow' | 'cube' | 'sphere' | 'cylinder' | 'line_strip' | 'line_list' | 'cube_list' | 'sphere_list' | 'points' | 'text' | 'mesh_resource' | 'triangle_list' | 'unknown';
     action: number;
     frameId?: string;
@@ -50,6 +53,7 @@ export interface MarkerMessage {
 }
 
 export interface MarkerArrayData {
+    arrow_styles?: Record<string, Pick<MarkerMessage, 'scale' | 'color'>>;
     source_type?: 'pose_array';
     id: string;
     name: string;

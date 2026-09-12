@@ -17,6 +17,8 @@ find_package(ament_cmake QUIET)
 # --- 1. ROS 2 Build ---
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_auto REQUIRED)
+find_package(arrow_visualization REQUIRED)
+include_directories(${arrow_visualization_INCLUDE_DIRS})
 
 message(STATUS "ROS 2 (Humble) environment detected.")
 

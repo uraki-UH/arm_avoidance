@@ -155,7 +155,6 @@ flowchart TD
 | `/selected_topological_map` | `ais_gng_msgs/TopologicalMap` | target に応じて選ばれたマップ |
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` | ID・姿勢・形状スコア・到達性状態 |
-| `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` | 候補姿勢スコア |
 | `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
 | `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
 | `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標 |
@@ -578,13 +577,14 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 候補TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
-| 上面把持面積スコア | `/grasp_pose_cand_scores` | `std_msgs/Float32MultiArray` |
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持の採用環境ノード | `/grasp_pose_cands/nodes` | `visualization_msgs/MarkerArray` |
 
 上面把持とボクセル照合の既定出力を共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
+形状スコアは`candidates[].shape_score`へ統一し、旧スコア単独トピックを廃止。
+ViewerとROS Marker送信側の[矢印共通仕様](../../ToPoFuzzy-Viewer/common/arrow_visual_spec.md)に従い、描画設定と候補データを分離。
 上方方式の採用環境ノードは`candidate_nodes_topic`（既定`/grasp_pose_cands/nodes`）で別表示。
 平面・付属非平面をSPHERE_LISTで表示し、idは平面クラスタID由来の候補idに対応する。
 色の判定には候補stateを使用し、位置到達範囲内はHANDLE既定色`#00d1ff`、範囲外・未評価は従来の青系候補色。

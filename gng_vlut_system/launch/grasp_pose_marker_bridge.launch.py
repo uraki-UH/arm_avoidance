@@ -16,6 +16,8 @@ def generate_launch_description():
         DeclareLaunchArgument("color_g", default_value="0.8"),
         DeclareLaunchArgument("color_b", default_value="0.2"),
         DeclareLaunchArgument("color_a", default_value="1.0"),
+        DeclareLaunchArgument("anchor", default_value="tail"),
+        DeclareLaunchArgument("enable_transverse_axes", default_value="true"),
         Node(
             package="gng_vlut_system",
             executable="grasp_pose_marker_bridge_node",
@@ -32,6 +34,8 @@ def generate_launch_description():
                 "color_g": LaunchConfiguration("color_g"),
                 "color_b": LaunchConfiguration("color_b"),
                 "color_a": LaunchConfiguration("color_a"),
+                "anchor": LaunchConfiguration("anchor"),
+                "enable_transverse_axes": LaunchConfiguration("enable_transverse_axes"),
             }],
         ),
     ])
