@@ -62,20 +62,14 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 - ID・姿勢・到達性状態: `/grasp_pose_cands` (`gng_control_msgs/msg/GraspCandidateArray`)
 - 候補スコア: `/grasp_pose_cand_scores`
 - 判定概要: `/grasp_pose_cands/summary`
-- 可視化: ViewerのConnection Streamsで`/grasp_pose_cands`をON
 
-Viewerは同じ候補IDのローカルZ軸矢印を、未評価=黄・到達範囲内=明るい薄緑水色・範囲外=灰で表示。計画launch・別のreachability/Markerトピックは不要。
-上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。調整は`ToPoDualArm.yaml`の`candidate_*`設定。
-到達性は候補生成側で評価。YAMLの各生成ノードにある`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を設定。map未受信・TF不明なら未評価。
-`candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合だけ `candidate_frame: "ToPoDualArm/base_link"` とし、[`sensor_static_tf.yaml`](gng_vlut_system/config/sensor_static_tf.yaml) に外部センサTFを記述して次を起動。
 
-ros2 launch gng_vlut_system sensor_static_tf.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/sensor_static_tf.yaml
+上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。
+`candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合は `candidate_frame: "ToPoDualArm/base_link"` とし、外部センサTFをURDFまたは実機bringupから配信。
 
 `grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
 ## HTML全点群からCPU GNGテンプレートを保存
-
 点群も保存
 source /ros2_ws/install/setup.bash
 ros2 run ais_gng save_object_gng_dataset mug_complete  --replace --with-points
@@ -96,23 +90,11 @@ ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
   dataset_file:=mug_complete
 
 ## 環境GNGとの照合後に物体テンプレートを配信
-
-照合が連続フレームで確定した場合だけ、`/<template_id>/topological_map_static`へ
-事前登録GNGを配信する。
-
-```bash
-source /ros2_ws/install/setup.bash
 ros2 launch gng_vlut_system object_template_matching.launch.py \
   dataset_file:=mug_complete
-```
 
-環境側GNG topicは既定で`/topological_map`。変更する場合は
-`environment_topological_map_topic:=/topological_map/merged`を追加する。
 姿勢許容、特徴量のファジー評価、確定条件は
 `/ros2_ws/src/gng_vlut_system/config/object_template_matching.yaml`で設定する。
-`max_contradiction_point_ratio`は、仮説の隣接構造で説明できない点群支持量の許容率とする。
-この値を超える候補は破棄し、次点yaw候補を評価する。全候補が破棄された場合は
-`topological_map_static`を配信しない。
 
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \

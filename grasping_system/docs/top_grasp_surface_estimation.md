@@ -64,7 +64,7 @@ GNG学習・局所平面クラスタ生成（前段）
 
 ROSノードは、グラフとクラスタの `frame_number`、`header.frame_id`、`header.stamp` が一致した組だけを処理する。`candidate_frame` が空文字なら入力座標系のまま評価・配信し、TF取得も行わない。値を設定した場合だけ、グラフ時刻のTFで両方を `candidate_frame` に変換してから評価する。`up_axis`、平面法線の傾斜、TCP位置・姿勢はすべてこの評価座標系で扱う。
 
-外部センサの固定TFは把持推定の責務ではない。`gng_vlut_system/config/sensor_static_tf.yaml` の `sensor_static_transforms` に必要な組だけを定義し、`sensor_static_tf.launch.py` を共通TF配信として起動する。既定の配列は空であり、何も定義・起動しない場合はTF配信も座標変換も発生しない。ロボット基準の評価が必要なときは、`candidate_frame` を `ToPoDualArm/base_link` に設定し、対応する外部センサTFまたは既存の動的TFを用意する。TF がない、または入力時刻がゼロで座標変換が必要な場合は、誤った座標で候補を出さず、候補・スコアを空配列として配信し、summary の `status` を `tf_unavailable` とする。これにより以前の候補が残留しない。同じグラフ番号・時刻の成功済み入力は再処理しない。
+外部センサの固定TFは把持推定の責務ではない。ロボット基準の評価が必要なときは、`candidate_frame` を `ToPoDualArm/base_link` に設定し、URDFのfixed jointまたは実機bringupから対応する外部センサTFを配信する。TF がない、または入力時刻がゼロで座標変換が必要な場合は、誤った座標で候補を出さず、候補・スコアを空配列として配信し、summary の `status` を `tf_unavailable` とする。これにより以前の候補が残留しない。同じグラフ番号・時刻の成功済み入力は再処理しない。
 
 クラスタごとに重心の有限性と所属添字の範囲を確認し、所属ノード数を判定。矩形計算時には各ノード位置の有限性も確認。ノード数不足は `rejected_small_region`、不正データ・ゼロ法線は `rejected_invalid_region` に集計。正規化法線と上方向の内積絶対値が`cos(max_surface_tilt_deg)`に満たない面は`rejected_surface_tilt`として棄却。棄却面も隣接平面・障害物の根拠として維持。
 
@@ -332,13 +332,6 @@ ros2 launch ais_gng ais_gng.launch.py \
 ```bash
 ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-```
-
-ロボット基準へ変換する場合だけ、別端末で外部センサTFを配信:
-
-```bash
-ros2 launch gng_vlut_system sensor_static_tf.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/sensor_static_tf.yaml
 ```
 
 候補根拠の確認:
