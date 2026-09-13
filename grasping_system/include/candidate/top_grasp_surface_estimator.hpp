@@ -409,6 +409,8 @@ private:
       }
       for (const auto next_idx : node_adjacency[node_idx]) {
         if (is_visited[next_idx]) continue;
+        // 候補平面の外では非平面ノードだけを探索。他平面の取り込み・経由の禁止
+        if (owner_by_node[next_idx] >= 0) continue;
         const auto &next = map.nodes[next_idx];
         const auto it = component_owner.find(next.nonplane_component_id);
         if (!config_.enable_reference_plane_attachment &&
@@ -427,7 +429,7 @@ private:
           (!std::isfinite(max_attachment_edge_length) || max_attachment_edge_length <= 0.0 ||
           (next_p - p).norm() > max_attachment_edge_length * config_.max_attachment_edge_length_ratio)) continue;
         if (config_.enable_reference_plane_attachment) {
-          // 所属分類によらない参照面からの距離判定。近接帯を越えた探索の禁止
+          // 非平面ノードの参照面からの距離判定。近接帯を越えた探索の禁止
           const Eigen::Vector3d world_p(next.pos.x, next.pos.y, next.pos.z);
           if (!world_p.allFinite() ||
             (next.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) ||

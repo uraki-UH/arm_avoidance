@@ -88,7 +88,7 @@ TopGraspSurfaceConfig makeConfig()
 int main()
 {
   {
-    // 候補平面を種とした別平面への拡張、土台近接帯での停止、外形超過の除外
+    // 候補平面を種とした非平面探索、土台近接帯での停止、外形超過の除外
     TopologicalMap reference_map;
     PlaneClusterArray reference_clusters;
     const auto seed = addRectangle(reference_map, 0, 0, 0.10, 0.02, 0.02);
@@ -97,7 +97,6 @@ int main()
     reference_clusters.clusters.push_back(makeCluster(1, seed, 0, 0, 0.10, {0, 0, 1}));
     reference_clusters.clusters.front().local_spacing = 0.15;
     reference_clusters.clusters.push_back(makeCluster(2, base, 0, 0, 0, {0, 0, 1}));
-    reference_clusters.clusters.push_back(makeCluster(3, attached, 0, 0, 0.06, {0, 0, 1}));
     addEdge(reference_map, seed[0], base[0]);
     addEdge(reference_map, seed[0], attached[0]);
     for (std::size_t idx = 1; idx < attached.size(); ++idx)
@@ -109,7 +108,15 @@ int main()
     expect(!output.candidates.empty() && output.candidates.front().cluster_id == 1,
       "候補平面の保持");
     expect(output.candidates.front().attached_node_indices.size() == 4,
-      "所属平面をまたぐ接続ノードの抽出");
+      "接続する非平面ノードの抽出");
+    reference_clusters.clusters.push_back(makeCluster(3, attached, 0, 0, 0.06, {0, 0, 1}));
+    output = TopGraspSurfaceEstimator(reference_config).estimate(reference_map, reference_clusters);
+    expect(output.candidates.front().attached_node_indices.empty(), "他平面ノードの取り込み禁止");
+    // 入口だけが別平面所属でも、その先の非平面ノードへの探索は禁止
+    reference_clusters.clusters.back().node_indices = {attached[0]};
+    output = TopGraspSurfaceEstimator(reference_config).estimate(reference_map, reference_clusters);
+    expect(output.candidates.front().attached_node_indices.empty(), "他平面を経由した非平面探索の禁止");
+    reference_clusters.clusters.pop_back();
     reference_map.nodes[attached[0]].pos.z = 0.005;
     output = TopGraspSurfaceEstimator(reference_config).estimate(reference_map, reference_clusters);
     expect(output.candidates.front().attached_node_indices.empty(), "土台近接帯での探索停止");
