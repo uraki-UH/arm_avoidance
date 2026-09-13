@@ -82,6 +82,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
     # 通常運用の旧方式設定とは独立した、追加判定の回帰検証
     config_parameters.update(
         max_surface_tilt_deg=25.0,
+        enable_candidate_frame_passthrough=False,
         enable_nonplane_attachment=True,
         enable_approach_check=True,
         candidate_confirm_updates=3,
@@ -96,7 +97,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
     params_path = Path(config_dir.name) / "params.yaml"
     params_path.write_text(yaml.safe_dump(config))
     command = [
-        "ros2", "launch", "grasping_system", "top_grasp_surface_estimator.launch.py",
+        "ros2", "launch", "grasping_system", "top_grasp_pose_candidates.launch.py",
         f"params_file:={params_path}",
     ]
     if enable_override:

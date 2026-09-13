@@ -2,7 +2,7 @@
 
 ## 変更
 
-- `top_grasp_surface_estimator.launch.py`の平面クラスタ入力既定値を、廃止済みの`/topological_planar_clusters_incremental`から`/plane_clusters`へ変更
+- `top_grasp_pose_candidates.launch.py`の平面クラスタ入力既定値を、廃止済みの`/topological_planar_clusters_incremental`から`/plane_clusters`へ変更
 
 ## 影響
 

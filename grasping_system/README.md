@@ -198,7 +198,7 @@ make the OBB oversized. A cluster with no adjacent plane remains eligible. The
 output pose always points the TCP local Z axis downward.
 
 ```bash
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
@@ -212,7 +212,7 @@ For the GPU backend or the legacy ROS-connected path, disable direct clustering
 and clear the marker-only input:
 
 ```bash
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   plane_clusters_input_topic:=''
 ```
 
@@ -226,4 +226,4 @@ Pass `start_plane_cluster:=false` when no plane-cluster marker process is needed
 `GraspCandidateArray`によるID・姿勢・状態の一括配信。Viewerの既定表示は未評価=黄・範囲内=明るい薄緑水色・範囲外=灰。レイヤーの「矢印表示」で寸法・色・基準位置・補助2軸を設定可能。
 到達性は候補生成側で評価。`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を生成ノードに設定。計画launch・別Markerへの依存なし。
 
-`grasp_candidate_joint_planning.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。
+`grasp_joint_candidates.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。

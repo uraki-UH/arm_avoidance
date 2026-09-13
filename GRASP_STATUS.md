@@ -109,7 +109,7 @@ ros2 launch ais_gng ais_gng.launch.py \
 別端末で上方向の把持候補生成を起動:
 
 ```bash
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 

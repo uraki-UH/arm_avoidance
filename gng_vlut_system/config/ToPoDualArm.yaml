@@ -198,8 +198,6 @@
       target_frame_id: "base_link"
       marker_frame_id: "base_link"
       input_topic: "/camera/transformed_points"
-      output_topic: "/camera/self_filtered_points"
-      self_output_topic: "/camera/self_points"
       mask_topic: "self_voxel"
 
 /left_grasp_voxel_matcher:

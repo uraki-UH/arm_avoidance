@@ -281,8 +281,6 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     declare_parameter("self_recognition.marker_frame_id", "");
     declare_parameter("mask_topic", "/self_recognition/voxel_mask");
     declare_parameter("self_recognition.mask_topic", "");
-    declare_parameter("self_output_topic", "");
-    declare_parameter("self_recognition.self_output_topic", "");
 
     const std::string urdf_rel = get_parameter("urdf_path").as_string();
     const std::string resource_root_dir = get_parameter("resource_root_dir").as_string();
@@ -499,9 +497,6 @@ SelfRecognitionVizNode::SelfRecognitionVizNode(const rclcpp::NodeOptions & optio
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this);
 
     mask_topic_ = getStringWithFallback(*this, "self_recognition.mask_topic", "mask_topic");
-    if (mask_topic_.empty()) {
-        mask_topic_ = getStringWithFallback(*this, "self_recognition.self_output_topic", "self_output_topic");
-    }
     if (mask_topic_.empty()) {
         mask_topic_ = "/self_voxel";
     }

@@ -2,11 +2,11 @@
 
 この文書は `gng_vlut_system` の把握に必要な変数、トピック、サービス、内部状態、データフローをまとめた技術仕様書です。
 
-対象の中心は `grasp_candidate_joint_planning.launch.py` を起点とする把持候補選定・候補軌道生成・評価指標 publish の系統です。
+対象の中心は `grasp_joint_candidates.launch.py` を起点とする把持候補選定・候補軌道生成・評価指標 publish の系統です。
 
 ## 1. システム概要
 
-`grasp_candidate_joint_planning.launch.py` は次の 2 系統を起動します。
+`grasp_joint_candidates.launch.py` は次の 2 系統を起動します。
 
 1. `topological_map_goal_selector.launch.py`
 2. `topological_map_avoidance.launch.py`
@@ -17,7 +17,7 @@
 
 ```mermaid
 flowchart TD
-    A[grasp_candidate_joint_planning.launch.py] --> B[topological_map_goal_selector.launch.py]
+    A[grasp_joint_candidates.launch.py] --> B[topological_map_goal_selector.launch.py]
     A --> D[topological_map_avoidance.launch.py]
 
     B --> G[selected_goal_candidate_ids]
@@ -32,7 +32,7 @@ flowchart TD
 
 ## 3. 変数一覧
 
-### 3.1 `grasp_candidate_joint_planning.launch.py` の launch 引数
+### 3.1 `grasp_joint_candidates.launch.py` の launch 引数
 
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
@@ -172,11 +172,11 @@ flowchart TD
 
 ## 7. 実行系との分離
 
-`grasp_candidate_joint_planning.launch.py` は常に `publish_target_joint_states:=false` と `control_claim_enabled:=false` を設定する。実機・仮想ロボットの関節更新は、候補の `final_joint_state` を選択する実行系から別途行う。
+`grasp_joint_candidates.launch.py` は常に `publish_target_joint_states:=false` と `control_claim_enabled:=false` を設定する。実機・仮想ロボットの関節更新は、候補の `final_joint_state` を選択する実行系から別途行う。
 
 ## 8. viewer 側に委ねる見た目
 
-候補ロボットプレビューは `grasp_candidate_joint_planning.launch.py` が既定で召喚する。`publish_candidate_robot_preview:=false` で停止可能。見た目は ToPoFuzzy Viewer 側で制御し、ROS 側はプレビューの送信有無だけを制御する。
+候補ロボットプレビューは `grasp_joint_candidates.launch.py` が既定で召喚する。`publish_candidate_robot_preview:=false` で停止可能。見た目は ToPoFuzzy Viewer 側で制御し、ROS 側はプレビューの送信有無だけを制御する。
 
 ### 8.1 URDF プレビューの初期ロード
 
@@ -550,7 +550,7 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持の採用環境ノード | `/grasp_pose_cands/nodes` | `visualization_msgs/MarkerArray` |
 
-上面把持とボクセル照合の既定出力を共通化し、`grasp_candidate_joint_planning.launch.py`の既定入力へ接続。
+上面把持とボクセル照合の既定出力を共通化し、`grasp_joint_candidates.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
 形状スコアは`candidates[].shape_score`へ統一し、旧スコア単独トピックを廃止。

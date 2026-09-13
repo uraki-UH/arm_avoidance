@@ -176,7 +176,7 @@ def launch_setup(context, *args, **kwargs):
     add_override_param("root_link", "root_link", aliases=["self_recognition.root_link"])
     add_override_param("leaf_link", "leaf_link", aliases=["self_recognition.leaf_link"])
     add_if_not_empty("target_frame_id", "target_frame_id")
-    add_override_param("mask_topic", "mask_topic", aliases=["self_recognition.mask_topic", "self_output_topic", "self_recognition.self_output_topic"])
+    add_override_param("mask_topic", "mask_topic", aliases=["self_recognition.mask_topic"])
 
     final_params_list = []
     if params_file and os.path.exists(params_file):

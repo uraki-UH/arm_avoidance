@@ -75,7 +75,7 @@ ROS_DOMAIN_ID=217 ROS_LOCALHOST_ONLY=1 timeout --signal=INT --kill-after=15 100 
 
 ```bash
 ROS_DOMAIN_ID=218 ROS_LOCALHOST_ONLY=1 timeout --signal=INT --kill-after=15 110 python3 /ros2_ws/src/grasping_system/test/check_top_grasp_topic_integration.py
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py params_file:=/tmp/top_grasp_topic_contract_<検証ごとのID>/params.yaml
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py params_file:=/tmp/top_grasp_topic_contract_<検証ごとのID>/params.yaml
 ```
 
 個別出力ケースでは上記launchに`candidate_topic:=/topic_contract/grasp_pose_cands`、

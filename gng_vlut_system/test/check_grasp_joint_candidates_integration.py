@@ -26,7 +26,7 @@ def main():
          "--params-file", params, "-p", f"gng_model_path:={model_dir}/gng.bin",
          "-p", f"vlut_path:={model_dir}/vlut.bin", "-p", "base_frame:=ToPoDualArm/base_link",
          "-r", "topological_map:=/ToPoDualArm/topological_map_static"],
-        ["ros2", "launch", "gng_vlut_system", "grasp_candidate_joint_planning.launch.py",
+        ["ros2", "launch", "gng_vlut_system", "grasp_joint_candidates.launch.py",
          f"params_file:={params}"],
     ]
     processes = []

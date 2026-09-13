@@ -330,7 +330,7 @@ ros2 launch ais_gng ais_gng.launch.py \
 別端末:
 
 ```bash
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
@@ -343,7 +343,7 @@ ros2 topic echo /grasp_pose_cands/summary \
 
 現行launchは入力を `/plane_clusters` に設定し、追加のクラスタ可視化ノードは既定で起動しない。C++単体の入力既定値には旧トピック名が残っているため、上記launchを利用。現行launch・C++での入力パラメータ名も旧綴りの `planar_clusters_topic` であり、独自設定時は `plane_clusters_topic` との混同に注意。
 
-候補出力は `grasp_candidate_joint_planning.launch.py` の既定入力と共通。候補生成方式は上方方式かボクセル方式の一方だけ起動し、比較時はトピックを分離。名前付きYAMLの出力値がlaunch引数より優先されるため、個別トピック指定時は両者を同じ値へ変更。自動的な発行者排他や候補統合は未実装。計画launchは候補経路・候補関節角度の出力専用であり、動作指令を配信しない。
+候補出力は `grasp_joint_candidates.launch.py` の既定入力と共通。候補生成方式は上方方式かボクセル方式の一方だけ起動し、比較時はトピックを分離。名前付きYAMLの出力値がlaunch引数より優先されるため、個別トピック指定時は両者を同じ値へ変更。自動的な発行者排他や候補統合は未実装。計画launchは候補経路・候補関節角度の出力専用であり、動作指令を配信しない。
 
 ROSノードは最新のグラフとクラスタを各1件保持する方式。更新番号不一致では待機し、履歴を探索して組み合わせない。入力停止や不一致だけでは旧候補の失効出力は行わないため、撮影時は時刻・更新番号も確認。互換用スコア配列はheaderを持たないため、厳密な対応には候補内の`shape_score`を使用。
 
@@ -382,7 +382,7 @@ ROSノードは最新のグラフとクラスタを各1件保持する方式。�
 5. **結果**: TCP位置・下向き姿勢、局所寸法、採用・棄却件数の表示。
 6. **限界**: 欠損・分割・接続への依存、実機把持成功とは異なることの説明。
 
-撮影例は「採用候補」「過大領域」「隣接する同一平面の小片」「孤立領域」を比較。誤採用し得る孤立領域も含めることで、隣接関係の役割と現状の限界を説明可能。候補計算・Viewer表示に軌道生成・ロボット駆動は不要。ただし任意で到達性評価を追加する現行の `grasp_candidate_joint_planning.launch.py` は経路計算と候補ロボットのViewer召喚を含む。
+撮影例は「採用候補」「過大領域」「隣接する同一平面の小片」「孤立領域」を比較。誤採用し得る孤立領域も含めることで、隣接関係の役割と現状の限界を説明可能。候補計算・Viewer表示に軌道生成・ロボット駆動は不要。ただし任意で到達性評価を追加する現行の `grasp_joint_candidates.launch.py` は経路計算と候補ロボットのViewer召喚を含む。
 
 発表用の短い説明:
 
@@ -395,7 +395,7 @@ ROSノードは最新のグラフとクラスタを各1件保持する方式。�
 | 投影、PCA矩形、サイズ判定 | [推定器](../include/candidate/top_grasp_surface_estimator.hpp) の `horizontalBasis()`、`fitFootprint()` |
 | 隣接関係、距離、姿勢、並べ替え | [推定器](../include/candidate/top_grasp_surface_estimator.hpp) の `estimate()` |
 | 入力整合、候補・summary出力 | [ROSノード](../src/top_grasp_surface_estimator_node.cpp) |
-| 候補生成の起動 | [launch](../launch/top_grasp_surface_estimator.launch.py) |
+| 候補生成の起動 | [launch](../launch/top_grasp_pose_candidates.launch.py) |
 | 共通パラメータ | [ToPoDualArm.yaml](../../gng_vlut_system/config/ToPoDualArm.yaml) の `/top_grasp_surface_estimator` |
 | 合成入力の検査内容 | [テスト](../test/test_top_grasp_surface_estimator.cpp) |
 | 過去の実行結果 | [2026-08-27検証記録](../../gng_vlut_system/docs/releases/2026-08-27_top_grasp_surface_estimation.md) |

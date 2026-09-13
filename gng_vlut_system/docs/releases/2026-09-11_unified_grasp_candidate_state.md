@@ -54,7 +54,7 @@
 - `test_grasp_candidate_publisher`: ID保持、TF移動、負座標・境界、無効姿勢、空入力、単一配信元。
 - `python3 gng_vlut_system/test/test_grasp_candidate_reachability.py`: 計画入力の6件。
 - `python3 grasping_system/test/check_top_grasp_topic_integration.py`: 標準・個別出力先の2件。
-- `python3 gng_vlut_system/test/check_grasp_candidate_joint_planning_integration.py`: 実GNGによる候補関節計画・旧計画消去。
+- `python3 gng_vlut_system/test/check_grasp_joint_candidates_integration.py`: 実GNGによる候補関節計画・旧計画消去。
 - `node tests/check_pose_array_stream.cjs`: ROSからWebSocketへの同一IDの3色更新、汎用PoseArray、空候補、再接続。
 - `node tests/pose_marker_renderer.test.mjs`: 矢印オブジェクトを増やさない色更新、TF、方向、消去。
 - フロントエンドlint、tscによる型検査、Viteによる一時出力先へのビルド。

@@ -24,7 +24,7 @@
 
 ## Removed
 
-- 候補表示における`grasp_candidate_joint_planning.launch.py`への必須依存。
+- 候補表示における`grasp_joint_candidates.launch.py`への必須依存。
 - 過剰だった到達性評価との照合・色統合、照合用の`header_stamp`、専用テスト。
 - `/grasp_pose_markers`の再生成はなし。
 

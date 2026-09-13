@@ -34,7 +34,7 @@ python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_lin
 
 
 ## 把持候補の関節角度・候補軌道の出力
-ros2 launch gng_vlut_system grasp_candidate_joint_planning.launch.py \
+ros2 launch gng_vlut_system grasp_joint_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 `/ToPoDualArm/grasp_candidate_metrics` の各候補に `final_joint_state` を出力。Viewerには候補姿勢のロボットinstanceも召喚する。実機・仮想ロボットへの関節指令は配信しない。候補ロボット表示だけを止める場合は `publish_candidate_robot_preview:=false` を追加。
@@ -56,7 +56,7 @@ ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 ## GNG平面クラスタから上方向把持候補を生成
 `ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
 
-ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 - ID・姿勢・到達性状態: `/grasp_pose_cands` (`gng_control_msgs/msg/GraspCandidateArray`)
@@ -67,7 +67,7 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。
 `candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合は `candidate_frame: "ToPoDualArm/base_link"` とし、外部センサTFをURDFまたは実機bringupから配信。
 
-`grasp_candidate_joint_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
+`grasp_joint_candidates.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
 ## HTML全点群からCPU GNGテンプレートを保存
 点群も保存
@@ -117,10 +117,6 @@ ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
   input_topic:=/ToPoDualArm/right_arm_voxel \
   danger_inflation:=0.05
   (output_voxel_size:=0.02)
-
-## 自己認識ボクセル内外の点群に分けてパブリッシュ
-ros2 run gng_vlut_system self_recognition_filter_node
-  # self-recognition voxel内の点群: /self_recognition_points
 
 # URDF準拠のダミー関節状態
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
