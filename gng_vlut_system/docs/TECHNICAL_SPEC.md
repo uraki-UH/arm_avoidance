@@ -2,28 +2,23 @@
 
 この文書は `gng_vlut_system` の把握に必要な変数、トピック、サービス、内部状態、データフローをまとめた技術仕様書です。
 
-対象の中心は `grasp_goal_planning.launch.py` を起点とする把持候補選定・候補軌道生成・評価指標 publish の系統です。
+対象の中心は `grasp_candidate_joint_planning.launch.py` を起点とする把持候補選定・候補軌道生成・評価指標 publish の系統です。
 
 ## 1. システム概要
 
-`grasp_goal_planning.launch.py` は次の 4 系統をまとめて起動します。
+`grasp_candidate_joint_planning.launch.py` は次の 2 系統を起動します。
 
 1. `topological_map_goal_selector.launch.py`
-2. `robot_spawn.launch.py`
-3. `topological_map_avoidance.launch.py`
-4. `virtual_joint_state_driver.launch.py` ただし `enable_motion:=true` のときのみ
+2. `topological_map_avoidance.launch.py`
 
-補助として、`publish_world_tf:=true` の場合に static TF を追加します。
+候補経路と候補関節角度の出力専用。robot spawn、仮想関節駆動、関節指令、control claim の配信は行わない。
 
 ## 2. 起動フロー
 
 ```mermaid
 flowchart TD
-    A[grasp_goal_planning.launch.py] --> B[topological_map_goal_selector.launch.py]
-    A --> C[robot_spawn.launch.py]
+    A[grasp_candidate_joint_planning.launch.py] --> B[topological_map_goal_selector.launch.py]
     A --> D[topological_map_avoidance.launch.py]
-    A --> E[virtual_joint_state_driver.launch.py]
-    A --> F[static_transform_publisher]
 
     B --> G[selected_goal_candidate_ids]
     B --> H[selected_topological_map]
@@ -33,16 +28,11 @@ flowchart TD
     D --> L[plan_topological_map]
     D --> M[grasp_candidate_metrics]
     D --> N[current_ee_pose]
-    D --> O[target_joint_states]
-    D --> P[control_claims]
-
-    O --> E
-    E --> Q[joint_states]
 ```
 
 ## 3. 変数一覧
 
-### 3.1 `grasp_goal_planning.launch.py` の launch 引数
+### 3.1 `grasp_candidate_joint_planning.launch.py` の launch 引数
 
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
@@ -52,8 +42,6 @@ flowchart TD
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 把持候補として採択したノード ID 群 |
 | `robot_name` | string | `ToPoDualArm` | namespace と topic 接頭辞 |
 | `urdf_path` | path | 空 | ロボットモデル参照 |
-| `enable_joint_state_publisher` | bool | `false` | `robot_spawn` での JointState Publisher 有無 |
-| `enable_motion` | bool | `true` | 実際に target を駆動するか |
 | `candidate_count` | int | `8` | 候補ノード数 |
 | `non_collision_only` | bool | `true` | 衝突ノードを候補から除外 |
 | `orientation_weight` | float | `0.0` | 向き一致度の重み |
@@ -62,10 +50,10 @@ flowchart TD
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
 | `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `initial_joint_names_csv` | csv | 組み込み値 | 仮想関節初期化名 |
 | `trajectory_topic` | topic | `/ToPoDualArm/plan_topological_map` | 確定経路の出力 |
 | `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路の出力 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 候補評価指標の出力 |
+| `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
 | `publish_hz` | float | `20.0` | avoidance node の publish 周波数 |
 | `avoid_collisions` | bool | `true` | 衝突ノードを避ける |
 | `avoid_danger` | bool | `true` | danger ノードを避ける |
@@ -75,13 +63,6 @@ flowchart TD
 | `strict_goal_collision_check` | bool | `false` | 目的地の衝突判定を厳格化 |
 | `replan_on_path_collision` | bool | `false` | 進行中経路が危険なら再計画 |
 | `allow_zero_initial_joint_state` | bool | `true` | 初期 joint_state が無いときゼロ初期値を使う |
-| `publish_target_joint_states` | bool | `true` | target_joint_states の publish 有無 |
-| `allow_safe_goal_fallback` | bool | `true` | 候補が無いとき安全ノードへ逃がすか |
-| `virtual_joint_state_publish_hz` | float | `50.0` | 仮想関節追従の publish 周波数 |
-| `virtual_joint_state_max_joint_velocity` | float | `0.6` | 仮想追従の最大関節速度 |
-| `virtual_joint_state_position_tolerance` | float | `0.01` | 目標到達許容差 |
-| `virtual_joint_state_use_wraparound` | bool | `true` | 角度 wrap-around 補正 |
-| `publish_world_tf` | bool | `false` | world -> base_link static TF の publish |
 
 ### 3.2 `topological_map_goal_selector.launch.py` の引数
 
@@ -122,6 +103,7 @@ flowchart TD
 | `goal_joint_limit_weight` | float | `0.5` | ゴール評価の関節限界重み |
 | `replan_on_path_collision` | bool | `true` | 進行中の危険経路で再計画 |
 | `allow_zero_initial_joint_state` | bool | `true` | 初期 joint_state 無しのゼロ初期化 |
+| `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
 | `publish_target_joint_states` | bool | `true` | target_joint_states 出力 |
 | `allow_safe_goal_fallback` | bool | `true` | safe ノード fallback の有無 |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 候補 ID 入力 |
@@ -157,11 +139,9 @@ flowchart TD
 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` | ID・姿勢・形状スコア・到達性状態 |
 | `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
 | `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
-| `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標 |
+| `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標と各候補の `final_joint_state` |
 | `/ToPoDualArm/current_ee_pose` | `geometry_msgs/PoseStamped` | 現在 EE pose |
-| `target_joint_states` | `sensor_msgs/JointState` | 目標関節値 |
 | `joint_states` | `sensor_msgs/JointState` | 仮想 or 実機の現在関節値 |
-| `/ToPoDualArm/control_claims` | `gng_control_msgs/JointControlClaim` | control claim |
 
 ## 5. サービス
 
@@ -188,25 +168,15 @@ flowchart TD
     H --> L[plan_topological_map]
     H --> M[cand_topological_map]
     H --> N[grasp_candidate_metrics]
-    J --> O[virtual_joint_state_driver]
-    O --> I
 ```
 
-## 7. no-motion モード
+## 7. 実行系との分離
 
-`enable_motion:=false` のときは次の扱いになります。
-
-- `virtual_joint_state_driver.launch.py` を起動しない
-- `publish_target_joint_states:=false`
-- `control_claim_enabled:=false`
-- `allow_safe_goal_fallback:=false`
-
-このモードでは、候補ノード群・候補軌道・評価指標の生成は維持しつつ、実際の関節更新を止める。
+`grasp_candidate_joint_planning.launch.py` は常に `publish_target_joint_states:=false` と `control_claim_enabled:=false` を設定する。実機・仮想ロボットの関節更新は、候補の `final_joint_state` を選択する実行系から別途行う。
 
 ## 8. viewer 側に委ねる見た目
 
-候補ロボットプレビューの見た目は ToPoFuzzy Viewer 側で制御する。
-ROS 側はプレビューの送信有無だけを制御し、見た目の指定は送らない。
+候補ロボットプレビューは `grasp_candidate_joint_planning.launch.py` が既定で召喚する。`publish_candidate_robot_preview:=false` で停止可能。見た目は ToPoFuzzy Viewer 側で制御し、ROS 側はプレビューの送信有無だけを制御する。
 
 ### 8.1 URDF プレビューの初期ロード
 
@@ -580,7 +550,7 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持の採用環境ノード | `/grasp_pose_cands/nodes` | `visualization_msgs/MarkerArray` |
 
-上面把持とボクセル照合の既定出力を共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
+上面把持とボクセル照合の既定出力を共通化し、`grasp_candidate_joint_planning.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
 形状スコアは`candidates[].shape_score`へ統一し、旧スコア単独トピックを廃止。

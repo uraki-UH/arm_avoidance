@@ -2,7 +2,7 @@
 
 ## Summary
 
-上方把持方式の既定出力をボクセル方式と共通化し、`grasp_goal_planning.launch.py`の既定入力へ接続。
+上方把持方式の既定出力をボクセル方式と共通化し、`grasp_candidate_joint_planning.launch.py`の既定入力へ接続。
 
 ## Changed
 
@@ -17,7 +17,7 @@
 
 ## Fixed
 
-- 上方把持出力と`grasp_goal_planning.launch.py`既定入力の名称不一致。
+- 上方把持出力と`grasp_candidate_joint_planning.launch.py`既定入力の名称不一致。
 
 ## Removed
 

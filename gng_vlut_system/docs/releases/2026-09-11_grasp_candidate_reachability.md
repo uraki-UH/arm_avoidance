@@ -1,6 +1,6 @@
 # 把持候補の保持と位置到達性による計画スキップ
 
-`grasp_goal_planning.launch.py`の入口で、全把持候補の位置到達性を評価する。
+`grasp_candidate_joint_planning.launch.py`の入口で、全把持候補の位置到達性を評価する。
 領域外の候補も削除せず、元の姿勢・配列添字・形状スコアを含む評価結果を配信する。
 計画には領域内候補と同じ登録セルにある非衝突GNGノードだけを渡す。
 
@@ -9,9 +9,8 @@
 ビルド後に`source /ros2_ws/install/setup.bash`を実行してから、従来のコマンドを使用する。
 
 ```bash
-ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  enable_motion:=false
+ros2 launch gng_vlut_system grasp_candidate_joint_planning.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
 既定の到達領域は`/ToPoDualArm/topological_map_static`にあるTCP位置を5 cmセルへ量子化した集合。
@@ -66,7 +65,7 @@ Safety VLUTのアーム本体占有セルをTCP到達領域として扱うもの
 - 全領域外・空入力・TF取得失敗時には目標IDを空配列として配信。
 - 採用経路トピックには既存仕様により現在手先の仮想ノードだけが残る場合あり。旧経路のエッジは消去。
 - `candidate_count`は各把持候補に対応付けるGNGノード数。既定値8。
-- `enable_motion:=false`でも領域内候補の経路計算は有効。関節目標の配信・仮想関節駆動は無効。
+- 現行launchは領域内候補の経路計算を行い、候補関節角度を`grasp_candidate_metrics`へ出力。関節目標の配信・仮想関節駆動は行わない。
 
 ## 検証
 
@@ -74,13 +73,13 @@ Safety VLUTのアーム本体占有セルをTCP到達領域として扱うもの
 - `test_grasp_candidate_reachability.py`による回帰テスト11件。
   混在候補の保持、全領域外、空入力、TF欠落、台車移動相当のTF変更、負座標境界、
   衝突状態、独立mapのID分離、map更新、不正入力。
-- `check_grasp_goal_planning_integration.py`による実GNG・VLUTを用いた結合確認。
+- `check_grasp_candidate_joint_planning_integration.py`による実GNG・VLUTを用いた結合確認。
   混在入力→全領域外→領域内復帰→空入力、旧経路・旧評価の失効、関節目標配信なし。
   結合確認の現在関節角は既定のゼロ姿勢。実機での把持・経路安全性検証は未実施。
 
 ```bash
 ROS_DOMAIN_ID=218 ROS_LOCALHOST_ONLY=1 \
-  python3 /ros2_ws/src/gng_vlut_system/test/check_grasp_goal_planning_integration.py
+  python3 /ros2_ws/src/gng_vlut_system/test/check_grasp_candidate_joint_planning_integration.py
 ```
 
 結合確認スクリプトは隔離ドメイン内で次のコマンドを起動し、終了時に両方を停止する。
@@ -93,7 +92,6 @@ ros2 run gng_vlut_system safety_monitor_node --ros-args \
   -p base_frame:=ToPoDualArm/base_link \
   -r topological_map:=/ToPoDualArm/topological_map_static
 
-ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  enable_motion:=false
+ros2 launch gng_vlut_system grasp_candidate_joint_planning.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```

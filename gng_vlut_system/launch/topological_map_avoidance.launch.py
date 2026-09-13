@@ -50,6 +50,8 @@ def launch_setup(context, *args, **kwargs):
     goal_joint_limit_weight = LaunchConfiguration("goal_joint_limit_weight").perform(context)
     replan_on_path_collision = LaunchConfiguration("replan_on_path_collision").perform(context)
     allow_zero_initial_joint_state = LaunchConfiguration("allow_zero_initial_joint_state").perform(context)
+    publish_candidate_robot_preview = LaunchConfiguration(
+        "publish_candidate_robot_preview").perform(context)
     publish_target_joint_states = LaunchConfiguration("publish_target_joint_states").perform(context)
     allow_safe_goal_fallback = LaunchConfiguration("allow_safe_goal_fallback").perform(context)
     goal_candidate_ids_topic = LaunchConfiguration("goal_candidate_ids_topic").perform(context)
@@ -136,6 +138,10 @@ def launch_setup(context, *args, **kwargs):
         node_params["allow_zero_initial_joint_state"] = (
             allow_zero_initial_joint_state.lower() in ("1", "true", "yes", "on")
         )
+    if publish_candidate_robot_preview:
+        node_params["publish_candidate_robot_preview"] = (
+            publish_candidate_robot_preview.lower() in ("1", "true", "yes", "on")
+        )
     if publish_target_joint_states:
         node_params["publish_target_joint_states"] = (
             publish_target_joint_states.lower() in ("1", "true", "yes", "on")
@@ -215,6 +221,7 @@ def generate_launch_description():
                               description="ゴール姿勢の関節限界余裕ボーナス重み。大きいほど関節限界から遠い姿勢が優先される"),
         DeclareLaunchArgument("replan_on_path_collision", default_value="true"),
         DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),
+        DeclareLaunchArgument("publish_candidate_robot_preview", default_value="true"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("target_topic", default_value=""),
         DeclareLaunchArgument("robot_base_frame", default_value=""),

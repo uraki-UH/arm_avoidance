@@ -19,7 +19,7 @@ TopologicalMapを直接可視化する構成。計画処理用の`/selected_goal
 ## Removed
 
 - `/selected_topological_map_markers`のpublisherとマーカ生成。
-- selectorの`--marker-topic`、selector launchと`grasp_goal_planning.launch.py`の`marker_topic`引数。
+- selectorの`--marker-topic`、selector launchと`grasp_candidate_joint_planning.launch.py`の`marker_topic`引数。
 
 ## Behavior Impact
 

@@ -33,10 +33,11 @@ python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_lin
 
 
 
-## 把持候補姿勢、軌道、動く
-ros2 launch gng_vlut_system grasp_goal_planning.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  enable_motion:=false
+## 把持候補の関節角度・候補軌道の出力
+ros2 launch gng_vlut_system grasp_candidate_joint_planning.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+`/ToPoDualArm/grasp_candidate_metrics` の各候補に `final_joint_state` を出力。Viewerには候補姿勢のロボットinstanceも召喚する。実機・仮想ロボットへの関節指令は配信しない。候補ロボット表示だけを止める場合は `publish_candidate_robot_preview:=false` を追加。
 
 
 ## HTML起動
@@ -53,7 +54,6 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
 
 ## GNG平面クラスタから上方向把持候補を生成
-
 `ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
 
 ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
@@ -67,7 +67,7 @@ ros2 launch grasping_system top_grasp_surface_estimator.launch.py \
 上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。
 `candidate_frame: ""` は入力座標系のままでTF変換なし。ロボット基準にする場合は `candidate_frame: "ToPoDualArm/base_link"` とし、外部センサTFをURDFまたは実機bringupから配信。
 
-`grasp_goal_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
+`grasp_candidate_joint_planning.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
 ## HTML全点群からCPU GNGテンプレートを保存
 点群も保存
@@ -104,25 +104,6 @@ ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
 
 ==============================================================
 
-##　dynamixel handlerの起動（使えない可能性が高い）
-ros2 launch dynamixel_handler dynamixel_handler_launch.xml
-USB の番号が変わる環境では、こちらのラッパーの方が安定。
-ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
-
-##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
-ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
-
-ros2 launch dynamixel_joint_state_bridge \
-  dynamixel_joint_state_bridge.launch.py \
-  namespace:=/ToPoDualArm
-
-realsense
-ros2 run dynamixel_joint_state_bridge dynamixel_joint_state_bridge_node \
-  --ros-args \
-  -r __ns:=/ToPoDualArm \
-  --params-file /ros2_ws/src/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge.yaml \
-  -p output_topic:=viewer_joint_states
-
 ##　自己認識ボクセルの起動
 ros2 launch gng_vlut_system self_recognition_viz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -145,20 +126,8 @@ ros2 run gng_vlut_system self_recognition_filter_node
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
 
-  ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
-
-## realsenseのrosbag + 点群座標変換
-# ターミナル1: raw点群を /camera/camera/depth/color/points_raw へ　リマップして再生
-ros2 bag play /rosbag/uraki/rosbag2_2026_04_22-19_10_41/ \
-  --topics /camera/camera/depth/color/points \
-  --remap /camera/camera/depth/color/points:=/camera/camera/depth/color/points_raw \
-  --loop
-
-# ターミナル2: 変換後の点群を元のトピック名でpublish
-ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
-  input_topic:=/camera/camera/depth/color/points_raw \
-  output_topic:=/camera/camera/depth/color/points
 
 
 ## GNGの学習の実行
@@ -176,23 +145,18 @@ ros2 launch gng_vlut_system topological_map_avoidance.launch.py   params_file:=/
 ros2 launch gng_vlut_system target_joint_state_executor.launch.py   robot_name:=ToPoDualArm   target_topic:=target_joint_states   state_topic:=joint_states   command_topic:=joint_commands   max_joint_velocity:=0.6   publish_hz:=20.0
 
 
-python3 test_tf_publisher.py --static --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2 --hold-seconds 1.0
-
-
 python3 -m pip install --user torch==2.8.0 torchvision --index-url https://download.pytorch.org/whl/cpu
 
 
 ## GNGノードを把持候補用ボクセルへ変換
-`/topological_map`と`/scan/transformed`を照合し、点群支持のある物体候補をボクセル化する。
+`/topological_map`と`/scan/transformed`を照合し、点群支持のある物体候補をボクセル化。
 `SAFE_TERRAIN`、`HUMAN`、`CAR`は候補から除外。
 
-```bash
 ros2 launch ais_gng topological_grid.launch.py \
   input_topic:=/topological_map \
   pointcloud_topic:=/scan/transformed \
   output_topic:=/topo_voxel_ids \
   grid_size:=0.02
-```
 
 ## 把持ボクセル照合（左グリッパ、POC）
 ボクセルとグリッパ体積、平面クラスタなどを使って  tcp候補を得る
@@ -225,13 +189,9 @@ ros2 launch gng_vlut_system robot_gazebo_sim.launch.py \
   world:=/ros2_ws/src/gng_vlut_system/worlds/pick_and_place.world
 
 ## Gazeboの点群・GNG検証用起動
-ピックアンドプレースworld、環境固定LiDAR、LiDAR走査密度は
-`gng_vlut_system/config/gazebo_pick_and_place.yaml`で管理する。
-Gazeboの生PointCloud2は、実機・シミュレーション共通の`/lidar_points`へ出力する。
+`gng_vlut_system/config/gazebo_pick_and_place.yaml`で設定管理　　点群トピック　/lidar_points
 
-```bash
 ros2 launch gng_vlut_system gazebo_pick_and_place.launch.py
-```
 
 設定ファイルだけを差し替える場合は次のとおり。
 
@@ -262,19 +222,6 @@ echo 'source /ros2_ws/install/setup.bash' >> ~/.bashrc
 alias sh='source /opt/ros/humble/setup.bash'
 alias sw='source /ros2_ws/install/setup.bash'
 
-
-### dockerではなく素の ROS2 環境で入れる場合
-sudo apt install ros-humble-rosbridge-server
-
-### 起動手順
-# 1) rosbridge を起動
-ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
-
-このlaunchはWebSocketに加えて`rosapi`を起動する。単体HTMLは`rosapi`から
-`*_grip_V_topological_map`、`*_grip_minV_topological_map`、`*_grip_baseV_topological_map`、
-`*_grip_sweptV_topological_map`
-topicを自動発見するため、`ros2 run
-rosbridge_server rosbridge_websocket`だけではなく上記launchを使用する。
 
 ## 左腕をtopological_map_avoidanceで動かす
 ros2 launch gng_vlut_system topological_map_avoidance.launch.py \

@@ -29,3 +29,23 @@ ros2 launch realsense2_camera rs_launch.py \
 
 
 ros2 launch realsense2_camera rs_launch.py   align_depth.enable:=true   pointcloud.enable:=true   pointcloud.ordered_pc:=true
+
+
+##　dynamixel handlerの起動（使えない可能性が高い）
+ros2 launch dynamixel_handler dynamixel_handler_launch.xml
+USB の番号が変わる環境では、こちらのラッパーの方が安定。
+ros2 launch topoarm_bringup dynamixel_handler_auto.launch.py
+
+##　dynamixelの/dynamixel/state/present　トピックをjoint_statesに変換
+ros2 launch dynamixel_joint_state_bridge dynamixel_joint_state_bridge.launch.py namespace:=/ToPoDualArm
+
+ros2 launch dynamixel_joint_state_bridge \
+  dynamixel_joint_state_bridge.launch.py \
+  namespace:=/ToPoDualArm
+
+realsense
+ros2 run dynamixel_joint_state_bridge dynamixel_joint_state_bridge_node \
+  --ros-args \
+  -r __ns:=/ToPoDualArm \
+  --params-file /ros2_ws/src/dynamixel_joint_state_bridge/config/dynamixel_joint_state_bridge.yaml \
+  -p output_topic:=viewer_joint_states

@@ -11,7 +11,7 @@ import time
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from geometry_msgs.msg import Pose
-from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Int32MultiArray, String
 from ais_gng_msgs.msg import TopologicalMap
 from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray, GraspCandidateMetricArray
 
@@ -26,8 +26,8 @@ def main():
          "--params-file", params, "-p", f"gng_model_path:={model_dir}/gng.bin",
          "-p", f"vlut_path:={model_dir}/vlut.bin", "-p", "base_frame:=ToPoDualArm/base_link",
          "-r", "topological_map:=/ToPoDualArm/topological_map_static"],
-        ["ros2", "launch", "gng_vlut_system", "grasp_goal_planning.launch.py",
-         f"params_file:={params}", "enable_motion:=false"],
+        ["ros2", "launch", "gng_vlut_system", "grasp_candidate_joint_planning.launch.py",
+         f"params_file:={params}"],
     ]
     processes = []
     logs = []
@@ -45,6 +45,8 @@ def main():
             ("/ToPoDualArm/grasp_candidate_metrics", GraspCandidateMetricArray, "metrics"),
             ("/ToPoDualArm/plan_topological_map", TopologicalMap, "plan"),
             ("/ToPoDualArm/cand_topological_map", TopologicalMap, "candidate_plan"),
+            ("/viewer/internal/stream/robot/description", String, "candidate_robot_description"),
+            ("/viewer/internal/stream/robot/pose", String, "candidate_robot_pose"),
         ]:
             node.create_subscription(msg_type, topic, lambda msg, key=key: received.update({key: msg}), qos)
         publisher = node.create_publisher(GraspCandidateArray, "/grasp_pose_cands", qos)
@@ -83,8 +85,16 @@ def main():
         wait_for(lambda: "goals" in received and received["goals"].data, "領域内候補の目標選択")
         allowed_ids = set(received["goals"].data)
         assert selected_node.id in allowed_ids
-        wait_for(lambda: "metrics" in received and received["metrics"].candidates, "領域内候補の計画評価")
+        wait_for(
+            lambda: "metrics" in received and received["metrics"].candidates and
+            "candidate_robot_description" in received and
+            "candidate_robot_pose" in received,
+            "領域内候補の計画評価と候補ロボット召喚")
         assert all(item.goal_node_id in allowed_ids for item in received["metrics"].candidates)
+        assert all(
+            item.final_joint_state.name and
+            len(item.final_joint_state.name) == len(item.final_joint_state.position)
+            for item in received["metrics"].candidates)
         print("混在入力: 全候補保持・領域内目標だけの計画評価を確認", flush=True)
 
         source.update_id += 1
@@ -112,6 +122,7 @@ def main():
         wait_for(lambda: not received["candidates"].candidates and not received["goals"].data
                  and not received["metrics"].candidates, "空入力")
         assert node.count_publishers("/ToPoDualArm/target_joint_states") == 0
+        assert node.count_publishers("/ToPoDualArm/control_claims") == 0
         assert node.count_publishers("/grasp_pose_cands") == 1
         assert node.count_publishers("/grasp_pose_markers") == 0
         assert node.count_publishers("/grasp_pose_cands/reachability") == 0

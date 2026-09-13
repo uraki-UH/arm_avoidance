@@ -542,8 +542,10 @@ public:
           target_topic_, rclcpp::QoS(10).reliable());
     }
 
-    control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
-        control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+    if (control_claim_enabled_) {
+      control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
+          control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+    }
 
     param_cb_handle_ = add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> & params) {
@@ -559,6 +561,10 @@ public:
               control_claim_mode_ = param.as_int();
             } else if (name == "control_claim_enabled") {
               control_claim_enabled_ = param.as_bool();
+              if (control_claim_enabled_ && !control_claim_pub_) {
+                control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
+                    control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+              }
             }
           }
           return result;
@@ -926,13 +932,15 @@ private:
     }
     publishCurrentEefPoseLocked(current_q);
 
-    gng_control_msgs::msg::JointControlClaim claim;
-    claim.command_topic = target_topic_;
-    claim.joint_names = controlled_joint_names_;
-    claim.priority = control_claim_priority_;
-    claim.mode = static_cast<uint8_t>(control_claim_mode_);
-    claim.enabled = control_claim_enabled_;
-    control_claim_pub_->publish(claim);
+    if (control_claim_pub_) {
+      gng_control_msgs::msg::JointControlClaim claim;
+      claim.command_topic = target_topic_;
+      claim.joint_names = controlled_joint_names_;
+      claim.priority = control_claim_priority_;
+      claim.mode = static_cast<uint8_t>(control_claim_mode_);
+      claim.enabled = control_claim_enabled_;
+      control_claim_pub_->publish(claim);
+    }
 
     last_target_q_ = target_q;
   }

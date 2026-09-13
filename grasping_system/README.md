@@ -226,4 +226,4 @@ Pass `start_plane_cluster:=false` when no plane-cluster marker process is needed
 `GraspCandidateArray`によるID・姿勢・状態の一括配信。Viewerの既定表示は未評価=黄・範囲内=明るい薄緑水色・範囲外=灰。レイヤーの「矢印表示」で寸法・色・基準位置・補助2軸を設定可能。
 到達性は候補生成側で評価。`reachability_map_topic`、`reachability_voxel_size`、`reachability_voxel_origin`、`reachability_publish_hz`を生成ノードに設定。計画launch・別Markerへの依存なし。
 
-`grasp_goal_planning.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。
+`grasp_candidate_joint_planning.launch.py`の既定入力への接続。ボクセル方式と共通の出力先のため、候補生成は一方式のみ起動。両方式の比較時は出力トピックの分離と、名前付きYAML・launch引数の出力設定の整合が必要。
