@@ -17,7 +17,21 @@ A high-performance web-based Point Cloud Viewer and Editor built with React, Thr
   - Interactive Transform (Translate, Rotate, Scale)
 - **File Support**: PCD, LAS, LAZ, PLY
 
+## ロボット候補のリンク別表示設定
+
+サイドバーのロボット色設定の「リンク別の表示設定」で、URDFの各関節に
+対応する子リンクの色・Opacity・Emissiveを変更できます。同じロボット項目に複数の候補姿勢が
+ある場合、すべての候補の同名リンクへ一括反映されます。固定リンクや
+グリッパの左右指も、表示形状を持つリンクであれば設定対象です。
+
+部位ごとの表示設定は全体設定より優先されます。「戻す」でその部位の
+指定を解除し、「すべて戻す」で部位別の指定をまとめて解除できます。
+設定対象はVisualの色で、Collisionの色は既存の全体設定を使用します。
+candidateの設定画面はリンク別の設定のみを表示します。candidateの部位色を
+解除するとURDF色に戻り、Opacity・Emissiveは共通の既定値に戻ります。
+
 ## Directory Structure
+
 
 ```
 ToPoFuzzyViewer/

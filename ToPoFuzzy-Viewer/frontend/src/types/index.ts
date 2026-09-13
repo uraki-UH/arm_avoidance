@@ -203,6 +203,8 @@ export interface RobotSettings {
     visible: boolean;
     color: string;
     useUrdfColors?: boolean;
+    link_colors?: Record<string, string>;
+    link_appearance?: Record<string, { opacity?: number; emissive_intensity?: number }>;
     showVisual: boolean;
     showCollision: boolean;
     showManipulabilityEllipsoid?: boolean;

@@ -546,7 +546,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "enable_gripper_volume_graph",
             default_value="",
-            description="Enable gripper-volume TopologicalMap publishers; empty uses params_file",
+            description="グリッパ体積の確認用トピック発行ノードの起動切替。未指定時はparams_fileを使用。",
         ),
         DeclareLaunchArgument(
             "gripper_volume_config_file",

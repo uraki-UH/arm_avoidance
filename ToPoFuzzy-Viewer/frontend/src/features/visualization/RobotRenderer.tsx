@@ -2,7 +2,10 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { createPortal, useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
-import { RobotData, RobotPoseInstance, Transform } from '../../types';
+import { apply_robot_appearance } from './robot_link_appearance';
+
+const empty_link_colors: Record<string, string> = {};
+import { RobotData, RobotPoseInstance, RobotSettings, Transform } from '../../types';
 import { DisplayFrame, useDemandUpdate } from './SharedRenderers';
 
 interface RobotRendererProps {
@@ -11,6 +14,8 @@ interface RobotRendererProps {
     visible?: boolean;
     color?: string;
     useUrdfColors?: boolean;
+    link_colors?: Record<string, string>;
+    link_appearance?: RobotSettings['link_appearance'];
     emissiveIntensity?: number;
     opacity?: number;
     jointValuesOverride?: number[];
@@ -76,6 +81,8 @@ function RobotInstanceRenderer({
     visible = true,
     color = 'blue',
     useUrdfColors = true,
+    link_colors = empty_link_colors,
+    link_appearance,
     emissiveIntensity = 0.2,
     opacity = 1,
     jointValuesOverride = [],
@@ -193,85 +200,15 @@ function RobotInstanceRenderer({
         rotationalMaterial,
     ]);
 
-    // Trigger re-render in demand mode
-    useDemandUpdate([robot, data, visible, color, useUrdfColors, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride, showManipulabilityEllipsoid, manipLinkName]);
+    // 描画要求モードでの色・姿勢変更の反映
+    useDemandUpdate([robot, data, visible, color, useUrdfColors, link_colors, link_appearance, emissiveIntensity, effectiveOpacity, tf, jointValuesOverride, showManipulabilityEllipsoid, manipLinkName]);
 
-    // --- Memoize Robot Material ---
-    const robotMaterial = useMemo(() => new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color),
-        emissive: new THREE.Color(color).multiplyScalar(Math.max(0, emissiveIntensity)),
-        roughness: 0.7,
-        metalness: 0.1,
-        transparent: effectiveOpacity < 1,
-        opacity: effectiveOpacity,
-    }), [color, emissiveIntensity, effectiveOpacity]);
+    const apply_appearance = useCallback((object: THREE.Object3D) => {
+        apply_robot_appearance(object, link_colors, useUrdfColors, color, effectiveOpacity, emissiveIntensity, link_appearance);
+    }, [link_colors, link_appearance, useUrdfColors, color, effectiveOpacity, emissiveIntensity]);
 
-    const applyMaterialTweaks = useCallback((material: THREE.Material | THREE.Material[]) => {
-        const applyOne = (m: THREE.Material) => {
-            const anyMaterial = m as THREE.Material & {
-                transparent?: boolean;
-                opacity?: number;
-                depthTest?: boolean;
-                depthWrite?: boolean;
-                emissive?: THREE.Color;
-                color?: THREE.Color;
-            };
-
-            const is_transparent = effectiveOpacity < 1;
-            anyMaterial.transparent = is_transparent;
-            anyMaterial.opacity = effectiveOpacity;
-            anyMaterial.depthTest = true;
-            anyMaterial.depthWrite = !is_transparent;
-
-            if (anyMaterial.emissive && anyMaterial.color) {
-                anyMaterial.emissive.copy(anyMaterial.color).multiplyScalar(Math.max(0, emissiveIntensity));
-            }
-
-            anyMaterial.needsUpdate = true;
-        };
-
-        if (Array.isArray(material)) {
-            material.forEach(applyOne);
-        } else {
-            applyOne(material);
-        }
-    }, [emissiveIntensity, effectiveOpacity]);
-
-    const applyRobotMaterial = useCallback((obj: THREE.Object3D) => {
-        if (!obj) return;
-        obj.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                if (Array.isArray(mesh.material)) {
-                    mesh.material = mesh.material.map(() => robotMaterial);
-                } else if (mesh.material !== robotMaterial) {
-                    mesh.material = robotMaterial;
-                }
-                applyMaterialTweaks(mesh.material);
-                mesh.castShadow = false;
-                mesh.receiveShadow = false;
-                mesh.renderOrder = 10;
-            }
-        });
-    }, [applyMaterialTweaks, robotMaterial]);
-
-    const applyUrdfAppearanceTweaks = useCallback((obj: THREE.Object3D) => {
-        if (!obj) return;
-        obj.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                applyMaterialTweaks(mesh.material);
-                mesh.castShadow = false;
-                mesh.receiveShadow = false;
-                mesh.renderOrder = 10;
-            }
-        });
-    }, [applyMaterialTweaks]);
-
-    const applyCurrentAppearanceRef = useRef<(obj: THREE.Object3D) => void>(() => undefined);
-    applyCurrentAppearanceRef.current = useUrdfColors
-        ? applyUrdfAppearanceTweaks
-        : applyRobotMaterial;
+    const applyCurrentAppearanceRef = useRef(apply_appearance);
+    applyCurrentAppearanceRef.current = apply_appearance;
 
     const scheduleInvalidate = useCallback(() => {
         if (!mountedRef.current || invalidateFrameRef.current !== null) return;
@@ -294,18 +231,14 @@ function RobotInstanceRenderer({
 
     useEffect(() => {
         if (!robot) return;
-        if (useUrdfColors) {
-            applyUrdfAppearanceTweaks(robot);
-        } else {
-            applyRobotMaterial(robot);
-        }
+        apply_appearance(robot);
         scheduleInvalidate();
-    }, [robot, useUrdfColors, effectiveOpacity, emissiveIntensity, applyRobotMaterial, applyUrdfAppearanceTweaks, scheduleInvalidate]);
+    }, [robot, apply_appearance, scheduleInvalidate]);
 
     // --- Load URDF ---
     useEffect(() => {
         if (!data?.urdf) return;
-        const loadSignature = `${data.urdf}::${useUrdfColors ? 'urdf' : 'robot'}`;
+        const loadSignature = data.urdf;
         if (loadSignature === lastLoadSignatureRef.current) return;
         lastLoadSignatureRef.current = loadSignature;
 
@@ -325,12 +258,13 @@ function RobotInstanceRenderer({
         try {
             const robotObj = urdfLoader.parse(data.urdf);
             applyCurrentAppearanceRef.current(robotObj);
+            lastJointSignatureRef.current = null;
             setRobot(robotObj);
         } catch (err) {
             console.error("Failed to parse URDF:", err);
             lastLoadSignatureRef.current = null;
         }
-    }, [data?.urdf, scheduleInvalidate, tag, useUrdfColors]);
+    }, [data?.urdf, scheduleInvalidate, tag]);
 
     // --- Update Joints ---
     useEffect(() => {
@@ -396,6 +330,8 @@ function RobotRenderer({
     visible = true,
     color = 'blue',
     useUrdfColors = true,
+    link_colors = empty_link_colors,
+    link_appearance,
     emissiveIntensity = 0.2,
     opacity = 1,
     jointValuesOverride = [],
@@ -406,9 +342,10 @@ function RobotRenderer({
     manipLinkName = '',
     onManipClick,
 }: RobotRendererProps) {
+    const enable_urdf_colors = /(^|[/_-])candidate(?:[/_-]|$)/i.test(tag) || useUrdfColors;
     const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
 
-    useDemandUpdate([data, visible, color, useUrdfColors, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType]);
+    useDemandUpdate([data, visible, color, useUrdfColors, link_colors, link_appearance, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType]);
 
     if (hasInstances) {
         const instances = data.instances as RobotPoseInstance[];
@@ -430,7 +367,8 @@ function RobotRenderer({
                             data={instanceData}
                             visible={visible}
                             color={color}
-                            useUrdfColors={useUrdfColors}
+                            useUrdfColors={enable_urdf_colors}
+                            link_colors={link_colors} link_appearance={link_appearance}
                             emissiveIntensity={emissiveIntensity}
                             opacity={instance.opacity ?? data.opacity ?? opacity}
                             jointValuesOverride={jointValuesOverride}
@@ -453,7 +391,8 @@ function RobotRenderer({
             data={data}
             visible={visible}
             color={color}
-            useUrdfColors={useUrdfColors}
+            useUrdfColors={enable_urdf_colors}
+            link_colors={link_colors} link_appearance={link_appearance}
             emissiveIntensity={emissiveIntensity}
             opacity={opacity}
             jointValuesOverride={jointValuesOverride}

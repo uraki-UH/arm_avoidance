@@ -1,10 +1,12 @@
 import { Palette, X } from 'lucide-react';
+import { RobotLinkColorControls } from './RobotLinkColorControls';
 import { ControlSlider } from '../../components/ui/SharedControls';
 import {
     DYNAMIC_GNG_DEFAULTS,
     GraphData,
     LayerSettings,
     RobotSettings,
+    RobotData,
     STATIC_GNG_DEFAULTS,
     TRAJECTORY_GNG_DEFAULTS,
     VoxelSettings,
@@ -20,6 +22,8 @@ interface EntityColorModalProps {
     entityType: ColorEntityType;
     settings: RobotSettings | VoxelSettings | LayerSettings | null;
     graphData?: GraphData | null;
+    robot_data?: RobotData | null;
+    is_candidate_robot?: boolean;
     onClose: () => void;
     onUpdate: (updates: Record<string, unknown>) => void;
 }
@@ -31,6 +35,8 @@ export function EntityColorModal({
     entityType,
     settings,
     graphData,
+    robot_data,
+    is_candidate_robot = false,
     onClose,
     onUpdate,
 }: EntityColorModalProps) {
@@ -82,71 +88,77 @@ export function EntityColorModal({
                 <div className="flex-1 overflow-y-auto bg-[#0c141d]/50 p-4">
                     {entityType === 'robot' && (
                         <div className="space-y-3">
-                            <div className="rounded-md border border-white/5 bg-black/15 p-2">
-                                <div className="mb-2 flex items-center justify-between">
+                            {!is_candidate_robot && <>
+                                <div className="rounded-md border border-white/5 bg-black/15 p-2">
+                                    <div className="mb-2 flex items-center justify-between">
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => onUpdate({ useUrdfColors: true })}
+                                            className={`entity-btn justify-center px-3 py-1 text-[10px] ${robotUseUrdfColors ? 'active-indigo' : ''}`}
+                                        >
+                                            URDF COLOR
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => onUpdate({ useUrdfColors: false })}
+                                            className={`entity-btn justify-center px-3 py-1 text-[10px] ${!robotUseUrdfColors ? 'active-indigo' : ''}`}
+                                        >
+                                            CUSTOM COLOR
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => onUpdate({ useUrdfColors: true })}
-                                        className={`entity-btn justify-center px-3 py-1 text-[10px] ${robotUseUrdfColors ? 'active-indigo' : ''}`}
-                                    >
-                                        URDF COLOR
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => onUpdate({ useUrdfColors: false })}
-                                        className={`entity-btn justify-center px-3 py-1 text-[10px] ${!robotUseUrdfColors ? 'active-indigo' : ''}`}
-                                    >
-                                        CUSTOM COLOR
-                                    </button>
+                                <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
+                                            Visual Color
+                                        </label>
+                                        <input
+                                            type="color"
+                                            value={robotSettings.color || '#87ceeb'}
+                                            disabled={robotUseUrdfColors}
+                                            onChange={(e) => onUpdate({ color: e.target.value })}
+                                            onInput={(e) => onUpdate({ color: (e.target as HTMLInputElement).value })}
+                                            className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
+                                            Collision Color
+                                        </label>
+                                        <input
+                                            type="color"
+                                            value={robotSettings.collisionColor || '#ff9f1c'}
+                                            onChange={(e) => onUpdate({ collisionColor: e.target.value })}
+                                            onInput={(e) => onUpdate({ collisionColor: (e.target as HTMLInputElement).value })}
+                                            className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 rounded-md border border-white/5 bg-black/15 p-2">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                        Visual Color
-                                    </label>
-                                    <input
-                                        type="color"
-                                        value={robotSettings.color || '#87ceeb'}
-                                        disabled={robotUseUrdfColors}
-                                        onChange={(e) => onUpdate({ color: e.target.value })}
-                                        onInput={(e) => onUpdate({ color: (e.target as HTMLInputElement).value })}
-                                        className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-40"
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-[9px] font-bold uppercase tracking-wider text-[var(--text-secondary)] opacity-70">
-                                        Collision Color
-                                    </label>
-                                    <input
-                                        type="color"
-                                        value={robotSettings.collisionColor || '#ff9f1c'}
-                                        onChange={(e) => onUpdate({ collisionColor: e.target.value })}
-                                        onInput={(e) => onUpdate({ collisionColor: (e.target as HTMLInputElement).value })}
-                                        className="h-8 w-full cursor-pointer rounded border border-white/10 bg-transparent p-0"
-                                    />
-                                </div>
-                            </div>
-                            <ControlSlider
-                                label="Opacity"
-                                value={robotSettings.opacity ?? 1}
-                                min={0}
-                                max={1}
-                                step={0.01}
-                                onChange={(v) => onUpdate({ opacity: v })}
-                                formatValue={(v) => `${Math.round(v * 100)}%`}
-                            />
-                            <ControlSlider
-                                label="Emissive"
-                                value={robotSettings.emissiveIntensity ?? 0.2}
-                                min={0}
-                                max={1.5}
-                                step={0.01}
-                                onChange={(v) => onUpdate({ emissiveIntensity: v })}
-                                formatValue={(v) => `${v.toFixed(2)}x`}
-                            />
+                            </>}
+                            <RobotLinkColorControls robot_data={robot_data}
+                                settings={is_candidate_robot ? { ...robotSettings, useUrdfColors: true } : robotSettings} on_update={onUpdate} />
+                            {!is_candidate_robot && <>
+                                <ControlSlider
+                                    label="Opacity"
+                                    value={robotSettings.opacity ?? 1}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    onChange={(v) => onUpdate({ opacity: v })}
+                                    formatValue={(v) => `${Math.round(v * 100)}%`}
+                                />
+                                <ControlSlider
+                                    label="Emissive"
+                                    value={robotSettings.emissiveIntensity ?? 0.2}
+                                    min={0}
+                                    max={1.5}
+                                    step={0.01}
+                                    onChange={(v) => onUpdate({ emissiveIntensity: v })}
+                                    formatValue={(v) => `${v.toFixed(2)}x`}
+                                />
+                            </>}
                         </div>
                     )}
 

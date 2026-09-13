@@ -116,15 +116,23 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
 
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
 
-ToPoDualArmのロボット、GNG、左右グリッパーの最大把持体積graphと、
-全閉時の左右指に挟まれた内部の非占有領域graphをまとめて起動します。
-`ToPoDualArm.yaml`の`gripper_volume_graph.enabled`が`true`なら、対応する
-`L_tcp` / `R_tcp` graphも同じlaunchからpublishされます。
+ToPoDualArmのロボットとGNGを表示します。左右グリッパーの体積確認用トピック
+（`L_grip_V_topological_map`など、左右の`V`・`minV`・`baseV`・`sweptV`）は
+`ToPoDualArm.yaml`で既定オフです。
 
 ```bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
+
+体積を可視化して確認する場合は、同じコマンドに
+`enable_gripper_volume_graph:=true`を追加します。
+`enable_gripper_volume_graph:=false`で発行ノードの起動を無効化できます。
+引数を省略した場合は、YAMLの`gripper_volume_graph.enabled`に従います。
+切替はlaunchの再起動時に反映されます。
+
+`grasp_voxel_matcher_node`でこれらのトピックを入力として使う構成では、
+発行をオンにするか、別のlaunchから発行ノードを起動してください。
 
 - **GNGマップを送信**:
   ```bash
