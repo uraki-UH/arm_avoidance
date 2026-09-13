@@ -240,7 +240,7 @@
     # 同一平面クラスタ候補の公開前連続有効更新数
     candidate_confirm_updates: 5
     # 確定候補の短期欠測保持更新数
-    candidate_missing_update_allowance: 2
+    candidate_missing_update_allowance: 5
     # TCP位置・姿勢の指数移動平均係数
     candidate_position_ema_alpha: 0.35
     candidate_orientation_ema_alpha: 0.35
@@ -262,10 +262,10 @@
     # 法線符号に依存しない上方向との傾斜角 [deg]
     max_surface_tilt_deg: 90.0
     enable_nonplane_attachment: false
-    # 付属探索の平面OBB外側余白 [m]
-    nonplane_margin: 0.03
-    # 平面から付属ノードまでの累積エッジ長 [m]
-    max_nonplane_graph_dist: 0.15
+    # 候補平面から接続する開口外平面を参照した付属ノード探索
+    enable_reference_plane_attachment: true
+    # 候補内平均エッジ長に対する入口エッジ長の許容倍率
+    max_attachment_edge_length_ratio: 1.2
     # 平面最高位置からの付属探索深さと上方許容幅 [m]
     max_nonplane_depth: 0.08
     max_nonplane_height: 0.01
@@ -273,11 +273,11 @@
     # 簡易進入領域の高さと把持開口外側余白 [m]。実グリッパ形状とは別の近似
     approach_height: 0.10
     approach_margin: 0.01
-    minimum_protrusion_distance: 0.01
+    minimum_protrusion_distance: 0.005
     minimum_region_nodes: 4
     # ToPoDualArmの開口内部寸法。両側余白とGNG点間の補正
-    grasp_size_x: 0.15
-    grasp_size_y: 0.15
+    grasp_size_x: 0.20
+    grasp_size_y: 0.20
     footprint_margin: 0.002
     footprint_padding: 0.003
     tcp_standoff: 0.0

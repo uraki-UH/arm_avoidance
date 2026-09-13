@@ -132,8 +132,10 @@ private:
     maximum_candidates_ = config.maximum_candidates;
     config.max_surface_tilt_deg = declare_parameter<double>("max_surface_tilt_deg", 25.0);
     config.enable_nonplane_attachment = declare_parameter<bool>("enable_nonplane_attachment", true);
-    config.nonplane_margin = declare_parameter<double>("nonplane_margin", 0.03);
-    config.max_nonplane_graph_dist = declare_parameter<double>("max_nonplane_graph_dist", 0.15);
+    config.enable_reference_plane_attachment = declare_parameter<bool>(
+      "enable_reference_plane_attachment", false);
+    config.max_attachment_edge_length_ratio = declare_parameter<double>(
+      "max_attachment_edge_length_ratio", 1.3);
     config.max_nonplane_depth = declare_parameter<double>("max_nonplane_depth", 0.08);
     config.max_nonplane_height = declare_parameter<double>("max_nonplane_height", 0.01);
     config.enable_approach_check = declare_parameter<bool>("enable_approach_check", true);
