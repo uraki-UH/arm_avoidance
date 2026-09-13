@@ -147,13 +147,13 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
             _value(environment, "static_tf_child_frame", base_frame)))
     voxel_topic = str(_value(
         entry, "voxel_topic", _value(
-            environment, "voxel_topic", f"/{robot_name}/roi_voxel_ids")))
+            environment, "voxel_topic", f"/{robot_name}/self_filter_roi_voxels")))
     enable_environment_self_filter = _is_enabled(_value(
         self_recognition, "enable_environment_self_filter", False))
     raw_voxel_topic = voxel_topic
     if enable_environment_self_filter:
         raw_voxel_topic = _namespaced_topic(robot_name, _value(
-            self_recognition, "raw_environment_voxel_topic", "roi_voxel_ids_raw"))
+            self_recognition, "raw_environment_voxel_topic", "roi_voxels"))
     input_topic = str(_value(entry, "input_topic", default_input_topic))
     source_frame_id = str(_value(entry, "source_frame_id", default_source_frame_id))
 
@@ -395,13 +395,13 @@ def _launch_setup(context, *_args, **_kwargs):
     base_frame = _value(environment, "base_frame", root_params.get("frame_id", "base_link"))
     target_frame_id = _namespaced_frame(robot_name, base_frame)
     input_topic = _value(environment, "input_topic", "/topo_points")
-    voxel_topic = _value(environment, "voxel_topic", f"/{robot_name}/roi_voxel_ids")
+    voxel_topic = _value(environment, "voxel_topic", f"/{robot_name}/self_filter_roi_voxels")
     enable_environment_self_filter = _is_enabled(_value(
         self_recognition, "enable_environment_self_filter", False))
     source_voxel_topic = voxel_topic
     if enable_environment_self_filter:
         source_voxel_topic = _namespaced_topic(robot_name, _value(
-            self_recognition, "raw_environment_voxel_topic", "roi_voxel_ids_raw"))
+            self_recognition, "raw_environment_voxel_topic", "roi_voxels"))
     source_frame_id = _value(environment, "source_frame_id", "")
     enable_world_index_build, enable_world_index_roi_query = _world_index_modes(world_index)
     world_index_frame_id = _value(world_index, "frame_id", "world")

@@ -22,7 +22,7 @@
         consumers:
           - params_file: "/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml"
             robot_name: "ToPoDualArm_A"
-            voxel_topic: "/ToPoDualArm_A/roi_voxel_ids"
+            voxel_topic: "/ToPoDualArm_A/self_filter_roi_voxels"
           - params_file: "/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml"
             robot_name: "ToPoDualArm_B"
-            voxel_topic: "/ToPoDualArm_B/roi_voxel_ids"
+            voxel_topic: "/ToPoDualArm_B/self_filter_roi_voxels"

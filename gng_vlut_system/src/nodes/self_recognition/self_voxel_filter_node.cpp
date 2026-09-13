@@ -38,9 +38,9 @@ public:
   : Node("self_voxel_filter_node"),
     processor_(::robot_sim::common::Constants::DEFAULT_VOXEL_SIZE) {
     declare_parameter<std::string>(
-        "self_recognition.raw_environment_voxel_topic", "roi_voxel_ids_raw");
+        "self_recognition.raw_environment_voxel_topic", "roi_voxels");
     declare_parameter<std::string>(
-        "self_recognition.filtered_environment_voxel_topic", "roi_voxel_ids");
+        "self_recognition.filtered_environment_voxel_topic", "self_filter_roi_voxels");
     declare_parameter<std::string>("self_recognition.mask_topic", "self_voxel");
     declare_parameter<double>("self_recognition.self_exclusion_inflation", 0.02);
     declare_parameter<double>("self_recognition.max_self_mask_age_sec", 0.5);

@@ -143,6 +143,29 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   ros2 launch gng_vlut_system topoarm_viewer_bridge.launch.py
   ```
 
+### 環境点群からVLUTへの入力
+
+`gng_viewer_bridge.launch.py`と併用し、YAMLで指定した点群をボクセル化します。
+
+```bash
+ros2 launch gng_vlut_system environment_to_vlut.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+```
+
+ToPoDualArmの自己領域除去が有効な構成では、環境ボクセルのトピックは次の2つです。
+
+| トピック | 内容 |
+| --- | --- |
+| `/ToPoDualArm/roi_voxels` | 自己ロボット領域の除去前（旧`roi_voxel_ids_raw`） |
+| `/ToPoDualArm/self_filter_roi_voxels` | 自己ロボット領域と除去余裕幅を除いた結果（旧`roi_voxel_ids`） |
+
+VLUT用の占有・危険ボクセルへの変換には除去後のトピックを使用します。
+入力・出力名は`self_recognition.raw_environment_voxel_topic`と
+`self_recognition.filtered_environment_voxel_topic`、後段の購読先は
+`environment_voxelization.voxel_topic`で設定できます。
+名称変更後は両方のlaunchを再起動し、Viewerで手動選択していた旧トピックを
+新しい名前に変更してください。
+
 ## 4. テストとデバッグ
 
 ### ボクセル色変化テスト

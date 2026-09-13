@@ -81,7 +81,8 @@
     # --- 環境点群からVLUTまでの統合起動設定 ---
     environment_voxelization:
       input_topic: "/camera/camera/depth/color/points"
-      voxel_topic: "/ToPoDualArm/roi_voxel_ids"
+      # 自己ロボット領域除去後の環境ボクセル（VLUT入力への接続先）
+      voxel_topic: "/ToPoDualArm/self_filter_roi_voxels"
       source_frame_id: ""
       allow_unconnected_source_as_world: true
       base_frame: "base_link"
@@ -187,8 +188,9 @@
       enable_self_recognition_viz: true
       # 環境ボクセルから自己ボクセルと膨張領域を除外するフィルタ
       enable_environment_self_filter: true
-      raw_environment_voxel_topic: "roi_voxel_ids_raw"
-      filtered_environment_voxel_topic: "roi_voxel_ids"
+      # 自己ロボット領域の除去前と除去後のトピック
+      raw_environment_voxel_topic: "roi_voxels"
+      filtered_environment_voxel_topic: "self_filter_roi_voxels"
       # 自己認識境界の位置ずれ吸収用膨張幅
       self_exclusion_inflation: 0.02
       # 停止済み自己認識結果の継続利用防止用受信間隔
