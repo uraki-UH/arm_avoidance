@@ -106,20 +106,20 @@ $$
 $$
 \ell_a=\min_k\mathbf{a}^{\mathsf T}\mathbf{q}_k,
 \quad r_a=\max_k\mathbf{a}^{\mathsf T}\mathbf{q}_k,
-\quad L_a=r_a-\ell_a+2p.
+\quad L_a=r_a-\ell_a.
 $$
 
-軸 $\mathbf{b}$ についても同様に $\ell_b,r_b,L_b$ を算出。$p$ は `footprint_padding`。矩形中心は:
+軸 $\mathbf{b}$ についても同様に $\ell_b,r_b,L_b$ を算出。矩形中心は:
 
 $$
 \mathbf{c}_{uv}=\mathbf{a}\frac{\ell_a+r_a}{2}
                  +\mathbf{b}\frac{\ell_b+r_b}{2}.
 $$
 
-把持面寸法を $G_x,G_y$、内側余白を $m$ とすると、使用可能寸法は:
+把持面寸法を $G_x,G_y$ とすると、補正なしの使用可能寸法は:
 
 $$
-U_x=G_x-2m,\qquad U_y=G_y-2m.
+U_x=G_x,\qquad U_y=G_y.
 $$
 
 採用可能なサイズ条件:
@@ -135,7 +135,7 @@ $$
 - PCA主軸に沿ったOBBであり、全角度を探索した最小面積外接矩形ではない。
 - 主軸は分散の大きい方向であり、投影範囲の長辺方向と必ず一致するわけではない。
 - 判定は面積だけでなく、2方向の寸法それぞれに対する包含条件。
-- `footprint_padding` は固定の寸法補正。ノード密度や欠損量から自動推定した誤差幅ではない。
+- 観測外形と指定の把持可能寸法との直接比較。固定余白・外形の膨張補正なし。
 
 ### 3.4 GNGエッジに基づくクラスタ隣接関係
 
@@ -217,7 +217,7 @@ $$
 
 1. GNGエッジを走査し、非平面成分IDごとに接続先の平面を記録。複数平面に接続する成分は付属対象外。これは誤結合を避ける保守的条件であり、同一物体でも側面へ接続する成分は除外され得る。
 2. 平面ノードを始点として、訪問済み管理付きの幅優先探索で接続ノードを抽出。累積距離と平面OBB外側余白による制限はなし。付属探索の上下位置による制限もなし。参照平面モードでは符号付き離隔と入口エッジ長の条件を使用。`BOUNDARY_FREE_SPACE`を持つ端点は探索を通過させない。境界ビットは観測根拠であり、物体端の確定ではない。
-3. 付属ノードが固定TCPの開口内に収まらない場合、`rejected_attached_oversize`として棄却。`footprint_padding`と`footprint_margin`も適用。付属込みの局所外形は`target_extent_x/y`、平面OBBは従来の`extent_x/y`に分離。
+3. 付属ノードが固定TCPの開口内に収まらない場合、`rejected_attached_oversize`として棄却。付属ノードの座標と開口寸法との直接比較。付属込みの局所外形は`target_extent_x/y`、平面OBBは従来の`extent_x/y`に分離。
 4. 接続や平面所属によらず、全グラフの有限位置ノードを上方の矩形柱で確認。平面最高位置より上で、`approach_height + max(0, tcp_standoff)`までの高さで、開口XY寸法に`approach_margin`を足した領域に観測ノードがあれば`rejected_approach_obstacle`として棄却。
 
 成分IDとノード添字は同一フレーム内だけで使用。未分類の`NONPLANE_COMPONENT_NONE`や探索範囲外のノードは付属対象外でも、上方障害物の確認対象。`enable_nonplane_attachment=false`でも`enable_approach_check=true`なら進入判定を継続。
@@ -250,8 +250,6 @@ GNGエッジからクラスタ隣接集合を構築
 | `up_axis` | `[0,0,1]` | 上方向 |
 | `minimum_region_nodes` | `4` | 候補領域のノード数下限 |
 | `grasp_size_x`, `grasp_size_y` | 各 `0.15 m` | 設定上の把持面寸法 |
-| `footprint_margin` | `0.002 m` | 把持面の片側内側余白 |
-| `footprint_padding` | `0.003 m` | 領域寸法の片側補正 |
 | `minimum_protrusion_distance` | `0.01 m` | 隣接平面距離の下限 |
 | `tcp_standoff` | `0 m` | 最高位置からの上方オフセット |
 | `maximum_candidates` | `20` | 出力件数上限 |

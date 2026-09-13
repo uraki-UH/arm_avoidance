@@ -78,8 +78,6 @@ TopGraspSurfaceConfig makeConfig()
   config.minimum_protrusion_distance = 0.01;
   config.grasp_size_x = 0.061;
   config.grasp_size_y = 0.074;
-  config.footprint_margin = 0.0;
-  config.footprint_padding = 0.005;
   return config;
 }
 
@@ -87,6 +85,146 @@ TopGraspSurfaceConfig makeConfig()
 
 int main()
 {
+  {
+    // 指定開口と観測幅の直接比較。旧余白による140 mm制限の除去
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    const auto inside = addRectangle(map, 0, 0, 0.1, 0.145, 0.05);
+    const auto outside = addRectangle(map, 1, 0, 0.1, 0.155, 0.05);
+    clusters.clusters.push_back(makeCluster(1, inside, 0, 0, 0.1, {0, 0, 1}));
+    clusters.clusters.push_back(makeCluster(2, outside, 1, 0, 0.1, {0, 0, 1}));
+    TopGraspSurfaceConfig config;
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    config.enable_approach_check = false;
+    const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(result.candidates.size() == 1 && result.candidates.front().cluster_id == 1,
+      "145 mm must fit and 155 mm must exceed a 150 mm opening");
+    expect(std::abs(result.candidates.front().extent_x - 0.145) < 1e-6,
+      "reported extent must not include padding");
+  }
+  {
+    // 複数平面候補の全構成ノード、各平面からの付属探索、候補外平面での停止
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    const auto first = addRectangle(map, -0.025, 0, 0.10, 0.02, 0.02);
+    const auto second = addRectangle(map, 0.025, 0, 0.10, 0.02, 0.02);
+    const auto base = addRectangle(map, 0, 0, 0, 0.4, 0.4);
+    const auto attached_first = addRectangle(map, -0.025, 0, 0.08, 0.02, 0.02);
+    const auto attached_second = addRectangle(map, 0.025, 0, 0.08, 0.02, 0.02);
+    clusters.clusters.push_back(makeCluster(1, first, -0.025, 0, 0.10, {0, 0, 1}));
+    clusters.clusters.push_back(makeCluster(2, second, 0.025, 0, 0.10, {0, 0, 1}));
+    clusters.clusters.push_back(makeCluster(3, base, 0, 0, 0, {0, 0, 1}));
+    clusters.clusters[0].local_spacing = 0.1;
+    clusters.clusters[1].local_spacing = 0.1;
+    addEdge(map, first[0], attached_first[0]);
+    addEdge(map, attached_first[0], second[0]);
+    addEdge(map, second[0], attached_second[0]);
+    addEdge(map, first[0], base[0]);
+    for (std::size_t idx = 1; idx < 4; ++idx) {
+      addEdge(map, attached_first[0], attached_first[idx]);
+      addEdge(map, attached_second[0], attached_second[idx]);
+    }
+    TopGraspSurfaceConfig config;
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    config.enable_approach_check = false;
+    config.enable_reference_plane_attachment = true;
+    config.enable_plane_combinations = true;
+    auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    const auto combined = std::find_if(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids == std::vector<std::uint32_t>{1, 2}; });
+    expect(combined != result.candidates.end(), "connected planes must form a combined candidate");
+    expect(combined->node_indices.size() == 8, "combined candidate must contain all plane nodes");
+    expect(combined->attached_node_indices.size() == 8, "attachments must start from every member plane");
+    const auto single = std::find_if(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids == std::vector<std::uint32_t>{1}; });
+    expect(single != result.candidates.end(), "single candidates must remain available");
+    expect(single->attached_node_indices.size() == 4, "nonmember plane must stop traversal");
+    // 直接接続の第三平面からの外形拡張
+    const auto third = addRectangle(map, 0, 0.035, 0.10, 0.02, 0.02);
+    clusters.clusters.push_back(makeCluster(4, third, 0, 0.035, 0.10, {0, 0, 1}));
+    clusters.clusters.back().local_spacing = 0.1;
+    addEdge(map, second[0], third[0]);
+    result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(std::any_of(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids == std::vector<std::uint32_t>{1, 2, 4} &&
+        candidate.node_indices.size() == 12 && candidate.attached_node_indices.size() == 8; }),
+      "three planes must form a complete combined candidate");
+    clusters.clusters.pop_back();
+    map.edges.resize(map.edges.size() - 2);
+    config.enable_plane_combinations = false;
+    result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(result.candidates.size() == 2, "disabled combinations must retain only singles");
+    config.enable_plane_combinations = true;
+    config.grasp_size_x = config.grasp_size_y = 0.06;
+    result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(std::none_of(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids.size() > 1; }),
+      "oversized combinations must be rejected");
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    map.edges.clear();
+    result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(result.candidates.size() == 2, "disconnected planes must not form combinations");
+  }
+  {
+    // 8平面の領域拡張。全組合せ列挙なしでの全ノード保持と重複排除
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    for (std::uint32_t idx = 0; idx < 8; ++idx) {
+      const double x = 0.008 * idx;
+      const auto nodes = addRectangle(map, x, 0, 0.1, 0.006, 0.004);
+      clusters.clusters.push_back(makeCluster(idx + 1, nodes, x, 0, 0.1, {0, 0, 1}));
+      for (std::uint32_t previous = 0; previous < idx; ++previous) {
+        addEdge(map, nodes[0], clusters.clusters[previous].node_indices[0]);
+      }
+    }
+    TopGraspSurfaceConfig config;
+    config.enable_plane_combinations = true;
+    config.enable_reference_plane_attachment = true;
+    config.enable_approach_check = false;
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    config.maximum_candidates = 1000;
+    auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(result.candidates.size() == 9, "eight singles and one grown region must remain");
+    const auto full = std::find_if(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids.size() == 8; });
+    expect(full != result.candidates.end() && full->node_indices.size() == 32,
+      "eight-plane candidate must retain all member nodes");
+    expect(std::abs(full->extent_x - 0.062) < 1e-6,
+      "projection bounds must expand in the seed plane orientation");
+    config.grasp_size_x = config.grasp_size_y = 0.02;
+    result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(std::none_of(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids.size() > 2; }),
+      "size overflow must terminate further expansion");
+  }
+  {
+    // 基準からの距離順による採用。左右を同時に含められない場合の近い側の優先
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    for (const double x : {0.0, 0.012, -0.019}) {
+      const auto nodes = addRectangle(map, x, 0, 0.1, 0.004, 0.002);
+      clusters.clusters.push_back(makeCluster(clusters.clusters.size() + 1, nodes, x, 0, 0.1, {0, 0, 1}));
+    }
+    addEdge(map, 0, 4);
+    addEdge(map, 0, 8);
+    TopGraspSurfaceConfig config;
+    config.enable_plane_combinations = true;
+    config.enable_reference_plane_attachment = true;
+    config.enable_approach_check = false;
+    config.grasp_size_x = config.grasp_size_y = 0.03;
+    const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    expect(result.candidates.size() == 5, "greedy growth must retain singles and two feasible pairs");
+    expect(std::any_of(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids == std::vector<std::uint32_t>{1, 2}; }),
+      "nearest adjacent plane must be accepted first");
+    std::reverse(clusters.clusters.begin(), clusters.clusters.end());
+    const auto reordered = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    for (const auto &candidate : result.candidates) {
+      expect(std::any_of(reordered.candidates.begin(), reordered.candidates.end(), [&](const auto &other) {
+        return candidate.source_cluster_ids == other.source_cluster_ids;
+      }), "cluster array order must not change grown membership");
+    }
+  }
   {
     // 候補平面を種とした非平面探索、土台近接帯での停止、外形超過の除外
     TopologicalMap reference_map;

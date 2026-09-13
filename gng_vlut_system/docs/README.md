@@ -4,6 +4,7 @@
 
 ## 主な文書
 
+- [把持推定・ファジィルールの現状と全体フロー](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
 - [TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)
 - [TASK_LIST.md](./TASK_LIST.md)
 - [TASK_CANDIDATES.md](./TASK_CANDIDATES.md)

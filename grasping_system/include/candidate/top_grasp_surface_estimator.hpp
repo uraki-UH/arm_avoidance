@@ -12,6 +12,7 @@
 #include <functional>
 #include <limits>
 #include <queue>
+#include <set>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,14 +29,14 @@ struct TopGraspSurfaceConfig
   std::size_t minimum_region_nodes = 4U;
   double grasp_size_x = 0.061;
   double grasp_size_y = 0.074;
-  double footprint_margin = 0.005;
-  double footprint_padding = 0.005;
   double tcp_standoff = 0.0;
   std::size_t maximum_candidates = 20U;
   double max_surface_tilt_deg = 25.0;
   bool enable_nonplane_attachment = true;
   // 候補平面起点の接続探索と、接続する開口外平面からの離隔判定
   bool enable_reference_plane_attachment = false;
+  // 隣接平面の組合せ探索
+  bool enable_plane_combinations = false;
   // 候補内平均エッジ長に対する入口エッジ長の許容倍率
   double max_attachment_edge_length_ratio = 1.3;
   bool enable_approach_check = true;
@@ -46,6 +47,8 @@ struct TopGraspSurfaceConfig
 struct TopGraspSurfaceCandidate
 {
   std::uint32_t cluster_id = 0U;
+  // 候補を構成する平面IDの昇順集合
+  std::vector<std::uint32_t> source_cluster_ids;
   std::vector<std::uint32_t> node_indices;
   // 平面OBBとは独立した、同一フレーム内の付属ノード添字と局所外形
   std::vector<std::uint32_t> attached_node_indices;
@@ -154,7 +157,8 @@ public:
     std::vector<double> internal_edge_length_sum(region_count, 0.0);
     std::vector<std::size_t> internal_edge_num(region_count, 0U);
     std::vector<std::vector<std::uint32_t>> node_adjacency(
-      (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment) ? map.nodes.size() : 0U);
+      (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment ||
+      config_.enable_plane_combinations) ? map.nodes.size() : 0U);
     std::unordered_map<std::uint32_t, int> component_owner;
     const auto register_owner = [&](std::size_t node_idx, int plane_idx) {
         const auto component_id = map.nodes[node_idx].nonplane_component_id;
@@ -186,7 +190,8 @@ public:
           ++internal_edge_num[first_owner];
         }
       }
-      if (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment) {
+      if (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment ||
+        config_.enable_plane_combinations) {
         node_adjacency[first_node].push_back(second_node);
         node_adjacency[second_node].push_back(first_node);
         register_owner(first_node, second_owner);
@@ -200,7 +205,7 @@ public:
       adjacency[static_cast<std::size_t>(second_owner)].insert(
         static_cast<std::size_t>(first_owner));
     }
-    if (config_.enable_reference_plane_attachment) {
+    if (config_.enable_reference_plane_attachment || config_.enable_plane_combinations) {
       // 非平面連結成分を介した平面間接続。平面内部を経由した推移的な接続の除外
       std::vector<bool> is_visited(map.nodes.size(), false);
       const auto can_bridge = [&](std::size_t node_idx) {
@@ -236,14 +241,115 @@ public:
     }
     result.adjacent_region_pair_count /= 2U;
 
+    std::vector<std::vector<std::size_t>> groups;
+    std::vector<Footprint> group_footprints;
     for (std::size_t region_index = 0U; region_index < region_count; ++region_index) {
-      if (candidate_eligible[region_index] == 0U) {
+      if (!candidate_eligible[region_index]) continue;
+      groups.push_back({region_index});
+      group_footprints.push_back(footprints[region_index]);
+    }
+    if (config_.enable_plane_combinations) {
+      // 各基準平面から一方向の領域拡張。採用平面の隣接先だけを探索対象へ追加
+      const auto seed_num = groups.size();
+      for (std::size_t idx = 0; idx < seed_num; ++idx) {
+        auto group = groups[idx];
+        auto footprint = group_footprints[idx];
+        const auto seed = group.front();
+        const auto &origin = clusters.clusters[seed].centroid;
+        const auto nearer = [&](std::size_t a, std::size_t b) {
+          const auto dist = [&](std::size_t member) {
+            const auto &p = clusters.clusters[member].centroid;
+            return Eigen::Vector3d(p.x - origin.x, p.y - origin.y, p.z - origin.z).squaredNorm();
+          };
+          if (dist(a) != dist(b)) return dist(a) < dist(b);
+          return clusters.clusters[a].id < clusters.clusters[b].id;
+        };
+        std::set<std::size_t, decltype(nearer)> pending(nearer);
+        std::vector<bool> is_visited(region_count, false);
+        is_visited[seed] = true;
+        pending.insert(adjacency[seed].begin(), adjacency[seed].end());
+        while (!pending.empty()) {
+          const auto next = *pending.begin();
+          pending.erase(pending.begin());
+          if (is_visited[next]) continue;
+          is_visited[next] = true;
+          if (!candidate_eligible[next]) continue;
+          auto expanded = expand_bounds(footprint, footprints[next]);
+          if (!expanded.fits) continue;
+          footprint = std::move(expanded);
+          group.push_back(next);
+          pending.insert(adjacency[next].begin(), adjacency[next].end());
+        }
+        if (group.size() > 1) {
+          std::sort(group.begin(), group.end());
+          groups.push_back(std::move(group));
+          group_footprints.push_back(std::move(footprint));
+        }
+      }
+    }
+    std::set<std::vector<std::size_t>> accepted_groups;
+    for (std::size_t group_idx = 0; group_idx < groups.size(); ++group_idx) {
+      const auto &group = groups[group_idx];
+      if (accepted_groups.count(group)) continue;
+      const auto region_index = group.front();
+      auto cluster = clusters.clusters[region_index];
+      cluster.node_indices.clear();
+      Eigen::Vector3d candidate_centroid = Eigen::Vector3d::Zero();
+      std::set<std::size_t> neighbours;
+      std::vector<std::uint32_t> source_cluster_ids;
+      auto group_owner = owner_by_node;
+      auto group_component_owner = component_owner;
+      double edge_sum = 0.0;
+      std::size_t edge_num = 0;
+      double spacing_sum = 0.0;
+      for (const auto member : group) {
+        const auto &part = clusters.clusters[member];
+        source_cluster_ids.push_back(part.id);
+        cluster.node_indices.insert(cluster.node_indices.end(), part.node_indices.begin(), part.node_indices.end());
+        for (const auto node_idx : part.node_indices) group_owner[node_idx] = static_cast<int>(region_index);
+        neighbours.insert(adjacency[member].begin(), adjacency[member].end());
+        edge_sum += internal_edge_length_sum[member];
+        edge_num += internal_edge_num[member];
+        spacing_sum += part.local_spacing;
+      }
+      for (const auto member : group) neighbours.erase(member);
+      if (group.size() > 1 && !config_.enable_reference_plane_attachment) {
+        // 複合候補を一所有者とみなした非平面成分の接続先再集計
+        group_component_owner.clear();
+        for (std::size_t node_idx = 0; node_idx < node_adjacency.size(); ++node_idx) {
+          if (group_owner[node_idx] >= 0) continue;
+          const auto component_id = map.nodes[node_idx].nonplane_component_id;
+          if (component_id == ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE) continue;
+          for (const auto next_idx : node_adjacency[node_idx]) {
+            if (group_owner[next_idx] < 0) continue;
+            const auto [it, is_inserted] = group_component_owner.emplace(component_id, group_owner[next_idx]);
+            if (!is_inserted && it->second != group_owner[next_idx]) it->second = -2;
+          }
+        }
+      }
+      std::sort(source_cluster_ids.begin(), source_cluster_ids.end());
+      std::sort(cluster.node_indices.begin(), cluster.node_indices.end());
+      cluster.node_indices.erase(std::unique(cluster.node_indices.begin(), cluster.node_indices.end()), cluster.node_indices.end());
+      for (const auto node_idx : cluster.node_indices) {
+        const auto &p = map.nodes[node_idx].pos;
+        candidate_centroid += Eigen::Vector3d(p.x, p.y, p.z);
+      }
+      candidate_centroid /= cluster.node_indices.size();
+      if (group.size() == 1) {
+        candidate_centroid = Eigen::Vector3d(cluster.centroid.x, cluster.centroid.y, cluster.centroid.z);
+      }
+      const Footprint &footprint = group_footprints[group_idx];
+      if (!footprint.valid) {
+        ++result.rejected_invalid_region;
         continue;
       }
-      const auto &cluster = clusters.clusters[region_index];
+      if (!footprint.fits) {
+        ++result.rejected_oversize_region;
+        continue;
+      }
       double minimum_plane_distance = std::numeric_limits<double>::infinity();
       std::vector<Eigen::Vector4d> reference_planes;
-      for (const std::size_t neighbour_index : adjacency[region_index]) {
+      for (const std::size_t neighbour_index : neighbours) {
         if (config_.enable_reference_plane_attachment &&
           (!footprints[neighbour_index].valid || footprints[neighbour_index].fits)) continue;
         const auto &neighbour = clusters.clusters[neighbour_index];
@@ -257,8 +363,6 @@ public:
           continue;
         }
         normal.normalize();
-        const Eigen::Vector3d candidate_centroid(
-          cluster.centroid.x, cluster.centroid.y, cluster.centroid.z);
         // 候補平面の重心側を正とした、参照面法線の統一
         if (normal.dot(candidate_centroid - neighbour_centroid) < 0.0) {
           normal = -normal;
@@ -268,6 +372,14 @@ public:
         minimum_plane_distance = std::min(
           minimum_plane_distance,
           std::abs(normal.dot(candidate_centroid - neighbour_centroid)));
+        if (group.size() > 1) {
+          // 組合せ内の各平面が同じ参照面側にあることの確認
+          for (const auto member : group) {
+            const auto &c = clusters.clusters[member].centroid;
+            minimum_plane_distance = std::min(minimum_plane_distance,
+              normal.dot(Eigen::Vector3d(c.x, c.y, c.z) - neighbour_centroid));
+          }
+        }
       }
       const bool has_plane_distance = std::isfinite(minimum_plane_distance);
       if (has_plane_distance &&
@@ -276,8 +388,6 @@ public:
         ++result.rejected_low_protrusion_region;
         continue;
       }
-
-      const Footprint &footprint = footprints[region_index];
 
       const Eigen::Vector3d world_y =
         (basis_u * footprint.local_y_axis.x() +
@@ -291,6 +401,7 @@ public:
 
       TopGraspSurfaceCandidate candidate;
       candidate.cluster_id = cluster.id;
+      candidate.source_cluster_ids = source_cluster_ids;
       candidate.node_indices = cluster.node_indices;
       candidate.tcp_position = basis_u * footprint.center_uv.x() +
         basis_v * footprint.center_uv.y() +
@@ -300,19 +411,19 @@ public:
       candidate.extent_y = footprint.extent_y;
       candidate.surface_height = footprint.maximum_height;
       candidate.footprint_fill_ratio = footprint.fill_ratio;
-      candidate.adjacent_region_count = adjacency[region_index].size();
+      candidate.adjacent_region_count = neighbours.size();
       candidate.has_neighbor_plane_distance = has_plane_distance;
       if (has_plane_distance) {
         candidate.minimum_neighbor_plane_distance = minimum_plane_distance;
       }
       if (!evaluate_nonplane(
-          map, region_index, owner_by_node, node_adjacency, component_owner,
-          reference_planes, internal_edge_num[region_index] > 0 ?
-            internal_edge_length_sum[region_index] / internal_edge_num[region_index] :
-            static_cast<double>(cluster.local_spacing), candidate, result))
+          map, region_index, group_owner, node_adjacency, group_component_owner,
+          reference_planes, edge_num > 0 ? edge_sum / edge_num :
+            spacing_sum / group.size(), candidate, result))
       {
         continue;
       }
+      accepted_groups.insert(group);
       result.candidates.push_back(std::move(candidate));
     }
 
@@ -381,8 +492,8 @@ private:
     std::unordered_set<std::uint32_t> attached_components;
     Eigen::Vector2d min_target(-0.5 * candidate.extent_x, -0.5 * candidate.extent_y);
     Eigen::Vector2d max_target = -min_target;
-    const double usable_x = 0.5 * config_.grasp_size_x - config_.footprint_margin;
-    const double usable_y = 0.5 * config_.grasp_size_y - config_.footprint_margin;
+    const double usable_x = 0.5 * config_.grasp_size_x;
+    const double usable_y = 0.5 * config_.grasp_size_y;
     while (!queue.empty()) {
       const auto node_idx = queue.front();
       queue.pop();
@@ -393,12 +504,9 @@ private:
         if (node.nonplane_component_id !=
           ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE)
           attached_components.insert(node.nonplane_component_id);
-        min_target = min_target.cwiseMin(
-          (p.head<2>().array() - config_.footprint_padding).matrix());
-        max_target = max_target.cwiseMax(
-          (p.head<2>().array() + config_.footprint_padding).matrix());
-        if (std::abs(p.x()) + config_.footprint_padding > usable_x ||
-          std::abs(p.y()) + config_.footprint_padding > usable_y)
+        min_target = min_target.cwiseMin(p.head<2>());
+        max_target = max_target.cwiseMax(p.head<2>());
+        if (std::abs(p.x()) > usable_x || std::abs(p.y()) > usable_y)
         {
           ++result.rejected_attached_oversize;
           return false;
@@ -458,6 +566,8 @@ private:
 
   struct Footprint
   {
+    // 基準方向への投影用点群。凸包頂点と同じ投影上下限
+    std::vector<Eigen::Vector2d> projected_points;
     bool valid = false;
     bool fits = false;
     Eigen::Vector2d local_y_axis = Eigen::Vector2d::UnitY();
@@ -488,10 +598,9 @@ private:
     if (config_.enable_approach_check && config_.approach_height <= 0.0) {
       throw std::invalid_argument("接近判定を有効にする場合、接近領域の高さは正の値が必要です");
     }
-    if (!std::isfinite(config_.tcp_standoff) || !std::isfinite(config_.footprint_margin) ||
-      !std::isfinite(config_.footprint_padding))
+    if (!std::isfinite(config_.tcp_standoff))
     {
-      throw std::invalid_argument("footprint offsets must be finite");
+      throw std::invalid_argument("tcp_standoff must be finite");
     }
     if (!config_.up_axis.allFinite() || config_.up_axis.norm() < 1.0e-12) {
       throw std::invalid_argument("up_axis must be finite and non-zero");
@@ -503,9 +612,7 @@ private:
       throw std::invalid_argument("minimum_protrusion_distance must be finite and non-negative");
     }
     if (!std::isfinite(config_.grasp_size_x) || !std::isfinite(config_.grasp_size_y) ||
-      config_.grasp_size_x <= 0.0 || config_.grasp_size_y <= 0.0 ||
-      config_.footprint_margin < 0.0 || config_.footprint_padding < 0.0 ||
-      2.0 * config_.footprint_margin >= std::min(config_.grasp_size_x, config_.grasp_size_y))
+      config_.grasp_size_x <= 0.0 || config_.grasp_size_y <= 0.0)
     {
       throw std::invalid_argument("grasp footprint parameters are invalid");
     }
@@ -552,6 +659,7 @@ private:
       result.maximum_height = std::max(
         result.maximum_height, position.dot(config_.up_axis));
     }
+    result.projected_points = projected;
     mean /= static_cast<double>(projected.size());
 
     Eigen::Matrix2d covariance = Eigen::Matrix2d::Zero();
@@ -577,12 +685,10 @@ private:
       };
     const auto major_bounds = bounds(major_axis);
     const auto minor_bounds = bounds(minor_axis);
-    const double major_extent = major_bounds.second - major_bounds.first +
-      2.0 * config_.footprint_padding;
-    const double minor_extent = minor_bounds.second - minor_bounds.first +
-      2.0 * config_.footprint_padding;
-    const double usable_x = config_.grasp_size_x - 2.0 * config_.footprint_margin;
-    const double usable_y = config_.grasp_size_y - 2.0 * config_.footprint_margin;
+    const double major_extent = major_bounds.second - major_bounds.first;
+    const double minor_extent = minor_bounds.second - minor_bounds.first;
+    const double usable_x = config_.grasp_size_x;
+    const double usable_y = config_.grasp_size_y;
 
     Eigen::Vector2d local_x_axis = Eigen::Vector2d::UnitX();
     double center_x = 0.0;
@@ -613,6 +719,31 @@ private:
     result.fill_ratio = (result.extent_x * result.extent_y) /
       std::max(usable_x * usable_y, 1.0e-12);
     result.valid = true;
+    return result;
+  }
+
+  Footprint expand_bounds(const Footprint &current, const Footprint &additional) const
+  {
+    Footprint result = current;
+    const Eigen::Vector2d axis_x(result.local_y_axis.y(), -result.local_y_axis.x());
+    const Eigen::Vector2d current_center(current.center_uv.dot(axis_x), current.center_uv.dot(result.local_y_axis));
+    const Eigen::Vector2d half_extent = 0.5 * Eigen::Vector2d(current.extent_x, current.extent_y);
+    Eigen::Vector2d min_point = current_center - half_extent;
+    Eigen::Vector2d max_point = current_center + half_extent;
+    for (const auto &point : additional.projected_points) {
+      const Eigen::Vector2d local(point.dot(axis_x), point.dot(result.local_y_axis));
+      min_point = min_point.cwiseMin(local);
+      max_point = max_point.cwiseMax(local);
+    }
+    const auto center = (0.5 * (min_point + max_point)).eval();
+    result.center_uv = axis_x * center.x() + result.local_y_axis * center.y();
+    result.extent_x = max_point.x() - min_point.x();
+    result.extent_y = max_point.y() - min_point.y();
+    result.maximum_height = std::max(current.maximum_height, additional.maximum_height);
+    const double usable_x = config_.grasp_size_x;
+    const double usable_y = config_.grasp_size_y;
+    result.fits = result.extent_x <= usable_x && result.extent_y <= usable_y;
+    result.fill_ratio = result.extent_x * result.extent_y / std::max(usable_x * usable_y, 1.0e-12);
     return result;
   }
 

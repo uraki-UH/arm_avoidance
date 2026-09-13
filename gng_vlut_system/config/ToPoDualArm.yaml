@@ -264,6 +264,8 @@
     enable_nonplane_attachment: false
     # 候補平面から接続する開口外平面を参照した付属ノード探索
     enable_reference_plane_attachment: true
+    # 隣接平面の組合せ候補。単独候補も併存
+    enable_plane_combinations: true
     # 候補内平均エッジ長に対する入口エッジ長の許容倍率
     max_attachment_edge_length_ratio: 1.2
     enable_approach_check: false
@@ -272,10 +274,8 @@
     approach_margin: 0.01
     minimum_protrusion_distance: 0.005
     minimum_region_nodes: 4
-    # ToPoDualArmの開口内部寸法。両側余白とGNG点間の補正
+    # ToPoDualArmの開口内部寸法。観測外形との直接比較
     grasp_size_x: 0.15
     grasp_size_y: 0.15
-    footprint_margin: 0.002
-    footprint_padding: 0.003
     tcp_standoff: 0.0
     maximum_candidates: 20

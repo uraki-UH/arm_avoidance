@@ -512,9 +512,9 @@ transient localでpublishする。
 `PlaneCluster.position_covariance`は所属GNGノード位置の母共分散`3×3`を`float32[9]`の行優先で保持する。
 平面フィット時に算出済みの空間共分散を再利用し、GNGノードの入力残差共分散とは区別する。
 法線と`up_axis`の内積絶対値から傾斜角を判定し、`max_surface_tilt_deg`の範囲の面だけを候補とする。
-各平面クラスタを独立に水平面へ投影してXY-OBBを計算する。OBBにはGNG点間を補う
-`footprint_padding`を加え、グリッパ内寸から`footprint_margin`を引いた
-`grasp_size_x × grasp_size_y`へ90度回転のどちらかで全体が収まる場合だけ候補にする。
+各平面クラスタの水平面投影によるXY-OBBの計算。
+外形の膨張補正や開口内側余白なしで、`grasp_size_x × grasp_size_y`との直接比較。
+90度回転のどちらかで全体が収まる場合の候補採用。
 さらに候補クラスタの重心から各隣接クラスタ平面までの絶対距離を求め、その最小値が
 `minimum_protrusion_distance`以上であることを要求する。隣接クラスタがない候補はこの条件を通す。
 点同士の最小距離は接触境界でほぼ0になるため使わない。隣接平面を候補OBBへ統合しないため、

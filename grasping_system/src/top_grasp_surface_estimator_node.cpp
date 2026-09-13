@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -125,8 +126,6 @@ private:
     config.minimum_region_nodes = positiveSizeParameter("minimum_region_nodes", 4);
     config.grasp_size_x = declare_parameter<double>("grasp_size_x", 0.061);
     config.grasp_size_y = declare_parameter<double>("grasp_size_y", 0.074);
-    config.footprint_margin = declare_parameter<double>("footprint_margin", 0.005);
-    config.footprint_padding = declare_parameter<double>("footprint_padding", 0.005);
     config.tcp_standoff = declare_parameter<double>("tcp_standoff", 0.0);
     config.maximum_candidates = positiveSizeParameter("maximum_candidates", 20);
     maximum_candidates_ = config.maximum_candidates;
@@ -134,6 +133,7 @@ private:
     config.enable_nonplane_attachment = declare_parameter<bool>("enable_nonplane_attachment", true);
     config.enable_reference_plane_attachment = declare_parameter<bool>(
       "enable_reference_plane_attachment", false);
+    config.enable_plane_combinations = declare_parameter<bool>("enable_plane_combinations", false);
     config.max_attachment_edge_length_ratio = declare_parameter<double>(
       "max_attachment_edge_length_ratio", 1.3);
     config.enable_approach_check = declare_parameter<bool>("enable_approach_check", true);
@@ -423,10 +423,14 @@ private:
       track.is_observed = false;
     }
     for (const auto &surface : raw_result.candidates) {
-      const auto id = surface.cluster_id;
-      const auto observed = makeCandidateSnapshot(surface, map);
-      const auto [it, is_inserted] = candidate_tracks_.try_emplace(id);
+      // 構成平面集合による単独候補・複合候補の独立追跡
+      const auto [it, is_inserted] = candidate_tracks_.try_emplace(surface.source_cluster_ids);
       auto &track = it->second;
+      auto observed = makeCandidateSnapshot(surface, map);
+      if (is_inserted && next_candidate_id_ > std::numeric_limits<std::int32_t>::max()) {
+        throw std::overflow_error("candidate id exhausted");
+      }
+      observed.id = is_inserted ? static_cast<std::uint32_t>(next_candidate_id_++) : track.snapshot.id;
       if (is_inserted) {
         track.snapshot = observed;
         track.valid_update_num = 1U;
@@ -623,6 +627,12 @@ private:
       const auto &surface = result.candidates[index];
       stream << "{\"index\":" << index
              << ",\"cluster_id\":" << surface.cluster_id
+             << ",\"source_cluster_ids\":[";
+      for (std::size_t idx = 0; idx < surface.source_cluster_ids.size(); ++idx) {
+        if (idx != 0) stream << ',';
+        stream << surface.source_cluster_ids[idx];
+      }
+      stream << ']'
              << ",\"node_count\":" << surface.node_indices.size()
              << ",\"attached_node_num\":" << surface.attached_node_indices.size()
              << ",\"attached_component_num\":" << surface.attached_component_num
@@ -669,7 +679,8 @@ private:
   double candidate_orientation_ema_alpha_ = 0.35;
   double candidate_track_reset_dist_ = 0.10;
   std::string candidate_track_frame_id_;
-  std::unordered_map<std::uint32_t, CandidateTrack> candidate_tracks_;
+  std::map<std::vector<std::uint32_t>, CandidateTrack> candidate_tracks_;
+  std::uint64_t next_candidate_id_ = 1;
   std::uint32_t last_processed_frame_ = std::numeric_limits<std::uint32_t>::max();
   std::int64_t last_processed_stamp_ = std::numeric_limits<std::int64_t>::min();
   ais_gng_msgs::msg::TopologicalMap::SharedPtr map_;
