@@ -38,8 +38,6 @@ struct TopGraspSurfaceConfig
   bool enable_reference_plane_attachment = false;
   // 候補内平均エッジ長に対する入口エッジ長の許容倍率
   double max_attachment_edge_length_ratio = 1.3;
-  double max_nonplane_depth = 0.08;
-  double max_nonplane_height = 0.01;
   bool enable_approach_check = true;
   double approach_height = 0.10;
   double approach_margin = 0.01;
@@ -357,7 +355,7 @@ private:
     if (config_.enable_approach_check) {
       for (std::size_t node_idx = 0; node_idx < map.nodes.size(); ++node_idx) {
         const Eigen::Vector3d p = local_point(node_idx);
-        if (p.allFinite() && p.z() > config_.max_nonplane_height &&
+        if (p.allFinite() && p.z() > 0.0 &&
           p.z() <= config_.approach_height + std::max(0.0, config_.tcp_standoff) &&
           std::abs(p.x()) <= 0.5 * config_.grasp_size_x + config_.approach_margin &&
           std::abs(p.y()) <= 0.5 * config_.grasp_size_y + config_.approach_margin)
@@ -442,8 +440,7 @@ private:
           queue.push(next_idx);
           continue;
         }
-        if (!next_p.allFinite() ||
-          next_p.z() < -config_.max_nonplane_depth || next_p.z() > config_.max_nonplane_height)
+        if (!next_p.allFinite())
         {
           continue;
         }
@@ -480,15 +477,14 @@ private:
     {
       throw std::invalid_argument("max_surface_tilt_deg must be within [0, 90]");
     }
-    for (const double value : {config_.max_nonplane_depth, config_.max_nonplane_height,
-        config_.approach_height, config_.approach_margin})
+    for (const double value : {config_.approach_height, config_.approach_margin})
     {
       if (!std::isfinite(value) || value < 0.0) {
-        throw std::invalid_argument("nonplane and approach dimensions must be finite and non-negative");
+        throw std::invalid_argument("接近領域の寸法は非負の有限値が必要です");
       }
     }
-    if (config_.enable_approach_check && config_.approach_height <= config_.max_nonplane_height) {
-      throw std::invalid_argument("approach_height must exceed max_nonplane_height");
+    if (config_.enable_approach_check && config_.approach_height <= 0.0) {
+      throw std::invalid_argument("接近判定を有効にする場合、接近領域の高さは正の値が必要です");
     }
     if (!std::isfinite(config_.tcp_standoff) || !std::isfinite(config_.footprint_margin) ||
       !std::isfinite(config_.footprint_padding))

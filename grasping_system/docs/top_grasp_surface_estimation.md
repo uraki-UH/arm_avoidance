@@ -216,9 +216,9 @@ $$
 平面OBB、TCP、面積比は平面ノードだけから算出し、非平面ノードを混ぜて再フィットしない。
 
 1. GNGエッジを走査し、非平面成分IDごとに接続先の平面を記録。複数平面に接続する成分は付属対象外。これは誤結合を避ける保守的条件であり、同一物体でも側面へ接続する成分は除外され得る。
-2. 平面ノードを始点として、訪問済み管理付きの幅優先探索で接続ノードを抽出。累積距離と平面OBB外側余白による制限はなし。従来の非平面付属モードでは下方深さ・上方高さを使用。参照平面モードでは符号付き離隔と入口エッジ長の条件を使用。`BOUNDARY_FREE_SPACE`を持つ端点は探索を通過させない。境界ビットは観測根拠であり、物体端の確定ではない。
+2. 平面ノードを始点として、訪問済み管理付きの幅優先探索で接続ノードを抽出。累積距離と平面OBB外側余白による制限はなし。付属探索の上下位置による制限もなし。参照平面モードでは符号付き離隔と入口エッジ長の条件を使用。`BOUNDARY_FREE_SPACE`を持つ端点は探索を通過させない。境界ビットは観測根拠であり、物体端の確定ではない。
 3. 付属ノードが固定TCPの開口内に収まらない場合、`rejected_attached_oversize`として棄却。`footprint_padding`と`footprint_margin`も適用。付属込みの局所外形は`target_extent_x/y`、平面OBBは従来の`extent_x/y`に分離。
-4. 接続や平面所属によらず、全グラフの有限位置ノードを上方の矩形柱で確認。平面最高位置から`max_nonplane_height`を超え、`approach_height + max(0, tcp_standoff)`までの高さで、開口XY寸法に`approach_margin`を足した領域に観測ノードがあれば`rejected_approach_obstacle`として棄却。
+4. 接続や平面所属によらず、全グラフの有限位置ノードを上方の矩形柱で確認。平面最高位置より上で、`approach_height + max(0, tcp_standoff)`までの高さで、開口XY寸法に`approach_margin`を足した領域に観測ノードがあれば`rejected_approach_obstacle`として棄却。
 
 成分IDとノード添字は同一フレーム内だけで使用。未分類の`NONPLANE_COMPONENT_NONE`や探索範囲外のノードは付属対象外でも、上方障害物の確認対象。`enable_nonplane_attachment=false`でも`enable_approach_check=true`なら進入判定を継続。
 
@@ -261,7 +261,6 @@ GNGエッジからクラスタ隣接集合を構築
 | `candidate_track_reset_dist` | `0.10 m` | 再確認へ戻すTCP位置差 |
 | `max_surface_tilt_deg` | `90 deg` | 上方向に対する平面傾斜角 |
 | `enable_nonplane_attachment` | `false` | 非平面付属部分の探索・包含判定 |
-| `max_nonplane_depth`, `max_nonplane_height` | `0.08 / 0.01 m` | 平面最高位置からの下方・上方付属探索幅 |
 | `enable_approach_check` | `false` | 上方観測障害物の確認 |
 | `approach_height`, `approach_margin` | `0.10 / 0.01 m` | 簡易進入領域の高さ・開口外側余白 |
 

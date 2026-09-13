@@ -136,8 +136,6 @@ private:
       "enable_reference_plane_attachment", false);
     config.max_attachment_edge_length_ratio = declare_parameter<double>(
       "max_attachment_edge_length_ratio", 1.3);
-    config.max_nonplane_depth = declare_parameter<double>("max_nonplane_depth", 0.08);
-    config.max_nonplane_height = declare_parameter<double>("max_nonplane_height", 0.01);
     config.enable_approach_check = declare_parameter<bool>("enable_approach_check", true);
     config.approach_height = declare_parameter<double>("approach_height", 0.10);
     config.approach_margin = declare_parameter<double>("approach_margin", 0.01);

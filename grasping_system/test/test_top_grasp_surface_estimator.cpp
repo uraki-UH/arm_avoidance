@@ -299,11 +299,20 @@ int main()
     "attachment toggle has no effect");
   local_map.nodes[4].pos.x = 0.023;
 
-  // 上限外・自由空間境界・未分類成分は付属対象外
+  // 旧上下制限を超える付属ノードの採用。接近判定は独立して無効化
   config = makeConfig();
-  config.max_nonplane_depth = 0.005;
-  expect(TopGraspSurfaceEstimator(config).estimate(local_map, local_clusters)
-    .candidates[0].attached_node_indices.empty(), "depth bound ignored");
+  config.enable_approach_check = false;
+  for (const double height : {-0.1, 0.14}) {
+    auto unrestricted_map = local_map;
+    unrestricted_map.nodes[4].pos.z = height;
+    const auto unrestricted_result = TopGraspSurfaceEstimator(config).estimate(
+      unrestricted_map, local_clusters);
+    expect(unrestricted_result.candidates.size() == 1 &&
+      unrestricted_result.candidates.front().attached_node_indices.size() == 1,
+      "上下位置による付属探索の打ち切りなし");
+  }
+
+  // 自由空間境界・未分類成分の付属対象からの除外
   local_map.nodes[4].boundary_evidence = attached.BOUNDARY_FREE_SPACE;
   expect(estimator.estimate(local_map, local_clusters).candidates[0].attached_node_indices.empty(),
     "free-space boundary admitted");
@@ -370,6 +379,10 @@ int main()
   evaluated = estimator.estimate(local_map, local_clusters);
   expect(evaluated.candidates.empty() && evaluated.rejected_approach_obstacle == 1,
     "unconnected overhead obstacle accepted");
+  local_map.nodes[4].pos.z = 0.105;
+  expect(estimator.estimate(local_map, local_clusters).rejected_approach_obstacle == 1,
+    "平面最高位置から5 mm上の接近障害物検出");
+  local_map.nodes[4].pos.z = 0.14;
   config = makeConfig();
   config.enable_nonplane_attachment = false;
   expect(TopGraspSurfaceEstimator(config).estimate(local_map, local_clusters).candidates.empty(),

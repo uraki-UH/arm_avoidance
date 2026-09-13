@@ -266,9 +266,6 @@
     enable_reference_plane_attachment: true
     # 候補内平均エッジ長に対する入口エッジ長の許容倍率
     max_attachment_edge_length_ratio: 1.2
-    # 平面最高位置からの付属探索深さと上方許容幅 [m]
-    max_nonplane_depth: 0.08
-    max_nonplane_height: 0.01
     enable_approach_check: false
     # 簡易進入領域の高さと把持開口外側余白 [m]。実グリッパ形状とは別の近似
     approach_height: 0.10
