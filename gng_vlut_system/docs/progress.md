@@ -272,3 +272,9 @@ timeout -s INT -k 3s 12s perf record -F 49 -g -p 1845486,1844494 -o /tmp/grasp_c
 - 1回の計画内で開始候補間の有向エッジ判定・基礎コストを再利用する遅延キャッシュを実装。安全制約・終点別ペナルティは維持し、単一開始候補時はキャッシュ生成なし。[現行仕様・全起動コマンド](releases/2026-09-14_candidate_path_batch.md)を更新。
 - Dockerビルド・C++7件・domain 218の既存ROS結合テストに成功。実GNGの全40経路一致、キャッシュ寿命と更新後の再評価を確認。3回の同一実行内比較の中央値は共有方式271.269 ms、追加キャッシュ方式107.392 ms。全体CPU改善率は未測定。
 - 検証用launch・子ノード・比較計測はすべて終了済み。既存ROSの停止・再起動操作なし。新たな設定・トピック・メッセージ変更なし。
+
+## 2026-09-15: 候補軌道計画の計算時間ログ
+
+- 計画更新時の計算時間・目標候補数・到達数をINFOの1行に集約し、起動時の詳細一覧と候補受信ログをDEBUGへ移動。[計測範囲・検証・起動コマンド](releases/2026-09-15_candidate_planning_log.md)を記録。
+- Releaseビルド・インストールとdomain 218の既存ROS結合テストに成功。計算時間ログ7件、静止入力での再探索なし、通常ログの簡潔化を確認。検証用launch・子ノードはすべて停止済み。
+- Applied the requested English format `dof=7 Plan: 34.35 ms Count: goal=2 reach=2` and removed the separate startup INFO log. Release library rebuilds passed; no ROS processes were started for these wording changes.
