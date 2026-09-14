@@ -24,7 +24,9 @@ libreoffice --headless --convert-to pdf --outdir gng_vlut_system/docs/presentati
 - [PowerPoint：編集用](./fuzzy_grasp_design_draft.pptx)
 - [PDF：閲覧・共有用](./fuzzy_grasp_design_draft.pdf)
 - [生成スクリプト](./build_fuzzy_grasp_slides.py)
-- [元資料：入力情報・制約・集合の設計案](../designs/fuzzy_grasp_input_design.md)
+- [元資料：統合設計書・入力情報・制約・集合](../designs/fuzzy_grasp_design.md#inputs)
+
+統合前の設計案から作成したスライド。統合に伴うPowerPoint・PDFの再生成は未実施。最新の設計内容は上記の統合設計書を参照。
 
 2026-09-14作成、16:9、全8枚。図・表・グラフはPowerPointの編集可能な図形と文字。
 未実装の設計案と現行の入力取得状況を区別。メンバシップ関数の数値境界は未確定。

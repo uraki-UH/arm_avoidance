@@ -41,3 +41,27 @@ ctest --test-dir /ros2_ws/build/gng_vlut_system -R '^test_candidate_metric_avail
 - ROS把持経路では指標配信と固定的な候補選択を確認。汎用IF-THENエンジンの把持候補選択への接続は見つからず。
 - [ROSルールエンジンの実装雛形設計](designs/fuzzy_rule_engine_design.md)を追加。責務・入出力・設定形式・欠損値・ID対応・確認項目を記載。
 - 実装・数値境界の確定・ROS起動・動作検証は未実施。既存コードとタスク順序の変更なし。
+
+## 2026-09-14: 隣接平面クラスタの統合拒否調査
+
+- 稼働中のCPU GNGから`/topological_map`と`/plane_clusters`を読み取り、同じ`frame_number`の5更新（9236〜9240）について隣接クラスタ対の統合条件を再計算。
+- クラスタ7と10は法線差約5.4〜6.5度・接続4本で、面内広がり比・統合後残差上限・少数側残差の条件を通過。正規化残差約0.30に対して増加判定の許容値が約0.20となり、残差増加条件による拒否を確認。
+- 根拠は[統合判定](../../ais_gng_cpu/src/ais_gng/src/topological_plane/plane_cluster_incremental.cpp#L1248)。出力済みクラスタ対の再評価であり、内部の逐次統合全経路や物理的な同一平面性の検証ではない点に留意。
+- [CPU起動処理](../../ais_gng_cpu/src/ais_gng/launch/ais_gng.launch.py#L167)で、`plane_params_file`から非平面成分設定だけを抽出し、平面クラスタの統合設定をCPUノードへ渡していないことを確認。
+- 調査用ノード`plane_merge_readonly_probe`は終了し、終了後のプロセス一覧で残存なしを確認。既存のGNG・Viewer・ROS daemonの停止や再起動なし。ROSソースコード・設定変更、ビルド、統合条件変更後の検証は未実施。
+
+調査ノードの実行コマンド（終了済み、調査スクリプトは一時ファイル）:
+
+```bash
+docker compose exec -T gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 15s python3 -' < /tmp/plane_merge_probe.py
+```
+
+## 2026-09-14: 把持ファジールール設計資料の統合
+
+- 入力設計・実装雛形・145件のルール候補・ROS入力指標候補の4資料を [統合設計書](designs/fuzzy_grasp_design.md) へ移管。旧4ファイルはリンク案内のみ。
+- 現行実装調査から未実装の改善提案を統合先へ移管。実装説明・数値再現結果・過去のスライド・既存進捗は維持。
+- `/grasp_pose_cands`の型、`/plane_clusters`の名称、独立スコアtopicの廃止、関節余裕・推定時間等の未計算状態をソース確認の範囲で整合。全topicの実受信確認なし。
+- README・現状資料・評価メッセージ仕様・スライド生成元の参照先を更新。スライドのPowerPoint・PDF再生成は未実施。
+- 移管前後の照合でルール145件の本文、入力表67行、指標・仮説等のID100件、JSON雛形1件の保持を確認。
+- 文書リンク88件の解決、コードフェンス対応、スライド生成元のPython構文を検査。既存索引の無関係なリンク切れ1件は変更対象外。`git diff --check`に成功。
+- ROSコード・設定・評価式・タスク順序の変更なし。常駐プロセスの新規起動・既存プロセスの停止なし。

@@ -5,8 +5,7 @@
 ## 主な文書
 
 - [把持推定・ファジィルールの現状と全体フロー](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
-- [ROS把持ファジィ評価の入力・制約・集合の設計案](./designs/fuzzy_grasp_input_design.md)
-- [ROSファジィルールエンジンの実装雛形設計（未実装）](./designs/fuzzy_rule_engine_design.md)
+- [把持ファジールール統合設計書：入力・実装契約・145ルール・拡張指標](./designs/fuzzy_grasp_design.md)
 - [把持ファジィ評価の相談用スライド（PowerPoint・PDF）](./presentations/README.md)
 - [TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)
 - [TASK_LIST.md](./TASK_LIST.md)

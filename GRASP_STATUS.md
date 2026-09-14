@@ -142,4 +142,4 @@ Viewerが稼働していれば、この2つのlaunchで候補の計算・矢印�
 - [ボクセル方式のROS実装](grasping_system/src/grasp_voxel_matcher_node.cpp)
 - [現在の共通設定](gng_vlut_system/config/ToPoDualArm.yaml)
 - [上方向把持の既存検証記録](gng_vlut_system/docs/releases/2026-08-27_top_grasp_surface_estimation.md)
-- [今後のファジールール候補](FUZZY_GRASP_RULE_CATALOG.md)
+- [把持ファジールール統合設計書](gng_vlut_system/docs/designs/fuzzy_grasp_design.md)

@@ -80,7 +80,7 @@ def segment(slide, x1, y1, x2, y2, color=line_color, width=1.5):
     return shape
 
 
-def base(num, title, subtitle, source="設計案：fuzzy_grasp_input_design.md"):
+def base(num, title, subtitle, source="設計案：fuzzy_grasp_design.md"):
     slide = deck.slides.add_slide(deck.slide_layouts[6])
     slide.background.fill.solid()
     slide.background.fill.fore_color.rgb = RGBColor.from_string(paper)
@@ -140,7 +140,7 @@ for x, number, title, desc, accent in [
     text(slide, desc, x + 0.18, 5.70, 3.3, 0.26, 12, "B9D4E5")
 text(slide, "相談用ドラフト  •  2026.09.14", 0.64, 6.82, 5.3, 0.27, 11, "B9D4E5")
 text(slide, "現行ROSには未接続／数値境界は未確定", 7.2, 6.82, 5.48, 0.27, 11, "B9D4E5", align=PP_ALIGN.RIGHT)
-slide.notes_slide.notes_text_frame.text = "元資料: ../designs/fuzzy_grasp_input_design.md。現行HTMLの試作ルールと今後のROSルール設計の区別。所属度は把持成功確率ではない。"
+slide.notes_slide.notes_text_frame.text = "元資料: ../designs/fuzzy_grasp_design.md。現行HTMLの試作ルールと今後のROSルール設計の区別。所属度は把持成功確率ではない。"
 
 # 2：二種類のGNGと候補評価の関係
 slide = base(2, "候補は幾何で生成し、ルールで比較する", "環境形状GNGとロボット関節配置GNGは、役割もノードIDも別。")
@@ -263,7 +263,7 @@ for idx, (kind, condition, output, color) in enumerate([
 text(slide, "次に決めること", 0.77, 5.57, 2.75, 0.37, 18, ink, True)
 text(slide, "① 初期入力を選ぶ    ② 集合の境界を決める    ③ 発火・非発火と順位を検証する", 3.26, 5.60, 9.23, 0.38, 15, muted)
 note(slide, "候補ID・入力の有効性・発火ルール・制約違反・保留理由を保存し、説明できる評価へ。")
-slide.notes_slide.notes_text_frame.text = "詳細: ../designs/fuzzy_grasp_input_design.md。初期AND=min、OR=max、出力代表値の加重平均などは方式の候補で未確定。全ルール非発火を自動高評価にしない。品質点と実行・保留の行動選択は分離。"
+slide.notes_slide.notes_text_frame.text = "詳細: ../designs/fuzzy_grasp_design.md。初期AND=min、OR=max、出力代表値の加重平均などは方式の候補で未確定。全ルール非発火を自動高評価にしない。品質点と実行・保留の行動選択は分離。"
 
 
 def main():
