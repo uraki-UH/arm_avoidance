@@ -13,8 +13,11 @@ namespace fuzzrobo::surface_model
 {
 struct options
 {
+  std::string method = "model";
   double max_link_length = 0.08;
   double max_link_normal_deg = 45.0;
+  // smooth_graphのエッジと接平面の角度[deg]。
+  double max_link_tangent_deg = 30.0;
   // 観測支持領域の分離・小欠損補完。falseは領域分離導入前の動作。
   bool enable_support_regions = true;
   // 曲面支持領域の小欠損補完距離[m]。0は補完なし。
@@ -108,6 +111,7 @@ struct region
 
 struct result
 {
+  std::string method = "model";
   std::vector<local_patch> patches;
   // 元GNGの接続に由来するパッチ間edge。smooth_edgesは法線・距離ゲート通過分。
   std::vector<std::array<std::uint32_t, 2>> patch_edges;
@@ -126,6 +130,10 @@ struct result
   double support_ms = 0.0;
   std::size_t support_split_num = 0;
   std::size_t support_gap_links = 0;
+  // smooth_graphの採用エッジ（入力配列添字）と差分更新の処理数。
+  std::vector<std::uint16_t> connected_edges;
+  std::size_t link_check_num = 0;
+  std::size_t connectivity_node_num = 0;
 };
 
 struct node_dev
@@ -141,7 +149,7 @@ std::size_t plane_patch_num(const result &surfaces, const region &surface);
 void split_support_regions(result &surfaces,
   const ais_gng_msgs::msg::TopologicalMap &map, const options &config);
 
-// retainedはtrackerによる現在ノードの距離・法線・支持率検証済みの候補。
+// modelのretainedはtrackerでの検証済み候補。smooth_graphは履歴なしの接続判定。
 result extract(
   const ais_gng_msgs::msg::TopologicalMap &map,
   const ais_gng_msgs::msg::PlaneClusterArray &planes,

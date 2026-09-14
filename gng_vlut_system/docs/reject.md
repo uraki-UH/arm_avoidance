@@ -21,3 +21,16 @@
 - 検証との区別: 回帰テスト成功と比較再生でのクラスタ数減少は実施済みの事実だが、クラスタリング性能の改善や統合の正しさの裏付けとしては不十分。
 - 再検討条件: 未確定。検討案は、同一入力で残存分割・誤統合・時系列安定性を比較し、改善の根拠を確認した上での再採用判断。接続条件緩和やYAML転送の恒久禁止という判断ではない。
 - 今回の適用範囲: 不採用記録と変更履歴への参照追記のみ。コード・設定の取り消し、ビルド、ROSプロセスの操作なし。
+
+## 2026-09-15: Surface clustering micro-optimizations and exact patch cache
+
+- Scope/decision: agent assessment for the captured GNG stream; production adoption deferred for three fitting micro-optimizations and an exact unchanged-patch cache.
+- Evidence: identical captured inputs and five interleaved Release runs showed only 1.4–2.8% total reductions. No exact unchanged plane patches were observed across 200 patch comparisons. Details and reproduction commands: [investigation](designs/curved_surface_position_fit.md#2026-09-15-live-cost-and-incremental-update-investigation).
+- Correctness: the first two prototypes preserved recorded non-timing outputs exactly; fixed Eigen dimensions introduced only tested floating-point rounding differences. All three passed 66 existing tests. The decision is based on limited benefit, not test failure or a user rejection.
+- Reconsider when representative inputs show a substantial unchanged-patch fraction, or targeted candidate-fitting work produces a material and repeatable gain. Incremental fitting in general is not rejected. Production code/settings remain unchanged.
+
+## 2026-09-15: smooth_graphによる既定曲面方式の置換
+
+- **対象・判断**: モデル当てはめなしの連続面抽出を既定方式にする案は採用見送り。比較用の起動選択肢としては実装済み。
+- **根拠**: 同じ実入力21フレームで7.407 msから1.159 msへ短縮した一方、平均1,420/1,545ノードが一つの成分に統合。背景平面と小領域の境界を維持できず、現在の形状クラスタの同等置換とは扱えない。[仕様・測定記録](releases/2026-09-15_smooth_surface_graph.md)。
+- **再検討条件**: モデル当てはめなしで背景平面・細い橋・法線変化の境界を扱い、多シーンで分割品質と実行時間を確認できた場合。差分管理も今回の変動入力では3.7%増であり、常時高速化とはみなさない。

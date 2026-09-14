@@ -93,9 +93,10 @@ ais_gng_msgs::msg::TopologicalMap make_graph(
     cluster.scale.x=size.x(); cluster.scale.y=size.y(); cluster.scale.z=size.z();
     out.clusters.push_back(std::move(cluster));
   }
-  out.edges.reserve(map.edges.size());
-  for (std::size_t i=0; i+1<map.edges.size(); i+=2) {
-    const auto a=map.edges[i], b=map.edges[i+1];
+  const auto &graph_edges=surfaces.method=="smooth_graph" ? surfaces.connected_edges:map.edges;
+  out.edges.reserve(graph_edges.size());
+  for (std::size_t i=0; i+1<graph_edges.size(); i+=2) {
+    const auto a=graph_edges[i], b=graph_edges[i+1];
     if (a>=node_region.size() || b>=node_region.size() || a==b) continue;
     if (node_region[a]<0 || node_region[a]!=node_region[b]) continue;
     out.edges.push_back(a); out.edges.push_back(b);
@@ -148,15 +149,17 @@ visualization_msgs::msg::MarkerArray make_markers(
       label.pose.position=point(center);
       label.pose.position.z+=0.025;
       std::ostringstream text;
-      text << r.shape.type << " #" << r.id << " " << std::fixed << std::setprecision(1)
-           << r.shape.rms*1000 << "mm";
+      text << r.shape.type << " #" << r.id;
+      if (r.shape.type!="smooth_surface")
+        text << " " << std::fixed << std::setprecision(1) << r.shape.rms*1000 << "mm";
       label.text=text.str();
       out.markers.push_back(std::move(label));
     }
   }
-  // 全GNG edgeの一回走査。同一モデル所属の実edgeのみ描画し、架空の接続を生成しない。
-  for (std::size_t i=0; i+1<map.edges.size(); i+=2) {
-    const auto a=map.edges[i], b=map.edges[i+1];
+  // 同一領域の実エッジ。smooth_graphでは接続判定を通過したエッジのみ。
+  const auto &graph_edges=surfaces.method=="smooth_graph" ? surfaces.connected_edges:map.edges;
+  for (std::size_t i=0; i+1<graph_edges.size(); i+=2) {
+    const auto a=graph_edges[i], b=graph_edges[i+1];
     if (a>=node_region.size() || b>=node_region.size() || a==b) continue;
     const int r=node_region[a];
     if (r<0 || r!=node_region[b]) continue;
@@ -226,6 +229,11 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     {"uncertain_edges",surfaces.uncertain_edges},
     {"min_display_plane_patches",min_display_plane_patches},
     {"patches",json::array()},{"models",json::array()}};
+  out["method"]=surfaces.method;
+  if (surfaces.method=="smooth_graph") {
+    out["link_check_num"]=surfaces.link_check_num;
+    out["connectivity_node_num"]=surfaces.connectivity_node_num;
+  }
   for (std::size_t i=0; i<surfaces.patches.size(); ++i) {
     const auto &p=surfaces.patches[i];
     json patch={{"id",i},{"kind",p.plane_cluster_idx>=0 ? "plane_patch":"nonplane_node"},
@@ -233,7 +241,7 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     if (p.plane_cluster_idx>=0) patch["plane_cluster_id"]=planes.clusters[p.plane_cluster_idx].id;
     const auto &c = p.curvature;
     patch["curvature"] = {{"valid",c.valid},{"sample_num",c.sample_num},
-      {"method","position_quadratic"}};
+      {"method",surfaces.method=="smooth_graph" ? "none":"position_quadratic"}};
     patch["curvature"].update({{"fit_iter",c.fit_iter},
       {"has_svd_fallback",c.has_svd_fallback}});
     if (c.valid) {
@@ -263,7 +271,7 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     if (r.support_parent_id!=std::numeric_limits<std::uint32_t>::max())
       model["support_parent_id"]=r.support_parent_id;
     model["is_display_candidate"]=is_display_candidate(surfaces,r,min_display_plane_patches);
-    if (s.type!="unknown") {
+    if (s.type!="unknown" && s.type!="smooth_surface") {
       model["fit"]={{"origin",vector_json(s.origin)},{"coordinate_scale",s.scale},
         {"q",std::vector<double>(s.q.data(),s.q.data()+10)},
         {"rms_m",s.rms},{"max_patch_rms_m",s.max_patch_rms},{"score_m2",s.score},
@@ -287,8 +295,12 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   const double hz=node.declare_parameter("surface_model.hz",2.0);
   if (!std::isfinite(hz) || hz<=0) throw std::invalid_argument("surface_model.hz must be finite and positive");
   period_=1.0/hz;
+  config_.method=node.declare_parameter("surface_model.method",config_.method);
+  if (config_.method!="model" && config_.method!="smooth_graph")
+    throw std::invalid_argument("surface_model.method must be model or smooth_graph");
   config_.max_link_length=node.declare_parameter("surface_model.max_link_length",config_.max_link_length);
   config_.max_link_normal_deg=node.declare_parameter("surface_model.max_link_normal_deg",config_.max_link_normal_deg);
+  config_.max_link_tangent_deg=node.declare_parameter("surface_model.max_link_tangent_deg",config_.max_link_tangent_deg);
   config_.enable_support_regions=node.declare_parameter(
     "surface_model.enable_support_regions",config_.enable_support_regions);
   config_.max_support_gap=node.declare_parameter("surface_model.max_support_gap",config_.max_support_gap);

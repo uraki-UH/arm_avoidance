@@ -89,6 +89,11 @@ def generate_launch_description():
             'GPU版では平面クラスタ生成とマーカー変換を起動'
         )
     )
+    declar_surface_method = DeclareLaunchArgument(
+        'surface_method', default_value='auto',
+        choices=['auto', 'model', 'smooth_graph'],
+        description='曲面抽出方式。autoはYAML設定、modelは形状推定、smooth_graphは接続判定'
+    )
     declar_topological_map_topic = DeclareLaunchArgument(
         'topological_map_topic',
         default_value='/topological_map',
@@ -206,6 +211,9 @@ def generate_launch_description():
             'start_plane_cluster')
         if start_plane_cluster:
             surface_parameter_overrides = {}
+            surface_method = LaunchConfiguration('surface_method').perform(context)
+            if surface_method != 'auto':
+                surface_parameter_overrides['surface_model.method'] = surface_method
             support_mode = LaunchConfiguration('enable_support_regions').perform(context)
             if support_mode != 'auto':
                 surface_parameter_overrides['surface_model.enable_support_regions'] = (
@@ -247,6 +255,7 @@ def generate_launch_description():
         declar_plane_params_file,
         declar_enable_support_regions,
         declar_start_plane_cluster,
+        declar_surface_method,
         declar_topological_map_topic,
         declar_plane_clusters_topic,
         declar_plane_clusters_input_topic,

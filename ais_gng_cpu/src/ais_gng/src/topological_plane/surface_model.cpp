@@ -1,4 +1,4 @@
-#include "ais_gng/topological_plane/surface_model.hpp"
+#include "ais_gng/topological_plane/surface_model_tracking.hpp"
 #include "ais_gng/topological_plane/convex_hull.hpp"
 
 #include <Eigen/Eigenvalues>
@@ -327,6 +327,9 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   const ais_gng_msgs::msg::PlaneClusterArray &planes, const options &config,
   const std::vector<region> &retained)
 {
+  if (config.method=="smooth_graph") return tracker{}.update(map,planes,config);
+  if (config.method!="model")
+    throw std::invalid_argument("surface_model.method must be model or smooth_graph");
   if (map.frame_number != planes.frame_number || map.header.frame_id != planes.header.frame_id) {
     throw std::invalid_argument("surface models require matching map/plane frame and coordinate frame");
   }

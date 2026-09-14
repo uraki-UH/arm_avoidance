@@ -278,3 +278,16 @@ timeout -s INT -k 3s 12s perf record -F 49 -g -p 1845486,1844494 -o /tmp/grasp_c
 - 計画更新時の計算時間・目標候補数・到達数をINFOの1行に集約し、起動時の詳細一覧と候補受信ログをDEBUGへ移動。[計測範囲・検証・起動コマンド](releases/2026-09-15_candidate_planning_log.md)を記録。
 - Releaseビルド・インストールとdomain 218の既存ROS結合テストに成功。計算時間ログ7件、静止入力での再探索なし、通常ログの簡潔化を確認。検証用launch・子ノードはすべて停止済み。
 - Applied the requested English format `dof=7 Plan: 34.35 ms Count: goal=2 reach=2` and removed the separate startup INFO log. Release library rebuilds passed; no ROS processes were started for these wording changes.
+
+## 2026-09-15: Surface clustering cost and incremental updates
+
+- Observed the existing stream and captured 21 synchronized frames with 1,545 nodes. Mean surface extraction was 9.196 ms at about 1.9 Hz; all frames exhausted the 128-fit budget. Exact unchanged-patch count was zero across 200 comparisons. [Measurements, limitations, artifacts, and startup commands](designs/curved_surface_position_fit.md#2026-09-15-live-cost-and-incremental-update-investigation).
+- Compared three isolated Release prototypes on identical inputs. Total reductions were 1.4–2.8%; each passed 66 existing tests. [Production adoption deferred](reject.md#2026-09-15-surface-clustering-micro-optimizations-and-exact-patch-cache). No production source or setting changes for this investigation.
+- Capture/probe/build/replay/test processes all exited. Existing GNG launch and nodes remained running; no user process was stopped or restarted.
+
+## 2026-09-15: モデル当てはめなしの連続面抽出
+
+- `surface_method:=smooth_graph` を追加。実GNGエッジの距離・法線・接平面条件と影響成分の差分再探索を既存ファイル内に実装。[仕様・比較条件・全起動コマンド](releases/2026-09-15_smooth_surface_graph.md)を記録。
+- Releaseビルド・C++74件・隔離ROS検証に成功。実入力21フレームで所属と採用エッジが毎回全探索と一致。従来modelの所属・種別・IDも変更前結果と一致。
+- 従来7.407 msに対して新方式1.159 ms。ただし最大成分は平均1,420/1,545ノードへ拡大。差分管理単独は実入力で3.7%の増加、固定入力では判定・所属再探索の省略を確認。分割品質を理由に既定値modelを維持。
+- 検証ROSノード・driver・再評価・ビルド・描画はすべて終了、プロセス一覧で残留なし。既存プロセスの停止・再起動操作なし。結果・比較図は `tmp/surface_graph_20260915/` に保存。

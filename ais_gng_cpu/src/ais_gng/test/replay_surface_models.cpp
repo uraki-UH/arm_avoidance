@@ -16,12 +16,14 @@ void read_vector(const json &value, vector_type &out)
 
 json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClusterArray &planes)
 {
-  json out={{"update_ms",result.update_ms},{"curvature_ms",result.curvature_ms},
+  json out={{"method",result.method},{"update_ms",result.update_ms},{"curvature_ms",result.curvature_ms},
     {"fits",result.model_fits},{"patches",json::array()},
     {"sharp",json::array()},{"smooth",json::array()},{"uncertain",json::array()},
     {"boundary_ms",result.boundary_ms},{"boundary_fit_num",result.boundary_fit_num},
     {"support_ms",result.support_ms},{"support_split_num",result.support_split_num},
     {"support_gap_links",result.support_gap_links},
+    {"link_check_num",result.link_check_num},{"connectivity_node_num",result.connectivity_node_num},
+    {"connected_edges",result.connected_edges},{"regions",json::array()},
     {"shown",json::array()}};
   for (const auto &patch:result.patches) {
     if (patch.plane_cluster_idx<0) continue;
@@ -42,8 +44,11 @@ json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClus
     }
   }
   for (const auto &region:result.regions) {
+    out["regions"].push_back({{"id",region.id},{"type",region.shape.type},
+      {"nodes",region.node_indices},{"is_retained",region.is_retained}});
     if (region.shape.type=="plane" || region.shape.type=="unknown" ||
-      (!region.is_retained && surface::plane_patch_num(result,region)<2)) continue;
+      std::max(surface::plane_patch_num(result,region),
+        region.is_retained ? region.seed_plane_patch_num:0)<2) continue;
     std::set<std::uint32_t> ids;
     for (auto idx:region.patch_indices) {
       const auto plane=result.patches[idx].plane_cluster_idx;
@@ -58,12 +63,17 @@ json summarize(const surface::result &result, const ais_gng_msgs::msg::PlaneClus
 
 int main(int argc, char **argv)
 {
-  if (argc<2 || argc>3 || (argc==3 && std::string(argv[2])!="--disable-support-regions")) {
-    std::cerr<<"usage: replay_surface_models observed.json [--disable-support-regions]\n";
+  if (argc<2) {
+    std::cerr<<"usage: replay_surface_models observed.json [--disable-support-regions] [--smooth-graph]\n";
     return 2;
   }
   surface::options config;
-  config.enable_support_regions=argc!=3;
+  for (int i=2;i<argc;++i) {
+    const std::string flag=argv[i];
+    if (flag=="--disable-support-regions") config.enable_support_regions=false;
+    else if (flag=="--smooth-graph") config.method="smooth_graph";
+    else { std::cerr<<"unknown option: "<<flag<<'\n'; return 2; }
+  }
   try {
     std::ifstream input(argv[1]);
     const auto records=json::parse(input);
@@ -91,6 +101,7 @@ int main(int argc, char **argv)
       for (const auto &raw:record.at("planes").at("clusters")) {
         ais_gng_msgs::msg::PlaneCluster plane;
         plane.id=raw.at("id"); read_vector(raw.at("normal"),plane.normal);
+        plane.local_spacing=raw.value("local_spacing",0.0F);
         plane.node_indices=raw.at("node_indices").get<decltype(plane.node_indices)>();
         planes.clusters.push_back(plane);
       }

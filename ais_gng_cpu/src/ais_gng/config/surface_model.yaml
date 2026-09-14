@@ -1,6 +1,8 @@
 /**:
   ros__parameters:
     surface_model.enable: true
+    # modelは従来の形状推定、smooth_graphはモデル当てはめなしの連続面抽出。
+    surface_model.method: model
     # 一行ログのCurveは別ノードの直近計算時間。軽量通知は出力先の/update_ms。
     surface_model.output_topic: /curved_surface_clusters
     surface_model.hz: 2.0
@@ -16,6 +18,8 @@
     surface_model.max_link_length: 0.08
     # 位置由来の境界接平面、または非平面ノード法線の接続角[deg]。
     surface_model.max_link_normal_deg: 45.0
+    # smooth_graphのエッジと両端の接平面の角度[deg]。
+    surface_model.max_link_tangent_deg: 30.0
     # 観測支持領域の分離・小欠損補完。falseは領域分離導入前の動作。
     surface_model.enable_support_regions: true
     # 曲面上の小欠損補完距離[m]。0は補完なし。
@@ -35,12 +39,13 @@
     # score = RMS^2 + complexity_penalty^2 * モデル自由度。
     surface_model.complexity_penalty: 0.001
     surface_model.max_radius: 5.0
+    # 形状推定の支持数。smooth_graphでは連続面の所属ノード数。
     surface_model.min_fit_nodes: 12
     surface_model.max_fit_samples: 256
     surface_model.max_model_fits: 128
     # 不明境界に対する追加局所フィットの回数。0は追加推定なし。
     surface_model.max_boundary_fits: 32
-    # 生成済み曲面の維持判定。位置・法線・支持率と、観測支持領域の分離検査。
+    # modelは生成済み曲面の維持判定。smooth_graphは接続判定・所属・IDの履歴利用。
     surface_model.retention.enable: true
     surface_model.retention.max_point_residual: 0.012
     surface_model.retention.max_normal_deg: 45.0
