@@ -179,6 +179,8 @@ AND=min、OR=max、出力代表値の加重平均などは初期方式の候補�
 
 ## 11. 実装参照
 
+ROS側の責務分割・設定形式・欠損値処理・テスト方針は [ルールエンジンの実装雛形設計](fuzzy_rule_engine_design.md) を参照。現行実装ではなく設計案。
+
 - [候補形状・寸法・面積比](../../../grasping_system/include/candidate/top_grasp_surface_estimator.hpp)
 - [候補追跡とsummary出力](../../../grasping_system/src/top_grasp_surface_estimator_node.cpp)
 - [GNG側ノードメッセージ](../../../ais_gng_cpu/src/ais_gng_msgs/msg/TopologicalNode.msg)

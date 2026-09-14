@@ -20,6 +20,35 @@ ros2 launch pointcloud_transformer_cpp pointcloud_transformer.launch.py \
   input_topic:=/camera/camera/depth/color/points_raw \
   output_topic:=/camera/camera/depth/color/points
 
+# URDF準拠のダミー関節状態
+ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+  urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
+
+ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
+  urdf_path:=/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
+
+
+## GNGの学習の実行
+  ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  use_voxel_collision:=true
+
+
+
+
+##　自己認識ボクセルの起動
+ros2 launch gng_vlut_system self_recognition_viz.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  root_link:=right_link2 \
+  leaf_link:=right_link8 \
+  mask_topic:=/ToPoDualArm/right_arm_voxel
+
+##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
+ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
+  robot_name:=ToPoDualArm \
+  input_topic:=/ToPoDualArm/right_arm_voxel \
+  danger_inflation:=0.05
+  (output_voxel_size:=0.02)
+
 
 
 

@@ -69,33 +69,6 @@ ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
 
 `grasp_joint_candidates.launch.py`の既定入力へ接続。上方方式とボクセル方式は同じ出力先のため、候補生成はどちらか一方だけ起動。比較時は出力トピックを分離し、名前付きYAMLの出力設定とlaunch引数を同じ値へ変更。
 
-## HTML全点群からCPU GNGテンプレートを保存
-点群も保存
-source /ros2_ws/install/setup.bash
-ros2 run ais_gng save_object_gng_dataset mug_complete  --replace --with-points
-
---replaceをつけると同名で保存していたやつ削除
-
-保存先は`/datasets/設定名_<UTC日時>_<連番>_gng_template.json.gz`。
-
-同名テンプレートを置換し、過去の同名保存と対応する点群・深度・色情報を削除する場合。
-
-
-置換保存先は`/datasets/mug_complete_gng_template.json.gz`。
-
-保存済みテンプレートは、保存名の接頭名だけで静的トピックへ配信。
-
-source /ros2_ws/install/setup.bash
-ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
-  dataset_file:=mug_complete
-
-## 環境GNGとの照合後に物体テンプレートを配信
-ros2 launch gng_vlut_system object_template_matching.launch.py \
-  dataset_file:=mug_complete
-
-姿勢許容、特徴量のファジー評価、確定条件は
-`/ros2_ws/src/gng_vlut_system/config/object_template_matching.yaml`で設定する。
-
 ## RVizでロボットを表示
 ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
@@ -103,20 +76,6 @@ ros2 launch gng_vlut_system visualize_robot_rviz.launch.py \
 
 
 ==============================================================
-
-##　自己認識ボクセルの起動
-ros2 launch gng_vlut_system self_recognition_viz.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  root_link:=right_link2 \
-  leaf_link:=right_link8 \
-  mask_topic:=/ToPoDualArm/right_arm_voxel
-
-##　自己認識ボクセルをoccupied_voxels / danger_voxelsに橋渡し
-ros2 launch gng_vlut_system voxel_to_vlut.launch.py \
-  robot_name:=ToPoDualArm \
-  input_topic:=/ToPoDualArm/right_arm_voxel \
-  danger_inflation:=0.05
-  (output_voxel_size:=0.02)
 
 # URDF準拠のダミー関節状態
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
