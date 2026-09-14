@@ -12,7 +12,7 @@ test('球リストの初回・個数・色・位置変更で描画前の直径�
     // 実際のReact Three Fiber更新順序を使用、GPU描画のみ代替
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     extend(THREE);
-    const temporary_directory = await mkdtemp(resolve('node_modules/.marker-renderer-test-'));
+    const temporary_directory = await mkdtemp(resolve('tests/.marker-renderer-test-'));
     let root;
     try {
         const output_file = resolve(temporary_directory, 'renderer.mjs');

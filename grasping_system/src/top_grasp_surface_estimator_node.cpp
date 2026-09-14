@@ -134,9 +134,6 @@ private:
     config.maximum_candidates = positiveSizeParameter("maximum_candidates", 20);
     maximum_candidates_ = config.maximum_candidates;
     config.max_surface_tilt_deg = declare_parameter<double>("max_surface_tilt_deg", 25.0);
-    config.enable_nonplane_attachment = declare_parameter<bool>("enable_nonplane_attachment", true);
-    config.enable_reference_plane_attachment = declare_parameter<bool>(
-      "enable_reference_plane_attachment", false);
     config.enable_plane_combinations = declare_parameter<bool>("enable_plane_combinations", false);
     config.max_attachment_edge_length_ratio = declare_parameter<double>(
       "max_attachment_edge_length_ratio", 1.3);

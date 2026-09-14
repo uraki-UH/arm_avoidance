@@ -63,7 +63,6 @@
 <g id="fuzzy" data-node="fuzzy"><rect x="80" y="820" width="260" height="70" rx="3" fill="#f7f8fa" stroke="#8b939e" stroke-width="2" stroke-dasharray="7 5"/><text x="210" y="845.56" text-anchor="middle" font-size="21" font-weight="400" fill="#172e40"><tspan x="210" dy="0">ファジールール評価</tspan><tspan x="210" dy="34">設計段階・未接続</tspan></text></g>
 
 <text x="1300" y="375" text-anchor="middle" font-size="22" font-weight="400" fill="#956423"><tspan x="1300" dy="0">候補姿勢を基準に対象領域を確認</tspan></text>
-<text x="1670" y="557" text-anchor="middle" font-size="20" font-weight="400" fill="#956423"><tspan x="1670" dy="0">付属ノードの考慮は設定依存</tspan></text>
 <text x="210" y="743" text-anchor="middle" font-size="20" font-weight="400" fill="#526979"><tspan x="210" dy="0">任意座標系・細かいボクセル</tspan></text>
 <text x="900" y="934" text-anchor="middle" font-size="21" font-weight="400" fill="#526979"><tspan x="900" dy="0">幾何的候補や位置到達状態だけでは、把持成功を保証しない</tspan></text>
 <line x1="40" y1="1014" x2="1880" y2="1014" stroke="#dce3e8"/>

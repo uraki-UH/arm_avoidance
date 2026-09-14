@@ -540,8 +540,8 @@ export interface UseWebSocketReturn {
     openEditSession: (sourceTopic: string, targetFrame?: string) => Promise<EditSessionInfo>;
     inspect_graph: (source_id: string, selection: graph_selection,
         graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_snapshot>;
-    inspect_graph_bounds: (source_id: string, selection: graph_selection,
-        graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_bounds>;
+    inspect_graph_bounds: (source_id: string,
+        graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_bounds[]>;
     addEditRegion: (
         sessionId: string,
         min: [number, number, number],
@@ -653,8 +653,9 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
         ): Promise<EditSessionInfo> => sendRpc('edit.openSession', { sourceTopic, targetFrame }),
         inspect_graph: (source_id: string, selection: graph_selection, graph?: GraphData, marker_array?: MarkerArrayData) =>
             sendRpc<graph_snapshot>('edit.inspect_graph', { source_id, selection, graph, marker_array }),
-        inspect_graph_bounds: (source_id: string, selection: graph_selection, graph?: GraphData, marker_array?: MarkerArrayData) =>
-            sendRpc<graph_bounds>('edit.inspect_graph', { source_id, selection, graph, marker_array, enable_bounds_only: true }),
+        inspect_graph_bounds: async (source_id: string, graph?: GraphData, marker_array?: MarkerArrayData) =>
+            (await sendRpc<{ bounds: graph_bounds[] }>('edit.inspect_graph',
+                { source_id, graph, marker_array, enable_bounds_only: true })).bounds,
         addEditRegion: (
             sessionId: string,
             min: [number, number, number],

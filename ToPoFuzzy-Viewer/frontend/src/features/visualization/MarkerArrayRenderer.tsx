@@ -272,7 +272,8 @@ export function MarkerArrayRenderer({
     if (!visible || data.visible === false || data.markers.length === 0) return null;
 
     return (
-        <group name={`${tag}-markers`}>
+        <group name={`${tag}-markers`} userData={{ inspection_source: on_inspect ? tag : undefined,
+            inspection_revision: data }}>
             {arrow_batches.map(([key, batch]) => <MarkerFrame key={key} marker={batch.marker}
                 transforms={transforms} manualTransform={manualTransform} allow_untransformed={data.source_type !== 'pose_array'}>
                 <ArrowBatch samples={batch.samples} style={batch.style} />

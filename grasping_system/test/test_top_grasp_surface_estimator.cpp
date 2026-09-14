@@ -156,7 +156,6 @@ int main()
     TopGraspSurfaceConfig config;
     config.grasp_size_x = config.grasp_size_y = 0.15;
     config.enable_approach_check = false;
-    config.enable_reference_plane_attachment = true;
     config.enable_plane_combinations = true;
     auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
     const auto combined = std::find_if(result.candidates.begin(), result.candidates.end(),
@@ -208,7 +207,6 @@ int main()
     }
     TopGraspSurfaceConfig config;
     config.enable_plane_combinations = true;
-    config.enable_reference_plane_attachment = true;
     config.enable_approach_check = false;
     config.grasp_size_x = config.grasp_size_y = 0.15;
     config.maximum_candidates = 1000;
@@ -238,7 +236,6 @@ int main()
     addEdge(map, 0, 8);
     TopGraspSurfaceConfig config;
     config.enable_plane_combinations = true;
-    config.enable_reference_plane_attachment = true;
     config.enable_approach_check = false;
     config.grasp_size_x = config.grasp_size_y = 0.03;
     const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
@@ -269,7 +266,6 @@ int main()
     for (std::size_t idx = 1; idx < attached.size(); ++idx)
       addEdge(reference_map, attached[0], attached[idx]);
     auto reference_config = makeConfig();
-    reference_config.enable_reference_plane_attachment = true;
     reference_config.enable_approach_check = false;
     auto output = TopGraspSurfaceEstimator(reference_config).estimate(reference_map, reference_clusters);
     expect(!output.candidates.empty() && output.candidates.front().cluster_id == 1,
@@ -436,13 +432,14 @@ int main()
     !isolated_it->has_neighbor_plane_distance,
     "isolated region unexpectedly has a neighbour distance");
 
-  // 平面と付属部分の分離、開口包含、観測障害物による候補棄却
+  // 参照面なしの候補保持と、参照面取得後の自動的な付属抽出
   TopologicalMap local_map;
   PlaneClusterArray local_clusters;
   const auto top = addRectangle(local_map, 0.0, 0.0, 0.10, 0.03, 0.02);
   local_clusters.clusters.push_back(makeCluster(1, top, 0, 0, 0.1, {0, 0, 1}));
+  local_clusters.clusters.front().local_spacing = 0.2;
   const auto base = estimator.estimate(local_map, local_clusters);
-  expect(base.candidates.size() == 1, "base plane not accepted");
+  expect(base.candidates.size() == 1, "参照面なしの平面候補の保持");
   ais_gng_msgs::msg::TopologicalNode attached;
   attached.id = 999;
   attached.nonplane_component_id = 0;
@@ -451,61 +448,55 @@ int main()
   local_map.nodes.push_back(attached);
   addEdge(local_map, top.back(), 4);
   auto evaluated = estimator.estimate(local_map, local_clusters);
-  expect(evaluated.candidates.size() == 1, "fitting attachment rejected");
+  expect(evaluated.candidates.size() == 1 &&
+    evaluated.candidates.front().attached_node_indices.empty(),
+    "参照面なしでの成分ID方式への暗黙切替の禁止");
+
+  const auto reference = addRectangle(local_map, 0, 0, 0, 0.4, 0.4);
+  local_clusters.clusters.push_back(makeCluster(10, reference, 0, 0, 0, {0, 0, 1}));
+  addEdge(local_map, top.front(), reference.front());
+  evaluated = estimator.estimate(local_map, local_clusters);
+  expect(evaluated.candidates.size() == 1, "参照面ありの候補保持");
   expect(evaluated.candidates[0].attached_node_indices == std::vector<std::uint32_t>{4},
-    "attachment must use array idx, not node id");
-  expect(evaluated.candidates[0].attached_component_num == 1, "component 0 not counted");
-  expect(evaluated.candidates[0].node_indices == top, "plane membership changed");
+    "ノードIDではなく配列添字による付属抽出");
+  expect(evaluated.candidates[0].attached_component_num == 1, "成分IDゼロの集計");
+  expect(evaluated.candidates[0].node_indices == top, "平面所属の保持");
   expect((evaluated.candidates[0].tcp_position - base.candidates[0].tcp_position).norm() < 1e-9,
-    "attachment moved seed TCP");
+    "付属抽出によるTCP位置変更の禁止");
   expect(evaluated.candidates[0].extent_x == base.candidates[0].extent_x,
-    "attachment changed plane OBB");
+    "付属抽出による平面OBB変更の禁止");
   expect(evaluated.candidates[0].target_extent_x > base.candidates[0].extent_x,
-    "attachment missing from separate local bounds");
+    "付属込み外形の独立した記録");
 
   local_map.nodes[4].pos.x = 0.04;
   evaluated = estimator.estimate(local_map, local_clusters);
   expect(evaluated.candidates.empty() && evaluated.rejected_attached_oversize == 1,
-    "oversize attachment accepted");
-  auto config = makeConfig();
-  config.enable_nonplane_attachment = false;
-  expect(TopGraspSurfaceEstimator(config).estimate(local_map, local_clusters).candidates.size() == 1,
-    "attachment toggle has no effect");
+    "付属部分の寸法超過による候補棄却");
   local_map.nodes[4].pos.x = 0.023;
 
-  // 旧上下制限を超える付属ノードの採用。接近判定は独立して無効化
-  config = makeConfig();
-  config.enable_approach_check = false;
-  for (const double height : {-0.1, 0.14}) {
-    auto unrestricted_map = local_map;
-    unrestricted_map.nodes[4].pos.z = height;
-    const auto unrestricted_result = TopGraspSurfaceEstimator(config).estimate(
-      unrestricted_map, local_clusters);
-    expect(unrestricted_result.candidates.size() == 1 &&
-      unrestricted_result.candidates.front().attached_node_indices.size() == 1,
-      "上下位置による付属探索の打ち切りなし");
-  }
-
-  // 自由空間境界・未分類成分の付属対象からの除外
+  // 自由空間境界の除外。成分IDなしでも参照面と接続による抽出
   local_map.nodes[4].boundary_evidence = attached.BOUNDARY_FREE_SPACE;
   expect(estimator.estimate(local_map, local_clusters).candidates[0].attached_node_indices.empty(),
-    "free-space boundary admitted");
+    "自由空間境界の付属除外");
   local_map.nodes[4].boundary_evidence = 0;
   local_map.nodes[4].nonplane_component_id = attached.NONPLANE_COMPONENT_NONE;
-  expect(estimator.estimate(local_map, local_clusters).candidates[0].attached_node_indices.empty(),
-    "unclassified node admitted");
+  evaluated = estimator.estimate(local_map, local_clusters);
+  expect(evaluated.candidates[0].attached_node_indices == std::vector<std::uint32_t>{4} &&
+    evaluated.candidates[0].attached_component_num == 0,
+    "成分IDに依存しない接続抽出と未分類成分の非集計");
   local_map.nodes[4].nonplane_component_id = 0;
 
-  // 複数エッジを経由した付属抽出と、世界座標の回転・並進に対する整合
+  // 複数エッジを経由した付属抽出と、座標回転・並進に対する整合
   auto chain_map = local_map;
   auto chain_clusters = local_clusters;
   attached.pos.x = 0.02;
   attached.pos.z = 0.06;
+  const auto chain_idx = static_cast<std::uint32_t>(chain_map.nodes.size());
   chain_map.nodes.push_back(attached);
-  addEdge(chain_map, 4, 5);
+  addEdge(chain_map, 4, chain_idx);
   const auto chain_result = estimator.estimate(chain_map, chain_clusters);
   expect(chain_result.candidates[0].attached_node_indices.size() == 2,
-    "multi-edge attachment missing");
+    "複数エッジを介した付属抽出");
   const Eigen::Matrix3d rotation = Eigen::AngleAxisd(
     0.7, Eigen::Vector3d(1, 2, 3).normalized()).toRotationMatrix();
   const Eigen::Vector3d translation(0.3, -0.2, 0.5);
@@ -516,61 +507,56 @@ int main()
     node.pos.y = p.y();
     node.pos.z = p.z();
   }
-  auto &plane = chain_clusters.clusters[0];
+  for (auto &plane : chain_clusters.clusters) {
+    const Eigen::Vector3d center = rotation *
+      Eigen::Vector3d(plane.centroid.x, plane.centroid.y, plane.centroid.z) + translation;
+    const Eigen::Vector3d normal = rotation *
+      Eigen::Vector3d(plane.normal.x, plane.normal.y, plane.normal.z);
+    plane.centroid.x = center.x();
+    plane.centroid.y = center.y();
+    plane.centroid.z = center.z();
+    plane.normal.x = normal.x();
+    plane.normal.y = normal.y();
+    plane.normal.z = normal.z();
+  }
   const Eigen::Vector3d center = rotation * Eigen::Vector3d(0, 0, 0.1) + translation;
-  const Eigen::Vector3d up = rotation * Eigen::Vector3d::UnitZ();
-  plane.centroid.x = center.x();
-  plane.centroid.y = center.y();
-  plane.centroid.z = center.z();
-  plane.normal.x = up.x();
-  plane.normal.y = up.y();
-  plane.normal.z = up.z();
-  config = makeConfig();
-  config.up_axis = up;
+  auto config = makeConfig();
+  config.up_axis = rotation * Eigen::Vector3d::UnitZ();
   const auto rotated = TopGraspSurfaceEstimator(config).estimate(chain_map, chain_clusters);
   expect(rotated.candidates.size() == 1 &&
-    rotated.candidates[0].attached_node_indices.size() == 2, "rotated attachment changed");
+    rotated.candidates[0].attached_node_indices.size() == 2, "座標変換後の付属抽出の保持");
   expect((rotated.candidates[0].tcp_position - center).norm() < 1e-6,
-    "rotated TCP changed");
+    "座標変換後のTCP位置の整合");
 
-  // 同一IDでも非接続ノードは不採用。別平面への橋渡しは成分全体を付属対象外
-  auto bridged_map = local_map;
-  auto bridged_clusters = local_clusters;
-  bridged_map.nodes.push_back(attached);
-  expect(estimator.estimate(bridged_map, bridged_clusters).candidates[0]
-    .attached_node_indices.size() == 1, "disconnected same-ID node attached");
-  const auto other = addRectangle(bridged_map, 0.3, 0, 0, 0.03, 0.02);
-  bridged_clusters.clusters.push_back(makeCluster(2, other, 0.3, 0, 0, {0, 0, 1}));
-  addEdge(bridged_map, 4, other.front());
-  expect(estimator.estimate(bridged_map, bridged_clusters).candidates[0]
-    .attached_node_indices.empty(), "multi-plane component attached");
+  // 同じ成分IDでも非接続ノードは対象外
+  auto disconnected_map = local_map;
+  disconnected_map.nodes.push_back(attached);
+  expect(estimator.estimate(disconnected_map, local_clusters).candidates[0]
+    .attached_node_indices.size() == 1, "非接続の同一IDノードの除外");
 
-  // 接続なし・ラベルなしでも上方ノードは障害物。付属探索OFFでも同じ判定
+  // 参照面なしでも独立した上方障害物判定
   local_map.edges.clear();
   local_map.nodes[4].pos.x = 0.0;
   local_map.nodes[4].pos.z = 0.14;
   local_map.nodes[4].nonplane_component_id = attached.NONPLANE_COMPONENT_NONE;
   evaluated = estimator.estimate(local_map, local_clusters);
   expect(evaluated.candidates.empty() && evaluated.rejected_approach_obstacle == 1,
-    "unconnected overhead obstacle accepted");
+    "参照面・接続・成分IDに依存しない進入障害物の棄却");
   local_map.nodes[4].pos.z = 0.105;
   expect(estimator.estimate(local_map, local_clusters).rejected_approach_obstacle == 1,
     "平面最高位置から5 mm上の接近障害物検出");
   local_map.nodes[4].pos.z = 0.14;
   config = makeConfig();
-  config.enable_nonplane_attachment = false;
-  expect(TopGraspSurfaceEstimator(config).estimate(local_map, local_clusters).candidates.empty(),
-    "attachment toggle disabled obstacle check");
   config.enable_approach_check = false;
   expect(TopGraspSurfaceEstimator(config).estimate(local_map, local_clusters).candidates.size() == 1,
-    "approach toggle has no effect");
+    "進入判定スイッチの独立性");
   local_map.nodes[4].pos.z = 0.3;
   expect(estimator.estimate(local_map, local_clusters).candidates.size() == 1,
-    "distant overhead point blocked finite approach");
+    "進入範囲外の上方点による棄却の抑止");
   local_map.nodes[4].pos.z = 0.14;
   local_map.nodes[4].pos.x = 0.3;
   expect(estimator.estimate(local_map, local_clusters).candidates.size() == 1,
-    "lateral distant point blocked approach");
+    "進入範囲外の側方点による棄却の抑止");
 
   // 壁面・不正法線・入力フレーム不一致の除外
   local_clusters.clusters[0].normal.z = 0;

@@ -261,9 +261,6 @@
     up_axis: [0.0, 0.0, 1.0]
     # 法線符号に依存しない上方向との傾斜角 [deg]
     max_surface_tilt_deg: 90.0
-    enable_nonplane_attachment: false
-    # 候補平面から接続する開口外平面を参照した付属ノード探索
-    enable_reference_plane_attachment: true
     # 隣接平面の組合せ候補。単独候補も併存
     enable_plane_combinations: true
     # 候補内平均エッジ長に対する入口エッジ長の許容倍率

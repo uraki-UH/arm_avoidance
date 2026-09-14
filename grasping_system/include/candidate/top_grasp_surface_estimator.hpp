@@ -14,7 +14,6 @@
 #include <queue>
 #include <set>
 #include <stdexcept>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -32,9 +31,6 @@ struct TopGraspSurfaceConfig
   double tcp_standoff = 0.0;
   std::size_t maximum_candidates = 20U;
   double max_surface_tilt_deg = 25.0;
-  bool enable_nonplane_attachment = true;
-  // 候補平面起点の接続探索と、接続する開口外平面からの離隔判定
-  bool enable_reference_plane_attachment = false;
   // 隣接平面の組合せ探索
   bool enable_plane_combinations = false;
   // 候補内平均エッジ長に対する入口エッジ長の許容倍率
@@ -216,22 +212,7 @@ public:
     std::vector<std::unordered_set<std::size_t>> adjacency(region_count);
     std::vector<double> internal_edge_length_sum(region_count, 0.0);
     std::vector<std::size_t> internal_edge_num(region_count, 0U);
-    std::vector<std::vector<std::uint32_t>> node_adjacency(
-      (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment ||
-      config_.enable_plane_combinations) ? map.nodes.size() : 0U);
-    std::unordered_map<std::uint32_t, int> component_owner;
-    const auto register_owner = [&](std::size_t node_idx, int plane_idx) {
-        const auto component_id = map.nodes[node_idx].nonplane_component_id;
-        if (plane_idx < 0 || owner_by_node[node_idx] >= 0 ||
-          component_id == ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE)
-        {
-          return;
-        }
-        const auto [it, is_inserted] = component_owner.emplace(component_id, plane_idx);
-        if (!is_inserted && it->second != plane_idx) {
-          it->second = -2;
-        }
-      };
+    std::vector<std::vector<std::uint32_t>> node_adjacency(map.nodes.size());
     for (std::size_t edge = 0U; edge + 1U < map.edges.size(); edge += 2U) {
       const std::size_t first_node = map.edges[edge];
       const std::size_t second_node = map.edges[edge + 1U];
@@ -250,13 +231,8 @@ public:
           ++internal_edge_num[first_owner];
         }
       }
-      if (config_.enable_nonplane_attachment || config_.enable_reference_plane_attachment ||
-        config_.enable_plane_combinations) {
-        node_adjacency[first_node].push_back(second_node);
-        node_adjacency[second_node].push_back(first_node);
-        register_owner(first_node, second_owner);
-        register_owner(second_node, first_owner);
-      }
+      node_adjacency[first_node].push_back(second_node);
+      node_adjacency[second_node].push_back(first_node);
       if (first_owner < 0 || second_owner < 0 || first_owner == second_owner) {
         continue;
       }
@@ -265,7 +241,7 @@ public:
       adjacency[static_cast<std::size_t>(second_owner)].insert(
         static_cast<std::size_t>(first_owner));
     }
-    if (config_.enable_reference_plane_attachment || config_.enable_plane_combinations) {
+    {
       // 非平面連結成分を介した平面間接続。平面内部を経由した推移的な接続の除外
       std::vector<bool> is_visited(map.nodes.size(), false);
       const auto can_bridge = [&](std::size_t node_idx) {
@@ -358,7 +334,6 @@ public:
       std::set<std::size_t> neighbours;
       std::vector<std::uint32_t> source_cluster_ids;
       auto group_owner = owner_by_node;
-      auto group_component_owner = component_owner;
       double edge_sum = 0.0;
       std::size_t edge_num = 0;
       double spacing_sum = 0.0;
@@ -373,20 +348,6 @@ public:
         spacing_sum += part.local_spacing;
       }
       for (const auto member : group) neighbours.erase(member);
-      if (group.size() > 1 && !config_.enable_reference_plane_attachment) {
-        // 複合候補を一所有者とみなした非平面成分の接続先再集計
-        group_component_owner.clear();
-        for (std::size_t node_idx = 0; node_idx < node_adjacency.size(); ++node_idx) {
-          if (group_owner[node_idx] >= 0) continue;
-          const auto component_id = map.nodes[node_idx].nonplane_component_id;
-          if (component_id == ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE) continue;
-          for (const auto next_idx : node_adjacency[node_idx]) {
-            if (group_owner[next_idx] < 0) continue;
-            const auto [it, is_inserted] = group_component_owner.emplace(component_id, group_owner[next_idx]);
-            if (!is_inserted && it->second != group_owner[next_idx]) it->second = -2;
-          }
-        }
-      }
       std::sort(source_cluster_ids.begin(), source_cluster_ids.end());
       std::sort(cluster.node_indices.begin(), cluster.node_indices.end());
       cluster.node_indices.erase(std::unique(cluster.node_indices.begin(), cluster.node_indices.end()), cluster.node_indices.end());
@@ -410,8 +371,7 @@ public:
       double minimum_plane_distance = std::numeric_limits<double>::infinity();
       std::vector<Eigen::Vector4d> reference_planes;
       for (const std::size_t neighbour_index : neighbours) {
-        if (config_.enable_reference_plane_attachment &&
-          (!footprints[neighbour_index].valid || footprints[neighbour_index].fits)) continue;
+        if (!footprints[neighbour_index].valid || footprints[neighbour_index].fits) continue;
         const auto &neighbour = clusters.clusters[neighbour_index];
         Eigen::Vector3d normal(
           neighbour.normal.x, neighbour.normal.y, neighbour.normal.z);
@@ -477,7 +437,7 @@ public:
         candidate.minimum_neighbor_plane_distance = minimum_plane_distance;
       }
       if (!evaluate_nonplane(
-          map, region_index, group_owner, node_adjacency, group_component_owner,
+          map, region_index, group_owner, node_adjacency,
           reference_planes, edge_num > 0 ? edge_sum / edge_num :
             spacing_sum / group.size(), candidate, result))
       {
@@ -506,7 +466,6 @@ private:
     const ais_gng_msgs::msg::TopologicalMap &map, std::size_t plane_idx,
     const std::vector<int> &owner_by_node,
     const std::vector<std::vector<std::uint32_t>> &node_adjacency,
-    const std::unordered_map<std::uint32_t, int> &component_owner,
     const std::vector<Eigen::Vector4d> &reference_planes,
     double max_attachment_edge_length,
     TopGraspSurfaceCandidate &candidate, TopGraspSurfaceResult &result) const
@@ -536,8 +495,7 @@ private:
         }
       }
     }
-    if (config_.enable_reference_plane_attachment ? reference_planes.empty() :
-      !config_.enable_nonplane_attachment) {
+    if (reference_planes.empty()) {
       return true;
     }
 
@@ -580,40 +538,20 @@ private:
         // 候補平面の外では非平面ノードだけを探索。他平面の取り込み・経由の禁止
         if (owner_by_node[next_idx] >= 0) continue;
         const auto &next = map.nodes[next_idx];
-        const auto it = component_owner.find(next.nonplane_component_id);
-        if (!config_.enable_reference_plane_attachment &&
-          (owner_by_node[next_idx] >= 0 || it == component_owner.end() ||
-          it->second != static_cast<int>(plane_idx) ||
-          (next.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) ||
-          (owner_by_node[node_idx] < 0 &&
-          node.nonplane_component_id != next.nonplane_component_id)))
-        {
-          continue;
-        }
         const Eigen::Vector3d next_p = local_point(next_idx);
         // 候補平面から非平面への入口エッジを、候補内平均長と許容倍率で選別
-        if (config_.enable_reference_plane_attachment &&
-          owner_by_node[node_idx] == static_cast<int>(plane_idx) && owner_by_node[next_idx] < 0 &&
+        if (owner_by_node[node_idx] == static_cast<int>(plane_idx) &&
           (!std::isfinite(max_attachment_edge_length) || max_attachment_edge_length <= 0.0 ||
           (next_p - p).norm() > max_attachment_edge_length * config_.max_attachment_edge_length_ratio)) continue;
-        if (config_.enable_reference_plane_attachment) {
-          // 非平面ノードの参照面からの距離判定。近接帯を越えた探索の禁止
-          const Eigen::Vector3d world_p(next.pos.x, next.pos.y, next.pos.z);
-          if (!world_p.allFinite() ||
-            (next.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) ||
-            std::any_of(reference_planes.begin(), reference_planes.end(),
-              [&](const Eigen::Vector4d &plane) {
-                return plane.head<3>().dot(world_p) + plane.w() <
-                  config_.minimum_protrusion_distance;
-              })) continue;
-          is_visited[next_idx] = true;
-          queue.push(next_idx);
-          continue;
-        }
-        if (!next_p.allFinite())
-        {
-          continue;
-        }
+        // 非平面ノードの参照面からの距離判定。近接帯を越えた探索の禁止
+        const Eigen::Vector3d world_p(next.pos.x, next.pos.y, next.pos.z);
+        if (!world_p.allFinite() ||
+          (next.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE) ||
+          std::any_of(reference_planes.begin(), reference_planes.end(),
+            [&](const Eigen::Vector4d &plane) {
+              return plane.head<3>().dot(world_p) + plane.w() <
+                config_.minimum_protrusion_distance;
+            })) continue;
         is_visited[next_idx] = true;
         queue.push(next_idx);
       }

@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <tf2/LinearMath/Transform.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -14,6 +15,10 @@
 
 namespace graph_inspection {
 using json = nlohmann::json;
+
+inline std::string marker_group_ns(const std::string& ns) {
+    return ns == "grasp_nonplane" ? "grasp_plane" : ns;
+}
 
 inline std::array<double, 3> point(const json& value) {
     std::array<double, 3> result{value.at(0).get<double>(), value.at(1).get<double>(), value.at(2).get<double>()};
@@ -35,6 +40,96 @@ inline std::array<double, 3> marker_point(const json& marker, const json& value)
     const auto transformed = tf2::Transform(rotation.normalized(),
         tf2::Vector3(origin[0], origin[1], origin[2])) * tf2::Vector3(p[0], p[1], p[2]);
     return {transformed.x(), transformed.y(), transformed.z()};
+}
+
+// 明示的な候補所属ごとの一括AABB。候補ごとの全ノード再走査なし。
+inline json bounds_list(const json& params) {
+    struct extent {
+        json selection;
+        std::string frame_id;
+        std::array<double, 3> min_position, max_position;
+        double node_diameter = 0;
+        bool has_points = false;
+    };
+    std::map<std::string, extent> groups;
+    const auto add = [&](const json& selection, const std::string& key, const std::string& frame_id,
+                         const std::array<double, 3>& p, double diameter = 0.0) {
+        auto& group = groups[key];
+        if (!group.has_points) {
+            group.selection = selection;
+            group.frame_id = frame_id;
+            group.min_position = group.max_position = p;
+            group.has_points = true;
+        } else if (group.frame_id != frame_id) {
+            throw std::invalid_argument("Candidate parts use different frames");
+        }
+        for (std::size_t axis = 0; axis < 3; ++axis) {
+            group.min_position[axis] = std::min(group.min_position[axis], p[axis]);
+            group.max_position[axis] = std::max(group.max_position[axis], p[axis]);
+        }
+        group.node_diameter = std::max(group.node_diameter, diameter);
+    };
+    if (params.contains("marker_array")) {
+        std::size_t num_points = 0;
+        for (const auto& marker : params.at("marker_array").at("markers")) {
+            if (marker.value("type", "") != "sphere_list" || marker.value("action", 0) >= 2) continue;
+            const auto ns = marker.at("ns").get<std::string>();
+            const auto id = marker.at("id").get<std::int64_t>();
+            const json selection = {{"kind", "marker"}, {"ns", ns}, {"id", id}};
+            const auto key = json::array({marker_group_ns(ns), id}).dump();
+            const auto& points = marker.at("points");
+            num_points += points.size();
+            if (num_points > 200000) throw std::invalid_argument("Oversized candidate array");
+            double diameter = 0.02;
+            for (const auto& value : marker.value("scale", json::array())) {
+                const auto size = value.get<double>();
+                if (std::isfinite(size) && size > 0) { diameter = size; break; }
+            }
+            for (const auto& p : points) {
+                add(selection, key, marker.value("frameId", ""), marker_point(marker, p), diameter);
+            }
+            if (ns == "grasp_plane" && !points.empty()) groups[key].selection = selection;
+        }
+    } else {
+        const auto& graph = params.at("graph");
+        const auto& nodes = graph.at("nodes");
+        if (!nodes.is_array() || nodes.size() > 200000) throw std::invalid_argument("Oversized inspection graph");
+        std::map<std::int64_t, std::vector<std::int64_t>> owners;
+        std::size_t num_members = 0;
+        for (const auto& cluster : graph.value("clusters", json::array())) {
+            const auto id = cluster.at("id").get<std::int64_t>();
+            for (const auto& member : cluster.at("nodeIds")) {
+                if (++num_members > 2000000) throw std::invalid_argument("Oversized candidate membership");
+                owners[member.get<std::int64_t>()].push_back(id);
+            }
+        }
+        const auto frame_id = graph.value("frameId", "");
+        for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+            const auto& node = nodes[idx];
+            const auto id = node.value("id", static_cast<std::int64_t>(idx));
+            const auto p = point(json::array({node.at("x"), node.at("y"), node.at("z")}));
+            const auto found = owners.find(id);
+            if (found != owners.end()) {
+                for (const auto owner : found->second) {
+                    const json selection = {{"kind", "cluster"}, {"id", owner}};
+                    add(selection, selection.dump(), frame_id, p);
+                }
+            } else if (node.contains("nonplaneComponentId") && node.at("nonplaneComponentId").is_number_integer()) {
+                const auto component = node.at("nonplaneComponentId").get<std::int64_t>();
+                if (component < 0 || component >= 0xFFFFFFFFLL) continue;
+                const json selection = {{"kind", "component"}, {"id", component}};
+                add(selection, selection.dump(), frame_id, p);
+            }
+        }
+    }
+    json bounds = json::array();
+    for (const auto& [key, group] : groups) {
+        (void)key;
+        bounds.push_back({{"source_id", params.at("source_id")}, {"selection", group.selection},
+            {"frame_id", group.frame_id}, {"min_position", group.min_position},
+            {"max_position", group.max_position}, {"node_diameter", group.node_diameter}});
+    }
+    return {{"bounds", std::move(bounds)}};
 }
 
 // クリック時の受信データからの読取専用切り出し。ROS購読・TF・元データの変更なし。
@@ -67,8 +162,7 @@ inline json snapshot(const json& params) {
         for (const auto& part : markers) {
             const auto part_ns = part.value("ns", "");
             // 既存把持候補の平面・付属非平面は同一候補IDの別部品。一般Markerの同IDとは区別。
-            const bool is_same_part = part_ns == ns || (is_grasp_part &&
-                (part_ns == "grasp_plane" || part_ns == "grasp_nonplane"));
+            const bool is_same_part = marker_group_ns(part_ns) == marker_group_ns(ns);
             if (!is_same_part || part.at("id") != id || part.value("action", 0) >= 2 ||
                 part.value("type", "") != "sphere_list") continue;
             if (part.value("frameId", "") != graph["frameId"]) {

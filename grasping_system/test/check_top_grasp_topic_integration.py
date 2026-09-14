@@ -59,6 +59,7 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
     cluster.id = 1
     cluster.centroid.z = 0.1
     cluster.normal.z = 1.0
+    cluster.local_spacing = 0.05
     for x, y in ((-0.015, -0.02), (-0.015, 0.02), (0.015, -0.02), (0.015, 0.02)):
         point = TopologicalNode()
         point.id = len(graph.nodes)
@@ -72,18 +73,28 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
     graph.nodes.append(attached)
     graph.edges = [3, 4]
     clusters = PlaneClusterArray()
-    clusters.clusters = [cluster]
+    # 参照面を用いた通常方式の付属抽出。付属ノードの添字4は維持
+    reference = PlaneCluster()
+    reference.id = 90
+    reference.normal.z = 1.0
+    for x, y in ((-0.3, -0.3), (-0.3, 0.3), (0.3, -0.3), (0.3, 0.3)):
+        point = TopologicalNode()
+        point.id = len(graph.nodes)
+        point.pos.x, point.pos.y, point.pos.z = x, y, 0.0
+        reference.node_indices.append(len(graph.nodes))
+        graph.nodes.append(point)
+    graph.edges.extend([0, reference.node_indices[0]])
+    clusters.clusters = [cluster, reference]
     params_path = root / "gng_vlut_system/config/ToPoDualArm.yaml"
     config_dir = tempfile.TemporaryDirectory(prefix="top_grasp_topic_contract_")
     # 名前付きYAMLとlaunch引数の出力先・候補座標系の整合
     config = yaml.safe_load(params_path.read_text())
     config_parameters = config["/top_grasp_surface_estimator"]["ros__parameters"]
     config_parameters.update(topics)
-    # 通常運用の旧方式設定とは独立した、追加判定の回帰検証
+    # 通常の付属探索と、独立した進入障害物判定の回帰検証
     config_parameters.update(
         max_surface_tilt_deg=25.0,
         enable_candidate_frame_passthrough=False,
-        enable_nonplane_attachment=True,
         enable_approach_check=True,
         candidate_confirm_updates=3,
         candidate_missing_update_allowance=2,
@@ -120,7 +131,10 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                     clusters.frame_number = graph.frame_number
                     map_pub.publish(graph)
                     cluster_pub.publish(clusters)
-                    rclpy.spin_once(node, timeout_sec=0.1)
+                    # 次の入力前に3出力を受信するための待機。depth 1による未確定出力の上書き防止
+                    receive_until = time.monotonic() + 0.1
+                    while time.monotonic() < receive_until:
+                        rclpy.spin_once(node, timeout_sec=0.01)
                     if len(received) != len(topics):
                         continue
                     summary = json.loads(received["summary_topic"].data)
@@ -308,10 +322,13 @@ def check_case(node, qos, root, enable_override, candidate_frame="topic_contract
                             continue
                         assert poses.candidates[0].state == GraspCandidate.OUTSIDE
                         assert poses.candidates[1].state == GraspCandidate.INSIDE
+                        # 再生成時にも採番し直される候補IDと、配信状態との対応
+                        state_by_id = {candidate.id: candidate.state for candidate in poses.candidates}
                         for marker in markers[1:]:
                             expected = (
                                 (0.02315337, 0.1878208, 0.3139887, 1.0)
-                                if marker.id == 2 else (0.0, 0.6375969, 1.0, 1.0))
+                                if state_by_id[marker.id] == GraspCandidate.OUTSIDE
+                                else (0.0, 0.6375969, 1.0, 1.0))
                             assert has_marker_color(marker, expected)
                         print("異なる候補IDのHANDLE色・候補色の同時表示確認", flush=True)
                         break

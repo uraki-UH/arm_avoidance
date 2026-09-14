@@ -57,7 +57,7 @@ digraph system_grasp_flow {
     style="rounded,filled"; color="#f2dfc5"; fillcolor="#fff7ec";
     surface_seed [label="把持面候補の抽出\n・寸法確認", fillcolor="#ffecd1"];
     tcp_candidates [label="把持手先位置・\n姿勢候補の生成", fillcolor="#ffecd1"];
-    target_check [label="候補姿勢を基準に\n付属ノード・対象寸法を確認\n付属ノード考慮は設定依存", fillcolor="#ffecd1"];
+    target_check [label="候補姿勢を基準に\n付属ノード・対象寸法を確認", fillcolor="#ffecd1"];
     geometric_candidates [label="幾何的な把持候補\n対象ノード・局所寸法", shape=parallelogram, fillcolor="#ffe0ad"];
     joint_evaluation [label="関節姿勢候補の\n探索・評価"];
     joint_candidates [label="関節姿勢候補・評価結果", shape=parallelogram, fillcolor="#ffe0ad"];

@@ -562,11 +562,9 @@ function App() {
         if (snapshot) void handle_inspect(snapshot.source_id, snapshot.selection);
     }, [handle_inspect]);
 
-    const get_hover_bounds = useCallback((source_id: string, selection: graph_selection) => {
+    const get_hover_bounds = useCallback((source_id: string) => {
         const source = inspection_sources.current;
-        return inspect_graph_bounds(source_id, selection,
-            selection.kind === 'marker' ? undefined : source.graphData[source_id],
-            selection.kind === 'marker' ? source.markerData[source_id] : undefined);
+        return inspect_graph_bounds(source_id, source.graphData[source_id], source.markerData[source_id]);
     }, [inspect_graph_bounds]);
 
     const handleManipSelect = (graphTag: string, node: GraphNode) => {
@@ -764,7 +762,7 @@ function App() {
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
-                    <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds}
+                    <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds} on_inspect={handle_inspect}
                         transforms={transforms} layer_settings={layerSettings} marker_settings={markerSettings} />
                     <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                     <OrbitControls makeDefault />

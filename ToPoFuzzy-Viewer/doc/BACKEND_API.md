@@ -139,10 +139,11 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 
 `edit.inspect_graph`は`viewer_edit_node`による読取専用RPC。編集セッション、追加のROS購読・publishは不要。
 
-- 入力: `{ source_id, selection, graph?, marker_array?, enable_bounds_only? }`。`graph`または`marker_array`は取得時の受信フレーム全体で、ブラウザ側のノード切り出しなし。
+- 入力: `{ source_id, selection?, graph?, marker_array?, enable_bounds_only? }`。`graph`または`marker_array`は取得時の受信フレーム全体で、ブラウザ側のノード切り出しなし。
 - `selection`: `{ kind: "node" | "cluster" | "component" | "marker", id, ns? }`。`marker`のみ`ns`必須。
 - 通常出力: `{ source_id, selection, title, graph, frame_id, min_position, max_position, node_color, node_diameter }`。`selection`は解決後の所属。座標系は入力元、寸法はノード中心群のAABB、単位m。
 - `enable_bounds_only=true`では`{ source_id, selection, frame_id, min_position, max_position, node_diameter }`だけを返却。ノード列・エッジ列の返送とエッジ再対応なし。既定falseで通常取得の挙動を維持。
+- `enable_bounds_only=true`かつ`selection`省略時は`{ bounds: [...] }`で物体単位の範囲を一括返却。明示クラスタ・非平面component・SPHERE_LIST候補が対象で、所属なしノードを物体として推測せず、空入力は空配列。候補ごとの全ノード再走査なし。
 - ノードクリックは`clusters[].nodeIds`の明示所属を優先し、次に有効な`nonplaneComponentId`を利用。所属なしは単一ノード、複数クラスタへの所属はエラー。形状・接続からの物体推測なし。
 - 所属はノードID、`edges`は配列添字。切り出し先の添字へ再対応し、選択クラスタの属性は保持。
 - `SPHERE_LIST`は同一source・namespace・ID単位。既存把持候補の`grasp_plane`と`grasp_nonplane`だけは同じIDの部品を合算。別namespaceの同一IDは混入なし。
@@ -154,11 +155,11 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 取得失敗時は直前の表示を保持しエラーを表示。主画面のカメラ、TF、ROSデータへの変更なし。
 `map`必須の編集RPCとは別用途であり、独立表示にはTFへの変換不要。
 
-ホバー枠は同じ所属解決によるAABBを利用し、主画面と同じTF・手動表示変換を適用。
-選択可能なノード・クラスタだけを最大10 Hzで当たり判定し、計測時間が長い場合は間隔を拡大。
-範囲取得は同時1件・最大4 Hz、対象と受信フレームが同じなら再取得なし。
-カーソル外れ・ドラッグ・編集モード・購読解除時は非表示。古い要求の遅延応答による枠の再表示なし。
-取得失敗時は枠を表示せず、推定値で代替なし。点群全体・ロボットメッシュはホバー対象外。
+ホバー・クリックは初回から物体全体のAABBで判定し、点・球メッシュのraycastなし。主画面と同じTF・手動表示変換・線枠の余白を適用。
+判定は10 Hz、範囲取得は可視ソース全体で同時1件・最大4 Hz。ソースの受信フレームが同じなら再取得なし。重なりはカメラから近い枠を優先。
+枠内の点のない場所からも独立ビューの選択が可能。5pxを超えたドラッグ後のクリックは除外。
+境界の判定外れは350msの猶予。キャンバス退出・ドラッグ・編集モード・購読解除時は即時非表示。古い要求の遅延応答による枠の再表示なし。
+更新中と一過性の取得失敗は直前の範囲を維持し、600ms以上の連続失敗で解除。推定値への代替なし。点群全体・ロボットメッシュはホバー対象外。
 
 ## Notes
 - Legacy RPC method names are intentionally unsupported in v2.

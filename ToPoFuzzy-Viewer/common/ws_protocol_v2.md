@@ -154,10 +154,11 @@ ROS Marker用には同じ値をlinear RGBへ変換。辞書は他の矢印スタ
 
 ### 読取専用の候補切り出し
 
-`edit.inspect_graph({ source_id, selection, graph?, marker_array?, enable_bounds_only? })`で取得時のフレームをバックエンドへ送信。
+`edit.inspect_graph({ source_id, selection?, graph?, marker_array?, enable_bounds_only? })`で取得時のフレームをバックエンドへ送信。
 `selection`は`{ kind: "node" | "cluster" | "component" | "marker", id, ns? }`。
 通常応答は`{ source_id, selection, title, graph, frame_id, min_position, max_position, node_color, node_diameter }`。
 `enable_bounds_only=true`ではホバー用途として`source_id, selection, frame_id, min_position, max_position, node_diameter`だけを返却。既定false。
+`enable_bounds_only=true`かつ`selection`省略時は`{ bounds: [...] }`による物体単位の一括AABB。明示クラスタ・非平面component・SPHERE_LISTが対象、所属なしノードの推測なし。
 切り出し後のエッジは配列添字、所属IDと座標系は維持。失敗コードは`INSPECTION_FAILED`。
 読取専用で追加ストリームなし。所属解決・Marker部品合算・入力制限は[API仕様](../doc/BACKEND_API.md#候補の独立表示)を参照。
 

@@ -211,7 +211,8 @@ private:
         if (method.rfind("edit.", 0) != 0) return;
         if (method == "edit.inspect_graph") {
             try {
-                publishOk(id, graph_inspection::snapshot(params));
+                publishOk(id, params.value("enable_bounds_only", false) && !params.contains("selection")
+                    ? graph_inspection::bounds_list(params) : graph_inspection::snapshot(params));
             } catch (const std::exception& error) {
                 publishError(id, "INSPECTION_FAILED", error.what());
             }
