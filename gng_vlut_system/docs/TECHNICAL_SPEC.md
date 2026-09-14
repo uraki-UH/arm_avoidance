@@ -186,6 +186,7 @@ flowchart TD
 
 ### 8.1 URDF プレビューの初期ロード
 
+- 候補の `robot.frameId` と各instanceの基準は、明示的な `robot_base_frame`、通常ロボットと共通のYAML `frame_id`、URDFルートの順。後二者は `world` と名前空間付きフレームを除いてノード名前空間を補完。
 - `stream.robot.description` のトップレベル `robot.urdf` にだけ URDF 本文を格納する。
 - `robot.instances[]` はトップレベルの URDF を共有し、各候補の関節値・FK結果・可操作性だけを保持する。
 - `stream.robot.pose` は先に受信した description の URDF を Viewer 側で維持するため、URDF 本文を再送しない。
@@ -560,20 +561,20 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 上面把持判定内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
-| 上面把持の採用環境ノード | `/grasp_pose_cands/nodes` | `visualization_msgs/MarkerArray` |
+| 上面把持の採用環境グラフ | `/grasp_pose_cands/Tmap` | `ais_gng_msgs/TopologicalMap` |
 
 上面把持とボクセル照合の既定出力を共通化し、`grasp_joint_candidates.launch.py`の既定入力へ接続。
 共通トピックの候補生成は一方式のみ起動し、比較時は名前付きYAMLとlaunch引数の出力先を揃えて分離。
 自動排他・候補統合は対象外。候補生成launchからの重複矢印Marker配信はなし。
 形状スコアは`candidates[].shape_score`へ統一し、旧スコア単独トピックを廃止。
 ViewerとROS Marker送信側の[矢印共通仕様](../../ToPoFuzzy-Viewer/common/arrow_visual_spec.md)に従い、描画設定と候補データを分離。
-上方方式の採用環境ノードは`candidate_nodes_topic`（既定`/grasp_pose_cands/nodes`）で別表示。
-平面・付属非平面をSPHERE_LISTで表示し、idは平面クラスタID由来の候補idに対応する。
-色の判定には候補stateを使用し、位置到達範囲内はHANDLE既定色`#00d1ff`、範囲外・未評価は従来の青系候補色。
-HANDLE色はViewerの線形RGBへ変換して適用。矢印側の配色と、ユーザーがGUIで変更したHANDLE色への自動追従は対象外。
-共通publisherの配信通知で候補IDと対応付け、状態だけの更新にも追従する。保存したノード位置の再抽出なし。
-各ノードの個別到達性や実把持成功ではなく、所属候補TCPの位置到達性の表示。
-`candidate_node_diameter`の既定は0.012 m。候補評価座標系で配信し、空候補・TF欠落ではDELETEALLのみを配信する。
+把持候補の矢印レイヤーに「上位N件表示」スライダーを配置。0は全件、正数は受信順の先頭N件。ROS出力・順位・計画・対象ノードグラフは変更せず、描画だけを制限。
+上方方式の採用環境グラフは`candidate_graph_topic`（既定`/grasp_pose_cands/Tmap`）で表示。
+1候補=1clusterとし、cluster.idを候補idへ対応。平面・付属非平面のうち、同じ候補内の元GNGエッジだけを保持。候補間の接続や推測エッジは追加しない。
+ノードIDとedges添字は出力内で再採番。候補が重なる場合も候補ごとに独立した所属と接続を保持。
+環境labelは維持し、semantic_labelは所属候補TCPの位置到達性（UNKNOWN=2、INSIDE=3、OUTSIDE=4）。Viewerの共通ラベル設定で色分け。矢印側の配色は維持。
+状態更新は保存したノード・エッジを再抽出せず反映。空候補・TF欠落は空TopologicalMapで旧表示を消去。
+点サイズ・Edge WidthはViewer側設定。`candidate_node_diameter`は非平面領域の試験Marker専用。詳細は[上方把持のROS出力仕様](../../grasping_system/docs/top_grasp_surface_estimation.md#6-ros出力と起動)。
 可視化はViewerの`/grasp_pose_cands`直接購読を利用し、計画launchへの表示依存はなし。
 候補生成側の共通publisherが`update_id`と候補`id`を管理し、同じ配列の`state`を更新する。
 上方方式は平面クラスタIDを候補IDに用い、連続5更新で確定、2更新の短期欠測を保持する。位置・姿勢は指数移動平均と把持対称を考慮したSlerpで平滑化し、TCP位置が0.10 mを超えて変わる場合は再確認へ戻す。状態更新だけではIDを維持、新規候補集合では`update_id`を増加。配信元の再起動では番号を再初期化。

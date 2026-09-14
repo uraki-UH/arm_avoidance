@@ -12,6 +12,7 @@ interface MarkerArrayRendererProps {
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform?: Transform;
     on_inspect?: (marker: MarkerMessage) => void;
+    max_visible_candidates?: number;
 }
 
 const MARKER_RENDER_ORDER = 1000;
@@ -264,10 +265,11 @@ export function MarkerArrayRenderer({
     transforms,
     manualTransform,
     on_inspect,
+    max_visible_candidates = 0,
 }: MarkerArrayRendererProps) {
     const effective_style = useArrowSettings(tag);
-    const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style), [data, effective_style]);
-    useDemandUpdate([tag, data, visible, transforms, manualTransform, effective_style]);
+    const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style, max_visible_candidates), [data, effective_style, max_visible_candidates]);
+    useDemandUpdate([tag, data, visible, transforms, manualTransform, effective_style, max_visible_candidates]);
 
     if (!visible || data.visible === false || data.markers.length === 0) return null;
 

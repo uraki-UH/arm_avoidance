@@ -211,6 +211,7 @@ public:
     declare_parameter("trial_seed", 0);
     declare_parameter("waypoint_tolerance", 0.05);
     declare_parameter("robot_base_frame", "");
+    declare_parameter("frame_id", "");
     declare_parameter("publish_candidate_robot_preview", true);
     // ゴール姿勢スコアリング
     // score = ホップ数 + 0.5*関節距離
@@ -285,27 +286,6 @@ public:
     }
     if (!chain_) {
       throw std::runtime_error("Failed to build kinematic chain.");
-    }
-
-    auto resolveNamespacedFrame = [this](const std::string &link_name) {
-      std::string ns_raw = std::string(get_namespace());
-      if (!ns_raw.empty() && ns_raw.front() == '/') {
-        ns_raw.erase(ns_raw.begin());
-      }
-      if (ns_raw.empty()) {
-        return link_name;
-      }
-      if (link_name.empty()) {
-        return ns_raw;
-      }
-      return ns_raw + "/" + link_name;
-    };
-
-    if (robot_base_frame_.empty()) {
-      robot_base_frame_ = resolveNamespacedFrame(robot_root_link_name_);
-    }
-    if (robot_base_frame_.empty()) {
-      robot_base_frame_ = "base_link";
     }
 
     chain_joint_names_ = orderedJointNames(*chain_);
@@ -410,10 +390,17 @@ public:
     goal_candidate_ids_topic_ = get_parameter("goal_candidate_ids_topic").as_string();
     robot_base_frame_ = get_parameter("robot_base_frame").as_string();
     if (robot_base_frame_.empty()) {
+      // 通常ロボットと共通の表示基準。未指定時のみURDFルートへフォールバック
+      robot_base_frame_ = get_parameter("frame_id").as_string();
+      if (robot_base_frame_.empty()) {
+        robot_base_frame_ = robot_root_link_name_.empty() ? "base_link" : robot_root_link_name_;
+      }
       const std::string ns_raw = std::string(get_namespace());
       const std::string ns = ns_raw.empty() ? "" : (ns_raw.front() == '/' ? ns_raw.substr(1) : ns_raw);
-      const std::string root_link = robot_root_link_name_.empty() ? std::string("base_link") : robot_root_link_name_;
-      robot_base_frame_ = ns.empty() ? root_link : (root_link.empty() ? ns : ns + "/" + root_link);
+      if (!ns.empty() && robot_base_frame_ != "world" &&
+          robot_base_frame_.find('/') == std::string::npos) {
+        robot_base_frame_ = ns + "/" + robot_base_frame_;
+      }
     }
     publish_candidate_robot_preview_ = get_parameter("publish_candidate_robot_preview").as_bool();
     goal_rot_manip_weight_ =
@@ -1064,7 +1051,7 @@ private:
   bool publish_candidate_robot_preview_ = true;
   float goal_rot_manip_weight_ = 1.0f;
   float goal_joint_limit_weight_ = 0.5f;
-  std::string robot_base_frame_ = "base_link";
+  std::string robot_base_frame_;
   std::string robot_root_link_name_;
   std::string candidate_robot_urdf_content_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr request_update_srv_;

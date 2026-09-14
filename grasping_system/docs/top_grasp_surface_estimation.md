@@ -297,13 +297,17 @@ $$
 | --- | --- | --- |
 | `/grasp_pose_cands` | `gng_control_msgs/msg/GraspCandidateArray` | update_id、平面クラスタID由来の候補id、pose、shape_score、state。入力グラフのheaderを継承 |
 | `/grasp_pose_cands/summary` | `std_msgs/msg/String` | 件数、棄却理由、処理時間、候補別寸法などのJSON |
-| `/grasp_pose_cands/nodes` | `visualization_msgs/msg/MarkerArray` | 採用候補の平面・非平面付属ノード。候補の位置到達性で色分け |
+| `/grasp_pose_cands/Tmap` | `ais_gng_msgs/msg/TopologicalMap` | 採用候補の平面・非平面付属ノードと候補内の元GNGエッジ。候補の位置到達性で色分け |
 
 候補矢印の重複Marker配信はなし。Viewerで `/grasp_pose_cands` を選択するとgatewayが描画用データへ変換し、ローカルZ軸を表示。計画launchは不要。候補評価座標系を維持し、空候補は旧表示を消去。
 
-対象ノードは別ソース`/grasp_pose_cands/nodes`をConnection StreamsでONにして表示。`candidate_nodes_topic`で出力先、`candidate_node_diameter`で球直径を指定（既定0.012 m）。候補ごとに`SPHERE_LIST`でまとめ、`grasp_plane`と`grasp_nonplane`のnamespaceで区別。Markerのidは平面クラスタID由来の候補idに対応し、ノード単体IDではない。
-色の判定には`/grasp_pose_cands`のstateを使用し、範囲内はHANDLE既定色の水色`#00d1ff`、範囲外・未評価は従来の候補色（線形RGB `[0.1, 0.85, 1.0]`）。平面・非平面とも所属候補の状態を適用。共通候補publisherの配信通知で色を更新し、入力グラフが停止中でも到達mapやTFによる状態変更を反映。状態のみの変更では保存したノード位置を再利用し、把持候補の再推定は不要。各ノード位置そのものの到達性ではなく、所属候補TCP位置の到達性であり、姿勢・衝突・把持成功の保証ではない。矢印側の配色は変更なし。
-ノード位置は候補計算に使った座標系のグラフから取得し、headerも同じ座標系。二重変換なし。ViewerがMarkerArrayを更新ごとの完全スナップショットとして扱うため、毎回DELETEALLと現在のノードを一括配信。確定候補の短期欠測中は直前スナップショットを再配信し、空候補・TF取得失敗時はDELETEALLのみ。QoSはreliable/transient_local・depth 1で、遅延購読でも最新集合を取得。入力停止時の自動失効は従来どおりなし。
+対象ノードは`/grasp_pose_cands/Tmap`をConnection StreamsでONにして表示。`candidate_graph_topic`で出力先を指定し、点サイズ・Edge WidthはViewer側で設定。旧`candidate_nodes_topic`と通常候補のMarker配信は廃止。`candidate_node_diameter`は非平面領域の試験Marker専用。
+
+1候補を1clusterとして表現し、`cluster.id`は`GraspCandidate.id`、`cluster.nodes`は出力内ノードID。平面と付属非平面を合わせ、重複所属は候補内で除外。`edges`は元GNGに存在し、両端が同じ候補に所属する接続のみ。候補間接続や推測エッジは追加しない。候補が重なる場合も各候補に独立したノードIDを割り当て、接続の混線を防止。IDとedges添字は出力内で再採番するため、元環境ノードIDとの同一視は禁止。clusterの位置・大きさは対象ノード群のAABB、姿勢は単位Quaternion。
+
+環境`label`は維持し、候補ノードとclusterの`semantic_label`に所属候補TCPの位置到達性を設定。`SEMANTIC_GRASP_UNKNOWN=2`は灰青`#708090`、`SEMANTIC_GRASP_INSIDE=3`は水色`#00d1ff`、`SEMANTIC_GRASP_OUTSIDE=4`は青`#2a7898`。Viewerの共通ラベル設定で表示・色・優先順位を変更可能。入力グラフ停止中も到達mapやTFによる状態変更を反映し、保存済みノード位置・エッジは再抽出しない。各ノード個別の到達性、姿勢・衝突・把持成功の保証ではない。矢印側の配色は変更なし。
+
+ノード位置・法線は候補評価座標系へ一度だけ変換したグラフから取得。確定候補の短期欠測中はノード・エッジを一緒に保持。配信は毎回全置換で、空候補・TF取得失敗時は空のnodes/edges/clusters。QoSはreliable/transient_local・depth 1で、遅延購読でも最新集合を取得。入力停止時の自動失効は従来どおりなし。
 参照面と探索条件を満たす付属ノードがある場合は非平面ノードも表示。参照面がない場合は平面ノードのみ表示。
 
 到達性は候補生成側の共通処理で評価。`state`は未評価=0（黄）、範囲内=1（緑）、範囲外=2（灰）。`reachability_map_topic`のTCP登録セルと候補観測時刻のTFを使用し、状態だけの変化では`update_id`と候補`id`を維持。上方把持方式の候補IDは同一平面クラスタの存続中に維持し、他方式のID規約は各候補生成器に従う。位置の到達範囲であり、姿勢到達性や把持成功の保証ではない。

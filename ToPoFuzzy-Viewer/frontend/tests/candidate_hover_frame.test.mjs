@@ -8,7 +8,8 @@ import React from 'react';
 import { act, createRoot, extend } from '@react-three/fiber';
 import * as THREE from 'three';
 
-test('初回からAABBだけのホバー判定・更新・解除と遅延応答の無効化', async () => {
+for (const source_id of ['/grasp_pose_cands/Tmap', '/nonplane_components']) test(
+    `トピック別フラグとAABB判定・遅延応答の無効化: ${source_id}`, async () => {
     const saved_globals = new Map(['window', 'document', 'performance', 'IS_REACT_ACT_ENVIRONMENT']
         .map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
     const temporary_directory = await mkdtemp(resolve('tests/.hover-frame-test-'));
@@ -23,11 +24,13 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
     try {
         const output_file = resolve(temporary_directory, 'hover.mjs');
         await build({
-            entryPoints: ['src/features/visualization/CandidateHoverFrame.tsx'],
+            stdin: { contents: "export * from './src/features/visualization/CandidateHoverFrame'; export * from './src/features/visualization/graphLayerSettings';",
+                resolveDir: process.cwd(), loader: 'tsx' },
             outfile: output_file, bundle: true, packages: 'external', platform: 'node',
             format: 'esm', jsx: 'automatic', logLevel: 'silent',
         });
-        const { CandidateHoverFrame } = await import(pathToFileURL(output_file).href);
+        const { CandidateHoverFrame, createDefaultGraphLayerSettings } = await import(pathToFileURL(output_file).href);
+        assert.equal(createDefaultGraphLayerSettings(source_id, { mode: 'dynamic' }).enable_bounding_box, false);
         const canvas = new EventTarget();
         canvas.width = canvas.height = 200;
         canvas.style = { cursor: 'crosshair' };
@@ -50,28 +53,36 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
         const mesh = new THREE.InstancedMesh(geometry, material, 2);
         mesh.setMatrixAt(0, new THREE.Matrix4());
         mesh.setMatrixAt(1, new THREE.Matrix4().makeTranslation(0.4, 0, 0));
-        const source_id = '/hover_test';
         mesh.userData = { inspection_source: source_id, inspection_revision: {}, pick_nodes: [{ id: 11 }, { id: 12 }] };
         mesh.raycast = () => { throw new Error('ノードへのraycastは禁止'); };
         const other = new THREE.Mesh(geometry, material);
         other.position.set(1.4, 0, 0);
         other.userData = { inspection_source: source_id, inspection_revision: {}, inspection_selection: { kind: 'cluster', id: 8 } };
         other.raycast = () => { throw new Error('球へのraycastは禁止'); };
+        // 名前によらず、フラグ未指定のトピックは範囲取得・当たり判定の対象外
+        for (const source of ['/ToPoDualArm/Tmap_static', '/nonplane_components', '/nonplane_components/Tmap',
+            '/topological_map', '/normals', '/markers', '/grasp_pose_cands', '/grasp_pose_cands_other/Tmap', '/other/grasp_pose_cands/Tmap']) {
+            if (source === source_id) continue;
+            const excluded = new THREE.Mesh(geometry, material);
+            excluded.userData = { inspection_source: source, inspection_revision: {} };
+            scene.add(excluded);
+        }
         scene.add(mesh, other);
         const renderer = { render() {}, setSize() {}, setPixelRatio() {}, domElement: canvas };
         root = createRoot(canvas);
         root.configure({ gl: renderer, scene, camera, frameloop: 'never', size: { width: 200, height: 200, top: 0, left: 0 } });
         const props = {
-            is_enabled: true, transforms: {}, layer_settings: {}, marker_settings: {},
+            is_enabled: true, transforms: {}, layer_settings: {},
             on_inspect: (source, selection) => { selections.push({ source, selection }); },
             get_bounds: source => {
+                assert.equal(source, source_id);
                 requests.push({ source });
                 return new Promise((resolve, reject) => { pending.push({ resolve, reject }); });
             },
         };
         const bounds = { source_id, frame_id: 'world', selection: { kind: 'cluster', id: 7 },
             min_position: [-0.1, -0.2, -0.1], max_position: [0.5, 0.2, 0.1] };
-        const other_bounds = { ...bounds, selection: { kind: 'cluster', id: 8 },
+        const other_bounds = { ...bounds, selection: { ...bounds.selection, id: 8 },
             min_position: [1.3, -0.2, -0.1], max_position: [1.5, 0.2, 0.1] };
         const frame = () => scene.getObjectByName('candidate-hover-frame');
         const emit = (type, values = {}) => canvas.dispatchEvent(Object.assign(new Event(type), values));
@@ -92,6 +103,13 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
             scene.updateMatrixWorld(true);
             await tick();
         };
+        await act(async () => { root.render(React.createElement(CandidateHoverFrame, props)); });
+        move(0.2);
+        await tick();
+        assert.equal(requests.length, 0);
+        assert.equal(frame(), undefined);
+        assert.equal(timer, undefined);
+        props.layer_settings = { [source_id]: { enable_bounding_box: true } };
         await act(async () => { root.render(React.createElement(CandidateHoverFrame, props)); });
         move(0.2);
         await tick();
@@ -164,7 +182,7 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
         mesh.userData.inspection_revision = {};
         await tick(300);
         move(0.2);
-        await respond([bounds, other_bounds, { ...bounds, selection: { kind: 'cluster', id: 9 },
+        await respond([bounds, other_bounds, { ...bounds, selection: { ...bounds.selection, id: 9 },
             min_position: [-0.1, -0.2, 1], max_position: [0.5, 0.2, 1.2] }]);
         assert.ok(Math.abs(frame().position.z - 1.1) < 1e-6);
 
@@ -182,8 +200,19 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
         move(0);
         await tick(300);
         mesh.visible = other.visible = false;
+        const request_num = requests.length;
+        const selection_num = selections.length;
         await tick();
         assert.equal(frame(), undefined);
+        await act(async () => {
+            emit('pointerdown', event_position);
+            emit('pointerup', { ...event_position, buttons: 0 });
+            emit('click', event_position);
+        });
+        await tick(500);
+        assert.equal(requests.length, request_num);
+        assert.equal(selections.length, selection_num);
+        assert.equal(canvas.style.cursor, 'crosshair');
 
         mesh.visible = other.visible = true;
         move(0);
@@ -196,7 +225,8 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
         await act(async () => { root.render(React.createElement(CandidateHoverFrame, { ...props,
             transforms: { sensor: { pos: [-1, 0.5, 0], quat: q.toArray() } },
-            layer_settings: { [source_id]: { graphTransform: { position: [0.4, 0, 0], rotation: [0, 0, 0], scale: [2, 1, 1] } } },
+            layer_settings: { [source_id]: { enable_bounding_box: true,
+                graphTransform: { position: [0.4, 0, 0], rotation: [0, 0, 0], scale: [2, 1, 1] } } },
         })); });
         move(-1, 1.3);
         await respond([{ ...bounds, frame_id: 'sensor' }]);
@@ -205,6 +235,37 @@ test('初回からAABBだけのホバー判定・更新・解除と遅延応答�
         assert.ok(displayed_position.distanceTo(new THREE.Vector3(-1, 1.3, 0)) < 1e-6);
         top_element = {};
         await tick();
+        assert.equal(frame(), undefined);
+        assert.equal(canvas.style.cursor, 'crosshair');
+        // 取得待機中のOFF、遅延応答の破棄、再ON時の再取得
+        top_element = canvas;
+        await act(async () => { root.render(React.createElement(CandidateHoverFrame, props)); });
+        mesh.userData.inspection_revision = {};
+        move(0.2);
+        await tick(300);
+        const num_before_disable = requests.length;
+        const selections_before_disable = selections.length;
+        const disabled_props = { ...props, layer_settings: { [source_id]: { enable_bounding_box: false } } };
+        await act(async () => {
+            root.render(React.createElement(CandidateHoverFrame, disabled_props));
+        });
+        assert.equal(frame(), undefined);
+        await act(async () => {
+            emit('pointerdown', event_position);
+            emit('pointerup', { ...event_position, buttons: 0 });
+            emit('click', event_position);
+        });
+        assert.equal(selections.length, selections_before_disable);
+        await respond();
+        assert.equal(frame(), undefined);
+        assert.equal(requests.length, num_before_disable);
+        await act(async () => { root.render(React.createElement(CandidateHoverFrame, props)); });
+        move(0.2);
+        await tick(300);
+        assert.equal(requests.length, num_before_disable + 1);
+        await respond();
+        assert.ok(frame());
+        await act(async () => { root.render(React.createElement(CandidateHoverFrame, disabled_props)); });
         assert.equal(frame(), undefined);
         assert.equal(canvas.style.cursor, 'crosshair');
     } finally {

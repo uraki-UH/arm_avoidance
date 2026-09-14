@@ -1,25 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { graph_bounds, graph_selection, LayerSettings, Transform } from '../../types';
+import { graph_bounds, graph_selection, LayerSettings } from '../../types';
 import { DisplayFrame } from './SharedRenderers';
 
 const bounds_key = (bounds: graph_bounds) => JSON.stringify([bounds.source_id, bounds.selection]);
 const bounds_padding = (bounds: graph_bounds, settings: Record<string, LayerSettings>) =>
-    0.003 + (bounds.selection.kind === 'marker' ? (bounds.node_diameter ?? 0) / 2 : (settings[bounds.source_id]?.nodeScale ?? 0.003));
+    0.003 + (settings[bounds.source_id]?.nodeScale ?? 0.003);
 
-export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transforms, layer_settings, marker_settings }: {
+export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transforms, layer_settings }: {
     is_enabled: boolean;
     get_bounds: (source_id: string) => Promise<graph_bounds[]>;
     on_inspect: (source_id: string, selection: graph_selection) => void;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     layer_settings: Record<string, LayerSettings>;
-    marker_settings: Record<string, { transform?: Transform }>;
 }) {
     const { gl, scene, camera, invalidate } = useThree();
     const [bounds, set_bounds] = useState<graph_bounds | null>(null);
-    const settings_ref = useRef({ transforms, layer_settings, marker_settings });
-    settings_ref.current = { transforms, layer_settings, marker_settings };
+    const settings_ref = useRef({ transforms, layer_settings });
+    settings_ref.current = { transforms, layer_settings };
+    const enable_picking = is_enabled && Object.values(layer_settings).some(settings => settings.enable_bounding_box === true);
     const geometry = useMemo(() => {
         const box = new THREE.BoxGeometry(1, 1, 1);
         const edges = new THREE.EdgesGeometry(box);
@@ -33,7 +33,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
     useEffect(() => { invalidate(); }, [bounds, invalidate]);
 
     useEffect(() => {
-        if (!is_enabled) return;
+        if (!enable_picking) return;
         const canvas = gl.domElement;
         const raycaster = new THREE.Raycaster();
         const local_ray = new THREE.Ray(), box = new THREE.Box3();
@@ -47,6 +47,8 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         let selected: graph_bounds | null = null;
         let press: { x: number; y: number; has_dragged: boolean } | null = null;
         let previous_cursor = '', last_hit_ms = 0, next_request_ms = 0, suspend_until_ms = 0;
+        const can_pick_source = (source: string) =>
+            settings_ref.current.layer_settings[source]?.enable_bounding_box === true;
         const pick = (client_x: number, client_y: number) => {
             const rect = canvas.getBoundingClientRect();
             raycaster.setFromCamera(new THREE.Vector2((client_x - rect.left) / rect.width * 2 - 1,
@@ -55,9 +57,9 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             const settings = settings_ref.current;
             // 点・球メッシュへのraycastなし。表示と同じTF・手動変換を適用したAABBとの交差のみ。
             for (const entry of cache.values()) for (const candidate of entry.bounds) {
+                if (!can_pick_source(candidate.source_id)) continue;
                 const tf = candidate.frame_id === 'world' ? undefined : settings.transforms[candidate.frame_id];
-                const manual = candidate.selection.kind === 'marker' ? settings.marker_settings[candidate.source_id]?.transform :
-                    settings.layer_settings[candidate.source_id]?.graphTransform;
+                const manual = settings.layer_settings[candidate.source_id]?.graphTransform;
                 matrix.compose(position.fromArray(tf?.pos ?? [0, 0, 0]), rotation.fromArray(tf?.quat ?? [0, 0, 0, 1]), scale.set(1, 1, 1));
                 manual_matrix.compose(position.fromArray(manual?.position ?? [0, 0, 0]),
                     rotation.setFromEuler(euler.fromArray(manual?.rotation ?? [0, 0, 0])), scale.fromArray(manual?.scale ?? [1, 1, 1]));
@@ -121,7 +123,8 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             const sources = new Map<string, unknown>();
             scene.traverseVisible(object => {
                 const source = object.userData.inspection_source;
-                if (source && !sources.has(source)) sources.set(source, object.userData.inspection_revision);
+                if (typeof source !== 'string' || !can_pick_source(source)) return;
+                if (!sources.has(source)) sources.set(source, object.userData.inspection_revision);
             });
             for (const source of cache.keys()) if (!sources.has(source)) cache.delete(source);
             for (const source of sources.keys()) if (!cache.has(source)) cache.set(source, { revision: unrequested, bounds: [], last_request_ms: 0 });
@@ -139,7 +142,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
                     entry.last_request_ms = now;
                     next_request_ms = now + 250;
                     void get_bounds(source).then(result => {
-                        if (!is_alive || cache.get(source) !== entry) return;
+                        if (!is_alive || cache.get(source) !== entry || !can_pick_source(source)) return;
                         entry.bounds = result;
                         entry.revision = revision;
                         entry.failed_since_ms = undefined;
@@ -172,10 +175,10 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
             canvas.removeEventListener('wheel', wheel);
             window.removeEventListener('blur', leave);
         };
-    }, [is_enabled, get_bounds, on_inspect, gl, scene, camera]);
+    }, [enable_picking, get_bounds, on_inspect, gl, scene, camera]);
 
-    if (!is_enabled || !bounds) return null;
-    const transform = bounds.selection.kind === 'marker' ? marker_settings[bounds.source_id]?.transform : layer_settings[bounds.source_id]?.graphTransform;
+    if (!is_enabled || !bounds || layer_settings[bounds.source_id]?.enable_bounding_box !== true) return null;
+    const transform = layer_settings[bounds.source_id]?.graphTransform;
     const padding = bounds_padding(bounds, layer_settings);
     const size = bounds.max_position.map((value, idx) => value - bounds.min_position[idx] + padding * 2) as [number, number, number];
     const center = bounds.max_position.map((value, idx) => (value + bounds.min_position[idx]) / 2) as [number, number, number];

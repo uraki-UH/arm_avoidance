@@ -21,6 +21,14 @@ export interface node_label_definition {
 
 /** 重複可能な可視化ラベルの定義。受信属性のみを参照、幾何判定なし。 */
 export const node_label_definitions: readonly node_label_definition[] = [
+    { id: 'grasp_reachability', name: '把持候補の到達性', color: '#00d1ff', enable_by_default: true, default_priority: -4,
+        is_match: (node) => [2, 3, 4].includes(node.semanticLabel ?? 0) },
+    { id: 'grasp_unknown', parent_id: 'grasp_reachability', name: '未評価', color: '#708090', enable_by_default: true, default_priority: 3,
+        is_match: (node) => node.semanticLabel === 2 },
+    { id: 'grasp_inside', parent_id: 'grasp_reachability', name: '到達範囲内', color: '#00d1ff', enable_by_default: true, default_priority: 4,
+        is_match: (node) => node.semanticLabel === 3 },
+    { id: 'grasp_outside', parent_id: 'grasp_reachability', name: '到達範囲外', color: '#2a7898', enable_by_default: true, default_priority: 5,
+        is_match: (node) => node.semanticLabel === 4 },
     { id: 'boundary_fov', parent_id: 'boundary', name: '視野端', color: '#b388ff', enable_by_default: true, default_priority: -3,
         is_match: (node) => node.is_boundary_candidate === true && ((node.boundary_evidence ?? 0) & 4) !== 0 },
     { id: 'boundary_occlusion', parent_id: 'boundary', name: '遮蔽の証拠', color: '#ff5252', enable_by_default: true, default_priority: -2,
@@ -32,7 +40,7 @@ export const node_label_definitions: readonly node_label_definition[] = [
     { id: 'boundary', name: '境界候補', color: '#ff8c00', enable_by_default: true, default_priority: 0,
         is_match: (node) => node.is_boundary_candidate === true },
     { id: 'handle', name: 'HANDLE', color: '#00d1ff', enable_by_default: true, default_priority: 1,
-        is_match: (node) => Number.isFinite(node.semanticLabel) && (node.semanticLabel ?? 0) > 0 },
+        is_match: (node) => node.semanticLabel === 1 },
 ];
 
 export type node_label_options = Pick<LayerSettings,
@@ -149,6 +157,7 @@ type graph_layer_settings = LayerSettings & Required<Pick<LayerSettings,
     'nodeScale' | 'edgeWidth' | 'covarianceEllipsoidColor' | 'covarianceEllipsoidScale' | 'graphTransform'>>;
 
 export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): graph_layer_settings {
+    const is_grasp_candidate_map = tag === '/grasp_pose_cands/Tmap';
     const isStatic = graph.mode === 'static';
     const isTrajectory = isTrajectoryGraphTag(tag);
     const visualDefaults = isStatic ? STATIC_GNG_DEFAULTS : DYNAMIC_GNG_DEFAULTS;
@@ -156,7 +165,8 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
     return {
         visible: true,
         showNodes: true,
-        showEdges: !isStatic,
+        enable_bounding_box: false,
+        showEdges: !isStatic && !is_grasp_candidate_map,
         showClusters: false,
         ...normalize_node_label_settings(),
         visibleLabels: {
@@ -173,8 +183,8 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         showManipulabilityEllipsoids: false,
         manipEllipsoidMode: 'all',
         manipEllipsoidType: 'translational',
-        // 初期化済みレイヤーと同じ不透明度
-        nodeOpacity: STATIC_GNG_DEFAULTS.nodeOpacity,
+        // レイヤー用途別の初期不透明度
+        nodeOpacity: is_grasp_candidate_map ? 0.5 : STATIC_GNG_DEFAULTS.nodeOpacity,
         edgeOpacity: STATIC_GNG_DEFAULTS.edgeOpacity,
         graphTransform: {
             position: [0, 0, 0],
@@ -183,7 +193,7 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         },
         nodeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.nodeColor : visualDefaults.nodeColor,
         edgeColor: isTrajectory ? TRAJECTORY_GNG_DEFAULTS.edgeColor : visualDefaults.edgeColor,
-        nodeScale: 0.003,
+        nodeScale: is_grasp_candidate_map ? 0.008 : 0.003,
         edgeWidth: 0.001,
         covarianceEllipsoidColor: '#aefeff',
         covarianceEllipsoidScale: 2.0,

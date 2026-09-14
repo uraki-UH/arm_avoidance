@@ -42,8 +42,8 @@ def generate_launch_description():
                 "candidate_topic", default_value="/grasp_pose_cands"
             ),
             DeclareLaunchArgument(
-                "candidate_nodes_topic",
-                default_value=[LaunchConfiguration("candidate_topic"), "/nodes"],
+                "candidate_graph_topic",
+                default_value=[LaunchConfiguration("candidate_topic"), "/Tmap"],
             ),
             DeclareLaunchArgument(
                 "summary_topic", default_value="/grasp_pose_cands/summary"
@@ -80,7 +80,7 @@ def generate_launch_description():
                             "planar_clusters_topic"
                         ),
                         "candidate_topic": LaunchConfiguration("candidate_topic"),
-                        "candidate_nodes_topic": LaunchConfiguration("candidate_nodes_topic"),
+                        "candidate_graph_topic": LaunchConfiguration("candidate_graph_topic"),
                         "summary_topic": LaunchConfiguration("summary_topic"),
                     },
                 ],

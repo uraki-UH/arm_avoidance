@@ -1,4 +1,4 @@
-import { marker_arrow_options } from '../features/visualization/arrows';
+import { is_grasp_candidate_array, marker_arrow_options } from '../features/visualization/arrows';
 import { ArrowStyleControls } from '../features/visualization/SharedRenderers';
 import React, { useState } from 'react';
 import {
@@ -151,7 +151,7 @@ interface SidebarContentProps {
     robotData: Record<string, RobotData>;
     robotSettings: Record<string, RobotSettings>;
     markerData: Record<string, MarkerArrayData>;
-    markerSettings: Record<string, { visible: boolean, transform?: Transform }>;
+    markerSettings: Record<string, { visible: boolean, transform?: Transform, max_visible_candidates?: number }>;
     voxelData: Record<string, VoxelData>;
     voxelSettings: Record<string, VoxelSettings>;
 
@@ -369,9 +369,17 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 );
                               }},
                             { type: 'marker', data: props.markerData, settings: props.markerSettings, label: 'Source ID', hasTf: true,
-                              extra: (tag: string, _s: any, d: any) => d.markers?.some((m: any) => m.type === 'arrow' && m.action !== 2 && m.action !== 3) ? (
+                              extra: (tag: string, s: any, d: any) => <>
+                                {is_grasp_candidate_array(d) && <ControlSlider label="上位N件表示（0: 全件）"
+                                    value={s.max_visible_candidates ?? 0} min={0}
+                                    max={Math.max(1, d.markers.length, s.max_visible_candidates ?? 0)} step={1}
+                                    disabled={d.markers.length === 0}
+                                    formatValue={value => value === 0 ? '全件' : `${value}件`}
+                                    onChange={value => props.onUpdateSettings('marker', tag, { max_visible_candidates: value })} />}
+                                {d.markers?.some((m: any) => m.type === 'arrow' && m.action !== 2 && m.action !== 3) && (
                                 <ArrowStyleControls style_key={tag} {...marker_arrow_options(d)} />
-                              ) : null },
+                                )}
+                              </> },
                             { type: 'voxel', data: props.voxelData, settings: props.voxelSettings, label: 'Voxel ID', hasTf: true,
                               extra: (tag: string, _s: any, d: any) => (
                                 <div className="relative mt-0.5">

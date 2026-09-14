@@ -145,7 +145,7 @@ function App() {
     });
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
-    const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform }>>({});
+    const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform, max_visible_candidates?: number }>>({});
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
     const [transformContext, setTransformContext] = useState<{ type: 'cloud' | 'layer' | 'robot' | 'marker' | 'voxel', id: string, title: string } | null>(null);
     const [robotJointContext, setRobotJointContext] = useState<{ id: string, title: string, selectedManipLink?: string } | null>(null);
@@ -564,7 +564,7 @@ function App() {
 
     const get_hover_bounds = useCallback((source_id: string) => {
         const source = inspection_sources.current;
-        return inspect_graph_bounds(source_id, source.graphData[source_id], source.markerData[source_id]);
+        return inspect_graph_bounds(source_id, source.graphData[source_id]);
     }, [inspect_graph_bounds]);
 
     const handleManipSelect = (graphTag: string, node: GraphNode) => {
@@ -730,6 +730,7 @@ function App() {
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
                                     <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform}
+                                        max_visible_candidates={s.max_visible_candidates}
                                         on_inspect={!isEditMode && !zoneMonitor.isDrawing ? marker => void handle_inspect(tag,
                                             { kind: 'marker', id: marker.id, ns: marker.ns }) : undefined} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
@@ -763,7 +764,7 @@ function App() {
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
                     <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds} on_inspect={handle_inspect}
-                        transforms={transforms} layer_settings={layerSettings} marker_settings={markerSettings} />
+                        transforms={transforms} layer_settings={layerSettings} />
                     <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                     <OrbitControls makeDefault />
                 </Canvas>

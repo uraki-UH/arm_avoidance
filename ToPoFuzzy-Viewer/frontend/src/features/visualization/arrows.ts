@@ -174,10 +174,15 @@ export function marker_arrow_options(data: MarkerArrayData) {
     return { base_style, can_have_orientation };
 }
 
-// 全入力方式を同じ座標系・描画設定ごとに一括描画
-export function marker_arrow_batches(data: MarkerArrayData, overrides: Partial<arrow_style>) {
+export const is_grasp_candidate_array = (data: MarkerArrayData) =>
+    data.source_type === 'pose_array' && data.arrow_styles?.candidate_state !== undefined;
+
+// 受信順の上位候補を選んだ後、座標系・描画設定ごとの一括描画。0は全件。
+export function marker_arrow_batches(data: MarkerArrayData, overrides: Partial<arrow_style>, max_visible_candidates = 0) {
     const batches = new Map<string, { marker: MarkerMessage; samples: arrow_sample[]; style: Partial<arrow_style> }>();
-    for (const marker of data.markers) {
+    const markers = is_grasp_candidate_array(data) && Number.isFinite(max_visible_candidates) && max_visible_candidates >= 1
+        ? data.markers.slice(0, Math.floor(max_visible_candidates)) : data.markers;
+    for (const marker of markers) {
         const arrow = marker_arrow(marker, data.arrow_styles);
         if (!arrow) continue;
         const style = { ...arrow.style, ...overrides };

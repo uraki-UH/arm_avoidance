@@ -1,4 +1,5 @@
 #include <candidate/top_grasp_surface_estimator.hpp>
+#include <candidate/candidate_topological_map.hpp>
 
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
@@ -85,6 +86,39 @@ TopGraspSurfaceConfig makeConfig()
 
 int main()
 {
+  {
+    // 入力IDとは異なる添字の接続、候補間エッジ除外、重複候補の独立所属
+    TopologicalMap source;
+    addRectangle(source, 0, 0, 0.1, 0.02, 0.02);
+    source.nodes[0].id = 99;
+    source.nodes[0].label = TopologicalMap::WALL;
+    source.nodes[3].pos.x = std::numeric_limits<float>::quiet_NaN();
+    source.edges = {0, 1, 1, 2, 2, 3, 0, 99, 1};
+    const auto first = grasping_system::candidate::extract_candidate_graph(source, {0, 1, 1}, {0, 3, 99});
+    const auto second = grasping_system::candidate::extract_candidate_graph(source, {1, 2}, {});
+    expect(first.nodes.size() == 2 && first.edges == std::vector<std::uint16_t>({0, 1}),
+      "候補外・不正・未完エッジの除外と重複所属の排除");
+    TopologicalMap output;
+    grasping_system::candidate::append_candidate_graph(output, first, 70000);
+    grasping_system::candidate::append_candidate_graph(output, second, 80000);
+    expect(output.nodes.size() == 4 && output.edges == std::vector<std::uint16_t>({0, 1, 2, 3}),
+      "共有ノードが存在する候補同士の接続禁止");
+    expect(output.clusters[0].id == 70000 && output.clusters[1].id == 80000 &&
+      output.clusters[0].nodes == std::vector<std::uint16_t>({0, 1}) &&
+      output.clusters[1].nodes == std::vector<std::uint16_t>({2, 3}), "候補IDと所属の対応");
+    expect(output.nodes[0].label == TopologicalMap::WALL && output.nodes[0].id == 0 &&
+      output.nodes[3].id == 3, "環境ラベルの保持と出力内IDの一意性");
+    expect(std::abs(output.clusters[0].pos.z - 0.1) < 1e-6 &&
+      std::abs(output.clusters[0].scale.y - 0.02) < 1e-6, "対象ノード群の境界箱");
+    output.nodes.resize(65536);
+    bool has_exception = false;
+    try {
+      grasping_system::candidate::append_candidate_graph(output, first, 90000);
+    } catch (const std::overflow_error &) {
+      has_exception = true;
+    }
+    expect(has_exception && output.nodes.size() == 65536, "ノードID上限での巻き戻り防止");
+  }
   {
     // 平面ゼロの試験抽出、サイズ分割、平面・既存候補の除外
     TopologicalMap map;

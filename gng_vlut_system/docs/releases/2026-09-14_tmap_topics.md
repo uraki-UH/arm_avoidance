@@ -72,4 +72,14 @@ timeout 120s ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit --incremental
 
 ## Risk / Notes
 
-実画面でのGPU描画操作は未検証。過去の進捗・リリース記録中の旧トピック名は履歴として維持。並行変更のC++目標選択ノードの既定名・配置・結合検証は未完了。
+実画面でのGPU描画操作は未検証。過去の進捗・リリース記録中の旧トピック名は履歴として維持。C++目標選択移行の結合検証は[別作業の完了記録](2026-09-14_goal_selector_cpu.md)を参照。
+
+### Tmap表記への統一
+
+ユーザー指定で短縮表記を`Tmap`へ統一。ROSの既定値・設定・Viewer判定・テストを更新し、実処理の行数増加なし。Viewerは従来の`tmap`と`topological_map`も認識。
+関連3パッケージの再ビルド、frontend型チェック・名前判定テスト、domain 218の経路結合テストに成功。変換ノードの既存ビルド対象欠落は変更なし。
+検証コマンドは上記のgrasping_system・fuzzy_classifier・frontend・結合テストと同じ。gng_vlut_systemの再ビルドは以下。すべて終了済み。既存ROSへの停止・再起動操作なし。
+
+```bash
+docker exec gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 15s 600s cmake --build /ros2_ws/build/gng_vlut_system --target topofuzzy_bridge_node topological_map_planning topological_map_goal_selector_node arm_avoid_node visualization_gng_static_node object_hypothesis_summon_node object_template_map_publisher_node object_match_hypothesis_publisher_node -j2'
+```

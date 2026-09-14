@@ -91,7 +91,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
             }}
             onPointerCancel={() => { drag.current = null; }}>
             <div className="min-w-0">
-                <h3 className="text-sm font-bold">{snapshot.title} <span className="text-xs font-normal opacity-60">固定表示</span></h3>
+                <h3 className="text-sm font-bold">{snapshot.title} <span className="text-xs font-normal opacity-60"></span></h3>
                 <p className="truncate text-[10px] opacity-60" title={snapshot.source_id}>{snapshot.source_id}</p>
             </div>
             <button className="btn-secondary px-2" onClick={onClose} aria-label="候補ビューを閉じる">閉じる</button>
@@ -121,7 +121,6 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
             </WebGLErrorBoundary>
         </div>
         <footer className="shrink-0 space-y-1 border-t border-white/10 p-2 text-[11px] text-[var(--text-secondary)]">
-            <p>左ドラッグ: 回転 / ホイール: 拡大縮小 / 右ドラッグ: 平行移動</p>
             <p>{snapshot.graph.nodes.length} nodes / {snapshot.graph.edges.length / 2} edges</p>
             <p>XYZ寸法: {extent.map(value => value.toFixed(3)).join(' / ')} m</p>
             <p>座標系: {snapshot.graph.frameId || '未指定'} / 元シーン・TFの変更なし</p>

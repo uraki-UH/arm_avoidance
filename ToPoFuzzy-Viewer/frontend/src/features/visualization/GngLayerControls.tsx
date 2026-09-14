@@ -1,4 +1,4 @@
-import { Share2, Square } from 'lucide-react';
+import { Box, Share2, Square } from 'lucide-react';
 import { GraphData, LayerSettings } from '../../types';
 import { LayerItem, CompactToggle } from '../../components/ui/SharedControls';
 import { graphHasManipulabilityData } from './graphLayerSettings';
@@ -72,6 +72,13 @@ export function GngLayerControls({
             {settings.visible && (
                 <div className="mt-1">
                     <div className="-ml-1 grid grid-cols-8 gap-1">
+                        <CompactToggle
+                            icon={<Box size={12} />}
+                            label="Bounding Box"
+                            isOn={settings.enable_bounding_box ?? false}
+                            onToggle={() => onUpdate({ enable_bounding_box: !settings.enable_bounding_box })}
+                            className="col-span-6 w-[90%] justify-self-start"
+                        />
                         <CompactToggle
                             icon={<Square size={12} />}
                             label="Nodes"

@@ -103,6 +103,34 @@ test('球リストの初回・個数・色・位置変更で描画前の直径�
             await act(async () => { root.render(React.createElement(observe, { marker })); });
         }
         assert.equal(num_checks, updates.length);
+        // 把持候補だけを受信順で制限。入力停止中のスライダー変更と全件復帰。
+        const candidates = {
+            source_type: 'pose_array', arrow_styles: { candidate_state: { enable_transverse_axes: false } },
+            markers: [31, 7, 12].map((id, idx) => ({ id, ns: 'pose_array', type: 'arrow', action: 0,
+                frameId: 'world', pos: [idx + 1, 0, 0], orientation: [0, 0, 0, 1], state: idx,
+                arrow_style_id: 'candidate_state' })),
+        };
+        for (const [data, limit, expected] of [
+            [candidates, 0, 3], [candidates, 2, 2], [candidates, 1, 1], [candidates, 0, 3],
+            [candidates, 10, 3], [{ ...candidates, markers: [] }, 2, 0], [candidates, 2, 2],
+            [{ ...candidates, source_type: undefined }, 1, 3],
+        ]) {
+            await act(async () => { root.render(React.createElement(MarkerArrayRenderer, {
+                tag: '/custom_candidates', data, transforms: {}, max_visible_candidates: limit,
+            })); });
+            const meshes = [];
+            scene.traverse(object => { if (object.isInstancedMesh) meshes.push(object); });
+            assert.equal(meshes.length, expected ? 2 : 0);
+            for (const mesh of meshes) {
+                assert.equal(mesh.count, expected);
+                for (let idx = 0; idx < expected; idx++) {
+                    const matrix = new THREE.Matrix4();
+                    mesh.getMatrixAt(idx, matrix);
+                    assert.ok(Math.abs(matrix.elements[12] - (idx + 1)) < 1e-6);
+                }
+            }
+        }
+        assert.equal(candidates.markers.length, 3);
         await act(async () => { root.unmount(); });
         root = undefined;
         await new Promise((resolve) => setTimeout(resolve, 600));

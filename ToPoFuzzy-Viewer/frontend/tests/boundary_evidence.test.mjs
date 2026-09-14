@@ -10,6 +10,17 @@ try {
     await build({ stdin: { contents: "export * from './src/utils/topologicalMapProtocol'; export * from './src/features/visualization/graphLayerSettings';",
         resolveDir: process.cwd() }, outfile: output, bundle: true, platform: 'node', format: 'esm' });
     const module = await import(pathToFileURL(output).href);
+    for (const mode of ['static', 'dynamic']) {
+        const graph = { mode, nodes: [], edges: [], clusters: [] };
+        const defaults = module.createDefaultGraphLayerSettings('/grasp_pose_cands/Tmap', graph);
+        assert.deepEqual([defaults.nodeScale, defaults.showEdges, defaults.nodeOpacity], [0.008, false, 0.5]);
+        const other = module.createDefaultGraphLayerSettings('/topological_map', graph);
+        assert.equal(other.nodeScale, 0.003);
+        assert.equal(other.showEdges, mode !== 'static');
+        const override = module.resolve_graph_layer_settings('/grasp_pose_cands/Tmap', graph,
+            { nodeScale: 0.02, showEdges: true, nodeOpacity: 0.9 });
+        assert.deepEqual([override.nodeScale, override.showEdges, override.nodeOpacity], [0.02, true, 0.9]);
+    }
     const buffer = new ArrayBuffer(36+84);
     const view = new DataView(buffer);
     view.setUint32(0, 0x31474d54, true); view.setUint16(4, 1, true);
@@ -32,7 +43,7 @@ try {
     assert.equal(module.node_label_definitions.find((item) => item.id === 'boundary_unknown')
         .is_match({ is_boundary_candidate: true }), true);
     const settings = module.normalize_node_label_settings();
-    assert.deepEqual(module.get_node_label_groups(settings.node_label_priority).map((item) => item.id), ['boundary', 'handle']);
+    assert.deepEqual(module.get_node_label_groups(settings.node_label_priority).map((item) => item.id), ['grasp_reachability', 'boundary', 'handle']);
     const node = { is_boundary_candidate: true, boundary_evidence: 7, semanticLabel: 1 };
     const select = (options, value = node) => module.resolve_node_label(value, module.get_active_node_labels(options));
     assert.equal(select({}).id, 'boundary_fov');
@@ -60,7 +71,7 @@ try {
     assert.deepEqual(module.insert_node_label(['a', 'b'], 'a', 'x'), ['a', 'b']);
     const child_order = ['boundary_free_space', 'boundary_unknown', 'boundary_fov', 'boundary_occlusion'];
     const priority = module.reorder_node_label_subset(reordered, child_order);
-    assert.deepEqual(module.get_node_label_groups(priority).map((item) => item.id), ['handle', 'boundary']);
+    assert.deepEqual(module.get_node_label_groups(priority).map((item) => item.id), ['grasp_reachability', 'handle', 'boundary']);
     assert.deepEqual(priority.filter((id) => id.startsWith('boundary_')), child_order);
     const overlap = (id, target) => module.insert_node_label(['a', 'b', 'c', 'd'], id,
         module.get_node_label_overlap_target(['a', 'b', 'c', 'd'], id, target));
@@ -71,6 +82,14 @@ try {
     assert.deepEqual(overlap('b', 'a'), ['b', 'a', 'c', 'd']);
     assert.deepEqual(overlap('b', 'b'), ['a', 'b', 'c', 'd']);
     assert.deepEqual(overlap('b', 'unknown'), ['a', 'b', 'c', 'd']);
+    for (const [semantic_label, id, color] of [[2, 'grasp_unknown', '#708090'],
+        [3, 'grasp_inside', '#00d1ff'], [4, 'grasp_outside', '#2a7898']]) {
+        const candidate_node = { ...node, semanticLabel: semantic_label };
+        assert.equal(select({}, candidate_node).id, id);
+        assert.equal(select({}, candidate_node).color, color);
+        assert.equal(module.node_label_definitions.find((item) => item.id === 'handle').is_match(candidate_node), false);
+        assert.equal(select({ node_label_visibility: { grasp_reachability: false } }, candidate_node).id, 'boundary_fov');
+    }
     console.log('boundary_evidence_protocol_labels=passed');
 } finally {
     await rm(temporary_directory, { recursive: true, force: true });

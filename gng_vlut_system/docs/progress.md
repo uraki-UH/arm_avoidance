@@ -160,3 +160,77 @@ node /tmp/codex-hover-test.cjs
 - 同一実入力10,801ノード・8候補で選択結果の完全一致を確認。TF移動・復帰、空候補の失効・復帰を検証。実入力6秒のCPU測定は103.27%から12.17%へ低下し、最終版の再測定は11.33%。
 - tmap短縮を保持した最終launchの結合テストをdomain 228で実行し成功。C++既定topicの整合・実行ファイル配置・選定map配信まで確認し、対応する結合確認の保留を解消。変換ノードの別のビルド問題は対象外。
 - 計測・再生・launchはすべて停止済み。既存ROSのPID・コンテナ状態を維持。稼働中旧版の再起動と実画面確認は未実施。
+
+## 2026-09-14: Tmapへの表記統一
+
+- ユーザー指定の`Tmap`へROS既定名・設定・Viewer判定を統一。環境入力`/topological_map`は維持。[変更・検証コマンド](releases/2026-09-14_tmap_topics.md)を更新。
+- 関連3パッケージのDocker再ビルド、frontend型チェック・名前判定、domain 218の経路結合テストに成功。検証プロセスは終了済み。既存ROSへの停止・再起動操作なし。
+
+## 2026-09-14: 静的ロボットマップのホバー枠除外
+
+- `/ToPoDualArm/Tmap_static`をホバー枠・範囲取得から除外。実装は除外条件1行のみ。[仕様・検証](releases/2026-09-14_candidate_bbox_picking.md)を更新。
+- ホバー回帰テストとfrontend型チェックに成功。検証コマンドは終了済み、ROSの起動・再起動なし。実画面確認は未実施。
+
+## 2026-09-14: 把持対象ノードのTopologicalMap配信
+
+- ユーザー指定の`/grasp_pose_cands/Tmap`へ出力を変更。同じ候補内の元GNGエッジだけを収録し、候補IDはclusterへ対応。到達性を既存semantic_labelで配信し、Viewerの共通ラベル設定へ接続。[仕様・検証コマンド](releases/2026-09-14_candidate_topological_map.md)を記録。
+- Docker Releaseビルド3パッケージ、把持推定・部分グラフC++テスト、Viewer詳細抽出7件、domain 117のROS結合3ケースに成功。候補間エッジ除外、状態更新、遅延購読、空配信を確認。
+- frontendのラベル・ホバー回帰テスト、lint・buildに成功。既存ビルド警告あり、実画面GPU描画と大規模入力の負荷測定は未実施。
+- 検証launch・子ノードは全停止済み。既存ROSのPIDとコンテナ状態を維持し、ROSデーモンの新規残留なし。稼働中旧版の自動再起動なし。
+
+## 2026-09-14: バウンディングボックス判定の把持候補限定
+
+- ユーザー指定により、ホバー枠・枠内クリック・範囲取得を`/grasp_pose_cands/`配下だけへ限定。非平面成分などの個別除外ではなく、許可するprefixの判定へ変更。[現行仕様・検証](releases/2026-09-14_candidate_bbox_picking.md)を更新。
+- 対象外だけの表示時にも範囲取得・枠・クリック選択が発生しない回帰テスト、frontend lint・buildに成功。実画面操作は未検証。
+- 検証コマンドは全終了済み。ROSノード・サーバーの新規起動なし。backendは未変更で、既存の全体ビルドへの干渉なし。
+
+## 2026-09-14: 把持候補矢印の上位N件表示
+
+- 既存Marker設定へ表示数スライダーを追加。受信順の先頭N件だけを描画し、0は全件。ROS・対象ノードグラフ・計画への変更なし。[仕様・検証](releases/2026-09-14_candidate_display_limit.md)を記録。
+- 描画回帰テスト、lint、型チェックに成功。コマンドは全終了済み。ROS・サーバー起動なし、実画面操作は未検証。
+
+## 2026-09-14: バウンディングボックスのトピック別フラグ化
+
+- ユーザー指定により、名前による対象制限を削除。Graph/Markerのトピック別`enable_bounding_box`とGUIの`Bounding Box`切替を追加し、全トピックの既定をOFFへ統一。[現行仕様・検証](releases/2026-09-14_candidate_bbox_picking.md)を更新。
+- 把持候補Graph・非平面成分Graph・任意名Markerの回帰検証に成功。既定OFF、明示ON、OFF時の枠・クリック解除、遅延応答破棄、再ON、全OFF時のタイマー停止を確認。
+- frontend lint・buildとDocker backendビルドに成功。検証コマンドは全終了済み。ROSノードの新規起動・停止操作なし。実画面操作は未検証。
+
+## 2026-09-14: 把持対象グラフの表示既定値
+
+- `/grasp_pose_cands/Tmap`のノードサイズ0.008、エッジ表示OFF、ノード不透明度0.5へ変更。他レイヤーと手動設定は維持。[仕様・検証](releases/2026-09-14_candidate_topological_map.md)を更新。
+- 既定値回帰テスト・型チェックに成功。検証コマンドは終了済み、ROS起動なし。実画面操作は未検証。
+
+## 2026-09-14: 把持候補ロボットプレビュー未配信の調査
+
+- 21:32:23のlaunchログで`topological_map_path_planner_node`（PID 51618）の起動直後の終了コード-6を確認。目標選択ノードだけが継続し、計画・プレビュー生成ノードは不在。
+- 6秒の購読で静的GNG 10,801ノード、把持候補6件（INSIDE 2件）、選定ID `[3425,3485,4105]`を確認。候補評価トピックのpublisherは0。robot pose購読はQoS不一致があり、未受信を停止の根拠には使用せず。
+- domain 218で同一設定を再現すると正常初期化し、10秒の上限まで入力待ちを継続。元の異常終了の例外本文は保存ログになく、詳細原因は未確定。コード変更・既存launchの停止や再起動なし。
+- 以下の調査用プロセスはすべて終了し、既存ROSのPID維持を確認。
+
+```bash
+docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 10s /ros2_ws/install/gng_vlut_system/lib/gng_vlut_system/topological_map_path_planner_node --ros-args -r __node:=topological_map_path_planner_node -r __ns:=/ToPoDualArm --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml --params-file /tmp/launch_params_pihazn67'
+docker exec -i gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 15s python3 -' < /tmp/preview_inputs_probe.py
+```
+
+## 2026-09-14: Marker側のバウンディングボックス設定の削除
+
+- ユーザー指定により、法線などのMarker側からボタン・設定・判定経路を削除。Graph側の既定OFF・明示ONと、Marker本体の描画は維持。[現行仕様・検証](releases/2026-09-14_candidate_bbox_picking.md)を更新。
+- ホバー・既存Marker描画の回帰テスト、frontend lint・buildに成功。検証コマンドは全終了済み。ROS・サーバー起動なし、実画面操作は未検証。
+
+## 2026-09-14: 把持候補ロボットの基準フレーム修正
+
+- 実配信で通常ロボットの `base_link` と候補の `base_footprint` の不一致を確認。計画ノードもYAMLの `frame_id` を使用するよう修正し、重複した初期化を削除。[仕様・検証コマンド](releases/2026-09-14_candidate_robot_frame.md)を記録。
+- 追加回帰検証で修正前の失敗を再現。Docker Releaseビルド、domain 218の既存経路結合テストと全候補フレーム一致、フレーム設定5ケースに成功。実画面描画は未確認。
+- 購読プローブ・検証launch・子ノードは全停止済み。テスト用一時ログを削除。既存ROSへの停止・再起動操作なし。
+- 最終確認時に、こちらの操作によらない既存Viewerコンテナ・関連launchの停止を確認。検証プロセスとROSデーモンの新規残留なし。外部変更を戻すための再起動は未実施。
+
+## 2026-09-14: 候補ロボットと本体のTF不整合調査
+
+- Docker内の6秒の読み取り専用購読で、候補ロボットのframeIdは`ToPoDualArm/base_footprint`、本体・静的GNG・選定GNGは`ToPoDualArm/base_link`と確認。候補配信も確認済み。
+- `world -> base_footprint`は原点・無回転、別配信元の`world -> base_link`は位置`(0.15,0,-0.2)`・yaw `3.2 rad`。URDF由来の`base_footprint -> base_link`も同時配信され、`base_link`の親が競合。候補と本体で異なる変換の適用を確認。
+- `world -> graspnet_table`は単位変換、把持候補と対象ノードグラフは`world`。今回の購読範囲では物体入力側の非単位変換なし。
+- 調査用コマンドは下記のとおり終了コード0で終了し、プローブ残留なし。既存プロセスの停止・再起動操作、ソース・設定変更なし。調査中に外部からの既存launch再起動を観測したため、全PID維持とは記録せず。実画面での修正後確認は未実施。
+
+```bash
+docker exec -i gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 15s python3 -' < /tmp/grasp_frame_probe.py
+```

@@ -183,6 +183,7 @@ export interface Transform {
 export interface LayerSettings {
     visible: boolean;
     showNodes: boolean;
+    enable_bounding_box?: boolean;
     // 旧ラベル設定の読み込み互換
     enable_boundary_highlight?: boolean;
     overlap_label_priority?: 'boundary' | 'handle';
@@ -456,11 +457,14 @@ export const LAYER_LABELS = [
 ];
 
 export const SEMANTIC_LABELS = [
-   "HANDLE"
+   "HANDLE", "GRASP_UNKNOWN", "GRASP_INSIDE", "GRASP_OUTSIDE"
 ];
 
 export const SEMANTIC_COLORS = [
     '#00d1ff',
+    '#708090',
+    '#00d1ff',
+    '#2a7898',
 ];
 
 export const STATIC_GNG_DEFAULTS = {

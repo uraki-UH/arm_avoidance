@@ -298,6 +298,8 @@ HTML側は候補の `goalNodeId` / `goal_node_id` / `candidateId` / `candidate_i
 
 以下は調査時の稼働値。2026-09-14の[方式一本化](releases/2026-09-14_fixed_reference_attachment.md)で付属抽出の2つの切替設定は廃止。参照平面方式を通常動作として維持し、既存プロセスは未再起動。
 
+現行の対象ノード出力は[候補Tmap化](releases/2026-09-14_candidate_topological_map.md)により`/grasp_pose_cands/Tmap`（TopologicalMap）。以下の`/nodes`は調査当時の値。
+
 | 設定 | 値 |
 | --- | --- |
 | 入力 | `/topological_map`、`/plane_clusters` |

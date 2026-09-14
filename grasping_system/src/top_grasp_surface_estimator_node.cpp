@@ -1,5 +1,6 @@
 #include <candidate/top_grasp_surface_estimator.hpp>
 #include <candidate/grasp_candidate_publisher.hpp>
+#include <candidate/candidate_topological_map.hpp>
 
 #include <ais_gng_msgs/msg/plane_cluster_array.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
@@ -45,8 +46,8 @@ public:
       "planar_clusters_topic", "/topological_planar_clusters_incremental");
     const std::string candidate_topic = declare_parameter<std::string>(
       "candidate_topic", "/grasp_pose_cands");
-    const std::string candidate_nodes_topic = declare_parameter<std::string>(
-      "candidate_nodes_topic", candidate_topic + "/nodes");
+    const std::string candidate_graph_topic = declare_parameter<std::string>(
+      "candidate_graph_topic", candidate_topic + "/Tmap");
     candidate_node_diameter_ = declare_parameter<double>("candidate_node_diameter", 0.012);
     if (!std::isfinite(candidate_node_diameter_) || candidate_node_diameter_ <= 0.0) {
       throw std::invalid_argument("candidate_node_diameter must be finite and positive");
@@ -75,8 +76,8 @@ public:
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_, this, true);
 
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
-    candidate_nodes_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-      candidate_nodes_topic, output_qos);
+    candidate_graph_publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
+      candidate_graph_topic, output_qos);
     if (declare_parameter<bool>("enable_nonplane_region_trial", false)) {
       nonplane_regions_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         "/nonplane_grasp_regions/nodes", output_qos);
@@ -84,7 +85,7 @@ public:
     candidate_publisher_ = std::make_unique<candidate::grasp_candidate_publisher>(
       *this, candidate_topic,
       [this](const gng_control_msgs::msg::GraspCandidateArray &poses) {
-        publish_candidate_node_states(poses);
+        publish_candidate_graph_states(poses);
       });
     summary_publisher_ = create_publisher<std_msgs::msg::String>(summary_topic, output_qos);
 
@@ -211,7 +212,7 @@ private:
     for (const auto &candidate : stable_candidates) {
       output_result.candidates.push_back(candidate.surface);
     }
-    prepare_candidate_nodes(stable_candidates, candidate_map.header);
+    prepare_candidate_graph(stable_candidates, candidate_map);
     publishCandidates(stable_candidates, candidate_map.header);
     publishSummary(output_result, processing_ms, raw_result.candidates.size());
     RCLCPP_INFO_THROTTLE(
@@ -333,8 +334,7 @@ private:
   {
     std::uint32_t id = 0U;
     candidate::TopGraspSurfaceCandidate surface;
-    std::vector<geometry_msgs::msg::Point> plane_points;
-    std::vector<geometry_msgs::msg::Point> attached_points;
+    ais_gng_msgs::msg::TopologicalMap graph;
   };
 
   struct CandidateTrack
@@ -390,8 +390,8 @@ private:
     CandidateSnapshot snapshot;
     snapshot.id = surface.cluster_id;
     snapshot.surface = surface;
-    snapshot.plane_points = snapshotPoints(map, surface.node_indices);
-    snapshot.attached_points = snapshotPoints(map, surface.attached_node_indices);
+    snapshot.graph = candidate::extract_candidate_graph(
+      map, surface.node_indices, surface.attached_node_indices);
     return snapshot;
   }
 
@@ -511,75 +511,46 @@ private:
     candidate_publisher_->publish(std::move(poses));
   }
 
-  void prepare_candidate_nodes(
+  void prepare_candidate_graph(
     const std::vector<CandidateSnapshot> &candidates,
-    const std_msgs::msg::Header &header)
+    const ais_gng_msgs::msg::TopologicalMap &map)
   {
-    using marker_msg = visualization_msgs::msg::Marker;
-    visualization_msgs::msg::MarkerArray markers;
-    markers.markers.reserve(1U + 2U * candidates.size());
-    marker_msg clear;
-    clear.header = header;
-    clear.action = marker_msg::DELETEALL;
-    markers.markers.push_back(std::move(clear));
-    // 毎回の全置換により、候補減少・空配信・遅延購読時の旧ノード残留を防止
+    ais_gng_msgs::msg::TopologicalMap output;
+    output.header = map.header;
+    output.frame_number = map.frame_number;
     for (const auto &candidate : candidates) {
-      for (const bool is_nonplane : {false, true}) {
-        const auto &points = is_nonplane ? candidate.attached_points : candidate.plane_points;
-        marker_msg marker;
-        marker.header = header;
-        marker.ns = is_nonplane ? "grasp_nonplane" : "grasp_plane";
-        marker.id = static_cast<std::int32_t>(candidate.id);
-        marker.type = marker_msg::SPHERE_LIST;
-        marker.action = marker_msg::ADD;
-        marker.pose.orientation.w = 1.0;
-        marker.scale.x = marker.scale.y = marker.scale.z = candidate_node_diameter_;
-        marker.points = points;
-        if (!marker.points.empty()) {
-          markers.markers.push_back(std::move(marker));
-        }
-      }
+      candidate::append_candidate_graph(output, candidate.graph, candidate.id);
     }
-    candidate_node_markers_ = std::move(markers);
+    candidate_graph_ = std::move(output);
   }
 
-  void publish_candidate_node_states(const gng_control_msgs::msg::GraspCandidateArray &poses)
+  void publish_candidate_graph_states(const gng_control_msgs::msg::GraspCandidateArray &poses)
   {
     using candidate_msg = gng_control_msgs::msg::GraspCandidate;
-    using marker_msg = visualization_msgs::msg::Marker;
+    using map_msg = ais_gng_msgs::msg::TopologicalMap;
     if (poses.candidates.empty()) {
-      candidate_node_markers_.markers.resize(1);
-      auto &clear = candidate_node_markers_.markers.front();
-      clear = marker_msg();
-      clear.header = poses.header;
-      clear.action = marker_msg::DELETEALL;
+      candidate_graph_ = map_msg();
+      candidate_graph_.header = poses.header;
+      candidate_graph_.frame_number = map_ ? map_->frame_number : 0U;
     }
     std::unordered_map<std::uint32_t, std::uint8_t> state_by_id;
     for (const auto &entry : poses.candidates) {
       state_by_id.emplace(entry.id, entry.state);
     }
-    // 採用ノード位置は再抽出せず、候補IDに対応する到達性状態だけを更新
-    for (auto &marker : candidate_node_markers_.markers) {
-      if (marker.action != marker_msg::ADD) continue;
-      const auto it = state_by_id.find(static_cast<std::uint32_t>(marker.id));
+    // 幾何・エッジの再抽出なし。環境labelを保持し、到達性はsemantic_labelへ反映
+    for (auto &cluster : candidate_graph_.clusters) {
+      const auto it = state_by_id.find(cluster.id);
       const auto state = it == state_by_id.end() ? candidate_msg::UNKNOWN : it->second;
-      // 到達性状態の識別色。到達範囲内は水色、範囲外は中暗度の青、未評価は灰青色
-      if (state == candidate_msg::INSIDE) {
-        marker.color.r = 0.0F;
-        marker.color.g = 0.6375969F;
-        marker.color.b = 1.0F;
-      } else if (state == candidate_msg::OUTSIDE) {
-        marker.color.r = 0.02315337F;
-        marker.color.g = 0.1878208F;
-        marker.color.b = 0.3139887F;
-      } else {
-        marker.color.r = 0.1620294F;
-        marker.color.g = 0.2158605F;
-        marker.color.b = 0.2788943F;
+      cluster.semantic_label = state == candidate_msg::INSIDE ? map_msg::SEMANTIC_GRASP_INSIDE :
+        state == candidate_msg::OUTSIDE ? map_msg::SEMANTIC_GRASP_OUTSIDE : map_msg::SEMANTIC_GRASP_UNKNOWN;
+      cluster.semantic_reliability = 1.0F;
+      for (const auto node_id : cluster.nodes) {
+        auto &node = candidate_graph_.nodes[node_id];
+        node.semantic_label = cluster.semantic_label;
+        node.semantic_reliability = cluster.semantic_reliability;
       }
-      marker.color.a = 1.0F;
     }
-    candidate_nodes_publisher_->publish(candidate_node_markers_);
+    candidate_graph_publisher_->publish(candidate_graph_);
   }
 
   void publish_nonplane_regions(
@@ -728,9 +699,9 @@ private:
   rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr clusters_subscription_;
   std::unique_ptr<candidate::grasp_candidate_publisher> candidate_publisher_;
   double candidate_node_diameter_ = 0.012;
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr candidate_nodes_publisher_;
+  rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr candidate_graph_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr nonplane_regions_publisher_;
-  visualization_msgs::msg::MarkerArray candidate_node_markers_;
+  ais_gng_msgs::msg::TopologicalMap candidate_graph_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

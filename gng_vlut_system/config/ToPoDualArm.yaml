@@ -234,8 +234,8 @@
     topological_map_topic: "/topological_map"
     planar_clusters_topic: "/plane_clusters"
     candidate_topic: "/grasp_pose_cands"
-    candidate_nodes_topic: "/grasp_pose_cands/nodes"
-    # 採用ノードの表示直径 [m]
+    candidate_graph_topic: "/grasp_pose_cands/Tmap"
+    # 非平面領域の試験Marker表示直径 [m]。候補Tmapの点サイズはViewer側設定
     candidate_node_diameter: 0.012
     # 同一平面クラスタ候補の公開前連続有効更新数
     candidate_confirm_updates: 5

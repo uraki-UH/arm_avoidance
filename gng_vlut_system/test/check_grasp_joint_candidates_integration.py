@@ -1,6 +1,7 @@
 """実GNGと隔離ROSドメインによる候補経路生成・実行系分離の結合確認。"""
 
 import copy
+import json
 import os
 from pathlib import Path
 import signal
@@ -34,6 +35,7 @@ def main():
     processes = []
     logs = []
     log_dir = tempfile.TemporaryDirectory(prefix="grasp_candidate_integration_")
+    os.environ["ROS_LOG_DIR"] = log_dir.name
     node = None
     rclpy.init()
     try:
@@ -102,6 +104,14 @@ def main():
             "candidate_robot_description" in received and
             "candidate_robot_pose" in received,
             "領域内候補の計画評価と候補ロボット召喚")
+        # 通常ロボット・GNGと候補プレビューの基準フレームの一致
+        for key in ("candidate_robot_description", "candidate_robot_pose"):
+            robot = json.loads(received[key].data)["robot"]
+            assert robot["frameId"] == map_msg.header.frame_id, robot["frameId"]
+            assert robot["instances"]
+            assert all(item["frameId"] == map_msg.header.frame_id
+                       for item in robot["instances"])
+        print("候補ロボット: YAMLの基準フレームと全インスタンスの一致を確認", flush=True)
         assert all(item.goal_node_id in allowed_ids for item in received["metrics"].candidates)
         assert any(item.feasible and item.path_node_ids for item in received["metrics"].candidates)
         assert all(
