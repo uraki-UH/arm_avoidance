@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="flow_title flow_desc">
+<title id="flow_title">把持候補推定を中心とした全体フロー</title>
+<desc id="flow_desc">上段に環境認識と上方把持候補生成、下段に環境・ロボット照合と関節姿勢評価。把持面の寸法確認、姿勢生成、付属ノード確認の順序。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#526979"/></marker></defs>
+<g font-family="Noto Sans CJK JP, sans-serif">
+<rect width="1920" height="1080" fill="#fff"/>
+<rect x="40" y="42" width="8" height="71" rx="4" fill="#238873"/>
+<text x="70" y="81" font-size="43" font-weight="700" fill="#172e40">把持候補推定を中心とした全体フロー</text>
+<text x="72" y="119" font-size="22" fill="#526979">上方把持の位置・姿勢と、対応する対象領域・局所寸法を推定</text>
+<rect x="40" y="160" width="1000" height="190" rx="16" fill="#f0f6fb"/>
+<text x="62" y="198" font-size="26" font-weight="700" fill="#326784">環境認識</text>
+<rect x="1070" y="160" width="810" height="415" rx="16" fill="#fff6e9"/>
+<text x="1092" y="198" font-size="26" font-weight="700" fill="#a26017">把持候補生成</text>
+<path d="M56 400H1024Q1040 400 1040 416V579Q1040 595 1056 595H1424Q1440 595 1440 611V962Q1440 978 1424 978H56Q40 978 40 962V416Q40 400 56 400Z" fill="#f0f8f5"/>
+<text x="62" y="429" font-size="23" font-weight="700" fill="#287565">環境・ロボット照合</text>
+<rect x="1495" y="600" width="385" height="390" rx="16" fill="#fff6e9"/>
+<text x="1514" y="631" font-size="23" font-weight="700" fill="#a26017">ロボット側の候補評価</text>
+<g fill="none" stroke="#526979" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)">
+<path data-edge="rgbd-&gt;points" d="M218 270H280"/>
+<path data-edge="points-&gt;gng" d="M480 270H530"/>
+<path data-edge="gng-&gt;clusters" d="M715 270H765"/>
+<path data-edge="clusters-&gt;surface_seed" d="M1005 270H1100"/>
+<path data-edge="points-&gt;world_points" d="M380 310V395H320V440"/>
+<path data-edge="world_points-&gt;local_voxels" d="M210 520V625"/>
+<path data-edge="urdf-&gt;robot_voxels" d="M850 520V625"/>
+<path data-edge="robot_state-&gt;robot_voxels" d="M535 520V565H820V625"/>
+<path data-edge="robot_state-&gt;local_voxels" d="M405 480H370V585H250V625"/>
+<path data-edge="local_range-&gt;local_voxels" d="M417 670H340"/>
+<path data-edge="local_voxels-&gt;voxel_match" d="M210 715V770H780V805"/>
+<path data-edge="robot_voxels-&gt;voxel_match" d="M850 715V805"/>
+<path data-edge="vlut-&gt;voxel_match" d="M665 845H730"/>
+<path data-edge="voxel_match-&gt;map_update" d="M970 845H1040V670H1090"/>
+<path data-edge="map_update-&gt;effectivity_map" d="M1250 715V805"/>
+<path data-edge="surface_seed-&gt;tcp_candidates" d="M1430 270H1510"/>
+<path data-edge="tcp_candidates-&gt;target_check" d="M1675 310V430"/>
+<path data-edge="target_check-&gt;geometric_candidates" d="M1510 480H1418"/>
+<path data-edge="geometric_candidates-&gt;joint_evaluation" d="M1411 510H1485V680H1510"/>
+<path data-edge="effectivity_map-&gt;joint_evaluation" d="M1410 845H1465V710H1510"/>
+<path data-edge="joint_evaluation-&gt;joint_candidates" d="M1675 735V815"/>
+<path data-edge="joint_candidates-&gt;trajectory" d="M1675 900V936" stroke-dasharray="7 5"/>
+</g>
+<g id="rgbd" data-node="rgbd"><path d="M84 230H230L206 310H60Z" fill="#edf6fd" stroke="#46799c" stroke-width="2"/><text x="145" y="279.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="145" dy="0">RGB-D</tspan></text></g>
+<g id="points" data-node="points"><rect x="280" y="230" width="200" height="80" rx="3" fill="#edf6fd" stroke="#46799c" stroke-width="2"/><text x="380" y="279.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="380" dy="0">3D点群生成</tspan></text></g>
+<g id="gng" data-node="gng"><rect x="530" y="230" width="185" height="80" rx="3" fill="#edf6fd" stroke="#46799c" stroke-width="2"/><text x="622.5" y="279.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="622.5" dy="0">GNG学習</tspan></text></g>
+<g id="clusters" data-node="clusters"><rect x="765" y="230" width="240" height="80" rx="3" fill="#edf6fd" stroke="#46799c" stroke-width="2"/><text x="885" y="262.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="885" dy="0">平面・非平面</tspan><tspan x="885" dy="34">クラスタ抽出</tspan></text></g>
+<g id="surface_seed" data-node="surface_seed"><rect x="1100" y="230" width="330" height="80" rx="3" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1265" y="262.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1265" dy="0">1. 把持面候補の抽出</tspan><tspan x="1265" dy="34">・寸法確認</tspan></text></g>
+<g id="tcp_candidates" data-node="tcp_candidates"><rect x="1510" y="230" width="330" height="80" rx="3" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1675" y="262.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1675" dy="0">2. 把持手先位置・</tspan><tspan x="1675" dy="34">姿勢候補の生成</tspan></text></g>
+<g id="target_check" data-node="target_check"><rect x="1510" y="430" width="330" height="100" rx="3" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1675" y="472.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1675" dy="0">3. 候補姿勢を基準に</tspan><tspan x="1675" dy="34">付属ノード・寸法確認</tspan></text></g>
+<g id="geometric_candidates" data-node="geometric_candidates"><path d="M1124 430H1430L1406 530H1100Z" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1265" y="472.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1265" dy="0">幾何的な把持候補</tspan><tspan x="1265" dy="34">対象ノード・局所寸法</tspan></text></g>
+<g id="world_points" data-node="world_points"><rect x="80" y="440" width="260" height="80" rx="3" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="210" y="472.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="210" dy="0">世界座標で点群登録</tspan><tspan x="210" dy="34">粗いボクセル</tspan></text></g>
+<g id="robot_state" data-node="robot_state"><path d="M429 440H665L641 520H405Z" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="535" y="489.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="535" dy="0">関節角度・TF</tspan></text></g>
+<g id="urdf" data-node="urdf"><path d="M754 440H970L946 520H730Z" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="850" y="472.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="850" dy="0">ロボットモデル</tspan><tspan x="850" dy="34">URDF</tspan></text></g>
+<g id="local_voxels" data-node="local_voxels"><rect x="80" y="625" width="260" height="90" rx="3" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="210" y="662.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="210" dy="0">周辺点群抽出・</tspan><tspan x="210" dy="34">局所ボクセル化</tspan></text></g>
+<g id="local_range" data-node="local_range"><path d="M429 625H665L641 715H405Z" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="535" y="679.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="535" dy="0">局所範囲設定</tspan></text></g>
+<g id="robot_voxels" data-node="robot_voxels"><rect x="730" y="625" width="240" height="90" rx="3" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="850" y="662.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="850" dy="0">ロボット占有</tspan><tspan x="850" dy="34">ボクセル生成</tspan></text></g>
+<g id="vlut" data-node="vlut"><path d="M405 819C405 801 665 801 665 819V871C665 889 405 889 405 871Z" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><path d="M405 819C405 837 665 837 665 819" fill="none" stroke="#4b8b7c" stroke-width="2"/><text x="535" y="859.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="535" dy="0">VLUT</tspan></text></g>
+<g id="voxel_match" data-node="voxel_match"><rect x="730" y="805" width="240" height="80" rx="3" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="850" y="854.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="850" dy="0">VoxelLUT照合</tspan></text></g>
+<g id="map_update" data-node="map_update"><rect x="1090" y="625" width="320" height="90" rx="3" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><text x="1250" y="662.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1250" dy="0">Effectivity Map</tspan><tspan x="1250" dy="34">更新</tspan></text></g>
+<g id="effectivity_map" data-node="effectivity_map"><path d="M1090 819C1090 801 1410 801 1410 819V871C1410 889 1090 889 1090 871Z" fill="#eef8f4" stroke="#4b8b7c" stroke-width="2"/><path d="M1090 819C1090 837 1410 837 1410 819" fill="none" stroke="#4b8b7c" stroke-width="2"/><text x="1250" y="859.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1250" dy="0">Effectivity Map</tspan></text></g>
+<g id="joint_evaluation" data-node="joint_evaluation"><rect x="1510" y="645" width="330" height="90" rx="3" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1675" y="682.36" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1675" dy="0">関節姿勢候補の</tspan><tspan x="1675" dy="34">探索・評価</tspan></text></g>
+<g id="joint_candidates" data-node="joint_candidates"><path d="M1534 815H1840L1816 900H1510Z" fill="#fff0d9" stroke="#bd7b26" stroke-width="2"/><text x="1675" y="849.86" text-anchor="middle" font-size="26" font-weight="500" fill="#172e40"><tspan x="1675" dy="0">関節姿勢候補</tspan><tspan x="1675" dy="34">評価結果</tspan></text></g>
+<g id="trajectory" data-node="trajectory"><rect x="1510" y="936" width="330" height="42" rx="3" fill="#f7f8fa" stroke="#8b939e" stroke-width="2" stroke-dasharray="7 5"/><text x="1675" y="964.56" text-anchor="middle" font-size="21" font-weight="400" fill="#172e40"><tspan x="1675" dy="0">軌道生成・評価：今回は省略</tspan></text></g>
+<g id="fuzzy" data-node="fuzzy"><rect x="80" y="820" width="260" height="70" rx="3" fill="#f7f8fa" stroke="#8b939e" stroke-width="2" stroke-dasharray="7 5"/><text x="210" y="845.56" text-anchor="middle" font-size="21" font-weight="400" fill="#172e40"><tspan x="210" dy="0">ファジールール評価</tspan><tspan x="210" dy="34">設計段階・未接続</tspan></text></g>
+
+<text x="1300" y="375" text-anchor="middle" font-size="22" font-weight="400" fill="#956423"><tspan x="1300" dy="0">候補姿勢を基準に対象領域を確認</tspan></text>
+<text x="1670" y="557" text-anchor="middle" font-size="20" font-weight="400" fill="#956423"><tspan x="1670" dy="0">付属ノードの考慮は設定依存</tspan></text>
+<text x="210" y="743" text-anchor="middle" font-size="20" font-weight="400" fill="#526979"><tspan x="210" dy="0">任意座標系・細かいボクセル</tspan></text>
+<text x="900" y="934" text-anchor="middle" font-size="21" font-weight="400" fill="#526979"><tspan x="900" dy="0">幾何的候補や位置到達状態だけでは、把持成功を保証しない</tspan></text>
+<line x1="40" y1="1014" x2="1880" y2="1014" stroke="#dce3e8"/>
+<text x="45" y="1050" font-size="22" fill="#526979">平行四辺形：入出力　　長方形：処理　　円柱：保存データ　　破線：未接続・今回省略</text>
+<text x="1875" y="1050" text-anchor="end" font-size="22" fill="#526979">観測領域に基づく局所寸法の推定</text>
+</g></svg>

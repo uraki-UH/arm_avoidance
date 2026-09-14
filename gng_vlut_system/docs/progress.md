@@ -65,3 +65,35 @@ docker compose exec -T gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && so
 - 移管前後の照合でルール145件の本文、入力表67行、指標・仮説等のID100件、JSON雛形1件の保持を確認。
 - 文書リンク88件の解決、コードフェンス対応、スライド生成元のPython構文を検査。既存索引の無関係なリンク切れ1件は変更対象外。`git diff --check`に成功。
 - ROSコード・設定・評価式・タスク順序の変更なし。常駐プロセスの新規起動・既存プロセスの停止なし。
+
+## 2026-09-14: 疎な接続による平面分割の改善
+
+- 実入力のクラスタ1と54で、幾何条件を通過する一方、直接接続1本のため統合候補から外れるケースを確認。1と19は少数側残差でも拒否となる別ケース。
+- 接続1本のノイズ付き同一平面で回帰テスト失敗を確認後、統合用接続数とYAML転送を修正。変更範囲・互換性は[リリースノート](releases/2026-09-14_plane_merge_connections.md)を参照。
+- DockerビルドとC++22件・launch2件のテストに成功。同一実入力列の隔離再生で分割数の減少を確認。全箇所の正解判定や修正後Viewerでの目視確認は未実施。
+- 調査・比較ノードはすべて終了。プロセス一覧で既存GNG・Viewer・ROS daemonの維持とテストプロセス残存なしを確認。比較用一時スクリプトは終了後削除。
+
+起動コマンド（すべて終了済み）:
+```bash
+docker compose exec -T gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout 15s python3 -' < /tmp/plane_merge_probe.py
+docker compose exec -T gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout -s INT -k 10s 120s python3 -' < /tmp/plane_merge_replay.py
+```
+
+## 2026-09-14: 不採用案の追加テスト削除
+
+- ユーザー依頼により、[不採用の平面クラスタ改善案](reject.md)に追加したC++テスト1件、launchテスト2件、専用補助コードとCMake登録を削除。既存テスト・処理本体の変更なし。
+- 削除対象のソース参照残存なしと`git diff --check`を確認。再ビルド・テスト実行・ROSプロセスの操作は未実施。
+
+## 2026-09-14: 上方把持フローの順序修正
+
+- [システム全体フロー](presentations/README.md#システム全体フロー上方把持の順序修正版)をDOT・SVG・PNGで作成。生成コマンドは同READMEに記載、生成処理は終了済み。
+- 把持面の寸法確認と、候補姿勢生成後の付属ノード・対象寸法確認を分離。幾何的候補と関節姿勢探索の出力も分離。
+- SVG上の主要接続16本と、未接続ファジー評価への入力矢印がないことを機械確認。PNGで文字と接続を目視確認、`git diff --check`に成功。
+- ROSコード・設定変更、常駐プロセスの新規起動、既存プロセスの停止なし。
+
+## 2026-09-14: 全体フローのスライド配置調整
+
+- 全体フローのSVGを1920×1080の固定配置へ変更。上段の環境認識・把持候補生成、下段の照合・関節姿勢評価へ整理し、主要文字を26pxへ拡大。
+- 元図の22ノード・22接続の保持とSVG・PNG寸法を機械確認。PNGで文字・矢印・背景区分の重なりを目視確認し、修正。
+- SVGを配置の正本、DOTを接続の参照用として案内を更新。[PNG再生成コマンド](presentations/README.md#システム全体フロー上方把持の順序修正版)を実行し、生成処理は終了済み。`git diff --check`に成功。
+- ROSコード・設定変更、常駐プロセスの新規起動、既存プロセスの停止なし。

@@ -31,14 +31,22 @@ python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_lin
 graspnet用
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.15  --y 0.0 --z -0.2 --yaw 3.2
 
+## GNG平面クラスタから上方向把持候補を生成
+ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
+`ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
+
+- ID・姿勢・到達性状態: `/grasp_pose_cands` (`gng_control_msgs/msg/GraspCandidateArray`)
+- 候補スコア: `/grasp_pose_cand_scores`
+- 判定概要: `/grasp_pose_cands/summary`
 
 ## 把持候補の関節角度・候補軌道の出力
 ros2 launch gng_vlut_system grasp_joint_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 `/ToPoDualArm/grasp_candidate_metrics` の各候補に `final_joint_state` を出力。Viewerには候補姿勢のロボットinstanceも召喚する。実機・仮想ロボットへの関節指令は配信しない。候補ロボット表示だけを止める場合は `publish_candidate_robot_preview:=false` を追加。
-
+ 
 
 ## HTML起動
 python3 -m http.server 8000
@@ -52,16 +60,6 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
 
 ## AISGNG実行
 ros2 launch ais_gng ais_gng.launch.py   backend:=cpu   lidar:=graspnet.yaml
-
-## GNG平面クラスタから上方向把持候補を生成
-`ais_gng.launch.py`でCPU GNGと平面クラスタを起動した状態で、上面把持候補を生成する。
-
-ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
-
-- ID・姿勢・到達性状態: `/grasp_pose_cands` (`gng_control_msgs/msg/GraspCandidateArray`)
-- 候補スコア: `/grasp_pose_cand_scores`
-- 判定概要: `/grasp_pose_cands/summary`
 
 
 上方把持候補は同じ平面クラスタIDが既定5更新連続で有効になってから公開し、既定2更新の短期欠測は保持する。

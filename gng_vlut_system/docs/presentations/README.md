@@ -1,5 +1,39 @@
 # 把持ファジィ評価の相談用スライド
 
+## システム全体フロー：上方把持の順序修正版
+
+- [PNG：閲覧・スライド貼付用](./system_grasp_flow.png)
+- [SVG：16:9スライドの配置・文字・矢印の編集元](./system_grasp_flow.svg)
+- [DOT：接続関係の参照用](./system_grasp_flow.dot)
+
+2026-09-14作成。把持面の寸法確認、手先位置・姿勢候補の生成、候補姿勢に基づく付属ノード・対象寸法確認を区別。
+[上方把持推定器](../../../grasping_system/include/candidate/top_grasp_surface_estimator.hpp#L462)の処理順を参照。付属ノードの考慮は設定依存であり、対象寸法は物体全体の寸法保証ではない。
+幾何的候補の出力とロボット側の関節姿勢探索を分離。ファジー評価は設計段階・未接続、軌道生成は今回省略として表示。
+図は処理とデータ依存の概要であり、各ROSノードが同期して順番に実行される意味ではない。
+
+スライド用に1920×1080の固定配置へ調整。上段は環境認識と把持候補生成、下段は環境・ロボット照合と関節姿勢評価。
+配置の正本はSVG、DOTは接続関係の参照用。DOTから同名SVGを再生成するとスライド配置が失われるため、PNGだけをSVGから書き出す。
+
+PNGの再生成（システムPythonのPyGObject・Cairo・librsvgとNoto Sans CJK JPが必要）:
+
+```bash
+/usr/bin/python3 - <<'PY'
+import gi
+import cairo
+gi.require_version("Rsvg", "2.0")
+from gi.repository import Rsvg
+
+base = "gng_vlut_system/docs/presentations/system_grasp_flow"
+surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 1920, 1080)
+handle = Rsvg.Handle.new_from_file(base + ".svg")
+viewport = Rsvg.Rectangle()
+viewport.x, viewport.y = 0, 0
+viewport.width, viewport.height = 1920, 1080
+handle.render_document(cairo.Context(surface), viewport)
+surface.write_to_png(base + ".png")
+PY
+```
+
 ## 現行実装の説明用：全12枚
 
 - [PowerPoint：現行入力・集合・全ルール・フロー](./fuzzy_grasp_current_implementation.pptx)

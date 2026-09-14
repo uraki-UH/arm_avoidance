@@ -1,0 +1,90 @@
+digraph system_grasp_flow {
+  graph [
+    charset="UTF-8", rankdir=TB, bgcolor="white", pad=0.3,
+    nodesep=0.35, ranksep=0.48, splines=ortho, compound=true, newrank=true,
+    fontname="Noto Sans CJK JP", fontsize=26, fontcolor="#142b40",
+    labelloc=t, labeljust=l,
+    label="システム全体の処理・データフロー\n上方把持：候補姿勢と対象領域の対応を明示"
+  ];
+  node [
+    shape=box, style=filled, fillcolor="white", color="#59758a",
+    fontname="Noto Sans CJK JP", fontsize=16, fontcolor="#142b40",
+    margin="0.20,0.15", penwidth=1.3
+  ];
+  edge [color="#59758a", penwidth=1.5, arrowsize=0.8];
+
+  subgraph cluster_environment {
+    label="環境認識"; fontsize=21;
+    style="rounded,filled"; color="#dfedf8"; fillcolor="#f0f7fc";
+    rgbd [label="RGB-D", shape=parallelogram, fillcolor="#dceffc"];
+    points [label="3D点群生成"];
+    world_points [label="世界座標で点群登録\n粗いボクセル"];
+    local_voxels [label="周辺点群抽出・\n局所ボクセル化\n細かいボクセル"];
+    gng [label="GNG学習"];
+    clusters [label="平面・非平面\nクラスタ抽出"];
+    rgbd -> points;
+    points -> world_points;
+    world_points -> local_voxels;
+    points -> gng;
+    gng -> clusters;
+    { rank=same; world_points; gng; }
+    { rank=same; local_voxels; clusters; }
+  }
+
+  subgraph cluster_robot {
+    label="ロボット・環境照合"; fontsize=21;
+    style="rounded,filled"; color="#d6ede5"; fillcolor="#edf8f4";
+    urdf [label="ロボットモデル\nURDF", shape=parallelogram, fillcolor="#dcefe7"];
+    robot_state [label="関節角度・TF", shape=parallelogram, fillcolor="#dcefe7"];
+    local_range [label="局所範囲設定", shape=parallelogram, fillcolor="#dcefe7"];
+    robot_voxels [label="ロボット占有\nボクセル生成"];
+    vlut [label="VLUT", shape=cylinder, fillcolor="#dcefe7"];
+    voxel_match [label="VoxelLUT照合"];
+    map_update [label="Effectivity Map更新"];
+    effectivity_map [label="Effectivity Map", shape=cylinder, fillcolor="#dcefe7"];
+    urdf -> robot_voxels;
+    robot_state -> robot_voxels;
+    robot_voxels -> voxel_match;
+    vlut -> voxel_match;
+    voxel_match -> map_update;
+    map_update -> effectivity_map;
+    { rank=same; urdf; robot_state; local_range; }
+    { rank=same; robot_voxels; vlut; }
+  }
+
+  subgraph cluster_grasp {
+    label="把持候補推定"; fontsize=21;
+    style="rounded,filled"; color="#f2dfc5"; fillcolor="#fff7ec";
+    surface_seed [label="把持面候補の抽出\n・寸法確認", fillcolor="#ffecd1"];
+    tcp_candidates [label="把持手先位置・\n姿勢候補の生成", fillcolor="#ffecd1"];
+    target_check [label="候補姿勢を基準に\n付属ノード・対象寸法を確認\n付属ノード考慮は設定依存", fillcolor="#ffecd1"];
+    geometric_candidates [label="幾何的な把持候補\n対象ノード・局所寸法", shape=parallelogram, fillcolor="#ffe0ad"];
+    joint_evaluation [label="関節姿勢候補の\n探索・評価"];
+    joint_candidates [label="関節姿勢候補・評価結果", shape=parallelogram, fillcolor="#ffe0ad"];
+    trajectory [label="軌道生成・評価\n今回は省略", style="filled,dashed", color="#8b949e", fillcolor="#f5f6f7"];
+    surface_seed -> tcp_candidates -> target_check -> geometric_candidates;
+    geometric_candidates -> joint_evaluation -> joint_candidates;
+    joint_candidates -> trajectory [style=dashed];
+  }
+
+  // 座標・範囲設定は局所環境生成の入力、占有結果は照合の入力
+  robot_state -> local_voxels;
+  local_range -> local_voxels;
+  local_voxels -> voxel_match;
+  clusters -> surface_seed;
+  effectivity_map -> joint_evaluation;
+
+  fuzzy [
+    label="ファジールール評価\n設計段階・未接続",
+    style="filled,dashed", fillcolor="#fff7ec", color="#bd7a2a"
+  ];
+  legend [
+    shape=plain, fontsize=13,
+    label="平行四辺形：入出力　長方形：処理　円柱：保存データ\n破線：今回省略・設計段階　対象寸法は観測領域の局所寸法\n幾何的候補・位置到達状態だけでは把持成功を保証しない"
+  ];
+  { rank=same; rgbd; urdf; robot_state; local_range; }
+  { rank=same; clusters; surface_seed; }
+  { rank=same; trajectory; fuzzy; }
+  trajectory -> legend [style=invis];
+  fuzzy -> legend [style=invis];
+}

@@ -20,16 +20,6 @@ def configured_input_topic(config_path):
     return ''
 
 
-def configured_nonplane_component_parameters(config_path):
-    with open(config_path, encoding='utf-8') as config_file:
-        config = yaml.safe_load(config_file)
-    params = config.get('ais_gng_node', {}).get('ros__parameters', {})
-    return (
-        bool(params.get('nonplane_component.direct_enabled', True)),
-        str(params.get('nonplane_component.output_topic', '/nonplane_components')),
-    )
-
-
 def automatic_camera_info_topic(point_cloud_topic):
     known_topics = {
         '/camera/camera/depth/color/points':
@@ -164,18 +154,22 @@ def generate_launch_description():
             'topological_map_topic').perform(context)
         plane_clusters_topic = LaunchConfiguration(
             'plane_clusters_topic').perform(context)
+        with open(LaunchConfiguration('plane_params_file').perform(context),
+                  encoding='utf-8') as config_file:
+            plane_config = yaml.safe_load(config_file)
+        plane_parameters = plane_config.get(
+            'plane_cluster_incremental_node', {}).get('ros__parameters', {})
         enable_nonplane_component = False
         if backend == 'cpu':
+            # 共通設定のCPU直結名前空間への転写。CPU固有設定、起動引数の順で優先。
             plane_parameter_overrides = {
-                'plane_cluster.output_topic': plane_clusters_topic,
+                f'plane_cluster.{name}': value for name, value in plane_parameters.items()
             }
-            enable_nonplane_component, nonplane_output_topic = (
-                configured_nonplane_component_parameters(
-                    LaunchConfiguration('plane_params_file').perform(context)))
-            plane_parameter_overrides['nonplane_component.direct_enabled'] = (
-                enable_nonplane_component)
-            plane_parameter_overrides['nonplane_component.output_topic'] = (
-                nonplane_output_topic)
+            plane_parameter_overrides.update(
+                plane_config.get('ais_gng_node', {}).get('ros__parameters', {}))
+            plane_parameter_overrides['plane_cluster.output_topic'] = plane_clusters_topic
+            enable_nonplane_component = bool(plane_parameter_overrides.get(
+                'nonplane_component.direct_enabled', True))
             rho_mode = LaunchConfiguration(
                 'use_node_rho_for_seed_order').perform(context)
             if rho_mode != 'auto':
@@ -227,6 +221,7 @@ def generate_launch_description():
                     executable='plane_cluster_incremental_node',
                     name='plane_cluster_visualization_node',
                     parameters=[
+                        plane_parameters,
                         LaunchConfiguration('plane_params_file'),
                         surface_config_path,
                         surface_parameter_overrides,
