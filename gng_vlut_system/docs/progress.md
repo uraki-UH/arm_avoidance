@@ -234,3 +234,41 @@ docker exec -i gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash &&
 ```bash
 docker exec -i gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 15s python3 -' < /tmp/grasp_frame_probe.py
 ```
+
+## 2026-09-14: 稼働中処理のCPU負荷測定
+
+- 22:00:50から10秒間の`pidstat`測定。100%は論理CPU 1個相当、ホストは16論理CPU。候補経路計画98.5%、Viewer専用Chrome GPUプロセス92.3%、GraspNet再生70.4%、同Chrome renderer32.0%、ais_gng_cpu26.5%、topofuzzy_bridge24.7%、world_index_to_voxel17.3%、目標選択13.5%、voxel_to_vlut10.0%、上方把持推定9.1%、平面クラスタ3.7%、Viewer gateway3.6%。Chromeの値はGPU使用率ではなくCPU使用率。
+- 別時点の`docker stats --no-stream`ではgng_cpu_container244.12%、graspnet_player72.95%、rosbridge_container0.32%、frontend0.10%。frontendコンテナ値にブラウザ描画負荷は含まず。
+- コード確認では、計画側に入力不変時の早期returnが存在する一方、`planFromStartCandidates`内でゴール候補ごと・開始候補ごとにDijkstra探索を実行。`topofuzzy_bridge`の占有・危険ボクセル受信は入力不変判定なしで安全評価とdirty化。計画が実際に何を契機に再実行したかの内訳は未測定。
+- GraspNet再生は20 Hz・フレーム10〜15のループ設定。コンテナ内`graspnet_player_cpp.cpp`の`publish_frame`は各回RGB/depth画像の読み込み、点群生成、PointCloud2生成を実行し、生成済み点群のキャッシュなし。Viewerは既に`frameloop="demand"`、`dpr={1}`。
+- 関数別サンプリングは`perf_event_paranoid=4`によって失敗。権限制限の変更なし、関数別CPU割合・改善率は未確定。ソース・設定の変更、既存プロセスの停止・再起動なし。
+- 以下の有限計測コマンドは終了済み。対象主要PIDの継続を確認。ROSノード・サーバーの新規起動なし、失敗したperfの空ファイルは削除。
+
+```bash
+pidstat -u -p 1845486,1844918,1844966,1844494,1845334,1754609,1845139,1845484,1845141,1845222,1754613,1841990 2 5
+timeout -s INT -k 3s 12s perf record -F 49 -g -p 1845486,1844494 -o /tmp/grasp_cpu_20260914.perf -- sleep 5
+```
+
+## 2026-09-14: 候補ロボットの表示数制限
+
+- 候補ロボット欄に既存スライダーを追加。配信順の先頭N件、0は全件。ROS側の評価・選定・配信への変更なし。[仕様・検証コマンド](releases/2026-09-14_candidate_robot_display_limit.md)を記録。
+- 候補数・順序更新・全件復帰・空配信・TF維持と既存ロボット色・Markerの回帰検証に成功。frontend lint・本番ビルド・backendビルドに成功。通常ビルドの権限不足・DockerのMCAP依存不足を記録し、依存や権限を変えず検証経路を切替。実画面操作は未検証。
+- 検証コマンドは全終了、一時ファイルを削除。ROS・サーバーの新規起動や既存プロセスの停止・再起動操作なし。
+
+## 2026-09-14: 候補ロボットの全件復帰・単体選択GUI
+
+- 「全件に戻す」「先頭N件」「1体選択」を追加。番号スライダーで単体候補を指定し、全件復帰時は件数制限と単体選択を解除。Collisionの表示対象も選択候補へ一致。[現行仕様・検証コマンド](releases/2026-09-14_candidate_robot_display_limit.md)を更新。
+- GUIコールバック、候補番号変更、候補数減少・空配信、全件復帰、TF維持と既存ロボット色・Markerの回帰検証に成功。frontend lint・型チェック・本番ビルドに成功。実ブラウザ操作は未検証。
+- 全検証コマンド終了、一時出力・テスト用ファイルを削除。既存Frontendサーバーを維持。ROS・サーバーの新規起動、既存プロセスの停止・再起動なし。
+
+## 2026-09-14: 候補経路探索の重複削減
+
+- 安全ゴール間での開始候補別Dijkstra共有と探索配列化を実装。終点例外・隣接危険度ペナルティ有効時は個別探索を維持。[仕様・測定条件・全起動コマンド](releases/2026-09-14_candidate_path_batch.md)を記録。
+- Dockerビルド、C++テスト6件、domain 218のROS結合テストに成功。実GNGの5開始候補×8ゴールの全経路一致、追加3回の探索時間中央値1,370.62 msから286.57 msを確認。変更後の個別・共有比較であり、旧版バイナリや稼働全体のCPU改善率とは区別。
+- 検証launch・子ノードと有限計測は全終了済み、最終プロセス一覧で残留なし。既存ROSへの停止・再起動操作なし。調査中に外部からの候補計画launch起動を観測し、そのプロセスは維持。
+
+## 2026-09-14: 候補経路のエッジコスト共有
+
+- 1回の計画内で開始候補間の有向エッジ判定・基礎コストを再利用する遅延キャッシュを実装。安全制約・終点別ペナルティは維持し、単一開始候補時はキャッシュ生成なし。[現行仕様・全起動コマンド](releases/2026-09-14_candidate_path_batch.md)を更新。
+- Dockerビルド・C++7件・domain 218の既存ROS結合テストに成功。実GNGの全40経路一致、キャッシュ寿命と更新後の再評価を確認。3回の同一実行内比較の中央値は共有方式271.269 ms、追加キャッシュ方式107.392 ms。全体CPU改善率は未測定。
+- 検証用launch・子ノード・比較計測はすべて終了済み。既存ROSの停止・再起動操作なし。新たな設定・トピック・メッセージ変更なし。

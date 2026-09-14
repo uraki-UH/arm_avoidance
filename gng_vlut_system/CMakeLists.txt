@@ -118,7 +118,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_gtest(test_candidate_metric_availability
-    test/test_candidate_metric_availability.cpp)
+    test/test_candidate_metric_availability.cpp
+    test/test_candidate_path_batch.cpp)
   if(TARGET test_candidate_metric_availability)
     target_include_directories(test_candidate_metric_availability PRIVATE src src/core src/legacy)
     target_link_libraries(test_candidate_metric_availability metrics_lib safety_engine collision_lib)

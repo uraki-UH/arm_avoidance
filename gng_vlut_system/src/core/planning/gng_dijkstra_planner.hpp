@@ -7,7 +7,9 @@
 #include "safety_engine/indexing/ispatial_index.hpp"
 #include <algorithm>
 #include <map>
+#include <limits>
 #include <queue>
+#include <unordered_map>
 
 namespace planning {
 
@@ -18,6 +20,13 @@ namespace planning {
  */
 template <typename T_angle, typename T_coord, typename T_GNG>
 class GngDijkstraPlanner : public IPathPlanner<T_angle, T_coord, T_GNG> {
+  struct cached_edge {
+    bool has_value = false;
+    bool is_active = false;
+    float cost = 0.0f;
+  };
+  using edge_cache = std::vector<std::vector<cached_edge>>;
+
 public:
   struct Stats {
     size_t visited_nodes = 0;
@@ -218,23 +227,89 @@ public:
   std::pair<int, std::vector<int>>
   planToAnyNode(int start_id, const std::vector<int> &candidate_goal_ids,
                 const T_GNG &gng, bool allow_danger_goal = true) {
-    if (!evaluator_)
+    return search_node_paths(start_id, candidate_goal_ids, gng, allow_danger_goal, nullptr);
+  }
+
+  // 同じ安全条件のゴール間で共有した探索。例外的な終点許可・危険度コストは個別探索
+  std::unordered_map<int, std::vector<int>> plan_to_each_node(
+      int start_id, const std::vector<int> &goal_ids,
+      const T_GNG &gng, bool allow_danger_goal = true) {
+    return plan_to_each_node_cached(start_id, goal_ids, gng, allow_danger_goal, nullptr);
+  }
+
+  // 1回の計画内に限定した開始候補間のエッジ判定・基礎コスト共有
+  std::unordered_map<int, std::unordered_map<int, std::vector<int>>> plan_from_each_start(
+      const std::vector<int> &start_ids, const std::vector<int> &goal_ids,
+      const T_GNG &gng, bool allow_danger_goal = true) {
+    std::unordered_map<int, std::unordered_map<int, std::vector<int>>> paths;
+    stats_.visited_nodes = 0;
+    if (start_ids.empty() || goal_ids.empty() || !evaluator_) return paths;
+    edge_cache cache(start_ids.size() > 1 ? gng.getMaxNodeNum() : 0);
+    std::size_t num_visited = 0;
+    for (int start_id : start_ids) {
+      if (start_id < 0 || start_id >= static_cast<int>(gng.getMaxNodeNum()) ||
+          paths.count(start_id)) continue;
+      paths.emplace(start_id,
+          plan_to_each_node_cached(start_id, goal_ids, gng, allow_danger_goal,
+                                   cache.empty() ? nullptr : &cache));
+      num_visited += stats_.visited_nodes;
+    }
+    stats_.visited_nodes = num_visited;
+    return paths;
+  }
+
+private:
+  std::unordered_map<int, std::vector<int>> plan_to_each_node_cached(
+      int start_id, const std::vector<int> &goal_ids,
+      const T_GNG &gng, bool allow_danger_goal, edge_cache *cache) {
+    std::unordered_map<int, std::vector<int>> paths;
+    std::vector<int> shared_goal_ids;
+    std::size_t num_visited = 0;
+    for (int goal_id : goal_ids) {
+      if (goal_id < 0 || goal_id >= static_cast<int>(gng.getMaxNodeNum())) {
+        continue;
+      }
+      const auto &node = gng.nodeAt(goal_id);
+      if (avoid_collisions_ && (enable_safety_penalty_ || node.status.is_colliding ||
+                               (avoid_danger_ && node.status.is_danger))) {
+        if (paths.count(goal_id)) continue;
+        auto result = search_node_paths(start_id, {goal_id}, gng, allow_danger_goal, nullptr, cache);
+        num_visited += stats_.visited_nodes;
+        paths.emplace(goal_id, std::move(result.second));
+      } else {
+        shared_goal_ids.push_back(goal_id);
+      }
+    }
+    if (!shared_goal_ids.empty()) {
+      search_node_paths(start_id, shared_goal_ids, gng, allow_danger_goal, &paths, cache);
+      num_visited += stats_.visited_nodes;
+    }
+    stats_.visited_nodes = num_visited;
+    return paths;
+  }
+
+  std::pair<int, std::vector<int>> search_node_paths(
+      int start_id, const std::vector<int> &candidate_goal_ids,
+      const T_GNG &gng, bool allow_danger_goal,
+      std::unordered_map<int, std::vector<int>> *all_paths, edge_cache *cache = nullptr) {
+    stats_.visited_nodes = 0;
+    if (!evaluator_ || start_id < 0 || start_id >= static_cast<int>(gng.getMaxNodeNum()))
       return {-1, {}};
 
     // ゴール判定用セット
     std::vector<bool> is_goal(gng.getMaxNodeNum(), false);
-    bool valid_goal_exists = false;
+    std::size_t num_remaining = 0;
     for (int gid : candidate_goal_ids) {
-      if (gid >= 0 && gid < (int)gng.getMaxNodeNum()) {
+      if (gid >= 0 && gid < (int)gng.getMaxNodeNum() && !is_goal[gid]) {
         is_goal[gid] = true;
-        valid_goal_exists = true;
+        ++num_remaining;
       }
     }
-    if (!valid_goal_exists)
+    if (num_remaining == 0)
       return {-1, {}};
 
     // すでにゴールにいる場合
-    if (is_goal[start_id])
+    if (is_goal[start_id] && !all_paths)
       return {start_id, {start_id}};
 
     stats_.visited_nodes = 0;
@@ -247,8 +322,8 @@ public:
 
     std::priority_queue<NodeInfo, std::vector<NodeInfo>, std::greater<NodeInfo>>
         pq;
-    std::map<int, float> min_dist;
-    std::map<int, int> parent;
+    std::vector<float> min_dist(gng.getMaxNodeNum(), std::numeric_limits<float>::infinity());
+    std::vector<int> parent(gng.getMaxNodeNum(), -1);
 
     pq.push({start_id, 0.0f});
     min_dist[start_id] = 0.0f;
@@ -263,13 +338,24 @@ public:
       // ゴール判定
       if (is_goal[current.id]) {
         reached_goal_id = current.id;
-        break;
+        if (!all_paths) break;
+        auto &path = (*all_paths)[current.id];
+        for (int at = current.id; at != start_id; at = parent[at]) {
+          path.push_back(at);
+        }
+        path.push_back(start_id);
+        std::reverse(path.begin(), path.end());
+        is_goal[current.id] = false;
+        if (--num_remaining == 0) break;
       }
 
       if (current.dist > min_dist[current.id])
         continue;
 
-      for (int neighbor_id : gng.getNeighborsAngle(current.id)) {
+      const auto &neighbors = gng.getNeighborsAngle(current.id);
+      if (cache) (*cache)[current.id].resize(neighbors.size());
+      for (std::size_t neighbor_idx = 0; neighbor_idx < neighbors.size(); ++neighbor_idx) {
+        const int neighbor_id = neighbors[neighbor_idx];
         const auto &v = gng.nodeAt(neighbor_id);
         if (!v.status.self_collision_free || !v.status.active)
           continue;
@@ -279,13 +365,11 @@ public:
           bool v_danger = v.status.is_danger;
 
           if (v_colliding) {
-            // Target node is colliding
-
-            // Unless it is the goal, strictly avoid entering collision
+            // 終点以外の衝突ノードへの進入禁止
             if (!is_goal[neighbor_id])
               continue;
 
-            // If strict check is enabled, even goal collision is forbidden
+            // 厳格チェック時の終点衝突禁止
             if (strict_goal_collision_check_)
               continue;
           }
@@ -293,15 +377,23 @@ public:
             continue;
           }
 
-          // Note: We ALLOW u_colliding (current) -> !v_colliding (safe)
-          // This enables "Escape" paths from a colliding start node.
+          // 衝突中の開始ノードから安全ノードへの脱出許可
         }
 
-        if (!gng.isEdgeActive(current.id, neighbor_id, 0))
-          continue;
-
-        const auto &u = gng.nodeAt(current.id);
-        float step_cost = evaluator_->evaluate(u, v);
+        float step_cost;
+        if (cache) {
+          auto &edge = (*cache)[current.id][neighbor_idx];
+          if (!edge.has_value) {
+            edge.is_active = gng.isEdgeActive(current.id, neighbor_id, 0);
+            if (edge.is_active) edge.cost = evaluator_->evaluate(gng.nodeAt(current.id), v);
+            edge.has_value = true;
+          }
+          if (!edge.is_active) continue;
+          step_cost = edge.cost;
+        } else {
+          if (!gng.isEdgeActive(current.id, neighbor_id, 0)) continue;
+          step_cost = evaluator_->evaluate(gng.nodeAt(current.id), v);
+        }
 
         // 実行系向けの隣接危険ノード数による追加コスト
         float safety_penalty = 0.0f;
@@ -319,7 +411,7 @@ public:
 
         float new_dist = current.dist + step_cost + safety_penalty;
 
-        if (min_dist.find(neighbor_id) == min_dist.end() ||
+        if ((parent[neighbor_id] == -1 && neighbor_id != start_id) ||
             new_dist < min_dist[neighbor_id]) {
           min_dist[neighbor_id] = new_dist;
           parent[neighbor_id] = current.id;
@@ -328,7 +420,7 @@ public:
       }
     }
 
-    if (reached_goal_id == -1)
+    if (all_paths || reached_goal_id == -1)
       return {-1, {}};
 
     // パス再構築
@@ -342,6 +434,7 @@ public:
     return {reached_goal_id, path};
   }
 
+public:
   /**
    * 指定されたポスチャに最も近いノードを見つける。
    */

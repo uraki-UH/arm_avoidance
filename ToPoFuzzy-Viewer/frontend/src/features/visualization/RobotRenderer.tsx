@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createPortal, useThree } from '@react-three/fiber';
 import URDFLoader from 'urdf-loader';
 import { apply_robot_appearance } from './robot_link_appearance';
+import { robot_candidate_idx } from './robot_candidate_display';
 
 const empty_link_colors: Record<string, string> = {};
 import { RobotData, RobotPoseInstance, RobotSettings, Transform } from '../../types';
@@ -12,6 +13,8 @@ interface RobotRendererProps {
     tag: string;
     data: RobotData;
     visible?: boolean;
+    max_visible_candidates?: number;
+    selected_candidate_idx?: number | null;
     color?: string;
     useUrdfColors?: boolean;
     link_colors?: Record<string, string>;
@@ -328,6 +331,8 @@ function RobotRenderer({
     tag,
     data,
     visible = true,
+    max_visible_candidates = 0,
+    selected_candidate_idx,
     color = 'blue',
     useUrdfColors = true,
     link_colors = empty_link_colors,
@@ -343,15 +348,20 @@ function RobotRenderer({
     onManipClick,
 }: RobotRendererProps) {
     const enable_urdf_colors = /(^|[/_-])candidate(?:[/_-]|$)/i.test(tag) || useUrdfColors;
-    const hasInstances = Array.isArray(data.instances) && data.instances.length > 0;
+    const has_instances = Array.isArray(data.instances);
 
-    useDemandUpdate([data, visible, color, useUrdfColors, link_colors, link_appearance, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType]);
+    useDemandUpdate([data, visible, color, useUrdfColors, link_colors, link_appearance, emissiveIntensity, opacity, tf, jointValuesOverride, manualTransform, showManipulabilityEllipsoid, manipEllipsoidType, max_visible_candidates, selected_candidate_idx]);
 
-    if (hasInstances) {
+    if (has_instances) {
         const instances = data.instances as RobotPoseInstance[];
+        const selected_idx = robot_candidate_idx(selected_candidate_idx, instances.length);
+        // 配信順での単体選択、または先頭N件の表示。件数0・未指定は全件表示
+        const visible_instances = selected_idx !== null ? instances.slice(selected_idx, selected_idx + 1)
+            : Number.isFinite(max_visible_candidates) && max_visible_candidates >= 1
+                ? instances.slice(0, Math.floor(max_visible_candidates)) : instances;
         return (
             <DisplayFrame name={tag} tf={tf} manual_transform={manualTransform} is_visible={visible}>
-                {instances.map((instance, index) => {
+                {visible_instances.map((instance, index) => {
                     const instanceData: RobotData = {
                         ...data,
                         ...instance,
@@ -362,8 +372,8 @@ function RobotRenderer({
                     };
                     return (
                         <RobotInstanceRenderer
-                            key={`${tag}-${index}`}
-                            tag={`${tag}-${index}`}
+                            key={`${tag}-${selected_idx ?? index}`}
+                            tag={`${tag}-${selected_idx ?? index}`}
                             data={instanceData}
                             visible={visible}
                             color={color}

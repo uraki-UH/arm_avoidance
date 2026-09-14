@@ -19,6 +19,7 @@ import {
 } from './types';
 import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
+import { robot_candidate_idx } from './features/visualization/robot_candidate_display';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
 import { CandidateHoverFrame } from './features/visualization/CandidateHoverFrame';
@@ -720,12 +721,14 @@ function App() {
                         {/* Entities (Consolidated rendering logic) */}
                         {[
                                 {
-                                    data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => (
+                                    data: robotData, settings: robotSettings, component: (tag: string, d: any, s: any, tf: any) => {
+                                    const selected_idx = robot_candidate_idx(s.selected_candidate_idx, d.instances?.length ?? 0);
+                                    return (
                                     <group key={tag}>
-                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} link_colors={s.link_colors} link_appearance={s.link_appearance} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? (tag.includes('candidate_goal_preview') ? 0.18 : 1)} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipEllipsoidType={s.manipEllipsoidType || 'translational'} manipLinkName={s.manipLinkName || ''} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
-                                {s.showCollision && <CollisionRenderer tag={tag} data={d} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 1, 0.28)} tf={tf} manualTransform={s.transform} />}
+                                {s.showVisual && <RobotRenderer tag={tag} data={d} visible={true} color={s.color} useUrdfColors={s.useUrdfColors ?? true} link_colors={s.link_colors} link_appearance={s.link_appearance} emissiveIntensity={s.emissiveIntensity ?? 0.2} opacity={s.opacity ?? (tag.includes('candidate_goal_preview') ? 0.18 : 1)} jointValuesOverride={s.jointControlMode === 'manual' ? (s.jointValues || []) : []} tf={tf} manualTransform={s.transform} showManipulabilityEllipsoid={s.showManipulabilityEllipsoid ?? false} manipEllipsoidType={s.manipEllipsoidType || 'translational'} manipLinkName={s.manipLinkName || ''} max_visible_candidates={s.max_visible_candidates} selected_candidate_idx={s.selected_candidate_idx} onManipClick={(linkName) => setRobotJointContext({ id: tag, title: `Robot joints: ${tag}`, selectedManipLink: linkName })} />}
+                                {s.showCollision && (!d.instances || d.instances.length > 0) && <CollisionRenderer tag={tag} data={selected_idx === null ? d : { ...d, ...d.instances?.[selected_idx] }} visible={true} color={s.collisionColor} opacity={Math.min(s.opacity ?? 1, 0.28)} tf={tf} manualTransform={s.transform} />}
                             </group>
-                                ), defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
+                                ); }, defaultSettings: { visible: true, color: 'skyblue', useUrdfColors: true, showVisual: true, showCollision: false, showManipulabilityEllipsoid: false, manipEllipsoidType: 'translational', manipLinkName: '', collisionColor: '#ff9f1c', emissiveIntensity: 0.2, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (

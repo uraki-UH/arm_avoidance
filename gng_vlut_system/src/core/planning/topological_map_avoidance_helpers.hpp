@@ -572,6 +572,26 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
   int best_start_id = -1;
   std::vector<int> best_path;
 
+  // 開始候補ごとの探索結果共有。選定順・評価式は従来のゴール優先順序を維持
+  std::vector<int> valid_goal_ids;
+  for (int goal_id : goal_candidates) {
+    if (goal_id < 0 || goal_id >= static_cast<int>(gng->getMaxNodeNum())) continue;
+    const auto &node = gng->nodeAt(goal_id);
+    if (node.id != -1 && node.status.active && node.status.self_collision_free) {
+      valid_goal_ids.push_back(goal_id);
+    }
+  }
+  if (valid_goal_ids.empty()) return {-1, {}};
+  std::vector<int> valid_start_ids;
+  for (int start_id : start_candidates) {
+    if (start_id < 0 || start_id >= static_cast<int>(gng->getMaxNodeNum())) continue;
+    const auto &node = gng->nodeAt(start_id);
+    if (node.id == -1 || !node.status.active || !node.status.self_collision_free) continue;
+    valid_start_ids.push_back(start_id);
+  }
+  const auto paths_by_start = planner.plan_from_each_start(
+      valid_start_ids, valid_goal_ids, *gng, allow_danger_goal);
+
   for (int goal_id : goal_candidates) {
     if (goal_id < 0 || goal_id >= static_cast<int>(gng->getMaxNodeNum())) {
       continue;
@@ -596,12 +616,13 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
         continue;
       }
 
-      auto [reached_goal_id, node_path] =
-          planner.planToAnyNode(start_id, std::vector<int>{goal_id}, *gng,
-                                allow_danger_goal);
-      if (node_path.empty() || reached_goal_id < 0) {
+      const auto &paths = paths_by_start.at(start_id);
+      const auto path_it = paths.find(goal_id);
+      if (path_it == paths.end() || path_it->second.empty()) {
         continue;
       }
+      const int reached_goal_id = goal_id;
+      const auto &node_path = path_it->second;
 
       const int dim = std::min(static_cast<int>(start_node.weight_angle.size()),
                                static_cast<int>(current_q.size()));
@@ -633,7 +654,7 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
         goal_best_score = score;
         goal_best_start_id = start_id;
         goal_reached_id = reached_goal_id;
-        goal_best_path = std::move(node_path);
+        goal_best_path = node_path;
       }
     }
 

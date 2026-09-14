@@ -223,6 +223,8 @@ export interface LayerSettings {
 }
 export interface RobotSettings {
     visible: boolean;
+    max_visible_candidates?: number;
+    selected_candidate_idx?: number | null;
     color: string;
     useUrdfColors?: boolean;
     link_colors?: Record<string, string>;

@@ -28,6 +28,7 @@ import { GenericTransformPanel } from '../features/manipulation/GenericTransform
 // removed
 import { ClippingControls } from '../features/manipulation/ClippingControls';
 import { GngLayerControls } from '../features/visualization/GngLayerControls';
+import { RobotCandidateControls } from '../features/visualization/RobotCandidateControls';
 import { GngLabelModal } from '../features/visualization/GngLabelModal';
 import { ZoneMonitorPanel } from '../features/analysis/ZoneMonitorPanel';
 import { GngDownsamplingPanel } from '../features/analysis/GngDownsamplingPanel';
@@ -320,6 +321,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                                 );
                                 return (
                                     <div className="mt-2 space-y-2">
+                                        {is_candidate_robot && <RobotCandidateControls settings={s}
+                                            num_candidates={robot.instances?.length ?? 0}
+                                            on_update={updates => props.onUpdateSettings('robot', tag, updates)} />}
                                         <div className="grid grid-cols-[1.2fr_1.2fr_1.4fr_1.0fr] gap-1">
                                             <button onClick={() => props.onUpdateSettings('robot', tag, { showVisual: !s.showVisual })} className={`entity-btn px-3 py-1 text-[10px] ${s.showVisual ? 'active-indigo' : ''}`}>
                                                 {s.showVisual ? <Eye size={12} /> : <EyeOff size={12} />} Visual
