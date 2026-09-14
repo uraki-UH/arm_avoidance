@@ -1,0 +1,1022 @@
+{
+  "grasp": {
+    "methods": {
+      "and": "min",
+      "or": "max",
+      "implication": "mamdani_min",
+      "aggregation": "max",
+      "defuzz": "weighted_average",
+      "fallback": "classic"
+    },
+    "features": {
+      "aperture_fit": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "contact_depth": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "handle_likeness": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          },
+          "Handle": {
+            "shape": "gaussian",
+            "params": [
+              1,
+              0.16,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "topological_density": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          },
+          "Dense": {
+            "shape": "rbf",
+            "params": [
+              0.92,
+              0.18,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "topology_safe": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "topology_unknown": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "topology_wall": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "topology_default": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "height_fit": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "approach_preference": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "collision_free": {
+        "enabled": true,
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.22,
+              0.42
+            ]
+          },
+          "Medium": {
+            "shape": "triangular",
+            "params": [
+              0.25,
+              0.5,
+              0.75
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.58,
+              0.78,
+              1,
+              1
+            ]
+          },
+          "Clean": {
+            "shape": "trapezoid",
+            "params": [
+              0.82,
+              0.94,
+              1,
+              1
+            ]
+          }
+        }
+      }
+    },
+    "outputs": {
+      "Reject": {
+        "value": 5,
+        "meaning": "不可"
+      },
+      "Low": {
+        "value": 28,
+        "meaning": "低い"
+      },
+      "Medium": {
+        "value": 55,
+        "meaning": "中程度"
+      },
+      "High": {
+        "value": 78,
+        "meaning": "推奨"
+      },
+      "VeryHigh": {
+        "value": 96,
+        "meaning": "強く推奨"
+      }
+    },
+    "rules": [
+      {
+        "id": "R1",
+        "active": true,
+        "name": "semantic safe handle high confidence",
+        "conditions": [
+          {
+            "feature": "handle_likeness",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "aperture_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "contact_depth",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topological_density",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topology_safe",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "collision_free",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "VeryHigh",
+        "weight": 1
+      },
+      {
+        "id": "R2",
+        "active": true,
+        "name": "unknown object surface acceptable grasp",
+        "conditions": [
+          {
+            "feature": "topology_unknown",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "aperture_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "contact_depth",
+            "label": "Medium",
+            "connector": "AND"
+          },
+          {
+            "feature": "collision_free",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "High",
+        "weight": 0.88
+      },
+      {
+        "id": "R3",
+        "active": true,
+        "name": "safe dense side/top grasp",
+        "conditions": [
+          {
+            "feature": "aperture_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "contact_depth",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topological_density",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "height_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topology_safe",
+            "label": "Medium",
+            "connector": "AND"
+          },
+          {
+            "feature": "collision_free",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "High",
+        "weight": 0.86
+      },
+      {
+        "id": "R4",
+        "active": true,
+        "name": "semantic moderate fallback",
+        "conditions": [
+          {
+            "feature": "aperture_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "contact_depth",
+            "label": "Medium",
+            "connector": "AND"
+          },
+          {
+            "feature": "height_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topology_wall",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Medium",
+        "weight": 0.7
+      },
+      {
+        "id": "R5",
+        "active": true,
+        "name": "insufficient aperture reject",
+        "conditions": [
+          {
+            "feature": "aperture_fit",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Reject",
+        "weight": 1
+      },
+      {
+        "id": "R6",
+        "active": true,
+        "name": "insufficient depth low",
+        "conditions": [
+          {
+            "feature": "contact_depth",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Low",
+        "weight": 0.85
+      },
+      {
+        "id": "R7",
+        "active": true,
+        "name": "sparse topology low confidence",
+        "conditions": [
+          {
+            "feature": "topological_density",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Low",
+        "weight": 0.68
+      },
+      {
+        "id": "R8",
+        "active": true,
+        "name": "wrong height reject",
+        "conditions": [
+          {
+            "feature": "height_fit",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Reject",
+        "weight": 0.85
+      },
+      {
+        "id": "R9",
+        "active": true,
+        "name": "preferred approach bonus",
+        "conditions": [
+          {
+            "feature": "approach_preference",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "aperture_fit",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "collision_free",
+            "label": "Medium",
+            "connector": "AND"
+          }
+        ],
+        "output": "High",
+        "weight": 0.58
+      },
+      {
+        "id": "R10",
+        "active": true,
+        "name": "wall semantic reject",
+        "conditions": [
+          {
+            "feature": "topology_wall",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "Reject",
+        "weight": 1
+      },
+      {
+        "id": "R11",
+        "active": true,
+        "name": "collision reject rule",
+        "conditions": [
+          {
+            "feature": "collision_free",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Reject",
+        "weight": 1
+      },
+      {
+        "id": "R12",
+        "active": true,
+        "name": "default uncertain low",
+        "conditions": [
+          {
+            "feature": "topology_default",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "topology_safe",
+            "label": "Low",
+            "connector": "AND"
+          },
+          {
+            "feature": "topology_unknown",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Low",
+        "weight": 0.72
+      }
+    ]
+  },
+  "cluster": {
+    "methods": {
+      "and": "min",
+      "or": "max",
+      "defuzz": "weighted_average"
+    },
+    "features": {
+      "normal_similarity": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.45,
+              0.65
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.62,
+              0.82,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "curvature_similarity": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.35,
+              0.55
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.5,
+              0.75,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "edge_length_fit": {
+        "labels": {
+          "Short": {
+            "shape": "trapezoid",
+            "params": [
+              0.55,
+              0.75,
+              1,
+              1
+            ]
+          },
+          "Long": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.35,
+              0.55
+            ]
+          }
+        }
+      }
+    },
+    "outputs": {
+      "Reject": {
+        "value": 0
+      },
+      "Connect": {
+        "value": 1
+      }
+    },
+    "rules": [
+      {
+        "id": "C1",
+        "active": true,
+        "name": "similar normals and short edge",
+        "conditions": [
+          {
+            "feature": "normal_similarity",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "curvature_similarity",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "edge_length_fit",
+            "label": "Short",
+            "connector": "AND"
+          }
+        ],
+        "output": "Connect",
+        "weight": 1
+      },
+      {
+        "id": "C2",
+        "active": true,
+        "name": "low normal similarity rejects",
+        "conditions": [
+          {
+            "feature": "normal_similarity",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "Reject",
+        "weight": 1
+      }
+    ]
+  },
+  "node": {
+    "methods": {
+      "and": "min",
+      "or": "max",
+      "defuzz": "weighted_average"
+    },
+    "features": {
+      "normal_up": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.35,
+              0.55
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.7,
+              0.88,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "normal_horizontal": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.35,
+              0.55
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.62,
+              0.82,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "curvature_high": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.18,
+              0.38
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.38,
+              0.62,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "region_size": {
+        "labels": {
+          "Small": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.2,
+              0.42
+            ]
+          },
+          "Large": {
+            "shape": "trapezoid",
+            "params": [
+              0.35,
+              0.6,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "neighbor_normal_similarity": {
+        "labels": {
+          "Low": {
+            "shape": "trapezoid",
+            "params": [
+              0,
+              0,
+              0.45,
+              0.65
+            ]
+          },
+          "High": {
+            "shape": "trapezoid",
+            "params": [
+              0.6,
+              0.82,
+              1,
+              1
+            ]
+          }
+        }
+      }
+    },
+    "outputs": {
+      "Default": {
+        "value": 0,
+        "label": "default"
+      },
+      "UnknownObject": {
+        "value": 30,
+        "label": "unknown"
+      },
+      "Wall": {
+        "value": 65,
+        "label": "wall"
+      },
+      "SafeArea": {
+        "value": 100,
+        "label": "safe"
+      }
+    },
+    "rules": [
+      {
+        "id": "N1",
+        "active": true,
+        "name": "horizontal upward safe floor/table",
+        "conditions": [
+          {
+            "feature": "normal_up",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "curvature_high",
+            "label": "Low",
+            "connector": "AND"
+          }
+        ],
+        "output": "SafeArea",
+        "weight": 1
+      },
+      {
+        "id": "N2",
+        "active": true,
+        "name": "vertical low curvature large region wall",
+        "conditions": [
+          {
+            "feature": "normal_horizontal",
+            "label": "High",
+            "connector": "AND"
+          },
+          {
+            "feature": "curvature_high",
+            "label": "Low",
+            "connector": "AND"
+          },
+          {
+            "feature": "region_size",
+            "label": "Large",
+            "connector": "AND"
+          },
+          {
+            "feature": "neighbor_normal_similarity",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "Wall",
+        "weight": 1
+      },
+      {
+        "id": "N3",
+        "active": true,
+        "name": "high curvature unknown object",
+        "conditions": [
+          {
+            "feature": "curvature_high",
+            "label": "High",
+            "connector": "AND"
+          }
+        ],
+        "output": "UnknownObject",
+        "weight": 1
+      },
+      {
+        "id": "N4",
+        "active": true,
+        "name": "otherwise default",
+        "conditions": [
+          {
+            "feature": "region_size",
+            "label": "Small",
+            "connector": "AND"
+          }
+        ],
+        "output": "Default",
+        "weight": 0.45
+      }
+    ]
+  },
+  "boundary_check": {
+    "low_at_zero": 0,
+    "high_at_one": 0
+  },
+  "source": {
+    "file": "ToPo-FUZZY_Manipulation_v1.html",
+    "sha256": "a1fc95464f54680eae666e309d9db5c4c545e021b7760bfd4e3270f9f4108acf",
+    "scope": "ソース内の初期値。ブラウザーで編集・読込されたモデルは対象外。",
+    "date": "2026-09-14"
+  }
+}

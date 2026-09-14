@@ -1,4 +1,5 @@
 #include <arrow_visualization/arrow_marker.hpp>
+#include "ais_gng/topological_plane/convex_hull.hpp"
 #include "ais_gng/topological_plane/plane_cluster_incremental.hpp"
 #include "ais_gng/topological_plane/plane_cluster_parameters.hpp"
 #include "ais_gng/topological_plane/nonplane_component_extractor.hpp"
@@ -43,50 +44,8 @@ geometry_msgs::msg::Point planeCorner(
   return result;
 }
 
-struct PlanePoint
-{
-  double u = 0.0;
-  double v = 0.0;
-};
-
-// Andrewのmonotone chainによる2D凸包(反時計回り、始点と終点は重複させない)。
-//
-// OBBの外接矩形は重心まわりに対称と見なすため、L字状など偏った分布では
-// 実メンバーが存在しない領域まで枠がはみ出し、隣接クラスタの枠と重なって見える
-// (実測: 同一フレーム列60枚でノードの最大25%が2クラスタ以上の枠に同時に入っていた)。
-// 実分布に沿う凸包に替えるとこの重なりが目に見えて減る(実測で約2-3割減)。
-std::vector<PlanePoint> convexHull(std::vector<PlanePoint> points)
-{
-  std::sort(points.begin(), points.end(), [](const PlanePoint &a, const PlanePoint &b) {
-      return a.u != b.u ? a.u < b.u : a.v < b.v;
-    });
-  points.erase(
-    std::unique(
-      points.begin(), points.end(),
-      [](const PlanePoint &a, const PlanePoint &b) { return a.u == b.u && a.v == b.v; }),
-    points.end());
-  if (points.size() < 3U) {
-    return points;
-  }
-  const auto cross = [](const PlanePoint &o, const PlanePoint &a, const PlanePoint &b) {
-      return (a.u - o.u) * (b.v - o.v) - (a.v - o.v) * (b.u - o.u);
-    };
-  std::vector<PlanePoint> hull(2U * points.size());
-  int k = 0;
-  for (std::size_t i = 0U; i < points.size(); ++i) {
-    while (k >= 2 && cross(hull[k - 2], hull[k - 1], points[i]) <= 0.0) { --k; }
-    hull[static_cast<std::size_t>(k++)] = points[i];
-  }
-  const int lower = k + 1;
-  for (int i = static_cast<int>(points.size()) - 2; i >= 0; --i) {
-    while (k >= lower && cross(hull[k - 2], hull[k - 1], points[static_cast<std::size_t>(i)]) <= 0.0) {
-      --k;
-    }
-    hull[static_cast<std::size_t>(k++)] = points[static_cast<std::size_t>(i)];
-  }
-  hull.resize(static_cast<std::size_t>(k - 1));
-  return hull;
-}
+using fuzzrobo::topological_plane::plane_point;
+using fuzzrobo::topological_plane::convex_hull;
 
 // 色番号から決定的に色を作る。番号が変わらない限り、色もフレーム間で変わらない。
 std_msgs::msg::ColorRGBA clusterColor(const std::uint32_t color_index)
@@ -165,7 +124,7 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
     // 実メンバーの接平面投影から凸包を取って描く。外接矩形(重心対称)と違い、
     // L字状など偏った分布でも実メンバーのいない領域まではみ出さない。凸包が
     // 作れない(メンバー3未満やほぼ一直線)場合だけ、従来の外接矩形にフォールバックする。
-    std::vector<PlanePoint> projected;
+    std::vector<plane_point> projected;
     projected.reserve(cluster.node_indices.size());
     for (const std::uint32_t node_index : cluster.node_indices) {
       if (node_index >= nodes.size()) { continue; }
@@ -177,7 +136,7 @@ visualization_msgs::msg::MarkerArray makeHullMarkers(
         {dx * cluster.tangent_u.x + dy * cluster.tangent_u.y + dz * cluster.tangent_u.z,
           dx * cluster.tangent_v.x + dy * cluster.tangent_v.y + dz * cluster.tangent_v.z});
     }
-    const std::vector<PlanePoint> hull = convexHull(std::move(projected));
+    const std::vector<plane_point> hull = convex_hull(std::move(projected));
 
     auto bounds = baseMarker(clusters.header, "incremental_plane_hull", marker_id);
     bounds.type = visualization_msgs::msg::Marker::LINE_LIST;

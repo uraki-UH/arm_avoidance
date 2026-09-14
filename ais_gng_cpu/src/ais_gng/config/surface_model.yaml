@@ -1,6 +1,7 @@
 /**:
   ros__parameters:
     surface_model.enable: true
+    # 一行ログのCurveは別ノードの直近計算時間。軽量通知は出力先の/update_ms。
     surface_model.output_topic: /curved_surface_clusters
     surface_model.hz: 2.0
     # 球ノード・線分edgeのMarker表示が既定。TopologicalMapは比較・外部利用時のみ。

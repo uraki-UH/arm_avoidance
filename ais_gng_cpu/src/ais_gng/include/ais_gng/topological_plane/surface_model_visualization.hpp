@@ -3,6 +3,7 @@
 #include "ais_gng/topological_plane/surface_model_tracking.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/float64.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <chrono>
 #include <set>
@@ -40,6 +41,7 @@ private:
   std::chrono::steady_clock::time_point last_{};
   std::set<std::pair<std::string, int>> published_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr data_;
+  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr timing_;
   rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr graph_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markers_;
 };

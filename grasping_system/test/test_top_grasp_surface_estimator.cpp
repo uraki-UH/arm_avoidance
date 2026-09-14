@@ -86,6 +86,35 @@ TopGraspSurfaceConfig makeConfig()
 int main()
 {
   {
+    // 平面ゼロの試験抽出、サイズ分割、平面・既存候補の除外
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    const auto first = addRectangle(map, 0, 0, 0.1, 0.02, 0.02);
+    const auto second = addRectangle(map, 0.2, 0, 0.1, 0.02, 0.02);
+    for (std::uint32_t idx = 1; idx < 8; ++idx) addEdge(map, idx - 1, idx);
+    const TopGraspSurfaceEstimator estimator(makeConfig());
+    grasping_system::candidate::TopGraspSurfaceResult existing;
+    auto regions = estimator.extract_nonplane_regions(map, clusters, existing);
+    expect(regions.size() == 2 && regions[0] == first && regions[1] == second,
+      "nonplane trial must split connected nodes by opening size");
+    clusters.clusters.push_back(makeCluster(1, first, 0, 0, 0.1, {0, 0, 1}));
+    regions = estimator.extract_nonplane_regions(map, clusters, existing);
+    expect(regions.size() == 1 && regions.front() == second, "plane nodes must be excluded");
+    existing.candidates.emplace_back();
+    existing.candidates.back().attached_node_indices = second;
+    expect(estimator.extract_nonplane_regions(map, clusters, existing).empty(),
+      "existing attachment nodes must be excluded");
+    existing.candidates.clear();
+    clusters.clusters.clear();
+    map.nodes[1].boundary_evidence = ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE;
+    map.nodes[6].pos.x = std::numeric_limits<float>::quiet_NaN();
+    map.edges.push_back(65535);
+    map.edges.push_back(0);
+    map.edges.push_back(0);
+    expect(estimator.extract_nonplane_regions(map, clusters, existing).empty(),
+      "invalid and free-space nodes must block traversal without invalid edge access");
+  }
+  {
     // 指定開口と観測幅の直接比較。旧余白による140 mm制限の除去
     TopologicalMap map;
     PlaneClusterArray clusters;

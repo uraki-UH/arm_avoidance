@@ -143,7 +143,9 @@ def generate_launch_description():
         if not os.path.exists(executable_path):
             raise RuntimeError(f"Backend executable not found: {executable_path}")
 
-        parameters = [gng_config_path]
+        surface_config_path = os.path.join(package_dir, 'config', 'surface_model.yaml')
+        # 時間通知の接続先と曲面ノードの出力先に共通の設定。
+        parameters = [gng_config_path, surface_config_path]
         input_topic = LaunchConfiguration('input_topic').perform(context)
         if input_topic:
             parameters.append({'input.topic_names': [input_topic]})
@@ -226,7 +228,7 @@ def generate_launch_description():
                     name='plane_cluster_visualization_node',
                     parameters=[
                         LaunchConfiguration('plane_params_file'),
-                        os.path.join(package_dir, 'config', 'surface_model.yaml'),
+                        surface_config_path,
                         surface_parameter_overrides,
                         {
                             'input_topic': topological_map_topic,

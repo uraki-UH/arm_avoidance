@@ -21,6 +21,7 @@
 #include "ais_gng_msgs/msg/topological_node.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "std_msgs/msg/u_int32_multi_array.hpp"
+#include "std_msgs/msg/float64.hpp"
 
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/node_support.hpp"
@@ -54,6 +55,8 @@ class AiSGNGComponent : public rclcpp::Node {
 
     rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr topological_map_pub_;
     rclcpp::Publisher<PC2>::SharedPtr transformed_pcl_pub_;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr curve_time_sub_;
+    double curve_ms_{-1.0};
 #if defined(AIS_GNG_BACKEND_CPU)
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};

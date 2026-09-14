@@ -323,6 +323,7 @@ publisher::publisher(rclcpp::Node &node):node_(node)
     graph_=node.create_publisher<ais_gng_msgs::msg::TopologicalMap>(topic,rclcpp::QoS(1).transient_local());
   }
   data_=node.create_publisher<std_msgs::msg::String>(topic+"/models",rclcpp::QoS(1).transient_local());
+  timing_=node.create_publisher<std_msgs::msg::Float64>(topic+"/update_ms",rclcpp::QoS(1));
   if (enable_markers_) {
     markers_=node.create_publisher<visualization_msgs::msg::MarkerArray>(topic+"/markers",rclcpp::QoS(1).transient_local());
   }
@@ -339,6 +340,11 @@ void publisher::update(const ais_gng_msgs::msg::TopologicalMap &map,
   last_=now;
   try {
     const auto surfaces=tracker_.update(map,planes,config_,retention_,min_display_plane_patches_);
+    if (timing_->get_subscription_count()>0) {
+      std_msgs::msg::Float64 timing;
+      timing.data=surfaces.update_ms;
+      timing_->publish(timing);
+    }
     if (graph_) graph_->publish(make_graph(surfaces,map));
     if (markers_) markers_->publish(make_markers(surfaces,map,enable_labels_,enable_patch_graph_,published_,min_display_plane_patches_));
     std_msgs::msg::String message;
@@ -355,7 +361,7 @@ void publisher::update(const ais_gng_msgs::msg::TopologicalMap &map,
         shown_nodes+=r.node_indices.size();
       }
     }
-    RCLCPP_INFO_THROTTLE(node_.get_logger(),*node_.get_clock(),2000,
+    RCLCPP_DEBUG_THROTTLE(node_.get_logger(),*node_.get_clock(),2000,
       "Surface: %.2f ms (K: %.3f ms, keep: %.3f ms) | patches=%zu plane=%zu curved=%zu unknown=%zu shown=%zu retained=%zu nodes=%zu fits=%zu/%zu",
       surfaces.update_ms,surfaces.curvature_ms,surfaces.retention_ms,surfaces.patches.size(),planar,curved,unknown,shown,retained,shown_nodes,
       surfaces.model_fits,config_.max_model_fits);

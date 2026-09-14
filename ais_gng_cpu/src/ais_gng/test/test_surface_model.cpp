@@ -1,10 +1,12 @@
 #include "ais_gng/topological_plane/surface_model.hpp"
 #include "ais_gng/topological_plane/surface_model_visualization.hpp"
+#include "ais_gng/topological_plane/convex_hull.hpp"
 #include <gtest/gtest.h>
 #include <Eigen/Geometry>
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
+#include <random>
 #include <set>
 
 namespace
@@ -99,6 +101,114 @@ TEST(SurfaceModel, plane_core_check_can_be_disabled_for_nonplane_only_curve)
   }
 }
 
+TEST(SurfaceModel, shared_hull_preserves_outer_corners_and_degenerate_inputs)
+{
+  using fuzzrobo::topological_plane::convex_hull;
+  const auto hull=convex_hull({{0,0},{1,1},{0,1},{1,0},{0.5,0.5},{1,1},{0.5,0}});
+  ASSERT_EQ(hull.size(),4U);
+  const std::vector<fuzzrobo::topological_plane::plane_point> expected={{0,0},{1,0},{1,1},{0,1}};
+  for (std::size_t idx=0; idx<hull.size(); ++idx) {
+    EXPECT_EQ(hull[idx].u,expected[idx].u); EXPECT_EQ(hull[idx].v,expected[idx].v);
+  }
+  EXPECT_TRUE(convex_hull({}).empty());
+  EXPECT_EQ(convex_hull({{2,3},{2,3}}).size(),1U);
+  const auto line=convex_hull({{0,0},{1,0},{2,0},{1,0}});
+  ASSERT_EQ(line.size(),2U);
+  EXPECT_EQ(line.front().u,0); EXPECT_EQ(line.back().u,2);
+}
+
+TEST(SurfaceModel, convex_boundary_matches_all_edge_reference)
+{
+  using fuzzrobo::topological_plane::plane_point;
+  using fuzzrobo::topological_plane::convex_hull;
+  using fuzzrobo::topological_plane::convex_hull_boundary;
+  std::mt19937 random(31415);
+  std::uniform_real_distribution<double> uniform(-1,1);
+  for (int scene_idx=0; scene_idx<40; ++scene_idx) for (double scale:{1e-4,1.0,1e3}) {
+    std::vector<plane_point> points;
+    // 多頂点の円周・細長い凸包・重複点・内側点を含む参照入力。
+    for (int idx=0; idx<150; ++idx) {
+      const double angle=2*pi*idx/150;
+      const double x=scene_idx==0 ? std::cos(angle):uniform(random);
+      const double y=scene_idx==0 ? std::sin(angle):uniform(random);
+      points.push_back({scale*x,scale*y*(scene_idx%2 ? 0.001:1.0)});
+    }
+    points.push_back(points.front()); points.push_back({0,0});
+    const auto hull=convex_hull(points);
+    for (double band_ratio:{0.0,0.0001,0.01,0.2,2.0}) {
+      const double band=scale*band_ratio;
+      const auto selected=convex_hull_boundary(points,band);
+      ASSERT_EQ(selected.size(),points.size());
+      for (std::size_t idx=0; idx<points.size(); ++idx) {
+        double min_dist=std::numeric_limits<double>::infinity();
+        const Eigen::Vector2d point(points[idx].u,points[idx].v);
+        for (std::size_t i=0; i<hull.size(); ++i) {
+          const auto &a=hull[i],&b=hull[(i+1)%hull.size()];
+          const Eigen::Vector2d begin(a.u,a.v),delta(b.u-a.u,b.v-a.v);
+          const double ratio=std::clamp((point-begin).dot(delta)/delta.squaredNorm(),0.0,1.0);
+          min_dist=std::min(min_dist,(point-begin-ratio*delta).norm());
+        }
+        // 境界の丸め誤差以外での、従来の全辺距離判定との完全一致。
+        if (std::abs(min_dist-band)>1e-10*scale) {
+          EXPECT_EQ(selected[idx],min_dist<band) << scene_idx << " " << scale << " " << band_ratio << " " << idx;
+        }
+      }
+    }
+  }
+  EXPECT_TRUE(convex_hull_boundary({},0.1).empty());
+  EXPECT_EQ(convex_hull_boundary({{2,3},{2,3}},0.1),std::vector<bool>({true,true}));
+  EXPECT_EQ(convex_hull_boundary({{0,0},{1,0},{2,0}},0.1),std::vector<bool>({true,true,true}));
+  EXPECT_EQ(convex_hull_boundary({{0,0},{2,0},{2,2},{0,2},{1,1}},1.0),
+    std::vector<bool>({true,true,true,true,true}));
+}
+
+TEST(SurfaceModel, plane_support_requires_a_boundary_path_for_each_component)
+{
+  const auto rotation=Eigen::AngleAxisd(0.7,vec(1,2,3).normalized()).toRotationMatrix();
+  for (bool has_rotation : {false,true}) for (bool has_boundary : {false,true})
+    for (bool is_connected : {false,true}) {
+      SCOPED_TRACE(::testing::Message() << has_rotation << " " << has_boundary << " " << is_connected);
+      const Eigen::Matrix3d transform=has_rotation ? rotation : Eigen::Matrix3d::Identity();
+      auto s=cylinder(0.1,0.1,48,false,transform);
+      options config;
+      config.min_plane_usage_ratio=0;
+      config.enable_support_regions=false;
+      auto first=extract(s.map,s.planes,config);
+      ASSERT_EQ(first.regions.size(),1U);
+      ASSERT_EQ(first.regions[0].shape.type,"cylinder");
+      first.regions[0].id=1000;
+
+      // 平面に重なる円筒の母線。元平面の外周位置と母線の連結だけを変更。
+      ais_gng_msgs::msg::PlaneCluster plane;
+      const vec n=transform*vec::UnitX();
+      plane.normal.x=n.x(); plane.normal.y=n.y(); plane.normal.z=n.z();
+      plane.local_spacing=0.01F;
+      for (std::uint32_t idx=0; idx<6; ++idx) plane.node_indices.push_back(idx);
+      for (double y : {-0.2,0.2}) for (double z : {has_boundary ? -0.1 : -0.2,0.2}) {
+        plane.node_indices.push_back(s.map.nodes.size());
+        add_node(s.map,transform*vec(0.1,y,z),n);
+      }
+      s.planes.clusters.push_back(plane);
+      if (!is_connected) {
+        std::vector<std::uint16_t> links;
+        for (std::size_t i=0; i+1<s.map.edges.size(); i+=2) {
+          const auto a=s.map.edges[i], b=s.map.edges[i+1];
+          if (a<6 && b<6 && (a==0 || b==0)) continue;
+          links.push_back(a); links.push_back(b);
+        }
+        s.map.edges=std::move(links);
+      }
+      const auto original_planes=s.planes;
+      const auto current=extract(s.map,s.planes,config,first.regions);
+      const bool has_retained=std::any_of(current.regions.begin(),current.regions.end(),[](const auto &surface) {
+        return surface.is_retained && surface.id==1000;
+      });
+      EXPECT_EQ(has_retained,has_boundary && is_connected);
+      EXPECT_EQ(s.planes,original_planes);
+      coverage(current,s.map.nodes.size());
+    }
+}
+
 TEST(SurfaceModel, connected_history_fragments_of_one_plane_reunite)
 {
   auto s=cylinder(0.1,0.1);
@@ -170,8 +280,35 @@ TEST(SurfaceModel, mixed_plane_root_does_not_block_two_distinct_curves)
     } else s.planes.clusters.push_back(plane);
   }
   edge(s.map,3,body_num+24*6+3);
+  // 分割周辺の長距離・重複・無効エッジ。局所更新での消失・誤分類の検査。
+  edge(s.map,0,body_num);
+  edge(s.map,body_num+24*6+3,3);
+  edge(s.map,0,65535);
   options config;
   const auto r=extract(s.map,s.planes,config);
+  const auto check_links = [&](const result &surfaces) {
+    std::vector<int> owner(s.map.nodes.size(),-1);
+    for (std::size_t idx=0; idx<surfaces.patches.size(); ++idx)
+      for (auto node_idx:surfaces.patches[idx].node_indices) owner[node_idx]=idx;
+    std::set<std::array<std::uint32_t,2>> expected,short_pairs;
+    for (std::size_t i=0; i+1<s.map.edges.size(); i+=2) {
+      const auto a=s.map.edges[i],b=s.map.edges[i+1];
+      if (a>=owner.size() || b>=owner.size() || owner[a]<0 || owner[b]<0 || owner[a]==owner[b]) continue;
+      const std::array<std::uint32_t,2> pair={static_cast<std::uint32_t>(std::min(owner[a],owner[b])),
+        static_cast<std::uint32_t>(std::max(owner[a],owner[b]))};
+      expected.insert(pair);
+      const auto &pa=s.map.nodes[a].pos,&pb=s.map.nodes[b].pos;
+      if (vec(pa.x-pb.x,pa.y-pb.y,pa.z-pb.z).norm()<=config.max_link_length) short_pairs.insert(pair);
+    }
+    EXPECT_EQ(surfaces.patch_edges,(std::vector<std::array<std::uint32_t,2>>(expected.begin(),expected.end())));
+    std::set<std::array<std::uint32_t,2>> classified;
+    for (const auto *links:{&surfaces.smooth_edges,&surfaces.sharp_edges,&surfaces.uncertain_edges})
+      for (const auto &pair:*links) {
+        EXPECT_EQ(short_pairs.count(pair),1U);
+        EXPECT_TRUE(classified.insert(pair).second);
+      }
+  };
+  check_links(r);
   std::string summary="fits="+std::to_string(r.model_fits);
   for (const auto &surface:r.regions) summary+=" "+surface.shape.type+":"+std::to_string(surface.node_indices.size());
   SCOPED_TRACE(summary);
@@ -195,6 +332,7 @@ TEST(SurfaceModel, mixed_plane_root_does_not_block_two_distinct_curves)
   }
   coverage(r,s.map.nodes.size());
   const auto retained=extract(s.map,s.planes,config,r.regions);
+  check_links(retained);
   ASSERT_EQ(retained.regions.size(),2U);
   for (const auto &surface:retained.regions) EXPECT_TRUE(surface.is_retained);
   coverage(retained,s.map.nodes.size());

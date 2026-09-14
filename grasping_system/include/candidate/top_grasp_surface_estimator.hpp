@@ -89,6 +89,66 @@ public:
     validateConfig();
   }
 
+  // 非平面起点の試験領域。把持成立・衝突・観測充足の判定なし
+  std::vector<std::vector<std::uint32_t>> extract_nonplane_regions(
+    const ais_gng_msgs::msg::TopologicalMap &map,
+    const ais_gng_msgs::msg::PlaneClusterArray &clusters,
+    const TopGraspSurfaceResult &existing) const
+  {
+    std::vector<std::vector<std::uint32_t>> regions;
+    std::vector<bool> is_used(map.nodes.size(), false);
+    const auto exclude = [&](const auto &indices) {
+      for (const auto idx : indices) if (idx < is_used.size()) is_used[idx] = true;
+    };
+    for (const auto &plane : clusters.clusters) exclude(plane.node_indices);
+    for (const auto &surface : existing.candidates) {
+      exclude(surface.node_indices);
+      exclude(surface.attached_node_indices);
+    }
+    std::vector<std::vector<std::uint32_t>> adjacency(map.nodes.size());
+    for (std::size_t idx = 0; idx + 1 < map.edges.size(); idx += 2) {
+      const auto a = map.edges[idx], b = map.edges[idx + 1];
+      if (a >= map.nodes.size() || b >= map.nodes.size()) continue;
+      adjacency[a].push_back(b);
+      adjacency[b].push_back(a);
+    }
+    for (std::size_t idx = 0; idx < map.nodes.size(); ++idx) {
+      const auto &node = map.nodes[idx];
+      if (!std::isfinite(node.pos.x) || !std::isfinite(node.pos.y) || !std::isfinite(node.pos.z) ||
+        (node.boundary_evidence & ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE)) is_used[idx] = true;
+    }
+    const auto [axis_x, axis_y] = horizontalBasis();
+    const auto project = [&](std::size_t idx) -> Eigen::Vector2d {
+      const auto &p = map.nodes[idx].pos;
+      const Eigen::Vector3d point(p.x, p.y, p.z);
+      return {point.dot(axis_x), point.dot(axis_y)};
+    };
+    // 領域ごとの再初期化なしの訪問管理。サイズ超過ノードは別領域の起点として再利用
+    std::vector<std::size_t> visited(map.nodes.size(), 0);
+    for (std::size_t seed = 0; seed < map.nodes.size(); ++seed) {
+      if (is_used[seed]) continue;
+      std::vector<std::uint32_t> region{static_cast<std::uint32_t>(seed)};
+      is_used[seed] = true;
+      Eigen::Vector2d min_point = project(seed), max_point = min_point;
+      for (std::size_t idx = 0; idx < region.size(); ++idx) {
+        for (const auto next : adjacency[region[idx]]) {
+          if (is_used[next] || visited[next] == seed + 1) continue;
+          visited[next] = seed + 1;
+          const Eigen::Vector2d next_min = min_point.cwiseMin(project(next));
+          const Eigen::Vector2d next_max = max_point.cwiseMax(project(next));
+          if (next_max.x() - next_min.x() > config_.grasp_size_x ||
+            next_max.y() - next_min.y() > config_.grasp_size_y) continue;
+          min_point = next_min;
+          max_point = next_max;
+          is_used[next] = true;
+          region.push_back(next);
+        }
+      }
+      if (region.size() >= config_.minimum_region_nodes) regions.push_back(std::move(region));
+    }
+    return regions;
+  }
+
   TopGraspSurfaceResult estimate(
     const ais_gng_msgs::msg::TopologicalMap &map,
     const ais_gng_msgs::msg::PlaneClusterArray &clusters) const

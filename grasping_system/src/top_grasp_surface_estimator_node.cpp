@@ -77,6 +77,10 @@ public:
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
     candidate_nodes_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       candidate_nodes_topic, output_qos);
+    if (declare_parameter<bool>("enable_nonplane_region_trial", false)) {
+      nonplane_regions_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        "/nonplane_grasp_regions/nodes", output_qos);
+    }
     candidate_publisher_ = std::make_unique<candidate::grasp_candidate_publisher>(
       *this, candidate_topic,
       [this](const gng_control_msgs::msg::GraspCandidateArray &poses) {
@@ -191,6 +195,14 @@ private:
 
     const auto started = std::chrono::steady_clock::now();
     const auto raw_result = estimator_.estimate(candidate_map, candidate_clusters);
+    if (nonplane_regions_publisher_) {
+      const auto trial_started = std::chrono::steady_clock::now();
+      const auto regions = estimator_.extract_nonplane_regions(candidate_map, candidate_clusters, raw_result);
+      publish_nonplane_regions(regions, candidate_map);
+      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 2000,
+        "Nonplane trial: regions=%zu calc_and_publish_ms=%.3f (unverified)", regions.size(),
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - trial_started).count());
+    }
     const double processing_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - started).count();
     last_processed_frame_ = map_->frame_number;
@@ -573,10 +585,40 @@ private:
     candidate_nodes_publisher_->publish(candidate_node_markers_);
   }
 
+  void publish_nonplane_regions(
+    const std::vector<std::vector<std::uint32_t>> &regions,
+    const ais_gng_msgs::msg::TopologicalMap &map)
+  {
+    using marker_msg = visualization_msgs::msg::Marker;
+    visualization_msgs::msg::MarkerArray output;
+    marker_msg marker;
+    marker.header = map.header;
+    marker.action = marker_msg::DELETEALL;
+    output.markers.push_back(marker);
+    marker.action = marker_msg::ADD;
+    marker.type = marker_msg::SPHERE_LIST;
+    marker.ns = "nonplane_unverified";
+    marker.pose.orientation.w = 1.0;
+    marker.scale.x = marker.scale.y = marker.scale.z = candidate_node_diameter_;
+    marker.color.r = 1.0F;
+    marker.color.g = 0.35F;
+    marker.color.b = 0.02F;
+    marker.color.a = 1.0F;
+    // 観測停止時の残留防止。候補ID追跡なしのフレーム単位試験表示
+    marker.lifetime.sec = 2;
+    for (const auto &region : regions) {
+      marker.points = snapshotPoints(map, region);
+      output.markers.push_back(marker);
+      ++marker.id;
+    }
+    nonplane_regions_publisher_->publish(output);
+  }
+
   void publishTfUnavailable()
   {
     candidate_tracks_.clear();
     candidate_track_frame_id_.clear();
+    if (nonplane_regions_publisher_) publish_nonplane_regions({}, *map_);
     gng_control_msgs::msg::GraspCandidateArray poses;
     poses.header = map_->header;
     poses.header.frame_id = outputFrame();
@@ -690,6 +732,7 @@ private:
   std::unique_ptr<candidate::grasp_candidate_publisher> candidate_publisher_;
   double candidate_node_diameter_ = 0.012;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr candidate_nodes_publisher_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr nonplane_regions_publisher_;
   visualization_msgs::msg::MarkerArray candidate_node_markers_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_publisher_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;

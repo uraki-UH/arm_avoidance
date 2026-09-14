@@ -96,7 +96,7 @@ class GngStdoutCapture {
     bool is_capturing_{false};
 };
 
-void replayGngSummaryWithTime(
+void replay_gng_summary_with_time(
     const std::string &output,
     double gng_ms,
     bool plane_cluster_ran,
@@ -105,7 +105,8 @@ void replayGngSummaryWithTime(
     double nonplane_ms,
     bool has_boundary_candidates = false,
     double boundary_ms = 0.0,
-    std::size_t num_boundary_candidates = 0) {
+    std::size_t num_boundary_candidates = 0,
+    const char *curve_time_text = "off") {
     std::size_t line_start = 0;
     while (line_start < output.size()) {
         const std::size_t line_end = output.find('\n', line_start);
@@ -139,7 +140,7 @@ void replayGngSummaryWithTime(
                 std::fprintf(
                     stdout,
                     "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
-                    "GNG: %.2f ms, Plane: %.2f ms, Nonplane: %s",
+                    "GNG: %.2f ms, Pl: %.2f ms, NonPL: %s",
                     input_num,
                     voxel_num,
                     active_num,
@@ -152,7 +153,7 @@ void replayGngSummaryWithTime(
                 std::fprintf(
                     stdout,
                     "I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d, "
-                    "GNG: %.2f ms, Plane: off, Nonplane: %s",
+                    "GNG: %.2f ms, Pl: off, NonPL: %s",
                     input_num,
                     voxel_num,
                     active_num,
@@ -162,8 +163,11 @@ void replayGngSummaryWithTime(
                     nonplane_time_text);
             }
             if (has_boundary_candidates) {
-                std::fprintf(stdout, ", Boundary: %.2f ms (%zu)", boundary_ms, num_boundary_candidates);
+                std::fprintf(stdout, ", Bound: %.2f ms (%zu)", boundary_ms, num_boundary_candidates);
+            } else {
+                std::fputs(", Bound: off", stdout);
             }
+            std::fprintf(stdout, ", Curve: %s", curve_time_text);
         } else {
             std::fwrite(line.data(), sizeof(char), line.size(), stdout);
         }
@@ -221,6 +225,15 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     topological_map_pub_ = this->create_publisher<ais_gng_msgs::msg::TopologicalMap>(
         "topological_map",
         rclcpp::QoS(1).reliable().transient_local());
+
+    // 別ノードの直近の曲面計算時間。GNGとの同期待ち・モデルJSONの受信なし。
+    const auto surface_topic=this->declare_parameter<std::string>(
+        "surface_model.output_topic","/curved_surface_clusters");
+    curve_time_sub_=this->create_subscription<std_msgs::msg::Float64>(
+        surface_topic+"/update_ms",rclcpp::QoS(1),
+        [this](std_msgs::msg::Float64::ConstSharedPtr message) {
+            curve_ms_=std::isfinite(message->data) && message->data>=0 ? message->data : -1.0;
+        });
 
 #if defined(AIS_GNG_BACKEND_CPU)
     direct_plane_cluster_enabled_ =
@@ -972,6 +985,15 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         gng_end - input_end).count();
     const double plane_cluster_summary_ms = std::chrono::duration<double, std::milli>(
         plane_cluster_end - classification_end).count();
+    char curve_time_text[32]{};
+    if (curve_time_sub_->get_publisher_count()==0) {
+        curve_ms_=-1.0;
+        std::snprintf(curve_time_text,sizeof(curve_time_text),"off");
+    } else if (curve_ms_<0) {
+        std::snprintf(curve_time_text,sizeof(curve_time_text),"--");
+    } else {
+        std::snprintf(curve_time_text,sizeof(curve_time_text),"%.2f ms",curve_ms_);
+    }
 #if defined(AIS_GNG_BACKEND_CPU)
     const auto boundary_start = std::chrono::steady_clock::now();
     std::size_t num_boundary_candidates = 0;
@@ -986,7 +1008,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     }
     const double boundary_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - boundary_start).count();
-    replayGngSummaryWithTime(
+    replay_gng_summary_with_time(
         gng_summary_output,
         gng_summary_ms,
         plane_cluster_ran,
@@ -995,15 +1017,18 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         nonplane_component_ms,
         enable_boundary_candidates_,
         boundary_ms,
-        num_boundary_candidates);
+        num_boundary_candidates,
+        curve_time_text);
 #else
-    replayGngSummaryWithTime(
+    replay_gng_summary_with_time(
         gng_summary_output,
         gng_summary_ms,
         plane_cluster_ran,
         plane_cluster_summary_ms,
         false,
-        0.0);
+        0.0,
+        false,0.0,0,
+        curve_time_text);
 #endif
 
     // マップを先にPublishし、表示専用ノードが同じフレームのクラスタを描画できるようにする。
