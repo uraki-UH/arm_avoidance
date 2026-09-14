@@ -78,6 +78,10 @@ public:
 
   void setAvoidDanger(bool enable) { avoid_danger_ = enable; }
 
+  void set_enable_safety_penalty(bool enable_safety_penalty) {
+    enable_safety_penalty_ = enable_safety_penalty;
+  }
+
   /**
    * ゴールノードの厳格な衝突チェックを設定する。
    */
@@ -162,9 +166,9 @@ public:
         const auto &u = gng.nodeAt(current.id);
         float step_cost = evaluator_->evaluate(u, v);
         
-        // [追加] 隣接安全マージンによるペナルティ
+        // 実行系向けの隣接危険ノード数による追加コスト
         float safety_penalty = 0.0f;
-        if (avoid_collisions_) {
+        if (avoid_collisions_ && enable_safety_penalty_) {
           for (int nv_id : gng.getNeighborsAngle(neighbor_id)) {
             if (gng.nodeAt(nv_id).status.is_colliding) {
               safety_penalty += 2.0f; // 1つ隣接衝突があるごとに大幅なコスト増
@@ -299,9 +303,9 @@ public:
         const auto &u = gng.nodeAt(current.id);
         float step_cost = evaluator_->evaluate(u, v);
 
-        // [追加] 隣接安全マージンによるペナルティ
+        // 実行系向けの隣接危険ノード数による追加コスト
         float safety_penalty = 0.0f;
-        if (avoid_collisions_) {
+        if (avoid_collisions_ && enable_safety_penalty_) {
           for (int nv_id : gng.getNeighborsAngle(neighbor_id)) {
             if (gng.nodeAt(nv_id).status.is_colliding) {
               safety_penalty += 2.0f;
@@ -485,6 +489,7 @@ public:
 private:
   std::shared_ptr<ICostEvaluator<T_angle, T_coord>> evaluator_;
   bool avoid_collisions_ = false;
+  bool enable_safety_penalty_ = true;
   bool avoid_danger_ = true;
   bool strict_goal_collision_check_ = false; // Added
   Stats stats_;

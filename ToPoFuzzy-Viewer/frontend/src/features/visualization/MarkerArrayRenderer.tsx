@@ -1,5 +1,5 @@
 import { useArrowSettings, marker_arrow_batches, marker_color } from './arrows';
-import { DisplayFrame, ArrowBatch, useDemandUpdate } from './SharedRenderers';
+import { DisplayFrame, ArrowBatch, useDemandUpdate, use_click_pick } from './SharedRenderers';
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
@@ -11,6 +11,7 @@ interface MarkerArrayRendererProps {
     visible?: boolean;
     transforms: Record<string, { pos: number[]; quat: number[] }>;
     manualTransform?: Transform;
+    on_inspect?: (marker: MarkerMessage) => void;
 }
 
 const MARKER_RENDER_ORDER = 1000;
@@ -43,8 +44,11 @@ function MarkerFrame({
     </DisplayFrame>;
 }
 
-function ListMarker({ marker }: { marker: MarkerMessage }) {
+function ListMarker({ marker, source_id, on_inspect }: {
+    marker: MarkerMessage; source_id: string; on_inspect?: (marker: MarkerMessage) => void;
+}) {
     const { invalidate } = useThree();
+    const pick = use_click_pick(on_inspect ? () => on_inspect(marker) : undefined);
     const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
     const pts = useMemo(() => marker.points || [], [marker.points]);
     const pointsLen = pts.length;
@@ -150,6 +154,9 @@ function ListMarker({ marker }: { marker: MarkerMessage }) {
             // 行列初期化前の単位サイズ球の描画防止
             count={0}
             renderOrder={MARKER_RENDER_ORDER}
+            userData={{ inspection_source: on_inspect ? source_id : undefined, inspection_revision: marker,
+                inspection_selection: { kind: 'marker', id: marker.id, ns: marker.ns } }}
+            {...pick}
         />
     );
 }
@@ -231,7 +238,7 @@ function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }
     );
 }
 
-function renderMarker(marker: MarkerMessage) {
+function renderMarker(marker: MarkerMessage, source_id: string, on_inspect?: (marker: MarkerMessage) => void) {
     if (is_delete_action(marker)) return null;
 
     switch (marker.type) {
@@ -244,7 +251,7 @@ function renderMarker(marker: MarkerMessage) {
         return <LineMarker marker={marker} strip={marker.type === 'line_strip'} />;
     case 'cube_list':
     case 'sphere_list':
-        return <ListMarker marker={marker} />;
+        return <ListMarker marker={marker} source_id={source_id} on_inspect={marker.type === 'sphere_list' ? on_inspect : undefined} />;
     default:
         return null;
     }
@@ -256,6 +263,7 @@ export function MarkerArrayRenderer({
     visible = true,
     transforms,
     manualTransform,
+    on_inspect,
 }: MarkerArrayRendererProps) {
     const effective_style = useArrowSettings(tag);
     const arrow_batches = useMemo(() => marker_arrow_batches(data, effective_style), [data, effective_style]);
@@ -272,7 +280,7 @@ export function MarkerArrayRenderer({
             {data.markers.filter(marker => marker.type !== 'arrow').map(marker => <MarkerFrame
                 key={`${marker.ns}:${marker.id}`} marker={marker} transforms={transforms}
                 manualTransform={manualTransform} allow_untransformed={data.source_type !== 'pose_array'}>
-                {renderMarker(marker)}
+                {renderMarker(marker, tag, on_inspect)}
             </MarkerFrame>)}
         </group>
     );

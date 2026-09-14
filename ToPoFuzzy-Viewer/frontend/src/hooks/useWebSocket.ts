@@ -6,6 +6,9 @@ import {
     MarkerArrayData,
     MarkerMessage,
     GraphData,
+    graph_selection,
+    graph_snapshot,
+    graph_bounds,
     RobotData,
     RobotPoseInstance,
     TransformData,
@@ -535,6 +538,10 @@ export interface UseWebSocketReturn {
     applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
     openEditSession: (sourceTopic: string, targetFrame?: string) => Promise<EditSessionInfo>;
+    inspect_graph: (source_id: string, selection: graph_selection,
+        graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_snapshot>;
+    inspect_graph_bounds: (source_id: string, selection: graph_selection,
+        graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_bounds>;
     addEditRegion: (
         sessionId: string,
         min: [number, number, number],
@@ -644,6 +651,10 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
             sourceTopic: string,
             targetFrame = 'map'
         ): Promise<EditSessionInfo> => sendRpc('edit.openSession', { sourceTopic, targetFrame }),
+        inspect_graph: (source_id: string, selection: graph_selection, graph?: GraphData, marker_array?: MarkerArrayData) =>
+            sendRpc<graph_snapshot>('edit.inspect_graph', { source_id, selection, graph, marker_array }),
+        inspect_graph_bounds: (source_id: string, selection: graph_selection, graph?: GraphData, marker_array?: MarkerArrayData) =>
+            sendRpc<graph_bounds>('edit.inspect_graph', { source_id, selection, graph, marker_array, enable_bounds_only: true }),
         addEditRegion: (
             sessionId: string,
             min: [number, number, number],

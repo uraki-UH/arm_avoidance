@@ -6,6 +6,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, ThisLaunchFileDir
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def launch_setup(context, *args, **kwargs):
@@ -52,9 +54,17 @@ def launch_setup(context, *args, **kwargs):
     selector_launch = PathJoinSubstitution(
         [ThisLaunchFileDir(), "topological_map_goal_selector.launch.py"]
     )
-    avoidance_launch = PathJoinSubstitution(
-        [ThisLaunchFileDir(), "topological_map_avoidance.launch.py"]
-    )
+    planner_params = {"urdf_path": resolved_urdf_path}
+    for value_type, names in (
+        (str, ("joint_topic", "topological_map_topic", "trajectory_topic",
+               "candidate_trajectory_topic", "candidate_metrics_topic", "goal_candidate_ids_topic")),
+        (float, ("publish_hz", "goal_rot_manip_weight", "goal_joint_limit_weight")),
+        (bool, ("avoid_collisions", "avoid_danger", "allow_danger_goal",
+                "strict_goal_collision_check", "allow_zero_initial_joint_state",
+                "publish_candidate_robot_preview")),
+    ):
+        for name in names:
+            planner_params[name] = ParameterValue(LaunchConfiguration(name), value_type=value_type)
 
     return [
         IncludeLaunchDescription(
@@ -72,31 +82,13 @@ def launch_setup(context, *args, **kwargs):
                 "manipulability_weight": manipulability_weight,
             }.items(),
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(avoidance_launch),
-            launch_arguments={
-                "params_file": LaunchConfiguration("params_file"),
-                "joint_topic": LaunchConfiguration("joint_topic"),
-                "topological_map_topic": LaunchConfiguration("topological_map_topic"),
-                "trajectory_topic": LaunchConfiguration("trajectory_topic"),
-                "candidate_trajectory_topic": LaunchConfiguration("candidate_trajectory_topic"),
-                "candidate_metrics_topic": LaunchConfiguration("candidate_metrics_topic"),
-                "publish_hz": LaunchConfiguration("publish_hz"),
-                "avoid_collisions": LaunchConfiguration("avoid_collisions"),
-                "avoid_danger": LaunchConfiguration("avoid_danger"),
-                "allow_danger_goal": LaunchConfiguration("allow_danger_goal"),
-                "goal_rot_manip_weight": LaunchConfiguration("goal_rot_manip_weight"),
-                "goal_joint_limit_weight": LaunchConfiguration("goal_joint_limit_weight"),
-                "strict_goal_collision_check": LaunchConfiguration("strict_goal_collision_check"),
-                "replan_on_path_collision": LaunchConfiguration("replan_on_path_collision"),
-                "allow_zero_initial_joint_state": LaunchConfiguration("allow_zero_initial_joint_state"),
-                "goal_candidate_ids_topic": LaunchConfiguration("goal_candidate_ids_topic"),
-                "publish_candidate_robot_preview": LaunchConfiguration(
-                    "publish_candidate_robot_preview"),
-                "control_claim_enabled": "false",
-                "publish_target_joint_states": "false",
-                "allow_safe_goal_fallback": "false",
-            }.items(),
+        Node(
+            package="gng_vlut_system",
+            executable="topological_map_path_planner_node",
+            name="topological_map_path_planner_node",
+            namespace=robot_name,
+            output="screen",
+            parameters=[params_file, planner_params],
         ),
     ]
 
@@ -140,7 +132,6 @@ def generate_launch_description():
         DeclareLaunchArgument("goal_joint_limit_weight", default_value="0.5",
                               description="ゴール姿勢の関節限界余裕ボーナス重み。大きいほど関節限界から遠い姿勢が優先される"),
         DeclareLaunchArgument("strict_goal_collision_check", default_value="false"),
-        DeclareLaunchArgument("replan_on_path_collision", default_value="false"),
         DeclareLaunchArgument("allow_zero_initial_joint_state", default_value="true"),
         OpaqueFunction(function=launch_setup),
     ])

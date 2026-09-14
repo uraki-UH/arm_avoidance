@@ -97,3 +97,39 @@ docker compose exec -T gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && so
 - 元図の22ノード・22接続の保持とSVG・PNG寸法を機械確認。PNGで文字・矢印・背景区分の重なりを目視確認し、修正。
 - SVGを配置の正本、DOTを接続の参照用として案内を更新。[PNG再生成コマンド](presentations/README.md#システム全体フロー上方把持の順序修正版)を実行し、生成処理は終了済み。`git diff --check`に成功。
 - ROSコード・設定変更、常駐プロセスの新規起動、既存プロセスの停止なし。
+
+## 2026-09-14: 候補ノードの独立3Dビュー
+
+- Topo Fuzzy Viewerへ候補ノードのクリック選択と独立カメラの詳細表示を追加。切り出しは既存`viewer_edit_node`、描画は既存の一括描画を利用。単体HTML・把持推定処理への変更なし。[仕様・操作方法](releases/2026-09-14_candidate_inspection_view.md)を参照。
+- DockerのReleaseビルド、追加C++テスト5件、frontend lint・ホスト側buildに成功。frontendコンテナ内buildは既存MCAP依存不足で失敗し、依存が揃っているホストで検証。依存追加なし。
+- ROS domain 225とWS port 19001のダミー候補を専用Chromeで受信。ノードクリックから平面25点・非平面5点の表示、主画面と独立した回転・ズーム・平行移動、全体表示、固定保持、明示更新、ウィンドウ移動、ドラッグ誤選択の防止を操作・画像比較で確認。
+- サイドバーを含む画面座標と3D領域座標の混同による初期配置のはみ出しを検出・修正。実ユーザー画面・大規模実環境での性能測定は未実施。
+- 検証用ROS・HTTP・Chromeの全プロセス終了と専用3ポートのリスナー消滅を確認。既存ROS・frontendのPID、ROS daemon、コンテナ状態を維持。
+
+検証起動コマンド（すべて終了済み、一時スクリプト使用）:
+```bash
+docker compose exec -T -w /ros2_ws gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout --signal=INT --kill-after=15s 620s python3 -u -' < /tmp/codex-candidate-inspection-ros.py
+node /tmp/codex-inspection-browser.cjs
+node /tmp/codex-inspection-ui-test.cjs
+```
+
+## 2026-09-14: 候補のホバー枠
+
+- 候補ノード・クラスタへのホバー枠を追加。独立ビューと共通の所属解決・AABBを使用し、TF・手動表示変換を適用。[仕様](releases/2026-09-14_candidate_hover_frame.md)を参照。
+- Docker Releaseビルド、候補抽出C++テスト6件、frontend lint・ホスト側buildに成功。検証によるTypeScript生成キャッシュの差分は除去。
+- domain 225・WS port 19001と専用Chromeで、TF付き枠の描画位置・候補切替・枠消去・クリックとの両立・ドラッグ中の非表示・購読OFFでの取得停止を検証。範囲取得は2.1秒で6件。大規模実環境での負荷計測は未実施。
+- 検証用ROS・HTTP・Chromeの終了、専用3ポートの消滅、既存ROSのPID維持を確認。開始前に停止状態だったfrontend・Viewerの起動なし。コンテナ状態を維持。
+
+検証起動コマンド（すべて終了済み、一時スクリプト使用）:
+```bash
+docker compose exec -T -w /ros2_ws gng_cpu bash -lc 'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash && timeout --signal=INT --kill-after=15s 620s python3 -u -' < /tmp/codex-hover-ros.py
+node /tmp/codex-hover-browser.cjs
+node /tmp/codex-hover-test.cjs
+```
+
+## 2026-09-14: 把持候補経路生成と回避実行の分離
+
+- `grasp_joint_candidates.launch.py`の起動先を経路生成専用ノードへ変更。共通処理の移動による実装共有と、追従・退避・近傍追加ペナルティを通らない計画更新を実装。[仕様・検証コマンド](releases/2026-09-14_candidate_path_planner.md)を記録し、RUN_GUIDEと現行仕様・ソース参照を更新。
+- Docker ReleaseビルドとC++・既存到達性テストに成功。追加C++テストの補助グラフのインターフェース不足による初回ビルド失敗は、補完後の再ビルド・再実行で解消。
+- domain 218で指定launchと実GNG入力を実行。専用ノードの起動、回避ノードとtrialサービスの不在、候補経路・評価・ロボットプレビューの配信、静止時の再探索抑制、明示要求・関節角度変更での更新、空候補時の旧出力消去、関節指令・control claim配信なしを確認。
+- 最終ビルドで結合テストを再実行し成功。検証用プロセスはすべて停止済み。既存ROSのPIDとコンテナ状態を維持し、ROS daemonの新規残留なし。実環境でのCPU負荷測定は未実施。

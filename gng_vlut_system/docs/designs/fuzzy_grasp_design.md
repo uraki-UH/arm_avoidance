@@ -252,7 +252,7 @@ ROS側の責務分割・設定形式・欠損値処理・テスト方針は [第
 | 同HTMLの `bindFuzzyEditor`、`renderFuzzyDebug` | JSON編集・保存と発火状況の表示 | ROSへルールを適用する機能とは別 |
 | [評価メッセージ変換](../../src/core/common/evaluation_metric_serialization.hpp) | 指標定義・値・有効フラグの配信 | ルール評価自体はなし |
 | [上方把持推定器](../../../grasping_system/src/top_grasp_surface_estimator_node.cpp) | 幾何候補、形状スコア、到達状態の配信 | 汎用IF-THENルールは未接続 |
-| [経路候補選択](../../src/nodes/planning/topological_map_avoidance_node.cpp) | 既存の固定的な候補スコアリング | 汎用IF-THENルールは未接続 |
+| [経路候補選択](../../src/nodes/planning/topological_map_planning_node.cpp) | 既存の固定的な候補スコアリング | 汎用IF-THENルールは未接続 |
 | [FuzzyClassifier](../../../FuzzyClassifier/src/cluster_relabel_node.cpp) | 台形所属度などによるクラスタ再分類 | 把持候補評価とは別用途。`COLCON_IGNORE`あり |
 
 HTMLのルールをROSへそのまま読み込めるという意味ではない。既存の指標変換・ID対応・欠損処理の違いを吸収する必要あり。

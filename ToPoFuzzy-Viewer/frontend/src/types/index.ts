@@ -153,6 +153,27 @@ export interface GraphData {
     mode?: GraphMode;
 }
 
+export interface graph_selection {
+    kind: 'node' | 'cluster' | 'component' | 'marker';
+    id: number;
+    ns?: string;
+}
+
+export interface graph_bounds {
+    source_id: string;
+    selection: graph_selection;
+    frame_id: string;
+    min_position: [number, number, number];
+    max_position: [number, number, number];
+    node_diameter?: number;
+}
+
+export interface graph_snapshot extends graph_bounds {
+    title: string;
+    graph: GraphData;
+    node_color?: MarkerMessage['color'] | null;
+}
+
 export interface Transform {
     position: [number, number, number];
     rotation: [number, number, number];

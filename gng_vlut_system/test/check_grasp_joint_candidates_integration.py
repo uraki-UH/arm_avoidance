@@ -1,4 +1,4 @@
-"""実GNGと隔離ROSドメインによる把持候補保持・計画スキップの結合確認。"""
+"""実GNGと隔離ROSドメインによる候補経路生成・実行系分離の結合確認。"""
 
 import copy
 import os
@@ -11,7 +11,9 @@ import time
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from geometry_msgs.msg import Pose
+from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32MultiArray, String
+from std_srvs.srv import Trigger
 from ais_gng_msgs.msg import TopologicalMap
 from gng_control_msgs.msg import GraspCandidate, GraspCandidateArray, GraspCandidateMetricArray
 
@@ -50,6 +52,8 @@ def main():
         ]:
             node.create_subscription(msg_type, topic, lambda msg, key=key: received.update({key: msg}), qos)
         publisher = node.create_publisher(GraspCandidateArray, "/grasp_pose_cands", qos)
+        joint_publisher = node.create_publisher(JointState, "/ToPoDualArm/joint_states", qos)
+        update_client = node.create_client(Trigger, "/ToPoDualArm/request_trajectory_update")
 
         def wait_for(predicate, label, max_sec=30.0):
             end = time.monotonic() + max_sec
@@ -68,6 +72,11 @@ def main():
             processes.append(subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                               start_new_session=True))
         wait_for(lambda: "map" in received and received["map"].nodes, "実GNG入力")
+        wait_for(lambda: "topological_map_path_planner_node" in node.get_node_names(),
+                 "経路生成専用ノードの起動")
+        assert "topological_map_avoidance_node" not in node.get_node_names()
+        assert not any(name.endswith("/request_trial_goal_advance")
+                       for name, _ in node.get_service_names_and_types())
         map_msg = received["map"]
         selected_node = next(item for item in map_msg.nodes if item.label == 1)
         inside = Pose()
@@ -91,11 +100,29 @@ def main():
             "candidate_robot_pose" in received,
             "領域内候補の計画評価と候補ロボット召喚")
         assert all(item.goal_node_id in allowed_ids for item in received["metrics"].candidates)
+        assert any(item.feasible and item.path_node_ids for item in received["metrics"].candidates)
         assert all(
             item.final_joint_state.name and
             len(item.final_joint_state.name) == len(item.final_joint_state.position)
             for item in received["metrics"].candidates)
         print("混在入力: 全候補保持・領域内目標だけの計画評価を確認", flush=True)
+
+        stamp = copy.deepcopy(received["metrics"].header.stamp)
+        end = time.monotonic() + 2.0
+        while time.monotonic() < end:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        assert received["metrics"].header.stamp == stamp
+        print("静止入力: 周期的な再探索・評価再配信なしを確認", flush=True)
+
+        wait_for(update_client.service_is_ready, "明示更新サービス")
+        future = update_client.call_async(Trigger.Request())
+        wait_for(lambda: future.done() and received["metrics"].header.stamp != stamp,
+                 "明示要求による再計画")
+        assert future.result().success
+        stamp = copy.deepcopy(received["metrics"].header.stamp)
+        joint_publisher.publish(received["metrics"].candidates[0].final_joint_state)
+        wait_for(lambda: received["metrics"].header.stamp != stamp, "現在関節姿勢の変更による再計画")
+        print("明示要求・現在関節姿勢変更による再計画を確認", flush=True)
 
         source.update_id += 1
         source.candidates = [GraspCandidate(id=42, pose=outside, state=GraspCandidate.OUTSIDE)]
@@ -128,6 +155,11 @@ def main():
         assert node.count_publishers("/grasp_pose_cands/reachability") == 0
         assert node.count_publishers("/grasp_pose_cands/reachability_markers") == 0
         print("空入力のクリア・関節目標配信なしを確認", flush=True)
+    except BaseException:
+        for log in logs:
+            log.flush()
+            print(Path(log.name).read_text()[-12000:], flush=True)
+        raise
     finally:
         for process in reversed(processes):
             if process.poll() is None:

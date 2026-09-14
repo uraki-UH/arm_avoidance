@@ -1,4 +1,4 @@
-import { ArrowBatch, EllipsoidBatch, DisplayFrame, useDemandUpdate } from './SharedRenderers';
+import { ArrowBatch, EllipsoidBatch, DisplayFrame, useDemandUpdate, use_click_pick } from './SharedRenderers';
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
@@ -15,13 +15,15 @@ interface GraphRendererProps {
     settings: LayerSettings;
     selectedClusterId?: number | null;
     onClusterSelect?: (clusterId: number | null) => void;
+    on_node_select?: (node: GraphNode) => void;
+    uniform_node_color?: string;
     onManipSelect?: (node: GraphNode) => void;
     enableClusterSelection?: boolean;
     tf?: { pos: number[]; quat: number[] } | null;
 }
 
 export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = null,
-    onClusterSelect, onManipSelect, enableClusterSelection = true, tf = null }: GraphRendererProps) {
+    onClusterSelect, on_node_select, uniform_node_color, onManipSelect, enableClusterSelection = true, tf = null }: GraphRendererProps) {
     const variant = graph.mode === 'static' ? 'static' : 'dynamic';
     const enable_cluster_colors = /(^|\/)curved_surface_clusters$/.test(tag);
     const { visible, showNodes, showEdges, showClusters, showNormals, showVelocity,
@@ -36,7 +38,12 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
 
     const selectionEnabled = enableClusterSelection && !!onClusterSelect;
-    const nodePalette = useMemo(() => buildNodePalette(nodeColor), [nodeColor]);
+    const node_pick = use_click_pick(enableClusterSelection && on_node_select ? event => {
+        const node = (event.object.userData.pick_nodes as GraphNode[] | undefined)?.[event.instanceId ?? -1];
+        if (node) on_node_select(node);
+    } : undefined);
+    const nodePalette = useMemo(() => uniform_node_color ? LAYER_COLORS.map(() => uniform_node_color) :
+        buildNodePalette(nodeColor), [nodeColor, uniform_node_color]);
     const cluster_node_colors = useMemo(
         () => enable_cluster_colors ? build_cluster_node_colors(graph) : undefined,
         [enable_cluster_colors, graph],
@@ -68,7 +75,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
             const semanticLabel = Number.isFinite(node.semanticLabel)
                 ? Math.trunc(node.semanticLabel as number)
                 : (Number.isFinite(node.id) ? (nodeSemanticLabels.get(node.id as number) || 0) : (nodeSemanticLabels.get(nodeIndex) || 0));
-            const nextNode = { ...node, semanticLabel };
+            const nextNode = { ...node, id: node.id ?? nodeIndex, semanticLabel };
             const selected_label = resolve_node_label(nextNode, active_labels);
             // 通常分類と有効な属性ラベルのOR判定。goalノードも共通処理。
             const is_label_visible = !visibleLabels || visibleLabels[labelIndex as 0 | 1 | 2 | 3 | 4 | 5];
@@ -343,6 +350,9 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
                         ref={(el) => { nodeMeshRefs.current[labelIndex] = el; }}
                         args={[nodeSphereGeometry, nodeMaterials[labelIndex], nodeCapacity]}
                         count={nodeRenderReady ? nodeBuckets[labelIndex].length : 0}
+                        userData={{ pick_nodes: nodeBuckets[labelIndex], inspection_source: enableClusterSelection ? tag : undefined,
+                            inspection_revision: graph }}
+                        {...node_pick}
                         frustumCulled={false}
                         renderOrder={10}
                     />
@@ -355,6 +365,9 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
                     ref={goalNodeMeshRef}
                     args={[nodeSphereGeometry, goalNodeMaterial, nodeCapacity]}
                     count={nodeRenderReady ? goalNodes.length : 0}
+                    userData={{ pick_nodes: goalNodes, inspection_source: enableClusterSelection ? tag : undefined,
+                        inspection_revision: graph }}
+                    {...node_pick}
                     frustumCulled={false}
                     renderOrder={12}
                 />
@@ -393,6 +406,8 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
                     <group key={cluster.id}>
                     <group position={cluster.pos} quaternion={new THREE.Quaternion(...cluster.quat)}>
                         <mesh
+                            userData={{ inspection_source: selectionEnabled ? tag : undefined, inspection_revision: graph,
+                                inspection_selection: { kind: 'cluster', id: cluster.id } }}
                             scale={isHuman ? [cluster.scale[0], cluster.scale[2], cluster.scale[1]] : cluster.scale}
                             rotation={isHuman ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
                             onPointerDown={handlePointerDown}

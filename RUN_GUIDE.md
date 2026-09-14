@@ -45,7 +45,7 @@ ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
 ros2 launch gng_vlut_system grasp_joint_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
-`/ToPoDualArm/grasp_candidate_metrics` の各候補に `final_joint_state` を出力。Viewerには候補姿勢のロボットinstanceも召喚する。実機・仮想ロボットへの関節指令は配信しない。候補ロボット表示だけを止める場合は `publish_candidate_robot_preview:=false` を追加。
+`topological_map_path_planner_node`で候補経路・評価・`final_joint_state`を出力。回避ノードの起動、追従・退避、関節指令の配信なし。Viewerの候補ロボット表示だけを止める場合は`publish_candidate_robot_preview:=false`を追加。
  
 
 ## HTML起動

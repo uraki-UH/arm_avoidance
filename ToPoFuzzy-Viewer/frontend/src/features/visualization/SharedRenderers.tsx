@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { useThree } from '@react-three/fiber';
+import { ThreeEvent, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Transform } from '../../types';
 import { EllipsoidInstance, updateEllipsoidInstances } from './ellipsoid';
@@ -14,6 +14,42 @@ export function useDemandUpdate(dependencies: readonly unknown[]) {
         // 呼出元による表示依存値の指定
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [...dependencies, invalidate]);
+}
+
+// カメラのドラッグ操作とクリック選択の分離。
+// eslint-disable-next-line react-refresh/only-export-components
+export function use_click_pick(on_pick?: (event: ThreeEvent<MouseEvent>) => void) {
+    // ワークスペース命名規約のuse_接頭辞。フック本体は常に無条件呼出。
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const gesture = useRef({ has_dragged: false, cancel: () => {} });
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => {
+        const state = gesture.current;
+        return () => state.cancel();
+    }, []);
+    if (!on_pick) return {};
+    return {
+        onPointerDown: (event: ThreeEvent<PointerEvent>) => {
+            const state = gesture.current;
+            state.cancel();
+            state.has_dragged = false;
+            const controller = new AbortController();
+            state.cancel = () => controller.abort();
+            // 移動中の全ノードraycast回避。押下中だけの画面座標追跡。
+            const options = { capture: true, signal: controller.signal };
+            window.addEventListener('pointermove', move => {
+                if (move.pointerId === event.pointerId && Math.hypot(move.clientX - event.clientX,
+                    move.clientY - event.clientY) > 5) state.has_dragged = true;
+            }, options);
+            window.addEventListener('pointerup', state.cancel, { ...options, once: true });
+            window.addEventListener('pointercancel', state.cancel, { ...options, once: true });
+        },
+        onClick: (event: ThreeEvent<MouseEvent>) => {
+            if (event.button !== 0 || event.delta > 5 || gesture.current.has_dragged) return;
+            event.stopPropagation();
+            on_pick(event);
+        },
+    };
 }
 
 // 共通の表示座標系。適用順はTFまたは基準姿勢、手動変換、子要素の姿勢

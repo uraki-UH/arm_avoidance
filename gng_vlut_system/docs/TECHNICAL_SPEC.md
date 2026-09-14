@@ -9,7 +9,7 @@
 `grasp_joint_candidates.launch.py` は次の 2 系統を起動します。
 
 1. `topological_map_goal_selector.launch.py`
-2. `topological_map_avoidance.launch.py`
+2. `topological_map_path_planner_node`（launchから直接起動）
 
 候補経路と候補関節角度の出力専用。robot spawn、仮想関節駆動、関節指令、control claim の配信は行わない。
 
@@ -18,7 +18,7 @@
 ```mermaid
 flowchart TD
     A[grasp_joint_candidates.launch.py] --> B[topological_map_goal_selector.launch.py]
-    A --> D[topological_map_avoidance.launch.py]
+    A --> D[topological_map_path_planner_node]
 
     B --> G[selected_goal_candidate_ids]
     B --> H[selected_topological_map]
@@ -54,14 +54,13 @@ flowchart TD
 | `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路の出力 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 候補評価指標の出力 |
 | `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
-| `publish_hz` | float | `20.0` | avoidance node の publish 周波数 |
+| `publish_hz` | float | `20.0` | 入力変化確認と候補計画更新の上限周波数。未変更時の再探索・再配信なし |
 | `avoid_collisions` | bool | `true` | 衝突ノードを避ける |
 | `avoid_danger` | bool | `true` | danger ノードを避ける |
 | `allow_danger_goal` | bool | `true` | 最終ゴールとして danger を許可 |
 | `goal_rot_manip_weight` | float | `1.0` | ゴール姿勢の回転可操作性重み |
 | `goal_joint_limit_weight` | float | `0.5` | ゴール姿勢の関節限界余裕重み |
 | `strict_goal_collision_check` | bool | `false` | 目的地の衝突判定を厳格化 |
-| `replan_on_path_collision` | bool | `false` | 進行中経路が危険なら再計画 |
 | `allow_zero_initial_joint_state` | bool | `true` | 初期 joint_state が無いときゼロ初期値を使う |
 
 ### 3.2 `topological_map_goal_selector.launch.py` の引数
@@ -80,6 +79,8 @@ flowchart TD
 | `manipulability_weight` | float | `0.25` | 可操作性補正重み |
 
 ### 3.3 `topological_map_avoidance.launch.py` の引数
+
+追従・退避を伴う実行系の独立launch。`grasp_joint_candidates.launch.py`からの起動なし。
 
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
@@ -147,7 +148,7 @@ flowchart TD
 | サービス | 用途 |
 |---|---|
 | `request_trajectory_update` | 軌道再計画を要求する |
-| `request_trial_goal_advance` | trial モードで次の goal coordinate へ進める |
+| `request_trial_goal_advance` | 回避ノード専用。trial モードで次の goal coordinate へ進める |
 
 ## 6. データフロー
 
@@ -159,10 +160,9 @@ flowchart TD
     B --> E[selected_goal_candidate_ids]
     B --> F[selected_topological_map]
 
-    E --> H[TopologicalMapAvoidance]
-    F --> H
+    E --> H[TopologicalMapPathPlanner]
+    A --> H
     I[joint_states] --> H
-    H --> J[target_joint_states]
     H --> K[current_ee_pose]
     H --> L[plan_topological_map]
     H --> M[cand_topological_map]
@@ -171,7 +171,11 @@ flowchart TD
 
 ## 7. 実行系との分離
 
-`grasp_joint_candidates.launch.py` は常に `publish_target_joint_states:=false` と `control_claim_enabled:=false` を設定する。実機・仮想ロボットの関節更新は、候補の `final_joint_state` を選択する実行系から別途行う。
+`grasp_joint_candidates.launch.py` は経路生成専用の `topological_map_path_planner_node` を起動。実行系と共通のモデル読込み・Dijkstra探索・評価出力を使用するが、周期処理は候補経路更新専用。追従、退避、trial、制御パラメータ更新callback、関節指令とcontrol claimのpublisher生成なし。パラメータ変更による実行系への切替不可。
+
+- 再計画の契機は候補ID列、現在関節角度、マップの安全ラベル・基準座標系の変更、または `request_trajectory_update`。同じ入力の再受信や時刻だけの更新による再探索なし。
+- 衝突・危険ノードの通過制約と `allow_danger_goal` は維持。候補探索には隣接危険ノード数の追加ペナルティなし。既存の目標姿勢スコアと候補ごとの経路出力は維持。
+- 出力はGNG経由ノード列と関節姿勢。時刻付き実行軌道・制御指令ではなく、実機・仮想ロボットの関節更新は別の実行系の担当。
 
 ## 8. viewer 側に委ねる見た目
 

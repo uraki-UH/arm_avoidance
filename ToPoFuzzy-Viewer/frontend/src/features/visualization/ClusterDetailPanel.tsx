@@ -1,290 +1,133 @@
-import { useMemo, useState, useEffect, useRef, memo } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { ArrowBatch } from './SharedRenderers';
-import { arrow_sample, normal_arrow_style } from './arrows';
-import { GraphCluster, GraphNode, LAYER_COLORS, LAYER_LABELS, SEMANTIC_COLORS, SEMANTIC_LABELS } from '../../types';
+import { graph_snapshot, LayerSettings } from '../../types';
+import { GraphRenderer } from './GraphRenderer';
+import { createDefaultGraphLayerSettings } from './graphLayerSettings';
+import { marker_color } from './arrows';
+import { WebGLErrorBoundary } from '../../components/WebGLErrorBoundary';
 
-export interface ClusterSnapshot {
-    cluster: GraphCluster;
-    nodes: GraphNode[];
-    edges: { source: GraphNode, target: GraphNode }[];
+export type ClusterSnapshot = graph_snapshot & { settings?: LayerSettings };
+
+function InspectionCamera({ snapshot, reset_count }: { snapshot: graph_snapshot; reset_count: number }) {
+    const { camera, controls, size, invalidate } = useThree();
+    useLayoutEffect(() => {
+        if (!(camera instanceof THREE.PerspectiveCamera) || !controls) return;
+        const orbit = controls as unknown as { target: THREE.Vector3; update: () => void };
+        const min = new THREE.Vector3(...snapshot.min_position);
+        const max = new THREE.Vector3(...snapshot.max_position);
+        const center = min.clone().add(max).multiplyScalar(0.5);
+        const radius = Math.max(0.01, min.distanceTo(max) / 2 + (snapshot.node_diameter ?? 0) / 2);
+        const vertical_fov = THREE.MathUtils.degToRad(camera.fov);
+        const horizontal_fov = 2 * Math.atan(Math.tan(vertical_fov / 2) * size.width / size.height);
+        const dist = 1.3 * radius / Math.sin(Math.min(vertical_fov, horizontal_fov) / 2);
+        camera.up.set(0, 0, 1);
+        camera.position.copy(center).add(new THREE.Vector3(1, -1, 0.8).normalize().multiplyScalar(dist));
+        camera.near = Math.max(0.00001, radius / 1000);
+        camera.far = Math.max(100, dist * 100);
+        camera.updateProjectionMatrix();
+        orbit.target.copy(center);
+        orbit.update();
+        invalidate();
+    }, [snapshot, reset_count, camera, controls, size.width, size.height, invalidate]);
+    return <OrbitControls makeDefault enableDamping={false} onChange={() => invalidate()} />;
 }
 
-interface ClusterDetailPanelProps {
+function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, error }: {
     snapshot: ClusterSnapshot;
     onClose: () => void;
-}
-
-function ClusterDetailPanelInner({ snapshot, onClose }: ClusterDetailPanelProps) {
-    const { cluster, nodes: clusterNodes, edges: clusterEdges } = snapshot;
-    const [showNodes, setShowNodes] = useState(true);
-    const [showEdges, setShowEdges] = useState(true);
-    const [showNormals, setShowNormals] = useState(true);
-
-    // Draggable state
-    // Initial position: somewhat top-right but in pixels. 
-    // Assuming window width ~1920, top-right might be left: 1500, top: 20
-    // But safely starting at left: 50%, top: 10% or using viewport units converted to pixels is hard without ref.
-    // Let's settle for a safe fixed default like left: 1000, top: 50
-    const [position, setPosition] = useState({ x: window.innerWidth - 780, y: window.innerHeight - 420 });
-    const [isDragging, setIsDragging] = useState(false);
-    const dragStartRef = useRef<{ x: number, y: number } | null>(null);
-    const initialPosRef = useRef<{ x: number, y: number } | null>(null);
-
-    useEffect(() => {
-        const handleMouseMove = (e: MouseEvent) => {
-            if (isDragging && dragStartRef.current && initialPosRef.current) {
-                const dx = e.clientX - dragStartRef.current.x;
-                const dy = e.clientY - dragStartRef.current.y;
-                setPosition({
-                    x: initialPosRef.current.x + dx,
-                    y: initialPosRef.current.y + dy
-                });
-            }
+    on_refresh: () => void;
+    is_loading: boolean;
+    error: string | null;
+}) {
+    const [enable_nodes, set_enable_nodes] = useState(true);
+    const [enable_edges, set_enable_edges] = useState(true);
+    const [enable_normals, set_enable_normals] = useState(false);
+    const [reset_count, set_reset_count] = useState(0);
+    const [position, set_position] = useState<{ x: number; y: number } | null>(null);
+    const drag = useRef<{ x: number; y: number; left: number; top: number; max_x: number; max_y: number } | null>(null);
+    const settings = useMemo(() => {
+        const defaults = createDefaultGraphLayerSettings(snapshot.source_id, snapshot.graph);
+        return { ...defaults, ...snapshot.settings,
+            visible: true, visibleLabels: defaults.visibleLabels, graphTransform: defaults.graphTransform,
+            showNodes: enable_nodes, showEdges: enable_edges, showNormals: enable_normals,
+            showClusters: false, showVelocity: false,
+            showManipulabilityEllipsoids: false, showCovarianceEllipsoids: false,
+            ...(snapshot.node_color ? { nodeOpacity: marker_color(snapshot.node_color).opacity } : {}),
+            ...((snapshot.node_diameter ?? 0) > 0 ? { nodeScale: snapshot.node_diameter! / 2 } : {}),
         };
+    }, [snapshot, enable_nodes, enable_edges, enable_normals]);
+    const extent = snapshot.max_position.map((value, idx) => value - snapshot.min_position[idx]);
+    const center = snapshot.max_position.map((value, idx) => (value + snapshot.min_position[idx]) / 2) as [number, number, number];
 
-        const handleMouseUp = () => {
-            setIsDragging(false);
-        };
-
-        if (isDragging) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-        }
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [isDragging]);
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        setIsDragging(true);
-        dragStartRef.current = { x: e.clientX, y: e.clientY };
-        initialPosRef.current = { x: position.x, y: position.y };
-    };
-
-    // Calculate cluster center for camera targeting
-    const center = useMemo(() => {
-        if (!cluster) return [0, 0, 0];
-        return cluster.pos;
-    }, [cluster]);
-
-    const orbitTarget = useMemo(
-        () => new THREE.Vector3(center[0], center[1], center[2]),
-        [center]
-    );
-
-    const nodeGeometry = useMemo(() => new THREE.SphereGeometry(0.025, 8, 8), []);
-    const nodeMaterials = useMemo(
-        () => LAYER_COLORS.map(color => new THREE.MeshBasicMaterial({ color })),
-        []
-    );
-    const nodeSemanticMaterials = useMemo(
-        () => SEMANTIC_COLORS.map(color => new THREE.MeshBasicMaterial({ color })),
-        []
-    );
-    const semanticLabelText = (semanticLabel?: number) => {
-        if (!Number.isFinite(semanticLabel) || (semanticLabel ?? 0) <= 0) return '';
-        return SEMANTIC_LABELS[(Math.trunc(semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
-    };
-
-    const edgeGeometry = useMemo(() => new THREE.CylinderGeometry(1, 1, 1, 4), []);
-    const edgeMaterial = useMemo(
-        () => new THREE.MeshBasicMaterial({ color: '#006400', transparent: true, opacity: 1.0 }),
-        []
-    );
-
-    const edgeTransforms = useMemo(() => {
-        const up = new THREE.Vector3(0, 1, 0);
-        return clusterEdges.map(edge => {
-            const start = new THREE.Vector3(edge.source.x, edge.source.y, edge.source.z);
-            const end = new THREE.Vector3(edge.target.x, edge.target.y, edge.target.z);
-            const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-            const len = start.distanceTo(end);
-            const dir = new THREE.Vector3().subVectors(end, start).normalize();
-            const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
-
-            return {
-                position: [mid.x, mid.y, mid.z] as [number, number, number],
-                quaternion: [quat.x, quat.y, quat.z, quat.w] as [number, number, number, number],
-                length: len
-            };
-        });
-    }, [clusterEdges]);
-
-    const normal_samples = useMemo<arrow_sample[]>(() => clusterNodes.map(node => ({
-        position: [node.x, node.y, node.z], direction: [node.nx, node.ny, node.nz],
-    })), [clusterNodes]);
-
-    // 寸法
-    const dimensions = useMemo(() => {
-        if (!cluster) return null;
-        // Calculate bounding box from nodes + raw points if available
-        let minX = Infinity, minY = Infinity, minZ = Infinity;
-        let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-
-        const pointsToMeasure: { x: number, y: number, z: number }[] = [...clusterNodes];
-
-        if (pointsToMeasure.length === 0) return null;
-
-        pointsToMeasure.forEach(p => {
-            minX = Math.min(minX, p.x);
-            minY = Math.min(minY, p.y);
-            minZ = Math.min(minZ, p.z);
-            maxX = Math.max(maxX, p.x);
-            maxY = Math.max(maxY, p.y);
-            maxZ = Math.max(maxZ, p.z);
-        });
-
-        // Add node radius padding (~0.025)
-        const padding = 0.025;
-        return {
-            x: (maxX - minX + padding * 2).toFixed(3),
-            y: (maxY - minY + padding * 2).toFixed(3),
-            z: (maxZ - minZ + padding * 2).toFixed(3),
-            width: maxX - minX + padding * 2,
-            height: maxY - minY + padding * 2,
-            depth: maxZ - minZ + padding * 2,
-            center: [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2]
-        };
-    }, [clusterNodes, cluster]);
-
-    if (!cluster) return null;
-
-    return (
-        <div
-            className="surface-panel absolute z-50 flex h-96 w-96 min-h-0 flex-col overflow-hidden"
-            style={{
-                left: position.x,
-                top: position.y,
-                cursor: isDragging ? 'grabbing' : 'auto',
-                resize: 'both',
-                minWidth: 320,
-                minHeight: 320,
-                maxWidth: '90vw',
-                maxHeight: '90vh'
+    return <section role="dialog" aria-label="候補の独立3Dビュー"
+        className="surface-panel absolute z-50 flex min-h-0 flex-col overflow-hidden"
+        style={{ left: position?.x, right: position ? undefined : 16, top: position?.y ?? 72,
+            width: 'min(480px, calc(100% - 32px))', height: 460,
+            minWidth: 'min(320px, calc(100% - 32px))', minHeight: 320,
+            maxWidth: 'calc(100% - 32px)', maxHeight: '85vh', resize: 'both' }}>
+        <header className="flex shrink-0 cursor-grab items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2"
+            style={{ touchAction: 'none' }}
+            onPointerDown={event => {
+                if (event.button !== 0 || (event.target as HTMLElement).closest('button')) return;
+                const panel = event.currentTarget.parentElement!;
+                const bounds = panel.getBoundingClientRect();
+                const parent = panel.offsetParent!.getBoundingClientRect();
+                drag.current = { x: event.clientX, y: event.clientY, left: bounds.left - parent.left,
+                    top: bounds.top - parent.top, max_x: parent.width - 100, max_y: parent.height - 48 };
+                event.currentTarget.setPointerCapture(event.pointerId);
             }}
-        >
-            {/* Header */}
-            <div
-                className="flex shrink-0 cursor-grab items-center justify-between border-b border-white/10 bg-black/25 p-2 active:cursor-grabbing"
-                onMouseDown={handleMouseDown}
-            >
-                    <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                    Cluster #{cluster.id} ({LAYER_LABELS[cluster.label]}{semanticLabelText(cluster.semanticLabel) ? ` / ${semanticLabelText(cluster.semanticLabel)}` : ''}) Details (Offline)
-                    </h3>
-                <button
-                    onClick={onClose}
-                    className="btn-secondary inline-flex h-7 w-7 items-center justify-center p-0 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                >
-                    ✕
-                </button>
+            onPointerMove={event => {
+                if (!drag.current) return;
+                set_position({ x: Math.max(0, Math.min(drag.current.max_x,
+                    drag.current.left + event.clientX - drag.current.x)),
+                y: Math.max(0, Math.min(drag.current.max_y,
+                    drag.current.top + event.clientY - drag.current.y)) });
+            }}
+            onPointerUp={event => {
+                drag.current = null;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            }}
+            onPointerCancel={() => { drag.current = null; }}>
+            <div className="min-w-0">
+                <h3 className="text-sm font-bold">{snapshot.title} <span className="text-xs font-normal opacity-60">固定表示</span></h3>
+                <p className="truncate text-[10px] opacity-60" title={snapshot.source_id}>{snapshot.source_id}</p>
             </div>
-
-            {/* Controls */}
-            <div className="flex shrink-0 gap-3 border-b border-white/10 bg-black/20 p-2 text-xs text-[var(--text-primary)]">
-                <label className="inline-flex items-center gap-1.5">
-                    <input type="checkbox" checked={showNodes} onChange={e => setShowNodes(e.target.checked)} />
-                    Nodes
-                </label>
-                <label className="inline-flex items-center gap-1.5">
-                    <input type="checkbox" checked={showEdges} onChange={e => setShowEdges(e.target.checked)} />
-                    Edges
-                </label>
-                <label className="inline-flex items-center gap-1.5">
-                    <input type="checkbox" checked={showNormals} onChange={e => setShowNormals(e.target.checked)} />
-                    Normals
-                </label>
-            </div>
-
-            {/* Canvas */}
-            <div className="flex-1 min-h-0 relative">
-                <Canvas
-                    frameloop="demand"
-                    dpr={1}
-                    gl={{ powerPreference: 'low-power', antialias: false }}
-                    camera={{ position: [center[0] + 5, center[1] + 5, center[2] + 5], up: [0, 0, 1], fov: 50 }}
-                >
-                    <ambientLight intensity={0.5} />
-                    <pointLight position={[10, 10, 10]} intensity={0.8} />
-                    <DemandOrbitControls target={orbitTarget} />
-
-                    <group>
-                        {/* Nodes */}
-                        {showNodes && clusterNodes.map((node, i) => (
-                            <mesh
-                                key={i}
-                                position={[node.x, node.y, node.z]}
-                                geometry={nodeGeometry}
-                                material={
-                                    Number.isFinite(node.semanticLabel) && (node.semanticLabel ?? 0) > 0
-                                        ? nodeSemanticMaterials[(node.semanticLabel ?? 0) % nodeSemanticMaterials.length]
-                                        : nodeMaterials[node.label % nodeMaterials.length]
-                                }
-                            />
-                        ))}
-
-                        {/* Edges */}
-                        {showEdges && edgeTransforms.map((edge, i) => (
-                            <mesh
-                                key={i}
-                                position={edge.position}
-                                quaternion={edge.quaternion}
-                                scale={[0.01, edge.length, 0.01]}
-                                geometry={edgeGeometry}
-                                material={edgeMaterial}
-                            />
-                        ))}
-
-                        {/* Normals */}
-                        {showNormals && <ArrowBatch samples={normal_samples} style={normal_arrow_style} />}
-
-
-                        {/* Bounding Box & Dimensions */}
-                        {dimensions && (
-                            <group>
-                                <mesh position={new THREE.Vector3(...dimensions.center as [number, number, number])}>
-                                    <boxGeometry args={[dimensions.width, dimensions.height, dimensions.depth]} />
-                                    <meshBasicMaterial color="white" wireframe transparent opacity={0.3} />
-                                </mesh>
-                                <Html position={[dimensions.center[0], dimensions.center[1] + dimensions.height / 2 + 0.1, dimensions.center[2]]} center>
-                                    <div className="whitespace-nowrap rounded bg-black/65 px-1 text-xs text-white">
-                                        W:{dimensions.x} H:{dimensions.z} D:{dimensions.y}
-                                    </div>
-                                </Html>
-                            </group>
-                        )}
-                    </group>
-
-                    <gridHelper args={[10, 20]} position={[center[0], center[1], center[2] - 1]} rotation={[Math.PI / 2, 0, 0]} />
-                    <axesHelper args={[1]} position={[center[0], center[1], center[2]]} />
-                </Canvas>
-            </div>
-
-            {/* Stats Footer */}
-            <div className="grid shrink-0 grid-cols-2 gap-x-4 border-t border-white/10 bg-black/25 p-2 text-xs text-[var(--text-secondary)]">
-                <span>Reliability: {cluster.reliability.toFixed(3)}</span>
-                <span>Semantic: {semanticLabelText(cluster.semanticLabel) || 'NONE'}</span>
-                <span>Nodes: {clusterNodes.length}</span>
-                <span>Sem rel: {Number.isFinite(cluster.semanticReliability) ? cluster.semanticReliability!.toFixed(3) : '0.000'}</span>
-                <span>Pos: [{cluster.pos.map(v => v.toFixed(2)).join(',')}]</span>
-
-            </div>
+            <button className="btn-secondary px-2" onClick={onClose} aria-label="候補ビューを閉じる">閉じる</button>
+        </header>
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/10 p-2 text-xs">
+            <label><input type="checkbox" checked={enable_nodes} onChange={e => set_enable_nodes(e.target.checked)} /> ノード</label>
+            <label><input type="checkbox" checked={enable_edges} disabled={!snapshot.graph.edges.length}
+                onChange={e => set_enable_edges(e.target.checked)} /> エッジ</label>
+            <label><input type="checkbox" checked={enable_normals} disabled={snapshot.selection.kind === 'marker'}
+                onChange={e => set_enable_normals(e.target.checked)} /> 法線</label>
+            <button className="btn-secondary px-2 py-1" onClick={() => set_reset_count(value => value + 1)}>全体表示</button>
+            <button className="btn-secondary px-2 py-1" disabled={is_loading} onClick={on_refresh}>
+                {is_loading ? '取得中' : '最新を取得'}</button>
         </div>
-    );
+        {error && <p role="alert" className="px-2 py-1 text-xs text-red-300">{error}</p>}
+        <div className="relative min-h-0 flex-1 bg-black/20">
+            <WebGLErrorBoundary>
+                <Canvas frameloop="demand" dpr={1} gl={{ antialias: false }}
+                    camera={{ up: [0, 0, 1], fov: 45 }}>
+                    <ambientLight intensity={1.5} />
+                    <directionalLight position={[3, -3, 5]} intensity={2} />
+                    <InspectionCamera snapshot={snapshot} reset_count={reset_count} />
+                    <GraphRenderer tag={snapshot.source_id} data={snapshot.graph} settings={settings} enableClusterSelection={false}
+                        uniform_node_color={snapshot.node_color ? marker_color(snapshot.node_color).color.getStyle() : undefined} />
+                    <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />
+                </Canvas>
+            </WebGLErrorBoundary>
+        </div>
+        <footer className="shrink-0 space-y-1 border-t border-white/10 p-2 text-[11px] text-[var(--text-secondary)]">
+            <p>左ドラッグ: 回転 / ホイール: 拡大縮小 / 右ドラッグ: 平行移動</p>
+            <p>{snapshot.graph.nodes.length} nodes / {snapshot.graph.edges.length / 2} edges</p>
+            <p>XYZ寸法: {extent.map(value => value.toFixed(3)).join(' / ')} m</p>
+            <p>座標系: {snapshot.graph.frameId || '未指定'} / 元シーン・TFの変更なし</p>
+        </footer>
+    </section>;
 }
 
-function DemandOrbitControls({ target }: { target: THREE.Vector3 }) {
-    const { invalidate } = useThree();
-    return <OrbitControls target={target} onChange={() => invalidate()} />;
-}
-
-export const ClusterDetailPanel = memo(
-    ClusterDetailPanelInner,
-    (prev, next) => prev.snapshot === next.snapshot
-);
-
+export const ClusterDetailPanel = memo(ClusterDetailPanelInner);
 export default ClusterDetailPanel;

@@ -346,7 +346,7 @@ High(0.99) = 1
 - [候補メッセージ](../../MSG/gng_control_msgs/msg/GraspCandidate.msg)
 - [把持関節候補launch](../launch/grasp_joint_candidates.launch.py)
 - [計画GNG目標選択](../launch/topological_map_goal_selector_node.py)
-- [経路計画](../src/nodes/planning/topological_map_avoidance_node.cpp)
+- [経路計画](../src/nodes/planning/topological_map_planning_node.cpp)
 - [評価値生成](../src/core/planning/topological_map_avoidance_helpers.hpp)
 - [評価指標変換](../src/core/common/evaluation_metric_serialization.hpp)
 - [ToPoDualArm設定](../config/ToPoDualArm.yaml)

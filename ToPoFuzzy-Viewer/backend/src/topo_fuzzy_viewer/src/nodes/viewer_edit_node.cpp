@@ -1,6 +1,7 @@
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
+#include "topo_fuzzy_viewer/common/graph_inspection.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -208,6 +209,14 @@ private:
         }
 
         if (method.rfind("edit.", 0) != 0) return;
+        if (method == "edit.inspect_graph") {
+            try {
+                publishOk(id, graph_inspection::snapshot(params));
+            } catch (const std::exception& error) {
+                publishError(id, "INSPECTION_FAILED", error.what());
+            }
+            return;
+        }
         if (method == "edit.openSession") {
             handleOpenSession(id, params);
             return;

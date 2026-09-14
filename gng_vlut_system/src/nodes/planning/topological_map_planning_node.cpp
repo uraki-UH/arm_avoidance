@@ -163,15 +163,17 @@ static std::vector<double> eigenToStdVector(const Eigen::VectorXf &q) {
 
 namespace robot_sim::planning {
 
-class TopologicalMapAvoidanceNode : public rclcpp::Node {
+class TopologicalMapPlanningNode : public rclcpp::Node {
 public:
   using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
   using PlannerType =
       ::planning::GngDijkstraPlanner<Eigen::VectorXf, Eigen::Vector3f, GNGType>;
   using CostType = ::planning::JointLInfCost<Eigen::VectorXf, Eigen::Vector3f>;
 
-  explicit TopologicalMapAvoidanceNode(const rclcpp::NodeOptions &options)
-      : Node("topological_map_avoidance_node", options) {
+  TopologicalMapPlanningNode(const rclcpp::NodeOptions &options, bool enable_execution)
+      : Node(enable_execution ? "topological_map_avoidance_node" :
+                               "topological_map_path_planner_node", options),
+        enable_execution_(enable_execution) {
     declare_parameter("urdf_path", "");
     declare_parameter("gng_model_path", "");
     declare_parameter("gng.data_directory", "");
@@ -184,7 +186,7 @@ public:
     declare_parameter("control_claim_topic", "");
     declare_parameter("control_claim_priority", 10);
     declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
-    declare_parameter("control_claim_enabled", true);
+    declare_parameter("control_claim_enabled", enable_execution_);
     declare_parameter("trajectory_topic", "/ToPoDualArm/plan_topological_map");
     declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/cand_topological_map");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
@@ -196,10 +198,10 @@ public:
     declare_parameter("avoid_danger", true);
     declare_parameter("allow_danger_goal", true);
     declare_parameter("strict_goal_collision_check", false);
-    declare_parameter("replan_on_path_collision", true);
+    declare_parameter("replan_on_path_collision", enable_execution_);
     declare_parameter("allow_zero_initial_joint_state", true);
-    declare_parameter("publish_target_joint_states", true);
-    declare_parameter("allow_safe_goal_fallback", true);
+    declare_parameter("publish_target_joint_states", enable_execution_);
+    declare_parameter("allow_safe_goal_fallback", enable_execution_);
     declare_parameter("trial_mode", false);
     declare_parameter("trial_goal_interval_sec", 4.0);
     declare_parameter("trial_safe_only", true);
@@ -336,7 +338,7 @@ public:
 
     if (gng_model_path.empty()) {
       RCLCPP_WARN(get_logger(),
-                  "gng_model_path is empty. The avoidance node will not publish until a model is provided.");
+                  "gng_model_path is empty. Planning requires a GNG model.");
     } else if (!gng_->load(gng_model_path)) {
       throw std::runtime_error("Failed to load GNG model from: " + gng_model_path);
     }
@@ -377,6 +379,7 @@ public:
     avoid_danger_ = get_parameter("avoid_danger").as_bool();
     allow_danger_goal_ = get_parameter("allow_danger_goal").as_bool();
     planner_.setAvoidDanger(avoid_danger_);
+    planner_.set_enable_safety_penalty(enable_execution_);
     planner_.setStrictGoalCollisionCheck(
         get_parameter("strict_goal_collision_check").as_bool());
     replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
@@ -384,7 +387,7 @@ public:
         get_parameter("allow_zero_initial_joint_state").as_bool();
     allow_safe_goal_fallback_ = get_parameter("allow_safe_goal_fallback").as_bool();
 
-    trial_mode_ = get_parameter("trial_mode").as_bool();
+    trial_mode_ = enable_execution_ && get_parameter("trial_mode").as_bool();
     trial_goal_interval_sec_ = std::max(0.1, get_parameter("trial_goal_interval_sec").as_double());
     trial_safe_only_ = get_parameter("trial_safe_only").as_bool();
     trial_return_home_ = get_parameter("trial_return_home").as_bool();
@@ -441,7 +444,7 @@ public:
     }
     control_claim_priority_ = get_parameter("control_claim_priority").as_int();
     control_claim_mode_ = get_parameter("control_claim_mode").as_int();
-    control_claim_enabled_ = get_parameter("control_claim_enabled").as_bool();
+    control_claim_enabled_ = enable_execution_ && get_parameter("control_claim_enabled").as_bool();
     const bool publish_target_joint_states =
         get_parameter("publish_target_joint_states").as_bool();
 
@@ -457,6 +460,8 @@ public:
         topological_map_topic, rclcpp::QoS(1).reliable().transient_local(),
         [this](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
           std::lock_guard<std::mutex> lock(mutex_);
+          has_pending_plan_ = has_pending_plan_ || !have_map_ ||
+              latest_map_.header.frame_id != msg->header.frame_id;
           latest_map_ = *msg;
           have_map_ = true;
           updateNodeStatusFromMapLocked(*msg);
@@ -477,7 +482,9 @@ public:
               latest_goal_candidate_ids_.push_back(static_cast<int>(id));
             }
             // 到達領域の変化による旧経路・旧評価の失効と、新しい候補への再計画
-            if (!trial_mode_) {
+            if (!enable_execution_) {
+              has_pending_plan_ = true;
+            } else if (!trial_mode_) {
               requestReplanLocked();
               const Eigen::VectorXf current_q = have_joint_state_
                   ? currentJointVectorLocked()
@@ -534,7 +541,7 @@ public:
       }
     }
 
-    if (publish_target_joint_states) {
+    if (enable_execution_ && publish_target_joint_states) {
       target_pub_ = create_publisher<sensor_msgs::msg::JointState>(
           target_topic_, rclcpp::QoS(10).reliable());
     }
@@ -544,28 +551,30 @@ public:
           control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
     }
 
-    param_cb_handle_ = add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter> & params) {
-          rcl_interfaces::msg::SetParametersResult result;
-          result.successful = true;
-          result.reason = "ok";
-          std::lock_guard<std::mutex> lock(mutex_);
-          for (const auto & param : params) {
-            const auto & name = param.get_name();
-            if (name == "control_claim_priority") {
-              control_claim_priority_ = param.as_int();
-            } else if (name == "control_claim_mode") {
-              control_claim_mode_ = param.as_int();
-            } else if (name == "control_claim_enabled") {
-              control_claim_enabled_ = param.as_bool();
-              if (control_claim_enabled_ && !control_claim_pub_) {
-                control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
-                    control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+    if (enable_execution_) {
+      param_cb_handle_ = add_on_set_parameters_callback(
+          [this](const std::vector<rclcpp::Parameter> & params) {
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            result.reason = "ok";
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const auto & param : params) {
+              const auto & name = param.get_name();
+              if (name == "control_claim_priority") {
+                control_claim_priority_ = param.as_int();
+              } else if (name == "control_claim_mode") {
+                control_claim_mode_ = param.as_int();
+              } else if (name == "control_claim_enabled") {
+                control_claim_enabled_ = param.as_bool();
+                if (control_claim_enabled_ && !control_claim_pub_) {
+                  control_claim_pub_ = create_publisher<gng_control_msgs::msg::JointControlClaim>(
+                      control_claim_topic_, rclcpp::QoS(1).reliable().transient_local());
+                }
               }
             }
-          }
-          return result;
-        });
+            return result;
+          });
+    }
 
     request_update_srv_ = create_service<std_srvs::srv::Trigger>(
         "request_trajectory_update",
@@ -573,29 +582,38 @@ public:
                std_srvs::srv::Trigger::Response::SharedPtr response) {
           std::lock_guard<std::mutex> lock(mutex_);
           trajectory_.update_requested = true;
+          has_pending_plan_ = true;
           response->success = true;
           response->message = "trajectory update requested";
         });
 
-    trial_goal_advance_srv_ = create_service<std_srvs::srv::Trigger>(
-        "request_trial_goal_advance",
-        [this](const std_srvs::srv::Trigger::Request::SharedPtr,
-               std_srvs::srv::Trigger::Response::SharedPtr response) {
-          std::lock_guard<std::mutex> lock(mutex_);
-          advanceTrialGoalLocked();
-          response->success = true;
-          response->message = "trial goal advanced";
-        });
+    if (enable_execution_) {
+      trial_goal_advance_srv_ = create_service<std_srvs::srv::Trigger>(
+          "request_trial_goal_advance",
+          [this](const std_srvs::srv::Trigger::Request::SharedPtr,
+                 std_srvs::srv::Trigger::Response::SharedPtr response) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            advanceTrialGoalLocked();
+            response->success = true;
+            response->message = "trial goal advanced";
+          });
+    }
 
     const double publish_hz = std::max(1.0, get_parameter("publish_hz").as_double());
     timer_ = create_wall_timer(
         std::chrono::milliseconds(static_cast<int>(1000.0 / publish_hz)),
-        [this]() { this->publishTargetLocked(); });
+        [this]() {
+          if (enable_execution_) {
+            publishTargetLocked();
+          } else {
+            publish_candidate_paths();
+          }
+        });
 
     RCLCPP_INFO(get_logger(),
-                "TopologicalMapAvoidanceNode ready. joint_topic=%s map_topic=%s goal_ids_topic=%s target_topic=%s claim_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s candidate_metrics_topic=%s dof=%d trial_mode=%d",
-                joint_topic.c_str(), topological_map_topic.c_str(),
-                goal_candidate_ids_topic_.c_str(), target_topic_.c_str(), control_claim_topic_.c_str(), trajectory_topic_.c_str(),
+                "Planning ready. enable_execution=%d joint_topic=%s map_topic=%s goal_ids_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s candidate_metrics_topic=%s dof=%d trial_mode=%d",
+                enable_execution_ ? 1 : 0, joint_topic.c_str(), topological_map_topic.c_str(),
+                goal_candidate_ids_topic_.c_str(), trajectory_topic_.c_str(),
                 candidate_trajectory_topic_.c_str(),
                 candidate_metrics_topic_.c_str(),
                 dof, trial_mode_ ? 1 : 0);
@@ -605,6 +623,46 @@ public:
   }
 
 private:
+  const bool enable_execution_;
+  bool has_pending_plan_ = true;
+  Eigen::VectorXf last_plan_q_;
+
+  // 入力変化または明示要求に限定した候補経路・評価の更新。追従状態の更新なし
+  void publish_candidate_paths() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!gng_ || !have_map_ || (!have_joint_state_ && !allow_zero_initial_joint_state_)) {
+      return;
+    }
+    const Eigen::VectorXf current_q = have_joint_state_
+        ? currentJointVectorLocked() : Eigen::VectorXf::Zero(chain_->getTotalDOF());
+    if (!has_pending_plan_ && last_plan_q_.size() == current_q.size() &&
+        std::equal(current_q.data(), current_q.data() + current_q.size(), last_plan_q_.data())) {
+      return;
+    }
+    has_pending_plan_ = false;
+    last_plan_q_ = current_q;
+    const auto goal_candidates = latest_goal_candidate_ids_.empty()
+        ? std::vector<int>{} : selectedGoalCandidatesLocked(-1);
+    const auto start_candidates = collectNearestStartCandidatesLocked(current_q, 5);
+    int selected_start_id = -1;
+    std::unordered_map<int, std::vector<int>> candidate_path_by_goal;
+    std::vector<std::vector<int>> candidate_paths;
+    auto [goal_id, node_path] = planFromStartCandidatesLocked(
+        current_q, start_candidates, goal_candidates, selected_start_id,
+        candidate_path_by_goal, candidate_paths);
+    trajectory_.goal_id = goal_id;
+    // 経路ID不変でも、更新された安全ラベル・座標系の再配信
+    have_last_candidate_publish_ = false;
+    if (candidate_paths.empty()) {
+      publishCandidateTrajectoryPathsLocked(candidate_paths);
+    } else {
+      publishCandidateTrajectoryPathsLocked(current_q, candidate_paths);
+    }
+    publishTrajectoryPathLocked(current_q, node_path);
+    publishGraspCandidateMetricsLocked(selected_start_id, goal_candidates, candidate_path_by_goal);
+    publishCurrentEefPoseLocked(current_q);
+  }
+
   Eigen::VectorXf currentJointVectorLocked() const {
     Eigen::VectorXf q(static_cast<int>(chain_->getTotalDOF()));
     q.setZero();
@@ -677,6 +735,10 @@ private:
       if (node.id == -1) {
         continue;
       }
+
+      const uint8_t next_label = n.label == 2 ? 2 : (n.label == 3 ? 3 : 1);
+      has_pending_plan_ = has_pending_plan_ || !node.status.active ||
+          pathLabelFromStatus(node.status) != next_label;
 
       // FIXME: self_collision_free は静的な自己干渉の判定結果であり、環境障害物の
       // ラベルで書き換えるべきではない。障害物が消えたときに true へ戻してしまうため、
@@ -1744,15 +1806,19 @@ private:
   }
 };
 
+class TopologicalMapAvoidanceNode : public TopologicalMapPlanningNode {
+public:
+  explicit TopologicalMapAvoidanceNode(const rclcpp::NodeOptions &options)
+      : TopologicalMapPlanningNode(options, true) {}
+};
+
+class TopologicalMapPathPlannerNode : public TopologicalMapPlanningNode {
+public:
+  explicit TopologicalMapPathPlannerNode(const rclcpp::NodeOptions &options)
+      : TopologicalMapPlanningNode(options, false) {}
+};
+
 } // namespace robot_sim::planning
 
 RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::planning::TopologicalMapAvoidanceNode)
-
-int main(int argc, char **argv) {
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<robot_sim::planning::TopologicalMapAvoidanceNode>(
-      rclcpp::NodeOptions());
-  rclcpp::spin(node);
-  rclcpp::shutdown();
-  return 0;
-}
+RCLCPP_COMPONENTS_REGISTER_NODE(robot_sim::planning::TopologicalMapPathPlannerNode)

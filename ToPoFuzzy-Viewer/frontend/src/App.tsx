@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -12,6 +12,7 @@ import {
     PointCloudData,
     HeatmapSettings,
     GraphNode,
+    graph_selection,
     LayerSettings,
     ClippingPlane,
     ClippingAxis
@@ -20,6 +21,7 @@ import { GraphRenderer } from './features/visualization/GraphRenderer';
 import { RobotRenderer } from './features/visualization/RobotRenderer';
 import { CollisionRenderer } from './features/visualization/CollisionRenderer';
 import { MarkerArrayRenderer } from './features/visualization/MarkerArrayRenderer';
+import { CandidateHoverFrame } from './features/visualization/CandidateHoverFrame';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useZoneMonitor } from './features/analysis/useZoneMonitor';
 import { VoxelRenderer } from './features/visualization/VoxelRenderer';
@@ -188,6 +190,8 @@ function App() {
         setParameter,
         getTemplateMatchConfig,
         applyTemplateMatchConfig,
+        inspect_graph,
+        inspect_graph_bounds,
     } = useWebSocket(wsUrl);
 
     useEffect(() => {
@@ -313,6 +317,13 @@ function App() {
     const [disabledSourceIds, setDisabledSourceIds] = useState<Set<string>>(new Set());
 
     const [selectedClusterSnapshot, setSelectedClusterSnapshot] = useState<ClusterSnapshot | null>(null);
+    const [is_inspecting, set_is_inspecting] = useState(false);
+    const [inspection_error, set_inspection_error] = useState<string | null>(null);
+    const inspection_request = useRef(0);
+    const inspection_sources = useRef({ graphData, markerData, layerSettings });
+    inspection_sources.current = { graphData, markerData, layerSettings };
+    const inspection_snapshot = useRef(selectedClusterSnapshot);
+    inspection_snapshot.current = selectedClusterSnapshot;
     const [selectedManipSnapshot, setSelectedManipSnapshot] = useState<GraphNodeDetailSnapshot | null>(null);
 
     const {
@@ -517,57 +528,46 @@ function App() {
 
     const bounds = smoothedBounds;
 
-    const handleClusterSelect = (clusterId: number | null) => {
-        if (clusterId === null) {
-            setSelectedClusterSnapshot(null);
-            return;
+    const close_inspection = useCallback(() => {
+        ++inspection_request.current;
+        setSelectedClusterSnapshot(null);
+        set_is_inspecting(false);
+        set_inspection_error(null);
+    }, []);
+
+    // 選択時の全受信フレームを送信し、切り出しはバックエンドへ委譲。
+    const handle_inspect = useCallback(async (source_id: string, selection: graph_selection) => {
+        const request_id = ++inspection_request.current;
+        const source = inspection_sources.current;
+        set_is_inspecting(true);
+        set_inspection_error(null);
+        try {
+            const graph = source.graphData[source_id];
+            const marker_array = source.markerData[source_id];
+            if (selection.kind === 'marker' ? !marker_array : !graph) throw new Error('選択元のデータがありません');
+            const snapshot = await inspect_graph(source_id, selection,
+                selection.kind === 'marker' ? undefined : graph, selection.kind === 'marker' ? marker_array : undefined);
+            if (request_id !== inspection_request.current) return;
+            setSelectedClusterSnapshot({ ...snapshot, settings: source.layerSettings[source_id] });
+        } catch (error) {
+            if (request_id === inspection_request.current) set_inspection_error(
+                error instanceof Error ? error.message : String(error));
+        } finally {
+            if (request_id === inspection_request.current) set_is_inspecting(false);
         }
+    }, [inspect_graph]);
 
-        // Find which graph has this cluster (simplified: search all)
-        let foundCluster = null;
-        let foundGraph = null;
-        for (const data of Object.values(graphData)) {
-            const c = data.clusters.find((c) => c.id === clusterId);
-            if (c) {
-                foundCluster = c;
-                foundGraph = data;
-                break;
-            }
-        }
+    const refresh_inspection = useCallback(() => {
+        const snapshot = inspection_snapshot.current;
+        if (snapshot) void handle_inspect(snapshot.source_id, snapshot.selection);
+    }, [handle_inspect]);
 
-        if (!foundCluster || !foundGraph) return;
-
-        const nodeIdsSet = new Set(foundCluster.nodeIds);
-        const nodeById = new Map<number, GraphNode>();
-        foundGraph.nodes.forEach((node, index) => {
-            if (Number.isFinite(node.id)) {
-                nodeById.set(node.id as number, node);
-            }
-            nodeById.set(index, node);
-        });
-        const nodes = foundCluster.nodeIds
-            .map((nodeId) => nodeById.get(nodeId))
-            .filter((n): n is GraphNode => n !== undefined);
-
-        const edges: { source: GraphNode; target: GraphNode }[] = [];
-        for (let i = 0; i < foundGraph.edges.length; i += 2) {
-            const srcIdx = foundGraph.edges[i];
-            const dstIdx = foundGraph.edges[i + 1];
-            if (nodeIdsSet.has(srcIdx) && nodeIdsSet.has(dstIdx)) {
-                const srcNode = nodeById.get(srcIdx);
-                const dstNode = nodeById.get(dstIdx);
-                if (srcNode && dstNode) {
-                    edges.push({ source: srcNode, target: dstNode });
-                }
-            }
-        }
-
-        setSelectedClusterSnapshot({
-            cluster: JSON.parse(JSON.stringify(foundCluster)),
-            nodes: JSON.parse(JSON.stringify(nodes)),
-            edges: JSON.parse(JSON.stringify(edges)),
-        });
-    };
+    const get_hover_bounds = useCallback((source_id: string, selection: graph_selection) => {
+        const source = inspection_sources.current;
+        return inspect_graph_bounds(source_id, selection,
+            selection.kind === 'marker' ? undefined : source.graphData[source_id],
+            selection.kind === 'marker' ? source.markerData[source_id] : undefined);
+    }, [inspect_graph_bounds]);
 
     const handleManipSelect = (graphTag: string, node: GraphNode) => {
         const graph = graphData[graphTag];
@@ -731,7 +731,9 @@ function App() {
                             },
                             {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
-                                    <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform} />
+                                    <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform}
+                                        on_inspect={!isEditMode && !zoneMonitor.isDrawing ? marker => void handle_inspect(tag,
+                                            { kind: 'marker', id: marker.id, ns: marker.ns }) : undefined} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
                             {
@@ -753,17 +755,28 @@ function App() {
                             if (!settings || !settings.visible || disabledSourceIds.has(tag)) return null;
                             const tf = data.frameId && data.frameId !== 'world' ? (transforms[data.frameId] ?? null) : null;
                             return <GraphRenderer key={tag} tag={tag} data={data} settings={settings} tf={tf}
-                                selectedClusterId={selectedClusterSnapshot?.cluster.id ?? null}
-                                onClusterSelect={handleClusterSelect} onManipSelect={(node) => handleManipSelect(tag, node)}
-                                enableClusterSelection={data.mode === 'static' || !zoneMonitor.isDrawing} />;
+                                selectedClusterId={selectedClusterSnapshot?.source_id === tag && selectedClusterSnapshot.selection.kind === 'cluster'
+                                    ? selectedClusterSnapshot.selection.id : null}
+                                onClusterSelect={id => id === null ? close_inspection() : void handle_inspect(tag, { kind: 'cluster', id })}
+                                on_node_select={node => void handle_inspect(tag, { kind: 'node', id: node.id! })}
+                                onManipSelect={(node) => handleManipSelect(tag, node)}
+                                enableClusterSelection={!isEditMode && !zoneMonitor.isDrawing} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
+                    <CandidateHoverFrame is_enabled={!isEditMode && !zoneMonitor.isDrawing} get_bounds={get_hover_bounds}
+                        transforms={transforms} layer_settings={layerSettings} marker_settings={markerSettings} />
                     <gridHelper args={[20, 20, '#444444', '#222222']} rotation={[Math.PI / 2, 0, 0]} />
                     <OrbitControls makeDefault />
                 </Canvas>
                     </WebGLErrorBoundary>
-                {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={() => setSelectedClusterSnapshot(null)} />}
+                {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={close_inspection}
+                    on_refresh={refresh_inspection} is_loading={is_inspecting} error={inspection_error} />}
+                {!selectedClusterSnapshot && (is_inspecting || inspection_error) &&
+                    <div role="status" className="surface-panel absolute right-4 top-4 z-50 flex max-w-md items-center gap-3 p-3 text-sm">
+                        <span>{is_inspecting ? '候補の形状を取得中...' : inspection_error}</span>
+                        <button className="btn-secondary px-2" onClick={close_inspection}>閉じる</button>
+                    </div>}
                 {selectedManipSnapshot && <GraphNodeDetailPanel snapshot={selectedManipSnapshot} onClose={() => setSelectedManipSnapshot(null)} />}
             </div>
         </MainLayout>
