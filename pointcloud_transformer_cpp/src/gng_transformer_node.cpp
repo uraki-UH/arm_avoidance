@@ -19,7 +19,7 @@ public:
   GngTransformerNode() : Node("gng_transformer_node") {
     this->declare_parameter<std::string>("target_frame", "base_link");
     this->declare_parameter<std::string>("input_topic", "/gng_map");
-    this->declare_parameter<std::string>("output_topic", "/topological_map_transformed");
+    this->declare_parameter<std::string>("output_topic", "/Tmap_transformed");
     this->declare_parameter<double>("filter_radius", 1.0); // Negative to disable
     this->declare_parameter<double>("filter_z_min", -1.0);
     this->declare_parameter<double>("filter_z_max", 1.0);

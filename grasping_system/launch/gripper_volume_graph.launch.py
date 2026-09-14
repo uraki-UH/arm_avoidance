@@ -15,7 +15,7 @@ DEFAULT_GRIPPERS = """[
   {
     name: gripper,
     tf_frame: tool0,
-    output_topic: grip_V_topological_map,
+    output_topic: grip_V_Tmap,
     shape: box,
     dimensions: [0.08, 0.04, 0.10],
     center: [0.0, 0.0, 0.05],
@@ -242,7 +242,7 @@ def _launch_grippers(context):
 
         parameters = {
             "output_topic": str(
-                spec.get("output_topic", f"{gripper_name}/grip_V_topological_map")
+                spec.get("output_topic", f"{gripper_name}/grip_V_Tmap")
             ),
             "frame_id": tf_frame,
             "shape": str(spec.get("shape", "box")),

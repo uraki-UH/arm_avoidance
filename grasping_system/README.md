@@ -119,7 +119,7 @@ ros2 launch grasping_system gripper_volume_graph.launch.py \
     {
       name: main_gripper,
       tf_frame: tool0,
-      output_topic: /grip_V_topological_map,
+      output_topic: /grip_V_Tmap,
       shape: box,
       dimensions: [0.08, 0.04, 0.10],
       center: [0.0, 0.0, 0.05],
@@ -140,14 +140,14 @@ ros2 launch grasping_system gripper_volume_graph.launch.py \
 
 This publishes:
 
-- `/ToPoDualArm/L_grip_V_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_grip_V_topological_map` in `ToPoDualArm/R_tcp`
-- `/ToPoDualArm/L_grip_minV_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_grip_minV_topological_map` in `ToPoDualArm/R_tcp`
-- `/ToPoDualArm/L_grip_baseV_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_grip_baseV_topological_map` in `ToPoDualArm/R_tcp`
-- `/ToPoDualArm/L_grip_sweptV_topological_map` in `ToPoDualArm/L_tcp`
-- `/ToPoDualArm/R_grip_sweptV_topological_map` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_V_Tmap` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_V_Tmap` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_minV_Tmap` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_minV_Tmap` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_baseV_Tmap` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_baseV_Tmap` in `ToPoDualArm/R_tcp`
+- `/ToPoDualArm/L_grip_sweptV_Tmap` in `ToPoDualArm/L_tcp`
+- `/ToPoDualArm/R_grip_sweptV_Tmap` in `ToPoDualArm/R_tcp`
 
 `tf_prefix` is optional. It is useful when `robot_state_publisher` prefixes all
 frames to isolate multiple robots. Frames that already contain the same prefix

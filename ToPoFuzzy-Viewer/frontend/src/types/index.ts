@@ -487,8 +487,7 @@ export const TRAJECTORY_GNG_DEFAULTS = {
 } as const;
 
 export function isTrajectoryGraphTag(tag: string): boolean {
-    return tag.includes('plan_topological_map') ||
-        tag.includes('cand_topological_map');
+    return /(?:plan|cand)_(?:[Tt]map|topological_map)(?:_|\/|$)/.test(tag);
 }
 
 export type ClippingAxis = 'x' | 'y' | 'z' | 'none';

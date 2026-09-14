@@ -1,7 +1,7 @@
 fuzzy_cluster_relabel:
   ros__parameters:
     input_topic: "/topological_map"
-    output_topic: "/fuzzy_classifier/topological_map"
+    output_topic: "/fuzzy_classifier/Tmap"
     rewrite_label: true
     rewrite_label_inferred: false
     preserve_structural_labels: true

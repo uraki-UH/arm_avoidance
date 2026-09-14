@@ -97,8 +97,8 @@ def generate_launch_description():
     pkg_share = get_package_share_directory("gng_vlut_system")
     return LaunchDescription([
         DeclareLaunchArgument("params_file", default_value=os.path.join(pkg_share, "config", "ToPoDualArm2.yaml")),
-        DeclareLaunchArgument("topological_map_topic", default_value="/ToPoDualArm/topological_map_static"),
-        DeclareLaunchArgument("output_topic", default_value="/selected_topological_map"),
+        DeclareLaunchArgument("topological_map_topic", default_value="/ToPoDualArm/Tmap_static"),
+        DeclareLaunchArgument("output_topic", default_value="/selected_Tmap"),
         DeclareLaunchArgument("goal_candidate_ids_topic", default_value="/selected_goal_candidate_ids"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         DeclareLaunchArgument("urdf_path", default_value=""),
@@ -110,8 +110,8 @@ def generate_launch_description():
         DeclareLaunchArgument("node_feature_topic", default_value="/ToPoDualArm/topological_node_features"),
         DeclareLaunchArgument("manipulability_weight", default_value="0.25"),
         DeclareLaunchArgument("joint_topic", default_value="/ToPoDualArm/joint_states"),
-        DeclareLaunchArgument("trajectory_topic", default_value="/ToPoDualArm/plan_topological_map"),
-        DeclareLaunchArgument("candidate_trajectory_topic", default_value="/ToPoDualArm/cand_topological_map"),
+        DeclareLaunchArgument("trajectory_topic", default_value="/ToPoDualArm/plan_Tmap"),
+        DeclareLaunchArgument("candidate_trajectory_topic", default_value="/ToPoDualArm/cand_Tmap"),
         DeclareLaunchArgument("candidate_metrics_topic", default_value="/ToPoDualArm/grasp_candidate_metrics"),
         DeclareLaunchArgument("publish_candidate_robot_preview", default_value="true"),
         DeclareLaunchArgument("publish_hz", default_value="20.0"),

@@ -21,11 +21,11 @@ flowchart TD
     A --> D[topological_map_path_planner_node]
 
     B --> G[selected_goal_candidate_ids]
-    B --> H[selected_topological_map]
+    B --> H[selected_Tmap]
     B --> J[grasp_pose_candidates / grasp_pose_scores]
 
-    D --> K[cand_topological_map]
-    D --> L[plan_topological_map]
+    D --> K[cand_Tmap]
+    D --> L[plan_Tmap]
     D --> M[grasp_candidate_metrics]
     D --> N[current_ee_pose]
 ```
@@ -37,8 +37,8 @@ flowchart TD
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
 | `params_file` | path | `config/ToPoDualArm2.yaml` | URDF と各種パラメータの参照元 |
-| `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 目標候補選定の入力マップ |
-| `output_topic` | topic | `/selected_topological_map` | 選定後マップ |
+| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 目標候補選定の入力マップ |
+| `output_topic` | topic | `/selected_Tmap` | 選定後マップ |
 | `goal_candidate_ids_topic` | topic | `/selected_goal_candidate_ids` | 把持候補として採択したノード ID 群 |
 | `robot_name` | string | `ToPoDualArm` | namespace と topic 接頭辞 |
 | `urdf_path` | path | 空 | ロボットモデル参照 |
@@ -50,8 +50,8 @@ flowchart TD
 | `node_feature_topic` | topic | `/ToPoDualArm/topological_node_features` | ノード特徴量入力 |
 | `manipulability_weight` | float | `0.25` | 可操作性ペナルティ重み |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `trajectory_topic` | topic | `/ToPoDualArm/plan_topological_map` | 確定経路の出力 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路の出力 |
+| `trajectory_topic` | topic | `/ToPoDualArm/plan_Tmap` | 確定経路の出力 |
+| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_Tmap` | 候補経路の出力 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 候補評価指標の出力 |
 | `publish_candidate_robot_preview` | bool | `true` | Viewer候補ロボットinstanceの召喚 |
 | `publish_hz` | float | `20.0` | 入力変化確認と候補計画更新の上限周波数。未変更時の再探索・再配信なし |
@@ -65,10 +65,13 @@ flowchart TD
 
 ### 3.2 `topological_map_goal_selector.launch.py` の引数
 
+実体はC++の`topological_map_goal_selector_node`。入力は最新1件を保持し、`goal_update_hz`の周期で選択を実行。候補の再受信がなくても最新TFを参照。TF未取得・空候補・全領域外では旧目標を空出力で失効。
+選定mapと目標IDの出力QoSはreliable・transient local・depth 1。可操作性重みが0の場合は特徴量topicの購読なし。
+
 | 変数 | 型 | デフォルト | 用途 |
 |---|---:|---|---|
-| `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 元マップ入力 |
-| `output_topic` | topic | `/selected_topological_map` | 選定後マップ |
+| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 元マップ入力 |
+| `output_topic` | topic | `/selected_Tmap` | 選定後マップ |
 | `candidate_count` | int | `8` | 抽出ノード数 |
 | `non_collision_only` | bool | `true` | 衝突ノードを除外 |
 | `orientation_weight` | float | `0.25` | 姿勢整合重み |
@@ -87,10 +90,10 @@ flowchart TD
 | `params_file` | path | `config/ToPoDualArm.yaml` | GNG/URDF 参照 |
 | `urdf_path` | path | 空 | ロボットモデル |
 | `gng_model_path` | path | 空 | GNG モデル直接指定 |
-| `topological_map_topic` | topic | `/ToPoDualArm/topological_map_static` | 追跡対象マップ |
+| `topological_map_topic` | topic | `/ToPoDualArm/Tmap_static` | 追跡対象マップ |
 | `joint_topic` | topic | `/ToPoDualArm/joint_states` | 現在姿勢入力 |
-| `trajectory_topic` | topic | `/ToPoDualArm/plan_topological_map` | 確定経路 |
-| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_topological_map` | 候補経路 |
+| `trajectory_topic` | topic | `/ToPoDualArm/plan_Tmap` | 確定経路 |
+| `candidate_trajectory_topic` | topic | `/ToPoDualArm/cand_Tmap` | 候補経路 |
 | `candidate_metrics_topic` | topic | `/ToPoDualArm/grasp_candidate_metrics` | 評価指標 |
 | `trial_mode` | bool | `false` | trial 動作 |
 | `trial_goal_interval_sec` | float | `4.0` | trial の目標切替周期 |
@@ -133,12 +136,12 @@ flowchart TD
 
 | トピック | 型 | 役割 |
 |---|---|---|
-| `/ToPoDualArm/topological_map_static` | `ais_gng_msgs/TopologicalMap` | 元の GNG マップ |
-| `/selected_topological_map` | `ais_gng_msgs/TopologicalMap` | target に応じて選ばれたマップ |
+| `/ToPoDualArm/Tmap_static` | `ais_gng_msgs/TopologicalMap` | 元の GNG マップ |
+| `/selected_Tmap` | `ais_gng_msgs/TopologicalMap` | target に応じて選ばれたマップ |
 | `/selected_goal_candidate_ids` | `std_msgs/Int32MultiArray` | goal 候補 ID の集合 |
 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` | ID・姿勢・形状スコア・到達性状態 |
-| `/ToPoDualArm/plan_topological_map` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
-| `/ToPoDualArm/cand_topological_map` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
+| `/ToPoDualArm/plan_Tmap` | `ais_gng_msgs/TopologicalMap` | 確定した経路。現在 EE pose を先頭ノードに含める |
+| `/ToPoDualArm/cand_Tmap` | `ais_gng_msgs/TopologicalMap` | 候補経路。現在 EE pose を先頭ノードに含め、各goal候補ごとに現在姿勢近傍のstart候補から最良pathを生成する |
 | `/ToPoDualArm/grasp_candidate_metrics` | `gng_control_msgs/GraspCandidateMetricArray` | 候補評価指標と各候補の `final_joint_state` |
 | `/ToPoDualArm/current_ee_pose` | `geometry_msgs/PoseStamped` | 現在 EE pose |
 | `joint_states` | `sensor_msgs/JointState` | 仮想 or 実機の現在関節値 |
@@ -158,14 +161,14 @@ flowchart TD
     C[Target pose / point / pose array] --> B
     D[Node features] --> B
     B --> E[selected_goal_candidate_ids]
-    B --> F[selected_topological_map]
+    B --> F[selected_Tmap]
 
     E --> H[TopologicalMapPathPlanner]
     A --> H
     I[joint_states] --> H
     H --> K[current_ee_pose]
-    H --> L[plan_topological_map]
-    H --> M[cand_topological_map]
+    H --> L[plan_Tmap]
+    H --> M[cand_Tmap]
     H --> N[grasp_candidate_metrics]
 ```
 
@@ -550,9 +553,9 @@ Viewerは候補配列を直接受信し、同じIDのローカル`+Z`矢印を�
 | 物体候補占有 | `/topological_grid_voxels` | `voxel_msgs/Voxel` |
 | 表示・診断専用の孤立セル | `/topological_grid_voxels/isolated` | `voxel_msgs/Voxel` |
 | 全環境占有 | 空(物体候補と共用) | `voxel_msgs/Voxel` |
-| 最大把持領域 | `grip_V_topological_map` | `ais_gng_msgs/TopologicalMap` |
-| 最小把持領域 | `grip_minV_topological_map` | `ais_gng_msgs/TopologicalMap` |
-| 基部禁止領域 | `grip_baseV_topological_map` | `ais_gng_msgs/TopologicalMap` |
+| 最大把持領域 | `grip_V_Tmap` | `ais_gng_msgs/TopologicalMap` |
+| 最小把持領域 | `grip_minV_Tmap` | `ais_gng_msgs/TopologicalMap` |
+| 基部禁止領域 | `grip_baseV_Tmap` | `ais_gng_msgs/TopologicalMap` |
 | 候補TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
 | 照合内訳 | `/grasp_pose_cands/summary` | `std_msgs/String` |
 | 上面把持TCP Pose群 | `/grasp_pose_cands` | `gng_control_msgs/GraspCandidateArray` |
@@ -759,16 +762,16 @@ signature schemaは4である。version 1からversion 4との読み込み互換
 |---|---|---|
 | `visualization_gng.enabled` | `false` | 可視化GNGの読み込みと配信 |
 | `visualization_gng.path_prefix` | 空 | 空なら元`gng.bin`と同じ場所の`vis_gng`をファイル接頭辞に使う |
-| `visualization_gng.topic_prefix` | `topological_map_vis` | `_L<layer>`を付けるtopic接頭辞 |
-| `visualization_gng.trajectory_input_topic` | `plan_topological_map` | 元GNG IDで表された実行軌道入力 |
-| `visualization_gng.trajectory_topic_prefix` | `plan_topological_map_vis` | 可視化ノード軌道の出力接頭辞 |
-| `visualization_gng.candidate_trajectory_input_topic` | `cand_topological_map` | 元GNG IDで表された候補軌道入力 |
-| `visualization_gng.candidate_trajectory_topic_prefix` | `cand_topological_map_vis` | 可視化候補軌道の出力接頭辞 |
+| `visualization_gng.topic_prefix` | `Tmap_vis` | `_L<layer>`を付けるtopic接頭辞 |
+| `visualization_gng.trajectory_input_topic` | `plan_Tmap` | 元GNG IDで表された実行軌道入力 |
+| `visualization_gng.trajectory_topic_prefix` | `plan_Tmap_vis` | 可視化ノード軌道の出力接頭辞 |
+| `visualization_gng.candidate_trajectory_input_topic` | `cand_Tmap` | 元GNG IDで表された候補軌道入力 |
+| `visualization_gng.candidate_trajectory_topic_prefix` | `cand_Tmap_vis` | 可視化候補軌道の出力接頭辞 |
 
 `ToPoDualArm.yaml`では有効化済みで、現在の出力は
-`/ToPoDualArm/topological_map_vis_L0`、型は
+`/ToPoDualArm/Tmap_vis_L0`、型は
 `ais_gng_msgs/msg/TopologicalMap`である。既存の
-`/ToPoDualArm/topological_map_static`とlayer topicは変更しない。
+`/ToPoDualArm/Tmap_static`とlayer topicは変更しない。
 
 bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
 `source_node_id -> visual_node_id`逆引き配列を`O(n)`で1回だけ構築する。
@@ -782,8 +785,8 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 
 | 入力 | layer 0出力 |
 |---|---|
-| `/ToPoDualArm/plan_topological_map` | `/ToPoDualArm/plan_topological_map_vis_L0` |
-| `/ToPoDualArm/cand_topological_map` | `/ToPoDualArm/cand_topological_map_vis_L0` |
+| `/ToPoDualArm/plan_Tmap` | `/ToPoDualArm/plan_Tmap_vis_L0` |
+| `/ToPoDualArm/cand_Tmap` | `/ToPoDualArm/cand_Tmap_vis_L0` |
 
 複数の元ノードが同じ可視化ノードへ対応する場合は1ノードへ統合し、自己loopと
 重複edgeを除去する。ID `65535`の現在姿勢仮想ノードは入力と可視化graphのframeが
@@ -798,7 +801,7 @@ ToPoDualArmの追加出力は次のとおりで、いずれも
 `65534`から降順に割り当てる。Viewerはedgeの入出次数から目標を推測せず、`is_goal`だけで
 紫色表示を決める。候補軌道上の集約ノードは、対応する入力経路のlabelを
 collision、danger、safeの順に保守的に保持し、静的graphのbest-wins集約で上書きしない。
-Viewerでは`plan_topological_map`と`cand_topological_map`を軌道レイヤーとして扱い、
+Viewerでは`plan_Tmap`と`cand_Tmap`（旧名`plan_topological_map`・`cand_topological_map`も対応）を軌道レイヤーとして扱い、
 safeノードとedgeをシアン`#25c3eb`で初期表示する。dangerの黄、collisionの赤、
 候補目標の紫は変更しない。旧既定の緑色を保持している軌道レイヤーだけシアンへ移行し、
 ユーザーが色設定で変更した値は維持する。
@@ -833,7 +836,7 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 
 ros2 launch gng_vlut_system visualization_gng_static.launch.py \
   model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng_static_L0.bin \
-  topic_name:=/ToPoDualArm/topological_map_vis_static_L0 \
+  topic_name:=/ToPoDualArm/Tmap_vis_static_L0 \
   frame_id:=base_link
 ```
 
@@ -917,7 +920,7 @@ flowchart TD
     C -- yes --> E[source ID逆引きとedge path hashを構築]
     E --> F[元ノードStatusをbest-wins集約]
     F --> G[TopologicalMapを生成]
-    G --> H[topological_map_vis_Ln]
+    G --> H[Tmap_vis_Ln]
     I[occupied/danger voxel更新] --> F
     J[plan/cand topological map] --> K[各source edgeをO 1で保存列へ変換]
     K --> L[保存済み中間visual nodeを展開]
@@ -1000,7 +1003,7 @@ PNG判定では各点のXYZとCameraInfoによるピンホール投影を照合�
 
 `object_template_map_publisher_node`は`object_template`またはGNG同梱済みの
 `object_surface_dataset`を読み、JSONの`template_id`ごとに
-`/<template_id>/topological_map_static`へ`ais_gng_msgs/msg/TopologicalMap`を配信する。
+`/<template_id>/Tmap_static`へ`ais_gng_msgs/msg/TopologicalMap`を配信する。
 QoSは`reliable`、depth 1、`transient_local`とする。配信するnodeには位置、法線、`rho`、
 入力点ID、勝者点群数、勝者点群共分散を設定し、edgeと`idx`形式のクラスタも変換する。
 
@@ -1018,11 +1021,11 @@ ros2 launch gng_vlut_system object_template_map_publisher.launch.py \
 launchは既定の`/datasets`へ`<dataset_file>_gng_template.json.gz`を連結して読込先を組み立てる。
 上記の`dataset_file`が`mug_complete`なら、読込先は
 `/datasets/mug_complete_gng_template.json.gz`、出力topicは
-`/mug_complete/topological_map_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
+`/mug_complete/Tmap_static`となる。topic用IDはJSON内の`dataset_id`を優先し、
 ない場合は`gng_template.template_id`を使用する。IDは英字開始の英数字と`_`だけを許可する。
 テストなどで読込先ディレクトリだけを変更する場合は、任意引数`dataset_dir`を使用する。
 
-このtopicは物体認識・照合用であり、ロボット関節空間の`/ToPoDualArm/topological_map_static`を
+このtopicは物体認識・照合用であり、ロボット関節空間の`/ToPoDualArm/Tmap_static`を
 置換しない。`gng_viewer_bridge.launch.py`が読むロボット用`gng.bin`と`vlut.bin`も変更しない。
 
 ### 15.2 物体GNGテンプレート照合と確定配信
@@ -1093,7 +1096,7 @@ edge、平面、欠損率をvalidatorで重ねて判定しない。確定後は�
 |---|---|
 | `/<template_id>/object_template_match_candidates` | 最良姿勢候補、score、対応node、対応edge比率、欠損率、反証点群支持量 |
 | `/<template_id>/object_template_match_state` | `pending`または`confirmed`、連続確認状態、最新候補 |
-| `/<template_id>/topological_map_static` | `confirmed`時だけ配信する事前登録GNG |
+| `/<template_id>/Tmap_static` | `confirmed`時だけ配信する事前登録GNG |
 
 ```bash
 ros2 launch gng_vlut_system object_template_matching.launch.py
@@ -1166,9 +1169,9 @@ ros2 launch gng_vlut_system object_match_hypothesis_publisher.launch.py \
   grid_cell_size:=0.03
 ```
 
-テンプレート入力は`/<template_id>/topological_map_static`、環境入力は既定で`/topological_map`となる。
+テンプレート入力は`/<template_id>/Tmap_static`、環境入力は既定で`/topological_map`となる。
 `environment_cluster_id:=-1`なら環境マップ全体を候補として扱う。出力は
-`/<template_id>/hypotheses/<hypothesis_id>/topological_map`、AABBと候補名のMarkerArrayは同じprefixの
+`/<template_id>/hypotheses/<hypothesis_id>/Tmap`、AABBと候補名のMarkerArrayは同じprefixの
 `/markers`、候補ID・スコア・yaw・AABBを含むJSONは`/metadata`へ`transient_local`で配信する。
 
 ### 15.4 仮物体仮説による登録グラフ召喚
@@ -1177,9 +1180,9 @@ ros2 launch gng_vlut_system object_match_hypothesis_publisher.launch.py \
 `object_surface_dataset`を再帰的に検出し、登録済みIDから仮の物体仮説を選ぶ。現段階のランダム選択は
 認識器接続前の動作確認用であり、`score`と`yaw_deg`も仮metadataとする。物体の位置変換や点群配信は行わず、
 選択したIDの登録済みGNGだけを、IDによらず固定の
-`/object_hypothesis/topological_map`へ召喚する。環境GNGの`/topological_map`とはnamespaceを分離する。
+`/object_hypothesis/Tmap`へ召喚する。環境GNGの`/topological_map`とはnamespaceを分離する。
 物体IDはマップtopic名や`frame_id`へ埋め込まず、`summon_state`の`template_id`で管理する。
-単体テンプレート配信用の`/<template_id>/topological_map_static`は変更しない。
+単体テンプレート配信用の`/<template_id>/Tmap_static`は変更しない。
 
 ```bash
 ros2 launch gng_vlut_system object_hypothesis_summon.launch.py \

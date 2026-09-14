@@ -7,7 +7,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("pose_topic", default_value="/grasp_pose_cands"),
-        DeclareLaunchArgument("reachability_map_topic", default_value="/ToPoDualArm/topological_map_static"),
+        DeclareLaunchArgument("reachability_map_topic", default_value="/ToPoDualArm/Tmap_static"),
         DeclareLaunchArgument("frame_id", default_value="world"),
         DeclareLaunchArgument("publish_rate_hz", default_value="1.0"),
         DeclareLaunchArgument("candidate_count", default_value="1"),

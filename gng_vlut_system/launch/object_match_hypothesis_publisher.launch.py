@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 def create_hypothesis_node(context):
     template_id = LaunchConfiguration("template_id").perform(context)
-    template_topic = f"/{template_id}/topological_map_static"
+    template_topic = f"/{template_id}/Tmap_static"
     return [Node(
         package="gng_vlut_system",
         executable="object_match_hypothesis_publisher_node",

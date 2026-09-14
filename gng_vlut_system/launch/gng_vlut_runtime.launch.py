@@ -147,7 +147,7 @@ def launch_setup(context, *args, **kwargs):
             parameters=[{
                 "target_frame": LaunchConfiguration("base_frame"),
                 "input_topic": "/gng_map",
-                "output_topic": "/topological_map_transformed",
+                "output_topic": "/Tmap_transformed",
                 "filter_radius": 3.0
             }]
         ),

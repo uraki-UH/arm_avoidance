@@ -7,7 +7,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("model_path"),
-        DeclareLaunchArgument("topic_name", default_value="topological_map_vis"),
+        DeclareLaunchArgument("topic_name", default_value="Tmap_vis"),
         DeclareLaunchArgument("frame_id", default_value="base_link"),
         Node(
             package="gng_vlut_system",

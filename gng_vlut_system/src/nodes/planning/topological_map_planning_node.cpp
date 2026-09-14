@@ -181,14 +181,14 @@ public:
     declare_parameter("gng.gng_model_filename", "");
     declare_parameter("gng.profile_names", "");
     declare_parameter("joint_topic", "/ToPoDualArm/joint_states");
-    declare_parameter("topological_map_topic", "/ToPoDualArm/topological_map_static");
+    declare_parameter("topological_map_topic", "/ToPoDualArm/Tmap_static");
     declare_parameter("target_topic", "target_joint_states");
     declare_parameter("control_claim_topic", "");
     declare_parameter("control_claim_priority", 10);
     declare_parameter("control_claim_mode", static_cast<int>(gng_control_msgs::msg::JointControlClaim::MODE_EXCLUSIVE));
     declare_parameter("control_claim_enabled", enable_execution_);
-    declare_parameter("trajectory_topic", "/ToPoDualArm/plan_topological_map");
-    declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/cand_topological_map");
+    declare_parameter("trajectory_topic", "/ToPoDualArm/plan_Tmap");
+    declare_parameter("candidate_trajectory_topic", "/ToPoDualArm/cand_Tmap");
     declare_parameter("candidate_metrics_topic", "/ToPoDualArm/grasp_candidate_metrics");
     declare_parameter("evaluation_metrics_topic", "/evaluation_metrics");
     declare_parameter("current_ee_pose_topic", "");

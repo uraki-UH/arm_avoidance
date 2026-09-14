@@ -120,7 +120,7 @@ def generate_launch_description():
         DeclareLaunchArgument("random_seed", default_value="0"),
         DeclareLaunchArgument("state_topic", default_value="/object_hypothesis/summon_state"),
         DeclareLaunchArgument("selection_topic", default_value="/object_hypothesis/select"),
-        DeclareLaunchArgument("map_topic", default_value="/object_hypothesis/topological_map"),
+        DeclareLaunchArgument("map_topic", default_value="/object_hypothesis/Tmap"),
         DeclareLaunchArgument("frame_id", default_value="object_template"),
         DeclareLaunchArgument("publish_hz", default_value="1.0"),
         OpaqueFunction(function=create_summon_nodes),

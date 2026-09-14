@@ -208,7 +208,7 @@ public:
   : Node("gripper_volume_graph_node")
   {
     const std::string output_topic =
-      declare_parameter<std::string>("output_topic", "grip_V_topological_map");
+      declare_parameter<std::string>("output_topic", "grip_V_Tmap");
     frame_id_ = declare_parameter<std::string>("frame_id", "tool0");
     shape_ = declare_parameter<std::string>("shape", "box");
     dimensions_ = declare_parameter<std::vector<double>>(

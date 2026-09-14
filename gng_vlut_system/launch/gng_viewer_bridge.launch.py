@@ -534,7 +534,7 @@ def generate_launch_description():
         DeclareLaunchArgument("gng_frame_id", default_value=""),
         DeclareLaunchArgument("gng_source_frame_id", default_value=""),
         DeclareLaunchArgument("publish_hz", default_value=""),
-        DeclareLaunchArgument("topic_name", default_value="topological_map_static"),
+        DeclareLaunchArgument("topic_name", default_value="Tmap_static"),
         DeclareLaunchArgument("node_feature_topic", default_value="topological_node_features"),
         DeclareLaunchArgument("grasp_state_topic", default_value="grasp_state"),
         DeclareLaunchArgument("grasp_applied_state_topic", default_value="grasp_state_applied"),

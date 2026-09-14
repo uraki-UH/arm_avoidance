@@ -136,6 +136,10 @@ rclcpp_components_register_node(topological_map_planning
   PLUGIN "robot_sim::planning::TopologicalMapPathPlannerNode"
   EXECUTABLE topological_map_path_planner_node)
 add_executable(arm_avoid_node nodes/planning/arm_avoid_node.cpp)
+add_executable(topological_map_goal_selector_node nodes/planning/topological_map_goal_selector_node.cpp)
+ament_target_dependencies(topological_map_goal_selector_node
+    rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
+install(TARGETS topological_map_goal_selector_node DESTINATION lib/${PROJECT_NAME})
 add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
 add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_state_driver_node.cpp)
 

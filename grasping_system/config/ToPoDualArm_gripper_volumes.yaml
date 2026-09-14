@@ -1,7 +1,7 @@
 grippers:
   - name: left_gripper
     tf_frame: L_tcp
-    output_topic: /ToPoDualArm/L_grip_V_topological_map
+    output_topic: /ToPoDualArm/L_grip_V_Tmap
     shape: box
     # XYZ in the TCP frame: finger span, maximum opening, usable finger depth.
     dimensions: [0.061, 0.074, 0.0883]
@@ -34,7 +34,7 @@ grippers:
 
   - name: left_gripper_undersize
     tf_frame: L_tcp
-    output_topic: /ToPoDualArm/L_grip_minV_topological_map
+    output_topic: /ToPoDualArm/L_grip_minV_Tmap
     shape: box
     # Free voxels bracketed by the fully closed fingers along the closing axis.
     dimensions: [0.061, 0.074, 0.0883]
@@ -67,7 +67,7 @@ grippers:
 
   - name: left_gripper_base_forbidden
     tf_frame: L_tcp
-    output_topic: /ToPoDualArm/L_grip_baseV_topological_map
+    output_topic: /ToPoDualArm/L_grip_baseV_Tmap
     shape: box
     # Base STL bounds plus a 5 mm required-empty collision margin.
     dimensions: [0.0916, 0.161, 0.0305]
@@ -87,7 +87,7 @@ grippers:
 
   - name: left_gripper_closing_sweep_forbidden
     tf_frame: L_tcp
-    output_topic: /ToPoDualArm/L_grip_sweptV_topological_map
+    output_topic: /ToPoDualArm/L_grip_sweptV_Tmap
     # Union of the base and both fingers from fully open to fully closed.
     # This is a collision template, not an object-volume template.
     shape: box
@@ -122,7 +122,7 @@ grippers:
 
   - name: right_gripper
     tf_frame: R_tcp
-    output_topic: /ToPoDualArm/R_grip_V_topological_map
+    output_topic: /ToPoDualArm/R_grip_V_Tmap
     shape: box
     dimensions: [0.061, 0.074, 0.0883]
     center: [0.0, 0.0, 0.04415]
@@ -153,7 +153,7 @@ grippers:
 
   - name: right_gripper_undersize
     tf_frame: R_tcp
-    output_topic: /ToPoDualArm/R_grip_minV_topological_map
+    output_topic: /ToPoDualArm/R_grip_minV_Tmap
     shape: box
     dimensions: [0.061, 0.074, 0.0883]
     center: [0.0, 0.0, 0.04415]
@@ -184,7 +184,7 @@ grippers:
 
   - name: right_gripper_base_forbidden
     tf_frame: R_tcp
-    output_topic: /ToPoDualArm/R_grip_baseV_topological_map
+    output_topic: /ToPoDualArm/R_grip_baseV_Tmap
     shape: box
     dimensions: [0.0916, 0.161, 0.0305]
     center: [0.0, 0.0, 0.09525]
@@ -203,7 +203,7 @@ grippers:
 
   - name: right_gripper_closing_sweep_forbidden
     tf_frame: R_tcp
-    output_topic: /ToPoDualArm/R_grip_sweptV_topological_map
+    output_topic: /ToPoDualArm/R_grip_sweptV_Tmap
     shape: box
     dimensions: [0.10, 0.17, 0.14]
     center: [0.0, 0.0, 0.07]

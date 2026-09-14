@@ -174,11 +174,11 @@
     visualization_gng:
       enabled: true
       path_prefix: ""
-      topic_prefix: "topological_map_vis"
-      trajectory_input_topic: "plan_topological_map"
-      trajectory_topic_prefix: "plan_topological_map_vis"
-      candidate_trajectory_input_topic: "cand_topological_map"
-      candidate_trajectory_topic_prefix: "cand_topological_map_vis"
+      topic_prefix: "Tmap_vis"
+      trajectory_input_topic: "plan_Tmap"
+      trajectory_topic_prefix: "plan_Tmap_vis"
+      candidate_trajectory_input_topic: "cand_Tmap"
+      candidate_trajectory_topic_prefix: "cand_Tmap_vis"
 
     # --- Self Recognition Settings ---
     self_recognition:
@@ -206,12 +206,12 @@
   ros__parameters:
     object_voxels_topic: "/topo_voxel_ids"
     environment_voxels_topic: ""
-    required_graph_topic: "/ToPoDualArm/L_grip_V_topological_map"
-    undersize_graph_topic: "/ToPoDualArm/L_grip_minV_topological_map"
-    forbidden_graph_topic: "/ToPoDualArm/L_grip_sweptV_topological_map"
+    required_graph_topic: "/ToPoDualArm/L_grip_V_Tmap"
+    undersize_graph_topic: "/ToPoDualArm/L_grip_minV_Tmap"
+    forbidden_graph_topic: "/ToPoDualArm/L_grip_sweptV_Tmap"
     candidate_topic: "/grasp_pose_cands"
     candidate_voxels_topic: "/grasp_pose_cand_cells"
-    reachability_map_topic: "/ToPoDualArm/topological_map_static"
+    reachability_map_topic: "/ToPoDualArm/Tmap_static"
     reachability_voxel_size: 0.05
     reachability_voxel_origin: [0.0, 0.0, 0.0]
     reachability_publish_hz: 5.0
@@ -246,7 +246,7 @@
     candidate_orientation_ema_alpha: 0.35
     # 同一候補トラックを再確認扱いへ戻すTCP位置差 [m]
     candidate_track_reset_dist: 0.10
-    reachability_map_topic: "/ToPoDualArm/topological_map_static"
+    reachability_map_topic: "/ToPoDualArm/Tmap_static"
     reachability_voxel_size: 0.05
     reachability_voxel_origin: [0.0, 0.0, 0.0]
     reachability_publish_hz: 5.0

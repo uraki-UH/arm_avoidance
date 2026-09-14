@@ -61,7 +61,7 @@ public:
     selection_topic_ = declare_parameter<std::string>(
       "selection_topic", "/object_hypothesis/select");
     map_topic_ = declare_parameter<std::string>(
-      "map_topic", "/object_hypothesis/topological_map");
+      "map_topic", "/object_hypothesis/Tmap");
     const double switch_interval_sec = declare_parameter<double>("switch_interval_sec", 5.0);
     const auto random_seed = declare_parameter<std::int64_t>("random_seed", 0);
 

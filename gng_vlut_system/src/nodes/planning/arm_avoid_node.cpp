@@ -66,7 +66,7 @@ public:
     declare_parameter<std::string>("root_link", "base_link");
     declare_parameter<std::string>("leaf_link", "right_end_effector_link");
     declare_parameter<std::string>("joint_topic", "joint_states");
-    declare_parameter<std::string>("graph_topic", "arm_avoid/topological_map");
+    declare_parameter<std::string>("graph_topic", "arm_avoid/Tmap");
     declare_parameter<std::string>("safe_target_topic",
                                    "arm_avoid/safe_target_joint_states");
     declare_parameter<double>("publish_hz", 10.0);

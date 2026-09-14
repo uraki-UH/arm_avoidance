@@ -27,7 +27,7 @@ def main():
         ["ros2", "run", "gng_vlut_system", "safety_monitor_node", "--ros-args",
          "--params-file", params, "-p", f"gng_model_path:={model_dir}/gng.bin",
          "-p", f"vlut_path:={model_dir}/vlut.bin", "-p", "base_frame:=ToPoDualArm/base_link",
-         "-r", "topological_map:=/ToPoDualArm/topological_map_static"],
+         "-r", "topological_map:=/ToPoDualArm/Tmap_static"],
         ["ros2", "launch", "gng_vlut_system", "grasp_joint_candidates.launch.py",
          f"params_file:={params}"],
     ]
@@ -41,12 +41,13 @@ def main():
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         received = {}
         for topic, msg_type, key in [
-            ("/ToPoDualArm/topological_map_static", TopologicalMap, "map"),
+            ("/ToPoDualArm/Tmap_static", TopologicalMap, "map"),
+            ("/selected_Tmap", TopologicalMap, "selected_map"),
             ("/grasp_pose_cands", GraspCandidateArray, "candidates"),
             ("/selected_goal_candidate_ids", Int32MultiArray, "goals"),
             ("/ToPoDualArm/grasp_candidate_metrics", GraspCandidateMetricArray, "metrics"),
-            ("/ToPoDualArm/plan_topological_map", TopologicalMap, "plan"),
-            ("/ToPoDualArm/cand_topological_map", TopologicalMap, "candidate_plan"),
+            ("/ToPoDualArm/plan_Tmap", TopologicalMap, "plan"),
+            ("/ToPoDualArm/cand_Tmap", TopologicalMap, "candidate_plan"),
             ("/viewer/internal/stream/robot/description", String, "candidate_robot_description"),
             ("/viewer/internal/stream/robot/pose", String, "candidate_robot_pose"),
         ]:
@@ -94,6 +95,8 @@ def main():
         wait_for(lambda: "goals" in received and received["goals"].data, "領域内候補の目標選択")
         allowed_ids = set(received["goals"].data)
         assert selected_node.id in allowed_ids
+        wait_for(lambda: "selected_map" in received and received["selected_map"].nodes,
+                 "短縮名の選定マップ出力")
         wait_for(
             lambda: "metrics" in received and received["metrics"].candidates and
             "candidate_robot_description" in received and

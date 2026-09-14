@@ -117,7 +117,7 @@ ros2 launch gng_vlut_system visualize_topoarm_rviz.launch.py \
 学習したGNGマップやアームの姿勢をToPoFuzzy-Viewerに送信します。
 
 ToPoDualArmのロボットとGNGを表示します。左右グリッパーの体積確認用トピック
-（`L_grip_V_topological_map`など、左右の`V`・`minV`・`baseV`・`sweptV`）は
+（`L_grip_V_Tmap`など、左右の`V`・`minV`・`baseV`・`sweptV`）は
 `ToPoDualArm.yaml`で既定オフです。
 
 ```bash

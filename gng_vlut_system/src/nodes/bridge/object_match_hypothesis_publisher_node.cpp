@@ -165,7 +165,7 @@ public:
     output_prefix_ = "/" + template_id_ + "/hypotheses/" + hypothesis_id_;
     const auto output_qos = rclcpp::QoS(1).reliable().transient_local();
     graph_publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
-      output_prefix_ + "/topological_map", output_qos);
+      output_prefix_ + "/Tmap", output_qos);
     marker_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
       output_prefix_ + "/markers", output_qos);
     metadata_publisher_ = create_publisher<std_msgs::msg::String>(

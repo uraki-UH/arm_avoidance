@@ -168,7 +168,7 @@ public:
     std::string topic_name = get_parameter("output_topic").as_string();
     if (topic_name.empty()) {
       topic_name = multi_template_mode_ ?
-        "/object_hypothesis/topological_map" : "/" + template_id_ + "/topological_map_static";
+        "/object_hypothesis/Tmap" : "/" + template_id_ + "/Tmap_static";
     }
     publisher_ = create_publisher<ais_gng_msgs::msg::TopologicalMap>(
       topic_name, rclcpp::QoS(1).reliable().transient_local());

@@ -48,11 +48,11 @@ public:
     environment_voxels_topic_ = declare_parameter<std::string>(
       "environment_voxels_topic", "");
     required_graph_topic_ = declare_parameter<std::string>(
-      "required_graph_topic", "grip_V_topological_map");
+      "required_graph_topic", "grip_V_Tmap");
     undersize_graph_topic_ = declare_parameter<std::string>(
-      "undersize_graph_topic", "grip_minV_topological_map");
+      "undersize_graph_topic", "grip_minV_Tmap");
     forbidden_graph_topic_ = declare_parameter<std::string>(
-      "forbidden_graph_topic", "grip_baseV_topological_map");
+      "forbidden_graph_topic", "grip_baseV_Tmap");
     const std::string candidate_topic = declare_parameter<std::string>(
       "candidate_topic", "/grasp_pose_cands");
     const std::string candidate_voxels_topic = declare_parameter<std::string>(

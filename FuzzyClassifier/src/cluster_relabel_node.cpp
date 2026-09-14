@@ -268,7 +268,7 @@ public:
   {
     input_topic_ = this->declare_parameter<std::string>("input_topic", "/topological_map");
     output_topic_ =
-      this->declare_parameter<std::string>("output_topic", "/fuzzy_classifier/topological_map");
+      this->declare_parameter<std::string>("output_topic", "/fuzzy_classifier/Tmap");
     rewrite_label_ = this->declare_parameter<bool>("rewrite_label", true);
     rewrite_label_inferred_ = this->declare_parameter<bool>("rewrite_label_inferred", false);
     preserve_structural_labels_ =

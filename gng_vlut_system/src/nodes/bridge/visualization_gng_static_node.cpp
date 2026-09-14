@@ -26,7 +26,7 @@ class VisualizationGngStaticNode : public rclcpp::Node {
       : Node("visualization_gng_static_node") {
     const std::string model_path = declare_parameter<std::string>("model_path", "");
     const std::string topic_name =
-        declare_parameter<std::string>("topic_name", "topological_map_vis");
+        declare_parameter<std::string>("topic_name", "Tmap_vis");
     const std::string frame_id = declare_parameter<std::string>("frame_id", "base_link");
     if (model_path.empty()) {
       throw std::invalid_argument("model_path is required");
