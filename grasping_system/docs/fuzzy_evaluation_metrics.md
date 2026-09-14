@@ -39,8 +39,8 @@
 ### 2.4 安全マージン
 | 変数名 | 型 | 値の想定範囲 | 単位 | 説明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `joint_limit_margin_min` | `float32` | $[0, 1]$ | なし | 候補姿勢における各関節の「限界までの余裕度」の最小値。0で限界到達、1で中心。 |
-| `joint_limit_margin_mean` | `float32` | $[0, 1]$ | なし | 各関節の余裕度の平均値。 |
+| `joint_limit_margin_min` | `float32` | 未確定 | 未確定 | 未計算（NaN）。最小余裕の定義確定まで暫定値の代入なし。 |
+| `joint_limit_margin_mean` | `float32` | 未確定 | 未確定 | 未計算（NaN）。平均余裕の定義確定まで暫定値の代入なし。 |
 | `self_collision_margin` | `float32` | $[0, \infty)$ | `m` | ロボット本体（リンク間）の自己干渉マージン。※現状の実装では NaN。 |
 | `environment_collision_margin` | `float32` | $[0, \infty)$ | `m` | 周囲の障害物環境との干渉マージン。※現状の実装では NaN。 |
 
@@ -56,8 +56,10 @@
 | `path_node_ids` | `int32[]` | GNGノードID群 | なし | 開始点から目標点までの経路を構成するノードIDの配列。 |
 | `path_position_manipulability` | `float32[]` | 各要素 $[0, \infty)$ | なし | 経路上各ノードでの並進マニピュラビリティの推移。 |
 | `path_rotation_manipulability` | `float32[]` | 各要素 $[0, \infty)$ | なし | 経路上各ノードでの回転マニピュラビリティの推移。 |
-| `estimated_energy` | `float32` | $[0, \infty)$ | `rad²` | 関節角度の変化量の二乗和（$\sum \|\Delta q\|^2$）。値が小さいほど滑らかでエネルギー消費が少ない。 |
-| `estimated_duration` | `float32` | $[0, \infty)$ | `s` (秒) | 経路移動にかかる推定所要時間（$\sum \max(\|\Delta q\|) / \dot{q}_{\max}$）。 |
+| `estimated_energy` | `float32` | 未確定 | 未確定 | 未計算（NaN）。用途・計算根拠の確定まで暫定式なし。 |
+| `estimated_duration` | `float32` | 未確定 | `s` (秒) | 未計算（NaN）。時間推定モデルの確定まで暫定式なし。 |
+
+上記4指標は候補選定とは独立した配信用の暫定処理を停止。フィールドは互換性のため維持し、`/evaluation_metrics`では`sample_metric_valid=false`として配信。未計算値を0や低評価へ置換しないこと。利用中の関節限界スコア、可操作性、上方候補のOBB面積比は変更対象外。
 
 ### 2.7 ノード付帯特徴量（拡張用）
 `metric_names` および `metric_values` 配列にペアとして格納される、個別ノードが保持する統計評価値です。

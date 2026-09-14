@@ -21,6 +21,12 @@
 - エージェントが新規プロセスを起動した場合は、最終報告に起動コマンドと停止済みであることを
   必ず記載する。
 
+## 作業記録
+
+- 実装・調査・設計判断の記録時は `skills/maintain-project-docs/SKILL.md` を参照する。
+- `gng_vlut_system/docs/progress.md` は実施済みの事実と検証結果、`reject.md` は不採用・採用見送りの判断専用とし、予定や現行仕様を混在させない。
+- 時間・依存作業などの都合による保留は `gng_vlut_system/docs/pending.md` に理由・完了済み範囲・再開条件・次の一手を記録し、不採用と区別する。
+
 ## Git worktree同期フロー
 
 - 各worktreeの基準ブランチは、`branch.<worktreeブランチ名>.codex-base`へ明示的に保存する。

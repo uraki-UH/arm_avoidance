@@ -113,7 +113,6 @@ flowchart TD
 | `control_claim_mode` | int | `1` | control claim モード |
 | `control_claim_enabled` | bool | `true` | claim publish 有効化 |
 | `current_ee_pose_topic` | topic | `/ToPoDualArm/current_ee_pose` | 現在 EE pose 出力 |
-| `metrics_max_joint_velocity` | float | `0.6` | 評価時間の見積もり用速度 |
 
 ### 3.4 `virtual_joint_state_driver.launch.py` の引数
 
@@ -331,6 +330,11 @@ Viewer のリンク別楕円は対象 URDF リンクの子として描画する�
 可操作性の `manipulability_condition_number`、`min_singular_value`、`manipulability_singular_values` は
 可操作性楕円体などの基礎データから派生できるため、`/evaluation_metrics` の固定schemaには含めない。
 診断用の`/grasp_candidate_metrics`では互換性のため既存フィールドを維持する。
+
+`joint_limit_margin_min`、`joint_limit_margin_mean`、`estimated_energy`、`estimated_duration`は未計算（NaN）。
+候補選定に未使用の暫定計算を停止し、汎用評価への変換では`sample_metric_valid=false`を適用。
+関連する`metrics_max_joint_velocity`パラメータは廃止。選択処理の関節限界スコア、可操作性、上方候補の面積比は維持。
+詳細は [暫定評価指標の未計算化](releases/2026-09-14_provisional_candidate_metrics.md) を参照。
 
 `feasible=false`の候補は`/evaluation_metrics`へsampleを生成せず、`feasible`自体も評価指標にしない。
 診断用の`/grasp_candidate_metrics`には到達不能候補を含む全候補を維持する。

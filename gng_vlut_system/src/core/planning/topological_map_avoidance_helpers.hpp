@@ -141,47 +141,16 @@ static inline std::vector<float> buildPathManipulability(
   return values;
 }
 
-static inline std::pair<float, float> estimatePathEnergyAndDuration(
-    const std::shared_ptr<GNGType> &gng, const Eigen::VectorXf &current_q,
-    const std::vector<int> &path, double max_joint_velocity) {
-  if (!gng || path.empty()) {
-    return {0.0f, 0.0f};
-  }
-
-  float energy = 0.0f;
-  float duration = 0.0f;
-  Eigen::VectorXf previous = current_q;
-  const double clamped_velocity = std::max(1e-6, max_joint_velocity);
-
-  for (const int node_id : path) {
-    if (node_id < 0 || node_id >= static_cast<int>(gng->getMaxNodeNum())) {
-      continue;
-    }
-    const auto &node = gng->nodeAt(node_id);
-    if (node.id == -1 || node.weight_angle.size() != previous.size()) {
-      continue;
-    }
-
-    const Eigen::VectorXf delta = node.weight_angle - previous;
-    energy += static_cast<float>(delta.squaredNorm());
-    duration += static_cast<float>(delta.cwiseAbs().maxCoeff() / clamped_velocity);
-    previous = node.weight_angle;
-  }
-
-  return {energy, duration};
-}
-
 static inline gng_control_msgs::msg::GraspCandidateMetricArray
 buildGraspCandidateMetricArray(
     const rclcpp::Time &stamp, const std::string &frame_id,
     const std::string &robot_name, const std::string &base_frame,
-    int selected_goal_node_id, const Eigen::VectorXf &current_q, int start_id,
+    int selected_goal_node_id, int start_id,
     const std::vector<int> &goal_candidates,
     const std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
     const std::shared_ptr<GNGType> &gng,
     const std::shared_ptr<::kinematics::KinematicChain> &chain,
-    const std::vector<std::string> &controlled_joint_names,
-    double max_joint_velocity) {
+    const std::vector<std::string> &controlled_joint_names) {
   gng_control_msgs::msg::GraspCandidateMetricArray out;
   out.header.stamp = stamp;
   out.header.frame_id = frame_id;
@@ -207,6 +176,7 @@ buildGraspCandidateMetricArray(
     metric.rotation_manipulability = nanMetric();
     metric.manipulability_condition_number = nanMetric();
     metric.min_singular_value = nanMetric();
+    // 定義未確定の余裕・品質・時間指標。代替スコアを用いない未計算値
     metric.joint_limit_margin_min = nanMetric();
     metric.joint_limit_margin_mean = nanMetric();
     metric.self_collision_margin = nanMetric();
@@ -222,8 +192,6 @@ buildGraspCandidateMetricArray(
         metric.end_effector_pose = buildPoseFromNode(node);
         metric.final_joint_state =
             buildJointStateFromQ(node.weight_angle, controlled_joint_names, stamp);
-        metric.joint_limit_margin_min = node.status.joint_limit_score;
-        metric.joint_limit_margin_mean = node.status.joint_limit_score;
 
         const auto position_manip =
             node.status.manip_info.valid
@@ -264,10 +232,6 @@ buildGraspCandidateMetricArray(
           buildPathManipulability(gng, chain, path_it->second, false);
       metric.path_rotation_manipulability =
           buildPathManipulability(gng, chain, path_it->second, true);
-      const auto [energy, duration] =
-          estimatePathEnergyAndDuration(gng, current_q, path_it->second, max_joint_velocity);
-      metric.estimated_energy = energy;
-      metric.estimated_duration = duration;
     }
 
     out.candidates.push_back(std::move(metric));

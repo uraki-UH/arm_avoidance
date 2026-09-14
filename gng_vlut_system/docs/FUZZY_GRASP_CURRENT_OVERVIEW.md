@@ -272,14 +272,14 @@ HTMLには `/evaluation_metrics` の非文字列指標を `evaluation.<metric_id
 | --- | --- |
 | `position_manipulability` | 位置可操作性 |
 | `rotation_manipulability` | 回転可操作性 |
-| `joint_limit_margin_min` | 関節限界余裕。現行生成処理ではmeanと同じノードスコアを代入 |
-| `joint_limit_margin_mean` | 関節限界余裕。独立した平均値計算ではない |
+| `joint_limit_margin_min` | 未計算（NaN）。ノードスコアによる代用なし |
+| `joint_limit_margin_mean` | 未計算（NaN）。ノードスコアによる代用なし |
 | `self_collision_margin` | 自己衝突余裕。現行生成処理ではNaN |
 | `environment_collision_margin` | 環境衝突余裕。現行生成処理ではNaN |
 | `gripper_width` | グリッパ幅。現行生成処理ではNaN |
 | `grasp_region_score` | 把持領域スコア。現行生成処理ではNaN |
-| `estimated_energy` | 推定経路コスト系の指標 |
-| `estimated_duration` | 推定所要時間 |
+| `estimated_energy` | 未計算（NaN）。暫定式なし |
+| `estimated_duration` | 未計算（NaN）。暫定式なし |
 | `path_position_manipulability` | 経路上の位置可操作性の配列 |
 | `path_rotation_manipulability` | 経路上の回転可操作性の配列 |
 

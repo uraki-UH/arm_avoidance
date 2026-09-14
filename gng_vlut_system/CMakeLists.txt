@@ -117,6 +117,14 @@ add_subdirectory(src)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_gtest(test_candidate_metric_availability
+    test/test_candidate_metric_availability.cpp)
+  if(TARGET test_candidate_metric_availability)
+    target_include_directories(test_candidate_metric_availability PRIVATE src src/core src/legacy)
+    target_link_libraries(test_candidate_metric_availability metrics_lib safety_engine collision_lib)
+    ament_target_dependencies(test_candidate_metric_availability
+      rclcpp sensor_msgs geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
+  endif()
   ament_add_pytest_test(test_grasp_candidate_reachability
     test/test_grasp_candidate_reachability.py
     ENV ROS_DOMAIN_ID=217 ROS_LOCALHOST_ONLY=1

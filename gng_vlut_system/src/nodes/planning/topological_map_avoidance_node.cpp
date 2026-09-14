@@ -210,7 +210,6 @@ public:
     declare_parameter("waypoint_tolerance", 0.05);
     declare_parameter("robot_base_frame", "");
     declare_parameter("publish_candidate_robot_preview", true);
-    declare_parameter("metrics_max_joint_velocity", 0.6);
     // ゴール姿勢スコアリング
     // score = ホップ数 + 0.5*関節距離
     //       + goal_rot_manip_weight  * log(回転可操作性 条件数)  ← 手首ねじれ抑制
@@ -414,8 +413,6 @@ public:
       robot_base_frame_ = ns.empty() ? root_link : (root_link.empty() ? ns : ns + "/" + root_link);
     }
     publish_candidate_robot_preview_ = get_parameter("publish_candidate_robot_preview").as_bool();
-    metrics_max_joint_velocity_ =
-        std::max(1e-6, get_parameter("metrics_max_joint_velocity").as_double());
     goal_rot_manip_weight_ =
         static_cast<float>(std::max(0.0, get_parameter("goal_rot_manip_weight").as_double()));
     goal_joint_limit_weight_ =
@@ -486,7 +483,7 @@ public:
                   ? currentJointVectorLocked()
                   : Eigen::VectorXf::Zero(chain_->getTotalDOF());
               publishTrajectoryPathLocked(current_q, {});
-              publishGraspCandidateMetricsLocked(current_q, -1, {}, {});
+              publishGraspCandidateMetricsLocked(-1, {}, {});
             }
             RCLCPP_INFO(
                 get_logger(),
@@ -1003,7 +1000,6 @@ private:
   double waypoint_tolerance_ = 0.05;
   bool replan_on_path_collision_ = true;
   bool publish_candidate_robot_preview_ = true;
-  double metrics_max_joint_velocity_ = 0.6;
   float goal_rot_manip_weight_ = 1.0f;
   float goal_joint_limit_weight_ = 0.5f;
   std::string robot_base_frame_ = "base_link";
@@ -1191,7 +1187,7 @@ private:
 
     trajectory_.goal_id = reached_goal_id;
     publishGraspCandidateMetricsLocked(
-        current_q, selected_start_id >= 0 ? selected_start_id : start_id,
+        selected_start_id >= 0 ? selected_start_id : start_id,
         goal_candidates, candidate_path_by_goal);
     trajectory_.bridge_valid = false;
     trajectory_.bridge_path.clear();
@@ -1572,7 +1568,7 @@ private:
   }
 
   void publishGraspCandidateMetricsLocked(
-      const Eigen::VectorXf &current_q, int start_id,
+      int start_id,
       const std::vector<int> &goal_candidates,
       const std::unordered_map<int, std::vector<int>> &candidate_path_by_goal) {
     if (!candidate_metrics_pub_ || !gng_) {
@@ -1589,9 +1585,9 @@ private:
       ns_raw.erase(ns_raw.begin());
     }
     const auto out = topological_map_avoidance::buildGraspCandidateMetricArray(
-        now(), frame_id, ns_raw, robot_base_frame_, trajectory_.goal_id, current_q,
+        now(), frame_id, ns_raw, robot_base_frame_, trajectory_.goal_id,
         start_id, goal_candidates, candidate_path_by_goal, gng_, chain_,
-        controlled_joint_names_, metrics_max_joint_velocity_);
+        controlled_joint_names_);
     candidate_metrics_pub_->publish(out);
 
     if (evaluation_metrics_pub_ && !evaluation_metrics_topic_.empty()) {
