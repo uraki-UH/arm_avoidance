@@ -6,6 +6,20 @@
 
 ## 2026-09-15: 非平面成分のViewer Graph化
 
+追記: ユーザー指定により`/nonplane_components`のBbox既定設定を削除し、GUI・独立ビュー選択を対象外へ変更。Graph配信・法線・共分散と把持候補Tmapの既定ONは維持。関連テスト2ファイル・lint・frontend本番ビルド・Docker backendビルドに成功。実ブラウザ操作は未検証。有限コマンドは終了、一時出力は削除済み。ROSノード・サーバーの起動停止なし。
+
+今回の検証コマンド（frontendディレクトリ）:
+
+```bash
+node --test tests/inspection_bbox_gate.test.mjs tests/candidate_hover_frame.test.mjs
+npm run lint
+npm run build -- --configLoader runner --outDir /tmp/nonplane-bbox-hidden-build
+```
+
+```bash
+docker exec -w /ros2_ws gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 15s 180s colcon build --packages-select topo_fuzzy_viewer --symlink-install --parallel-workers 1'
+```
+
 - ROS所属配列を維持し、バックエンドの非平面Marker生成を既存Graphバイナリ配信へ置換。元ID・法線・共分散・成分所属・実エッジを保持し、平面側端点を成分のBboxから除外。[現行仕様・実行コマンド](releases/2026-09-15_nonplane_graph_viewer.md)を記録。
 - `/nonplane_components`に既定OFFのBbox切替を追加。他トピックの未指定設定・把持候補の既定ONと既存の並行変更を維持。
 - Docker backendビルド・CTest 2対象、隔離ROSでの入力全6到着順・再接続再購読・空成分・購読解除検証、frontend関連5ファイル・lint・本番ビルドに成功。初回のテスト側端点数・再購読漏れ・旧Bbox期待値と一時出力先権限を修正後に再検証成功。
@@ -380,3 +394,10 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 - 点群の表示設定を受信バッファと分離し、旧データ削除後の同名トピック復帰時に再適用。グラフの受信ごとの色変更・属性欠落による表示設定の自動OFFを廃止。[仕様・検証コマンド](releases/2026-09-15_viewer_stream_restart.md#表示設定保持の追加検証)を更新。
 - 再起動回帰2件、Bbox回帰3件、lint、TypeScript検査、本番アセット生成に成功。非表示・透明度0・手動変換・グラフ設定の保持、新点群バッファへの置換を確認。実ブラウザ描画は未検証。
 - 有限テスト・ビルドは終了、一時出力は削除済み。ROS・サーバーの新規起動や既存プロセスの停止操作なし。
+
+## 2026-09-15: 上方把持候補の凸包・回転包含判定
+
+- 平面PCAと複合候補の固定軸を廃止し、2D凸包・支持点切替区間による開口包含判定へ置換。[仕様・検証コマンド](releases/2026-09-15_convex_grasp_footprint.md)を記録。
+- Docker Releaseビルド・CTest・AddressSanitizer/UndefinedBehaviorSanitizer検査に成功。回転形状、合算時の再回転、重複点不変性、退化形状、ランダム120件と独立角度走査の整合を確認。
+- 32平面・3,072ノードの合成入力で推定時間の中央値0.125 ms（内点あり）・0.620 ms（全点が凸包頂点）を測定。実入力・Viewer・実機把持は未検証。
+- 検証プロセスは全終了、一時出力は削除済み。既存プロセスへの起動停止操作なし。外部再起動後の推定器が今回のビルド結果を使用していることを確認。

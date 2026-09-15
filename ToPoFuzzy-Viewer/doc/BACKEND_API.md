@@ -67,7 +67,7 @@ CPUの`/nonplane_components`はROSでは`std_msgs/msg/UInt32MultiArray`のまま
 - 成分内の実エッジと平面への実接続エッジだけを保持。平面側端点もGraphへ含めるが成分所属には含めず、`nonplaneComponentId=UINT32_MAX`。Bbox・成分の独立表示は非平面所属ノードだけが対象。
 - 成分ごとの共通Graph色を使用、平面側端点は灰色。法線・共分散の可視化は既存Graph設定。色・寸法は旧Marker表示と同一ではない。
 - 空成分は空Graphで旧表示を消去。送信制御は通常Graphと共通の描画完了通知方式。全クライアント切断後の再接続では再購読が必要。
-- `/nonplane_components`のBounding Boxは既定OFF、ON時に成分の独立ビューを選択可能。既存Viewerバックエンドの再起動とページ再読み込みが適用手順。
+- `/nonplane_components`のBounding Box設定は未指定、GUI・独立ビュー選択は対象外。Graph表示・法線・共分散は維持。旧設定が残る場合はページ再読み込みが適用手順。
 
 ### `job.progress`
 ```json
@@ -176,7 +176,7 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 フッターはノード数・エッジ数・XYZ寸法の1行、座標系の説明行なし。独立ビュー内の`nonplane_components`は`nonplane_`へ表示のみ短縮（見出し例: `nonplane_7`）。元source ID・RPC・ROSトピック名は維持、元名はsource表示のツールチップで確認可能。
 `map`必須の編集RPCとは別用途であり、独立表示にはTFへの変換不要。
 
-ホバー枠・枠内クリック・一括範囲取得と、ノード・クラスタ・Markerの直接クリックによる独立表示は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。真偽値の明示指定があるGraphだけGUIの`Bounding Box`を表示し、falseでも再ON可能。`/grasp_pose_cands/Tmap`だけ既定でtrueを指定、`nonplane_components`で終わるGraphは既定falseの切替あり。`/topological_map`を含む他グラフは未指定のためGUI・選択機能なし。明示的なOFFは受信更新でも保持。法線などGraph設定を持たないMarkerからの独立表示なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。
+ホバー枠・枠内クリック・一括範囲取得と、ノード・クラスタ・Markerの直接クリックによる独立表示は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。真偽値の明示指定があるGraphだけGUIの`Bounding Box`を表示し、falseでも再ON可能。`/grasp_pose_cands/Tmap`だけ既定でtrueを指定。`/nonplane_components`・`/topological_map`を含む他グラフは未指定のためGUI・選択機能なし。明示的なOFFは受信更新でも保持。法線などGraph設定を持たないMarkerからの独立表示なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。
 ONのトピックは初回から物体全体のAABBで判定し、ホバーでの点・球メッシュのraycastなし。主画面と同じTF・手動表示変換・線枠の余白を適用。OFFで枠・当たり判定・直接選択・詳細取得RPCを停止し、取得中のOFFによる遅延表示・エラー表示も抑止。既に開いた独立ビューの固定表示は維持するが、「最新を取得」には元トピックのONが必要。可操作性楕円体の詳細選択は別機能として維持。
 判定は10 Hz、範囲取得は可視ソース全体で同時1件・最大4 Hz。ソースの受信フレームが同じなら再取得なし。重なりはカメラから近い枠を優先。
 枠内の点のない場所からも独立ビューの選択が可能。5pxを超えたドラッグ後のクリックは除外。

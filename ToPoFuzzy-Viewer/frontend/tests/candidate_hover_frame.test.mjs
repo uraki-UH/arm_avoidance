@@ -31,7 +31,7 @@ for (const source_id of ['/grasp_pose_cands/Tmap', '/nonplane_components']) test
         });
         const { CandidateHoverFrame, createDefaultGraphLayerSettings } = await import(pathToFileURL(output_file).href);
         assert.equal(createDefaultGraphLayerSettings(source_id, { mode: 'dynamic' }).enable_bounding_box,
-            source_id === '/grasp_pose_cands/Tmap');
+            source_id === '/grasp_pose_cands/Tmap' ? true : undefined);
         const canvas = new EventTarget();
         canvas.width = canvas.height = 200;
         canvas.style = { cursor: 'crosshair' };

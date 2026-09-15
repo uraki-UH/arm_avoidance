@@ -12,7 +12,7 @@ ROS側の所属配列を維持したまま、Viewer向け非平面表示をMarke
 
 ## Added
 
-- `/nonplane_components`に既定OFFのBounding Box切替。ONで成分の独立ビューを選択可能。他Graphの未指定設定と把持候補Tmapの既定ONを維持。
+- ユーザー指定により`/nonplane_components`のBounding Box設定は未指定。GUI・独立ビュー選択は対象外、Graph表示・法線・共分散は維持。把持候補Tmapの既定ONは維持。旧設定が残る場合はページ再読み込みが必要。
 - 属性・ID・エッジ・範囲のC++テスト、隔離ROSとWebSocketによる配信テスト。
 
 ## Fixed

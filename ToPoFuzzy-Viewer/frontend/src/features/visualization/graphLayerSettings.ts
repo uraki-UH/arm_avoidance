@@ -166,7 +166,6 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         visible: true,
         showNodes: true,
         ...(is_grasp_candidate_map ? { enable_bounding_box: true } : {}),
-        ...(/(^|\/)nonplane_components$/.test(tag) ? { enable_bounding_box: false } : {}),
         showEdges: !isStatic && !is_grasp_candidate_map,
         showClusters: false,
         ...normalize_node_label_settings(),
