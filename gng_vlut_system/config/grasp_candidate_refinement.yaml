@@ -1,0 +1,53 @@
+/**:
+  ros__parameters:
+    # 既存候補の並列評価。既存トピックへの上書き・関節指令なし
+    update_hz: 2.0
+    max_candidates: 20
+    max_cloud_points: 1000000
+    max_local_points: 30000
+    # 購読停止の検出時間と、候補・点群間の時刻差 [sec]
+    max_input_age_sec: 2.0
+    max_stamp_diff_sec: 0.5
+    # ToPoDualArm左腕の関節鎖。root_frameは実行時のTF座標系
+    urdf_path: /ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
+    root_link: L_shoulder_mount
+    root_frame: ToPoDualArm/L_shoulder_mount
+    tcp_frame: L_tcp
+    gripper_joint: L_gripper_joint
+    gripper_mimic_joint: L_gripper_mimic
+    # 閉鎖時の指内面間隔 [m]。対称直動指の変換式は関節値=(開口幅-closed_width)/2
+    closed_width: 0.0
+    max_ik_seeds: 3
+    max_ik_iter: 120
+    max_seed_dist: 0.15
+    max_joint_change_deg: 25.0
+    max_position_error: 0.002
+    max_orientation_error_deg: 3.0
+    # 指内幅・指幅・指長・保守的な指厚 [m]。既存の候補許容外形とは独立
+    min_width: 0.005
+    max_width: 0.074
+    finger_span: 0.061
+    finger_length: 0.0883
+    finger_thickness: 0.034
+    # TCPから見た近似基部直方体の寸法とZ範囲 [m]
+    base_span: 0.092
+    base_width: 0.161
+    min_base_depth: 0.080
+    max_base_depth: 0.111
+    opening_margin: 0.003
+    collision_margin: 0.001
+    approach_length: 0.060
+    # 指内面の観測接触帯 [m]。両側の支持数と面内広がりによる検査
+    contact_band: 0.002
+    min_contact_depth: 0.003
+    max_contact_depth: 0.070
+    min_contact_points: 8
+    min_contact_spread: 0.002
+    max_contact_variation: 0.08
+    max_contact_normal_deg: 30.0
+    max_center_shift: 0.025
+    # 上方候補の+Z進入から、+Zが基部側の実L_tcpへの補正角 [deg]
+    # 入力が既に実TCP座標系の場合は0
+    tcp_rotation_x_deg: 180.0
+    yaw_offsets_deg: [-15.0, 0.0, 15.0]
+    insertion_depths: [0.025, 0.040, 0.055]

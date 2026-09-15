@@ -140,6 +140,11 @@ add_executable(topological_map_goal_selector_node nodes/planning/topological_map
 ament_target_dependencies(topological_map_goal_selector_node
     rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
 install(TARGETS topological_map_goal_selector_node DESTINATION lib/${PROJECT_NAME})
+# 既存候補を購読する独立した把持幅・姿勢補正
+add_executable(grasp_candidate_refiner_node nodes/planning/grasp_candidate_refiner_node.cpp)
+target_link_libraries(grasp_candidate_refiner_node robot_model_lib kinematics_lib)
+ament_target_dependencies(grasp_candidate_refiner_node ${DEPS_ROS})
+install(TARGETS grasp_candidate_refiner_node DESTINATION lib/${PROJECT_NAME})
 add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
 add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_state_driver_node.cpp)
 

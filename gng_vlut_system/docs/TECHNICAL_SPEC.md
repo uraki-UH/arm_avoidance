@@ -1213,3 +1213,42 @@ ID別の登録マップはlaunch内部で集約し、外部の可視化topicと�
 ros2 topic pub --once /object_hypothesis/select std_msgs/msg/String \
   "{data: mug_complete}"
 ```
+
+## 16. 把持候補の独立した幅・姿勢補正
+
+`grasp_candidate_refinement.launch.py` は既存の候補生成・選定・計画と独立した追加評価を起動する。
+既定入力は `/grasp_pose_cands`、`/camera/camera/depth/color/points`、
+`/ToPoDualArm/grasp_candidate_metrics`。出力は専用メッセージの `/grasp_pose_refined` と、
+接触線・幅ラベルの `/grasp_pose_refined/markers`。元候補のIDと順序を維持し、
+既存トピックや関節指令へ配信しない。既定2 Hz、最大20候補。
+
+点群全体を5 cmの既存ボクセル索引へ格納し、各候補の指・基部・進入掃引を包含するAABBから
+未間引きの点を抽出する。yaw 3方向×挿入深さ3段階について、閉じ軸の両端付近の支持点と
+PCA法線を評価し、対向する接触候補の支持がある姿勢を優先する。中心補正と近似グリッパの
+観測衝突検査を行い、接触対成立・観測衝突なしの場合に既存関節候補を初期値としたIKを試す。
+関節制限・初期値からの変更量・FK残差と実TCP姿勢のグリッパ掃引を再検査する。
+
+幅は次の3種類を区別する。
+
+| フィールド | 意味 |
+| --- | --- |
+| `observed_width` | 局所点群の閉じ軸方向の観測幅。欠損面を含む全幅の保証なし |
+| `contact_width` | 両側接触を確認した支持点中心間の閉じ軸方向の幅 |
+| `opening_width` | 進入時開口。観測幅に左右の余裕を追加した値 |
+
+未計算値はNaN。接触対の有効性は `has_contact_pair`、IKの成立は `has_joint_solution` で判定する。
+既定の最大内幅74 mmは元候補の許容外形とは独立。出力関節値の指開口は
+`(opening_width - closed_width) / 2` と、その符号反転値。
+
+`GraspRefinementArray.header` は元候補の座標系と点群時刻、`source_header` と `cloud_header` は
+入力の由来を保持する。各 `GraspRefinement` は元候補ID、IK初期値のGNGノードID、元姿勢、
+補正目標 `refined_pose`、出力関節角、実FK姿勢 `joint_pose`、接触点、支持点数、幅、
+各検査の有効性と棄却理由を持つ。`update_ms` は索引作成・局所評価・IKの更新時間で、配信とMarker作成を除く。
+
+TF欠損時の座標流用なし。入力停止・時刻差・重複ID・不正点群・空配信では旧結果を無効化する。
+局所点数の予算超過は間引きで通さず棄却する。設定は起動時読み込み。
+TCP軸補正の既定180度は、既存の+Z進入候補を+Zが基部側の実 `L_tcp` へ変換する設定。
+
+腕全体の衝突・経路・未観測空間の検証は含まず、`has_arm_path_check` は常にfalse。
+IKが成立しても実行可能判定ではない。詳細な設定・起動方法・検証範囲は
+[リリースノート](releases/2026-09-15_grasp_candidate_refinement.md)を参照。

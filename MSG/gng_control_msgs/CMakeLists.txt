@@ -13,6 +13,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/GraspCandidateArray.msg"
   "msg/GraspCandidateMetric.msg"
   "msg/GraspCandidateMetricArray.msg"
+  "msg/GraspRefinement.msg"
+  "msg/GraspRefinementArray.msg"
   "msg/GraspState.msg"
   "msg/JointControlClaim.msg"
   DEPENDENCIES geometry_msgs sensor_msgs std_msgs

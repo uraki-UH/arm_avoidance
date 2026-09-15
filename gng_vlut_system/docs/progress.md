@@ -311,3 +311,24 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash 
 ```
 
 結合テスト内の`ros2 run gng_vlut_system safety_monitor_node`と`ros2 launch gng_vlut_system grasp_joint_candidates.launch.py`の全引数は[検証起動コマンド](releases/2026-09-14_candidate_static_path_index.md#verification)と同一。
+
+## 2026-09-15: 把持幅・TCP姿勢・関節姿勢の独立した追加評価
+
+- 既存候補を購読する別ノードと専用出力を追加。局所実点群による幅・接触・グリッパ掃引評価、既存関節候補を初期値にしたIKを実装。[仕様・制限・全起動コマンド](releases/2026-09-15_grasp_candidate_refinement.md)を記録。
+- Releaseビルド、新規8件・既存16件のC++検証と隔離ROS結合検証に成功。合成40 mm対象・実URDFで40/46 mmの接触幅・開口とIK補正、既存出力への非干渉、欠損・失効・不正入力時の無効化を確認。
+- 指定bagの実点群20フレームを既存GNG・上方候補生成へ投入。追加評価は48更新・最大14候補で平均11.569 ms、最大18.701 ms（IKなし）。観測幅457件、確定接触対0件。実点群での把持成立、補正した腕の衝突・経路は未検証。
+- 検証driver・launch・子ノード・有限計測は全終了済み、開始前後のプロセス一覧で残留なし。既存プロセスの停止・再起動操作なし。結果は `tmp/grasp_refinement_20260915/` に保存。
+
+## 2026-09-15: 追加pushされた把持候補補正の再統合
+
+- 最新fetch後の`origin/grasp_new4`（`fd44919`）を前回の統合結果`1a314f7`へ統合。前回の高速化・計測ログ・曲面抽出を保持。ソース・仕様書は自動マージ、進捗文書の追記競合は双方を保持して解消。
+- Dockerで専用メッセージ生成、新規ノードと既存計画のReleaseビルド・インストールに成功。C++は新規補正8件、到達性9件、経路計画8件の計25件成功。domain 218で新規補正と既存候補計画のROS結合テストも成功。
+- 合成対象の接触幅40 mm・開口46 mm・IK補正、既存トピックへの非干渉、欠損・衝突・TF失効復帰・入力停止・不正入力・空入力の処理を確認。実点群での把持成立は今回の検証対象外。
+- 下記コマンドと検証用launch・子ノードはすべて終了済み。一時結果・ROSログの専用ディレクトリを削除し、テスト残留なしを確認。既存ROSの停止・再起動操作、pushなし。
+
+```bash
+docker exec -w /ros2_ws gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 15s 240s colcon build --packages-select gng_control_msgs --symlink-install --executor sequential && source /ros2_ws/install/setup.bash && timeout -s INT -k 15s 120s cmake -S /ros2_ws/src/gng_vlut_system -B /ros2_ws/build/gng_vlut_system && timeout -s INT -k 15s 480s cmake --build /ros2_ws/build/gng_vlut_system --target grasp_candidate_refiner_node test_grasp_refinement test_grasp_candidate_reachability test_candidate_metric_availability topological_map_planning -j2 && timeout -s INT -k 5s 120s ctest --test-dir /ros2_ws/build/gng_vlut_system --output-on-failure -R "^(test_grasp_refinement|test_grasp_candidate_reachability|test_candidate_metric_availability)$"'
+docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/grasp_merge_check_Fs4LBp/ros gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 10s 120s cmake --install /ros2_ws/build/gng_vlut_system && timeout -s INT -k 20s 120s python3 /ros2_ws/src/gng_vlut_system/test/check_grasp_refinement.py --output /tmp/grasp_merge_check_Fs4LBp/result.json && timeout -s INT -k 25s 180s python3 /ros2_ws/src/gng_vlut_system/test/check_grasp_joint_candidates_integration.py'
+```
+
+新規検証の子launchは`ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py params_file:=/tmp/grasp_refinement_0vwzlmg0/params.yaml candidate_topic:=/grasp_refinement_test/source seed_topic:=/grasp_refinement_test/seeds point_cloud_topic:=/grasp_refinement_test/points output_topic:=/grasp_refinement_test/result`。既存候補計画テストの子launchは[前回の起動コマンド](releases/2026-09-14_candidate_static_path_index.md#verification)と同一。
