@@ -191,6 +191,48 @@ function MarkerPrimitive({ marker }: { marker: MarkerMessage }) {
     return <primitive object={object} scale={scale} renderOrder={MARKER_RENDER_ORDER} />;
 }
 
+function TextMarker({ marker }: { marker: MarkerMessage }) {
+    const label = useMemo(() => {
+        if (!marker.text) return null;
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+        const font_size = 48;
+        const font = `${font_size}px monospace`;
+        const lines = marker.text.split('\n');
+        context.font = font;
+        const capital_height = context.measureText('A').actualBoundingBoxAscent || font_size;
+        const width = Math.ceil(Math.max(...lines.map(line => context.measureText(line).width)) + 8);
+        const height = Math.ceil(lines.length * font_size * 1.2 + 8);
+        // 長文でもテクスチャ辺長を制限。外部フォント取得なし、文字変更時のみ再生成
+        const ratio = Math.min(1, 2048 / width, 2048 / height);
+        canvas.width = Math.ceil(width * ratio);
+        canvas.height = Math.ceil(height * ratio);
+        context.scale(ratio, ratio);
+        context.font = font;
+        context.textAlign = 'center';
+        context.textBaseline = 'top';
+        context.fillStyle = '#ffffff';
+        context.strokeStyle = '#000000';
+        context.lineWidth = 2;
+        lines.forEach((line, idx) => {
+            context.strokeText(line, width / 2, 4 + idx * font_size * 1.2);
+            context.fillText(line, width / 2, 4 + idx * font_size * 1.2);
+        });
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        return { texture, width: width / capital_height, height: height / capital_height };
+    }, [marker.text]);
+    useEffect(() => () => label?.texture.dispose(), [label]);
+    const { color, opacity } = marker_color(marker.color);
+    const height = marker.scale?.[2] ?? 0;
+    if (!label || !Number.isFinite(height) || height <= 0) return null;
+    return <sprite scale={[label.width * height, label.height * height, 1]} renderOrder={MARKER_RENDER_ORDER}>
+        <spriteMaterial map={label.texture} color={color} opacity={opacity} transparent
+            depthTest={false} depthWrite={false} toneMapped={false} />
+    </sprite>;
+}
+
 function LineMarker({ marker, strip }: { marker: MarkerMessage; strip: boolean }) {
     const { invalidate } = useThree();
     const { color, opacity } = useMemo(() => marker_color(marker.color), [marker.color]);
@@ -243,6 +285,8 @@ function renderMarker(marker: MarkerMessage, source_id: string, on_inspect?: (ma
     if (is_delete_action(marker)) return null;
 
     switch (marker.type) {
+    case 'text':
+        return <TextMarker marker={marker} />;
     case 'cube':
     case 'sphere':
     case 'cylinder':

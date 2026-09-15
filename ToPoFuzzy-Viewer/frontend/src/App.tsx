@@ -11,6 +11,7 @@ import {
     EntityType,
     PointCloudData,
     HeatmapSettings,
+    point_cloud_display_settings,
     GraphNode,
     graph_selection,
     LayerSettings,
@@ -149,6 +150,7 @@ function App() {
         simpleColor: '#c8ff4a',
     });
     const [pointCloudOpacity, setPointCloudOpacity] = useState(1);
+    const [point_cloud_display, set_point_cloud_display] = useState<Record<string, point_cloud_display_settings>>({});
     const [robotSettings, setRobotSettings] = useState<Record<string, RobotSettings>>({});
     const [markerSettings, setMarkerSettings] = useState<Record<string, { visible: boolean, transform?: Transform, max_visible_candidates?: number }>>({});
     const [voxelSettings, setVoxelSettings] = useState<Record<string, VoxelSettings>>({});
@@ -450,9 +452,19 @@ function App() {
         setSelectedLayerId(data.id);
     };
 
+    const update_point_cloud_display = (id: string, settings: point_cloud_display_settings | null) => {
+        set_point_cloud_display(prev => {
+            const next = { ...prev };
+            if (settings) next[id] = settings;
+            else delete next[id];
+            return next;
+        });
+    };
+
     const handleRemoveLayer = (id: string) => {
         if (isEditMode) return;
         point_cloud_view_settings_ref.current.delete(id);
+        update_point_cloud_display(id, null);
         setDisabledSourceIds((prev) => new Set(prev).add(id));
         setPointClouds((prev) => {
             const filtered = prev.filter((pc) => pc.id !== id);
@@ -633,6 +645,8 @@ function App() {
                             setHeatmapSettings={setHeatmapSettings}
                             pointCloudOpacity={pointCloudOpacity}
                             setPointCloudOpacity={setPointCloudOpacity}
+                            point_cloud_display={point_cloud_display}
+                            on_update_point_cloud_display={update_point_cloud_display}
                             bounds={bounds}
                             selectedCloud={selectedCloud}
                             transformMode={transformMode}
@@ -720,7 +734,8 @@ function App() {
                                     key={pc.id}
                                     data={pc}
                                     tf={tf}
-                                    heatmapSettings={heatmapSettings}
+                                    heatmapSettings={point_cloud_display[pc.id] ?? heatmapSettings}
+                                    opacity={point_cloud_display[pc.id]?.opacity}
                                     selected={isEditMode && pc.id === editLayerId}
                                     transformMode={transformMode}
                                     onTransformChange={(pos, rot, scale) => handleTransformChange(pc.id, pos, rot, scale)}

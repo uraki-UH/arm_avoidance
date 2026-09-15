@@ -10,6 +10,7 @@ interface PointCloudRendererProps {
     data: PointCloudData;
     tf?: { pos: number[]; quat: number[] } | null;
     heatmapSettings?: HeatmapSettings;
+    opacity?: number;
     selected?: boolean;
     transformMode?: 'translate' | 'rotate' | 'scale';
     onTransformChange?: (position: [number, number, number], rotation: [number, number, number], scale: [number, number, number]) => void;
@@ -48,6 +49,7 @@ export function PointCloudRenderer({
     data,
     tf,
     heatmapSettings,
+    opacity = data.opacity ?? 1,
     selected = false,
     transformMode = 'translate',
     onTransformChange,
@@ -58,8 +60,8 @@ export function PointCloudRenderer({
     const transformControlsRef = useRef<any>(null);
     const { camera, gl, invalidate } = useThree();
 
-    // Trigger re-render in demand mode
-    useDemandUpdate([data, tf, heatmapSettings, selected, transformMode]);
+    // 表示設定変更時のオンデマンド再描画。
+    useDemandUpdate([data, tf, heatmapSettings, opacity, selected, transformMode]);
 
     useEffect(() => {
         if (!frameGroupRef.current) return;
@@ -140,7 +142,6 @@ export function PointCloudRenderer({
 
     const material = useMemo(() => {
         const pointSize = heatmapSettings?.pointSize || 0.02;
-        const opacity = data.opacity ?? 1;
         const isTransparent = opacity < 1;
         const isShaderMode = heatmapSettings && ['height', 'distance', 'intensity'].includes(heatmapSettings.mode);
 
@@ -194,7 +195,7 @@ export function PointCloudRenderer({
             }
             return pointsMaterial;
         }
-    }, [heatmapSettings, data.opacity]);
+    }, [heatmapSettings, opacity]);
 
     useEffect(() => {
         return () => { material.dispose(); };

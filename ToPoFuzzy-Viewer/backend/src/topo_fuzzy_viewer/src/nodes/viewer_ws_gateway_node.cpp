@@ -125,6 +125,7 @@ namespace converter {
                   {"scale", {m.scale.x, m.scale.y, m.scale.z}},
                   {"color", {m.color.r, m.color.g, m.color.b, m.color.a}},
                   {"frameId", m.header.frame_id}};
+        if (m.type == visualization_msgs::msg::Marker::TEXT_VIEW_FACING) j["text"] = m.text;
         if (!m.points.empty()) { json pts = json::array(); for (auto& p : m.points) pts.push_back({p.x, p.y, p.z}); j["points"] = pts; }
         if (!m.colors.empty()) { json cols = json::array(); for (auto& c : m.colors) cols.push_back({c.r, c.g, c.b, c.a}); j["colors"] = cols; }
         return j;

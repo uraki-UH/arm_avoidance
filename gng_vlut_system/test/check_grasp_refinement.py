@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import tempfile
@@ -124,7 +125,55 @@ def main():
             try:
                 process = subprocess.Popen(command, stdout=log, stderr=log, start_new_session=True)
                 cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points)
-                def wait_for(predicate, label, publish=True, max_sec=8):
+                def wait_for_log(text):
+                    deadline = time.monotonic()+8
+                    while time.monotonic() < deadline:
+                        assert process.poll() is None, 'refiner exited'
+                        if text in Path(args.output+'.log').read_text():
+                            return
+                        rclpy.spin_once(node, timeout_sec=.02)
+                    raise RuntimeError('missing status log: '+text)
+
+                def wait_for_markers(out):
+                    deadline = time.monotonic()+2
+                    while time.monotonic() < deadline:
+                        for message in reversed(markers):
+                            if message.markers and message.markers[0].header == out.header:
+                                assert message.markers[0].action == 3
+                                assert all(m.type != 9 and not m.text for m in message.markers)
+                                return [m for m in message.markers if m.action == 0]
+                        rclpy.spin_once(node, timeout_sec=.02)
+                    raise RuntimeError('missing geometry markers')
+
+                def check_geometry(out):
+                    shapes = wait_for_markers(out)
+                    candidate = out.candidates[0]
+                    arrow = next(m for m in shapes if m.ns == 'refined_approach')
+                    assert arrow.type == 0 and arrow.header == out.header
+                    local_arrow = np.array([[p.x, p.y, p.z] for p in arrow.points])
+                    np.testing.assert_allclose(local_arrow, [[0, 0, .1483], [0, 0, 0]], atol=1e-9)
+                    width = candidate.contact_width if candidate.has_contact_pair else candidate.observed_width
+                    if not math.isfinite(width) or width <= 0:
+                        assert len(shapes) == 1 and arrow.color.r == arrow.color.g == arrow.color.b
+                        q = arrow.pose.orientation
+                        original = candidate.source_pose.orientation
+                        np.testing.assert_allclose([q.x, q.y, q.z, q.w],
+                            [original.w, original.z, -original.y, -original.x], atol=1e-9)
+                        return shapes
+                    frame = next(m for m in shapes if m.ns == 'refined_gripper')
+                    assert frame.type == 5 and frame.pose == arrow.pose
+                    assert len(frame.points) == (20 if candidate.has_contact_pair else 120)
+                    local = np.array([[p.x, p.y, p.z] for p in frame.points])
+                    np.testing.assert_allclose(local.max(axis=0)-local.min(axis=0), [.061, width, .0883], atol=1e-9)
+                    for value in (frame.pose, arrow.pose):
+                        np.testing.assert_allclose([value.position.x, value.position.y, value.position.z],
+                            [candidate.refined_pose.position.x, candidate.refined_pose.position.y, candidate.refined_pose.position.z], atol=1e-9)
+                        q = value.orientation
+                        expected = candidate.refined_pose.orientation
+                        np.testing.assert_allclose([q.x, q.y, q.z, q.w], [expected.x, expected.y, expected.z, expected.w], atol=1e-9)
+                    return shapes
+
+                def wait_for(predicate, label, publish=True, max_sec=8, has_cloud=True):
                     deadline = time.monotonic()+max_sec
                     next_publish = 0
                     while time.monotonic() < deadline:
@@ -132,7 +181,9 @@ def main():
                         if publish and time.monotonic() >= next_publish:
                             stamp = node.get_clock().now().to_msg()
                             source.header.stamp = cloud.header.stamp = stamp
-                            source_pub.publish(source); seed_pub.publish(seeds); cloud_pub.publish(cloud)
+                            source_pub.publish(source); seed_pub.publish(seeds)
+                            if has_cloud:
+                                cloud_pub.publish(cloud)
                             next_publish = time.monotonic()+.12
                         rclpy.spin_once(node, timeout_sec=.02)
                         if received and predicate(received[-1]):
@@ -140,11 +191,16 @@ def main():
                     detail = [(c.reason, c.contact_width, c.position_error) for c in received[-1].candidates] if received else []
                     raise RuntimeError(label+': '+repr(detail))
 
+                wait_for_log('waiting_for_candidates')
+                assert not received
+                no_cloud = wait_for(lambda out: out.candidates[0].reason == 'no_point_cloud', 'missing cloud', has_cloud=False)
+                check_geometry(no_cloud)
                 source.update_id = 1
                 first = wait_for(lambda out: out.source_update_id == 1 and out.candidates[0].has_joint_solution, 'contact and IK')
                 result = first.candidates[0]
                 assert result.source_candidate_id == 101 and result.seed_node_id == 123
                 assert result.has_contact_pair and result.has_gripper_check and not result.has_observed_collision
+                first_shapes = check_geometry(first)
                 assert abs(result.contact_width-.04) < 1e-5 and abs(result.opening_width-.046) < 1e-5
                 assert result.position_error <= .002 and result.orientation_error_deg <= 3
                 assert not result.has_arm_path_check and result.reason == 'refined_arm_path_unchecked'
@@ -161,14 +217,18 @@ def main():
                 assert {name for name, _ in publishers} <= {prefix+'/result', prefix+'/result/markers', '/rosout', '/parameter_events'}
                 assert node.count_publishers(prefix+'/source') == 1
                 source.update_id = 2
-                cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points[:len(points)//2])
+                cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points[:len(points)//2]+[points[-1]])
                 missing = wait_for(lambda out: out.source_update_id == 2 and not out.candidates[0].has_contact_pair, 'missing side')
                 assert math.isnan(missing.candidates[0].contact_width)
+                assert math.isfinite(missing.candidates[0].observed_width)
+                check_geometry(missing)
                 source.update_id = 3
                 obstacle = target[:3, :3] @ np.array([0, 0, .10])+target[:3, 3]
                 cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points+[obstacle])
                 blocked = wait_for(lambda out: out.source_update_id == 3 and out.candidates[0].has_observed_collision, 'base collision')
                 assert not blocked.candidates[0].has_joint_solution
+                blocked_shapes = check_geometry(blocked)
+                assert all(m.color.r > m.color.g for m in blocked_shapes)
                 source.update_id = 4
                 cloud = point_cloud2.create_cloud_xyz32(Header(frame_id='refinement_camera'), points)
                 wait_for(lambda out: out.source_update_id == 4 and out.candidates[0].reason == 'cloud_transform_unavailable', 'missing TF')
@@ -192,7 +252,8 @@ def main():
                     source.candidates[0].pose.orientation.y = value
                     source.candidates[0].pose.orientation.z = value
                     source.candidates[0].pose.orientation.w = value
-                    wait_for(lambda out: out.source_update_id == source.update_id and out.candidates[0].reason == 'invalid_pose', 'invalid quaternion')
+                    invalid = wait_for(lambda out: out.source_update_id == source.update_id and out.candidates[0].reason == 'invalid_pose', 'invalid quaternion')
+                    assert not wait_for_markers(invalid)
                     source.update_id += 1
                 source.candidates[0].pose.orientation = orientation
                 cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points)
@@ -206,6 +267,14 @@ def main():
                 padded = wait_for(lambda out: out.source_update_id == source.update_id and out.candidates[0].has_joint_solution, 'row padding')
                 assert abs(padded.candidates[0].contact_width-.04) < 1e-5
                 source.update_id += 1
+                cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points*200)
+                budget = wait_for(lambda out: out.source_update_id == source.update_id and
+                                  out.candidates[0].reason == 'local_point_budget', 'local point budget')
+                assert math.isnan(budget.candidates[0].observed_width)
+                assert not budget.candidates[0].has_contact_pair and not budget.candidates[0].has_joint_solution
+                check_geometry(budget)
+                source.update_id += 1
+                cloud = point_cloud2.create_cloud_xyz32(Header(frame_id=source.header.frame_id), points)
                 seeds.candidates = []
                 unseeded = wait_for(lambda out: out.source_update_id == source.update_id and out.candidates[0].reason == 'no_joint_seeds', 'missing seeds')
                 assert unseeded.candidates[0].has_contact_pair and not unseeded.candidates[0].has_joint_solution
@@ -216,11 +285,18 @@ def main():
                 while time.monotonic() < deadline:
                     rclpy.spin_once(node, timeout_sec=.02)
                 assert markers and all(m.action != 0 for m in markers[-1].markers)
+                wait_for_log('no_candidates')
+                log_text = Path(args.output+'.log').read_text()
+                log_times = [float(v) for v in re.findall(r'\[INFO\] \[(\d+\.\d+)\].*Refine: ', log_text)]
+                assert len(log_times) >= 2 and all(b-a >= 4.9 for a, b in zip(log_times, log_times[1:]))
                 payload = {'result': 'passed', 'first': message_to_ordereddict(first),
                            'recovered': message_to_ordereddict(recovered),
+                           'first_markers': [message_to_ordereddict(m) for m in first_shapes],
                            'checks': ['40/46 mm widths', 'IK correction', 'gripper joints', 'no old publishers',
                                       'input unchanged', 'occlusion', 'collision', 'TF loss/recovery', 'stale', 'duplicates',
-                                      'invalid quaternion', 'row padding', 'missing seeds', 'empty']}
+                                      'invalid quaternion', 'row padding', 'missing seeds', 'empty',
+                                      'waiting log', 'uncomputed direction only', 'measured gripper dimensions',
+                                      'refined orientation', 'dashed observation', 'collision color', 'no text', 'status log rate']}
                 Path(args.output).write_text(json.dumps(payload, indent=2))
                 print(json.dumps({'result': 'passed', 'first_ms': first.update_ms, 'checks': payload['checks']}), flush=True)
             finally:

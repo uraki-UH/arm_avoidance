@@ -17,6 +17,18 @@ A high-performance web-based Point Cloud Viewer and Editor built with React, Thr
   - Interactive Transform (Translate, Rotate, Scale)
 - **File Support**: PCD, LAS, LAZ, PLY
 
+## 点群トピック別の表示設定
+
+サイドバーの「Display → 点群の表示設定対象」でトピックを選び、Point Size、Opacity、
+Color Mode（RGB・単色・Heatmap）、単色の色、Heatmapの配色・範囲を個別調整できます。
+個別設定のないトピックは「共通設定」に追従します。トピック選択だけでは個別化せず、
+値の変更時にその時点の表示設定一式を保持します。「共通設定に戻す」で指定を解除できます。
+
+個別設定は同名トピックの配信停止・再開や購読切替を跨いで保持します。
+レイヤーの明示削除またはブラウザリロードで解除します。永続保存はありません。
+設定変更は描画のみで、ROS入力・GNG学習・点群データや送信レートには影響しません。
+個別Heatmapの範囲は設定値を使用し、別トピックを含む全体点群の範囲による自動上書きはありません。
+
 ## ロボット候補のリンク別表示設定
 
 サイドバーのロボット色設定の「リンク別の表示設定」で、URDFの各関節に

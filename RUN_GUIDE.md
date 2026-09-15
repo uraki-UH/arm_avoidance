@@ -50,6 +50,11 @@ ros2 launch gng_vlut_system grasp_joint_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
 `topological_map_path_planner_node`で候補経路・評価・`final_joint_state`を出力。回避ノードの起動、追従・退避、関節指令の配信なし。Viewerの候補ロボット表示だけを止める場合は`publish_candidate_robot_preview:=false`を追加。
+
+## 実点群による把持幅・姿勢の追加補正
+ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py
+
+上記の候補・関節候補と実点群が必要。`/grasp_pose_refined/markers`に把持幅の線枠と進入方向の矢印を表示。文字なし、幅未計算は灰色矢印のみ。`candidate_goal_preview`は置換しない。設定は`gng_vlut_system/config/grasp_candidate_refinement.yaml`。点群名が異なる場合は`point_cloud_topic:=<入力名>`を追加。[描き分け・検証結果](gng_vlut_system/docs/releases/2026-09-15_grasp_geometry_markers.md)。
  
 
 ## HTML起動

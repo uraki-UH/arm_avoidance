@@ -117,6 +117,17 @@ ROS Marker用には同じ値をlinear RGBへ変換。辞書は他の矢印スタ
 - 旧形式のインライン`scale`・`color`も入力可能。矢印以外のMarker規約は変更なし。
 - 補助軸、anchor、ブラウザ設定の詳細は[共通仕様](arrow_visual_spec.md)を参照。
 
+### Text Marker
+
+`visualization_msgs/msg/Marker`と`MarkerArray`の`TEXT_VIEW_FACING`は、通常Markerと同じ配信経路で
+`type: "text"`と`text`本文を保持。特定のトピック名への依存なし。
+
+- 位置は`frameId`・`pos`と既存の手動変換を適用。文字面はカメラへ正対。
+- `scale[2]`を大文字高さの基準[m]として使用。`scale[0:2]`は文字寸法に不使用。
+- `color`のRGB・透明度を使用。空本文、無効または正でない高さ、削除actionは非表示。
+- 改行対応。ブラウザ内のCanvasTextureを本文変更時だけ生成し、交換・非表示時に解放。
+- 外部フォント取得なし。長文はテクスチャ辺長2048以内に縮小し、表示上の寸法比を保持。
+
 ### Stream Reset
 ```json
 { "type": "stream.reset", "topic": "/points", "tag": "/points" }

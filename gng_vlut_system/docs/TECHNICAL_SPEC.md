@@ -1223,7 +1223,7 @@ ros2 topic pub --once /object_hypothesis/select std_msgs/msg/String \
 `grasp_candidate_refinement.launch.py` は既存の候補生成・選定・計画と独立した追加評価を起動する。
 既定入力は `/grasp_pose_cands`、`/camera/camera/depth/color/points`、
 `/ToPoDualArm/grasp_candidate_metrics`。出力は専用メッセージの `/grasp_pose_refined` と、
-接触線・幅ラベルの `/grasp_pose_refined/markers`。元候補のIDと順序を維持し、
+把持幅・指内面の線枠と進入矢印の `/grasp_pose_refined/markers`。元候補のIDと順序を維持し、
 既存トピックや関節指令へ配信しない。既定2 Hz、最大20候補。
 
 点群全体を5 cmの既存ボクセル索引へ格納し、各候補の指・基部・進入掃引を包含するAABBから
@@ -1252,6 +1252,17 @@ PCA法線を評価し、対向する接触候補の支持がある姿勢を優�
 TF欠損時の座標流用なし。入力停止・時刻差・重複ID・不正点群・空配信では旧結果を無効化する。
 局所点数の予算超過は間引きで通さず棄却する。設定は起動時読み込み。
 TCP軸補正の既定180度は、既存の+Z進入候補を+Zが基部側の実 `L_tcp` へ変換する設定。
+
+INFOログは入力名・局所点数上限と、未受信・候補数・接触対数・IK成立数・理由別件数を表示。
+状態変化時だけ最短5秒間隔で更新し、入力停止後の最終状態も表示する。
+描画の文字は使用せず、棄却理由はログ・評価メッセージに保持する。
+`refined_gripper`のLINE_LISTは、TCPのY方向に把持幅、X方向に`finger_span`、Z方向に`finger_length`を持つ
+左右の指内面の線枠。接触対がある場合は`contact_width`の実線、観測のみは`observed_width`の破線。
+`refined_approach`のARROWは、実TCPの+Z側から原点へ向かう進入方向。両者とも補正目標`refined_pose`に追従する。
+接触対ありは水色、IK成立は緑、観測のみは橙、衝突・幅範囲外は赤。
+幅未計算では線枠を出さず、元候補を`tcp_rotation_x_deg`で軸補正した灰色矢印だけを表示する。
+不正姿勢は描画なし。未計算幅はNaNのままで、架空の把持幅・成立姿勢を補完しない。
+進入時の`opening_width`は数値として保持し、線枠へは使用しない。詳細は[描画仕様](releases/2026-09-15_grasp_geometry_markers.md)。
 
 腕全体の衝突・経路・未観測空間の検証は含まず、`has_arm_path_check` は常にfalse。
 IKが成立しても実行可能判定ではない。詳細な設定・起動方法・検証範囲は

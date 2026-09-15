@@ -47,6 +47,7 @@ import {
 import {
     PointCloudData,
     HeatmapSettings,
+    point_cloud_display_settings,
     GraphData,
     EditRegion,
     DataSource,
@@ -113,6 +114,8 @@ interface SidebarContentProps {
     setHeatmapSettings: (settings: HeatmapSettings) => void;
     pointCloudOpacity: number;
     setPointCloudOpacity: (opacity: number) => void;
+    point_cloud_display: Record<string, point_cloud_display_settings>;
+    on_update_point_cloud_display: (id: string, settings: point_cloud_display_settings | null) => void;
     bounds: any;
 
     selectedCloud: PointCloudData | undefined;
@@ -196,6 +199,19 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
     const isLayerActionDisabled = props.isEditMode;
     const [labelContext, setLabelContext] = useState<{ tag: string; title: string } | null>(null);
     const [isObjectMatchDialogOpen, setIsObjectMatchDialogOpen] = useState(false);
+    const [point_cloud_target, set_point_cloud_target] = useState('');
+    const display_settings = props.point_cloud_display[point_cloud_target] ?? {
+        ...props.heatmapSettings, opacity: props.pointCloudOpacity,
+    };
+    const update_display_settings = (settings: point_cloud_display_settings) => {
+        if (point_cloud_target) {
+            props.on_update_point_cloud_display(point_cloud_target, settings);
+        } else {
+            const { opacity, ...heatmap } = settings;
+            props.setHeatmapSettings(heatmap);
+            props.setPointCloudOpacity(opacity);
+        }
+    };
 
     const layersTab = (
         <div className="space-y-3">
@@ -482,23 +498,45 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
 
     const displayTab = (
         <div className="space-y-3">
+            <div className="surface-muted space-y-2 p-3">
+                <label htmlFor="point-cloud-display-target" className="control-label">点群の表示設定対象</label>
+                <select id="point-cloud-display-target" className="select-field"
+                    value={point_cloud_target} onChange={event => set_point_cloud_target(event.target.value)}>
+                    <option value="">共通設定</option>
+                    {[...new Set([...props.pointClouds.map(pc => pc.id), ...Object.keys(props.point_cloud_display),
+                        ...(point_cloud_target ? [point_cloud_target] : [])])].map(id => (
+                        <option key={id} value={id}>{id}</option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                    {point_cloud_target
+                        ? (props.point_cloud_display[point_cloud_target] ? 'このトピックの個別設定' : '共通設定を使用中。変更すると個別設定になります。')
+                        : '個別設定のない点群に適用します。'}
+                </p>
+                {point_cloud_target && props.point_cloud_display[point_cloud_target] && (
+                    <button className="entity-btn px-2 py-1 text-xs"
+                        onClick={() => props.on_update_point_cloud_display(point_cloud_target, null)}>
+                        共通設定に戻す
+                    </button>
+                )}
+            </div>
             <CollapsibleSection title="Rendering" icon={<Gauge size={16} />} defaultOpen={true}>
                 <div className="surface-muted space-y-4 p-3">
                     <ControlSlider
                         label="Point Size"
-                        value={props.heatmapSettings.pointSize}
+                        value={display_settings.pointSize}
                         min={0.001}
                         max={0.2}
                         step={0.001}
-                        onChange={(val) => props.setHeatmapSettings({ ...props.heatmapSettings, pointSize: val })}
+                        onChange={(val) => update_display_settings({ ...display_settings, pointSize: val })}
                     />
                     <ControlSlider
                         label="Opacity"
-                        value={props.pointCloudOpacity}
+                        value={display_settings.opacity}
                         min={0}
                         max={1}
                         step={0.05}
-                        onChange={props.setPointCloudOpacity}
+                        onChange={opacity => update_display_settings({ ...display_settings, opacity })}
                         formatValue={(v) => `${Math.round(v * 100)}%`}
                     />
                 </div>
@@ -506,9 +544,9 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
 
             <CollapsibleSection title="Heatmap" icon={<Eye size={16} />} defaultOpen={false}>
                 <HeatmapControls
-                    settings={props.heatmapSettings}
-                    onSettingsChange={props.setHeatmapSettings}
-                    bounds={props.bounds}
+                    settings={display_settings}
+                    onSettingsChange={settings => update_display_settings({ ...settings, opacity: display_settings.opacity })}
+                    bounds={point_cloud_target ? undefined : props.bounds}
                 />
             </CollapsibleSection>
         </div>

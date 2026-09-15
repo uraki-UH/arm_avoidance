@@ -90,6 +90,11 @@ export interface HeatmapSettings {
     simpleColor: string;
 }
 
+// トピック単位の表示設定。未指定トピックは共通設定を使用。
+export interface point_cloud_display_settings extends HeatmapSettings {
+    opacity: number;
+}
+
 // --- Graph / GNG Types ---
 
 export interface GraphNode {

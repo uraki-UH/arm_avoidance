@@ -49,8 +49,16 @@ def publish(generation):
     marker.pose.position.x = float(generation)
     marker.scale.x = marker.scale.y = marker.scale.z = 0.1
     marker.color.a = 1.0
+    label = Marker()
+    label.header = marker.header
+    label.id = 1000 + generation
+    label.type = Marker.TEXT_VIEW_FACING
+    label.pose.orientation.w = 1.0
+    label.scale.z = 0.025
+    label.color.a = 1.0
+    label.text = f'候補{generation}: local_point_budget\n接触未確認'
     timer = node.create_timer(0.1, lambda: (
-        cloud_pub.publish(cloud), marker_pub.publish(MarkerArray(markers=[marker]))))
+        cloud_pub.publish(cloud), marker_pub.publish(MarkerArray(markers=[marker, label]))))
     try:
         rclpy.spin(node)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
@@ -177,6 +185,10 @@ def main():
                             received.add('cloud')
                 elif value.get('type') == 'stream.marker_array':
                     if any(m['id'] == generation for m in value.get('markers', [])):
+                        text_marker = next(m for m in value['markers'] if m['id'] == 1000 + generation)
+                        assert text_marker['type'] == 'text'
+                        assert text_marker['text'] == f'候補{generation}: local_point_budget\n接触未確認'
+                        assert text_marker['scale'][2] == 0.025
                         received.add('marker')
                 return received == {'graph', 'cloud', 'marker'}
             client.until(has_new_data)
@@ -187,7 +199,7 @@ def main():
             publisher = subprocess.Popen([sys.executable, __file__, '--publisher', '3'],
                                          env=env, stdout=log, stderr=log)
             client.until(has_new_data)
-            print('PASS: 全レイヤー削除、選択維持、未ACKグラフ・点群・QoS変更Marker、即時再起動')
+            print('PASS: 全レイヤー削除、選択維持、未ACKグラフ・点群・QoS変更Marker、文字本文、即時再起動')
         except BaseException:
             log.seek(0)
             print(log.read().decode(errors='replace'), file=sys.stderr)

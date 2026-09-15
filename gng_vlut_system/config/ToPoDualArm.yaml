@@ -272,7 +272,7 @@
     minimum_protrusion_distance: 0.005
     minimum_region_nodes: 4
     # ToPoDualArmの開口内部寸法。観測外形との直接比較
-    grasp_size_x: 0.15
-    grasp_size_y: 0.15
+    grasp_size_x: 0.13
+    grasp_size_y: 0.13
     tcp_standoff: 0.0
     maximum_candidates: 20
