@@ -32,6 +32,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_grasp_attention test/test_grasp_attention.cpp)
   target_include_directories(test_grasp_attention PRIVATE include)
   ament_target_dependencies(test_grasp_attention ais_gng_msgs)
+  ament_add_gtest(test_boundary_attention test/test_boundary_attention.cpp)
+  target_include_directories(test_boundary_attention PRIVATE include)
   ament_lint_auto_find_test_dependencies()
 
   ament_add_gtest(test_node_support test/test_node_support.cpp

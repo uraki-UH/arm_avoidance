@@ -77,6 +77,7 @@ MY_API void gng_exec() { gng.exec(); }
 MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio) {
     auto &core = gng.n1;
     core.priority_point_ids.clear();
+    core.priority_weights.clear();
     core.priority_ratio = 0;
     if (!num_points) {return 1;}
     if (!gng.initialized || !point_ids || num_points > static_cast<uint32_t>(gng.input_pcl_num) ||
@@ -91,6 +92,29 @@ MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_po
     core.priority_point_ids.erase(std::unique(core.priority_point_ids.begin(), core.priority_point_ids.end()),
         core.priority_point_ids.end());
     core.priority_ratio = ratio;
+    return 1;
+}
+
+MY_API uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const float *weights,
+        uint32_t num_points, float ratio) {
+    auto &core = gng.n1;
+    core.priority_point_ids.clear();
+    core.priority_weights.clear();
+    core.priority_ratio = 0;
+    if (!num_points) {return 1;}
+    if (!weights || !point_ids || !gng.initialized || num_points > static_cast<uint32_t>(gng.input_pcl_num)) {return 0;}
+    for (uint32_t idx = 0; idx < num_points; ++idx) {
+        if (!std::isfinite(weights[idx]) || weights[idx] <= 0) {return 0;}
+    }
+    if (!gng_set_priority_input(point_ids, num_points, ratio)) {return 0;}
+    if (core.priority_point_ids.size() != num_points) {
+        core.priority_point_ids.clear();
+        core.priority_ratio = 0;
+        return 0;
+    }
+    // 重みと添字の対応維持。従来APIのソート結果を入力順へ復帰。
+    core.priority_point_ids.assign(point_ids, point_ids + num_points);
+    core.priority_weights.assign(weights, weights + num_points);
     return 1;
 }
 

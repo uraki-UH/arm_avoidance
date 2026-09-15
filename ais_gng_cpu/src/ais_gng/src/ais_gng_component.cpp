@@ -305,6 +305,15 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         throw std::invalid_argument("境界候補の隣接数上限の不正値");
     }
     max_boundary_neighbors_ = static_cast<uint32_t>(max_boundary_neighbors);
+    enable_boundary_attention_ = declare_parameter("enable_boundary_attention", false, boundary_descriptor);
+    boundary_attention_radius_ = declare_parameter("boundary_attention.radius", 0.03, boundary_descriptor);
+    boundary_attention_ratio_ = declare_parameter("boundary_attention.ratio", 0.2, boundary_descriptor);
+    boundary_attention_timeout_sec_ = declare_parameter("boundary_attention.timeout_sec", 0.5, boundary_descriptor);
+    if (!std::isfinite(boundary_attention_radius_) || boundary_attention_radius_ <= 0 ||
+        !std::isfinite(boundary_attention_ratio_) || boundary_attention_ratio_ <= 0 || boundary_attention_ratio_ >= 1 ||
+        !std::isfinite(boundary_attention_timeout_sec_) || boundary_attention_timeout_sec_ <= 0) {
+        throw std::invalid_argument("境界重点学習の設定値が不正");
+    }
     enable_boundary_evidence_ = declare_parameter<bool>("boundary.enable_evidence", true, boundary_descriptor);
     boundary_classifier_.min_range_gap_th = declare_parameter<double>("boundary.min_range_gap_th", 0.03, boundary_descriptor);
     boundary_classifier_.max_anchor_dist = declare_parameter<double>("boundary.max_anchor_dist", 0.05, boundary_descriptor);
@@ -486,6 +495,14 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s margin=%.3f m ratio=%.2f timeout=%.2f s",
             grasp_topic.c_str(), grasp_attention_margin_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
     }
+    if (enable_boundary_attention_ && enable_grasp_attention_ &&
+        grasp_attention_ratio_ + boundary_attention_ratio_ >= 1.0) {
+        throw std::invalid_argument("重点配分率の合計による通常学習枠の消失");
+    }
+    if (enable_boundary_attention_) {
+        RCLCPP_INFO(get_logger(), "境界重点学習: radius=%.3f m ratio=%.2f timeout=%.2f s",
+            boundary_attention_radius_, boundary_attention_ratio_, boundary_attention_timeout_sec_);
+    }
 #endif
 
     // 入力点群関連
@@ -624,7 +641,8 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
-        if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0) {continue;}
+        if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
+            name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0) {continue;}
         if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
             name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
             name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
@@ -928,15 +946,19 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         : base_frame_id_;
     header.stamp = msg->header.stamp;
 #if defined(AIS_GNG_BACKEND_CPU)
+    std::vector<uint32_t> grasp_ids;
     if (enable_grasp_attention_) {
-        const auto ids = prepare_grasp_attention(header, clouds.size() == 1);
+        grasp_ids = prepare_grasp_attention(header, clouds.size() == 1);
         // 購読時のみ点群化。重点対象の失効時は空点群で表示を解除。
         if (grasp_attention_pub_->get_subscription_count() > 0 ||
             grasp_attention_pub_->get_intra_process_subscription_count() > 0) {
             uint32_t num_points = 0;
             const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
-            grasp_attention_pub_->publish(makePointCloud2Msg(header, points, num_points, &ids));
+            grasp_attention_pub_->publish(makePointCloud2Msg(header, points, num_points, &grasp_ids));
         }
+    }
+    if (enable_grasp_attention_ || enable_boundary_attention_) {
+        prepare_priority_attention(header, clouds.size() == 1, grasp_ids);
     }
 #endif
     const auto input_end = std::chrono::steady_clock::now();
@@ -1043,7 +1065,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 #if defined(AIS_GNG_BACKEND_CPU)
     const auto boundary_start = std::chrono::steady_clock::now();
     std::size_t num_boundary_candidates = 0;
-    if (enable_boundary_candidates_) {
+    if (enable_boundary_candidates_ || enable_boundary_attention_) {
         for (auto &node : map_msg->nodes) {
             node.is_boundary_candidate = gng_get_node_num_neighbors(node.id) <= max_boundary_neighbors_;
             num_boundary_candidates += node.is_boundary_candidate ? 1U : 0U;
@@ -1051,6 +1073,16 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         if (enable_boundary_evidence_ && num_boundary_candidates > 0) {
             classify_boundary_evidence(*map_msg, transformed_pcl, transformed_pcl_num);
         }
+    }
+    if (enable_boundary_attention_) {
+        boundary_attention_nodes_.clear();
+        for (const auto &node : map_msg->nodes) {
+            if (node.is_boundary_candidate) {
+                boundary_attention_nodes_.push_back({node.pos.x, node.pos.y, node.pos.z});
+            }
+        }
+        boundary_attention_header_ = header;
+        boundary_attention_received_ = std::chrono::steady_clock::now();
     }
     const double boundary_ms = std::chrono::duration<double, std::milli>(
         std::chrono::steady_clock::now() - boundary_start).count();
@@ -1061,7 +1093,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         plane_cluster_summary_ms,
         nonplane_component_ran,
         nonplane_component_ms,
-        enable_boundary_candidates_,
+        enable_boundary_candidates_ || enable_boundary_attention_,
         boundary_ms,
         num_boundary_candidates,
         curve_time_text);
@@ -1372,7 +1404,6 @@ void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_
 #if defined(AIS_GNG_BACKEND_CPU)
 std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
         const std_msgs::msg::Header &header, bool has_single_input) {
-    gng_set_priority_input(nullptr, 0, 0);
     const auto &candidate = grasp_attention_map_;
     if (!has_single_input) {
         RCLCPP_WARN_ONCE(get_logger(), "Grasp attention requires a single input cloud; using normal learning");
@@ -1414,12 +1445,37 @@ std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
     uint32_t num_points = 0;
     const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
     auto ids = grasp_attention_regions_.select(points, num_points);
-    if (!ids.empty()) {
-        gng_set_priority_input(ids.data(), static_cast<uint32_t>(ids.size()), static_cast<float>(grasp_attention_ratio_));
-        RCLCPP_DEBUG(get_logger(), "Grasp attention selected %zu/%u points, ratio=%.3f",
-            ids.size(), num_points, grasp_attention_ratio_);
-    }
     return ids;
+}
+
+void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &header,
+        bool has_single_input, const std::vector<uint32_t> &grasp_ids) {
+    gng_set_priority_input(nullptr, 0, 0);
+    if (!has_single_input) {return;}
+    if (!enable_boundary_attention_) {
+        if (!grasp_ids.empty()) {
+            gng_set_priority_input(grasp_ids.data(), grasp_ids.size(), grasp_attention_ratio_);
+        }
+        return;
+    }
+    uint32_t num_points = 0;
+    const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
+    const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
+    const double elapsed_sec = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - boundary_attention_received_).count();
+    std::vector<float> weights(num_points, 0);
+    if (boundary_attention::can_reuse(boundary_attention_header_.frame_id,
+            stamp_sec(boundary_attention_header_.stamp), header.frame_id, stamp_sec(header.stamp),
+            elapsed_sec, boundary_attention_timeout_sec_)) {
+        weights = boundary_attention::make_weights(points, num_points,
+            boundary_attention_nodes_, boundary_attention_radius_);
+    }
+    const auto priority = boundary_attention::mix(grasp_ids, grasp_attention_ratio_,
+        weights, boundary_attention_ratio_);
+    if (!priority.ids.empty() && !gng_set_weighted_priority_input(priority.ids.data(),
+            priority.weights.data(), priority.ids.size(), priority.ratio)) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点入力設定の失敗、通常学習へ復帰");
+    }
 }
 #endif
 

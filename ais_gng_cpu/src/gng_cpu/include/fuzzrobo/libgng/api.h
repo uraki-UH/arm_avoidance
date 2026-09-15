@@ -164,6 +164,10 @@ void gng_exec();
 // 空指定で解除。不正指定は解除して0を返却。配列の内部コピー、既存点群の複製なし。
 uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio);
 
+// 重み付き重点入力。重みは有限な正値、添字は重複なし。失敗時は重点設定を解除。
+uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const float *weights,
+    uint32_t num_points, float ratio);
+
 /**
  * @brief TopologicalMap差分の記録を切り替える
  * @param[in] enable 0以外で有効。無効時は変更記録の処理を行わない

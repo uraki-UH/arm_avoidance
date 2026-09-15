@@ -26,6 +26,8 @@ cb
 
 `ais_gng.launch.py`へ`enable_grasp_attention:=true`を追加すると、`/grasp_pose_cands/Tmap`のノード近傍へ学習回数の一部を配分。設定・失効条件・観測統計の扱いは[重点学習](docs/grasp_attention.md)を参照。
 
+境界ノード周辺への距離重み付き重点学習は[境界重点学習](docs/boundary_attention.md)を参照。`graspnet.yaml`で有効、把持重点と併用可能。
+
 ## モデル当てはめなしの連続面抽出（比較用）
 
 GNGの位置・法線・実エッジだけで滑らかな連結成分をまとめる方式。

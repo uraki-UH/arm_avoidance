@@ -385,13 +385,15 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     uniform_int_distribution<> rA(0, input_pcl_num - 1);  // 一様乱数
     const bool has_priority = raw_points && !priority_point_ids.empty() && priority_ratio > 0;
     uniform_int_distribution<> priority_dist(0, std::max(1, static_cast<int>(priority_point_ids.size())) - 1);
+    const bool has_priority_weights = has_priority && priority_weights.size() == priority_point_ids.size();
+    std::discrete_distribution<> weighted_priority_dist(priority_weights.begin(), priority_weights.end());
     {
         uniform_int_distribution<> rA_Attention(0, std::max(1, attention_pcl_num) - 1);
         for(i=j=0; i< gng_config.learning_num; ++i){
             // 総学習回数を固定した重点配分。通常学習の既存混合比は残余枠内で維持。
             if (has_priority && static_cast<int>((i + 1) * static_cast<double>(priority_ratio)) >
                 static_cast<int>(i * static_cast<double>(priority_ratio))) {
-                const auto raw_idx = priority_point_ids[priority_dist(mt)];
+                const auto raw_idx = priority_point_ids[has_priority_weights ? weighted_priority_dist(mt) : priority_dist(mt)];
                 auto point = (*raw_points)[raw_idx];
                 learn_normal(point, nullptr, raw_idx, false);
                 continue;

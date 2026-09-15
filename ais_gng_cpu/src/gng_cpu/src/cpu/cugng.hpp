@@ -63,6 +63,7 @@ class CUGNG {
     uint32_t observation_ray_num = 0;
     // 次の学習1回用の重点点添字。観測統計とは独立した学習配分。
     vector<uint32_t> priority_point_ids;
+    vector<float> priority_weights;
     float priority_ratio = 0;
 
     CUGNG();

@@ -26,6 +26,7 @@
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/node_support.hpp"
 #include "ais_gng/grasp_attention.hpp"
+#include "ais_gng/boundary_attention.hpp"
 #include "ais_gng/observation_pixels.hpp"
 #include "ais_gng/boundary_evidence.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -69,6 +70,15 @@ class AiSGNGComponent : public rclcpp::Node {
     std::chrono::steady_clock::time_point grasp_attention_received_{};
     grasp_attention::regions grasp_attention_regions_;
     std::vector<uint32_t> prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input);
+    bool enable_boundary_attention_{false};
+    double boundary_attention_radius_{0.03};
+    double boundary_attention_ratio_{0.2};
+    double boundary_attention_timeout_sec_{0.5};
+    std::vector<boundary_attention::point> boundary_attention_nodes_;
+    std_msgs::msg::Header boundary_attention_header_;
+    std::chrono::steady_clock::time_point boundary_attention_received_{};
+    void prepare_priority_attention(const std_msgs::msg::Header &header, bool has_single_input,
+        const std::vector<uint32_t> &grasp_ids);
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};
     bool enable_boundary_evidence_{true};
