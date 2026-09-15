@@ -130,9 +130,13 @@ import { useEditSession } from './features/manipulation/editSession';
 import { WebGLErrorBoundary } from './components/WebGLErrorBoundary';
 
 type ColorContext = { type: 'robot' | 'voxel' | 'graph'; id: string; title: string };
+type point_cloud_view_settings = Pick<PointCloudData,
+    'visible' | 'opacity' | 'position' | 'rotation' | 'scale' | 'matrix'>;
 
 function App() {
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
+    // 配信元の停止を跨ぐ表示設定のみの保持。点群バッファの保持なし。
+    const point_cloud_view_settings_ref = useRef(new Map<string, point_cloud_view_settings>());
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
     const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
@@ -381,6 +385,11 @@ function App() {
 
     useEffect(() => {
         setPointClouds((prev) => {
+            for (const cloud of prev) {
+                const { visible, opacity, position, rotation, scale, matrix } = cloud;
+                point_cloud_view_settings_ref.current.set(cloud.id,
+                    { visible, opacity, position, rotation, scale, matrix });
+            }
             let next = [...prev];
             let changed = false;
 
@@ -389,13 +398,15 @@ function App() {
                 if (isEditMode && editLayerId === cloud.id) return;
 
                 const index = next.findIndex((pc) => pc.id === cloud.id);
+                const saved_settings = next[index] ?? point_cloud_view_settings_ref.current.get(cloud.id);
                 const newCloud = {
                     ...cloud,
-                    visible: index >= 0 ? next[index].visible : true,
-                    opacity: index >= 0 ? next[index].opacity : pointCloudOpacity,
-                    position: index >= 0 ? next[index].position : (cloud.position || [0, 0, 0]),
-                    rotation: index >= 0 ? next[index].rotation : (cloud.rotation || [0, 0, 0]),
-                    scale: index >= 0 ? next[index].scale : (cloud.scale || [1, 1, 1]),
+                    visible: saved_settings?.visible ?? true,
+                    opacity: saved_settings?.opacity ?? pointCloudOpacity,
+                    position: saved_settings?.position ?? cloud.position ?? [0, 0, 0],
+                    rotation: saved_settings?.rotation ?? cloud.rotation ?? [0, 0, 0],
+                    scale: saved_settings?.scale ?? cloud.scale ?? [1, 1, 1],
+                    matrix: saved_settings?.matrix ?? cloud.matrix,
                 };
 
                 if (index === -1) {
@@ -424,6 +435,9 @@ function App() {
     }, [wsPointClouds, disabledSourceIds, pointCloudOpacity, isEditMode, editLayerId]);
 
     useEffect(() => {
+        for (const [id, settings] of point_cloud_view_settings_ref.current) {
+            point_cloud_view_settings_ref.current.set(id, { ...settings, opacity: pointCloudOpacity });
+        }
         setPointClouds((prev) => prev.map((pc) => ({ ...pc, opacity: pointCloudOpacity })));
     }, [pointCloudOpacity]);
 
@@ -438,6 +452,7 @@ function App() {
 
     const handleRemoveLayer = (id: string) => {
         if (isEditMode) return;
+        point_cloud_view_settings_ref.current.delete(id);
         setDisabledSourceIds((prev) => new Set(prev).add(id));
         setPointClouds((prev) => {
             const filtered = prev.filter((pc) => pc.id !== id);

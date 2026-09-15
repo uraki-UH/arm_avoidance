@@ -166,6 +166,7 @@ export function createDefaultGraphLayerSettings(tag: string, graph: GraphData): 
         visible: true,
         showNodes: true,
         ...(is_grasp_candidate_map ? { enable_bounding_box: true } : {}),
+        ...(/(^|\/)nonplane_components$/.test(tag) ? { enable_bounding_box: false } : {}),
         showEdges: !isStatic && !is_grasp_candidate_map,
         showClusters: false,
         ...normalize_node_label_settings(),
@@ -216,46 +217,14 @@ export function useGraphLayerSettings(graphData: Record<string, GraphData>) {
             let changed = false;
 
             Object.entries(graphData).forEach(([tag, graph]) => {
-                const isStatic = graph.mode === 'static';
-                const isTrajectory = isTrajectoryGraphTag(tag);
-                const hasManipulabilityData = graphHasManipulabilityData(graph);
-                const previousNodeColor = isStatic
-                    ? STATIC_GNG_DEFAULTS.nodeColor
-                    : DYNAMIC_GNG_DEFAULTS.nodeColor;
-                const previousEdgeColor = isStatic
-                    ? STATIC_GNG_DEFAULTS.edgeColor
-                    : DYNAMIC_GNG_DEFAULTS.edgeColor;
-                const migrateNodeColor = isTrajectory && (
-                    !nextSettings[tag]?.nodeColor || nextSettings[tag].nodeColor === previousNodeColor
-                );
-                const migrateEdgeColor = isTrajectory && (
-                    !nextSettings[tag]?.edgeColor || nextSettings[tag].edgeColor === previousEdgeColor
-                );
-
+                // 初回のみの既定値設定。復帰・一時的な属性欠落による選択済み設定の変更なし。
                 if (!nextSettings[tag]) {
                     nextSettings[tag] = createDefaultGraphLayerSettings(tag, graph);
-                    changed = true;
-                } else if (migrateNodeColor || migrateEdgeColor) {
-                    nextSettings[tag] = {
-                        ...nextSettings[tag],
-                        nodeColor: migrateNodeColor
-                            ? TRAJECTORY_GNG_DEFAULTS.nodeColor
-                            : nextSettings[tag].nodeColor,
-                        edgeColor: migrateEdgeColor
-                            ? TRAJECTORY_GNG_DEFAULTS.edgeColor
-                            : nextSettings[tag].edgeColor,
-                    };
                     changed = true;
                 } else if (!nextSettings[tag].visibleLabels) {
                     nextSettings[tag] = {
                         ...nextSettings[tag],
                         visibleLabels: createDefaultGraphLayerSettings(tag, graph).visibleLabels,
-                    };
-                    changed = true;
-                } else if (!hasManipulabilityData && nextSettings[tag].showManipulabilityEllipsoids) {
-                    nextSettings[tag] = {
-                        ...nextSettings[tag],
-                        showManipulabilityEllipsoids: false,
                     };
                     changed = true;
                 }

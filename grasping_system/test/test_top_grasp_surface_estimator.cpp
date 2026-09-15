@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <random>
 #include <stdexcept>
 #include <vector>
 
@@ -82,10 +83,131 @@ TopGraspSurfaceConfig makeConfig()
   return config;
 }
 
+void expect_contains(
+  const TopologicalMap &map, const grasping_system::candidate::TopGraspSurfaceCandidate &candidate,
+  const TopGraspSurfaceConfig &config)
+{
+  for (const auto idx : candidate.node_indices) {
+    const auto &p = map.nodes[idx].pos;
+    const Eigen::Vector3d local = candidate.tcp_orientation.conjugate() *
+      (Eigen::Vector3d(p.x, p.y, p.z) - candidate.tcp_position);
+    expect(std::abs(local.x()) <= 0.5 * candidate.extent_x + 1e-8 &&
+      std::abs(local.y()) <= 0.5 * candidate.extent_y + 1e-8, "出力TCP矩形による全所属ノードの包含");
+  }
+  expect(candidate.extent_x <= config.grasp_size_x + 1e-10 &&
+    candidate.extent_y <= config.grasp_size_y + 1e-10, "開口XY寸法の同時充足");
+  expect((candidate.tcp_orientation * Eigen::Vector3d::UnitZ() +
+    config.up_axis.normalized()).norm() < 1e-9, "上方向に対する進入姿勢の維持");
+}
+
 }  // namespace
 
 int main()
 {
+  {
+    // 正方形のyaw不変性と、辺方向では不適合でも斜めに収まる細長い対象
+    for (const double angle : {0.0, 0.17, 0.7853981633974483, 1.3, 2.8}) {
+      for (const bool is_thin : {false, true}) {
+        TopologicalMap map;
+        PlaneClusterArray clusters;
+        auto nodes = addRectangle(map, 0, 0, 0.1, is_thin ? 0.17 : 0.12, is_thin ? 0.001 : 0.12);
+        for (auto &node : map.nodes) {
+          const double x = node.pos.x, y = node.pos.y;
+          node.pos.x = 0.3 + std::cos(angle) * x - std::sin(angle) * y;
+          node.pos.y = -0.2 + std::sin(angle) * x + std::cos(angle) * y;
+        }
+        clusters.clusters.push_back(makeCluster(1, nodes, 0.3, -0.2, 0.1, {0, 0, 1}));
+        auto config = makeConfig();
+        config.enable_approach_check = false;
+        config.grasp_size_x = 0.15;
+        config.grasp_size_y = is_thin ? 0.10 : 0.15;
+        const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+        expect(result.candidates.size() == 1, "回転によって開口に収まる対象の採用");
+        const auto &candidate = result.candidates.front();
+        expect_contains(map, candidate, config);
+        expect((candidate.tcp_position - Eigen::Vector3d(0.3, -0.2, 0.1)).norm() < 1e-6,
+          "回転矩形の中心と最高位置によるTCP");
+        if (!is_thin) expect(std::abs(candidate.extent_x - 0.12) < 1e-6 &&
+          std::abs(candidate.extent_y - 0.12) < 1e-6, "斜め正方形の実寸保持");
+        // 入力順序・重複点数によるPCA方向依存の排除
+        for (int idx = 0; idx < 100; ++idx) nodes.push_back(nodes.front());
+        std::reverse(nodes.begin(), nodes.end());
+        clusters.clusters.front().node_indices = nodes;
+        const auto repeated = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+        expect(repeated.candidates.size() == 1 &&
+          repeated.candidates.front().tcp_orientation.angularDistance(candidate.tcp_orientation) < 1e-10 &&
+          (repeated.candidates.front().tcp_position - candidate.tcp_position).norm() < 1e-10,
+          "同一凸包に対する位置姿勢の再現性");
+      }
+    }
+  }
+  {
+    // 3平面の合算時の再回転と、最初の平面を含む全凸包の保持
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    for (std::uint32_t idx = 0; idx < 3; ++idx) {
+      const auto nodes = addRectangle(map, 0.085 * idx, 0, 0.1, 0.012, 0.012);
+      for (const auto node_idx : nodes) {
+        auto &p = map.nodes[node_idx].pos;
+        const double x = p.x, y = p.y;
+        p.x = (x - y) / std::sqrt(2.0);
+        p.y = (x + y) / std::sqrt(2.0);
+      }
+      clusters.clusters.push_back(makeCluster(idx + 1, nodes,
+        0.085 * idx / std::sqrt(2.0), 0.085 * idx / std::sqrt(2.0), 0.1, {0, 0, 1}));
+      if (idx > 0) addEdge(map, nodes.front(), clusters.clusters[idx - 1].node_indices.front());
+    }
+    auto config = makeConfig();
+    config.enable_plane_combinations = true;
+    config.enable_approach_check = false;
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+    const auto full = std::find_if(result.candidates.begin(), result.candidates.end(),
+      [](const auto &candidate) { return candidate.source_cluster_ids.size() == 3; });
+    expect(full != result.candidates.end() && full->node_indices.size() == 12,
+      "起点の軸に固定すると収まらない3平面の合算");
+    expect_contains(map, *full, config);
+  }
+  {
+    // 独立した密な角度走査との比較。支持頂点切替・辺間角度・退化形状の検証
+    std::mt19937 random(9241);
+    std::uniform_real_distribution<double> uniform(-1.0, 1.0);
+    for (std::size_t trial = 0; trial < 120; ++trial) {
+      TopologicalMap map;
+      std::vector<std::uint32_t> nodes;
+      for (std::size_t idx = 0; idx < 1 + trial % 23; ++idx) {
+        nodes.push_back(idx);
+        map.nodes.emplace_back();
+        map.nodes.back().pos.x = 0.11 * uniform(random);
+        map.nodes.back().pos.y = trial < 23 ? 0.0 : 0.09 * uniform(random);
+        map.nodes.back().pos.z = 0.1;
+      }
+      PlaneClusterArray clusters;
+      clusters.clusters.push_back(makeCluster(1, nodes, 0, 0, 0.1, {0, 0, 1}));
+      auto config = makeConfig();
+      config.minimum_region_nodes = 1;
+      config.enable_approach_check = false;
+      config.grasp_size_x = 0.15;
+      config.grasp_size_y = 0.10;
+      const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+      for (const auto &candidate : result.candidates) expect_contains(map, candidate, config);
+      bool can_fit_sampled = false;
+      for (int step = 0; step < 3600 && !can_fit_sampled; ++step) {
+        const double angle = std::acos(-1.0) * step / 3600;
+        Eigen::Vector2d min_point = Eigen::Vector2d::Constant(std::numeric_limits<double>::infinity());
+        Eigen::Vector2d max_point = -min_point;
+        for (const auto &node : map.nodes) {
+          const Eigen::Vector2d local(std::cos(angle) * node.pos.x + std::sin(angle) * node.pos.y,
+            -std::sin(angle) * node.pos.x + std::cos(angle) * node.pos.y);
+          min_point = min_point.cwiseMin(local);
+          max_point = max_point.cwiseMax(local);
+        }
+        can_fit_sampled = max_point.x() - min_point.x() <= config.grasp_size_x &&
+          max_point.y() - min_point.y() <= config.grasp_size_y;
+      }
+      expect(!can_fit_sampled || !result.candidates.empty(), "密な角度走査で適合する形状の取りこぼし防止");
+    }
+  }
   {
     // 非平面経由の小平面・側面を合算対象へ追加。起点条件と開口寸法の維持
     TopologicalMap map;
@@ -211,7 +333,7 @@ int main()
     TopologicalMap map;
     PlaneClusterArray clusters;
     const auto inside = addRectangle(map, 0, 0, 0.1, 0.145, 0.05);
-    const auto outside = addRectangle(map, 1, 0, 0.1, 0.155, 0.05);
+    const auto outside = addRectangle(map, 1, 0, 0.1, 0.175, 0.05);
     clusters.clusters.push_back(makeCluster(1, inside, 0, 0, 0.1, {0, 0, 1}));
     clusters.clusters.push_back(makeCluster(2, outside, 1, 0, 0.1, {0, 0, 1}));
     TopGraspSurfaceConfig config;
@@ -219,7 +341,7 @@ int main()
     config.enable_approach_check = false;
     const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
     expect(result.candidates.size() == 1 && result.candidates.front().cluster_id == 1,
-      "145 mm must fit and 155 mm must exceed a 150 mm opening");
+      "145x50 mmの包含と、斜めでも収まらない175x50 mmの除外");
     expect(std::abs(result.candidates.front().extent_x - 0.145) < 1e-6,
       "reported extent must not include padding");
   }
@@ -309,18 +431,18 @@ int main()
     expect(full != result.candidates.end() && full->node_indices.size() == 32,
       "eight-plane candidate must retain all member nodes");
     expect(std::abs(full->extent_x - 0.062) < 1e-6,
-      "projection bounds must expand in the seed plane orientation");
+      "全所属点の外形寸法の保持");
     config.grasp_size_x = config.grasp_size_y = 0.02;
     result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
     expect(std::none_of(result.candidates.begin(), result.candidates.end(),
-      [](const auto &candidate) { return candidate.source_cluster_ids.size() > 2; }),
+      [](const auto &candidate) { return candidate.source_cluster_ids.size() > 3; }),
       "size overflow must terminate further expansion");
   }
   {
     // 基準からの距離順による採用。左右を同時に含められない場合の近い側の優先
     TopologicalMap map;
     PlaneClusterArray clusters;
-    for (const double x : {0.0, 0.012, -0.019}) {
+    for (const double x : {0.0, 0.012, -0.029}) {
       const auto nodes = addRectangle(map, x, 0, 0.1, 0.004, 0.002);
       clusters.clusters.push_back(makeCluster(clusters.clusters.size() + 1, nodes, x, 0, 0.1, {0, 0, 1}));
     }

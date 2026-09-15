@@ -2,6 +2,7 @@
 #include "topo_fuzzy_viewer/protocol/arrow_protocol.h"
 #include "topo_fuzzy_viewer/protocol/rpc.h"
 #include "topo_fuzzy_viewer/common/topic_names.h"
+#include "topo_fuzzy_viewer/common/nonplane_graph.h"
 #include "topo_fuzzy_viewer/protocol/protocol.h"
 #include "topo_fuzzy_viewer/protocol/topological_map_protocol.h"
 #include "topo_fuzzy_viewer/common/pcl_converter.h"
@@ -140,121 +141,6 @@ namespace converter {
         return arrow_protocol::pose_stream(msg, tag);
     }
 
-    std::array<float, 3U> nonplane_component_color(const std::size_t component_index) {
-        constexpr std::array<std::array<float, 3U>, 8U> colors{{
-            {{0.93F, 0.33F, 0.31F}}, {{0.20F, 0.75F, 0.38F}},
-            {{0.24F, 0.56F, 0.95F}}, {{0.88F, 0.56F, 0.18F}},
-            {{0.69F, 0.36F, 0.90F}}, {{0.10F, 0.73F, 0.76F}},
-            {{0.94F, 0.44F, 0.67F}}, {{0.64F, 0.78F, 0.24F}},
-        }};
-        return colors[component_index % colors.size()];
-    }
-    json nonplane_marker(
-        const std::int32_t id, const std::string& marker_ns, const std::string& marker_type,
-        const std::array<float, 3U>& color, const std::array<double, 3U>& scale,
-        const std::string& frame_id)
-    {
-        return {
-            {"id", id}, {"ns", marker_ns}, {"type", marker_type}, {"action", 0},
-            {"pos", {0.0, 0.0, 0.0}}, {"quat", {0.0, 0.0, 0.0, 1.0}},
-            {"scale", {scale[0], scale[1], scale[2]}},
-            {"color", {color[0], color[1], color[2], 1.0F}}, {"frameId", frame_id},
-            {"points", json::array()},
-        };
-    }
-    json to_json(
-        const std_msgs::msg::UInt32MultiArray::SharedPtr msg,
-        const ais_gng_msgs::msg::TopologicalMap& map,
-        const ais_gng_msgs::msg::PlaneClusterArray* plane_clusters,
-        const std::string& tag)
-    {
-        if (msg->data.size() < 2U || msg->data[0] != map.frame_number) {
-            return json();
-        }
-
-        const std::size_t component_num = msg->data[1];
-        std::size_t data_index = 2U;
-        json markers = json::array();
-        std::vector<std::int32_t> component_by_node(map.nodes.size(), -1);
-        for (std::size_t component_index = 0U; component_index < component_num; ++component_index) {
-            if (data_index + 2U > msg->data.size()) {
-                return json();
-            }
-            const std::uint32_t component_id = msg->data[data_index++];
-            const std::size_t node_num = msg->data[data_index++];
-            if (node_num > msg->data.size() - data_index) {
-                return json();
-            }
-            const auto color = nonplane_component_color(component_index);
-            auto marker = nonplane_marker(
-                static_cast<std::int32_t>(component_id), "nonplane_components", "sphere_list",
-                color, {0.012, 0.012, 0.012}, map.header.frame_id);
-            for (std::size_t node_offset = 0U; node_offset < node_num; ++node_offset) {
-                const std::uint32_t node_index = msg->data[data_index++];
-                if (node_index >= map.nodes.size()) {
-                    continue;
-                }
-                component_by_node[node_index] = static_cast<std::int32_t>(component_index);
-                const auto& position = map.nodes[node_index].pos;
-                marker["points"].push_back({position.x, position.y, position.z});
-            }
-            markers.push_back(std::move(marker));
-        }
-        if (data_index != msg->data.size()) {
-            return json();
-        }
-
-        auto edges = nonplane_marker(
-            0, "nonplane_component_edges", "line_list", {0.92F, 0.92F, 0.92F},
-            {0.004, 0.0, 0.0}, map.header.frame_id);
-        for (std::size_t edge_index = 0U; edge_index + 1U < map.edges.size(); edge_index += 2U) {
-            const std::size_t first = map.edges[edge_index];
-            const std::size_t second = map.edges[edge_index + 1U];
-            if (first >= map.nodes.size() || second >= map.nodes.size() ||
-                component_by_node[first] < 0 || component_by_node[first] != component_by_node[second])
-            {
-                continue;
-            }
-            const auto& first_position = map.nodes[first].pos;
-            const auto& second_position = map.nodes[second].pos;
-            edges["points"].push_back({first_position.x, first_position.y, first_position.z});
-            edges["points"].push_back({second_position.x, second_position.y, second_position.z});
-        }
-        markers.push_back(std::move(edges));
-
-        if (plane_clusters != nullptr && plane_clusters->frame_number == map.frame_number) {
-            std::vector<bool> is_plane_node(map.nodes.size(), false);
-            for (const auto& cluster : plane_clusters->clusters) {
-                for (const std::uint32_t node_index : cluster.node_indices) {
-                    if (node_index < is_plane_node.size()) {
-                        is_plane_node[node_index] = true;
-                    }
-                }
-            }
-            auto anchors = nonplane_marker(
-                0, "nonplane_component_plane_anchors", "line_list", {1.0F, 0.78F, 0.05F},
-                {0.004, 0.0, 0.0}, map.header.frame_id);
-            for (std::size_t edge_index = 0U; edge_index + 1U < map.edges.size(); edge_index += 2U) {
-                const std::size_t first = map.edges[edge_index];
-                const std::size_t second = map.edges[edge_index + 1U];
-                if (first >= map.nodes.size() || second >= map.nodes.size()) {
-                    continue;
-                }
-                const bool is_anchor =
-                    (component_by_node[first] >= 0 && is_plane_node[second]) ||
-                    (component_by_node[second] >= 0 && is_plane_node[first]);
-                if (!is_anchor) {
-                    continue;
-                }
-                const auto& first_position = map.nodes[first].pos;
-                const auto& second_position = map.nodes[second].pos;
-                anchors["points"].push_back({first_position.x, first_position.y, first_position.z});
-                anchors["points"].push_back({second_position.x, second_position.y, second_position.z});
-            }
-            markers.push_back(std::move(anchors));
-        }
-        return {{"type", "stream.marker_array"}, {"tag", tag}, {"markers", markers}};
-    }
     json to_json(const ais_gng_feature_msgs::msg::TopologicalNodeFeature& feature, const std::string& tag) {
         return {
             {"type", "stream.topological_node_feature"},
@@ -465,6 +351,7 @@ public:
             [this](const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg) {
                 std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
                 latest_nonplane_source_map_ = msg;
+                flush_nonplane_components_locked();
             });
         nonplane_source_plane_cluster_sub_ =
             create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
@@ -472,6 +359,7 @@ public:
                 [this](const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr msg) {
                     std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
                     latest_nonplane_source_plane_clusters_ = msg;
+                    flush_nonplane_components_locked();
                 });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
@@ -520,12 +408,12 @@ private:
     }
 
     json collectSources() {
-        std::unordered_set<std::string> active_sources;
+        std::unordered_map<std::string, std::string> active_sources;
         {
             std::lock_guard<std::mutex> lock(sourceMutex_);
             active_sources.reserve(activeDynamicSubs_.size());
             for (const auto& [topic, _] : activeDynamicSubs_) {
-                active_sources.insert(topic);
+                active_sources.emplace(topic, activeSubTypes_.at(topic));
             }
         }
 
@@ -537,6 +425,12 @@ private:
             if (!topic_utils::isBrowsableSourceType(st)) continue;
             if (count_publishers(topic) == 0) continue;
             sources.push_back({{"id",topic},{"name",topic},{"label",topic},{"type",st},{"active",active_sources.count(topic)>0}});
+            active_sources.erase(topic);
+        }
+        // 配信停止中もStreamsのチェック解除が可能な選択項目の維持。
+        for (const auto& [topic, source_type] : active_sources) {
+            sources.push_back({{"id",topic},{"name",topic},{"label",topic},
+                {"type",source_type},{"active",true}});
         }
         return sources;
     }
@@ -583,10 +477,7 @@ private:
             // event is actually set.
             wait_for_graph_change(graph_event, std::chrono::milliseconds(200));
             if (!graphWatchRunning_) break;
-            if (graph_event->check_and_clear()) {
-                broadcast_source_lifecycle_events();
-                broadcastSourcesIfChanged();
-            }
+            if (graph_event->check_and_clear()) broadcastSourcesIfChanged();
         }
     }
 
@@ -622,8 +513,6 @@ private:
             current_signatures.emplace_back(source_id, publisher_signature(source_id));
         }
 
-        std::vector<std::string> disappeared_source_ids;
-        std::vector<std::string> restarted_source_ids;
         {
             std::lock_guard<std::mutex> lock(sourceMutex_);
             for (const auto& [source_id, signature] : current_signatures) {
@@ -633,32 +522,27 @@ private:
                 }
 
                 const auto existing = active_source_publisher_signatures_.find(source_id);
-                if (existing != active_source_publisher_signatures_.end()) {
-                    if (!existing->second.empty() && signature.empty()) {
-                        disappeared_source_ids.push_back(source_id);
-                    } else if (!existing->second.empty() && !signature.empty() &&
-                        existing->second != signature)
-                    {
-                        restarted_source_ids.push_back(source_id);
+                if (existing != active_source_publisher_signatures_.end() &&
+                    existing->second != signature) {
+                    // 選択項目を残したまま旧購読・送信待ち・描画完了待ちの破棄。
+                    activeDynamicSubs_[source_id].reset();
+                    sendStreamDelete(source_id);
+                    if (!signature.empty()) {
+                        // 削除イベント送信後の再購読。新データと旧削除通知の順序保証。
+                        loop_->defer([this, source_id, signature]() {
+                            std::lock_guard<std::mutex> lock(sourceMutex_);
+                            const auto selected = activeDynamicSubs_.find(source_id);
+                            if (selected != activeDynamicSubs_.end() && !selected->second &&
+                                active_source_publisher_signatures_[source_id] == signature) {
+                                subscribe_source_locked(source_id);
+                            }
+                        });
                     }
                 }
                 active_source_publisher_signatures_[source_id] = signature;
             }
         }
 
-        for (const auto& source_id : disappeared_source_ids) {
-            sendStreamDelete(source_id);
-        }
-        for (const auto& source_id : restarted_source_ids) {
-            {
-                std::lock_guard<std::mutex> lock(markerMutex_);
-                last_arrow_styles_.erase(source_id);
-            }
-            broadcastText(json({
-                {"type", "stream.reset"}, {"id", source_id},
-                {"tag", source_id}, {"topic", source_id}
-            }).dump());
-        }
     }
 
     void broadcastSourcesIfChanged() {
@@ -678,21 +562,25 @@ private:
         const std_msgs::msg::UInt32MultiArray::SharedPtr msg,
         const std::string& source_id)
     {
-        ais_gng_msgs::msg::TopologicalMap::SharedPtr map;
-        ais_gng_msgs::msg::PlaneClusterArray::SharedPtr plane_clusters;
-        {
-            std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
-            map = latest_nonplane_source_map_;
-            plane_clusters = latest_nonplane_source_plane_clusters_;
+        std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+        pending_nonplane_components_[source_id] = msg;
+        flush_nonplane_components_locked();
+    }
+
+    // 三入力の到着順に依存しない同一フレーム照合。各ソースの未配信最新1件のみ保持
+    void flush_nonplane_components_locked() {
+        if (!latest_nonplane_source_map_) return;
+        for (auto it = pending_nonplane_components_.begin(); it != pending_nonplane_components_.end();) {
+            const auto graph = nonplane_graph::build(*it->second, *latest_nonplane_source_map_,
+                latest_nonplane_source_plane_clusters_.get());
+            if (!graph) { ++it; continue; }
+            try {
+                broadcastTopologicalMap(it->first, topological_map_protocol::serialize(*graph, it->first));
+            } catch (const std::exception& error) {
+                RCLCPP_ERROR(get_logger(), "Nonplane graph serialization failed: %s", error.what());
+            }
+            it = pending_nonplane_components_.erase(it);
         }
-        if (!map) {
-            return;
-        }
-        const json payload = converter::to_json(msg, *map, plane_clusters.get(), source_id);
-        if (payload.is_null()) {
-            return;
-        }
-        broadcast_markers(source_id, payload);
     }
 
     void broadcast_markers(const std::string& source_id, const json& payload) {
@@ -710,6 +598,91 @@ private:
         broadcastText(snapshot.dump());
     }
 
+    // sourceMutex_保持中の購読生成。復帰時の型・QoSの再評価。
+    void subscribe_source_locked(const std::string& sid) {
+        const auto topics = get_topic_names_and_types();
+        const auto found = topics.find(sid);
+        if (found == topics.end()) return;
+        const auto st = topic_utils::detectType(sid, found->second);
+        if (st == "pointcloud") {
+            activeSubTypes_[sid] = "pointcloud";
+            activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(
+                sid,
+                rclcpp::SensorDataQoS().keep_last(1),
+                [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) {
+                    if (!shouldForwardPointCloud(sid)) return;
+                    broadcastPointCloud(
+                        sid,
+                        m->header.frame_id,
+                        utils::convertToProtocolMessage(
+                            utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
+                });
+        } else if (st == "nonplane_component") {
+            activeSubTypes_[sid] = "nonplane_component";
+            activeDynamicSubs_[sid] = create_subscription<std_msgs::msg::UInt32MultiArray>(
+                sid, rclcpp::QoS(1).reliable().transient_local(),
+                [this, sid](const std_msgs::msg::UInt32MultiArray::SharedPtr m) {
+                    broadcast_nonplane_components(m, sid);
+                });
+        } else if (st == "topological_map") {
+            activeSubTypes_[sid] = "topological_map";
+            activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
+                try {
+                    broadcastTopologicalMap(sid, topological_map_protocol::serialize(*m, sid));
+                } catch (const std::exception& error) {
+                    RCLCPP_ERROR(get_logger(), "TopologicalMap binary serialization failed: %s", error.what());
+                }
+            });
+        } else if (st == "topological_node_feature") {
+            activeSubTypes_[sid] = "topological_node_feature";
+            activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalNodeFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalNodeFeature::SharedPtr m) {
+                const auto payload = converter::to_json(*m, sid);
+                {
+                    std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
+                    lastNodeFeaturePayloads_[sid] = payload;
+                }
+                broadcastText(payload.dump());
+            });
+        } else if (st == "topological_cluster_feature") {
+            activeSubTypes_[sid] = "topological_cluster_feature";
+            activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalClusterFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalClusterFeature::SharedPtr m) {
+                const auto payload = converter::to_json(*m, sid);
+                {
+                    std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
+                    lastClusterFeaturePayloads_[sid] = payload;
+                }
+                broadcastText(payload.dump());
+            });
+        } else if (st == "marker") {
+            activeSubTypes_[sid] = "marker";
+            if (std::find(found->second.begin(), found->second.end(),
+                          "gng_control_msgs/msg/GraspCandidateArray") != found->second.end()) {
+                activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<gng_control_msgs::msg::GraspCandidateArray>(
+                    *this, sid,
+                    [this, sid](const gng_control_msgs::msg::GraspCandidateArray::SharedPtr msg) {
+                        broadcast_markers(sid, converter::to_json(*msg, sid));
+                    });
+            } else if (std::find(found->second.begin(), found->second.end(),
+                          "geometry_msgs/msg/PoseArray") != found->second.end()) {
+                activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<geometry_msgs::msg::PoseArray>(
+                    *this, sid, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
+                        broadcast_markers(sid, converter::to_json(*m, sid));
+                    });
+            } else {
+                activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<visualization_msgs::msg::MarkerArray>(*this, sid, [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
+                    broadcast_markers(sid, converter::to_json(m, sid));
+                });
+            }
+        } else if (st == "voxel") {
+            activeSubTypes_[sid] = "voxel";
+            {
+                std::lock_guard<std::mutex> voxel_lock(voxelMutex_);
+                voxelStreamStates_.erase(sid);
+            }
+            activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { handleVoxelData(m, sid); });
+        }
+    }
+
     void handleSourcesSetActive(WebSocket* ws, const std::string& id, const json& params) {
         std::string sid = params.value("sourceId", "");
         bool active = params.value("active", false);
@@ -719,7 +692,11 @@ private:
         {
             std::lock_guard<std::mutex> lock(sourceMutex_);
             if (active) {
-                if (activeDynamicSubs_.count(sid)) return;
+                if (activeDynamicSubs_.count(sid)) {
+                    broadcastText(viewer_internal::makeOkResponse(id,
+                        {{"success",true},{"sourceId",sid},{"active",true}}));
+                    return;
+                }
                 auto topics = get_topic_names_and_types();
                 if (topics.count(sid)) {
                 std::string st = topic_utils::detectType(sid, topics[sid]);
@@ -735,87 +712,15 @@ private:
                         "This topic currently has no publisher"));
                     return;
                 }
-                if (st == "pointcloud") {
-                    activeSubTypes_[sid] = "pointcloud";
-                    activeDynamicSubs_[sid] = create_subscription<sensor_msgs::msg::PointCloud2>(
-                        sid,
-                        rclcpp::SensorDataQoS().keep_last(1),
-                        [this, sid](const sensor_msgs::msg::PointCloud2::SharedPtr m) {
-                            if (!shouldForwardPointCloud(sid)) return;
-                            broadcastPointCloud(
-                                sid,
-                                m->header.frame_id,
-                                utils::convertToProtocolMessage(
-                                    utils::convertFromRosMsg(m, pointCloudMaxPoints_)).serialize());
-                        });
-                } else if (st == "nonplane_component") {
-                    activeSubTypes_[sid] = "nonplane_component";
-                    activeDynamicSubs_[sid] = create_subscription<std_msgs::msg::UInt32MultiArray>(
-                        sid, rclcpp::QoS(1).reliable().transient_local(),
-                        [this, sid](const std_msgs::msg::UInt32MultiArray::SharedPtr m) {
-                            broadcast_nonplane_components(m, sid);
-                        });
-                } else if (st == "topological_map") {
-                    activeSubTypes_[sid] = "topological_map";
-                    activeDynamicSubs_[sid] = create_subscription<ais_gng_msgs::msg::TopologicalMap>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const ais_gng_msgs::msg::TopologicalMap::SharedPtr m) {
-                        try {
-                            broadcastTopologicalMap(sid, topological_map_protocol::serialize(*m, sid));
-                        } catch (const std::exception& error) {
-                            RCLCPP_ERROR(get_logger(), "TopologicalMap binary serialization failed: %s", error.what());
-                        }
-                    });
-                } else if (st == "topological_node_feature") {
-                    activeSubTypes_[sid] = "topological_node_feature";
-                    activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalNodeFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalNodeFeature::SharedPtr m) {
-                        const auto payload = converter::to_json(*m, sid);
-                        {
-                            std::lock_guard<std::mutex> lock(nodeFeatureMutex_);
-                            lastNodeFeaturePayloads_[sid] = payload;
-                        }
-                        broadcastText(payload.dump());
-                    });
-                } else if (st == "topological_cluster_feature") {
-                    activeSubTypes_[sid] = "topological_cluster_feature";
-                    activeDynamicSubs_[sid] = create_subscription<ais_gng_feature_msgs::msg::TopologicalClusterFeature>(sid, rclcpp::QoS(10).reliable().transient_local(), [this, sid](const ais_gng_feature_msgs::msg::TopologicalClusterFeature::SharedPtr m) {
-                        const auto payload = converter::to_json(*m, sid);
-                        {
-                            std::lock_guard<std::mutex> lock(clusterFeatureMutex_);
-                            lastClusterFeaturePayloads_[sid] = payload;
-                        }
-                        broadcastText(payload.dump());
-                    });
-                } else if (st == "marker") {
-                    activeSubTypes_[sid] = "marker";
-                    if (std::find(topics[sid].begin(), topics[sid].end(),
-                                  "gng_control_msgs/msg/GraspCandidateArray") != topics[sid].end()) {
-                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<gng_control_msgs::msg::GraspCandidateArray>(
-                            *this, sid,
-                            [this, sid](const gng_control_msgs::msg::GraspCandidateArray::SharedPtr msg) {
-                                broadcast_markers(sid, converter::to_json(*msg, sid));
-                            });
-                    } else if (std::find(topics[sid].begin(), topics[sid].end(),
-                                  "geometry_msgs/msg/PoseArray") != topics[sid].end()) {
-                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<geometry_msgs::msg::PoseArray>(
-                            *this, sid, [this, sid](const geometry_msgs::msg::PoseArray::SharedPtr m) {
-                                broadcast_markers(sid, converter::to_json(*m, sid));
-                            });
-                    } else {
-                        activeDynamicSubs_[sid] = arrow_visualization::subscribe_adaptive<visualization_msgs::msg::MarkerArray>(*this, sid, [this, sid](const visualization_msgs::msg::MarkerArray::SharedPtr m) {
-                            broadcast_markers(sid, converter::to_json(m, sid));
-                        });
-                    }
-                } else if (st == "voxel") {
-                    activeSubTypes_[sid] = "voxel";
-                    {
-                        std::lock_guard<std::mutex> voxel_lock(voxelMutex_);
-                        voxelStreamStates_.erase(sid);
-                    }
-                    activeDynamicSubs_[sid] = create_subscription<voxel_msgs::msg::Voxel>(sid, rclcpp::QoS(1).reliable().transient_local(), [this, sid](const voxel_msgs::msg::Voxel::SharedPtr m) { handleVoxelData(m, sid); });
-                }
+                subscribe_source_locked(sid);
                 active_source_publisher_signatures_[sid] = publisher_signature(sid);
                 }
             } else {
                 // 再接続後に購読がなくても、保持された表示キャッシュを消去
+                {
+                    std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+                    pending_nonplane_components_.erase(sid);
+                }
                 if (remove_layer) sendStreamDelete(sid);
                 if (activeDynamicSubs_.count(sid)) {
                     activeDynamicSubs_.erase(sid);
@@ -1086,6 +991,26 @@ private:
 
     void sendStreamDelete(const std::string& sid) {
         std::string id = (sid.front() == '/') ? sid : "/" + sid;
+        {
+            std::lock_guard<std::mutex> lock(pendingPointCloudMutex_);
+            pendingPointCloudPackets_.erase(id);
+        }
+        {
+            std::lock_guard<std::mutex> lock(pointCloudRateMutex_);
+            lastPointCloudForwardTime_.erase(id);
+        }
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            pendingTopologicalMapPackets_.erase(id);
+            for (auto& [_, client] : topologicalMapClientStates_) {
+                client.awaiting_topics.erase(id);
+                client.sent_versions.erase(id);
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+            pending_nonplane_components_.erase(id);
+        }
         broadcastText(json({{"type", "stream.delete"}, {"id", id}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.remove_layer"}, {"id", id}, {"tag", id}, {"topic", id}}).dump());
         broadcastText(json({{"type", "stream.pointcloud.meta"}, {"tag", id}, {"topic", id}, {"active", false}, {"action", "remove"}}).dump());
@@ -1194,6 +1119,10 @@ private:
             active_source_publisher_signatures_.clear();
         }
         lastGraphPayloads_.clear();
+        {
+            std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+            pending_nonplane_components_.clear();
+        }
         lastNodeFeaturePayloads_.clear();
         lastClusterFeaturePayloads_.clear();
         {
@@ -1225,6 +1154,10 @@ private:
         broadcastLatestRobotPose(msg->data);
     }
     void checkLiveness() {
+        // ROS購読コールバックと同じ排他グループでの停止・復帰処理。
+        // グラフ通知の取りこぼしにも対応する1秒周期の確認。
+        broadcast_source_lifecycle_events();
+        broadcastSourcesIfChanged();
         if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) {
             std::lock_guard<std::mutex> lock(robotMutex_);
             for (auto const& [tag, _] : lastRobotDescriptions_) {
@@ -1356,6 +1289,7 @@ private:
     std::string lastStaticTfPayload_;
     std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
     ais_gng_msgs::msg::TopologicalMap::SharedPtr latest_nonplane_source_map_;
+    std::unordered_map<std::string, std_msgs::msg::UInt32MultiArray::SharedPtr> pending_nonplane_components_;
     ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_nonplane_source_plane_clusters_;
     std::chrono::steady_clock::time_point lastTfTime_;
     std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_, nonplane_source_mutex_;

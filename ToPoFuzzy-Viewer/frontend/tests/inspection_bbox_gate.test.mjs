@@ -38,11 +38,13 @@ test('未指定トピックのBbox GUI非表示と、明示OFFからの再有効
             platform: 'node', format: 'esm', jsx: 'automatic' });
         const { GngLayerControls, createDefaultGraphLayerSettings } = await import(pathToFileURL(outfile).href);
         const graph = { mode: 'dynamic', nodes: [], edges: [], clusters: [] };
-        for (const tag of ['/topological_map', '/ToPoDualArm/Tmap_static', '/grasp_pose_cands/Tmap', '/custom']) {
+        for (const tag of ['/topological_map', '/ToPoDualArm/Tmap_static', '/grasp_pose_cands/Tmap', '/nonplane_components', '/custom']) {
             let settings = createDefaultGraphLayerSettings(tag, graph);
             const render = () => GngLayerControls({ tag, graphData: graph, settings, onRemove() {},
                 onUpdate: updates => { settings = { ...settings, ...updates }; } });
-            assert.equal(renderToStaticMarkup(render()).includes('Bounding Box'), tag === '/grasp_pose_cands/Tmap');
+            assert.equal(renderToStaticMarkup(render()).includes('Bounding Box'),
+                ['/grasp_pose_cands/Tmap', '/nonplane_components'].includes(tag));
+            if (tag === '/nonplane_components') assert.equal(settings.enable_bounding_box, false);
             for (const enable_bounding_box of [false, true]) {
                 settings.enable_bounding_box = enable_bounding_box;
                 const tree = render();

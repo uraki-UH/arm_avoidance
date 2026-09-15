@@ -56,6 +56,8 @@
 予約領域1バイトの利用によるレコード長・バージョンの維持。旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
 ROSメッセージ定義の互換性とは別のため、ROS送受信側には同一定義での再ビルド・再起動が必要。
 
+`/nonplane_components`のROS所属配列も、Viewerでは既存`TMG1`へ変換。`sources.list`の型は`nonplane_component`のまま、tagも元トピック名を維持。Marker JSONの併送なし。元ノードID・Graph対応属性・成分所属・実エッジを保持し、平面側接続端点だけは成分所属から除外。通常Graphと同じ`stream.topological_map.applied`で描画完了を通知。構築条件・空成分・再購読は[非平面成分のGraph表示](../doc/BACKEND_API.md#非平面成分のgraph表示)を参照。
+
 ### 姿勢配列・候補表示
 
 `geometry_msgs/msg/PoseArray`と`gng_control_msgs/msg/GraspCandidateArray`は`sources.list`で`type: "marker"`として公開。
@@ -112,9 +114,15 @@ ROS Marker用には同じ値をlinear RGBへ変換。辞書は他の矢印スタ
 { "type": "stream.reset", "topic": "/points", "tag": "/points" }
 ```
 
-同名ROSトピックのpublisher GID更新時の描画キャッシュ初期化。フロントエンドは対象トピックの
-点群・グラフ・ボクセル・Markerを消去し、後続メッセージで同じレイヤーを再構築する。レイヤーの
-可視設定と手動変換は維持する。
+`stream.reset`は描画キャッシュ削除の互換イベント。配信元の停止・GID変更時は通常の
+`stream.delete`等の削除イベントを配信し、点群・グラフ・ボクセル・Markerの旧Scene Layersを削除。
+Streamsの選択は維持し、停止中も`sources.list`へ`active: true`の項目を残す。
+同名配信元の復帰時は購読を生成し直し、後続データからレイヤーを再構築。
+Marker系のQoSも再評価。グラフの未ACK・送信済み版番号・未送信キャッシュは世代を跨いで保持しない。
+確認周期は1秒。停止検出にはROS discoveryの反映時間も必要で、メッセージ間隔だけによる停止判定はなし。
+同じブラウザセッションでは、同名トピックの色・ラベル・表示ON/OFFなどの設定を維持。
+点群の透明度・手動変換も受信データとは別に保持し、復帰時の新しい点群へ適用。
+古い点群バッファの保持なし。ブラウザ再読み込みを跨ぐ永続保存は対象外。
 
 ### Edit Job Progress
 ```json

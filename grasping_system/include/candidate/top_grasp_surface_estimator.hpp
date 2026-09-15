@@ -6,6 +6,7 @@
 #include <Eigen/Geometry>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -563,8 +564,8 @@ private:
 
   struct Footprint
   {
-    // 基準方向への投影用点群。凸包頂点と同じ投影上下限
-    std::vector<Eigen::Vector2d> projected_points;
+    // 水平投影の反時計回り凸包。複合候補の再評価用
+    std::vector<Eigen::Vector2d> hull;
     bool valid = false;
     bool fits = false;
     Eigen::Vector2d local_y_axis = Eigen::Vector2d::UnitY();
@@ -638,9 +639,7 @@ private:
     if (node_indices.empty()) {
       return result;
     }
-    std::vector<Eigen::Vector2d> projected;
-    projected.reserve(node_indices.size());
-    Eigen::Vector2d mean = Eigen::Vector2d::Zero();
+    result.hull.reserve(node_indices.size());
     result.maximum_height = -std::numeric_limits<double>::infinity();
     for (const std::uint32_t node_index : node_indices) {
       if (node_index >= map.nodes.size()) {
@@ -651,97 +650,126 @@ private:
       if (!position.allFinite()) {
         return result;
       }
-      projected.emplace_back(position.dot(basis_u), position.dot(basis_v));
-      mean += projected.back();
+      result.hull.emplace_back(position.dot(basis_u), position.dot(basis_v));
       result.maximum_height = std::max(
         result.maximum_height, position.dot(config_.up_axis));
     }
-    result.projected_points = projected;
-    mean /= static_cast<double>(projected.size());
+    return fit_hull(std::move(result));
+  }
 
-    Eigen::Matrix2d covariance = Eigen::Matrix2d::Zero();
-    for (const Eigen::Vector2d &point : projected) {
-      const Eigen::Vector2d delta = point - mean;
-      covariance.noalias() += delta * delta.transpose();
+  static std::vector<Eigen::Vector2d> convex_hull(std::vector<Eigen::Vector2d> points)
+  {
+    std::sort(points.begin(), points.end(), [](const auto &a, const auto &b) {
+      return a.x() != b.x() ? a.x() < b.x() : a.y() < b.y();
+    });
+    points.erase(std::unique(points.begin(), points.end()), points.end());
+    if (points.size() < 3) return points;
+    std::vector<Eigen::Vector2d> hull;
+    hull.reserve(points.size() * 2);
+    const auto append = [&](const Eigen::Vector2d &point, std::size_t start) {
+      while (hull.size() >= start + 2) {
+        const Eigen::Vector2d a = hull.back() - hull[hull.size() - 2];
+        const Eigen::Vector2d b = point - hull.back();
+        if (a.x() * b.y() - a.y() * b.x() > 0.0) break;
+        hull.pop_back();
+      }
+      hull.push_back(point);
+    };
+    for (const auto &point : points) append(point, 0);
+    const auto start = hull.size() - 1;
+    for (auto iter = points.rbegin() + 1; iter != points.rend(); ++iter) append(*iter, start);
+    hull.pop_back();
+    return hull;
+  }
+
+  Footprint fit_hull(Footprint result) const
+  {
+    result.hull = convex_hull(std::move(result.hull));
+    const auto &hull = result.hull;
+    if (hull.empty()) return result;
+    const double pi = std::acos(-1.0);
+    const auto wrap_angle = [pi](double angle) {
+      angle = std::fmod(angle, pi);
+      return angle < 0.0 ? angle + pi : angle;
+    };
+    // 支持頂点の切替角。各区間内の外接幅は固定頂点差のsin/cos式
+    std::vector<double> angles{0.0, pi};
+    angles.reserve(2 * hull.size() + 2);
+    for (std::size_t idx = 0; hull.size() > 1 && idx < hull.size(); ++idx) {
+      const Eigen::Vector2d edge = hull[(idx + 1) % hull.size()] - hull[idx];
+      const double angle = std::atan2(edge.y(), edge.x());
+      angles.push_back(wrap_angle(angle));
+      angles.push_back(wrap_angle(angle + 0.5 * pi));
     }
-    covariance /= static_cast<double>(projected.size());
-    const double principal_angle = 0.5 * std::atan2(
-      2.0 * covariance(0, 1), covariance(0, 0) - covariance(1, 1));
-    const Eigen::Vector2d major_axis(std::cos(principal_angle), std::sin(principal_angle));
-    const Eigen::Vector2d minor_axis(-major_axis.y(), major_axis.x());
-
-    const auto bounds = [&projected](const Eigen::Vector2d &axis) {
-        double minimum = std::numeric_limits<double>::infinity();
-        double maximum = -std::numeric_limits<double>::infinity();
-        for (const Eigen::Vector2d &point : projected) {
-          const double projection = point.dot(axis);
-          minimum = std::min(minimum, projection);
-          maximum = std::max(maximum, projection);
+    std::sort(angles.begin(), angles.end());
+    angles.erase(std::unique(angles.begin(), angles.end()), angles.end());
+    std::array<std::size_t, 4> support{};
+    double best_score = std::numeric_limits<double>::infinity();
+    const double roundoff = 64 * std::numeric_limits<double>::epsilon();
+    for (std::size_t idx = 1; idx < angles.size(); ++idx) {
+      const double mid = 0.5 * (angles[idx - 1] + angles[idx]);
+      const Eigen::Vector2d axis_x(std::cos(mid), std::sin(mid));
+      const Eigen::Vector2d axis_y(-axis_x.y(), axis_x.x());
+      const std::array<Eigen::Vector2d, 4> directions{axis_x, -axis_x, axis_y, -axis_y};
+      // 回転キャリパーによる支持点更新。角度ごとの全頂点走査なし
+      for (std::size_t side = 0; side < support.size(); ++side) {
+        auto &vertex = support[side];
+        if (idx == 1) {
+          for (std::size_t next = 1; next < hull.size(); ++next) {
+            if ((hull[next] - hull[vertex]).dot(directions[side]) > 0.0) vertex = next;
+          }
+        } else {
+          for (std::size_t step = 0; step < hull.size(); ++step) {
+            const auto next = (vertex + 1) % hull.size();
+            if ((hull[next] - hull[vertex]).dot(directions[side]) <= 0.0) break;
+            vertex = next;
+          }
         }
-        return std::pair<double, double>{minimum, maximum};
+      }
+      const Eigen::Vector2d span_x = hull[support[0]] - hull[support[1]];
+      const Eigen::Vector2d span_y = hull[support[2]] - hull[support[3]];
+      const auto evaluate = [&](double angle) {
+        const Eigen::Vector2d x(std::cos(angle), std::sin(angle)), y(-x.y(), x.x());
+        const double extent_x = std::max(0.0, span_x.dot(x));
+        const double extent_y = std::max(0.0, span_y.dot(y));
+        const double ratio_x = extent_x / config_.grasp_size_x;
+        const double ratio_y = extent_y / config_.grasp_size_y;
+        const bool can_fit = std::max(ratio_x, ratio_y) <= 1.0 + roundoff;
+        // 包含可能な評価方向を優先し、その中で外接面積の小さい方向を選択
+        const double score = can_fit ? ratio_x * ratio_y : std::max(ratio_x, ratio_y);
+        if (result.valid && (result.fits > can_fit ||
+          (result.fits == can_fit && score >= best_score - roundoff))) return;
+        result.valid = true;
+        result.fits = can_fit;
+        best_score = score;
+        result.local_y_axis = y;
+        result.extent_x = extent_x;
+        result.extent_y = extent_y;
+        result.center_uv = x * (0.5 * (hull[support[0]] + hull[support[1]])).dot(x) +
+          y * (0.5 * (hull[support[2]] + hull[support[3]])).dot(y);
       };
-    const auto major_bounds = bounds(major_axis);
-    const auto minor_bounds = bounds(minor_axis);
-    const double major_extent = major_bounds.second - major_bounds.first;
-    const double minor_extent = minor_bounds.second - minor_bounds.first;
-    const double usable_x = config_.grasp_size_x;
-    const double usable_y = config_.grasp_size_y;
-
-    Eigen::Vector2d local_x_axis = Eigen::Vector2d::UnitX();
-    double center_x = 0.0;
-    double center_y = 0.0;
-    if (major_extent <= usable_x && minor_extent <= usable_y) {
-      local_x_axis = major_axis;
-      result.local_y_axis = minor_axis;
-      result.extent_x = major_extent;
-      result.extent_y = minor_extent;
-      center_x = 0.5 * (major_bounds.first + major_bounds.second);
-      center_y = 0.5 * (minor_bounds.first + minor_bounds.second);
-      result.fits = true;
-    } else if (minor_extent <= usable_x && major_extent <= usable_y) {
-      local_x_axis = minor_axis;
-      result.local_y_axis = major_axis;
-      result.extent_x = minor_extent;
-      result.extent_y = major_extent;
-      center_x = 0.5 * (minor_bounds.first + minor_bounds.second);
-      center_y = 0.5 * (major_bounds.first + major_bounds.second);
-      result.fits = true;
-    } else {
-      result.extent_x = major_extent;
-      result.extent_y = minor_extent;
+      evaluate(angles[idx - 1]);
+      // 非負の外接幅は区間内で凹関数。最大寸法比の最小点は端点か両比の交点
+      const double a = span_x.x() / config_.grasp_size_x - span_y.y() / config_.grasp_size_y;
+      const double b = span_x.y() / config_.grasp_size_x + span_y.x() / config_.grasp_size_y;
+      if (a != 0.0 || b != 0.0) {
+        const double balanced_angle = wrap_angle(std::atan2(-a, b));
+        if (balanced_angle > angles[idx - 1] && balanced_angle < angles[idx]) evaluate(balanced_angle);
+      }
+      evaluate(angles[idx]);
     }
-    if (result.fits) {
-      result.center_uv = local_x_axis * center_x + result.local_y_axis * center_y;
-    }
-    result.fill_ratio = (result.extent_x * result.extent_y) /
-      std::max(usable_x * usable_y, 1.0e-12);
-    result.valid = true;
+    result.fill_ratio = result.extent_x * result.extent_y /
+      std::max(config_.grasp_size_x * config_.grasp_size_y, 1.0e-12);
     return result;
   }
 
   Footprint expand_bounds(const Footprint &current, const Footprint &additional) const
   {
-    Footprint result = current;
-    const Eigen::Vector2d axis_x(result.local_y_axis.y(), -result.local_y_axis.x());
-    const Eigen::Vector2d current_center(current.center_uv.dot(axis_x), current.center_uv.dot(result.local_y_axis));
-    const Eigen::Vector2d half_extent = 0.5 * Eigen::Vector2d(current.extent_x, current.extent_y);
-    Eigen::Vector2d min_point = current_center - half_extent;
-    Eigen::Vector2d max_point = current_center + half_extent;
-    for (const auto &point : additional.projected_points) {
-      const Eigen::Vector2d local(point.dot(axis_x), point.dot(result.local_y_axis));
-      min_point = min_point.cwiseMin(local);
-      max_point = max_point.cwiseMax(local);
-    }
-    const auto center = (0.5 * (min_point + max_point)).eval();
-    result.center_uv = axis_x * center.x() + result.local_y_axis * center.y();
-    result.extent_x = max_point.x() - min_point.x();
-    result.extent_y = max_point.y() - min_point.y();
+    Footprint result;
+    result.hull = current.hull;
+    result.hull.insert(result.hull.end(), additional.hull.begin(), additional.hull.end());
     result.maximum_height = std::max(current.maximum_height, additional.maximum_height);
-    const double usable_x = config_.grasp_size_x;
-    const double usable_y = config_.grasp_size_y;
-    result.fits = result.extent_x <= usable_x && result.extent_y <= usable_y;
-    result.fill_ratio = result.extent_x * result.extent_y / std::max(usable_x * usable_y, 1.0e-12);
-    return result;
+    return fit_hull(std::move(result));
   }
 
   TopGraspSurfaceConfig config_;

@@ -6,8 +6,8 @@ import { test } from 'node:test';
 import { build } from 'esbuild';
 import * as THREE from 'three';
 
-test('曲面所属色のノードID参照・edgeとの一致・未所属・通常色復帰', async () => {
-    const directory = await mkdtemp(resolve('node_modules/.cluster-graph-test-'));
+test('曲面・非平面所属色のノードID参照・edgeとの一致・未所属・通常色復帰', async () => {
+    const directory = await mkdtemp(resolve('tests/.cluster-graph-test-'));
     const geometry = new THREE.SphereGeometry(1, 4, 3);
     const material = new THREE.MeshStandardMaterial();
     const mesh = new THREE.InstancedMesh(geometry, material, 4);

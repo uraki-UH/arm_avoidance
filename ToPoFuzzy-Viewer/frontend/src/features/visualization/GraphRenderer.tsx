@@ -25,7 +25,7 @@ interface GraphRendererProps {
 export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = null,
     onClusterSelect, on_node_select, uniform_node_color, onManipSelect, enableClusterSelection = true, tf = null }: GraphRendererProps) {
     const variant = graph.mode === 'static' ? 'static' : 'dynamic';
-    const enable_cluster_colors = /(^|\/)curved_surface_clusters$/.test(tag);
+    const enable_cluster_colors = /(^|\/)(curved_surface_clusters|nonplane_components)$/.test(tag);
     const { visible, showNodes, showEdges, showClusters, showNormals, showVelocity,
         showCovarianceEllipsoids, showManipulabilityEllipsoids, manipEllipsoidMode, manipEllipsoidType,
         nodeScale, edgeWidth, covarianceEllipsoidScale, visibleLabels, nodeOpacity, edgeOpacity,
