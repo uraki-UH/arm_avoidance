@@ -6,6 +6,33 @@
 
 ## 2026-09-15: ROIボクセルとGNGの座標ずれ調査
 
+再調査: ちらつきの申告後も外部TFの子は`ToPoDualArm/base_link`。`/tf`のPublisherは`test_tf_publisher`、`/tf_static`はrosbag再生とロボットの`robot_state_publisher`。6秒の受信で`world -> ToPoDualArm/base_link`の動的TFを121件、`ToPoDualArm/base_footprint -> ToPoDualArm/base_link`の固定TFを1件確認。Viewerの5秒受信で固定姿勢1件・動的姿勢38件、切替1回。親フレームの競合とViewer側での値の上書きを確認したが、周期的なちらつきの全原因までは未確定。既存ノード・ソース・YAMLの変更なし。診断用コールバックは初回2試行でrclpyのMessageInfo非対応により失敗し、メッセージ単体での受信へ変更後に成功。すべての診断プロセス・一時WebSocket接続は終了済み。
+
+再調査時の診断ノード起動コマンド（終了済み）:
+
+```bash
+docker exec gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 3s 15s python3 -c '\''import time,json,rclpy
+from tf2_msgs.msg import TFMessage
+from rclpy.qos import QoSProfile,DurabilityPolicy,ReliabilityPolicy
+rclpy.init(); node=rclpy.create_node("tf_conflict_probe"); records={}; subscriptions=[]
+def callback(topic):
+ def receive(msg):
+  for t in msg.transforms:
+   if t.child_frame_id not in ("ToPoDualArm/base_link","ToPoDualArm/base_footprint"):continue
+   p,q=t.transform.translation,t.transform.rotation
+   key=(topic,t.header.frame_id,t.child_frame_id,p.x,p.y,p.z,q.x,q.y,q.z,q.w)
+   records[key]=records.get(key,0)+1
+ return receive
+try:
+ for topic,durability in [("/tf",DurabilityPolicy.VOLATILE),("/tf_static",DurabilityPolicy.TRANSIENT_LOCAL)]:
+  subscriptions.append(node.create_subscription(TFMessage,topic,callback(topic),QoSProfile(depth=100,reliability=ReliabilityPolicy.RELIABLE,durability=durability)))
+ end=time.monotonic()+6
+ while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=0.1)
+ for key,count in records.items():print(json.dumps({"topic":key[0],"parent":key[1],"child":key[2],"xyz":key[3:6],"quaternion":key[6:],"received":count}),flush=True)
+finally:node.destroy_node();rclpy.shutdown()
+'\'''
+```
+
 追記: ロボット座標で格子を構築しworld表示で回転させる意図を確認後、入力frameの末尾一致による自動読み替えを削除。ToPoDualArmの固定TFをOFFに変更し、URDFルートへの外部TF運用をREADMEへ記載。[修正・検証コマンド](releases/2026-09-15_roi_robot_frame.md)を記録。修正前に不具合を再現、修正後は単体テスト21件と隔離ROSの4条件×2姿勢でvoxel ID一致・world復元位置の量子化誤差内一致を確認。ビルド指定とテストのsnapshot要求形式の失敗も修正後に再検証。専用ノードは停止済み、既存ノードの停止・再起動なし。実ブラウザ目視は未検証。
 
 - 実入力`/camera/camera/depth/color/points`と`/topological_map`の`frame_id`が`base_link`であることを受信確認。ROI生成の`resolveSourceFrameId`だけが末尾一致で`ToPoDualArm/base_link`へ読み替える実装を確認。Viewerの既存WebSocketから受信した`/ToPoDualArm/self_filter_roi_voxels`は`ToPoDualArm/base_link`、voxel幅0.02 m。Viewerは両者へ別のTFを適用する構成。
