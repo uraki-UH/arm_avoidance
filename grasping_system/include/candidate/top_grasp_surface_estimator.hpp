@@ -180,10 +180,6 @@ public:
           owner_by_node[node_index] = static_cast<int>(region_index);
         }
       }
-      if (cluster.node_indices.size() < config_.minimum_region_nodes) {
-        ++result.rejected_small_region;
-        continue;
-      }
       const Eigen::Vector3d normal(cluster.normal.x, cluster.normal.y, cluster.normal.z);
       if (!normal.allFinite() || normal.norm() < 1.0e-12) {
         ++result.rejected_invalid_region;
@@ -191,6 +187,11 @@ public:
       }
       footprints[region_index] = fitFootprint(
         cluster.node_indices, map, basis_u, basis_v);
+      // 起点の条件と合算対象の形状を分離。小平面も組合せの寸法判定へ使用
+      if (cluster.node_indices.size() < config_.minimum_region_nodes) {
+        ++result.rejected_small_region;
+        continue;
+      }
       // 法線の符号に依存しない、上方向との傾斜角判定
       if (std::abs(normal.normalized().dot(config_.up_axis)) + 1.0e-12 <
         std::cos(config_.max_surface_tilt_deg * std::acos(-1.0) / 180.0))
@@ -198,8 +199,6 @@ public:
         ++result.rejected_surface_tilt;
         continue;
       }
-      footprints[region_index] = fitFootprint(
-        cluster.node_indices, map, basis_u, basis_v);
       if (!footprints[region_index].valid) {
         ++result.rejected_invalid_region;
       } else if (!footprints[region_index].fits) {
@@ -309,7 +308,7 @@ public:
           pending.erase(pending.begin());
           if (is_visited[next]) continue;
           is_visited[next] = true;
-          if (!candidate_eligible[next]) continue;
+          if (!footprints[next].valid) continue;
           auto expanded = expand_bounds(footprint, footprints[next]);
           if (!expanded.fits) continue;
           footprint = std::move(expanded);
@@ -636,7 +635,7 @@ private:
     const Eigen::Vector3d &basis_v) const
   {
     Footprint result;
-    if (node_indices.size() < config_.minimum_region_nodes) {
+    if (node_indices.empty()) {
       return result;
     }
     std::vector<Eigen::Vector2d> projected;

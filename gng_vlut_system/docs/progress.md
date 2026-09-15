@@ -353,3 +353,10 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 - Bbox OFF時にも残っていたノード・クラスタ・Marker直接選択を、トピック別フラグへ連動。詳細取得の開始・応答でも確認し、OFF後の遅延表示とエラーを抑止。`/grasp_pose_cands/Tmap`だけ既定ONへ変更。[仕様・全検証コマンド](releases/2026-09-15_inspection_bbox_gate.md)を記録。
 - 関連frontendテスト5ファイル、lint・本番ビルド、Dockerのbackendビルドに成功。Appの実接続条件と非同期処理、明示OFFの保持、既存ホバー・Marker・独立ビュー内Bbox既定OFFを確認。実ブラウザ操作は未検証。
 - 検証コマンドは全終了、一時テスト・build出力を削除。ROSノード・開発サーバーの新規起動や既存プロセスの停止・再起動操作なし。
+
+## 2026-09-15: 接続小平面の合算と未指定Bbox GUIの非表示
+
+- 非平面経由の接続を再利用し、起点の最低ノード数・傾斜角と合算対象の寸法判定を分離。小平面・側面を含む候補Tmapを検証。[仕様・Docker実行コマンド](releases/2026-09-15_grasp_small_plane_membership.md)を記録。
+- Bounding Box未指定のGraphではGUIなし、明示falseでは再ON可能とし、通常`/topological_map`を対象外へ変更。[仕様・frontend実行コマンド](releases/2026-09-15_bbox_explicit_controls.md)を記録。
+- Docker Releaseビルド・C++回帰検証・CTest、frontend関連4ファイルのテスト・lint・本番ビルドに成功。初回ホバーテストの旧false期待値を更新して再検証成功。実入力・実ブラウザ・実機動作は未検証。
+- 有限コマンドは全終了、一時出力は削除済み。既存ROS PIDを維持し、検証プロセスの残留なし。frontendコンテナの稼働期間更新を観測したが、本作業からの起動停止操作なし。

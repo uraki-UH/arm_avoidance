@@ -183,6 +183,7 @@ export interface Transform {
 export interface LayerSettings {
     visible: boolean;
     showNodes: boolean;
+    // 未指定はGUI・選択機能なし。明示した真偽値は切替可能な表示状態
     enable_bounding_box?: boolean;
     // 旧ラベル設定の読み込み互換
     enable_boundary_highlight?: boolean;

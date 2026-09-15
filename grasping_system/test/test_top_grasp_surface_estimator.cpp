@@ -87,6 +87,64 @@ TopGraspSurfaceConfig makeConfig()
 int main()
 {
   {
+    // 非平面経由の小平面・側面を合算対象へ追加。起点条件と開口寸法の維持
+    TopologicalMap map;
+    PlaneClusterArray clusters;
+    const auto top = addRectangle(map, -0.02, 0, 0.10, 0.02, 0.02);
+    const auto side = addRectangle(map, 0.02, 0, 0.08, 0.02, 0.02);
+    const auto base = addRectangle(map, 0, 0, 0, 0.4, 0.4);
+    clusters.clusters.push_back(makeCluster(1, top, -0.02, 0, 0.10, {0, 0, 1}));
+    clusters.clusters.push_back(makeCluster(2, {side[0], side[1], side[2]}, 0.02, 0, 0.08, {1, 0, 0}));
+    clusters.clusters.push_back(makeCluster(3, base, 0, 0, 0, {0, 0, 1}));
+    clusters.clusters[0].local_spacing = clusters.clusters[1].local_spacing = 0.1;
+    const auto bridge_idx = static_cast<std::uint32_t>(map.nodes.size());
+    map.nodes.emplace_back();
+    map.nodes.back().pos.z = 0.09;
+    addEdge(map, top[0], base[0]);
+    addEdge(map, top.back(), bridge_idx);
+    addEdge(map, bridge_idx, side[0]);
+    TopGraspSurfaceConfig config;
+    config.enable_plane_combinations = true;
+    config.enable_approach_check = false;
+    config.grasp_size_x = config.grasp_size_y = 0.15;
+    const auto has_combination = [](const auto &result) {
+      return std::any_of(result.candidates.begin(), result.candidates.end(), [](const auto &candidate) {
+        return candidate.source_cluster_ids == std::vector<std::uint32_t>{1, 2};
+      });
+    };
+    for (const auto num_nodes : {3U, 4U}) {
+      clusters.clusters[1].node_indices.assign(side.begin(), side.begin() + num_nodes);
+      clusters.clusters[1].normal.x = num_nodes == 4 ? 1.0 : 0.0;
+      clusters.clusters[1].normal.z = num_nodes == 3 ? 1.0 : 0.0;
+      const auto result = TopGraspSurfaceEstimator(config).estimate(map, clusters);
+      expect(has_combination(result), "小平面・傾斜条件外の側面を含む複合候補");
+      for (const auto &candidate : result.candidates) {
+        expect(candidate.source_cluster_ids != std::vector<std::uint32_t>{2}, "小平面・側面の単独起点化なし");
+        if (candidate.source_cluster_ids.size() != 2) continue;
+        expect(candidate.node_indices.size() == top.size() + num_nodes, "両平面の全所属ノードを維持");
+        expect(candidate.attached_node_indices == std::vector<std::uint32_t>{bridge_idx}, "接続する非平面の保持");
+        const auto graph = grasping_system::candidate::extract_candidate_graph(
+          map, candidate.node_indices, candidate.attached_node_indices);
+        expect(graph.nodes.size() == top.size() + num_nodes + 1 && graph.edges.size() == 4,
+          "候補Tmapに両平面と非平面経由の接続を出力");
+      }
+    }
+    auto modified = map;
+    for (const auto node_idx : side) modified.nodes[node_idx].pos.x += 0.3;
+    expect(!has_combination(TopGraspSurfaceEstimator(config).estimate(modified, clusters)), "合算サイズ超過の除外");
+    modified = map;
+    modified.edges.resize(modified.edges.size() - 2);
+    expect(!has_combination(TopGraspSurfaceEstimator(config).estimate(modified, clusters)), "接続なしの除外");
+    modified = map;
+    modified.nodes[bridge_idx].boundary_evidence = ais_gng_msgs::msg::TopologicalNode::BOUNDARY_FREE_SPACE;
+    expect(!has_combination(TopGraspSurfaceEstimator(config).estimate(modified, clusters)), "自由空間境界を経由した接続の除外");
+    modified = map;
+    modified.nodes[side[0]].pos.x = std::numeric_limits<float>::quiet_NaN();
+    expect(!has_combination(TopGraspSurfaceEstimator(config).estimate(modified, clusters)), "不正座標の小平面の除外");
+    config.enable_plane_combinations = false;
+    expect(!has_combination(TopGraspSurfaceEstimator(config).estimate(map, clusters)), "組合せOFFの維持");
+  }
+  {
     // 入力IDとは異なる添字の接続、候補間エッジ除外、重複候補の独立所属
     TopologicalMap source;
     addRectangle(source, 0, 0, 0.1, 0.02, 0.02);

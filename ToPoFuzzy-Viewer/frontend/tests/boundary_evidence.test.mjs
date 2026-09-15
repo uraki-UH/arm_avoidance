@@ -16,8 +16,8 @@ try {
         assert.equal(defaults.enable_bounding_box, true);
         assert.deepEqual([defaults.nodeScale, defaults.showEdges, defaults.nodeOpacity], [0.008, false, 0.5]);
         const other = module.createDefaultGraphLayerSettings('/topological_map', graph);
-        assert.equal(other.enable_bounding_box, false);
-        assert.equal(module.createDefaultGraphLayerSettings('/ToPoDualArm/Tmap_static', graph).enable_bounding_box, false);
+        assert.equal(Object.hasOwn(other, 'enable_bounding_box'), false);
+        assert.equal(module.createDefaultGraphLayerSettings('/ToPoDualArm/Tmap_static', graph).enable_bounding_box, undefined);
         assert.equal(other.nodeScale, 0.003);
         assert.equal(other.showEdges, mode !== 'static');
         const override = module.resolve_graph_layer_settings('/grasp_pose_cands/Tmap', graph,

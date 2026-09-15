@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { build } from 'esbuild';
+import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 // 実Appの接続条件と非同期コールバックの検証。DOM・WebGL・通信のみ対象外
@@ -22,6 +26,45 @@ function attribute(component, name) {
     return element.attributes.properties.find(prop => prop.name?.getText(source) === name)
         .initializer.expression.getText(source);
 }
+
+test('未指定トピックのBbox GUI非表示と、明示OFFからの再有効化', async () => {
+    const directory = await mkdtemp(resolve('tests/.bbox-controls-'));
+    try {
+        const outfile = resolve(directory, 'controls.mjs');
+        await build({ stdin: { contents: `
+            export { GngLayerControls } from './src/features/visualization/GngLayerControls';
+            export { createDefaultGraphLayerSettings } from './src/features/visualization/graphLayerSettings';
+        `, resolveDir: process.cwd() }, outfile, bundle: true, packages: 'external',
+            platform: 'node', format: 'esm', jsx: 'automatic' });
+        const { GngLayerControls, createDefaultGraphLayerSettings } = await import(pathToFileURL(outfile).href);
+        const graph = { mode: 'dynamic', nodes: [], edges: [], clusters: [] };
+        for (const tag of ['/topological_map', '/ToPoDualArm/Tmap_static', '/grasp_pose_cands/Tmap', '/custom']) {
+            let settings = createDefaultGraphLayerSettings(tag, graph);
+            const render = () => GngLayerControls({ tag, graphData: graph, settings, onRemove() {},
+                onUpdate: updates => { settings = { ...settings, ...updates }; } });
+            assert.equal(renderToStaticMarkup(render()).includes('Bounding Box'), tag === '/grasp_pose_cands/Tmap');
+            for (const enable_bounding_box of [false, true]) {
+                settings.enable_bounding_box = enable_bounding_box;
+                const tree = render();
+                const controls = [];
+                const visit = node => {
+                    if (Array.isArray(node)) node.forEach(visit);
+                    else if (node?.props) { controls.push(node); visit(node.props.children); }
+                };
+                visit(tree);
+                const toggle = controls.find(node => node.props.label === 'Bounding Box');
+                assert.equal(toggle.props.isOn, enable_bounding_box);
+                toggle.props.onToggle();
+                assert.equal(settings.enable_bounding_box, !enable_bounding_box);
+                assert.ok(renderToStaticMarkup(render()).includes('Bounding Box'));
+            }
+            delete settings.enable_bounding_box;
+            assert.ok(!renderToStaticMarkup(render()).includes('Bounding Box'));
+        }
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});
 
 test('ノード・クラスタ・Markerの直接選択はBboxと編集状態に従属', () => {
     for (const enable_bounding_box of [undefined, false, true]) {
