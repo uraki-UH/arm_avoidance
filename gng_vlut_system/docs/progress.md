@@ -337,3 +337,13 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 
 - 独立3DビューのXYZ軸を既定OFFとし、チェックボックスを追加。主画面・候補選択・XYZ寸法表示は維持。[仕様・検証コマンド](releases/2026-09-15_inspection_axes_toggle.md)を記録。
 - frontendのlint・本番ビルドに成功。ブラウザの実操作は未検証。有限コマンドは終了、一時出力は削除済み。ROS・開発サーバーへの起動停止操作なし。
+
+## 2026-09-15: 候補独立ビューの情報整理
+
+- フッターをノード数・エッジ数・XYZ寸法の1行へ集約し、座標系の説明を削除。`nonplane_components`の表示だけを`nonplane_`へ短縮。[仕様・検証コマンド](releases/2026-09-15_inspection_info_layout.md)を記録。
+- HTML出力テスト・lint・本番ビルドに成功。元source不変も確認。実ブラウザ描画は未検証。有限コマンドは終了、一時出力は削除済み。ROS・開発サーバーへの起動停止操作なし。
+
+## 2026-09-15: 独立ビューのBbox切替
+
+- 独立ビューへ既定OFFのBbox表示を追加。受信済みの範囲から線枠を描画し、主画面設定は維持。[仕様・検証コマンド](releases/2026-09-15_inspection_bbox_toggle.md)を記録。
+- HTML出力テスト・lint・本番ビルドに成功。実ブラウザの切替・描画は未検証。有限コマンドは終了、一時出力は削除済み。ROS・開発サーバーへの起動停止操作なし。

@@ -154,6 +154,8 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 独立ビューは取得時点の固定表示。「最新を取得」で同じsource・所属IDの最新受信フレームを再要求。
 取得失敗時は直前の表示を保持しエラーを表示。主画面のカメラ、TF、ROSデータへの変更なし。
 独立ビューのXYZ軸は既定OFF。操作欄の「XYZ軸」で表示切替。ビューを閉じて開き直すとOFF、XYZ寸法の数値表示は常時維持。
+「Bbox」も既定OFFで独立した表示切替。受信済みの`min_position`・`max_position`を黄色の線枠で表示。「最新を取得」で範囲を更新、閉じて開き直すとOFF。主画面のBounding Box設定・当たり判定とは非連動、追加RPC・ROS購読なし。
+フッターはノード数・エッジ数・XYZ寸法の1行、座標系の説明行なし。独立ビュー内の`nonplane_components`は`nonplane_`へ表示のみ短縮（見出し例: `nonplane_7`）。元source ID・RPC・ROSトピック名は維持、元名はsource表示のツールチップで確認可能。
 `map`必須の編集RPCとは別用途であり、独立表示にはTFへの変換不要。
 
 ホバー枠・枠内クリック・一括範囲取得は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。GUIの`Bounding Box`で切替、既定は全グラフOFF。法線などのMarkerにはこの設定・判定なし。名前・prefixによる自動ONや対象制限なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。

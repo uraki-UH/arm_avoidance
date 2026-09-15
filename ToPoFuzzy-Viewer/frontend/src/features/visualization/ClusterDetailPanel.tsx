@@ -45,6 +45,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
     const [enable_edges, set_enable_edges] = useState(true);
     const [enable_normals, set_enable_normals] = useState(false);
     const [enable_axes, set_enable_axes] = useState(false);
+    const [enable_bounding_box, set_enable_bounding_box] = useState(false);
     const [reset_count, set_reset_count] = useState(0);
     const [position, set_position] = useState<{ x: number; y: number } | null>(null);
     const drag = useRef<{ x: number; y: number; left: number; top: number; max_x: number; max_y: number } | null>(null);
@@ -61,6 +62,8 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
     }, [snapshot, enable_nodes, enable_edges, enable_normals]);
     const extent = snapshot.max_position.map((value, idx) => value - snapshot.min_position[idx]);
     const center = snapshot.max_position.map((value, idx) => (value + snapshot.min_position[idx]) / 2) as [number, number, number];
+    const bounds = useMemo(() => new THREE.Box3(
+        new THREE.Vector3(...snapshot.min_position), new THREE.Vector3(...snapshot.max_position)), [snapshot]);
 
     return <section role="dialog" aria-label="候補の独立3Dビュー"
         className="surface-panel absolute z-50 flex min-h-0 flex-col overflow-hidden"
@@ -92,8 +95,9 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
             }}
             onPointerCancel={() => { drag.current = null; }}>
             <div className="min-w-0">
-                <h3 className="text-sm font-bold">{snapshot.title} <span className="text-xs font-normal opacity-60"></span></h3>
-                <p className="truncate text-[10px] opacity-60" title={snapshot.source_id}>{snapshot.source_id}</p>
+                <h3 className="text-sm font-bold">{snapshot.title.replace(/^nonplane_components #/, 'nonplane_')}</h3>
+                <p className="truncate text-[10px] opacity-60" title={snapshot.source_id}>
+                    {snapshot.source_id.replace(/(^|\/)nonplane_components(?=\/|$)/g, '$1nonplane_')}</p>
             </div>
             <button className="btn-secondary px-2" onClick={onClose} aria-label="候補ビューを閉じる">閉じる</button>
         </header>
@@ -104,6 +108,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
             <label><input type="checkbox" checked={enable_normals} disabled={snapshot.selection.kind === 'marker'}
                 onChange={e => set_enable_normals(e.target.checked)} /> 法線</label>
             <label><input type="checkbox" checked={enable_axes} onChange={e => set_enable_axes(e.target.checked)} /> XYZ軸</label>
+            <label><input type="checkbox" checked={enable_bounding_box} onChange={e => set_enable_bounding_box(e.target.checked)} /> Bbox</label>
             <button className="btn-secondary px-2 py-1" onClick={() => set_reset_count(value => value + 1)}>全体表示</button>
             <button className="btn-secondary px-2 py-1" disabled={is_loading} onClick={on_refresh}>
                 {is_loading ? '取得中' : '最新を取得'}</button>
@@ -119,6 +124,8 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
                     <GraphRenderer tag={snapshot.source_id} data={snapshot.graph} settings={settings} enableClusterSelection={false}
                         uniform_node_color={snapshot.node_color ? marker_color(snapshot.node_color).color.getStyle() : undefined} />
                     {enable_axes && <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />}
+                    {enable_bounding_box && <box3Helper args={[bounds, '#ffe8a1']} renderOrder={2000}
+                        material-depthTest={false} material-depthWrite={false} material-toneMapped={false} />}
                 </Canvas>
             </WebGLErrorBoundary>
         </div>
