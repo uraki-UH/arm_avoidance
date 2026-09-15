@@ -54,6 +54,10 @@ def generate_launch_description():
         default_value='',
         description='入力PointCloud2トピックの上書き'
     )
+    declar_enable_grasp_attention = DeclareLaunchArgument(
+        'enable_grasp_attention', default_value='auto',
+        description='把持候補近傍の重点学習。autoはYAML設定、未指定は無効（CPU専用）'
+    )
     declar_source_point_cloud_topic = DeclareLaunchArgument(
         'source_point_cloud_topic',
         default_value='auto',
@@ -141,6 +145,12 @@ def generate_launch_description():
         surface_config_path = os.path.join(package_dir, 'config', 'surface_model.yaml')
         # 時間通知の接続先と曲面ノードの出力先に共通の設定。
         parameters = [gng_config_path, surface_config_path]
+        grasp_attention = LaunchConfiguration('enable_grasp_attention').perform(context)
+        if grasp_attention != 'auto':
+            enable_grasp_attention = parse_bool(grasp_attention, 'enable_grasp_attention')
+            if enable_grasp_attention and backend != 'cpu':
+                raise RuntimeError('enable_grasp_attention is supported only by the CPU backend')
+            parameters.append({'enable_grasp_attention': enable_grasp_attention})
         input_topic = LaunchConfiguration('input_topic').perform(context)
         if input_topic:
             parameters.append({'input.topic_names': [input_topic]})
@@ -250,6 +260,7 @@ def generate_launch_description():
         declar_lidar,
         declar_backend,
         declar_input_topic,
+        declar_enable_grasp_attention,
         declar_source_point_cloud_topic,
         declar_source_camera_info_topic,
         declar_plane_params_file,

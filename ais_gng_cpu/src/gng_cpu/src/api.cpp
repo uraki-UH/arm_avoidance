@@ -74,6 +74,26 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
+MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio) {
+    auto &core = gng.n1;
+    core.priority_point_ids.clear();
+    core.priority_ratio = 0;
+    if (!num_points) {return 1;}
+    if (!gng.initialized || !point_ids || num_points > static_cast<uint32_t>(gng.input_pcl_num) ||
+        !std::isfinite(ratio) || ratio <= 0 || ratio >= 1) {return 0;}
+    for (uint32_t idx = 0; idx < num_points; ++idx) {
+        if (point_ids[idx] >= static_cast<uint32_t>(gng.input_pcl_num)) {return 0;}
+        const auto &p = gng.map.input_pcl[point_ids[idx]];
+        if (!std::isfinite(p.p[0]) || !std::isfinite(p.p[1]) || !std::isfinite(p.p[2])) {return 0;}
+    }
+    core.priority_point_ids.assign(point_ids, point_ids + num_points);
+    std::sort(core.priority_point_ids.begin(), core.priority_point_ids.end());
+    core.priority_point_ids.erase(std::unique(core.priority_point_ids.begin(), core.priority_point_ids.end()),
+        core.priority_point_ids.end());
+    core.priority_ratio = ratio;
+    return 1;
+}
+
 MY_API uint8_t gng_set_observation_input(const gng_observation_input *input) {
     auto &core = gng.n1;
     core.has_observation_origin = false;

@@ -383,16 +383,20 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     if (input_pcl_num == 0)
         return;
     uniform_int_distribution<> rA(0, input_pcl_num - 1);  // 一様乱数
-    if (attention_pcl_num == 0){
-        for(i=0; i< gng_config.learning_num; ++i){
-            // 学習
-            learn_input(rA(mt));
-        }
-    }else{
-        uniform_int_distribution<> rA_Attention(0, attention_pcl_num - 1);//一様乱数
+    const bool has_priority = raw_points && !priority_point_ids.empty() && priority_ratio > 0;
+    uniform_int_distribution<> priority_dist(0, std::max(1, static_cast<int>(priority_point_ids.size())) - 1);
+    {
+        uniform_int_distribution<> rA_Attention(0, std::max(1, attention_pcl_num) - 1);
         for(i=j=0; i< gng_config.learning_num; ++i){
-            // j: 0 ~ 9
-            if(++j == gng_config.unknown_learning_rate){
+            // 総学習回数を固定した重点配分。通常学習の既存混合比は残余枠内で維持。
+            if (has_priority && static_cast<int>((i + 1) * static_cast<double>(priority_ratio)) >
+                static_cast<int>(i * static_cast<double>(priority_ratio))) {
+                const auto raw_idx = priority_point_ids[priority_dist(mt)];
+                auto point = (*raw_points)[raw_idx];
+                learn_normal(point, nullptr, raw_idx, false);
+                continue;
+            }
+            if(attention_pcl_num == 0 || ++j == gng_config.unknown_learning_rate){
                 learn_input(rA(mt));
                 j = 0; // リセット
             } else {
@@ -420,7 +424,7 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
         }
     }
 }
-void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx) {
+void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics) {
     static Node_d n;
     int i;
     // 全探索
@@ -440,7 +444,7 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     }
 
     auto &node0 = nodes[n.id1];
-    if (enable_observation_support && has_observation_origin) {
+    if (enable_statistics && enable_observation_support && has_observation_origin) {
         if (!node0.observation_range.has_support) {observation_touched_ids.push_back(n.id1);}
         const auto &point = observation_point ? *observation_point : p;
         const auto pixel_idx = observation_pixel_source.get(raw_idx);
@@ -455,8 +459,11 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
             ++observation_ray_num;
         }
     }
-    update_winner_statistics(n, p);
-    if (training_event_capture_enabled) {recordTrainingEvents(n, p);}
+    // 重点再学習の独立観測扱い防止。共分散・支持・統計用イベントは通常学習枠のみ。
+    if (enable_statistics) {
+        update_winner_statistics(n, p);
+        if (training_event_capture_enabled) {recordTrainingEvents(n, p);}
+    }
     // ノードの移動
     // if (!node0.static_node){
     Vec3f new_pos = node0.pos.move(p, node0.eta_s1, 1.f - node0.eta_s1);

@@ -114,6 +114,8 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     static bool no_prev_config = true;
     if (!initialized) return;
     n1.beginMapDeltaFrame();
+    n1.priority_point_ids.clear();
+    n1.priority_ratio = 0;
     // 入力点群の確保
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
@@ -206,6 +208,11 @@ void GNG::exec() {
     }
     // クラスタリング（CPU）
     vg.applyFilter(map.input_pcl, input_pcl_num, map.inpcl_labels);
+    // 既存入力範囲フィルタの再利用。重点指定による範囲外点の復活防止。
+    auto &priority = n1.priority_point_ids;
+    priority.erase(std::remove_if(priority.begin(), priority.end(), [&](uint32_t idx) {
+        return idx >= static_cast<uint32_t>(input_pcl_num) || map.inpcl_labels[idx] == 0;
+    }), priority.end());
     auto t1 = std::chrono::system_clock::now();
     // ダウンサンプリング
     attention();
@@ -217,6 +224,8 @@ void GNG::exec() {
         nullptr, nullptr, n1.observation_angle_table && !enable_observation_attention_compact ? &observation_attention_raw_ids : nullptr,
         &map.input_pcl, &vg, enable_observation_attention_compact ? &observation_attention_spans : nullptr,
         enable_observation_attention_compact ? &observation_attention_blocks : nullptr);
+    n1.priority_point_ids.clear();
+    n1.priority_ratio = 0;
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
     n1.observation_angle_table = nullptr;

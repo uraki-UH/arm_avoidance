@@ -455,6 +455,33 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     declare_classify_double("classify.threshold", 0.8);                            // 分類のしきい値 (cpu)
     declare_classify_string("classify.device", "cpu");                            // 分類器の推論デバイス(cpu/cuda/auto)
 
+#if defined(AIS_GNG_BACKEND_CPU)
+    // 把持候補近傍の重点学習。実行中の設定変更なし。
+    rcl_interfaces::msg::ParameterDescriptor grasp_descriptor;
+    grasp_descriptor.read_only = true;
+    enable_grasp_attention_ = declare_parameter("enable_grasp_attention", false, grasp_descriptor);
+    grasp_attention_radius_ = declare_parameter("grasp_attention.radius", 0.03, grasp_descriptor);
+    grasp_attention_ratio_ = declare_parameter("grasp_attention.ratio", 0.5, grasp_descriptor);
+    grasp_attention_timeout_sec_ = declare_parameter("grasp_attention.timeout_sec", 0.5, grasp_descriptor);
+    const auto grasp_topic = declare_parameter<std::string>(
+        "grasp_attention.topic", "/grasp_pose_cands/Tmap", grasp_descriptor);
+    if (!std::isfinite(grasp_attention_radius_) || grasp_attention_radius_ <= 0 ||
+        !std::isfinite(grasp_attention_ratio_) || grasp_attention_ratio_ <= 0 || grasp_attention_ratio_ >= 1 ||
+        !std::isfinite(grasp_attention_timeout_sec_) || grasp_attention_timeout_sec_ <= 0 || grasp_topic.empty()) {
+        throw std::invalid_argument("Invalid grasp_attention parameters");
+    }
+    if (enable_grasp_attention_) {
+        grasp_attention_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+            grasp_topic, rclcpp::QoS(1).best_effort().durability_volatile(),
+            [this](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr candidate) {
+                grasp_attention_received_ = std::chrono::steady_clock::now();
+                grasp_attention_map_ = candidate->nodes.size() <= 65536 ? candidate : nullptr;
+            });
+        RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s radius=%.3f m ratio=%.2f timeout=%.2f s",
+            grasp_topic.c_str(), grasp_attention_radius_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
+    }
+#endif
+
     // 入力点群関連
     this->declare_parameter("input.topic_names", std::vector<std::string>{""});    // 入力点群のtopicの名前 (cpu/gpu)
     const auto input_point_cloud_num =
@@ -591,6 +618,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         bool success = false;
         std::vector<float> flt_array;
         auto name = p.get_name();
+        if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0) {continue;}
         if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
             name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
             name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
@@ -893,6 +921,9 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         ? msg->header.frame_id
         : base_frame_id_;
     header.stamp = msg->header.stamp;
+#if defined(AIS_GNG_BACKEND_CPU)
+    if (enable_grasp_attention_) {prepare_grasp_attention(header, clouds.size() == 1);}
+#endif
     const auto input_end = std::chrono::steady_clock::now();
 
     // GNGの実行とライブラリ要約ログへの処理時間付加
@@ -1320,6 +1351,52 @@ void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_
         markers.markers.push_back(std::move(marker));
     }
     node_support_pub_->publish(std::move(markers));
+}
+#endif
+
+#if defined(AIS_GNG_BACKEND_CPU)
+void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input) {
+    gng_set_priority_input(nullptr, 0, 0);
+    const auto &candidate = grasp_attention_map_;
+    if (!has_single_input || !candidate || candidate->nodes.empty()) {return;}
+    const double elapsed = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - grasp_attention_received_).count();
+    const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
+    const double cloud_sec = stamp_sec(header.stamp), candidate_sec = stamp_sec(candidate->header.stamp);
+    if (elapsed > grasp_attention_timeout_sec_ || cloud_sec <= 0 || candidate_sec <= 0 ||
+        cloud_sec < candidate_sec || cloud_sec - candidate_sec > grasp_attention_timeout_sec_ ||
+        header.frame_id.empty() || candidate->header.frame_id.empty()) {return;}
+    geometry_msgs::msg::TransformStamped transform;
+    const bool has_transform = header.frame_id != candidate->header.frame_id;
+    if (has_transform) {
+        try {
+            transform = tf_buffer_->lookupTransform(header.frame_id, candidate->header.frame_id,
+                rclcpp::Time(header.stamp));
+        } catch (const tf2::TransformException &error) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                "Grasp attention skipped: TF unavailable: %s", error.what());
+            return;
+        }
+    }
+    std::vector<std::array<float, 3>> centers;
+    centers.reserve(candidate->nodes.size());
+    for (const auto &node : candidate->nodes) {
+        geometry_msgs::msg::Point point;
+        point.x = node.pos.x; point.y = node.pos.y; point.z = node.pos.z;
+        if (has_transform) {
+            geometry_msgs::msg::Point converted;
+            tf2::doTransform(point, converted, transform);
+            point = converted;
+        }
+        centers.push_back({static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z)});
+    }
+    grasp_attention_regions_.assign(std::move(centers), grasp_attention_radius_);
+    uint32_t num_points = 0;
+    const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
+    const auto ids = grasp_attention_regions_.select(points, num_points);
+    if (!ids.empty()) {
+        gng_set_priority_input(ids.data(), static_cast<uint32_t>(ids.size()), static_cast<float>(grasp_attention_ratio_));
+    }
 }
 #endif
 

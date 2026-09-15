@@ -4,6 +4,7 @@
     gng_setParameter;
     gng_setPointCloud;
     gng_exec;
+    gng_set_priority_input;
     gng_setMapDeltaCapture;
     gng_getTopologicalMapDelta;
     gng_setTrainingEventCapture;

@@ -160,6 +160,10 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
  */
 void gng_exec();
 
+// 次の1回の学習用重点入力。setPointCloud後の元点添字、総学習回数に対する配分率。
+// 空指定で解除。不正指定は解除して0を返却。配列の内部コピー、既存点群の複製なし。
+uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio);
+
 /**
  * @brief TopologicalMap差分の記録を切り替える
  * @param[in] enable 0以外で有効。無効時は変更記録の処理を行わない

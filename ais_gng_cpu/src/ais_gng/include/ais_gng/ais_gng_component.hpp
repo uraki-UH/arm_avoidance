@@ -25,6 +25,7 @@
 
 #if defined(AIS_GNG_BACKEND_CPU)
 #include "ais_gng/node_support.hpp"
+#include "ais_gng/grasp_attention.hpp"
 #include "ais_gng/observation_pixels.hpp"
 #include "ais_gng/boundary_evidence.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -58,6 +59,15 @@ class AiSGNGComponent : public rclcpp::Node {
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr curve_time_sub_;
     double curve_ms_{-1.0};
 #if defined(AIS_GNG_BACKEND_CPU)
+    bool enable_grasp_attention_{false};
+    double grasp_attention_radius_{0.03};
+    double grasp_attention_ratio_{0.5};
+    double grasp_attention_timeout_sec_{0.5};
+    rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr grasp_attention_sub_;
+    ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr grasp_attention_map_;
+    std::chrono::steady_clock::time_point grasp_attention_received_{};
+    grasp_attention::regions grasp_attention_regions_;
+    void prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input);
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};
     bool enable_boundary_evidence_{true};

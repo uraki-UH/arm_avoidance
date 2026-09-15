@@ -2,6 +2,15 @@ ais_gng_node:
   ros__parameters:
     node.num_max: 5000
     node.learning_num: 5000
+    # 把持候補近傍の重点学習（起動時設定）
+    enable_grasp_attention: false
+    grasp_attention.topic: "/grasp_pose_cands/Tmap"
+    # 候補ノード周辺の半径[m]
+    grasp_attention.radius: 0.03
+    # 総学習回数中の重点更新の配分率
+    grasp_attention.ratio: 0.5
+    # 候補受信と入力点群時刻による有効期間[s]
+    grasp_attention.timeout_sec: 0.5
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
