@@ -44,6 +44,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
     const [enable_nodes, set_enable_nodes] = useState(true);
     const [enable_edges, set_enable_edges] = useState(true);
     const [enable_normals, set_enable_normals] = useState(false);
+    const [enable_axes, set_enable_axes] = useState(false);
     const [reset_count, set_reset_count] = useState(0);
     const [position, set_position] = useState<{ x: number; y: number } | null>(null);
     const drag = useRef<{ x: number; y: number; left: number; top: number; max_x: number; max_y: number } | null>(null);
@@ -102,6 +103,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
                 onChange={e => set_enable_edges(e.target.checked)} /> エッジ</label>
             <label><input type="checkbox" checked={enable_normals} disabled={snapshot.selection.kind === 'marker'}
                 onChange={e => set_enable_normals(e.target.checked)} /> 法線</label>
+            <label><input type="checkbox" checked={enable_axes} onChange={e => set_enable_axes(e.target.checked)} /> XYZ軸</label>
             <button className="btn-secondary px-2 py-1" onClick={() => set_reset_count(value => value + 1)}>全体表示</button>
             <button className="btn-secondary px-2 py-1" disabled={is_loading} onClick={on_refresh}>
                 {is_loading ? '取得中' : '最新を取得'}</button>
@@ -116,14 +118,12 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
                     <InspectionCamera snapshot={snapshot} reset_count={reset_count} />
                     <GraphRenderer tag={snapshot.source_id} data={snapshot.graph} settings={settings} enableClusterSelection={false}
                         uniform_node_color={snapshot.node_color ? marker_color(snapshot.node_color).color.getStyle() : undefined} />
-                    <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />
+                    {enable_axes && <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />}
                 </Canvas>
             </WebGLErrorBoundary>
         </div>
-        <footer className="shrink-0 space-y-1 border-t border-white/10 p-2 text-[11px] text-[var(--text-secondary)]">
-            <p>{snapshot.graph.nodes.length} nodes / {snapshot.graph.edges.length / 2} edges</p>
-            <p>XYZ寸法: {extent.map(value => value.toFixed(3)).join(' / ')} m</p>
-            <p>座標系: {snapshot.graph.frameId || '未指定'} / 元シーン・TFの変更なし</p>
+        <footer className="shrink-0 overflow-x-auto whitespace-nowrap border-t border-white/10 p-2 text-[11px] text-[var(--text-secondary)]">
+            <p>{snapshot.graph.nodes.length} nodes / {snapshot.graph.edges.length / 2} edges / XYZ寸法: {extent.map(value => value.toFixed(3)).join(' / ')} m</p>
         </footer>
     </section>;
 }

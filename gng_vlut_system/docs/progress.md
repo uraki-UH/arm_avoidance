@@ -332,3 +332,8 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 ```
 
 新規検証の子launchは`ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py params_file:=/tmp/grasp_refinement_0vwzlmg0/params.yaml candidate_topic:=/grasp_refinement_test/source seed_topic:=/grasp_refinement_test/seeds point_cloud_topic:=/grasp_refinement_test/points output_topic:=/grasp_refinement_test/result`。既存候補計画テストの子launchは[前回の起動コマンド](releases/2026-09-14_candidate_static_path_index.md#verification)と同一。
+
+## 2026-09-15: 候補独立ビューのXYZ軸切替
+
+- 独立3DビューのXYZ軸を既定OFFとし、チェックボックスを追加。主画面・候補選択・XYZ寸法表示は維持。[仕様・検証コマンド](releases/2026-09-15_inspection_axes_toggle.md)を記録。
+- frontendのlint・本番ビルドに成功。ブラウザの実操作は未検証。有限コマンドは終了、一時出力は削除済み。ROS・開発サーバーへの起動停止操作なし。
