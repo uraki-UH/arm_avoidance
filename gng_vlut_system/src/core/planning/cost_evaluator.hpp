@@ -2,6 +2,7 @@
 
 #include "gng/GrowingNeuralGas.hpp"
 #include <Eigen/Dense>
+#include <optional>
 
 namespace planning {
 
@@ -21,6 +22,11 @@ public:
    */
   virtual float evaluate(const GNG::NeuronNode<T_angle, T_coord> &u,
                          const GNG::NeuronNode<T_angle, T_coord> &v) = 0;
+
+  // 活性ノード間で安全ラベルに依存しない固定エッジコスト。未対応の評価器は事前計算対象外
+  virtual std::optional<float> static_edge_cost(
+      const GNG::NeuronNode<T_angle, T_coord> &,
+      const GNG::NeuronNode<T_angle, T_coord> &) const { return std::nullopt; }
 
   /**
    * 特定のノードにいることによるペナルティやリスクを評価する。

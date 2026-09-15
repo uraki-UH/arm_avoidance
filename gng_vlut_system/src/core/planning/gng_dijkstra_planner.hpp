@@ -5,7 +5,12 @@
 #include "planner/RRT/state_validity_checker.hpp"
 #include "safety_engine/runtime/safety_management.hpp"
 #include "safety_engine/indexing/ispatial_index.hpp"
+#include "planning/static_path_index.hpp"
 #include <algorithm>
+#include <atomic>
+#include <cmath>
+#include <future>
+#include <thread>
 #include <map>
 #include <limits>
 #include <queue>
@@ -42,6 +47,28 @@ public:
   void setCostEvaluator(
       std::shared_ptr<ICostEvaluator<T_angle, T_coord>> evaluator) override {
     evaluator_ = evaluator;
+    static_graph_.reset();
+  }
+
+  // 固定モデル読込後の探索索引構築。重み・エッジ変更時は再構築が必要
+  bool prepare_static_graph(const T_GNG &gng) {
+    static_graph_.reset();
+    if (!evaluator_) return false;
+    std::vector<std::size_t> offsets(gng.getMaxNodeNum() + 1, 0);
+    std::vector<static_path_index::edge> edges;
+    for (std::size_t from = 0; from < gng.getMaxNodeNum(); ++from) {
+      for (int to : gng.getNeighborsAngle(from)) {
+        if (!gng.isEdgeActive(from, to, 0)) continue;
+        const auto cost = evaluator_->static_edge_cost(gng.nodeAt(from), gng.nodeAt(to));
+        if (!cost || !std::isfinite(*cost) || *cost < 0.0f) return false;
+        edges.push_back({to, *cost});
+      }
+      offsets[from + 1] = edges.size();
+    }
+    static_graph_ = std::make_unique<static_path_index>(std::move(offsets), std::move(edges));
+    static_gng_ = &gng;
+    static_num_nodes_ = gng.getMaxNodeNum();
+    return true;
   }
 
   /**
@@ -237,22 +264,93 @@ public:
     return plan_to_each_node_cached(start_id, goal_ids, gng, allow_danger_goal, nullptr);
   }
 
-  // 1回の計画内に限定した開始候補間のエッジ判定・基礎コスト共有
+  // 固定索引の再利用と独立木の並列探索。非対応評価器は計画内のエッジコスト共有
   std::unordered_map<int, std::unordered_map<int, std::vector<int>>> plan_from_each_start(
       const std::vector<int> &start_ids, const std::vector<int> &goal_ids,
       const T_GNG &gng, bool allow_danger_goal = true) {
     std::unordered_map<int, std::unordered_map<int, std::vector<int>>> paths;
     stats_.visited_nodes = 0;
     if (start_ids.empty() || goal_ids.empty() || !evaluator_) return paths;
-    edge_cache cache(start_ids.size() > 1 ? gng.getMaxNodeNum() : 0);
+    const bool can_use_static = static_graph_ && static_gng_ == &gng &&
+        static_num_nodes_ == gng.getMaxNodeNum() && !(avoid_collisions_ && enable_safety_penalty_);
+    std::vector<uint8_t> can_enter;
+    if (can_use_static) {
+      can_enter.resize(gng.getMaxNodeNum());
+      for (std::size_t idx = 0; idx < can_enter.size(); ++idx) {
+        const auto &status = gng.nodeAt(idx).status;
+        can_enter[idx] = status.active && status.self_collision_free &&
+            (!avoid_collisions_ || (!status.is_colliding && !(avoid_danger_ && status.is_danger)));
+      }
+      static_graph_->update_access(can_enter, start_ids, goal_ids);
+    }
+    edge_cache cache(!can_use_static && start_ids.size() > 1 ? gng.getMaxNodeNum() : 0);
+    using indexed_result = std::pair<std::unordered_map<int, std::vector<int>>, std::size_t>;
+    struct search_job {
+      int start;
+      int terminal;
+      std::vector<int> goals;
+    };
+    std::vector<search_job> jobs;
     std::size_t num_visited = 0;
+    auto add_job = [&](int start, std::vector<int> goals, int terminal) {
+      if (goals.empty()) return;
+      if (static_graph_->needs_search(start, goals, terminal)) {
+        jobs.push_back({start, terminal, std::move(goals)});
+      } else {
+        auto result = static_graph_->paths(start, goals, num_visited, terminal);
+        paths.at(start).insert(std::make_move_iterator(result.begin()), std::make_move_iterator(result.end()));
+      }
+    };
     for (int start_id : start_ids) {
       if (start_id < 0 || start_id >= static_cast<int>(gng.getMaxNodeNum()) ||
           paths.count(start_id)) continue;
-      paths.emplace(start_id,
-          plan_to_each_node_cached(start_id, goal_ids, gng, allow_danger_goal,
-                                   cache.empty() ? nullptr : &cache));
-      num_visited += stats_.visited_nodes;
+      if (can_use_static) {
+        std::vector<int> shared_goals;
+        std::vector<int> exception_goals;
+        for (int goal : goal_ids) {
+          if (goal < 0 || goal >= static_cast<int>(can_enter.size())) continue;
+          if (can_enter[goal] || goal == start_id) {
+            shared_goals.push_back(goal);
+          } else {
+            const auto &status = gng.nodeAt(goal).status;
+            if (status.active && status.self_collision_free &&
+                !(avoid_collisions_ && ((status.is_colliding && strict_goal_collision_check_) ||
+                   (status.is_danger && avoid_danger_ && !allow_danger_goal))) &&
+                std::find(exception_goals.begin(), exception_goals.end(), goal) == exception_goals.end()) {
+              exception_goals.push_back(goal);
+            }
+          }
+        }
+        paths.emplace(start_id, std::unordered_map<int, std::vector<int>>{});
+        add_job(start_id, std::move(shared_goals), -1);
+        // 例外終点ごとに独立した木。別の危険終点の通過許可への転用なし
+        for (int goal : exception_goals) add_job(start_id, {goal}, goal);
+      } else {
+        paths.emplace(start_id,
+            plan_to_each_node_cached(start_id, goal_ids, gng, allow_danger_goal,
+                                     cache.empty() ? nullptr : &cache));
+        num_visited += stats_.visited_nodes;
+      }
+    }
+    std::vector<indexed_result> results(jobs.size());
+    std::atomic<std::size_t> next_job{0};
+    auto search = [&]() {
+      for (std::size_t idx; (idx = next_job.fetch_add(1, std::memory_order_relaxed)) < jobs.size();) {
+        const auto &job = jobs[idx];
+        results[idx].first = static_graph_->paths(job.start, job.goals, results[idx].second, job.terminal);
+      }
+    };
+    // ワーカー数をCPU数までに制限。同じ木の同時更新と再利用時のスレッド起動なし
+    const auto num_workers = std::min<std::size_t>(jobs.size(), std::max(1U, std::thread::hardware_concurrency()));
+    std::vector<std::future<void>> workers;
+    for (std::size_t idx = 1; idx < num_workers; ++idx) workers.push_back(std::async(std::launch::async, search));
+    search();
+    for (auto &worker : workers) worker.get();
+    for (std::size_t idx = 0; idx < jobs.size(); ++idx) {
+      auto &result = results[idx];
+      num_visited += result.second;
+      paths.at(jobs[idx].start).insert(std::make_move_iterator(result.first.begin()),
+                                       std::make_move_iterator(result.first.end()));
     }
     stats_.visited_nodes = num_visited;
     return paths;
@@ -581,6 +679,9 @@ public:
 
 private:
   std::shared_ptr<ICostEvaluator<T_angle, T_coord>> evaluator_;
+  std::unique_ptr<static_path_index> static_graph_;
+  const T_GNG *static_gng_ = nullptr;
+  std::size_t static_num_nodes_ = 0;
   bool avoid_collisions_ = false;
   bool enable_safety_penalty_ = true;
   bool avoid_danger_ = true;

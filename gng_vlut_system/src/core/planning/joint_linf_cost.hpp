@@ -34,6 +34,12 @@ public:
     return node.status.active ? 0.0f : inactive_penalty_;
   }
 
+  std::optional<float> static_edge_cost(
+      const GNG::NeuronNode<T_angle, T_coord> &u,
+      const GNG::NeuronNode<T_angle, T_coord> &v) const override {
+    return (u.weight_angle - v.weight_angle).template lpNorm<Eigen::Infinity>();
+  }
+
 private:
   float inactive_penalty_;
 };

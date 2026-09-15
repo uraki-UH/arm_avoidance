@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
 #include <chrono>
+#include <ctime>
 #include <iostream>
 #include <fstream>
 #include <random>
 #include <set>
+#include <cstdlib>
 
 #include "core/planning/gng_dijkstra_planner.hpp"
 #include "core/planning/joint_linf_cost.hpp"
@@ -60,6 +62,14 @@ void compare_paths(planner_type &planner, const batch_graph &graph,
       EXPECT_EQ(goal_paths[goal_id], planner.planToAnyNode(id, {goal_id}, graph, allow_danger_goal).second);
     }
   }
+  ASSERT_TRUE(planner.prepare_static_graph(graph));
+  auto indexed = planner.plan_from_each_start({start_id, (start_id + 1) % static_cast<int>(graph.nodes.size())},
+                                             goals, graph, allow_danger_goal);
+  for (auto &[id, goal_paths] : indexed) {
+    for (int goal_id : goals) {
+      EXPECT_EQ(goal_paths[goal_id], planner.planToAnyNode(id, {goal_id}, graph, allow_danger_goal).second);
+    }
+  }
 }
 
 TEST(candidate_path_batch, edge_cache_scope) {
@@ -96,6 +106,32 @@ TEST(candidate_path_batch, edge_cache_scope) {
   EXPECT_EQ(cost->num_calls - num_before, 4);
   graph.neighbors[1].clear();
   EXPECT_TRUE(planner.plan_from_each_start({0, 4}, {3}, graph)[4][3].empty());
+}
+
+TEST(candidate_path_batch, static_index_resume_and_invalidation) {
+  batch_graph graph(6);
+  graph.neighbors = {{1, 2}, {3}, {3}, {4}, {5}, {}};
+  auto planner = make_planner();
+  planner.setAvoidCollisions(true);
+  ASSERT_TRUE(planner.prepare_static_graph(graph));
+  EXPECT_EQ(planner.plan_from_each_start({0}, {1}, graph)[0][1], std::vector<int>({0, 1}));
+  auto expected = planner.planToAnyNode(0, {5}, graph).second;
+  EXPECT_EQ(planner.plan_from_each_start({0}, {5}, graph)[0][5], expected);
+  EXPECT_EQ(planner.plan_from_each_start({0}, {5}, graph)[0][5], expected);
+  EXPECT_EQ(planner.getLastStats().visited_nodes, 0U);
+  graph.nodes[1].status.is_colliding = true;
+  EXPECT_EQ(planner.plan_from_each_start({0}, {5}, graph)[0][5], std::vector<int>({0, 2, 3, 4, 5}));
+  graph.nodes[2].status.is_danger = true;
+  EXPECT_TRUE(planner.plan_from_each_start({0}, {5}, graph)[0][5].empty());
+  graph.nodes[1].status.is_colliding = false;
+  EXPECT_FALSE(planner.plan_from_each_start({0}, {5}, graph)[0][5].empty());
+  graph.disabled_edges.insert({1, 3});
+  ASSERT_TRUE(planner.prepare_static_graph(graph));
+  EXPECT_TRUE(planner.plan_from_each_start({0}, {5}, graph)[0][5].empty());
+  planner.setAvoidDanger(false);
+  EXPECT_FALSE(planner.plan_from_each_start({0}, {5}, graph)[0][5].empty());
+  auto from_two = planner.plan_from_each_start({2}, {5}, graph);
+  EXPECT_EQ(from_two[2][5], planner.planToAnyNode(2, {5}, graph).second);
 }
 
 TEST(candidate_path_batch, terminal_exceptions_and_updates) {
@@ -202,14 +238,17 @@ TEST(candidate_path_batch, actual_robot_graph) {
   });
   ASSERT_GT(safe_ids.size(), 100U);
   std::vector<int> goals;
+  std::vector<int> starts;
   for (int idx = 1; idx <= 8; ++idx) goals.push_back(safe_ids[idx * safe_ids.size() / 9]);
+  starts.assign(safe_ids.begin(), safe_ids.begin() + 5);
+  if (std::getenv("GNG_PLANNING_DANGER_GOALS")) {
+    for (int goal : goals) graph.nodeAt(goal).status.is_danger = true;
+    std::cout << "controlled_danger_goals=" << goals.size() << '\n';
+  }
   double individual_ms = 0.0;
   double shared_ms = 0.0;
-  std::vector<int> starts;
   std::unordered_map<int, std::unordered_map<int, std::vector<int>>> expected_by_start;
-  for (int start_idx = 0; start_idx < 5; ++start_idx) {
-    const int start_id = safe_ids[start_idx];
-    starts.push_back(start_id);
+  for (int start_id : starts) {
     std::unordered_map<int, std::vector<int>> expected;
     auto begin = std::chrono::steady_clock::now();
     for (int goal_id : goals) expected[goal_id] = planner.planToAnyNode(start_id, {goal_id}, graph).second;
@@ -229,5 +268,36 @@ TEST(candidate_path_batch, actual_robot_graph) {
   }
   std::cout << "actual_graph_individual_ms=" << individual_ms << " shared_ms=" << shared_ms
             << " cached_ms=" << cached_ms << '\n';
+  const auto prepare_begin = std::chrono::steady_clock::now();
+  ASSERT_TRUE(planner.prepare_static_graph(graph));
+  const auto cold_begin = std::chrono::steady_clock::now();
+  const auto cpu_begin = std::clock();
+  auto indexed = planner.plan_from_each_start(starts, goals, graph);
+  const auto cpu_end = std::clock();
+  const auto cold_end = std::chrono::steady_clock::now();
+  for (int start_id : starts) {
+    for (int goal_id : goals) EXPECT_EQ(indexed[start_id][goal_id], expected_by_start[start_id][goal_id]);
+  }
+  double max_warm_ms = 0.0;
+  for (int iter = 0; iter < 10; ++iter) {
+    const auto warm_begin = std::chrono::steady_clock::now();
+    auto warm = planner.plan_from_each_start(starts, goals, graph);
+    max_warm_ms = std::max(max_warm_ms,
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - warm_begin).count());
+    EXPECT_EQ(warm, indexed);
+    EXPECT_EQ(planner.getLastStats().visited_nodes, 0U);
+  }
+  graph.nodeAt(safe_ids[safe_ids.size() / 2]).status.is_colliding = true;
+  const auto update_begin = std::chrono::steady_clock::now();
+  auto updated = planner.plan_from_each_start(starts, goals, graph);
+  const auto update_end = std::chrono::steady_clock::now();
+  for (int start_id : starts) {
+    for (int goal_id : goals) EXPECT_EQ(updated[start_id][goal_id], planner.planToAnyNode(start_id, {goal_id}, graph).second);
+  }
+  std::cout << "prepare_ms=" << std::chrono::duration<double, std::milli>(cold_begin - prepare_begin).count()
+            << " cold_ms=" << std::chrono::duration<double, std::milli>(cold_end - cold_begin).count()
+            << " cold_cpu_ms=" << 1000.0 * (cpu_end - cpu_begin) / CLOCKS_PER_SEC
+            << " max_warm_ms=" << max_warm_ms
+            << " safety_update_ms=" << std::chrono::duration<double, std::milli>(update_end - update_begin).count() << '\n';
 }
 }  // 無名名前空間

@@ -362,6 +362,9 @@ public:
     planner_.set_enable_safety_penalty(enable_execution_);
     planner_.setStrictGoalCollisionCheck(
         get_parameter("strict_goal_collision_check").as_bool());
+    if (!enable_execution_ && !planner_.prepare_static_graph(*gng_)) {
+      RCLCPP_WARN(get_logger(), "Static path index unavailable; using regular search");
+    }
     replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
     allow_zero_initial_joint_state_ =
         get_parameter("allow_zero_initial_joint_state").as_bool();
