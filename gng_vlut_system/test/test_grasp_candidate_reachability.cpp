@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <limits>
+#include <random>
 
 #include "nodes/planning/goal_node_selection.hpp"
 
@@ -168,5 +169,115 @@ TEST(grasp_candidate_reachability, invalid_voxel_grid_and_negative_cells) {
     source.voxel_size = size;
     EXPECT_TRUE(select_goal_nodes(&map, source, nullptr, default_options, no_tf).ids.empty());
   }
+}
+
+TEST(grasp_candidate_reachability, spatial_cache_refreshes_geometry_but_reuses_metadata_updates) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(make_map({0.01F, 0.21F}));
+  goal_spatial_index cache;
+  EXPECT_TRUE(cache.update(map));
+  EXPECT_FALSE(cache.update(map));
+  auto next = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map);
+  next->header.frame_id = "moved_base";
+  next->frame_number++;
+  next->nodes[0].label = ais_gng_msgs::msg::TopologicalMap::WALL;
+  next->nodes[1].id = 42;
+  EXPECT_FALSE(cache.update(next));
+  EXPECT_TRUE(cache.has_map(next.get()));
+  EXPECT_FALSE(cache.has_map(map.get()));
+  auto source = make_candidates({0.02, 0.22});
+  source.header.frame_id = source.evaluation_header.frame_id = "moved_base";
+  EXPECT_EQ(select_goal_nodes(next.get(), source, nullptr, default_options, no_tf, &cache).ids,
+      (std::vector<int32_t>{42}));
+  next = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*next);
+  next->nodes[1].pos.x = 9.0F;
+  EXPECT_TRUE(cache.update(next));
+  EXPECT_TRUE(select_goal_nodes(next.get(), source, nullptr, default_options, no_tf, &cache).ids.empty());
+  next = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*next);
+  next->nodes.clear();
+  EXPECT_TRUE(cache.update(next));
+  EXPECT_TRUE(select_goal_nodes(next.get(), source, nullptr, default_options, no_tf, &cache).ids.empty());
+  EXPECT_TRUE(cache.update(nullptr));
+  EXPECT_FALSE(cache.has_map(nullptr));
+}
+
+TEST(grasp_candidate_reachability, indexed_selection_matches_full_scan_across_rotating_frames) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>();
+  map->header.frame_id = "base";
+  std::mt19937 random(8427);
+  std::uniform_real_distribution<double> uniform(-1.0, 1.0);
+  ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray features;
+  for (std::uint16_t idx = 0; idx < 4096; ++idx) {
+    auto &node = map->nodes.emplace_back();
+    node.id = 4095 - idx;
+    node.pos.x = uniform(random); node.pos.y = uniform(random); node.pos.z = uniform(random);
+    node.normal.x = uniform(random); node.normal.y = uniform(random); node.normal.z = uniform(random);
+    node.label = idx % 7 == 0 ? ais_gng_msgs::msg::TopologicalMap::WALL : 1;
+    auto &feature = features.features.emplace_back();
+    feature.node_id = node.id;
+    feature.manip_valid = idx % 9 != 0;
+    feature.manip_condition_number = 1 + idx % 100;
+  }
+  map->nodes[0].pos.x = std::numeric_limits<float>::quiet_NaN();
+  map->nodes[1].pos.y = std::numeric_limits<float>::infinity();
+  goal_spatial_index cache;
+  cache.update(map);
+  goal_selection_options options;
+  for (int iter = 0; iter < 80; ++iter) {
+    auto source = make_candidates({});
+    source.header.frame_id = "source";
+    source.evaluation_header.frame_id = "reach";
+    source.voxel_size = 0.03 + 0.03 * (iter % 10);
+    source.voxel_origin.x = uniform(random);
+    source.voxel_origin.y = uniform(random);
+    source.voxel_origin.z = uniform(random);
+    tf2::Quaternion rotation;
+    rotation.setRPY(uniform(random), uniform(random), uniform(random));
+    const tf2::Transform map_to_reach(rotation, tf2::Vector3(uniform(random), uniform(random), uniform(random)));
+    rotation.setRPY(uniform(random), uniform(random), uniform(random));
+    const tf2::Transform source_to_map(rotation, tf2::Vector3(uniform(random), uniform(random), uniform(random)));
+    const goal_transform_lookup lookup = [&](const auto &target, const auto &frame) -> std::optional<tf2::Transform> {
+      if (iter == 79) return std::nullopt;
+      if (target == "reach" && frame == "base") return map_to_reach;
+      if (target == "reach" && frame == "source") return map_to_reach * source_to_map;
+      if (target == "base" && frame == "source") return source_to_map;
+      return std::nullopt;
+    };
+    for (int idx = 0; idx < 20; ++idx) {
+      const auto &node = map->nodes[2 + random() % (map->nodes.size() - 2)];
+      const auto point = source_to_map.inverse() * tf2::Vector3(node.pos.x, node.pos.y, node.pos.z);
+      auto &item = source.candidates.emplace_back();
+      item.pose.position.x = point.x(); item.pose.position.y = point.y(); item.pose.position.z = point.z();
+      item.pose.orientation.w = 1;
+      item.state = idx % 5 == 0 ? candidate::OUTSIDE : candidate::INSIDE;
+    }
+    options.allow_collision = iter % 2 == 0;
+    options.num_candidates = 1 + iter % 9;
+    const auto expected = select_goal_nodes(map.get(), source, &features, options, lookup);
+    const auto actual = select_goal_nodes(map.get(), source, &features, options, lookup, &cache);
+    ASSERT_EQ(actual.ids, expected.ids) << iter;
+    ASSERT_EQ(actual.map, expected.map) << iter;
+    EXPECT_FALSE(cache.update(map));
+  }
+}
+
+TEST(grasp_candidate_reachability, indexed_cell_boundaries_duplicates_and_invalid_nodes) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(make_map({
+      -0.125F, 0.0F, 0.125F, std::nextafter(0.125F, 0.0F), std::nextafter(0.125F, 1.0F), 0.125F}));
+  goal_spatial_index cache;
+  cache.update(map);
+  for (const double shift : {0.0, 0.125, -0.125, 1e8}) {
+    auto source = make_candidates({-0.125 + shift, 0.0 + shift, 0.125 + shift});
+    source.header.frame_id = source.evaluation_header.frame_id = "world";
+    source.voxel_size = 0.125;
+    const goal_transform_lookup lookup = [shift](const auto &target, const auto &) {
+      return tf2::Transform(tf2::Quaternion(0, 0, 0, 1), tf2::Vector3(target == "world" ? shift : -shift, 0, 0));
+    };
+    EXPECT_EQ(select_goal_nodes(map.get(), source, nullptr, default_options, lookup, &cache).map,
+        select_goal_nodes(map.get(), source, nullptr, default_options, lookup).map);
+  }
+  map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map);
+  for (auto &node : map->nodes) node.pos.x = std::numeric_limits<float>::quiet_NaN();
+  EXPECT_TRUE(cache.update(map));
+  EXPECT_FALSE(cache.update(std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map)));
 }
 }  // 回帰テスト用の補助定義

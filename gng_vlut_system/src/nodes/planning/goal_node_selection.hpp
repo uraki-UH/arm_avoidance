@@ -14,6 +14,7 @@
 #include <ais_gng_feature_msgs/msg/topological_node_feature_array.hpp>
 #include <gng_control_msgs/msg/grasp_candidate_array.hpp>
 #include <tf2/LinearMath/Transform.h>
+#include "goal_spatial_index.hpp"
 
 namespace robot_sim::planning {
 
@@ -37,7 +38,8 @@ inline goal_selection_result select_goal_nodes(
     const ais_gng_msgs::msg::TopologicalMap *map,
     const gng_control_msgs::msg::GraspCandidateArray &source,
     const ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray *features,
-    const goal_selection_options &options, const goal_transform_lookup &lookup) {
+    const goal_selection_options &options, const goal_transform_lookup &lookup,
+    const goal_spatial_index *spatial_index = nullptr) {
   goal_selection_result result;
   if (!map) return result;
   result.map.header = map->header;
@@ -80,9 +82,12 @@ inline goal_selection_result select_goal_nodes(
     return norm <= 1e-9 ? tf2::Vector3(0, 0, 0) : vec / norm;
   };
   std::map<cell, std::vector<std::size_t>> goal_cells;
-  for (std::size_t idx = 0; idx < map->nodes.size(); ++idx) {
-    const auto key = voxel_cell(*map_to_reach * position(map->nodes[idx].pos));
-    if (key) goal_cells[*key].push_back(idx);
+  const bool has_spatial_index = spatial_index && spatial_index->has_map(map);
+  if (!has_spatial_index) {
+    for (std::size_t idx = 0; idx < map->nodes.size(); ++idx) {
+      const auto key = voxel_cell(*map_to_reach * position(map->nodes[idx].pos));
+      if (key) goal_cells[*key].push_back(idx);
+    }
   }
   std::unordered_map<uint16_t, const ais_gng_feature_msgs::msg::TopologicalNodeFeature *> node_features;
   if (features && options.manipulability_weight > 0.0) {
@@ -99,6 +104,13 @@ inline goal_selection_result select_goal_nodes(
     const auto target_position = position(candidate.pose.position);
     const auto key = voxel_cell(*source_to_reach * target_position);
     if (!key) continue;
+    if (has_spatial_index && !goal_cells.count(*key)) {
+      auto &indices = goal_cells[*key];
+      for (const auto idx : spatial_index->query_cell(*key, size, position(origin), *map_to_reach)) {
+        // 回転セルの外接箱だけでは採用せず、従来の半開区間の所属を再確認
+        if (voxel_cell(*map_to_reach * position(map->nodes[idx].pos)) == key) indices.push_back(idx);
+      }
+    }
     const auto found = goal_cells.find(*key);
     if (found == goal_cells.end()) continue;
     const auto target = *source_to_map * target_position;

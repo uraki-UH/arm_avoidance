@@ -4,6 +4,12 @@
 時間・依存作業などによる保留作業の状態は [pending.md](pending.md) に分離。
 記録単位は「日付 / 対象 / 実施内容 / 結果・検証範囲 / 根拠へのリンク」。既存履歴の一括転記なし。
 
+## 2026-09-15: 把持アテンションの物体候補AABB化
+
+- ユーザー指定によりノード半径方式をクラスタ別AABB＋余白へ置換。`radius`を`margin`へ変更し、既定OFF・配分率・失効条件・GNGコアを維持。[仕様・実行コマンド](releases/2026-09-15_grasp_attention_aabb.md)を記録。
+- Dockerビルド、AABB単体テスト3件、既存GNG APIテスト2対象、隔離ROSの候補内部点・別候補間・所属なし・失効・TF検証に成功。10候補・5000ノード・10万入力点のAABB構築＋抽出は合成データ単回で1.42386 ms。
+- 検証用CPU・Pythonノードは終了、既存CPU/ViewerのPIDを維持。実環境での把持成功率・最適余白は未検証。
+
 ## 2026-09-15: 把持候補近傍のGNG重点学習
 
 - CPU GNGへ既定OFFの重点入力APIとROS候補購読を追加。総学習回数内での配分、候補失効・TF失敗時の通常処理、重点分の観測統計への非計上を実装。[仕様・起動方法](../../ais_gng_cpu/docs/grasp_attention.md)と[検証コマンド・結果](releases/2026-09-15_grasp_attention.md)を記録。
@@ -415,3 +421,10 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 - Viewerの「把持ラベル」配下に把持部位・未評価・到達範囲内・到達範囲外を統合。個別色・表示状態と旧設定の移管を確認。
 - 実HTML関数の点群生成、ラベル解決・移管、モーダル構造、実Chromeの操作の4検証とlint・型検査・本番アセット生成に成功。HTML→ROS→GNGの実通信は今回未検証。
 - `node tests/label_priority_browser.test.mjs`で起動したChrome PID 1060265は停止済み。専用プロファイル・一時ビルド出力を削除。既存ブラウザ・ROSノードの起動停止操作なし。
+
+## 2026-09-15: SpatialTree比較とTmap目標選択索引
+
+- 通常版とSpatialTree2を実Tmapの10,801ノードで比較。同一数値型でのバイナリ一致・検索不一致0を確認し、既存通常版doubleを採用。[仕様・比較結果・全検証コマンド](releases/2026-09-15_static_spatial_index.md)を記録。
+- 静的索引の再利用と回転セルの外接箱検索を実装し、既存の選定条件・結果を保持。実Tmap座標と合成候補20件の目標選択中央値は1.351 msから0.485 msへ短縮。
+- Docker Releaseビルド、12件の回帰検証、AddressSanitizer/UndefinedBehaviorSanitizer、隔離ROSでの実GNG候補・経路出力確認に成功。実画面・実機把持は未検証。
+- 検証プロセスは全終了、一時コピー・実行ファイル・ROSログを削除し、再現用の座標・結果ログを保持。既存目標選択ノードPID 497597を維持。AIS・frontendの外部再起動を観測したが、本作業からの起動停止操作なし。

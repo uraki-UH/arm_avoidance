@@ -137,6 +137,7 @@ rclcpp_components_register_node(topological_map_planning
   EXECUTABLE topological_map_path_planner_node)
 add_executable(arm_avoid_node nodes/planning/arm_avoid_node.cpp)
 add_executable(topological_map_goal_selector_node nodes/planning/topological_map_goal_selector_node.cpp)
+target_include_directories(topological_map_goal_selector_node PRIVATE ${CMAKE_SOURCE_DIR}/../SpatialTree/include)
 ament_target_dependencies(topological_map_goal_selector_node
     rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
 install(TARGETS topological_map_goal_selector_node DESTINATION lib/${PROJECT_NAME})

@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 #include <queue>
+#include <stdexcept>
 #include <vector>
 
 namespace SpatialTree {
@@ -553,6 +554,34 @@ public:
   }
 
   int getTotalNodes() const { return total_elements_; }
+
+  // 静止要素の閉区間AABB検索。セル外へ移動した要素を未更新のまま使用することは禁止
+  template <typename Visitor>
+  void query_aabb(const Point<Scalar, Dim> &min_point,
+                  const Point<Scalar, Dim> &max_point, Visitor visitor) const {
+    for (int axis = 0; axis < Dim; ++axis)
+      if (!std::isfinite(min_point[axis]) || !std::isfinite(max_point[axis]) || min_point[axis] > max_point[axis])
+        throw std::invalid_argument("範囲検索には有限で整列済みの上下限が必要です");
+    const auto visit = [&](const auto &self, const Cell &cell) -> void {
+      if (cell.subtree_element_count == 0) return;
+      for (int axis = 0; axis < Dim; ++axis) {
+        if (cell.bounds.center[axis] + cell.bounds.half_extents[axis] < min_point[axis] ||
+            cell.bounds.center[axis] - cell.bounds.half_extents[axis] > max_point[axis]) return;
+      }
+      if (cell.is_subdivided) {
+        for (int idx = 0; idx < ChildCount; ++idx) self(self, cell.children_block[idx]);
+      } else {
+        for (auto *element : cell.elements) {
+          const auto &position = Traits::getPosition(element);
+          bool is_inside = true;
+          for (int axis = 0; axis < Dim; ++axis)
+            is_inside = is_inside && position[axis] >= min_point[axis] && position[axis] <= max_point[axis];
+          if (is_inside) visitor(element);
+        }
+      }
+    };
+    visit(visit, *root_);
+  }
 
   template <typename Func> void visitCells(Func visitor) const {
     root_->visitCells(visitor, 0);

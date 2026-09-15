@@ -1,5 +1,7 @@
 # 2026-09-15 - CPU GNGの把持候補近傍重点学習
 
+後続変更: ノード半径方式を[物体候補AABB＋余白方式](2026-09-15_grasp_attention_aabb.md)へ置換。以下の半径・kd-treeの記載は初期実装の記録。
+
 ## Summary
 
 把持候補ノード近傍の実測点へ学習回数を配分する、既定OFFのCPUオプションを追加。[現行仕様・設定・起動方法](../../../ais_gng_cpu/docs/grasp_attention.md)を正本とする。

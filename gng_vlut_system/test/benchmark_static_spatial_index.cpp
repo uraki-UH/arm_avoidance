@@ -5,6 +5,9 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#ifdef SPATIAL_BENCH_SELECTION
+#include "nodes/planning/goal_node_selection.hpp"
+#endif
 
 // 同一ソースを両ライブラリ・同一精度でビルドするための比較用切替
 #ifndef SPATIAL_BENCH_SCALAR
@@ -39,8 +42,77 @@ double elapsed_ms(clock_type::time_point start) {
   return std::chrono::duration<double, std::milli>(clock_type::now() - start).count();
 }
 
+#ifdef SPATIAL_BENCH_SELECTION
+int benchmark_selection(const char *path) {
+  using namespace robot_sim::planning;
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>();
+  map->header.frame_id = "base";
+  std::ifstream input(path);
+  double x, y, z;
+  ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray features;
+  while (input >> x >> y >> z) {
+    auto &node = map->nodes.emplace_back();
+    node.id = map->nodes.size() - 1;
+    node.pos.x = x; node.pos.y = y; node.pos.z = z;
+    node.normal.z = 1;
+    node.label = node.id % 13 == 0 ? ais_gng_msgs::msg::TopologicalMap::WALL : 1;
+    auto &feature = features.features.emplace_back();
+    feature.node_id = node.id; feature.manip_valid = true; feature.manip_condition_number = 1 + node.id % 100;
+  }
+  if (map->nodes.empty()) throw std::runtime_error("空の座標ファイル");
+  goal_spatial_index cache;
+  const auto start = clock_type::now();
+  cache.update(map);
+  std::cout << "cached_build_ms=" << elapsed_ms(start) << '\n';
+  const goal_selection_options options;
+  tf2::Quaternion rotation;
+  rotation.setRPY(0.3, -0.2, 0.7);
+  const tf2::Transform transform(rotation, tf2::Vector3(0.31, -0.17, 0.23));
+  const goal_transform_lookup lookup = [&](const auto &, const auto &) { return transform; };
+  for (const int num_candidates : {1, 20, 100}) {
+    gng_control_msgs::msg::GraspCandidateArray source;
+    source.header.frame_id = "base"; source.evaluation_header.frame_id = "reach";
+    source.voxel_size = 0.05;
+    for (int idx = 0; idx < num_candidates; ++idx) {
+      const auto &p = map->nodes[(idx * 103) % map->nodes.size()].pos;
+      auto &candidate = source.candidates.emplace_back();
+      candidate.state = gng_control_msgs::msg::GraspCandidate::INSIDE;
+      candidate.pose.position.x = p.x; candidate.pose.position.y = p.y; candidate.pose.position.z = p.z;
+      candidate.pose.orientation.w = 1;
+    }
+    std::vector<double> old_ms, new_ms, receive_ms;
+    for (int iter = 0; iter < 220; ++iter) {
+      auto copy = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map);
+      copy->frame_number = iter;
+      const auto receive_start = clock_type::now();
+      if (cache.update(copy)) throw std::runtime_error("同一座標での不要な再構築");
+      const auto receive = elapsed_ms(receive_start);
+      std::array<goal_selection_result, 2> results;
+      std::array<double, 2> times;
+      for (int order = 0; order < 2; ++order) {
+        const int mode = (iter + order) % 2;
+        const auto query_start = clock_type::now();
+        results[mode] = select_goal_nodes(copy.get(), source, &features, options, lookup, mode ? &cache : nullptr);
+        times[mode] = elapsed_ms(query_start);
+      }
+      if (results[0].ids != results[1].ids || results[0].map != results[1].map)
+        throw std::runtime_error("目標選択結果の不一致");
+      if (iter >= 20) { old_ms.push_back(times[0]); new_ms.push_back(times[1]); receive_ms.push_back(receive); }
+    }
+    const auto median = [](auto values) { std::sort(values.begin(), values.end()); return values[values.size() / 2]; };
+    std::cout << "candidates=" << num_candidates << " nodes=" << map->nodes.size()
+              << " samples=200 old_ms=" << median(old_ms) << " new_ms=" << median(new_ms)
+              << " same_positions_ms=" << median(receive_ms) << " mismatches=0\n";
+  }
+  return 0;
+}
+#endif
+
 int main(int argc, char **argv) {
   if (argc != 2) throw std::runtime_error("座標ファイルの指定が必要");
+#ifdef SPATIAL_BENCH_SELECTION
+  return benchmark_selection(argv[1]);
+#endif
   std::ifstream input(argv[1]);
   std::vector<entry> original;
   double x, y, z;

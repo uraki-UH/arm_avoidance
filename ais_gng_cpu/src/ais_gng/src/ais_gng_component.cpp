@@ -460,12 +460,12 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     rcl_interfaces::msg::ParameterDescriptor grasp_descriptor;
     grasp_descriptor.read_only = true;
     enable_grasp_attention_ = declare_parameter("enable_grasp_attention", false, grasp_descriptor);
-    grasp_attention_radius_ = declare_parameter("grasp_attention.radius", 0.03, grasp_descriptor);
+    grasp_attention_margin_ = declare_parameter("grasp_attention.margin", 0.03, grasp_descriptor);
     grasp_attention_ratio_ = declare_parameter("grasp_attention.ratio", 0.5, grasp_descriptor);
     grasp_attention_timeout_sec_ = declare_parameter("grasp_attention.timeout_sec", 0.5, grasp_descriptor);
     const auto grasp_topic = declare_parameter<std::string>(
         "grasp_attention.topic", "/grasp_pose_cands/Tmap", grasp_descriptor);
-    if (!std::isfinite(grasp_attention_radius_) || grasp_attention_radius_ <= 0 ||
+    if (!std::isfinite(grasp_attention_margin_) || grasp_attention_margin_ < 0 ||
         !std::isfinite(grasp_attention_ratio_) || grasp_attention_ratio_ <= 0 || grasp_attention_ratio_ >= 1 ||
         !std::isfinite(grasp_attention_timeout_sec_) || grasp_attention_timeout_sec_ <= 0 || grasp_topic.empty()) {
         throw std::invalid_argument("Invalid grasp_attention parameters");
@@ -481,8 +481,8 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
                 grasp_attention_received_ = std::chrono::steady_clock::now();
                 grasp_attention_map_ = candidate->nodes.size() <= 65536 ? candidate : nullptr;
             });
-        RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s radius=%.3f m ratio=%.2f timeout=%.2f s",
-            grasp_topic.c_str(), grasp_attention_radius_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
+        RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s margin=%.3f m ratio=%.2f timeout=%.2f s",
+            grasp_topic.c_str(), grasp_attention_margin_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
     }
 #endif
 
@@ -1366,7 +1366,7 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
         RCLCPP_WARN_ONCE(get_logger(), "Grasp attention requires a single input cloud; using normal learning");
         return;
     }
-    if (!candidate || candidate->nodes.empty()) {return;}
+    if (!candidate || candidate->nodes.empty() || candidate->clusters.empty()) {return;}
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - grasp_attention_received_).count();
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
@@ -1386,8 +1386,8 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
             return;
         }
     }
-    std::vector<std::array<float, 3>> centers;
-    centers.reserve(candidate->nodes.size());
+    std::vector<std::array<float, 3>> positions;
+    positions.reserve(candidate->nodes.size());
     for (const auto &node : candidate->nodes) {
         geometry_msgs::msg::Point point;
         point.x = node.pos.x; point.y = node.pos.y; point.z = node.pos.z;
@@ -1396,9 +1396,9 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
             tf2::doTransform(point, converted, transform);
             point = converted;
         }
-        centers.push_back({static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z)});
+        positions.push_back({static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z)});
     }
-    grasp_attention_regions_.assign(std::move(centers), grasp_attention_radius_);
+    grasp_attention_regions_.assign(*candidate, positions, grasp_attention_margin_);
     uint32_t num_points = 0;
     const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
     const auto ids = grasp_attention_regions_.select(points, num_points);

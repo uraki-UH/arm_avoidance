@@ -60,7 +60,7 @@ class AiSGNGComponent : public rclcpp::Node {
     double curve_ms_{-1.0};
 #if defined(AIS_GNG_BACKEND_CPU)
     bool enable_grasp_attention_{false};
-    double grasp_attention_radius_{0.03};
+    double grasp_attention_margin_{0.03};
     double grasp_attention_ratio_{0.5};
     double grasp_attention_timeout_sec_{0.5};
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr grasp_attention_sub_;

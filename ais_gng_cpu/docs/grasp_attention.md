@@ -2,7 +2,7 @@
 
 ## 起動
 
-CPUバックエンド専用、既定OFF。把持候補の生成ノードは別途起動し、`/grasp_pose_cands/Tmap`を配信しておく。
+CPUバックエンド専用、既定OFF。把持候補の生成ノードは別途起動し、クラスタ所属付きの`/grasp_pose_cands/Tmap`を配信しておく。
 
 ```bash
 ros2 launch ais_gng ais_gng.launch.py \
@@ -16,25 +16,29 @@ ros2 launch ais_gng ais_gng.launch.py \
 
 `config/gng_cpu/graspnet.yaml`の`ais_gng_node.ros__parameters`で設定。全項目は起動時設定、ROSパラメータの実行中変更は不可。
 
+YAMLで`enable_grasp_attention: true`にすればlaunch引数の追加は不要。旧`grasp_attention.radius`は`grasp_attention.margin`へ置換。半径検索との切替オプションはなし。
+
 | パラメータ | 既定値 | 内容 |
 | --- | --- | --- |
 | `enable_grasp_attention` | `false` | 重点学習の有効化 |
 | `grasp_attention.topic` | `/grasp_pose_cands/Tmap` | 候補ノードのTopologicalMap |
-| `grasp_attention.radius` | `0.03` | 候補ノード周辺の半径[m]、正数 |
+| `grasp_attention.margin` | `0.03` | 候補AABBの各方向の余白[m]、0以上 |
 | `grasp_attention.ratio` | `0.5` | 総学習回数中の重点更新の配分率、0より大きく1未満 |
 | `grasp_attention.timeout_sec` | `0.5` | 受信停止・候補時刻の許容期間[s]、正数 |
 
 ## 処理
 
 1. 候補Graphの各ノード位置を、入力点群に対応するGNG座標系へTF変換。
-2. 重複中心を除去し、候補中心だけのkd-treeを構築。
-3. GNGに既に入力済みの実測XYZから半径内の元点添字を選択。ROS再publish・点群複製・点群ボクセル再登録なし。
+2. `clusters[].nodes`をノードIDとして解決し、クラスタごとのAABBを構築。TF変換後のノード位置から範囲を計算し、各方向に余白を付加。
+3. GNGに既に入力済みの実測XYZから、いずれかのAABB内の元点添字を選択。複数候補を一括したAABBは作らず、重複範囲の点も1回だけ選択。ROS再publish・点群複製・点群ボクセル再登録なし。
 4. GNG既存の入力範囲フィルタに従って重点点を限定。
 5. `node.learning_num`を増やさず、指定比率で重点更新を通常更新へ挿入。
 
 例えば5000回・比率0.5なら重点2500回、従来方式2500回。従来方式の枠内では既存の全体点群／人・未知物体重点点群の混合比を維持するため、「全体一様2500回」ではない。
 
 実エッジ更新・勝者選択・学習係数・ノード追加条件は従来処理を使用。点の密度やGNGノード数の自動増加を保証する機能ではなく、観測済み領域への学習資源配分。
+
+ノードからの距離にかかわらず候補内部・余白内の実測点が対象。AABBは観測済み候補の広がりであって真の物体形状の確定値ではなく、近くの床や別物体の点も範囲に入る場合あり。計算量は範囲構築が所属ノード数に比例し、入力判定は点数×候補数。ノード単位のkd-tree検索は廃止。
 
 ## 通常学習への復帰
 
@@ -44,7 +48,8 @@ ros2 launch ais_gng ais_gng.launch.py \
 - TFは入力点群の時刻で要求、最新TFへの代替なし。同一frame_idはTF不要。
 - 候補位置の予測や、候補生成から入力取得までの物体運動補償は未実装。
 - 現実装は単一入力点群のみ。複数入力時は警告と通常学習への復帰。
-- 候補ノードのラベルや到達性による選別なし。指定Graphの全ノードが中心候補。65536ノードを超える入力は重点指定を解除。
+- 候補ノードのラベルや到達性による選別なし。クラスタ未所属ノードは範囲外。クラスタ所属がなければ通常学習へ復帰。65536ノードを超える入力は重点指定を解除。
+- 空クラスタ、参照先のないID、所属ノードの不正座標は該当クラスタを除外。Graph内の重複ノードIDは全重点範囲を解除。範囲推測による代替なし。
 - OFF時は候補購読・TF追加購読・近傍検索なし。
 
 ## 観測統計と公開API
@@ -57,4 +62,4 @@ CPUライブラリへ`gng_set_priority_input(point_ids, num_points, ratio)`を�
 
 ## 検証
 
-[実行コマンド・結果](../../gng_vlut_system/docs/releases/2026-09-15_grasp_attention.md)を参照。実物把持の成功率改善や実環境の最適な半径・配分率は未検証。
+[AABB方式の実行コマンド・結果](../../gng_vlut_system/docs/releases/2026-09-15_grasp_attention_aabb.md)を参照。実物把持の成功率改善や実環境の最適な余白・配分率は未検証。

@@ -11,7 +11,7 @@ import time
 def main():
     os.environ.update(ROS_DOMAIN_ID='219', ROS_LOCALHOST_ONLY='1')
     import rclpy
-    from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
+    from ais_gng_msgs.msg import TopologicalCluster, TopologicalMap, TopologicalNode
     from geometry_msgs.msg import TransformStamped
     from rclpy.qos import qos_profile_sensor_data
     from sensor_msgs.msg import PointCloud2, PointField
@@ -59,6 +59,7 @@ def main():
         vertex = TopologicalNode()
         vertex.pos.x, vertex.pos.y, vertex.pos.z = float(x), 0.0, 0.2
         message.nodes = [vertex]
+        message.clusters = [TopologicalCluster(nodes=[vertex.id])]
         return message
 
     def publish_cloud(stamp=None):
@@ -120,6 +121,20 @@ def main():
                 case(make_candidate(), True)
             case(make_candidate('attention_candidates', -0.3), True)
             print('PASS: ON時の近傍抽出、異なる座標系からのTF適用')
+
+            wide = make_candidate(x=0.4)
+            other = TopologicalNode(id=99)
+            other.pos.x, other.pos.y, other.pos.z = 1.0, 0.0, 0.2
+            wide.nodes.append(other)
+            wide.clusters[0].nodes = [0, 99]
+            case(wide, True)
+            wide.clusters = [TopologicalCluster(nodes=[0]), TopologicalCluster(nodes=[99])]
+            wide.header.stamp = node.get_clock().now().to_msg()
+            case(wide, False)
+            wide.clusters = []
+            wide.header.stamp = node.get_clock().now().to_msg()
+            case(wide, False)
+            print('PASS: ノードから離れた候補内部点の採用、候補間の非結合、所属なしの通常学習復帰')
 
             empty = make_candidate()
             empty.nodes = []

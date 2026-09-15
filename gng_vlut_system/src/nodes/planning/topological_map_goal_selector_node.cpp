@@ -29,10 +29,13 @@ class topological_map_goal_selector_node : public rclcpp::Node {
     ids_pub_ = create_publisher<std_msgs::msg::Int32MultiArray>(
         declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids"), qos);
     ids_pub_->publish(std_msgs::msg::Int32MultiArray{});
-    // 受信時は最新スナップショットのみ保持。目標更新周期への計算集約。
+    // 受信時の座標差分確認と索引更新。候補選択は目標更新周期へ集約
     map_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
         declare_parameter("topological_map_topic", "/ToPoDualArm/Tmap_static"), qos,
-        [this](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr msg) { map_ = std::move(msg); });
+        [this](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr msg) {
+          map_ = std::move(msg);
+          spatial_index_.update(map_);
+        });
     candidates_sub_ = create_subscription<gng_control_msgs::msg::GraspCandidateArray>(
         declare_parameter("candidate_topic", "/grasp_pose_cands"), qos,
         [this](gng_control_msgs::msg::GraspCandidateArray::ConstSharedPtr msg) { candidates_ = std::move(msg); });
@@ -57,7 +60,7 @@ class topological_map_goal_selector_node : public rclcpp::Node {
                   "目標選択のTF取得失敗: %s", error.what());
               return std::nullopt;
             }
-          });
+          }, &spatial_index_);
       output_pub_->publish(selected.map);
       std_msgs::msg::Int32MultiArray ids;
       ids.data = std::move(selected.ids);
@@ -67,6 +70,7 @@ class topological_map_goal_selector_node : public rclcpp::Node {
 
  private:
   goal_selection_options options_;
+  goal_spatial_index spatial_index_;
   tf2_ros::Buffer tf_buffer_;
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr map_;

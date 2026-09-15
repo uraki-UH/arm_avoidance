@@ -5,8 +5,8 @@ ais_gng_node:
     # 把持候補近傍の重点学習（起動時設定）
     enable_grasp_attention: false
     grasp_attention.topic: "/grasp_pose_cands/Tmap"
-    # 候補ノード周辺の半径[m]
-    grasp_attention.radius: 0.03
+    # 物体候補AABBの各方向の余白[m]
+    grasp_attention.margin: 0.03
     # 総学習回数中の重点更新の配分率
     grasp_attention.ratio: 0.5
     # 候補受信と入力点群時刻による有効期間[s]
