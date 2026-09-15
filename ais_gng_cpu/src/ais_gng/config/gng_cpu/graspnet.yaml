@@ -3,7 +3,7 @@ ais_gng_node:
     node.num_max: 5000
     node.learning_num: 5000
     # 把持候補近傍の重点学習（起動時設定）
-    enable_grasp_attention: false
+    enable_grasp_attention: true
     grasp_attention.topic: "/grasp_pose_cands/Tmap"
     # 物体候補AABBの各方向の余白[m]
     grasp_attention.margin: 0.03

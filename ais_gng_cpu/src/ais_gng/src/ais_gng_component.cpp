@@ -471,6 +471,8 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         throw std::invalid_argument("Invalid grasp_attention parameters");
     }
     if (enable_grasp_attention_) {
+        grasp_attention_pub_ = create_publisher<PC2>(
+            "downsampling/grasp", rclcpp::QoS(1).best_effort().durability_volatile());
         if (!observation_transform_buffer_) {
             observation_transform_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
             observation_transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*observation_transform_buffer_);
@@ -926,7 +928,16 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         : base_frame_id_;
     header.stamp = msg->header.stamp;
 #if defined(AIS_GNG_BACKEND_CPU)
-    if (enable_grasp_attention_) {prepare_grasp_attention(header, clouds.size() == 1);}
+    if (enable_grasp_attention_) {
+        const auto ids = prepare_grasp_attention(header, clouds.size() == 1);
+        // 購読時のみ点群化。重点対象の失効時は空点群で表示を解除。
+        if (grasp_attention_pub_->get_subscription_count() > 0 ||
+            grasp_attention_pub_->get_intra_process_subscription_count() > 0) {
+            uint32_t num_points = 0;
+            const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
+            grasp_attention_pub_->publish(makePointCloud2Msg(header, points, num_points, &ids));
+        }
+    }
 #endif
     const auto input_end = std::chrono::steady_clock::now();
 
@@ -1359,21 +1370,22 @@ void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_
 #endif
 
 #if defined(AIS_GNG_BACKEND_CPU)
-void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input) {
+std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
+        const std_msgs::msg::Header &header, bool has_single_input) {
     gng_set_priority_input(nullptr, 0, 0);
     const auto &candidate = grasp_attention_map_;
     if (!has_single_input) {
         RCLCPP_WARN_ONCE(get_logger(), "Grasp attention requires a single input cloud; using normal learning");
-        return;
+        return {};
     }
-    if (!candidate || candidate->nodes.empty() || candidate->clusters.empty()) {return;}
+    if (!candidate || candidate->nodes.empty() || candidate->clusters.empty()) {return {};}
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - grasp_attention_received_).count();
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
     const double cloud_sec = stamp_sec(header.stamp), candidate_sec = stamp_sec(candidate->header.stamp);
     if (elapsed > grasp_attention_timeout_sec_ || cloud_sec <= 0 || candidate_sec <= 0 ||
         cloud_sec < candidate_sec || cloud_sec - candidate_sec > grasp_attention_timeout_sec_ ||
-        header.frame_id.empty() || candidate->header.frame_id.empty()) {return;}
+        header.frame_id.empty() || candidate->header.frame_id.empty()) {return {};}
     geometry_msgs::msg::TransformStamped transform;
     const bool has_transform = header.frame_id != candidate->header.frame_id;
     if (has_transform) {
@@ -1383,7 +1395,7 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
         } catch (const tf2::TransformException &error) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                 "Grasp attention skipped: TF unavailable: %s", error.what());
-            return;
+            return {};
         }
     }
     std::vector<std::array<float, 3>> positions;
@@ -1401,12 +1413,13 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
     grasp_attention_regions_.assign(*candidate, positions, grasp_attention_margin_);
     uint32_t num_points = 0;
     const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
-    const auto ids = grasp_attention_regions_.select(points, num_points);
+    auto ids = grasp_attention_regions_.select(points, num_points);
     if (!ids.empty()) {
         gng_set_priority_input(ids.data(), static_cast<uint32_t>(ids.size()), static_cast<float>(grasp_attention_ratio_));
         RCLCPP_DEBUG(get_logger(), "Grasp attention selected %zu/%u points, ratio=%.3f",
             ids.size(), num_points, grasp_attention_ratio_);
     }
+    return ids;
 }
 #endif
 
@@ -1700,11 +1713,12 @@ std::unique_ptr<PC2> AiSGNGComponent::mixPointCloud2Msg(
 std::unique_ptr<PC2> AiSGNGComponent::makePointCloud2Msg(
         const std_msgs::msg::Header &header,
         const float *transformed_pcl,
-        const uint32_t transformed_pcl_num) {
+        const uint32_t transformed_pcl_num,
+        const std::vector<uint32_t> *selected_ids) {
     auto pcl2_msg = std::make_unique<PC2>();
     pcl2_msg->header = header;
     pcl2_msg->height = 1;
-    pcl2_msg->width = transformed_pcl_num;
+    pcl2_msg->width = selected_ids ? static_cast<uint32_t>(selected_ids->size()) : transformed_pcl_num;
     pcl2_msg->is_dense = false;
     pcl2_msg->is_bigendian = false;
     pcl2_msg->point_step = 3 * sizeof(float);
@@ -1724,7 +1738,14 @@ std::unique_ptr<PC2> AiSGNGComponent::makePointCloud2Msg(
     pcl2_msg->fields[2].count = 1;
     pcl2_msg->data.resize(pcl2_msg->row_step * pcl2_msg->height);
 
-    std::copy((uint8_t*)transformed_pcl, (uint8_t*)transformed_pcl + pcl2_msg->data.size(), pcl2_msg->data.begin());
+    if (selected_ids) {
+        for (std::size_t idx = 0; idx < selected_ids->size(); ++idx) {
+            std::memcpy(pcl2_msg->data.data() + idx * pcl2_msg->point_step,
+                transformed_pcl + 3 * static_cast<std::size_t>((*selected_ids)[idx]), pcl2_msg->point_step);
+        }
+    } else if (!pcl2_msg->data.empty()) {
+        std::memcpy(pcl2_msg->data.data(), transformed_pcl, pcl2_msg->data.size());
+    }
 
     return pcl2_msg;
 }

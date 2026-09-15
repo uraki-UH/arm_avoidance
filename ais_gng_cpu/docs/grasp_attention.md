@@ -30,7 +30,7 @@ YAMLで`enable_grasp_attention: true`にすればlaunch引数の追加は不要�
 
 1. 候補Graphの各ノード位置を、入力点群に対応するGNG座標系へTF変換。
 2. `clusters[].nodes`をノードIDとして解決し、クラスタごとのAABBを構築。TF変換後のノード位置から範囲を計算し、各方向に余白を付加。
-3. GNGに既に入力済みの実測XYZから、いずれかのAABB内の元点添字を選択。複数候補を一括したAABBは作らず、重複範囲の点も1回だけ選択。ROS再publish・点群複製・点群ボクセル再登録なし。
+3. GNGに既に入力済みの実測XYZから、いずれかのAABB内の元点添字を選択。複数候補を一括したAABBは作らず、重複範囲の点も1回だけ選択。学習への入力は添字のみで、点群ボクセル再登録なし。可視化購読時だけ選択点を別途配信。
 4. GNG既存の入力範囲フィルタに従って重点点を限定。
 5. `node.learning_num`を増やさず、指定比率で重点更新を通常更新へ挿入。
 
@@ -39,6 +39,23 @@ YAMLで`enable_grasp_attention: true`にすればlaunch引数の追加は不要�
 実エッジ更新・勝者選択・学習係数・ノード追加条件は従来処理を使用。点の密度やGNGノード数の自動増加を保証する機能ではなく、観測済み領域への学習資源配分。
 
 ノードからの距離にかかわらず候補内部・余白内の実測点が対象。AABBは観測済み候補の広がりであって真の物体形状の確定値ではなく、近くの床や別物体の点も範囲に入る場合あり。計算量は範囲構築が所属ノード数に比例し、入力判定は点数×候補数。ノード単位のkd-tree検索は廃止。
+
+## 選択点群の可視化
+
+`/downsampling/grasp`（`sensor_msgs/msg/PointCloud2`）を購読。重点学習ON時のみPublisherを作成し、購読者がいる場合だけXYZを点群化。追加のON/OFF設定はなし。
+
+- 内容は候補AABB＋余白内の重点入力候補。GNG内部の入力範囲フィルタ適用前であり、最終的に各反復で抽選された点の順列や回数ではない。
+- 重複なしのXYZのみ。RGB・semanticラベルは付加しない。
+- ヘッダは`/topological_map`と同じGNG座標系・入力点群時刻。
+- GNG入力処理ごとに配信。候補なし・失効・TF失敗・該当点なしの場合は空点群を配信。入力点群自体が止まった場合の独立した消去タイマーはなし。
+- QoSはbest_effort、volatile、depth 1。履歴再配信なし。名前空間付き起動では同じ名前空間内の`downsampling/grasp`。
+- `/downsampling/unknown`・`/downsampling/human`は従来の別出力。
+
+設定有効化とGNG再起動後、ViewerのPointCloud2ストリームとして選択可能。CLIで確認する場合:
+
+```bash
+ros2 topic echo /downsampling/grasp --field width --qos-reliability best_effort
+```
 
 ## 通常学習への復帰
 

@@ -64,10 +64,11 @@ class AiSGNGComponent : public rclcpp::Node {
     double grasp_attention_ratio_{0.5};
     double grasp_attention_timeout_sec_{0.5};
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr grasp_attention_sub_;
+    rclcpp::Publisher<PC2>::SharedPtr grasp_attention_pub_;
     ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr grasp_attention_map_;
     std::chrono::steady_clock::time_point grasp_attention_received_{};
     grasp_attention::regions grasp_attention_regions_;
-    void prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input);
+    std::vector<uint32_t> prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input);
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};
     bool enable_boundary_evidence_{true};
@@ -167,7 +168,8 @@ class AiSGNGComponent : public rclcpp::Node {
     std::unique_ptr<PC2> makePointCloud2Msg(
         const std_msgs::msg::Header &header,
         const float *transformed_pcl,
-        const uint32_t transformed_pcl_num);
+        const uint32_t transformed_pcl_num,
+        const std::vector<uint32_t> *selected_ids = nullptr);
     std::unique_ptr<PC2> makePointCloud2MsgFromClustedNode(
         const std_msgs::msg::Header &header,
         const ais_gng_msgs::msg::TopologicalMap &map);
