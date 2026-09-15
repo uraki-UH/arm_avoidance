@@ -347,3 +347,9 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 
 - 独立ビューへ既定OFFのBbox表示を追加。受信済みの範囲から線枠を描画し、主画面設定は維持。[仕様・検証コマンド](releases/2026-09-15_inspection_bbox_toggle.md)を記録。
 - HTML出力テスト・lint・本番ビルドに成功。実ブラウザの切替・描画は未検証。有限コマンドは終了、一時出力は削除済み。ROS・開発サーバーへの起動停止操作なし。
+
+## 2026-09-15: 主画面Bboxと独立表示の連動
+
+- Bbox OFF時にも残っていたノード・クラスタ・Marker直接選択を、トピック別フラグへ連動。詳細取得の開始・応答でも確認し、OFF後の遅延表示とエラーを抑止。`/grasp_pose_cands/Tmap`だけ既定ONへ変更。[仕様・全検証コマンド](releases/2026-09-15_inspection_bbox_gate.md)を記録。
+- 関連frontendテスト5ファイル、lint・本番ビルド、Dockerのbackendビルドに成功。Appの実接続条件と非同期処理、明示OFFの保持、既存ホバー・Marker・独立ビュー内Bbox既定OFFを確認。実ブラウザ操作は未検証。
+- 検証コマンドは全終了、一時テスト・build出力を削除。ROSノード・開発サーバーの新規起動や既存プロセスの停止・再起動操作なし。

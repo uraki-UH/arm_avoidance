@@ -13,12 +13,16 @@ try {
     for (const mode of ['static', 'dynamic']) {
         const graph = { mode, nodes: [], edges: [], clusters: [] };
         const defaults = module.createDefaultGraphLayerSettings('/grasp_pose_cands/Tmap', graph);
+        assert.equal(defaults.enable_bounding_box, true);
         assert.deepEqual([defaults.nodeScale, defaults.showEdges, defaults.nodeOpacity], [0.008, false, 0.5]);
         const other = module.createDefaultGraphLayerSettings('/topological_map', graph);
+        assert.equal(other.enable_bounding_box, false);
+        assert.equal(module.createDefaultGraphLayerSettings('/ToPoDualArm/Tmap_static', graph).enable_bounding_box, false);
         assert.equal(other.nodeScale, 0.003);
         assert.equal(other.showEdges, mode !== 'static');
         const override = module.resolve_graph_layer_settings('/grasp_pose_cands/Tmap', graph,
-            { nodeScale: 0.02, showEdges: true, nodeOpacity: 0.9 });
+            { nodeScale: 0.02, showEdges: true, nodeOpacity: 0.9, enable_bounding_box: false });
+        assert.equal(override.enable_bounding_box, false);
         assert.deepEqual([override.nodeScale, override.showEdges, override.nodeOpacity], [0.02, true, 0.9]);
     }
     const buffer = new ArrayBuffer(36+84);

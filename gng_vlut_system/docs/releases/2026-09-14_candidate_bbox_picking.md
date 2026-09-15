@@ -4,6 +4,8 @@
 
 Topo Fuzzy Viewerの候補選択を、個々のノードの球ではなく物体全体のバウンディングボックスとの交差へ変更。
 
+以下は導入時の記録。現在は[独立表示のBbox連動](2026-09-15_inspection_bbox_gate.md)により、直接クリックもBboxに従属し、`/grasp_pose_cands/Tmap`だけ既定ON。
+
 ## Changed
 
 - ホバー・クリックともに初回から箱との交差判定。ノード間の空隙も選択対象。

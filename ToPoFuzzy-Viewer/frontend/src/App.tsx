@@ -538,6 +538,7 @@ function App() {
 
     // 選択時の全受信フレームを送信し、切り出しはバックエンドへ委譲。
     const handle_inspect = useCallback(async (source_id: string, selection: graph_selection) => {
+        if (inspection_sources.current.layerSettings[source_id]?.enable_bounding_box !== true) return;
         const request_id = ++inspection_request.current;
         const source = inspection_sources.current;
         set_is_inspecting(true);
@@ -548,10 +549,12 @@ function App() {
             if (selection.kind === 'marker' ? !marker_array : !graph) throw new Error('選択元のデータがありません');
             const snapshot = await inspect_graph(source_id, selection,
                 selection.kind === 'marker' ? undefined : graph, selection.kind === 'marker' ? marker_array : undefined);
-            if (request_id !== inspection_request.current) return;
+            if (request_id !== inspection_request.current ||
+                inspection_sources.current.layerSettings[source_id]?.enable_bounding_box !== true) return;
             setSelectedClusterSnapshot({ ...snapshot, settings: source.layerSettings[source_id] });
         } catch (error) {
-            if (request_id === inspection_request.current) set_inspection_error(
+            if (request_id === inspection_request.current &&
+                inspection_sources.current.layerSettings[source_id]?.enable_bounding_box === true) set_inspection_error(
                 error instanceof Error ? error.message : String(error));
         } finally {
             if (request_id === inspection_request.current) set_is_inspecting(false);
@@ -734,7 +737,7 @@ function App() {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
                                     <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform}
                                         max_visible_candidates={s.max_visible_candidates}
-                                        on_inspect={!isEditMode && !zoneMonitor.isDrawing ? marker => void handle_inspect(tag,
+                                        on_inspect={!isEditMode && !zoneMonitor.isDrawing && layerSettings[tag]?.enable_bounding_box === true ? marker => void handle_inspect(tag,
                                             { kind: 'marker', id: marker.id, ns: marker.ns }) : undefined} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
@@ -762,7 +765,7 @@ function App() {
                                 onClusterSelect={id => id === null ? close_inspection() : void handle_inspect(tag, { kind: 'cluster', id })}
                                 on_node_select={node => void handle_inspect(tag, { kind: 'node', id: node.id! })}
                                 onManipSelect={(node) => handleManipSelect(tag, node)}
-                                enableClusterSelection={!isEditMode && !zoneMonitor.isDrawing} />;
+                                enableClusterSelection={!isEditMode && !zoneMonitor.isDrawing && settings.enable_bounding_box === true} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
