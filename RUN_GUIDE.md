@@ -25,6 +25,8 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 
+元マップは`/ToPoDualArm/Tmap_static`、集約マップは`/ToPoDualArm/Tmap_vis_L0`。ViewerのTopicsで表示を選択。追加launchは不要。[集約データの再生成](gng_vlut_system/docs/releases/2026-09-15_tmap_l0_restore.md)。
+
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 

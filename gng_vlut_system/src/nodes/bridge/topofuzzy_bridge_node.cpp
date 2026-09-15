@@ -716,8 +716,10 @@ private:
       robot_sim::visualization::VisualizationGngModel model;
       std::string error;
       if (!model.load(path, &error)) {
-        RCLCPP_WARN(get_logger(), "Visualization GNG layer %d skipped: %s",
-                    layer, error.c_str());
+        RCLCPP_WARN(get_logger(),
+                    "集約GNG L%dの読み込み失敗: %s。"
+                    "現在のvisualization_gng_trainerで%sから再生成が必要",
+                    layer, error.c_str(), gng_path.c_str());
         continue;
       }
       const auto source_points =
@@ -802,11 +804,11 @@ private:
       RCLCPP_INFO(get_logger(),
                   "Loaded visualization GNG layer %d: nodes=%zu edges=%zu "
                   "mapped_sources=%zu transition_overrides=%zu "
-                  "topic=%s_layer_%d",
+                  "topic=%s",
                   layer, visual_layer.model.nodes.size(),
                   visual_layer.model.edges.size(), mapped_source_count,
                   visual_layer.model.transition_paths.size(),
-                  topic_prefix.c_str(), layer);
+                  visual_layer.publisher->get_topic_name());
       visualization_layers_.push_back(std::move(visual_layer));
     }
   }

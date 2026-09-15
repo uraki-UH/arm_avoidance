@@ -685,11 +685,14 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 可視化ノードの位置は複合特徴量で最も近い所属元ノードの実在する手先位置へ置く。重心位置は使わない。
 その後、元angle-space edgeの両端にある`weight_angle`を線形補間し、各補間姿勢を
 URDFのFKで手先位置へ変換する。補間位置は、各可視化ノードの空間KNN距離中央値から求めた
-接続半径内にある最近傍nodeだけへ対応付ける。軌跡から離れたnodeへ飛ぶedgeは作らない。
+接続半径内にある最近傍nodeだけへ対応付ける。始終点は複合特徴量による所属先であり、
+中間点とは対応基準が異なる。半径内の対応先がない補間点は飛ばすため、
+表示された各直線edgeが連続したFK軌跡を表す保証はない。
 始点・終点だけの直結はedge化せず、途中の可視化nodeを経由した遷移だけを出力する。
-さらに、FK軌跡で裏付けられた候補だけを各可視化nodeの最短`max_edge_neighbors`本へ制限する。
+さらに、FK補間の対応列から得た候補を各可視化nodeの最短`max_edge_neighbors`本へ制限する。
 各元angle edgeについて順序付き列と`max_i(|dq_i| / max_velocity_i)`の移動時間を保存する。両端が同じ可視化ノードへ
 対応するedgeも状態遷移として保存する。静的可視化edgeは、この保存済み遷移列の隣接関係で構成する。
+学習直後のcoord-space edge縮約結果はこの段階で上書きされるため、最終出力は元グラフの単純な縮約ではない。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
@@ -782,6 +785,12 @@ signature schemaは4である。version 1からversion 4との読み込み互換
 `/ToPoDualArm/Tmap_vis_L0`、型は
 `ais_gng_msgs/msg/TopologicalMap`である。既存の
 `/ToPoDualArm/Tmap_static`とlayer topicは変更しない。
+
+`gng_viewer_bridge.launch.py params_file:=.../ToPoDualArm.yaml`で両者を同時配信する。
+集約元は`Tmap_static`と同じ`gng.bin`であり、ROSトピックの再学習や起動ごとの集約計算は行わない。
+2026-09-15の同梱作業環境では10,801元ノードを150ノード・554エッジへ集約済み。
+旧version 4のbinは現在のreaderで使えないためversion 5へ再生成した。
+手順・確認範囲は[集約L0の配信復旧](releases/2026-09-15_tmap_l0_restore.md)を参照。
 
 bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
 `source_node_id -> visual_node_id`逆引き配列を`O(n)`で1回だけ構築する。
