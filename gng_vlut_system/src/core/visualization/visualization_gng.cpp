@@ -346,50 +346,6 @@ std::vector<float> makeAttachmentRadii(
   return radii;
 }
 
-std::vector<std::pair<std::uint32_t, std::uint32_t>>
-limitTrajectoryEdgeNeighbors(
-    const std::vector<VisualizationGngNode> &visual_nodes,
-    std::vector<std::pair<std::uint32_t, std::uint32_t>> candidate_edges,
-    int max_edge_neighbors) {
-  std::sort(candidate_edges.begin(), candidate_edges.end());
-  candidate_edges.erase(
-      std::unique(candidate_edges.begin(), candidate_edges.end()),
-      candidate_edges.end());
-
-  std::vector<std::vector<std::pair<float, std::uint32_t>>> neighbors(
-      visual_nodes.size());
-  for (const auto &[source, target] : candidate_edges) {
-    if (source >= visual_nodes.size() || target >= visual_nodes.size() ||
-        source == target) {
-      continue;
-    }
-    const float distance =
-        (visual_nodes[source].position - visual_nodes[target].position).norm();
-    if (!std::isfinite(distance)) {
-      continue;
-    }
-    neighbors[source].emplace_back(distance, target);
-    neighbors[target].emplace_back(distance, source);
-  }
-
-  std::vector<std::pair<std::uint32_t, std::uint32_t>> limited_edges;
-  for (std::uint32_t source = 0; source < neighbors.size(); ++source) {
-    auto &source_neighbors = neighbors[source];
-    std::sort(source_neighbors.begin(), source_neighbors.end());
-    const std::size_t count = std::min<std::size_t>(
-        static_cast<std::size_t>(max_edge_neighbors), source_neighbors.size());
-    for (std::size_t index = 0; index < count; ++index) {
-      limited_edges.emplace_back(
-          std::min(source, source_neighbors[index].second),
-          std::max(source, source_neighbors[index].second));
-    }
-  }
-  std::sort(limited_edges.begin(), limited_edges.end());
-  limited_edges.erase(std::unique(limited_edges.begin(), limited_edges.end()),
-                      limited_edges.end());
-  return limited_edges;
-}
-
 }  // namespace
 
 std::filesystem::path visualizationGngLayerPath(
@@ -494,8 +450,7 @@ void precomputeVisualizationGngTransitionPaths(
   if (!fk || params.max_joint_step <= 0.0f ||
       params.max_samples_per_edge < 2 || params.attachment_knn < 1 ||
       params.attachment_radius_scale <= 0.0f ||
-      params.min_attachment_radius < 0.0f || params.max_edge_neighbors < 1 ||
-      model.nodes.empty()) {
+      params.min_attachment_radius < 0.0f || model.nodes.empty()) {
     throw std::invalid_argument(
         "invalid visualization GNG interpolation configuration");
   }
@@ -538,7 +493,6 @@ void precomputeVisualizationGngTransitionPaths(
 
   std::vector<VisualizationGngTransitionPath> transition_paths;
   std::vector<std::uint16_t> transition_path_nodes;
-  std::vector<std::pair<std::uint32_t, std::uint32_t>> visual_edges;
   for (const auto &[source_id, target_id] :
        collectSourceAngleEdges(source_points)) {
     const auto source_it = source_by_id.find(source_id);
@@ -591,15 +545,6 @@ void precomputeVisualizationGngTransitionPaths(
     path.push_back(target_visual_it->second);
 
     const bool has_visual_connection = path.size() >= 3;
-    if (has_visual_connection) {
-      for (std::size_t i = 1; i < path.size(); ++i) {
-        if (path[i - 1] == path[i]) {
-          continue;
-        }
-        visual_edges.emplace_back(std::min(path[i - 1], path[i]),
-                                  std::max(path[i - 1], path[i]));
-      }
-    }
     if (path.size() > std::numeric_limits<std::uint16_t>::max() ||
         transition_path_nodes.size() + path.size() >
             std::numeric_limits<std::uint32_t>::max()) {
@@ -617,8 +562,7 @@ void precomputeVisualizationGngTransitionPaths(
          static_cast<std::uint16_t>(path.size()), motion_time_sec,
          has_visual_connection});
   }
-  model.edges = limitTrajectoryEdgeNeighbors(
-      model.nodes, std::move(visual_edges), params.max_edge_neighbors);
+  // FK補間は軌道表示用の対応情報のみ。空間グラフの縮約エッジは不変
   model.transition_paths = std::move(transition_paths);
   model.transition_path_nodes = std::move(transition_path_nodes);
 }
@@ -643,7 +587,7 @@ VisualizationGngModel trainVisualizationGng(
         "visualization GNG requires at least two source points");
   }
   if (!std::isfinite(params.joint_motion_weight) ||
-      params.joint_motion_weight <= 0.0f ||
+      params.joint_motion_weight < 0.0f ||
       !std::isfinite(params.workspace_motion_sec_per_m) ||
       params.workspace_motion_sec_per_m <= 0.0f ||
       !std::isfinite(params.workspace_sample_resolution) ||
@@ -815,6 +759,7 @@ VisualizationGngModel trainVisualizationGng(
        ++visual_index) {
     auto &visual_node = model.nodes[visual_index];
     float nearest_distance = std::numeric_limits<float>::infinity();
+    Eigen::Vector3d position_sum = Eigen::Vector3d::Zero();
     Eigen::Vector3f normal_sum = Eigen::Vector3f::Zero();
     bool has_safe_member = false;
     bool has_danger_member = false;
@@ -825,6 +770,7 @@ VisualizationGngModel trainVisualizationGng(
       }
       const std::size_t source_index = source_it->second;
       const auto &source = source_points[source_index];
+      position_sum += source.position.cast<double>();
       if (source.direction.allFinite()) {
         normal_sum += source.direction;
       }
@@ -836,13 +782,14 @@ VisualizationGngModel trainVisualizationGng(
       if (distance < nearest_distance) {
         nearest_distance = distance;
         visual_node.representative_source_node_id = source_id;
-        visual_node.position = source.position;
         visual_node.representative_joint_angle = source.weight_angle;
       }
     }
     if (visual_node.representative_source_node_id < 0) {
       throw std::runtime_error("visualization GNG node has no representative");
     }
+    visual_node.position =
+        (position_sum / static_cast<double>(visual_node.source_node_ids.size())).cast<float>();
     visual_node.normal = normal_sum.norm() > 1e-6f
                              ? normal_sum.normalized()
                              : Eigen::Vector3f::UnitZ();

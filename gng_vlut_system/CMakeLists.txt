@@ -120,6 +120,10 @@ if(BUILD_TESTING)
   ament_add_gtest(test_grasp_refinement test/test_grasp_refinement.cpp)
   target_include_directories(test_grasp_refinement PRIVATE src)
   ament_target_dependencies(test_grasp_refinement Eigen3)
+  ament_add_gtest(test_visualization_gng test/test_visualization_gng.cpp)
+  target_include_directories(test_visualization_gng PRIVATE src/core)
+  target_link_libraries(test_visualization_gng visualization_gng_lib)
+  ament_target_dependencies(test_visualization_gng Eigen3)
   ament_add_gtest(test_candidate_metric_availability
     test/test_candidate_metric_availability.cpp
     test/test_candidate_path_batch.cpp)

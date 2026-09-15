@@ -90,7 +90,7 @@ Options parseOptions(int argc, char **argv) {
     } else if (argument == "--seed") {
       options.training.seed = static_cast<std::uint32_t>(parseInt(value, argument));
     } else if (argument == "--joint-motion-weight") {
-      options.training.joint_motion_weight = parseFloat(value, argument);
+      options.training.joint_motion_weight = parseNonnegativeFloat(value, argument);
     } else if (argument == "--workspace-motion-sec-per-m") {
       options.training.workspace_motion_sec_per_m = parseFloat(value, argument);
     } else if (argument == "--workspace-sample-resolution") {
@@ -118,8 +118,6 @@ Options parseOptions(int argc, char **argv) {
       options.interpolation.attachment_radius_scale = parseFloat(value, argument);
     } else if (argument == "--edge-min-attachment-radius") {
       options.interpolation.min_attachment_radius = parseNonnegativeFloat(value, argument);
-    } else if (argument == "--edge-max-neighbors") {
-      options.interpolation.max_edge_neighbors = parseInt(value, argument);
     } else {
       throw std::invalid_argument("unknown option: " + argument);
     }
@@ -136,8 +134,7 @@ Options parseOptions(int argc, char **argv) {
       options.interpolation.max_samples_per_edge < 2 ||
       options.interpolation.attachment_knn < 1 ||
       options.interpolation.attachment_radius_scale <= 0.0f ||
-      options.interpolation.min_attachment_radius < 0.0f ||
-      options.interpolation.max_edge_neighbors < 1) {
+      options.interpolation.min_attachment_radius < 0.0f) {
     throw std::invalid_argument("reachability voxel visualization option is invalid");
   }
   return options;
@@ -158,8 +155,7 @@ void printUsage(const char *program) {
          " [--max-interpolation-samples <n>]"
          " [--edge-attachment-knn <n>]"
          " [--edge-attachment-radius-scale <scale>]"
-         " [--edge-min-attachment-radius <m>]"
-         " [--edge-max-neighbors <n>]\n";
+         " [--edge-min-attachment-radius <m>]\n";
 }
 
 std::vector<robot_sim::visualization::VisualizationGngSourcePoint>
@@ -179,6 +175,9 @@ makeSourcePoints(const robot_sim::visualization::VisualizationGngStaticModel &in
         static_cast<int>(target));
     points[target].angle_neighbor_source_node_ids.push_back(
         static_cast<int>(source));
+    // 元ボクセルの空間隣接と、関節補間の対応情報の分離
+    points[source].coord_neighbor_source_node_ids.push_back(static_cast<int>(target));
+    points[target].coord_neighbor_source_node_ids.push_back(static_cast<int>(source));
   }
   return points;
 }

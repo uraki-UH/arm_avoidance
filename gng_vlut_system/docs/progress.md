@@ -540,3 +540,10 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 
 - 新旧binの150座標が完全一致し、元coord edge縮約結果をFK補間の空間最近傍対応で上書きする現行処理を確認。新旧エッジ長を集計し、[追加調査](releases/2026-09-15_tmap_l0_restore.md#集約形状の追加調査)に記録。
 - 前回の配信検証と形状品質を区別し、仕様書の連続性保証に関する過剰な記述を修正。生成処理・設定・binの変更なし。ROS・常駐プロセスの起動なし。
+
+## 2026-09-15: 集約L0の空間所属・重心・元接続保持
+
+- 空間のみの既定所属、重心描画、元coord edge縮約とFK遷移メタ情報の分離を実装。10,801元ノードから150ノード・740エッジへ再生成。[仕様・全検証起動コマンド](releases/2026-09-15_spatial_tmap_aggregation.md)を記録。
+- Docker Release・GTest 5件・隔離ROS/WS検証に成功。全元ノードの一意所属、元トピックの縮約edgeとの完全一致、連結成分1・孤立0を確認。所属点距離RMSは219.2 mmから46.2 mmへ改善。長い元接続は保持。
+- 現行Viewer描画で3方向の前後比較を目視確認。元GNG・VLUTのSHA256不変、共有の到達可能ボクセルtrainerのビルド成功を確認。到達可能ボクセルbinの更新は未実施。
+- 起動した検証launch・Gateway・Chromeは全停止、専用ログ・profileを削除し、ポート解放を確認。既存通常bridgeの退出を観測したが、本作業から既存プロセスの停止・再起動操作なし。結果は`tmp/tmap_spatial_20260915/`へ保存。

@@ -23,6 +23,7 @@ struct VisualizationGngSourcePoint {
 };
 
 struct VisualizationGngNode {
+  // 所属点の空間重心。代表関節角のFK位置とは独立した描画位置
   Eigen::Vector3f position = Eigen::Vector3f::Zero();
   Eigen::Vector3f normal = Eigen::Vector3f::UnitZ();
   std::uint8_t label = 2;
@@ -46,7 +47,6 @@ struct VisualizationGngInterpolationParams {
   int attachment_knn = 6;
   float attachment_radius_scale = 1.0f;
   float min_attachment_radius = 0.02f;
-  int max_edge_neighbors = 6;
   std::vector<float> joint_max_velocities;
 };
 
@@ -68,7 +68,8 @@ struct VisualizationGngTrainingParams {
   float neighbor_learning_rate = 0.005f;
   float split_error_scale = 0.5f;
   float error_decay = 0.0005f;
-  float joint_motion_weight = 1.0f;
+  // 空間集約の既定値。正値の場合のみ関節移動時間も所属判定へ追加
+  float joint_motion_weight = 0.0f;
   float workspace_motion_sec_per_m = 1.0f;
   float workspace_sample_resolution = 0.05f;
   std::vector<float> joint_max_velocities;

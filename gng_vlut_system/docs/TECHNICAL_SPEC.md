@@ -625,22 +625,23 @@ flowchart TD
 ### 13.1 目的とデータ所有
 
 姿勢GNGのノードをそのまま描くと、異なる関節姿勢が同じ手先位置付近に重なり、
-状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerの手先位置と、
-関節速度上限で正規化した関節移動時間を使って別のGNGを事前学習し、描画点数を減らす。
+状態色が混ざる。可視化専用GNGは、姿勢GNGの各coord layerの手先位置を空間集約し、
+描画点数を減らす。関節移動時間の所属判定への追加は明示指定時だけの機能。
 
 coord layerは選択したGNG profileのEEF順に分離して学習・配信し、左右腕の手先位置を
 同じlayerへ混在させない。現行`ToPoDualArm.yaml`は`gng.profile_names: left_arm`なので、
 現在の`ToPoDualArm10000`はcoord layer 1個で、layer 0は`L_tcp`に対応する。右腕または
 双腕を対象にする場合は対象profileを選択して元GNGを学習し、各layerの可視化binを生成する。
 
-可視化GNGは関節姿勢を新規生成しない。各可視化ノードは所属元ノードのうち複合特徴量で
-最も近い1個を代表元に選び、代表元の手先位置、法線、状態label、関節角をbinへ保存する。
+可視化GNGは関節姿勢を新規生成しない。描画位置は所属点の空間重心、代表関節角は
+学習点に最も近い所属元ノードの実在する関節角。法線・状態labelも所属元から集約する。
+描画位置と代表関節角のFK位置は別物であり、集約点そのものの到達可能性は保証しない。
 これにより、static用途では元姿勢GNGをロードせずにグラフを召喚できる。一方、全所属元IDと
 元angle edge由来の遷移列も保存するため、既存bridgeは元GNGとの照合、動的状態集約、軌道変換を継続できる。
 
 | データ | 所有元 | 用途 |
 |---|---|---|
-| `VisualizationGngNode::position` | 可視化GNG | 代表元ノードの手先位置 |
+| `VisualizationGngNode::position` | 可視化GNG | 所属元ノードの手先位置の重心 |
 | `VisualizationGngNode::normal` | 可視化GNG | 所属元ノードの手先方向を正規化加算した法線 |
 | `VisualizationGngNode::label` | 可視化GNG | 学習時点のsafe / danger / colliding集約値 |
 | `VisualizationGngNode::representative_source_node_id` | 可視化GNG | 可視化ノードを代表する元姿勢GNGノードID |
@@ -648,7 +649,7 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
 | `weight_angle` / `weight_coords` | 元姿勢GNG | 姿勢と手先位置 |
 | `Status` | 元姿勢GNG | 動的なsafe / danger / colliding判定 |
-| 可視化GNGエッジ | 事前計算 | angle-space edgeのFK補間列を可視化ノード間へ写像した遷移可能性 |
+| 可視化GNGエッジ | 事前計算 | 元coord-space edgeの所属先間への縮約。自己ループ・重複を除外 |
 | `transition_paths` | 可視化GNG | 元angle edgeごとの順序付き可視化ノード列と関節移動時間 |
 
 ### 13.2 学習変数
@@ -656,7 +657,7 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 | 変数 | 既定値 | 意味 |
 |---|---:|---|
 | `target_nodes` | 500 | 可視化GNGの目標ノード数。元ノード数以下へ制限 |
-| `iterations` | 200000 | 状態・手先位置の複合特徴量に対する学習反復数 |
+| `iterations` | 200000 | 空間集約の学習反復数 |
 | `insertion_interval` | 200 | 誤差最大ノード間へ新ノードを追加する間隔 |
 | `max_edge_age` | 200 | 使用されないエッジを削除する年齢上限 |
 | `winner_learning_rate` | 0.05 | 最近傍ノードの学習率 |
@@ -671,41 +672,40 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 | `attachment_knn` | 6 | 補間軌跡への接続半径を決める空間近傍数 |
 | `attachment_radius_scale` | 1.0 | 局所KNN距離中央値に掛ける接続半径倍率 |
 | `min_attachment_radius` | 0.02 m | 補間軌跡への接続半径下限 |
-| `max_edge_neighbors` | 6 | FK軌跡候補から各可視化nodeに残す最短edge数 |
-| `joint_motion_weight` | 1.0 | 関節移動時間特徴量の重み |
+| `joint_motion_weight` | 0.0 | 関節移動時間特徴量の重み。0で空間のみ、正値で関節状態も考慮 |
 | `workspace_motion_sec_per_m` | 1.0 s/m | 手先位置距離を時間相当へ換算する係数 |
 | `workspace_sample_resolution` | 0.05 m | 空間セル均等サンプリングの解像度。0で元ノード均等サンプリング |
 | `default_joint_max_velocity` | 0.6 rad/s | URDF速度上限がない関節の移動時間換算値 |
 
-学習には、各関節をURDFの速度上限で割り、その最大値を使う関節移動時間特徴量と、
-`workspace_motion_sec_per_m`で時間相当へ換算した`weight_coords[layer]`を連結して使う。
-これにより、手先位置が近くても関節移動時間が大きい折畳み姿勢を別状態として残す。
-さらに`workspace_sample_resolution`の空間セルを均等に選ぶため、入力点数が多い手先領域だけへ
-可視化ノードが偏ることを抑制する。各元ノードIDはちょうど1回だけ`source_node_ids`へ格納し、
-可視化ノードの位置は複合特徴量で最も近い所属元ノードの実在する手先位置へ置く。重心位置は使わない。
-その後、元angle-space edgeの両端にある`weight_angle`を線形補間し、各補間姿勢を
-URDFのFKで手先位置へ変換する。補間位置は、各可視化ノードの空間KNN距離中央値から求めた
-接続半径内にある最近傍nodeだけへ対応付ける。始終点は複合特徴量による所属先であり、
-中間点とは対応基準が異なる。半径内の対応先がない補間点は飛ばすため、
-表示された各直線edgeが連続したFK軌跡を表す保証はない。
-始点・終点だけの直結はedge化せず、途中の可視化nodeを経由した遷移だけを出力する。
-さらに、FK補間の対応列から得た候補を各可視化nodeの最短`max_edge_neighbors`本へ制限する。
-各元angle edgeについて順序付き列と`max_i(|dq_i| / max_velocity_i)`の移動時間を保存する。両端が同じ可視化ノードへ
-対応するedgeも状態遷移として保存する。静的可視化edgeは、この保存済み遷移列の隣接関係で構成する。
-学習直後のcoord-space edge縮約結果はこの段階で上書きされるため、最終出力は元グラフの単純な縮約ではない。
+既定では`weight_coords[layer]`のみで学習と所属判定を行う。
+`joint_motion_weight`が正値の場合のみ、各関節をURDF速度上限で割った特徴量も連結し、
+最大関節移動時間を距離へ反映する。`workspace_sample_resolution`の空間セルを均等に選び、
+入力密度による偏りを抑制する。各元ノードIDはちょうど1回だけ`source_node_ids`へ格納し、
+可視化位置を所属点の算術平均へ配置する。代表元ID・代表関節角は別に保持する。
+
+可視化edgeは、元coord-space edgeの両端を所属可視化nodeへ置き換え、自己ループと重複だけを
+除いたもの。FK補間による上書きや近傍本数による切り捨ては行わない。元グラフに由来する長いedgeは
+残り、滑らかな曲面メッシュや無衝突軌道を表すものではない。所属判定は空間近傍であり、
+各所属集合の内部連結性を強制する処理はない。
+
+元angle-space edgeの関節角を線形補間し、URDF FKで得た手先位置を可視化nodeへ対応付けた
+`transition_paths`は、既存軌道表示用の独立したメタ情報として保存する。
+始終点は保存済み所属先、中間点は局所KNNから求めた半径内の空間最近傍。
+対応先のない補間点は飛ばすため、連続したFK軌跡の保証はない。
+順序付き列と`max_i(|dq_i| / max_velocity_i)`の移動時間、両端が同じ可視化nodeの遷移も保存するが、
+この補間処理で可視化node位置や空間edgeは変更しない。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
   --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm3/gng.bin \
   --target-nodes 500 --iterations 200000 --seed 42 \
-  --joint-motion-weight 1.0 \
+  --joint-motion-weight 0 \
   --workspace-motion-sec-per-m 1.0 \
   --workspace-sample-resolution 0.05 \
   --interpolation-joint-step 0.05 \
   --edge-attachment-knn 6 \
   --edge-attachment-radius-scale 1.0 \
   --edge-min-attachment-radius 0.02 \
-  --edge-max-neighbors 6 \
   --ros-args \
   --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
@@ -788,9 +788,9 @@ signature schemaは4である。version 1からversion 4との読み込み互換
 
 `gng_viewer_bridge.launch.py params_file:=.../ToPoDualArm.yaml`で両者を同時配信する。
 集約元は`Tmap_static`と同じ`gng.bin`であり、ROSトピックの再学習や起動ごとの集約計算は行わない。
-2026-09-15の同梱作業環境では10,801元ノードを150ノード・554エッジへ集約済み。
-旧version 4のbinは現在のreaderで使えないためversion 5へ再生成した。
-手順・確認範囲は[集約L0の配信復旧](releases/2026-09-15_tmap_l0_restore.md)を参照。
+2026-09-15の作業環境では10,801元ノードを150ノード・740エッジへ空間集約済み。
+保存形式はversion 5のままだが、以前生成したbinの集約結果は自動更新されないため再生成が必要。
+手順・確認範囲は[空間集約の修正](releases/2026-09-15_spatial_tmap_aggregation.md)を参照。
 
 bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
 `source_node_id -> visual_node_id`逆引き配列を`O(n)`で1回だけ構築する。
@@ -847,7 +847,7 @@ ros2 run gng_vlut_system visualization_gng_trainer \
   --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin \
   --output-prefix /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng \
   --target-nodes 150 --iterations 200000 --seed 42 \
-  --joint-motion-weight 1.0 \
+  --joint-motion-weight 0 \
   --workspace-motion-sec-per-m 1.0 \
   --workspace-sample-resolution 0.05 \
   --ros-args \
@@ -894,8 +894,8 @@ ros2 launch gng_vlut_system visualization_gng_static.launch.py \
 
 到達可能ボクセルmapをさらに描画用GNGへ圧縮する場合は、
 `reachability_voxel_visualization_gng_trainer`を使う。この処理も元GNGを読まず、
-ボクセルmapの代表関節角、法線、空間隣接候補edgeだけを入力にする。候補edgeの代表姿勢を
-URDF FKで補間し、途中の可視化nodeを経由したedgeだけを出力する。出力は`VIZGST1`であり、
+ボクセルmapの代表関節角、法線、空間隣接edgeだけを入力にする。既定は空間のみの所属判定で、
+元ボクセルの空間隣接edgeを縮約して出力する。FK補間によるedgeの置換は行わない。出力は`VIZGST1`であり、
 同じstatic launcherから配信できる。
 
 ```bash
@@ -909,8 +909,7 @@ ros2 run gng_vlut_system reachability_voxel_visualization_gng_trainer \
   --resource-root-dir /ros2_ws/src/dual_arm_urdf \
   --mesh-root-dir /ros2_ws/src/dual_arm_urdf/meshes \
   --root-link L_shoulder_mount \
-  --eef-link L_tcp \
-  --edge-max-neighbors 6
+  --eef-link L_tcp
 ```
 
 ### 13.7 フロー

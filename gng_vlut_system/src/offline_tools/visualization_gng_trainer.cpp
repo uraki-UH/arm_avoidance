@@ -179,7 +179,6 @@ void printUsage(const char *program) {
          " [--edge-attachment-knn <n>]"
          " [--edge-attachment-radius-scale <scale>]"
          " [--edge-min-attachment-radius <m>]"
-         " [--edge-max-neighbors <n>]"
          " [--joint-motion-weight <weight>]"
          " [--workspace-motion-sec-per-m <sec_per_m>]"
          " [--workspace-sample-resolution <m>]"
@@ -255,8 +254,6 @@ Options parseOptions(const std::vector<std::string> &arguments) {
       options.interpolation.attachment_radius_scale = parseFloat(value, argument);
     } else if (argument == "--edge-min-attachment-radius") {
       options.interpolation.min_attachment_radius = parseFloat(value, argument);
-    } else if (argument == "--edge-max-neighbors") {
-      options.interpolation.max_edge_neighbors = parseInt(value, argument);
     } else if (argument == "--joint-motion-weight") {
       options.training.joint_motion_weight = parseFloat(value, argument);
     } else if (argument == "--workspace-motion-sec-per-m") {
@@ -285,8 +282,7 @@ Options parseOptions(const std::vector<std::string> &arguments) {
       options.interpolation.attachment_knn < 1 ||
       options.interpolation.attachment_radius_scale <= 0.0f ||
       options.interpolation.min_attachment_radius < 0.0f ||
-      options.interpolation.max_edge_neighbors < 1 ||
-      options.training.joint_motion_weight <= 0.0f ||
+      options.training.joint_motion_weight < 0.0f ||
       options.training.workspace_motion_sec_per_m <= 0.0f ||
       options.training.workspace_sample_resolution < 0.0f ||
       options.default_joint_max_velocity <= 0.0f) {
@@ -497,6 +493,7 @@ void trainLayer(const SourceGng &source, const Options &options, int layer,
       loaded.joint_angle_dimension != model.joint_angle_dimension ||
       !nodesEqual(loaded.nodes, model.nodes) ||
       loaded.edges != model.edges ||
+      loaded.edges != robot_sim::visualization::contractVisualizationGngEdges(source_points, loaded.nodes) ||
       !transitionsEqual(loaded, model) ||
       empty_node_count != 0 || mapped_source_count != source_points.size() ||
       mapped_source_ids.size() != mapped_source_count ||
