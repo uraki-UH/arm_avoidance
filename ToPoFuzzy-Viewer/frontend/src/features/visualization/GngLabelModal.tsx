@@ -164,14 +164,16 @@ export function GngLabelModal({
                                                 {children.length > 0 && (
                                                     <details className="group mt-2 rounded-md border border-white/10 bg-black/20 text-[10px]">
                                                         <summary className="flex min-h-[44px] w-full cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-color)] [&::-webkit-details-marker]:hidden">
-                                                            <span>原因別の表示・色</span>
+                                                            <span>{item.id === 'grasp_labels' ? 'ラベル別の表示・色' : '原因別の表示・色'}</span>
                                                             <ChevronDown size={16} className="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
                                                         </summary>
                                                         <fieldset disabled={!is_enabled} className="space-y-2 px-2 pb-2 disabled:opacity-40">
-                                                            <legend className="sr-only">{item.name}の原因別設定</legend>
-                                                            <p className="text-[var(--text-secondary)]">複数選択可。証拠が重なる場合は上の色を優先。</p>
+                                                            <legend className="sr-only">{item.name}の内訳設定</legend>
+                                                            <p className="text-[var(--text-secondary)]">{item.id === 'grasp_labels'
+                                                                ? '把持部位は入力の指定、到達性は把持候補の評価。複数選択可。'
+                                                                : '複数選択可。証拠が重なる場合は上の色を優先。'}</p>
                                                             <LabelPriorityList ids={children.map((child) => child.id)} names={children.map((child) => child.name)}
-                                                                title={item.name + 'の原因別優先順位'}
+                                                                title={item.name + (item.id === 'grasp_labels' ? 'のラベル別優先順位' : 'の原因別優先順位')}
                                                                 on_reorder={(ids) => onUpdate({ node_label_priority: reorder_node_label_subset(settings.node_label_priority, ids) })}>
                                                                 {children.map((child) => (
                                                                     <div key={child.id} className="flex min-h-[32px] items-center gap-2 pl-7 pr-12">

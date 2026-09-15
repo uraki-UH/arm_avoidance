@@ -58,7 +58,7 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
 
     const semanticLabel = useMemo(() => {
         if (!Number.isFinite(node.semanticLabel) || (node.semanticLabel ?? 0) <= 0) return '';
-        return SEMANTIC_LABELS[(Math.trunc(node.semanticLabel as number) - 1) % SEMANTIC_LABELS.length] || 'HANDLE';
+        return SEMANTIC_LABELS[Math.trunc(node.semanticLabel as number) - 1] || '不明';
     }, [node.semanticLabel]);
 
     const nonplaneComponentLabel = useMemo(() => {

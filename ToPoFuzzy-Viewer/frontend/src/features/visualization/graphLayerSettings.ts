@@ -21,13 +21,15 @@ export interface node_label_definition {
 
 /** 重複可能な可視化ラベルの定義。受信属性のみを参照、幾何判定なし。 */
 export const node_label_definitions: readonly node_label_definition[] = [
-    { id: 'grasp_reachability', name: '把持候補の到達性', color: '#00d1ff', enable_by_default: true, default_priority: -4,
-        is_match: (node) => [2, 3, 4].includes(node.semanticLabel ?? 0) },
-    { id: 'grasp_unknown', parent_id: 'grasp_reachability', name: '未評価', color: '#708090', enable_by_default: true, default_priority: 3,
+    { id: 'grasp_labels', name: '把持ラベル', color: '#00d1ff', enable_by_default: true, default_priority: -4,
+        is_match: (node) => [1, 2, 3, 4].includes(node.semanticLabel ?? 0) },
+    { id: 'handle', parent_id: 'grasp_labels', name: '把持部位', color: '#00d1ff', enable_by_default: true, default_priority: 1,
+        is_match: (node) => node.semanticLabel === 1 },
+    { id: 'grasp_unknown', parent_id: 'grasp_labels', name: '未評価', color: '#708090', enable_by_default: true, default_priority: 3,
         is_match: (node) => node.semanticLabel === 2 },
-    { id: 'grasp_inside', parent_id: 'grasp_reachability', name: '到達範囲内', color: '#00d1ff', enable_by_default: true, default_priority: 4,
+    { id: 'grasp_inside', parent_id: 'grasp_labels', name: '到達範囲内', color: '#00d1ff', enable_by_default: true, default_priority: 4,
         is_match: (node) => node.semanticLabel === 3 },
-    { id: 'grasp_outside', parent_id: 'grasp_reachability', name: '到達範囲外', color: '#2a7898', enable_by_default: true, default_priority: 5,
+    { id: 'grasp_outside', parent_id: 'grasp_labels', name: '到達範囲外', color: '#2a7898', enable_by_default: true, default_priority: 5,
         is_match: (node) => node.semanticLabel === 4 },
     { id: 'boundary_fov', parent_id: 'boundary', name: '視野端', color: '#b388ff', enable_by_default: true, default_priority: -3,
         is_match: (node) => node.is_boundary_candidate === true && ((node.boundary_evidence ?? 0) & 4) !== 0 },
@@ -39,8 +41,6 @@ export const node_label_definitions: readonly node_label_definition[] = [
         is_match: (node) => node.is_boundary_candidate === true && (node.boundary_evidence ?? 0) === 0 },
     { id: 'boundary', name: '境界候補', color: '#ff8c00', enable_by_default: true, default_priority: 0,
         is_match: (node) => node.is_boundary_candidate === true },
-    { id: 'handle', name: 'HANDLE', color: '#00d1ff', enable_by_default: true, default_priority: 1,
-        is_match: (node) => node.semanticLabel === 1 },
 ];
 
 export type node_label_options = Pick<LayerSettings,
@@ -59,14 +59,24 @@ export function normalize_node_label_settings(options: node_label_options = {},
     for (const definition of definitions) {
         node_label_visibility[definition.id] = options.node_label_visibility?.[definition.id] ??
             legacy_visibility[definition.id] ?? definition.enable_by_default;
-        const color = options.node_label_colors?.[definition.id];
+        // 旧到達性グループのOFFは到達性の子だけへ移管。把持部位の独立設定は維持。
+        if (options.node_label_visibility?.grasp_labels === undefined &&
+            options.node_label_visibility?.grasp_reachability === false &&
+            ['grasp_unknown', 'grasp_inside', 'grasp_outside'].includes(definition.id)) {
+            node_label_visibility[definition.id] = false;
+        }
+        const color = options.node_label_colors?.[definition.id] ??
+            (definition.id === 'grasp_labels' ? options.node_label_colors?.grasp_reachability : undefined);
         node_label_colors[definition.id] = color && /^#[\da-f]{6}$/i.test(color) ? color : definition.color;
     }
     const defaults = [...definitions].sort((a, b) => a.default_priority - b.default_priority).map((item) => item.id);
     const requested = options.node_label_priority ??
         (options.overlap_label_priority ? [options.overlap_label_priority] : []);
+    // 旧親項目のうち先に指定された位置への統合。子ラベルID・色・相対順は維持。
+    const migrated_priority = requested.includes('grasp_labels') ? requested : requested.flatMap((id) =>
+        id === 'grasp_reachability' ? ['grasp_labels'] : id === 'handle' ? ['grasp_labels', id] : [id]);
     const known_ids = new Set(defaults);
-    const node_label_priority = [...new Set([...requested, ...defaults])].filter((id) => known_ids.has(id));
+    const node_label_priority = [...new Set([...migrated_priority, ...defaults])].filter((id) => known_ids.has(id));
     return { node_label_visibility, node_label_priority, node_label_colors };
 }
 

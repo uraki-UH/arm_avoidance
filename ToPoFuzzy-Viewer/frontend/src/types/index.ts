@@ -460,7 +460,7 @@ export const LAYER_LABELS = [
 ];
 
 export const SEMANTIC_LABELS = [
-   "HANDLE", "GRASP_UNKNOWN", "GRASP_INSIDE", "GRASP_OUTSIDE"
+   "把持部位", "未評価", "到達範囲内", "到達範囲外"
 ];
 
 export const SEMANTIC_COLORS = [

@@ -100,6 +100,11 @@ CPUの`/nonplane_components`はROSでは`std_msgs/msg/UInt32MultiArray`のまま
 ## Methods
 
 ## Sources / Stream Control
+
+把持ラベル付き点群はHTMLの`/semantic_points`を使用。`/handle_points`専用配信は廃止し、把持部位の生成機能は維持。
+GNGの数値ラベル1はViewerで「把持部位」と表示し、到達性2〜4と共通の「把持ラベル」グループへ統合。
+ROSメッセージ形式の変更なし。[ラベル値と設定移管](../common/ws_protocol_v2.md#graph-stream)を参照。
+
 - `sources.list`
 - `sources.setActive` (`{ sourceId, active, removeLayer? }`)
   - `active=false, removeLayer=true` stops the subscription and emits stream deletion events for the corresponding scene layer.

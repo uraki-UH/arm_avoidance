@@ -18,7 +18,7 @@ try {
         import {createRoot} from 'react-dom/client';
         import {GngLabelModal} from './src/features/visualization/GngLabelModal';
         function App() {
-            const [settings, set_settings] = useState({});
+            const [settings, set_settings] = useState({node_label_priority: ['boundary', 'grasp_labels']});
             window.settings = settings;
             return <GngLabelModal open visibleLabels={{0:false,1:false,2:false,3:false,4:false,5:false}}
                 label_settings={settings} onClose={()=>{}} onUpdate={(value)=>set_settings(current=>({...current,...value}))} />;
@@ -90,14 +90,14 @@ try {
     };
     const root_name = '重複ラベルの優先順位';
     const frame_style = () => evaluate(`(()=>{
-        const style=getComputedStyle(document.querySelector('[data-priority-id="handle"]'));
+        const style=getComputedStyle(document.querySelector('[data-priority-id="grasp_labels"]'));
         return {border:style.borderTopWidth,color:style.borderTopColor,background:style.backgroundColor};
     })()`);
     const idle_style = await frame_style();
     assert.equal(idle_style.border, '1px');
     assert.notEqual(idle_style.background, 'rgba(0, 0, 0, 0)');
-    const frame_point = await point('HANDLEを長押しして移動');
-    frame_point.x = await evaluate('document.querySelector("[data-priority-id=handle]").getBoundingClientRect().left + 10');
+    const frame_point = await point('把持ラベルを長押しして移動');
+    frame_point.x = await evaluate('document.querySelector("[data-priority-id=grasp_labels]").getBoundingClientRect().left + 10');
     await call('Input.dispatchMouseEvent', { type: 'mouseMoved', ...frame_point, buttons: 0 });
     await pause(200);
     const hover_style = await frame_style();
@@ -108,7 +108,7 @@ try {
     assert.notEqual(pressed_style.color, hover_style.color);
     await mouse('mouseReleased', frame_point);
     await pause(200);
-    const button_styles = await evaluate(`['境界候補','HANDLE'].map(name=>{
+    const button_styles = await evaluate(`['境界候補','把持ラベル'].map(name=>{
         const style=getComputedStyle(document.querySelector('[aria-label="'+name+'を先頭へ移動"]'));
         return {border:style.borderTopWidth,background:style.backgroundColor,opacity:style.opacity};
     })`);
@@ -119,30 +119,30 @@ try {
     }
     assert.notEqual(button_styles[0].background, button_styles[1].background);
     const check_overlap = async () => {
-        const lower_target = await point('HANDLEを長押しして移動'); lower_target.y -= 12;
+        const lower_target = await point('把持ラベルを長押しして移動'); lower_target.y -= 12;
         await drag('境界候補', lower_target);
-        assert.deepEqual(await order(root_name), ['handle', 'boundary'], '下の項目の上端付近への重なり');
-        const upper_target = await point('HANDLEを長押しして移動'); upper_target.y += 12;
+        assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary'], '下の項目の上端付近への重なり');
+        const upper_target = await point('把持ラベルを長押しして移動'); upper_target.y += 12;
         await drag('境界候補', upper_target);
-        assert.deepEqual(await order(root_name), ['boundary', 'handle'], '上の項目の下端付近への重なり');
+        assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels'], '上の項目の下端付近への重なり');
     };
     const check_frame = async () => {
         for (const edge of ['left', 'right', 'top', 'bottom']) {
             const source = await evaluate(`(()=>{
-                const r=document.querySelector('[data-priority-id="handle"]').getBoundingClientRect();
+                const r=document.querySelector('[data-priority-id="grasp_labels"]').getBoundingClientRect();
                 const edge=${JSON.stringify(edge)};
                 return {x:edge==='left'?r.left+0.5:edge==='right'?r.right-0.5:r.left+r.width/2,
                     y:edge==='top'?r.top+0.5:edge==='bottom'?r.bottom-0.5:r.top+r.height/2};
             })()`);
-            await drag('HANDLE', await point('境界候補を長押しして移動'), 420, false, source);
-            assert.deepEqual(await order(root_name), ['handle', 'boundary'], edge + '枠線からの長押し');
+            await drag('把持ラベル', await point('境界候補を長押しして移動'), 420, false, source);
+            assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary'], edge + '枠線からの長押し');
             await mouse('mousePressed', await point('境界候補を先頭へ移動'));
             await mouse('mouseReleased', await point('境界候補を先頭へ移動'));
             await pause(30);
         }
         const summary_point = await evaluate(`(()=>{const r=document.querySelector('summary').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
-        await drag('境界候補', await point('HANDLEを長押しして移動'), 420, false, summary_point);
-        assert.deepEqual(await order(root_name), ['handle', 'boundary'], '枠内の展開見出しからの長押し');
+        await drag('境界候補', await point('把持ラベルを長押しして移動'), 420, false, summary_point);
+        assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary'], '枠内の展開見出しからの長押し');
         assert.equal(await evaluate('document.querySelector("details").open'), false, 'ドラッグでの誤展開なし');
         await mouse('mousePressed', await point('境界候補を先頭へ移動'));
         await mouse('mouseReleased', await point('境界候補を先頭へ移動'));
@@ -156,28 +156,28 @@ try {
         await pause(30);
         assert.equal(await evaluate('document.querySelector("details").open'), false, '見出しの短いクリックによる折り畳み');
     };
-    assert.deepEqual(await order(root_name), ['boundary', 'handle']);
-    await mouse('mousePressed', await point('HANDLEの色分け'));
-    await mouse('mouseReleased', await point('HANDLEの色分け'));
+    assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels']);
+    await mouse('mousePressed', await point('把持ラベルの色分け'));
+    await mouse('mouseReleased', await point('把持ラベルの色分け'));
     await pause(30);
-    assert.equal(await evaluate('window.settings.node_label_visibility.handle'), false);
-    await mouse('mousePressed', await point('HANDLEの色分け'));
-    await mouse('mouseReleased', await point('HANDLEの色分け'));
+    assert.equal(await evaluate('window.settings.node_label_visibility.grasp_labels'), false);
+    await mouse('mousePressed', await point('把持ラベルの色分け'));
+    await mouse('mouseReleased', await point('把持ラベルの色分け'));
     await pause(30);
-    assert.equal(await evaluate('window.settings.node_label_visibility.handle'), true);
-    const icon_point = await evaluate(`(()=>{const r=document.querySelector('[aria-label="HANDLEを長押しして移動"] [data-drag-indicator]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
-    await drag('HANDLE', await point('境界候補を長押しして移動'), 30, false, icon_point);
-    assert.deepEqual(await order(root_name), ['handle', 'boundary'], '押しながらすぐ動かす操作の取りこぼし');
+    assert.equal(await evaluate('window.settings.node_label_visibility.grasp_labels'), true);
+    const icon_point = await evaluate(`(()=>{const r=document.querySelector('[aria-label="把持ラベルを長押しして移動"] [data-drag-indicator]').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+    await drag('把持ラベル', await point('境界候補を長押しして移動'), 30, false, icon_point);
+    assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary'], '押しながらすぐ動かす操作の取りこぼし');
     await mouse('mousePressed', await point('境界候補を先頭へ移動'));
     await mouse('mouseReleased', await point('境界候補を先頭へ移動'));
     await pause(30);
-    await drag('HANDLE', await point('境界候補を長押しして移動'));
-    assert.deepEqual(await order(root_name), ['handle', 'boundary']);
-    assert.equal(await evaluate('window.settings.node_label_visibility.handle'), true);
+    await drag('把持ラベル', await point('境界候補を長押しして移動'));
+    assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary']);
+    assert.equal(await evaluate('window.settings.node_label_visibility.grasp_labels'), true);
     await mouse('mousePressed', await point('境界候補を先頭へ移動'));
     await mouse('mouseReleased', await point('境界候補を先頭へ移動'));
     await pause(30);
-    assert.deepEqual(await order(root_name), ['boundary', 'handle']);
+    assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels']);
     await check_overlap();
     await check_frame();
     await evaluate('document.querySelector("summary").click()');
@@ -185,22 +185,22 @@ try {
     const target = await point('遮蔽の証拠を長押しして移動'); target.y -= 8;
     await drag('原因不明', target);
     assert.deepEqual(await order(child_name), ['boundary_fov', 'boundary_unknown', 'boundary_occlusion', 'boundary_free_space']);
-    await drag('HANDLE', { x: 2, y: 2 });
-    assert.deepEqual(await order(root_name), ['boundary', 'handle']);
-    await drag('HANDLE', await point('境界候補を長押しして移動'), 420, true);
-    assert.deepEqual(await order(root_name), ['boundary', 'handle']);
+    await drag('把持ラベル', { x: 2, y: 2 });
+    assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels']);
+    await drag('把持ラベル', await point('境界候補を長押しして移動'), 420, true);
+    assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels']);
     assert.equal(await evaluate('document.querySelector("[role=dialog]").scrollWidth > document.querySelector("[role=dialog]").clientWidth'), false);
-    const touch_start = await point('HANDLEを長押しして移動');
+    const touch_start = await point('把持ラベルを長押しして移動');
     const touch_end = await point('境界候補を長押しして移動');
     await call('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...touch_start, id: 1 }] });
     await pause(420);
     await call('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...touch_end, id: 1 }] });
     await call('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await pause(30);
-    assert.deepEqual(await order(root_name), ['handle', 'boundary']);
+    assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary']);
     await call('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 1, mobile: false });
     assert.equal(await evaluate('document.querySelector("[role=dialog]").scrollWidth > document.querySelector("[role=dialog]").clientWidth'), false);
-    await mouse('mousePressed', await point('HANDLEを長押しして移動'));
+    await mouse('mousePressed', await point('把持ラベルを長押しして移動'));
     await evaluate('window.unmount()');
     await pause(420);
     await mouse('mouseReleased', { x: 2, y: 2 });
@@ -225,14 +225,14 @@ try {
             const root=ReactDOM.createRoot(host);window.unmount=()=>{root.unmount();host.remove()};root.render(React.createElement(App));
         })()`);
         await pause(150);
-        assert.deepEqual(await order(root_name), ['boundary', 'handle']);
-        await drag('HANDLE', await point('境界候補を長押しして移動'), 30);
-        assert.deepEqual(await order(root_name), ['handle', 'boundary']);
+        assert.deepEqual(await order(root_name), ['boundary', 'grasp_labels']);
+        await drag('把持ラベル', await point('境界候補を長押しして移動'), 30);
+        assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary']);
         await mouse('mousePressed', await point('境界候補を先頭へ移動'));
         await mouse('mouseReleased', await point('境界候補を先頭へ移動'));
         await pause(30);
-        await drag('HANDLE', await point('境界候補を長押しして移動'));
-        assert.deepEqual(await order(root_name), ['handle', 'boundary']);
+        await drag('把持ラベル', await point('境界候補を長押しして移動'));
+        assert.deepEqual(await order(root_name), ['grasp_labels', 'boundary']);
         assert.ok(await evaluate('window.render_tick') > 10);
         await mouse('mousePressed', await point('境界候補を先頭へ移動'));
         await mouse('mouseReleased', await point('境界候補を先頭へ移動'));

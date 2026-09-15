@@ -4,68 +4,62 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 namespace fuzzrobo::grasp_attention {
 
-// 候補中心だけの空間索引。入力点群のボクセル再登録なし。
+// 候補中心だけの平衡kd-tree。入力点群のボクセル再登録・点ごとのメモリ確保なし。
 class regions {
     using point = std::array<float, 3>;
-    using cell = std::array<int64_t, 3>;
-    struct cell_hash {
-        std::size_t operator()(const cell &value) const {
-            std::size_t hash = 0;
-            for (auto axis : value) {hash ^= std::hash<int64_t>{}(axis) + 0x9e3779b9 + (hash << 6) + (hash >> 2);}
-            return hash;
+    std::vector<point> centers_;
+    double radius2_ = 0;
+    void partition(std::size_t begin, std::size_t end, int axis) {
+        if (begin == end) {return;}
+        const auto mid = begin + (end - begin) / 2;
+        std::nth_element(centers_.begin() + begin, centers_.begin() + mid, centers_.begin() + end,
+            [axis](const auto &a, const auto &b) {return a[axis] < b[axis];});
+        partition(begin, mid, (axis + 1) % 3);
+        partition(mid + 1, end, (axis + 1) % 3);
+    }
+    bool is_near(const float *p, std::size_t begin, std::size_t end, int axis) const {
+        if (begin == end) {return false;}
+        const auto mid = begin + (end - begin) / 2;
+        const auto &center = centers_[mid];
+        double dist2 = 0;
+        for (int dim = 0; dim < 3; ++dim) {
+            const double delta = static_cast<double>(p[dim]) - center[dim];
+            dist2 += delta * delta;
         }
-    };
-    std::unordered_map<cell, std::vector<point>, cell_hash> cells_;
-    double radius_ = 0;
-    bool get_cell(const float *p, cell &key) const {
-        for (int axis = 0; axis < 3; ++axis) {
-            const double value = std::floor(p[axis] / radius_);
-            if (!std::isfinite(value) || std::abs(value) > 1e12) {return false;}
-            key[axis] = static_cast<int64_t>(value);
+        if (dist2 <= radius2_) {return true;}
+        const double delta = static_cast<double>(p[axis]) - center[axis];
+        const int next_axis = (axis + 1) % 3;
+        if (delta < 0) {
+            return is_near(p, begin, mid, next_axis) ||
+                (delta * delta <= radius2_ && is_near(p, mid + 1, end, next_axis));
         }
-        return true;
+        return is_near(p, mid + 1, end, next_axis) ||
+            (delta * delta <= radius2_ && is_near(p, begin, mid, next_axis));
     }
 public:
     void assign(std::vector<point> centers, double radius) {
-        cells_.clear();
-        radius_ = radius;
+        centers_.clear();
+        radius2_ = radius * radius;
         if (!std::isfinite(radius) || radius <= 0) {return;}
         centers.erase(std::remove_if(centers.begin(), centers.end(), [](const auto &p) {
             return !std::isfinite(p[0]) || !std::isfinite(p[1]) || !std::isfinite(p[2]);
         }), centers.end());
         std::sort(centers.begin(), centers.end());
         centers.erase(std::unique(centers.begin(), centers.end()), centers.end());
-        for (const auto &p : centers) {
-            cell key;
-            if (get_cell(p.data(), key)) {cells_[key].push_back(p);}
-        }
+        centers_ = std::move(centers);
+        partition(0, centers_.size(), 0);
     }
     bool contains(const float *p) const {
-        if (cells_.empty()) {return false;}
-        cell key;
-        if (!get_cell(p, key)) {return false;}
-        for (int x = -1; x <= 1; ++x) for (int y = -1; y <= 1; ++y) for (int z = -1; z <= 1; ++z) {
-            const auto it = cells_.find({key[0] + x, key[1] + y, key[2] + z});
-            if (it == cells_.end()) {continue;}
-            for (const auto &center : it->second) {
-                double dist2 = 0;
-                for (int axis = 0; axis < 3; ++axis) {
-                    const double delta = static_cast<double>(p[axis]) - center[axis];
-                    dist2 += delta * delta;
-                }
-                if (dist2 <= radius_ * radius_) {return true;}
-            }
-        }
-        return false;
+        return p && std::isfinite(p[0]) && std::isfinite(p[1]) && std::isfinite(p[2]) &&
+            is_near(p, 0, centers_.size(), 0);
     }
     std::vector<uint32_t> select(const float *points, uint32_t num_points) const {
         std::vector<uint32_t> ids;
-        if (!points || cells_.empty()) {return ids;}
+        if (!points || centers_.empty()) {return ids;}
         for (uint32_t idx = 0; idx < num_points; ++idx) {
             if (contains(points + 3 * static_cast<std::size_t>(idx))) {ids.push_back(idx);}
         }

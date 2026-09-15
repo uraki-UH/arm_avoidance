@@ -471,6 +471,10 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         throw std::invalid_argument("Invalid grasp_attention parameters");
     }
     if (enable_grasp_attention_) {
+        if (!observation_transform_buffer_) {
+            observation_transform_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+            observation_transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*observation_transform_buffer_);
+        }
         grasp_attention_sub_ = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
             grasp_topic, rclcpp::QoS(1).best_effort().durability_volatile(),
             [this](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr candidate) {
@@ -1358,7 +1362,11 @@ void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_
 void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &header, bool has_single_input) {
     gng_set_priority_input(nullptr, 0, 0);
     const auto &candidate = grasp_attention_map_;
-    if (!has_single_input || !candidate || candidate->nodes.empty()) {return;}
+    if (!has_single_input) {
+        RCLCPP_WARN_ONCE(get_logger(), "Grasp attention requires a single input cloud; using normal learning");
+        return;
+    }
+    if (!candidate || candidate->nodes.empty()) {return;}
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - grasp_attention_received_).count();
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
@@ -1370,7 +1378,7 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
     const bool has_transform = header.frame_id != candidate->header.frame_id;
     if (has_transform) {
         try {
-            transform = tf_buffer_->lookupTransform(header.frame_id, candidate->header.frame_id,
+            transform = observation_transform_buffer_->lookupTransform(header.frame_id, candidate->header.frame_id,
                 rclcpp::Time(header.stamp));
         } catch (const tf2::TransformException &error) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
@@ -1396,6 +1404,8 @@ void AiSGNGComponent::prepare_grasp_attention(const std_msgs::msg::Header &heade
     const auto ids = grasp_attention_regions_.select(points, num_points);
     if (!ids.empty()) {
         gng_set_priority_input(ids.data(), static_cast<uint32_t>(ids.size()), static_cast<float>(grasp_attention_ratio_));
+        RCLCPP_DEBUG(get_logger(), "Grasp attention selected %zu/%u points, ratio=%.3f",
+            ids.size(), num_points, grasp_attention_ratio_);
     }
 }
 #endif

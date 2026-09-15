@@ -1,0 +1,154 @@
+"""隔離ROSドメインでの把持重点入力・TF・失効・既定OFFの検証。"""
+
+import os
+import signal
+import struct
+import subprocess
+import tempfile
+import time
+
+
+def main():
+    os.environ.update(ROS_DOMAIN_ID='219', ROS_LOCALHOST_ONLY='1')
+    import rclpy
+    from ais_gng_msgs.msg import TopologicalMap, TopologicalNode
+    from geometry_msgs.msg import TransformStamped
+    from rclpy.qos import qos_profile_sensor_data
+    from sensor_msgs.msg import PointCloud2, PointField
+    from tf2_ros import StaticTransformBroadcaster
+
+    rclpy.init()
+    node = rclpy.create_node('grasp_attention_test')
+    cloud_pub = node.create_publisher(PointCloud2, '/attention_test_points', qos_profile_sensor_data)
+    candidate_pub = node.create_publisher(TopologicalMap, '/grasp_pose_cands/Tmap', 1)
+    received = []
+    sub = node.create_subscription(TopologicalMap, '/topological_map', received.append, qos_profile_sensor_data)
+    broadcaster = StaticTransformBroadcaster(node)
+    transform = TransformStamped()
+    transform.header.stamp = node.get_clock().now().to_msg()
+    transform.header.frame_id = 'attention_sensor'
+    transform.child_frame_id = 'attention_candidates'
+    transform.transform.translation.x = 1.0
+    transform.transform.rotation.w = 1.0
+    broadcaster.sendTransform(transform)
+
+    def spin(sec):
+        deadline = time.monotonic() + sec
+        while time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.01)
+
+    def wait(predicate, sec=25):
+        deadline = time.monotonic() + sec
+        while not predicate():
+            assert time.monotonic() < deadline, 'ROS応答の時間超過'
+            spin(0.05)
+
+    def stop(process):
+        if process and process.poll() is None:
+            process.send_signal(signal.SIGINT)
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+
+    def make_candidate(frame='attention_sensor', x=0.7, stamp=None):
+        message = TopologicalMap()
+        message.header.frame_id = frame
+        message.header.stamp = stamp or node.get_clock().now().to_msg()
+        vertex = TopologicalNode()
+        vertex.pos.x, vertex.pos.y, vertex.pos.z = float(x), 0.0, 0.2
+        message.nodes = [vertex]
+        return message
+
+    def publish_cloud(stamp=None):
+        cloud = PointCloud2()
+        cloud.header.frame_id = 'attention_sensor'
+        cloud.header.stamp = stamp or node.get_clock().now().to_msg()
+        cloud.height, cloud.width = 1, 400
+        cloud.fields = [PointField(name=axis, offset=idx * 4, datatype=7, count=1)
+                        for idx, axis in enumerate('xyz')]
+        cloud.point_step, cloud.row_step = 12, 4800
+        cloud.data = b''.join(struct.pack('<fff', 0.6 + x * 0.01, -0.1 + y * 0.01, 0.2)
+                              for x in range(20) for y in range(20))
+        num_before = len(received)
+        cloud_pub.publish(cloud)
+        wait(lambda: len(received) > num_before)
+
+    process = None
+    with tempfile.TemporaryFile() as log:
+        def output():
+            return os.pread(log.fileno(), 16 * 1024 * 1024, 0).decode(errors='replace')
+
+        def start(enable_focus):
+            command = ['/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu', '--ros-args',
+                       '--params-file', '/ros2_ws/src/ais_gng_cpu/src/ais_gng/config/gng_cpu/graspnet.yaml',
+                       '--log-level', 'ais_gng_node:=debug']
+            params = {'enable_grasp_attention': str(enable_focus).lower(), 'node.num_max': '256',
+                      'node.learning_num': '200', 'input.point_cloud_num': '5000',
+                      'input.topic_names': '[/attention_test_points]',
+                      'classify.human': 'false', 'classify.car': 'false',
+                      'node.enable_observation_support': 'false'}
+            for name, value in params.items():
+                command += ['-p', f'{name}:={value}']
+            return subprocess.Popen(command, stdout=log, stderr=log)
+
+        def case(candidate, has_focus, stamp=None):
+            before = output().count('Grasp attention selected')
+            candidate_pub.publish(candidate)
+            spin(0.08)
+            publish_cloud(stamp)
+            spin(0.02)
+            assert (output().count('Grasp attention selected') > before) == has_focus
+
+        try:
+            process = start(False)
+            wait(lambda: cloud_pub.get_subscription_count() > 0 or process.poll() is not None)
+            assert process.poll() is None
+            assert candidate_pub.get_subscription_count() == 0
+            case(make_candidate(), False)
+            stop(process)
+            wait(lambda: cloud_pub.get_subscription_count() == 0)
+            print('PASS: OFF時の候補購読なし、通常Graph配信')
+
+            process = start(True)
+            wait(lambda: (cloud_pub.get_subscription_count() > 0 and candidate_pub.get_subscription_count() > 0)
+                 or process.poll() is not None)
+            assert process.poll() is None
+            spin(0.5)
+            for _ in range(3):
+                case(make_candidate(), True)
+            case(make_candidate('attention_candidates', -0.3), True)
+            print('PASS: ON時の近傍抽出、異なる座標系からのTF適用')
+
+            empty = make_candidate()
+            empty.nodes = []
+            case(empty, False)
+            old = node.get_clock().now().to_msg()
+            old.sec -= 2
+            case(make_candidate(stamp=old), False)
+            future = node.get_clock().now().to_msg()
+            future.sec += 2
+            case(make_candidate(stamp=future), False)
+            case(make_candidate('missing_frame'), False)
+            case(make_candidate(x=100), False)
+
+            candidate = make_candidate()
+            candidate_pub.publish(candidate)
+            spin(0.7)
+            before = output().count('Grasp attention selected')
+            publish_cloud(candidate.header.stamp)
+            assert output().count('Grasp attention selected') == before
+            print('PASS: 空候補・古い/未来の時刻・TFなし・該当点なし・受信停止時の通常学習継続')
+        except BaseException:
+            print(output()[-12000:])
+            raise
+        finally:
+            stop(process)
+            node.destroy_subscription(sub)
+            node.destroy_node()
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

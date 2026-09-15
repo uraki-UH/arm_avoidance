@@ -804,23 +804,11 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           </div>
           <div class="ros-source-row">
             <div class="ros-source-head">
-              <label class="topo-switch"><input id="handlePublishEnabled" type="checkbox"> handle_points</label>
-              <input id="handleTopicName" type="text" placeholder="handle_points" value="handle_points">
-            </div>
-            <div id="handlePublishDetail" class="ros-source-detail hide">
-              <div class="control-pair">
-                <input id="handleAutoHz" type="range" min="0.1" max="50" step="0.1" value="10">
-                <input id="handleAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="10">
-              </div>
-              <div id="handleRosStatus" class="status">ROS handle: disconnected</div>
-            </div>
-          </div>
-          <div class="ros-source-row">
-            <div class="ros-source-head">
               <label class="topo-switch"><input id="semanticPublishEnabled" type="checkbox" checked> semantic_points</label>
               <input id="semanticTopicName" type="text" placeholder="semantic_points" value="semantic_points">
             </div>
             <div id="semanticPublishDetail" class="ros-source-detail">
+              <div class="muted">物体全体の点群と各点の把持部位ラベルを配信。到達性の評価とは別情報。</div>
               <div class="control-pair">
                 <input id="semanticAutoHz" type="range" min="0.1" max="50" step="0.1" value="10">
                 <input id="semanticAutoHzNum" type="number" min="0.1" max="50" step="0.1" value="10">
@@ -7868,14 +7856,7 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
   const DEFAULT_TOPO_POINTS_FRAME = 'map';
   const SEMANTIC_LABELS = {
     default: 0,
-    body: 0,
-    rim: 2,
-    cap: 3,
     handle: 1,
-    table: 4,
-    floor: 4,
-    wall: 5,
-    outlier: 255,
   };
   let ros = null;
   let rosConnecting = false;
@@ -8026,7 +8007,8 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
     return getCurrentTopoPoints();
   }
   function semanticLabelValue(label){
-    const key = String(label || 'default').toLowerCase();
+    // 入力の把持部位のみの符号化。到達性2〜4は候補評価側での付与。
+    const key = label === 1 ? 'handle' : String(label || 'default').toLowerCase();
     return Object.prototype.hasOwnProperty.call(SEMANTIC_LABELS, key) ? SEMANTIC_LABELS[key] : 0;
   }
   function createPointCloudPublisher({
@@ -8682,17 +8664,6 @@ loadEmbeddedRules();renderGngAlgorithmButtons();arrangeGraspLayout();setupViewer
         defaultTopic: DEFAULT_TOPO_POINTS_TOPIC,
         statusPrefix: 'ROS topo',
         getPointsFn: ()=> getCurrentTopoPoints() || [],
-      },
-      {
-        enabledId: 'handlePublishEnabled',
-        detailId: 'handlePublishDetail',
-        topicId: 'handleTopicName',
-        hzId: 'handleAutoHz',
-        hzNumId: 'handleAutoHzNum',
-        statusId: 'handleRosStatus',
-        defaultTopic: 'handle_points',
-        statusPrefix: 'ROS handle',
-        getPointsFn: ()=> getCurrentHandlePoints() || [],
       },
       {
         enabledId: 'semanticPublishEnabled',

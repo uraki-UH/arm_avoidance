@@ -4,6 +4,13 @@
 時間・依存作業などによる保留作業の状態は [pending.md](pending.md) に分離。
 記録単位は「日付 / 対象 / 実施内容 / 結果・検証範囲 / 根拠へのリンク」。既存履歴の一括転記なし。
 
+## 2026-09-15: 把持候補近傍のGNG重点学習
+
+- CPU GNGへ既定OFFの重点入力APIとROS候補購読を追加。総学習回数内での配分、候補失効・TF失敗時の通常処理、重点分の観測統計への非計上を実装。[仕様・起動方法](../../ais_gng_cpu/docs/grasp_attention.md)と[検証コマンド・結果](releases/2026-09-15_grasp_attention.md)を記録。
+- Docker Releaseビルド、CTest 3対象、隔離ROSでのON/OFF・TF・時刻・空候補・受信停止の検証に成功。初回ビルドのTF参照範囲とテストの設定順序を修正後に成功。
+- 5000候補中心・10万点の近傍検索を合成データで測定。空間ハッシュ43.8318 msからkd-tree20.3293 msへ変更、選択点42178点で一致。重点50%時の通常勝者イベント500回、共分散・観測方向件数への重点分の混入なしを確認。
+- 検証用ROS domain 219のCPU・Pythonノードは終了、既存CPU/ViewerのPIDを維持。把持推定器の外部再起動を観測したが本作業からの停止なし。実物把持の成功率改善・実入力での最適設定は未検証。
+
 ## 2026-09-15: 非平面成分のViewer Graph化
 
 追記: ユーザー指定により`/nonplane_components`のBbox既定設定を削除し、GUI・独立ビュー選択を対象外へ変更。Graph配信・法線・共分散と把持候補Tmapの既定ONは維持。関連テスト2ファイル・lint・frontend本番ビルド・Docker backendビルドに成功。実ブラウザ操作は未検証。有限コマンドは終了、一時出力は削除済み。ROSノード・サーバーの起動停止なし。
@@ -401,3 +408,10 @@ docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 -e ROS_LOG_DIR=/tmp/gra
 - Docker Releaseビルド・CTest・AddressSanitizer/UndefinedBehaviorSanitizer検査に成功。回転形状、合算時の再回転、重複点不変性、退化形状、ランダム120件と独立角度走査の整合を確認。
 - 32平面・3,072ノードの合成入力で推定時間の中央値0.125 ms（内点あり）・0.620 ms（全点が凸包頂点）を測定。実入力・Viewer・実機把持は未検証。
 - 検証プロセスは全終了、一時出力は削除済み。既存プロセスへの起動停止操作なし。外部再起動後の推定器が今回のビルド結果を使用していることを確認。
+
+## 2026-09-15: HTML・Viewerの把持ラベル統合
+
+- HTMLの`/handle_points`専用配信を削除し、把持部位生成を残して`/semantic_points`へ集約。HTMLの出力ラベルを0/1に揃え、縁・蓋・机等と到達性2〜4の衝突を解消。[仕様・検証コマンド](releases/2026-09-15_grasp_label_unification.md)を記録。
+- Viewerの「把持ラベル」配下に把持部位・未評価・到達範囲内・到達範囲外を統合。個別色・表示状態と旧設定の移管を確認。
+- 実HTML関数の点群生成、ラベル解決・移管、モーダル構造、実Chromeの操作の4検証とlint・型検査・本番アセット生成に成功。HTML→ROS→GNGの実通信は今回未検証。
+- `node tests/label_priority_browser.test.mjs`で起動したChrome PID 1060265は停止済み。専用プロファイル・一時ビルド出力を削除。既存ブラウザ・ROSノードの起動停止操作なし。
