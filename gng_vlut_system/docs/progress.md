@@ -4,6 +4,42 @@
 時間・依存作業などによる保留作業の状態は [pending.md](pending.md) に分離。
 記録単位は「日付 / 対象 / 実施内容 / 結果・検証範囲 / 根拠へのリンク」。既存履歴の一括転記なし。
 
+## 2026-09-15: ROIボクセルとGNGの座標ずれ調査
+
+追記: ロボット座標で格子を構築しworld表示で回転させる意図を確認後、入力frameの末尾一致による自動読み替えを削除。ToPoDualArmの固定TFをOFFに変更し、URDFルートへの外部TF運用をREADMEへ記載。[修正・検証コマンド](releases/2026-09-15_roi_robot_frame.md)を記録。修正前に不具合を再現、修正後は単体テスト21件と隔離ROSの4条件×2姿勢でvoxel ID一致・world復元位置の量子化誤差内一致を確認。ビルド指定とテストのsnapshot要求形式の失敗も修正後に再検証。専用ノードは停止済み、既存ノードの停止・再起動なし。実ブラウザ目視は未検証。
+
+- 実入力`/camera/camera/depth/color/points`と`/topological_map`の`frame_id`が`base_link`であることを受信確認。ROI生成の`resolveSourceFrameId`だけが末尾一致で`ToPoDualArm/base_link`へ読み替える実装を確認。Viewerの既存WebSocketから受信した`/ToPoDualArm/self_filter_roi_voxels`は`ToPoDualArm/base_link`、voxel幅0.02 m。Viewerは両者へ別のTFを適用する構成。
+- `world -> ToPoDualArm/base_link`の動的TF（x=0.15、yaw=1.5）と、`world -> ToPoDualArm/base_footprint -> ToPoDualArm/base_link`の固定TFを同時受信。ロボットbaseの親フレーム定義の競合を確認。診断終盤には外部操作によるTF配信プロセスの引数変更を観測。
+- 座標系の解釈は環境固定／ロボット追従の意図確認が必要。コード・YAML・既存ノードへの変更なし。ブラウザの手動オフセットや最終描画位置の実測は未実施。
+- 初回診断では既存`voxel_msgs`のPython型サポートにundefined symbolエラー。Voxelを除く受信と既存Viewerの読み取り専用接続に切り替えて調査。診断プロセスとWebSocket接続は終了、追加ROSデーモン・診断ノードの残留なし。
+
+ヘッダ・TF診断の起動コマンド（終了済み）:
+
+```bash
+docker exec gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 15s python3 -c '\''import time,json,rclpy
+from sensor_msgs.msg import PointCloud2
+from ais_gng_msgs.msg import TopologicalMap
+from tf2_msgs.msg import TFMessage
+from rclpy.qos import qos_profile_sensor_data,QoSProfile,DurabilityPolicy,ReliabilityPolicy
+rclpy.init(); node=rclpy.create_node("roi_frame_diagnostic"); seen=set(); subs=[]
+def receive(msg,topic):
+ key=(topic,msg.header.frame_id)
+ if key in seen:return
+ seen.add(key); print("HEADER",topic,msg.header,flush=True)
+def tf(msg):
+ for t in msg.transforms:
+  key=(t.header.frame_id,t.child_frame_id,str(t.transform))
+  if key not in seen:seen.add(key);print("TF",key,flush=True)
+try:
+ for kind,topic in [(PointCloud2,"/camera/camera/depth/color/points"),(TopologicalMap,"/topological_map")]:subs.append(node.create_subscription(kind,topic,lambda m,t=topic:receive(m,t),qos_profile_sensor_data))
+ subs.append(node.create_subscription(TFMessage,"/tf",tf,qos_profile_sensor_data))
+ subs.append(node.create_subscription(TFMessage,"/tf_static",tf,QoSProfile(depth=100,durability=DurabilityPolicy.TRANSIENT_LOCAL,reliability=ReliabilityPolicy.RELIABLE)))
+ end=time.monotonic()+5
+ while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=0.1)
+finally:node.destroy_node();rclpy.shutdown()
+'\'''
+```
+
 ## 2026-09-15: 把持アテンション選択点のトピック化
 
 - `/downsampling/grasp`へXYZのPointCloud2出力を追加。重点学習ON・購読時のみ点群化、対象失効時は空点群。既存の選択添字・変換処理を再利用し、GNGコア・設定項目の追加変更なし。[仕様・検証起動コマンド](releases/2026-09-15_grasp_attention_cloud.md)を記録。

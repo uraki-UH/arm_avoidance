@@ -31,6 +31,10 @@ python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_lin
 graspnet用
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.15  --y 0.0 --z -0.2 --yaw 3.2
 
+rosbag用？
+python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.3 --y 0.0 --z -0.2   --yaw 3.14
+
+
 ## GNG平面クラスタから上方向把持候補を生成
 ros2 launch grasping_system top_grasp_pose_candidates.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml

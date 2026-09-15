@@ -186,12 +186,7 @@ private:
     if (msg.header.frame_id.empty() || msg.header.frame_id == "map") {
       return world_frame_id_;
     }
-    const std::size_t namespace_pos = target_frame_id_.find_last_of('/');
-    if (namespace_pos != std::string::npos &&
-      msg.header.frame_id == target_frame_id_.substr(namespace_pos + 1))
-    {
-      return target_frame_id_;
-    }
+    // 短縮名と名前空間付きframeは別座標系。名前の末尾一致による読み替えなし。
     return msg.header.frame_id;
   }
 

@@ -109,8 +109,8 @@
       vlut_danger_dist: 0.025
       publish_hz: 30.0
 
-      # 固定設置時だけ使用するworldからロボットbaseへの外部較正TF
-      enable_static_tf: true
+      # 外部TF運用時の固定較正TFの停止。外部TFの子はURDFルートのbase_footprint。
+      enable_static_tf: false
       static_tf_parent_frame: "world"
       static_tf_child_frame: "base_footprint"
       static_tf_x: 0.0

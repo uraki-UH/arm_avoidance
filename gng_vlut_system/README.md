@@ -147,6 +147,25 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 
 `gng_viewer_bridge.launch.py`と併用し、YAMLで指定した点群をボクセル化します。
 
+ROIは`ToPoDualArm/base_link`座標でボクセル化し、ViewerではTFを適用してworldへ表示します。
+ロボットのyawに沿って格子が斜めになっても、占有範囲は環境点群と重なる構成です。
+入力の`base_link`と`ToPoDualArm/base_link`は別frameとして扱い、末尾一致による自動読み替えは行いません。
+
+現在のToPoDualArm設定は外部TF運用（`environment_voxelization.enable_static_tf: false`）です。
+URDFが`base_footprint -> base_link`を配信するため、外部TFは次のルートへ与えます。
+既存の`world -> ToPoDualArm/base_link`配信と固定設置用TFは終了してから切り替えてください。
+
+```bash
+python3 test_tf_publisher.py --world-frame world \
+  --frame-id ToPoDualArm/base_footprint \
+  --x 0.150 --y 0.0 --z 0.0 --yaw 1.5
+```
+
+入力frameのTFがない場合、`allow_unconnected_source_as_world: true`では入力座標をworldとみなします。
+これは入力がworld基準であることを確認した場合だけの互換動作で、座標較正の代わりではありません。
+通常は正しい入力frameとTFを与え、GNGとROIで同じ座標の意味を使用してください。
+固定設置へ戻す場合は外部TFを停止し、同YAMLの固定TFを有効化します。
+
 ```bash
 ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
