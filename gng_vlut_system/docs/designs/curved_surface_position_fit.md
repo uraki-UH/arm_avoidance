@@ -1,5 +1,8 @@
 # 位置偏差による局所曲率推定
 
+モデル当てはめを使わない比較方式 `smooth_graph` は[連続面クラスタリングの仕様と検証](../releases/2026-09-15_smooth_surface_graph.md)を参照。
+以下は既定方式 `model` の位置フィット仕様。新方式は曲率係数を計算せず、実入力で大きな領域統合が発生するため既定値は維持。
+
 追跡中の接続切れ・遠隔領域の保持に関する後続変更は[曲面の観測支持領域](curved_surface_support_regions.md)を参照。
 分割時の参照集合再構築は下記の通常追跡とは別の処理。
 
@@ -127,3 +130,69 @@ LD_LIBRARY_PATH=/tmp/curvature-boundary-9mGNMW/warm:$LD_LIBRARY_PATH /tmp/curvat
 ```
 
 検証プロセスはすべて終了済み。既存ROSノード・bagの停止や再起動なし。実行中の旧版への自動反映なし、通常のGNG launch再起動で反映。PC再起動は不要。
+
+## 2026-09-15: Live cost and incremental-update investigation
+
+Observed the existing `ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml` without restarting it. Point-cloud and GNG-map publication were approximately 18.8 Hz; surface-model publication was 1.88 Hz with `surface_model.hz=2.0`. The GNG log's `Curve` field is the latest duration received from the separate surface process, not a cost added to every GNG update.
+
+Captured 21 matching map/plane/model frames, each with 1,545 GNG nodes and 10 source plane clusters:
+
+| Stage | Mean ms |
+| --- | ---: |
+| Entire surface extraction, including retention | 9.196 |
+| Patch curvature | 1.263 |
+| Boundary construction/classification | 1.099 |
+| Retention checks/growth | 0.218 |
+| Support-region processing | 0.081 |
+| Remaining work, including model fitting and graph/region construction | 6.536 |
+
+The maximum extraction time in these frames was 14.466 ms. JSON/Marker construction, ROS delivery, and Viewer rendering are outside this timer. This is an observation under shared machine load, not a worst-case execution bound.
+
+Every frame reached the 128-fit budget. Additional offline instrumentation measured an average 4.325 ms inside `fit_best`, with 128 calls and 120.62 distinct ordered candidate lists per extraction. Identical candidate-list reuse was only about 5.8%; this is not a measured cache speedup.
+
+Across 20 successive frame pairs, 93.69% of common nodes moved more than 0.5 mm. Only 29.5% of plane patches retained their ordered membership, and none of the 200 patch comparisons had both identical membership and positions. Exact unchanged-patch caching has no curvature-fit hits on this capture. This does not rule out incremental statistics or other input distributions.
+
+### Prototype comparison
+
+Built separate Release libraries in an ignored experiment directory. The installed library and production sources were not modified. Each comparison used the same 21 captured frames, five runs, and interleaved variant ordering. Values below are medians of per-run mean tracked extraction times.
+
+| Prototype | Baseline ms | Prototype ms | Reduction |
+| --- | ---: | ---: | ---: |
+| Validate each patch immediately; remove per-patch scratch arrays | 7.496 | 7.304 | 2.6% |
+| Skip higher-complexity models when their score lower bound cannot win | 7.496 | 7.389 | 1.4% |
+| Fixed column counts for the sphere/circle/ellipse Eigen matrices | 7.460 | 7.251 | 2.8% |
+
+The first two variants matched all recorded non-timing fields exactly. The fixed-column variant initially failed exact floating-point comparison: differences were rounding only, with unchanged memberships, model types, IDs, and fit counts. All five reruns passed relative `1e-10` / absolute `1e-12` numerical comparison. Each variant passed the existing 66 surface-model tests. The small measured reductions did not justify adopting a new production implementation in this investigation; see [decision](../reject.md#2026-09-15-surface-clustering-micro-optimizations-and-exact-patch-cache).
+
+### Incremental direction and limits
+
+Valid-model retention and attachment of new nonplane nodes already avoid some refitting. Patch curvature, boundary classification, and extraction of unclaimed regions still run again. Further incremental work should target candidate fitting, rather than the already inexpensive retention checks.
+
+Updating position moments after node movement is feasible, but it alone does not replace the current fits: local curvature also changes its PCA coordinates, density weights, and robust weights; region fitting changes its normalized coordinates and capped sample selection. A recursive fitting design therefore needs explicit numerical/quality validation. A position-change flag would invalidate almost every patch in this capture. Reusing fits based on a movement tolerance or reducing the 128-fit budget changes the result/update policy and was not implemented here.
+
+### Artifacts and commands
+
+Host artifacts: `tmp/surface_incremental_20260915/` (Git-ignored). Includes `observed.json`, three source snapshots, the original shared library in `baseline/`, prototype libraries/sources, comparison scripts, per-frame JSONL, profiling results, and test logs. All diagnostic and benchmark processes exited; the existing GNG launch and its nodes remained running.
+
+Commands inside `gng_cpu_container`, after sourcing `/ros2_ws/install/setup.bash`:
+
+```bash
+python3 /tmp/surface_latency_probe.py
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/capture.py
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/build_compare.py
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/build_compare.py patch
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/build_compare.py bounds
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/build_compare.py fixed
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/compare.py
+python3 /ros2_ws/src/tmp/surface_incremental_20260915/compare.py baseline fixed
+```
+
+Instrumented replay and existing tests:
+
+```bash
+surface_run=/ros2_ws/src/tmp/surface_incremental_20260915
+LD_LIBRARY_PATH=$surface_run/profile:$LD_LIBRARY_PATH $surface_run/replay $surface_run/observed.json
+for variant in patch bounds fixed; do
+  LD_LIBRARY_PATH=$surface_run/$variant:$LD_LIBRARY_PATH /ros2_ws/build/ais_gng/test_surface_model
+done
+```

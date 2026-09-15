@@ -292,12 +292,12 @@ public:
     controlled_joint_names_ = orderedControlledJointNames(*chain_);
 
     const int dof = chain_->getTotalDOF();
-    RCLCPP_INFO(get_logger(), "Selected GNG profiles: %s",
+    RCLCPP_DEBUG(get_logger(), "Selected GNG profiles: %s",
                 joinStrings(selected_profiles, ", ").c_str());
-    RCLCPP_INFO(get_logger(), "Chain joint order (%zu): %s",
+    RCLCPP_DEBUG(get_logger(), "Chain joint order (%zu): %s",
                 chain_joint_names_.size(),
                 joinStrings(chain_joint_names_, ", ").c_str());
-    RCLCPP_INFO(get_logger(), "Controlled joint order (%zu): %s",
+    RCLCPP_DEBUG(get_logger(), "Controlled joint order (%zu): %s",
                 controlled_joint_names_.size(),
                 joinStrings(controlled_joint_names_, ", ").c_str());
     gng_ = std::make_shared<GNGType>(dof, 3, chain_.get());
@@ -347,7 +347,7 @@ public:
       }
     }
     if (!cached_safe_goal_ids_.empty()) {
-      RCLCPP_INFO(
+      RCLCPP_DEBUG(
           get_logger(),
           "Cached %zu safe GNG nodes from loaded model before map updates.",
           cached_safe_goal_ids_.size());
@@ -482,7 +482,7 @@ public:
               publishTrajectoryPathLocked(current_q, {});
               publishGraspCandidateMetricsLocked(-1, {}, {});
             }
-            RCLCPP_INFO(
+            RCLCPP_DEBUG(
                 get_logger(),
                 "Received goal candidate ids: count=%zu first=%d topic=%s",
                 latest_goal_candidate_ids_.size(),
@@ -600,16 +600,13 @@ public:
           }
         });
 
-    RCLCPP_INFO(get_logger(),
+    RCLCPP_DEBUG(get_logger(),
                 "Planning ready. enable_execution=%d joint_topic=%s map_topic=%s goal_ids_topic=%s trajectory_topic=%s candidate_trajectory_topic=%s candidate_metrics_topic=%s dof=%d trial_mode=%d",
                 enable_execution_ ? 1 : 0, joint_topic.c_str(), topological_map_topic.c_str(),
                 goal_candidate_ids_topic_.c_str(), trajectory_topic_.c_str(),
                 candidate_trajectory_topic_.c_str(),
                 candidate_metrics_topic_.c_str(),
                 dof, trial_mode_ ? 1 : 0);
-    RCLCPP_INFO(get_logger(),
-                "Waiting for inputs: joint_topic=%s topological_map_topic=%s",
-                joint_topic.c_str(), topological_map_topic.c_str());
   }
 
 private:
@@ -631,6 +628,8 @@ private:
     }
     has_pending_plan_ = false;
     last_plan_q_ = current_q;
+    // 候補選定から経路探索・選択までの実時間。配信用データ生成・配信の除外
+    const auto plan_start = std::chrono::steady_clock::now();
     const auto goal_candidates = latest_goal_candidate_ids_.empty()
         ? std::vector<int>{} : selectedGoalCandidatesLocked(-1);
     const auto start_candidates = collectNearestStartCandidatesLocked(current_q, 5);
@@ -640,6 +639,11 @@ private:
     auto [goal_id, node_path] = planFromStartCandidatesLocked(
         current_q, start_candidates, goal_candidates, selected_start_id,
         candidate_path_by_goal, candidate_paths);
+    const double plan_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - plan_start).count();
+    RCLCPP_INFO(get_logger(), "dof=%d Plan: %.2f ms Count: goal=%zu reach=%zu",
+                chain_->getTotalDOF(), plan_ms,
+                goal_candidates.size(), candidate_path_by_goal.size());
     trajectory_.goal_id = goal_id;
     // 経路ID不変でも、更新された安全ラベル・座標系の再配信
     have_last_candidate_publish_ = false;

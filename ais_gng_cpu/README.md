@@ -22,6 +22,19 @@ cd /ros2_ws/src/ais_gng/core/scripts
 cb
 ```
 
+## モデル当てはめなしの連続面抽出（比較用）
+
+GNGの位置・法線・実エッジだけで滑らかな連結成分をまとめる方式。
+
+```bash
+ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml surface_method:=smooth_graph
+```
+
+`surface_method:=model` で従来方式へ復帰。省略時は `config/surface_model.yaml` の設定を使用し、既定値は `model`。
+新方式は `smooth_surface` と所属を出力し、球・円柱の係数や曲率フィットは出力しない。
+実入力で高速化を確認した一方、背景平面まで大きく統合する場合があるため比較用の選択肢。
+設定・出力契約・測定値は[仕様と検証記録](../gng_vlut_system/docs/releases/2026-09-15_smooth_surface_graph.md)を参照。
+
 ## 物体GNGデータセット保存
 
 `ais_gng.launch.py`は学習nodeと同時に、`/topological_map`の最新GNGを保存する

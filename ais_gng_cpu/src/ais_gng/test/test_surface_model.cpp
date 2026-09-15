@@ -1570,3 +1570,252 @@ TEST(SurfaceTracking, TrackedColorDoesNotShiftWhenAnotherRegionDisappears)
     EXPECT_EQ(next.markers[0].color,m.color);
   }
 }
+
+namespace
+{
+options smooth_options()
+{
+  options config;
+  config.method="smooth_graph";
+  return config;
+}
+
+scene separated_grids()
+{
+  scene s;
+  for (int side=0;side<2;++side) {
+    ais_gng_msgs::msg::PlaneCluster plane;
+    plane.id=side;
+    for (int x=0;x<(side ? 3:6);++x) for (int y=0;y<4;++y) {
+      add_node(s.map,vec(side+0.01*x,0.01*y,0),vec::UnitZ());
+      const auto idx=s.map.nodes.size()-1;
+      plane.node_indices.push_back(idx);
+      if (y) edge(s.map,idx,idx-1);
+      if (x) edge(s.map,idx,idx-4);
+    }
+    s.planes.clusters.push_back(std::move(plane));
+  }
+  return s;
+}
+
+std::vector<std::vector<std::uint16_t>> surface_partition(const result &surfaces,const map_type &map)
+{
+  std::vector<std::vector<std::uint16_t>> groups;
+  for (const auto &r:surfaces.regions) {
+    std::vector<std::uint16_t> ids;
+    for (auto idx:r.node_indices) ids.push_back(map.nodes[idx].id);
+    std::sort(ids.begin(),ids.end()); groups.push_back(std::move(ids));
+  }
+  std::sort(groups.begin(),groups.end());
+  return groups;
+}
+}
+
+TEST(SmoothSurfaceGraph, full_cylinder_without_model_fits_or_fabricated_coefficients)
+{
+  const auto s=cylinder(0.12,0.12);
+  auto config=smooth_options();
+  config.max_model_fits=0;
+  tracker tracking;
+  const auto surfaces=tracking.update(s.map,s.planes,config);
+  ASSERT_EQ(surfaces.regions.size(),1U);
+  EXPECT_EQ(surfaces.regions[0].shape.type,"smooth_surface");
+  EXPECT_EQ(surfaces.model_fits,0U);
+  EXPECT_EQ(surfaces.boundary_fit_num,0U);
+  EXPECT_EQ(surfaces.curvature_ms,0);
+  coverage(surfaces,s.map.nodes.size());
+  const auto data=nlohmann::json::parse(serialize(surfaces,s.map,s.planes));
+  EXPECT_EQ(data["method"],"smooth_graph");
+  EXPECT_FALSE(data["models"][0].contains("fit"));
+  std::set<std::pair<std::string,int>> published;
+  const auto markers=make_markers(surfaces,s.map,true,false,published);
+  bool has_label=false;
+  for (const auto &m:markers.markers) if (m.ns=="surface_labels") {
+    has_label=true;
+    EXPECT_EQ(m.text.find("mm"),std::string::npos);
+  }
+  EXPECT_TRUE(has_label);
+}
+
+TEST(SmoothSurfaceGraph, unchanged_decisions_reuse_membership_after_motion_and_reordering)
+{
+  auto s=separated_grids();
+  tracker tracking;
+  const auto config=smooth_options();
+  const auto first=tracking.update(s.map,s.planes,config);
+  const auto unchanged=tracking.update(s.map,s.planes,config);
+  EXPECT_EQ(unchanged.link_check_num,0U);
+  EXPECT_EQ(unchanged.connectivity_node_num,0U);
+  for (auto &node:s.map.nodes) node.pos.x+=0.001F;
+  const auto moved=tracking.update(s.map,s.planes,config);
+  EXPECT_GT(moved.link_check_num,0U);
+  EXPECT_EQ(moved.connectivity_node_num,0U);
+  std::reverse(s.map.nodes.begin(),s.map.nodes.end());
+  for (auto &idx:s.map.edges) idx=s.map.nodes.size()-1-idx;
+  for (auto &plane:s.planes.clusters) for (auto &idx:plane.node_indices) idx=s.map.nodes.size()-1-idx;
+  const auto reordered=tracking.update(s.map,s.planes,config);
+  EXPECT_EQ(reordered.link_check_num,0U);
+  EXPECT_EQ(reordered.connectivity_node_num,0U);
+  ASSERT_EQ(reordered.regions.size(),first.regions.size());
+  for (std::size_t i=0;i<first.regions.size();++i) EXPECT_EQ(reordered.regions[i].id,first.regions[i].id);
+  EXPECT_EQ(surface_partition(reordered,s.map),surface_partition(tracker{}.update(s.map,s.planes,config),s.map));
+}
+
+TEST(SmoothSurfaceGraph, split_and_merge_rebuild_only_affected_component)
+{
+  auto s=separated_grids();
+  tracker tracking;
+  const auto config=smooth_options();
+  const auto first=tracking.update(s.map,s.planes,config);
+  ASSERT_EQ(first.regions.size(),2U);
+  const auto original_edges=s.map.edges;
+  s.map.edges.clear();
+  for (std::size_t i=0;i<original_edges.size();i+=2) {
+    const auto a=original_edges[i],b=original_edges[i+1];
+    if (std::min(a,b)<12 && std::max(a,b)>=12 && std::max(a,b)<24) continue;
+    edge(s.map,a,b);
+  }
+  const auto split=tracking.update(s.map,s.planes,config);
+  ASSERT_EQ(split.regions.size(),3U);
+  EXPECT_EQ(split.link_check_num,0U);
+  EXPECT_EQ(split.connectivity_node_num,24U);
+  EXPECT_EQ(split.regions[0].id,first.regions[0].id);
+  EXPECT_EQ(split.regions[1].id,first.regions[1].id);
+  s.map.edges=original_edges;
+  const auto merged=tracking.update(s.map,s.planes,config);
+  ASSERT_EQ(merged.regions.size(),2U);
+  EXPECT_EQ(merged.connectivity_node_num,24U);
+  EXPECT_EQ(merged.regions[0].id,first.regions[0].id);
+  EXPECT_EQ(merged.regions[1].id,first.regions[1].id);
+}
+
+TEST(SmoothSurfaceGraph, sharp_normals_parallel_steps_and_long_links_stay_separate)
+{
+  for (int kind=0;kind<3;++kind) {
+    auto s=separated_grids();
+    for (std::size_t i=24;i<s.map.nodes.size();++i) {
+      auto &node=s.map.nodes[i];
+      node.pos.x-=1;
+      if (kind==0) { node.normal.x=1; node.normal.z=0; }
+      if (kind==1) node.pos.z+=0.02F;
+      if (kind==2) node.pos.x+=1;
+    }
+    edge(s.map,0,24);
+    const auto surfaces=tracker{}.update(s.map,s.planes,smooth_options());
+    EXPECT_GE(surfaces.regions.size(),2U);
+    std::vector<int> owner(s.map.nodes.size(),-1);
+    for (std::size_t i=0;i<surfaces.regions.size();++i)
+      for (auto idx:surfaces.regions[i].node_indices) owner[idx]=i;
+    EXPECT_NE(owner[0],owner[24]);
+    const auto graph=make_graph(surfaces,s.map);
+    for (std::size_t i=0;i<graph.edges.size();i+=2)
+      EXPECT_EQ(owner[graph.edges[i]],owner[graph.edges[i+1]]);
+  }
+}
+
+TEST(SmoothSurfaceGraph, changing_geometry_edges_and_limits_matches_full_rebuild)
+{
+  const auto original=separated_grids();
+  tracker tracking;
+  std::mt19937 random(20915);
+  for (int frame=0;frame<80;++frame) {
+    auto s=original;
+    auto config=smooth_options();
+    s.map.frame_number=s.planes.frame_number=frame;
+    if (frame%7==0) config.max_link_length=0.009;
+    for (auto &node:s.map.nodes) {
+      node.pos.z+=0.001F*static_cast<int>(random()%4);
+      if (random()%5==0) node.normal.z=-node.normal.z;
+      if (random()%23==0) node.normal.z=0;
+    }
+    s.map.edges.clear();
+    for (std::size_t i=0;i<original.map.edges.size();i+=2)
+      if (random()%7) edge(s.map,original.map.edges[i],original.map.edges[i+1]);
+    edge(s.map,0,0); edge(s.map,0,65535);
+    if (frame%3==0) edge(s.map,0,1);
+    const auto incremental=tracking.update(s.map,s.planes,config);
+    const auto full=tracker{}.update(s.map,s.planes,config);
+    EXPECT_EQ(incremental.connected_edges,full.connected_edges);
+    EXPECT_EQ(surface_partition(incremental,s.map),surface_partition(full,s.map));
+    coverage(incremental,s.map.nodes.size());
+  }
+}
+
+TEST(SmoothSurfaceGraph, node_loss_id_reuse_and_frame_reset_do_not_keep_stale_membership)
+{
+  auto s=separated_grids();
+  tracker tracking;
+  const auto config=smooth_options();
+  tracking.update(s.map,s.planes,config);
+  s.map.nodes.pop_back();
+  const auto missing=tracking.update(s.map,s.planes,config);
+  coverage(missing,s.map.nodes.size());
+  EXPECT_EQ(surface_partition(missing,s.map),surface_partition(tracker{}.update(s.map,s.planes,config),s.map));
+  for (auto &node:s.map.nodes) node.pos.x+=2;
+  const auto reused=tracking.update(s.map,s.planes,config);
+  for (const auto &r:reused.regions) EXPECT_FALSE(r.is_retained);
+  s.map.header.frame_id=s.planes.header.frame_id="new_frame";
+  const auto reset=tracking.update(s.map,s.planes,config);
+  for (const auto &r:reset.regions) EXPECT_FALSE(r.is_retained);
+  s.map.nodes[1].id=s.map.nodes[0].id;
+  const auto duplicate=tracking.update(s.map,s.planes,config);
+  coverage(duplicate,s.map.nodes.size());
+  for (const auto &r:duplicate.regions) EXPECT_FALSE(r.is_retained);
+  s.map.nodes[0].pos.x=std::numeric_limits<float>::quiet_NaN();
+  const auto invalid=tracking.update(s.map,s.planes,config);
+  coverage(invalid,s.map.nodes.size());
+  s.map.nodes.clear();
+  const auto empty=tracking.update(s.map,s.planes,config);
+  EXPECT_TRUE(empty.regions.empty());
+  EXPECT_TRUE(empty.connected_edges.empty());
+}
+
+TEST(SmoothSurfaceGraph, stateless_api_disabled_history_and_method_switch)
+{
+  auto s=cylinder(0.12,0.12);
+  const auto config=smooth_options();
+  tracker tracking;
+  const auto first=tracking.update(s.map,s.planes,config);
+  const auto independent=extract(s.map,s.planes,config);
+  EXPECT_EQ(independent.method,"smooth_graph");
+  EXPECT_EQ(independent.connected_edges,first.connected_edges);
+  retention_options history;
+  history.enable_retention=false;
+  const auto disabled=tracking.update(s.map,s.planes,config,history);
+  EXPECT_EQ(disabled.link_check_num,first.link_check_num);
+  EXPECT_EQ(disabled.connectivity_node_num,s.map.nodes.size());
+  for (const auto &r:disabled.regions) EXPECT_FALSE(r.is_retained);
+  EXPECT_EQ(tracking.update(s.map,s.planes).regions[0].shape.type,"cylinder");
+  const auto switched=tracking.update(s.map,s.planes,config);
+  EXPECT_EQ(switched.connected_edges,first.connected_edges);
+  for (const auto &r:switched.regions) EXPECT_FALSE(r.is_retained);
+  auto invalid=config;
+  invalid.method="missing";
+  EXPECT_THROW(extract(s.map,s.planes,invalid),std::invalid_argument);
+  EXPECT_THROW(tracking.update(s.map,s.planes,invalid),std::invalid_argument);
+  s.planes.frame_number=s.map.frame_number+1;
+  EXPECT_THROW(tracking.update(s.map,s.planes,config),std::invalid_argument);
+}
+
+TEST(SmoothSurfaceGraph, rejected_shortcut_inside_connected_surface_is_not_published)
+{
+  auto s=cylinder(0.03,0.03);
+  edge(s.map,0,144);
+  const auto surfaces=extract(s.map,s.planes,smooth_options());
+  ASSERT_EQ(surfaces.regions.size(),1U);
+  const auto graph=make_graph(surfaces,s.map);
+  EXPECT_EQ(graph.edges,surfaces.connected_edges);
+  EXPECT_EQ(graph.edges.size()+2,s.map.edges.size());
+  for (std::size_t i=0;i<graph.edges.size();i+=2)
+    EXPECT_FALSE(std::min(graph.edges[i],graph.edges[i+1])==0 && std::max(graph.edges[i],graph.edges[i+1])==144);
+  std::set<std::pair<std::string,int>> published;
+  const auto markers=make_markers(surfaces,s.map,false,false,published);
+  std::size_t edge_point_num=0;
+  for (const auto &m:markers.markers) if (m.ns=="surface_edges") edge_point_num+=m.points.size();
+  EXPECT_EQ(edge_point_num,graph.edges.size());
+  const auto data=nlohmann::json::parse(serialize(surfaces,s.map,s.planes));
+  for (const auto &patch:data["patches"]) {
+    EXPECT_EQ(patch["curvature"]["method"],"none");
+    EXPECT_EQ(patch["curvature"]["valid"],false);
+  }
+}

@@ -279,3 +279,35 @@ timeout -s INT -k 3s 12s perf record -F 49 -g -p 1845486,1844494 -o /tmp/grasp_c
 - Dockerビルド・C++8件・domain 218のROS結合テストに成功。実GNGの5開始候補×8終点で全40経路一致。各5回の初回探索は安全終点2.99〜3.91 ms、危険終点6.33〜8.49 ms。安全状態更新後も各回10 ms未満、再利用は最大0.240 ms。索引準備31〜41 msは別計測。ROS配信・描画込みの時間とは区別。
 - 実運用の6候補が全て危険ラベルだった時点を観測。同時刻スナップショットの取得は候補ID配信元不在で失敗し、危険終点の性能検証は保存済みGNGの制御条件として実施。全体CPU・実運用遅延の改善率は未測定。
 - プローブ・検証launch・子ノード・有限ベンチマークはすべて終了済み。既存ROSへの停止・再起動操作なし。トピック・パラメータ追加なし。
+
+## 2026-09-15: 候補軌道計画の計算時間ログ
+
+- 計画更新時の計算時間・目標候補数・到達数をINFOの1行に集約し、起動時の詳細一覧と候補受信ログをDEBUGへ移動。[計測範囲・検証・起動コマンド](releases/2026-09-15_candidate_planning_log.md)を記録。
+- Releaseビルド・インストールとdomain 218の既存ROS結合テストに成功。計算時間ログ7件、静止入力での再探索なし、通常ログの簡潔化を確認。検証用launch・子ノードはすべて停止済み。
+- Applied the requested English format `dof=7 Plan: 34.35 ms Count: goal=2 reach=2` and removed the separate startup INFO log. Release library rebuilds passed; no ROS processes were started for these wording changes.
+
+## 2026-09-15: Surface clustering cost and incremental updates
+
+- Observed the existing stream and captured 21 synchronized frames with 1,545 nodes. Mean surface extraction was 9.196 ms at about 1.9 Hz; all frames exhausted the 128-fit budget. Exact unchanged-patch count was zero across 200 comparisons. [Measurements, limitations, artifacts, and startup commands](designs/curved_surface_position_fit.md#2026-09-15-live-cost-and-incremental-update-investigation).
+- Compared three isolated Release prototypes on identical inputs. Total reductions were 1.4–2.8%; each passed 66 existing tests. [Production adoption deferred](reject.md#2026-09-15-surface-clustering-micro-optimizations-and-exact-patch-cache). No production source or setting changes for this investigation.
+- Capture/probe/build/replay/test processes all exited. Existing GNG launch and nodes remained running; no user process was stopped or restarted.
+
+## 2026-09-15: モデル当てはめなしの連続面抽出
+
+- `surface_method:=smooth_graph` を追加。実GNGエッジの距離・法線・接平面条件と影響成分の差分再探索を既存ファイル内に実装。[仕様・比較条件・全起動コマンド](releases/2026-09-15_smooth_surface_graph.md)を記録。
+- Releaseビルド・C++74件・隔離ROS検証に成功。実入力21フレームで所属と採用エッジが毎回全探索と一致。従来modelの所属・種別・IDも変更前結果と一致。
+- 従来7.407 msに対して新方式1.159 ms。ただし最大成分は平均1,420/1,545ノードへ拡大。差分管理単独は実入力で3.7%の増加、固定入力では判定・所属再探索の省略を確認。分割品質を理由に既定値modelを維持。
+- 検証ROSノード・driver・再評価・ビルド・描画はすべて終了、プロセス一覧で残留なし。既存プロセスの停止・再起動操作なし。結果・比較図は `tmp/surface_graph_20260915/` に保存。
+
+## 2026-09-15: 手元の候補経路高速化とリモート更新の統合
+
+- ユーザー承認に基づき、手元のステージ済み10ファイルを`a957cdc`へ保存。最新fetch後の`origin/grasp_new4`（`cf17573`、計測ログ・連続面抽出の2コミット）を統合。ソースは自動マージ、進捗文書の末尾追記競合は双方の記録を保持して解消。
+- Docker内で候補計画・曲面抽出のビルド、C++8件と74件、domain 218のROS結合テストに成功。候補ロボットの基準座標、混在入力、静止時の再計画抑止、関節変更・明示要求、空入力のクリアと関節目標配信なしを確認。
+- 下記の有限コマンドと検証用launch・子ノードはすべて終了済み。既存ROSへの停止・再起動操作なし。確認中に別の既存シェルからの候補計画launch起動を観測し、そのプロセスは維持。リモートへのpushなし。
+
+```bash
+docker exec gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 15s 360s cmake --build /ros2_ws/build/gng_vlut_system --target test_candidate_metric_availability topological_map_planning -j2 && timeout -s INT -k 5s 120s /ros2_ws/build/gng_vlut_system/test_candidate_metric_availability && timeout -s INT -k 15s 360s cmake --build /ros2_ws/build/ais_gng --target test_surface_model plane_cluster_incremental_node -j2 && timeout -s INT -k 5s 120s /ros2_ws/build/ais_gng/test_surface_model --gtest_color=no'
+docker exec -e ROS_DOMAIN_ID=218 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 25s 180s python3 /ros2_ws/src/gng_vlut_system/test/check_grasp_joint_candidates_integration.py'
+```
+
+結合テスト内の`ros2 run gng_vlut_system safety_monitor_node`と`ros2 launch gng_vlut_system grasp_joint_candidates.launch.py`の全引数は[検証起動コマンド](releases/2026-09-14_candidate_static_path_index.md#verification)と同一。
