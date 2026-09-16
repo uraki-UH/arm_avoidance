@@ -856,7 +856,7 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 ros2 launch gng_vlut_system visualization_gng_static.launch.py \
   model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng_static_L0.bin \
   topic_name:=/ToPoDualArm/Tmap_vis_static_L0 \
-  frame_id:=base_link
+  frame_id:=ToPoDualArm/base_link
 ```
 
 static nodeのlabelは学習保存時点の値であり、占有voxelなどによる動的更新はしない。

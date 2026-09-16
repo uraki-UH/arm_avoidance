@@ -4,6 +4,29 @@
 時間・依存作業などによる保留作業の状態は [pending.md](pending.md) に分離。
 記録単位は「日付 / 対象 / 実施内容 / 結果・検証範囲 / 根拠へのリンク」。既存履歴の一括転記なし。
 
+## 2026-09-16: 簡略版Tmap L0の再生成と単体召喚確認
+
+- 稼働中環境で`/ToPoDualArm/Tmap_vis_L0`がなく、`visualization_gng.enabled: true`に対して保存済み`vis_gng_L0.bin`が非対応の`VIZGNG2`であることを確認。旧モデルは同じディレクトリの`vis_gng_L0_v2_20260916.bin`へバックアップ。
+- 現行trainerでL0を再生成し、10,801元ノードから150ノード・740エッジ、連結成分1・孤立0を確認。`vis_gng_L0.bin`は`VIZGNG5`、単体版`vis_gng_static_L0.bin`は`VIZGST1`。保存再読込検証成功。元`gng.bin`・`vlut.bin`への変更なし。
+- 通常環境の元Tmapのframeを`ToPoDualArm/base_link`と受信確認。隔離ドメイン224で単体launchを起動し、同frameの150ノード・740エッジを受信。最初のCLI echoは時間切れとなり、明示的reliable/transient-localのPython購読で再確認。
+- 生成・検証プロセスは終了、単体launchと検証購読ノードは停止済み。既存のブリッジ・再生の停止／再起動なし。既存ブラウザでの表示は未検証。[起動手順](../README.md#topofuzzy-viewerへのブリッジ)と[単体版の座標指定](TECHNICAL_SPEC.md#135-元gng非依存のstatic召喚)を更新。
+
+コンテナ内で実行した生成・検証起動コマンド（ドメイン224、全停止済み）:
+
+```bash
+ROS_DOMAIN_ID=224 ROS_LOCALHOST_ONLY=1 ros2 run gng_vlut_system visualization_gng_trainer \
+  --input /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin \
+  --output-prefix /ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng \
+  --layer 0 --target-nodes 150 --iterations 200000 --seed 42 \
+  --joint-motion-weight 0 --workspace-motion-sec-per-m 1.0 --workspace-sample-resolution 0.05 \
+  --ros-args --params-file /ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
+
+ROS_DOMAIN_ID=224 ROS_LOCALHOST_ONLY=1 ros2 launch gng_vlut_system visualization_gng_static.launch.py \
+  model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng_static_L0.bin \
+  topic_name:=/ToPoDualArm/Tmap_vis_static_L0 \
+  frame_id:=ToPoDualArm/base_link
+```
+
 ## 2026-09-16: Tmap_staticのBBoxによるROI範囲
 
 - ToPoDualArmのROIを静的マップBBox＋各面20 cmへ変更。TF変換、直接／world検索、consumer別設定に対応。[仕様・検証コマンド](releases/2026-09-16_tmap_roi_bounds.md)。

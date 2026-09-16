@@ -131,6 +131,22 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 引数を省略した場合は、YAMLの`gripper_volume_graph.enabled`に従います。
 切替はlaunchの再起動時に反映されます。
 
+簡略版L0は`/ToPoDualArm/Tmap_vis_L0`です。`visualization_gng.enabled: true`と
+現行形式の`vis_gng_L0.bin`があれば、上記ブリッジの起動時に元の`Tmap_static`と同時配信されます。
+モデルを再生成した場合はブリッジの再起動が必要です。
+
+既存のブリッジを再起動せず、静的な簡略版だけを追加する場合は次を使用します。
+
+```bash
+ros2 launch gng_vlut_system visualization_gng_static.launch.py \
+  model_path:=/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/vis_gng_static_L0.bin \
+  topic_name:=/ToPoDualArm/Tmap_vis_static_L0 \
+  frame_id:=ToPoDualArm/base_link
+```
+
+Viewerでは`/ToPoDualArm/Tmap_vis_static_L0`を選択します。単体版は保存時点の静的グラフで、
+占有による安全状態の更新や軌道変換はありません。
+
 `grasp_voxel_matcher_node`でこれらのトピックを入力として使う構成では、
 発行をオンにするか、別のlaunchから発行ノードを起動してください。
 
