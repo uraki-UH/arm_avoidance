@@ -171,6 +171,12 @@ ros2 launch gng_vlut_system environment_to_vlut.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
+ROI範囲は`/ToPoDualArm/Tmap_static`の全ノードのBBoxに、XYZ各面20 cmの余白を加えた範囲です。
+余白はYAMLの`environment_voxelization.reachability_margin_x/y/z`で調整できます。
+`reachability_map_topic: "Tmap_static"`はロボットnamespace内のマップを指定します。
+マップ／必要なTFの取得まではROI配信を待機し、空文字列を指定した場合だけ従来の固定範囲を使用します。
+ボクセル解像度は従来どおりVLUT基準です。[範囲計算の仕様](docs/TECHNICAL_SPEC.md#17-roi範囲の静的マップbbox追従)。
+
 ToPoDualArmの自己領域除去が有効な構成では、環境ボクセルのトピックは次の2つです。
 
 | トピック | 内容 |

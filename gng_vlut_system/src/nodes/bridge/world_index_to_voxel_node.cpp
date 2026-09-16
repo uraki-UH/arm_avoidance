@@ -5,6 +5,7 @@
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <std_msgs/msg/header.hpp>
 #include <voxel_msgs/msg/voxel.hpp>
+#include <ais_gng_msgs/msg/topological_map.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -36,11 +37,24 @@ namespace robot_sim::bridge
 class WorldIndexToVoxelNode : public rclcpp::Node
 {
 private:
+  struct map_bounds_source
+  {
+    std::string topic;
+    ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr map;
+    rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr subscription;
+    Eigen::Isometry3d map_to_target{Eigen::Isometry3d::Identity()};
+    std::size_t max_dense_voxel_num{0};
+    bool is_dirty{true};
+    bool has_bounds{false};
+  };
+
   struct additional_consumer
   {
     std::string name;
     std::string target_frame_id;
     reachability_bounds bounds;
+    std::unique_ptr<map_bounds_source> map_source;
+    bool has_bounds{true};
     std::unique_ptr<robot_sim::analysis::VoxelIdCodec> voxel_codec;
     std::unique_ptr<reachability_voxel_accumulator> voxel_accumulator;
     rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr roi_publisher;
@@ -69,6 +83,7 @@ public:
     declare_parameter<int>("z_shift", 0);
     declare_parameter<long>("offset", 1000000L);
     declare_parameter<bool>("enable_reachability_filter", true);
+    declare_parameter<std::string>("reachability_map_topic", "");
     declare_parameter<double>("min_reachability_x", -0.1);
     declare_parameter<double>("max_reachability_x", 0.5);
     declare_parameter<double>("min_reachability_y", -1.0);
@@ -143,6 +158,9 @@ public:
       1, get_parameter("parallel_thread_num").as_int()));
     voxel_accumulator_ = std::make_unique<reachability_voxel_accumulator>(
       voxel_codec_, reachability_bounds_, max_dense_voxel_num);
+    map_source_ = make_map_bounds_source(
+      get_parameter("reachability_map_topic").as_string(),
+      reachability_bounds_.enable_filter, max_dense_voxel_num);
 
     tf_buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -178,6 +196,93 @@ public:
   }
 
 private:
+  std::unique_ptr<map_bounds_source> make_map_bounds_source(
+    const std::string &topic, bool enable_filter, std::size_t max_dense_voxel_num)
+  {
+    if (topic.empty() || !enable_filter) {
+      return nullptr;
+    }
+    auto source = std::make_unique<map_bounds_source>();
+    source->topic = topic;
+    source->max_dense_voxel_num = max_dense_voxel_num;
+    source->subscription = create_subscription<ais_gng_msgs::msg::TopologicalMap>(
+      topic, rclcpp::QoS(1).reliable().transient_local(),
+      [state = source.get()](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr map) {
+        // ラベル・占有状態だけの更新によるBBox再計算の省略
+        const bool has_same_geometry = state->map &&
+          state->map->header.frame_id == map->header.frame_id &&
+          state->map->nodes.size() == map->nodes.size() &&
+          std::equal(map->nodes.begin(), map->nodes.end(), state->map->nodes.begin(),
+            [](const auto &left, const auto &right) { return left.pos == right.pos; });
+        state->is_dirty = state->is_dirty || !has_same_geometry;
+        state->map = std::move(map);
+      });
+    return source;
+  }
+
+  bool update_map_bounds(
+    map_bounds_source *source, const std::string &target_frame,
+    const sensor_msgs::msg::PointCloud2 &cloud, reachability_bounds &bounds,
+    const robot_sim::analysis::VoxelIdCodec &codec,
+    std::unique_ptr<reachability_voxel_accumulator> &accumulator)
+  {
+    if (!source) {
+      return true;
+    }
+    if (!source->map || source->map->header.frame_id.empty()) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+        "ROI範囲用Tmap待機: topic=%s", source->topic.c_str());
+      return false;
+    }
+    Eigen::Isometry3d map_to_target = Eigen::Isometry3d::Identity();
+    if (!lookupTransform(target_frame, source->map->header.frame_id, cloud, map_to_target)) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+        "ROI範囲用TF待機: target=%s source=%s", target_frame.c_str(),
+        source->map->header.frame_id.c_str());
+      return false;
+    }
+    if (!source->is_dirty && source->has_bounds &&
+      map_to_target.matrix().isApprox(source->map_to_target.matrix(), 1.0e-12))
+    {
+      return true;
+    }
+
+    reachability_bounds next = bounds;
+    next.min_corner = Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity());
+    next.max_corner = -next.min_corner;
+    // ROI座標系へ変換後の全ノードを含む軸平行BBox。マージンは各軸の両側へ適用
+    for (const auto &node : source->map->nodes) {
+      const Eigen::Vector3d point = map_to_target * Eigen::Vector3d(
+        node.pos.x, node.pos.y, node.pos.z);
+      if (point.allFinite()) {
+        next.min_corner = next.min_corner.cwiseMin(point);
+        next.max_corner = next.max_corner.cwiseMax(point);
+      }
+    }
+    if (!next.min_corner.allFinite() || !next.max_corner.allFinite()) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+        "ROI範囲用Tmapに有効ノードなし: topic=%s", source->topic.c_str());
+      return false;
+    }
+    if (!source->has_bounds || (next.min_corner.array() != bounds.min_corner.array()).any() ||
+      (next.max_corner.array() != bounds.max_corner.array()).any())
+    {
+      accumulator = std::make_unique<reachability_voxel_accumulator>(
+        codec, next, source->max_dense_voxel_num);
+      bounds = next;
+      const Eigen::Vector3d min_roi = bounds.min_corner - bounds.margin;
+      const Eigen::Vector3d max_roi = bounds.max_corner + bounds.margin;
+      RCLCPP_INFO(get_logger(),
+        "Tmap BBoxからROI更新: topic=%s frame=%s min=(%.3f, %.3f, %.3f) max=(%.3f, %.3f, %.3f)",
+        source->topic.c_str(), target_frame.c_str(), min_roi.x(), min_roi.y(), min_roi.z(),
+        max_roi.x(), max_roi.y(), max_roi.z());
+    }
+    source->map_to_target = map_to_target;
+    source->has_bounds = true;
+    source->is_dirty = false;
+    return true;
+  }
+
   std::string resolveSourceFrameId(const sensor_msgs::msg::PointCloud2 &msg) const
   {
     if (!source_frame_id_.empty()) {
@@ -295,6 +400,9 @@ private:
         std::max<std::int64_t>(0, configured_max_dense_voxel_num));
       consumer.voxel_accumulator = std::make_unique<reachability_voxel_accumulator>(
         *consumer.voxel_codec, consumer.bounds, consumer_max_dense_voxel_num);
+      consumer.map_source = make_map_bounds_source(
+        entry.value("reachability_map_topic", std::string()),
+        consumer.bounds.enable_filter, consumer_max_dense_voxel_num);
       consumer.roi_publisher = create_publisher<voxel_msgs::msg::Voxel>(
         output_topic, voxel_qos);
       additional_consumers_.push_back(std::move(consumer));
@@ -393,6 +501,9 @@ private:
     {
       additional_consumer &consumer = additional_consumers_[consumer_idx];
       additional_consumer_result &result = results[consumer_idx];
+      if (!consumer.has_bounds) {
+        continue;
+      }
       Eigen::Isometry3d world_to_target = Eigen::Isometry3d::Identity();
       if (!lookupTransform(
           consumer.target_frame_id, world_frame_id_, msg, world_to_target))
@@ -431,6 +542,9 @@ private:
     {
       additional_consumer &consumer = additional_consumers_[consumer_idx];
       const additional_consumer_result &result = results[consumer_idx];
+      if (!consumer.has_bounds) {
+        continue;
+      }
       if (!result.has_transform) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
@@ -524,6 +638,9 @@ private:
     const std::string &source_frame)
   {
     for (additional_consumer &consumer : additional_consumers_) {
+      if (!consumer.has_bounds) {
+        continue;
+      }
       Eigen::Isometry3d source_to_target = Eigen::Isometry3d::Identity();
       if (!lookupTransform(
           consumer.target_frame_id, source_frame, msg, source_to_target))
@@ -566,14 +683,24 @@ private:
     }
 
     const std::size_t input_point_num = static_cast<std::size_t>(msg->width) * msg->height;
+    const bool has_primary_bounds = update_map_bounds(
+      map_source_.get(), target_frame_id_, *msg, reachability_bounds_,
+      voxel_codec_, voxel_accumulator_);
+    for (auto &consumer : additional_consumers_) {
+      consumer.has_bounds = update_map_bounds(
+        consumer.map_source.get(), consumer.target_frame_id, *msg, consumer.bounds,
+        *consumer.voxel_codec, consumer.voxel_accumulator);
+    }
     reachability_voxelization_stats direct_voxel_stats;
     std::size_t direct_roi_voxel_num = 0;
     bool has_direct_primary_output = false;
     bool is_direct_primary_identity = false;
     if (!enable_roi_query_) {
-      has_direct_primary_output = publishPrimaryDirect(
-        *msg, source_frame, direct_voxel_stats, direct_roi_voxel_num,
-        is_direct_primary_identity);
+      if (has_primary_bounds) {
+        has_direct_primary_output = publishPrimaryDirect(
+          *msg, source_frame, direct_voxel_stats, direct_roi_voxel_num,
+          is_direct_primary_identity);
+      }
       publishAdditionalConsumersDirect(*msg, source_frame);
       if (!enable_world_index_) {
         const double processing_ms = std::chrono::duration<double, std::milli>(
@@ -651,12 +778,13 @@ private:
     bool has_primary_output = false;
     bool is_world_to_target_identity = false;
     Eigen::Isometry3d world_to_target = Eigen::Isometry3d::Identity();
-    if (!lookupTransform(target_frame_id_, world_frame_id_, *msg, world_to_target)) {
+    if (has_primary_bounds &&
+      !lookupTransform(target_frame_id_, world_frame_id_, *msg, world_to_target)) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 2000,
         "ROI用TF取得失敗: target=%s source=%s",
         target_frame_id_.c_str(), world_frame_id_.c_str());
-    } else {
+    } else if (has_primary_bounds) {
       is_world_to_target_identity = isIdentityTransform(world_to_target);
       const auto [min_world, max_world] = makeWorldQueryBounds(world_to_target.inverse());
       voxel_accumulator_->begin_frame(world_index_->point_num());
@@ -724,6 +852,7 @@ private:
   bool enable_world_bucket_publish_{true};
   int parallel_thread_num_{1};
   reachability_bounds reachability_bounds_;
+  std::unique_ptr<map_bounds_source> map_source_;
   robot_sim::analysis::VoxelIdCodec voxel_codec_;
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;
   std::unique_ptr<world_point_bucket_index> world_index_;

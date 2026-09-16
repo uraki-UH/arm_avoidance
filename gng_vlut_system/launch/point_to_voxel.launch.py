@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -16,6 +17,7 @@ def generate_launch_description():
         DeclareLaunchArgument("z_shift", default_value="0"),
         DeclareLaunchArgument("offset", default_value="1000000"),
         DeclareLaunchArgument("enable_reachability_filter", default_value="true"),
+        DeclareLaunchArgument("reachability_map_topic", default_value=""),
         DeclareLaunchArgument("min_reachability_x", default_value="-0.4"),
         DeclareLaunchArgument("max_reachability_x", default_value="0.4"),
         DeclareLaunchArgument("min_reachability_y", default_value="-0.4"),
@@ -46,6 +48,8 @@ def generate_launch_description():
                 "z_shift": LaunchConfiguration("z_shift"),
                 "offset": LaunchConfiguration("offset"),
                 "enable_reachability_filter": LaunchConfiguration("enable_reachability_filter"),
+                "reachability_map_topic": ParameterValue(
+                    LaunchConfiguration("reachability_map_topic"), value_type=str),
                 "min_reachability_x": LaunchConfiguration("min_reachability_x"),
                 "max_reachability_x": LaunchConfiguration("max_reachability_x"),
                 "min_reachability_y": LaunchConfiguration("min_reachability_y"),

@@ -1275,3 +1275,28 @@ INFOログは入力名・局所点数上限と、未受信・候補数・接触�
 腕全体の衝突・経路・未観測空間の検証は含まず、`has_arm_path_check` は常にfalse。
 IKが成立しても実行可能判定ではない。詳細な設定・起動方法・検証範囲は
 [リリースノート](releases/2026-09-15_grasp_candidate_refinement.md)を参照。
+
+## 17. ROI範囲の静的マップBBox追従
+
+`environment_to_vlut.launch.py`の`environment_voxelization.reachability_map_topic`に
+マップtopicを指定すると、`world_index_to_voxel_node`が`TopologicalMap.nodes[].pos`からROIの軸平行BBoxを構築する。
+ラベル・可到達状態・エッジの有無によるノード除外はなく、非有限座標だけを除外する。
+`ToPoDualArm.yaml`では相対名`Tmap_static`を指定し、`/ToPoDualArm/Tmap_static`を使用する。
+絶対topic名はそのまま使用。低レベルの`point_to_vlut`、`point_to_voxel`、`world_index_to_voxel`の
+launch引数にも同名を渡せる。低レベルlaunchの既定値は空文字列。
+
+範囲は出力の`target_frame_id`基準。マップと異なるframeの場合、点群処理時のTFで全ノードを
+ROI座標へ変換してから各軸のmin/maxを求める。両側の面へ既存の`reachability_margin_x/y/z`を加える。
+ToPoDualArmの余白は各面0.2 m。world bucket検索ではこのROIをworldへ変換した包含AABBで粗選別後、
+ROI座標の範囲で厳密に点を選別する。直接方式でも同じ範囲を使用する。
+変更対象は点群の採用範囲だけで、空間の箱全体を占有として充填しない。ボクセル幅・ID規則は変更しない。
+
+マップはreliable/transient-localで購読し、後起動でも保持済み静的マップを取得する。
+ノード座標・マップframe・必要なTFが変わらない間はBBoxを再計算せず、範囲が変わった時だけ集約器を再構築する。
+マップ未取得・空frame・有効点なし・TF未接続では、そのconsumerの新規ROI配信を停止して待機する。
+旧範囲や単位変換への自動フォールバック、保持済み配信のクリアは行わない。
+複数consumerは各ロボットのマップ・TF・範囲を独立管理し、未準備のconsumerが他のROIを停止させない。
+
+`reachability_map_topic: ""`または項目なしの場合は従来の`min/max_reachability_*`と余白を使用する。
+`enable_reachability_filter: false`の場合はマップ購読・待機を行わず、従来の経路を維持する。
+実行中ノードへのYAML自動再読込はなく、設定・実行ファイルの反映には環境ボクセル化launchの再起動が必要。

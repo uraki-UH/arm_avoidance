@@ -69,6 +69,11 @@ def _namespaced_topic(robot_name, topic):
     return f"/{robot_name}/{normalized}" if robot_name else f"/{normalized}"
 
 
+def _reachability_map_topic(environment, robot_name):
+    topic = str(environment.get("reachability_map_topic") or "").strip()
+    return _namespaced_topic(robot_name, topic) if topic else ""
+
+
 def _world_index_modes(world_index):
     legacy_enable = _is_enabled(_value(world_index, "enable", False))
     enable_build = _is_enabled(_value(
@@ -196,6 +201,8 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
         "offset": int(_value(voxel_idx_params, "offset", 1000000)),
         "enable_reachability_filter": _is_enabled(_value(
             environment, "enable_reachability_filter", True)),
+        "reachability_map_topic": _reachability_map_topic(
+            {**environment, **entry}, robot_name),
         "min_reachability_x": float(_value(
             environment, "min_reachability_x", gng_params.get("min_x", -0.1))),
         "max_reachability_x": float(_value(
@@ -229,7 +236,8 @@ def _shared_consumer_parameters(entry, default_input_topic, default_source_frame
 def _additional_consumer_json(consumer):
     keys = (
         "name", "target_frame_id", "voxel_topic", "voxel_size", "x_shift", "y_shift",
-        "z_shift", "offset", "enable_reachability_filter", "min_reachability_x",
+        "z_shift", "offset", "enable_reachability_filter", "reachability_map_topic",
+        "min_reachability_x",
         "max_reachability_x", "min_reachability_y", "max_reachability_y",
         "min_reachability_z", "max_reachability_z", "reachability_margin_x",
         "reachability_margin_y", "reachability_margin_z", "max_dense_voxel_num")
@@ -302,7 +310,8 @@ def _shared_world_index_actions(
                     key: primary_consumer[key]
                     for key in (
                         "voxel_size", "x_shift", "y_shift", "z_shift", "offset",
-                        "enable_reachability_filter", "min_reachability_x",
+                        "enable_reachability_filter", "reachability_map_topic",
+                        "min_reachability_x",
                         "max_reachability_x", "min_reachability_y", "max_reachability_y",
                         "min_reachability_z", "max_reachability_z",
                         "reachability_margin_x", "reachability_margin_y",
@@ -436,6 +445,7 @@ def _launch_setup(context, *_args, **_kwargs):
         "offset": _value(voxel_idx_params, "offset", 1000000),
         "enable_reachability_filter": _value(
             environment, "enable_reachability_filter", True),
+        "reachability_map_topic": _reachability_map_topic(environment, robot_name),
         "min_reachability_x": _value(environment, "min_reachability_x", gng_params.get("min_x", -0.1)),
         "max_reachability_x": _value(environment, "max_reachability_x", gng_params.get("max_x", 0.5)),
         "min_reachability_y": _value(environment, "min_reachability_y", gng_params.get("min_y", -1.0)),

@@ -86,9 +86,12 @@
       source_frame_id: ""
       allow_unconnected_source_as_world: true
       base_frame: "base_link"
-      reachability_margin_x: 0.2
-      reachability_margin_y: 0.2
-      reachability_margin_z: 0.2
+      # ROI範囲の基準マップ。全ノードのBBoxと各軸の余白。空文字列で従来の固定範囲
+      reachability_map_topic: "Tmap_static"
+      # BBoxの各面から外側への余白 [m]
+      reachability_margin_x: 0.1
+      reachability_margin_y: 0.1
+      reachability_margin_z: 0.1
 
       # world座標系のbucket索引とViewer用可視化出力
       world_index:

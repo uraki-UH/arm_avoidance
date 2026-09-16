@@ -2,52 +2,21 @@ ais_gng_node:
   ros__parameters:
     node.num_max: 5000
     node.learning_num: 5000
-    # 把持候補近傍の重点学習（起動時設定）
-    enable_grasp_attention: true
-    grasp_attention.topic: "/grasp_pose_cands/Tmap"
-    grasp_attention.margin: 0.03
-    grasp_attention.ratio: 0.8
-    grasp_attention.timeout_sec: 0.5
-
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
-    node.covariance_enabled: true
-    # 学習グラフ全体の隣接数に基づく境界候補
-    boundary.enable_candidates: true
-    # 境界候補の隣接数上限
-    boundary.max_neighbors: 5
-    # 前フレームの境界ノード近傍への重点学習（起動時設定）
-    enable_boundary_attention: true
-    # 境界からの対象半径[m]。ガウス重みの標準偏差は半径の1/3
-    boundary_attention.radius: 0.03
-    boundary_attention.ratio: 0.2
-    boundary_attention.timeout_sec: 0.5
-    # 実測レイと明示視野による追加証拠。観測原点・姿勢・視野不足時は不明
-    boundary.enable_evidence: true
-    # 局所平面への期待距離と実測距離の誤差余裕[m]
-    boundary.min_range_gap_th: 0.03
-    boundary.max_anchor_dist: 0.05
-    # boundary.lidar_angles_degは未指定でCameraInfo利用。空配列の明示はROS 2で読込不可。
-    # LiDAR利用時の指定内容: [開始yaw, 終了yaw, 開始pitch, 終了pitch, yaw間隔, pitch間隔][deg]
-    # 第一・第二勝者の入力統計による共分散楕円体
-    node.enable_support: false
-    node.support.sample_alpha: 0.01
-    node.support.second_weight: 1.0
-    node.support.min_axis_std: 0.01
-    node.support.base_scale: 2.0
-
+    node.covariance_enabled: false
     # 古い接続の削除年齢
     edge.age_max: 100
     node.s1_reset_range: 0.1
-    node.s1_age_max: [6, 30, 12, 4] # [標準, 安全, 壁面, unknown]
-    node.clusted_s1_age: [20, 100, 30, 10] # [標準, 安全, 壁面, unknown]
-    node.interval: [0.2, 0.1, 0.1, 0.008] # [標準, 安全, 壁面, unknown]
-    node.static.age_min: -1 # 長期記憶の年齢
+    node.s1_age_max: [6, 12, 12, 4] # [標準, 安全, 壁面, unknown]
+    node.clusted_s1_age: [20, 30, 30, 10] # [標準, 安全, 壁面, unknown]
+    node.interval: [0.1, 0.2, 0.1, 0.01] # [標準, 安全, 壁面, unknown]
+    node.static.age_min: 250 # 長期記憶の年齢
 
     ds.transformed: true
     ds.range_max: 0.2
-    # 未知・DEFAULT点群の配信点数枠
+    # 把持候補用点群の保持上限
     ds.all.num_max: 10000
     ds.unknown.num_max: 6000
     ds.human.num_max: 3000
