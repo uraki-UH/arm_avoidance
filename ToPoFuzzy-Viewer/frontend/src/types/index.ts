@@ -142,7 +142,7 @@ export interface GraphCluster {
     match: number;
     reliability: number;
     velocity: [number, number, number];
-    nodeIds: number[];  // IDs of nodes belonging to this cluster
+    nodeIds: number[];  // Viewer受信時の正規化後の所属ノードID
     hasVelocityObservation?: boolean;
     velCovXx?: number;
     velCovXy?: number;

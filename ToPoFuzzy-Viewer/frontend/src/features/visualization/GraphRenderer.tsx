@@ -3,7 +3,7 @@ import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
 import { useThree, ThreeEvent } from '@react-three/fiber';
 import { GraphData, GraphNode, LayerSettings, LAYER_COLORS, isTrajectoryGraphTag } from '../../types';
-import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors } from './gngGraphics';
+import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors, build_classified_node_labels } from './gngGraphics';
 import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows';
 import { get_active_node_labels, resolve_node_label, resolve_graph_layer_settings } from './graphLayerSettings';
 
@@ -48,6 +48,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         () => enable_cluster_colors ? build_cluster_node_colors(graph) : undefined,
         [enable_cluster_colors, graph],
     );
+    const classified_node_labels = useMemo(() => build_classified_node_labels(graph), [graph]);
     const active_labels = useMemo(() => get_active_node_labels(settings), [settings]);
     const label_signature = active_labels.map((item) => item.id).join('|');
     const isTrajectoryGraph = isTrajectoryGraphTag(tag);
@@ -70,7 +71,8 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
         const goal_nodes: GraphData['nodes'] = [];
         const node_colors = new Map<GraphNode, string>();
         graph.nodes.forEach((node, nodeIndex) => {
-            const rawLabel = Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0;
+            const classified_label = classified_node_labels.get(node.id ?? nodeIndex);
+            const rawLabel = classified_label ?? (Number.isFinite(node.label) ? Math.trunc(node.label as number) : 0);
             const labelIndex = ((rawLabel % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length;
             const semanticLabel = Number.isFinite(node.semanticLabel)
                 ? Math.trunc(node.semanticLabel as number)
@@ -83,6 +85,9 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
             const cluster_color = cluster_node_colors?.get(node.id ?? nodeIndex);
             if (cluster_color) node_colors.set(nextNode, cluster_color);
             else if (selected_label) node_colors.set(nextNode, selected_label.color);
+            else if (classified_label !== undefined && !(highlightGoalNodes && node.isGoal)) {
+                node_colors.set(nextNode, nodePalette[labelIndex]);
+            }
             if (highlightGoalNodes && node.isGoal) {
                 goal_nodes.push(nextNode);
             } else {
@@ -90,7 +95,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
             }
         });
         return { buckets, goal_nodes, node_colors };
-    }, [graph.nodes, nodeSemanticLabels, visibleLabels, highlightGoalNodes, active_labels, cluster_node_colors]);
+    }, [graph.nodes, nodeSemanticLabels, visibleLabels, highlightGoalNodes, active_labels, cluster_node_colors, classified_node_labels, nodePalette]);
     const goalNodeSignature = useMemo(
         () => goalNodes.map((node) => node.id ?? `${node.x},${node.y},${node.z}`).join('|'),
         [goalNodes]

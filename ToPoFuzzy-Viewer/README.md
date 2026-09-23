@@ -148,6 +148,9 @@ ros2 run ais_gng ais_gng_node
   - `CAR` = 青紫（`#8b5cf6`）
 - The arm renderer follows `/joint_states` via the gng_safety bridge and updates the pose in real time.
 - In the GNG Topology panel, `Nodes` and `Edges` can be toggled independently, and `Edge Width` adjusts the whole graph thickness.
+- 環境GNGの人・車の確定分類は、Streamsで`/topological_map`を選択した後、所属ノードの色へ反映。Humanは赤紫、Carは青紫。レイヤー欄の`Human: N / Car: N`は確定クラスタ数。
+- `Clusters`をONにすると人は円柱、車はボックスで追加表示。既定OFFと既存の表示設定を維持し、トピックの自動選択なし。ノード色は`Clusters`のON/OFFとは独立。
+- 境界・把持など有効な属性色や明示的な単色指定は優先。分類解除後は元のノード色へ復帰。今回の表示更新にはブラウザの再読み込みのみ、ROSノードの再起動は不要。
 
 ## ROS2 Packages
 

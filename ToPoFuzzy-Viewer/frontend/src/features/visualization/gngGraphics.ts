@@ -173,6 +173,16 @@ export function updateEdgeInstances(
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 }
 
+/** 確定した人・車の所属ノードID別ラベル。元ノードの幾何ラベルの変更なし。 */
+export function build_classified_node_labels(graph: GraphData): Map<number, number> {
+    const labels = new Map<number, number>();
+    for (const cluster of graph.clusters) {
+        if (cluster.label !== 4 && cluster.label !== 5) continue;
+        for (const id of cluster.nodeIds) labels.set(id, cluster.label);
+    }
+    return labels;
+}
+
 /** クラスタ所属IDによる表示色。未所属は灰色、通常分類やsemantic属性は変更なし。 */
 export function build_cluster_node_colors(graph: GraphData): Map<number, string> {
     const colors = new Map(graph.nodes.map((node, idx) => [node.id ?? idx, '#737373']));

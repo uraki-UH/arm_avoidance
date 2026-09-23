@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
-import { deserializeTopologicalMap, isTopologicalMapPacket } from '../utils/topologicalMapProtocol';
+import { deserializeTopologicalMap, isTopologicalMapPacket, normalize_environment_cluster_ids } from '../utils/topologicalMapProtocol';
 import {
     PointCloudData,
     MarkerArrayData,
@@ -1059,7 +1059,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                         },
                         'stream.graph': (p) => {
                             if (!p.graph) return;
-                            const mergedGraph = mergeGraphFeatures(p.graph as GraphStreamPayload);
+                            const mergedGraph = normalize_environment_cluster_ids(tag, mergeGraphFeatures(p.graph as GraphStreamPayload));
                             pendingGraphUpdatesRef.current.set(tag, {
                                 tag,
                                 graph: mergedGraph,

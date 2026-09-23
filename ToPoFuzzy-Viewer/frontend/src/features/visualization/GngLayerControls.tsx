@@ -37,6 +37,8 @@ export function GngLayerControls({
         ? Object.values(settings.visibleLabels).filter(Boolean).length
         : 6;
     const hasManipulabilityData = graphHasManipulabilityData(graphData);
+    const num_human_clusters = graphData.clusters.filter(cluster => cluster.label === 4).length;
+    const num_car_clusters = graphData.clusters.filter(cluster => cluster.label === 5).length;
 
     return (
         <div className="surface-muted border-l-2 border-[var(--accent-color)]/30 p-3 transition-colors mb-2">
@@ -66,6 +68,9 @@ export function GngLayerControls({
                         })()}
                     </div>
                     <span className="whitespace-nowrap font-mono tabular-nums leading-none">{Math.floor(graphData.edges.length / 2)} edges</span>
+                    <span className="whitespace-nowrap font-mono tabular-nums leading-none">
+                        Human: {num_human_clusters} / Car: {num_car_clusters}
+                    </span>
                 </div>
             </LayerItem>
 
@@ -98,6 +103,13 @@ export function GngLayerControls({
                             label="Normals"
                             isOn={settings.showNormals ?? false}
                             onToggle={() => onUpdate({ showNormals: !(settings.showNormals ?? false) })}
+                            className="col-span-3 w-[90%] justify-self-start"
+                        />
+                        <CompactToggle
+                            icon={<Box size={12} />}
+                            label="Clusters"
+                            isOn={settings.showClusters}
+                            onToggle={() => onUpdate({ showClusters: !settings.showClusters })}
                             className="col-span-3 w-[90%] justify-self-start"
                         />
                         <CompactToggle

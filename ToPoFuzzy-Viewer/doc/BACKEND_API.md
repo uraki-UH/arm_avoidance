@@ -50,6 +50,13 @@ Published before each binary cloud frame.
 現行配信は `TMG1` バイナリversion 2（96バイト/node）。外側のWSプロトコルはv2のまま。
 Viewerは旧version 1（84バイト/node）も読込可能。以下は互換JSON表現。
 
+環境GNGの`/topological_map`に限り、配信時の`clusters[].nodeIds`はノード配列添字。
+Frontend受信時にIDへ正規化し、描画・検査用スナップショットではノードIDとして利用。
+他のGraphの既存ID方式は維持。トピック別名の自動推定や配信形式の変更なし。
+確定クラスタのHuman/Car分類は所属ノード色・レイヤー内件数へ反映。`Clusters`操作で既存の円柱・ボックス表示を切替。
+入力ノードの幾何ラベルは変更せず、追加ROSトピック・追加パラメータもなし。
+詳細は[Graph Stream](../common/ws_protocol_v2.md#graph-stream)を参照。
+
 ```json
 { "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true, "num_safe_states": 0, "num_danger_states": 0, "num_collision_states": 0 }], "edges": [], "clusters": [] } }
 ```

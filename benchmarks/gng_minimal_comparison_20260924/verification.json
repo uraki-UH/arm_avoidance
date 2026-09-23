@@ -1,0 +1,12 @@
+{
+  "protected_source_files": 325,
+  "protected_source_changed": [],
+  "production_sha256": "cdb5d7736c23ed07fdc86ca7202abf5c518ca0222067f0550cb0be8f1e8417a4",
+  "existing_runtime_processes_unchanged": 10,
+  "owned_benchmark_processes_remaining": 0,
+  "release_targets": 4,
+  "ctest_passed": 19,
+  "consistent_graph_frames": 900,
+  "baseline_tree_raw_matched_frames": 50,
+  "temporary_build_removed": true
+}

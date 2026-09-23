@@ -1,0 +1,1400 @@
+{
+  "short": {
+    "combined": {
+      "tree_raw": {
+        "exec_mean_ms": 6.443774333333333,
+        "trial_exec_mean_ms": [
+          6.555092099999999,
+          6.384686125,
+          6.391544775
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 8440.975,
+        "quality": {
+          "mean_dist_m": 0.20348613573726015,
+          "p95_dist_m": 0.5833530414928322,
+          "rms_dist_m": 0.303714095326901,
+          "coverage_0_2m": 0.6007927868335852,
+          "coverage_0_4m": 0.8823421799669449,
+          "coverage_1_0m": 0.9885654587582348,
+          "num_components": 425.0,
+          "max_component_ratio": 0.45622789269578706,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5233859860538729,
+          "nonzero_coverage_0_4m": 0.85952734541573,
+          "nonzero_coverage_1_0m": 0.9863480220947443,
+          "nonzero_p95_dist_m": 0.6254350443896566
+        },
+        "statistics": {
+          "voxel_ms": 0.0,
+          "attention_ms": 0.0,
+          "learn_ms": 3.584432891666667,
+          "label_ms": 1.5599110166666665,
+          "maintenance_ms": 0.4498693166666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19863.05,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 785.85,
+          "num_deleted_nodes": 790.1,
+          "num_zero_samples": 642.075,
+          "input_prepare_ms": 0.8444446833333333,
+          "num_input_points": 153309.85,
+          "num_training_points": 153309.85
+        },
+        "reduction_vs_combined_percent": 0.0
+      },
+      "grid_raw": {
+        "exec_mean_ms": 6.251721875,
+        "trial_exec_mean_ms": [
+          6.232368500000001,
+          6.27359305,
+          6.249204075
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 7549.65,
+        "quality": {
+          "mean_dist_m": 1.5270545298028393,
+          "p95_dist_m": 7.921194141844433,
+          "rms_dist_m": 3.2234963596257495,
+          "coverage_0_2m": 0.42938427891105124,
+          "coverage_0_4m": 0.7069209425831449,
+          "coverage_1_0m": 0.8075987861053271,
+          "num_components": 550.0,
+          "max_component_ratio": 0.4475467560557349,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5126420025887216,
+          "nonzero_coverage_0_4m": 0.843992503169118,
+          "nonzero_coverage_1_0m": 0.964192006364757,
+          "nonzero_p95_dist_m": 0.7954674673181283
+        },
+        "statistics": {
+          "voxel_ms": 0.0,
+          "attention_ms": 0.0,
+          "learn_ms": 3.731398791666667,
+          "label_ms": 1.3480661666666667,
+          "maintenance_ms": 0.331314325,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18201.85,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 792.2,
+          "num_deleted_nodes": 790.0,
+          "num_zero_samples": 642.075,
+          "input_prepare_ms": 0.8363344833333333,
+          "num_input_points": 153309.85,
+          "num_training_points": 153309.85
+        },
+        "reduction_vs_combined_percent": 0.0
+      },
+      "tree_voxel_0_1": {
+        "exec_mean_ms": 17.644898675,
+        "trial_exec_mean_ms": [
+          17.614402325,
+          17.681624399999997,
+          17.6386693
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 10778.7,
+        "quality": {
+          "mean_dist_m": 1.4742307428864905,
+          "p95_dist_m": 7.941960870524906,
+          "rms_dist_m": 3.210458347808762,
+          "coverage_0_2m": 0.4467188192868322,
+          "coverage_0_4m": 0.7667389347170415,
+          "coverage_1_0m": 0.8330963357058879,
+          "num_components": 564.4,
+          "max_component_ratio": 0.5132003717381661,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5333400738471593,
+          "nonzero_coverage_0_4m": 0.9154108256166753,
+          "nonzero_coverage_1_0m": 0.9946344391033396,
+          "nonzero_p95_dist_m": 0.4784964528119616
+        },
+        "statistics": {
+          "voxel_ms": 10.6011725,
+          "attention_ms": 0.0,
+          "learn_ms": 4.454348358333333,
+          "label_ms": 1.9967398416666668,
+          "maintenance_ms": 0.5859484,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 20735.75,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1051.175,
+          "num_deleted_nodes": 1060.4,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 10.6011725,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": 0.0
+      },
+      "grid_voxel_0_1": {
+        "exec_mean_ms": 16.329971208333333,
+        "trial_exec_mean_ms": [
+          16.31271245,
+          16.336838450000002,
+          16.340362725
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 10154.225,
+        "quality": {
+          "mean_dist_m": 1.486692713588475,
+          "p95_dist_m": 7.940158134622161,
+          "rms_dist_m": 3.2139028758096244,
+          "coverage_0_2m": 0.43366960540738375,
+          "coverage_0_4m": 0.7606921222562526,
+          "coverage_1_0m": 0.8268357966117656,
+          "num_components": 675.2,
+          "max_component_ratio": 0.457691393171033,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5177599048703184,
+          "nonzero_coverage_0_4m": 0.9081904501446523,
+          "nonzero_coverage_1_0m": 0.9871599037893434,
+          "nonzero_p95_dist_m": 0.5101587294424903
+        },
+        "statistics": {
+          "voxel_ms": 10.322315433333335,
+          "attention_ms": 0.0,
+          "learn_ms": 3.79251995,
+          "label_ms": 1.7921778583333332,
+          "maintenance_ms": 0.41643195,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19776.275,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1017.525,
+          "num_deleted_nodes": 1024.8,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 10.322315433333335,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": 0.0
+      },
+      "tree_voxel_0_5": {
+        "exec_mean_ms": 15.078547608333333,
+        "trial_exec_mean_ms": [
+          15.147809725000002,
+          15.035589499999997,
+          15.0522436
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 11314.4,
+        "quality": {
+          "mean_dist_m": 0.9786253901823079,
+          "p95_dist_m": 4.932045067985364,
+          "rms_dist_m": 2.0214561631430383,
+          "coverage_0_2m": 0.40936479919996877,
+          "coverage_0_4m": 0.8136327624894996,
+          "coverage_1_0m": 0.901696291999986,
+          "num_components": 556.8,
+          "max_component_ratio": 0.5728389818133142,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4111058399001971,
+          "nonzero_coverage_0_4m": 0.8937575122502714,
+          "nonzero_coverage_1_0m": 0.998897622041184,
+          "nonzero_p95_dist_m": 0.47581946944220865
+        },
+        "statistics": {
+          "voxel_ms": 8.378277316666667,
+          "attention_ms": 0.0,
+          "learn_ms": 4.162056308333333,
+          "label_ms": 1.9533677249999999,
+          "maintenance_ms": 0.57822795,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18391.175,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1019.05,
+          "num_deleted_nodes": 1032.0,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 8.378277316666667,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": 0.0
+      },
+      "grid_voxel_0_5": {
+        "exec_mean_ms": 13.651730983333334,
+        "trial_exec_mean_ms": [
+          13.683938675000002,
+          13.620297749999997,
+          13.650956525000002
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 11191.375,
+        "quality": {
+          "mean_dist_m": 1.4909364382895138,
+          "p95_dist_m": 7.928592432449358,
+          "rms_dist_m": 3.205628638497592,
+          "coverage_0_2m": 0.3482633798459559,
+          "coverage_0_4m": 0.7500530839613766,
+          "coverage_1_0m": 0.8354686183968084,
+          "num_components": 656.8,
+          "max_component_ratio": 0.5143689008713626,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4157924794900268,
+          "nonzero_coverage_0_4m": 0.8954867212900595,
+          "nonzero_coverage_1_0m": 0.9974664785977783,
+          "nonzero_p95_dist_m": 0.4781355115151114
+        },
+        "statistics": {
+          "voxel_ms": 8.141582891666665,
+          "attention_ms": 0.0,
+          "learn_ms": 3.24599145,
+          "label_ms": 1.8218917333333333,
+          "maintenance_ms": 0.4357917416666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 17465.4,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1037.1,
+          "num_deleted_nodes": 1050.6,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 8.141582891666665,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": 0.0
+      }
+    },
+    "native": {
+      "tree_raw": {
+        "exec_mean_ms": 6.514070791666667,
+        "trial_exec_mean_ms": [
+          6.53715725,
+          6.483924775,
+          6.52113035
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 8440.975,
+        "quality": {
+          "mean_dist_m": 0.20348613573726015,
+          "p95_dist_m": 0.5833530414928322,
+          "rms_dist_m": 0.303714095326901,
+          "coverage_0_2m": 0.6007927868335852,
+          "coverage_0_4m": 0.8823421799669449,
+          "coverage_1_0m": 0.9885654587582348,
+          "num_components": 425.0,
+          "max_component_ratio": 0.45622789269578706,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5233859860538729,
+          "nonzero_coverage_0_4m": 0.85952734541573,
+          "nonzero_coverage_1_0m": 0.9863480220947443,
+          "nonzero_p95_dist_m": 0.6254350443896566
+        },
+        "statistics": {
+          "voxel_ms": 0.0,
+          "attention_ms": 0.0,
+          "learn_ms": 3.678520366666666,
+          "label_ms": 1.5392194916666666,
+          "maintenance_ms": 0.4523967583333333,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19863.05,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 785.85,
+          "num_deleted_nodes": 790.1,
+          "num_zero_samples": 642.075,
+          "input_prepare_ms": 0.8391957083333333,
+          "num_input_points": 153309.85,
+          "num_training_points": 153309.85
+        },
+        "reduction_vs_combined_percent": -1.0909205489970875
+      },
+      "grid_raw": {
+        "exec_mean_ms": 6.203896791666667,
+        "trial_exec_mean_ms": [
+          6.190542774999999,
+          6.222598525,
+          6.198549075000001
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 7549.65,
+        "quality": {
+          "mean_dist_m": 1.5270545298028393,
+          "p95_dist_m": 7.921194141844433,
+          "rms_dist_m": 3.2234963596257495,
+          "coverage_0_2m": 0.42938427891105124,
+          "coverage_0_4m": 0.7069209425831449,
+          "coverage_1_0m": 0.8075987861053271,
+          "num_components": 550.0,
+          "max_component_ratio": 0.4475467560557349,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5126420025887216,
+          "nonzero_coverage_0_4m": 0.843992503169118,
+          "nonzero_coverage_1_0m": 0.964192006364757,
+          "nonzero_p95_dist_m": 0.7954674673181283
+        },
+        "statistics": {
+          "voxel_ms": 0.0,
+          "attention_ms": 0.0,
+          "learn_ms": 3.696218533333333,
+          "label_ms": 1.3332213583333334,
+          "maintenance_ms": 0.3348515416666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18201.85,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 792.2,
+          "num_deleted_nodes": 790.0,
+          "num_zero_samples": 642.075,
+          "input_prepare_ms": 0.83473925,
+          "num_input_points": 153309.85,
+          "num_training_points": 153309.85
+        },
+        "reduction_vs_combined_percent": 0.7649905784289812
+      },
+      "tree_voxel_0_1": {
+        "exec_mean_ms": 17.593803291666664,
+        "trial_exec_mean_ms": [
+          17.572032874999998,
+          17.597254349999996,
+          17.612122649999996
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 10778.7,
+        "quality": {
+          "mean_dist_m": 1.4742307428864905,
+          "p95_dist_m": 7.941960870524906,
+          "rms_dist_m": 3.210458347808762,
+          "coverage_0_2m": 0.4467188192868322,
+          "coverage_0_4m": 0.7667389347170415,
+          "coverage_1_0m": 0.8330963357058879,
+          "num_components": 564.4,
+          "max_component_ratio": 0.5132003717381661,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5333400738471593,
+          "nonzero_coverage_0_4m": 0.9154108256166753,
+          "nonzero_coverage_1_0m": 0.9946344391033396,
+          "nonzero_p95_dist_m": 0.4784964528119616
+        },
+        "statistics": {
+          "voxel_ms": 10.570983475,
+          "attention_ms": 0.0,
+          "learn_ms": 4.453601108333333,
+          "label_ms": 1.9736798333333334,
+          "maintenance_ms": 0.5890398916666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 20735.75,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1051.175,
+          "num_deleted_nodes": 1060.4,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 10.570983475,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": 0.2895759520893715
+      },
+      "grid_voxel_0_1": {
+        "exec_mean_ms": 16.716185391666667,
+        "trial_exec_mean_ms": [
+          16.7989387,
+          16.690487374999996,
+          16.659130100000002
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 10154.225,
+        "quality": {
+          "mean_dist_m": 1.486692713588475,
+          "p95_dist_m": 7.940158134622161,
+          "rms_dist_m": 3.2139028758096244,
+          "coverage_0_2m": 0.43366960540738375,
+          "coverage_0_4m": 0.7606921222562526,
+          "coverage_1_0m": 0.8268357966117656,
+          "num_components": 675.2,
+          "max_component_ratio": 0.457691393171033,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5177599048703184,
+          "nonzero_coverage_0_4m": 0.9081904501446523,
+          "nonzero_coverage_1_0m": 0.9871599037893434,
+          "nonzero_p95_dist_m": 0.5101587294424903
+        },
+        "statistics": {
+          "voxel_ms": 10.612059966666667,
+          "attention_ms": 0.0,
+          "learn_ms": 3.878898941666667,
+          "label_ms": 1.8015768833333332,
+          "maintenance_ms": 0.4170082333333333,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19776.275,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1017.525,
+          "num_deleted_nodes": 1024.8,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 10.612059966666667,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": -2.3650634676945614
+      },
+      "tree_voxel_0_5": {
+        "exec_mean_ms": 14.975675016666665,
+        "trial_exec_mean_ms": [
+          15.065991574999998,
+          14.974712925,
+          14.886320549999999
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 11314.4,
+        "quality": {
+          "mean_dist_m": 0.9786253901823079,
+          "p95_dist_m": 4.932045067985364,
+          "rms_dist_m": 2.0214561631430383,
+          "coverage_0_2m": 0.40936479919996877,
+          "coverage_0_4m": 0.8136327624894996,
+          "coverage_1_0m": 0.901696291999986,
+          "num_components": 556.8,
+          "max_component_ratio": 0.5728389818133142,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4111058399001971,
+          "nonzero_coverage_0_4m": 0.8937575122502714,
+          "nonzero_coverage_1_0m": 0.998897622041184,
+          "nonzero_p95_dist_m": 0.47581946944220865
+        },
+        "statistics": {
+          "voxel_ms": 8.366474808333333,
+          "attention_ms": 0.0,
+          "learn_ms": 4.108115025,
+          "label_ms": 1.9185098999999999,
+          "maintenance_ms": 0.576172775,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18391.175,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1019.05,
+          "num_deleted_nodes": 1032.0,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 8.366474808333333,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": 0.6822446984868336
+      },
+      "grid_voxel_0_5": {
+        "exec_mean_ms": 13.90937805,
+        "trial_exec_mean_ms": [
+          13.988542875000002,
+          13.910673075,
+          13.828918199999999
+        ],
+        "matched_graph_frames": 150,
+        "num_graph_frames": 150,
+        "num_nodes": 11191.375,
+        "quality": {
+          "mean_dist_m": 1.4909364382895138,
+          "p95_dist_m": 7.928592432449358,
+          "rms_dist_m": 3.205628638497592,
+          "coverage_0_2m": 0.3482633798459559,
+          "coverage_0_4m": 0.7500530839613766,
+          "coverage_1_0m": 0.8354686183968084,
+          "num_components": 656.8,
+          "max_component_ratio": 0.5143689008713626,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4157924794900268,
+          "nonzero_coverage_0_4m": 0.8954867212900595,
+          "nonzero_coverage_1_0m": 0.9974664785977783,
+          "nonzero_p95_dist_m": 0.4781355115151114
+        },
+        "statistics": {
+          "voxel_ms": 8.358793941666667,
+          "attention_ms": 0.0,
+          "learn_ms": 3.2925544583333335,
+          "label_ms": 1.8187009083333334,
+          "maintenance_ms": 0.43331754166666664,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 17465.4,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1037.1,
+          "num_deleted_nodes": 1050.6,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 8.358793941666667,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": -1.8872849676075054
+      }
+    },
+    "radix": {
+      "tree_voxel_0_1": {
+        "exec_mean_ms": 11.333761141666667,
+        "trial_exec_mean_ms": [
+          11.187670649999998,
+          11.298441100000002,
+          11.515171675
+        ],
+        "matched_graph_frames": 0,
+        "num_graph_frames": 150,
+        "num_nodes": 10778.7,
+        "quality": {
+          "mean_dist_m": 1.4742307360122995,
+          "p95_dist_m": 7.941960829362759,
+          "rms_dist_m": 3.2104583314197925,
+          "coverage_0_2m": 0.4467188192868322,
+          "coverage_0_4m": 0.7667389347170415,
+          "coverage_1_0m": 0.8330963357058879,
+          "num_components": 564.4,
+          "max_component_ratio": 0.5132003717381661,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5333400738471593,
+          "nonzero_coverage_0_4m": 0.9154108256166753,
+          "nonzero_coverage_1_0m": 0.9946344391033396,
+          "nonzero_p95_dist_m": 0.4784964528119616
+        },
+        "statistics": {
+          "voxel_ms": 4.3989345250000005,
+          "attention_ms": 0.0,
+          "learn_ms": 4.359162674999999,
+          "label_ms": 1.9808244416666667,
+          "maintenance_ms": 0.5885378916666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 20735.75,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1051.175,
+          "num_deleted_nodes": 1060.4,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 4.3989345250000005,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": 35.767490930821864
+      },
+      "grid_voxel_0_1": {
+        "exec_mean_ms": 10.435474041666668,
+        "trial_exec_mean_ms": [
+          10.267996125,
+          10.365860275,
+          10.672565725000002
+        ],
+        "matched_graph_frames": 0,
+        "num_graph_frames": 150,
+        "num_nodes": 10154.225,
+        "quality": {
+          "mean_dist_m": 1.4866927067276177,
+          "p95_dist_m": 7.940158090728223,
+          "rms_dist_m": 3.213902858325837,
+          "coverage_0_2m": 0.43366960540738375,
+          "coverage_0_4m": 0.7606921222562526,
+          "coverage_1_0m": 0.8268357966117656,
+          "num_components": 675.2,
+          "max_component_ratio": 0.457691393171033,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.5177599048703184,
+          "nonzero_coverage_0_4m": 0.9081904501446523,
+          "nonzero_coverage_1_0m": 0.9871599037893434,
+          "nonzero_p95_dist_m": 0.5101587294424903
+        },
+        "statistics": {
+          "voxel_ms": 4.460138541666667,
+          "attention_ms": 0.0,
+          "learn_ms": 3.7466128999999997,
+          "label_ms": 1.8041022333333332,
+          "maintenance_ms": 0.4181069916666667,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19776.275,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1017.525,
+          "num_deleted_nodes": 1024.8,
+          "num_zero_samples": 0.05,
+          "input_prepare_ms": 4.460138541666667,
+          "num_input_points": 153309.85,
+          "num_training_points": 79576.85
+        },
+        "reduction_vs_combined_percent": 36.09618836105878
+      },
+      "tree_voxel_0_5": {
+        "exec_mean_ms": 11.160122900000001,
+        "trial_exec_mean_ms": [
+          11.222070050000001,
+          11.11816825,
+          11.1401304
+        ],
+        "matched_graph_frames": 0,
+        "num_graph_frames": 150,
+        "num_nodes": 11314.5,
+        "quality": {
+          "mean_dist_m": 0.9786251663495733,
+          "p95_dist_m": 4.932045172900438,
+          "rms_dist_m": 2.0214559982239457,
+          "coverage_0_2m": 0.40936479970937756,
+          "coverage_0_4m": 0.8136340671890272,
+          "coverage_1_0m": 0.901696291999986,
+          "num_components": 557.0,
+          "max_component_ratio": 0.572830765504727,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4111058365886649,
+          "nonzero_coverage_0_4m": 0.8937590696037049,
+          "nonzero_coverage_1_0m": 0.998897622041184,
+          "nonzero_p95_dist_m": 0.47581927025188897
+        },
+        "statistics": {
+          "voxel_ms": 4.638970158333333,
+          "attention_ms": 0.0,
+          "learn_ms": 4.0178507083333335,
+          "label_ms": 1.92117845,
+          "maintenance_ms": 0.576223325,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18391.275,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1019.025,
+          "num_deleted_nodes": 1031.95,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 4.638970158333333,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": 25.98675157657604
+      },
+      "grid_voxel_0_5": {
+        "exec_mean_ms": 10.041097558333334,
+        "trial_exec_mean_ms": [
+          10.042366175000002,
+          10.0806377,
+          10.0002888
+        ],
+        "matched_graph_frames": 0,
+        "num_graph_frames": 150,
+        "num_nodes": 11191.375,
+        "quality": {
+          "mean_dist_m": 1.4909364786105126,
+          "p95_dist_m": 7.92859269359136,
+          "rms_dist_m": 3.2056287425913466,
+          "coverage_0_2m": 0.34826207701620976,
+          "coverage_0_4m": 0.7500517806222218,
+          "coverage_1_0m": 0.8354673136972808,
+          "num_components": 656.8,
+          "max_component_ratio": 0.5143689008713626,
+          "num_zero_points": 24904.2,
+          "nonzero_coverage_0_2m": 0.4157909231061291,
+          "nonzero_coverage_0_4m": 0.8954851682176942,
+          "nonzero_coverage_1_0m": 0.9974649212443447,
+          "nonzero_p95_dist_m": 0.4781349950973599
+        },
+        "statistics": {
+          "voxel_ms": 4.61782755,
+          "attention_ms": 0.0,
+          "learn_ms": 3.1644870083333334,
+          "label_ms": 1.8199578916666665,
+          "maintenance_ms": 0.4330572333333333,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 17465.4,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1037.1,
+          "num_deleted_nodes": 1050.6,
+          "num_zero_samples": 0.325,
+          "input_prepare_ms": 4.61782755,
+          "num_input_points": 153309.85,
+          "num_training_points": 15668.475
+        },
+        "reduction_vs_combined_percent": 26.44817297826941
+      }
+    }
+  },
+  "extended": {
+    "tree_voxel_0_1": {
+      "baseline": {
+        "input_ms": {
+          "mean": 1.03243698,
+          "median": 1.0257025,
+          "p95": 1.08993705
+        },
+        "exec_ms": {
+          "mean": 25.614840188000002,
+          "median": 25.5357385,
+          "p95": 27.252338799999997
+        },
+        "output_ms": {
+          "mean": 0.7594600800000001,
+          "median": 0.7592030000000001,
+          "p95": 0.7774703
+        },
+        "total_ms": {
+          "mean": 27.406737248,
+          "median": 27.330216,
+          "p95": 29.083068049999998
+        },
+        "nodes": {
+          "mean": 10612.532,
+          "median": 10580.5,
+          "p95": 10911.1
+        },
+        "edges": {
+          "mean": 17703.584,
+          "median": 17686.0,
+          "p95": 18160.55
+        },
+        "added_output_nodes": {
+          "mean": 1056.956,
+          "median": 1038.0,
+          "p95": 1205.55
+        },
+        "removed_output_nodes": {
+          "mean": 1056.048,
+          "median": 1043.5,
+          "p95": 1206.55
+        },
+        "statistics": {
+          "voxel_ms": 11.749553468,
+          "attention_ms": 0.0,
+          "learn_ms": 9.728786052,
+          "label_ms": 3.534874408,
+          "maintenance_ms": 0.5938658880000001,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 20333.956,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1056.988,
+          "num_deleted_nodes": 1056.08,
+          "num_zero_samples": 0.056,
+          "input_prepare_ms": 11.749553468,
+          "num_input_points": 153303.148,
+          "num_training_points": 79544.276
+        }
+      },
+      "radix": {
+        "input_ms": {
+          "mean": 0.898189244,
+          "median": 0.8970560000000001,
+          "p95": 0.9357474
+        },
+        "exec_ms": {
+          "mean": 11.251108244000001,
+          "median": 11.258717,
+          "p95": 11.60625935
+        },
+        "output_ms": {
+          "mean": 0.673729304,
+          "median": 0.673656,
+          "p95": 0.6925796
+        },
+        "total_ms": {
+          "mean": 12.823026791999999,
+          "median": 12.811952999999999,
+          "p95": 13.2187921
+        },
+        "nodes": {
+          "mean": 10612.532,
+          "median": 10580.5,
+          "p95": 10911.1
+        },
+        "edges": {
+          "mean": 17703.584,
+          "median": 17686.0,
+          "p95": 18160.55
+        },
+        "added_output_nodes": {
+          "mean": 1056.956,
+          "median": 1038.0,
+          "p95": 1205.55
+        },
+        "removed_output_nodes": {
+          "mean": 1056.048,
+          "median": 1043.5,
+          "p95": 1206.55
+        },
+        "statistics": {
+          "voxel_ms": 4.400172788,
+          "attention_ms": 0.0,
+          "learn_ms": 4.33865716,
+          "label_ms": 1.9232844279999999,
+          "maintenance_ms": 0.582760812,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 20333.956,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1056.988,
+          "num_deleted_nodes": 1056.08,
+          "num_zero_samples": 0.056,
+          "input_prepare_ms": 4.400172788,
+          "num_input_points": 153303.148,
+          "num_training_points": 79544.276
+        }
+      },
+      "baseline_quality": {
+        "mean_dist_m": 1.2194173721414112,
+        "p95_dist_m": 6.5613429455877315,
+        "rms_dist_m": 2.6424034460690984,
+        "coverage_0_2m": 0.4745528452902425,
+        "coverage_0_4m": 0.7993997536103393,
+        "coverage_1_0m": 0.865055601901668,
+        "num_components": 561.0909090909091,
+        "max_component_ratio": 0.49096767531584073,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.5300414673866379,
+        "nonzero_coverage_0_4m": 0.9166439233473576,
+        "nonzero_coverage_1_0m": 0.9948008911325111,
+        "nonzero_p95_dist_m": 0.4772368185764165
+      },
+      "radix_quality": {
+        "mean_dist_m": 1.2194173493434848,
+        "p95_dist_m": 6.561342805665716,
+        "rms_dist_m": 2.6424033902637154,
+        "coverage_0_2m": 0.4745528452902425,
+        "coverage_0_4m": 0.7993997536103393,
+        "coverage_1_0m": 0.865055601901668,
+        "num_components": 561.0909090909091,
+        "max_component_ratio": 0.49096767531584073,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.5300414673866379,
+        "nonzero_coverage_0_4m": 0.9166439233473576,
+        "nonzero_coverage_1_0m": 0.9948008911325111,
+        "nonzero_p95_dist_m": 0.4772368185764165
+      },
+      "matched_topology_frames": 300,
+      "matched_graph_frames": 0,
+      "num_frames": 300
+    },
+    "grid_voxel_0_1": {
+      "baseline": {
+        "input_ms": {
+          "mean": 1.0410811159999998,
+          "median": 1.0317375,
+          "p95": 1.0876999499999997
+        },
+        "exec_ms": {
+          "mean": 24.308015308,
+          "median": 24.320496,
+          "p95": 25.306238099999998
+        },
+        "output_ms": {
+          "mean": 0.729000552,
+          "median": 0.7255015,
+          "p95": 0.748802
+        },
+        "total_ms": {
+          "mean": 26.078096976,
+          "median": 26.0861595,
+          "p95": 27.11311765
+        },
+        "nodes": {
+          "mean": 10020.128,
+          "median": 10027.0,
+          "p95": 10254.05
+        },
+        "edges": {
+          "mean": 16431.636,
+          "median": 16428.5,
+          "p95": 16762.55
+        },
+        "added_output_nodes": {
+          "mean": 956.132,
+          "median": 937.0,
+          "p95": 1088.1
+        },
+        "removed_output_nodes": {
+          "mean": 955.52,
+          "median": 940.0,
+          "p95": 1101.0
+        },
+        "statistics": {
+          "voxel_ms": 12.088726432,
+          "attention_ms": 0.0,
+          "learn_ms": 8.577203240000001,
+          "label_ms": 3.212686088,
+          "maintenance_ms": 0.421005444,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19671.324,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1028.14,
+          "num_deleted_nodes": 1027.528,
+          "num_zero_samples": 0.056,
+          "input_prepare_ms": 12.088726432,
+          "num_input_points": 153303.148,
+          "num_training_points": 79544.276
+        }
+      },
+      "radix": {
+        "input_ms": {
+          "mean": 0.803940568,
+          "median": 0.8010205,
+          "p95": 0.8439972499999999
+        },
+        "exec_ms": {
+          "mean": 10.219301924,
+          "median": 10.219081,
+          "p95": 10.5773241
+        },
+        "output_ms": {
+          "mean": 0.643009532,
+          "median": 0.645073,
+          "p95": 0.6598855499999999
+        },
+        "total_ms": {
+          "mean": 11.666252024,
+          "median": 11.658251499999999,
+          "p95": 12.0368089
+        },
+        "nodes": {
+          "mean": 10020.564,
+          "median": 10028.5,
+          "p95": 10254.3
+        },
+        "edges": {
+          "mean": 16432.4,
+          "median": 16430.0,
+          "p95": 16764.1
+        },
+        "added_output_nodes": {
+          "mean": 956.288,
+          "median": 937.0,
+          "p95": 1088.1
+        },
+        "removed_output_nodes": {
+          "mean": 955.672,
+          "median": 940.0,
+          "p95": 1101.0
+        },
+        "statistics": {
+          "voxel_ms": 4.418127036,
+          "attention_ms": 0.0,
+          "learn_ms": 3.597006156,
+          "label_ms": 1.7879644520000002,
+          "maintenance_ms": 0.410174884,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 19671.504,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1028.296,
+          "num_deleted_nodes": 1027.68,
+          "num_zero_samples": 0.056,
+          "input_prepare_ms": 4.418127036,
+          "num_input_points": 153303.148,
+          "num_training_points": 79544.276
+        }
+      },
+      "baseline_quality": {
+        "mean_dist_m": 1.4692780865041077,
+        "p95_dist_m": 7.962355296769488,
+        "rms_dist_m": 3.1961704860865483,
+        "coverage_0_2m": 0.43281069188678706,
+        "coverage_0_4m": 0.7646930553068828,
+        "coverage_1_0m": 0.8300418724218429,
+        "num_components": 651.1818181818181,
+        "max_component_ratio": 0.4699685507336918,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.5151012017524681,
+        "nonzero_coverage_0_4m": 0.9100769669800974,
+        "nonzero_coverage_1_0m": 0.9878704998813759,
+        "nonzero_p95_dist_m": 0.503928755413523
+      },
+      "radix_quality": {
+        "mean_dist_m": 1.4692736440244618,
+        "p95_dist_m": 7.962355219224318,
+        "rms_dist_m": 3.1961702097699902,
+        "coverage_0_2m": 0.4328243402794896,
+        "coverage_0_4m": 0.7646948365574395,
+        "coverage_1_0m": 0.8300418724218429,
+        "num_components": 651.0909090909091,
+        "max_component_ratio": 0.4699630425482317,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.5151173357911764,
+        "nonzero_coverage_0_4m": 0.9100791204414995,
+        "nonzero_coverage_1_0m": 0.9878704998813759,
+        "nonzero_p95_dist_m": 0.503928755413523
+      },
+      "matched_topology_frames": 211,
+      "matched_graph_frames": 0,
+      "num_frames": 300
+    },
+    "tree_voxel_0_5": {
+      "baseline": {
+        "input_ms": {
+          "mean": 1.038151044,
+          "median": 1.0320040000000001,
+          "p95": 1.1063044499999999
+        },
+        "exec_ms": {
+          "mean": 22.081970520000002,
+          "median": 22.094533,
+          "p95": 23.24505795
+        },
+        "output_ms": {
+          "mean": 0.7487704039999998,
+          "median": 0.7481585,
+          "p95": 0.76600375
+        },
+        "total_ms": {
+          "mean": 23.868891968000003,
+          "median": 23.8675395,
+          "p95": 25.0562572
+        },
+        "nodes": {
+          "mean": 11184.56,
+          "median": 11183.0,
+          "p95": 11284.55
+        },
+        "edges": {
+          "mean": 17179.032,
+          "median": 17169.5,
+          "p95": 17461.3
+        },
+        "added_output_nodes": {
+          "mean": 1028.404,
+          "median": 1023.0,
+          "p95": 1144.1
+        },
+        "removed_output_nodes": {
+          "mean": 1028.368,
+          "median": 1020.0,
+          "p95": 1153.0
+        },
+        "statistics": {
+          "voxel_ms": 8.663669276,
+          "attention_ms": 0.0,
+          "learn_ms": 9.398875264,
+          "label_ms": 3.433203752,
+          "maintenance_ms": 0.5791046440000001,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18034.568,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1028.412,
+          "num_deleted_nodes": 1028.376,
+          "num_zero_samples": 0.252,
+          "input_prepare_ms": 8.663669276,
+          "num_input_points": 153303.148,
+          "num_training_points": 15572.844
+        }
+      },
+      "radix": {
+        "input_ms": {
+          "mean": 0.9050084439999999,
+          "median": 0.9016455,
+          "p95": 0.9496979
+        },
+        "exec_ms": {
+          "mean": 11.11767304,
+          "median": 11.112294,
+          "p95": 11.370683399999999
+        },
+        "output_ms": {
+          "mean": 0.671402544,
+          "median": 0.671273,
+          "p95": 0.68774895
+        },
+        "total_ms": {
+          "mean": 12.694084027999999,
+          "median": 12.689012,
+          "p95": 12.9638168
+        },
+        "nodes": {
+          "mean": 11184.748,
+          "median": 11183.0,
+          "p95": 11289.0
+        },
+        "edges": {
+          "mean": 17177.804,
+          "median": 17176.5,
+          "p95": 17443.1
+        },
+        "added_output_nodes": {
+          "mean": 1028.2,
+          "median": 1023.5,
+          "p95": 1143.0
+        },
+        "removed_output_nodes": {
+          "mean": 1028.216,
+          "median": 1019.0,
+          "p95": 1151.1999999999998
+        },
+        "statistics": {
+          "voxel_ms": 4.6334839279999995,
+          "attention_ms": 0.0,
+          "learn_ms": 4.028948428,
+          "label_ms": 1.8744218559999999,
+          "maintenance_ms": 0.5745992639999999,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 18032.46,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1028.208,
+          "num_deleted_nodes": 1028.224,
+          "num_zero_samples": 0.252,
+          "input_prepare_ms": 4.6334839279999995,
+          "num_input_points": 153303.148,
+          "num_training_points": 15572.844
+        }
+      },
+      "baseline_quality": {
+        "mean_dist_m": 0.6788040025222775,
+        "p95_dist_m": 3.174775348603899,
+        "rms_dist_m": 1.326532468755101,
+        "coverage_0_2m": 0.4163253338582949,
+        "coverage_0_4m": 0.8527061317475869,
+        "coverage_1_0m": 0.9404168456388485,
+        "num_components": 558.5454545454545,
+        "max_component_ratio": 0.5227185999969642,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.40873070677759615,
+        "nonzero_coverage_0_4m": 0.894266795791903,
+        "nonzero_coverage_1_0m": 0.9986722707782466,
+        "nonzero_p95_dist_m": 0.4765347172556185
+      },
+      "radix_quality": {
+        "mean_dist_m": 0.6787774457721489,
+        "p95_dist_m": 3.1747263507100367,
+        "rms_dist_m": 1.3265131219863118,
+        "coverage_0_2m": 0.4163609414560026,
+        "coverage_0_4m": 0.8527500106843667,
+        "coverage_1_0m": 0.940432262004117,
+        "num_components": 559.2727272727273,
+        "max_component_ratio": 0.5217975467989097,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.4087727697663178,
+        "nonzero_coverage_0_4m": 0.8943187689241114,
+        "nonzero_coverage_1_0m": 0.9986906692002918,
+        "nonzero_p95_dist_m": 0.47641944420613225
+      },
+      "matched_topology_frames": 35,
+      "matched_graph_frames": 0,
+      "num_frames": 300
+    },
+    "grid_voxel_0_5": {
+      "baseline": {
+        "input_ms": {
+          "mean": 1.004283396,
+          "median": 1.0092785,
+          "p95": 1.05384785
+        },
+        "exec_ms": {
+          "mean": 20.999609667999998,
+          "median": 21.061494500000002,
+          "p95": 22.07055505
+        },
+        "output_ms": {
+          "mean": 0.732722052,
+          "median": 0.7331995,
+          "p95": 0.7473337999999999
+        },
+        "total_ms": {
+          "mean": 22.736615116,
+          "median": 22.7866935,
+          "p95": 23.813483599999998
+        },
+        "nodes": {
+          "mean": 11010.464,
+          "median": 11009.5,
+          "p95": 11111.55
+        },
+        "edges": {
+          "mean": 16472.576,
+          "median": 16480.5,
+          "p95": 16657.1
+        },
+        "added_output_nodes": {
+          "mean": 997.284,
+          "median": 995.0,
+          "p95": 1111.6499999999999
+        },
+        "removed_output_nodes": {
+          "mean": 997.4,
+          "median": 993.0,
+          "p95": 1113.1
+        },
+        "statistics": {
+          "voxel_ms": 8.920469368000001,
+          "attention_ms": 0.0,
+          "learn_ms": 8.454404672,
+          "label_ms": 3.1943183360000003,
+          "maintenance_ms": 0.422415216,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 17416.268,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1039.108,
+          "num_deleted_nodes": 1039.224,
+          "num_zero_samples": 0.252,
+          "input_prepare_ms": 8.920469368000001,
+          "num_input_points": 153303.148,
+          "num_training_points": 15572.844
+        }
+      },
+      "radix": {
+        "input_ms": {
+          "mean": 0.81491138,
+          "median": 0.8111275,
+          "p95": 0.8558329
+        },
+        "exec_ms": {
+          "mean": 10.075877644,
+          "median": 10.0149685,
+          "p95": 10.470183
+        },
+        "output_ms": {
+          "mean": 0.654612432,
+          "median": 0.6550024999999999,
+          "p95": 0.6694570999999999
+        },
+        "total_ms": {
+          "mean": 11.545401456,
+          "median": 11.4748545,
+          "p95": 11.958165900000001
+        },
+        "nodes": {
+          "mean": 11010.676,
+          "median": 11007.5,
+          "p95": 11109.65
+        },
+        "edges": {
+          "mean": 16473.244,
+          "median": 16483.5,
+          "p95": 16654.2
+        },
+        "added_output_nodes": {
+          "mean": 997.396,
+          "median": 995.0,
+          "p95": 1112.6499999999999
+        },
+        "removed_output_nodes": {
+          "mean": 997.624,
+          "median": 993.0,
+          "p95": 1112.1
+        },
+        "statistics": {
+          "voxel_ms": 4.632286636,
+          "attention_ms": 0.0,
+          "learn_ms": 3.193148524,
+          "label_ms": 1.8165033320000001,
+          "maintenance_ms": 0.42704758800000003,
+          "cluster_ms": 0.0,
+          "num_nearest_queries": 4000.0,
+          "num_tree_moves": 17416.748,
+          "num_probe_points": 0.0,
+          "num_observed_nodes": 0.0,
+          "num_attention_candidates": 0.0,
+          "num_attention_hits": 0.0,
+          "num_added_nodes": 1039.232,
+          "num_deleted_nodes": 1039.46,
+          "num_zero_samples": 0.252,
+          "input_prepare_ms": 4.632286636,
+          "num_input_points": 153303.148,
+          "num_training_points": 15572.844
+        }
+      },
+      "baseline_quality": {
+        "mean_dist_m": 1.4750238705030467,
+        "p95_dist_m": 7.938426707380822,
+        "rms_dist_m": 3.1835751044953366,
+        "coverage_0_2m": 0.3421044539458831,
+        "coverage_0_4m": 0.7490162838573695,
+        "coverage_1_0m": 0.8377765043485922,
+        "num_components": 644.3636363636364,
+        "max_component_ratio": 0.48703275297605925,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.4071218847644863,
+        "nonzero_coverage_0_4m": 0.8914156798327184,
+        "nonzero_coverage_1_0m": 0.997077853640337,
+        "nonzero_p95_dist_m": 0.4814137396091473
+      },
+      "radix_quality": {
+        "mean_dist_m": 1.4751573752788394,
+        "p95_dist_m": 7.9384271818665955,
+        "rms_dist_m": 3.1835894587227798,
+        "coverage_0_2m": 0.34168902254842104,
+        "coverage_0_4m": 0.7490079263427091,
+        "coverage_1_0m": 0.8377438608239306,
+        "num_components": 644.4545454545455,
+        "max_component_ratio": 0.4993103483346221,
+        "num_zero_points": 24483.090909090908,
+        "nonzero_coverage_0_2m": 0.4066270515037626,
+        "nonzero_coverage_0_4m": 0.8914036700624387,
+        "nonzero_coverage_1_0m": 0.9970385221015531,
+        "nonzero_p95_dist_m": 0.48121734727924004
+      },
+      "matched_topology_frames": 35,
+      "matched_graph_frames": 0,
+      "num_frames": 300
+    }
+  }
+}

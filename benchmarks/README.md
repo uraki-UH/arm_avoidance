@@ -14,6 +14,8 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_runtime_trials_20260924](gng_runtime_trials_20260924/) | 学習量を維持した空き番号管理・LTO・入力ソートの実装比較 |
+| [gng_minimal_comparison_20260924](gng_minimal_comparison_20260924/) | 最小構成で入力voxel・node.grid・treeの6条件比較 |
 | [gng_bsp3d_minimal_20260923](gng_bsp3d_minimal_20260923/) | 入力ボクセル化なし・元点直接学習の最小tree版 |
 | [gng_bsp3d_sampled_20260923](gng_bsp3d_sampled_20260923/) | 固定ノードグリッド撤去・照合回数制限の比較 |
 | [gng_bsp3d_20260923](gng_bsp3d_20260923/) | グリッド・固定順8分木・bsp3dの比較 |

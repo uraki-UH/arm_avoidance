@@ -1,0 +1,30 @@
+{
+  global:
+    gng_init;
+    gng_get_sampling_statistics;
+    gng_get_minimal_statistics;
+    gng_get_comparison_statistics;
+    gng_setParameter;
+    gng_setPointCloud;
+    gng_exec;
+    gng_set_priority_input;
+    gng_set_weighted_priority_input;
+    gng_setMapDeltaCapture;
+    gng_getTopologicalMapDelta;
+    gng_setTrainingEventCapture;
+    gng_setTrainingEventMaxWinnerRank;
+    gng_getTrainingEvents;
+    gng_get_node_statistics;
+    gng_get_node_num_neighbors;
+    gng_set_observation_input;
+    gng_get_observation_angle_range;
+    gng_get_observation_frame;
+    gng_getTopologicalMap;
+    gng_getDownSampling;
+    gng_getAffineTransformedInputPointCloud;
+    gng_setInferredClusterLabels;
+    gng_setInferredNodeLabels;
+    gng_setNodePositions;
+  local:
+    *;
+};

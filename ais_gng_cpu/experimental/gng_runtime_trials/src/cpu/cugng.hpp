@@ -1,0 +1,161 @@
+#pragma once
+
+#include "../utils/utils.hpp"
+#include "../utils/node.hpp"
+#include "../utils/param.hpp"
+
+#include "define.h"
+
+#include <cstdint>
+#include <queue>
+#include <bsp3d/bsp3d.hpp>
+#include "cell_grid.hpp"
+#include <fuzzrobo/libgng/sampling_api.h>
+#include <fuzzrobo/libgng/observation_pixel_view.hpp>
+
+struct Node_d{
+    uint32_t id1;
+    float id1_d2;
+    uint32_t id2;
+    float id2_d2;
+};
+
+
+class CUGNG {
+   public:
+    int node_num = 0;
+    int node_num_max = 0;
+    vector<Node> nodes;
+    vector<uint8_t> edge_count;
+    vector<uint16_t> tn_id;
+    NodeConfig gng_config;
+    EdgeConfig *edge_config = nullptr;
+    Vec3f min_input_pos, max_input_pos;
+    bool is_input_in_range(const Vec3f &point) const;
+    gng_sampling_statistics sampling_statistics{};
+    vector<float> edge_distance; // エッジの距離
+    uint32_t frame_number = 0; // フレーム数
+    bool training_event_capture_enabled = false;
+    uint16_t training_event_winner_rank_max = 1;
+    vector<GngTrainingEvent> training_events;
+    uint32_t training_event_num = 0;
+    bool enable_covariance = false;
+    bool enable_support = false;
+    uint16_t max_covariance_winner_rank = 1;
+    double support_sample_alpha = 0.01;
+    double support_second_weight = 0.5;
+    double support_second_alpha = 1 - std::sqrt(0.99);
+    bool map_delta_capture_enabled = false;
+    bool enable_observation_support = false;
+    bool has_observation_origin = false;
+    Vec3f observation_origin;
+    bool has_observation_frame_origin = false;
+    Vec3f observation_frame_origin;
+    gng_observation::pixel_view observation_pixel_source;
+    // 前フレームで支持を記録したノードのみのクリア対象。
+    vector<uint32_t> observation_touched_ids;
+    const gng_observation::ray_angles *observation_angle_table = nullptr;
+    uint32_t observation_table_num = 0;
+    uint32_t observation_pixel_hit_num = 0;
+    uint32_t observation_ray_num = 0;
+    // 次の学習1回用の重点点添字。観測統計とは独立した学習配分。
+    vector<uint32_t> priority_point_ids;
+    vector<float> priority_weights;
+    float priority_ratio = 0;
+
+    CUGNG();
+    bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
+    void clear();
+    void learn_raw(vector<Vec3f> &points, const vector<uint32_t> &point_ids);
+    void learn_normal(Vec3f& input_point, const Vec3f *observation_point = nullptr, uint32_t raw_idx = UINT32_MAX,
+        bool enable_statistics = true, const Node_d *selected_winners = nullptr,
+        bool is_selected_in_vigilance = false);
+    void setTrainingEventCapture(bool enable);
+    void setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
+    const GngTrainingEvent* getTrainingEvents(uint32_t *num) const;
+    void setMapDeltaCapture(bool enable);
+    const GngMapDelta* getMapDelta();
+    void beginMapDeltaFrame();
+    void finishMapDeltaFrame();
+    void recordNodeDelta(const Node &node, uint8_t operation);
+
+    void getMinAll(Vec3f& p, Node_d& result);
+    bool getMinGrid(Vec3f& p, Node_d& result);
+    bool getDownSamplingGrid(Vec3f& p, uint8_t &label, Node_d &n);
+    void move_node(Node& node, Vec3f& new_pos);
+
+    /* ノードを削除する関数 */
+    void delete_node(uint32_t idx);
+    /* ノードを追加する関数 */
+    uint32_t add_node(Vec3f &pos);
+    /* エッジを切断する関数 */
+    void disconnect(uint32_t idx1, uint32_t idx2);
+    /* 全てのエッジを切断する関数 */
+    void disconnect_all(uint32_t idx);
+    /* ノード同士を接続する関数 */
+    void connect(uint32_t idx1, uint32_t idx2);
+    /* エッジ数が0のノードを削除し、学習係数を減衰する関数 */
+    void check_delete_no_edge_and_decay_eta();
+    /* エッジIDを検索 */
+    uint32_t getEdgeIndex(uint32_t idx1, uint32_t idx2);
+    /* ノードの法線ベクトルの算出 */
+    void normal_vector(Node& node);
+    /* ノードのCOS類似度の算出 */
+    void rho(Node& node);
+    /* ノードの年齢チェック */
+    void check_age();
+    /* エッジの長さチェック */
+    void check_edge_distance();
+    /* エッジの距離を計算 */
+    void calc_edge_distanceXY();
+
+    const uint32_t ykey2[4] = {_YK_KEY2_1, _YK_KEY2_2, _YK_KEY2_3, _YK_KEY2_4};
+    const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
+
+   private:
+#if GNG_FREE_NODE_MODE == 1
+    uint32_t next_free_idx = 0;
+#elif GNG_FREE_NODE_MODE == 2
+    std::priority_queue<uint32_t, vector<uint32_t>, std::greater<uint32_t>> free_node_ids;
+#endif
+    uint32_t find_free_node();
+    void release_node_id(uint32_t idx);
+#ifdef GNG_USE_NODE_GRID
+    static constexpr uint32_t max_nodes_per_cell = 10;
+    static constexpr uint32_t num_cells_per_page = 256;
+    cell_grid node_cells;
+    vector<std::array<uint32_t, max_nodes_per_cell>> cell_nodes;
+    vector<uint32_t> page_offsets;
+    vector<uint8_t> cell_counts;
+    std::array<uint32_t, max_nodes_per_cell> &get_cell(uint32_t idx);
+    void remove_from_cell(Node &node);
+#else
+    struct spatial_entry {
+        SpatialTree::Point<float, 3> position;
+        void *spatial_handle = nullptr;
+        int index_in_cell = 0;
+        uint32_t node_idx = 0;
+    };
+    using spatial_tree = bsp3d::Index<spatial_entry>;
+    std::unique_ptr<spatial_tree> spatial_index;
+    std::vector<spatial_entry> spatial_entries;
+    bool query_spatial(Vec3f &point, Node_d &winners, uint8_t *label);
+#endif
+    void beginTrainingEvents();
+    void resizeTrainingEventBuffer();
+    void recordTrainingEvent(
+        uint16_t winner_rank,
+        const Node &winner_node,
+        const Vec3f &input_point);
+    void recordTrainingEvents(const Node_d &winners, const Vec3f &input_point);
+    void update_winner_statistics(const Node_d &winners, const Vec3f &point);
+    void recordEdgeDelta(const Node &first, const Node &second, uint8_t operation);
+    static GngNodeKey nodeKey(const Node &node);
+
+    bool map_delta_frame_open = false;
+    vector<uint8_t> node_update_recorded;
+    vector<uint16_t> updated_node_ids;
+    vector<GngNodeDelta> node_deltas;
+    vector<GngEdgeDelta> edge_deltas;
+    GngMapDelta map_delta_view;
+};

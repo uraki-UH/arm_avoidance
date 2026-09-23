@@ -1,0 +1,19 @@
+{
+  "report_count": 136,
+  "frames_with_4000_learning_queries": 10800,
+  "frames_with_equal_input_pool_and_zero_sample_counts": 10800,
+  "frames_with_exact_graph_and_node_update_counts_excluding_radix": 8850,
+  "protected_source_files_unchanged": 272,
+  "production_sha256": "cdb5d7736c23ed07fdc86ca7202abf5c518ca0222067f0550cb0be8f1e8417a4",
+  "existing_runtime_before": 13,
+  "existing_runtime_after": 9,
+  "external_runtime_removed": 5,
+  "external_runtime_added": 1,
+  "existing_processes_stopped_or_restarted_by_this_task": 0,
+  "owned_runtime_processes_remaining": 0,
+  "temporary_build_removed": true,
+  "release_configurations": 8,
+  "ctest_passed": 116,
+  "final_ctest_passed": 34,
+  "final_combined_and_radix_libraries_byte_identical_to_measured": true
+}

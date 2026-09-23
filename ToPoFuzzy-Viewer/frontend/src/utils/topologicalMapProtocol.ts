@@ -12,6 +12,16 @@ export interface TopologicalMapPacket {
     graph: GraphData;
 }
 
+/** 環境GNGの配列添字からViewer内のノードIDへの対応付け。他グラフは既存ID方式。 */
+export function normalize_environment_cluster_ids(tag: string, graph: GraphData): GraphData {
+    if (tag !== '/topological_map') return graph;
+    return { ...graph, clusters: graph.clusters.map(cluster => ({
+        ...cluster,
+        nodeIds: cluster.nodeIds.flatMap(idx => Number.isInteger(idx) && idx >= 0 && idx < graph.nodes.length
+            ? [graph.nodes[idx].id ?? idx] : []),
+    })) };
+}
+
 function requireBytes(buffer: ArrayBuffer, offset: number, size: number): void {
     if (size < 0 || offset < 0 || offset + size > buffer.byteLength) {
         throw new Error('Topological map packet is truncated');
@@ -106,5 +116,7 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
         offset += CLUSTER_RECORD_SIZE + nodeIdNum * 2;
     }
     if (offset !== buffer.byteLength) throw new Error('Invalid topological map trailing data');
-    return { tag, graph: { timestamp, tag, frameId, mode: tag.includes('static') ? 'static' : 'dynamic', nodes, edges, clusters } };
+    return { tag, graph: normalize_environment_cluster_ids(tag, {
+        timestamp, tag, frameId, mode: tag.includes('static') ? 'static' : 'dynamic', nodes, edges, clusters,
+    }) };
 }
