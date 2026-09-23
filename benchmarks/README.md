@@ -14,6 +14,8 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_bsp3d_minimal_20260923](gng_bsp3d_minimal_20260923/) | 入力ボクセル化なし・元点直接学習の最小tree版 |
+| [gng_bsp3d_sampled_20260923](gng_bsp3d_sampled_20260923/) | 固定ノードグリッド撤去・照合回数制限の比較 |
 | [gng_bsp3d_20260923](gng_bsp3d_20260923/) | グリッド・固定順8分木・bsp3dの比較 |
 | [gng_bsp3d_profile_20260923](gng_bsp3d_profile_20260923/) | bsp3dの段階・詳細・標本計測 |
 | [gng_spatial_nearest_20260923](gng_spatial_nearest_20260923/) | 旧AABB・汎用2近傍・固定順2近傍の比較 |

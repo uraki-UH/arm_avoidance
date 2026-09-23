@@ -6,6 +6,7 @@
 #include "../auth/auth.hpp"
 #include "../auth/yk_piv.hpp"
 #include "cugng.hpp"
+#include "sampling_grid.hpp"
 #include "voxel_grid.hpp"
 #include "clustering.hpp"
 #include "labelling.hpp"
@@ -51,7 +52,7 @@ struct Affine {
         float y2 = -p1->quat.y;
         float z2 = -p1->quat.z;
         // クォータニオンの差分
-        // q2 - q1 = 
+        // q2 - q1 =
         // q1-1 = (w1, -x1, -y1, -z1)
         // dq = q2 * q1-1
         // https://zenn.dev/mebiusbox/books/132b654aa02124/viewer/2966c7
@@ -128,6 +129,7 @@ class GNG{
     Logger log;
     VoxelGrid vg;
     CUGNG n1;
+    sampling_grid sampling_index;
     Labelling la;
     Clustering cl;
 

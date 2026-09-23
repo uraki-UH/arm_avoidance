@@ -357,14 +357,6 @@ public:
                 latest_nonplane_source_map_ = msg;
                 flush_nonplane_components_locked();
             });
-        nonplane_source_plane_cluster_sub_ =
-            create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
-                "/plane_clusters", nonplane_source_qos,
-                [this](const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr msg) {
-                    std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
-                    latest_nonplane_source_plane_clusters_ = msg;
-                    flush_nonplane_components_locked();
-                });
         livenessTimer_ = create_wall_timer(std::chrono::seconds(1), [this]() { checkLiveness(); });
         serverThread_ = std::thread([this, port]() { runServerLoop(port); });
         graphWatchThread_ = std::thread([this]() { watchGraphChanges(); });
@@ -1157,9 +1149,28 @@ private:
         }
         broadcastLatestRobotPose(msg->data);
     }
+    void update_plane_subscription() {
+        // 発行元の存在中だけ購読。停止時の空トピック維持と古い所属キャッシュの抑止。
+        if (count_publishers("/plane_clusters") == 0) {
+            nonplane_source_plane_cluster_sub_.reset();
+            std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+            latest_nonplane_source_plane_clusters_.reset();
+        } else if (!nonplane_source_plane_cluster_sub_) {
+            nonplane_source_plane_cluster_sub_ =
+                create_subscription<ais_gng_msgs::msg::PlaneClusterArray>(
+                    "/plane_clusters", rclcpp::QoS(1).reliable().transient_local(),
+                    [this](const ais_gng_msgs::msg::PlaneClusterArray::SharedPtr msg) {
+                        std::lock_guard<std::mutex> lock(nonplane_source_mutex_);
+                        latest_nonplane_source_plane_clusters_ = msg;
+                        flush_nonplane_components_locked();
+                    });
+        }
+    }
+
     void checkLiveness() {
         // ROS購読コールバックと同じ排他グループでの停止・復帰処理。
         // グラフ通知の取りこぼしにも対応する1秒周期の確認。
+        update_plane_subscription();
         broadcast_source_lifecycle_events();
         broadcastSourcesIfChanged();
         if (this->get_publishers_info_by_topic(std::string(viewer_internal::topics::kStreamRobot) + "/description").empty()) {

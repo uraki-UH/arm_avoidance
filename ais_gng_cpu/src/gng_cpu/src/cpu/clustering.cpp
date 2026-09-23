@@ -301,19 +301,24 @@ void Clustering::_take_over_cluster(Cluster &prev, Cluster &now) {
     now.label_inferred = prev.label_inferred;
     now.count_inferred = prev.count_inferred;
 
-    if(now.label_inferred == HUMAN){// 人
-        if((now.count_inferred >= cluster_config->human_confirmation_age) && 
-           (frame_number - now.frame_inferred) > cluster_config->human_hysteresis_age){
-            now.label = HUMAN;
-            // 見た目の大きさを制限する
-            float radius = MIN(MAX(now.scale[0], now.scale[1]), cluster_config->human_radius);
-            now.scale[0] = radius;
-            now.scale[1] = radius;
-        }
-    }else if(now.label_inferred == CAR){ // 車
-        if((now.count_inferred >= cluster_config->car_confirmation_age) && 
-           (frame_number - now.frame_inferred) > cluster_config->car_hysteresis_age){
-            now.label = CAR;
+    if (now.label_inferred == HUMAN || now.label_inferred == CAR) {
+        const bool is_human = now.label_inferred == HUMAN;
+        const auto max_inference_age = static_cast<uint32_t>(is_human
+            ? cluster_config->human_hysteresis_age : cluster_config->car_hysteresis_age);
+        const auto min_confirmation_count = static_cast<uint32_t>(is_human
+            ? cluster_config->human_confirmation_age : cluster_config->car_confirmation_age);
+        // 推論の保持期限切れによる失効と、再検出時への確認回数持越し防止。
+        if (frame_number - now.frame_inferred > max_inference_age) {
+            now.label_inferred = DEFAULT;
+            now.count_inferred = 0;
+        } else if (now.count_inferred >= min_confirmation_count) {
+            now.label = now.label_inferred;
+            if (is_human) {
+                // 人クラスタの表示幅制限。
+                float radius = MIN(MAX(now.scale[0], now.scale[1]), cluster_config->human_radius);
+                now.scale[0] = radius;
+                now.scale[1] = radius;
+            }
         }
     }
     int sum_same = 0;

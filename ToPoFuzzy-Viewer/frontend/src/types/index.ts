@@ -460,8 +460,8 @@ export const LAYER_COLORS = [
     '#1f8f3a', // 1: SAFE_TERRAIN (deep green)
     '#FF0000', // 2: COLLISION (Red)
     '#FFFF00', // 3: DANGER (Yellow)
-    '#2aa84a', // 4: UNUSED / legacy (green fallback)
-    '#53c86a'  // 5: OTHER / fallback (soft green)
+    '#d946ef', // 4: HUMAN（赤紫）
+    '#8b5cf6'  // 5: CAR（青紫）
 ];
 
 export const LAYER_LABELS = [

@@ -44,6 +44,7 @@ void CUGNG::clear() {
     tn_id.clear();
     edge_count.clear();
     edge_distance.clear();
+    attention_voxel_ids.clear();
     training_events.clear();
     training_event_num = 0;
     node_update_recorded.clear();
@@ -277,7 +278,7 @@ void CUGNG::check_edge_distance() {
             norm2 = node.pos.squaredNorm(edge.pos);
             if(norm2 < edge_config->distance_min2[node.label]){
                 disconnect_ids[disconnect_num++] = e_id; // エッジの切断
-            } 
+            }
         }
         // エッジの削除
         for (i = 0; i < disconnect_num; ++i) {
@@ -382,7 +383,33 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
                     // 全attention点のXYZ複製なし。選択点の元番号からの直接参照。
                     const auto raw_idx = (*attention_raw_ids)[idx];
                     auto point = (*raw_points)[raw_idx];
+#ifdef GNG_USE_SAMPLED_ATTENTION
+                    // 元点での重点条件確認と回数上限付き再選択。取得済み2近傍の再利用。
+                    bool has_attention_point = false;
+                    for (uint32_t trial = 0; trial < gng_config.max_attention_trials; ++trial) {
+                        const auto selected_idx = trial == 0 ? idx : rA_Attention(mt);
+                        uint32_t selected_raw_idx;
+                        if (source_voxels && !attention_voxel_ids.empty()) {
+                            const auto &range = source_voxels->voxel_range[attention_voxel_ids[selected_idx]];
+                            std::uniform_int_distribution<uint32_t> select_raw(range.start, range.end - 1);
+                            selected_raw_idx = source_voxels->voxel_index[select_raw(mt)].raw_index;
+                        } else {
+                            selected_raw_idx = (*attention_raw_ids)[selected_idx];
+                        }
+                        auto selected_point = (*raw_points)[selected_raw_idx];
+                        Node_d winners;
+                        uint8_t label = 0;
+                        const bool is_in_vigilance = getDownSamplingGrid(selected_point, label, winners);
+                        if (label == 0) {continue;}
+                        ++sampling_statistics.num_attention_hits;
+                        learn_normal(selected_point, nullptr, selected_raw_idx, true, &winners, is_in_vigilance);
+                        has_attention_point = true;
+                        break;
+                    }
+                    if (!has_attention_point) {learn_input(rA(mt));}
+#else
                     learn_normal(point, nullptr, raw_idx);
+#endif
                 } else if (attention_spans && attention_blocks && raw_points && source_voxels) {
                     // 大入力時の圧縮索引。選択点だけの区間検索と実測XYZの読み出し。
                     const auto block = static_cast<uint32_t>(idx) / 64;
@@ -401,17 +428,27 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
         }
     }
 }
-void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics) {
+void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics, const Node_d *selected_winners, bool is_selected_in_vigilance) {
     static Node_d n;
     int i;
     // 全探索
-    bool p_is_in_vigilance = getMinGrid(p, n);
+    sampling_statistics.num_zero_samples += p.p[0] == 0 && p.p[1] == 0 && p.p[2] == 0;
+    const bool p_is_in_vigilance = selected_winners
+        ? (n = *selected_winners, is_selected_in_vigilance) : getMinGrid(p, n);
     // Grid 探索
     // getMinAll(p, n);
 
     // pが警戒領域に無いときに追加
     if(!p_is_in_vigilance){
+#ifdef GNG_USE_SAMPLED_ATTENTION
+        const auto node_idx = add_node(p);
+        if (node_idx != NODE_NOID) {
+            if (n.id1 != NODE_NOID) {connect(node_idx, n.id1);}
+            if (n.id2 != NODE_NOID) {connect(node_idx, n.id2);}
+        }
+#else
         add_node(p);
+#endif
     }
 
     // s1が見つからない
@@ -715,12 +752,12 @@ void CUGNG::check_age(){
             continue;
 
         const uint32_t node_age = frame_number - node.frame; // ノードの年齢
-        
+
         if (node.clustered_flag)
             age = gng_config.clusted_s1_age[node.label];
         else
             age = gng_config.s1_age[node.label];
-        
+
         if (node.static_node) {
             age = gng_config.max_static_s1_age;
             if (node.age_s1 >= age) {

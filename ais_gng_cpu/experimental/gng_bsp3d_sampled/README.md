@@ -1,52 +1,66 @@
-# Spatial Tree・bsp3d版GNG（独立比較版）
+# 固定グリッドを使わないbsp3d版GNG
 
-2026-09-23時点の`ais_gng_cpu/src/gng_cpu`をコピーした実験版。元のcugng.cpp・cugng.hpp・CPUライブラリ・YAMLへの変更なし。API互換の共有ライブラリとして単独実行。ROS launchへの組込み・インストール先の置換は未実施。
+`../gng_spatial_tree`からコピーした独立実験版。元CPU版・既存tree版・bsp3d本体への編集なし。通常のROS launchへの組込みとインストール先の差替えは未実施。
 
-## 実装
+## 2つの比較版
 
-- `src/cpu/cugng.cpp`: ビルド定義で切替可能なSpatialTree版・bsp3d版。元CPU版から独立したコピー。
-- `src/cpu/cugng_grid_reference.cpp`: 同時点のグリッド版比較用コピー。
-- ノード追加・移動・削除に合わせた索引更新。移動時の索引更新省略なし。
-- SpatialTree版の`getDownSamplingGrid`と`getMinGrid`は`find_spatial_nearest`で木全体の最近傍2ノードを取得。固定27セルの範囲検索、候補列挙、グリッド順の候補ソートを廃止。近傍が遠方だけの場合も取得。
-- 木の構築・分割・統合・移動はSpatialTreeを利用。探索だけを3次元・2近傍向けに実装し、入力点側の子セルを先行し、残りの7セルを固定順で探索。子セルの並べ替えなし。現在の第2近傍距離と距離下限による厳密な枝刈り。共通SpatialTreeライブラリへの変更なし。
-- bsp3d版は`bsp3d/include/bsp3d/bsp3d.hpp`の`bsp3d::Index`（`MovingBSPTree`）を索引として利用。既存GNGの学習規則を維持し、`findNBest`で木全体の2近傍を取得。範囲検索・探索時の子セルソートなし。
-- bsp3dの3次元既定値を使用。葉32点、実点群境界箱の更新なし、近似誤差0。追加・移動・削除をすべて索引API経由で反映し、葉内の座標キャッシュと同期。ライブラリ本体の編集なし。
-- 警戒領域・寿命リセット・重点学習ラベルの判定対象も最近傍2ノード。距離判定には既存の`node.interval`・`node.s1_reset_range`・`ds.range_max`を継続使用。3番目以降のノードによる判定なし。
-- 同距離時は木の探索順に依存し、グリッド版とのノードID選択順・グラフの完全一致保証なし。
-- YAMLの入力範囲・ボクセル処理・ノード上限・セル当たり10ノードの管理は従来どおり。入力点の追加除外なし。固定グリッドの管理メモリは残存。
+| ライブラリ | ノード管理 | 学習前の入力照合 |
+| --- | --- | --- |
+| `libgng_bsp3d_pure.so` | bsp3dのみ | 従来どおり全入力voxel |
+| `libgng_bsp3d_sampled.so` | bsp3dのみ | 回数制限付き全域探索、観測確認、重点候補選別を分離 |
 
-## ビルドとテスト
+両版とも固定グリッドの配列・1セル10ノード制限を撤去。ノード追加・移動・削除はbsp3dへ反映し、移動時の座標キャッシュも同期。`node.grid`は既存APIとの互換性のため受理するが、グラフ構築・検索・メモリ確保には不使用。
+
+最近傍探索は木全体の厳密2近傍。固定範囲検索、候補列挙、探索時の子セルの並べ替えなし。既存bsp3d版と同じ葉容量32・近似誤差0の設定。
+
+## 回数制限版の処理
+
+1. YAML範囲内の全元点を、疎な入力セルへ登録。入力索引による点の削除・平均化なし。
+2. 各ノード近傍の元点を確認し、`node.s1_reset_range`内に実測点があれば寿命をリセット。学習への採用、最近傍順位から独立した全ノードの観測判定。
+3. 未知物体・人のノードと入力セル内実点群の境界箱との距離から重点候補を作成。入力voxel単位で候補を選び、学習時にそのvoxel内の元点を選択。重複点数による学習枠の独占を抑制。
+4. 選択した元点の最近傍2ノードで重点条件を再確認。回数上限まで再選択し、不成立時は通常学習枠へ振替。取得済み最近傍は学習で再利用。
+5. 入力voxel列を探索枠数で等分し、各区間内をフレームごとに巡回。選択した代表点だけでノード追加・接続更新。ノード上限で入力の一部に偏らないよう、選択点の処理順をシャッフル。tree子セルのソートとは無関係。
+6. 全域探索・学習で新しいノードを追加した場合、取得済み近傍へ可能な接続を設定。後続の全点照合を待つことによる即時孤立削除を抑制。
+
+エッジ寿命の加算は既存の学習時処理を維持。全点の接続更新を減らしたため、元版と同じエッジ寿命・構造になる保証なし。
+
+## 実験用パラメータ
+
+独立ライブラリの`gng_setParameter`と比較用YAMLで使用。通常のROS launchへのパラメータ追加は未実施。
+
+| 名前 | 既定値 | 用途 |
+| --- | ---: | --- |
+| `sampling.max_probe_num` | 16000 | 全域探索の1フレーム上限。0で追加探索なし |
+| `sampling.min_cell_size` | 0.5 | 元点索引のセル幅の下限（m）。正の有限値 |
+| `sampling.max_attention_trials` | 3 | 重点学習1枠の候補確認上限。整数1〜64 |
+
+元点索引の実際の幅は、`sampling.min_cell_size`と観測・重点判定距離の最大値の2倍のうち大きい方。索引の探索セル数を抑える目的であり、入力解像度の変更なし。
+
+`node.learning_num`は学習回数、`input.voxel_grid_unit`は入力voxelの幅として維持。入力範囲・ノード数上限・距離パラメータも引き続き使用。探索枠は候補選択であり、入力点群や可視化用出力からの除外ではない。
+
+ノード最近傍検索の上限は、全域探索枠＋学習回数×（重点候補確認上限＋1）。実際には候補成立時の再利用により少ない回数。`gng_get_sampling_statistics()`で回数・段階別時間・追加削除数を取得可能。
+
+## 制約と挙動差
+
+- 最近傍2ノードからの警戒領域・重点ラベル判定は既存bsp3d版と共通。元グリッド版の周辺全ノード判定とは非同値。
+- 回数制限版の観測寿命は元点ベース、重点学習の配分はvoxelベース。元版とのグラフ完全一致なし。`gng_getDownSampling()`のラベルは粗い重点候補を含む値。
+- 寿命確認用入力索引・候補生成の費用が追加。入力voxel数が少ない場合の高速化保証なし。
+- エッジの密な配列は従来どおり。最大20000ノードでは配列2種の合計が約2 GB。固定グリッド撤去によるこの配列の削減なし。
+- 入力voxelの32 bit番号制約は従来どおり。`node.grid`の制約とは独立。
+- 既定の`GNG_DETERMINISTIC_BENCHMARK=ON`は比較用の乱数・LPF時間刻み固定。実時間での利用にはOFFで再ビルドが必要。
+
+## ビルド・検証
 
 コンテナ内:
 
 ```bash
-cmake -S /ros2_ws/src/ais_gng_cpu/experimental/gng_spatial_tree \
-  -B /tmp/gng_spatial_copy_build -DCMAKE_BUILD_TYPE=Release
-cmake --build /tmp/gng_spatial_copy_build -j2
-ctest --test-dir /tmp/gng_spatial_copy_build --output-on-failure --timeout 30
+cmake -S /ros2_ws/src/ais_gng_cpu/experimental/gng_bsp3d_sampled \
+  -B /tmp/gng_bsp3d_sampled_build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build /tmp/gng_bsp3d_sampled_build -j2
+ctest --test-dir /tmp/gng_bsp3d_sampled_build --output-on-failure --timeout 30
 ```
 
-APIテスト24件（3方式×8件）、最近傍検索の全走査照合2件、bsp3d同梱の索引テスト1件、計27件。空・1ノード・遠方・境界・同距離・追加・移動・削除・再初期化、寿命とラベル判定を検証。
+APIテスト16件、最近傍と全走査の照合1件、グリッド非依存・高密度格納1件、観測・候補・探索回数・重点配分1件。
 
-`libgng_grid.so`・`libgng_spatial.so`・`libgng_bsp3d.so`を生成。通常のROSパッケージとは別ビルド。
-既定の`GNG_DETERMINISTIC_BENCHMARK=ON`は3方式の学習乱数・LPF時間刻み（0.1秒）を固定。これは比較専用の条件。実時間・非固定乱数の動作には同オプションをOFFで再ビルド。
-
-## 実行時間の再現
-
-```bash
-source /opt/ros/humble/setup.bash
-OPENBLAS_NUM_THREADS=1 timeout -s INT -k 5 90 python3 \
-  /ros2_ws/src/ais_gng_cpu/experimental/gng_spatial_tree/benchmark.py \
-  --library /tmp/gng_spatial_copy_build/libgng_bsp3d.so \
-  --config /ros2_ws/src/benchmarks/gng_spatial_tree_20260923/at128_snapshot.yaml \
-  --bag /rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3 \
-  --output /tmp/gng_spatial_result.json
-```
-
-比較元は`--library`を`libgng_grid.so`または`libgng_spatial.so`へ変更。同じ30フレームを50回入力し、先頭10回を除いた40回を集計。JSONに全フレームの時間・ノード数・エッジ数・グラフハッシュを保存。ROS変換・TF・配信・viewer・外部分類器の実行時間は含まない。入力はbagのセンサー座標をそのまま使用。
-
-bsp3d版の比較条件・実測結果は[検証記録](../../../gng_vlut_system/docs/releases/2026-09-23_gng_bsp3d.md)。設定・起動スクリプト・集計結果は`benchmarks/gng_bsp3d_20260923/`、比較ライブラリ・生ログはGit管理外の`artifacts/gng_bsp3d_20260923/`へ保存。
-
-SpatialTreeの最近傍2ノード版の実測結果・制約は[検証記録](../../../gng_vlut_system/docs/releases/2026-09-23_gng_spatial_nearest.md)。設定・比較起動スクリプト・集計結果は`benchmarks/gng_spatial_nearest_20260923/`、共有ライブラリ・生ログはGit管理外の`artifacts/gng_spatial_nearest_20260923/`へ保存。
-
-旧AABB版の実測は[旧版の比較記録](../../../gng_vlut_system/docs/designs/gng_spatial_tree_20260923.md)。旧版ライブラリはGit管理外の`artifacts/gng_spatial_tree_20260923/`に保存済み。再現に必要なローカル保存物と各保存先は[計測資料README](../../../benchmarks/README.md)を参照。
+比較設定・起動スクリプトは[benchmarks](../../../benchmarks/gng_bsp3d_sampled_20260923/)。共有ライブラリ・生ログ・グラフはGit管理外の`artifacts/gng_bsp3d_sampled_20260923/`へ保存。結果と比較条件は[検証記録](../../../gng_vlut_system/docs/releases/2026-09-23_gng_bsp3d_sampled.md)。

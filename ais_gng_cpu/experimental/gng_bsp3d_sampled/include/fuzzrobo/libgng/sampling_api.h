@@ -7,6 +7,7 @@ typedef struct gng_sampling_statistics {
     uint64_t num_nearest_queries, num_tree_moves, num_probe_points;
     uint64_t num_observed_nodes, num_attention_candidates, num_attention_hits;
     uint64_t num_added_nodes, num_deleted_nodes;
+    uint64_t num_zero_samples;
 } gng_sampling_statistics;
 
 #ifdef __cplusplus

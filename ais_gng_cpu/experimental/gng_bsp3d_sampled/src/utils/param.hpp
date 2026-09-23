@@ -23,6 +23,7 @@ struct NodeConfig{
     int num_max; // ノード数の上限
     int learning_num; // 学習回数
     int unknown_learning_rate;
+    uint32_t max_attention_trials = 3; // 重点候補の1学習枠あたりの確認回数
     /* 学習係数 */
     float eta_s1;            // s1更新時の学習係数
     float eta_s2;            // s1更新時の学習係数
@@ -53,6 +54,8 @@ struct OtherConfig{
     uint32_t point_cloud_num; // 入力点群数
     float node_grid;  // ノードのグリッドサイズ
     float voxel_grid_unit;
+    float min_sampling_cell_size = 0.5f; // 元点索引のセル幅（m）
+    uint32_t max_sampling_probe_num = 16000; // 全域探索の1フレーム処理枠
     float x_min, x_max; // 範囲
     float y_min, y_max; // 範囲
     float z_min, z_max; // 範囲

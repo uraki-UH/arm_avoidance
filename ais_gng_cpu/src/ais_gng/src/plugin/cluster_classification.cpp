@@ -84,7 +84,7 @@ bool ClusterClassification::setParameter(const std::string &name, int, const std
     return true;
 }
 
-void ClusterClassification::classify(std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> &map, std::vector<uint32_t> &cluster_ids, std::vector<uint32_t> &cluster_frames, std::vector<uint8_t> &cluster_labels) {
+void ClusterClassification::classify(std::unique_ptr<ais_gng_msgs::msg::TopologicalMap> &map, std::vector<uint32_t> &cluster_ids, std::vector<uint32_t> &cluster_ages, std::vector<uint8_t> &cluster_labels) {
     // どちらも無効な場合は何もしない
     if(!human_enable_ && !car_enable_){
         return;
@@ -171,7 +171,8 @@ void ClusterClassification::classify(std::unique_ptr<ais_gng_msgs::msg::Topologi
             map->clusters[c_ids[i]].label_reliability = 0;
         }
         cluster_ids.emplace_back(map->clusters[c_ids[i]].id);
-        cluster_frames.emplace_back(map->clusters[c_ids[i]].frame);
+        // APIへの入力は生成フレーム番号ではなく推論時点のクラスタ年齢。
+        cluster_ages.emplace_back(map->frame_number - map->clusters[c_ids[i]].frame);
         cluster_labels.emplace_back(map->clusters[c_ids[i]].label_inferred);
     }
 }

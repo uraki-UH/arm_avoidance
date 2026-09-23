@@ -34,7 +34,7 @@ int GNG::init(const char *binary_path) {
         return ERROR_FAIL_AUTHENTICATION;
     }
 #endif
-    
+
     // GNG初期化
     if(!n1.init(&param.node, &param.edge, &param.config)){
         return ERROR_VOXEL_GRID_LEAF_SIZE;
@@ -230,8 +230,13 @@ void GNG::exec() {
     // 学習
     // n1.learn_normal(input_pcl, input_pcl_num);// 元点群
     // 全voxelの実測代表点・元番号の別配列なし。学習時の直接参照。
+    const vector<uint32_t> *attention_raw_ids =
+        n1.observation_angle_table && !enable_observation_attention_compact ? &observation_attention_raw_ids : nullptr;
+#ifdef GNG_USE_SAMPLED_ATTENTION
+    attention_raw_ids = &observation_attention_raw_ids;
+#endif
     n1.learn(vg.filtered_pcl, vg.filtered_pcl_num, attention_pcl, attention_pcl_num,
-        nullptr, nullptr, n1.observation_angle_table && !enable_observation_attention_compact ? &observation_attention_raw_ids : nullptr,
+        nullptr, nullptr, attention_raw_ids,
         &map.input_pcl, &vg, enable_observation_attention_compact ? &observation_attention_spans : nullptr,
         enable_observation_attention_compact ? &observation_attention_blocks : nullptr);
     n1.priority_point_ids.clear();
@@ -267,11 +272,11 @@ void GNG::exec() {
     n1.finishMapDeltaFrame();
 
 #ifdef GNG_ENABLE_FRAME_LOG
-    log.println("I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d", 
+    log.println("I: %d, V: %d, A: %d, Nodes: %d, Clusters: %d",
         input_pcl_num,
         vg.filtered_pcl_num,
         attention_pcl_num,
-        n1.node_num, 
+        n1.node_num,
         cl.clusters.size());
     log.println(
         "[%d]: V: %d, A: %d, L:%d, La:%d, Ch:%d, Cl:%d",
@@ -299,6 +304,28 @@ void GNG::exec() {
 }
 
 void GNG::attention(){
+#ifdef GNG_USE_SAMPLED_ATTENTION
+    enable_observation_attention_compact = false;
+    observation_attention_spans.clear();
+    observation_attention_blocks.clear();
+    voxel2node_ids_num = 0;
+    sampling_index.prepare(n1, vg, map.input_pcl, map.inpcl_labels,
+        param.config.min_sampling_cell_size, param.config.max_sampling_probe_num,
+        observation_attention_raw_ids);
+    // voxel単位の重点配分。密な同一点群への学習枠集中を避け、選択後は元点を使用。
+    n1.attention_voxel_ids.clear();
+    for (uint32_t idx = 0; idx < vg.filtered_pcl_num; ++idx) {
+        const auto &range = vg.voxel_range[idx];
+        for (uint32_t point_idx = range.start; point_idx < range.end; ++point_idx) {
+            if ((map.inpcl_labels[vg.voxel_index[point_idx].raw_index] & 0b010) != 0) {
+                n1.attention_voxel_ids.push_back(idx);
+                break;
+            }
+        }
+    }
+    attention_pcl_num = n1.attention_voxel_ids.size();
+    return;
+#endif
     // 元番号配列を256 KiBに抑える自動切替の目安。実入力点数を使用。
     constexpr uint32_t max_observation_direct_point_num = 65536;
     enable_observation_attention_compact = n1.observation_angle_table && input_pcl_num > max_observation_direct_point_num;
@@ -419,7 +446,7 @@ void GNG::makeResult(){
             map.clusters_nodes[j++] = n1.tn_id[node_id];
         }
         c.node_num = 0;
-    } 
+    }
 #elif defined(VERSION_MAP)
     map.cluster_num = 0;
 #endif
@@ -487,7 +514,7 @@ void GNG::check_error(){
                             break;
                         }
                     }
-                }                
+                }
                 if (dublicate) {
                     log.print("Edge Duplicate Error(node_id: %d), Edges: ", node.id);
                     for (i = 0; i < node.edge_num; ++i) {
@@ -514,7 +541,7 @@ void GNG::check_error(){
                 check_cluster_error = true;
                 continue;
             }
-            
+
             for(int i=0; i < c.size; ++i){
                 for(j=i+1; j < c.size; ++j){
                     if(c.nodes_ids[i] == c.nodes_ids[j]){

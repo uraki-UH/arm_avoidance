@@ -140,7 +140,15 @@ bool Param::setParameter(const char *p_c, const uint32_t index, const float valu
     string p(p_c);
 
     // debug
-    if (p == "node.grid" && value > 0) {
+    if (p == "sampling.min_cell_size" && value > 0 && std::isfinite(value)) {
+        config.min_sampling_cell_size = value;
+    } else if (p == "sampling.max_probe_num" && value >= 0 && std::isfinite(value) &&
+        std::floor(value) == value && static_cast<double>(value) <= std::numeric_limits<uint32_t>::max()) {
+        config.max_sampling_probe_num = static_cast<uint32_t>(value);
+    } else if (p == "sampling.max_attention_trials" && value >= 1 && std::isfinite(value) &&
+        std::floor(value) == value && value <= 64) {
+        node.max_attention_trials = static_cast<uint32_t>(value);
+    } else if (p == "node.grid" && value > 0) {
         config.node_grid = value;
     /* Node Config */
     } else if (p == "node.num_max" && value >= 0){

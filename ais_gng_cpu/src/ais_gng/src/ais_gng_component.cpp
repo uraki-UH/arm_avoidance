@@ -229,11 +229,13 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     // 別ノードの直近の曲面計算時間。GNGとの同期待ち・モデルJSONの受信なし。
     const auto surface_topic=this->declare_parameter<std::string>(
         "surface_model.output_topic","/curved_surface_clusters");
-    curve_time_sub_=this->create_subscription<std_msgs::msg::Float64>(
-        surface_topic+"/update_ms",rclcpp::QoS(1),
-        [this](std_msgs::msg::Float64::ConstSharedPtr message) {
-            curve_ms_=std::isfinite(message->data) && message->data>=0 ? message->data : -1.0;
-        });
+    if (this->declare_parameter<bool>("surface_model.enable", false)) {
+        curve_time_sub_=this->create_subscription<std_msgs::msg::Float64>(
+            surface_topic+"/update_ms",rclcpp::QoS(1),
+            [this](std_msgs::msg::Float64::ConstSharedPtr message) {
+                curve_ms_=std::isfinite(message->data) && message->data>=0 ? message->data : -1.0;
+            });
+    }
 
 #if defined(AIS_GNG_BACKEND_CPU)
     direct_plane_cluster_enabled_ =
@@ -254,6 +256,8 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     }
     direct_nonplane_component_enabled_ = this->declare_parameter<bool>(
         "nonplane_component.direct_enabled", true);
+    // 平面所属情報を入力とする非平面抽出の計算・出力の同時無効化。
+    direct_nonplane_component_enabled_ &= direct_plane_cluster_enabled_;
     // 旧設定の読込互換。単独ノードを含む全成分の保持を優先。
     if (this->declare_parameter<int64_t>("nonplane_component.min_component_nodes", 1) != 1) {
         RCLCPP_WARN(this->get_logger(),
@@ -1074,13 +1078,13 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
 #endif
     const auto conversion_end = std::chrono::steady_clock::now();
 
-    // クラスタのラベルを分類
-    std::vector<uint32_t> cluster_ids, cluster_frames;
+    // クラスタのラベル分類と推論時点の年齢。
+    std::vector<uint32_t> cluster_ids, cluster_ages;
     std::vector<uint8_t> cluster_labels;
-    cluster_classification_.classify(map_msg, cluster_ids, cluster_frames, cluster_labels);
+    cluster_classification_.classify(map_msg, cluster_ids, cluster_ages, cluster_labels);
 
     // GNGにフィードバック
-    gng_setInferredClusterLabels(cluster_ids.data(), cluster_frames.data(), cluster_labels.data(), cluster_ids.size());
+    gng_setInferredClusterLabels(cluster_ids.data(), cluster_ages.data(), cluster_labels.data(), cluster_ids.size());
     const auto classification_end = std::chrono::steady_clock::now();
 
 #if defined(AIS_GNG_BACKEND_CPU)
@@ -1136,7 +1140,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     const double plane_cluster_summary_ms = std::chrono::duration<double, std::milli>(
         plane_cluster_end - classification_end).count();
     char curve_time_text[32]{};
-    if (curve_time_sub_->get_publisher_count()==0) {
+    if (!curve_time_sub_ || curve_time_sub_->get_publisher_count()==0) {
         curve_ms_=-1.0;
         std::snprintf(curve_time_text,sizeof(curve_time_text),"off");
     } else if (curve_ms_<0) {

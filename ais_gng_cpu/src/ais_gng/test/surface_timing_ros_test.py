@@ -45,6 +45,7 @@ def main():
                 'classify.human:=false', 'classify.car:=false',
                 'boundary.enable_candidates:=true', 'boundary.enable_evidence:=false',
                 'plane_cluster.output_topic:=/surface_timing_test/planes',
+                'surface_model.enable:=true',
                 f'surface_model.output_topic:={curve_topic}',
             ], gng_log)
             rclpy.init()

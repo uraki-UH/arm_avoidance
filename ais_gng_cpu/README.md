@@ -56,6 +56,16 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic
 
 ノード生成候補はボクセル番号順の偏りを避けるため、フレーム番号を種にした順序で全件処理。入力点の追加除外なし。ノード上限到達時の全域被覆・密度は保証されず、YAMLの範囲・間隔・上限が引き続き適用。[原因・回帰検証](../gng_vlut_system/docs/releases/2026-09-23_gng_spatial_coverage.md)。
 
+## CPUクラスタの所属情報と人・車の分類
+
+通常CPU版のクラスタ出力は、実際の所属ノード数と所属配列をROSへ転送。`/topological_map`の`clusters[].nodes`は同じメッセージの`nodes[]`への添字であり、永続ノードIDではない。
+
+`classify.human`・`classify.car`で有効な分類器は、所属30ノード以上などの既存条件を満たすクラスタを入力として使用。Pl・CurveのON/OFFとは別機能。所属数が0で渡されて全件除外される不具合を修正済み。[変更範囲・回帰検証](../gng_vlut_system/docs/releases/2026-09-23_gng_cluster_members.md)。
+
+`clusters[].label_inferred`は当該フレームの推論結果、`clusters[].label`は確認・保持処理後のラベル。通常CPU版では同じクラスの推論を`cluster.human.confirmation_age` / `cluster.car.confirmation_age`の回数だけ確認後、次のGNG更新から確定ラベルへ反映。同一フレームの重複結果の加算なし。
+
+推論途絶時は`cluster.human.hysteresis_age` / `cluster.car.hysteresis_age`フレーム分を保持。保持期間内の短い途絶では確認回数を維持し、期限切れまたは人・車の切替時にはリセット。生成フレーム番号と年齢の取り違え、保持条件の逆転を修正済み。[仕様・検証範囲](../gng_vlut_system/docs/releases/2026-09-23_gng_cluster_labels.md)。
+
 ## CPU直結の平面クラスタリング（既定OFF）
 
 `lidar:=at128.yaml`などで選ぶセンサー別YAMLの`ais_gng_node.ros__parameters`で、Pl・Curveの計算ON/OFFを指定可能。`at128.yaml`には両方falseで明記。
@@ -71,13 +81,15 @@ ais_gng_node:
 
 短い2項目は`ais_gng.launch.py`用の設定。内部では既存の`plane_cluster.direct_enabled`・`surface_model.enable`へ変換。センサー別YAMLに旧名もある場合は短い名前を優先。値は引用符なしの`true`／`false`。
 
-`plane_clustering: false`では平面クラスタ計算と、その結果に依存する非平面成分抽出を停止。GNG学習・ノード・エッジ出力は継続。設定反映にはlaunchの再起動が必要。GPU版・独立ノードによる平面計算はこの項目の対象外。
+`plane_clustering: false`ではCPU直結の平面クラスタ計算と、その結果に依存する非平面成分抽出・Publisherを停止。通常の自動入力構成では平面可視化・曲面ノードも起動せず、保存ノードの平面購読も無効化。GNG学習・`/topological_map`のノード・エッジ出力は継続。GPU構成では独立平面ノードの起動条件へ適用。設定反映にはlaunchの再起動が必要。
 
-不要な平面可視化ノードの起動も省く場合は`start_plane_cluster:=false`を追加。この引数だけではCPU内蔵の平面計算は停止しないため、YAML設定との併用。
+OFF時に`start_plane_cluster:=false`を追加する必要なし。平面計算ONのまま可視化・曲面ノードだけを止める場合は引き続き利用可能。`plane_clusters_input_topic`を明示した外部平面入力・独立再計算は自動起動抑止の対象外。[OFF時の通信口抑止と検証](../gng_vlut_system/docs/releases/2026-09-23_gng_clustering_topics.md)。
 
 ## 曲面検出（既定OFF）
 
 `curve_clustering: false`により、曲面検出・追跡・曲面出力を無効化。GNG学習と平面検出は継続。`ais_gng.launch.py`ではセンサー別YAMLを優先し、未指定時は`config/surface_model.yaml`を使用。設定の反映はlaunchの再起動後。共通設定はCPU・GPU・単独の曲面launchに適用。
+
+曲面OFFまたは曲面ノード未起動時はGNG側の`/curved_surface_clusters/update_ms`購読も未生成。Viewerの補助平面購読は発行元の存在中だけ有効。Viewer更新前の既存プロセスにはViewerの再起動も必要。他の独立ノードによる同名トピックの購読・発行は停止対象外。
 
 曲面が必要な場合は`curve_clustering: true`へ変更し、`start_plane_cluster:=false`を外して再起動。通常のCPU構成では平面クラスタを入力とするため、`plane_clustering: true`も必要。外部の平面入力を使用する構成は別。以下の比較方式も有効化後に利用可能。
 

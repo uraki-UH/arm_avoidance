@@ -77,7 +77,8 @@ def main():
     with tempfile.TemporaryFile() as log:
         try:
             gateway = subprocess.Popen([
-                '/ros2_ws/build/topo_fuzzy_viewer/viewer_ws_gateway_node',
+                os.environ.get('VIEWER_GATEWAY_EXECUTABLE',
+                               '/ros2_ws/build/topo_fuzzy_viewer/viewer_ws_gateway_node'),
                 '--ros-args', '-p', f'port:={port}'], stdout=log, stderr=log)
             deadline = time.monotonic() + 15
             while client is None and time.monotonic() < deadline:
@@ -101,6 +102,9 @@ def main():
                     return (isinstance(value, bytes) and value[:4] == b'TMG1'
                             and struct.unpack_from('<I', value, 16)[0] == frame)
                 packet = client.until(is_graph)
+                # 現行version 2の状態カウンタを含むノードレコード長。
+                assert struct.unpack_from('<H', packet, 4)[0] == 2
+                node_stride = 96
                 tag_size, frame_size = struct.unpack_from('<II', packet, 8)
                 assert packet[36:36 + tag_size].decode() == topic
                 assert packet[36 + tag_size:36 + tag_size + frame_size] == b'sensor'
@@ -108,11 +112,11 @@ def main():
                     num_nodes, 4 if num_nodes else 0, 1 if num_nodes else 0)
                 if num_nodes:
                     offset = 36 + tag_size + frame_size
-                    assert [struct.unpack_from('<H', packet, offset + idx * 84)[0]
+                    assert [struct.unpack_from('<H', packet, offset + idx * node_stride)[0]
                             for idx in range(3)] == [50, 12, 80]
-                    assert [struct.unpack_from('<I', packet, offset + idx * 84 + 12)[0]
+                    assert [struct.unpack_from('<I', packet, offset + idx * node_stride + 12)[0]
                             for idx in range(3)] == [0xffffffff, 7, 7]
-                    assert struct.unpack_from('<4H', packet, offset + 3 * 84) == (1, 2, 2, 0)
+                    assert struct.unpack_from('<4H', packet, offset + 3 * node_stride) == (1, 2, 2, 0)
                 client.send({'type': 'stream.topological_map.applied', 'topic': topic})
 
             for frame, order in enumerate(itertools.permutations(range(3)), 100):

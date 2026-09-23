@@ -10,10 +10,10 @@ uint32_t voxel_rightshift_func(const Voxel &x, const unsigned offset) {
 VoxelGrid::VoxelGrid(){
 
 }
-VoxelGrid::~VoxelGrid() { 
+VoxelGrid::~VoxelGrid() {
 }
 
-void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) { 
+void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) {
     voxel_config = _grid_config;
     enable_voxel_downsampling = _other_config->voxel_grid_unit > 0;
     voxel_index.resize(_other_config->point_cloud_num);

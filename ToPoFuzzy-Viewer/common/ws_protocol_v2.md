@@ -80,6 +80,8 @@ version 2は末尾に集約元姿勢の表示用件数を追加。先頭84バイ
 
 `/nonplane_components`のROS所属配列も、Viewerでは既存`TMG1`へ変換。`sources.list`の型は`nonplane_component`のまま、tagも元トピック名を維持。Marker JSONの併送なし。元ノードID・Graph対応属性・成分所属・実エッジを保持し、平面側接続端点だけは成分所属から除外。通常Graphと同じ`stream.topological_map.applied`で描画完了を通知。構築条件・空成分・再購読は[非平面成分のGraph表示](../doc/BACKEND_API.md#非平面成分のgraph表示)を参照。
 
+補助平面入力のROS購読は発行元の存在に追従。停止時は購読と平面キャッシュを破棄し、復帰時に再接続。WSフィールド・バイナリ形式・選択項目の保持仕様の変更なし。
+
 ### 姿勢配列・候補表示
 
 `geometry_msgs/msg/PoseArray`と`gng_control_msgs/msg/GraspCandidateArray`は`sources.list`で`type: "marker"`として公開。

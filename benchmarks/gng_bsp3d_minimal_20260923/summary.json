@@ -1,0 +1,202 @@
+{
+  "short": {
+    "grid": {
+      "exec_mean_ms": 208.29606458333333,
+      "trial_exec_mean_ms": [
+        209.109866575,
+        205.235102575,
+        210.54322459999997
+      ],
+      "num_nodes": 19879.925,
+      "quality": {
+        "mean_dist_m": 1.435364702545027,
+        "p95_dist_m": 7.9519167360150504,
+        "rms_dist_m": 3.2173307641800024,
+        "coverage_0_2m": 0.6428693900117555,
+        "coverage_0_4m": 0.7955668707796109,
+        "coverage_1_0m": 0.8282915313078432,
+        "num_components": 92.4,
+        "max_component_ratio": 0.8971200605905084,
+        "num_zero_points": 24904.2,
+        "nonzero_coverage_0_2m": 0.7675266238371938,
+        "nonzero_coverage_0_4m": 0.9498277809023821,
+        "nonzero_coverage_1_0m": 0.9888977128029733,
+        "nonzero_p95_dist_m": 0.4004351043909029
+      },
+      "matched_frames": 150,
+      "library_sha256": "8f8aa29833a35a7216a20cce1e8ed89466ee75b9da029defb77aa288fbc73b89"
+    },
+    "sampled": {
+      "exec_mean_ms": 136.32205255,
+      "trial_exec_mean_ms": [
+        133.799669925,
+        140.37720965,
+        134.789278075
+      ],
+      "num_nodes": 19884.425,
+      "quality": {
+        "mean_dist_m": 1.1552793589081756,
+        "p95_dist_m": 6.320787349866862,
+        "rms_dist_m": 2.5746186310221217,
+        "coverage_0_2m": 0.6536115900384988,
+        "coverage_0_4m": 0.8345147176075667,
+        "coverage_1_0m": 0.866083344456265,
+        "num_components": 38.6,
+        "max_component_ratio": 0.9176278171302654,
+        "num_zero_points": 24904.2,
+        "nonzero_coverage_0_2m": 0.7803541798394138,
+        "nonzero_coverage_0_4m": 0.9573955217966523,
+        "nonzero_coverage_1_0m": 0.9950840543329038,
+        "nonzero_p95_dist_m": 0.37325220108940715
+      },
+      "matched_frames": 150,
+      "library_sha256": "bb033c7a58bbfa5445eba1553512a09aa0ae89bd33636f87b1fdaadc2ab687a8",
+      "statistics": {
+        "voxel_ms": 18.0502908,
+        "attention_ms": 66.36853038333332,
+        "learn_ms": 14.429952483333333,
+        "label_ms": 18.78860441666667,
+        "maintenance_ms": 5.6139659166666664,
+        "cluster_ms": 13.043820441666668,
+        "num_nearest_queries": 21751.65,
+        "num_tree_moves": 25103.025,
+        "num_probe_points": 16000.0,
+        "num_observed_nodes": 14311.125,
+        "num_attention_candidates": 54866.2,
+        "num_attention_hits": 3046.225,
+        "num_added_nodes": 119.925,
+        "num_deleted_nodes": 115.575,
+        "num_zero_samples": 0.0
+      }
+    },
+    "minimal": {
+      "exec_mean_ms": 21.40245979166667,
+      "trial_exec_mean_ms": [
+        20.58618745,
+        22.440793825000004,
+        21.180398099999998
+      ],
+      "num_nodes": 8440.975,
+      "quality": {
+        "mean_dist_m": 0.20348613573726015,
+        "p95_dist_m": 0.5833530414928322,
+        "rms_dist_m": 0.303714095326901,
+        "coverage_0_2m": 0.6007927868335852,
+        "coverage_0_4m": 0.8823421799669449,
+        "coverage_1_0m": 0.9885654587582348,
+        "num_components": 425.0,
+        "max_component_ratio": 0.45622789269578706,
+        "num_zero_points": 24904.2,
+        "nonzero_coverage_0_2m": 0.5233859860538729,
+        "nonzero_coverage_0_4m": 0.85952734541573,
+        "nonzero_coverage_1_0m": 0.9863480220947443,
+        "nonzero_p95_dist_m": 0.6254350443896566
+      },
+      "matched_frames": 150,
+      "library_sha256": "eae73a84ad590f7068b07ae13befee71a96dea2fff475152ce1f3ee703a191dd",
+      "statistics": {
+        "voxel_ms": 0.0,
+        "attention_ms": 0.0,
+        "learn_ms": 13.402339958333332,
+        "label_ms": 5.22057195,
+        "maintenance_ms": 0.90369585,
+        "cluster_ms": 0.0,
+        "num_nearest_queries": 4000.0,
+        "num_tree_moves": 19863.05,
+        "num_probe_points": 0.0,
+        "num_observed_nodes": 0.0,
+        "num_attention_candidates": 0.0,
+        "num_attention_hits": 0.0,
+        "num_added_nodes": 785.85,
+        "num_deleted_nodes": 790.1,
+        "num_zero_samples": 642.075,
+        "input_prepare_ms": 1.8550944083333334,
+        "num_input_points": 153309.85
+      }
+    }
+  },
+  "voxel_setting_invariance": {
+    "matched_frames": 50,
+    "num_frames": 50
+  },
+  "extended_minimal": {
+    "frames": 300,
+    "warmup": 50,
+    "summary": {
+      "input_ms": {
+        "mean": 1.71746434,
+        "median": 1.5825755,
+        "p95": 2.839480799999999
+      },
+      "exec_ms": {
+        "mean": 18.752741124,
+        "median": 17.782169,
+        "p95": 26.300208949999995
+      },
+      "output_ms": {
+        "mean": 1.0515861,
+        "median": 0.992671,
+        "p95": 1.6741165
+      },
+      "total_ms": {
+        "mean": 21.521791564,
+        "median": 20.424768999999998,
+        "p95": 29.902376949999997
+      },
+      "nodes": {
+        "mean": 8330.76,
+        "median": 8312.5,
+        "p95": 8546.85
+      },
+      "edges": {
+        "mean": 14213.9,
+        "median": 14210.5,
+        "p95": 14530.3
+      },
+      "added_output_nodes": {
+        "mean": 808.168,
+        "median": 788.0,
+        "p95": 918.0
+      },
+      "removed_output_nodes": {
+        "mean": 807.404,
+        "median": 793.5,
+        "p95": 928.55
+      },
+      "statistics": {
+        "voxel_ms": 0.0,
+        "attention_ms": 0.0,
+        "learn_ms": 11.618655279999999,
+        "label_ms": 4.655691364,
+        "maintenance_ms": 0.824427736,
+        "cluster_ms": 0.0,
+        "num_nearest_queries": 4000.0,
+        "num_tree_moves": 19221.196,
+        "num_probe_points": 0.0,
+        "num_observed_nodes": 0.0,
+        "num_attention_candidates": 0.0,
+        "num_attention_hits": 0.0,
+        "num_added_nodes": 808.172,
+        "num_deleted_nodes": 807.408,
+        "num_zero_samples": 639.32,
+        "input_prepare_ms": 1.638781276,
+        "num_input_points": 153303.148
+      }
+    },
+    "quality": {
+      "mean_dist_m": 0.5464317382275904,
+      "p95_dist_m": 2.574942930029913,
+      "rms_dist_m": 1.087377109788899,
+      "coverage_0_2m": 0.5555308137581085,
+      "coverage_0_4m": 0.8397507048799617,
+      "coverage_1_0m": 0.9447347933360798,
+      "num_components": 445.45454545454544,
+      "max_component_ratio": 0.4415393015562451,
+      "num_zero_points": 24483.090909090908,
+      "nonzero_coverage_0_2m": 0.5226320067964033,
+      "nonzero_coverage_0_4m": 0.860875715397875,
+      "nonzero_coverage_1_0m": 0.9858383475998916,
+      "nonzero_p95_dist_m": 0.6243653808651968
+    }
+  }
+}

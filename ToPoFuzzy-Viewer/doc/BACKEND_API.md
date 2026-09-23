@@ -69,6 +69,7 @@ ROSメッセージの拡張に伴い送受信ノードの再ビルド・再起�
 CPUの`/nonplane_components`はROSでは`std_msgs/msg/UInt32MultiArray`のまま。`sources.list`の型は`nonplane_component`、選択後のWS出力は同じtagの`TMG1` Graph。旧Marker JSON生成・追加ROS Graphトピックなし。
 
 - バックエンドで`/topological_map`・`/plane_clusters`・成分所属の`frame_number`を照合。平面と元Graphの`frame_id`も一致必須。各入力の最新だけを保持し、到着時に再照合。全フレーム配信の保証なし、不一致フレームの混合なし。
+- 補助入力`/plane_clusters`は発行元の存在中だけ購読。既存の1秒周期確認で接続・解除し、停止時に平面キャッシュも破棄。平面OFF時のSubscriberだけによるROSトピック維持なし。発行元の復帰時はtransient-localの最新データを再取得。選択済みStreams項目の保持は従来どおり。
 - 元ノードID、Graph配信対応の法線・勝者入力共分散・ラベル・境界属性を保持。`clusters[].nodeIds`は非平面成分の元ノードID、`edges`は出力配列添字。
 - 成分内の実エッジと平面への実接続エッジだけを保持。平面側端点もGraphへ含めるが成分所属には含めず、`nonplaneComponentId=UINT32_MAX`。Bbox・成分の独立表示は非平面所属ノードだけが対象。
 - 成分ごとの共通Graph色を使用、平面側端点は灰色。法線・共分散の可視化は既存Graph設定。色・寸法は旧Marker表示と同一ではない。

@@ -144,6 +144,8 @@ ros2 run ais_gng ais_gng_node
   - `safe` = green
   - `danger` = yellow
   - `collision` = red
+  - `HUMAN` = 赤紫（`#d946ef`）
+  - `CAR` = 青紫（`#8b5cf6`）
 - The arm renderer follows `/joint_states` via the gng_safety bridge and updates the pose in real time.
 - In the GNG Topology panel, `Nodes` and `Edges` can be toggled independently, and `Edge Width` adjusts the whole graph thickness.
 

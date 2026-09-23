@@ -116,7 +116,8 @@ class test_clustering_yaml(unittest.TestCase):
             with self.subTest(enable_common=enable_common):
                 params = self.resolve_parameters({}, enable_common=enable_common)
                 self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_common)
-                self.assertEqual(params[2]['surface_model.enable'], enable_common)
+                self.assertEqual(len(params), 3 if enable_common else 2)
+                self.assertEqual(params[0]['surface_model.enable'], enable_common)
 
     def test_sensor_overrides_common(self):
         for enable_plane in (False, True):
@@ -127,11 +128,14 @@ class test_clustering_yaml(unittest.TestCase):
                         'surface_model.enable': enable_curve,
                     }, enable_common=not enable_plane)
                     self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_plane)
-                    self.assertEqual(params[0]['surface_model.enable'], enable_curve)
-                    self.assertEqual(params[2]['surface_model.enable'], enable_curve)
+                    self.assertEqual(params[0]['surface_model.enable'], enable_plane and enable_curve)
+                    self.assertEqual(len(params), 3 if enable_plane else 2)
+                    if enable_plane:
+                        self.assertEqual(params[2]['surface_model.enable'], enable_curve)
 
     def test_surface_topic_consistency(self):
-        params = self.resolve_parameters({'surface_model.output_topic': '/yaml_test/curves'})
+        params = self.resolve_parameters({'surface_model.output_topic': '/yaml_test/curves'},
+                                         enable_common=True)
         self.assertEqual(params[0]['surface_model.output_topic'], '/yaml_test/curves')
         self.assertEqual(params[2]['surface_model.output_topic'], '/yaml_test/curves')
 
@@ -144,8 +148,10 @@ class test_clustering_yaml(unittest.TestCase):
                         'curve_clustering': enable_curve,
                     }, enable_common=not enable_curve)
                     self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_plane)
-                    self.assertEqual(params[0]['surface_model.enable'], enable_curve)
-                    self.assertEqual(params[2]['surface_model.enable'], enable_curve)
+                    self.assertEqual(params[0]['surface_model.enable'], enable_plane and enable_curve)
+                    self.assertEqual(len(params), 3 if enable_plane else 2)
+                    if enable_plane:
+                        self.assertEqual(params[2]['surface_model.enable'], enable_curve)
 
     def test_short_switches_override_legacy_names(self):
         for enable_clustering in (False, True):
@@ -158,7 +164,9 @@ class test_clustering_yaml(unittest.TestCase):
                 })
                 self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_clustering)
                 self.assertEqual(params[0]['surface_model.enable'], enable_clustering)
-                self.assertEqual(params[2]['surface_model.enable'], enable_clustering)
+                self.assertEqual(len(params), 3 if enable_clustering else 2)
+                if enable_clustering:
+                    self.assertEqual(params[2]['surface_model.enable'], enable_clustering)
 
     def test_invalid_short_switches(self):
         for name in ('plane_clustering', 'curve_clustering'):
@@ -172,21 +180,54 @@ class test_clustering_yaml(unittest.TestCase):
             'surface_model.method': 'smooth_graph',
             'surface_model.enable_support_regions': True,
             'plane_cluster.use_node_rho_for_seed_order': True,
-        }, arguments={'surface_method': 'model', 'enable_support_regions': 'false',
+        }, enable_common=True, arguments={'surface_method': 'model', 'enable_support_regions': 'false',
                       'use_node_rho_for_seed_order': 'false'})
         self.assertEqual(params[2]['surface_model.method'], 'model')
         self.assertFalse(params[2]['surface_model.enable_support_regions'])
         self.assertFalse(params[0]['plane_cluster.use_node_rho_for_seed_order'])
 
     def test_nonplane_override(self):
-        params = self.resolve_parameters({'nonplane_component.direct_enabled': False})
+        params = self.resolve_parameters({'nonplane_component.direct_enabled': False},
+                                         enable_common=True)
         self.assertFalse(params[0]['nonplane_component.direct_enabled'])
         self.assertTrue(params[2]['enable_nonplane_markers'])
 
     def test_explicit_stop_of_surface_node(self):
-        params = self.resolve_parameters({'curve_clustering': True},
+        params = self.resolve_parameters({'curve_clustering': True, 'plane_clustering': True},
                                          arguments={'start_plane_cluster': 'false'})
         self.assertEqual(len(params), 2)
+        self.assertFalse(params[0]['surface_model.enable'])
+        self.assertEqual(params[1]['plane_clusters_topic'], '/plane_clusters')
+
+    def test_disabled_clustering_has_no_consumers(self):
+        params = self.resolve_parameters({'plane_clustering': False, 'curve_clustering': False})
+        self.assertEqual(len(params), 2)
+        self.assertEqual(params[1]['plane_clusters_topic'], '')
+        self.assertFalse(params[0]['nonplane_component.direct_enabled'])
+        self.assertFalse(params[0]['surface_model.enable'])
+
+    def test_external_plane_source_keeps_surface_node(self):
+        params = self.resolve_parameters({'plane_clustering': False, 'curve_clustering': True},
+                                         arguments={'plane_clusters_input_topic': '/external/planes'})
+        self.assertEqual(len(params), 3)
+        self.assertTrue(params[0]['surface_model.enable'])
+        self.assertFalse(params[0]['nonplane_component.direct_enabled'])
+        self.assertEqual(params[1]['plane_clusters_topic'], '/external/planes')
+        self.assertEqual(params[2]['clusters_input_topic'], '/external/planes')
+
+    def test_explicit_standalone_plane_node(self):
+        params = self.resolve_parameters({'plane_clustering': False},
+                                         arguments={'plane_clusters_input_topic': ''})
+        self.assertEqual(len(params), 3)
+        self.assertEqual(params[2]['clusters_input_topic'], '')
+        self.assertEqual(params[1]['plane_clusters_topic'], '/plane_clusters')
+
+    def test_gpu_switch_controls_plane_node(self):
+        for enable_plane in (False, True):
+            params = self.resolve_parameters({'plane_clustering': enable_plane},
+                                             arguments={'backend': 'gpu'})
+            self.assertEqual(len(params), 3 if enable_plane else 2)
+            self.assertEqual(params[1]['plane_clusters_topic'], '/plane_clusters' if enable_plane else '')
 
 
 if __name__ == '__main__':

@@ -410,7 +410,7 @@ void GNG::makeResult(){
         for (auto &node_id: cluster.nodes_ids) {
             map.clusters_nodes[j++] = n1.tn_id[node_id];
         }
-        c.node_num = 0;
+        c.node_num = static_cast<uint32_t>(cluster.nodes_ids.size());
     } 
 #elif defined(VERSION_MAP)
     map.cluster_num = 0;
@@ -427,9 +427,15 @@ void GNG::setInferredClusterLabels(const uint32_t *cluster_ids, const uint32_t *
             if(cluster.ros_id == cluster_ids[i] &&
                 cluster_age >= cluster_ages[i]
                 ){
+                // クラス切替時の確認回数リセットと同一フレームの二重加算防止。
+                if (cluster.label_inferred != cluster_labels[i]) {
+                    cluster.count_inferred = 0;
+                } else if (cluster.count_inferred > 0 && cluster.frame_inferred == n1.frame_number) {
+                    break;
+                }
                 cluster.label_inferred = cluster_labels[i];
                 cluster.frame_inferred = n1.frame_number;
-                cluster.count_inferred++;
+                if (cluster.count_inferred < UINT32_MAX) {cluster.count_inferred++;}
                 // log.println("Detect %s, %d, age: %d",
                 // cluster_labels[i] == HUMAN ? "Human" : "CAR",
                 // cluster.ros_id, cluster_age);

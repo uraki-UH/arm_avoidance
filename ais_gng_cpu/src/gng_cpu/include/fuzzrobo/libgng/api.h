@@ -56,7 +56,7 @@ struct TopologicalCluster {
     Vec3 pos={0,0,0};                     // 位置
     Vec3 scale={0,0,0};                   // サイズ
     Quaternion quat={0,0,0,1};              // 姿勢
-    uint32_t frame=0;                 // 年齢
+    uint32_t frame=0;                 // クラスタ生成フレーム番号
     float match=0;                  // 一致率
     Vec3 velocity={0,0,0};                // 速度
     uint16_t *nodes=nullptr;  // クラスタに属しているノードのID
@@ -228,9 +228,9 @@ uint8_t* gng_getDownSampling(uint32_t *label_num);
 float* gng_getAffineTransformedInputPointCloud(uint32_t *num);
 
 /**
- * @brief 推定されたクラスタラベルを設定する
+ * @brief 推定されたクラスタラベルの設定
  * @param[in] cluster_ids クラスタID
- * @param[in] cluster_ages クラスタ年齢
+ * @param[in] cluster_ages 推論時点のクラスタ年齢（map.frame_number - cluster.frame）
  * @param[in] cluster_labels クラスタラベル
  * @param[in] size クラスタの数
  */

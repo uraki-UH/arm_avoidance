@@ -199,6 +199,14 @@ else()
     message(WARNING "PyTorch is not available in this Python environment. GNG backends will be skipped, but utility nodes can still build.")
 endif()
 
+if(BUILD_TESTING AND _torch_available)
+  ament_add_gtest(test_cluster_classification test/test_cluster_classification.cpp
+    src/plugin/cluster_classification.cpp)
+  target_include_directories(test_cluster_classification PRIVATE include)
+  target_link_libraries(test_cluster_classification gng_cpu::gng_cpu ${TORCH_LIBRARIES})
+  ament_target_dependencies(test_cluster_classification ais_gng_msgs rclcpp ament_index_cpp)
+endif()
+
 foreach(_backend IN ITEMS cpu gpu)
   set(_backend_lib "")
   if(_backend STREQUAL "cpu")

@@ -157,6 +157,9 @@ def generate_launch_description():
             raise RuntimeError(f"Backend executable not found: {executable_path}")
 
         surface_config_path = os.path.join(package_dir, 'config', 'surface_model.yaml')
+        with open(surface_config_path, encoding='utf-8') as config_file:
+            surface_parameters = yaml.safe_load(config_file).get(
+                '/**', {}).get('ros__parameters', {})
         # センサー設定と短名変換の統合。同一セレクターへの展開による共通設定との優先順維持。
         parameters = [surface_config_path, gng_parameters]
         launch_parameter_overrides = {}
@@ -189,6 +192,7 @@ def generate_launch_description():
             plane_config = yaml.safe_load(config_file)
         plane_parameters = plane_config.get(
             'plane_cluster_incremental_node', {}).get('ros__parameters', {})
+        enable_plane_clustering = bool(gng_parameters.get('plane_clustering', True))
         enable_nonplane_component = False
         if backend == 'cpu':
             # 共通設定のCPU直結名前空間への転写。センサー別YAML、起動引数の順で優先。
@@ -202,8 +206,11 @@ def generate_launch_description():
                 if name.startswith(('plane_cluster.', 'nonplane_component.'))
             })
             plane_parameter_overrides['plane_cluster.output_topic'] = plane_clusters_topic
-            enable_nonplane_component = bool(plane_parameter_overrides.get(
-                'nonplane_component.direct_enabled', True))
+            enable_plane_clustering = bool(plane_parameter_overrides.get(
+                'plane_cluster.direct_enabled', True))
+            enable_nonplane_component = enable_plane_clustering and bool(
+                plane_parameter_overrides.get('nonplane_component.direct_enabled', True))
+            plane_parameter_overrides['nonplane_component.direct_enabled'] = enable_nonplane_component
             rho_mode = LaunchConfiguration(
                 'use_node_rho_for_seed_order').perform(context)
             if rho_mode != 'auto':
@@ -211,6 +218,24 @@ def generate_launch_description():
                     'plane_cluster.use_node_rho_for_seed_order'
                 ] = parse_bool(rho_mode, 'use_node_rho_for_seed_order')
             parameters.append(plane_parameter_overrides)
+
+        # 自動入力では平面OFFに追従。明示指定の外部入力・独立再計算は従来どおりの起動対象。
+        clusters_input_topic = LaunchConfiguration('plane_clusters_input_topic').perform(context)
+        has_explicit_plane_source = clusters_input_topic != 'auto'
+        if not has_explicit_plane_source:
+            clusters_input_topic = plane_clusters_topic if backend == 'cpu' else ''
+        enable_plane_node = parse_bool(
+            LaunchConfiguration('start_plane_cluster').perform(context), 'start_plane_cluster')
+        enable_plane_node = enable_plane_node and (
+            enable_plane_clustering or has_explicit_plane_source)
+        has_plane_output = (backend == 'cpu' and enable_plane_clustering) or enable_plane_node
+        exporter_plane_topic = (
+            plane_clusters_topic if backend == 'cpu' and enable_plane_clustering
+            else clusters_input_topic or plane_clusters_topic)
+        # 起動しない曲面ノードの計算時間トピックへの購読抑止。
+        launch_parameter_overrides['surface_model.enable'] = enable_plane_node and bool(
+            gng_parameters.get('surface_model.enable',
+                               surface_parameters.get('surface_model.enable', True)))
 
         # センサー・平面設定より明示launch引数を優先。
         parameters.append(launch_parameter_overrides)
@@ -229,7 +254,7 @@ def generate_launch_description():
                 executable='object_gng_dataset_exporter_node',
                 parameters=[{
                     'map_topic': topological_map_topic,
-                    'plane_clusters_topic': plane_clusters_topic,
+                    'plane_clusters_topic': exporter_plane_topic if has_plane_output else '',
                     'point_cloud_topic': source_point_cloud_topic,
                     'camera_info_topic': source_camera_info_topic,
                 }],
@@ -237,10 +262,7 @@ def generate_launch_description():
             ),
         ]
 
-        start_plane_cluster = parse_bool(
-            LaunchConfiguration('start_plane_cluster').perform(context),
-            'start_plane_cluster')
-        if start_plane_cluster:
+        if enable_plane_node:
             # センサー別の曲面設定を実際の計算ノードへも転送。
             surface_parameter_overrides = {
                 name: value for name, value in gng_parameters.items()
@@ -253,11 +275,6 @@ def generate_launch_description():
             if support_mode != 'auto':
                 surface_parameter_overrides['surface_model.enable_support_regions'] = (
                     parse_bool(support_mode, 'enable_support_regions'))
-            clusters_input_topic = LaunchConfiguration(
-                'plane_clusters_input_topic').perform(context)
-            if clusters_input_topic == 'auto':
-                clusters_input_topic = (
-                    plane_clusters_topic if backend == 'cpu' else '')
             nodes.append(
                 Node(
                     package='ais_gng',

@@ -59,6 +59,7 @@ class CUGNG {
     uint32_t observation_pixel_hit_num = 0;
     uint32_t observation_ray_num = 0;
     // 次の学習1回用の重点点添字。観測統計とは独立した学習配分。
+    vector<uint32_t> attention_voxel_ids; // 重点候補を含む入力voxelの番号
     vector<uint32_t> priority_point_ids;
     vector<float> priority_weights;
     float priority_ratio = 0;
@@ -74,7 +75,8 @@ class CUGNG {
         const vector<observation_attention_span> *attention_spans = nullptr,
         const vector<uint32_t> *attention_blocks = nullptr);
     void learn_normal(Vec3f& input_point, const Vec3f *observation_point = nullptr, uint32_t raw_idx = UINT32_MAX,
-        bool enable_statistics = true);
+        bool enable_statistics = true, const Node_d *selected_winners = nullptr,
+        bool is_selected_in_vigilance = false);
     void setTrainingEventCapture(bool enable);
     void setTrainingEventMaxWinnerRank(uint16_t max_winner_rank);
     const GngTrainingEvent* getTrainingEvents(uint32_t *num) const;

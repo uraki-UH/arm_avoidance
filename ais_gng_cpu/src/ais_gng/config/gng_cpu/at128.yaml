@@ -12,7 +12,7 @@ ais_gng_node:
     node.s1_reset_range: 0.1
     node.grid: 1.0
     node.s1_age_max: [6, 6, 6, 3] #[default, safe, wall, unknown]
-    node.clusted_s1_age: [20, 20, 6, 3] 
+    node.clusted_s1_age: [20, 20, 6, 6] 
     node.interval: [0.1, 0.4, 0.4, 0.1] 
     node.static.age_min: -1 # 長期記憶の年齢
     node.static.s1_age_max: 100 # 長期記憶ノードの未観測・未選択寿命（GNG更新回数）
@@ -62,5 +62,5 @@ ais_gng_node:
     input.x_max: 200.
     input.y_min: -200.
     input.y_max: 200.
-    input.z_min: -5.0
-    input.z_max: 10.0
+    input.z_min: -20.0
+    input.z_max: 20.0

@@ -38,3 +38,11 @@ add_executable(gng_bsp3d_nearest_test test/gng_spatial_nearest_test.cpp
 target_include_directories(gng_bsp3d_nearest_test PRIVATE include "${bsp3d_include_dir}")
 target_compile_definitions(gng_bsp3d_nearest_test PRIVATE GNG_VERSION=0)
 add_test(NAME gng_bsp3d_nearest_test COMMAND gng_bsp3d_nearest_test)
+
+foreach(test_name tree_storage_test sampling_grid_test)
+  add_executable(${test_name} test/${test_name}.cpp src/cpu/cugng.cpp src/cpu/sampling_grid.cpp
+    src/cpu/voxel_grid.cpp src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(${test_name} PRIVATE include "${bsp3d_include_dir}" ${Boost_INCLUDE_DIRS})
+  target_compile_definitions(${test_name} PRIVATE GNG_VERSION=0 GNG_USE_SAMPLED_ATTENTION=1 GNG_DETERMINISTIC_BENCHMARK=1)
+  add_test(NAME ${test_name} COMMAND ${test_name})
+endforeach()
