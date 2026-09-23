@@ -202,7 +202,8 @@ void GNG::exec() {
     }
 #endif
 
-    auto t0 = std::chrono::system_clock::now();
+    n1.sampling_statistics = {};
+    auto t0 = std::chrono::steady_clock::now();
     if (!n1.enable_observation_support || !n1.has_observation_origin) {
         n1.observation_pixel_source = {};
         n1.observation_angle_table = nullptr;
@@ -222,10 +223,10 @@ void GNG::exec() {
     }
     priority.resize(kept_num);
     if (has_priority_weights) {n1.priority_weights.resize(kept_num);}
-    auto t1 = std::chrono::system_clock::now();
+    auto t1 = std::chrono::steady_clock::now();
     // ダウンサンプリング
     attention();
-    auto t2 = std::chrono::system_clock::now();
+    auto t2 = std::chrono::steady_clock::now();
     // 学習
     // n1.learn_normal(input_pcl, input_pcl_num);// 元点群
     // 全voxelの実測代表点・元番号の別配列なし。学習時の直接参照。
@@ -240,10 +241,10 @@ void GNG::exec() {
     n1.observation_pixel_source = {};
     n1.observation_angle_table = nullptr;
     n1.observation_table_num = 0;
-    auto t3 = std::chrono::system_clock::now();
+    auto t3 = std::chrono::steady_clock::now();
     // ラベリング
     la.labelling_fuzzy();
-    auto t4 = std::chrono::system_clock::now();
+    auto t4 = std::chrono::steady_clock::now();
     // エッジが短いのは削除
     n1.check_edge_distance();
     // 年齢に基づく削除
@@ -252,10 +253,17 @@ void GNG::exec() {
     n1.check_delete_no_edge_and_decay_eta();
     // クラスタリングのために，エッジの距離を計算
     n1.calc_edge_distanceXY();
-    auto t5 = std::chrono::system_clock::now();
+    auto t5 = std::chrono::steady_clock::now();
     // クラスタリング
     cl.clustering();
-    auto t6 = std::chrono::system_clock::now();
+    auto t6 = std::chrono::steady_clock::now();
+    auto &statistics = n1.sampling_statistics;
+    statistics.voxel_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    statistics.attention_ms = std::chrono::duration<double, std::milli>(t2 - t1).count();
+    statistics.learn_ms = std::chrono::duration<double, std::milli>(t3 - t2).count();
+    statistics.label_ms = std::chrono::duration<double, std::milli>(t4 - t3).count();
+    statistics.maintenance_ms = std::chrono::duration<double, std::milli>(t5 - t4).count();
+    statistics.cluster_ms = std::chrono::duration<double, std::milli>(t6 - t5).count();
     n1.finishMapDeltaFrame();
 
 #ifdef GNG_ENABLE_FRAME_LOG

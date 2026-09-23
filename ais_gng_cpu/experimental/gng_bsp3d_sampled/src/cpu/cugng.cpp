@@ -6,114 +6,44 @@ CUGNG::CUGNG(){
 
 }
 
-bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
-    observation_touched_ids.clear();
-    observation_pixel_source = {};
-    GridConfig c;
-    // 範囲 (大きい)
-    c.x_min = _other_config->x_min;
-    c.x_max = _other_config->x_max;
-    c.y_min = _other_config->y_min;
-    c.y_max = _other_config->y_max;
-    c.z_min = _other_config->z_min;
-    c.z_max = _other_config->z_max;
-
-    // Voxel Grid
-    // 間引き無効時の範囲判定用グリッド。点の集約には不使用。
-    c.unit = _other_config->voxel_grid_unit > 0
-        ? _other_config->voxel_grid_unit : _other_config->node_grid;
-    if (!voxel_config.init(c))
-        return false;
-
-    // Grid 範囲を広げる
-    c.unit = _other_config->node_grid;
-    c.x_min -= c.unit;
-    c.y_min -= c.unit;
-    c.z_min -= c.unit;
-    c.x_max += c.unit;
-    c.y_max += c.unit;
-    c.z_max += c.unit;
-    if (!grid_config.init(c))
-        return false;
-    
-    // copy
-    node_num_max = _gng_config->num_max;
-    gng_config = *_gng_config;
-    edge_config = _edge_config;
-
-    // clear
-    node_num = 0;
-    // nodes.clear();
-    // tn_id.clear();
-    edge_count.clear();
-    grid.clear();
-    grid_page_offsets.clear();
-    grid_node_num.clear();
-
-    // malloc
+bool CUGNG::init(NodeConfig *node_config, EdgeConfig *edge_params, OtherConfig *input_config) {
+    clear();
+    GridConfig bounds;
+    bounds.x_min = input_config->x_min;
+    bounds.x_max = input_config->x_max;
+    bounds.y_min = input_config->y_min;
+    bounds.y_max = input_config->y_max;
+    bounds.z_min = input_config->z_min;
+    bounds.z_max = input_config->z_max;
+    // 入力ボクセル専用の範囲。間引き無効時もnode.gridへの非依存。
+    bounds.unit = input_config->voxel_grid_unit > 0 ? input_config->voxel_grid_unit : 1.0f;
+    if (!voxel_config.init(bounds)) {return false;}
+    node_num_max = node_config->num_max;
+    gng_config = *node_config;
+    edge_config = edge_params;
     nodes.resize(node_num_max);
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-    spatial_root = nullptr;
-#endif
-    spatial_index.reset();
     spatial_entries.assign(node_num_max, spatial_entry{});
-#ifdef GNG_USE_BSP3D
-    // 3次元向けの既定値。近似なし、葉の容量32、検索用の実点群境界箱なし。
     spatial_index = std::make_unique<spatial_tree>();
-#else
-    const SpatialTree::BoundingBox<float, 3> bounds{
-        {(grid_config.x_min + grid_config.x_max) * 0.5f,
-         (grid_config.y_min + grid_config.y_max) * 0.5f,
-         (grid_config.z_min + grid_config.z_max) * 0.5f},
-        {(grid_config.x_max - grid_config.x_min) * 0.5f,
-         (grid_config.y_max - grid_config.y_min) * 0.5f,
-         (grid_config.z_max - grid_config.z_min) * 0.5f}};
-    spatial_index = std::make_unique<spatial_tree>(bounds, SpatialTree::SpatialTreeParams<float>{});
-    spatial_index->visitCells([&](const auto &cell, int depth) {
-        if (depth == 0) {spatial_root = &cell;}
-    });
-#endif
-#endif
     tn_id.resize(node_num_max);
-    edge_count.resize(node_num_max * node_num_max);
-    memset(edge_count.data(), 0, sizeof(uint8_t) * node_num_max * node_num_max);
-    edge_distance.resize(node_num_max * node_num_max);
-    grid_page_offsets.assign((static_cast<size_t>(grid_config.maxXYZ) + grid_page_size - 1) / grid_page_size, UINT32_MAX);
-    grid_node_num.resize(grid_config.maxXYZ, 0);
-    for (auto& node : nodes)
-        node.init(NODE_NOID, 0.f, 0.f);
-
-    // 学習回数
+    // 既存エッジ表の維持。今回のグリッド撤去とは独立したメモリ構造。
+    const auto num_edge_slots = static_cast<size_t>(node_num_max) * node_num_max;
+    edge_count.assign(num_edge_slots, 0);
+    edge_distance.resize(num_edge_slots);
+    for (auto &node : nodes) {node.init(NODE_NOID, 0.0f, 0.0f);}
     frame_number = 0;
-    map_delta_frame_open = false;
-
-    // 積算誤差による追加
-#ifdef ADD_NODE_ERR
-    Vec3f p(0, 0, 0);
-    add_node(p);               // 初期ノードを追加
-    p[0] = 1;
-    add_node(p);  // 初期ノードを追加
-#endif
+    sampling_statistics = {};
     return true;
 }
 void CUGNG::clear() {
+    spatial_index.reset();
+    spatial_entries.clear();
     observation_touched_ids.clear();
     observation_pixel_source = {};
     node_num = 0;
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-    spatial_root = nullptr;
-#endif
-    spatial_index.reset();
-    spatial_entries.clear();
-#endif
     nodes.clear();
     tn_id.clear();
     edge_count.clear();
-    grid.clear();
-    grid_page_offsets.clear();
-    grid_node_num.clear();
+    edge_distance.clear();
     training_events.clear();
     training_event_num = 0;
     node_update_recorded.clear();
@@ -583,255 +513,60 @@ void CUGNG::getMinAll(Vec3f& p, Node_d& n){
     }
 }
 
-bool CUGNG::getMinGrid(Vec3f& p, Node_d& n){
-#ifdef GNG_USE_SPATIAL_TREE
-    return query_spatial(p, n, nullptr);
-#else
-    int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
-    int grid_min_i, grid_max_i;
-    int grid_min_j, grid_max_j;
-    int grid_min_k, grid_max_k;
-    float norm2;
-    uint32_t grid_index;
-
-    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
-
-    grid_min_i = MAX(0, grid_mid_i - 1);
-    grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
-    grid_min_j = MAX(0, grid_mid_j - 1);
-    grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
-    grid_min_k = MAX(0, grid_mid_k - 1);
-    grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
-
-    n.id1 = NODE_NOID;
-    n.id1_d2 = FLT_MAX;
-    n.id2 = NODE_NOID;
-    n.id2_d2 = FLT_MAX;
-
-    bool p_is_in_vigilance = false;
-
-    for (i = grid_min_i; i <= grid_max_i; ++i)
-        for (j = grid_min_j; j <= grid_max_j; ++j)
-            for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
-                if (grid_index >= grid_config.maxXYZ)
-                    continue;
-                const auto num = grid_node_num[grid_index];
-                if (num == 0) {continue;}
-                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
-                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
-                    const auto id = ids[grid_node_i];
-                    auto &node = nodes[id];
-                    const float x = p.p[0] - node.pos.p[0];
-                    const float y = p.p[1] - node.pos.p[1];
-                    const float z = p.p[2] - node.pos.p[2];
-                    norm2 = x * x + y * y + z * z;
-                    if (norm2 < n.id2_d2) {
-                        if (norm2 < n.id1_d2) {
-                            n.id2 = n.id1,
-                            n.id2_d2 = n.id1_d2;
-                            n.id1 = id, n.id1_d2 = norm2;
-                        } else {
-                            n.id2 = id, n.id2_d2 = norm2;
-                        }
-                    }
-                    p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
-                }
-            }
-
-    return p_is_in_vigilance;
-#endif
+bool CUGNG::getMinGrid(Vec3f &point, Node_d &winners) {
+    return query_spatial(point, winners, nullptr);
 }
 
-bool CUGNG::getDownSamplingGrid(Vec3f& p, uint8_t& label, Node_d &n){
-#ifdef GNG_USE_SPATIAL_TREE
-    return query_spatial(p, n, &label);
-#else
-    int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
-    int grid_min_i, grid_max_i;
-    int grid_min_j, grid_max_j;
-    int grid_min_k, grid_max_k;
-    float norm2;
-    uint32_t grid_index;
-
-    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
-
-    grid_min_i = MAX(0, grid_mid_i - 1);
-    grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
-    grid_min_j = MAX(0, grid_mid_j - 1);
-    grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
-    grid_min_k = MAX(0, grid_mid_k - 1);
-    grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
-
-    bool p_is_in_vigilance = false;
-
-    n.id1 = NODE_NOID;
-    n.id1_d2 = FLT_MAX;
-    n.id2 = NODE_NOID;
-    n.id2_d2 = FLT_MAX;
-
-    label = 0;
-
-    for (i = grid_min_i; i <= grid_max_i; ++i)
-        for (j = grid_min_j; j <= grid_max_j; ++j)
-            for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
-                if (grid_index >= grid_config.maxXYZ)
-                    continue;
-                const auto num = grid_node_num[grid_index];
-                if (num == 0) {continue;}
-                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
-                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
-                    const auto id = ids[grid_node_i];
-                    auto &node = nodes[id];
-                    const float x = p.p[0] - node.pos.p[0];
-                    const float y = p.p[1] - node.pos.p[1];
-                    const float z = p.p[2] - node.pos.p[2];
-                    norm2 = x * x + y * y + z * z;
-                    if(norm2 < gng_config.s1_reset_range2){
-                        node.age_s1 = 0;
-                    }
-                    if(norm2 < gng_config.ds_range_max2){
-                        if(node.clusted_label == HUMAN){
-                            label |= 0b111;
-                        }else if(node.label == UNKNOWN_OBJECT){
-                            label |= 0b011;
-                        }
-                    }
-                    p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
-                    if (norm2 < n.id2_d2) {
-                        if (norm2 < n.id1_d2) {
-                            n.id2 = n.id1,
-                            n.id2_d2 = n.id1_d2;
-                            n.id1 = id, n.id1_d2 = norm2;
-                        } else {
-                            n.id2 = id, n.id2_d2 = norm2;
-                        }
-                    }
-                }
-            }
-    return p_is_in_vigilance;
-#endif
+bool CUGNG::getDownSamplingGrid(Vec3f &point, uint8_t &label, Node_d &winners) {
+    return query_spatial(point, winners, &label);
 }
 
 void CUGNG::delete_node(uint32_t idx) {
-    if (idx >= node_num_max || node_num <= 2)
-        return;
-    auto& node = nodes[idx];
-    if (node.id == NODE_NOID)
-        return;
-#ifdef GNG_USE_SPATIAL_TREE
-    spatial_index->remove(&spatial_entries[idx]);
-#endif
+    if (idx >= static_cast<uint32_t>(node_num_max) || node_num <= 2) {return;}
+    auto &node = nodes[idx];
+    if (node.id == NODE_NOID) {return;}
     recordNodeDelta(node, GNG_DELTA_REMOVE);
-    // gridから削除
-    auto& g1 = grid_cell(node.grid_i);
-    uint32_t last = --grid_node_num[node.grid_i];
-    if (node.grid_vec_i != last) {
-        nodes[g1[last]].grid_vec_i = node.grid_vec_i;
-        g1[node.grid_vec_i] = g1[last];
-    }
-    g1[last] = NODE_NOID;
-    
-    node_num--;
-
+    spatial_index->remove(&spatial_entries[idx]);
+    --node_num;
+    ++sampling_statistics.num_deleted_nodes;
     disconnect_all(idx);
     node.id = NODE_NOID;
 }
 
-void CUGNG::move_node(Node& node, Vec3f& new_pos) {
-    if(node.id == NODE_NOID){
-        // assert(false);
-        return;
+void CUGNG::move_node(Node &node, Vec3f &new_pos) {
+    if (node.id == NODE_NOID || !voxel_config.isRange(new_pos.p)) {return;}
+    for (int axis = 0; axis < 3; ++axis) {
+        if (!std::isfinite(new_pos.p[axis])) {return;}
     }
-
-    if(!voxel_config.isRange(new_pos.p)){
-        return;
-    }
-
-    uint32_t new_index = grid_config.getIndex(new_pos.p);
-    if(new_index >= grid_config.maxXYZ){
-        // 何もしない
-        return;
-    }
-    if (new_index != node.grid_i && grid_node_num[new_index] >= NODE_GRID_NODE_NUM_NAX) {
-        return;
-    }
-    const bool position_changed = map_delta_capture_enabled &&
-        (node.pos.p[0] != new_pos.p[0] || node.pos.p[1] != new_pos.p[1] ||
-         node.pos.p[2] != new_pos.p[2]);
-#ifdef GNG_USE_SPATIAL_TREE
+    const bool is_position_changed = node.pos.p[0] != new_pos.p[0] ||
+        node.pos.p[1] != new_pos.p[1] || node.pos.p[2] != new_pos.p[2];
+    node.pos = new_pos;
+    // ノード座標と索引内の座標キャッシュの同期。セル収容上限による拒否なし。
     spatial_index->updatePosition(&spatial_entries[node.id],
         {new_pos.p[0], new_pos.p[1], new_pos.p[2]});
-#endif
-    node.pos.p[0] = new_pos.p[0];
-    node.pos.p[1] = new_pos.p[1];
-    node.pos.p[2] = new_pos.p[2];
-    if (position_changed) {
-        recordNodeDelta(node, GNG_DELTA_UPDATE);
-    }
-
-    // 動かさない
-    if (new_index == node.grid_i) {
-        return;
-    }
-
-    // グリッドの更新
-    // 削除
-    auto& g1 = grid_cell(node.grid_i);
-    if(grid_node_num[node.grid_i] == 0){
-        assert(node_num);
-    }
-
-    uint32_t last = --grid_node_num[node.grid_i];
-    if (node.grid_vec_i != last) {
-        nodes[g1[last]].grid_vec_i = node.grid_vec_i;
-        g1[node.grid_vec_i] = g1[last];
-    }
-    g1[last] = NODE_NOID;
-
-    auto& g2 = grid_cell(new_index);
-    node.grid_i = new_index;
-    node.grid_vec_i = grid_node_num[new_index]++;
-    g2[node.grid_vec_i] = node.id;
+    ++sampling_statistics.num_tree_moves;
+    if (map_delta_capture_enabled && is_position_changed) {recordNodeDelta(node, GNG_DELTA_UPDATE);}
 }
 
 uint32_t CUGNG::add_node(Vec3f &pos) {
-    if(node_num == node_num_max){
-        return NODE_NOID; // ノード数の上限に達している
+    if (node_num == node_num_max || !voxel_config.isRange(pos.p)) {return NODE_NOID;}
+    for (int axis = 0; axis < 3; ++axis) {
+        if (!std::isfinite(pos.p[axis])) {return NODE_NOID;}
     }
-    uint32_t grid_i = grid_config.getIndex(pos);
-
-    if(grid_i >= grid_config.maxXYZ){
-        return NODE_NOID; // 範囲外
-    }
-    if (grid_node_num[grid_i] >= NODE_GRID_NODE_NUM_NAX) {
-        return NODE_NOID; // グリッドセルの上限
-    }
-    for (uint32_t i = 0; i < node_num_max; i++) {
-        if (nodes[i].id == NODE_NOID) {
-            auto& node = nodes[i];
-            node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
-            node.frame = frame_number;
-            node.grid_i = grid_i;
-            auto& g1 = grid_cell(grid_i);
-            node.grid_vec_i = grid_node_num[grid_i]++;
-            g1[node.grid_vec_i] = i;
-#ifdef GNG_USE_SPATIAL_TREE
-            auto &entry = spatial_entries[i];
-            entry = spatial_entry{};
-            entry.node_idx = i;
-            entry.position = {pos.p[0], pos.p[1], pos.p[2]};
-            spatial_index->add(&entry);
-#endif
-            node_num++;
-            recordNodeDelta(node, GNG_DELTA_ADD);
-            return i;
-        }
+    for (uint32_t idx = 0; idx < static_cast<uint32_t>(node_num_max); ++idx) {
+        if (nodes[idx].id != NODE_NOID) {continue;}
+        auto &node = nodes[idx];
+        node.init(idx, gng_config.eta_s1, gng_config.eta_s2, pos);
+        node.frame = frame_number;
+        auto &entry = spatial_entries[idx];
+        entry = spatial_entry{};
+        entry.node_idx = idx;
+        entry.position = {pos.p[0], pos.p[1], pos.p[2]};
+        spatial_index->add(&entry);
+        ++node_num;
+        ++sampling_statistics.num_added_nodes;
+        recordNodeDelta(node, GNG_DELTA_ADD);
+        return idx;
     }
     return NODE_NOID;
 }
@@ -1025,56 +760,14 @@ void CUGNG::calc_edge_distanceXY(){
     }
 }
 
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-void CUGNG::find_spatial_nearest(const spatial_tree::Cell &cell,
-        const SpatialTree::Point<float, 3> &point, Node_d &winners) {
-    if (cell.subtree_element_count == 0) {return;}
-    if (!cell.is_subdivided) {
-        for (const auto *entry : cell.elements) {
-            const float dist2 = (entry->position - point).squaredNorm();
-            if (dist2 < winners.id2_d2) {
-                if (dist2 < winners.id1_d2) {
-                    winners.id2 = winners.id1;
-                    winners.id2_d2 = winners.id1_d2;
-                    winners.id1 = entry->node_idx;
-                    winners.id1_d2 = dist2;
-                } else {
-                    winners.id2 = entry->node_idx;
-                    winners.id2_d2 = dist2;
-                }
-            }
-        }
-        return;
-    }
-
-    const int first = cell.getChildIndex(point);
-    find_spatial_nearest(cell.children_block[first], point, winners);
-
-    // 分割面までの距離による兄弟セルの距離下限。子セルの並べ替えなし。
-    const float x = point[0] - cell.bounds.center[0];
-    const float y = point[1] - cell.bounds.center[1];
-    const float z = point[2] - cell.bounds.center[2];
-    const float x2 = x * x, y2 = y * y, z2 = z * z;
-    const float min_dist2[8]{0, x2, y2, x2 + y2, z2, x2 + z2, y2 + z2, x2 + y2 + z2};
-    for (int mask = 1; mask < 8; ++mask) {
-        // 固定順のため枝刈り後も後続セルを評価。固定半径なしの最近傍探索。
-        if (min_dist2[mask] > winners.id2_d2) {continue;}
-        find_spatial_nearest(cell.children_block[first ^ mask], point, winners);
-    }
-}
-#endif
-
 bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
+    ++sampling_statistics.num_nearest_queries;
     winners.id1 = winners.id2 = NODE_NOID;
     winners.id1_d2 = winners.id2_d2 = FLT_MAX;
     if (label) {*label = 0;}
-    // 木全体の最近傍2ノード。固定範囲の候補列挙・候補配列の確保なし。
-#ifdef GNG_USE_BSP3D
     if (!spatial_index) {return false;}
     std::array<bsp3d::SearchResult<spatial_entry>, 2> nearest;
-    const int num_nearest = spatial_index->findNBest(
-        {point.p[0], point.p[1], point.p[2]}, 2, nearest);
+    const int num_nearest = spatial_index->findNBest({point.p[0], point.p[1], point.p[2]}, 2, nearest);
     if (num_nearest > 0) {
         winners.id1 = nearest[0].element->node_idx;
         winners.id1_d2 = nearest[0].distance_sq;
@@ -1083,12 +776,7 @@ bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
         winners.id2 = nearest[1].element->node_idx;
         winners.id2_d2 = nearest[1].distance_sq;
     }
-#else
-    if (!spatial_root) {return false;}
-    find_spatial_nearest(*spatial_root, {point.p[0], point.p[1], point.p[2]}, winners);
-#endif
-
-    // 警戒領域・寿命・重点学習ラベルの判定対象は最近傍2ノードのみ。
+    // 既存bsp3d版と同じ2近傍の判定。全ノードの観測寿命維持は別処理。
     const uint32_t ids[2]{winners.id1, winners.id2};
     const float dist2[2]{winners.id1_d2, winners.id2_d2};
     bool is_in_vigilance = false;
@@ -1106,4 +794,3 @@ bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
     }
     return is_in_vigilance;
 }
-#endif

@@ -26,6 +26,10 @@ void library_init(void) {
 
 GNG gng;
 
+MY_API const gng_sampling_statistics *gng_get_sampling_statistics() {
+    return &gng.n1.sampling_statistics;
+}
+
 MY_API int gng_init() {
     // ライブラリのパスを取得
     Dl_info info;

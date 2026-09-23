@@ -1,6 +1,7 @@
 {
   global:
     gng_init;
+    gng_get_sampling_statistics;
     gng_setParameter;
     gng_setPointCloud;
     gng_exec;

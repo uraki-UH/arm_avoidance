@@ -57,8 +57,6 @@ class Node{
         // int s1_w_num;
         uint32_t edges[NODE_MAX_EDGE];
         uint32_t edge_num;  // 接続しているエッジの数
-        uint32_t grid_i;//所属しているgridのvectorの中のindex
-        uint32_t grid_vec_i;
 
         // 時間
         uint32_t frame;
