@@ -1,0 +1,7 @@
+{
+  "before_sha256": "0dc97bf8914afda4ba015314891000febb90ffa271519291cbdee359d702fa3a",
+  "after_sha256": "7a692383c6ecb884dd3166ff7beb3bfefe73ef9a66d96a557cf4693e0c11838a",
+  "before_inode": 40539057,
+  "after_inode": 40539167,
+  "installed": "/ros2_ws/install/gng_cpu/lib/libgng_cpu.so"
+}

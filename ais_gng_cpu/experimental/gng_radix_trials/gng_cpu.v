@@ -1,0 +1,33 @@
+{
+  global:
+    gng_get_efficiency_view;
+    gng_get_voxel_sort_ms;
+    gng_set_trial_seed;
+    gng_set_trial_last_representative;
+    gng_set_trial_input_capture;
+    gng_get_trial_inputs;
+    gng_init;
+    gng_setParameter;
+    gng_setPointCloud;
+    gng_exec;
+    gng_set_priority_input;
+    gng_set_weighted_priority_input;
+    gng_setMapDeltaCapture;
+    gng_getTopologicalMapDelta;
+    gng_setTrainingEventCapture;
+    gng_setTrainingEventMaxWinnerRank;
+    gng_getTrainingEvents;
+    gng_get_node_statistics;
+    gng_get_node_num_neighbors;
+    gng_set_observation_input;
+    gng_get_observation_angle_range;
+    gng_get_observation_frame;
+    gng_getTopologicalMap;
+    gng_getDownSampling;
+    gng_getAffineTransformedInputPointCloud;
+    gng_setInferredClusterLabels;
+    gng_setInferredNodeLabels;
+    gng_setNodePositions;
+  local:
+    *;
+};

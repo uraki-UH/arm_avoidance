@@ -1,0 +1,12 @@
+{
+  "production_source_file_num": 53,
+  "production_source_unchanged": true,
+  "production_library_unchanged": true,
+  "production_library_sha256": "0dc97bf8914afda4ba015314891000febb90ffa271519291cbdee359d702fa3a",
+  "existing_ros_process_num": 9,
+  "existing_ros_changes": {},
+  "external_ros_additions": {},
+  "owned_processes": [],
+  "temporary_build_removed": true,
+  "colcon_package_num": 30
+}

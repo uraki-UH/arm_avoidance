@@ -1,0 +1,826 @@
+{
+  "compared_frames": 1090,
+  "executed_frames": 2180,
+  "comparisons": [
+    {
+      "case": "features_0.1",
+      "frames": 30,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0,
+        "events_sha256": 0,
+        "delta_sha256": 0,
+        "statistics_sha256": 0,
+        "observation_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 30,
+        "learning_inputs_sha256": 30,
+        "events_sha256": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0,
+        "events_sha256": 0,
+        "delta_sha256": 0,
+        "statistics_sha256": 0,
+        "observation_sha256": 0
+      }
+    },
+    {
+      "case": "features_0.5",
+      "frames": 30,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0,
+        "events_sha256": 0,
+        "delta_sha256": 0,
+        "statistics_sha256": 0,
+        "observation_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 30,
+        "learning_inputs_sha256": 30,
+        "events_sha256": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0,
+        "events_sha256": 0,
+        "delta_sha256": 0,
+        "statistics_sha256": 0,
+        "observation_sha256": 0
+      }
+    },
+    {
+      "case": "features_0",
+      "frames": 30,
+      "matches": {
+        "topology_sha256": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 30,
+        "learning_inputs_sha256": 30,
+        "events_sha256": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "totals": {
+        "topology_sha256": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "cell_membership_sha256": 30,
+        "cell_sequence_sha256": 30,
+        "ranges_sha256": 30,
+        "centroids_sha256": 30,
+        "learning_inputs_sha256": 30,
+        "events_sha256": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "first_difference": {
+        "topology_sha256": null,
+        "graph_sha256": null,
+        "cluster_sha256": null,
+        "label_sha256": null,
+        "voxel_sha256": null,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": null,
+        "learning_inputs_sha256": null,
+        "events_sha256": null,
+        "delta_sha256": null,
+        "statistics_sha256": null,
+        "observation_sha256": null
+      }
+    },
+    {
+      "case": "voxel_0.1_1",
+      "frames": 300,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 300,
+        "cell_sequence_sha256": 300,
+        "ranges_sha256": 300,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "voxel_sha256": 300,
+        "cell_membership_sha256": 300,
+        "cell_sequence_sha256": 300,
+        "ranges_sha256": 300,
+        "centroids_sha256": 300,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    },
+    {
+      "case": "voxel_0.1_2",
+      "frames": 100,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 100,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    },
+    {
+      "case": "voxel_0.1_3",
+      "frames": 100,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 100,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    },
+    {
+      "case": "voxel_0.5_1",
+      "frames": 300,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 300,
+        "cell_sequence_sha256": 300,
+        "ranges_sha256": 300,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "voxel_sha256": 300,
+        "cell_membership_sha256": 300,
+        "cell_sequence_sha256": 300,
+        "ranges_sha256": 300,
+        "centroids_sha256": 300,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    },
+    {
+      "case": "voxel_0.5_2",
+      "frames": 100,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 100,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    },
+    {
+      "case": "voxel_0.5_3",
+      "frames": 100,
+      "matches": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      },
+      "totals": {
+        "topology_sha256": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "cell_membership_sha256": 100,
+        "cell_sequence_sha256": 100,
+        "ranges_sha256": 100,
+        "centroids_sha256": 100,
+        "learning_inputs_sha256": 1
+      },
+      "first_difference": {
+        "topology_sha256": 0,
+        "graph_sha256": 0,
+        "cluster_sha256": 0,
+        "label_sha256": 1,
+        "voxel_sha256": 0,
+        "cell_membership_sha256": null,
+        "cell_sequence_sha256": null,
+        "ranges_sha256": null,
+        "centroids_sha256": 0,
+        "learning_inputs_sha256": 0
+      }
+    }
+  ],
+  "results": {
+    "0.1": {
+      "long_run": {
+        "boost": {
+          "input_ms": 0.9796330759999999,
+          "exec_ms": 106.68243439199999,
+          "output_ms": 1.333959016,
+          "total_ms": 108.996026484,
+          "sort_ms": 9.042922488,
+          "voxel_ms": 10.869595444,
+          "attention_ms": 76.51314310000001,
+          "learn_ms": 5.3132834,
+          "label_ms": 5.235512291999999,
+          "maintenance_ms": 2.82970732,
+          "cluster_ms": 5.860300303999999
+        },
+        "radix": {
+          "input_ms": 0.993450272,
+          "exec_ms": 97.645193972,
+          "output_ms": 1.3311515559999998,
+          "total_ms": 99.96979579999999,
+          "sort_ms": 2.2914172159999997,
+          "voxel_ms": 4.108600648,
+          "attention_ms": 74.286316032,
+          "learn_ms": 5.273161312,
+          "label_ms": 5.242003759999999,
+          "maintenance_ms": 2.8161053000000003,
+          "cluster_ms": 5.871293344
+        }
+      },
+      "trials": [
+        {
+          "trial": 1,
+          "boost": {
+            "input_ms": 0.9836114,
+            "exec_ms": 107.79815463999999,
+            "output_ms": 1.3268893,
+            "total_ms": 110.10865534,
+            "sort_ms": 9.03853036,
+            "voxel_ms": 10.85894316,
+            "attention_ms": 77.71164874,
+            "learn_ms": 5.2753576,
+            "label_ms": 5.16848874,
+            "maintenance_ms": 2.85811486,
+            "cluster_ms": 5.87745404
+          },
+          "radix": {
+            "input_ms": 1.00850746,
+            "exec_ms": 98.89994062,
+            "output_ms": 1.3182318,
+            "total_ms": 101.22667988,
+            "sort_ms": 2.29997394,
+            "voxel_ms": 4.13532392,
+            "attention_ms": 75.51687272,
+            "learn_ms": 5.186467,
+            "label_ms": 5.17128726,
+            "maintenance_ms": 2.85392816,
+            "cluster_ms": 5.9886456
+          }
+        },
+        {
+          "trial": 2,
+          "boost": {
+            "input_ms": 1.04268764,
+            "exec_ms": 117.68059406,
+            "output_ms": 1.37970128,
+            "total_ms": 120.10298298,
+            "sort_ms": 9.19428308,
+            "voxel_ms": 11.14018962,
+            "attention_ms": 85.7320681,
+            "learn_ms": 5.8296891,
+            "label_ms": 5.58707284,
+            "maintenance_ms": 3.09974986,
+            "cluster_ms": 6.23692284
+          },
+          "radix": {
+            "input_ms": 0.9997532,
+            "exec_ms": 100.9869502,
+            "output_ms": 1.32267588,
+            "total_ms": 103.30937928,
+            "sort_ms": 2.30893524,
+            "voxel_ms": 4.18651162,
+            "attention_ms": 77.20068218,
+            "learn_ms": 5.34545388,
+            "label_ms": 5.28647606,
+            "maintenance_ms": 2.92577828,
+            "cluster_ms": 5.99421978
+          }
+        },
+        {
+          "trial": 3,
+          "boost": {
+            "input_ms": 0.97390136,
+            "exec_ms": 108.18663364,
+            "output_ms": 1.32548482,
+            "total_ms": 110.48601982,
+            "sort_ms": 9.07561376,
+            "voxel_ms": 10.91763844,
+            "attention_ms": 78.0208729,
+            "learn_ms": 5.2906705,
+            "label_ms": 5.1711731,
+            "maintenance_ms": 2.87106566,
+            "cluster_ms": 5.86811374
+          },
+          "radix": {
+            "input_ms": 0.98480996,
+            "exec_ms": 99.83814668,
+            "output_ms": 1.3282053,
+            "total_ms": 102.15116194,
+            "sort_ms": 2.33303694,
+            "voxel_ms": 4.16751576,
+            "attention_ms": 76.3316805,
+            "learn_ms": 5.2155624,
+            "label_ms": 5.20968704,
+            "maintenance_ms": 2.88529716,
+            "cluster_ms": 5.978816
+          }
+        }
+      ],
+      "median": {
+        "boost": {
+          "input_ms": 0.9836114,
+          "exec_ms": 108.18663364,
+          "output_ms": 1.3268893,
+          "total_ms": 110.48601982,
+          "sort_ms": 9.07561376,
+          "voxel_ms": 10.91763844,
+          "attention_ms": 78.0208729,
+          "learn_ms": 5.2906705,
+          "label_ms": 5.1711731,
+          "maintenance_ms": 2.87106566,
+          "cluster_ms": 5.87745404
+        },
+        "radix": {
+          "input_ms": 0.9997532,
+          "exec_ms": 99.83814668,
+          "output_ms": 1.32267588,
+          "total_ms": 102.15116194,
+          "sort_ms": 2.30893524,
+          "voxel_ms": 4.16751576,
+          "attention_ms": 76.3316805,
+          "learn_ms": 5.2155624,
+          "label_ms": 5.20968704,
+          "maintenance_ms": 2.88529716,
+          "cluster_ms": 5.9886456
+        }
+      },
+      "quality": {
+        "boost": {
+          "num_points": 128768.53846153847,
+          "mean_dist": 0.17558294912828865,
+          "p95_dist": 0.382508712517572,
+          "coverage_0_2": 0.7557678517970996,
+          "coverage_0_4": 0.9546753380633902
+        },
+        "radix": {
+          "num_points": 128768.53846153847,
+          "mean_dist": 0.174649958914421,
+          "p95_dist": 0.3808699081851615,
+          "coverage_0_2": 0.7593783487168602,
+          "coverage_0_4": 0.9549645690660714
+        }
+      },
+      "quality_delta": {
+        "coverage_0_2": {
+          "mean": 0.0036104969197606066,
+          "min": -0.0012455612375154024,
+          "max": 0.0073260073260073
+        },
+        "coverage_0_4": {
+          "mean": 0.0002892310026811895,
+          "min": -0.0029947552990100546,
+          "max": 0.0017870681252030174
+        },
+        "mean_dist": {
+          "mean": -0.0009329902138676394,
+          "min": -0.004431929491082398,
+          "max": 0.0030608479146737033
+        },
+        "p95_dist": {
+          "mean": -0.001638804332410535,
+          "min": -0.006935704638367679,
+          "max": 0.010451459043712197
+        }
+      },
+      "first_frame": {
+        "centroid_max_component_m": 3.814697265625e-06,
+        "centroid_max_dist_m": 4.264961199760036e-06,
+        "changed_centroids": 4441,
+        "reordered_raw_indices": 73447,
+        "learning_point_max_dist_m": 0.12248947536706271,
+        "learning_point_mean_dist_m": 0.019964052726710278,
+        "changed_learning_points": 1479,
+        "learning_points_over_1mm": 1430
+      },
+      "graph_size": {
+        "boost": {
+          "nodes": 19870.72,
+          "edges": 54160.18,
+          "clusters": 100,
+          "attention_num": 24875.824
+        },
+        "radix": {
+          "nodes": 19870.96,
+          "edges": 54152.46,
+          "clusters": 100,
+          "attention_num": 24628.676
+        }
+      },
+      "total_reduction_percent": 8.281247468525843,
+      "sort_reduction_percent": 74.66065623098372
+    },
+    "0.5": {
+      "long_run": {
+        "boost": {
+          "input_ms": 0.9507551439999999,
+          "exec_ms": 37.575927723999996,
+          "output_ms": 1.21960666,
+          "total_ms": 39.74628952799999,
+          "sort_ms": 6.918087116,
+          "voxel_ms": 8.382351452,
+          "attention_ms": 12.344273472,
+          "learn_ms": 4.410305727999999,
+          "label_ms": 3.78867002,
+          "maintenance_ms": 2.2892891079999997,
+          "cluster_ms": 6.314386268
+        },
+        "radix": {
+          "input_ms": 0.945830904,
+          "exec_ms": 33.232650868,
+          "output_ms": 1.217429896,
+          "total_ms": 35.395911668000004,
+          "sort_ms": 2.886579252,
+          "voxel_ms": 4.370298608,
+          "attention_ms": 12.090392656,
+          "learn_ms": 4.319183988,
+          "label_ms": 3.784894356,
+          "maintenance_ms": 2.282473828,
+          "cluster_ms": 6.339639008
+        }
+      },
+      "trials": [
+        {
+          "trial": 1,
+          "boost": {
+            "input_ms": 0.95048918,
+            "exec_ms": 37.8475945,
+            "output_ms": 1.2300331199999999,
+            "total_ms": 40.0281168,
+            "sort_ms": 6.9693308,
+            "voxel_ms": 8.45318502,
+            "attention_ms": 12.60710328,
+            "learn_ms": 4.4148641,
+            "label_ms": 3.76308806,
+            "maintenance_ms": 2.30222234,
+            "cluster_ms": 6.2586281
+          },
+          "radix": {
+            "input_ms": 0.9371599,
+            "exec_ms": 33.0868946,
+            "output_ms": 1.2067011,
+            "total_ms": 35.2307556,
+            "sort_ms": 2.8872185,
+            "voxel_ms": 4.38027838,
+            "attention_ms": 12.13938658,
+            "learn_ms": 4.2551738,
+            "label_ms": 3.76201136,
+            "maintenance_ms": 2.26022392,
+            "cluster_ms": 6.2421621
+          }
+        },
+        {
+          "trial": 2,
+          "boost": {
+            "input_ms": 1.06122022,
+            "exec_ms": 40.21324096,
+            "output_ms": 1.24467384,
+            "total_ms": 42.51913502,
+            "sort_ms": 7.07615584,
+            "voxel_ms": 8.67086562,
+            "attention_ms": 13.67760774,
+            "learn_ms": 4.69044036,
+            "label_ms": 4.05940314,
+            "maintenance_ms": 2.3658449,
+            "cluster_ms": 6.69787244
+          },
+          "radix": {
+            "input_ms": 1.09904074,
+            "exec_ms": 36.01588794,
+            "output_ms": 1.23873584,
+            "total_ms": 38.35366452,
+            "sort_ms": 2.98857434,
+            "voxel_ms": 4.66151608,
+            "attention_ms": 13.63115162,
+            "learn_ms": 4.62565702,
+            "label_ms": 4.03565582,
+            "maintenance_ms": 2.36827674,
+            "cluster_ms": 6.64316972
+          }
+        },
+        {
+          "trial": 3,
+          "boost": {
+            "input_ms": 0.95396366,
+            "exec_ms": 37.37001752,
+            "output_ms": 1.1908454,
+            "total_ms": 39.51482658,
+            "sort_ms": 6.91246308,
+            "voxel_ms": 8.3660759,
+            "attention_ms": 12.42036428,
+            "learn_ms": 4.29848414,
+            "label_ms": 3.75566974,
+            "maintenance_ms": 2.24435604,
+            "cluster_ms": 6.2431382
+          },
+          "radix": {
+            "input_ms": 0.9277743,
+            "exec_ms": 33.16659014,
+            "output_ms": 1.1994951600000001,
+            "total_ms": 35.2938596,
+            "sort_ms": 2.88009328,
+            "voxel_ms": 4.37721128,
+            "attention_ms": 12.19995194,
+            "learn_ms": 4.2865391,
+            "label_ms": 3.74873658,
+            "maintenance_ms": 2.28683694,
+            "cluster_ms": 6.22268408
+          }
+        }
+      ],
+      "median": {
+        "boost": {
+          "input_ms": 0.95396366,
+          "exec_ms": 37.8475945,
+          "output_ms": 1.2300331199999999,
+          "total_ms": 40.0281168,
+          "sort_ms": 6.9693308,
+          "voxel_ms": 8.45318502,
+          "attention_ms": 12.60710328,
+          "learn_ms": 4.4148641,
+          "label_ms": 3.76308806,
+          "maintenance_ms": 2.30222234,
+          "cluster_ms": 6.2586281
+        },
+        "radix": {
+          "input_ms": 0.9371599,
+          "exec_ms": 33.16659014,
+          "output_ms": 1.2067011,
+          "total_ms": 35.2938596,
+          "sort_ms": 2.8872185,
+          "voxel_ms": 4.38027838,
+          "attention_ms": 12.19995194,
+          "learn_ms": 4.2865391,
+          "label_ms": 3.76201136,
+          "maintenance_ms": 2.28683694,
+          "cluster_ms": 6.2421621
+        }
+      },
+      "quality": {
+        "boost": {
+          "num_points": 128768.53846153847,
+          "mean_dist": 0.1837590299805832,
+          "p95_dist": 0.3369408095855536,
+          "coverage_0_2": 0.5965872974258114,
+          "coverage_0_4": 0.9822665052578128
+        },
+        "radix": {
+          "num_points": 128768.53846153847,
+          "mean_dist": 0.18344660633014764,
+          "p95_dist": 0.3348382436662998,
+          "coverage_0_2": 0.5972480122668482,
+          "coverage_0_4": 0.9835637336565327
+        }
+      },
+      "quality_delta": {
+        "coverage_0_2": {
+          "mean": 0.0006607148410368452,
+          "min": -0.009156088022595377,
+          "max": 0.012009904425448692
+        },
+        "coverage_0_4": {
+          "mean": 0.0012972283987198825,
+          "min": -0.0062773518731183975,
+          "max": 0.00881136066695698
+        },
+        "mean_dist": {
+          "mean": -0.0003124236504355363,
+          "min": -0.00355214159789094,
+          "max": 0.0032978790183546824
+        },
+        "p95_dist": {
+          "mean": -0.0021025659192538257,
+          "min": -0.016926585425685425,
+          "max": 0.009381591673250533
+        }
+      },
+      "first_frame": {
+        "centroid_max_component_m": 1.52587890625e-05,
+        "centroid_max_dist_m": 1.6303368565825232e-05,
+        "changed_centroids": 6983,
+        "reordered_raw_indices": 137125,
+        "learning_point_max_dist_m": 0.6811336028891111,
+        "learning_point_mean_dist_m": 0.13045438033424625,
+        "changed_learning_points": 2859,
+        "learning_points_over_1mm": 2504
+      },
+      "graph_size": {
+        "boost": {
+          "nodes": 18814.032,
+          "edges": 36437.436,
+          "clusters": 99.824,
+          "attention_num": 24848.74
+        },
+        "radix": {
+          "nodes": 18818.968,
+          "edges": 36530.204,
+          "clusters": 99.708,
+          "attention_num": 24308.276
+        }
+      },
+      "total_reduction_percent": 10.945368515305775,
+      "sort_reduction_percent": 58.274892992833486
+    }
+  }
+}

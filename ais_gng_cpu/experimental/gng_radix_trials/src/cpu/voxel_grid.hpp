@@ -25,8 +25,8 @@ class VoxelGrid {
         GridConfig *voxel_config;
         bool enable_voxel_downsampling = true;
         vector<Voxel> voxel_index;
-        // 入力上限で確保したソート用作業領域のフレーム間再利用。
         vector<Voxel> sort_buffer;
+        double sort_ms = 0;
         vector<VoxelRange> voxel_range;
         vector<Vec3f> filtered_pcl;  // フィルタリング後の点群
         uint32_t filtered_pcl_num;

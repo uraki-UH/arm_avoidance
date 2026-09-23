@@ -16,6 +16,8 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_radix_multiseed_20260924](gng_radix_multiseed_20260924/) | 6シードの品質・観測代表点比較と本番基数ソート採用 |
+| [gng_radix_production_20260924](gng_radix_production_20260924/) | 本番機能を保持した基数ソートの時間・選択学習点・被覆の比較 |
 | [gng_production_efficiency_20260924](gng_production_efficiency_20260924/) | 本番CPUの結果一致を維持した空きID管理・重心走査統合と実験版の基数ソート標準化 |
 | [gng_runtime_trials_20260924](gng_runtime_trials_20260924/) | 学習量を維持した空き番号管理・LTO・入力ソートの実装比較 |
 | [gng_minimal_comparison_20260924](gng_minimal_comparison_20260924/) | 最小構成で入力voxel・node.grid・treeの6条件比較 |

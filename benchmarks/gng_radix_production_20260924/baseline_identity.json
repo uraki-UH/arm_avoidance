@@ -1,0 +1,14 @@
+{
+  "0.1": {
+    "graph_sha256": 300,
+    "cluster_sha256": 300,
+    "label_sha256": 300,
+    "voxel_sha256": 300
+  },
+  "0.5": {
+    "graph_sha256": 300,
+    "cluster_sha256": 300,
+    "label_sha256": 300,
+    "voxel_sha256": 300
+  }
+}

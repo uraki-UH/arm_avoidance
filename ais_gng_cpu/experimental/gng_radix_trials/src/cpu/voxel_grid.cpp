@@ -1,6 +1,7 @@
 #include "voxel_grid.hpp"
-
 #include "radix_sort.hpp"
+
+#include <boost/sort/spreadsort/spreadsort.hpp>
 
 
 uint32_t voxel_rightshift_func(const Voxel &x, const unsigned offset) {
@@ -17,7 +18,9 @@ void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) {
     voxel_config = _grid_config;
     enable_voxel_downsampling = _other_config->voxel_grid_unit > 0;
     voxel_index.resize(_other_config->point_cloud_num);
+#ifdef GNG_RADIX_VOXELS
     sort_buffer.resize(_other_config->point_cloud_num);
+#endif
     voxel_range.resize(_other_config->point_cloud_num);
     filtered_pcl.resize(_other_config->point_cloud_num);
 }
@@ -25,6 +28,7 @@ void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) {
 void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
     filtered_pcl_num = 0;
     voxel_index_num = 0;
+    sort_ms = 0;
     if(inpcl_num == 0){
         filtered_pcl_num = 0;
         return; // 入力点群がない場合は何もしない
@@ -59,10 +63,17 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
     voxel_index_num = n;
     if (voxel_index_num == 0) {return;}
 
-    // 全32bitセル番号による安定基数ソート。
+    // ボクセルグリッドのソート。計測対象は整列のみ。
+    const auto sort_begin = std::chrono::steady_clock::now();
+#ifdef GNG_RADIX_VOXELS
     radix_sort_voxels(voxel_index.data(), sort_buffer.data(), voxel_index_num);
+#else
+    boost::sort::spreadsort::integer_sort(voxel_index.data(), voxel_index.data() + voxel_index_num,
+        [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });
+#endif
+    sort_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sort_begin).count();
 
-    // セル範囲の確定と重心計算の単一走査。
+    // 同じソート順・加算順での、セル範囲の確定と重心計算の単一走査。
     uint32_t begin_idx = 0;
     while (begin_idx < voxel_index_num) {
         const uint32_t cell_idx = voxel_index[begin_idx].voxel_index;

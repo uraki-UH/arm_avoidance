@@ -1,0 +1,37 @@
+{
+  "executed_comparison_frames": 5040,
+  "installed_smoke_frames": 30,
+  "test_num": 51,
+  "cb_package_num": 30,
+  "cb_sec": 55.6,
+  "is_release": true,
+  "has_lto": true,
+  "is_public_api_unchanged": true,
+  "is_runtime_restored": true,
+  "existing_ros_process_num": 9,
+  "has_remaining_trial_processes": false,
+  "is_temporary_build_removed": true,
+  "changed_existing_production_files": [
+    "ais_gng_cpu/src/gng_cpu/CMakeLists.txt",
+    "ais_gng_cpu/src/gng_cpu/src/cpu/voxel_grid.cpp",
+    "ais_gng_cpu/src/gng_cpu/src/cpu/voxel_grid.hpp"
+  ],
+  "library": {
+    "before_sha256": "0dc97bf8914afda4ba015314891000febb90ffa271519291cbdee359d702fa3a",
+    "after_sha256": "7a692383c6ecb884dd3166ff7beb3bfefe73ef9a66d96a557cf4693e0c11838a",
+    "before_inode": 40539057,
+    "after_inode": 40539167,
+    "installed": "/ros2_ws/install/gng_cpu/lib/libgng_cpu.so"
+  },
+  "comparison_libraries": {
+    "boost": "7d476f653f24c84912c713006d6a945ef4c2efa66d625f96f34a141b31cf4ff9",
+    "radix": "b8439cde48ae0f72fa3ebf13796d3167e532b937684b149f90b0f4636f15a5db"
+  },
+  "worktree": {
+    "branch": "grasp_new4",
+    "base": "origin/grasp_new2",
+    "ahead": 71,
+    "behind": 0,
+    "is_root_mismatch": true
+  }
+}
