@@ -16,6 +16,9 @@ public:
     LabelConfig *label_config;
     CUGNG *gng;
     Time time;
+    // 近傍参照用の連続配列。初期化時の確保とフレーム間再利用。
+    vector<Vec3f> node_positions;
+    vector<Vec3f> node_normals;
 
     float _fuzzy_safe_label(float angle);
     float _fuzzy_wall_label(float angle);

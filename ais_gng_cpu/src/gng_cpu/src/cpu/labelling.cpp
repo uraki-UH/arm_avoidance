@@ -13,6 +13,8 @@ void Labelling::init(NodeConfig *_gng_config, LabelConfig *_label_config, CUGNG 
     gng_config = _gng_config;
     label_config = _label_config;
     gng = _gng;
+    node_positions.resize(_gng->nodes.size());
+    node_normals.resize(_gng->nodes.size());
 }
 
 void Labelling::labelling_fuzzy() {
@@ -24,6 +26,10 @@ void Labelling::labelling_fuzzy() {
     float angle;
     Vec3f vec;
     float max_exp;
+    // 座標だけを集約した、隣接ノード参照時のキャッシュ局所性改善。
+    for (const auto &node : gng->nodes) {
+        if (node.id != NODE_NOID) {node_positions[node.id] = node.pos;}
+    }
     for (auto &node : gng->nodes) {
         if (node.id == NODE_NOID)
             continue;
@@ -31,7 +37,8 @@ void Labelling::labelling_fuzzy() {
         if (capture_map_delta) {
             previous_normal = node.normal;
         }
-        gng->normal_vector(node);
+        gng->normal_vector(node, node_positions.data());
+        node_normals[node.id] = node.normal;
         if (capture_map_delta &&
             (node.normal[0] != previous_normal[0] ||
              node.normal[1] != previous_normal[1] ||
@@ -56,7 +63,7 @@ void Labelling::labelling_fuzzy() {
 
         /* ファジィ法線ベクトル・曲率の算出 */
         if (node.edge_num >= 2) {
-            gng->rho(node);
+            gng->rho(node, node_normals.data());
             // node.d_normal = acosf(node.normal.dot(normal) / (node.normal.norm() * normal.norm()));  // 1時刻前からの誤差
             angle = acosf(node.normal[2]);
             /* ファジィ法線ベクトルの算出 */

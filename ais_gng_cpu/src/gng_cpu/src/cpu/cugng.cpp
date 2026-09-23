@@ -878,34 +878,43 @@ uint32_t CUGNG::getEdgeIndex(uint32_t idx1, uint32_t idx2){
     return idx2 + (uint32_t)node_num_max*idx1;
 }
 
-void CUGNG::normal_vector(Node& node) {
-    int i;
-    if(node.edge_num <= 1){
+void CUGNG::normal_vector(Node& node, Vec3f *node_positions) {
+    // 連続座標配列がある場合の直接参照。単独呼出しでは従来のノード配列参照。
+    const auto position = [&](uint32_t idx) -> Vec3f & {
+        return node_positions ? node_positions[idx] : nodes[idx].pos;
+    };
+    if (node.edge_num <= 1) {
         node.normal.zero();
-    }else if (node.edge_num == 2){
-        node.normal = (nodes[node.edges[0]].pos - nodes[node.id].pos).cross(nodes[node.edges[1]].pos - nodes[node.id].pos).normalized();
-    }else{
-        Vec3f normal0 =  (nodes[node.edges[0]].pos - nodes[node.id].pos).cross(nodes[node.edges[node.edge_num-1]].pos - nodes[node.id].pos);
-        Vec3f normal_sum = normal0;
-        for(i=0; i< (node.edge_num-1);++i){
-            Vec3f normal = (nodes[node.edges[i]].pos - nodes[node.id].pos).cross(nodes[node.edges[i+1]].pos - nodes[node.id].pos).normalized();
-            if(normal0.dot(normal) < 0)
-                normal_sum += normal.reverse();
-            else
-                normal_sum += normal;
-        }
-        node.normal = normal_sum.normalized();
+        return;
     }
+    // 同じ差分ベクトルの再利用。外積・正規化・加算の順序は維持。
+    const auto origin = position(node.id);
+    auto previous = position(node.edges[0]) - origin;
+    if (node.edge_num == 2) {
+        node.normal = previous.cross(position(node.edges[1]) - origin).normalized();
+        return;
+    }
+    const auto last = position(node.edges[node.edge_num - 1]) - origin;
+    auto reference = previous.cross(last);
+    auto normal_sum = reference;
+    for (uint32_t idx = 1; idx < node.edge_num; ++idx) {
+        auto next = position(node.edges[idx]) - origin;
+        auto normal = previous.cross(next).normalized();
+        if (reference.dot(normal) < 0) {normal_sum += normal.reverse();}
+        else {normal_sum += normal;}
+        previous = next;
+    }
+    node.normal = normal_sum.normalized();
 }
 
-void CUGNG::rho(Node& node) {
+void CUGNG::rho(Node& node, Vec3f *node_normals) {
     /* 2つの隣接ノードとの関係を見てcos類似度を平均する */
     float rho_sum = 0;
     /* 2つの接線からcos類似度を計算*/
     int num = 0;
     float dot;
     for (int i = 0; i < node.edge_num;++i) {
-        dot = node.normal.dot(nodes[node.edges[i]].normal);
+        dot = node.normal.dot(node_normals ? node_normals[node.edges[i]] : nodes[node.edges[i]].normal);
         if(dot != 0.f){
             rho_sum += fabs(dot);
             num++;

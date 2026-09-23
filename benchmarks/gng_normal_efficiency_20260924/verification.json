@@ -1,0 +1,46 @@
+{
+  "compared_frames": 1410,
+  "executed_comparison_frames": 2660,
+  "installed_smoke_frames": 30,
+  "test_num": 70,
+  "cb_package_num": 30,
+  "cb_sec": 57.3,
+  "is_release": true,
+  "has_lto": true,
+  "is_public_api_unchanged": true,
+  "is_runtime_restored": true,
+  "existing_ros_process_num": 12,
+  "has_remaining_trial_processes": false,
+  "is_temporary_build_removed": true,
+  "has_running_gng_old_library": true,
+  "changed_existing_production_files": [
+    "CMakeLists.txt",
+    "src/cpu/labelling.cpp",
+    "src/cpu/cugng.cpp",
+    "src/cpu/labelling.hpp",
+    "src/cpu/cugng.hpp"
+  ],
+  "library": {
+    "before_sha256": "7a692383c6ecb884dd3166ff7beb3bfefe73ef9a66d96a557cf4693e0c11838a",
+    "after_sha256": "0111075e1ab5e8239d4f6a8cab2762d9876d194d561c69a95146a92cab770e6f",
+    "before_inode": 40539167,
+    "after_inode": 40539471,
+    "installed": "/ros2_ws/install/gng_cpu/lib/libgng_cpu.so"
+  },
+  "comparison_libraries": {
+    "before": "cb7a6a800dcab44cb06441b95ccd8f2fbdc8d34e0dc697adbfd6228a1e647aeb",
+    "after": "2361f8a99318c4ca6129118e5ecb3e03ebc758635d333d543b17871accb493d4",
+    "reuse": "5e59c443b84133093d7afe0ff2fdd207e9f3b1cbbdc102406951c0005a4404d1"
+  },
+  "setup_retry_notes": [
+    "コンテナ所有ファイルのテスト登録をコンテナ内で修正。0件の実行は成功件数から除外。",
+    "ROS環境を読み込んでCMakeを再生成。回帰テスト1件の成功を確認。"
+  ],
+  "worktree": {
+    "branch": "grasp_new4",
+    "base": "origin/grasp_new2",
+    "ahead": 72,
+    "behind": 0,
+    "is_root_mismatch": true
+  }
+}

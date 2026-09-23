@@ -1,0 +1,852 @@
+{
+  "compared_frames": 1410,
+  "executed_frames": 2660,
+  "comparisons": [
+    {
+      "method": "after",
+      "name": "probe_0.1",
+      "frames": 80,
+      "matches": {
+        "nodes": 80,
+        "edges": 80,
+        "clusters": 80,
+        "graph_sha256": 80,
+        "cluster_sha256": 80,
+        "label_sha256": 80,
+        "normal_sha256": 80,
+        "rho_sha256": 80,
+        "positions_sha256": 80,
+        "voxel_sha256": 80,
+        "voxel_num": 80,
+        "kept_input_num": 80,
+        "attention_num": 80,
+        "learning_num": 80
+      },
+      "before": {
+        "input_ms": 1.0516457166666666,
+        "exec_ms": 106.60648633333334,
+        "output_ms": 1.3296833166666668,
+        "total_ms": 108.98781536666667,
+        "normal_ms": 3.4258363666666667,
+        "rho_label_ms": 1.9705337166666665,
+        "voxel_ms": 4.264097633333333,
+        "attention_ms": 81.73884301666666,
+        "learn_ms": 5.719704149999999,
+        "label_ms": 5.3966970833333345,
+        "maintenance_ms": 3.0112104000000004,
+        "cluster_ms": 6.422460166666667
+      },
+      "after": {
+        "input_ms": 1.0572133833333333,
+        "exec_ms": 108.68907806666667,
+        "output_ms": 1.3103529500000002,
+        "total_ms": 111.0566444,
+        "normal_ms": 3.1155450833333327,
+        "rho_label_ms": 1.5608818166666665,
+        "voxel_ms": 4.300738483333333,
+        "attention_ms": 84.37497383333334,
+        "learn_ms": 5.826650683333333,
+        "label_ms": 4.676908116666667,
+        "maintenance_ms": 3.002839850000001,
+        "cluster_ms": 6.459172333333332
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "probe_0.1",
+      "frames": 80,
+      "matches": {
+        "nodes": 80,
+        "edges": 80,
+        "clusters": 80,
+        "graph_sha256": 80,
+        "cluster_sha256": 80,
+        "label_sha256": 80,
+        "normal_sha256": 80,
+        "rho_sha256": 80,
+        "positions_sha256": 80,
+        "voxel_sha256": 80,
+        "voxel_num": 80,
+        "kept_input_num": 80,
+        "attention_num": 80,
+        "learning_num": 80
+      },
+      "before": {
+        "input_ms": 1.0516457166666666,
+        "exec_ms": 106.60648633333334,
+        "output_ms": 1.3296833166666668,
+        "total_ms": 108.98781536666667,
+        "normal_ms": 3.4258363666666667,
+        "rho_label_ms": 1.9705337166666665,
+        "voxel_ms": 4.264097633333333,
+        "attention_ms": 81.73884301666666,
+        "learn_ms": 5.719704149999999,
+        "label_ms": 5.3966970833333345,
+        "maintenance_ms": 3.0112104000000004,
+        "cluster_ms": 6.422460166666667
+      },
+      "after": {
+        "input_ms": 1.0520547166666665,
+        "exec_ms": 106.94959723333332,
+        "output_ms": 1.3460886833333334,
+        "total_ms": 109.34774063333334,
+        "normal_ms": 3.025837866666666,
+        "rho_label_ms": 1.5681256999999997,
+        "voxel_ms": 4.281096383333333,
+        "attention_ms": 82.55210753333334,
+        "learn_ms": 5.955249983333333,
+        "label_ms": 4.594513299999999,
+        "maintenance_ms": 3.0218210166666664,
+        "cluster_ms": 6.492129883333334
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "matches": {
+        "nodes": 300,
+        "edges": 300,
+        "clusters": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "normal_sha256": 300,
+        "rho_sha256": 300,
+        "positions_sha256": 300,
+        "voxel_sha256": 300,
+        "voxel_num": 300,
+        "kept_input_num": 300,
+        "attention_num": 300,
+        "learning_num": 300
+      },
+      "before": {
+        "input_ms": 1.068186048,
+        "exec_ms": 106.65739384400001,
+        "output_ms": 1.357373544,
+        "total_ms": 109.082953436,
+        "normal_ms": 3.5640889039999997,
+        "rho_label_ms": 2.023781092,
+        "voxel_ms": 4.389701348,
+        "attention_ms": 81.6494197,
+        "learn_ms": 5.881073616,
+        "label_ms": 5.588283531999999,
+        "maintenance_ms": 3.033502728,
+        "cluster_ms": 6.062026199999999
+      },
+      "after": {
+        "input_ms": 1.032450248,
+        "exec_ms": 104.089360636,
+        "output_ms": 1.353790996,
+        "total_ms": 106.47560188,
+        "normal_ms": 3.12008248,
+        "rho_label_ms": 1.576235316,
+        "voxel_ms": 4.239027948000001,
+        "attention_ms": 80.15710051199999,
+        "learn_ms": 5.874051068000001,
+        "label_ms": 4.69671442,
+        "maintenance_ms": 2.9667945280000003,
+        "cluster_ms": 6.108255164
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "matches": {
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "normal_sha256": 100,
+        "rho_sha256": 100,
+        "positions_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before": {
+        "input_ms": 1.04039274,
+        "exec_ms": 107.3282608,
+        "output_ms": 1.3499548,
+        "total_ms": 109.71860833999999,
+        "normal_ms": 3.5161472600000003,
+        "rho_label_ms": 2.00664068,
+        "voxel_ms": 4.3178817,
+        "attention_ms": 82.52741087999999,
+        "learn_ms": 5.7158048599999995,
+        "label_ms": 5.523121939999999,
+        "maintenance_ms": 3.0571088999999994,
+        "cluster_ms": 6.1351806600000005
+      },
+      "after": {
+        "input_ms": 1.0949214600000001,
+        "exec_ms": 107.63914944,
+        "output_ms": 1.3790748799999997,
+        "total_ms": 110.11314578,
+        "normal_ms": 3.1177353599999997,
+        "rho_label_ms": 1.5720836599999999,
+        "voxel_ms": 4.4213593200000005,
+        "attention_ms": 83.23201499999999,
+        "learn_ms": 5.916166840000001,
+        "label_ms": 4.69033824,
+        "maintenance_ms": 3.0677630800000006,
+        "cluster_ms": 6.254287279999999
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "matches": {
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "normal_sha256": 100,
+        "rho_sha256": 100,
+        "positions_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before": {
+        "input_ms": 1.0514095799999998,
+        "exec_ms": 106.8002067,
+        "output_ms": 1.32526962,
+        "total_ms": 109.17688590000002,
+        "normal_ms": 3.466802999999999,
+        "rho_label_ms": 1.9752994200000003,
+        "voxel_ms": 4.31308028,
+        "attention_ms": 81.98487954000001,
+        "learn_ms": 5.72781006,
+        "label_ms": 5.442406160000001,
+        "maintenance_ms": 3.0445343599999997,
+        "cluster_ms": 6.236657120000001
+      },
+      "after": {
+        "input_ms": 1.07380886,
+        "exec_ms": 106.69979256,
+        "output_ms": 1.3366212000000002,
+        "total_ms": 109.11022261999999,
+        "normal_ms": 3.0611987,
+        "rho_label_ms": 1.5749194000000002,
+        "voxel_ms": 4.37200508,
+        "attention_ms": 82.51544122,
+        "learn_ms": 5.9044979799999995,
+        "label_ms": 4.637058859999999,
+        "maintenance_ms": 3.0471282799999995,
+        "cluster_ms": 6.1753325199999995
+      }
+    },
+    {
+      "method": "after",
+      "name": "probe_0.5",
+      "frames": 80,
+      "matches": {
+        "nodes": 80,
+        "edges": 80,
+        "clusters": 80,
+        "graph_sha256": 80,
+        "cluster_sha256": 80,
+        "label_sha256": 80,
+        "normal_sha256": 80,
+        "rho_sha256": 80,
+        "positions_sha256": 80,
+        "voxel_sha256": 80,
+        "voxel_num": 80,
+        "kept_input_num": 80,
+        "attention_num": 80,
+        "learning_num": 80
+      },
+      "before": {
+        "input_ms": 1.0234662666666665,
+        "exec_ms": 35.2881613,
+        "output_ms": 1.2140052166666666,
+        "total_ms": 37.52563278333332,
+        "normal_ms": 2.220045483333334,
+        "rho_label_ms": 1.7278381499999997,
+        "voxel_ms": 4.516130316666666,
+        "attention_ms": 13.382387650000002,
+        "learn_ms": 4.606661966666667,
+        "label_ms": 3.94819215,
+        "maintenance_ms": 2.3525838166666664,
+        "cluster_ms": 6.437379816666667
+      },
+      "after": {
+        "input_ms": 1.03913315,
+        "exec_ms": 35.28284646666666,
+        "output_ms": 1.2031315333333332,
+        "total_ms": 37.52511115000001,
+        "normal_ms": 2.07837975,
+        "rho_label_ms": 1.4544423666666664,
+        "voxel_ms": 4.585038383333333,
+        "attention_ms": 13.642120266666668,
+        "learn_ms": 4.587659399999999,
+        "label_ms": 3.5331568666666664,
+        "maintenance_ms": 2.3572197500000005,
+        "cluster_ms": 6.528859783333333
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "probe_0.5",
+      "frames": 80,
+      "matches": {
+        "nodes": 80,
+        "edges": 80,
+        "clusters": 80,
+        "graph_sha256": 80,
+        "cluster_sha256": 80,
+        "label_sha256": 80,
+        "normal_sha256": 80,
+        "rho_sha256": 80,
+        "positions_sha256": 80,
+        "voxel_sha256": 80,
+        "voxel_num": 80,
+        "kept_input_num": 80,
+        "attention_num": 80,
+        "learning_num": 80
+      },
+      "before": {
+        "input_ms": 1.0234662666666665,
+        "exec_ms": 35.2881613,
+        "output_ms": 1.2140052166666666,
+        "total_ms": 37.52563278333332,
+        "normal_ms": 2.220045483333334,
+        "rho_label_ms": 1.7278381499999997,
+        "voxel_ms": 4.516130316666666,
+        "attention_ms": 13.382387650000002,
+        "learn_ms": 4.606661966666667,
+        "label_ms": 3.94819215,
+        "maintenance_ms": 2.3525838166666664,
+        "cluster_ms": 6.437379816666667
+      },
+      "after": {
+        "input_ms": 1.0517403833333334,
+        "exec_ms": 35.00177016666667,
+        "output_ms": 1.220896366666667,
+        "total_ms": 37.27440691666666,
+        "normal_ms": 2.012935683333333,
+        "rho_label_ms": 1.4348341500000001,
+        "voxel_ms": 4.556916366666668,
+        "attention_ms": 13.255513,
+        "learn_ms": 4.769334683333333,
+        "label_ms": 3.4482660666666667,
+        "maintenance_ms": 2.3769095500000006,
+        "cluster_ms": 6.549239200000001
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "matches": {
+        "nodes": 300,
+        "edges": 300,
+        "clusters": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "normal_sha256": 300,
+        "rho_sha256": 300,
+        "positions_sha256": 300,
+        "voxel_sha256": 300,
+        "voxel_num": 300,
+        "kept_input_num": 300,
+        "attention_num": 300,
+        "learning_num": 300
+      },
+      "before": {
+        "input_ms": 1.036868508,
+        "exec_ms": 35.337109088,
+        "output_ms": 1.2179413359999998,
+        "total_ms": 37.591918932,
+        "normal_ms": 2.2262437600000005,
+        "rho_label_ms": 1.7615202720000003,
+        "voxel_ms": 4.541064884,
+        "attention_ms": 13.303071208,
+        "learn_ms": 4.594334372,
+        "label_ms": 3.9880797080000003,
+        "maintenance_ms": 2.3544596959999997,
+        "cluster_ms": 6.511966392000001
+      },
+      "after": {
+        "input_ms": 1.0681198079999998,
+        "exec_ms": 35.522039015999994,
+        "output_ms": 1.224382584,
+        "total_ms": 37.814541408000004,
+        "normal_ms": 2.0420614440000002,
+        "rho_label_ms": 1.454409984,
+        "voxel_ms": 4.579579472,
+        "attention_ms": 13.41202242,
+        "learn_ms": 4.881653447999999,
+        "label_ms": 3.496942148,
+        "maintenance_ms": 2.38763002,
+        "cluster_ms": 6.717997712000001
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "matches": {
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "normal_sha256": 100,
+        "rho_sha256": 100,
+        "positions_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before": {
+        "input_ms": 1.03251656,
+        "exec_ms": 35.39370855999999,
+        "output_ms": 1.22816442,
+        "total_ms": 37.65438953999999,
+        "normal_ms": 2.25793228,
+        "rho_label_ms": 1.7516269799999997,
+        "voxel_ms": 4.50288788,
+        "attention_ms": 13.43009354,
+        "learn_ms": 4.604308700000001,
+        "label_ms": 4.00988468,
+        "maintenance_ms": 2.37360198,
+        "cluster_ms": 6.429203079999999
+      },
+      "after": {
+        "input_ms": 1.0642625600000002,
+        "exec_ms": 35.04527882,
+        "output_ms": 1.24319092,
+        "total_ms": 37.3527323,
+        "normal_ms": 2.01141722,
+        "rho_label_ms": 1.41715906,
+        "voxel_ms": 4.568671900000001,
+        "attention_ms": 13.174713959999998,
+        "learn_ms": 4.78910756,
+        "label_ms": 3.4289763600000005,
+        "maintenance_ms": 2.39577492,
+        "cluster_ms": 6.64118004
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "matches": {
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "normal_sha256": 100,
+        "rho_sha256": 100,
+        "positions_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before": {
+        "input_ms": 1.0388851,
+        "exec_ms": 35.29483846,
+        "output_ms": 1.23924524,
+        "total_ms": 37.5729688,
+        "normal_ms": 2.2061078800000002,
+        "rho_label_ms": 1.7793952800000001,
+        "voxel_ms": 4.52269134,
+        "attention_ms": 13.407542560000001,
+        "learn_ms": 4.5446517,
+        "label_ms": 3.98583568,
+        "maintenance_ms": 2.34897802,
+        "cluster_ms": 6.437144820000001
+      },
+      "after": {
+        "input_ms": 1.0402449599999999,
+        "exec_ms": 35.2386346,
+        "output_ms": 1.23358334,
+        "total_ms": 37.5124629,
+        "normal_ms": 2.03589594,
+        "rho_label_ms": 1.46504708,
+        "voxel_ms": 4.5348786,
+        "attention_ms": 13.296625459999998,
+        "learn_ms": 4.843474480000001,
+        "label_ms": 3.501546200000001,
+        "maintenance_ms": 2.40483036,
+        "cluster_ms": 6.6126467
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "features_0",
+      "frames": 30,
+      "matches": {
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "normal_sha256": 30,
+        "rho_sha256": 30,
+        "positions_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before": {
+        "input_ms": 1.0698184,
+        "exec_ms": 182.67506904,
+        "output_ms": 1.32286364,
+        "total_ms": 185.06775108000002,
+        "normal_ms": 3.9402936,
+        "rho_label_ms": 2.14610676,
+        "voxel_ms": 0.7994432,
+        "attention_ms": 159.97507136000002,
+        "learn_ms": 5.961550599999999,
+        "label_ms": 6.0866918,
+        "maintenance_ms": 3.2026634399999994,
+        "cluster_ms": 6.5943105200000005
+      },
+      "after": {
+        "input_ms": 1.0811398399999999,
+        "exec_ms": 180.64660779999997,
+        "output_ms": 1.32709092,
+        "total_ms": 183.05483855999998,
+        "normal_ms": 3.3779745999999995,
+        "rho_label_ms": 1.74230896,
+        "voxel_ms": 0.80529876,
+        "attention_ms": 158.5680816,
+        "learn_ms": 6.2182124399999985,
+        "label_ms": 5.12082764,
+        "maintenance_ms": 3.17828668,
+        "cluster_ms": 6.705890160000001
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "features_0.1",
+      "frames": 30,
+      "matches": {
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "normal_sha256": 30,
+        "rho_sha256": 30,
+        "positions_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before": {
+        "input_ms": 1.13160076,
+        "exec_ms": 111.06795884000002,
+        "output_ms": 1.2873272,
+        "total_ms": 113.4868868,
+        "normal_ms": 3.7885577599999998,
+        "rho_label_ms": 2.1350504800000003,
+        "voxel_ms": 4.393365599999999,
+        "attention_ms": 83.83422052,
+        "learn_ms": 7.06280072,
+        "label_ms": 5.92390364,
+        "maintenance_ms": 2.9690613200000002,
+        "cluster_ms": 6.83307028
+      },
+      "after": {
+        "input_ms": 1.12301312,
+        "exec_ms": 109.95867888,
+        "output_ms": 1.2821213599999999,
+        "total_ms": 112.36381336000001,
+        "normal_ms": 3.22490356,
+        "rho_label_ms": 1.74180084,
+        "voxel_ms": 4.38265444,
+        "attention_ms": 83.41945076,
+        "learn_ms": 7.1852268399999994,
+        "label_ms": 4.967162640000001,
+        "maintenance_ms": 3.00638904,
+        "cluster_ms": 6.944659680000001
+      }
+    },
+    {
+      "method": "reuse",
+      "name": "features_0.5",
+      "frames": 30,
+      "matches": {
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "normal_sha256": 30,
+        "rho_sha256": 30,
+        "positions_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before": {
+        "input_ms": 1.1278494,
+        "exec_ms": 37.35225888,
+        "output_ms": 1.18925408,
+        "total_ms": 39.669362359999994,
+        "normal_ms": 2.62977624,
+        "rho_label_ms": 1.9562288,
+        "voxel_ms": 4.51251532,
+        "attention_ms": 13.62000448,
+        "learn_ms": 5.737043760000001,
+        "label_ms": 4.586275479999999,
+        "maintenance_ms": 2.4002622400000004,
+        "cluster_ms": 6.44885452
+      },
+      "after": {
+        "input_ms": 1.09207104,
+        "exec_ms": 36.96931784,
+        "output_ms": 1.1735016,
+        "total_ms": 39.23489048,
+        "normal_ms": 2.28932492,
+        "rho_label_ms": 1.6320039199999998,
+        "voxel_ms": 4.52745204,
+        "attention_ms": 13.5733706,
+        "learn_ms": 5.9556262800000015,
+        "label_ms": 3.92175372,
+        "maintenance_ms": 2.39867468,
+        "cluster_ms": 6.54400736
+      }
+    }
+  ],
+  "conditions": {
+    "0.1": {
+      "before": {
+        "input_ms": 1.068186048,
+        "exec_ms": 106.65739384400001,
+        "output_ms": 1.357373544,
+        "total_ms": 109.082953436,
+        "normal_ms": 3.5640889039999997,
+        "rho_label_ms": 2.023781092,
+        "voxel_ms": 4.389701348,
+        "attention_ms": 81.6494197,
+        "learn_ms": 5.881073616,
+        "label_ms": 5.588283531999999,
+        "maintenance_ms": 3.033502728,
+        "cluster_ms": 6.062026199999999
+      },
+      "after": {
+        "input_ms": 1.032450248,
+        "exec_ms": 104.089360636,
+        "output_ms": 1.353790996,
+        "total_ms": 106.47560188,
+        "normal_ms": 3.12008248,
+        "rho_label_ms": 1.576235316,
+        "voxel_ms": 4.239027948000001,
+        "attention_ms": 80.15710051199999,
+        "learn_ms": 5.874051068000001,
+        "label_ms": 4.69671442,
+        "maintenance_ms": 2.9667945280000003,
+        "cluster_ms": 6.108255164
+      },
+      "repeated": {
+        "total_ms": {
+          "trials": {
+            "before": [
+              109.88457948,
+              109.71860834,
+              109.1768859
+            ],
+            "reuse": [
+              108.20058854,
+              110.11314578,
+              109.11022262
+            ]
+          },
+          "before_median": 109.71860834,
+          "after_median": 109.11022262
+        },
+        "label_ms": {
+          "trials": {
+            "before": [
+              5.58095772,
+              5.52312194,
+              5.44240616
+            ],
+            "reuse": [
+              4.62291652,
+              4.69033824,
+              4.63705886
+            ]
+          },
+          "before_median": 5.52312194,
+          "after_median": 4.63705886
+        },
+        "normal_ms": {
+          "trials": {
+            "before": [
+              3.58163936,
+              3.51614726,
+              3.466803
+            ],
+            "reuse": [
+              3.07490518,
+              3.11773536,
+              3.0611987
+            ]
+          },
+          "before_median": 3.51614726,
+          "after_median": 3.07490518
+        },
+        "rho_label_ms": {
+          "trials": {
+            "before": [
+              1.99898268,
+              2.00664068,
+              1.97529942
+            ],
+            "reuse": [
+              1.54761288,
+              1.57208366,
+              1.5749194
+            ]
+          },
+          "before_median": 1.99898268,
+          "after_median": 1.57208366
+        }
+      }
+    },
+    "0.5": {
+      "before": {
+        "input_ms": 1.036868508,
+        "exec_ms": 35.337109088,
+        "output_ms": 1.2179413359999998,
+        "total_ms": 37.591918932,
+        "normal_ms": 2.2262437600000005,
+        "rho_label_ms": 1.7615202720000003,
+        "voxel_ms": 4.541064884,
+        "attention_ms": 13.303071208,
+        "learn_ms": 4.594334372,
+        "label_ms": 3.9880797080000003,
+        "maintenance_ms": 2.3544596959999997,
+        "cluster_ms": 6.511966392000001
+      },
+      "after": {
+        "input_ms": 1.0681198079999998,
+        "exec_ms": 35.522039015999994,
+        "output_ms": 1.224382584,
+        "total_ms": 37.814541408000004,
+        "normal_ms": 2.0420614440000002,
+        "rho_label_ms": 1.454409984,
+        "voxel_ms": 4.579579472,
+        "attention_ms": 13.41202242,
+        "learn_ms": 4.881653447999999,
+        "label_ms": 3.496942148,
+        "maintenance_ms": 2.38763002,
+        "cluster_ms": 6.717997712000001
+      },
+      "repeated": {
+        "total_ms": {
+          "trials": {
+            "before": [
+              37.4771762,
+              37.65438954,
+              37.5729688
+            ],
+            "reuse": [
+              37.55239582,
+              37.3527323,
+              37.5124629
+            ]
+          },
+          "before_median": 37.5729688,
+          "after_median": 37.5124629
+        },
+        "label_ms": {
+          "trials": {
+            "before": [
+              3.93610986,
+              4.00988468,
+              3.98583568
+            ],
+            "reuse": [
+              3.44951298,
+              3.42897636,
+              3.5015462
+            ]
+          },
+          "before_median": 3.98583568,
+          "after_median": 3.44951298
+        },
+        "normal_ms": {
+          "trials": {
+            "before": [
+              2.19547342,
+              2.25793228,
+              2.20610788
+            ],
+            "reuse": [
+              2.01893044,
+              2.0114172200000002,
+              2.03589594
+            ]
+          },
+          "before_median": 2.20610788,
+          "after_median": 2.01893044
+        },
+        "rho_label_ms": {
+          "trials": {
+            "before": [
+              1.74030984,
+              1.75162698,
+              1.77939528
+            ],
+            "reuse": [
+              1.43012886,
+              1.41715906,
+              1.46504708
+            ]
+          },
+          "before_median": 1.75162698,
+          "after_median": 1.43012886
+        }
+      }
+    }
+  }
+}

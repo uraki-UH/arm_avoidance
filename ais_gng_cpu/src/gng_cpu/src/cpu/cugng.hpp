@@ -108,9 +108,9 @@ class CUGNG {
     /* エッジIDを検索 */
     uint32_t getEdgeIndex(uint32_t idx1, uint32_t idx2);
     /* ノードの法線ベクトルの算出 */
-    void normal_vector(Node& node);
+    void normal_vector(Node& node, Vec3f *node_positions = nullptr);
     /* ノードのCOS類似度の算出 */
-    void rho(Node& node);
+    void rho(Node& node, Vec3f *node_normals = nullptr);
     /* ノードの年齢チェック */
     void check_age();
     /* エッジの長さチェック */

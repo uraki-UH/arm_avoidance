@@ -146,6 +146,11 @@ if(GNG_BUILD_BENCHMARKS)
   target_include_directories(radix_sort_test PRIVATE src include)
   target_compile_definitions(radix_sort_test PRIVATE GNG_VERSION=${GNG_VERSION})
   add_test(NAME radix_sort_test COMMAND radix_sort_test)
+  add_executable(normal_cache_test test/normal_cache_test.cpp src/cpu/cugng.cpp src/cpu/labelling.cpp
+    src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(normal_cache_test PRIVATE src include)
+  target_compile_definitions(normal_cache_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  add_test(NAME normal_cache_test COMMAND normal_cache_test)
   add_executable(node_id_reuse_test test/node_id_reuse_test.cpp src/cpu/cugng.cpp
     src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
   target_include_directories(node_id_reuse_test PRIVATE src include)

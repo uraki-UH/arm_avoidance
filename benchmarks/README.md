@@ -16,6 +16,7 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_normal_efficiency_20260924](gng_normal_efficiency_20260924/) | 法線・曲率の連続配列参照と差分再利用、全出力一致の検証 |
 | [gng_radix_multiseed_20260924](gng_radix_multiseed_20260924/) | 6シードの品質・観測代表点比較と本番基数ソート採用 |
 | [gng_radix_production_20260924](gng_radix_production_20260924/) | 本番機能を保持した基数ソートの時間・選択学習点・被覆の比較 |
 | [gng_production_efficiency_20260924](gng_production_efficiency_20260924/) | 本番CPUの結果一致を維持した空きID管理・重心走査統合と実験版の基数ソート標準化 |
