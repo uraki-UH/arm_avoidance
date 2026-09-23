@@ -132,6 +132,20 @@ def generate_launch_description():
         gng_config_path = os.path.join(package_dir, 'config', f'gng_{backend}', lidar)
         if not os.path.exists(gng_config_path):
             raise RuntimeError(f"Config file not found: {gng_config_path}")
+        with open(gng_config_path, encoding='utf-8') as config_file:
+            gng_parameters = yaml.safe_load(config_file).get(
+                'ais_gng_node', {}).get('ros__parameters', {})
+        # センサー別YAMLの短い切替名から内部パラメータへの変換。旧名との併記時は短い名前を優先。
+        clustering_switches = {}
+        for yaml_name, parameter_name in (
+                ('plane_clustering', 'plane_cluster.direct_enabled'),
+                ('curve_clustering', 'surface_model.enable')):
+            if yaml_name in gng_parameters:
+                enable_clustering = gng_parameters[yaml_name]
+                if not isinstance(enable_clustering, bool):
+                    raise RuntimeError(f'{yaml_name} must be a YAML boolean (true/false)')
+                clustering_switches[parameter_name] = enable_clustering
+        gng_parameters.update(clustering_switches)
 
         executable_path = os.path.join(
             get_package_prefix("ais_gng"),
@@ -143,17 +157,18 @@ def generate_launch_description():
             raise RuntimeError(f"Backend executable not found: {executable_path}")
 
         surface_config_path = os.path.join(package_dir, 'config', 'surface_model.yaml')
-        # 時間通知の接続先と曲面ノードの出力先に共通の設定。
-        parameters = [gng_config_path, surface_config_path]
+        # センサー設定と短名変換の統合。同一セレクターへの展開による共通設定との優先順維持。
+        parameters = [surface_config_path, gng_parameters]
+        launch_parameter_overrides = {}
         grasp_attention = LaunchConfiguration('enable_grasp_attention').perform(context)
         if grasp_attention != 'auto':
             enable_grasp_attention = parse_bool(grasp_attention, 'enable_grasp_attention')
             if enable_grasp_attention and backend != 'cpu':
                 raise RuntimeError('enable_grasp_attention is supported only by the CPU backend')
-            parameters.append({'enable_grasp_attention': enable_grasp_attention})
+            launch_parameter_overrides['enable_grasp_attention'] = enable_grasp_attention
         input_topic = LaunchConfiguration('input_topic').perform(context)
         if input_topic:
-            parameters.append({'input.topic_names': [input_topic]})
+            launch_parameter_overrides['input.topic_names'] = [input_topic]
         source_point_cloud_topic = LaunchConfiguration(
             'source_point_cloud_topic').perform(context)
         if source_point_cloud_topic == 'auto':
@@ -176,12 +191,16 @@ def generate_launch_description():
             'plane_cluster_incremental_node', {}).get('ros__parameters', {})
         enable_nonplane_component = False
         if backend == 'cpu':
-            # 共通設定のCPU直結名前空間への転写。CPU固有設定、起動引数の順で優先。
+            # 共通設定のCPU直結名前空間への転写。センサー別YAML、起動引数の順で優先。
             plane_parameter_overrides = {
                 f'plane_cluster.{name}': value for name, value in plane_parameters.items()
             }
             plane_parameter_overrides.update(
                 plane_config.get('ais_gng_node', {}).get('ros__parameters', {}))
+            plane_parameter_overrides.update({
+                name: value for name, value in gng_parameters.items()
+                if name.startswith(('plane_cluster.', 'nonplane_component.'))
+            })
             plane_parameter_overrides['plane_cluster.output_topic'] = plane_clusters_topic
             enable_nonplane_component = bool(plane_parameter_overrides.get(
                 'nonplane_component.direct_enabled', True))
@@ -193,6 +212,8 @@ def generate_launch_description():
                 ] = parse_bool(rho_mode, 'use_node_rho_for_seed_order')
             parameters.append(plane_parameter_overrides)
 
+        # センサー・平面設定より明示launch引数を優先。
+        parameters.append(launch_parameter_overrides)
         nodes = [
             Node(
                 package="ais_gng",
@@ -220,7 +241,11 @@ def generate_launch_description():
             LaunchConfiguration('start_plane_cluster').perform(context),
             'start_plane_cluster')
         if start_plane_cluster:
-            surface_parameter_overrides = {}
+            # センサー別の曲面設定を実際の計算ノードへも転送。
+            surface_parameter_overrides = {
+                name: value for name, value in gng_parameters.items()
+                if name.startswith('surface_model.')
+            }
             surface_method = LaunchConfiguration('surface_method').perform(context)
             if surface_method != 'auto':
                 surface_parameter_overrides['surface_model.method'] = surface_method

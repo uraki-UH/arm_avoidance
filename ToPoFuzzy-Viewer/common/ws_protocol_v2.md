@@ -42,7 +42,8 @@
 
 ### Graph Stream
 
-現行のグラフ配信は `TMG1` バイナリ。以下は互換JSON表現。
+現行のグラフ配信は `TMG1` バイナリversion 2（ノード96バイト）。外側のWSプロトコルはv2のまま。
+Viewerは旧バイナリversion 1（ノード84バイト）も読み込み可能。以下は互換JSON表現。
 
 ノードの`semanticLabel`は「把持ラベル」グループで表示・色・優先順位を設定。
 0=通常、1=入力で指定された把持部位、2=候補到達性の未評価、3=到達範囲内、4=到達範囲外。
@@ -53,16 +54,29 @@ HTMLのラベル付き`/semantic_points`は0/1のみを生成。専用`/handle_p
 境界候補とはグループ単位で優先順位を設定。統合前の2親項目のうち先に指定された位置へ移管。
 
 ```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true }], "edges": [], "clusters": [] } }
+{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true, "num_safe_states": 0, "num_danger_states": 0, "num_collision_states": 0 }], "edges": [], "clusters": [] } }
 ```
 
 `is_boundary_candidate` は `TopologicalNode` のGNG側境界候補属性。Viewer内での次数判定なし。
 `boundary_evidence` は候補付近の観測証拠ビット。1=遮蔽、2=自由空間、4=視野端、0=不明。複数ビットの併存が可能。
-バイナリでは同レコードのオフセット6、レコード長84バイトは維持。属性欠落・旧予約値0は不明。
+バイナリではノードレコードのオフセット6。属性欠落・旧予約値0は不明。
 局所面延長との比較による証拠であり、物体の真の境界や仮説全体の棄却の確定情報ではない。
-バイナリでは84バイトのノードレコード先頭から5バイト目（0起点）に格納、0がfalse、1がtrue。
-予約領域1バイトの利用によるレコード長・バージョンの維持。旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
+境界候補フラグはノードレコード先頭から5バイト目（0起点）に格納、0がfalse、1がtrue。
+旧形式の予約領域0、またはJSON属性欠落時は候補扱いなし。
 ROSメッセージ定義の互換性とは別のため、ROS送受信側には同一定義での再ビルド・再起動が必要。
+
+version 2は末尾に集約元姿勢の表示用件数を追加。先頭84バイト、Header、edge、clusterの配置は変更なし。
+
+| node内offset | 型 | 属性 |
+|---:|---|---|
+| 84 | `uint32` | `num_safe_states`（安全） |
+| 88 | `uint32` | `num_danger_states`（危険） |
+| 92 | `uint32` | `num_collision_states`（衝突／使用不可） |
+
+合計が正の場合はsafe・danger・collisionの色を件数割合で混色。`label`や判定ロジックの変更なし。
+件数のみの変更も描画更新対象。欠落・不正値・合計0は従来のlabel色へ復帰。
+ノード詳細に件数と割合を表示。元姿勢の構成比であり、安全確率ではない。
+単色・目標・semantic・境界などの明示的色指定は優先。詳細は[GNG仕様](../../gng_vlut_system/docs/TECHNICAL_SPEC.md#134-rosパラメータとトピック)を参照。
 
 `/nonplane_components`のROS所属配列も、Viewerでは既存`TMG1`へ変換。`sources.list`の型は`nonplane_component`のまま、tagも元トピック名を維持。Marker JSONの併送なし。元ノードID・Graph対応属性・成分所属・実エッジを保持し、平面側接続端点だけは成分所属から除外。通常Graphと同じ`stream.topological_map.applied`で描画完了を通知。構築条件・空成分・再購読は[非平面成分のGraph表示](../doc/BACKEND_API.md#非平面成分のgraph表示)を参照。
 

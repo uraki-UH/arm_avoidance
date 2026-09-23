@@ -1,5 +1,7 @@
 #include "cugng.hpp"
 
+#include <numeric>
+
 CUGNG::CUGNG(){
 
 }
@@ -17,7 +19,9 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     c.z_max = _other_config->z_max;
 
     // Voxel Grid
-    c.unit = _other_config->voxel_grid_unit;
+    // 間引き無効時の範囲判定用グリッド。点の集約には不使用。
+    c.unit = _other_config->voxel_grid_unit > 0
+        ? _other_config->voxel_grid_unit : _other_config->node_grid;
     if (!voxel_config.init(c))
         return false;
 
@@ -259,8 +263,14 @@ void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point
 void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num){
     uint32_t i, j;
     static Node_d n;
-    // 全探索
-    for (i = j = 0; i < input_pcl_num;++i){
+    // ボクセル番号順による低いZ側へのノード枠の偏在防止。全入力の一度ずつの処理。
+    std::vector<uint32_t> point_order(input_pcl_num);
+    std::iota(point_order.begin(), point_order.end(), 0U);
+    std::mt19937 random(frame_number);
+    std::shuffle(point_order.begin(), point_order.end(), random);
+    j = 0;
+    for (const uint32_t point_idx : point_order){
+        i = point_idx;
         bool inpcl_is_in_vigilance = getDownSamplingGrid(inpcl[i], labels[i], n);
         if(!inpcl_is_in_vigilance){
             add_node(inpcl[i]);
@@ -920,7 +930,7 @@ void CUGNG::check_age(){
             age = gng_config.s1_age[node.label];
         
         if (node.static_node) {
-            age = 100;
+            age = gng_config.max_static_s1_age;
             if (node.age_s1 >= age) {
                 delete_node(node.id);
             } else {

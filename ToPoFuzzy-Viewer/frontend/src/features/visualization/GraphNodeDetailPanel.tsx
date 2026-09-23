@@ -1,6 +1,7 @@
 import { memo, useMemo, useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { GraphData, GraphNode, LAYER_LABELS, SEMANTIC_LABELS } from '../../types';
+import { get_node_state_counts } from './gngGraphics';
 
 export interface GraphNodeDetailSnapshot {
     graphTag: string;
@@ -15,6 +16,7 @@ interface GraphNodeDetailPanelProps {
 
 function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelProps) {
     const { graphTag, graph, node } = snapshot;
+    const state_counts = get_node_state_counts(node);
     const [position, setPosition] = useState({ x: window.innerWidth - 520, y: 40 });
     const [isDragging, setIsDragging] = useState(false);
     const dragStartRef = useRef<{ x: number, y: number } | null>(null);
@@ -109,6 +111,20 @@ function GraphNodeDetailPanelInner({ snapshot, onClose }: GraphNodeDetailPanelPr
             </div>
 
             <div className="space-y-2 overflow-y-auto p-3 text-xs text-[var(--text-primary)]">
+                {state_counts && (
+                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                        <div className="font-semibold">集約元の姿勢割合（確率・安全保証ではありません）</div>
+                        {[
+                            ['安全', state_counts.num_safe],
+                            ['危険', state_counts.num_danger],
+                            ['衝突・使用不可', state_counts.num_collision],
+                        ].map(([name, num]) => (
+                            <div key={name} className="mt-1 font-mono">
+                                {name}: {num} / {state_counts.num_total} ({(Number(num) * 100 / state_counts.num_total).toFixed(1)}%)
+                            </div>
+                        ))}
+                    </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-md border border-white/10 bg-black/20 p-2">
                         <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">Layer</div>

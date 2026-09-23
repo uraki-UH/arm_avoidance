@@ -19,3 +19,7 @@ uint8 BOUNDARY_OCCLUSION = 1
 uint8 BOUNDARY_FREE_SPACE = 2
 uint8 BOUNDARY_FIELD_OF_VIEW = 4
 uint8 boundary_evidence
+# 集約元の姿勢ノード数。表示用、既存labelの判定とは独立。合計0は未収録
+uint32 num_safe_states
+uint32 num_danger_states
+uint32 num_collision_states

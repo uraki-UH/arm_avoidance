@@ -15,10 +15,12 @@
 namespace robot_sim::visualization {
 namespace {
 
-constexpr std::array<char, 8> kMagic = {'V', 'I', 'Z', 'G', 'N', 'G', '5', '\0'};
-constexpr std::uint32_t kVersion = 5;
-constexpr std::array<char, 8> kStaticMagic = {'V', 'I', 'Z', 'G', 'S', 'T', '1', '\0'};
-constexpr std::uint32_t kStaticVersion = 1;
+constexpr std::array<char, 8> kMagic = {'V', 'I', 'Z', 'G', 'N', 'G', '6', '\0'};
+constexpr std::uint32_t kVersion = 6;
+constexpr std::array<char, 8> legacy_magic = {'V', 'I', 'Z', 'G', 'N', 'G', '5', '\0'};
+constexpr std::array<char, 8> kStaticMagic = {'V', 'I', 'Z', 'G', 'S', 'T', '2', '\0'};
+constexpr std::uint32_t kStaticVersion = 2;
+constexpr std::array<char, 8> legacy_static_magic = {'V', 'I', 'Z', 'G', 'S', 'T', '1', '\0'};
 constexpr std::uint32_t kMaxSerializedItems = 10000000;
 constexpr std::uint32_t kMaxJointAngleDimension = 1024;
 constexpr std::uint32_t kSourceSignatureSchema = 4;
@@ -40,6 +42,20 @@ template <typename T>
 bool readValue(std::ifstream &stream, T &value) {
   stream.read(reinterpret_cast<char *>(&value), sizeof(T));
   return static_cast<bool>(stream);
+}
+
+template <typename Node>
+bool write_state_counts(std::ofstream &stream, const Node &node) {
+  return writeValue(stream, node.num_safe_states) &&
+         writeValue(stream, node.num_danger_states) &&
+         writeValue(stream, node.num_collision_states);
+}
+
+template <typename Node>
+bool read_state_counts(std::ifstream &stream, Node &node) {
+  return readValue(stream, node.num_safe_states) &&
+         readValue(stream, node.num_danger_states) &&
+         readValue(stream, node.num_collision_states);
 }
 
 float featureDistanceSquared(const Eigen::VectorXf &first,
@@ -776,6 +792,9 @@ VisualizationGngModel trainVisualizationGng(
       }
       has_safe_member = has_safe_member || source.label == 1;
       has_danger_member = has_danger_member || source.label == 3;
+      if (source.label == 1) ++visual_node.num_safe_states;
+      else if (source.label == 3) ++visual_node.num_danger_states;
+      else if (source.label == 2) ++visual_node.num_collision_states;
       const float distance = featureDistanceSquared(
           training_nodes[visual_to_training[visual_index]].feature,
           features[source_index]);
@@ -859,7 +878,7 @@ bool VisualizationGngModel::save(const std::filesystem::path &path,
         std::find(node.source_node_ids.begin(), node.source_node_ids.end(),
                   node.representative_source_node_id) ==
             node.source_node_ids.end() ||
-        !writeValue(stream, node.label) ||
+        !writeValue(stream, node.label) || !write_state_counts(stream, node) ||
         !(stream.write(reinterpret_cast<const char *>(
                            node.representative_joint_angle.data()),
                        static_cast<std::streamsize>(
@@ -949,8 +968,9 @@ bool VisualizationGngModel::load(const std::filesystem::path &path,
   std::uint32_t node_count = 0;
   std::uint32_t edge_count = 0;
   std::uint32_t transition_count = 0;
-  if (!stream || magic != kMagic || !readValue(stream, version) ||
-      version != kVersion || !readValue(stream, coord_layer) ||
+  if (!stream || !readValue(stream, version) ||
+      !((magic == kMagic && version == kVersion) ||
+        (magic == legacy_magic && version == 5)) || !readValue(stream, coord_layer) ||
       !readValue(stream, loaded_joint_angle_dimension) ||
       !readValue(stream, source_signature) || !readValue(stream, node_count) ||
       !readValue(stream, edge_count) || !readValue(stream, transition_count) ||
@@ -975,6 +995,7 @@ bool VisualizationGngModel::load(const std::filesystem::path &path,
     node.representative_joint_angle.resize(
         static_cast<int>(loaded_joint_angle_dimension));
     if (!stream || !readValue(stream, label) ||
+        (version >= 6 && !read_state_counts(stream, node)) ||
         !(stream.read(reinterpret_cast<char *>(
                           node.representative_joint_angle.data()),
                       static_cast<std::streamsize>(
@@ -1092,7 +1113,8 @@ VisualizationGngStaticModel makeVisualizationGngStaticModel(
   static_model.nodes.reserve(model.nodes.size());
   for (const auto &node : model.nodes) {
     static_model.nodes.push_back(
-        {node.position, node.normal, node.label, node.representative_joint_angle});
+        {node.position, node.normal, node.label, node.representative_joint_angle,
+         node.num_safe_states, node.num_danger_states, node.num_collision_states});
   }
   static_model.edges = model.edges;
   return static_model;
@@ -1139,6 +1161,7 @@ bool VisualizationGngStaticModel::save(const std::filesystem::path &path,
         node.representative_joint_angle.size() !=
             static_cast<int>(joint_angle_dimension) ||
         !node.representative_joint_angle.allFinite() || !writeValue(stream, node.label) ||
+        !write_state_counts(stream, node) ||
         !(stream.write(reinterpret_cast<const char *>(
                            node.representative_joint_angle.data()),
                        static_cast<std::streamsize>(
@@ -1182,8 +1205,9 @@ bool VisualizationGngStaticModel::load(const std::filesystem::path &path,
   std::uint32_t node_count = 0;
   std::uint32_t edge_count = 0;
   stream.read(magic.data(), static_cast<std::streamsize>(magic.size()));
-  if (!stream || magic != kStaticMagic || !readValue(stream, version) ||
-      version != kStaticVersion || !readValue(stream, coord_layer) ||
+  if (!stream || !readValue(stream, version) ||
+      !((magic == kStaticMagic && version == kStaticVersion) ||
+        (magic == legacy_static_magic && version == 1)) || !readValue(stream, coord_layer) ||
       !readValue(stream, loaded_joint_angle_dimension) ||
       !readValue(stream, node_count) || !readValue(stream, edge_count) ||
       node_count > std::numeric_limits<std::uint16_t>::max() ||
@@ -1200,6 +1224,7 @@ bool VisualizationGngStaticModel::load(const std::filesystem::path &path,
     node.representative_joint_angle.resize(
         static_cast<int>(loaded_joint_angle_dimension));
     if (!stream || !readValue(stream, node.label) ||
+        (version >= 2 && !read_state_counts(stream, node)) ||
         !(stream.read(reinterpret_cast<char *>(node.representative_joint_angle.data()),
                       static_cast<std::streamsize>(
                           loaded_joint_angle_dimension * sizeof(float)))) ||

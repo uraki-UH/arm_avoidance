@@ -318,6 +318,9 @@ function graphHasChanged(prev: GraphData, next: GraphData): boolean {
             a.ny !== b.ny ||
             a.nz !== b.nz ||
             a.label !== b.label ||
+            a.num_safe_states !== b.num_safe_states ||
+            a.num_danger_states !== b.num_danger_states ||
+            a.num_collision_states !== b.num_collision_states ||
             a.semanticLabel !== b.semanticLabel ||
             a.semanticReliability !== b.semanticReliability ||
             a.age !== b.age ||

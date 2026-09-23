@@ -414,6 +414,9 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
     this->declare_parameter("node.clusted_s1_age", std::vector<int>{20, 20, 6, 3});// クラスタ化されたノードの選択回数に基づく削除(cpu)
     this->declare_parameter("node.interval", std::vector<double>{});               // ノードの間隔(m)(cpu/gpu)
     this->declare_parameter("node.static.age_min", -1);                            // 長期記憶の年齢(cpu)  
+#if defined(AIS_GNG_BACKEND_CPU)
+    this->declare_parameter("node.static.s1_age_max", 100); // 長期記憶ノードの未観測・未選択寿命（GNG更新回数）
+#endif
 
     // エッジ関連
     this->declare_parameter("edge.num_max", 300000);                               // エッジ数の上限(cpu/gpu)
@@ -636,6 +639,72 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
     rcl_interfaces::msg::SetParametersResult result;
     result.reason = "success";
     result.successful = true;
+#if defined(AIS_GNG_BACKEND_CPU)
+    // 起動時・実行中に共通の寿命値検証。無効値の既定値への黙示的な置換防止。
+    for (const auto &p : params) {
+        if (p.get_name() != "node.static.s1_age_max") {continue;}
+        if (p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER || p.as_int() <= 0 ||
+            static_cast<double>(static_cast<float>(p.as_int())) >= std::numeric_limits<int>::max() ||
+            static_cast<double>(static_cast<float>(p.as_int())) != static_cast<double>(p.as_int())) {
+            result.successful = false;
+            result.reason = "node.static.s1_age_max must be a positive integer within the supported range";
+            return result;
+        }
+    }
+    if (initialized_) {
+        // 複数設定の一括検証。拒否時のROS値と内部設定の部分更新防止。
+        for (const auto &p : params) {
+            const auto &name = p.get_name();
+            bool can_update = false;
+            bool is_valid = false;
+            if (name == "node.learning_num" || name == "node.static.age_min" ||
+                name == "node.static.s1_age_max" ||
+                name == "performance.log_interval_ms") {
+                can_update = true;
+                if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+                    const auto value = p.as_int();
+                    is_valid = value >= (name == "node.static.age_min" ? -1 : 0) &&
+                        static_cast<double>(static_cast<float>(value)) < std::numeric_limits<int>::max();
+                }
+            } else if (name == "node.interval" || name == "node.s1_age_max" ||
+                       name == "node.clusted_s1_age") {
+                can_update = true;
+                if (name == "node.interval" &&
+                    p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE_ARRAY) {
+                    const auto values = p.as_double_array();
+                    is_valid = values.size() == 4 && std::all_of(values.begin(), values.end(),
+                        [](double value) {return std::isfinite(value) && value >= 0 &&
+                            value <= std::sqrt(std::numeric_limits<float>::max());});
+                } else if (name != "node.interval" &&
+                           p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER_ARRAY) {
+                    const auto values = p.as_integer_array();
+                    is_valid = values.size() == 4 && std::all_of(values.begin(), values.end(),
+                        [](int64_t value) {return value > 0 &&
+                            static_cast<double>(static_cast<float>(value)) < std::numeric_limits<int>::max();});
+                }
+            } else if (name == "node.eta_decay_rate" || name == "node.unknown_learning_rate" ||
+                       name == "node.s1_reset_range" || name == "ds.range_max") {
+                can_update = true;
+                if (p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+                    const double value = static_cast<float>(p.as_double());
+                    is_valid = std::isfinite(value) && value <= std::sqrt(std::numeric_limits<float>::max());
+                    if (name == "node.eta_decay_rate") {is_valid &= value >= 0 && value <= 1;}
+                    else if (name == "node.unknown_learning_rate") {is_valid &= value >= 0.5 && value < 1;}
+                    else {is_valid &= value > 0;}
+                }
+            } else if (name == "plane_cluster.use_node_rho_for_seed_order") {
+                can_update = direct_plane_clusterizer_ != nullptr;
+                is_valid = p.get_type() == rclcpp::ParameterType::PARAMETER_BOOL;
+            }
+            if (!can_update || !is_valid) {
+                result.successful = false;
+                result.reason = name + (can_update ? ": invalid parameter value" :
+                    ": runtime update unsupported; edit YAML and restart launch");
+                return result;
+            }
+        }
+    }
+#endif
     for (auto &p : params) {
         float value = 0.0F;
         bool success = false;
@@ -667,6 +736,14 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
                 flt_array[i] = static_cast<float>(double_array[i]);
         }
 
+#if defined(AIS_GNG_BACKEND_CPU)
+        if (name == "input.voxel_grid_unit" &&
+            (!std::isfinite(value) || value < 0)) {
+            result.successful = false;
+            result.reason = "input.voxel_grid_unit must be finite and nonnegative";
+            return result;
+        }
+#endif
         // プラグインのパラメータ
         success |= filter_.setParameter(name, 0, value); 
         success |= downsampling_.setParameter(name, 0, value);
@@ -796,6 +873,11 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         } else {
             RCLCPP_WARN(
                 this->get_logger(), "Unknown param: %s %s", name.c_str(), param_value.str().c_str());
+            if (initialized_) {
+                result.successful = false;
+                result.reason = "Unsupported parameter: " + name;
+                return result;
+            }
         }
     }
     return result;

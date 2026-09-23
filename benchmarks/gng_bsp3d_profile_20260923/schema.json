@@ -1,0 +1,32 @@
+{
+  "functions": [
+    "learn_search",
+    "attention_search",
+    "bsp_search",
+    "node_add",
+    "node_move",
+    "node_delete",
+    "tree_add",
+    "tree_move",
+    "tree_remove",
+    "connect",
+    "disconnect",
+    "downsampling",
+    "input_shuffle",
+    "attention_sort",
+    "voxel_sort",
+    "edge_length_check",
+    "node_age_check",
+    "isolated_node_check",
+    "edge_dist_update",
+    "learn_sample"
+  ],
+  "stages": [
+    "voxel",
+    "attention",
+    "learn",
+    "label",
+    "maintenance",
+    "cluster"
+  ]
+}

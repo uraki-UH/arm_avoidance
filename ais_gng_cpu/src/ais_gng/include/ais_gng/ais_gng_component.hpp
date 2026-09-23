@@ -24,6 +24,7 @@
 #include "std_msgs/msg/float64.hpp"
 
 #if defined(AIS_GNG_BACKEND_CPU)
+#include <fuzzrobo/libgng/observation_api.h>
 #include "ais_gng/node_support.hpp"
 #include "ais_gng/grasp_attention.hpp"
 #include "ais_gng/boundary_attention.hpp"

@@ -1,0 +1,107 @@
+{
+  "grid": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 103.938235,
+    "total_mean_ms": 106.515312775,
+    "exec_trial_mean_ms": [
+      103.479771325,
+      103.99869640000001,
+      104.336237275
+    ],
+    "exec_trial_p95_ms": [
+      105.30009799999999,
+      105.79680485,
+      109.51212355000001
+    ],
+    "total_trial_p95_ms": [
+      107.75426035,
+      108.3109595,
+      112.0372241
+    ],
+    "final_nodes": [
+      19925,
+      19925,
+      19925
+    ],
+    "final_edges": [
+      51660,
+      51660,
+      51660
+    ],
+    "has_repeatable_graph": true
+  },
+  "spatial": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 112.04292825,
+    "total_mean_ms": 114.64942102500001,
+    "exec_trial_mean_ms": [
+      111.5187171,
+      112.1043008,
+      112.50576685000001
+    ],
+    "exec_trial_p95_ms": [
+      113.14895804999999,
+      116.00404505,
+      115.01591755
+    ],
+    "total_trial_p95_ms": [
+      115.7309834,
+      118.6543755,
+      117.68612405
+    ],
+    "final_nodes": [
+      19901,
+      19901,
+      19901
+    ],
+    "final_edges": [
+      53566,
+      53566,
+      53566
+    ],
+    "has_repeatable_graph": true
+  },
+  "bsp3d": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 95.5036176,
+    "total_mean_ms": 98.41589786666667,
+    "exec_trial_mean_ms": [
+      96.26902494999999,
+      95.17329895,
+      95.0685289
+    ],
+    "exec_trial_p95_ms": [
+      99.11429634999999,
+      98.10283454999998,
+      96.6622726
+    ],
+    "total_trial_p95_ms": [
+      101.96632994999999,
+      100.93251034999999,
+      99.64456440000001
+    ],
+    "final_nodes": [
+      19901,
+      19901,
+      19901
+    ],
+    "final_edges": [
+      53566,
+      53566,
+      53566
+    ],
+    "has_repeatable_graph": true
+  },
+  "spatial_vs_bsp3d_matching_frames": 150,
+  "has_same_parameters": true,
+  "grid_vs_previous_matching_frames": 50,
+  "spatial_vs_previous_matching_frames": 50,
+  "exec_reduction_vs_spatial_percent": 14.761583714677684,
+  "exec_reduction_vs_grid_percent": 8.11502850707443
+}

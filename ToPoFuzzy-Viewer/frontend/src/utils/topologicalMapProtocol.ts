@@ -1,9 +1,8 @@
 import { GraphData } from '../types';
 
 const MAGIC = 0x31474d54;
-const VERSION = 1;
+const VERSION = 2;
 const HEADER_SIZE = 36;
-const NODE_RECORD_SIZE = 84;
 const CLUSTER_RECORD_SIZE = 80;
 const MAX_PACKET_BYTES = 64 * 1024 * 1024;
 const decoder = new TextDecoder();
@@ -28,9 +27,11 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
         throw new Error('Invalid topological map packet size');
     }
     const view = new DataView(buffer);
-    if (view.getUint32(0, true) !== MAGIC || view.getUint16(4, true) !== VERSION) {
+    const version = view.getUint16(4, true);
+    if (view.getUint32(0, true) !== MAGIC || (version !== 1 && version !== VERSION)) {
         throw new Error('Unsupported topological map packet');
     }
+    const node_record_size = version === 1 ? 84 : 96;
     const tagSize = view.getUint32(8, true);
     const frameIdSize = view.getUint32(12, true);
     const timestamp = view.getUint32(16, true);
@@ -50,9 +51,9 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
     offset += frameIdSize;
 
     const nodes: GraphData['nodes'] = [];
-    requireBytes(buffer, offset, nodeNum * NODE_RECORD_SIZE);
+    requireBytes(buffer, offset, nodeNum * node_record_size);
     for (let i = 0; i < nodeNum; i += 1) {
-        const base = offset + i * NODE_RECORD_SIZE;
+        const base = offset + i * node_record_size;
         nodes.push({
             id: view.getUint16(base, true),
             label: view.getUint8(base + 2),
@@ -63,6 +64,11 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
             age: view.getUint32(base + 8, true),
             nonplaneComponentId: view.getUint32(base + 12, true),
             winnerPointCount: view.getUint32(base + 16, true),
+            ...(version >= 2 ? {
+                num_safe_states: view.getUint32(base + 84, true),
+                num_danger_states: view.getUint32(base + 88, true),
+                num_collision_states: view.getUint32(base + 92, true),
+            } : {}),
             semanticReliability: view.getFloat32(base + 20, true),
             x: view.getFloat32(base + 24, true), y: view.getFloat32(base + 28, true), z: view.getFloat32(base + 32, true),
             nx: view.getFloat32(base + 36, true), ny: view.getFloat32(base + 40, true), nz: view.getFloat32(base + 44, true),
@@ -73,7 +79,7 @@ export function deserializeTopologicalMap(buffer: ArrayBuffer): TopologicalMapPa
             ],
         });
     }
-    offset += nodeNum * NODE_RECORD_SIZE;
+    offset += nodeNum * node_record_size;
 
     requireBytes(buffer, offset, edgeNum * 2);
     const edges: number[] = [];

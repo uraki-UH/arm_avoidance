@@ -1,17 +1,21 @@
 ais_gng_node:
   ros__parameters:
+    plane_clustering: false
+    curve_clustering: false #平面クラスタリングfalseでは実行できない
+
     node.num_max: 20000
     node.learning_num: 4000
     node.unknown_learning_rate: 0.8
     node.eta_s1: 0.08
     node.eta_s2: 0.008
-    node.eta_decay_rate: 0.99
+    node.eta_decay_rate: 1.00
     node.s1_reset_range: 0.1
-    node.grid: 0.5
+    node.grid: 1.0
     node.s1_age_max: [6, 6, 6, 3] #[default, safe, wall, unknown]
-    node.clusted_s1_age: [20, 20, 6, 3] #[default, safe, wall, unknown]
-    node.interval: [0.1, 0.4, 0.4, 0.05] #[default, safe, wall, unknown]
-    node.static.age_min: 250 # 長期記憶の年齢
+    node.clusted_s1_age: [20, 20, 6, 3] 
+    node.interval: [0.1, 0.4, 0.4, 0.1] 
+    node.static.age_min: -1 # 長期記憶の年齢
+    node.static.s1_age_max: 100 # 長期記憶ノードの未観測・未選択寿命（GNG更新回数）
 
     ds.transformed: true
     ds.range_max: 0.2
@@ -23,7 +27,7 @@ ais_gng_node:
     label.fuzzy.min: 0.5
     label.fuzzy.lpf_time_constant: 0.5
 
-    edge.num_max: 300000
+    edge.num_max: 100000
     edge.age_max: 100
 
     cluster.num_max: 100
@@ -51,12 +55,12 @@ ais_gng_node:
     input.topic_names: ["/scan"]
     input.point_cloud_num: 200000
     input.base_frame_id: "map"
-    input.voxel_grid_unit: 0.00
+    input.voxel_grid_unit: 0.5
     input.visualize: true
     input.local_coordinates: false
-    input.x_min: 0.
-    input.x_max: 100.
-    input.y_min: -50.
-    input.y_max: 50.
+    input.x_min: -200.
+    input.x_max: 200.
+    input.y_min: -200.
+    input.y_max: 200.
     input.z_min: -5.0
     input.z_max: 10.0

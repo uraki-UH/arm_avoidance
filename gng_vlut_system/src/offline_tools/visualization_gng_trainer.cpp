@@ -98,6 +98,9 @@ bool nodesEqual(
     if (!(lhs[index].position.array() == rhs[index].position.array()).all() ||
         !(lhs[index].normal.array() == rhs[index].normal.array()).all() ||
         lhs[index].label != rhs[index].label ||
+        lhs[index].num_safe_states != rhs[index].num_safe_states ||
+        lhs[index].num_danger_states != rhs[index].num_danger_states ||
+        lhs[index].num_collision_states != rhs[index].num_collision_states ||
         lhs[index].representative_source_node_id !=
             rhs[index].representative_source_node_id ||
         lhs[index].representative_joint_angle.size() !=
@@ -121,6 +124,9 @@ bool staticNodesEqual(
     if (!(lhs[index].position.array() == rhs[index].position.array()).all() ||
         !(lhs[index].normal.array() == rhs[index].normal.array()).all() ||
         lhs[index].label != rhs[index].label ||
+        lhs[index].num_safe_states != rhs[index].num_safe_states ||
+        lhs[index].num_danger_states != rhs[index].num_danger_states ||
+        lhs[index].num_collision_states != rhs[index].num_collision_states ||
         lhs[index].representative_joint_angle.size() !=
             rhs[index].representative_joint_angle.size() ||
         (lhs[index].representative_joint_angle.array() !=

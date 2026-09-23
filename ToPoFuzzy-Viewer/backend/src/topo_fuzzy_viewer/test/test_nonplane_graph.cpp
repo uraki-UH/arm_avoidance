@@ -90,6 +90,26 @@ TEST(nonplane_graph, empty_clear_singletons_and_empty_components) {
     EXPECT_EQ(single->clusters[0].nodes, std::vector<uint16_t>({3}));
 }
 
+TEST(topological_map_protocol, state_counts_are_independent_of_label) {
+    ais_gng_msgs::msg::TopologicalMap graph;
+    graph.nodes.resize(1);
+    graph.nodes[0].label = 1;
+    graph.nodes[0].num_safe_states = 1;
+    graph.nodes[0].num_danger_states = 4;
+    graph.nodes[0].num_collision_states = 95;
+    const auto packet = topological_map_protocol::serialize(graph, "");
+    topological_map_protocol::Header header;
+    topological_map_protocol::NodeRecord record;
+    std::memcpy(&header, packet.data(), sizeof(header));
+    std::memcpy(&record, packet.data() + sizeof(header), sizeof(record));
+    EXPECT_EQ(header.version, 2U);
+    EXPECT_EQ(header.payload_size, 96U);
+    EXPECT_EQ(record.label, 1U);
+    EXPECT_EQ(record.num_safe_states, 1U);
+    EXPECT_EQ(record.num_danger_states, 4U);
+    EXPECT_EQ(record.num_collision_states, 95U);
+}
+
 TEST(nonplane_graph, mismatched_frames_and_invalid_membership_are_rejected) {
     fixture input;
     EXPECT_FALSE(nonplane_graph::build(input.components, input.map, nullptr));

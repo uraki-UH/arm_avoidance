@@ -37,9 +37,32 @@ export function resolveGraphNodeColor(
         return SEMANTIC_COLORS[safeSemanticIndex] ?? SEMANTIC_COLORS[0];
     }
 
+    const state_color = resolve_state_ratio_color(node, palette);
+    if (state_color) return state_color;
+
     const labelValue = Number.isFinite(node.label) ? Math.trunc(node.label as number) : fallbackIndex;
     const safeIndex = ((labelValue % palette.length) + palette.length) % palette.length;
     return palette[safeIndex] ?? palette[0];
+}
+
+/** 集約元の状態件数。未収録・不正値では割合表示なし。 */
+export function get_node_state_counts(node: GraphData['nodes'][number]) {
+    const counts = [node.num_safe_states, node.num_danger_states, node.num_collision_states];
+    if (!counts.every(value => Number.isSafeInteger(value) && (value as number) >= 0)) return undefined;
+    const [num_safe, num_danger, num_collision] = counts as number[];
+    const num_total = num_safe + num_danger + num_collision;
+    return num_total > 0 ? { num_safe, num_danger, num_collision, num_total } : undefined;
+}
+
+/** 安全・危険・衝突の構成割合による線形RGB混色。labelの変更なし。 */
+export function resolve_state_ratio_color(node: GraphData['nodes'][number], palette = LAYER_COLORS) {
+    const counts = get_node_state_counts(node);
+    if (!counts) return undefined;
+    const color = new THREE.Color(0, 0, 0);
+    for (const [label, num] of [[1, counts.num_safe], [3, counts.num_danger], [2, counts.num_collision]]) {
+        color.add(new THREE.Color(palette[label] ?? LAYER_COLORS[label]).multiplyScalar(num / counts.num_total));
+    }
+    return `#${color.getHexString()}`;
 }
 
 /** 追加メッシュなしのノード色分け用マテリアル設定。発光色にもインスタンス色を適用。 */

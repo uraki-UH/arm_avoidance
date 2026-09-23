@@ -53,6 +53,9 @@ class VisualizationGngStaticNode : public rclcpp::Node {
       node.pos = toPoint32(source.position);
       node.normal = toPoint32(source.normal);
       node.label = source.label;
+      node.num_safe_states = source.num_safe_states;
+      node.num_danger_states = source.num_danger_states;
+      node.num_collision_states = source.num_collision_states;
       message.nodes.push_back(std::move(node));
     }
     message.edges.reserve(model.edges.size() * 2U);

@@ -23,6 +23,7 @@
 #include <tf2_ros/buffer.h>
 
 #include "core/common/manipulability_serialization.hpp"
+#include "core/gng/node_status.hpp"
 #include "visualization/visualization_gng.hpp"
 
 namespace robot_sim::bridge::topofuzzy {
@@ -300,6 +301,10 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationPathMessage(
 
   for (std::size_t i = 0; i < out.nodes.size(); ++i) {
     out.nodes[i].label = majorityPathLabel(label_votes[i], out.nodes[i].label);
+    // 軌道の状態色と背景L0の姿勢割合の分離
+    out.nodes[i].num_safe_states = 0;
+    out.nodes[i].num_danger_states = 0;
+    out.nodes[i].num_collision_states = 0;
   }
   return out;
 }
@@ -350,6 +355,7 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationGngMessage(
   for (std::size_t visual_index = 0; visual_index < node_count;
        ++visual_index) {
     const auto &visual_node = visual_gng.nodes[visual_index];
+    ais_gng_msgs::msg::TopologicalNode out;
     bool has_safe_member = false;
     bool has_danger_member = false;
     Eigen::Vector3f normal_sum = Eigen::Vector3f::Zero();
@@ -367,16 +373,18 @@ inline ais_gng_msgs::msg::TopologicalMap buildVisualizationGngMessage(
                           source.status.self_collision_free &&
                           !source.status.is_colliding;
       if (!usable) {
+        ++out.num_collision_states;
         continue;
       }
       if (source.status.is_danger) {
+        ++out.num_danger_states;
         has_danger_member = true;
       } else {
+        ++out.num_safe_states;
         has_safe_member = true;
       }
     }
 
-    ais_gng_msgs::msg::TopologicalNode out;
     out.id = static_cast<uint16_t>(visual_index);
     const Eigen::Vector3f position =
         need_transform

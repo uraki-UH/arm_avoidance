@@ -47,16 +47,22 @@ Published before each binary cloud frame.
 
 ### `stream.graph`
 
-現行配信は `TMG1` バイナリ。以下は互換JSON表現。
+現行配信は `TMG1` バイナリversion 2（96バイト/node）。外側のWSプロトコルはv2のまま。
+Viewerは旧version 1（84バイト/node）も読込可能。以下は互換JSON表現。
 
 ```json
-{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true }], "edges": [], "clusters": [] } }
+{ "type": "stream.graph", "graph": { "timestamp": 0, "nodes": [{ "id": 1, "x": 0.0, "y": 0.0, "z": 0.0, "isGoal": false, "is_boundary_candidate": true, "num_safe_states": 0, "num_danger_states": 0, "num_collision_states": 0 }], "edges": [], "clusters": [] } }
 ```
 
 `is_boundary_candidate` はGNGからの境界候補フラグ。専用トピック・Viewer側での次数再集計は不要。
 `boundary_evidence` はGNG実行側からの観測証拠ビット（遮蔽1・自由空間2・視野端4、0は不明）。併存可能。
 実測レイと局所面延長の比較結果であり、真の物体境界の確定情報ではない。Viewerは受信属性の表示のみ。
 バイナリでは候補フラグがノードレコード内オフセット5、証拠がオフセット6の各1バイト。詳細は `common/ws_protocol_v2.md` を参照。
+
+`num_safe_states`・`num_danger_states`・`num_collision_states`はL0の集約元姿勢件数。
+各`uint32`でnode内offset 84・88・92。`label`とは独立した色の混合とノード詳細表示用。
+合計0は未収録扱い。旧version 1にはこの属性なし。ROS側で集計し、Viewer側で安全判定の再計算なし。
+ROSメッセージの拡張に伴い送受信ノードの再ビルド・再起動とFrontendの更新が必要。
 
 ### 非平面成分のGraph表示
 

@@ -102,6 +102,9 @@ plane_cluster_incremental_node:
 
 ais_gng_node:
   ros__parameters:
+    # CPU直結の平面クラスタ計算。計算負荷抑制のため既定無効。
+    plane_cluster.direct_enabled: false
+
     # 単独nodeを含む全平面クラスタ未所属nodeへの連結成分ID付与。
     nonplane_component.direct_enabled: true
 

@@ -113,7 +113,13 @@ half_angle_deg、max_direction_num、max_cell_angle_deg、max_block_num、およ
 
 ## ライブラリAPI
 
+基本APIは`api.h`、観測情報の入出力APIは`observation_api.h`に分離。
+観測機能を使うコードでは以下のヘッダーが必要。`observation_api.h`から基本APIも参照可能。
+`api.h`だけの利用では観測用の角度範囲・画素ビューへの依存なし。
+
 ```cpp
+#include <fuzzrobo/libgng/observation_api.h>
+
 gng_setParameter("node.enable_observation_support", 0, 1);
 gng_setPointCloud(data, point_num, &config);
 gng_observation_input input;

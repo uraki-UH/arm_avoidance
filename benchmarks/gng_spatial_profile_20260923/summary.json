@@ -1,0 +1,78 @@
+{
+  "grid": {
+    "measured_frames": 40,
+    "stages_ms": {
+      "voxel": 10.81807685,
+      "attention": 92.77551415,
+      "learn": 5.485875475,
+      "label": 9.76929145,
+      "maintenance": 2.8797676,
+      "cluster": 6.505788475
+    },
+    "functions_ms": {
+      "learn_search": 3.922023,
+      "attention_search": 69.6900033,
+      "query_box": 0.0,
+      "tree_aabb": 0.0,
+      "candidate_sort": 0.0,
+      "candidate_evaluate": 0.0,
+      "tree_add": 0.0,
+      "tree_move": 0.0,
+      "tree_remove": 0.0
+    },
+    "calls": {
+      "learn_search": 4000,
+      "attention_search": 79576.85,
+      "query_box": 0,
+      "tree_aabb": 0,
+      "candidate_sort": 0,
+      "candidate_evaluate": 0,
+      "tree_add": 0,
+      "tree_move": 0,
+      "tree_remove": 0
+    },
+    "num_candidates": 0,
+    "api_exec_ms": 128.32057049999997,
+    "num_matching_frames": 50,
+    "control_exec_ms": 107.82399620000001,
+    "num_control_matching_frames": 50
+  },
+  "spatial": {
+    "measured_frames": 40,
+    "stages_ms": {
+      "voxel": 10.305975125,
+      "attention": 582.25775985,
+      "learn": 40.573103075,
+      "label": 10.23019985,
+      "maintenance": 2.95152485,
+      "cluster": 6.3893154
+    },
+    "functions_ms": {
+      "learn_search": 36.43533345,
+      "attention_search": 554.911877675,
+      "query_box": 12.875065975,
+      "tree_aabb": 333.1902257,
+      "candidate_sort": 208.11861675,
+      "candidate_evaluate": 24.649155574999998,
+      "tree_add": 0.02760805,
+      "tree_move": 1.065485475,
+      "tree_remove": 0.0537495
+    },
+    "calls": {
+      "learn_search": 4000,
+      "attention_search": 79576.85,
+      "query_box": 83576.85,
+      "tree_aabb": 83576.85,
+      "candidate_sort": 83576.85,
+      "candidate_evaluate": 83576.85,
+      "tree_add": 124.85,
+      "tree_move": 26014.9,
+      "tree_remove": 120.075
+    },
+    "num_candidates": 1673888.35,
+    "api_exec_ms": 652.8064199500001,
+    "num_matching_frames": 50,
+    "control_exec_ms": 614.8154887500001,
+    "num_control_matching_frames": 50
+  }
+}

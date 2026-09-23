@@ -30,6 +30,10 @@ struct VisualizationGngNode {
   int representative_source_node_id = -1;
   Eigen::VectorXf representative_joint_angle;
   std::vector<int> source_node_ids;
+  // 保存時点の集約元状態数。合計0は未収録
+  std::uint32_t num_safe_states = 0;
+  std::uint32_t num_danger_states = 0;
+  std::uint32_t num_collision_states = 0;
 };
 
 struct VisualizationGngTransitionPath {
@@ -94,6 +98,10 @@ struct VisualizationGngStaticNode {
   Eigen::Vector3f normal = Eigen::Vector3f::UnitZ();
   std::uint8_t label = 2;
   Eigen::VectorXf representative_joint_angle;
+  // 元GNGなしでの割合表示用状態数。合計0は未収録
+  std::uint32_t num_safe_states = 0;
+  std::uint32_t num_danger_states = 0;
+  std::uint32_t num_collision_states = 0;
 };
 
 struct VisualizationGngStaticModel {

@@ -1,0 +1,301 @@
+{
+  "coarse": {
+    "api_summary": {
+      "input_ms": {
+        "mean": 1.557284575,
+        "median": 1.5632030000000001,
+        "p95": 1.6086027999999999
+      },
+      "exec_ms": {
+        "mean": 95.782734925,
+        "median": 95.162623,
+        "p95": 97.0967698
+      },
+      "output_ms": {
+        "mean": 1.3500904999999999,
+        "median": 1.353609,
+        "p95": 1.38162645
+      },
+      "total_ms": {
+        "mean": 98.69011,
+        "median": 98.151265,
+        "p95": 99.92532185
+      }
+    },
+    "num_matching_frames": 50,
+    "measured_frames": 40,
+    "stages_ms": {
+      "voxel": 10.315956725,
+      "attention": 61.005926275,
+      "learn": 5.100938025,
+      "label": 9.856198325,
+      "maintenance": 2.923676925,
+      "cluster": 6.4597187
+    },
+    "functions_ms": {
+      "learn_search": 0.0,
+      "attention_search": 0.0,
+      "bsp_search": 0.0,
+      "node_add": 0.0,
+      "node_move": 0.0,
+      "node_delete": 0.0,
+      "tree_add": 0.0,
+      "tree_move": 0.0,
+      "tree_remove": 0.0,
+      "connect": 0.0,
+      "disconnect": 0.0,
+      "downsampling": 0.0,
+      "input_shuffle": 0.0,
+      "attention_sort": 0.0,
+      "voxel_sort": 0.0,
+      "edge_length_check": 0.0,
+      "node_age_check": 0.0,
+      "isolated_node_check": 0.0,
+      "edge_dist_update": 0.0,
+      "learn_sample": 0.0
+    },
+    "calls": {
+      "learn_search": 0,
+      "attention_search": 0,
+      "bsp_search": 0,
+      "node_add": 0,
+      "node_move": 0,
+      "node_delete": 0,
+      "tree_add": 0,
+      "tree_move": 0,
+      "tree_remove": 0,
+      "connect": 0,
+      "disconnect": 0,
+      "downsampling": 0,
+      "input_shuffle": 0,
+      "attention_sort": 0,
+      "voxel_sort": 0,
+      "edge_length_check": 0,
+      "node_age_check": 0,
+      "isolated_node_check": 0,
+      "edge_dist_update": 0,
+      "learn_sample": 0
+    },
+    "num_input": 160000,
+    "num_voxel": 79576.85,
+    "num_attention": 25376.5,
+    "num_node_adds": 112.475,
+    "num_free_slot_checks": 1116125.725,
+    "num_add_reject_cap": 18119.025
+  },
+  "detail": {
+    "api_summary": {
+      "input_ms": {
+        "mean": 4.2482807000000005,
+        "median": 4.2418505,
+        "p95": 4.32714375
+      },
+      "exec_ms": {
+        "mean": 131.831368225,
+        "median": 131.491574,
+        "p95": 134.98906060000002
+      },
+      "output_ms": {
+        "mean": 1.352705175,
+        "median": 1.3537249999999998,
+        "p95": 1.3859375
+      },
+      "total_ms": {
+        "mean": 137.43235410000003,
+        "median": 137.0869555,
+        "p95": 140.677656
+      }
+    },
+    "num_matching_frames": 50,
+    "measured_frames": 40,
+    "stages_ms": {
+      "voxel": 10.2906157,
+      "attention": 90.1394232,
+      "learn": 11.254847425,
+      "label": 10.0074518,
+      "maintenance": 3.533666625,
+      "cluster": 6.480918425
+    },
+    "functions_ms": {
+      "learn_search": 3.414095375,
+      "attention_search": 64.562297675,
+      "bsp_search": 52.553768975,
+      "node_add": 1.730178775,
+      "node_move": 3.558837775,
+      "node_delete": 0.0973657,
+      "tree_add": 0.036555075,
+      "tree_move": 1.577225125,
+      "tree_remove": 0.0507834,
+      "connect": 14.033845175,
+      "disconnect": 0.67549245,
+      "downsampling": 86.3017803,
+      "input_shuffle": 0.85094215,
+      "attention_sort": 3.3056019,
+      "voxel_sort": 8.202564125,
+      "edge_length_check": 1.669894,
+      "node_age_check": 0.331637325,
+      "isolated_node_check": 0.167304075,
+      "edge_dist_update": 1.3640609,
+      "learn_sample": 11.0542603
+    },
+    "calls": {
+      "learn_search": 4000,
+      "attention_search": 79576.85,
+      "bsp_search": 83576.85,
+      "node_add": 18231.7,
+      "node_move": 26531.45,
+      "node_delete": 109.3,
+      "tree_add": 112.475,
+      "tree_move": 26443.25,
+      "tree_remove": 109.3,
+      "connect": 83576.85,
+      "disconnect": 3365.8,
+      "downsampling": 1,
+      "input_shuffle": 1,
+      "attention_sort": 1,
+      "voxel_sort": 1,
+      "edge_length_check": 1,
+      "node_age_check": 1,
+      "isolated_node_check": 1,
+      "edge_dist_update": 1,
+      "learn_sample": 4000
+    },
+    "num_input": 160000,
+    "num_voxel": 79576.85,
+    "num_attention": 25376.5,
+    "num_node_adds": 112.475,
+    "num_free_slot_checks": 1116125.725,
+    "num_add_reject_cap": 18119.025
+  },
+  "sampled": {
+    "api_summary": {
+      "input_ms": {
+        "mean": 1.763216125,
+        "median": 1.7383760000000001,
+        "p95": 1.9370048499999994
+      },
+      "exec_ms": {
+        "mean": 101.18321685,
+        "median": 99.3402275,
+        "p95": 109.06816119999999
+      },
+      "output_ms": {
+        "mean": 1.382278775,
+        "median": 1.3442395,
+        "p95": 1.5226400499999988
+      },
+      "total_ms": {
+        "mean": 104.32871175,
+        "median": 102.630342,
+        "p95": 112.32010675
+      }
+    },
+    "num_matching_frames": 50,
+    "measured_frames": 40,
+    "stages_ms": {
+      "voxel": 10.3801359,
+      "attention": 65.2718028,
+      "learn": 5.444176775,
+      "label": 10.188078475,
+      "maintenance": 3.0231403,
+      "cluster": 6.6985213
+    },
+    "functions_ms": {
+      "learn_search": 3.071751825,
+      "attention_search": 63.995012175,
+      "bsp_search": 51.43730475,
+      "node_add": 1.765281825,
+      "node_move": 2.06412905,
+      "node_delete": 0.0976408,
+      "tree_add": 0.036335625,
+      "tree_move": 1.4939034,
+      "tree_remove": 0.050472575,
+      "connect": 14.0330724,
+      "disconnect": 0.60447665,
+      "downsampling": 61.25368135,
+      "input_shuffle": 0.834930175,
+      "attention_sort": 3.49494455,
+      "voxel_sort": 8.2499319,
+      "edge_length_check": 1.14124505,
+      "node_age_check": 0.3352051,
+      "isolated_node_check": 0.167927,
+      "edge_dist_update": 1.378297525,
+      "learn_sample": 5.88333295
+    },
+    "calls": {
+      "learn_search": 4000,
+      "attention_search": 79576.85,
+      "bsp_search": 83576.85,
+      "node_add": 18231.7,
+      "node_move": 26531.45,
+      "node_delete": 109.3,
+      "tree_add": 112.475,
+      "tree_move": 26443.25,
+      "tree_remove": 109.3,
+      "connect": 83576.85,
+      "disconnect": 3365.8,
+      "downsampling": 1,
+      "input_shuffle": 1,
+      "attention_sort": 1,
+      "voxel_sort": 1,
+      "edge_length_check": 1,
+      "node_age_check": 1,
+      "isolated_node_check": 1,
+      "edge_dist_update": 1,
+      "learn_sample": 4000
+    },
+    "samples": {
+      "learn_search": 62.475,
+      "attention_search": 1243.375,
+      "bsp_search": 1305.85,
+      "node_add": 18231.7,
+      "node_move": 414.525,
+      "node_delete": 109.3,
+      "tree_add": 112.475,
+      "tree_move": 413.2,
+      "tree_remove": 109.3,
+      "connect": 1305.85,
+      "disconnect": 52.575,
+      "downsampling": 1,
+      "input_shuffle": 1,
+      "attention_sort": 1,
+      "voxel_sort": 1,
+      "edge_length_check": 1,
+      "node_age_check": 1,
+      "isolated_node_check": 1,
+      "edge_dist_update": 1,
+      "learn_sample": 62.475
+    },
+    "num_input": 160000,
+    "num_voxel": 79576.85,
+    "num_attention": 25376.5,
+    "num_node_adds": 112.475,
+    "num_free_slot_checks": 1116125.725,
+    "num_add_reject_cap": 18119.025
+  },
+  "control": {
+    "api_summary": {
+      "input_ms": {
+        "mean": 1.542061525,
+        "median": 1.5409415,
+        "p95": 1.6112628999999998
+      },
+      "exec_ms": {
+        "mean": 95.371189925,
+        "median": 95.009422,
+        "p95": 97.27856895000001
+      },
+      "output_ms": {
+        "mean": 1.3560931999999999,
+        "median": 1.342656,
+        "p95": 1.3878337999999997
+      },
+      "total_ms": {
+        "mean": 98.26934465,
+        "median": 97.86845149999999,
+        "p95": 100.2216356
+      }
+    },
+    "num_matching_frames": 50
+  }
+}

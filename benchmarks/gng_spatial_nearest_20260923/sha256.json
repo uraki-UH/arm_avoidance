@@ -1,0 +1,12 @@
+{
+  "ais_gng_cpu/experimental/gng_spatial_tree/CMakeLists.txt": "b6c98dbc91c12529e7c5045ac6b9ff3fc4c9916c8c7f42d82bbfe2803d93aa09",
+  "ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.cpp": "076fc912ceca9a4d97b57f9d8440bcefab691829c0abb4f85bee92eba0537ba6",
+  "ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.hpp": "560285d2e1a650b7f97d923553e23d2aa531f8d9d8782c9a38b13a46863b842d",
+  "ais_gng_cpu/experimental/gng_spatial_tree/test/gng_spatial_nearest_test.cpp": "ba27ff577cd0122af79ae1c25a87438730dd3302a51016103a97031df0762b8f",
+  "ais_gng_cpu/experimental/gng_spatial_tree/benchmark.py": "7de63417a67ad9976f7132ed79be539970fa916f5fe9b19ebf5a2fc33f299050",
+  "SpatialTree/include/SpatialTree/SpatialTree.hpp": "cc92e052f550e7906e724486f21efa6a472f30967162b92ab1ab15e91ff86dab",
+  "artifacts/gng_spatial_nearest_20260923/at128_snapshot.yaml": "9d7c3d039177a709884714d83f66aee6277d834dd1600d48dc6d666b1ac05347",
+  "artifacts/gng_spatial_nearest_20260923/libgng_grid.so": "8f8aa29833a35a7216a20cce1e8ed89466ee75b9da029defb77aa288fbc73b89",
+  "artifacts/gng_spatial_nearest_20260923/libgng_spatial.so": "5eb3d9b50b89941519f6c4cfc7bb7e88d999da486f46f538ed36084e0931a960",
+  "artifacts/gng_spatial_nearest_20260923/libgng_spatial_fixed_order.so": "a81f342e2ecff41ed799a6ffb8f80fce65e94117eed8898631ea96680259efeb"
+}

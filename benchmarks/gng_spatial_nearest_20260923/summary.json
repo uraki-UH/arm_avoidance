@@ -1,0 +1,111 @@
+{
+  "grid": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 104.26241770833333,
+    "total_mean_ms": 106.85327045833333,
+    "exec_trial_mean_ms": [
+      104.679261,
+      103.50324607499999,
+      104.60474605000002
+    ],
+    "exec_trial_p95_ms": [
+      107.1735877,
+      105.82303055,
+      106.30539764999999
+    ],
+    "final_nodes": [
+      19925,
+      19925,
+      19925
+    ],
+    "final_edges": [
+      51660,
+      51660,
+      51660
+    ],
+    "has_repeatable_graph": true
+  },
+  "spatial_fixed_order": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 112.50914871666667,
+    "total_mean_ms": 115.1182678,
+    "exec_trial_mean_ms": [
+      114.44485610000001,
+      111.6480215,
+      111.43456855
+    ],
+    "exec_trial_p95_ms": [
+      117.43790135,
+      114.75915625,
+      114.26731695000001
+    ],
+    "final_nodes": [
+      19901,
+      19901,
+      19901
+    ],
+    "final_edges": [
+      53566,
+      53566,
+      53566
+    ],
+    "has_repeatable_graph": true
+  },
+  "spatial_generic": {
+    "trials": 3,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 196.563525475,
+    "total_mean_ms": 199.19102069166667,
+    "exec_trial_mean_ms": [
+      195.889726275,
+      197.162082175,
+      196.638767975
+    ],
+    "exec_trial_p95_ms": [
+      199.72799795,
+      201.5860674,
+      199.57903945
+    ],
+    "final_nodes": [
+      19901,
+      19901,
+      19901
+    ],
+    "final_edges": [
+      53566,
+      53566,
+      53566
+    ],
+    "has_repeatable_graph": true
+  },
+  "old_range": {
+    "trials": 1,
+    "frames_per_trial": 50,
+    "warmup": 10,
+    "exec_mean_ms": 617.4983112,
+    "total_mean_ms": 620.2139166,
+    "exec_trial_mean_ms": [
+      617.4983112
+    ],
+    "exec_trial_p95_ms": [
+      634.006757
+    ],
+    "final_nodes": [
+      19925
+    ],
+    "final_edges": [
+      51660
+    ],
+    "has_repeatable_graph": true
+  },
+  "generic_vs_fixed_order_matching_frames": 150,
+  "old_range_vs_grid_matching_frames": 50,
+  "has_same_parameters": true,
+  "speed_ratio_vs_old_range": 5.4884275478348385,
+  "time_ratio_vs_grid": 1.0790959119267978
+}

@@ -12,7 +12,7 @@
 namespace topological_map_protocol {
 
 constexpr std::uint32_t kMagic = 0x31474d54U;
-constexpr std::uint16_t kVersion = 1U;
+constexpr std::uint16_t kVersion = 2U;
 constexpr std::size_t kMaxPacketBytes = 64U * 1024U * 1024U;
 
 #pragma pack(push, 1)
@@ -45,6 +45,9 @@ struct NodeRecord {
     float pos[3];
     float normal[3];
     float winner_point_covariance[9];
+    std::uint32_t num_safe_states;
+    std::uint32_t num_danger_states;
+    std::uint32_t num_collision_states;
 };
 
 struct ClusterRecord {
@@ -65,7 +68,7 @@ struct ClusterRecord {
 #pragma pack(pop)
 
 static_assert(sizeof(Header) == 36U);
-static_assert(sizeof(NodeRecord) == 84U);
+static_assert(sizeof(NodeRecord) == 96U);
 static_assert(sizeof(ClusterRecord) == 80U);
 
 inline void append_bytes(
@@ -133,6 +136,9 @@ inline std::vector<std::uint8_t> serialize(
         record.age = map.frame_number >= node.frame ? map.frame_number - node.frame : 0U;
         record.nonplane_component_id = node.nonplane_component_id;
         record.winner_point_count = node.winner_point_count;
+        record.num_safe_states = node.num_safe_states;
+        record.num_danger_states = node.num_danger_states;
+        record.num_collision_states = node.num_collision_states;
         record.semantic_reliability = node.semantic_reliability;
         record.pos[0] = node.pos.x; record.pos[1] = node.pos.y; record.pos[2] = node.pos.z;
         record.normal[0] = node.normal.x; record.normal[1] = node.normal.y; record.normal[2] = node.normal.z;

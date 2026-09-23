@@ -1,6 +1,7 @@
 /**:
   ros__parameters:
-    surface_model.enable: true
+    # 計算負荷抑制のため曲面検出は既定無効。平面検出は独立。
+    surface_model.enable: false
     # modelは従来の形状推定、smooth_graphはモデル当てはめなしの連続面抽出。
     surface_model.method: model
     # 一行ログのCurveは別ノードの直近計算時間。軽量通知は出力先の/update_ms。

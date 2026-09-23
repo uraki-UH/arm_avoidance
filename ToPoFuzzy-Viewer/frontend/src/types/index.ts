@@ -113,6 +113,10 @@ export interface GraphNode {
     is_boundary_candidate?: boolean;
     boundary_evidence?: number;
     winnerPointCount?: number;
+    // 集約元の姿勢数。合計0または未指定の場合は従来のラベル表示
+    num_safe_states?: number;
+    num_danger_states?: number;
+    num_collision_states?: number;
     winnerPointCovariance?: [number, number, number, number, number, number, number, number, number];
     isGoal?: boolean;
     manipValid?: boolean;

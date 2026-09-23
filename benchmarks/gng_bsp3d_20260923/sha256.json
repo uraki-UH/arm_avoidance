@@ -1,0 +1,14 @@
+{
+  "ais_gng_cpu/experimental/gng_spatial_tree/CMakeLists.txt": "549084cf4fc6af49af99b9aadfbfa0e33e9e773bdc0d593abb2eb145ef20da21",
+  "ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.cpp": "342297f81ccc3efc7d5b738cc5451d77245bbb657c0bd5f82afb7a577e54263f",
+  "ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.hpp": "76570516f2015a30d359f68ee73dee7a9ff5e539cbf28ca2992e5d4d1c38f32d",
+  "ais_gng_cpu/experimental/gng_spatial_tree/test/gng_spatial_nearest_test.cpp": "ba27ff577cd0122af79ae1c25a87438730dd3302a51016103a97031df0762b8f",
+  "ais_gng_cpu/experimental/gng_spatial_tree/benchmark.py": "7de63417a67ad9976f7132ed79be539970fa916f5fe9b19ebf5a2fc33f299050",
+  "bsp3d/include/bsp3d/bsp3d.hpp": "187e16251e4c305d6c1f19e4f8bb3953b618603ed0dd378069d42415e32f9af6",
+  "bsp3d/examples/test_bsp3d.cpp": "922f91ebbe211204167e756bb9b97bdedf144f795d8a63f0432b677c8114876b",
+  "SpatialTree/include/SpatialTree/SpatialTree.hpp": "cc92e052f550e7906e724486f21efa6a472f30967162b92ab1ab15e91ff86dab",
+  "artifacts/gng_bsp3d_20260923/at128_snapshot.yaml": "9d7c3d039177a709884714d83f66aee6277d834dd1600d48dc6d666b1ac05347",
+  "artifacts/gng_bsp3d_20260923/libgng_grid.so": "8f8aa29833a35a7216a20cce1e8ed89466ee75b9da029defb77aa288fbc73b89",
+  "artifacts/gng_bsp3d_20260923/libgng_spatial.so": "fef9b9199ab35032001e1c745deb934053a925154346c136fab4a9e7ab5230b3",
+  "artifacts/gng_bsp3d_20260923/libgng_bsp3d.so": "4de7ffcf7f5861f32d7f21204f524042db8a5fc26e50c71f29bdf48e1b9311f2"
+}

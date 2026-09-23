@@ -644,6 +644,7 @@ coord layerは選択したGNG profileのEEF順に分離して学習・配信し�
 | `VisualizationGngNode::position` | 可視化GNG | 所属元ノードの手先位置の重心 |
 | `VisualizationGngNode::normal` | 可視化GNG | 所属元ノードの手先方向を正規化加算した法線 |
 | `VisualizationGngNode::label` | 可視化GNG | 学習時点のsafe / danger / colliding集約値 |
+| `num_safe_states` / `num_danger_states` / `num_collision_states` | 可視化GNG | 表示色用の集約元姿勢件数。合計0は未収録 |
 | `VisualizationGngNode::representative_source_node_id` | 可視化GNG | 可視化ノードを代表する元姿勢GNGノードID |
 | `VisualizationGngNode::representative_joint_angle` | 可視化GNG | static用途で保持する代表元の関節角 |
 | `VisualizationGngNode::source_node_ids` | 可視化GNG | 元姿勢GNGへの対応表 |
@@ -713,7 +714,7 @@ ros2 run gng_vlut_system visualization_gng_trainer \
 `--output-prefix`省略時は、入力binと同じディレクトリへ
 `vis_gng_L<layer>.bin`を生成する。既存のToPoDualArm3およびToPoDualArm10000の
 `VIZGNG2`および`VIZGNG3`は新方式では読み込まない。元GNGを変えずにこのコマンドを再実行して
-`VIZGNG5`へ置き換える。ノード数、エッジ数、遷移数は関節速度上限、空間被覆パラメータ、
+`VIZGNG6`へ置き換える。ノード数、エッジ数、遷移数は関節速度上限、空間被覆パラメータ、
 目標ノード数により変化する。
 
 941ノード版を残したまま、同じ`ToPoDualArm.yaml`から約10,000元ノード版を作る場合は、
@@ -734,14 +735,14 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 `gng_results/ToPoDualArm10000/`で、既存の`ToPoDualArm3/`は変更しない。
 現環境での生成結果は10,801有効元ノードである。
 
-### 13.3 bin形式 version 5
+### 13.3 bin形式 version 6
 
 固定長整数とfloatはnative binary表現で保存する。現在の対象環境は
-x86_64 little-endianであり、異なるendian間の互換性はversion 5では保証しない。
+x86_64 little-endianであり、異なるendian間の互換性はversion 6では保証しない。
 
 | 順序 | 型 | 内容 |
 |---:|---|---|
-| 1 | `char[8]` | magic `VIZGNG5\0` |
+| 1 | `char[8]` | magic `VIZGNG6\0` |
 | 2 | `uint32` | format version |
 | 3 | `uint32` | coord layer |
 | 4 | `uint32` | 代表関節角の次元数 |
@@ -752,22 +753,25 @@ x86_64 little-endianであり、異なるendian間の互換性はversion 5では
 | 9 | nodeごと `float32[3]` | 3次元位置 |
 | 10 | nodeごと `float32[3]` | 法線 |
 | 11 | nodeごと `uint8` | 保存時点の状態label |
-| 12 | nodeごと `float32[]` | 代表関節角 |
-| 13 | nodeごと `int32` | 代表元ノードID |
-| 14 | nodeごと `uint32` | 対応する元ノードID数 |
-| 15 | nodeごと `int32[]` | 元ノードID列 |
-| 16 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
-| 17 | transitionごと `int32[2]` | 昇順の元angle edge両端ID |
-| 18 | transitionごと `uint16` | 両端を含む順序付き可視化ノード数 |
-| 19 | transitionごと `float32` | 関節速度上限に基づく移動時間 [s] |
-| 20 | transitionごと `uint8` | 補間軌跡が可視化nodeへ接続できたか |
-| 21 | transitionごと `uint16[]` | 両端を含む順序付き可視化ノードID |
+| 12 | nodeごと `uint32[3]` | 安全・危険・衝突／使用不可の順の元姿勢件数 |
+| 13 | nodeごと `float32[]` | 代表関節角 |
+| 14 | nodeごと `int32` | 代表元ノードID |
+| 15 | nodeごと `uint32` | 対応する元ノードID数 |
+| 16 | nodeごと `int32[]` | 元ノードID列 |
+| 17 | edgeごと `uint32[2]` | 可視化ノードindexの組 |
+| 18 | transitionごと `int32[2]` | 昇順の元angle edge両端ID |
+| 19 | transitionごと `uint16` | 両端を含む順序付き可視化ノード数 |
+| 20 | transitionごと `float32` | 関節速度上限に基づく移動時間 [s] |
+| 21 | transitionごと `uint8` | 補間軌跡が可視化nodeへ接続できたか |
+| 22 | transitionごと `uint16[]` | 両端を含む順序付き可視化ノードID |
 
 読み込み時はmagic、version、配列上限、代表元ノードの所属、エッジindex、遷移両端、末尾余剰データを検証する。
 さらにブリッジが`source_signature`を現在の元GNGのノードID、座標、関節角、
 coord-space edge、angle-space edgeと照合し、古い組み合わせは配信しない。
 signature schemaは4である。version 1からversion 4との読み込み互換性は持たないため、元GNGごとに
 `visualization_gng_trainer`で再生成する。
+version 5は読み込み可能だが、未収録の状態件数はすべて0とする。通常ブリッジでは元GNGから
+現在の件数を再集計するため、version 5でも動的な割合表示が可能。
 
 ### 13.4 ROSパラメータとトピック
 
@@ -789,7 +793,7 @@ signature schemaは4である。version 1からversion 4との読み込み互換
 `gng_viewer_bridge.launch.py params_file:=.../ToPoDualArm.yaml`で両者を同時配信する。
 集約元は`Tmap_static`と同じ`gng.bin`であり、ROSトピックの再学習や起動ごとの集約計算は行わない。
 2026-09-15の作業環境では10,801元ノードを150ノード・740エッジへ空間集約済み。
-保存形式はversion 5のままだが、以前生成したbinの集約結果は自動更新されないため再生成が必要。
+2026-09-16から保存形式はversion 6。以前生成したbinの集約結果自体は自動更新されないため再生成が必要。
 手順・確認範囲は[空間集約の修正](releases/2026-09-15_spatial_tmap_aggregation.md)を参照。
 
 bridgeは可視化binを読み込むとき、各`source_node_ids`から密な
@@ -830,17 +834,30 @@ bridgeは最新の実行軌道と候補軌道を保持する。起動直後に�
 `source_node_id -> visual_node_id`逆引き配列は元ノード数ではなく最大元ノードIDから確保し、
 欠番を含む疎なIDを切り捨てない。
 
-状態は配信時に対応元ノードからbest-winsで集約する。1個でも使用可能ならsafe、
-safeがなくdangerだけ存在するならdanger、それ以外はcollidingとする。
+状態は配信時に対応元ノードからbest-winsで集約する。使用可能かつdangerでない元ノードが
+1個でもあればsafe、safeがなく使用可能なdangerがあればdanger、それ以外はcollidingとする。
+
+描画色は上記`label`と分離し、`TopologicalNode.num_safe_states`、`num_danger_states`、
+`num_collision_states`の構成比でsafe・danger・collisionのパレット色を線形RGB混色する。
+衝突／使用不可にはinactive、自己衝突、環境衝突を含み、元IDが見つからないノードは集計対象外。
+ノード詳細には件数と割合を表示する。割合は保存・学習した姿勢の構成比であり、
+関節空間の体積割合、成功確率、代表関節角の安全保証ではない。
+件数未収録・不正値・合計0では従来のlabel色へ戻る。ユーザーの単色指定、目標色、
+semantic・境界などの明示的色指定は優先する。元Tmapなど件数を持たないグラフの配色は変更しない。
+軌道変換出力は背景L0の件数を0へ戻し、入力軌道由来のlabel色を保持する。
+座標・labelが不変でも件数の変化をViewerの更新対象とする。
 
 ### 13.5 元GNG非依存のstatic召喚
 
-`visualization_gng_static_node`は`VIZGST1`の`vis_gng_static_L<layer>.bin`だけを読み込み、
-保存済みの位置、法線、label、代表関節角、エッジを`ais_gng_msgs/msg/TopologicalMap`として
-1回publishする。`VIZGST1`には元ノードID対応表と元angle edge遷移列を保存しないため、
+`visualization_gng_static_node`は`VIZGST2`の`vis_gng_static_L<layer>.bin`を読み込み、
+保存済みの位置、法線、label、状態件数、エッジを`ais_gng_msgs/msg/TopologicalMap`として
+1回publishする。代表関節角はbinに保存するが、このトピックには含めない。
+`VIZGST2`には元ノードID対応表と元angle edge遷移列を保存しないため、
 static nodeの実行時には10,000ノード版も対応表もメモリへ展開しない。`gng.bin`、`vlut.bin`、
-`topofuzzy_bridge_node`は不要である。元姿勢GNGは`VIZGNG5`と`VIZGST1`を生成する
+`topofuzzy_bridge_node`は不要である。元姿勢GNGは`VIZGNG6`と`VIZGST2`を生成する
 オフライン処理だけで使う。
+`VIZGST1`も読み込み可能だが、状態件数未収録のため従来のlabel色を使用する。
+version 2は各nodeのlabel直後に`uint32[3]`の状態件数を追加した形式。
 
 ```bash
 ros2 run gng_vlut_system visualization_gng_trainer \
@@ -859,7 +876,7 @@ ros2 launch gng_vlut_system visualization_gng_static.launch.py \
   frame_id:=ToPoDualArm/base_link
 ```
 
-static nodeのlabelは学習保存時点の値であり、占有voxelなどによる動的更新はしない。
+static nodeのlabelと状態件数は学習保存時点の値であり、占有voxelなどによる動的更新はしない。
 また、元ノードIDで指定される既存の実行軌道・候補軌道を可視化ノード列へ変換する機能は
 `topofuzzy_bridge_node`だけが提供する。動的安全判定または既存軌道変換が必要な場合は、
 従来の`visualization_gng.enabled`を使う。
@@ -868,7 +885,7 @@ static nodeのlabelは学習保存時点の値であり、占有voxelなどに�
 
 `reachability_voxel_builder`は元GNGを読まず、URDFの関節可動範囲を低差異列で直接サンプルし、
 FKで得た手先位置を規則ボクセルへ登録する。自己衝突判定を有効にした場合、保存される各セルは
-少なくとも1個の自己衝突なし代表関節角を持つ。保存形式は軽量`VIZGST1`であり、元ノードID対応表、
+少なくとも1個の自己衝突なし代表関節角を持つ。保存形式は軽量`VIZGST2`であり、元ノードID対応表、
 GNG edge、GNG遷移列を含まない。
 
 ボクセルの空間隣接edgeは可視化と領域連結性の確認用であり、アーム移動の無衝突性を表さない。
@@ -895,7 +912,7 @@ ros2 launch gng_vlut_system visualization_gng_static.launch.py \
 到達可能ボクセルmapをさらに描画用GNGへ圧縮する場合は、
 `reachability_voxel_visualization_gng_trainer`を使う。この処理も元GNGを読まず、
 ボクセルmapの代表関節角、法線、空間隣接edgeだけを入力にする。既定は空間のみの所属判定で、
-元ボクセルの空間隣接edgeを縮約して出力する。FK補間によるedgeの置換は行わない。出力は`VIZGST1`であり、
+元ボクセルの空間隣接edgeを縮約して出力する。FK補間によるedgeの置換は行わない。出力は`VIZGST2`であり、
 同じstatic launcherから配信できる。
 
 ```bash
@@ -926,7 +943,7 @@ flowchart TD
     H --> I[最近傍visual nodeの順序付き列へ変換]
     I --> J[全遷移列と移動時間を保存]
     J --> K[node 座標 法線 label 関節角 edgeのsignatureを計算]
-    K --> L[VIZGNG5 vis_gng_Ln.bin]
+    K --> L[VIZGNG6 vis_gng_Ln.bin]
     L --> M[保存直後に再読込して所属 edge 遷移列を検証]
 ```
 
