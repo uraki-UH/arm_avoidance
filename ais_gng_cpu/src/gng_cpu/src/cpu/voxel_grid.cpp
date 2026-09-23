@@ -62,32 +62,27 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
     boost::sort::spreadsort::integer_sort(voxel_index.data(), voxel_index.data() + voxel_index_num,
         [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });
 
-    uint32_t now_index = voxel_index[0].voxel_index;
-    voxel_range[0].start = 0;
-    for (i = n = 0; i < voxel_index_num; ++i){
-        if (voxel_index[i].voxel_index != now_index) {
-            now_index = voxel_index[i].voxel_index;
-            voxel_range[n].end = i;
-            voxel_range[++n].start = i;
-        }
-    }
-    voxel_range[n].end = voxel_index_num;
-    filtered_pcl_num = n + 1;
-
-    // ボクセルグリッドのフィルタリング
-    for (i = 0; i < filtered_pcl_num; ++i){
+    // 同じソート順・加算順での、セル範囲の確定と重心計算の単一走査。
+    uint32_t begin_idx = 0;
+    while (begin_idx < voxel_index_num) {
+        const uint32_t cell_idx = voxel_index[begin_idx].voxel_index;
+        uint32_t end_idx = begin_idx;
         float x = 0, y = 0, z = 0;
-        const auto *points = input_pcl.data();
-        const auto *indices = voxel_index.data();
-        for (n = voxel_range[i].start; n < voxel_range[i].end; ++n) {
-            x += points[indices[n].raw_index].p[0];
-            y += points[indices[n].raw_index].p[1];
-            z += points[indices[n].raw_index].p[2];
-        }
-        uint32_t voxel_num = voxel_range[i].end - voxel_range[i].start;
-        float num_1 = (1.f) / (float)voxel_num;
-        filtered_pcl[i].p[0] = x * num_1;
-        filtered_pcl[i].p[1] = y * num_1;
-        filtered_pcl[i].p[2] = z * num_1;
+        do {
+            const auto &point = input_pcl[voxel_index[end_idx].raw_index];
+            x += point.p[0];
+            y += point.p[1];
+            z += point.p[2];
+            ++end_idx;
+        } while (end_idx < voxel_index_num && voxel_index[end_idx].voxel_index == cell_idx);
+        const uint32_t voxel_num = end_idx - begin_idx;
+        const float num_1 = 1.f / static_cast<float>(voxel_num);
+        const uint32_t output_idx = filtered_pcl_num++;
+        voxel_range[output_idx].start = begin_idx;
+        voxel_range[output_idx].end = end_idx;
+        filtered_pcl[output_idx].p[0] = x * num_1;
+        filtered_pcl[output_idx].p[1] = y * num_1;
+        filtered_pcl[output_idx].p[2] = z * num_1;
+        begin_idx = end_idx;
     }
 }

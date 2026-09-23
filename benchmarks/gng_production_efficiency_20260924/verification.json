@@ -1,0 +1,31 @@
+{
+  "existing_ros_process_num": 12,
+  "existing_changes": {
+    "60270": {
+      "before": [
+        56,
+        "/usr/bin/python3 /opt/ros/humble/bin/ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic:=/lidar_points"
+      ],
+      "after": null
+    },
+    "60272": {
+      "before": [
+        60270,
+        "/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu --ros-args --params-file /ros2_ws/install/ais_gng/share/ais_gng/config/surface_model.yaml --params-file /tmp/launch_params_7g2yra2s --params-file /tmp/launch_params_7pq11i4l --params-file /tmp/launch_params_bxw38aea -r topological_map:=/topological_map"
+      ],
+      "after": null
+    },
+    "60274": {
+      "before": [
+        60270,
+        "/ros2_ws/install/ais_gng/lib/ais_gng/object_gng_dataset_exporter_node --ros-args --params-file /tmp/launch_params_7lnl5k_g"
+      ],
+      "after": null
+    }
+  },
+  "owned_processes": [],
+  "temporary_build_removed": true,
+  "installed_sha256": "0dc97bf8914afda4ba015314891000febb90ffa271519291cbdee359d702fa3a",
+  "existing_gng_mappings": {},
+  "has_benchmark_export": false
+}

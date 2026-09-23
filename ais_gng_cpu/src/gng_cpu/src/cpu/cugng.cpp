@@ -43,6 +43,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 
     // clear
     node_num = 0;
+    next_free_idx = 0;
     // nodes.clear();
     // tn_id.clear();
     edge_count.clear();
@@ -78,6 +79,7 @@ void CUGNG::clear() {
     observation_touched_ids.clear();
     observation_pixel_source = {};
     node_num = 0;
+    next_free_idx = 0;
     nodes.clear();
     tn_id.clear();
     edge_count.clear();
@@ -695,6 +697,7 @@ void CUGNG::delete_node(uint32_t idx) {
 
     disconnect_all(idx);
     node.id = NODE_NOID;
+    next_free_idx = std::min(next_free_idx, idx);
 }
 
 void CUGNG::move_node(Node& node, Vec3f& new_pos) {
@@ -762,7 +765,8 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
     if (grid_node_num[grid_i] >= NODE_GRID_NODE_NUM_NAX) {
         return NODE_NOID; // グリッドセルの上限
     }
-    for (uint32_t i = 0; i < node_num_max; i++) {
+    for (; next_free_idx < node_num_max; ++next_free_idx) {
+        const uint32_t i = next_free_idx;
         if (nodes[i].id == NODE_NOID) {
             auto& node = nodes[i];
             node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
@@ -773,6 +777,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             g1[node.grid_vec_i] = i;
             node_num++;
             recordNodeDelta(node, GNG_DELTA_ADD);
+            ++next_free_idx;
             return i;
         }
     }

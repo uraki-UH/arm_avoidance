@@ -122,6 +122,9 @@ class CUGNG {
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
 
    private:
+    // 最小空きIDの探索開始位置。削除時に手前の空きを反映。
+    uint32_t next_free_idx = 0;
+
     array<uint32_t, NODE_GRID_NODE_NUM_NAX> &grid_cell(uint32_t idx) {
         auto &offset = grid_page_offsets.data()[idx / grid_page_size];
         if (offset == UINT32_MAX) {

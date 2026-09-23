@@ -8,12 +8,15 @@
 - `artifacts/<実験名>/`: 共有ライブラリ、CMake生成物、生ログ、フレーム単位のJSON、再集計結果。ローカル保管のみでGit管理対象外。
 - 詳しい条件・結果・限界: `gng_vlut_system/docs/designs/` と `releases/` の各記録。
 
+`artifacts/COLCON_IGNORE`をGit管理し、保存した比較用パッケージも通常のcolcon探索から除外。`.gitignore`だけではROSパッケージ探索の除外にはならない。
+
 生成物のGit管理除外による実ファイルの削除なし。SHA-256資料内のパスは計測当時の記録であり、移動前の `artifacts/` 表記を維持。
 
 ## 計測資料
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_production_efficiency_20260924](gng_production_efficiency_20260924/) | 本番CPUの結果一致を維持した空きID管理・重心走査統合と実験版の基数ソート標準化 |
 | [gng_runtime_trials_20260924](gng_runtime_trials_20260924/) | 学習量を維持した空き番号管理・LTO・入力ソートの実装比較 |
 | [gng_minimal_comparison_20260924](gng_minimal_comparison_20260924/) | 最小構成で入力voxel・node.grid・treeの6条件比較 |
 | [gng_bsp3d_minimal_20260923](gng_bsp3d_minimal_20260923/) | 入力ボクセル化なし・元点直接学習の最小tree版 |

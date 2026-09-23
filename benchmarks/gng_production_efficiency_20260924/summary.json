@@ -1,0 +1,683 @@
+{
+  "comparison_frames": 1190,
+  "executed_frames": 2380,
+  "comparisons": [
+    {
+      "case": "features_0.5",
+      "frames": 30,
+      "matches": {
+        "input_num": 30,
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before_mean": {
+        "input_ms": 1.0542322400000002,
+        "exec_ms": 56.147650719999994,
+        "output_ms": 1.16882832,
+        "total_ms": 58.37071128,
+        "voxel_ms": 8.45603568,
+        "attention_ms": 29.31654752,
+        "learn_ms": 5.328755040000001,
+        "label_ms": 4.36742736,
+        "maintenance_ms": 2.3155340800000004,
+        "cluster_ms": 6.31600808
+      },
+      "after_mean": {
+        "input_ms": 1.0283722400000002,
+        "exec_ms": 39.47767032,
+        "output_ms": 1.1574188399999998,
+        "total_ms": 41.663461399999996,
+        "voxel_ms": 8.18774324,
+        "attention_ms": 12.765196799999998,
+        "learn_ms": 5.515835839999999,
+        "label_ms": 4.322175959999999,
+        "maintenance_ms": 2.3079794000000002,
+        "cluster_ms": 6.3317980799999996
+      }
+    },
+    {
+      "case": "features_0",
+      "frames": 30,
+      "matches": {
+        "input_num": 30,
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before_mean": {
+        "input_ms": 1.04895208,
+        "exec_ms": 174.35033772000003,
+        "output_ms": 1.3020682,
+        "total_ms": 176.701358,
+        "voxel_ms": 0.7621985599999997,
+        "attention_ms": 153.11918804,
+        "learn_ms": 5.212025480000001,
+        "label_ms": 5.79598504,
+        "maintenance_ms": 3.010235,
+        "cluster_ms": 6.4017346
+      },
+      "after_mean": {
+        "input_ms": 1.1111558000000001,
+        "exec_ms": 168.821059,
+        "output_ms": 1.295038,
+        "total_ms": 171.22725280000003,
+        "voxel_ms": 0.7822882800000001,
+        "attention_ms": 147.4533452,
+        "learn_ms": 5.3385035599999995,
+        "label_ms": 5.772442999999999,
+        "maintenance_ms": 3.01432452,
+        "cluster_ms": 6.412350120000001
+      }
+    },
+    {
+      "case": "raw",
+      "frames": 100,
+      "matches": {
+        "input_num": 100,
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before_mean": {
+        "input_ms": 0.9486692000000001,
+        "exec_ms": 167.56918838,
+        "output_ms": 1.3406543999999996,
+        "total_ms": 169.85851198000003,
+        "voxel_ms": 0.73346768,
+        "attention_ms": 148.98220188000002,
+        "learn_ms": 3.6960332200000003,
+        "label_ms": 5.37501218,
+        "maintenance_ms": 3.0164011800000003,
+        "cluster_ms": 5.716833320000001
+      },
+      "after_mean": {
+        "input_ms": 0.9103037,
+        "exec_ms": 162.08583958,
+        "output_ms": 1.34155626,
+        "total_ms": 164.33769954000002,
+        "voxel_ms": 0.7528952,
+        "attention_ms": 143.61281624,
+        "learn_ms": 3.65927308,
+        "label_ms": 5.317260119999999,
+        "maintenance_ms": 2.99648676,
+        "cluster_ms": 5.70129512
+      }
+    },
+    {
+      "case": "smoke",
+      "frames": 30,
+      "matches": {
+        "input_num": 30,
+        "nodes": 30,
+        "edges": 30,
+        "clusters": 30,
+        "graph_sha256": 30,
+        "cluster_sha256": 30,
+        "label_sha256": 30,
+        "voxel_sha256": 30,
+        "voxel_num": 30,
+        "kept_input_num": 30,
+        "attention_num": 30,
+        "learning_num": 30,
+        "events_sha256": 30,
+        "events_num": 30,
+        "delta_sha256": 30,
+        "statistics_sha256": 30,
+        "observation_sha256": 30
+      },
+      "before_mean": {
+        "input_ms": 1.03734736,
+        "exec_ms": 114.40321411999999,
+        "output_ms": 1.27723652,
+        "total_ms": 116.71779799999999,
+        "voxel_ms": 10.92423164,
+        "attention_ms": 81.89342788,
+        "learn_ms": 6.415580039999998,
+        "label_ms": 5.69855952,
+        "maintenance_ms": 2.8573352,
+        "cluster_ms": 6.56673592
+      },
+      "after_mean": {
+        "input_ms": 1.0445884,
+        "exec_ms": 109.46546984000001,
+        "output_ms": 1.2673423999999998,
+        "total_ms": 111.77740064,
+        "voxel_ms": 10.446881359999999,
+        "attention_ms": 77.36783220000001,
+        "learn_ms": 6.467448000000001,
+        "label_ms": 5.5835272,
+        "maintenance_ms": 2.82498064,
+        "cluster_ms": 6.73021784
+      }
+    },
+    {
+      "case": "voxel_0.1_1",
+      "frames": 300,
+      "matches": {
+        "input_num": 300,
+        "nodes": 300,
+        "edges": 300,
+        "clusters": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "voxel_sha256": 300,
+        "voxel_num": 300,
+        "kept_input_num": 300,
+        "attention_num": 300,
+        "learning_num": 300
+      },
+      "before_mean": {
+        "input_ms": 0.9306349,
+        "exec_ms": 108.61820732399998,
+        "output_ms": 1.328156652,
+        "total_ms": 110.876998876,
+        "voxel_ms": 10.809982152,
+        "attention_ms": 78.533691784,
+        "learn_ms": 5.2736450999999995,
+        "label_ms": 5.272254972,
+        "maintenance_ms": 2.837572072,
+        "cluster_ms": 5.844866344
+      },
+      "after_mean": {
+        "input_ms": 0.9382501080000001,
+        "exec_ms": 104.768258924,
+        "output_ms": 1.3272789280000001,
+        "total_ms": 107.03378795999998,
+        "voxel_ms": 10.530234248000001,
+        "attention_ms": 74.802556088,
+        "learn_ms": 5.415548751999999,
+        "label_ms": 5.249096188,
+        "maintenance_ms": 2.8452765440000003,
+        "cluster_ms": 5.877857756
+      }
+    },
+    {
+      "case": "voxel_0.1_2",
+      "frames": 100,
+      "matches": {
+        "input_num": 100,
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before_mean": {
+        "input_ms": 0.91098192,
+        "exec_ms": 109.40896814,
+        "output_ms": 1.3290150399999998,
+        "total_ms": 111.6489651,
+        "voxel_ms": 10.83065178,
+        "attention_ms": 79.31577222,
+        "learn_ms": 5.2808691,
+        "label_ms": 5.20402774,
+        "maintenance_ms": 2.86975492,
+        "cluster_ms": 5.8643744
+      },
+      "after_mean": {
+        "input_ms": 0.9123451199999999,
+        "exec_ms": 105.45012514000001,
+        "output_ms": 1.30995634,
+        "total_ms": 107.6724266,
+        "voxel_ms": 10.44948386,
+        "attention_ms": 75.64475148000001,
+        "learn_ms": 5.36832238,
+        "label_ms": 5.152663980000001,
+        "maintenance_ms": 2.8812349,
+        "cluster_ms": 5.909613220000001
+      }
+    },
+    {
+      "case": "voxel_0.1_3",
+      "frames": 100,
+      "matches": {
+        "input_num": 100,
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before_mean": {
+        "input_ms": 0.9376076000000002,
+        "exec_ms": 110.02861758,
+        "output_ms": 1.32426834,
+        "total_ms": 112.29049352,
+        "voxel_ms": 10.852352120000003,
+        "attention_ms": 79.81732686000001,
+        "learn_ms": 5.289813819999999,
+        "label_ms": 5.22100428,
+        "maintenance_ms": 2.9076867199999996,
+        "cluster_ms": 5.89434216
+      },
+      "after_mean": {
+        "input_ms": 0.90358628,
+        "exec_ms": 105.65015736,
+        "output_ms": 1.3072397,
+        "total_ms": 107.86098334,
+        "voxel_ms": 10.57669194,
+        "attention_ms": 75.73407688,
+        "learn_ms": 5.33343552,
+        "label_ms": 5.17458884,
+        "maintenance_ms": 2.8862669800000003,
+        "cluster_ms": 5.892711520000001
+      }
+    },
+    {
+      "case": "voxel_0.5_1",
+      "frames": 300,
+      "matches": {
+        "input_num": 300,
+        "nodes": 300,
+        "edges": 300,
+        "clusters": 300,
+        "graph_sha256": 300,
+        "cluster_sha256": 300,
+        "label_sha256": 300,
+        "voxel_sha256": 300,
+        "voxel_num": 300,
+        "kept_input_num": 300,
+        "attention_num": 300,
+        "learning_num": 300
+      },
+      "before_mean": {
+        "input_ms": 0.923095836,
+        "exec_ms": 50.036487172,
+        "output_ms": 1.1993136359999998,
+        "total_ms": 52.158896643999995,
+        "voxel_ms": 8.354621604,
+        "attention_ms": 24.848135972,
+        "learn_ms": 4.422475291999999,
+        "label_ms": 3.7982263279999997,
+        "maintenance_ms": 2.292777748,
+        "cluster_ms": 6.274634776
+      },
+      "after_mean": {
+        "input_ms": 0.898222832,
+        "exec_ms": 37.246953864000005,
+        "output_ms": 1.20284408,
+        "total_ms": 39.348020776,
+        "voxel_ms": 8.093173288,
+        "attention_ms": 12.105480739999999,
+        "learn_ms": 4.537323656,
+        "label_ms": 3.812666752,
+        "maintenance_ms": 2.293798008,
+        "cluster_ms": 6.36487098
+      }
+    },
+    {
+      "case": "voxel_0.5_2",
+      "frames": 100,
+      "matches": {
+        "input_num": 100,
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before_mean": {
+        "input_ms": 0.8945099800000001,
+        "exec_ms": 49.06819465999999,
+        "output_ms": 1.2084578,
+        "total_ms": 51.17116244000001,
+        "voxel_ms": 8.36906064,
+        "attention_ms": 23.867142579999996,
+        "learn_ms": 4.44646912,
+        "label_ms": 3.7456971400000003,
+        "maintenance_ms": 2.2934185399999993,
+        "cluster_ms": 6.30491138
+      },
+      "after_mean": {
+        "input_ms": 0.90863582,
+        "exec_ms": 37.42942314,
+        "output_ms": 1.20117854,
+        "total_ms": 39.5392375,
+        "voxel_ms": 8.18003942,
+        "attention_ms": 12.309653039999999,
+        "learn_ms": 4.4929766,
+        "label_ms": 3.8107297,
+        "maintenance_ms": 2.29249866,
+        "cluster_ms": 6.302168600000001
+      }
+    },
+    {
+      "case": "voxel_0.5_3",
+      "frames": 100,
+      "matches": {
+        "input_num": 100,
+        "nodes": 100,
+        "edges": 100,
+        "clusters": 100,
+        "graph_sha256": 100,
+        "cluster_sha256": 100,
+        "label_sha256": 100,
+        "voxel_sha256": 100,
+        "voxel_num": 100,
+        "kept_input_num": 100,
+        "attention_num": 100,
+        "learning_num": 100
+      },
+      "before_mean": {
+        "input_ms": 0.8751719599999999,
+        "exec_ms": 48.91466068,
+        "output_ms": 1.1875713800000003,
+        "total_ms": 50.977404019999994,
+        "voxel_ms": 8.341272960000001,
+        "attention_ms": 23.854809399999994,
+        "learn_ms": 4.33351132,
+        "label_ms": 3.7754311199999995,
+        "maintenance_ms": 2.26582622,
+        "cluster_ms": 6.30470718
+      },
+      "after_mean": {
+        "input_ms": 0.9556505399999999,
+        "exec_ms": 38.69595580000001,
+        "output_ms": 1.23441368,
+        "total_ms": 40.886020020000004,
+        "voxel_ms": 8.2987455,
+        "attention_ms": 12.843259680000001,
+        "learn_ms": 4.63109706,
+        "label_ms": 3.90125204,
+        "maintenance_ms": 2.4112996,
+        "cluster_ms": 6.567438880000001
+      }
+    }
+  ],
+  "timings": {
+    "0.1": {
+      "trials": [
+        {
+          "trial": 1,
+          "before": {
+            "input_ms": 0.93829422,
+            "exec_ms": 109.70794164,
+            "output_ms": 1.31619746,
+            "total_ms": 111.96243332,
+            "voxel_ms": 10.83573384,
+            "attention_ms": 79.55567386,
+            "learn_ms": 5.28040042,
+            "label_ms": 5.22145684,
+            "maintenance_ms": 2.87485424,
+            "cluster_ms": 5.89511644
+          },
+          "after": {
+            "input_ms": 0.93599122,
+            "exec_ms": 106.02100024,
+            "output_ms": 1.31875088,
+            "total_ms": 108.27574234,
+            "voxel_ms": 10.43905432,
+            "attention_ms": 76.19821612,
+            "learn_ms": 5.35614862,
+            "label_ms": 5.19888294,
+            "maintenance_ms": 2.8786447,
+            "cluster_ms": 5.90375792
+          }
+        },
+        {
+          "trial": 2,
+          "before": {
+            "input_ms": 0.91098192,
+            "exec_ms": 109.40896814,
+            "output_ms": 1.32901504,
+            "total_ms": 111.6489651,
+            "voxel_ms": 10.83065178,
+            "attention_ms": 79.31577222,
+            "learn_ms": 5.2808691,
+            "label_ms": 5.20402774,
+            "maintenance_ms": 2.86975492,
+            "cluster_ms": 5.8643744
+          },
+          "after": {
+            "input_ms": 0.91234512,
+            "exec_ms": 105.45012514,
+            "output_ms": 1.30995634,
+            "total_ms": 107.6724266,
+            "voxel_ms": 10.44948386,
+            "attention_ms": 75.64475148,
+            "learn_ms": 5.36832238,
+            "label_ms": 5.15266398,
+            "maintenance_ms": 2.8812349,
+            "cluster_ms": 5.90961322
+          }
+        },
+        {
+          "trial": 3,
+          "before": {
+            "input_ms": 0.9376076,
+            "exec_ms": 110.02861758,
+            "output_ms": 1.32426834,
+            "total_ms": 112.29049352,
+            "voxel_ms": 10.85235212,
+            "attention_ms": 79.81732686000001,
+            "learn_ms": 5.28981382,
+            "label_ms": 5.22100428,
+            "maintenance_ms": 2.90768672,
+            "cluster_ms": 5.89434216
+          },
+          "after": {
+            "input_ms": 0.90358628,
+            "exec_ms": 105.65015736,
+            "output_ms": 1.3072397,
+            "total_ms": 107.86098334,
+            "voxel_ms": 10.57669194,
+            "attention_ms": 75.73407688,
+            "learn_ms": 5.33343552,
+            "label_ms": 5.17458884,
+            "maintenance_ms": 2.88626698,
+            "cluster_ms": 5.89271152
+          }
+        }
+      ],
+      "median_total_ms": {
+        "before": 111.96243332,
+        "after": 107.86098334
+      },
+      "median_reduction_percent": 3.6632376221027996,
+      "long_run": {
+        "before": {
+          "input_ms": 0.9306349,
+          "exec_ms": 108.61820732399998,
+          "output_ms": 1.328156652,
+          "total_ms": 110.876998876,
+          "voxel_ms": 10.809982152,
+          "attention_ms": 78.533691784,
+          "learn_ms": 5.2736450999999995,
+          "label_ms": 5.272254972,
+          "maintenance_ms": 2.837572072,
+          "cluster_ms": 5.844866344
+        },
+        "after": {
+          "input_ms": 0.9382501080000001,
+          "exec_ms": 104.768258924,
+          "output_ms": 1.3272789280000001,
+          "total_ms": 107.03378795999998,
+          "voxel_ms": 10.530234248000001,
+          "attention_ms": 74.802556088,
+          "learn_ms": 5.415548751999999,
+          "label_ms": 5.249096188,
+          "maintenance_ms": 2.8452765440000003,
+          "cluster_ms": 5.877857756
+        }
+      },
+      "first_frame_ms": {
+        "before": 324.508858,
+        "after": 147.088624
+      }
+    },
+    "0.5": {
+      "trials": [
+        {
+          "trial": 1,
+          "before": {
+            "input_ms": 0.91762312,
+            "exec_ms": 49.89077362,
+            "output_ms": 1.20213376,
+            "total_ms": 52.0105305,
+            "voxel_ms": 8.38687094,
+            "attention_ms": 24.85968832,
+            "learn_ms": 4.3426026,
+            "label_ms": 3.77931102,
+            "maintenance_ms": 2.27063084,
+            "cluster_ms": 6.21006208
+          },
+          "after": {
+            "input_ms": 0.87962772,
+            "exec_ms": 36.8346281,
+            "output_ms": 1.19459096,
+            "total_ms": 38.90884678,
+            "voxel_ms": 8.06946436,
+            "attention_ms": 12.03548378,
+            "learn_ms": 4.41383024,
+            "label_ms": 3.75387048,
+            "maintenance_ms": 2.2609319,
+            "cluster_ms": 6.26157914
+          }
+        },
+        {
+          "trial": 2,
+          "before": {
+            "input_ms": 0.89450998,
+            "exec_ms": 49.06819466,
+            "output_ms": 1.2084578,
+            "total_ms": 51.17116244,
+            "voxel_ms": 8.36906064,
+            "attention_ms": 23.86714258,
+            "learn_ms": 4.44646912,
+            "label_ms": 3.74569714,
+            "maintenance_ms": 2.2934185400000002,
+            "cluster_ms": 6.30491138
+          },
+          "after": {
+            "input_ms": 0.90863582,
+            "exec_ms": 37.42942314,
+            "output_ms": 1.20117854,
+            "total_ms": 39.5392375,
+            "voxel_ms": 8.18003942,
+            "attention_ms": 12.30965304,
+            "learn_ms": 4.4929766,
+            "label_ms": 3.8107297,
+            "maintenance_ms": 2.29249866,
+            "cluster_ms": 6.3021686
+          }
+        },
+        {
+          "trial": 3,
+          "before": {
+            "input_ms": 0.87517196,
+            "exec_ms": 48.91466068,
+            "output_ms": 1.18757138,
+            "total_ms": 50.97740402,
+            "voxel_ms": 8.34127296,
+            "attention_ms": 23.8548094,
+            "learn_ms": 4.33351132,
+            "label_ms": 3.77543112,
+            "maintenance_ms": 2.26582622,
+            "cluster_ms": 6.30470718
+          },
+          "after": {
+            "input_ms": 0.95565054,
+            "exec_ms": 38.6959558,
+            "output_ms": 1.23441368,
+            "total_ms": 40.886020020000004,
+            "voxel_ms": 8.2987455,
+            "attention_ms": 12.843259680000001,
+            "learn_ms": 4.63109706,
+            "label_ms": 3.90125204,
+            "maintenance_ms": 2.4112996,
+            "cluster_ms": 6.56743888
+          }
+        }
+      ],
+      "median_total_ms": {
+        "before": 51.17116244,
+        "after": 39.5392375
+      },
+      "median_reduction_percent": 22.731406490205973,
+      "long_run": {
+        "before": {
+          "input_ms": 0.923095836,
+          "exec_ms": 50.036487172,
+          "output_ms": 1.1993136359999998,
+          "total_ms": 52.158896643999995,
+          "voxel_ms": 8.354621604,
+          "attention_ms": 24.848135972,
+          "learn_ms": 4.422475291999999,
+          "label_ms": 3.7982263279999997,
+          "maintenance_ms": 2.292777748,
+          "cluster_ms": 6.274634776
+        },
+        "after": {
+          "input_ms": 0.898222832,
+          "exec_ms": 37.246953864000005,
+          "output_ms": 1.20284408,
+          "total_ms": 39.348020776,
+          "voxel_ms": 8.093173288,
+          "attention_ms": 12.105480739999999,
+          "learn_ms": 4.537323656,
+          "label_ms": 3.812666752,
+          "maintenance_ms": 2.293798008,
+          "cluster_ms": 6.36487098
+        }
+      },
+      "first_frame_ms": {
+        "before": 211.773264,
+        "after": 99.302854
+      }
+    }
+  }
+}

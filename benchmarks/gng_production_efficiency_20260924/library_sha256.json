@@ -1,0 +1,9 @@
+{
+  "artifacts/gng_production_efficiency_20260924/after/libgng_cpu.so": "43e820c54c96e6ba29097375da495e8111ba15332c5be85237eb34b9b3077931",
+  "artifacts/gng_production_efficiency_20260924/before/libgng_cpu.so": "41b599b5ad90f54deccd7d611a279197f657d677a738fa3fdc943ea27bb55dcb",
+  "artifacts/gng_production_efficiency_20260924/experimental/libgng_minimal_grid_raw.so": "9682f5a0311765f1c71f9d740aad1d0bf5d596cbc480b255e359c408b1b6c8bf",
+  "artifacts/gng_production_efficiency_20260924/experimental/libgng_minimal_grid_voxel.so": "52c144b765acd53495948a77ff8d52a5f23b20371a9f0928add2af48a4f555b4",
+  "artifacts/gng_production_efficiency_20260924/experimental/libgng_minimal_tree_raw.so": "1a36582eb0926200849186f79b7c73e81809dbec35bc921af84fcfa37c51b36d",
+  "artifacts/gng_production_efficiency_20260924/experimental/libgng_minimal_tree_voxel.so": "26723abafc344ee0e98db32c26c2d17780251924ed89ef305b1124accf8e16a2",
+  "artifacts/gng_production_efficiency_20260924/production_before.so": "cdb5d7736c23ed07fdc86ca7202abf5c518ca0222067f0550cb0be8f1e8417a4"
+}

@@ -11,14 +11,14 @@
 | `GNG_FREE_NODE_MODE` | 0:毎回先頭から探索、1:最小空き番号の開始位置を保持、2:最小ヒープ | 1 |
 | `GNG_ENABLE_LTO` | ファイルをまたぐ最適化とインライン化 | ON |
 | `GNG_FUSE_VOXEL_REDUCTION` | ソート後の区間検出・重心計算の走査統合 | ON |
-| `GNG_RADIX_VOXELS` | 32bitセル番号を8bitずつ安定基数ソート | OFF |
+| `GNG_RADIX_VOXELS` | 32bitセル番号を8bitずつ安定基数ソート | ON |
 | `GNG_NATIVE_CPU` | 実行CPU向け命令選択、`-ffp-contract=off` | OFF |
 | `GNG_DETERMINISTIC_BENCHMARK` | 乱数をフレーム番号、LPFの時間刻みを0.1秒に固定 | ON |
 | `GNG_BUILD_VARIANTS` | ビルド対象のライブラリ組合せ | 上記4種 |
 
-標準の組合せ版は最小の空きIDを以前と同じ順序で選択。ノード削除時に探索開始位置を戻す方式。入力重心の加算順序も維持。`-ffast-math`、近似探索、学習点や学習回数の削減なし。
+最小の空きIDを以前と同じ順序で選択し、ノード削除時に探索開始位置を戻す方式。`GNG_RADIX_VOXELS=OFF`では入力重心の加算順序も維持。`-ffast-math`、近似探索、学習点や学習回数の削減なし。
 
-基数ソート版は有効点をすべて保持し、同じセル番号の順に同じ個数の重心を生成。ただし同じセル内の点の順序が変わるため、浮動小数点加算の丸め差あり。通常の組合せ版と分離した任意の実験オプション。
+基数ソート版は有効点をすべて保持し、同じセル番号の順に同じ個数の重心を生成。ただし同じセル内の点の順序が変わるため、浮動小数点加算の丸め差あり。2026-09-24の追加判断で、この実験版の標準として採用。長期学習で接続判断も変わる場合があり、出力の完全一致が必要な比較ではOFFを指定。
 
 `Vec3f`の既定コンストラクタが一時オブジェクトだけを生成していた既存不具合を、このコピー内で修正。ゼロ長ベクトルの正規化結果をゼロへ初期化。基準版を含む全8構成へ同じ修正を適用。
 
@@ -33,7 +33,7 @@ cmake --build /tmp/gng_runtime_trials_build/optimized -j 4
 ctest --test-dir /tmp/gng_runtime_trials_build/optimized --output-on-failure
 ```
 
-基数ソート版では別のビルド先と`-DGNG_RADIX_VOXELS=ON`を指定。コンパイラ最適化なし等の比較設定は[再現スクリプト](../../../benchmarks/gng_runtime_trials_20260924/build_trials.sh)を参照。通常のROS実行用ではなく、比較用の時間刻み固定ビルド。
+既存ビルド先ではキャッシュを更新するため`-DGNG_RADIX_VOXELS=ON`を明示。元の加算順を保つ比較版は別のビルド先と`-DGNG_RADIX_VOXELS=OFF`を指定。コンパイラ最適化なし等の比較設定は[再現スクリプト](../../../benchmarks/gng_runtime_trials_20260924/build_trials.sh)を参照。通常のROS実行用ではなく、比較用の時間刻み固定ビルド。
 
 ライブラリ名は前回互換の`libgng_minimal_<variant>.so`。実験ごとに`artifacts/gng_runtime_trials_20260924/<method>/`へ保存し、本番インストール先へのコピーなし。
 
@@ -44,6 +44,6 @@ ctest --test-dir /tmp/gng_runtime_trials_build/optimized --output-on-failure
 - 連続入力の追加計測では、座標の丸め差と接続構造を分離する`topology_sha256`を保存。対象はノードID・生成フレーム・ラベル・エッジ。
 - 品質評価とbag読込は時間計測外。GNG本体時間、入力転送、出力変換を分離。
 
-[実測・比較条件](../../../benchmarks/gng_runtime_trials_20260924/README.md)に結果を記録。
+[実測・比較条件](../../../benchmarks/gng_runtime_trials_20260924/README.md)に結果を記録。基数ソートの標準採用と本番版への結果保持型の変更は[追加判断](../../../gng_vlut_system/docs/releases/2026-09-24_gng_production_efficiency.md)を参照。
 
 全点の観測寿命維持・重点学習・クラスタリングを含まない前回の最小構成を維持。本番GNGとの機能差は前回から継続。エッジ表のメモリ構造も変更なし。

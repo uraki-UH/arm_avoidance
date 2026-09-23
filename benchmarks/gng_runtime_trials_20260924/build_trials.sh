@@ -27,7 +27,7 @@ for method in baseline hint heap lto fused combined; do
   mkdir -p "$trial_artifacts/$method"
   timeout 120 cmake -S "$trial_source" -B "$trial_build/$method" \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DGNG_FREE_NODE_MODE="$free_mode" -DGNG_ENABLE_LTO="$enable_lto" \
+    -DGNG_FREE_NODE_MODE="$free_mode" -DGNG_ENABLE_LTO="$enable_lto" -DGNG_RADIX_VOXELS=OFF \
     -DGNG_FUSE_VOXEL_REDUCTION="$enable_fused" -DGNG_BUILD_VARIANTS="$variants" \
     > "$trial_artifacts/$method/configure.log" 2>&1
   timeout 600 cmake --build "$trial_build/$method" -j 4 > "$trial_artifacts/$method/build.log" 2>&1

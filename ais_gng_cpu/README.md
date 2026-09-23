@@ -50,6 +50,8 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic
 
 ## CPU GNGの実行時間ボトルネック
 
+本番CPU版は、最小空きノードIDの探索開始位置を保持し、入力voxelの区間確定と重心計算を一度の走査に統合。既存の入力順・加算順・学習回数・全点照合を保持。基数ソートは独立実験版でのみ採用。[変更と出力一致検証](../gng_vlut_system/docs/releases/2026-09-24_gng_production_efficiency.md)。
+
 当時計測の処理時間内訳、全ボクセル近傍照合の役割、設定変更比較、二乗メモリ、未検証の改善候補は[ボトルネック調査報告](../gng_vlut_system/docs/designs/gng_runtime_cost_20260923.md)を参照。通常CPU版の条件付き実測であり、現在の設定やSpatialTree実験版の性能とは区別。
 
 ## CPUの空間被覆とノード上限
