@@ -232,7 +232,7 @@ export function EntityColorModal({
                                     label="Node Size"
                                     value={layerSettings.nodeScale ?? 0.003}
                                     min={0.0001}
-                                    max={0.05}
+                                    max={0.5}
                                     step={0.0001}
                                     onChange={(v) => onUpdate({ nodeScale: v })}
                                     formatValue={(v) => v.toFixed(4)}
@@ -241,7 +241,7 @@ export function EntityColorModal({
                                     label="Edge Width"
                                     value={layerSettings.edgeWidth ?? 0.001}
                                     min={0.00002}
-                                    max={0.01}
+                                    max={0.1}
                                     step={0.00001}
                                     onChange={(v) => onUpdate({ edgeWidth: v })}
                                     formatValue={(v) => v.toFixed(5)}
