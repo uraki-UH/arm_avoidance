@@ -127,7 +127,8 @@ struct ClusterOptions
   // 拒否しないための余裕。
   double merge_residual_growth_min_th = 0.15;
 
-  // 各側の相手平面へのRMS距離 / 各側の局所間隔平均。両側個別の適合判定。
+  // 各側全体から統合平面、および接続端点から相手平面へのRMS距離比。
+  // 分母は各評価点群の局所間隔平均。小面の法線誤差の遠方外挿の回避。
   // C++識別子は互換維持。ROS設定名はmax_merge_side_residual_ratio。
   double merge_smaller_side_residual_ratio = 0.15;
 

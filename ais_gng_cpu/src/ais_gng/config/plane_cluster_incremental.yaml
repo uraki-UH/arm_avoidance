@@ -80,7 +80,8 @@ plane_cluster_incremental_node:
     merge_residual_growth_ratio: 1.1
     # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
     merge_residual_growth_min_th: 0.1
-    # 各側の相手平面へのRMS距離 / 各側の局所間隔平均。粗い側による小物体の吸収防止。
+    # 各側全体から統合平面、および接続端点から相手平面へのRMS距離比。
+    # 分母は各評価点群の局所間隔平均。小面の法線誤差の遠方外挿と段差吸収の防止。
     max_merge_side_residual_ratio: 0.15
 
     # 新規平面クラスタの確定後、出力前に必要な確認フレーム数。

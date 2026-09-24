@@ -29,6 +29,7 @@ export interface arrow_sample {
     direction?: vector3;
     state?: number;
     length?: number;
+    head_length?: number;
 }
 
 const axis_style = (color: string): arrow_dimensions => ({
@@ -95,7 +96,8 @@ export function build_arrow_parts(sample: arrow_sample, style: arrow_style): arr
     };
     const color = style.enable_state_colors && sample.state !== undefined
         ? style.state_colors[sample.state] ?? style.state_colors[0] ?? style.color : style.color;
-    append(direction, { ...style, length: sample.length ?? style.length, color }, style.anchor);
+    append(direction, { ...style, length: sample.length ?? style.length,
+        head_length: sample.head_length ?? style.head_length, color }, style.anchor);
     if (parts.length && orientation && style.enable_transverse_axes) {
         for (const axis of ['x', 'y', 'z'] as const) {
             if (axis !== style.primary_axis) append(new THREE.Vector3(...axes[axis]).applyQuaternion(orientation), style.transverse_axes[axis], 'tail');

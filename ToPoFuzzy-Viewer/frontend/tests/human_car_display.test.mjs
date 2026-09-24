@@ -124,13 +124,16 @@ test('人・車クラスタの受信所属・描画色・更新・表示切替�
         await render(graph, { ...settings, ...updated });
         const shapes = [];
         scene.traverse(object => {
-            if (object.userData.inspection_selection?.kind === 'cluster') {
-                shapes.push([object.geometry.type, object.material.color.getHexString()]);
+            if (object.userData.pick_clusters) {
+                for (let idx = 0; idx < object.count; ++idx) {
+                    const color = new THREE.Color(); object.getColorAt(idx, color);
+                    shapes.push([object.geometry.type, color.getHexString()]);
+                }
             }
         });
-        assert.deepEqual(shapes, [['CylinderGeometry', 'd946ef'], ['BoxGeometry', '8b5cf6']]);
+        assert.deepEqual(shapes.sort(), [['CylinderGeometry', 'd946ef'], ['BoxGeometry', '8b5cf6']].sort());
         await render(graph, settings);
-        scene.traverse(object => assert.notEqual(object.userData.inspection_selection?.kind, 'cluster'));
+        assert.equal(scene.getObjectByName('cluster-batch'), undefined);
     } finally {
         if (root) await act(async () => { root.unmount(); });
         await rm(directory, { recursive: true, force: true });

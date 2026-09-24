@@ -3,7 +3,7 @@ set -euo pipefail
 trial_root=/ros2_ws/src/artifacts/plane_consistency_20260924
 trial_files=(libplane_cluster_incremental.so libais_gng_component_cpu.so plane_cluster_incremental_node)
 trial_backup=${1:-runtime_before}
-case "$trial_backup" in runtime_before|scale_runtime_before) ;; *) exit 2 ;; esac
+case "$trial_backup" in runtime_before|scale_runtime_before|contact_runtime_before) ;; *) exit 2 ;; esac
 test ! -e "$trial_root/$trial_backup"
 mkdir "$trial_root/$trial_backup"
 for file in "${trial_files[@]}"; do

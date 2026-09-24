@@ -160,6 +160,19 @@ struct PlaneAccumulator
     return count > 0U ? spacing_sum / static_cast<double>(count) : 0.0;
   }
 
+  // 累積点群から指定平面へのRMS。全点の再走査・固有値分解なしの距離評価。
+  double rms_to_plane(const PlaneFit &fit) const
+  {
+    if (count == 0U) {
+      return std::numeric_limits<double>::infinity();
+    }
+    const double offset = fit.normal.dot(anchor - fit.centroid);
+    const double squared_dist_sum = fit.normal.dot(moment * fit.normal) +
+      2.0 * offset * fit.normal.dot(sum);
+    return std::sqrt(std::max(0.0,
+      squared_dist_sum / static_cast<double>(count) + offset * offset));
+  }
+
   PlaneFit solve() const
   {
     PlaneFit fit;
@@ -363,10 +376,12 @@ struct Clusterizer::Impl
   std::vector<int> cluster_best_component;
   std::vector<std::size_t> cluster_best_size;
   DisjointSet merge_sets;
-  // 隣接クラスタ対の、つながっているエッジ本数と境界ノードの平面ずれ。
+  // 隣接クラスタ対の接続本数と、各側の接続端点統計。キーのクラスタ順での保持。
   struct AdjacentPair
   {
     std::size_t edges = 0U;
+    PlaneAccumulator first_contact;
+    PlaneAccumulator second_contact;
   };
   std::unordered_map<std::uint64_t, AdjacentPair> adjacent_pair_counts;
   std::vector<int> remap;
@@ -1218,7 +1233,12 @@ struct Clusterizer::Impl
         if (second_label == kUnassigned || second_label == first_label) {
           continue;
         }
-        ++adjacent_pair_counts[clusterPairKey(first_label, second_label)].edges;
+        auto &pair = adjacent_pair_counts[clusterPairKey(first_label, second_label)];
+        ++pair.edges;
+        const auto first_idx = first_label < second_label ? index : neighbour;
+        const auto second_idx = first_label < second_label ? neighbour : index;
+        pair.first_contact.add(positions[first_idx], Eigen::Vector3d::Zero(), spacings[first_idx]);
+        pair.second_contact.add(positions[second_idx], Eigen::Vector3d::Zero(), spacings[second_idx]);
       }
     }
     if (adjacent_pair_counts.empty()) {
@@ -1230,6 +1250,10 @@ struct Clusterizer::Impl
     merge_fits = plane_fits;
 
     merge_sets.reset(clusters.size());
+    const auto can_fit_plane = [this](const PlaneAccumulator &side, const PlaneFit &fit) {
+        return side.rms_to_plane(fit) / effective_spacing(side.meanSpacing()) <=
+               options.merge_smaller_side_residual_ratio;
+      };
     for (const auto &[key, pair] : adjacent_pair_counts) {
       ++statistics.merge_adjacent_pair_count;
       if (pair.edges < options.merge_connection_requirement) {
@@ -1259,7 +1283,7 @@ struct Clusterizer::Impl
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
-      // 統合後の面幅判定。残差・少数側RMSによる段差の誤吸収防止との併用。
+      // 統合後の面幅判定。各側の残差と接触部の整合性による誤吸収防止との併用。
       if (!has_plane_extent(union_fit, union_spacing, options.merge_min_planarity)) {
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
@@ -1282,24 +1306,14 @@ struct Clusterizer::Impl
         ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
       }
-      // 両側それぞれの局所間隔による、相手平面へのRMS距離比。
-      // 少数側だけの検査や統合後重心への移動による、段差・高密度小物体の吸収防止。
-      bool can_merge_sides = true;
-      for (const auto side : {first, second}) {
-        const auto other = side == first ? second : first;
-        const auto &side_fit = merge_fits[side];
-        const auto &other_fit = merge_fits[other];
-        const double offset = other_fit.normal.dot(side_fit.centroid - other_fit.centroid);
-        const double side_rms = std::sqrt(std::max(0.0,
-          other_fit.normal.dot(side_fit.covariance * other_fit.normal) + offset * offset));
-        if (side_rms / effective_spacing(merge_accumulators[side].meanSpacing()) >
-          options.merge_smaller_side_residual_ratio)
-        {
-          can_merge_sides = false;
-          break;
-        }
-      }
-      if (!can_merge_sides) {
+      // 各側全体から統合後平面への適合判定。大面の点数・間隔による小面の誤吸収防止。
+      // 相手の元平面との相互照合は接続端点のみ。小面の法線誤差の遠方外挿の回避。
+      // 連鎖統合時も現在の成分平面で接触部を評価。平行段差の重心移動による隠蔽防止。
+      if (!can_fit_plane(first_accumulator, union_fit) ||
+        !can_fit_plane(second_accumulator, union_fit) ||
+        !can_fit_plane(pair.first_contact, second_fit) ||
+        !can_fit_plane(pair.second_contact, first_fit))
+      {
         ++statistics.merge_smaller_side_rejected_pair_count;
         continue;
       }

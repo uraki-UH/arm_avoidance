@@ -1,0 +1,43 @@
+{
+  "frames": 150,
+  "warmup_frames": 50,
+  "trials": 3,
+  "input_sha256": "db92a648738f4ffd210de58c20fc41311e98dda8d42c4eedfdef49cffbecef7c",
+  "before": {
+    "nodes": 19143.9,
+    "clusters": 107.51,
+    "assigned": 11582.88,
+    "released": 5.02,
+    "born": 1.5,
+    "merged": 0.71,
+    "split": 2.1,
+    "cpu_ms": 13.373976,
+    "wall_ms": 13.381663000000001,
+    "trial_cpu_mean_ms": [
+      13.829664000000001,
+      13.373976,
+      13.161242999999999
+    ],
+    "unassigned": 7561.020000000002,
+    "assigned_percent": 60.50428596054095
+  },
+  "after": {
+    "nodes": 19143.9,
+    "clusters": 80.68,
+    "assigned": 11522.08,
+    "released": 5.43,
+    "born": 1.57,
+    "merged": 1.02,
+    "split": 2.26,
+    "cpu_ms": 13.093988999999999,
+    "wall_ms": 13.099305999999999,
+    "trial_cpu_mean_ms": [
+      12.724907,
+      13.093988999999999,
+      13.603580999999998
+    ],
+    "unassigned": 7621.8200000000015,
+    "assigned_percent": 60.18669132203991
+  },
+  "cpu_reduction_percent": 2.0935210291988082
+}

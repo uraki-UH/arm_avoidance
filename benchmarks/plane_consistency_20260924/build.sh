@@ -5,7 +5,7 @@ trial_root=artifacts/plane_consistency_20260924
 trial_mode=${1:-after}
 trial_include=ais_gng_cpu/src/ais_gng/include
 trial_source=ais_gng_cpu/src/ais_gng/src/topological_plane/plane_cluster_incremental.cpp
-if [[ "$trial_mode" == before || "$trial_mode" == scale_before ]]; then
+if [[ "$trial_mode" == before || "$trial_mode" == scale_before || "$trial_mode" == contact_before ]]; then
   trial_include=$trial_root/$trial_mode/include
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
 fi

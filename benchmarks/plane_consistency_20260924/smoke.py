@@ -1,4 +1,4 @@
-"""分離ROSドメインでの配布バイナリ起動・長平面入力試験と子プロセスの後片付け。"""
+"""分離ROSドメインでの配布バイナリ起動・平面統合試験と子プロセスの後片付け。"""
 
 import os
 import math
@@ -90,6 +90,57 @@ def main():
                     break
             else:
                 raise AssertionError(f"plane output missing: spacing={spacing}")
+
+        # 新しいノードIDによる各試験の所属初期化。確認済み出力6フレームの連続一致。
+        def expect_clusters(num_clusters):
+            last_frame = graph.frame_number
+            num_matches = 0
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                graph.frame_number += 1
+                publisher.publish(graph)
+                rclpy.spin_once(observer, timeout_sec=0.1)
+                if not received or received[-1].frame_number <= last_frame:
+                    continue
+                result = received[-1]
+                last_frame = result.frame_number
+                if (len(result.clusters) == num_clusters and
+                        sum(len(cluster.node_indices) for cluster in result.clusters) == len(graph.nodes)):
+                    num_matches += 1
+                    if num_matches == 6:
+                        return
+                else:
+                    num_matches = 0
+            raise AssertionError(f"interior patch output missing: expected={num_clusters}")
+
+        for trial_idx, offset in enumerate((0.0, 0.10)):
+            graph.nodes.clear()
+            del graph.edges[:]
+            angle = math.radians(1.0)
+            for is_small, size in ((False, 41), (True, 5)):
+                base_idx = len(graph.nodes)
+                for row in range(size):
+                    for column in range(size):
+                        idx = base_idx + row * size + column
+                        value = TopologicalNode()
+                        value.id = 10000 + trial_idx * 2000 + idx
+                        x = column * 0.5 - (1.0 if is_small else 10.0)
+                        value.pos.x = x * math.cos(angle) if is_small else x
+                        value.pos.y = row * 0.5 - (1.0 if is_small else 10.0)
+                        value.pos.z = offset + x * math.sin(angle) if is_small else 0.0
+                        value.normal.x = -math.sin(angle) if is_small else 0.0
+                        value.normal.z = math.cos(angle) if is_small else 1.0
+                        graph.nodes.append(value)
+                        if column:
+                            graph.edges.extend([idx - 1, idx])
+                        if row:
+                            graph.edges.extend([idx - size, idx])
+            expect_clusters(2)
+            for row in range(5):
+                graph.edges.extend([(18 + row) * 41 + 17, 1681 + row * 5,
+                                    (18 + row) * 41 + 23, 1681 + row * 5 + 4])
+            expect_clusters(1 if offset == 0.0 else 2)
+            print(f"PASS: 1706-node interior patch, 1 deg tilt, offset={offset} m", flush=True)
         assert all(process.poll() is None for process in processes)
     finally:
         for process in reversed(processes):

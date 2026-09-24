@@ -598,6 +598,87 @@ TEST(PlaneClusterIncremental, InteriorPatchMergesOnlyWhenCoplanarAndConnected)
   }
 }
 
+// 小面の法線誤差の遠方外挿によらない内部パッチ統合。スケール・走査方向・段差の確認。
+TEST(PlaneClusterIncremental, interior_patch_merge_uses_contact_region)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (const bool is_small_first : {false, true}) {
+      for (const double offset : {0.0, 0.10}) {
+        SCOPED_TRACE(scale);
+        SCOPED_TRACE(is_small_first);
+        SCOPED_TRACE(offset);
+        TopologicalMap map;
+        const double angle = 0.017453292519943295;
+        const double large_origin[3] = {-10.0 * scale, -10.0 * scale, 0.0};
+        const double small_origin[3] = {
+          -std::cos(angle) * scale, -scale, (offset - std::sin(angle)) * scale};
+        const double axis_u[3] = {1.0, 0.0, 0.0};
+        const double axis_v[3] = {0.0, 1.0, 0.0};
+        const double tilted_u[3] = {std::cos(angle), 0.0, std::sin(angle)};
+        std::size_t large_idx = 0U, small_idx = 0U;
+        for (const bool is_small : {is_small_first, !is_small_first}) {
+          if (is_small) {
+            small_idx = appendGrid(map, 5U, 5U, 0.5 * scale,
+              small_origin, tilted_u, axis_v, TopologicalMap::WALL);
+          } else {
+            large_idx = appendGrid(map, 41U, 41U, 0.5 * scale,
+              large_origin, axis_u, axis_v, TopologicalMap::WALL);
+          }
+        }
+        ClusterOptions options;
+        options.merge_connection_requirement = 2U;
+        Clusterizer clusterizer{options};
+        const auto disconnected = warmUp(clusterizer, map);
+        ASSERT_EQ(disconnected.clusters.clusters.size(), 2U);
+        for (std::size_t row = 0U; row < 5U; ++row) {
+          for (const bool is_right : {false, true}) {
+            map.edges.push_back(static_cast<std::uint16_t>(
+              large_idx + (18U + row) * 41U + (is_right ? 23U : 17U)));
+            map.edges.push_back(static_cast<std::uint16_t>(
+              small_idx + row * 5U + (is_right ? 4U : 0U)));
+          }
+        }
+        const auto result = clusterizer.update(map);
+        const auto num_clusters = offset == 0.0 ? 1U : 2U;
+        EXPECT_EQ(result.clusters.clusters.size(), num_clusters);
+        EXPECT_EQ(result.statistics.merged_cluster_count, offset == 0.0 ? 1U : 0U);
+        EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+        for (std::size_t iter = 0U; iter < 6U; ++iter) {
+          const auto repeated = clusterizer.update(map);
+          EXPECT_EQ(repeated.clusters.clusters.size(), num_clusters);
+          EXPECT_EQ(repeated.statistics.clustered_node_count, map.nodes.size());
+          EXPECT_EQ(clusterIds(repeated), clusterIds(result));
+        }
+      }
+    }
+  }
+}
+
+// 接触部が一致する傾斜面の分離。大面に埋もれる少数側の全体残差の検査。
+TEST(PlaneClusterIncremental, contact_match_does_not_hide_tilted_small_plane)
+{
+  TopologicalMap map;
+  const double large_origin[3] = {-10.0, -10.25, 0.0};
+  const double small_origin[3] = {0.0, 0.0, 0.0};
+  const double axis_u[3] = {1.0, 0.0, 0.0};
+  const double axis_v[3] = {0.0, 1.0, 0.0};
+  const double tilted_u[3] = {std::sqrt(0.75), 0.0, 0.5};
+  appendGrid(map, 41U, 41U, 0.5, large_origin, axis_u, axis_v, TopologicalMap::WALL);
+  const auto small_idx = appendGrid(
+    map, 5U, 5U, 0.5, small_origin, tilted_u, axis_v, TopologicalMap::WALL);
+  Clusterizer clusterizer{ClusterOptions{}};
+  ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+  for (std::size_t row = 0U; row < 5U; ++row) {
+    map.edges.push_back(static_cast<std::uint16_t>((21U + row) * 41U + 20U));
+    map.edges.push_back(static_cast<std::uint16_t>(small_idx + row * 5U));
+  }
+  const auto result = clusterizer.update(map);
+  EXPECT_EQ(result.clusters.clusters.size(), 2U);
+  EXPECT_EQ(result.statistics.merged_cluster_count, 0U);
+  EXPECT_GT(result.statistics.merge_smaller_side_rejected_pair_count, 0U);
+  EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+}
+
 // 線状でない2x2パッチの連鎖統合と、統合済み同士の二重計上防止。
 TEST(PlaneClusterIncremental, CompactPatchesMergeWithoutNodeCovariance)
 {

@@ -1,0 +1,118 @@
+{
+  "base_ref": "51c154c2df675601242547b0eed3ac72660be0ed",
+  "conditions": "Chrome headless / SwiftShader / 400x400 / 合成100・1000クラスタ / 30更新の中央値 / ノード・エッジOFF",
+  "results": [
+    {
+      "before": {
+        "mode": "before",
+        "num": 100,
+        "enable_velocity": false,
+        "update_ms": 2.1000000089406967,
+        "render_ms": 4.300000011920929,
+        "calls": 200,
+        "num_meshes": 100,
+        "num_cluster_interactions": 100,
+        "num_colored_pixels": 5604,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      },
+      "after": {
+        "mode": "after",
+        "num": 100,
+        "enable_velocity": false,
+        "update_ms": 0.29999999701976776,
+        "render_ms": 0.10000000894069672,
+        "calls": 4,
+        "num_meshes": 2,
+        "num_cluster_interactions": 0,
+        "num_colored_pixels": 5604,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      }
+    },
+    {
+      "before": {
+        "mode": "before",
+        "num": 100,
+        "enable_velocity": true,
+        "update_ms": 4.299999997019768,
+        "render_ms": 4.5999999940395355,
+        "calls": 312,
+        "num_meshes": 300,
+        "num_cluster_interactions": 100,
+        "num_colored_pixels": 5604,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      },
+      "after": {
+        "mode": "after",
+        "num": 100,
+        "enable_velocity": true,
+        "update_ms": 0.4000000059604645,
+        "render_ms": 0.10000000894069672,
+        "calls": 6,
+        "num_meshes": 4,
+        "num_cluster_interactions": 0,
+        "num_colored_pixels": 5604,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      }
+    },
+    {
+      "before": {
+        "mode": "before",
+        "num": 1000,
+        "enable_velocity": false,
+        "update_ms": 15.400000005960464,
+        "render_ms": 40.400000005960464,
+        "calls": 2000,
+        "num_meshes": 1000,
+        "num_cluster_interactions": 1000,
+        "num_colored_pixels": 55965,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      },
+      "after": {
+        "mode": "after",
+        "num": 1000,
+        "enable_velocity": false,
+        "update_ms": 0.7000000029802322,
+        "render_ms": 0.09999999403953552,
+        "calls": 4,
+        "num_meshes": 2,
+        "num_cluster_interactions": 0,
+        "num_colored_pixels": 55965,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      }
+    },
+    {
+      "before": {
+        "mode": "before",
+        "num": 1000,
+        "enable_velocity": true,
+        "update_ms": 38.900000005960464,
+        "render_ms": 50.1000000089407,
+        "calls": 3142,
+        "num_meshes": 3000,
+        "num_cluster_interactions": 1000,
+        "num_colored_pixels": 55965,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      },
+      "after": {
+        "mode": "after",
+        "num": 1000,
+        "enable_velocity": true,
+        "update_ms": 1.4000000059604645,
+        "render_ms": 0.20000000298023224,
+        "calls": 6,
+        "num_meshes": 4,
+        "num_cluster_interactions": 0,
+        "num_colored_pixels": 55965,
+        "mean_pixel_dev": 0,
+        "max_pixel_dev": 0
+      }
+    }
+  ]
+}

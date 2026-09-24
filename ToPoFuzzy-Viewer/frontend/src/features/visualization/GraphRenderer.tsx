@@ -1,10 +1,11 @@
 import { ArrowBatch, EllipsoidBatch, DisplayFrame, useDemandUpdate, use_click_pick } from './SharedRenderers';
 import { useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import * as THREE from 'three';
-import { useThree, ThreeEvent } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import { GraphData, GraphNode, LayerSettings, LAYER_COLORS, isTrajectoryGraphTag } from '../../types';
 import { buildNodePalette, updateNodeInstances, updateEdgeInstances, configure_node_material, build_cluster_node_colors, build_classified_node_labels } from './gngGraphics';
-import { arrow_sample, normal_arrow_style, velocity_arrow_style } from './arrows';
+import { arrow_sample, normal_arrow_style } from './arrows';
+import { ClusterBatch } from './ClusterBatch';
 import { get_active_node_labels, resolve_node_label, resolve_graph_layer_settings } from './graphLayerSettings';
 
 const CANDIDATE_GOAL_COLOR = '#a855f7';
@@ -35,9 +36,7 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
     const nodeMeshRefs = useRef<(THREE.InstancedMesh | null)[]>([]);
     const goalNodeMeshRef = useRef<THREE.InstancedMesh>(null);
     const edgesRef = useRef<THREE.InstancedMesh>(null);
-    const dragStartRef = useRef<{ x: number, y: number } | null>(null);
 
-    const selectionEnabled = enableClusterSelection && !!onClusterSelect;
     const node_pick = use_click_pick(enableClusterSelection && on_node_select ? event => {
         const node = (event.object.userData.pick_nodes as GraphNode[] | undefined)?.[event.instanceId ?? -1];
         if (node) on_node_select(node);
@@ -102,25 +101,6 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
     );
 
     useDemandUpdate([graph, settings, tf, selectedClusterId, variant, goalNodeSignature]);
-
-    // Handle cluster click with drag filtering
-    const handleClusterClick = (clusterId: number, e: ThreeEvent<MouseEvent>) => {
-        if (!selectionEnabled || !onClusterSelect) return;
-        e.stopPropagation();
-
-        if (dragStartRef.current) {
-            const dx = e.clientX - dragStartRef.current.x;
-            const dy = e.clientY - dragStartRef.current.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 5) return;
-        }
-
-        if (selectedClusterId === clusterId) {
-            onClusterSelect(null);
-        } else {
-            onClusterSelect(clusterId);
-        }
-    };
 
     // --- Geometries & Materials ---
     const nodeSphereGeometry = useMemo(() => new THREE.SphereGeometry(1, 12, 8), []);
@@ -344,7 +324,6 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
     const canMountNodes = showNodes && graph.nodes.length > 0 && nodeCapacity >= graph.nodes.length;
     const canMountEdges = showEdges && edgePairCount > 0 && edgeCapacity >= edgePairCount;
     const canMountNormals = showNormals && graph.nodes.length > 0;
-    const canMountVelocity = showVelocity && showClusters && graph.clusters.length > 0;
 
     const content = (
         <>
@@ -396,49 +375,9 @@ export function GraphRenderer({ tag, data: graph, settings, selectedClusterId = 
 
             {canMountNormals && <ArrowBatch samples={normal_samples} style={normal_arrow_style} />}
 
-            {showClusters && graph.clusters
-            .filter(cluster => !visibleLabels || visibleLabels[cluster.label as 0 | 1 | 2 | 3 | 4 | 5])
-            .map((cluster) => {
-                const isSelected = selectedClusterId === cluster.id;
-                const semanticColor = resolve_node_label({ semanticLabel: cluster.semanticLabel }, active_labels)?.color;
-                const color = isSelected ? '#FFFFFF' : (semanticColor || LAYER_COLORS[cluster.label % LAYER_COLORS.length]);
-                const isHuman = cluster.label === 4;
-                const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-                    if (selectionEnabled) dragStartRef.current = { x: e.clientX, y: e.clientY };
-                };
-
-                return (
-                    <group key={cluster.id}>
-                    <group position={cluster.pos} quaternion={new THREE.Quaternion(...cluster.quat)}>
-                        <mesh
-                            userData={{ inspection_source: selectionEnabled ? tag : undefined, inspection_revision: graph,
-                                inspection_selection: { kind: 'cluster', id: cluster.id } }}
-                            scale={isHuman ? [cluster.scale[0], cluster.scale[2], cluster.scale[1]] : cluster.scale}
-                            rotation={isHuman ? [Math.PI / 2, 0, 0] : [0, 0, 0]}
-                            onPointerDown={handlePointerDown}
-                            onClick={(e) => handleClusterClick(cluster.id, e as any)}
-                        >
-                            {isHuman ? <cylinderGeometry args={[0.5, 0.5, 1, 16]} /> : <boxGeometry args={[1, 1, 1]} />}
-                            <meshBasicMaterial
-                                color={color}
-                                transparent
-                                opacity={isSelected ? 0.1 : 0.3 * nodeOpacity}
-                                depthWrite={false}
-                                side={THREE.DoubleSide}
-                            />
-                        </mesh>
-
-
-                    </group>
-                        {canMountVelocity && (
-                            <ArrowBatch
-                                samples={[{ position: cluster.pos, direction: cluster.velocity }]}
-                                style={velocity_arrow_style(Math.hypot(...cluster.velocity))}
-                            />
-                        )}
-                    </group>
-                );
-            })}
+            {showClusters && <ClusterBatch graph={graph} source_id={tag} visible_labels={visibleLabels}
+                active_labels={active_labels} node_opacity={nodeOpacity} selected_cluster_id={selectedClusterId}
+                enable_velocity={showVelocity} on_select={enableClusterSelection ? onClusterSelect : undefined} />}
         </>
     );
 
