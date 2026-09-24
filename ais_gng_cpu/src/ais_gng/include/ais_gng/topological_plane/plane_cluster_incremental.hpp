@@ -97,10 +97,8 @@ struct ClusterOptions
   // そのため併合だけを独立して緩める専用値として分離してある。
   std::size_t merge_connection_requirement = 1;
 
-  // 通常2本接続を要求する設定での、小断片に限定した1本接続の救済。
+  // 通常2本接続を要求する設定での、短い1本接続の連続適合による救済。
   bool enable_fragment_merge = true;
-  // 救済対象となる小さい側の所属ノード数。
-  std::size_t max_fragment_nodes = 30;
   // 接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
   double max_fragment_edge_ratio_th = 2.5;
   // 各側・接触部・統合後平面の正規化RMS。通常併合より強い適合条件。

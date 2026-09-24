@@ -6,6 +6,7 @@
     gng_exec;
     gng_set_priority_input;
     gng_set_weighted_priority_input;
+    gng_set_unknown_attention_enabled;
     gng_setMapDeltaCapture;
     gng_getTopologicalMapDelta;
     gng_setTrainingEventCapture;

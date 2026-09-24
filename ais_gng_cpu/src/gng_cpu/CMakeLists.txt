@@ -108,6 +108,7 @@ set(VERSION_FILE ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.v)
 # ターゲットにリンカフラグとしてバージョンファイルを設定
 set_target_properties(${PROJECT_NAME} PROPERTIES
     LINK_FLAGS "-Wl,--version-script=${VERSION_FILE}"
+    LINK_DEPENDS "${VERSION_FILE}"
 )
 install(
   TARGETS ${PROJECT_NAME}

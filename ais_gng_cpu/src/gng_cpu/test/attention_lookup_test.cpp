@@ -5,6 +5,46 @@
 #include <set>
 
 namespace {
+// 既存unknown枠を無効にした場合の全体学習と、入力置換・実行後の既定復帰。
+bool check_unknown_attention_switch() {
+    GNG gng;
+    gng.param.config.point_cloud_num = 16;
+    gng.param.config.node_grid = 1;
+    gng.param.config.x_min = gng.param.config.y_min = gng.param.config.z_min = -5;
+    gng.param.config.x_max = gng.param.config.y_max = gng.param.config.z_max = 5;
+    gng.param.node.num_max = 8;
+    gng.param.node.learning_num = 4;
+    gng.param.node.unknown_learning_rate = 100;
+    gng.param.node.eta_s1 = gng.param.node.eta_s2 = 0;
+    for (auto &value : gng.param.node.vigilance2) {value = 100;}
+    if (gng.init("") != SUCCESS) {return false;}
+    std::vector<Vec3f> input{Vec3f(0.1f, 0, 0)}, attention{Vec3f(2.1f, 0, 0)};
+    auto first = Vec3f(0, 0, 0), second = Vec3f(2, 0, 0), third = Vec3f(3, 0, 0);
+    const auto first_id = gng.n1.add_node(first);
+    const auto second_id = gng.n1.add_node(second);
+    gng.n1.add_node(third);
+    gng.n1.setTrainingEventCapture(true);
+    for (const bool enable_unknown : {true, false}) {
+        gng.n1.enable_unknown_attention = enable_unknown;
+        gng.n1.learn(input, 1, attention, 1);
+        uint32_t num = 0;
+        const auto *events = gng.n1.getTrainingEvents(&num);
+        if (num != 4) {return false;}
+        for (uint32_t idx = 0; idx < num; ++idx) {
+            if (events[idx].winner_node_id != (enable_unknown ? second_id : first_id)) {return false;}
+        }
+    }
+    LiDAR_Config config;
+    config.point_step = 12;
+    const float points[] = {0.1f, 0, 0, 2.1f, 0, 0};
+    gng.n1.enable_unknown_attention = false;
+    gng.setPointCloud(reinterpret_cast<const uint8_t *>(points), 2, &config);
+    if (!gng.n1.enable_unknown_attention) {return false;}
+    gng.n1.enable_unknown_attention = false;
+    gng.exec();
+    return gng.n1.enable_unknown_attention;
+}
+
 uint32_t lookup_span_raw_idx(const GNG &gng, uint32_t idx) {
     // 学習側と同じ64点索引による展開。基準は別途作成した従来XYZ候補列。
     const auto &spans = gng.observation_attention_spans;
@@ -134,6 +174,10 @@ bool check_case(uint32_t point_num, float voxel_unit, bool has_angle_table, bool
 }
 
 int main() {
+    if (!check_unknown_attention_switch()) {
+        std::cerr << "unknown重点枠の切替・復帰の不整合\n";
+        return 1;
+    }
     uint32_t case_num = 0;
     for (const uint32_t point_num : {0U, 63U, 64U, 65U, 65535U, 65536U, 65537U}) {
         for (const auto voxel_unit : {0.f, 0.1f}) {

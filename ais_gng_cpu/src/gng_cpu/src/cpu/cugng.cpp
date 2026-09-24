@@ -450,7 +450,7 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     {
         uniform_int_distribution<> rA_Attention(0, std::max(1, attention_pcl_num) - 1);
         for(i=j=0; i< gng_config.learning_num; ++i){
-            // 総学習回数を固定した重点配分。通常学習の既存混合比は残余枠内で維持。
+            // 総学習回数を固定した重点配分。残余枠は既存混合または全体学習。
             if (has_priority && static_cast<int>((i + 1) * static_cast<double>(priority_ratio)) >
                 static_cast<int>(i * static_cast<double>(priority_ratio))) {
                 const auto raw_idx = priority_point_ids[has_priority_weights ? weighted_priority_dist(mt) : priority_dist(mt)];
@@ -458,7 +458,7 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
                 learn_normal(point, nullptr, raw_idx, false);
                 continue;
             }
-            if(attention_pcl_num == 0 || ++j == gng_config.unknown_learning_rate){
+            if(!enable_unknown_attention || attention_pcl_num == 0 || ++j == gng_config.unknown_learning_rate){
                 learn_input(rA(mt));
                 j = 0; // リセット
             } else {

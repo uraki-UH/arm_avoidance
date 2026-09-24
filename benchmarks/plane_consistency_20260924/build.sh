@@ -5,13 +5,15 @@ trial_root=artifacts/plane_consistency_20260924
 trial_mode=${1:-after}
 trial_include=ais_gng_cpu/src/ais_gng/include
 trial_source=ais_gng_cpu/src/ais_gng/src/topological_plane/plane_cluster_incremental.cpp
-if [[ "$trial_mode" == before || "$trial_mode" == scale_before || "$trial_mode" == contact_before ]]; then
+if [[ "$trial_mode" == before || "$trial_mode" == scale_before || "$trial_mode" == contact_before || "$trial_mode" == simple_before ]]; then
   trial_include=$trial_root/$trial_mode/include
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
 fi
-# 追加オプションのABIを揃えた変更前アルゴリズムの比較。実装だけを保存版へ切替。
+# 先行修正の比較用ソースと、廃止前のオプションを含む保存ヘッダの組合せ。
 if [[ "$trial_mode" == fragment_before || "$trial_mode" == direction_before || "$trial_mode" == absorption_before ]]; then
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
+  # 廃止前のオプションを参照する保存ソース用ヘッダ。実装と呼び出し側のABIの統一。
+  trial_include=$trial_root/simple_before/include
 fi
 mkdir -p "$trial_root/$trial_mode"
 trial_flags=(-std=c++17 -O3 -DNDEBUG -I"$trial_include" -I/usr/include/eigen3 -I/ros2_ws/install/ais_gng_msgs/include/ais_gng_msgs)

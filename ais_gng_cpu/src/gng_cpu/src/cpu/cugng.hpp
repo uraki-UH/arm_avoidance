@@ -67,6 +67,7 @@ class CUGNG {
     vector<uint32_t> priority_point_ids;
     vector<float> priority_weights;
     float priority_ratio = 0;
+    bool enable_unknown_attention = true;
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);

@@ -166,6 +166,10 @@ uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, f
 uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const float *weights,
     uint32_t num_points, float ratio);
 
+// 次の実行だけの既存unknown重点枠の切替。無効時の残余枠は全体学習。
+// setPointCloud後に指定。入力置換・実行後は既定の有効状態へ復帰。
+void gng_set_unknown_attention_enabled(uint8_t enable_unknown_attention);
+
 /**
  * @brief TopologicalMap差分の記録を切り替える
  * @param[in] enable 0以外で有効。無効時は変更記録の処理を行わない

@@ -274,7 +274,6 @@ struct Clusterizer::Impl
     options.max_effective_spacing = std::max(0.0, options.max_effective_spacing);
     options.merge_smaller_side_residual_ratio =
       std::max(0.0, options.merge_smaller_side_residual_ratio);
-    options.max_fragment_nodes = std::max<std::size_t>(3U, options.max_fragment_nodes);
     options.max_fragment_edge_ratio_th = std::max(0.0, options.max_fragment_edge_ratio_th);
     options.max_fragment_residual_ratio_th = std::max(0.0, options.max_fragment_residual_ratio_th);
     options.min_fragment_merge_frames = std::max<std::size_t>(1U, options.min_fragment_merge_frames);
@@ -1409,6 +1408,8 @@ struct Clusterizer::Impl
     merge_fits = plane_fits;
 
     merge_sets.reset(clusters.size());
+    const bool can_merge_single_edge =
+      options.enable_fragment_merge && options.merge_connection_requirement == 2U;
     const auto can_fit_plane = [this](
       const PlaneAccumulator &side, const PlaneFit &fit, const double max_residual_ratio_th) {
         return side.rms_to_plane(fit) / effective_spacing(side.meanSpacing()) <= max_residual_ratio_th;
@@ -1423,11 +1424,9 @@ struct Clusterizer::Impl
       const PlaneAccumulator &first_accumulator = merge_accumulators[first];
       const PlaneAccumulator &second_accumulator = merge_accumulators[second];
       const bool is_fragment_merge = pair.edges < options.merge_connection_requirement;
-      if (is_fragment_merge &&
-        (!options.enable_fragment_merge || options.merge_connection_requirement != 2U ||
-        pair.edges != 1U ||
-        std::min(first_accumulator.count, second_accumulator.count) > options.max_fragment_nodes ||
-        pair.single_edge_ratio > options.max_fragment_edge_ratio_th))
+      // 接続が弱い場合だけ、短い1本接続としての救済可否を確認。
+      if (is_fragment_merge && !(can_merge_single_edge && pair.edges == 1U &&
+        pair.single_edge_ratio <= options.max_fragment_edge_ratio_th))
       {
         ++statistics.merge_insufficient_edge_pair_count;
         continue;
@@ -1453,9 +1452,10 @@ struct Clusterizer::Impl
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
       }
-      const double max_cluster_ratio_th = is_fragment_merge ?
-        std::min(options.max_normalized_cluster_residual, options.max_fragment_residual_ratio_th) :
-        options.max_normalized_cluster_residual;
+      // 通常統合と1本救済で共通の残差判定。接続の強さによる上限値だけの切替。
+      const double max_pair_ratio_th = is_fragment_merge ?
+        options.max_fragment_residual_ratio_th : std::numeric_limits<double>::infinity();
+      const double max_cluster_ratio_th = std::min(options.max_normalized_cluster_residual, max_pair_ratio_th);
       if (union_residual_ratio > max_cluster_ratio_th) {
         ++statistics.merge_absolute_residual_rejected_pair_count;
         continue;
@@ -1477,9 +1477,7 @@ struct Clusterizer::Impl
       // 各側全体から統合後平面への適合判定。大面の点数・間隔による小面の誤吸収防止。
       // 相手の元平面との相互照合は接続端点のみ。小面の法線誤差の遠方外挿の回避。
       // 連鎖統合時も現在の成分平面で接触部を評価。平行段差の重心移動による隠蔽防止。
-      const double max_side_ratio_th = is_fragment_merge ?
-        std::min(options.merge_smaller_side_residual_ratio, options.max_fragment_residual_ratio_th) :
-        options.merge_smaller_side_residual_ratio;
+      const double max_side_ratio_th = std::min(options.merge_smaller_side_residual_ratio, max_pair_ratio_th);
       if (!can_fit_plane(first_accumulator, union_fit, max_side_ratio_th) ||
         !can_fit_plane(second_accumulator, union_fit, max_side_ratio_th) ||
         !can_fit_plane(pair.first_contact, second_fit, max_side_ratio_th) ||

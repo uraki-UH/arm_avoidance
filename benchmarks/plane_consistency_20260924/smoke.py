@@ -48,7 +48,7 @@ def main():
             req = GetParameters.Request()
             names = ["min_plane_width_ratio", "growth_residual_ratio", "retention_residual_ratio",
                      "max_effective_spacing", "max_normalized_cluster_residual", "max_merge_side_residual_ratio",
-                     "enable_fragment_merge", "max_fragment_nodes", "max_fragment_edge_ratio_th",
+                     "enable_fragment_merge", "max_fragment_edge_ratio_th",
                      "max_fragment_residual_ratio_th", "min_fragment_merge_frames", "enable_directional_split",
                      "min_split_edge_angle_deg_th", "min_split_conflict_nodes", "min_split_conflict_ratio_th",
                      "max_isolated_frames", "enable_coplanar_absorption",
@@ -261,6 +261,31 @@ def main():
             for _ in range(6):
                 expect_frame(1, 36 if has_conflict else 37)
             print(f"PASS: coplanar absorption contacts={num_contacts}, conflict={has_conflict}", flush=True)
+        # 点数上限なしの1本接続統合。1,170点と99点の平面、および段差の分離。
+        for trial_idx, offset in enumerate((0.0, 0.04)):
+            graph.nodes.clear()
+            del graph.edges[:]
+            for width, height, origin_x, origin_z in ((45, 26, 0.0, 0.0), (11, 9, 2.25, offset)):
+                for row in range(height):
+                    for column in range(width):
+                        idx = len(graph.nodes)
+                        value = TopologicalNode()
+                        value.id = 50000 + trial_idx * 2000 + idx
+                        value.pos.x, value.pos.y = origin_x + column * 0.05, row * 0.05
+                        value.pos.z = origin_z
+                        value.normal.z = 1.0
+                        graph.nodes.append(value)
+                        if column:
+                            graph.edges.extend([idx - 1, idx])
+                        if row:
+                            graph.edges.extend([idx - width, idx])
+            expect_clusters(2)
+            graph.edges.extend([44, 1170])
+            for frame in range(1, num_confirmation_frames + 1):
+                expected = 1 if offset == 0.0 and frame == num_confirmation_frames else 2
+                expect_frame(expected, 1269)
+            expect_clusters(1 if offset == 0.0 else 2)
+            print(f"PASS: single-edge merge, 1170+99 nodes, offset={offset} m", flush=True)
         assert all(process.poll() is None for process in processes)
     finally:
         for process in reversed(processes):

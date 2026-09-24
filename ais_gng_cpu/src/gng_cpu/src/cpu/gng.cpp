@@ -115,6 +115,7 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     n1.priority_point_ids.clear();
     n1.priority_weights.clear();
     n1.priority_ratio = 0;
+    n1.enable_unknown_attention = true;
     // 入力点群の確保
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
@@ -235,6 +236,7 @@ void GNG::exec() {
     n1.priority_point_ids.clear();
     n1.priority_weights.clear();
     n1.priority_ratio = 0;
+    n1.enable_unknown_attention = true;
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};
     n1.observation_angle_table = nullptr;

@@ -789,10 +789,10 @@ TEST(PlaneClusterIncremental, InteriorPatchMergesOnlyWhenCoplanarAndConnected)
     for (std::size_t idx = 4U * 36U; idx < 5U * 36U; ++idx) {
       map.nodes[idx].pos.z = static_cast<float>(offset);
     }
-    for (const auto pair : {std::pair{0U, 1U}, {1U, 2U}, {6U, 7U}, {7U, 8U}}) {
+    for (const auto & pair : {std::pair{0U, 1U}, {1U, 2U}, {6U, 7U}, {7U, 8U}}) {
       connect_plane_patches(map, pair.first, pair.second, true);
     }
-    for (const auto pair : {std::pair{0U, 3U}, {3U, 6U}, {2U, 5U}, {5U, 8U}}) {
+    for (const auto & pair : {std::pair{0U, 3U}, {3U, 6U}, {2U, 5U}, {5U, 8U}}) {
       connect_plane_patches(map, pair.first, pair.second, false);
     }
     Clusterizer clusterizer{ClusterOptions{}};
@@ -911,7 +911,78 @@ TEST(PlaneClusterIncremental, fragment_merge_requires_consecutive_frames)
   }
 }
 
-// 長い橋・段差・緩い適合・大きい断片・明示的な接続要求による救済対象の制限。
+// 点数ではなく幾何と継続性による統合。大きい断片・同規模の平面・スケールの確認。
+TEST(PlaneClusterIncremental, single_edge_merge_has_no_node_count_limit)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (const bool is_equal_size : {false, true}) {
+      SCOPED_TRACE(scale);
+      SCOPED_TRACE(is_equal_size);
+      TopologicalMap map;
+      const double spacing = 0.05 * scale;
+      const double origin[3] = {0.0, 0.0, 0.0};
+      const double next_origin[3] = {45.0 * spacing, 0.0, 0.0};
+      const double axis_u[3] = {1.0, 0.0, 0.0};
+      const double axis_v[3] = {0.0, 1.0, 0.0};
+      appendGrid(map, 45U, 26U, spacing, origin, axis_u, axis_v, TopologicalMap::WALL);
+      appendGrid(map, is_equal_size ? 45U : 11U, is_equal_size ? 26U : 9U,
+        spacing, next_origin, axis_u, axis_v, TopologicalMap::WALL);
+      ClusterOptions options;
+      options.merge_connection_requirement = 2U;
+      Clusterizer clusterizer{options};
+      const auto initial = warmUp(clusterizer, map);
+      ASSERT_EQ(initial.clusters.clusters.size(), 2U);
+      map.edges.insert(map.edges.end(), {44U, 1170U});
+      for (std::size_t frame = 1U; frame < options.min_fragment_merge_frames; ++frame) {
+        const auto pending = clusterizer.update(map);
+        EXPECT_EQ(pending.clusters.clusters.size(), 2U);
+        EXPECT_EQ(pending.statistics.num_fragment_pending_pairs, 1U);
+      }
+      const auto merged = clusterizer.update(map);
+      ASSERT_EQ(merged.clusters.clusters.size(), 1U);
+      EXPECT_EQ(merged.statistics.num_fragment_merged_clusters, 1U);
+      EXPECT_EQ(merged.statistics.clustered_node_count, map.nodes.size());
+      const auto stable = warmUp(clusterizer, map);
+      EXPECT_EQ(clusterIds(stable), clusterIds(merged));
+      EXPECT_EQ(totalChanges(stable), 0U);
+    }
+  }
+}
+
+// 大平面に対する小さい側の段差・傾きの拒否。統合全体の低残差による隠蔽防止。
+TEST(PlaneClusterIncremental, single_edge_merge_keeps_large_patch_geometry_guards)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (std::size_t case_idx = 0U; case_idx < 3U; ++case_idx) {
+      SCOPED_TRACE(scale);
+      SCOPED_TRACE(case_idx);
+      TopologicalMap map;
+      const double spacing = 0.05 * scale;
+      const double origin[3] = {0.0, 0.0, 0.0};
+      const double next_origin[3] = {45.0 * spacing, 0.0,
+        (case_idx == 0U ? 0.12 : (case_idx == 1U ? 0.80 : 0.0)) * spacing};
+      const double axis_u[3] = {1.0, 0.0, 0.0};
+      const double axis_v[3] = {0.0, 1.0, 0.0};
+      const double tilted_u[3] = {std::sqrt(0.75), 0.0, 0.5};
+      appendGrid(map, 45U, 26U, spacing, origin, axis_u, axis_v, TopologicalMap::WALL);
+      appendGrid(map, 11U, 9U, spacing, next_origin, case_idx == 2U ? tilted_u : axis_u,
+        axis_v, TopologicalMap::WALL);
+      ClusterOptions options;
+      options.merge_connection_requirement = 2U;
+      Clusterizer clusterizer{options};
+      ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+      map.edges.insert(map.edges.end(), {44U, 1170U});
+      for (std::size_t frame = 0U; frame < 8U; ++frame) {
+        const auto rejected = clusterizer.update(map);
+        EXPECT_EQ(rejected.clusters.clusters.size(), 2U);
+        EXPECT_EQ(rejected.statistics.num_fragment_merged_clusters, 0U);
+        EXPECT_EQ(rejected.statistics.clustered_node_count, map.nodes.size());
+      }
+    }
+  }
+}
+
+// 長い橋・段差・緩い適合・接続なし・明示的な接続要求による救済対象の制限。
 TEST(PlaneClusterIncremental, fragment_merge_preserves_safety_gates)
 {
   for (const double scale : {0.1, 1.0, 10.0}) {
@@ -923,11 +994,10 @@ TEST(PlaneClusterIncremental, fragment_merge_preserves_safety_gates)
         case_idx == 1U ? 0.8 : (case_idx == 2U ? 0.12 : 0.0));
       ClusterOptions options;
       options.merge_connection_requirement = case_idx == 5U ? 3U : 2U;
-      options.max_fragment_nodes = case_idx == 3U ? 20U : 30U;
       options.enable_fragment_merge = case_idx != 4U;
       Clusterizer clusterizer{options};
       ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
-      map.edges.insert(map.edges.end(), {11U, 144U});
+      if (case_idx != 3U) {map.edges.insert(map.edges.end(), {11U, 144U});}
       for (std::size_t frame = 0U; frame < 8U; ++frame) {
         const auto result = clusterizer.update(map);
         EXPECT_EQ(result.clusters.clusters.size(), 2U);

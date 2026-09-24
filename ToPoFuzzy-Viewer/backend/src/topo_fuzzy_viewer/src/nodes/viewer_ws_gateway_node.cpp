@@ -61,7 +61,13 @@ struct TopologicalMapPacket {
     std::uint64_t version = 0;
 };
 
+struct marker_packet {
+    std::shared_ptr<std::string> data;
+    std::uint64_t version = 0;
+};
+
 struct TopologicalMapClientState {
+    bool enable_marker_ack = false;
     std::unordered_map<std::string, std::uint64_t> sent_versions;
     std::unordered_set<std::string> awaiting_topics;
 };
@@ -390,7 +396,12 @@ private:
         json in = json::parse(msg, nullptr, false); if (in.is_discarded()) return;
         std::string type = in.value("type", ""), method = in.value("method", ""), id = in.value("id", ""), tag = in.value("tag", "");
         if (type == "request.state") { sendCurrentState(ws); return; }
-        if (type == "stream.topological_map.applied") {
+        if (type == "stream.marker_array.ready") {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            topologicalMapClientStates_[ws].enable_marker_ack = true;
+            return;
+        }
+        if (type == "stream.topological_map.applied" || type == "stream.marker_array.applied") {
             handleTopologicalMapApplied(ws, in.value("topic", tag));
             return;
         }
@@ -580,18 +591,20 @@ private:
     }
 
     void broadcast_markers(const std::string& source_id, const json& payload) {
-        auto snapshot = arrow_protocol::with_shared_styles(payload);
-        std::lock_guard<std::mutex> lock(markerMutex_);
-        // 再接続用キャッシュは辞書を含む完全な状態
-        lastMarkerPayloads_[source_id] = snapshot.dump();
-        const auto signature = snapshot["arrow_styles"].dump();
-        const auto previous = last_arrow_styles_.find(source_id);
-        if (previous != last_arrow_styles_.end() && previous->second == signature) {
-            snapshot.erase("arrow_styles");
-        } else {
-            last_arrow_styles_[source_id] = signature;
+        // 中間フレーム省略後も復元可能な、矢印辞書込みの完全なスナップショット。
+        auto data = std::make_shared<std::string>(arrow_protocol::with_shared_styles(payload).dump());
+        bool can_schedule_flush = false;
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            auto& latest = pending_marker_packets_[source_id];
+            latest.data = std::move(data);
+            ++latest.version;
+            if (!topologicalMapFlushScheduled_) {
+                topologicalMapFlushScheduled_ = true;
+                can_schedule_flush = true;
+            }
         }
-        broadcastText(snapshot.dump());
+        if (can_schedule_flush) loop_->defer([this]() { flush_pending_render_streams(); });
     }
 
     // sourceMutex_保持中の購読生成。復帰時の型・QoSの再評価。
@@ -808,34 +821,35 @@ private:
             }
         }
         if (schedule_flush) {
-            loop_->defer([this]() { flushPendingTopologicalMaps(); });
+            loop_->defer([this]() { flush_pending_render_streams(); });
         }
     }
 
-    void flushPendingTopologicalMaps() {
+    void flush_pending_render_streams() {
         std::scoped_lock lock(pendingTopologicalMapMutex_, connectionMutex_);
         topologicalMapFlushScheduled_ = false;
-        for (const auto& [topic, packet] : pendingTopologicalMapPackets_) {
-            if (!packet.data) {
-                continue;
-            }
+        const auto send_latest = [this](const std::string& topic, std::string_view data,
+                                       std::uint64_t version, bool is_marker) {
             for (auto* ws : connections_) {
                 auto& client = topologicalMapClientStates_[ws];
-                if (client.awaiting_topics.find(topic) != client.awaiting_topics.end()) {
-                    continue;
-                }
-                if (client.sent_versions[topic] >= packet.version) {
-                    continue;
-                }
-                if (ws->getBufferedAmount() < websocketMaxBackpressureBytes_) {
-                    ws->send(
-                        std::string_view(
-                            reinterpret_cast<const char*>(packet.data->data()), packet.data->size()),
-                        uWS::OpCode::BINARY);
-                    client.sent_versions[topic] = packet.version;
-                    client.awaiting_topics.insert(topic);
-                }
+                const bool enable_ack = !is_marker || client.enable_marker_ack;
+                if (enable_ack && client.awaiting_topics.count(topic)) continue;
+                if (client.sent_versions[topic] >= version) continue;
+                if (ws->getBufferedAmount() >= websocketMaxBackpressureBytes_) continue;
+                // 送信拒否時の未達ACK待ち防止。再送はdrainまたは次回更新時。
+                const auto status = ws->send(data, is_marker ? uWS::OpCode::TEXT : uWS::OpCode::BINARY);
+                if (status == WebSocket::SendStatus::DROPPED) continue;
+                client.sent_versions[topic] = version;
+                if (enable_ack) client.awaiting_topics.insert(topic);
             }
+        };
+        // Graphを先に処理し、大きいMarker送信による待機を抑制。
+        for (const auto& [topic, packet] : pendingTopologicalMapPackets_) {
+            if (packet.data) send_latest(topic, std::string_view(
+                reinterpret_cast<const char*>(packet.data->data()), packet.data->size()), packet.version, false);
+        }
+        for (const auto& [topic, packet] : pending_marker_packets_) {
+            if (packet.data) send_latest(topic, *packet.data, packet.version, true);
         }
     }
 
@@ -859,7 +873,7 @@ private:
             }
         }
         if (schedule_flush) {
-            loop_->defer([this]() { flushPendingTopologicalMaps(); });
+            loop_->defer([this]() { flush_pending_render_streams(); });
         }
     }
 
@@ -998,6 +1012,7 @@ private:
         {
             std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
             pendingTopologicalMapPackets_.erase(id);
+            pending_marker_packets_.erase(id);
             for (auto& [_, client] : topologicalMapClientStates_) {
                 client.awaiting_topics.erase(id);
                 client.sent_versions.erase(id);
@@ -1032,26 +1047,30 @@ private:
             std::lock_guard<std::mutex> l(clusterFeatureMutex_);
             lastClusterFeaturePayloads_.erase(id);
         }
-        {
-            std::lock_guard<std::mutex> l(markerMutex_);
-            lastMarkerPayloads_.erase(id);
-            last_arrow_styles_.erase(id);
-        }
     }
 
     void sendCurrentState(WebSocket* ws) {
+        {
+            std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
+            auto& client = topologicalMapClientStates_[ws];
+            // 明示的な状態要求時の再送。反映待ちのMarkerは追加送信なし。
+            for (const auto& [topic, packet] : pending_marker_packets_) {
+                (void)packet;
+                if (!client.awaiting_topics.count(topic)) client.sent_versions.erase(topic);
+            }
+        }
+        ws->send(json({{"type", "stream.capabilities"}, {"marker_array_applied", true}}).dump(), uWS::OpCode::TEXT);
+        loop_->defer([this]() { flush_pending_render_streams(); });
         std::lock_guard<std::mutex> l1(graphMutex_);
         std::lock_guard<std::mutex> l2(nodeFeatureMutex_);
         std::lock_guard<std::mutex> l3(clusterFeatureMutex_);
         std::lock_guard<std::mutex> l4(robotMutex_);
-        std::lock_guard<std::mutex> l5(markerMutex_);
         std::lock_guard<std::mutex> l6(tfMutex_);
         std::lock_guard<std::mutex> l7(voxelMutex_);
         for (auto& p : lastGraphPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& p : lastNodeFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastClusterFeaturePayloads_) ws->send(p.second.dump(), uWS::OpCode::TEXT);
         for (auto& p : lastRobotDescriptions_) ws->send(p.second, uWS::OpCode::TEXT);
-        for (auto& p : lastMarkerPayloads_) ws->send(p.second, uWS::OpCode::TEXT);
         for (auto& [tag, state] : voxelStreamStates_) {
             if (state.latest) {
                 ws->send(
@@ -1068,6 +1087,7 @@ private:
         behavior.maxPayloadLength = 64 * 1024 * 1024;
         behavior.maxBackpressure = websocketMaxBackpressureBytes_;
         behavior.closeOnBackpressureLimit = false;
+        behavior.drain = [this](auto*) { flush_pending_render_streams(); };
         behavior.open = [this](auto* ws) {
             bool start_streaming = false;
             {
@@ -1128,6 +1148,7 @@ private:
         {
             std::lock_guard<std::mutex> lock(pendingTopologicalMapMutex_);
             pendingTopologicalMapPackets_.clear();
+            pending_marker_packets_.clear();
             topologicalMapClientStates_.clear();
             topologicalMapFlushScheduled_ = false;
         }
@@ -1293,13 +1314,13 @@ private:
     rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr nonplane_source_map_sub_;
     rclcpp::Subscription<ais_gng_msgs::msg::PlaneClusterArray>::SharedPtr nonplane_source_plane_cluster_sub_;
     std::unordered_map<std::string, std::shared_ptr<void>> activeDynamicSubs_;
-    std::unordered_map<std::string, std::string> last_arrow_styles_;
-    std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_, lastMarkerPayloads_;
+    std::unordered_map<std::string, std::string> activeSubTypes_, lastGraphPayloads_, lastRobotDescriptions_;
     std::unordered_map<std::string, std::string> active_source_publisher_signatures_;
     std::unordered_map<std::string, json> lastNodeFeaturePayloads_, lastClusterFeaturePayloads_;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> lastPointCloudForwardTime_;
     std::unordered_map<std::string, PendingPointCloudPacket> pendingPointCloudPackets_;
     std::unordered_map<std::string, TopologicalMapPacket> pendingTopologicalMapPackets_;
+    std::unordered_map<std::string, marker_packet> pending_marker_packets_;
     std::unordered_map<WebSocket*, TopologicalMapClientState> topologicalMapClientStates_;
     std::string lastStaticTfPayload_;
     std::unordered_map<std::string, geometry_msgs::msg::TransformStamped> staticTransforms_;
@@ -1307,7 +1328,7 @@ private:
     std::unordered_map<std::string, std_msgs::msg::UInt32MultiArray::SharedPtr> pending_nonplane_components_;
     ais_gng_msgs::msg::PlaneClusterArray::SharedPtr latest_nonplane_source_plane_clusters_;
     std::chrono::steady_clock::time_point lastTfTime_;
-    std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, markerMutex_, tfMutex_, nonplane_source_mutex_;
+    std::mutex connectionMutex_, sourceMutex_, sourceSnapshotMutex_, graphMutex_, nodeFeatureMutex_, clusterFeatureMutex_, robotMutex_, tfMutex_, nonplane_source_mutex_;
     std::mutex pointCloudRateMutex_, pendingPointCloudMutex_, pendingTopologicalMapMutex_, pendingRobotPoseMutex_, voxelMutex_;
     std::unordered_map<std::string, VoxelStreamState> voxelStreamStates_;
     std::string lastSourcesSnapshot_;

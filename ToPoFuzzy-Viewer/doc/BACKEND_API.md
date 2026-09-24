@@ -136,9 +136,10 @@ ROSメッセージ形式の変更なし。[ラベル値と設定移管](../commo
 他のMarkerとの自動照合・色統合なし。詳細は`common/ws_protocol_v2.md`を参照。
 候補配列はID・位置・完全な姿勢・状態を配信。別のreachability購読なし。
 色・寸法・基準位置・補助軸はブラウザの共通矢印設定。把持候補は共有スタイルで矢先位置基準・補助軸OFFを指定。
-標準Markerの矢印は`arrow_style_id`で共有`arrow_styles`辞書を参照。辞書は初回・変更・再接続時に配信し、省略時は前回値を保持。
+標準Markerの矢印は`arrow_style_id`で共有`arrow_styles`辞書を参照。現行サーバーは各スナップショットに完全な辞書を付与し、旧配信の辞書省略も受信可能。
 候補状態色も同じ辞書の`candidate_state.state_colors`で配信し、ROSとViewerで共通のsRGB定義を使用。
 Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再起動時も必要に応じて再購読。
+Markerは対応能力の確認後、クライアント・トピックごとに反映待ち1件と最新入力1件だけを保持。大容量の平面ノードMarkerも同じ制御で配信し、ノード・エッジ数は維持。旧クライアント・旧サーバーとの接続も維持。[通知と再接続の規約](../common/ws_protocol_v2.md#markerの反映完了に合わせた配信)。
 標準`TEXT_VIEW_FACING`の文字は`type: "text"`・`text`として配信し、カメラへ正対する文字として描画。
 `/grasp_pose_refined/markers`の棄却理由も同じ経路を使用。高さ・色・改行・削除は[文字Marker仕様](../common/ws_protocol_v2.md#text-marker)を参照。
 詳細は[WS v2](../common/ws_protocol_v2.md)と[矢印共通仕様](../common/arrow_visual_spec.md)を参照。

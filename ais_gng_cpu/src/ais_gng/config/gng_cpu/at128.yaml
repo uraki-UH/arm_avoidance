@@ -3,9 +3,22 @@ ais_gng_node:
     plane_clustering: true
     curve_clustering: false #平面クラスタリングfalseでは実行できない
 
+    # 非平面連結成分の近傍への重点学習。ON時は旧unknown重点枠を置換。
+    enable_nonplane_attention: true
+    # 重点対象となる成分の構成ノード数。成分データ自体の除外なし。
+    nonplane_attention.min_component_nodes: 5
+    # 前回の対象ノードから現在入力点への近傍半径[m]。
+    nonplane_attention.radius: 0.3
+    # 総学習回数に対する重点枠の割合。残余枠は全体学習。
+    nonplane_attention.ratio: 0.5
+    # 前回の対象情報の有効期間[sec]。
+    nonplane_attention.timeout_sec: 0.5
+    # 重点候補点群の確認用出力。購読時のみ点群化。
+    nonplane_attention.enable_debug_points: true
+
     node.num_max: 20000
     node.learning_num: 4000
-    node.unknown_learning_rate: 0.8
+    node.unknown_learning_rate: 0.3
     node.eta_s1: 0.08
     node.eta_s2: 0.008
     node.eta_decay_rate: 1.00

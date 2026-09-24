@@ -1,6 +1,59 @@
 # 平面クラスタの整合化・局所スケール追従と内部小面統合の比較
 
-## 未所属ノードの面内取り込み救済（2026-09-25）
+## 1本接続統合の点数制限撤去（2026-09-25）
+
+`max_fragment_nodes`の30点上限と設定を削除。相対点数条件や新しい設定の追加なし。
+短い1本接続・両側／接触部／統合後の残差・連続3フレーム確認を維持し、残差上限の選択を共通化。
+通常の接続要求2本の場合だけ救済。要求3本以上・長い橋・段差・傾斜面の制約を維持。
+追加探索・全点再走査・新しい処理段階なし。ただし従来は点数で除外した候補にも既存の平面評価が必要。
+
+保存済み同一入力150フレーム、先頭50を除く平均の交互3試行中央値：[simple_summary.json](simple_summary.json)。
+
+| 項目 | 点数制限あり | 点数制限なし |
+| --- | ---: | ---: |
+| 平面処理CPU時間 [ms] | 12.075 | 12.205 |
+| 出力クラスタ数 | 64.99 | 63.99 |
+| 平面所属点数 | 12,627.35 | 12,620.16 |
+| 平面所属率 [%] | 65.960 | 65.923 |
+| 未所属点数 | 6,516.55 | 6,523.74 |
+
+CPU時間は約1.1%増で、試行分布には重なりあり。高速化・所属点増加の主張なし。
+最終出力の位置とエッジの一致を確認したうえで、旧ID 49の93点中87点がID 11の1,170点へ合流、5点は未所属、1点はID 6へ移動。最終クラスタ数69→68。
+実bagの誤統合率、全断片の解消、ライブ画像との対応は未検証。
+`--disable-fragment-merge`時は全150フレームの非時間集計列が前後一致。ノード単位の完全一致検証とは別。
+
+コンテナ内（`/ros2_ws/src`）での比較コマンド：
+
+```bash
+for method in simple_before simple_after; do
+  timeout 100 bash benchmarks/plane_consistency_20260924/build.sh "$method"
+done
+for trial in 1 2 3; do
+  for method in simple_before simple_after; do
+    timeout 45 artifacts/plane_consistency_20260924/"$method"/replay \
+      artifacts/plane_consistency_20260924/frames.bin \
+      > artifacts/plane_consistency_20260924/"$method"/final_"$trial".csv
+  done
+done
+python3 benchmarks/plane_consistency_20260924/summarize.py --prefix simple_
+```
+
+変更前ソースとヘッダは`artifacts/plane_consistency_20260924/simple_before/`へ保存。
+変更後の平面53テスト成功、変更前は点数制限撤去の追加1件が失敗。1,170＋99点／1,170＋1,170点、スケール0.1/1/10倍、段差・傾斜面拒否を検証。
+ROS用Releaseビルドと関連133テスト（平面53・非平面6・曲面74）が成功。
+`install.sh simple_runtime_before`で3バイナリをinode単位で反映、変更前を保存。
+
+```bash
+ROS_DOMAIN_ID=173 ROS_LOCALHOST_ONLY=1 timeout -s INT -k 15 90 \
+  python3 benchmarks/plane_consistency_20260924/smoke.py
+```
+
+上記ROS試験で共有パラメータ・従来ケースに加え、1,170＋99点の3フレーム統合と段差0.04 mの拒否を確認。
+ログは`simple_ros_build.log`・`simple_ros_ctest.log`・`simple_smoke.log`。
+試験ノードPID 221849/221861、比較・ビルドプロセスは終了。既存GNG/平面212638/212642、bag 202445、gateway 202494と3コンテナの稼働を維持。
+ROS試験後も検証用・配布先の3バイナリの一致を確認。反映前から稼働中のGNGは同じlaunchで再起動が必要。
+
+## 未所属ノードの面内取り込み救済（先行測定、2026-09-25）
 
 通常条件で拒否した未所属点だけを追加判定。確認済みの単一平面への短い接続と、全隣接エッジの面内方向を要求。
 1本接続は通常要求2本のときだけ成長距離0.15まで、通常の接続要求を満たす複数接続は保持距離0.30まで。
@@ -25,7 +78,7 @@
 未所属点は約13.4%減少。救済数は平均69.85点/フレーム。所属点数の増加は実シーンの正解ラベルによる品質保証とは別。
 解放・分割回数は増加。CPU時間は試行の分布に重なりがあり、厳密な高速化とは断定しない。
 OFF時は全150フレームの非時間集計列が変更前と一致。ノード単位の完全一致検証とは別。
-変更前保存ソースは`absorption_before/plane_cluster_incremental.cpp`、現行ヘッダと組み合わせたABI統一比較。
+変更前保存ソースは`absorption_before/plane_cluster_incremental.cpp`、当時の共通ヘッダと組み合わせたABI統一比較。現行ビルドスクリプトでは点数上限廃止前の`simple_before/include`を使用。
 
 規模別比較（各100測定フレーム、先頭20フレーム除外、交互3試行のCPU平均時間の中央値）：
 
@@ -102,7 +155,7 @@ CPU時間は約6.6%減少。過去測定との時間差ではなく今回の交�
 クラスタ総数の減少は、実シーンの全領域での分割正解を示す結果ではない。
 長い同一平面の統合、段差・直交面・密度差のある平行面の分離は、正解形状既知の回帰テストで確認。
 
-## 条件・検証
+## 先行測定の条件・検証
 
 - 入力：`/rosbag/fuzzy/Macnica_交差点分析/algo_0000_ros2/algo_0000_ros2.db3`の`/lidar_points`先頭150件。
 - 取得時の`at128.yaml`をコピーしてCPU GNGへ設定。入力voxel 0.5 m、learning 4000、ノード上限20,000。評価区間の平均ノード数19,143.90。

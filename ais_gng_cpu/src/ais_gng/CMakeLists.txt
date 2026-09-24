@@ -118,6 +118,10 @@ ament_target_dependencies(surface_model ais_gng_msgs rclcpp std_msgs visualizati
 target_link_libraries(plane_cluster_incremental_node surface_model)
 
 if(BUILD_TESTING)
+  ament_add_gtest(test_nonplane_attention test/test_nonplane_attention.cpp)
+  target_include_directories(test_nonplane_attention PRIVATE include)
+  target_link_libraries(test_nonplane_attention nonplane_component_extractor)
+  ament_target_dependencies(test_nonplane_attention ais_gng_msgs)
   ament_add_gtest(
     test_plane_cluster_incremental
     test/test_plane_cluster_incremental.cpp

@@ -87,6 +87,10 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
+MY_API void gng_set_unknown_attention_enabled(uint8_t enable_unknown_attention) {
+    gng.n1.enable_unknown_attention = enable_unknown_attention != 0;
+}
+
 MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio) {
     auto &core = gng.n1;
     core.priority_point_ids.clear();

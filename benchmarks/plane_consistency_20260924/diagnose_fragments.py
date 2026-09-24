@@ -114,7 +114,6 @@ def main():
         value["has_fragment_geometry"] = bool(
             params.get("enable_fragment_merge", False) and params["merge_connection_requirement"] == 2 and
             value["num_edges"] == 1 and not value["failed_geometry"] and
-            min(value["sizes"]) <= params["max_fragment_nodes"] and
             value["max_contact_length_ratio"] <= params["max_fragment_edge_ratio_th"] and
             max(ratios["absolute_residual"] * params["max_normalized_cluster_residual"],
                 max(ratios["side_residual"], ratios["contact_residual"]) * params["max_merge_side_residual_ratio"])

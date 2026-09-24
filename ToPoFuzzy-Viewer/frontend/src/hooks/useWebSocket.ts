@@ -716,6 +716,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     const pointCloudFrameIdsRef = useRef<Map<string, string>>(new Map());
     const pendingRequestsRef = useRef<Map<string, PendingRequest>>(new Map());
     const pendingGraphUpdatesRef = useRef<Map<string, QueuedGraphUpdate>>(new Map());
+    const pending_marker_updates_ref = useRef<Map<string, MarkerArrayData>>(new Map());
+    const enable_marker_ack_ref = useRef(false);
     const pendingTopologicalMapAppliedRef = useRef<Set<string>>(new Set());
     const topologicalMapReceivedAtRef = useRef<Map<string, number>>(new Map());
     const pendingVoxelUpdatesRef = useRef<Map<string, QueuedVoxelUpdate>>(new Map());
@@ -767,6 +769,29 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
                 return changed ? next : prev;
             });
+        }
+
+        if (pending_marker_updates_ref.current.size > 0) {
+            const batch = Array.from(pending_marker_updates_ref.current);
+            pending_marker_updates_ref.current.clear();
+            setMarkerData(prev => {
+                const next = { ...prev };
+                for (const [tag, data] of batch) next[tag] = {
+                    ...data, visible: prev[tag]?.visible ?? true,
+                    arrow_styles: data.arrow_styles ?? prev[tag]?.arrow_styles ?? {},
+                };
+                return next;
+            });
+            if (enable_marker_ack_ref.current) {
+                const expected_socket = wsRef.current;
+                // React反映後の描画機会を待った受信再開。旧接続からの通知は破棄。
+                window.requestAnimationFrame(() => {
+                    if (expected_socket !== wsRef.current || expected_socket?.readyState !== WebSocket.OPEN) return;
+                    for (const [topic] of batch) expected_socket.send(JSON.stringify({
+                        type: 'stream.marker_array.applied', topic,
+                    }));
+                });
+            }
         }
 
         if (pendingTopologicalMapAppliedRef.current.size > 0) {
@@ -905,6 +930,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             pointCloudFrameIdsRef.current.clear();
             flushPendingWithError('WebSocket reconnected');
             pendingGraphUpdatesRef.current.clear();
+            pending_marker_updates_ref.current.clear();
+            enable_marker_ack_ref.current = false;
             pendingTopologicalMapAppliedRef.current.clear();
             topologicalMapReceivedAtRef.current.clear();
             pendingVoxelUpdatesRef.current.clear();
@@ -1029,22 +1056,24 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                                 pointCloudFrameIdsRef.current.delete(p.topic);
                             }
                         },
+                        'stream.capabilities': (p) => {
+                            if (p.marker_array_applied === true && !enable_marker_ack_ref.current) {
+                                enable_marker_ack_ref.current = true;
+                                socket.send(JSON.stringify({ type: 'stream.marker_array.ready' }));
+                            }
+                        },
                         'stream.marker_array': (p) => {
                             if (!Array.isArray(p.markers)) return;
                             const markers = p.markers as MarkerMessage[];
                             const frameIds = marker_frame_ids(markers);
-                            setMarkerData(prev => ({
-                                ...prev,
-                                [tag]: {
-                                    id: tag, name: p.name || tag, tag,
-                                    source_type: p.source_type === 'pose_array' ? 'pose_array' : undefined,
-                                    arrow_styles: p.arrow_styles ?? prev[tag]?.arrow_styles ?? {},
-                                    frameId: frameIds.length === 1 ? frameIds[0] : undefined,
-                                    frameIds,
-                                    markers, count: markers.length,
-                                    visible: prev[tag]?.visible ?? true,
-                                } as MarkerArrayData,
-                            }));
+                            pending_marker_updates_ref.current.set(tag, {
+                                id: tag, name: p.name || tag, tag,
+                                source_type: p.source_type === 'pose_array' ? 'pose_array' : undefined,
+                                arrow_styles: p.arrow_styles ?? pending_marker_updates_ref.current.get(tag)?.arrow_styles,
+                                frameId: frameIds.length === 1 ? frameIds[0] : undefined,
+                                frameIds, markers, count: markers.length,
+                            });
+                            scheduleStreamFlush();
                         },
                         'stream.marker': (p) => {
                             if (!p.marker) return;
@@ -1176,6 +1205,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                             const targetId = p.topic || p.tag || p.id;
                             if (!targetId) return;
                             pendingPointCloudUpdatesRef.current.delete(targetId);
+                            pending_marker_updates_ref.current.delete(targetId);
                             pendingVoxelUpdatesRef.current.delete(targetId);
                             voxelStreamSnapshotsRef.current.delete(targetId);
                             setPointClouds(prev => {
@@ -1225,6 +1255,8 @@ export function useWebSocket(url: string): UseWebSocketReturn {
                 pendingTopicQueueRef.current = [];
                 pointCloudFrameIdsRef.current.clear();
                 pendingGraphUpdatesRef.current.clear();
+                pending_marker_updates_ref.current.clear();
+                enable_marker_ack_ref.current = false;
                 pendingTopologicalMapAppliedRef.current.clear();
                 topologicalMapReceivedAtRef.current.clear();
                 pendingVoxelUpdatesRef.current.clear();
@@ -1272,6 +1304,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
     useEffect(() => {
         const pendingGraphUpdates = pendingGraphUpdatesRef.current;
+        const pending_marker_updates = pending_marker_updates_ref.current;
         const pendingTopologicalMapApplied = pendingTopologicalMapAppliedRef.current;
         const topologicalMapReceivedAt = topologicalMapReceivedAtRef.current;
         const pendingVoxelUpdates = pendingVoxelUpdatesRef.current;
@@ -1282,6 +1315,7 @@ export function useWebSocket(url: string): UseWebSocketReturn {
             intentionalCloseRef.current = true;
             flushPendingWithError('WebSocket hook disposed');
             pendingGraphUpdates.clear();
+            pending_marker_updates.clear();
             pendingTopologicalMapApplied.clear();
             topologicalMapReceivedAt.clear();
             pendingVoxelUpdates.clear();
