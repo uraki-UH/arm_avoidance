@@ -35,6 +35,7 @@ class topological_map_goal_selector_node : public rclcpp::Node {
         [this](ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr msg) {
           map_ = std::move(msg);
           spatial_index_.update(map_);
+          selection_cache_.update_map(map_);
         });
     candidates_sub_ = create_subscription<gng_control_msgs::msg::GraspCandidateArray>(
         declare_parameter("candidate_topic", "/grasp_pose_cands"), qos,
@@ -43,7 +44,10 @@ class topological_map_goal_selector_node : public rclcpp::Node {
     if (!feature_topic.empty() && options_.manipulability_weight > 0.0) {
       features_sub_ = create_subscription<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
           feature_topic, rclcpp::QoS(1).reliable(),
-          [this](ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray::ConstSharedPtr msg) { features_ = std::move(msg); });
+          [this](ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray::ConstSharedPtr msg) {
+            features_ = std::move(msg);
+            selection_cache_.update_features(features_);
+          });
     }
     tf_listener_ = std::make_unique<tf2_ros::TransformListener>(tf_buffer_);
     // 候補が静止していてもTF変化を反映。待機timeoutなしの最新TF参照。
@@ -60,7 +64,7 @@ class topological_map_goal_selector_node : public rclcpp::Node {
                   "目標選択のTF取得失敗: %s", error.what());
               return std::nullopt;
             }
-          }, &spatial_index_);
+          }, &spatial_index_, &selection_cache_);
       output_pub_->publish(selected.map);
       std_msgs::msg::Int32MultiArray ids;
       ids.data = std::move(selected.ids);
@@ -71,6 +75,7 @@ class topological_map_goal_selector_node : public rclcpp::Node {
  private:
   goal_selection_options options_;
   goal_spatial_index spatial_index_;
+  goal_selection_cache selection_cache_;
   tf2_ros::Buffer tf_buffer_;
   std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
   ais_gng_msgs::msg::TopologicalMap::ConstSharedPtr map_;

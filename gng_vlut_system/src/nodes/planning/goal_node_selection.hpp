@@ -15,6 +15,7 @@
 #include <gng_control_msgs/msg/grasp_candidate_array.hpp>
 #include <tf2/LinearMath/Transform.h>
 #include "goal_spatial_index.hpp"
+#include "goal_selection_cache.hpp"
 
 namespace robot_sim::planning {
 
@@ -39,7 +40,8 @@ inline goal_selection_result select_goal_nodes(
     const gng_control_msgs::msg::GraspCandidateArray &source,
     const ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray *features,
     const goal_selection_options &options, const goal_transform_lookup &lookup,
-    const goal_spatial_index *spatial_index = nullptr) {
+    const goal_spatial_index *spatial_index = nullptr,
+    const goal_selection_cache *selection_cache = nullptr) {
   goal_selection_result result;
   if (!map) return result;
   result.map.header = map->header;
@@ -90,7 +92,9 @@ inline goal_selection_result select_goal_nodes(
     }
   }
   std::unordered_map<uint16_t, const ais_gng_feature_msgs::msg::TopologicalNodeFeature *> node_features;
-  if (features && options.manipulability_weight > 0.0) {
+  const bool has_feature_cache = selection_cache && selection_cache->has_features(features);
+  const bool has_features = features && options.manipulability_weight > 0.0;
+  if (has_features && !has_feature_cache) {
     for (const auto &feature : features->features) node_features[feature.node_id] = &feature;
   }
 
@@ -129,9 +133,16 @@ inline goal_selection_result select_goal_nodes(
         const auto node_dir = normalize(position(node.normal));
         if (!node_dir.fuzzyZero()) score += options.orientation_weight * (1.0 - std::abs(node_dir.dot(target_dir)));
       }
-      const auto feature = node_features.find(node.id);
-      if (feature != node_features.end()) {
-        const auto &value = *feature->second;
+      const ais_gng_feature_msgs::msg::TopologicalNodeFeature *feature = nullptr;
+      if (has_features) {
+        if (has_feature_cache) feature = selection_cache->find_feature(node.id);
+        else {
+          const auto found_feature = node_features.find(node.id);
+          if (found_feature != node_features.end()) feature = found_feature->second;
+        }
+      }
+      if (feature) {
+        const auto &value = *feature;
         const auto condition = value.manip_valid && std::isfinite(value.manip_condition_number)
             ? std::max(1.0, static_cast<double>(value.manip_condition_number)) : 100.0;
         score += options.manipulability_weight * std::log(condition);
@@ -143,8 +154,12 @@ inline goal_selection_result select_goal_nodes(
     for (std::size_t idx = 0; idx < num; ++idx) selected_ids.insert(map->nodes[scored[idx].second].id);
   }
   result.ids.assign(selected_ids.begin(), selected_ids.end());
-  for (const auto &node : map->nodes) {
-    if (selected_ids.count(node.id)) result.map.nodes.push_back(node);
+  if (selection_cache && selection_cache->has_map(map)) {
+    selection_cache->append_nodes(result.ids, result.map);
+  } else {
+    for (const auto &node : map->nodes) {
+      if (selected_ids.count(node.id)) result.map.nodes.push_back(node);
+    }
   }
   return result;
 }

@@ -1,59 +1,72 @@
 #pragma once
 
-#include <SpatialTree/SpatialTree.hpp>
+#include <bsp3d/bsp3d.hpp>
+#include <deque>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <tf2/LinearMath/Transform.h>
 
 namespace robot_sim::planning {
 
-// map座標系の静的索引。TF・ID・ラベル変更では位置索引の再構築なし
+// map座標系の差分索引。TF・ID・ラベル変更では空間索引の更新なし
 class goal_spatial_index {
-  using point = SpatialTree::Point<double, 3>;
+  using point = bsp3d::point3<double>;
   struct entry {
     point position;
     std::size_t idx;
+    void *spatial_handle = nullptr;
+    int index_in_cell = -1;
+    bool is_indexed = false;
   };
-  // 外部SpatialTreeのTraits APIへの適合。静的用途のセルハンドル保持なし
-  struct traits {
-    static const point &getPosition(const entry *value) { return value->position; }
-    static void setHandle(entry *, const void *) {}
-    static void setIndex(entry *, int) {}
-    static const void *getHandle(const entry *) { return nullptr; }
-  };
-  using tree = SpatialTree::AdaptiveTree<entry, double, 3, traits>;
+  using tree = bsp3d::Index<entry, double>;
   using map_type = ais_gng_msgs::msg::TopologicalMap;
 
 public:
   bool update(map_type::ConstSharedPtr map) {
     if (map == map_) return false;
-    const bool has_same_positions = map && map_ && map->nodes.size() == map_->nodes.size() &&
-        std::equal(map->nodes.begin(), map->nodes.end(), map_->nodes.begin(), [](const auto &a, const auto &b) {
-          const auto equal = [](float x, float y) { return x == y || (std::isnan(x) && std::isnan(y)); };
-          return equal(a.pos.x, b.pos.x) && equal(a.pos.y, b.pos.y) && equal(a.pos.z, b.pos.z);
-        });
+    if (!map) {
+      tree_.reset();
+      points_.clear();
+      map_.reset();
+      return true;
+    }
+    const auto old_num = points_.size();
+    const auto num = map->nodes.size();
+    bool has_changes = !map_ || old_num != num;
+    // deque内の要素アドレスを保持。件数変更時も残存要素のハンドルが有効。
+    while (points_.size() > num) {
+      auto &value = points_.back();
+      if (value.is_indexed) tree_->remove(&value);
+      points_.pop_back();
+    }
+    while (points_.size() < num) {
+      const auto idx = points_.size();
+      points_.push_back({point{}, idx});
+    }
+    for (std::size_t idx = 0; idx < num; ++idx) {
+      const auto &p = map->nodes[idx].pos;
+      const point next{p.x, p.y, p.z};
+      auto &value = points_[idx];
+      bool has_same_position = idx < old_num;
+      for (int axis = 0; axis < 3; ++axis)
+        has_same_position = has_same_position && (value.position[axis] == next[axis] ||
+            (std::isnan(value.position[axis]) && std::isnan(next[axis])));
+      if (has_same_position) continue;
+      has_changes = true;
+      const bool is_finite = std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+      if (value.is_indexed && is_finite) {
+        tree_->updatePosition(&value, next);
+      } else {
+        if (value.is_indexed) tree_->remove(&value);
+        value.position = next;
+        value.is_indexed = is_finite;
+        if (is_finite) {
+          if (!tree_) tree_ = std::make_unique<tree>();
+          tree_->add(&value);
+        }
+      }
+    }
     map_ = std::move(map);
-    if (has_same_positions) return false;
-    tree_.reset();
-    points_.clear();
-    if (!map_) return true;
-    points_.reserve(map_->nodes.size());
-    for (std::size_t idx = 0; idx < map_->nodes.size(); ++idx) {
-      const auto &p = map_->nodes[idx].pos;
-      if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z))
-        points_.push_back({point{p.x, p.y, p.z}, idx});
-    }
-    if (points_.empty()) return true;
-    point min_point = points_.front().position, max_point = min_point;
-    for (const auto &value : points_) for (int axis = 0; axis < 3; ++axis) {
-      min_point[axis] = std::min(min_point[axis], value.position[axis]);
-      max_point[axis] = std::max(max_point[axis], value.position[axis]);
-    }
-    const point span = max_point - min_point;
-    const double half = std::max({span[0], span[1], span[2], 0.01}) * 0.5 + 0.01;
-    tree_ = std::make_unique<tree>(SpatialTree::BoundingBox<double, 3>{
-        (min_point + max_point) * 0.5, point{half, half, half}}, SpatialTree::SpatialTreeParams<double>{});
-    for (auto &value : points_) tree_->add(&value);
-    return true;
+    return has_changes;
   }
 
   bool has_map(const map_type *map) const { return map && map == map_.get(); }
@@ -84,7 +97,7 @@ public:
     for (int axis = 0; axis < 3; ++axis)
       has_finite_bounds = has_finite_bounds && std::isfinite(min_point[axis]) && std::isfinite(max_point[axis]);
     if (!has_finite_bounds) {
-      for (const auto &value : points_) result.push_back(value.idx);
+      for (const auto &value : points_) if (value.is_indexed) result.push_back(value.idx);
     } else {
       tree_->query_aabb(min_point, max_point, [&](const entry *value) { result.push_back(value->idx); });
     }
@@ -93,8 +106,8 @@ public:
 
 private:
   map_type::ConstSharedPtr map_;
-  std::vector<entry> points_;
+  std::deque<entry> points_;
   std::unique_ptr<tree> tree_;
 };
 
-}  // 目標選択の静的空間索引
+}  // 目標選択の差分空間索引

@@ -2,7 +2,7 @@
 
 動く点群（GNG のノードなど）向けの空間索引と Growing Neural Gas の、**単一ヘッダ・外部依存なし**のパッケージです。3次元向けに既定値を調整してあります。
 
-中身は [`SpatialTree`](../SpatialTree) の実装そのもので、必要なヘッダを 1ファイルに結合しています。
+旧SpatialTreeを起源とする二分木の実装です。現在の正本は `include/bsp3d/bsp3d.hpp`。外部のSpatialTreeディレクトリや生成スクリプトへの依存はありません。内部の `SpatialTree::` 名前空間は既存APIとの互換用です。
 
 ## 使い方
 
@@ -43,7 +43,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ./build/bsp3d_gng      # GNG の学習
 ```
 
-## 性能（Apple M3、float、GNG の学習ループ 1反復あたり）
+## 過去の性能記録（Apple M3、float、GNG の学習ループ 1反復あたり）
 
 定常状態（ノード数の20倍の反復で暖機した後）で測定した値です。
 
@@ -95,10 +95,30 @@ SIMD 総当たりとの比較（同一実行内で測ったもの。実行ごと
 - **座標は必ず `updatePosition` 経由で変えてください。** 葉が座標の複製を持っているため、直接書き換えると探索結果がずれます
 - 次元を変えたい場合は `SpatialTree::MovingBSPTree<T, float, N>` を直接使えます（本ヘッダに含まれています）
 
-## 再生成
+## 閉区間の範囲検索とdouble座標
 
-元の実装を直したら、次で作り直します。
+`query_aabb(min_point, max_point, visitor)` は各軸の上下限を含む要素を列挙します。空の部分木を省略し、分割軸で枝刈りした後に葉の座標キャッシュを照合。呼出し側で不要な候補ソートや検索用配列確保は不要です。
 
+```cpp
+struct entry {
+  bsp3d::point3<double> position;
+  void *spatial_handle = nullptr;
+  int index_in_cell = -1;
+};
+bsp3d::Index<entry, double> tree;
+// tree.add(&value)による要素の追加後の問い合わせ
+const bsp3d::point3<double> min_point{0, 0, 0}, max_point{1, 1, 1};
+tree.query_aabb(min_point, max_point, [](const entry *value) {
+  // 該当要素の利用。問い合わせ中の索引変更は禁止。
+});
 ```
-python3 tools/amalgamate.py
-```
+
+上下限が非有限または逆転した場合と、不正な検索余白は `std::invalid_argument`。入力は有限座標を前提とし、非有限値検査を保持するため `-ffast-math` の使用は避けてください。独自のヒステリシスポリシーを使う場合、第4引数 `search_margin` に位置更新時の許容幅を包含する値が必要です。既定の `Index` はヒステリシスなし、余白0。
+
+`bsp3d::Index<T>`、`Point3`、`SearchResult<T>` の既定は従来どおりfloat。doubleの検索結果バッファには `SpatialTree::SearchResult<T, double, 3>` を使用できます。旧 `AdaptiveTree` は削除済み。
+
+目標選択への移行結果は[2026-09-24の比較](../benchmarks/bsp3d_migration_20260924/README.md)。範囲検索は短縮しましたが、初期構築は遅く、全用途での高速化を示す結果ではありません。
+
+## 保守
+
+単一ヘッダを直接編集し、`cmake --build build` と `ctest --test-dir build --output-on-failure` で検証します。旧生成スクリプトは削除済み。

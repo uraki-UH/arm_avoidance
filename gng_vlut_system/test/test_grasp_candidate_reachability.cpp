@@ -256,6 +256,13 @@ TEST(grasp_candidate_reachability, indexed_selection_matches_full_scan_across_ro
     const auto actual = select_goal_nodes(map.get(), source, &features, options, lookup, &cache);
     ASSERT_EQ(actual.ids, expected.ids) << iter;
     ASSERT_EQ(actual.map, expected.map) << iter;
+    goal_selection_cache selection_cache;
+    selection_cache.update_map(map);
+    auto features_copy = std::make_shared<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(features);
+    selection_cache.update_features(features_copy);
+    const auto cached = select_goal_nodes(map.get(), source, features_copy.get(), options, lookup, &cache, &selection_cache);
+    ASSERT_EQ(cached.ids, expected.ids) << iter;
+    ASSERT_EQ(cached.map, expected.map) << iter;
     EXPECT_FALSE(cache.update(map));
   }
 }
@@ -280,4 +287,124 @@ TEST(grasp_candidate_reachability, indexed_cell_boundaries_duplicates_and_invali
   EXPECT_TRUE(cache.update(map));
   EXPECT_FALSE(cache.update(std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map)));
 }
+
+TEST(grasp_candidate_reachability, selection_cache_preserves_duplicate_ids_and_input_order) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(make_map({0.02F, 1.0F, 0.01F, 9.0F}));
+  map->nodes[0].id = 65535;
+  map->nodes[1].id = 7;
+  map->nodes[2].id = 7;
+  map->nodes[3].id = 7;
+  map->nodes[3].label = ais_gng_msgs::msg::TopologicalMap::WALL;
+  map->nodes[3].pos.x = std::numeric_limits<float>::quiet_NaN();
+  const auto source = make_candidates({0.01});
+  auto options = default_options;
+  options.num_candidates = 1;
+  goal_spatial_index spatial;
+  goal_selection_cache cache;
+  spatial.update(map);
+  EXPECT_TRUE(cache.update_map(map));
+  EXPECT_FALSE(cache.update_map(map));
+  const auto actual = select_goal_nodes(map.get(), source, nullptr, options, no_tf, &spatial, &cache);
+  EXPECT_EQ(actual.ids, (std::vector<int32_t>{7}));
+  ASSERT_EQ(actual.map.nodes.size(), 3U);
+  EXPECT_EQ(actual.map.nodes[0], map->nodes[1]);
+  EXPECT_EQ(actual.map.nodes[1], map->nodes[2]);
+  EXPECT_TRUE(std::isnan(actual.map.nodes[2].pos.x));
+  EXPECT_EQ(actual.map.nodes[2].label, ais_gng_msgs::msg::TopologicalMap::WALL);
+  auto next = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map);
+  next->nodes[2].id = 65535;
+  std::swap(next->nodes[0], next->nodes[2]);
+  // 更新前の参照表では新mapへ適用せず、全走査のフォールバック。
+  EXPECT_EQ(select_goal_nodes(next.get(), source, nullptr, options, no_tf, nullptr, &cache).ids,
+      select_goal_nodes(next.get(), source, nullptr, options, no_tf).ids);
+  cache.update_map(next);
+  auto result = select_goal_nodes(next.get(), source, nullptr, options, no_tf, nullptr, &cache);
+  const auto expected = select_goal_nodes(next.get(), source, nullptr, options, no_tf);
+  EXPECT_EQ(result.ids, expected.ids);
+  EXPECT_EQ(result.map, expected.map);
+  EXPECT_TRUE(cache.update_map(nullptr));
+  EXPECT_FALSE(cache.has_map(next.get()));
+}
+
+TEST(grasp_candidate_reachability, selection_cache_refreshes_features_and_preserves_last_duplicate) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(make_map({0.01F,0.01F}));
+  map->nodes[0].id = 65535;
+  map->nodes[1].id = 0;
+  auto features = std::make_shared<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>();
+  for (const auto id : {65535,0,65535}) {
+    auto &value = features->features.emplace_back();
+    value.node_id = id;
+    value.manip_valid = true;
+    value.manip_condition_number = 2;
+  }
+  features->features.back().manip_condition_number = 10;
+  auto options = default_options;
+  options.num_candidates = 1;
+  options.manipulability_weight = 0.25;
+  const auto source = make_candidates({0.02});
+  goal_selection_cache cache;
+  cache.update_map(map);
+  EXPECT_TRUE(cache.update_features(features));
+  EXPECT_FALSE(cache.update_features(features));
+  EXPECT_EQ(select_goal_nodes(map.get(),source,features.get(),options,no_tf,nullptr,&cache).ids,
+      (std::vector<int32_t>{0}));
+  auto next = std::make_shared<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(*features);
+  next->features.back().manip_condition_number = 1;
+  EXPECT_EQ(select_goal_nodes(map.get(),source,next.get(),options,no_tf,nullptr,&cache).ids,
+      (std::vector<int32_t>{65535}));
+  cache.update_features(next);
+  EXPECT_EQ(select_goal_nodes(map.get(),source,next.get(),options,no_tf,nullptr,&cache).map,
+      select_goal_nodes(map.get(),source,next.get(),options,no_tf).map);
+  EXPECT_TRUE(cache.update_features(nullptr));
+  options.manipulability_weight = 0;
+  EXPECT_EQ(select_goal_nodes(map.get(),source,features.get(),options,no_tf,nullptr,&cache).map,
+      select_goal_nodes(map.get(),source,features.get(),options,no_tf).map);
+  auto empty = std::make_shared<ais_gng_msgs::msg::TopologicalMap>();
+  cache.update_map(empty);
+  EXPECT_TRUE(select_goal_nodes(empty.get(),source,nullptr,options,no_tf,nullptr,&cache).map.nodes.empty());
+}
+
+
+TEST(grasp_candidate_reachability, incremental_index_matches_full_scan_after_moves_resize_and_invalid_positions) {
+  auto map = std::make_shared<ais_gng_msgs::msg::TopologicalMap>();
+  map->header.frame_id = "base";
+  goal_spatial_index incremental;
+  std::mt19937 random(20260924);
+  std::uniform_real_distribution<float> uniform(-0.5F, 0.5F);
+  for (int iter = 0; iter < 180; ++iter) {
+    auto next = std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map);
+    next->frame_number = iter;
+    const auto num = iter % 19 == 0 ? 0U : 200U + random() % 1200U;
+    next->nodes.resize(num);
+    for (std::size_t idx = 0; idx < num; ++idx) {
+      auto &node = next->nodes[idx];
+      node.id = idx / 2;
+      node.label = idx % 7 == 0 ? ais_gng_msgs::msg::TopologicalMap::WALL : 1;
+      if (idx >= map->nodes.size() || idx % 3 == 0) {
+        node.pos.x = uniform(random); node.pos.y = uniform(random); node.pos.z = uniform(random);
+      }
+    }
+    if (num > 2 && iter % 2 == 0) next->nodes[0].pos.x = std::numeric_limits<float>::quiet_NaN();
+    if (num > 2 && iter % 3 == 0) next->nodes[1].pos.z = std::numeric_limits<float>::infinity();
+    if (iter % 5 == 0) std::shuffle(next->nodes.begin(), next->nodes.end(), random);
+    map = next;
+    incremental.update(map);
+    for (int query = 0; query < 8; ++query) {
+      const std::array<double,3> key{double(int(random()%8)-4),double(int(random()%8)-4),double(int(random()%8)-4)};
+      auto actual = incremental.query_cell(key, 0.125, tf2::Vector3(0,0,0),tf2::Transform::getIdentity());
+      std::vector<std::size_t> expected;
+      for (std::size_t idx = 0; idx < map->nodes.size(); ++idx) {
+        const auto &p = map->nodes[idx].pos;
+        if (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z) &&
+            p.x >= key[0]*0.125 && p.x <= (key[0]+1)*0.125 &&
+            p.y >= key[1]*0.125 && p.y <= (key[1]+1)*0.125 &&
+            p.z >= key[2]*0.125 && p.z <= (key[2]+1)*0.125) expected.push_back(idx);
+      }
+      std::sort(actual.begin(),actual.end());
+      ASSERT_EQ(actual,expected) << iter << ":" << query;
+    }
+    EXPECT_FALSE(incremental.update(std::make_shared<ais_gng_msgs::msg::TopologicalMap>(*map)));
+  }
+}
+
 }  // 回帰テスト用の補助定義

@@ -10,8 +10,6 @@
 #include <cstdint>
 #ifdef GNG_USE_BSP3D
 #include <bsp3d/bsp3d.hpp>
-#elif defined(GNG_USE_SPATIAL_TREE)
-#include <SpatialTree/SpatialTree.hpp>
 #endif
 #include <fuzzrobo/libgng/observation_pixel_view.hpp>
 
@@ -127,21 +125,14 @@ class CUGNG {
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
 
    private:
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
     struct spatial_entry {
         SpatialTree::Point<float, 3> position;
         void *spatial_handle = nullptr;
         int index_in_cell = 0;
         uint32_t node_idx = 0;
     };
-#ifdef GNG_USE_BSP3D
     using spatial_tree = bsp3d::Index<spatial_entry>;
-#else
-    using spatial_tree = SpatialTree::AdaptiveTree<spatial_entry, float, 3>;
-    const spatial_tree::Cell *spatial_root = nullptr;
-    static void find_spatial_nearest(const spatial_tree::Cell &cell,
-        const SpatialTree::Point<float, 3> &point, Node_d &winners);
-#endif
     std::unique_ptr<spatial_tree> spatial_index;
     std::vector<spatial_entry> spatial_entries;
     bool query_spatial(Vec3f &point, Node_d &winners, uint8_t *label);

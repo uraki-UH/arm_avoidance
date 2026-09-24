@@ -1,4 +1,8 @@
+#ifdef BSP3D_BENCH_REFERENCE
 #include <SpatialTree/SpatialTree.hpp>
+#else
+#include <bsp3d/bsp3d.hpp>
+#endif
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -21,21 +25,28 @@ struct entry {
   int index_in_cell = -1;
   std::size_t idx = 0;
 };
+#ifdef BSP3D_BENCH_REFERENCE
 using tree_type = SpatialTree::AdaptiveTree<entry, scalar, 3>;
+#else
+using tree_type = bsp3d::Index<entry, scalar>;
+#ifndef BSP3D_LEAF_NUM
+#define BSP3D_LEAF_NUM 32
+#endif
+#ifndef BSP3D_SPLIT_RULE
+#define BSP3D_SPLIT_RULE 0
+#endif
+#ifndef BSP3D_ENABLE_BBOX
+#define BSP3D_ENABLE_BBOX 0
+#endif
+#endif
 using bounds = SpatialTree::BoundingBox<scalar, 3>;
 using clock_type = std::chrono::steady_clock;
 
-// 両版共通の比較用範囲検索。公開Cellを利用し、元ライブラリの変更なし
-template<typename Visitor>
-void query_box(const tree_type::Cell &cell, const bounds &box, Visitor &visitor) {
-  for (int axis = 0; axis < 3; ++axis)
-    if (std::abs(cell.bounds.center[axis] - box.center[axis]) >
-        cell.bounds.half_extents[axis] + box.half_extents[axis]) return;
-  if (cell.is_subdivided) {
-    for (int idx = 0; idx < 8; ++idx) query_box(cell.children_block[idx], box, visitor);
-  } else {
-    for (const auto *value : cell.elements) if (box.contains(value->position)) visitor(*value);
-  }
+// 両方式の公開APIによる閉区間範囲検索。
+template<typename visitor_type>
+void query_box(const tree_type &tree, const bounds &box, visitor_type &visitor) {
+  tree.query_aabb(box.center - box.half_extents, box.center + box.half_extents,
+      [&](const entry *value) { visitor(*value); });
 }
 
 double elapsed_ms(clock_type::time_point start) {
@@ -141,15 +152,25 @@ int main(int argc, char **argv) {
   for (int iter = 0; iter < 12; ++iter) {
     auto values = original;
     const auto build_start = clock_type::now();
+#ifdef BSP3D_BENCH_REFERENCE
     tree_type tree(world, SpatialTree::SpatialTreeParams<scalar>{});
+#else
+    bsp3d::index_params<scalar> params;
+    params.max_leaf_size = BSP3D_LEAF_NUM;
+    params.use_bbox = BSP3D_ENABLE_BBOX;
+    params.split_rule = BSP3D_SPLIT_RULE;
+    tree_type tree(params);
+#endif
+#ifdef BSP3D_BULK_BUILD
+    tree.build(values.begin(), values.end());
+#else
     for (auto &value : values) tree.add(&value);
-    const tree_type::Cell *root = nullptr;
-    tree.visitCells([&](const auto &cell, int depth) { if (depth == 0) root = &cell; });
+#endif
     const double build_ms = elapsed_ms(build_start);
     const auto box_start = clock_type::now();
     for (const auto &box : queries) {
       auto visit = [&](const entry &value) { checksum += value.idx + 1; };
-      query_box(*root, box, visit);
+      query_box(tree, box, visit);
     }
     const double box_ms = elapsed_ms(box_start);
     const auto nearest_start = clock_type::now();
@@ -171,7 +192,7 @@ int main(int argc, char **argv) {
         distances.push_back((value.position - box.center).squaredNorm());
       }
       auto visit = [&](const entry &value) { actual.push_back(value.idx); };
-      query_box(*root, box, visit);
+      query_box(tree, box, visit);
       std::sort(actual.begin(), actual.end());
       if (actual != expected) throw std::runtime_error("範囲検索の不一致");
       const auto count = std::min<std::size_t>(8, values.size());

@@ -327,20 +327,19 @@ bag再生の約4.2 GBの先読み待ちは、フレームごとのGNG計算時�
 
 C・D・Eの詳細表は `artifacts/gng_<実験名>_20260924/<方式>/voxel_<幅>_<試行>.json` の `records[50:100]` から各区間の平均を求め、3試行で中央値を算出。D・Eは保存済みreport.jsonの共通項目と一致を確認。Aはsummary.jsonのtimings内のtrials、Bはconditions内のmetricsの方式別meanを使用。
 
-## 10. SpatialTree整理の判断材料
+## 10. SpatialTree整理とbsp3dへの移行
 
-追加の依存調査では、共通の `SpatialTree/` は旧GNG実験版以外にも利用あり。GNGの最近傍2ノード探索でbsp3dが速かった結果だけから、プロジェクト全体の不要依存とは判断不可。
+本書作成後、ユーザーの移行指示に従い、目標選択の索引もbsp3dへ統一。double座標の閉区間AABB検索を追加し、座標が同じ場合の索引再利用・TF逆変換・元セルによる再判定を保持。旧GNG比較パッケージの8分木方式、共通 `SpatialTree/`、bsp3d内の重複8分木実装と旧生成スクリプトを削除。
 
-| 対象 | 現在の役割 | 整理時の条件 |
-| --- | --- | --- |
-| `ais_gng_cpu/experimental/gng_spatial_tree` | 旧SpatialTree・bsp3d・gridの3方式が同居する比較パッケージ | 旧SpatialTree方式だけの整理が候補。bsp3d・grid・計測履歴の保持 |
-| 共通 `SpatialTree/` | 目標選択の静的索引でも使用。double座標、回転セルを包むAABBによる範囲候補の取得 | 単純削除では目標選択ノードと関連テストのビルドが破損。移行時は候補集合・境界・TF条件の照合が必要 |
-| `bsp3d/include/bsp3d/bsp3d.hpp` | 単一ヘッダ内に `SpatialTree::` 名前空間の型を含む | 名前空間の文字列が残るだけで旧外部ディレクトリへの依存とは限らない |
-| `bsp3d/tools/amalgamate.py` | 共通SpatialTree配下を入力とするヘッダ生成スクリプト | 共通ディレクトリ削除時には生成元の扱いも整理が必要 |
+bsp3dには葉の座標キャッシュ、部分木の件数管理、領域境界を管理する祖先への直接移動が既存実装としてあり、旧8分木の構造を追加移植する根拠はなし。不足していた範囲検索を追加。初期構築の一括処理案は比較で遅くなり不採用。
 
-推奨は、まず旧GNG実験版のSpatialTree方式だけを整理し、共通ライブラリは目標選択側の移行・検証まで維持する段階的な方法。これは整理案であり、本書作成時点でソースの削除・索引の差替えは未実施。
+初回の実GNG18,729座標に対する範囲検索1024回は0.664→0.461 ms、構築は1.371→4.420 ms。別プロセスの目標選択比較では約0.075〜0.116 ms増加したが、変更しない全走査基準も変動しており、その差をbsp3dだけの退化とは断定しない。
 
-根拠：[目標選択の索引](../src/nodes/planning/goal_spatial_index.hpp)、[目標選択のビルド定義](../src/CMakeLists.txt)、[関連テストのビルド定義](../CMakeLists.txt)、[3方式の比較ビルド](../../ais_gng_cpu/experimental/gng_spatial_tree/CMakeLists.txt)、[bsp3d生成スクリプト](../../bsp3d/tools/amalgamate.py)。
+同日追加で、特徴量・出力ID参照表の再利用と、bsp3dの移動・追加・削除による差分索引へ変更。座標変更ごとの全再構築は呼出し側の実装上の制限であり、bsp3dに必須の動作ではなかった。同一プロセス比較ではロボット保存座標10,801点・候補20件の静的選択1.221→0.254 ms、人工的な全点移動条件の更新＋選択2.422→0.714 ms。最終92,610組の出力一致を確認。[新仕様・制限](releases/2026-09-24_goal_selection_efficiency.md)、[全比較値・再現条件](../../benchmarks/goal_selection_efficiency_20260924/README.md)。
+
+初回構築は依然増加し、合成平面の全点移動には旧版より遅い条件あり。今回の結果は目標選択の処理であり、CPU GNG学習全体の高速化率には含めない。
+
+[移行仕様・検証](releases/2026-09-24_bsp3d_migration.md)、[条件・全比較値・再現手順](../../benchmarks/bsp3d_migration_20260924/README.md)。上記の過去GNG比較と測定対象・実行条件は別。
 
 [a]: ../../benchmarks/gng_production_efficiency_20260924/README.md
 [b]: ../../benchmarks/gng_radix_multiseed_20260924/README.md

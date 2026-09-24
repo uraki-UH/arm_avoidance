@@ -1,0 +1,204 @@
+{
+  "range": {
+    "points": {
+      "before": {
+        "build_ms": 1.371173,
+        "aabb_ms": 0.664204,
+        "nearest8_ms": 2.451226
+      },
+      "bsp32": {
+        "build_ms": 4.419567,
+        "aabb_ms": 0.461326,
+        "nearest8_ms": 1.396848
+      },
+      "bsp16": {
+        "build_ms": 4.967411,
+        "aabb_ms": 0.401051,
+        "nearest8_ms": 1.401932
+      },
+      "bsp8": {
+        "build_ms": 5.624386,
+        "aabb_ms": 0.391459,
+        "nearest8_ms": 1.618197
+      },
+      "bsp32_bbox": {
+        "build_ms": 5.098237,
+        "aabb_ms": 0.44622,
+        "nearest8_ms": 1.507018
+      }
+    },
+    "planar": {
+      "before": {
+        "build_ms": 1.398604,
+        "aabb_ms": 2.016589,
+        "nearest8_ms": 3.439218
+      },
+      "bsp32": {
+        "build_ms": 4.329912,
+        "aabb_ms": 1.931512,
+        "nearest8_ms": 1.921242
+      },
+      "bsp16": {
+        "build_ms": 5.134473,
+        "aabb_ms": 1.747132,
+        "nearest8_ms": 2.104579
+      },
+      "bsp8": {
+        "build_ms": 6.227919,
+        "aabb_ms": 1.980803,
+        "nearest8_ms": 2.478843
+      },
+      "bsp32_bbox": {
+        "build_ms": 4.998794,
+        "aabb_ms": 1.796085,
+        "nearest8_ms": 2.081088
+      }
+    }
+  },
+  "bulk": {
+    "points": {
+      "before": {
+        "build_ms": 1.371243,
+        "aabb_ms": 0.663167,
+        "nearest8_ms": 2.47821
+      },
+      "bsp32": {
+        "build_ms": 4.582532,
+        "aabb_ms": 0.466653,
+        "nearest8_ms": 1.444902
+      },
+      "bulk32": {
+        "build_ms": 9.881241,
+        "aabb_ms": 0.461529,
+        "nearest8_ms": 1.42346
+      },
+      "bulk16": {
+        "build_ms": 11.144457,
+        "aabb_ms": 0.470725,
+        "nearest8_ms": 1.523798
+      },
+      "bulk32_midpoint": {
+        "build_ms": 6.527981,
+        "aabb_ms": 0.478727,
+        "nearest8_ms": 1.328016
+      }
+    },
+    "planar": {
+      "before": {
+        "build_ms": 1.380623,
+        "aabb_ms": 1.975172,
+        "nearest8_ms": 3.347164
+      },
+      "bsp32": {
+        "build_ms": 4.334201,
+        "aabb_ms": 1.910914,
+        "nearest8_ms": 1.907509
+      },
+      "bulk32": {
+        "build_ms": 12.827536,
+        "aabb_ms": 1.901281,
+        "nearest8_ms": 1.94395
+      },
+      "bulk16": {
+        "build_ms": 13.778425,
+        "aabb_ms": 1.880108,
+        "nearest8_ms": 2.11542
+      },
+      "bulk32_midpoint": {
+        "build_ms": 8.51004,
+        "aabb_ms": 1.833168,
+        "nearest8_ms": 1.996778
+      }
+    }
+  },
+  "selection": {
+    "points": {
+      "before": {
+        "cached_build_ms": 2.46543,
+        "1": {
+          "new_ms": 1.77867,
+          "old_ms": 8.46941,
+          "same_positions_ms": 0.28538
+        },
+        "20": {
+          "new_ms": 2.01285,
+          "old_ms": 8.70969,
+          "same_positions_ms": 0.272438
+        },
+        "100": {
+          "new_ms": 2.15802,
+          "old_ms": 8.81458,
+          "same_positions_ms": 0.269405
+        }
+      },
+      "after": {
+        "cached_build_ms": 6.02864,
+        "1": {
+          "new_ms": 1.89478,
+          "old_ms": 8.82406,
+          "same_positions_ms": 0.287436
+        },
+        "20": {
+          "new_ms": 2.08857,
+          "old_ms": 9.02335,
+          "same_positions_ms": 0.268658
+        },
+        "100": {
+          "new_ms": 2.23305,
+          "old_ms": 9.05623,
+          "same_positions_ms": 0.26968
+        }
+      }
+    },
+    "planar": {
+      "before": {
+        "cached_build_ms": 2.41584,
+        "1": {
+          "new_ms": 1.69437,
+          "old_ms": 8.34977,
+          "same_positions_ms": 0.287216
+        },
+        "20": {
+          "new_ms": 1.85672,
+          "old_ms": 8.48989,
+          "same_positions_ms": 0.28439
+        },
+        "100": {
+          "new_ms": 2.2104,
+          "old_ms": 8.73981,
+          "same_positions_ms": 0.28799
+        }
+      },
+      "after": {
+        "cached_build_ms": 5.87169,
+        "1": {
+          "new_ms": 1.81984,
+          "old_ms": 8.73523,
+          "same_positions_ms": 0.286818
+        },
+        "20": {
+          "new_ms": 1.95252,
+          "old_ms": 8.81353,
+          "same_positions_ms": 0.292924
+        },
+        "100": {
+          "new_ms": 2.26982,
+          "old_ms": 9.12823,
+          "same_positions_ms": 0.290141
+        }
+      }
+    }
+  },
+  "fixtures": {
+    "points.txt": {
+      "sha256": "e1452a42c56b974bc8060636f9d733b6ed993a08a70de89bda69d72e3c7b55a9",
+      "source": "artifacts/gng_radix_production_20260924/boost/voxel_0.5_1_frame_299.npz",
+      "nodes": 18729
+    },
+    "planar.txt": {
+      "sha256": "eccf68894f71ddc8ee6a4c57e6cc342ed361229a42b452cc99d679f67dc859ef",
+      "source": "synthetic seed 20260924, thin plane and 500 origin duplicates",
+      "nodes": 20000
+    }
+  }
+}

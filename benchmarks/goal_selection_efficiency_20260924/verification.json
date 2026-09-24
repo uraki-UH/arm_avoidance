@@ -1,0 +1,13 @@
+{
+  "comparison_checks": 92610,
+  "mismatches": 0,
+  "release_gtest": 15,
+  "asan_ubsan_gtest": 15,
+  "incremental_aabb_checks": 1440,
+  "ros_cases": 8,
+  "ros_node_stopped": true,
+  "before_processes": 13,
+  "after_processes": 13,
+  "containers_preserved": 3,
+  "temporary_build_removed": true
+}

@@ -1,0 +1,26 @@
+{
+  "build_type": "Release",
+  "bsp3d_ctest": {
+    "passed": 2,
+    "total": 2
+  },
+  "gng_comparison_ctest": {
+    "passed": 18,
+    "total": 18
+  },
+  "goal_selector_gtest": {
+    "passed": 12,
+    "total": 12
+  },
+  "aabb_checks": 37600,
+  "aabb_asan_ubsan_checks": 37600,
+  "bulk_prototype_checks": 75216,
+  "selection_comparisons": 7920,
+  "selection_mismatches": 0,
+  "baseline_ros_processes": 13,
+  "preserved_ros_processes": 13,
+  "running_containers_before_after": 3,
+  "temporary_test_builds_removed": true,
+  "test_processes_remaining": 0,
+  "ros_playback_test_performed": false
+}

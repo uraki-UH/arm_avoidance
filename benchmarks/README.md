@@ -8,7 +8,7 @@
 - `artifacts/<実験名>/`: 共有ライブラリ、CMake生成物、生ログ、フレーム単位のJSON、再集計結果。ローカル保管のみでGit管理対象外。
 - 詳しい条件・結果・限界: `gng_vlut_system/docs/designs/` と `releases/` の各記録。
 
-`artifacts/COLCON_IGNORE`をGit管理し、保存した比較用パッケージも通常のcolcon探索から除外。`.gitignore`だけではROSパッケージ探索の除外にはならない。
+`artifacts/COLCON_IGNORE`・`benchmarks/COLCON_IGNORE`をGit管理し、保存した比較用パッケージと計測用`setup.py`を通常のcolcon探索から除外。`.gitignore`だけではROSパッケージ探索の除外にはならない。
 
 生成物のGit管理除外による実ファイルの削除なし。SHA-256資料内のパスは計測当時の記録であり、移動前の `artifacts/` 表記を維持。
 
@@ -16,6 +16,8 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [goal_selection_efficiency_20260924](goal_selection_efficiency_20260924/) | 目標選択の参照表再利用・bsp3d差分更新・同一プロセス比較 |
+| [bsp3d_migration_20260924](bsp3d_migration_20260924/) | 目標選択索引のbsp3d移行、旧8分木削除、範囲検索・初期構築の比較 |
 | [gng_incremental_updates_20260924](gng_incremental_updates_20260924/) | 同期再利用・孤立候補・実在エッジ走査によるCPU GNGの全体走査削減 |
 | [gng_followup_efficiency_20260924](gng_followup_efficiency_20260924/) | 探索・重点候補・クラスタ・疎エッジの4候補比較と本番3変更の採用 |
 | [gng_normal_efficiency_20260924](gng_normal_efficiency_20260924/) | 法線・曲率の連続配列参照と差分再利用、全出力一致の検証 |

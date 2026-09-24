@@ -52,28 +52,11 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 
     // malloc
     nodes.resize(node_num_max);
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-    spatial_root = nullptr;
-#endif
+#ifdef GNG_USE_BSP3D
     spatial_index.reset();
     spatial_entries.assign(node_num_max, spatial_entry{});
-#ifdef GNG_USE_BSP3D
     // 3次元向けの既定値。近似なし、葉の容量32、検索用の実点群境界箱なし。
     spatial_index = std::make_unique<spatial_tree>();
-#else
-    const SpatialTree::BoundingBox<float, 3> bounds{
-        {(grid_config.x_min + grid_config.x_max) * 0.5f,
-         (grid_config.y_min + grid_config.y_max) * 0.5f,
-         (grid_config.z_min + grid_config.z_max) * 0.5f},
-        {(grid_config.x_max - grid_config.x_min) * 0.5f,
-         (grid_config.y_max - grid_config.y_min) * 0.5f,
-         (grid_config.z_max - grid_config.z_min) * 0.5f}};
-    spatial_index = std::make_unique<spatial_tree>(bounds, SpatialTree::SpatialTreeParams<float>{});
-    spatial_index->visitCells([&](const auto &cell, int depth) {
-        if (depth == 0) {spatial_root = &cell;}
-    });
-#endif
 #endif
     tn_id.resize(node_num_max);
     edge_count.resize(node_num_max * node_num_max);
@@ -101,10 +84,7 @@ void CUGNG::clear() {
     observation_touched_ids.clear();
     observation_pixel_source = {};
     node_num = 0;
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-    spatial_root = nullptr;
-#endif
+#ifdef GNG_USE_BSP3D
     spatial_index.reset();
     spatial_entries.clear();
 #endif
@@ -584,7 +564,7 @@ void CUGNG::getMinAll(Vec3f& p, Node_d& n){
 }
 
 bool CUGNG::getMinGrid(Vec3f& p, Node_d& n){
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
     return query_spatial(p, n, nullptr);
 #else
     int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
@@ -646,7 +626,7 @@ bool CUGNG::getMinGrid(Vec3f& p, Node_d& n){
 }
 
 bool CUGNG::getDownSamplingGrid(Vec3f& p, uint8_t& label, Node_d &n){
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
     return query_spatial(p, n, &label);
 #else
     int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
@@ -724,7 +704,7 @@ void CUGNG::delete_node(uint32_t idx) {
     auto& node = nodes[idx];
     if (node.id == NODE_NOID)
         return;
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
     spatial_index->remove(&spatial_entries[idx]);
 #endif
     recordNodeDelta(node, GNG_DELTA_REMOVE);
@@ -764,7 +744,7 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
     const bool position_changed = map_delta_capture_enabled &&
         (node.pos.p[0] != new_pos.p[0] || node.pos.p[1] != new_pos.p[1] ||
          node.pos.p[2] != new_pos.p[2]);
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
     spatial_index->updatePosition(&spatial_entries[node.id],
         {new_pos.p[0], new_pos.p[1], new_pos.p[2]});
 #endif
@@ -821,7 +801,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             auto& g1 = grid_cell(grid_i);
             node.grid_vec_i = grid_node_num[grid_i]++;
             g1[node.grid_vec_i] = i;
-#ifdef GNG_USE_SPATIAL_TREE
+#ifdef GNG_USE_BSP3D
             auto &entry = spatial_entries[i];
             entry = spatial_entry{};
             entry.node_idx = i;
@@ -1025,52 +1005,13 @@ void CUGNG::calc_edge_distanceXY(){
     }
 }
 
-#ifdef GNG_USE_SPATIAL_TREE
-#ifndef GNG_USE_BSP3D
-void CUGNG::find_spatial_nearest(const spatial_tree::Cell &cell,
-        const SpatialTree::Point<float, 3> &point, Node_d &winners) {
-    if (cell.subtree_element_count == 0) {return;}
-    if (!cell.is_subdivided) {
-        for (const auto *entry : cell.elements) {
-            const float dist2 = (entry->position - point).squaredNorm();
-            if (dist2 < winners.id2_d2) {
-                if (dist2 < winners.id1_d2) {
-                    winners.id2 = winners.id1;
-                    winners.id2_d2 = winners.id1_d2;
-                    winners.id1 = entry->node_idx;
-                    winners.id1_d2 = dist2;
-                } else {
-                    winners.id2 = entry->node_idx;
-                    winners.id2_d2 = dist2;
-                }
-            }
-        }
-        return;
-    }
-
-    const int first = cell.getChildIndex(point);
-    find_spatial_nearest(cell.children_block[first], point, winners);
-
-    // 分割面までの距離による兄弟セルの距離下限。子セルの並べ替えなし。
-    const float x = point[0] - cell.bounds.center[0];
-    const float y = point[1] - cell.bounds.center[1];
-    const float z = point[2] - cell.bounds.center[2];
-    const float x2 = x * x, y2 = y * y, z2 = z * z;
-    const float min_dist2[8]{0, x2, y2, x2 + y2, z2, x2 + z2, y2 + z2, x2 + y2 + z2};
-    for (int mask = 1; mask < 8; ++mask) {
-        // 固定順のため枝刈り後も後続セルを評価。固定半径なしの最近傍探索。
-        if (min_dist2[mask] > winners.id2_d2) {continue;}
-        find_spatial_nearest(cell.children_block[first ^ mask], point, winners);
-    }
-}
-#endif
+#ifdef GNG_USE_BSP3D
 
 bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
     winners.id1 = winners.id2 = NODE_NOID;
     winners.id1_d2 = winners.id2_d2 = FLT_MAX;
     if (label) {*label = 0;}
     // 木全体の最近傍2ノード。固定範囲の候補列挙・候補配列の確保なし。
-#ifdef GNG_USE_BSP3D
     if (!spatial_index) {return false;}
     std::array<bsp3d::SearchResult<spatial_entry>, 2> nearest;
     const int num_nearest = spatial_index->findNBest(
@@ -1083,10 +1024,6 @@ bool CUGNG::query_spatial(Vec3f &point, Node_d &winners, uint8_t *label) {
         winners.id2 = nearest[1].element->node_idx;
         winners.id2_d2 = nearest[1].distance_sq;
     }
-#else
-    if (!spatial_root) {return false;}
-    find_spatial_nearest(*spatial_root, {point.p[0], point.p[1], point.p[2]}, winners);
-#endif
 
     // 警戒領域・寿命・重点学習ラベルの判定対象は最近傍2ノードのみ。
     const uint32_t ids[2]{winners.id1, winners.id2};

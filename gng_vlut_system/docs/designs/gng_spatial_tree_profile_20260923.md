@@ -21,7 +21,7 @@ getDownSamplingGridは平均79,576.85回/frame、学習側getMinGridは4,000回/
 
 さらに同距離時も従来と同じ評価順を保つためstd::sortを毎回実行。比較関数内でセル添字の除算・剰余・tuple比較を反復。ソート区間全体は実測済みだが、除算単独の寄与率は未計測。木の位置更新は約26,015回でも約1.07 ms/frame。
 
-[検索・ソートの実装](../../../ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.cpp)と[木の範囲検索](../../../SpatialTree/include/SpatialTree/SpatialTree.hpp)を参照。
+当時の実装は `ais_gng_cpu/experimental/gng_spatial_tree/src/cpu/cugng.cpp` と `SpatialTree/include/SpatialTree/SpatialTree.hpp`。後者と旧8分木方式は[2026-09-24の移行](../releases/2026-09-24_bsp3d_migration.md)で削除済み。本記録は当時の保存実装の計測であり、現行bsp3dの範囲検索の値ではない。
 
 ## 比較条件と限界
 

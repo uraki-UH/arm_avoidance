@@ -1,0 +1,21 @@
+{
+  "points.txt": {
+    "sha256": "e1452a42c56b974bc8060636f9d733b6ed993a08a70de89bda69d72e3c7b55a9",
+    "source": "artifacts/gng_radix_production_20260924/boost/voxel_0.5_1_frame_299.npz",
+    "nodes": 18729
+  },
+  "planar.txt": {
+    "sha256": "eccf68894f71ddc8ee6a4c57e6cc342ed361229a42b452cc99d679f67dc859ef",
+    "source": "synthetic seed 20260924, thin plane and 500 origin duplicates",
+    "nodes": 20000
+  },
+  "robot.txt": {
+    "source": "gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin",
+    "sha256": "cd3e45f0ad019110609c804a0d79e8725456d5a5f27622d2b3b87fbf5fedb53b",
+    "version": 9,
+    "nodes": 10801,
+    "coordinate_layer": 0,
+    "note": "保存座標のみ。比較用ラベル・法線・特徴量・候補は共通の合成条件。",
+    "coordinates_sha256": "2aba0271c8df93fa5b2171afe9c21c9521b81e004916467f4469436de439f207"
+  }
+}
