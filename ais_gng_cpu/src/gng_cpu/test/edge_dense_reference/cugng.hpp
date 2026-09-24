@@ -1,16 +1,16 @@
 #pragma once
 
-#include "../utils/utils.hpp"
-#include "../utils/node.hpp"
-#include "../utils/param.hpp"
-#include "voxel_grid.hpp"
+#include "../../src/utils/utils.hpp"
+#include "../../src/utils/node.hpp"
+#include "../../src/utils/param.hpp"
+#include "../../src/cpu/voxel_grid.hpp"
 
-#include "define.h"
+#include "../../src/cpu/define.h"
 
 #include <cstdint>
 #include <fuzzrobo/libgng/observation_pixel_view.hpp>
 
-struct Node_d{
+struct dense_node_d{
     uint32_t id1;
     float id1_d2;
     uint32_t id2;
@@ -18,16 +18,14 @@ struct Node_d{
 };
 
 // attention配列の連続区間と、既存voxel順序内の開始位置との対応。
-struct observation_attention_span {uint32_t begin, end, source_begin;};
+struct dense_attention_span {uint32_t begin, end, source_begin;};
 
-class CUGNG {
+class dense_cugng {
    public:
     int node_num = 0;
     int node_num_max = 0;
     vector<Node> nodes;
     vector<uint8_t> edge_count;
-    // 隣接配列と同順の共有エッジID。ID 0は未接続の読み出し専用領域。
-    vector<array<uint32_t, NODE_MAX_EDGE>> edge_slots;
     vector<array<uint32_t, NODE_GRID_NODE_NUM_NAX>> grid;
     // 使用セルを含む256セル単位の遅延確保。未使用ページの印はUINT32_MAX。
     static constexpr uint32_t grid_page_size = 256;
@@ -38,7 +36,7 @@ class CUGNG {
     EdgeConfig *edge_config = nullptr;
     GridConfig voxel_config;
     GridConfig grid_config;
-    vector<float> edge_distance; // 共有エッジIDごとのXY距離の二乗
+    vector<float> edge_distance; // エッジの距離
     uint32_t frame_number = 0; // フレーム数
     bool training_event_capture_enabled = false;
     uint16_t training_event_winner_rank_max = 1;
@@ -68,7 +66,7 @@ class CUGNG {
     vector<float> priority_weights;
     float priority_ratio = 0;
 
-    CUGNG();
+    dense_cugng();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
     void clear();
     // void learnBatch(vector<Vec3f> &inpcl, int input_pcl_num);
@@ -76,7 +74,7 @@ class CUGNG {
         const vector<Vec3f> *observation_points = nullptr,
         const vector<uint32_t> *voxel_raw_ids = nullptr, const vector<uint32_t> *attention_raw_ids = nullptr,
         const vector<Vec3f> *raw_points = nullptr, const VoxelGrid *source_voxels = nullptr,
-        const vector<observation_attention_span> *attention_spans = nullptr,
+        const vector<dense_attention_span> *attention_spans = nullptr,
         const vector<uint32_t> *attention_blocks = nullptr);
     void learn_normal(Vec3f& input_point, const Vec3f *observation_point = nullptr, uint32_t raw_idx = UINT32_MAX,
         bool enable_statistics = true);
@@ -89,10 +87,10 @@ class CUGNG {
     void finishMapDeltaFrame();
     void recordNodeDelta(const Node &node, uint8_t operation);
 
-    void getMinAll(Vec3f& p, Node_d& result);
-    bool getMinGrid(Vec3f& p, Node_d& result);
+    void getMinAll(Vec3f& p, dense_node_d& result);
+    bool getMinGrid(Vec3f& p, dense_node_d& result);
     void getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num);
-    bool getDownSamplingGrid(Vec3f& p, uint8_t &label, Node_d &n);
+    bool getDownSamplingGrid(Vec3f& p, uint8_t &label, dense_node_d &n);
     void move_node(Node& node, Vec3f& new_pos);
 
     /* ノードを削除する関数 */
@@ -107,7 +105,7 @@ class CUGNG {
     void connect(uint32_t idx1, uint32_t idx2);
     /* エッジ数が0のノードを削除し、学習係数を減衰する関数 */
     void check_delete_no_edge_and_decay_eta();
-    /* 接続中の共有エッジIDの検索。未接続時は予約ID 0。 */
+    /* エッジIDを検索 */
     uint32_t getEdgeIndex(uint32_t idx1, uint32_t idx2);
     /* ノードの法線ベクトルの算出 */
     void normal_vector(Node& node, Vec3f *node_positions = nullptr);
@@ -124,14 +122,6 @@ class CUGNG {
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
 
    private:
-    // 寿命のuint8巻戻りによる重複隣接も含めた、プールIDの参照数。
-    vector<uint8_t> edge_reference_num;
-    vector<uint32_t> free_edge_ids;
-    void release_edge_slot(uint32_t edge_idx) {
-        if (--edge_reference_num[edge_idx] == 0) {
-            free_edge_ids.push_back(edge_idx);
-        }
-    }
     // 探索に必要な座標とラベルだけの連続配置。バッチ外の直接参照は維持。
     struct search_node_state {
         Vec3f pos;
@@ -142,8 +132,8 @@ class CUGNG {
     vector<uint32_t> point_order;
     bool is_search_batch = false;
     void begin_search_batch();
-    template<bool enable_packed_search> bool get_min_grid_impl(Vec3f &point, Node_d &result);
-    template<bool enable_packed_search> bool get_down_sampling_grid_impl(Vec3f &point, uint8_t &label, Node_d &result);
+    template<bool enable_packed_search> bool get_min_grid_impl(Vec3f &point, dense_node_d &result);
+    template<bool enable_packed_search> bool get_down_sampling_grid_impl(Vec3f &point, uint8_t &label, dense_node_d &result);
     // 最小空きIDの探索開始位置。削除時に手前の空きを反映。
     uint32_t next_free_idx = 0;
 
@@ -161,8 +151,8 @@ class CUGNG {
         uint16_t winner_rank,
         const Node &winner_node,
         const Vec3f &input_point);
-    void recordTrainingEvents(const Node_d &winners, const Vec3f &input_point);
-    void update_winner_statistics(const Node_d &winners, const Vec3f &point);
+    void recordTrainingEvents(const dense_node_d &winners, const Vec3f &input_point);
+    void update_winner_statistics(const dense_node_d &winners, const Vec3f &point);
     void recordEdgeDelta(const Node &first, const Node &second, uint8_t operation);
     static GngNodeKey nodeKey(const Node &node);
 

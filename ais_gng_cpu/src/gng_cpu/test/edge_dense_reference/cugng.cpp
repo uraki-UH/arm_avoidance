@@ -2,11 +2,11 @@
 
 #include <numeric>
 
-CUGNG::CUGNG(){
+dense_cugng::dense_cugng(){
 
 }
 
-bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
+bool dense_cugng::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
     observation_touched_ids.clear();
     observation_pixel_source = {};
     GridConfig c;
@@ -18,7 +18,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     c.z_min = _other_config->z_min;
     c.z_max = _other_config->z_max;
 
-    // Voxel Grid
+    // 入力ボクセル設定
     // 間引き無効時の範囲判定用グリッド。点の集約には不使用。
     c.unit = _other_config->voxel_grid_unit > 0
         ? _other_config->voxel_grid_unit : _other_config->node_grid;
@@ -36,12 +36,12 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     if (!grid_config.init(c))
         return false;
     
-    // copy
+    // 設定値のコピー
     node_num_max = _gng_config->num_max;
     gng_config = *_gng_config;
     edge_config = _edge_config;
 
-    // clear
+    // 既存状態の初期化
     node_num = 0;
     next_free_idx = 0;
     // nodes.clear();
@@ -51,22 +51,14 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     grid_page_offsets.clear();
     grid_node_num.clear();
 
-    // malloc
+    // 作業領域の確保
     nodes.resize(node_num_max);
     search_nodes.resize(node_num_max);
     is_search_batch = false;
     tn_id.resize(node_num_max);
-    // ノード上限と次数上限から決まる、実在エッジ用領域の最大容量。
-    const size_t max_edge_num = static_cast<size_t>(node_num_max) * NODE_MAX_EDGE / 2 + 1;
-    edge_count.assign(1, EDGE_NO_CONNECT);
-    edge_distance.assign(1, 0.f);
-    edge_reference_num.assign(1, 0);
-    free_edge_ids.clear();
-    edge_count.reserve(max_edge_num);
-    edge_distance.reserve(max_edge_num);
-    edge_reference_num.reserve(max_edge_num);
-    free_edge_ids.reserve(max_edge_num);
-    edge_slots.resize(node_num_max);
+    edge_count.resize(node_num_max * node_num_max);
+    memset(edge_count.data(), 0, sizeof(uint8_t) * node_num_max * node_num_max);
+    edge_distance.resize(node_num_max * node_num_max);
     grid_page_offsets.assign((static_cast<size_t>(grid_config.maxXYZ) + grid_page_size - 1) / grid_page_size, UINT32_MAX);
     grid_node_num.resize(grid_config.maxXYZ, 0);
     for (auto& node : nodes)
@@ -85,7 +77,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 #endif
     return true;
 }
-void CUGNG::clear() {
+void dense_cugng::clear() {
     observation_touched_ids.clear();
     observation_pixel_source = {};
     node_num = 0;
@@ -96,10 +88,6 @@ void CUGNG::clear() {
     is_search_batch = false;
     tn_id.clear();
     edge_count.clear();
-    edge_distance.clear();
-    edge_slots.clear();
-    edge_reference_num.clear();
-    free_edge_ids.clear();
     grid.clear();
     grid_page_offsets.clear();
     grid_node_num.clear();
@@ -112,7 +100,7 @@ void CUGNG::clear() {
     map_delta_capture_enabled = false;
     map_delta_frame_open = false;
 }
-void CUGNG::setTrainingEventCapture(bool enable) {
+void dense_cugng::setTrainingEventCapture(bool enable) {
     if (enable && training_events.empty()) {
         resizeTrainingEventBuffer();
     }
@@ -120,7 +108,7 @@ void CUGNG::setTrainingEventCapture(bool enable) {
     training_event_num = 0;
 }
 
-void CUGNG::setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
+void dense_cugng::setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
     constexpr uint16_t supported_winner_rank_max = 2;
     training_event_winner_rank_max = std::clamp<uint16_t>(
         max_winner_rank,
@@ -132,21 +120,21 @@ void CUGNG::setTrainingEventMaxWinnerRank(uint16_t max_winner_rank) {
     training_event_num = 0;
 }
 
-const GngTrainingEvent* CUGNG::getTrainingEvents(uint32_t *num) const {
+const GngTrainingEvent* dense_cugng::getTrainingEvents(uint32_t *num) const {
     if (num != nullptr) {
         *num = training_event_num;
     }
     return training_event_num == 0 ? nullptr : training_events.data();
 }
 
-GngNodeKey CUGNG::nodeKey(const Node &node) {
+GngNodeKey dense_cugng::nodeKey(const Node &node) {
     GngNodeKey key;
     key.id = static_cast<uint16_t>(node.id);
     key.frame = node.frame;
     return key;
 }
 
-void CUGNG::setMapDeltaCapture(bool enable) {
+void dense_cugng::setMapDeltaCapture(bool enable) {
     if (enable == map_delta_capture_enabled) return;
     map_delta_capture_enabled = enable;
     map_delta_frame_open = false;
@@ -160,7 +148,7 @@ void CUGNG::setMapDeltaCapture(bool enable) {
     }
 }
 
-void CUGNG::beginMapDeltaFrame() {
+void dense_cugng::beginMapDeltaFrame() {
     if (!map_delta_capture_enabled || map_delta_frame_open) {
         return;
     }
@@ -173,7 +161,7 @@ void CUGNG::beginMapDeltaFrame() {
     map_delta_frame_open = true;
 }
 
-void CUGNG::recordNodeDelta(const Node &node, uint8_t operation) {
+void dense_cugng::recordNodeDelta(const Node &node, uint8_t operation) {
     if (!map_delta_capture_enabled || node.id == NODE_NOID ||
         node.id >= node_update_recorded.size()) {
         return;
@@ -191,7 +179,7 @@ void CUGNG::recordNodeDelta(const Node &node, uint8_t operation) {
     node_deltas.push_back(delta);
 }
 
-void CUGNG::recordEdgeDelta(const Node &first, const Node &second, uint8_t operation) {
+void dense_cugng::recordEdgeDelta(const Node &first, const Node &second, uint8_t operation) {
     if (!map_delta_capture_enabled || first.id == NODE_NOID || second.id == NODE_NOID ||
         first.id >= node_update_recorded.size() ||
         second.id >= node_update_recorded.size()) {
@@ -209,11 +197,11 @@ void CUGNG::recordEdgeDelta(const Node &first, const Node &second, uint8_t opera
     edge_deltas.push_back(delta);
 }
 
-void CUGNG::finishMapDeltaFrame() {
+void dense_cugng::finishMapDeltaFrame() {
     map_delta_frame_open = false;
 }
 
-const GngMapDelta* CUGNG::getMapDelta() {
+const GngMapDelta* dense_cugng::getMapDelta() {
     if (!map_delta_capture_enabled) {
         return nullptr;
     }
@@ -226,16 +214,16 @@ const GngMapDelta* CUGNG::getMapDelta() {
     return &map_delta_view;
 }
 
-void CUGNG::beginTrainingEvents() {
+void dense_cugng::beginTrainingEvents() {
     training_event_num = 0;
 }
 
-void CUGNG::resizeTrainingEventBuffer() {
+void dense_cugng::resizeTrainingEventBuffer() {
     const auto learning_num = static_cast<std::size_t>(std::max(0, gng_config.learning_num));
     training_events.resize(learning_num * training_event_winner_rank_max);
 }
 
-void CUGNG::recordTrainingEvent(
+void dense_cugng::recordTrainingEvent(
     uint16_t winner_rank,
     const Node &winner_node,
     const Vec3f &input_point) {
@@ -252,7 +240,7 @@ void CUGNG::recordTrainingEvent(
     event.residual.z = input_point.p[2] - winner_node.pos.p[2];
 }
 
-void CUGNG::update_winner_statistics(const Node_d &winners, const Vec3f &point) {
+void dense_cugng::update_winner_statistics(const dense_node_d &winners, const Vec3f &point) {
     if (!enable_covariance && !enable_support) {return;}
     if (!std::isfinite(point.p[0]) || !std::isfinite(point.p[1]) || !std::isfinite(point.p[2])) {return;}
     const uint32_t ids[]{winners.id1, winners.id2};
@@ -271,7 +259,7 @@ void CUGNG::update_winner_statistics(const Node_d &winners, const Vec3f &point) 
     }
 }
 
-void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point) {
+void dense_cugng::recordTrainingEvents(const dense_node_d &winners, const Vec3f &input_point) {
     if (winners.id1 != NODE_NOID) {
         recordTrainingEvent(1, nodes[winners.id1], input_point);
     }
@@ -279,7 +267,7 @@ void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point
         recordTrainingEvent(2, nodes[winners.id2], input_point);
     }
 }
-void CUGNG::begin_search_batch() {
+void dense_cugng::begin_search_batch() {
     // 前フレームのラベル更新と、バッチ外のノード操作の反映。
     search_nodes.resize(nodes.size());
     for (const auto &node : nodes) {
@@ -290,9 +278,9 @@ void CUGNG::begin_search_batch() {
     is_search_batch = true;
 }
 
-void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num){
+void dense_cugng::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num){
     uint32_t i, j;
-    static Node_d n;
+    static dense_node_d n;
     // ボクセル番号順による低いZ側へのノード枠の偏在防止。全入力の一度ずつの処理。
     begin_search_batch();
     point_order.resize(input_pcl_num);
@@ -317,7 +305,7 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
     voxel2node_ids_num = j;
     is_search_batch = false;
 }
-void CUGNG::check_edge_distance() {
+void dense_cugng::check_edge_distance() {
     static uint32_t disconnect_ids[NODE_MAX_EDGE];
     int disconnect_num = 0, i;
     float norm2;
@@ -357,13 +345,13 @@ void CUGNG::check_edge_distance() {
         }
     }
 }
-// void CUGNG::learnBatch(vector<Vec3f> &inpcl, int input_pcl_num){
+// void dense_cugng::learnBatch(vector<Vec3f> &inpcl, int input_pcl_num){
 //     for(auto &node:nodes){
 //         node.s1_w.zero();
 //         node.s1_w_num = 0;
 //     }
 
-//     Node_d node_d;
+//     dense_node_d node_d;
 
 //     for (int i = 0; i < input_pcl_num; ++i) {
 //         // 全探索
@@ -392,12 +380,12 @@ void CUGNG::check_edge_distance() {
 //         }
 //     }
 // }
-void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num,
+void dense_cugng::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num,
     const vector<Vec3f> *observation_points,
     const vector<uint32_t> *voxel_raw_ids, const vector<uint32_t> *attention_raw_ids,
     const vector<Vec3f> *raw_points, const VoxelGrid *source_voxels,
-    const vector<observation_attention_span> *attention_spans, const vector<uint32_t> *attention_blocks){
-    // frame
+    const vector<dense_attention_span> *attention_spans, const vector<uint32_t> *attention_blocks){
+    // フレーム更新
     frame_number++;
     beginTrainingEvents();
     has_observation_frame_origin = enable_observation_support && has_observation_origin;
@@ -470,8 +458,8 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     }
     is_search_batch = false;
 }
-void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics) {
-    static Node_d n;
+void dense_cugng::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics) {
+    static dense_node_d n;
     int i;
     // 全探索
     bool p_is_in_vigilance = getMinGrid(p, n);
@@ -524,10 +512,10 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     static uint32_t disconnect_ids[NODE_MAX_EDGE];
     int disconnect_num = 0;
     for (i = 0; i < node0.edge_num; ++i) {
-        const uint32_t edge_idx = edge_slots[node0.id][i];
-        edge_count[edge_idx]++;
+        uint32_t edge_index = getEdgeIndex(node0.id, node0.edges[i]);
+        edge_count[edge_index]++;
         /* Edgeの年齢による切断 */
-        if (edge_count[edge_idx] > edge_config->age_max){
+        if (edge_count[edge_index] > edge_config->age_max){
             disconnect_ids[disconnect_num++] = node0.edges[i];
         }
     }
@@ -556,7 +544,7 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     node0.age_s1 = 0;
 }
 
-void CUGNG::getMinAll(Vec3f& p, Node_d& n){
+void dense_cugng::getMinAll(Vec3f& p, dense_node_d& n){
     float norm2;
 
     n.id1 = NODE_NOID;
@@ -582,12 +570,12 @@ void CUGNG::getMinAll(Vec3f& p, Node_d& n){
     }
 }
 
-bool CUGNG::getMinGrid(Vec3f &p, Node_d &n) {
+bool dense_cugng::getMinGrid(Vec3f &p, dense_node_d &n) {
     return is_search_batch ? get_min_grid_impl<true>(p, n) : get_min_grid_impl<false>(p, n);
 }
 
 template<bool enable_packed_search>
-bool CUGNG::get_min_grid_impl(Vec3f& p, Node_d& n){
+bool dense_cugng::get_min_grid_impl(Vec3f& p, dense_node_d& n){
     int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
     int grid_min_i, grid_max_i;
     int grid_min_j, grid_max_j;
@@ -648,13 +636,13 @@ bool CUGNG::get_min_grid_impl(Vec3f& p, Node_d& n){
     return p_is_in_vigilance;
 }
 
-bool CUGNG::getDownSamplingGrid(Vec3f &p, uint8_t &label, Node_d &n) {
+bool dense_cugng::getDownSamplingGrid(Vec3f &p, uint8_t &label, dense_node_d &n) {
     return is_search_batch ? get_down_sampling_grid_impl<true>(p, label, n)
                            : get_down_sampling_grid_impl<false>(p, label, n);
 }
 
 template<bool enable_packed_search>
-bool CUGNG::get_down_sampling_grid_impl(Vec3f& p, uint8_t& label, Node_d &n){
+bool dense_cugng::get_down_sampling_grid_impl(Vec3f& p, uint8_t& label, dense_node_d &n){
     int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
     int grid_min_i, grid_max_i;
     int grid_min_j, grid_max_j;
@@ -726,7 +714,7 @@ bool CUGNG::get_down_sampling_grid_impl(Vec3f& p, uint8_t& label, Node_d &n){
     return p_is_in_vigilance;
 }
 
-void CUGNG::delete_node(uint32_t idx) {
+void dense_cugng::delete_node(uint32_t idx) {
     if (idx >= node_num_max || node_num <= 2)
         return;
     auto& node = nodes[idx];
@@ -749,7 +737,7 @@ void CUGNG::delete_node(uint32_t idx) {
     next_free_idx = std::min(next_free_idx, idx);
 }
 
-void CUGNG::move_node(Node& node, Vec3f& new_pos) {
+void dense_cugng::move_node(Node& node, Vec3f& new_pos) {
     if(node.id == NODE_NOID){
         // assert(false);
         return;
@@ -803,7 +791,7 @@ void CUGNG::move_node(Node& node, Vec3f& new_pos) {
     g2[node.grid_vec_i] = node.id;
 }
 
-uint32_t CUGNG::add_node(Vec3f &pos) {
+uint32_t dense_cugng::add_node(Vec3f &pos) {
     if(node_num == node_num_max){
         return NODE_NOID; // ノード数の上限に達している
     }
@@ -837,87 +825,82 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
     return NODE_NOID;
 }
 
-void CUGNG::disconnect(uint32_t idx1, uint32_t idx2) {
-    if (idx1 == idx2) {return;}
-    auto &first = nodes[idx1];
-    auto &second = nodes[idx2];
-    const uint32_t edge_idx = getEdgeIndex(idx1, idx2);
-    const bool has_edge = edge_count[edge_idx] != EDGE_NO_CONNECT;
-    // 従来と同じ末尾交換による削除順序と、共有IDの対応維持。
-    for (uint32_t idx = 0; idx < first.edge_num; ++idx) {
-        if (first.edges[idx] == idx2) {
-            release_edge_slot(edge_slots[idx1][idx]);
-            first.edges[idx] = first.edges[--first.edge_num];
-            edge_slots[idx1][idx] = edge_slots[idx1][first.edge_num];
+void dense_cugng::disconnect(uint32_t idx1, uint32_t idx2) {
+    if (idx1 == idx2)
+        return;
+    int i;
+    // エッジ
+    auto& n1 = nodes[idx1];
+    auto& n2 = nodes[idx2];
+    const bool was_connected = edge_count[getEdgeIndex(idx1, idx2)] != EDGE_NO_CONNECT;
+    auto& e1 = n1.edges;
+    auto& e2 = n2.edges;
+    // 自身のEdgesから相手を消す
+    for (i = 0; i < n1.edge_num; ++i) {
+        if (e1[i] == idx2) {
+            e1[i] = e1[--n1.edge_num];
             break;
         }
     }
-    for (uint32_t idx = 0; idx < second.edge_num; ++idx) {
-        if (second.edges[idx] == idx1) {
-            release_edge_slot(edge_slots[idx2][idx]);
-            second.edges[idx] = second.edges[--second.edge_num];
-            edge_slots[idx2][idx] = edge_slots[idx2][second.edge_num];
+
+    // 相手のEdgesから自身を消す
+    for (i = 0; i < n2.edge_num; ++i) {
+        if (e2[i] == idx1) {
+            e2[i] = e2[--n2.edge_num];
             break;
         }
     }
-    edge_count[edge_idx] = EDGE_NO_CONNECT;
-    if (has_edge) {recordEdgeDelta(first, second, GNG_DELTA_REMOVE);}
+    edge_count[getEdgeIndex(idx1, idx2)] = EDGE_NO_CONNECT;
+    if (was_connected) {
+        recordEdgeDelta(n1, n2, GNG_DELTA_REMOVE);
+    }
 }
 
-void CUGNG::disconnect_all(uint32_t idx) {
-    auto &first = nodes[idx];
-    // 対象ノードの元の隣接順による削除イベントと、相手側の末尾交換。
-    for (uint32_t slot_idx = 0; slot_idx < first.edge_num; ++slot_idx) {
-        const uint32_t second_idx = first.edges[slot_idx];
-        auto &second = nodes[second_idx];
-        const uint32_t edge_idx = edge_slots[idx][slot_idx];
-        for (uint32_t other_slot_idx = 0; other_slot_idx < second.edge_num; ++other_slot_idx) {
-            if (second.edges[other_slot_idx] == idx) {
-                recordEdgeDelta(first, second, GNG_DELTA_REMOVE);
-                release_edge_slot(edge_slots[second_idx][other_slot_idx]);
-                second.edges[other_slot_idx] = second.edges[--second.edge_num];
-                edge_slots[second_idx][other_slot_idx] = edge_slots[second_idx][second.edge_num];
-                edge_count[edge_idx] = EDGE_NO_CONNECT;
+void dense_cugng::disconnect_all(uint32_t idx) {
+    uint32_t i, j;
+    auto& n1 = nodes[idx];
+    /* 相手側のEdgesから自分を消す。 */
+    for (i = 0; i < n1.edge_num; ++i) {
+        // 相手のID
+        auto& n2_id = n1.edges[i];
+        auto& n2 = nodes[n2_id];
+        // 相手側のエッジをすべて探索する
+        for (j = 0; j < n2.edge_num; ++j) {
+            // 相手から見たノードが自分のIndexのときなら
+            if (n2.edges[j] == idx) {
+                recordEdgeDelta(n1, n2, GNG_DELTA_REMOVE);
+                n2.edges[j] = n2.edges[--n2.edge_num];
+                edge_count[getEdgeIndex(idx, n2_id)] = EDGE_NO_CONNECT;
                 break;
             }
         }
-        release_edge_slot(edge_idx);
     }
-    first.edge_num = 0;
+    n1.edge_num = 0;
 }
 
-void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
-    if (idx1 == idx2) {return;}
-    uint32_t edge_idx = getEdgeIndex(idx1, idx2);
-    if (edge_count[edge_idx] != EDGE_NO_CONNECT) {
-        edge_count[edge_idx] = EDGE_CONNECT;
+void dense_cugng::connect(uint32_t idx1, uint32_t idx2) {
+    // 同一のノード
+    if (idx1 == idx2) return;
+    // // すでに接続してる
+    uint32_t edge_index = getEdgeIndex(idx1, idx2);
+    if (edge_count[edge_index] != EDGE_NO_CONNECT) {
+        edge_count[edge_index] = EDGE_CONNECT;
         return;
     }
-    auto &first = nodes[idx1];
-    auto &second = nodes[idx2];
-    if (first.edge_num == NODE_MAX_EDGE || second.edge_num == NODE_MAX_EDGE) {return;}
-    if (edge_idx == 0) {
-        if (!free_edge_ids.empty()) {
-            edge_idx = free_edge_ids.back();
-            free_edge_ids.pop_back();
-            edge_distance[edge_idx] = 0.f;
-        } else {
-            edge_idx = edge_count.size();
-            edge_count.push_back(EDGE_NO_CONNECT);
-            edge_distance.push_back(0.f);
-            edge_reference_num.push_back(0);
-        }
-    }
-    edge_count[edge_idx] = EDGE_CONNECT;
-    edge_reference_num[edge_idx] += 2;
-    edge_slots[idx1][first.edge_num] = edge_idx;
-    edge_slots[idx2][second.edge_num] = edge_idx;
-    first.edges[first.edge_num++] = idx2;
-    second.edges[second.edge_num++] = idx1;
-    recordEdgeDelta(first, second, GNG_DELTA_ADD);
+    auto& n1 = nodes[idx1];
+    auto& n2 = nodes[idx2];
+
+    // エッジ上限
+    if (n1.edge_num == NODE_MAX_EDGE || n2.edge_num == NODE_MAX_EDGE)
+        return;
+    edge_count[edge_index] = EDGE_CONNECT;
+    // 末尾に追加
+    n1.edges[n1.edge_num++] = idx2;
+    n2.edges[n2.edge_num++] = idx1;
+    recordEdgeDelta(n1, n2, GNG_DELTA_ADD);
 }
 
-void CUGNG::check_delete_no_edge_and_decay_eta() {
+void dense_cugng::check_delete_no_edge_and_decay_eta() {
     for (auto& node : nodes) {
         if (node.id == NODE_NOID) {
             continue;
@@ -930,15 +913,13 @@ void CUGNG::check_delete_no_edge_and_decay_eta() {
         }
     }
 }
-uint32_t CUGNG::getEdgeIndex(uint32_t idx1, uint32_t idx2) {
-    const auto &first = nodes[idx1];
-    for (uint32_t slot_idx = 0; slot_idx < first.edge_num; ++slot_idx) {
-        if (first.edges[slot_idx] == idx2) {return edge_slots[idx1][slot_idx];}
-    }
-    return 0;
+uint32_t dense_cugng::getEdgeIndex(uint32_t idx1, uint32_t idx2){
+    if(idx1 < idx2)
+        return idx1 + (uint32_t)node_num_max*idx2;
+    return idx2 + (uint32_t)node_num_max*idx1;
 }
 
-void CUGNG::normal_vector(Node& node, Vec3f *node_positions) {
+void dense_cugng::normal_vector(Node& node, Vec3f *node_positions) {
     // 連続座標配列がある場合の直接参照。単独呼出しでは従来のノード配列参照。
     const auto position = [&](uint32_t idx) -> Vec3f & {
         return node_positions ? node_positions[idx] : nodes[idx].pos;
@@ -967,7 +948,7 @@ void CUGNG::normal_vector(Node& node, Vec3f *node_positions) {
     node.normal = normal_sum.normalized();
 }
 
-void CUGNG::rho(Node& node, Vec3f *node_normals) {
+void dense_cugng::rho(Node& node, Vec3f *node_normals) {
     /* 2つの隣接ノードとの関係を見てcos類似度を平均する */
     float rho_sum = 0;
     /* 2つの接線からcos類似度を計算*/
@@ -989,7 +970,7 @@ void CUGNG::rho(Node& node, Vec3f *node_normals) {
     }
 }
 
-void CUGNG::check_age(){
+void dense_cugng::check_age(){
     // 選択回数に基づく削除
     int age;
     for (auto &node : nodes) {
@@ -1027,7 +1008,7 @@ void CUGNG::check_age(){
     }
 }
 
-void CUGNG::calc_edge_distanceXY(){
+void dense_cugng::calc_edge_distanceXY(){
     int i;
     uint32_t edge_id;
     for (auto& node : nodes) {
@@ -1036,7 +1017,7 @@ void CUGNG::calc_edge_distanceXY(){
         for (i = 0; i < node.edge_num;++i){
             edge_id = node.edges[i];
             if(node.id < edge_id){
-                edge_distance[edge_slots[node.id][i]] = node.pos.squaredNormXY(nodes[edge_id].pos);
+                edge_distance[getEdgeIndex(node.id, edge_id)] = node.pos.squaredNormXY(nodes[edge_id].pos);
             }
         }
     }

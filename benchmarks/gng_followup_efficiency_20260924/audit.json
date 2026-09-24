@@ -1,0 +1,447 @@
+{
+  "methods": [
+    "attention_ids",
+    "attention_spans",
+    "search",
+    "cluster",
+    "edges",
+    "combined",
+    "combined_xyz"
+  ],
+  "cases": [
+    {
+      "method": "before",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "75057abd2afccc7c41b1049c083b748a2db2eb6c386ea243b89ea267b7711f2d"
+    },
+    {
+      "method": "before",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "7d638dfc54c369ccf4285d1fb2fb3d2506a78636c0a7aedfc50006326ebcf905"
+    },
+    {
+      "method": "before",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "e401efe53bd224a348ae4cfd1647b6cd90c1ee6cf6cc20a122fde94bcf2ae7ac"
+    },
+    {
+      "method": "before",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "b21191a2ad4ed5dba906ccba1fb1e82de261a982762cf0756338c6dd2aa2bcf5"
+    },
+    {
+      "method": "before",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "7493aa99c9662002e770c004d489e0d358ee3744d1d72cdd6b2def495ce00339"
+    },
+    {
+      "method": "before",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "d10897ccbbb839271425913d25cd97cf9dce9f71cc1b3c81781140dfad6f1412"
+    },
+    {
+      "method": "before",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "bc35be945f820273386592185612fb6e6f6b73a3f2cc36c2febe0a087ca7dd0a"
+    },
+    {
+      "method": "before",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "ac9da1b7a5e5e8d119dc6fd8bb13ff475d3ea32ad9f4044dc3500e4eb006c86a"
+    },
+    {
+      "method": "before",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "ee2470b284538470108c40e5fe692002e0efb494c69ff8e58afb2efc18e25f55"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "cdac97dc98f599ed5ff81488b084e66df239c1b7fa6486cb0df76d8bc4e63175"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "500c8f759cfeaec5199f7a6a480d5187b4dc6bd88b279284f9fd950a1c0e72b2"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "97914abb236cc50c38a47992730180d2f24dcf69ffc7ee20dfde07aebd072478"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "dfb8d5ee3dd00d234e6554b193ecc58830dff39aa4023324b466c926d1e6c84d"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "23f3bb844698ce1d038f1e3694aa7add53013fa53de97d490873cb06a84c1f0e"
+    },
+    {
+      "method": "attention_ids",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "232ffc75910e9f730cfdbdf703b2fd13e286b2116ad6f9b1d86b5c5a69584248"
+    },
+    {
+      "method": "attention_ids",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "fd045263ac77c98179677795d9056bc3db7272361d5a9db04b988a33a3b46fef"
+    },
+    {
+      "method": "attention_ids",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "c82540dbb7441b065de224840500dfd787fa5f0597e855410685e1885b8c6be1"
+    },
+    {
+      "method": "attention_ids",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "fc86e543c3ad2743f408e963c75bc9d89f1a28d01c8f5197a6b35918952ff585"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "ddef0fd2e6f1ecc4550ccc181d6e41bb7f2d5bfdf66470313e4ee69811d5b0bc"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "d7df8336b7d3ec32bbad8b93b0e57fa08bf98fc6ffdae0027deee7d1d0bf64dd"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "252e3c06a1b800c1b33bf95e5eba7948cdd524266b41d3497693fa1f39ce1e06"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "fef547beb04861e33b8eb0d1fcf5207a7a43c5cd506423f35720318fdac0bc65"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "8c55cd3f1aa4bc943071744d7a85174604fa3b7f1787958650f687da0e93d7c4"
+    },
+    {
+      "method": "attention_spans",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "bd58d95b3c9efbabbdfc5cf270ea40ad8318271db60acba708cceb3e32f9799d"
+    },
+    {
+      "method": "attention_spans",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "ebb3b02fecc6d8cd928b3de4ae478c813a04074b9da510aac7169f7e28ea56f7"
+    },
+    {
+      "method": "attention_spans",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "64d45e2cc30f961c2fb42aa0a38f4e059036d9c259c0a0083026bb42761aa3cd"
+    },
+    {
+      "method": "attention_spans",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "c7d1b78eebb7cdbdeddde674f674b4a045b032d9324ba193a9415c9454ac92d3"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "b65675dc4bcacbd114de9c1e2649b2833641fdf5937c2f6663433ba85721404d"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "2f8633fc75b03549f63d6ff6ba849ebf974342d39d05382b05984544aa8e3688"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "97840c20809d79e73b8fd9d9e551ccda868cc93d412461ee168c225cd1ec262d"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "d2a1f59ab575264f92e6c630a4c63e0fdf8ad52438c71cc606a1311ba5688023"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "bf123bc1829f8c387b13955d6537893f726cf2d68a0715575998d493b8753b69"
+    },
+    {
+      "method": "search",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "c7aec159b6db17297cfc5b7ddbb1fab6b30d253b9f5580fad063816e43bdd749"
+    },
+    {
+      "method": "search",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "90708ff2f79a22a92f083c15e9eca5201248a17b43b38d02e0e3f186c70d422d"
+    },
+    {
+      "method": "search",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "533ab97cdf68819539344b46b98cf0b22d4b7bf6f73e1bd2d1e690163288e017"
+    },
+    {
+      "method": "search",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "19f531be20c5b8b18d3868eb52685a20fea18b957726e45372caa2e8e5738271"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "bc90e6ca34b60d0c2a0a7c93dab0bded653f5ddee6b23a36b2c529a16ee58d9d"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "1f885b5c391b146d61018fd7a0dacff1785a9ba192a1d4dcb2c499aa62511b78"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "987b8eb3b8d077f8a0b51494b2dd6c01d2a5b75ca29ae9d1f8552bfc69aba372"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "0b86f323be1c54f3bc6e5c0f1fcf7911499a5345dfead558a0fb8994d2125730"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "e8aef7fdfe05c294db92beefef0758f6799642f5a156d540776861ec63babf2b"
+    },
+    {
+      "method": "cluster",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "447395445530808ba96b85e1d083b2a5028567409bc1644a2e62b9cce60eb615"
+    },
+    {
+      "method": "cluster",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "b0b33021ba92f388b715587c0649fad333defbc8e9c48ba3f018d5187c127b12"
+    },
+    {
+      "method": "cluster",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "9b838b1d2008a74b0c2d57aae2599fa9c20467dab425d757eb95753c617835c8"
+    },
+    {
+      "method": "cluster",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "1b02858d7c988da52e59009cc14398b95bca9b7829dfb454ad6d6c9b8483e22f"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "1bea8bfa0fdf3dcc62b3a9f62662ac2400e1c437df4bd26e566ce60bea5686bb"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "db67cce107146a01e7d5b2b8224759cec6b2ad38a68caf193a765bfa4386d390"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "8294ca5eb539175b5505c37ee7098531d293f62e0610d60069fe1cb7de029ae9"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "b10f7fca904f14fb0eed18a9e801122e3f8eb08c78875b727d5e1f9eab2f321e"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "98b7f6965ebc8cfeec4275c6558f077a9db42a7f227db50fd486fae1f756c38f"
+    },
+    {
+      "method": "edges",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "1fbec645f595c284c2f09929f0d39132d51c17e2163af0f7beddc05abf37f29f"
+    },
+    {
+      "method": "edges",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "9cf08a97a5aa379752e9cb1de17afbfec7bae84939e6c812ee3ee6ec748be907"
+    },
+    {
+      "method": "edges",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "7e3d2b8c38d6de83353b4802767708cb777e00046a396691851431f6cd56ce9e"
+    },
+    {
+      "method": "edges",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "d83363c69c6dd27903b18edf9e9d74b2596e3519a082fa59189e6d5e3a440619"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "663247fd4b95064661fb750214c135d858a99176da52b4ed14ea0235874cdb00"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "e33f2d66fbd5d3f265828ac5b1df6438e25e732f1c963e8686b8aeb724fb6be0"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "5c1fc7ccffca5b6942536a45b477d5074fa62dea505bb40a87e5769069787fc2"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "15fcad570efeb06971f7f000aed5d1386ecb13c4ce101f8f4d0fd4941566a0d3"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "16352327472df29e79bb5b1ac62c2b6e99d462643cd0849b91a45d2d54b694ad"
+    },
+    {
+      "method": "combined",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "a074e6db6fe3eac7d047cc324955e30101d52a8ac0e744b3d876580901474743"
+    },
+    {
+      "method": "combined",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "3766a753e816c66aad794c0b554c5feb478516fa02dbd18a73b51d01b04779e6"
+    },
+    {
+      "method": "combined",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "9202995c18d51766d6f6a5f1443fa1969e00202ed00e5d0ff5252f9a5903fdbd"
+    },
+    {
+      "method": "combined",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "b34f4fefcc7fc1b540a9a3d643359748497473d7168b1727e4743b0639f4688f"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.1_1",
+      "frames": 300,
+      "sha256": "47a949007041f2773b58474629fa32ef74ecf75c6b57f5c0eff3a3b8a68b7f18"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.1_2",
+      "frames": 100,
+      "sha256": "b8de2832919bddd72e39741cfb9fc944e8fe22152fefe78fffc8897f18b45d82"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.1_3",
+      "frames": 100,
+      "sha256": "9a2e753b5826b8af2f826fc029d975106ca414d716447eeb3aa2687c6a6e4963"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.5_1",
+      "frames": 300,
+      "sha256": "9459e8816bd3753b0c42336d83872384418f3f3b5a108354a798999a7485c841"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.5_2",
+      "frames": 100,
+      "sha256": "43ec2078bf2820442768329a08cae786bc83361650cb5a62c2f53bdf15aab9c0"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "voxel_0.5_3",
+      "frames": 100,
+      "sha256": "db2fd1bd3f29feddad164feacc680121bb5c08a42d373be885c7697b7b5b4c17"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "features_0",
+      "frames": 30,
+      "sha256": "ce7e113501a70bf1b3f8111172f7d1c7b54935f62f256c0e7b8c216b3ca4bc3e"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "features_0.1",
+      "frames": 30,
+      "sha256": "cc5f1a72d0ca1dd267b300b52e35198279d97189cdefffcf09202ee8ef417a39"
+    },
+    {
+      "method": "combined_xyz",
+      "name": "features_0.5",
+      "frames": 30,
+      "sha256": "936c2d17843243727d26be8ec32d51b91101bbb715524462bb258b7821e43916"
+    }
+  ],
+  "executed_frames": 8720,
+  "compared_frames": 7630
+}

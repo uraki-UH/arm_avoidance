@@ -16,6 +16,10 @@ class Clustering {
     
     vector<Cluster> clusters;
     vector<Cluster> disable_clusters;
+    // 次フレームの構築用配列と、探索・引継ぎ用作業領域の再利用。
+    vector<Cluster> new_clusters;
+    vector<int> cluster_tmp;
+    vector<pair<uint64_t, size_t>> prev_cluster_order;
     int wall_cluster_size;
     int unknown_cluster_size;
     int safe_cluster_size;

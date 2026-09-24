@@ -34,6 +34,10 @@ class Cluster {
 
    public:
     Cluster(const Cluster& cluster);
+    Cluster& operator=(const Cluster&) = default;
+    // 所属ノード配列の所有権移動による、ソート・再確保時のコピー削減。
+    Cluster(Cluster&&) noexcept = default;
+    Cluster& operator=(Cluster&&) noexcept = default;
     Cluster(vector<int>& ids, vector<Node> &nodes, uint32_t frame_number, int _label = DEFAULT);
     ~Cluster();
     void cylinder();

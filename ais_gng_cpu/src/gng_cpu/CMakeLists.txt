@@ -151,6 +151,28 @@ if(GNG_BUILD_BENCHMARKS)
   target_include_directories(normal_cache_test PRIVATE src include)
   target_compile_definitions(normal_cache_test PRIVATE GNG_VERSION=${GNG_VERSION})
   add_test(NAME normal_cache_test COMMAND normal_cache_test)
+  add_executable(search_cache_test test/search_cache_test.cpp src/cpu/cugng.cpp
+    src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(search_cache_test PRIVATE src include)
+  target_compile_definitions(search_cache_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  add_test(NAME search_cache_test COMMAND search_cache_test)
+  add_executable(cluster_bookkeeping_test test/cluster_bookkeeping_test.cpp
+    src/cpu/clustering.cpp src/cpu/cugng.cpp src/utils/cluster.cpp
+    src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(cluster_bookkeeping_test PRIVATE src include)
+  target_compile_definitions(cluster_bookkeeping_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  add_test(NAME cluster_bookkeeping_test COMMAND cluster_bookkeeping_test)
+  add_executable(sparse_edges_test test/sparse_edges_test.cpp test/edge_dense_reference/cugng.cpp
+    src/cpu/cugng.cpp src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(sparse_edges_test PRIVATE src include)
+  target_compile_definitions(sparse_edges_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  add_test(NAME sparse_edges_test COMMAND sparse_edges_test)
+  add_executable(attention_lookup_test test/attention_lookup_test.cpp ${SRC_FILES})
+  target_include_directories(attention_lookup_test PRIVATE src include ${Boost_INCLUDE_DIRS})
+  target_compile_definitions(attention_lookup_test PRIVATE GNG_VERSION=${GNG_VERSION}
+    ATTENTION_LOOKUP_VARIANT=0)
+  target_link_libraries(attention_lookup_test PRIVATE OpenSSL::SSL OpenSSL::Crypto ykpiv)
+  add_test(NAME attention_lookup_test COMMAND attention_lookup_test)
   add_executable(node_id_reuse_test test/node_id_reuse_test.cpp src/cpu/cugng.cpp
     src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
   target_include_directories(node_id_reuse_test PRIVATE src include)

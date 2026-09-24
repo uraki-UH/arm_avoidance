@@ -1,0 +1,95 @@
+{
+  "runtime_before": {
+    "47894": {
+      "parent": "263",
+      "command": "/usr/bin/python3 /opt/ros/humble/bin/ros2 launch topo_fuzzy_viewer viewer_stack.launch.py"
+    },
+    "47895": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_ws_gateway_node --ros-args -r __node:=viewer_ws_gateway_node --params-file /tmp/launch_params_xs8thsyp"
+    },
+    "47897": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_source_node --ros-args -r __node:=viewer_source_node"
+    },
+    "47899": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_rosbag_node --ros-args -r __node:=viewer_rosbag_node"
+    },
+    "47901": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_gng_node --ros-args -r __node:=viewer_gng_node"
+    },
+    "47903": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_param_node --ros-args -r __node:=viewer_param_node"
+    },
+    "47905": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_template_match_node --ros-args -r __node:=viewer_template_match_node"
+    },
+    "47907": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_edit_node --ros-args -r __node:=viewer_edit_node"
+    },
+    "52282": {
+      "parent": "440",
+      "command": "/usr/bin/python3 /opt/ros/humble/bin/ros2 bag play /rosbag/fuzzy/Macnica_\u4ea4\u5dee\u70b9\u5206\u6790/algo_0000_ros2 --loop"
+    }
+  },
+  "runtime_after": {
+    "47894": {
+      "parent": "263",
+      "command": "/usr/bin/python3 /opt/ros/humble/bin/ros2 launch topo_fuzzy_viewer viewer_stack.launch.py"
+    },
+    "47895": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_ws_gateway_node --ros-args -r __node:=viewer_ws_gateway_node --params-file /tmp/launch_params_xs8thsyp"
+    },
+    "47897": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_source_node --ros-args -r __node:=viewer_source_node"
+    },
+    "47899": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_rosbag_node --ros-args -r __node:=viewer_rosbag_node"
+    },
+    "47901": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_gng_node --ros-args -r __node:=viewer_gng_node"
+    },
+    "47903": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_param_node --ros-args -r __node:=viewer_param_node"
+    },
+    "47905": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_template_match_node --ros-args -r __node:=viewer_template_match_node"
+    },
+    "47907": {
+      "parent": "47894",
+      "command": "/ros2_ws/install/topo_fuzzy_viewer/lib/topo_fuzzy_viewer/viewer_edit_node --ros-args -r __node:=viewer_edit_node"
+    },
+    "52282": {
+      "parent": "440",
+      "command": "/usr/bin/python3 /opt/ros/humble/bin/ros2 bag play /rosbag/fuzzy/Macnica_\u4ea4\u5dee\u70b9\u5206\u6790/algo_0000_ros2 --loop"
+    }
+  },
+  "existing_gng_mappings": {},
+  "removed_temporary_builds": [
+    "/tmp/gng_followup_efficiency_build",
+    "/tmp/gng_followup_search_build",
+    "/tmp/gng_followup_cluster_build",
+    "/tmp/gng_followup_cluster_reference_build",
+    "/tmp/gng_followup_edges_build",
+    "/tmp/gng_followup_attention_test_build"
+  ],
+  "production_ctest_num": 20,
+  "production_api_test_num": 2,
+  "wasm_native_test_num": 1,
+  "installed_smoke_frames": 30,
+  "cb_packages": 30,
+  "cb_sec": 56.1,
+  "installed_sha256": "9521a0dc9bde9e29e3834454d38040be942d40ae2a3ce73a12976e096d4d6003",
+  "all_owned_processes_finished": true
+}

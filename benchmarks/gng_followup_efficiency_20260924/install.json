@@ -1,0 +1,31 @@
+{
+  "method": "combined_xyz",
+  "before_sha256": "0111075e1ab5e8239d4f6a8cab2762d9876d194d561c69a95146a92cab770e6f",
+  "after_sha256": "9521a0dc9bde9e29e3834454d38040be942d40ae2a3ce73a12976e096d4d6003",
+  "before_inode": 40539471,
+  "after_inode": 40539477,
+  "exported_symbols": [
+    "gng_exec",
+    "gng_getAffineTransformedInputPointCloud",
+    "gng_getDownSampling",
+    "gng_getTopologicalMap",
+    "gng_getTopologicalMapDelta",
+    "gng_getTrainingEvents",
+    "gng_get_node_num_neighbors",
+    "gng_get_node_statistics",
+    "gng_get_observation_angle_range",
+    "gng_get_observation_frame",
+    "gng_init",
+    "gng_setInferredClusterLabels",
+    "gng_setInferredNodeLabels",
+    "gng_setMapDeltaCapture",
+    "gng_setNodePositions",
+    "gng_setParameter",
+    "gng_setPointCloud",
+    "gng_setTrainingEventCapture",
+    "gng_setTrainingEventMaxWinnerRank",
+    "gng_set_observation_input",
+    "gng_set_priority_input",
+    "gng_set_weighted_priority_input"
+  ]
+}

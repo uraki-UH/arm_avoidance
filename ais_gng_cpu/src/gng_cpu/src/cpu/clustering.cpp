@@ -22,13 +22,18 @@ void Clustering::clustering() {
 
     const uint32_t frame_number = gng->frame_number;
 
-    vector<Cluster> new_clusters;  // 現在のノード情報で新規にクラスタリング
+    new_clusters.clear();
+    prev_cluster_order.clear();
+    for (size_t idx = 0; idx < clusters.size(); ++idx) {
+        prev_cluster_order.emplace_back(clusters[idx].id, idx);
+    }
+    // 重複ID時にも従来の線形探索と同じ先頭要素を選択する索引。
+    sort(prev_cluster_order.begin(), prev_cluster_order.end());
     Center new_human_center; //新規の人クラスタ
     vector<vector<int>> new_human_clusters; //新規の人クラスタ
 
     set<uint64_t> used_id;  // 使用済みクラスタID
     set<uint32_t> used_rosid; // 使用済みクラスタROSID
-    vector<int> cluster_tmp;
     vector<pair<float, int>> nodes_tmp;
     vector<vector<int>> cluster_tmp_tmp;
     int i, j;
@@ -51,7 +56,7 @@ void Clustering::clustering() {
         if (cluster_tmp.size() >= cluster_config->node_num_min) {
             Cluster c(cluster_tmp, gng->nodes, node.label);
             if (c.size != 0 && (c.getArea() > (cluster_config->plane_volume))) {
-                new_clusters.emplace_back(c);
+                new_clusters.emplace_back(std::move(c));
                 if(node.label == WALL)
                     wall_cluster_size++;
                 else
@@ -82,7 +87,7 @@ void Clustering::clustering() {
         if (cluster_tmp.size() >= cluster_config->node_num_min) {
             Cluster c(cluster_tmp, gng->nodes, frame_number);
             if (c.size != 0) {
-                new_clusters.emplace_back(c);
+                new_clusters.emplace_back(std::move(c));
                 unknown_cluster_size++;
             }
             // vector<Vec3f> cluster_node_pos;
@@ -139,11 +144,8 @@ void Clustering::clustering() {
                 ) {
                     continue;
                 }
-                // 新規ID
-                if (cluster_id_map.find(cluster_id) == cluster_id_map.end())
-                    cluster_id_map.emplace(cluster_id, 1);
-                else
-                    cluster_id_map.at(cluster_id)++;
+                // 単一の木探索による投票集計。同票時の昇順ID選択は維持。
+                ++cluster_id_map.try_emplace(cluster_id, 0).first->second;
             }
 
             // IDマップができなかった
@@ -155,13 +157,12 @@ void Clustering::clustering() {
                 return x.second < y.second;
             });
             cluster_id = pr->first;
-            // 見つかった場合
-            for (auto &prev_cluster : clusters) {
-                if (prev_cluster.id == cluster_id) {
-                    _take_over_cluster(prev_cluster, cluster);
-                    used_id.insert(cluster_id);
-                    break;
-                }
+            // 旧クラスタのID索引による引継ぎ先の検索。
+            const auto previous = lower_bound(prev_cluster_order.begin(), prev_cluster_order.end(),
+                pair<uint64_t, size_t>{cluster_id, 0});
+            if (previous != prev_cluster_order.end() && previous->first == cluster_id) {
+                _take_over_cluster(clusters[previous->second], cluster);
+                used_id.insert(cluster_id);
             }
         }
         // ROSIDを先にマップ
@@ -170,6 +171,8 @@ void Clustering::clustering() {
                 used_rosid.insert(cluster.ros_id);
             }
         }
+        // 使用済みROSIDの追加だけに対応した、最小空き候補の継続。
+        uint32_t min_free_ros_id = 0;
         // 新規クラスタへの処理
         for (auto &cluster: new_clusters) {
             // ID が既に振られている
@@ -181,11 +184,12 @@ void Clustering::clustering() {
             // over flow
             if (cluster.id == CLUSTER_DEFAULT_ID)
                 cluster.id = max_id++;
-            for (uint32_t ros_id = 0; ros_id < (UINT32_MAX - 1); ++ros_id) {
+            for (uint32_t ros_id = min_free_ros_id; ros_id < (UINT32_MAX - 1); ++ros_id) {
                 // ROSIDID が未使用
                 if (used_rosid.find(ros_id) == used_rosid.end()) {
                     cluster.ros_id = ros_id;
                     used_rosid.insert(ros_id);
+                    min_free_ros_id = ros_id + 1;
                     break;
                 }
             }
@@ -213,8 +217,8 @@ void Clustering::clustering() {
         }
     }
 
-    clusters.clear();
-    clusters = new_clusters;
+    // 所属ノード配列の深いコピーを伴わない、構築結果と旧領域の交換。
+    clusters.swap(new_clusters);
 
     // vector<Cluster> new_disable_clusters;
     // for(auto &cluster:disable_clusters){
@@ -279,10 +283,10 @@ void Clustering::_topologicalClusteringOther(int idx, vector<int> &ids, bool sta
             (node.label == UNKNOWN_OBJECT && node_edge.label == UNKNOWN_OBJECT)
                 ? cluster_config->unknown_edge_distance_max2
                 : cluster_config->other_edge_distance_max2;
-        uint32_t edge_index = gng->getEdgeIndex(idx, edge_id);
+        const uint32_t edge_idx = gng->edge_slots[idx][i];
         if (!node_edge.clustered_flag 
             && (node_edge.static_node == static_node)
-            && gng->edge_distance[edge_index] < edge_d2
+            && gng->edge_distance[edge_idx] < edge_d2
         ) {
             ids.emplace_back(edge_id);
             node_edge.clustered_flag = true;
