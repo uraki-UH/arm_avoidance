@@ -47,13 +47,19 @@ def main():
             assert client.wait_for_service(timeout_sec=12.0), name
             req = GetParameters.Request()
             names = ["min_plane_width_ratio", "growth_residual_ratio", "retention_residual_ratio",
-                     "max_effective_spacing", "max_normalized_cluster_residual", "max_merge_side_residual_ratio"]
+                     "max_effective_spacing", "max_normalized_cluster_residual", "max_merge_side_residual_ratio",
+                     "enable_fragment_merge", "max_fragment_nodes", "max_fragment_edge_ratio_th",
+                     "max_fragment_residual_ratio_th", "min_fragment_merge_frames"]
             prefix = "plane_cluster." if executable == "ais_gng_cpu" else ""
             req.names = [prefix + key for key in names]
             future = client.call_async(req)
             rclpy.spin_until_future_complete(observer, future, timeout_sec=5.0)
             assert future.done()
-            assert [value.double_value for value in future.result().values] == [settings[key] for key in names]
+            for key, value in zip(names, future.result().values):
+                expected = settings[key]
+                actual = value.bool_value if isinstance(expected, bool) else (
+                    value.integer_value if isinstance(expected, int) else value.double_value)
+                assert actual == expected, (key, actual, expected)
             observer.destroy_client(client)
         observer.create_subscription(PlaneClusterArray, "/plane_consistency/planes", received.append, 10)
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -141,6 +147,42 @@ def main():
                                     (18 + row) * 41 + 23, 1681 + row * 5 + 4])
             expect_clusters(1 if offset == 0.0 else 2)
             print(f"PASS: 1706-node interior patch, 1 deg tilt, offset={offset} m", flush=True)
+
+        # 1本接続の確認待ちを、各入力に対応する出力フレームで検証。
+        graph.nodes.clear()
+        del graph.edges[:]
+        for size, origin_x in ((12, 0.0), (5, 0.60)):
+            base_idx = len(graph.nodes)
+            for row in range(size):
+                for column in range(size):
+                    idx = base_idx + row * size + column
+                    value = TopologicalNode()
+                    value.id = 20000 + idx
+                    value.pos.x, value.pos.y = origin_x + column * 0.05, row * 0.05
+                    value.normal.z = 1.0
+                    graph.nodes.append(value)
+                    if column:
+                        graph.edges.extend([idx - 1, idx])
+                    if row:
+                        graph.edges.extend([idx - size, idx])
+        expect_clusters(2)
+        graph.edges.extend([11, 144])
+        num_confirmation_frames = settings["min_fragment_merge_frames"]
+        for frame in range(1, num_confirmation_frames + 1):
+            graph.frame_number += 1
+            publisher.publish(graph)
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                rclpy.spin_once(observer, timeout_sec=0.1)
+                if received and received[-1].frame_number == graph.frame_number:
+                    break
+            else:
+                raise AssertionError("fragment confirmation output missing")
+            expected = 1 if frame == num_confirmation_frames else 2
+            assert len(received[-1].clusters) == expected, (frame, len(received[-1].clusters))
+            assert sum(len(cluster.node_indices) for cluster in received[-1].clusters) == 169
+        expect_clusters(1)
+        print(f"PASS: single-edge fragment merge after {num_confirmation_frames} frames", flush=True)
         assert all(process.poll() is None for process in processes)
     finally:
         for process in reversed(processes):

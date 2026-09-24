@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -249,7 +250,7 @@ struct DisjointSet
   }
 };
 
-std::uint64_t clusterPairKey(const int first, const int second)
+std::uint64_t clusterPairKey(const std::uint32_t first, const std::uint32_t second)
 {
   const std::uint32_t low = static_cast<std::uint32_t>(std::min(first, second));
   const std::uint32_t high = static_cast<std::uint32_t>(std::max(first, second));
@@ -273,6 +274,10 @@ struct Clusterizer::Impl
     options.max_effective_spacing = std::max(0.0, options.max_effective_spacing);
     options.merge_smaller_side_residual_ratio =
       std::max(0.0, options.merge_smaller_side_residual_ratio);
+    options.max_fragment_nodes = std::max<std::size_t>(3U, options.max_fragment_nodes);
+    options.max_fragment_edge_ratio_th = std::max(0.0, options.max_fragment_edge_ratio_th);
+    options.max_fragment_residual_ratio_th = std::max(0.0, options.max_fragment_residual_ratio_th);
+    options.min_fragment_merge_frames = std::max<std::size_t>(1U, options.min_fragment_merge_frames);
     options.normal_filter_alpha = std::clamp(options.normal_filter_alpha, 0.01, 1.0);
     options.normal_alignment_deg = std::clamp(options.normal_alignment_deg, 0.0, 90.0);
     normal_alignment_cos = std::cos(options.normal_alignment_deg * kRadiansPerDeg);
@@ -380,10 +385,18 @@ struct Clusterizer::Impl
   struct AdjacentPair
   {
     std::size_t edges = 0U;
+    double single_edge_ratio = 0.0;
     PlaneAccumulator first_contact;
     PlaneAccumulator second_contact;
   };
   std::unordered_map<std::uint64_t, AdjacentPair> adjacent_pair_counts;
+  // 配列の詰め直しに依存しない永続クラスタID対による、1本接続の連続確認。
+  struct fragment_merge_state
+  {
+    std::uint32_t last_frame = 0U;
+    std::size_t num_frames = 0U;
+  };
+  std::unordered_map<std::uint64_t, fragment_merge_state> fragment_merge_evidence;
   std::vector<int> remap;
   std::vector<ClusterState> kept_clusters;
   std::vector<std::vector<std::uint32_t>> member_lists;
@@ -1214,6 +1227,7 @@ struct Clusterizer::Impl
   bool mergeClusters(ClusterStatistics &statistics)
   {
     if (clusters.size() < 2U) {
+      fragment_merge_evidence.clear();
       return false;
     }
     adjacent_pair_counts.clear();
@@ -1235,6 +1249,10 @@ struct Clusterizer::Impl
         }
         auto &pair = adjacent_pair_counts[clusterPairKey(first_label, second_label)];
         ++pair.edges;
+        if (pair.edges == 1U) {
+          pair.single_edge_ratio = (positions[index] - positions[neighbour]).norm() /
+            std::max(kEpsilon, std::min(spacings[index], spacings[neighbour]));
+        }
         const auto first_idx = first_label < second_label ? index : neighbour;
         const auto second_idx = first_label < second_label ? neighbour : index;
         pair.first_contact.add(positions[first_idx], Eigen::Vector3d::Zero(), spacings[first_idx]);
@@ -1242,6 +1260,7 @@ struct Clusterizer::Impl
       }
     }
     if (adjacent_pair_counts.empty()) {
+      fragment_merge_evidence.clear();
       return false;
     }
 
@@ -1250,16 +1269,12 @@ struct Clusterizer::Impl
     merge_fits = plane_fits;
 
     merge_sets.reset(clusters.size());
-    const auto can_fit_plane = [this](const PlaneAccumulator &side, const PlaneFit &fit) {
-        return side.rms_to_plane(fit) / effective_spacing(side.meanSpacing()) <=
-               options.merge_smaller_side_residual_ratio;
+    const auto can_fit_plane = [this](
+      const PlaneAccumulator &side, const PlaneFit &fit, const double max_residual_ratio_th) {
+        return side.rms_to_plane(fit) / effective_spacing(side.meanSpacing()) <= max_residual_ratio_th;
       };
     for (const auto &[key, pair] : adjacent_pair_counts) {
       ++statistics.merge_adjacent_pair_count;
-      if (pair.edges < options.merge_connection_requirement) {
-        ++statistics.merge_insufficient_edge_pair_count;
-        continue;
-      }
       const std::size_t first = merge_sets.find(static_cast<std::size_t>(key & 0xFFFFFFFFULL));
       const std::size_t second = merge_sets.find(static_cast<std::size_t>(key >> 32));
       if (first == second) {
@@ -1267,6 +1282,16 @@ struct Clusterizer::Impl
       }
       const PlaneAccumulator &first_accumulator = merge_accumulators[first];
       const PlaneAccumulator &second_accumulator = merge_accumulators[second];
+      const bool is_fragment_merge = pair.edges < options.merge_connection_requirement;
+      if (is_fragment_merge &&
+        (!options.enable_fragment_merge || options.merge_connection_requirement != 2U ||
+        pair.edges != 1U ||
+        std::min(first_accumulator.count, second_accumulator.count) > options.max_fragment_nodes ||
+        pair.single_edge_ratio > options.max_fragment_edge_ratio_th))
+      {
+        ++statistics.merge_insufficient_edge_pair_count;
+        continue;
+      }
       const PlaneFit &first_fit = merge_fits[first];
       const PlaneFit &second_fit = merge_fits[second];
       if (!first_fit.is_valid || !second_fit.is_valid) {
@@ -1288,7 +1313,10 @@ struct Clusterizer::Impl
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
       }
-      if (union_residual_ratio > options.max_normalized_cluster_residual) {
+      const double max_cluster_ratio_th = is_fragment_merge ?
+        std::min(options.max_normalized_cluster_residual, options.max_fragment_residual_ratio_th) :
+        options.max_normalized_cluster_residual;
+      if (union_residual_ratio > max_cluster_ratio_th) {
         ++statistics.merge_absolute_residual_rejected_pair_count;
         continue;
       }
@@ -1309,13 +1337,29 @@ struct Clusterizer::Impl
       // 各側全体から統合後平面への適合判定。大面の点数・間隔による小面の誤吸収防止。
       // 相手の元平面との相互照合は接続端点のみ。小面の法線誤差の遠方外挿の回避。
       // 連鎖統合時も現在の成分平面で接触部を評価。平行段差の重心移動による隠蔽防止。
-      if (!can_fit_plane(first_accumulator, union_fit) ||
-        !can_fit_plane(second_accumulator, union_fit) ||
-        !can_fit_plane(pair.first_contact, second_fit) ||
-        !can_fit_plane(pair.second_contact, first_fit))
+      const double max_side_ratio_th = is_fragment_merge ?
+        std::min(options.merge_smaller_side_residual_ratio, options.max_fragment_residual_ratio_th) :
+        options.merge_smaller_side_residual_ratio;
+      if (!can_fit_plane(first_accumulator, union_fit, max_side_ratio_th) ||
+        !can_fit_plane(second_accumulator, union_fit, max_side_ratio_th) ||
+        !can_fit_plane(pair.first_contact, second_fit, max_side_ratio_th) ||
+        !can_fit_plane(pair.second_contact, first_fit, max_side_ratio_th))
       {
         ++statistics.merge_smaller_side_rejected_pair_count;
         continue;
+      }
+      if (is_fragment_merge) {
+        auto &evidence = fragment_merge_evidence[clusterPairKey(clusters[first].id, clusters[second].id)];
+        if (evidence.last_frame != normal_filter_current_frame) {
+          evidence.num_frames = evidence.last_frame + 1U == normal_filter_current_frame ?
+            std::min(evidence.num_frames + 1U, options.min_fragment_merge_frames) : 1U;
+          evidence.last_frame = normal_filter_current_frame;
+        }
+        if (evidence.num_frames < options.min_fragment_merge_frames) {
+          ++statistics.num_fragment_pending_pairs;
+          continue;
+        }
+        ++statistics.num_fragment_merged_clusters;
       }
       // 統合済み成分のノード数によるID選択。同数時は古いIDを優先。
       merge_sets.unite(first, second, [this](const std::size_t a, const std::size_t b) {
@@ -1327,6 +1371,12 @@ struct Clusterizer::Impl
       const std::size_t root_idx = merge_sets.find(first);
       merge_accumulators[root_idx] = merged_fit;
       merge_fits[root_idx] = union_fit;
+    }
+
+    // 接続消失・幾何不適合・ID変更で途切れた履歴の破棄。再出現時の確認回数の初期化。
+    for (auto it = fragment_merge_evidence.begin(); it != fragment_merge_evidence.end();) {
+      it = it->second.last_frame == normal_filter_current_frame ? std::next(it) :
+        fragment_merge_evidence.erase(it);
     }
 
     std::size_t absorbed = 0U;
@@ -1551,6 +1601,7 @@ void Clusterizer::reset()
   // 利用側が取り違えるため。
   impl_->clusters.clear();
   impl_->owner_by_node_id.clear();
+  impl_->fragment_merge_evidence.clear();
   // フレーム番号の一致で「直前フレームの値か」を判定しているため、frame配列を
   // 番兵の0へ戻すだけで全エントリが無効化される(current_frameは巻き戻さない)。
   std::fill(
@@ -1570,6 +1621,7 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
   if (map.nodes.empty()) {
     impl_->clusters.clear();
     impl_->owner_by_node_id.clear();
+    impl_->fragment_merge_evidence.clear();
     return result;
   }
 

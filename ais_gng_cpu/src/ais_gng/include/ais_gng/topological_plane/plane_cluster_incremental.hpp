@@ -90,6 +90,17 @@ struct ClusterOptions
   // そのため併合だけを独立して緩める専用値として分離してある。
   std::size_t merge_connection_requirement = 1;
 
+  // 通常2本接続を要求する設定での、小断片に限定した1本接続の救済。
+  bool enable_fragment_merge = true;
+  // 救済対象となる小さい側の所属ノード数。
+  std::size_t max_fragment_nodes = 30;
+  // 接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
+  double max_fragment_edge_ratio_th = 2.5;
+  // 各側・接触部・統合後平面の正規化RMS。通常併合より強い適合条件。
+  double max_fragment_residual_ratio_th = 0.10;
+  // 同じ永続クラスタ対で幾何条件を満たした連続入力フレーム数。
+  std::size_t min_fragment_merge_frames = 3;
+
   // 新しいクラスタを育てる途中で要求する、生成中クラスタ内の隣接ノード数。
   // 生成直後は競合相手がいないため小さくてよい。
   std::size_t birth_neighbor_requirement = 1;
@@ -183,6 +194,9 @@ struct ClusterStatistics
   std::size_t merge_absolute_residual_rejected_pair_count = 0;
   std::size_t merge_residual_growth_rejected_pair_count = 0;
   std::size_t merge_smaller_side_rejected_pair_count = 0;
+  // 1本接続の小断片救済による統合数と連続確認待ち対数。
+  std::size_t num_fragment_merged_clusters = 0;
+  std::size_t num_fragment_pending_pairs = 0;
 
   // 鎖状(第2固有値が第1固有値に対して小さすぎる)として捨てた領域の数。
   std::size_t chain_rejected_count = 0;

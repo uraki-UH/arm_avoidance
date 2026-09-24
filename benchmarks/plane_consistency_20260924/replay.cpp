@@ -4,8 +4,10 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 
 // ROS起動なしの共有既定値と、共通YAMLと同じ種順序。
 struct Parameters
@@ -30,13 +32,22 @@ double cpu_ms()
 
 int main(int argc, char **argv)
 {
-  if (argc != 2) {return 2;}
+  const std::string_view mode = argc == 3 ? argv[2] : "";
+  if (argc < 2 || argc > 3 ||
+    (!mode.empty() && mode != "--diagnose" && mode != "--disable-fragment-merge")) {return 2;}
+  const bool enable_diagnostics = mode == "--diagnose";
   std::ifstream input(argv[1], std::ios::binary);
   if (!input) {return 2;}
   Parameters parameters;
-  fuzzrobo::topological_plane::incremental::Clusterizer clusterizer(
-    fuzzrobo::topological_plane::incremental::declareClusterOptions(parameters));
-  std::cout << "frame,nodes,clusters,assigned,released,born,merged,split,cpu_ms,wall_ms\n";
+  auto options = fuzzrobo::topological_plane::incremental::declareClusterOptions(parameters);
+  if (mode == "--disable-fragment-merge") {options.enable_fragment_merge = false;}
+  fuzzrobo::topological_plane::incremental::Clusterizer clusterizer(options);
+  std::cout << "frame,nodes,clusters,assigned,released,born,merged,split,cpu_ms,wall_ms";
+  if (enable_diagnostics) {
+    std::cout << ",adjacent_pairs,insufficient_edges,invalid_fit,plane_extent,absolute_residual,"
+      "residual_growth,side_residual,fragment_merged,fragment_pending";
+  }
+  std::cout << '\n';
   std::size_t frame = 0U;
   while (input.peek() != EOF) {
     ais_gng_msgs::msg::TopologicalMap map;
@@ -70,6 +81,43 @@ int main(int argc, char **argv)
     std::cout << frame++ << ',' << num_nodes << ',' << s.cluster_count << ','
               << s.clustered_node_count << ',' << s.released_node_count << ','
               << s.born_cluster_count << ',' << s.merged_cluster_count << ','
-              << s.split_cluster_count << ',' << elapsed_cpu_ms << ',' << wall_ms << '\n';
+              << s.split_cluster_count << ',' << elapsed_cpu_ms << ',' << wall_ms;
+    if (enable_diagnostics) {
+      std::cout << ',' << s.merge_adjacent_pair_count << ',' << s.merge_insufficient_edge_pair_count
+                << ',' << s.merge_invalid_fit_pair_count << ',' << s.merge_planarity_rejected_pair_count
+                << ',' << s.merge_absolute_residual_rejected_pair_count
+                << ',' << s.merge_residual_growth_rejected_pair_count
+                << ',' << s.merge_smaller_side_rejected_pair_count
+                << ',' << s.num_fragment_merged_clusters << ',' << s.num_fragment_pending_pairs;
+    }
+    std::cout << '\n';
+    // 最終フレームの観測点・接続・所属の診断用出力。本番の統合条件・ROS出力への変更なし。
+    if (enable_diagnostics && input.peek() == EOF) {
+      std::cerr << std::setprecision(9) << "{\"clusters\":[";
+      bool is_first = true;
+      for (const auto &cluster : result.clusters.clusters) {
+        if (!is_first) {std::cerr << ',';}
+        is_first = false;
+        std::cerr << "{\"id\":" << cluster.id << ",\"spacing\":" << cluster.local_spacing
+                  << ",\"nodes\":[";
+        for (std::size_t idx = 0U; idx < cluster.node_indices.size(); ++idx) {
+          if (idx != 0U) {std::cerr << ',';}
+          std::cerr << cluster.node_indices[idx];
+        }
+        std::cerr << "]}";
+      }
+      std::cerr << "],\"nodes\":[";
+      for (std::size_t idx = 0U; idx < map.nodes.size(); ++idx) {
+        if (idx != 0U) {std::cerr << ',';}
+        const auto &point = map.nodes[idx].pos;
+        std::cerr << '[' << point.x << ',' << point.y << ',' << point.z << ']';
+      }
+      std::cerr << "],\"edges\":[";
+      for (std::size_t idx = 0U; idx < map.edges.size(); ++idx) {
+        if (idx != 0U) {std::cerr << ',';}
+        std::cerr << map.edges[idx];
+      }
+      std::cerr << "]}\n";
+    }
   }
 }

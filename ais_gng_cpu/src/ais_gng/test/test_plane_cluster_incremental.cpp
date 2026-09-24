@@ -139,6 +139,21 @@ void connect_plane_patches(
   }
 }
 
+// 12x12の平面と5x5の小断片。1本接続試験用の独立した2成分。
+std::size_t append_fragment_pair(
+  TopologicalMap &map, const double scale = 1.0, const double gap_ratio = 1.0,
+  const double offset_ratio = 0.0)
+{
+  const auto base = map.nodes.size();
+  const double origin[3] = {0.0, 0.0, 0.0};
+  const double small_origin[3] = {(0.55 + 0.05 * gap_ratio) * scale, 0.0, 0.05 * offset_ratio * scale};
+  const double axis_u[3] = {1.0, 0.0, 0.0};
+  const double axis_v[3] = {0.0, 1.0, 0.0};
+  appendGrid(map, 12U, 12U, 0.05 * scale, origin, axis_u, axis_v, TopologicalMap::WALL);
+  appendGrid(map, 5U, 5U, 0.05 * scale, small_origin, axis_u, axis_v, TopologicalMap::WALL);
+  return base;
+}
+
 }  // 無名名前空間
 
 // 平坦な格子ひとつが、ひとつのクラスタになる。
@@ -677,6 +692,152 @@ TEST(PlaneClusterIncremental, contact_match_does_not_hide_tilted_small_plane)
   EXPECT_EQ(result.statistics.merged_cluster_count, 0U);
   EXPECT_GT(result.statistics.merge_smaller_side_rejected_pair_count, 0U);
   EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+}
+
+// 同じ小断片対の連続適合による1本接続の統合。スケールとID安定性の確認。
+TEST(PlaneClusterIncremental, fragment_merge_requires_consecutive_frames)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    SCOPED_TRACE(scale);
+    TopologicalMap map;
+    append_fragment_pair(map, scale);
+    ClusterOptions options;
+    options.merge_connection_requirement = 2U;
+    Clusterizer clusterizer{options};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+    map.edges.insert(map.edges.end(), {11U, 144U});
+    for (std::size_t frame = 1U; frame < options.min_fragment_merge_frames; ++frame) {
+      const auto pending = clusterizer.update(map);
+      EXPECT_EQ(pending.clusters.clusters.size(), 2U);
+      EXPECT_EQ(pending.statistics.num_fragment_pending_pairs, 1U);
+    }
+    const auto result = clusterizer.update(map);
+    ASSERT_EQ(result.clusters.clusters.size(), 1U);
+    EXPECT_EQ(result.statistics.num_fragment_merged_clusters, 1U);
+    EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+    EXPECT_EQ(clusterIds(warmUp(clusterizer, map)), clusterIds(result));
+  }
+}
+
+// 長い橋・段差・緩い適合・大きい断片・明示的な接続要求による救済対象の制限。
+TEST(PlaneClusterIncremental, fragment_merge_preserves_safety_gates)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (std::size_t case_idx = 0U; case_idx < 6U; ++case_idx) {
+      SCOPED_TRACE(scale);
+      SCOPED_TRACE(case_idx);
+      TopologicalMap map;
+      append_fragment_pair(map, scale, case_idx == 0U ? 3.0 : 1.0,
+        case_idx == 1U ? 0.8 : (case_idx == 2U ? 0.12 : 0.0));
+      ClusterOptions options;
+      options.merge_connection_requirement = case_idx == 5U ? 3U : 2U;
+      options.max_fragment_nodes = case_idx == 3U ? 20U : 30U;
+      options.enable_fragment_merge = case_idx != 4U;
+      Clusterizer clusterizer{options};
+      ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+      map.edges.insert(map.edges.end(), {11U, 144U});
+      for (std::size_t frame = 0U; frame < 8U; ++frame) {
+        const auto result = clusterizer.update(map);
+        EXPECT_EQ(result.clusters.clusters.size(), 2U);
+        EXPECT_EQ(result.statistics.num_fragment_merged_clusters, 0U);
+        EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+      }
+    }
+  }
+}
+
+// 接続消失・適合失敗・長い橋・reset・空入力による連続確認の初期化。
+TEST(PlaneClusterIncremental, fragment_merge_restarts_after_interruption)
+{
+  for (std::size_t case_idx = 0U; case_idx < 5U; ++case_idx) {
+    SCOPED_TRACE(case_idx);
+    TopologicalMap disconnected;
+    append_fragment_pair(disconnected);
+    auto connected = disconnected;
+    connected.edges.insert(connected.edges.end(), {11U, 144U});
+    ClusterOptions options;
+    options.merge_connection_requirement = 2U;
+    Clusterizer clusterizer{options};
+    ASSERT_EQ(warmUp(clusterizer, disconnected).clusters.clusters.size(), 2U);
+    for (std::size_t frame = 0U; frame < 2U; ++frame) {
+      EXPECT_EQ(clusterizer.update(connected).statistics.num_fragment_pending_pairs, 1U);
+    }
+    if (case_idx < 3U) {
+      auto interrupted = case_idx == 0U ? disconnected : connected;
+      for (std::size_t idx = 144U; idx < interrupted.nodes.size(); ++idx) {
+        if (case_idx == 1U) {interrupted.nodes[idx].pos.z += 0.01F;}
+        if (case_idx == 2U) {interrupted.nodes[idx].pos.x += 1.0F;}
+      }
+      EXPECT_EQ(clusterizer.update(interrupted).clusters.clusters.size(), 2U);
+    } else {
+      if (case_idx == 3U) {clusterizer.reset();}
+      if (case_idx == 4U) {clusterizer.update(TopologicalMap{});}
+      ASSERT_EQ(warmUp(clusterizer, disconnected).clusters.clusters.size(), 2U);
+    }
+    for (std::size_t frame = 0U; frame < 2U; ++frame) {
+      const auto pending = clusterizer.update(connected);
+      EXPECT_EQ(pending.clusters.clusters.size(), 2U);
+      EXPECT_EQ(pending.statistics.num_fragment_pending_pairs, 1U);
+    }
+    EXPECT_EQ(clusterizer.update(connected).clusters.clusters.size(), 1U);
+  }
+}
+
+// 別成分の削除による添字変更時も、同じ永続ID対の確認回数を保持。
+TEST(PlaneClusterIncremental, fragment_merge_survives_cluster_compaction)
+{
+  auto map = makeSinglePlane();
+  for (auto &node : map.nodes) {node.pos.x += 100.0F;}
+  const auto base = append_fragment_pair(map);
+  ClusterOptions options;
+  options.merge_connection_requirement = 2U;
+  options.weak_frame_allowance = 0U;
+  Clusterizer clusterizer{options};
+  ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 3U);
+  map.edges.insert(map.edges.end(), {static_cast<std::uint16_t>(base + 11U),
+    static_cast<std::uint16_t>(base + 144U)});
+  EXPECT_EQ(clusterizer.update(map).statistics.num_fragment_pending_pairs, 1U);
+  for (std::size_t idx = 0U; idx < base; ++idx) {
+    map.nodes[idx].pos.x = std::numeric_limits<float>::quiet_NaN();
+  }
+  const auto compacted = clusterizer.update(map);
+  EXPECT_EQ(compacted.statistics.removed_cluster_count, 1U);
+  EXPECT_EQ(compacted.statistics.num_fragment_pending_pairs, 1U);
+  const auto merged = clusterizer.update(map);
+  EXPECT_EQ(merged.clusters.clusters.size(), 1U);
+  EXPECT_EQ(merged.statistics.num_fragment_merged_clusters, 1U);
+  EXPECT_EQ(merged.statistics.clustered_node_count, 169U);
+}
+
+// 救済OFF時の従来接続条件と、確認フレーム数設定の反映。
+TEST(PlaneClusterIncremental, fragment_merge_options_and_regular_merge)
+{
+  for (const std::size_t num_frames : {1U, 5U}) {
+    TopologicalMap map;
+    append_fragment_pair(map);
+    ClusterOptions options;
+    options.merge_connection_requirement = 2U;
+    options.min_fragment_merge_frames = num_frames;
+    Clusterizer clusterizer{options};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+    map.edges.insert(map.edges.end(), {11U, 144U});
+    for (std::size_t frame = 1U; frame <= num_frames; ++frame) {
+      EXPECT_EQ(clusterizer.update(map).clusters.clusters.size(), frame == num_frames ? 1U : 2U);
+    }
+  }
+  TopologicalMap map;
+  append_fragment_pair(map);
+  ClusterOptions options;
+  options.merge_connection_requirement = 2U;
+  options.enable_fragment_merge = false;
+  Clusterizer clusterizer{options};
+  ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+  map.edges.insert(map.edges.end(), {11U, 144U});
+  EXPECT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+  map.edges.insert(map.edges.end(), {23U, 149U});
+  const auto result = clusterizer.update(map);
+  EXPECT_EQ(result.clusters.clusters.size(), 1U);
+  EXPECT_EQ(result.statistics.num_fragment_merged_clusters, 0U);
 }
 
 // 線状でない2x2パッチの連鎖統合と、統合済み同士の二重計上防止。

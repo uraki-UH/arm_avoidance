@@ -8,7 +8,7 @@ import statistics
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--prefix", choices=("", "scale_", "contact_"), default="")
+parser.add_argument("--prefix", choices=("", "scale_", "contact_", "fragment_"), default="")
 args = parser.parse_args()
 trial_root = Path(__file__).resolve().parents[2] / "artifacts/plane_consistency_20260924"
 result = {"frames": 150, "warmup_frames": 50, "trials": 3,

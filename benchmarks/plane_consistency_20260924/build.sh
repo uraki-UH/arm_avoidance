@@ -9,6 +9,10 @@ if [[ "$trial_mode" == before || "$trial_mode" == scale_before || "$trial_mode" 
   trial_include=$trial_root/$trial_mode/include
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
 fi
+# 追加オプションのABIを揃えた変更前アルゴリズムの比較。実装だけを保存版へ切替。
+if [[ "$trial_mode" == fragment_before ]]; then
+  trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
+fi
 mkdir -p "$trial_root/$trial_mode"
 trial_flags=(-std=c++17 -O3 -DNDEBUG -I"$trial_include" -I/usr/include/eigen3 -I/ros2_ws/install/ais_gng_msgs/include/ais_gng_msgs)
 for package in geometry_msgs std_msgs builtin_interfaces rosidl_runtime_cpp rosidl_runtime_c rosidl_typesupport_interface rcutils; do

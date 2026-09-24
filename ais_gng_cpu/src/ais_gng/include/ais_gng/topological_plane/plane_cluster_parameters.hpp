@@ -50,6 +50,16 @@ ClusterOptions declareClusterOptions(
       1, node.template declare_parameter<int>(name("connection_requirement"), 2)));
   options.merge_connection_requirement = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("merge_connection_requirement"), 2)));
+  options.enable_fragment_merge = node.template declare_parameter<bool>(
+    name("enable_fragment_merge"), options.enable_fragment_merge);
+  options.max_fragment_nodes = static_cast<std::size_t>(std::max<std::int64_t>(3,
+      node.template declare_parameter<int>(name("max_fragment_nodes"), options.max_fragment_nodes)));
+  options.max_fragment_edge_ratio_th = node.template declare_parameter<double>(
+    name("max_fragment_edge_ratio_th"), options.max_fragment_edge_ratio_th);
+  options.max_fragment_residual_ratio_th = node.template declare_parameter<double>(
+    name("max_fragment_residual_ratio_th"), options.max_fragment_residual_ratio_th);
+  options.min_fragment_merge_frames = static_cast<std::size_t>(std::max<std::int64_t>(1,
+      node.template declare_parameter<int>(name("min_fragment_merge_frames"), options.min_fragment_merge_frames)));
   options.birth_neighbor_requirement = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("birth_neighbor_requirement"), 1)));
   options.migration_improvement_margin =
