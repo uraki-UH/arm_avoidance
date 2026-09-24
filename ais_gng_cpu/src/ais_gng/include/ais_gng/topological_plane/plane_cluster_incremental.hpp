@@ -78,6 +78,13 @@ struct ClusterOptions
   // 誤って移る。
   std::size_t connection_requirement = 2;
 
+  // 未所属ノード限定の面内接続による取り込み救済。既所属間の移動には非適用。
+  bool enable_coplanar_absorption = true;
+  // 候補から伸びる全エッジと平面との角度[deg]。面外形状の誤吸収防止用。
+  double max_absorption_edge_angle_deg_th = 20.0;
+  // 平面への接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
+  double max_absorption_edge_ratio_th = 2.5;
+
   // クラスタ併合の候補と認めるために要求する、クラスタ間の直接GNGエッジ本数。
   //
   // 併合は数百点対数百点の結合フィット(merge_min_planarity・
@@ -150,12 +157,18 @@ struct ClusterOptions
   // 出力しないことで、画面上に「できては消える」塊が現れなくなる。0 なら即座に出す。
   std::size_t birth_confirm_frames = 3;
 
-  // クラスタを実際に分割するまでに、接続が切れた状態が続く必要があるフレーム数。
-  //
-  // 境界ノードの解放で接続は一時的によく切れる。そのたびに分割すると、大きな
-  // クラスタが割れて別IDになり、次のフレームで戻るという出入りを繰り返す。
-  // 0 なら即座に分割する。
+  // 分割条件の連続成立を許容するフレーム数。0は即時分割。
   std::size_t split_confirm_frames = 3;
+
+  // 非連結成分の面外エッジ方向による分割確認。falseは従来の接続切断のみの判定。
+  bool enable_directional_split = true;
+  // 元平面とエッジとの角度[deg]。面外接続の判定用。
+  double min_split_edge_angle_deg_th = 30.0;
+  // 面外接続を持つノード数と、分断候補成分内の同ノード割合。
+  std::size_t min_split_conflict_nodes = 2;
+  double min_split_conflict_ratio_th = 0.25;
+  // 全エッジ消失時に前回の法線・局所間隔で所属判定を継続するフレーム数。
+  std::size_t max_isolated_frames = 5;
 
   // 条件を満たさないまま許容するフレーム数。超えるとクラスタを破棄する。
   // 条件を満たさないまま許容するフレーム数。
@@ -175,6 +188,8 @@ struct ClusterStatistics
   std::size_t released_node_count = 0;
   std::size_t migrated_node_count = 0;
   std::size_t absorbed_node_count = 0;
+  // 通常の距離・接続条件では取り込めなかった面内候補の救済数。
+  std::size_t num_coplanar_absorbed_nodes = 0;
   std::size_t born_cluster_count = 0;
   std::size_t merged_cluster_count = 0;
   std::size_t split_cluster_count = 0;
@@ -185,6 +200,10 @@ struct ClusterStatistics
   std::size_t num_connectivity_reused_clusters = 0;
   // 連結成分の再探索で訪問したノード数。
   std::size_t num_connectivity_scanned_nodes = 0;
+  // 面外根拠不足・連続確認待ちの非連結成分数と、全エッジ消失の猶予対象ノード数。
+  std::size_t num_split_retained_components = 0;
+  std::size_t num_split_pending_components = 0;
+  std::size_t num_isolated_retained_nodes = 0;
 
   // 隣接クラスタ対が併合判定のどこで止まったかを示す診断値。
   std::size_t merge_adjacent_pair_count = 0;

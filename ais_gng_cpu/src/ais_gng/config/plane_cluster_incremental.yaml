@@ -49,6 +49,15 @@ plane_cluster_incremental_node:
     # ノード1個の判定は偶然の接続で誤って移りやすい。
     connection_requirement: 2
 
+    # 未所属ノード限定の面内接続による取り込み救済。既所属間の移動には非適用。
+    # 1本接続の救済は通常要求2本かつ成長距離内。複数接続は保持用距離までの救済。
+    # 確認済み平面への接続、他平面への接続なし、全エッジの面内方向が条件。
+    enable_coplanar_absorption: true
+    # 候補から伸びる全エッジと平面との角度[deg]。面外形状の誤吸収防止用。
+    max_absorption_edge_angle_deg_th: 20.0
+    # 平面への接続長 / 両端の局所間隔の小さい側。短い接続の確認用。
+    max_absorption_edge_ratio_th: 2.5
+
     # クラスタ併合の候補と認めるための、クラスタ間直接エッジ数の要求値。
     merge_connection_requirement: 2
 
@@ -99,9 +108,17 @@ plane_cluster_incremental_node:
     # 0 時の即時出力。
     birth_confirm_frames: 3
 
-    # 同一クラスタ内のGNG連結切断の分割前確認フレーム数。
-    # 境界ノードの一時的な解放による過剰分割の防止。
+    # 分割条件の連続成立を許容するフレーム数。0は即時分割。
     split_confirm_frames: 3
+    # 非連結成分の面外接続による分割確認。接続切れだけの場合の所属維持。
+    enable_directional_split: true
+    # 元平面とエッジとの角度[deg]。面外接続の判定用。
+    min_split_edge_angle_deg_th: 30.0
+    # 面外接続を持つノード数と、分断候補成分内の同ノード割合。
+    min_split_conflict_nodes: 2
+    min_split_conflict_ratio_th: 0.25
+    # 全エッジ消失時の前回法線・局所間隔による所属判定継続フレーム数。
+    max_isolated_frames: 5
 
     # 最小クラスタノード数不足状態に対する削除前許容フレーム数。
     # ノード単位の逸脱で一時的に縮んだクラスタの回復余地。

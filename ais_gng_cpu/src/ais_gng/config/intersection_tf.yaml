@@ -1,0 +1,7 @@
+# Macnica交差点bagの目視による暫定補正。単位はmとdeg。
+# Viewerのpos・rot_degと同じRx * Ry * Rz順の回転。スケールは1。
+world_frame: world
+map_frame: map
+lidar_frame: hesai_lidar
+pos: [0.0, 0.0, 6.0]
+rot_deg: [3.0, 13.0, 3.0]

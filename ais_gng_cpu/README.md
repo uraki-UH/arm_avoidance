@@ -32,6 +32,21 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic
 省略時はYAMLのトピック配列をそのまま使用。保存用元点群の`source_point_cloud_topic:=auto`も同じ指定に追従。
 [パラメータ適用順の修正と起動検証](../gng_vlut_system/docs/releases/2026-09-23_gng_input_topic_override.md)。
 
+## 交差点bagの位置・姿勢をYAMLで補正
+
+[intersection_tf.yaml](src/ais_gng/config/intersection_tf.yaml)の`pos`（m）と`rot_deg`（度）を編集。
+初期値は`pos: [0, 0, 6]`、`rot_deg: [3, 13, 3]`。ToPoFuzzy Viewerと同じEuler XYZ順の目視による暫定補正。
+
+```bash
+ros2 launch ais_gng intersection_tf.launch.py
+```
+
+このlaunchは`world → map`の恒等変換と`map → hesai_lidar`の補正だけを配信。
+TFの配信開始後、別ターミナルで上記の`ais_gng.launch.py`を起動。GNGは`input.base_frame_id: map`、`input.local_coordinates: false`を使用。
+補正前のGNGが起動中の場合は再起動してグラフを初期化し、Viewerの点群・GNG両方の手動変換を位置・回転0、スケール1へリセット。Viewerの基準フレームは`world`または`map`。
+YAMLの変更はTF launchとGNGの再起動で反映。固定TFを持つ旧`at128.launch.py`との併用は不可。
+別のYAMLは`config_file:=/path/to/config.yaml`で指定可能。[検証結果](../gng_vlut_system/docs/releases/2026-09-25_intersection_tf_yaml.md)。
+
 ## 把持候補近傍の重点学習（CPU・既定OFF）
 
 `ais_gng.launch.py`へ`enable_grasp_attention:=true`を追加すると、`/grasp_pose_cands/Tmap`のノード近傍へ学習回数の一部を配分。設定・失効条件・観測統計の扱いは[重点学習](docs/grasp_attention.md)を参照。

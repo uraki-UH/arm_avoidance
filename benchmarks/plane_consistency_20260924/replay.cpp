@@ -34,18 +34,21 @@ int main(int argc, char **argv)
 {
   const std::string_view mode = argc == 3 ? argv[2] : "";
   if (argc < 2 || argc > 3 ||
-    (!mode.empty() && mode != "--diagnose" && mode != "--disable-fragment-merge")) {return 2;}
+    (!mode.empty() && mode != "--diagnose" && mode != "--disable-fragment-merge" &&
+    mode != "--disable-directional-split" && mode != "--disable-coplanar-absorption")) {return 2;}
   const bool enable_diagnostics = mode == "--diagnose";
   std::ifstream input(argv[1], std::ios::binary);
   if (!input) {return 2;}
   Parameters parameters;
   auto options = fuzzrobo::topological_plane::incremental::declareClusterOptions(parameters);
   if (mode == "--disable-fragment-merge") {options.enable_fragment_merge = false;}
+  if (mode == "--disable-directional-split") {options.enable_directional_split = false;}
+  if (mode == "--disable-coplanar-absorption") {options.enable_coplanar_absorption = false;}
   fuzzrobo::topological_plane::incremental::Clusterizer clusterizer(options);
   std::cout << "frame,nodes,clusters,assigned,released,born,merged,split,cpu_ms,wall_ms";
   if (enable_diagnostics) {
     std::cout << ",adjacent_pairs,insufficient_edges,invalid_fit,plane_extent,absolute_residual,"
-      "residual_growth,side_residual,fragment_merged,fragment_pending";
+      "residual_growth,side_residual,fragment_merged,fragment_pending,split_retained,split_pending,isolated_retained,coplanar_absorbed";
   }
   std::cout << '\n';
   std::size_t frame = 0U;
@@ -88,7 +91,9 @@ int main(int argc, char **argv)
                 << ',' << s.merge_absolute_residual_rejected_pair_count
                 << ',' << s.merge_residual_growth_rejected_pair_count
                 << ',' << s.merge_smaller_side_rejected_pair_count
-                << ',' << s.num_fragment_merged_clusters << ',' << s.num_fragment_pending_pairs;
+                << ',' << s.num_fragment_merged_clusters << ',' << s.num_fragment_pending_pairs
+                << ',' << s.num_split_retained_components << ',' << s.num_split_pending_components
+                << ',' << s.num_isolated_retained_nodes << ',' << s.num_coplanar_absorbed_nodes;
     }
     std::cout << '\n';
     // 最終フレームの観測点・接続・所属の診断用出力。本番の統合条件・ROS出力への変更なし。

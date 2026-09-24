@@ -10,7 +10,7 @@ if [[ "$trial_mode" == before || "$trial_mode" == scale_before || "$trial_mode" 
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
 fi
 # 追加オプションのABIを揃えた変更前アルゴリズムの比較。実装だけを保存版へ切替。
-if [[ "$trial_mode" == fragment_before ]]; then
+if [[ "$trial_mode" == fragment_before || "$trial_mode" == direction_before || "$trial_mode" == absorption_before ]]; then
   trial_source=$trial_root/$trial_mode/plane_cluster_incremental.cpp
 fi
 mkdir -p "$trial_root/$trial_mode"

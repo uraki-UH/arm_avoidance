@@ -49,7 +49,10 @@ def main():
             names = ["min_plane_width_ratio", "growth_residual_ratio", "retention_residual_ratio",
                      "max_effective_spacing", "max_normalized_cluster_residual", "max_merge_side_residual_ratio",
                      "enable_fragment_merge", "max_fragment_nodes", "max_fragment_edge_ratio_th",
-                     "max_fragment_residual_ratio_th", "min_fragment_merge_frames"]
+                     "max_fragment_residual_ratio_th", "min_fragment_merge_frames", "enable_directional_split",
+                     "min_split_edge_angle_deg_th", "min_split_conflict_nodes", "min_split_conflict_ratio_th",
+                     "max_isolated_frames", "enable_coplanar_absorption",
+                     "max_absorption_edge_angle_deg_th", "max_absorption_edge_ratio_th"]
             prefix = "plane_cluster." if executable == "ais_gng_cpu" else ""
             req.names = [prefix + key for key in names]
             future = client.call_async(req)
@@ -167,8 +170,9 @@ def main():
                         graph.edges.extend([idx - size, idx])
         expect_clusters(2)
         graph.edges.extend([11, 144])
-        num_confirmation_frames = settings["min_fragment_merge_frames"]
-        for frame in range(1, num_confirmation_frames + 1):
+
+        # 入力1回に対応する出力の確認。確認待ち回数と孤立猶予の厳密な検証用。
+        def expect_frame(num_clusters, num_nodes):
             graph.frame_number += 1
             publisher.publish(graph)
             deadline = time.monotonic() + 5.0
@@ -177,12 +181,86 @@ def main():
                 if received and received[-1].frame_number == graph.frame_number:
                     break
             else:
-                raise AssertionError("fragment confirmation output missing")
+                raise AssertionError("confirmation output missing")
+            assert len(received[-1].clusters) == num_clusters, (graph.frame_number, len(received[-1].clusters))
+            assert sum(len(cluster.node_indices) for cluster in received[-1].clusters) == num_nodes
+
+        num_confirmation_frames = settings["min_fragment_merge_frames"]
+        for frame in range(1, num_confirmation_frames + 1):
             expected = 1 if frame == num_confirmation_frames else 2
-            assert len(received[-1].clusters) == expected, (frame, len(received[-1].clusters))
-            assert sum(len(cluster.node_indices) for cluster in received[-1].clusters) == 169
+            expect_frame(expected, 169)
         expect_clusters(1)
         print(f"PASS: single-edge fragment merge after {num_confirmation_frames} frames", flush=True)
+
+        # 同一平面の接続切れのみでは分割せず、面外根拠の連続成立時だけ分割。
+        del graph.edges[-2:]
+        for _ in range(settings["split_confirm_frames"] + 6):
+            expect_frame(1, 169)
+        print("PASS: coplanar component retained after disconnection", flush=True)
+        for idx in range(7):
+            value = TopologicalNode()
+            value.id = 30000 + idx
+            value.pos.x, value.pos.y = graph.nodes[144 + idx].pos.x, graph.nodes[144 + idx].pos.y
+            value.pos.z = -0.05
+            value.normal.x = 1.0
+            graph.edges.extend([144 + idx, len(graph.nodes)])
+            graph.nodes.append(value)
+        for _ in range(settings["split_confirm_frames"]):
+            expect_frame(1, 169)
+        expect_frame(2, 169)
+        print("PASS: off-plane external edges confirmed before split", flush=True)
+
+        # 孤立ノードの前回情報による短期保持と、猶予切れ・再接続の確認。
+        saved_edges = list(graph.edges)
+        del graph.edges[:]
+        for first, second in zip(saved_edges[::2], saved_edges[1::2]):
+            if first != 0 and second != 0:
+                graph.edges.extend([first, second])
+        graph.nodes[0].normal.z = 0.0
+        for _ in range(settings["max_isolated_frames"]):
+            expect_frame(2, 169)
+        expect_frame(2, 168)
+        del graph.edges[:]
+        graph.edges.extend(saved_edges)
+        graph.nodes[0].normal.z = 1.0
+        expect_frame(2, 169)
+        print("PASS: isolated-node grace, expiry and reconnection", flush=True)
+
+        # 未所属点の1本接続・距離緩和と、面外エッジを持つ小物体の拒否。
+        for trial_idx, (num_contacts, has_conflict) in enumerate(((1, False), (2, False), (1, True))):
+            graph.nodes.clear()
+            del graph.edges[:]
+            for idx in range(36):
+                value = TopologicalNode()
+                value.id = 40000 + trial_idx * 100 + idx
+                value.pos.x, value.pos.y = (idx % 6) * 0.05, (idx // 6) * 0.05
+                value.normal.z = 1.0
+                graph.nodes.append(value)
+                if idx % 6:
+                    graph.edges.extend([idx - 1, idx])
+                if idx >= 6:
+                    graph.edges.extend([idx - 6, idx])
+            expect_clusters(1)
+            value = TopologicalNode()
+            value.id = 40036 + trial_idx * 100
+            value.pos.x, value.pos.y = 0.30, 0.10
+            value.pos.z = 0.005 if num_contacts == 1 else 0.010
+            value.normal.z = 1.0
+            graph.nodes.append(value)
+            graph.edges.extend([17, 36])
+            if num_contacts == 2:
+                graph.edges.extend([23, 36])
+            if has_conflict:
+                protrusion = TopologicalNode()
+                protrusion.id = value.id + 1
+                protrusion.pos.x, protrusion.pos.y = value.pos.x, value.pos.y
+                protrusion.pos.z = value.pos.z + 0.05
+                protrusion.normal.x = 1.0
+                graph.nodes.append(protrusion)
+                graph.edges.extend([36, 37])
+            for _ in range(6):
+                expect_frame(1, 36 if has_conflict else 37)
+            print(f"PASS: coplanar absorption contacts={num_contacts}, conflict={has_conflict}", flush=True)
         assert all(process.poll() is None for process in processes)
     finally:
         for process in reversed(processes):
