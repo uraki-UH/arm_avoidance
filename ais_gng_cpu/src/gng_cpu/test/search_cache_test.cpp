@@ -33,20 +33,16 @@ bool has_same_graph(const CUGNG &first, const CUGNG &second) {
 }
 
 void reference_down_sampling(CUGNG &gng, std::vector<Vec3f> &points,
-                            std::vector<uint8_t> &labels, std::vector<Voxel> &mapping,
-                            uint32_t &num) {
+                            std::vector<uint8_t> &labels) {
     // バッチ外のNode直接参照による基準処理。追加・接続・乱数順の維持。
     std::vector<uint32_t> order(points.size());
     std::iota(order.begin(), order.end(), 0U);
     std::mt19937 random(gng.frame_number);
     std::shuffle(order.begin(), order.end(), random);
-    num = 0;
     for (const auto idx : order) {
         Node_d nearest;
         if (!gng.getDownSamplingGrid(points[idx], labels[idx], nearest)) {gng.add_node(points[idx]);}
         if (nearest.id1 != NODE_NOID) {
-            mapping[num].voxel_index = nearest.id1;
-            mapping[num++].raw_index = idx;
             if (nearest.id2 != NODE_NOID) {gng.connect(nearest.id1, nearest.id2);}
         }
     }
@@ -85,7 +81,6 @@ int main() {
         points.emplace_back(-0.5f, 0.f, 0.f);
         points.emplace_back(0.f, 0.f, 0.f);
         std::vector<uint8_t> labels_actual(points.size()), labels_expected(points.size());
-        std::vector<Voxel> mapping_actual(points.size()), mapping_expected(points.size());
         for (uint32_t frame = 0; frame < 12; ++frame) {
             for (uint32_t idx = 0; idx < actual.nodes.size(); ++idx) {
                 auto &a = actual.nodes[idx];
@@ -103,16 +98,11 @@ int main() {
                     expected.move_node(b, point);
                 }
             }
-            uint32_t num_actual = 0, num_expected = 0;
-            actual.getDownSampling(points, points.size(), labels_actual, mapping_actual, num_actual);
-            reference_down_sampling(expected, points, labels_expected, mapping_expected, num_expected);
-            if (num_actual != num_expected || labels_actual != labels_expected || !has_same_graph(actual, expected)) {
+            actual.getDownSampling(points, points.size(), labels_actual);
+            reference_down_sampling(expected, points, labels_expected);
+            if (labels_actual != labels_expected || !has_same_graph(actual, expected)) {
                 std::cerr << "down_sampling_mismatch " << max_nodes << ' ' << frame << '\n';
                 return 2;
-            }
-            for (uint32_t idx = 0; idx < num_actual; ++idx) {
-                if (mapping_actual[idx].voxel_index != mapping_expected[idx].voxel_index ||
-                    mapping_actual[idx].raw_index != mapping_expected[idx].raw_index) {return 3;}
             }
             // 単一候補の繰返し学習による、同一セル内・セル間移動の逐次反映。
             std::vector<Vec3f> learn_points{points[(frame * 23) % points.size()]};

@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { SidebarContent } from './layout/SidebarContent';
+import { useLocalMeshes } from './features/meshes/use_local_meshes';
+import { LocalMeshRenderer } from './features/meshes/LocalMeshRenderer';
 import { PointCloudRenderer } from './features/visualization/PointCloudRenderer';
 import {
     RobotSettings,
@@ -135,6 +137,7 @@ type point_cloud_view_settings = Pick<PointCloudData,
     'visible' | 'opacity' | 'position' | 'rotation' | 'scale' | 'matrix'>;
 
 function App() {
+    const local_meshes = useLocalMeshes();
     const [pointClouds, setPointClouds] = useState<PointCloudData[]>([]);
     // 配信元の停止を跨ぐ表示設定のみの保持。点群バッファの保持なし。
     const point_cloud_view_settings_ref = useRef(new Map<string, point_cloud_view_settings>());
@@ -615,6 +618,7 @@ function App() {
                 sidebar={
                     <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar}>
                         <SidebarContent
+                            local_meshes={local_meshes}
                             isConnected={isConnected}
                             connect={connect}
                             disconnect={disconnect}
@@ -724,6 +728,8 @@ function App() {
                     >
                         <ClippingPlaneSync planes={threeClippingPlanes} />
                         <ambientLight intensity={0.3} />
+                        {local_meshes.items.map(item => <LocalMeshRenderer key={item.id} item={item}
+                            focus_req={local_meshes.focus?.id === item.id ? local_meshes.focus.req : undefined} />)}
                         <pointLight position={[10, 10, 10]} intensity={0.5} />
                         <pointLight position={[-10, -10, -10]} intensity={0.3} />
 

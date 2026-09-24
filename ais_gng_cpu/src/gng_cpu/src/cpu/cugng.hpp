@@ -94,7 +94,7 @@ class CUGNG {
 
     void getMinAll(Vec3f& p, Node_d& result);
     bool getMinGrid(Vec3f& p, Node_d& result);
-    void getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num);
+    void getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels);
     bool getDownSamplingGrid(Vec3f& p, uint8_t &label, Node_d &n);
     void move_node(Node& node, Vec3f& new_pos);
 
@@ -156,8 +156,6 @@ class CUGNG {
         }
     }
     void begin_search_batch();
-    template<bool enable_packed_search> bool get_min_grid_impl(Vec3f &point, Node_d &result);
-    template<bool enable_packed_search> bool get_down_sampling_grid_impl(Vec3f &point, uint8_t &label, Node_d &result);
     // 最小空きIDの探索開始位置。削除時に手前の空きを反映。
     uint32_t next_free_idx = 0;
 

@@ -17,6 +17,11 @@ A high-performance web-based Point Cloud Viewer and Editor built with React, Thr
   - Interactive Transform (Translate, Rotate, Scale)
 - **File Support**: PCD, LAS, LAZ, PLY
 
+## メッシュモデルの直接表示
+
+メッシュを点群化せずに追加する場合は `Data → Mesh Models`。
+OBJ・PLY・STL・GLB/glTF・FBXに対応。[直接表示の手順・取得済み車両モデルの例](doc/MESH_MODELS.md)。
+
 ## 点群トピック別の表示設定
 
 サイドバーの「Display → 点群の表示設定対象」でトピックを選び、Point Size、Opacity、

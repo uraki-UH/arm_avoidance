@@ -1,0 +1,6 @@
+# オフラインの表示用メッシュ生成環境。Frontend・ROSの実行依存には追加なし
+pymeshlab==2025.7.post1
+trimesh==5.1.0
+numpy==2.5.3
+pillow==12.3.0
+scipy==1.18.1

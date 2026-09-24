@@ -152,13 +152,11 @@ int main() {
                         (int(random() % 60) - 30) * 0.1f, 0);
                 }
                 std::vector<uint8_t> first_labels(points.size()), second_labels(points.size());
-                std::vector<Voxel> first_mapping(points.size()), second_mapping(points.size());
-                uint32_t first_num = 0, second_num = 0;
-                actual.getDownSampling(points, points.size(), first_labels, first_mapping, first_num);
+                std::vector<Voxel> second_mapping(points.size());
+                uint32_t second_num = 0;
+                actual.getDownSampling(points, points.size(), first_labels);
                 expected.getDownSampling(points, points.size(), second_labels, second_mapping, second_num);
-                require(first_labels == second_labels && first_num == second_num &&
-                    std::memcmp(first_mapping.data(), second_mapping.data(), sizeof(Voxel) * first_num) == 0,
-                    "matching");
+                require(first_labels == second_labels, "matching");
                 const uint32_t first_idx = random() % param.node.num_max;
                 const uint32_t second_idx = random() % param.node.num_max;
                 const bool has_first = actual.nodes[first_idx].id != NODE_NOID;

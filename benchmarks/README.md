@@ -20,6 +20,8 @@
 | --- | --- |
 | [goal_selection_efficiency_20260924](goal_selection_efficiency_20260924/) | 目標選択の参照表再利用・bsp3d差分更新・同一プロセス比較 |
 | [bsp3d_migration_20260924](bsp3d_migration_20260924/) | 目標選択索引のbsp3d移行、旧8分木削除、範囲検索・初期構築の比較 |
+| [gng_search_readability_20260924](gng_search_readability_20260924/) | 探索本体の既存関数への集約、出力一致・性能維持の比較 |
+| [gng_unused_mapping_20260924](gng_unused_mapping_20260924/) | 未使用対応表とソートの削除、出力一致・処理時間の比較 |
 | [gng_incremental_updates_20260924](gng_incremental_updates_20260924/) | 同期再利用・孤立候補・実在エッジ走査によるCPU GNGの全体走査削減 |
 | [gng_followup_efficiency_20260924](gng_followup_efficiency_20260924/) | 探索・重点候補・クラスタ・疎エッジの4候補比較と本番3変更の採用 |
 | [gng_normal_efficiency_20260924](gng_normal_efficiency_20260924/) | 法線・曲率の連続配列参照と差分再利用、全出力一致の検証 |

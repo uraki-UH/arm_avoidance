@@ -313,8 +313,8 @@ void CUGNG::begin_search_batch() {
     is_search_batch = true;
 }
 
-void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels, vector<Voxel> &voxel2node_ids, uint32_t &voxel2node_ids_num){
-    uint32_t i, j;
+void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels){
+    uint32_t i;
     static Node_d n;
     // ボクセル番号順による低いZ側へのノード枠の偏在防止。全入力の一度ずつの処理。
     begin_search_batch();
@@ -322,22 +322,16 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
     std::iota(point_order.begin(), point_order.end(), 0U);
     std::mt19937 random(frame_number);
     std::shuffle(point_order.begin(), point_order.end(), random);
-    j = 0;
     for (const uint32_t point_idx : point_order){
         i = point_idx;
         bool inpcl_is_in_vigilance = getDownSamplingGrid(inpcl[i], labels[i], n);
         if(!inpcl_is_in_vigilance){
             add_node(inpcl[i]);
         }
-        if(n.id1 != NODE_NOID){
-            voxel2node_ids[j].voxel_index = n.id1;
-            voxel2node_ids[j++].raw_index = i;
-            if(n.id2 != NODE_NOID){
-                connect(n.id1, n.id2);
-            }
+        if(n.id1 != NODE_NOID && n.id2 != NODE_NOID){
+            connect(n.id1, n.id2);
         }
     }
-    voxel2node_ids_num = j;
     is_search_batch = enable_frame_search_reuse;
 }
 void CUGNG::check_edge_distance() {
@@ -606,147 +600,138 @@ void CUGNG::getMinAll(Vec3f& p, Node_d& n){
 }
 
 bool CUGNG::getMinGrid(Vec3f &p, Node_d &n) {
-    return is_search_batch ? get_min_grid_impl<true>(p, n) : get_min_grid_impl<false>(p, n);
-}
+    // 探索開始時の参照先選択。探索中の配列切替分岐と本体の重複を回避。
+    const auto search = [&](const auto &node_source) {
+        int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
+        int grid_min_i, grid_max_i;
+        int grid_min_j, grid_max_j;
+        int grid_min_k, grid_max_k;
+        float norm2;
+        uint32_t grid_index;
 
-template<bool enable_packed_search>
-bool CUGNG::get_min_grid_impl(Vec3f& p, Node_d& n){
-    int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
-    int grid_min_i, grid_max_i;
-    int grid_min_j, grid_max_j;
-    int grid_min_k, grid_max_k;
-    float norm2;
-    uint32_t grid_index;
+        grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
+        grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
+        grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
 
-    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
+        grid_min_i = MAX(0, grid_mid_i - 1);
+        grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
+        grid_min_j = MAX(0, grid_mid_j - 1);
+        grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
+        grid_min_k = MAX(0, grid_mid_k - 1);
+        grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
 
-    grid_min_i = MAX(0, grid_mid_i - 1);
-    grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
-    grid_min_j = MAX(0, grid_mid_j - 1);
-    grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
-    grid_min_k = MAX(0, grid_mid_k - 1);
-    grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
+        n.id1 = NODE_NOID;
+        n.id1_d2 = FLT_MAX;
+        n.id2 = NODE_NOID;
+        n.id2_d2 = FLT_MAX;
 
-    n.id1 = NODE_NOID;
-    n.id1_d2 = FLT_MAX;
-    n.id2 = NODE_NOID;
-    n.id2_d2 = FLT_MAX;
+        bool p_is_in_vigilance = false;
 
-    bool p_is_in_vigilance = false;
-
-    for (i = grid_min_i; i <= grid_max_i; ++i)
-        for (j = grid_min_j; j <= grid_max_j; ++j)
-            for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
-                if (grid_index >= grid_config.maxXYZ)
-                    continue;
-                const auto num = grid_node_num[grid_index];
-                if (num == 0) {continue;}
-                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
-                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
-                    const auto id = ids[grid_node_i];
-                    const auto &node = [&]() -> const auto & {
-                        if constexpr (enable_packed_search) {return search_nodes[id];}
-                        else {return nodes[id];}
-                    }();
-                    const float x = p.p[0] - node.pos.p[0];
-                    const float y = p.p[1] - node.pos.p[1];
-                    const float z = p.p[2] - node.pos.p[2];
-                    norm2 = x * x + y * y + z * z;
-                    if (norm2 < n.id2_d2) {
-                        if (norm2 < n.id1_d2) {
-                            n.id2 = n.id1,
-                            n.id2_d2 = n.id1_d2;
-                            n.id1 = id, n.id1_d2 = norm2;
-                        } else {
-                            n.id2 = id, n.id2_d2 = norm2;
+        for (i = grid_min_i; i <= grid_max_i; ++i)
+            for (j = grid_min_j; j <= grid_max_j; ++j)
+                for (k = grid_min_k; k <= grid_max_k; ++k) {
+                    grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
+                    if (grid_index >= grid_config.maxXYZ)
+                        continue;
+                    const auto num = grid_node_num[grid_index];
+                    if (num == 0) {continue;}
+                    const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
+                    for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
+                        const auto id = ids[grid_node_i];
+                        const auto &node = node_source[id];
+                        const float x = p.p[0] - node.pos.p[0];
+                        const float y = p.p[1] - node.pos.p[1];
+                        const float z = p.p[2] - node.pos.p[2];
+                        norm2 = x * x + y * y + z * z;
+                        if (norm2 < n.id2_d2) {
+                            if (norm2 < n.id1_d2) {
+                                n.id2 = n.id1,
+                                n.id2_d2 = n.id1_d2;
+                                n.id1 = id, n.id1_d2 = norm2;
+                            } else {
+                                n.id2 = id, n.id2_d2 = norm2;
+                            }
                         }
+                        p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
                     }
-                    p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
                 }
-            }
 
-    return p_is_in_vigilance;
+        return p_is_in_vigilance;
+    };
+    return is_search_batch ? search(search_nodes) : search(nodes);
 }
 
 bool CUGNG::getDownSamplingGrid(Vec3f &p, uint8_t &label, Node_d &n) {
-    return is_search_batch ? get_down_sampling_grid_impl<true>(p, label, n)
-                           : get_down_sampling_grid_impl<false>(p, label, n);
-}
+    // 探索開始時の参照先選択。探索中の配列切替分岐と本体の重複を回避。
+    const auto search = [&](const auto &node_source) {
+        int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
+        int grid_min_i, grid_max_i;
+        int grid_min_j, grid_max_j;
+        int grid_min_k, grid_max_k;
+        float norm2;
+        uint32_t grid_index;
 
-template<bool enable_packed_search>
-bool CUGNG::get_down_sampling_grid_impl(Vec3f& p, uint8_t& label, Node_d &n){
-    int grid_mid_i, grid_mid_j, grid_mid_k, i, j, k;
-    int grid_min_i, grid_max_i;
-    int grid_min_j, grid_max_j;
-    int grid_min_k, grid_max_k;
-    float norm2;
-    uint32_t grid_index;
+        grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
+        grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
+        grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
 
-    grid_mid_i = (int)((p.p[0] - grid_config.x_min) * grid_config.unit_1);
-    grid_mid_j = (int)((p.p[1] - grid_config.y_min) * grid_config.unit_1);
-    grid_mid_k = (int)((p.p[2] - grid_config.z_min) * grid_config.unit_1);
+        grid_min_i = MAX(0, grid_mid_i - 1);
+        grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
+        grid_min_j = MAX(0, grid_mid_j - 1);
+        grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
+        grid_min_k = MAX(0, grid_mid_k - 1);
+        grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
 
-    grid_min_i = MAX(0, grid_mid_i - 1);
-    grid_max_i = MIN((int)grid_config.max[0]-1, grid_mid_i + 1);
-    grid_min_j = MAX(0, grid_mid_j - 1);
-    grid_max_j = MIN((int)grid_config.max[1]-1, grid_mid_j + 1);
-    grid_min_k = MAX(0, grid_mid_k - 1);
-    grid_max_k = MIN((int)grid_config.max[2]-1, grid_mid_k + 1);
+        bool p_is_in_vigilance = false;
 
-    bool p_is_in_vigilance = false;
+        n.id1 = NODE_NOID;
+        n.id1_d2 = FLT_MAX;
+        n.id2 = NODE_NOID;
+        n.id2_d2 = FLT_MAX;
 
-    n.id1 = NODE_NOID;
-    n.id1_d2 = FLT_MAX;
-    n.id2 = NODE_NOID;
-    n.id2_d2 = FLT_MAX;
+        label = 0;
 
-    label = 0;
-
-    for (i = grid_min_i; i <= grid_max_i; ++i)
-        for (j = grid_min_j; j <= grid_max_j; ++j)
-            for (k = grid_min_k; k <= grid_max_k; ++k) {
-                grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
-                if (grid_index >= grid_config.maxXYZ)
-                    continue;
-                const auto num = grid_node_num[grid_index];
-                if (num == 0) {continue;}
-                const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
-                for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
-                    const auto id = ids[grid_node_i];
-                    const auto &node = [&]() -> const auto & {
-                        if constexpr (enable_packed_search) {return search_nodes[id];}
-                        else {return nodes[id];}
-                    }();
-                    const float x = p.p[0] - node.pos.p[0];
-                    const float y = p.p[1] - node.pos.p[1];
-                    const float z = p.p[2] - node.pos.p[2];
-                    norm2 = x * x + y * y + z * z;
-                    if(norm2 < gng_config.s1_reset_range2){
-                        nodes[id].age_s1 = 0;
-                    }
-                    if(norm2 < gng_config.ds_range_max2){
-                        if(node.clusted_label == HUMAN){
-                            label |= 0b111;
-                        }else if(node.label == UNKNOWN_OBJECT){
-                            label |= 0b011;
+        for (i = grid_min_i; i <= grid_max_i; ++i)
+            for (j = grid_min_j; j <= grid_max_j; ++j)
+                for (k = grid_min_k; k <= grid_max_k; ++k) {
+                    grid_index = i + j * grid_config.max[0] + k * grid_config.maxXY;
+                    if (grid_index >= grid_config.maxXYZ)
+                        continue;
+                    const auto num = grid_node_num[grid_index];
+                    if (num == 0) {continue;}
+                    const auto *ids = grid.data()[grid_page_offsets.data()[grid_index / grid_page_size] + grid_index % grid_page_size].data();
+                    for (uint32_t grid_node_i = 0; grid_node_i < num; ++grid_node_i) {
+                        const auto id = ids[grid_node_i];
+                        const auto &node = node_source[id];
+                        const float x = p.p[0] - node.pos.p[0];
+                        const float y = p.p[1] - node.pos.p[1];
+                        const float z = p.p[2] - node.pos.p[2];
+                        norm2 = x * x + y * y + z * z;
+                        if(norm2 < gng_config.s1_reset_range2){
+                            nodes[id].age_s1 = 0;
                         }
-                    }
-                    p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
-                    if (norm2 < n.id2_d2) {
-                        if (norm2 < n.id1_d2) {
-                            n.id2 = n.id1,
-                            n.id2_d2 = n.id1_d2;
-                            n.id1 = id, n.id1_d2 = norm2;
-                        } else {
-                            n.id2 = id, n.id2_d2 = norm2;
+                        if(norm2 < gng_config.ds_range_max2){
+                            if(node.clusted_label == HUMAN){
+                                label |= 0b111;
+                            }else if(node.label == UNKNOWN_OBJECT){
+                                label |= 0b011;
+                            }
+                        }
+                        p_is_in_vigilance |= (norm2 < gng_config.vigilance2[node.label]);
+                        if (norm2 < n.id2_d2) {
+                            if (norm2 < n.id1_d2) {
+                                n.id2 = n.id1,
+                                n.id2_d2 = n.id1_d2;
+                                n.id1 = id, n.id1_d2 = norm2;
+                            } else {
+                                n.id2 = id, n.id2_d2 = norm2;
+                            }
                         }
                     }
                 }
-            }
-    return p_is_in_vigilance;
+        return p_is_in_vigilance;
+    };
+    return is_search_batch ? search(search_nodes) : search(nodes);
 }
 
 void CUGNG::delete_node(uint32_t idx) {

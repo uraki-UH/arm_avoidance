@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { Tabs, CollapsibleSection } from '../layout/MainLayout';
 import { ServerFileBrowser } from '../features/io/ServerFileBrowser';
+import { LocalMeshPanel } from '../features/meshes/LocalMeshPanel';
+import { useLocalMeshes } from '../features/meshes/use_local_meshes';
 import { SourceSelector } from '../features/io/SourceSelector';
 import { HeatmapControls } from '../features/visualization/HeatmapControls';
 import { ExportPanel } from '../features/io/ExportPanel';
@@ -70,6 +72,7 @@ import {
 } from '../types';
 
 interface SidebarContentProps {
+    local_meshes: ReturnType<typeof useLocalMeshes>;
     isConnected: boolean;
     connect: () => void;
     disconnect: () => void;
@@ -476,6 +479,10 @@ export const SidebarContent: React.FC<SidebarContentProps> = (props) => {
                     listPointCloudFiles={props.listPointCloudFiles}
                     loadPointCloudFile={props.loadPointCloudFile}
                 />
+            </CollapsibleSection>
+
+            <CollapsibleSection title="Mesh Models" icon={<Box size={16} />} defaultOpen={false}>
+                <LocalMeshPanel meshes={props.local_meshes} />
             </CollapsibleSection>
 
             <CollapsibleSection title="Rosbag Playback" icon={<PlayCircle size={16} />} defaultOpen={false}>

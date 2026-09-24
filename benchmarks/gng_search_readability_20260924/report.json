@@ -1,0 +1,365 @@
+{
+  "compared_frames": 840,
+  "total_frames": 1680,
+  "compared_fields": [
+    "attention_num",
+    "cluster_sha256",
+    "clusters",
+    "delta_meta_sha256",
+    "delta_sha256",
+    "edges",
+    "events_num",
+    "events_sha256",
+    "frame",
+    "graph_sha256",
+    "input_num",
+    "kept_input_num",
+    "label_sha256",
+    "learning_num",
+    "node_members_sha256",
+    "nodes",
+    "normal_sha256",
+    "observation_sha256",
+    "positions_sha256",
+    "rho_sha256",
+    "statistics_sha256",
+    "voxel_num",
+    "voxel_sha256"
+  ],
+  "cases": {
+    "v0.1_r1": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.03962695,
+        "exec_ms": 86.66403663,
+        "output_ms": 1.3336196500000002,
+        "total_ms": 89.03728323000001,
+        "voxel_ms": 4.22706302,
+        "attention_ms": 65.4426449,
+        "learn_ms": 5.25881267,
+        "label_ms": 4.704332109999999,
+        "maintenance_ms": 1.6657476699999998,
+        "cluster_ms": 5.314525700000001
+      },
+      "after": {
+        "input_ms": 1.0580644900000002,
+        "exec_ms": 86.18503093,
+        "output_ms": 1.31464346,
+        "total_ms": 88.55773888000002,
+        "voxel_ms": 4.2256599,
+        "attention_ms": 65.27893212999999,
+        "learn_ms": 5.16780813,
+        "label_ms": 4.727136499999999,
+        "maintenance_ms": 1.6597533100000001,
+        "cluster_ms": 5.080148689999999
+      }
+    },
+    "v0.5_r1": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.04177037,
+        "exec_ms": 30.314326410000007,
+        "output_ms": 1.20606348,
+        "total_ms": 32.56216026,
+        "voxel_ms": 4.55573615,
+        "attention_ms": 10.990958100000002,
+        "learn_ms": 4.41806889,
+        "label_ms": 3.59202128,
+        "maintenance_ms": 1.39623849,
+        "cluster_ms": 5.316468279999999
+      },
+      "after": {
+        "input_ms": 1.0170428500000002,
+        "exec_ms": 29.713352299999993,
+        "output_ms": 1.19945676,
+        "total_ms": 31.929851910000007,
+        "voxel_ms": 4.46732941,
+        "attention_ms": 10.803197799999998,
+        "learn_ms": 4.2835538799999995,
+        "label_ms": 3.524390339999999,
+        "maintenance_ms": 1.3755176899999997,
+        "cluster_ms": 5.216356810000001
+      }
+    },
+    "v0.1_r2": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.0433828299999999,
+        "exec_ms": 86.43498444999999,
+        "output_ms": 1.31936865,
+        "total_ms": 88.79773593,
+        "voxel_ms": 4.24782466,
+        "attention_ms": 65.23036606,
+        "learn_ms": 5.31732327,
+        "label_ms": 4.7788705799999995,
+        "maintenance_ms": 1.7042633900000004,
+        "cluster_ms": 5.109158019999999
+      },
+      "after": {
+        "input_ms": 1.05422709,
+        "exec_ms": 86.59597881000002,
+        "output_ms": 1.3164027100000002,
+        "total_ms": 88.96660860999998,
+        "voxel_ms": 4.232729070000001,
+        "attention_ms": 65.42037193,
+        "learn_ms": 5.20147452,
+        "label_ms": 4.71090938,
+        "maintenance_ms": 1.6834550900000003,
+        "cluster_ms": 5.299507010000001
+      }
+    },
+    "v0.5_r2": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.0342966299999998,
+        "exec_ms": 29.70613532000001,
+        "output_ms": 1.18944318,
+        "total_ms": 31.929875129999996,
+        "voxel_ms": 4.466838060000001,
+        "attention_ms": 10.729883519999998,
+        "learn_ms": 4.362802199999999,
+        "label_ms": 3.50480338,
+        "maintenance_ms": 1.3697044299999999,
+        "cluster_ms": 5.22987052
+      },
+      "after": {
+        "input_ms": 1.0310664399999998,
+        "exec_ms": 29.611985979999996,
+        "output_ms": 1.2039444500000003,
+        "total_ms": 31.846996869999995,
+        "voxel_ms": 4.43961919,
+        "attention_ms": 10.78122791,
+        "learn_ms": 4.29403913,
+        "label_ms": 3.4969737500000004,
+        "maintenance_ms": 1.3634810800000003,
+        "cluster_ms": 5.19341846
+      }
+    },
+    "v0.1_r3": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.04088643,
+        "exec_ms": 85.85500368999999,
+        "output_ms": 1.33160845,
+        "total_ms": 88.22749857,
+        "voxel_ms": 4.27551583,
+        "attention_ms": 64.72502838999999,
+        "learn_ms": 5.217102669999999,
+        "label_ms": 4.715248740000001,
+        "maintenance_ms": 1.64829377,
+        "cluster_ms": 5.22954903
+      },
+      "after": {
+        "input_ms": 1.03615955,
+        "exec_ms": 86.47634432000001,
+        "output_ms": 1.3124666600000001,
+        "total_ms": 88.82497052999999,
+        "voxel_ms": 4.244545780000001,
+        "attention_ms": 65.46977998,
+        "learn_ms": 5.192238279999999,
+        "label_ms": 4.73669634,
+        "maintenance_ms": 1.6561582199999998,
+        "cluster_ms": 5.1304291100000015
+      }
+    },
+    "v0.5_r3": {
+      "frames": 120,
+      "warmup": 20,
+      "before": {
+        "input_ms": 1.05324312,
+        "exec_ms": 30.772109970000006,
+        "output_ms": 1.23447502,
+        "total_ms": 33.05982811,
+        "voxel_ms": 4.50917546,
+        "attention_ms": 11.17281486,
+        "learn_ms": 4.584127560000001,
+        "label_ms": 3.59524942,
+        "maintenance_ms": 1.4225161799999997,
+        "cluster_ms": 5.439879009999999
+      },
+      "after": {
+        "input_ms": 1.0301421499999999,
+        "exec_ms": 29.492066269999995,
+        "output_ms": 1.2001870000000001,
+        "total_ms": 31.72239542,
+        "voxel_ms": 4.4224559800000005,
+        "attention_ms": 10.712373110000001,
+        "learn_ms": 4.25634106,
+        "label_ms": 3.5093458299999996,
+        "maintenance_ms": 1.3571322300000004,
+        "cluster_ms": 5.19226637
+      }
+    },
+    "voxel_disabled": {
+      "frames": 30,
+      "warmup": 5,
+      "before": {
+        "input_ms": 1.0693002,
+        "exec_ms": 144.15814600000002,
+        "output_ms": 1.3026305999999999,
+        "total_ms": 146.53007680000002,
+        "voxel_ms": 0.7725758,
+        "attention_ms": 127.52293376,
+        "learn_ms": 3.82686792,
+        "label_ms": 4.66543136,
+        "maintenance_ms": 1.8384805599999998,
+        "cluster_ms": 5.48451332
+      },
+      "after": {
+        "input_ms": 1.05192048,
+        "exec_ms": 144.06297284000001,
+        "output_ms": 1.303485,
+        "total_ms": 146.41837832,
+        "voxel_ms": 0.7768896399999999,
+        "attention_ms": 127.41811531999998,
+        "learn_ms": 3.8265934400000003,
+        "label_ms": 4.64187552,
+        "maintenance_ms": 1.82014564,
+        "cluster_ms": 5.532520960000002
+      }
+    },
+    "features_0": {
+      "frames": 30,
+      "warmup": 5,
+      "before": {
+        "input_ms": 1.108422,
+        "exec_ms": 147.66372008,
+        "output_ms": 1.3053179600000002,
+        "total_ms": 150.07746004,
+        "voxel_ms": 0.7928495999999999,
+        "attention_ms": 129.02911888,
+        "learn_ms": 5.264586199999999,
+        "label_ms": 5.103992280000001,
+        "maintenance_ms": 1.9082826,
+        "cluster_ms": 5.511668879999999
+      },
+      "after": {
+        "input_ms": 1.11177376,
+        "exec_ms": 150.38138488,
+        "output_ms": 1.3144568,
+        "total_ms": 152.80761544,
+        "voxel_ms": 0.8123895600000001,
+        "attention_ms": 131.52829228000002,
+        "learn_ms": 5.31621652,
+        "label_ms": 5.16627608,
+        "maintenance_ms": 1.9584200800000002,
+        "cluster_ms": 5.54897216
+      }
+    },
+    "features_0.1": {
+      "frames": 30,
+      "warmup": 5,
+      "before": {
+        "input_ms": 1.06846284,
+        "exec_ms": 90.87846499999999,
+        "output_ms": 1.2993476000000002,
+        "total_ms": 93.24627544,
+        "voxel_ms": 4.2691921200000005,
+        "attention_ms": 67.667512,
+        "learn_ms": 6.51413812,
+        "label_ms": 4.99589076,
+        "maintenance_ms": 1.7177059599999998,
+        "cluster_ms": 5.66930736
+      },
+      "after": {
+        "input_ms": 1.11591696,
+        "exec_ms": 91.05857956,
+        "output_ms": 1.2982276,
+        "total_ms": 93.47272412000001,
+        "voxel_ms": 4.3249034,
+        "attention_ms": 67.79778136,
+        "learn_ms": 6.458953279999999,
+        "label_ms": 4.9640214799999995,
+        "maintenance_ms": 1.79482176,
+        "cluster_ms": 5.663974560000001
+      }
+    },
+    "features_0.5": {
+      "frames": 30,
+      "warmup": 5,
+      "before": {
+        "input_ms": 1.08531736,
+        "exec_ms": 32.18108668,
+        "output_ms": 1.16546344,
+        "total_ms": 34.43186748,
+        "voxel_ms": 4.52139988,
+        "attention_ms": 11.511072920000002,
+        "learn_ms": 5.516832839999999,
+        "label_ms": 3.9105598799999997,
+        "maintenance_ms": 1.4579942000000004,
+        "cluster_ms": 5.21615452
+      },
+      "after": {
+        "input_ms": 1.09551796,
+        "exec_ms": 31.733387360000005,
+        "output_ms": 1.17536964,
+        "total_ms": 34.00427496,
+        "voxel_ms": 4.59421128,
+        "attention_ms": 11.146007039999999,
+        "learn_ms": 5.3103960400000005,
+        "label_ms": 3.9352938,
+        "maintenance_ms": 1.4427690400000004,
+        "cluster_ms": 5.255085320000001
+      }
+    }
+  },
+  "median": {
+    "0.1": {
+      "before": {
+        "input_ms": 1.04088643,
+        "exec_ms": 86.43498444999999,
+        "output_ms": 1.33160845,
+        "total_ms": 88.79773593,
+        "voxel_ms": 4.24782466,
+        "attention_ms": 65.23036606,
+        "learn_ms": 5.25881267,
+        "label_ms": 4.715248740000001,
+        "maintenance_ms": 1.6657476699999998,
+        "cluster_ms": 5.22954903
+      },
+      "after": {
+        "input_ms": 1.05422709,
+        "exec_ms": 86.47634432000001,
+        "output_ms": 1.31464346,
+        "total_ms": 88.82497052999999,
+        "voxel_ms": 4.232729070000001,
+        "attention_ms": 65.42037193,
+        "learn_ms": 5.192238279999999,
+        "label_ms": 4.727136499999999,
+        "maintenance_ms": 1.6597533100000001,
+        "cluster_ms": 5.1304291100000015
+      }
+    },
+    "0.5": {
+      "before": {
+        "input_ms": 1.04177037,
+        "exec_ms": 30.314326410000007,
+        "output_ms": 1.20606348,
+        "total_ms": 32.56216026,
+        "voxel_ms": 4.50917546,
+        "attention_ms": 10.990958100000002,
+        "learn_ms": 4.41806889,
+        "label_ms": 3.59202128,
+        "maintenance_ms": 1.39623849,
+        "cluster_ms": 5.316468279999999
+      },
+      "after": {
+        "input_ms": 1.0301421499999999,
+        "exec_ms": 29.611985979999996,
+        "output_ms": 1.2001870000000001,
+        "total_ms": 31.846996869999995,
+        "voxel_ms": 4.43961919,
+        "attention_ms": 10.78122791,
+        "learn_ms": 4.2835538799999995,
+        "label_ms": 3.5093458299999996,
+        "maintenance_ms": 1.3634810800000003,
+        "cluster_ms": 5.19341846
+      }
+    }
+  }
+}

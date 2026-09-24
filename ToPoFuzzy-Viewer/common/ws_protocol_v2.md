@@ -1,6 +1,10 @@
 # WebSocket Protocol v2
 
 ## Transport
+
+`Mesh Models` のローカルメッシュ表示は本プロトコルの対象外。
+RPC・stream・ROS topicの追加なし。[操作と範囲](../doc/MESH_MODELS.md)。
+
 - Endpoint: `ws://<host>:9001`
 - Binary frames: 点群（`common/protocol.md`）およびグラフ（`TMG1`）
 - Text frames: JSON request/response and asynchronous events

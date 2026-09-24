@@ -1,6 +1,5 @@
 #include "gng.hpp"
 
-#include <boost/sort/spreadsort/spreadsort.hpp>
 // #include "../certification/yubikey.hpp"
 
 GNG::GNG() {
@@ -41,7 +40,6 @@ int GNG::init(const char *binary_path) {
     }
     voxel_labels.resize(param.config.point_cloud_num);
     attention_pcl.resize(param.config.point_cloud_num);
-    voxel2node_ids.resize(param.config.point_cloud_num);
 
     vg.init(&n1.voxel_config, &param.config);
     la.init(&param.node, &param.label, &n1);
@@ -299,7 +297,7 @@ void GNG::attention(){
     observation_attention_spans.clear();
     observation_attention_blocks.clear();
     if (n1.observation_angle_table && !enable_observation_attention_compact) {observation_attention_raw_ids.resize(input_pcl_num);}
-    n1.getDownSampling(vg.filtered_pcl, vg.filtered_pcl_num, voxel_labels, voxel2node_ids, voxel2node_ids_num);
+    n1.getDownSampling(vg.filtered_pcl, vg.filtered_pcl_num, voxel_labels);
     int i, j;
     for (i = attention_pcl_num = 0; i < vg.filtered_pcl_num; ++i){
         if (voxel_labels[i] == 0)
@@ -329,9 +327,6 @@ void GNG::attention(){
         }
     }
     if (enable_observation_attention_compact) {observation_attention_blocks.push_back(observation_attention_spans.size());}
-    boost::sort::spreadsort::integer_sort(voxel2node_ids.data(),
-    voxel2node_ids.data() + voxel2node_ids_num,
-        [](const Voxel &voxel, unsigned offset) { return voxel.voxel_index >> offset; });
 }
 
 void GNG::makeResult(){

@@ -144,6 +144,11 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 詳細は[WS v2](../common/ws_protocol_v2.md)と[矢印共通仕様](../common/arrow_visual_spec.md)を参照。
 
 ## File
+
+ローカルメッシュの `Mesh Models` はFrontend内だけの表示機能。
+以下の点群ファイルRPCは使用せず、ROS配信やサーバーへのアップロードもなし。
+[対応形式・操作・制限](MESH_MODELS.md)。
+
 - `files.list`
 - `files.load` (`{ path }`)
 
