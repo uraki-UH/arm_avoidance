@@ -16,6 +16,7 @@
 
 | ディレクトリ | 内容 |
 | --- | --- |
+| [gng_incremental_updates_20260924](gng_incremental_updates_20260924/) | 同期再利用・孤立候補・実在エッジ走査によるCPU GNGの全体走査削減 |
 | [gng_followup_efficiency_20260924](gng_followup_efficiency_20260924/) | 探索・重点候補・クラスタ・疎エッジの4候補比較と本番3変更の採用 |
 | [gng_normal_efficiency_20260924](gng_normal_efficiency_20260924/) | 法線・曲率の連続配列参照と差分再利用、全出力一致の検証 |
 | [gng_radix_multiseed_20260924](gng_radix_multiseed_20260924/) | 6シードの品質・観測代表点比較と本番基数ソート採用 |

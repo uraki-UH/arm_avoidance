@@ -151,6 +151,11 @@ if(GNG_BUILD_BENCHMARKS)
   target_include_directories(normal_cache_test PRIVATE src include)
   target_compile_definitions(normal_cache_test PRIVATE GNG_VERSION=${GNG_VERSION})
   add_test(NAME normal_cache_test COMMAND normal_cache_test)
+  add_executable(incremental_updates_test test/incremental_updates_test.cpp test/edge_dense_reference/cugng.cpp
+    src/cpu/cugng.cpp src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(incremental_updates_test PRIVATE src include)
+  target_compile_definitions(incremental_updates_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  add_test(NAME incremental_updates_test COMMAND incremental_updates_test)
   add_executable(search_cache_test test/search_cache_test.cpp src/cpu/cugng.cpp
     src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
   target_include_directories(search_cache_test PRIVATE src include)

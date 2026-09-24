@@ -224,6 +224,7 @@ void GNG::exec() {
     if (has_priority_weights) {n1.priority_weights.resize(kept_num);}
     auto t1 = std::chrono::system_clock::now();
     // ダウンサンプリング
+    n1.begin_update_frame(true, true, true);
     attention();
     auto t2 = std::chrono::system_clock::now();
     // 学習
@@ -252,6 +253,7 @@ void GNG::exec() {
     n1.check_delete_no_edge_and_decay_eta();
     // クラスタリングのために，エッジの距離を計算
     n1.calc_edge_distanceXY();
+    n1.end_update_frame();
     auto t5 = std::chrono::system_clock::now();
     // クラスタリング
     cl.clustering();

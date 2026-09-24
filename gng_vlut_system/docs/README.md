@@ -4,6 +4,7 @@
 
 ## 主な文書
 
+- [CPU版GNGの高速化：採用・見送り実装と処理時間の前後比較](./gng_cpu_optimization_summary_20260924.md)
 - [把持推定・ファジィルールの現状と全体フロー](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
 - [把持ファジールール統合設計書：入力・実装契約・145ルール・拡張指標](./designs/fuzzy_grasp_design.md)
 - [把持ファジィ評価の相談用スライド（PowerPoint・PDF）](./presentations/README.md)

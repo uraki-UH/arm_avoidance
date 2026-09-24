@@ -54,6 +54,8 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     // malloc
     nodes.resize(node_num_max);
     search_nodes.resize(node_num_max);
+    orphan_node_words.assign((node_num_max + 63) / 64, 0);
+    end_update_frame();
     is_search_batch = false;
     tn_id.resize(node_num_max);
     // ノード上限と次数上限から決まる、実在エッジ用領域の最大容量。
@@ -61,10 +63,12 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     edge_count.assign(1, EDGE_NO_CONNECT);
     edge_distance.assign(1, 0.f);
     edge_reference_num.assign(1, 0);
+    edge_node_ids.assign(1, {0, 0});
     free_edge_ids.clear();
     edge_count.reserve(max_edge_num);
     edge_distance.reserve(max_edge_num);
     edge_reference_num.reserve(max_edge_num);
+    edge_node_ids.reserve(max_edge_num);
     free_edge_ids.reserve(max_edge_num);
     edge_slots.resize(node_num_max);
     grid_page_offsets.assign((static_cast<size_t>(grid_config.maxXYZ) + grid_page_size - 1) / grid_page_size, UINT32_MAX);
@@ -92,6 +96,8 @@ void CUGNG::clear() {
     next_free_idx = 0;
     nodes.clear();
     search_nodes.clear();
+    orphan_node_words.clear();
+    end_update_frame();
     point_order.clear();
     is_search_batch = false;
     tn_id.clear();
@@ -99,6 +105,7 @@ void CUGNG::clear() {
     edge_distance.clear();
     edge_slots.clear();
     edge_reference_num.clear();
+    edge_node_ids.clear();
     free_edge_ids.clear();
     grid.clear();
     grid_page_offsets.clear();
@@ -279,12 +286,28 @@ void CUGNG::recordTrainingEvents(const Node_d &winners, const Vec3f &input_point
         recordTrainingEvent(2, nodes[winners.id2], input_point);
     }
 }
+void CUGNG::begin_update_frame(bool enable_search_reuse, bool enable_orphan_updates, bool enable_edge_updates) {
+    enable_frame_search_reuse = enable_search_reuse;
+    enable_frame_orphan_updates = enable_orphan_updates;
+    enable_frame_edge_updates = enable_edge_updates;
+    is_search_batch = false;
+    std::fill(orphan_node_words.begin(), orphan_node_words.end(), 0);
+}
+
+void CUGNG::end_update_frame() {
+    is_search_batch = false;
+    enable_frame_search_reuse = false;
+    enable_frame_orphan_updates = false;
+    enable_frame_edge_updates = false;
+}
+
 void CUGNG::begin_search_batch() {
     // 前フレームのラベル更新と、バッチ外のノード操作の反映。
     search_nodes.resize(nodes.size());
     for (const auto &node : nodes) {
         if (node.id != NODE_NOID) {
             search_nodes[node.id] = {node.pos, node.label, node.clusted_label};
+            mark_orphan_node(node);
         }
     }
     is_search_batch = true;
@@ -315,7 +338,7 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
         }
     }
     voxel2node_ids_num = j;
-    is_search_batch = false;
+    is_search_batch = enable_frame_search_reuse;
 }
 void CUGNG::check_edge_distance() {
     static uint32_t disconnect_ids[NODE_MAX_EDGE];
@@ -424,7 +447,7 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
     int i, j;
     if (input_pcl_num == 0)
         return;
-    begin_search_batch();
+    if (!is_search_batch) {begin_search_batch();}
     uniform_int_distribution<> rA(0, input_pcl_num - 1);  // 一様乱数
     const bool has_priority = raw_points && !priority_point_ids.empty() && priority_ratio > 0;
     uniform_int_distribution<> priority_dist(0, std::max(1, static_cast<int>(priority_point_ids.size())) - 1);
@@ -468,7 +491,7 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
             }
         }
     }
-    is_search_batch = false;
+    is_search_batch = enable_frame_search_reuse;
 }
 void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_idx, bool enable_statistics) {
     static Node_d n;
@@ -821,6 +844,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             auto& node = nodes[i];
             node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
             node.frame = frame_number;
+            mark_orphan_node(node);
             if (is_search_batch) {
                 search_nodes[i] = {node.pos, node.label, node.clusted_label};
             }
@@ -862,6 +886,8 @@ void CUGNG::disconnect(uint32_t idx1, uint32_t idx2) {
     }
     edge_count[edge_idx] = EDGE_NO_CONNECT;
     if (has_edge) {recordEdgeDelta(first, second, GNG_DELTA_REMOVE);}
+    mark_orphan_node(first);
+    mark_orphan_node(second);
 }
 
 void CUGNG::disconnect_all(uint32_t idx) {
@@ -878,12 +904,14 @@ void CUGNG::disconnect_all(uint32_t idx) {
                 second.edges[other_slot_idx] = second.edges[--second.edge_num];
                 edge_slots[second_idx][other_slot_idx] = edge_slots[second_idx][second.edge_num];
                 edge_count[edge_idx] = EDGE_NO_CONNECT;
+                mark_orphan_node(second);
                 break;
             }
         }
         release_edge_slot(edge_idx);
     }
     first.edge_num = 0;
+    mark_orphan_node(first);
 }
 
 void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
@@ -906,9 +934,11 @@ void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
             edge_count.push_back(EDGE_NO_CONNECT);
             edge_distance.push_back(0.f);
             edge_reference_num.push_back(0);
+            edge_node_ids.push_back({0, 0});
         }
     }
     edge_count[edge_idx] = EDGE_CONNECT;
+    edge_node_ids[edge_idx] = {std::min(idx1, idx2), std::max(idx1, idx2)};
     edge_reference_num[edge_idx] += 2;
     edge_slots[idx1][first.edge_num] = edge_idx;
     edge_slots[idx2][second.edge_num] = edge_idx;
@@ -918,6 +948,18 @@ void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
 }
 
 void CUGNG::check_delete_no_edge_and_decay_eta() {
+    if (enable_frame_orphan_updates && !(gng_config.eta_decay_rate < 1.f)) {
+        for (size_t word_idx = 0; word_idx < orphan_node_words.size(); ++word_idx) {
+            auto word = orphan_node_words[word_idx];
+            while (word != 0) {
+                const uint32_t node_id = word_idx * 64 + __builtin_ctzll(word);
+                word &= word - 1;
+                auto &node = nodes[node_id];
+                if (node.id != NODE_NOID && node.edge_num == 0) {delete_node(node_id);}
+            }
+        }
+        return;
+    }
     for (auto& node : nodes) {
         if (node.id == NODE_NOID) {
             continue;
@@ -1028,6 +1070,17 @@ void CUGNG::check_age(){
 }
 
 void CUGNG::calc_edge_distanceXY(){
+    if (enable_frame_edge_updates) {
+        // 両端の隣接配列を重複走査しない、実在エッジ用プールの単一走査。
+        for (uint32_t edge_idx = 1; edge_idx < edge_node_ids.size(); ++edge_idx) {
+            if (edge_reference_num[edge_idx] == 0) {continue;}
+            const auto &ids = edge_node_ids[edge_idx];
+            auto &first = is_search_batch ? search_nodes[ids[0]].pos : nodes[ids[0]].pos;
+            auto &second = is_search_batch ? search_nodes[ids[1]].pos : nodes[ids[1]].pos;
+            edge_distance[edge_idx] = first.squaredNormXY(second);
+        }
+        return;
+    }
     int i;
     uint32_t edge_id;
     for (auto& node : nodes) {

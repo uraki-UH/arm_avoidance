@@ -71,6 +71,9 @@ class CUGNG {
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
     void clear();
+    // フレーム内の同期再利用・孤立候補確認・実在エッジ走査。単独呼出しは従来処理。
+    void begin_update_frame(bool enable_search_reuse, bool enable_orphan_updates, bool enable_edge_updates);
+    void end_update_frame();
     // void learnBatch(vector<Vec3f> &inpcl, int input_pcl_num);
     void learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attention_pcl, int attention_pcl_num,
         const vector<Vec3f> *observation_points = nullptr,
@@ -141,6 +144,17 @@ class CUGNG {
     vector<search_node_state> search_nodes;
     vector<uint32_t> point_order;
     bool is_search_batch = false;
+    bool enable_frame_search_reuse = false;
+    bool enable_frame_orphan_updates = false;
+    bool enable_frame_edge_updates = false;
+    // ノードID順の候補走査用ビット列。削除順・残存ノード数制約の維持。
+    vector<uint64_t> orphan_node_words;
+    vector<array<uint32_t, 2>> edge_node_ids;
+    void mark_orphan_node(const Node &node) {
+        if (enable_frame_orphan_updates && node.id != NODE_NOID && node.edge_num == 0) {
+            orphan_node_words[node.id / 64] |= uint64_t{1} << (node.id % 64);
+        }
+    }
     void begin_search_batch();
     template<bool enable_packed_search> bool get_min_grid_impl(Vec3f &point, Node_d &result);
     template<bool enable_packed_search> bool get_down_sampling_grid_impl(Vec3f &point, uint8_t &label, Node_d &result);
