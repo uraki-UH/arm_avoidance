@@ -8,7 +8,7 @@ import React from 'react';
 import { act, createRoot, extend } from '@react-three/fiber';
 import * as THREE from 'three';
 
-for (const source_id of ['/grasp_pose_cands/Tmap', '/nonplane_components']) test(
+for (const source_id of ['/grasp_pose_cands/Tmap', '/nonplane_components', '/topological_map']) test(
     `トピック別フラグとAABB判定・遅延応答の無効化: ${source_id}`, async () => {
     const saved_globals = new Map(['window', 'document', 'performance', 'IS_REACT_ACT_ENVIRONMENT']
         .map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
@@ -114,6 +114,12 @@ for (const source_id of ['/grasp_pose_cands/Tmap', '/nonplane_components']) test
         await act(async () => { root.render(React.createElement(CandidateHoverFrame, props)); });
         move(0.2);
         await tick();
+        if (source_id === '/topological_map') {
+            assert.equal(requests.length, 0);
+            assert.equal(frame(), undefined);
+            assert.equal(timer, undefined);
+            return;
+        }
         assert.equal(requests.length, 1);
         await respond();
 

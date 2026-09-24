@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace
@@ -344,8 +345,8 @@ TEST(PlaneClusterIncremental, ChainRejectionIsStableAcrossFrames)
   }
 }
 
-// 各隣接対は平面でも、連鎖統合による全体の細長さを毎回再評価。
-TEST(PlaneClusterIncremental, MergeChainChecksAccumulatedPlanarity)
+// 面幅を保った同一平面の連鎖統合。長さだけを理由とする過剰分割の防止。
+TEST(PlaneClusterIncremental, WidePlaneChainMergesDespiteAspectRatio)
 {
   const ClusterOptions options;
   Clusterizer clusterizer{options};
@@ -357,12 +358,243 @@ TEST(PlaneClusterIncremental, MergeChainChecksAccumulatedPlanarity)
 
   for (std::size_t iter = 0U; iter < 5U; ++iter) {
     const ClusterResult result = clusterizer.update(map);
-    EXPECT_GE(result.clusters.clusters.size(), 2U);
-    EXPECT_LT(result.clusters.clusters.size(), 6U);
+    ASSERT_EQ(result.clusters.clusters.size(), 1U);
     EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
-    for (const auto &cluster : result.clusters.clusters) {
-      EXPECT_GE(cluster.planarity + 1.0e-6, options.merge_min_planarity);
+    EXPECT_LT(result.clusters.clusters.front().planarity, options.merge_min_planarity);
+  }
+}
+
+// 長さに依存しない面幅判定。路面相当の長方形を初回から一面として生成。
+TEST(PlaneClusterIncremental, LongWidePlaneIsNotRejectedAsChain)
+{
+  TopologicalMap map;
+  const double origin[3] = {0.0, 0.0, 0.0};
+  const double axis_u[3] = {1.0, 0.0, 0.0};
+  const double axis_v[3] = {0.0, 1.0, 0.0};
+  appendGrid(map, 120U, 6U, 0.05, origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
+  Clusterizer clusterizer{ClusterOptions{}};
+  const auto result = warmUp(clusterizer, map);
+  ASSERT_EQ(result.clusters.clusters.size(), 1U);
+  EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+}
+
+// 取り込み緩和のOFF時にも有効な保持ヒステリシスと、明確な逸脱の解放。
+TEST(PlaneClusterIncremental, RetentionDoesNotDependOnMultiEdgeRelaxation)
+{
+  ClusterOptions options;
+  options.enable_multi_edge_dist_relaxation = false;
+  options.max_effective_spacing = 0.02;
+  options.growth_residual_ratio = 0.70;
+  options.max_normalized_cluster_residual = 0.70;
+  options.retention_residual_ratio = 1.40;
+  Clusterizer clusterizer{options};
+  auto map = makeSinglePlane();
+  const auto initial = warmUp(clusterizer, map);
+  map.nodes[14].pos.z = 0.022F;
+  const auto retained = clusterizer.update(map);
+  EXPECT_EQ(retained.statistics.released_node_count, 0U);
+  EXPECT_EQ(retained.statistics.clustered_node_count, map.nodes.size());
+  EXPECT_EQ(clusterIds(retained), clusterIds(initial));
+  map.nodes[14].pos.z = 0.10F;
+  EXPECT_GT(clusterizer.update(map).statistics.released_node_count, 0U);
+}
+
+// 粗い点間隔での新規生成にも適用する厚み制約。生成直後の大量解放の防止。
+TEST(PlaneClusterIncremental, BirthUsesBoundedSpacingForResidual)
+{
+  ClusterOptions options;
+  options.birth_confirm_frames = 0U;
+  options.max_effective_spacing = 0.02;
+  auto map = makeSinglePlane();
+  for (auto &node : map.nodes) {
+    node.pos.x *= 10.0F;
+    node.pos.y *= 10.0F;
+    node.pos.z = node.id % 2U == 0U ? 0.05F : -0.05F;
+  }
+  Clusterizer clusterizer{options};
+  const auto result = clusterizer.update(map);
+  for (const auto &cluster : result.clusters.clusters) {
+    double squared_sum = 0.0;
+    for (const auto idx : cluster.node_indices) {
+      const auto &p = map.nodes[idx].pos;
+      const double dist = cluster.normal.x * (p.x - cluster.centroid.x) +
+        cluster.normal.y * (p.y - cluster.centroid.y) +
+        cluster.normal.z * (p.z - cluster.centroid.z);
+      squared_sum += dist * dist;
     }
+    EXPECT_LE(std::sqrt(squared_sum / cluster.node_indices.size()),
+      options.max_normalized_cluster_residual * options.max_effective_spacing + 1.e-6);
+  }
+}
+
+// 同じ相対ノイズ・変位に対する、卓上から屋外までの生成・保持・解放の一致。
+TEST(PlaneClusterIncremental, MembershipScalesWithLocalEdges)
+{
+  for (const double scale : {0.1, 1.0, 10.0, 100.0}) {
+    SCOPED_TRACE(scale);
+    const double spacing = 0.02 * scale;
+    TopologicalMap map;
+    const double origin[3] = {0.0, 0.0, 0.0};
+    const double axis_u[3] = {1.0, 0.0, 0.0};
+    const double axis_v[3] = {0.0, 1.0, 0.0};
+    appendGrid(map, 16U, 12U, spacing, origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
+    for (auto &node : map.nodes) {
+      node.pos.z = static_cast<float>(spacing * 0.02 * std::sin(1.7 * node.id));
+    }
+    Clusterizer clusterizer{ClusterOptions{}};
+    const auto original = warmUp(clusterizer, map);
+    ASSERT_EQ(original.clusters.clusters.size(), 1U);
+    EXPECT_EQ(original.statistics.clustered_node_count, map.nodes.size());
+    map.nodes[88].pos.z = static_cast<float>(spacing * 0.22);
+    const auto retained = clusterizer.update(map);
+    EXPECT_EQ(retained.statistics.released_node_count, 0U);
+    EXPECT_EQ(retained.statistics.clustered_node_count, map.nodes.size());
+    EXPECT_EQ(clusterIds(retained), clusterIds(original));
+    map.nodes[88].pos.z = static_cast<float>(spacing * 0.70);
+    const auto released = clusterizer.update(map);
+    EXPECT_EQ(released.statistics.released_node_count, 1U);
+    EXPECT_EQ(released.statistics.clustered_node_count, map.nodes.size() - 1U);
+  }
+}
+
+// 一本の異常に長いエッジによる距離許容幅の膨張防止。
+TEST(PlaneClusterIncremental, LongBridgeDoesNotRelaxLocalRetention)
+{
+  auto map = makeSinglePlane();
+  Clusterizer clusterizer{ClusterOptions{}};
+  ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 1U);
+  TopologicalNode far_node = map.nodes.front();
+  far_node.id = static_cast<std::uint16_t>(map.nodes.size());
+  far_node.pos.x = 100.0F;
+  map.nodes.push_back(far_node);
+  map.edges.insert(map.edges.end(), {14U, far_node.id});
+  map.nodes[14].pos.z = 0.025F;
+  const auto result = clusterizer.update(map);
+  EXPECT_EQ(result.statistics.released_node_count, 1U);
+  EXPECT_EQ(result.statistics.clustered_node_count, 35U);
+}
+
+// 点密度が異なる同数の面の統合判定。粗い側の間隔による小物体の吸収防止。
+TEST(PlaneClusterIncremental, MixedDensityMergeUsesBothLocalScales)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (const double offset : {0.0, 0.04}) {
+      SCOPED_TRACE(scale);
+      SCOPED_TRACE(offset);
+      TopologicalMap map;
+      const double origin[3] = {0.0, 0.0, 0.0};
+      const double small_origin[3] = {0.4 * scale, 0.4 * scale, offset * scale};
+      const double axis_u[3] = {1.0, 0.0, 0.0};
+      const double axis_v[3] = {0.0, 1.0, 0.0};
+      appendGrid(map, 6U, 6U, scale, origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
+      const auto small_idx = appendGrid(
+        map, 6U, 6U, 0.02 * scale, small_origin, axis_u, axis_v, TopologicalMap::UNKNOWN_OBJECT);
+      Clusterizer clusterizer{ClusterOptions{}};
+      ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+      map.edges.insert(map.edges.end(), {0U, static_cast<std::uint16_t>(small_idx),
+        1U, static_cast<std::uint16_t>(small_idx + 5U)});
+      const auto result = clusterizer.update(map);
+      EXPECT_EQ(result.clusters.clusters.size(), offset == 0.0 ? 1U : 2U);
+      EXPECT_EQ(result.statistics.clustered_node_count, 72U);
+    }
+  }
+}
+
+// 同じ法線を持つ隣接段差の分離。統合後の平面移動による段差隠蔽の防止。
+TEST(PlaneClusterIncremental, ParallelStepStaysSeparateAcrossScale)
+{
+  for (const double scale : {0.1, 1.0, 10.0, 100.0}) {
+    SCOPED_TRACE(scale);
+    auto map = make_plane_patches(2U, 1U);
+    for (auto &node : map.nodes) {
+      node.pos.x *= scale;
+      node.pos.y *= scale;
+      node.pos.z = node.id < 36U ? 0.0F : static_cast<float>(0.01 * scale);
+    }
+    Clusterizer clusterizer{ClusterOptions{}};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+    connect_plane_patches(map, 0U, 1U, true);
+    for (std::size_t iter = 0U; iter < 8U; ++iter) {
+      const auto result = clusterizer.update(map);
+      EXPECT_EQ(result.clusters.clusters.size(), 2U);
+      EXPECT_EQ(result.statistics.clustered_node_count, 72U);
+    }
+  }
+}
+
+// 既存平面への境界点の取り込みと、面から外れた追加点の拒否のスケール追従。
+TEST(PlaneClusterIncremental, AbsorptionScalesWithLocalEdges)
+{
+  for (const double scale : {0.1, 1.0, 10.0, 100.0}) {
+    SCOPED_TRACE(scale);
+    auto map = makeSinglePlane();
+    for (auto &node : map.nodes) {
+      node.pos.x *= scale;
+      node.pos.y *= scale;
+    }
+    Clusterizer clusterizer{ClusterOptions{}};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 1U);
+    TopologicalNode candidate = map.nodes.front();
+    candidate.id = 36U;
+    candidate.pos.x = static_cast<float>(0.30 * scale);
+    candidate.pos.y = static_cast<float>(0.10 * scale);
+    candidate.pos.z = static_cast<float>(0.005 * scale);
+    map.nodes.push_back(candidate);
+    map.edges.insert(map.edges.end(), {17U, 36U, 23U, 36U});
+    const auto accepted = clusterizer.update(map);
+    EXPECT_EQ(accepted.statistics.absorbed_node_count, 1U);
+    EXPECT_EQ(accepted.statistics.clustered_node_count, 37U);
+    candidate.id = 37U;
+    candidate.pos.z = static_cast<float>(0.035 * scale);
+    map.nodes.push_back(candidate);
+    map.edges.insert(map.edges.end(), {17U, 37U, 23U, 37U});
+    const auto rejected = clusterizer.update(map);
+    EXPECT_EQ(rejected.statistics.absorbed_node_count, 0U);
+    EXPECT_EQ(rejected.statistics.clustered_node_count, 37U);
+  }
+}
+
+// 絶対上限を明示した用途に限る距離制限。0の上限なし設定との区別。
+TEST(PlaneClusterIncremental, ExplicitSpacingCapRemainsAvailable)
+{
+  for (const double cap : {0.0, 0.02}) {
+    SCOPED_TRACE(cap);
+    auto map = makeSinglePlane();
+    for (auto &node : map.nodes) {
+      node.pos.x *= 10.0F;
+      node.pos.y *= 10.0F;
+    }
+    ClusterOptions options;
+    options.max_effective_spacing = cap;
+    Clusterizer clusterizer{options};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 1U);
+    map.nodes[14].pos.z = 0.03F;
+    EXPECT_EQ(clusterizer.update(map).statistics.released_node_count, cap == 0.0 ? 0U : 1U);
+  }
+}
+
+// 大平面内の別成分が接続された場合の一括統合。凸包包含だけによる誤吸収の防止。
+TEST(PlaneClusterIncremental, InteriorPatchMergesOnlyWhenCoplanarAndConnected)
+{
+  for (const double offset : {0.0, 0.08}) {
+    SCOPED_TRACE(offset);
+    TopologicalMap map = make_plane_patches(3U, 3U);
+    for (std::size_t idx = 4U * 36U; idx < 5U * 36U; ++idx) {
+      map.nodes[idx].pos.z = static_cast<float>(offset);
+    }
+    for (const auto pair : {std::pair{0U, 1U}, {1U, 2U}, {6U, 7U}, {7U, 8U}}) {
+      connect_plane_patches(map, pair.first, pair.second, true);
+    }
+    for (const auto pair : {std::pair{0U, 3U}, {3U, 6U}, {2U, 5U}, {5U, 8U}}) {
+      connect_plane_patches(map, pair.first, pair.second, false);
+    }
+    Clusterizer clusterizer{ClusterOptions{}};
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+    connect_plane_patches(map, 3U, 4U, true);
+    connect_plane_patches(map, 4U, 5U, true);
+    const auto result = clusterizer.update(map);
+    EXPECT_EQ(result.clusters.clusters.size(), offset == 0.0 ? 1U : 2U);
+    EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
   }
 }
 
@@ -397,6 +629,8 @@ TEST(PlaneClusterIncremental, MergeChainChecksAccumulatedResidual)
 {
   ClusterOptions options;
   options.max_normalized_cluster_residual = 0.15;
+  // 全体RMS判定のみの検証用。各側の適合判定は別試験で確認。
+  options.merge_smaller_side_residual_ratio = 1.0;
   Clusterizer clusterizer{options};
   TopologicalMap map = make_plane_patches(3U, 1U);
   for (std::size_t idx = 36U; idx < 72U; ++idx) {
@@ -420,6 +654,7 @@ TEST(PlaneClusterIncremental, SmallerSideResidualUsesPositionStatistics)
     SCOPED_TRACE(offset);
     ClusterOptions options;
     options.merge_residual_growth_min_th = 1.0;
+    options.max_normalized_cluster_residual = 1.0;
     options.merge_smaller_side_residual_ratio = 0.10;
     Clusterizer clusterizer{options};
     TopologicalMap map;

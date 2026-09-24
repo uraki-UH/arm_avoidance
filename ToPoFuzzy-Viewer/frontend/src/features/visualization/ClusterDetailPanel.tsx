@@ -1,3 +1,6 @@
+import { VehicleRegistrationControls, VehicleRegistrationLayer } from '../vehicleRegistration/VehicleRegistration';
+import { useVehicleRegistration } from '../vehicleRegistration/use_vehicle_registration';
+import type { register_vehicle as register_vehicle_fn } from '../vehicleRegistration/types';
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -34,13 +37,18 @@ function InspectionCamera({ snapshot, reset_count }: { snapshot: graph_snapshot;
     return <OrbitControls makeDefault enableDamping={false} onChange={() => invalidate()} />;
 }
 
-function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, error }: {
+function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, error, register_vehicle }: {
+    register_vehicle?: register_vehicle_fn;
     snapshot: ClusterSnapshot;
     onClose: () => void;
     on_refresh: () => void;
     is_loading: boolean;
     error: string | null;
 }) {
+    const registration = useVehicleRegistration(snapshot, register_vehicle);
+    const camera_snapshot = useMemo(() => registration.candidate ? { ...snapshot,
+        min_position: registration.candidate.min_position, max_position: registration.candidate.max_position } : snapshot,
+        [snapshot, registration.candidate]);
     const [enable_nodes, set_enable_nodes] = useState(true);
     const [enable_edges, set_enable_edges] = useState(true);
     const [enable_normals, set_enable_normals] = useState(false);
@@ -68,7 +76,7 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
     return <section role="dialog" aria-label="候補の独立3Dビュー"
         className="surface-panel absolute z-50 flex min-h-0 flex-col overflow-hidden"
         style={{ left: position?.x, right: position ? undefined : 16, top: position?.y ?? 72,
-            width: 'min(480px, calc(100% - 32px))', height: 460,
+            width: 'min(620px, calc(100% - 32px))', height: register_vehicle ? 680 : 460,
             minWidth: 'min(320px, calc(100% - 32px))', minHeight: 320,
             maxWidth: 'calc(100% - 32px)', maxHeight: '85vh', resize: 'both' }}>
         <header className="flex shrink-0 cursor-grab items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2"
@@ -113,6 +121,8 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
             <button className="btn-secondary px-2 py-1" disabled={is_loading} onClick={on_refresh}>
                 {is_loading ? '取得中' : '最新を取得'}</button>
         </div>
+        {register_vehicle && snapshot.selection.kind !== 'node' && snapshot.selection.kind !== 'marker' &&
+            <VehicleRegistrationControls state={registration} num_nodes={snapshot.graph.nodes.length} />}
         {error && <p role="alert" className="px-2 py-1 text-xs text-red-300">{error}</p>}
         <div className="relative min-h-0 flex-1 bg-black/20">
             <WebGLErrorBoundary>
@@ -120,9 +130,10 @@ function ClusterDetailPanelInner({ snapshot, onClose, on_refresh, is_loading, er
                     camera={{ up: [0, 0, 1], fov: 45 }}>
                     <ambientLight intensity={1.5} />
                     <directionalLight position={[3, -3, 5]} intensity={2} />
-                    <InspectionCamera snapshot={snapshot} reset_count={reset_count} />
+                    <InspectionCamera snapshot={camera_snapshot} reset_count={reset_count} />
                     <GraphRenderer tag={snapshot.source_id} data={snapshot.graph} settings={settings} enableClusterSelection={false}
                         uniform_node_color={snapshot.node_color ? marker_color(snapshot.node_color).color.getStyle() : undefined} />
+                    <VehicleRegistrationLayer candidate={registration.candidate} />
                     {enable_axes && <axesHelper args={[Math.max(...extent, 0.03) * 0.4]} position={center} />}
                     {enable_bounding_box && <box3Helper args={[bounds, '#ffe8a1']} renderOrder={2000}
                         material-depthTest={false} material-depthWrite={false} material-toneMapped={false} />}

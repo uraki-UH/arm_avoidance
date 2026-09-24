@@ -1,0 +1,115 @@
+"""分離ROSドメインでの配布バイナリ起動・長平面入力試験と子プロセスの後片付け。"""
+
+import os
+import math
+import signal
+import subprocess
+import time
+from pathlib import Path
+
+import rclpy
+import yaml
+from ais_gng_msgs.msg import PlaneClusterArray, TopologicalMap, TopologicalNode
+from rcl_interfaces.srv import GetParameters
+from rclpy.qos import DurabilityPolicy, QoSProfile
+
+
+def main():
+    assert os.environ.get("ROS_DOMAIN_ID") == "173"
+    output_dir = Path("/ros2_ws/src/artifacts/plane_consistency_20260924")
+    executable_dir = Path("/ros2_ws/install/ais_gng/lib/ais_gng")
+    processes, logs = [], []
+    rclpy.init()
+    observer = rclpy.create_node("plane_consistency_smoke_observer")
+    received = []
+    settings = yaml.safe_load(Path(
+        "/ros2_ws/src/ais_gng_cpu/src/ais_gng/config/plane_cluster_incremental.yaml"
+    ).read_text())["plane_cluster_incremental_node"]["ros__parameters"]
+    try:
+        for executable, name, params in (
+            ("ais_gng_cpu", "plane_consistency_smoke_cpu", [
+                "plane_cluster.direct_enabled:=true", "plane_cluster.min_plane_width_ratio:=1.0",
+                "input.topic_names:=[/plane_consistency/unused]"]),
+            ("plane_cluster_incremental_node", "plane_consistency_smoke_plane", [
+                "min_plane_width_ratio:=1.0", "input_topic:=/plane_consistency/map",
+                "output_topic:=/plane_consistency/planes", "enable_nonplane_markers:=false",
+                "surface_model.enable:=false"]),
+        ):
+            log = (output_dir / f"{name}.log").open("w")
+            logs.append(log)
+            command = [str(executable_dir / executable), "--ros-args", "-r", f"__node:={name}"]
+            for param in params:
+                command.extend(["-p", param])
+            print("start:", " ".join(command), flush=True)
+            process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            processes.append(process)
+            client = observer.create_client(GetParameters, f"/{name}/get_parameters")
+            assert client.wait_for_service(timeout_sec=12.0), name
+            req = GetParameters.Request()
+            names = ["min_plane_width_ratio", "growth_residual_ratio", "retention_residual_ratio",
+                     "max_effective_spacing", "max_normalized_cluster_residual", "max_merge_side_residual_ratio"]
+            prefix = "plane_cluster." if executable == "ais_gng_cpu" else ""
+            req.names = [prefix + key for key in names]
+            future = client.call_async(req)
+            rclpy.spin_until_future_complete(observer, future, timeout_sec=5.0)
+            assert future.done()
+            assert [value.double_value for value in future.result().values] == [settings[key] for key in names]
+            observer.destroy_client(client)
+        observer.create_subscription(PlaneClusterArray, "/plane_consistency/planes", received.append, 10)
+        qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        publisher = observer.create_publisher(TopologicalMap, "/plane_consistency/map", qos)
+        graph = TopologicalMap()
+        graph.header.frame_id = "map"
+        for row in range(6):
+            for column in range(120):
+                idx = row * 120 + column
+                value = TopologicalNode()
+                value.id = idx
+                value.pos.x, value.pos.y = column * 0.05, row * 0.05
+                value.normal.z = 1.0
+                graph.nodes.append(value)
+                if column:
+                    graph.edges.extend([idx - 1, idx])
+                if row:
+                    graph.edges.extend([idx - 120, idx])
+        for spacing in (0.005, 0.05, 2.0):
+            for idx, value in enumerate(graph.nodes):
+                value.pos.x = (idx % 120) * spacing
+                value.pos.y = (idx // 120) * spacing
+                value.pos.z = 0.02 * spacing * math.sin(1.7 * idx)
+            first_frame = graph.frame_number
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                graph.frame_number += 1
+                publisher.publish(graph)
+                rclpy.spin_once(observer, timeout_sec=0.1)
+                if (received and received[-1].frame_number > first_frame and
+                        len(received[-1].clusters) == 1 and
+                        len(received[-1].clusters[0].node_indices) == 720):
+                    print(f"PASS: spacing={spacing} m, one 720-node noisy plane", flush=True)
+                    break
+            else:
+                raise AssertionError(f"plane output missing: spacing={spacing}")
+        assert all(process.poll() is None for process in processes)
+    finally:
+        for process in reversed(processes):
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGINT)
+                try:
+                    process.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=5)
+            print(f"stopped: pid={process.pid} exit={process.returncode}", flush=True)
+        observer.destroy_node()
+        rclpy.shutdown()
+        for log in logs:
+            log.close()
+
+
+if __name__ == "__main__":
+    main()

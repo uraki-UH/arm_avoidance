@@ -202,12 +202,25 @@ Marker・PoseArray・候補の購読QoSは送信元に追従し、遅着・再�
 フッターはノード数・エッジ数・XYZ寸法の1行、座標系の説明行なし。独立ビュー内の`nonplane_components`は`nonplane_`へ表示のみ短縮（見出し例: `nonplane_7`）。元source ID・RPC・ROSトピック名は維持、元名はsource表示のツールチップで確認可能。
 `map`必須の編集RPCとは別用途であり、独立表示にはTFへの変換不要。
 
-ホバー枠・枠内クリック・一括範囲取得と、ノード・クラスタ・Markerの直接クリックによる独立表示は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。真偽値の明示指定があるGraphだけGUIの`Bounding Box`を表示し、falseでも再ON可能。`/grasp_pose_cands/Tmap`だけ既定でtrueを指定。`/nonplane_components`・`/topological_map`を含む他グラフは未指定のためGUI・選択機能なし。明示的なOFFは受信更新でも保持。法線などGraph設定を持たないMarkerからの独立表示なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。
+ホバー枠・枠内クリック・一括範囲取得と、ノード・クラスタ・Markerの直接クリックによる独立表示は、Viewerのトピック別Graph設定`enable_bounding_box=true`だけが対象。真偽値の明示指定があるGraphだけGUIの`Bounding Box`を表示し、falseでも再ON可能。`/grasp_pose_cands/Tmap`だけ既定でtrueを指定。`/topological_map`はBBox対象外で、過去のON設定が残っていてもGUI・枠・選択を無効化。`/nonplane_components`など他グラフは未指定のためGUI・選択機能なし。明示的なOFFは受信更新でも保持。法線などGraph設定を持たないMarkerからの独立表示なし。全OFF時は判定タイマーも停止。これはViewer内の表示設定であり、ROSメッセージやRPCフィールドの追加なし。
 ONのトピックは初回から物体全体のAABBで判定し、ホバーでの点・球メッシュのraycastなし。主画面と同じTF・手動表示変換・線枠の余白を適用。OFFで枠・当たり判定・直接選択・詳細取得RPCを停止し、取得中のOFFによる遅延表示・エラー表示も抑止。既に開いた独立ビューの固定表示は維持するが、「最新を取得」には元トピックのONが必要。可操作性楕円体の詳細選択は別機能として維持。
 判定は10 Hz、範囲取得は可視ソース全体で同時1件・最大4 Hz。ソースの受信フレームが同じなら再取得なし。重なりはカメラから近い枠を優先。
 枠内の点のない場所からも独立ビューの選択が可能。5pxを超えたドラッグ後のクリックは除外。
 境界の判定外れは350msの猶予。キャンバス退出・ドラッグ・編集モード・購読解除時は即時非表示。古い要求の遅延応答による枠の再表示なし。
 更新中と一過性の取得失敗は直前の範囲を維持し、600ms以上の連続失敗で解除。推定値への代替なし。点群全体・ロボットメッシュはホバー対象外。
+
+## 車両モデル照合
+
+`vehicle.register({ snapshot, dist_th?: 0.25, support_dist_th?: 0.35 })`。
+`snapshot`は`edit.inspect_graph`のcluster/component応答。座標系と全選択ノードを保持して送信。
+`viewer_vehicle_registration_node.py`が別ワーカーで処理し、同時実行は1件。通信側は60秒待機。
+返却は`{ source_id, selection, frame_id, timestamp, observation_kind: "gng_nodes", state, message, candidates, elapsed_ms, dist_th, support_dist_th, limitations }`。
+`state`は`class_candidate`（形状候補）、`ambiguous`（複数候補）、`insufficient`（判定保留）。
+各候補は`model_id, label, model_note, dimensions_m, yaw_deg, translation, match_ratio, support_ratio, unmatched_ratio, inlier_rms_m, compatibility, rank_score, num_inliers, num_observed`。
+描画用に変換済みXYZの平坦配列`matched_positions, unmatched_positions, outlier_positions`と全体の`min_position, max_position`を含む。Frontendでの点単位処理なし。
+一致ノードなしの`inlier_rms_m`はnull。入力・仮定・指標の定義は[車両照合仕様](VEHICLE_REGISTRATION.md)。
+エラーは`INVALID_PARAMS, BUSY, REGISTRATION_FAILED`。`job.progress/completed/failed`は要求idを`jobId`、`sessionId: "vehicle"`として通知。
+完了イベントには`durationMs, message`、結果本体はRPC応答。編集点群の`publishedTopic`なし。
 
 ## Notes
 - Legacy RPC method names are intentionally unsupported in v2.

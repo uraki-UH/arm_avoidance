@@ -210,6 +210,7 @@ Marker系のQoSも再評価。グラフの未ACK・送信済み版番号・未�
 - `gng.*`
 - `params.*`
 - `edit.*`
+- `vehicle.register`
 
 ### 読取専用の候補切り出し
 
@@ -224,3 +225,10 @@ Marker系のQoSも再評価。グラフの未ACK・送信済み版番号・未�
 Refer to `doc/BACKEND_API.md` for concrete method parameters and response payloads.
 
 The Topics checkbox disables a source with `sources.setActive({ active: false, removeLayer: true })`, so the corresponding scene layer is removed with the subscription.
+
+### 車両表面の位置合わせ
+
+`vehicle.register({ snapshot, dist_th?, support_dist_th? })`で選択クラスタの固定観測を照合。
+複数候補、適合度、支持率、未対応率、姿勢、変換済み描画点群を返却。分類保留を明示。
+処理は独立ノード。要求idのjobイベントを通知し、結果はRPC応答へ格納。
+入力制限・座標系・応答フィールド・エラーは[API仕様](../doc/BACKEND_API.md#車両モデル照合)を参照。

@@ -55,6 +55,11 @@ test('未指定トピックのBbox GUI非表示と、明示OFFからの再有効
                 };
                 visit(tree);
                 const toggle = controls.find(node => node.props.label === 'Bounding Box');
+                if (tag === '/topological_map') {
+                    assert.equal(toggle, undefined);
+                    assert.ok(!renderToStaticMarkup(render()).includes('車両照合の対象選択'));
+                    continue;
+                }
                 assert.equal(toggle.props.isOn, enable_bounding_box);
                 toggle.props.onToggle();
                 assert.equal(settings.enable_bounding_box, !enable_bounding_box);
@@ -69,12 +74,12 @@ test('未指定トピックのBbox GUI非表示と、明示OFFからの再有効
 });
 
 test('ノード・クラスタ・Markerの直接選択はBboxと編集状態に従属', () => {
-    for (const enable_bounding_box of [undefined, false, true]) {
+    for (const tag of ['/test', '/topological_map']) for (const enable_bounding_box of [undefined, false, true]) {
         for (const isEditMode of [false, true]) for (const isDrawing of [false, true]) {
             const settings = { enable_bounding_box };
-            const scope = { settings, layerSettings: { '/test': settings }, tag: '/test',
+            const scope = { settings, layerSettings: { [tag]: settings }, tag,
                 isEditMode, zoneMonitor: { isDrawing }, handle_inspect() {} };
-            const expected = enable_bounding_box === true && !isEditMode && !isDrawing;
+            const expected = tag !== '/topological_map' && enable_bounding_box === true && !isEditMode && !isDrawing;
             assert.equal(evaluate(attribute('GraphRenderer', 'enableClusterSelection'), scope), expected);
             assert.equal(typeof evaluate(attribute('MarkerArrayRenderer', 'on_inspect'), scope) === 'function', expected);
         }
@@ -108,6 +113,9 @@ test('Bbox OFF時のRPC抑止と、取得中のOFFによる遅延表示の防止
         assert.equal(num_requests, 0);
         assert.equal(is_loading, false);
         settings.enable_bounding_box = true;
+        scope.inspection_sources.current.layerSettings['/topological_map'] = settings;
+        await inspect('/topological_map', selection);
+        assert.equal(num_requests, 0);
         const pending = inspect('/test', selection);
         assert.equal(num_requests, 1);
         assert.equal(is_loading, true);

@@ -25,3 +25,7 @@ ToPoDualArm/
 # 実験の生成物・生ログ・生データ。再現資料と保存済み集計は benchmarks/ に分離。
 /artifacts/*
 !/artifacts/COLCON_IGNORE
+
+# ビルド・実行ログとTypeScriptの増分ビルド生成物
+*.log
+*.tsbuildinfo

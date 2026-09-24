@@ -74,6 +74,7 @@ struct PlaneFit
   Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
   Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
   double planarity = 0.0;
+  double plane_width_std = 0.0;
   double residual = 0.0;
   bool is_valid = false;
 };
@@ -185,6 +186,7 @@ struct PlaneAccumulator
     fit.normal = solver.eigenvectors().col(0).normalized();
     // 平面性は「線分状でないこと」を見る指標で、厚みは residual で別に評価する。
     fit.planarity = std::sqrt(std::clamp(eigenvalues.y() / largest, 0.0, 1.0));
+    fit.plane_width_std = std::sqrt(std::max(0.0, eigenvalues.y()));
     fit.residual = std::sqrt(std::max(0.0, eigenvalues.x()));
     fit.is_valid = fit.covariance.allFinite() && fit.normal.allFinite() &&
       std::isfinite(fit.planarity) && std::isfinite(fit.residual);
@@ -255,7 +257,9 @@ struct Clusterizer::Impl
     options.growth_residual_ratio = std::max(0.0, options.growth_residual_ratio);
     options.retention_residual_ratio = std::max(
       options.growth_residual_ratio, options.retention_residual_ratio);
-    options.max_effective_spacing = std::max(kEpsilon, options.max_effective_spacing);
+    options.max_effective_spacing = std::max(0.0, options.max_effective_spacing);
+    options.merge_smaller_side_residual_ratio =
+      std::max(0.0, options.merge_smaller_side_residual_ratio);
     options.normal_filter_alpha = std::clamp(options.normal_filter_alpha, 0.01, 1.0);
     options.normal_alignment_deg = std::clamp(options.normal_alignment_deg, 0.0, 90.0);
     normal_alignment_cos = std::cos(options.normal_alignment_deg * kRadiansPerDeg);
@@ -268,6 +272,7 @@ struct Clusterizer::Impl
     retention_normal_alignment_cos =
       std::cos(options.retention_normal_alignment_deg * kRadiansPerDeg);
     options.min_cluster_planarity = std::clamp(options.min_cluster_planarity, 0.0, 1.0);
+    options.min_plane_width_ratio = std::max(kEpsilon, options.min_plane_width_ratio);
     options.max_normalized_cluster_residual =
       std::max(0.0, options.max_normalized_cluster_residual);
     // 取り込みが確定判定より緩いと、育てた領域が最後の残差判定で丸ごと捨てられる。
@@ -335,6 +340,7 @@ struct Clusterizer::Impl
   std::vector<Eigen::Vector3d> positions;
   std::vector<Eigen::Vector3d> normals;
   std::vector<double> spacings;
+  std::vector<double> local_edge_lengths;
   std::vector<double> seed_scores;
   std::vector<std::uint8_t> usable;
   std::vector<std::uint16_t> node_ids;
@@ -344,6 +350,7 @@ struct Clusterizer::Impl
   std::vector<int> label;
   std::vector<int> next_label;
   std::vector<PlaneAccumulator> accumulators;
+  std::vector<PlaneFit> plane_fits;
   std::vector<std::size_t> neighbour_counts;
   std::vector<int> touched_clusters;
   std::vector<std::uint32_t> visit_marks;
@@ -433,29 +440,29 @@ struct Clusterizer::Impl
       adjacency_values[adjacency_cursor[second]++] = static_cast<std::uint32_t>(first);
     }
 
-    // 局所ノード間隔と法線を決める。GNGが法線を持つ場合はそのまま使い、
-    // 持たないノードだけ1ホップ近傍の共分散から補う。
+    // 局所間隔は隣接エッジ長の中央値（偶数本では小さい側）。長い橋エッジの影響抑制。
+    // GNG法線の再利用と、欠損時のみ1ホップ近傍の共分散による補完。
     PlaneAccumulator local;
     for (std::size_t index = 0U; index < node_count; ++index) {
       if (usable[index] == 0U) {
         continue;
       }
-      double spacing_sum = 0.0;
-      std::size_t spacing_count = 0U;
+      local_edge_lengths.clear();
       for (std::size_t cursor = adjacency_offsets[index];
         cursor < adjacency_offsets[index + 1U]; ++cursor)
       {
         const double dist = (positions[index] - positions[adjacency_values[cursor]]).norm();
         if (std::isfinite(dist) && dist > kEpsilon) {
-          spacing_sum += dist;
-          ++spacing_count;
+          local_edge_lengths.push_back(dist);
         }
       }
-      if (spacing_count == 0U) {
+      if (local_edge_lengths.empty()) {
         usable[index] = 0U;
         continue;
       }
-      spacings[index] = spacing_sum / static_cast<double>(spacing_count);
+      const auto middle = local_edge_lengths.begin() + (local_edge_lengths.size() - 1U) / 2U;
+      std::nth_element(local_edge_lengths.begin(), middle, local_edge_lengths.end());
+      spacings[index] = *middle;
 
       const Eigen::Vector3d supplied = pointOf(map.nodes[index].normal);
       if (supplied.allFinite() && supplied.squaredNorm() > kEpsilon) {
@@ -577,6 +584,7 @@ struct Clusterizer::Impl
   void refitClusters()
   {
     accumulators.assign(clusters.size(), PlaneAccumulator{});
+    plane_fits.assign(clusters.size(), PlaneFit{});
     for (std::size_t index = 0U; index < label.size(); ++index) {
       const int cluster_index = label[index];
       if (cluster_index == kUnassigned) {
@@ -593,6 +601,7 @@ struct Clusterizer::Impl
         continue;
       }
       PlaneFit fit = accumulator.solve();
+      plane_fits[index] = fit;
       if (!fit.is_valid) {
         continue;
       }
@@ -607,13 +616,27 @@ struct Clusterizer::Impl
     }
   }
 
-  // ノードから見た、あるクラスタ平面への正規化距離。
+  // 縦横比または局所間隔に対する面幅による線状領域の除外。長さへの非依存。
+  bool has_plane_extent(
+    const PlaneFit &fit, const double spacing, const double min_planarity) const
+  {
+    return fit.planarity >= min_planarity ||
+           fit.plane_width_std >= options.min_plane_width_ratio * std::max(spacing, kEpsilon);
+  }
+
+  // 局所スケールの任意の絶対上限。0は上限なし。
+  double effective_spacing(const double spacing) const
+  {
+    return options.max_effective_spacing > 0.0 ?
+           std::min(std::max(spacing, kEpsilon), options.max_effective_spacing) :
+           std::max(spacing, kEpsilon);
+  }
+
+  // 対象ノード自身の局所間隔による平面距離比。粗いクラスタ平均による許容幅の膨張防止。
   double fitScore(const std::size_t cluster_index, const std::size_t node_index) const
   {
     const ClusterState &cluster = clusters[cluster_index];
-    const double spacing = std::min(
-      std::max({cluster.spacing, spacings[node_index], kEpsilon}),
-      options.max_effective_spacing);
+    const double spacing = effective_spacing(spacings[node_index]);
     return std::abs(cluster.normal.dot(positions[node_index] - cluster.centroid)) / spacing;
   }
 
@@ -643,22 +666,8 @@ struct Clusterizer::Impl
         ++released;
         continue;
       }
-      // 逸脱判定は常に効かせる。接続本数はしきい値を緩めるだけで、判定そのものを
-      // 無効にはしない。無効にすると平面から離れても誰も外れず、集約値だけが
-      // 悪化していく。
-      std::size_t same_cluster_neighbours = 0U;
-      if (options.enable_multi_edge_dist_relaxation) {
-        for (std::size_t cursor = adjacency_offsets[index];
-          cursor < adjacency_offsets[index + 1U]; ++cursor)
-        {
-          if (label[adjacency_values[cursor]] == cluster_index) {
-            ++same_cluster_neighbours;
-          }
-        }
-      }
-      const double retention_limit = same_cluster_neighbours >= 2U ?
-        options.retention_residual_ratio : options.growth_residual_ratio;
-      if (fitScore(cluster, index) <= retention_limit) {
+      // 既所属の保持ヒステリシス。取り込み緩和フラグや接続本数とは独立。
+      if (fitScore(cluster, index) <= options.retention_residual_ratio) {
         continue;
       }
       label[index] = kUnassigned;
@@ -836,6 +845,14 @@ struct Clusterizer::Impl
         {
           continue;
         }
+        // 初期支持点にも成長時と同じ距離制約。別の高さの面を含む種の生成防止。
+        const double seed_spacing = effective_spacing(
+          std::min(spacings[seed], spacings[neighbour]));
+        if (std::abs(normals[seed].dot(positions[neighbour] - positions[seed])) >
+          options.growth_residual_ratio * seed_spacing)
+        {
+          continue;
+        }
         accumulator.add(positions[neighbour], normals[neighbour], spacings[neighbour]);
         visit_marks[neighbour] = visit_generation;
         frontier.push_back(neighbour);
@@ -847,7 +864,7 @@ struct Clusterizer::Impl
         continue;
       }
       // 種の時点で線分状なら、そこから育てても鎖にしかならない。
-      if (fit.planarity < options.min_growth_planarity) {
+      if (!has_plane_extent(fit, accumulator.meanSpacing(), options.min_growth_planarity)) {
         ++statistics.chain_rejected_count;
         rejectFrontier();
         continue;
@@ -873,35 +890,40 @@ struct Clusterizer::Impl
           if (std::abs(fit.normal.dot(normals[neighbour])) < normal_alignment_cos) {
             continue;
           }
-          const double spacing = std::max(
-            {accumulator.meanSpacing(), spacings[neighbour], kEpsilon});
+          const double spacing = effective_spacing(spacings[neighbour]);
           if (std::abs(fit.normal.dot(positions[neighbour] - fit.centroid)) / spacing >
             options.growth_residual_ratio)
           {
             continue;
           }
           // 生成中のクラスタに所属済みの隣接がいくつあるかを数える。
-          std::size_t attached = 0U;
-          for (std::size_t back_cursor = adjacency_offsets[neighbour];
-            back_cursor < adjacency_offsets[neighbour + 1U]; ++back_cursor)
-          {
-            if (visit_marks[adjacency_values[back_cursor]] == visit_generation) {
-              ++attached;
+          // 要求1本の場合、探索元currentへの接続が成立済み。
+          if (options.birth_neighbor_requirement > 1U) {
+            std::size_t attached = 0U;
+            for (std::size_t back_cursor = adjacency_offsets[neighbour];
+              back_cursor < adjacency_offsets[neighbour + 1U]; ++back_cursor)
+            {
+              if (visit_marks[adjacency_values[back_cursor]] == visit_generation &&
+                ++attached >= options.birth_neighbor_requirement)
+              {
+                break;
+              }
             }
-          }
-          if (attached < options.birth_neighbor_requirement) {
-            continue;
+            if (attached < options.birth_neighbor_requirement) {
+              continue;
+            }
           }
           accumulator.add(positions[neighbour], normals[neighbour], spacings[neighbour]);
           visit_marks[neighbour] = visit_generation;
           frontier.push_back(neighbour);
           if (frontier.size() >= refit_th) {
             const PlaneFit updated = accumulator.solve();
-          if (updated.is_valid) {
+            if (updated.is_valid) {
               fit = updated;
-              // サイズが倍になるたびに形を確認する。平面なら倍化しても
-              // 第2固有値の比は保たれるが、鎖状に伸び始めるとここで落ちる。
-              if (updated.planarity < options.min_growth_planarity) {
+              // サイズ倍化時の線状化判定。十分な幅を保った長い平面の許容。
+              if (!has_plane_extent(
+                  updated, accumulator.meanSpacing(), options.min_growth_planarity))
+              {
                 is_chain_like = true;
                 break;
               }
@@ -923,12 +945,13 @@ struct Clusterizer::Impl
       const PlaneFit final_fit = accumulator.solve();
       const double spacing = std::max(accumulator.meanSpacing(), kEpsilon);
       if (!final_fit.is_valid ||
-        final_fit.residual / spacing > options.max_normalized_cluster_residual)
+        final_fit.residual / effective_spacing(spacing) >
+        options.max_normalized_cluster_residual)
       {
         rejectFrontier();
         continue;
       }
-      if (final_fit.planarity < options.min_cluster_planarity) {
+      if (!has_plane_extent(final_fit, spacing, options.min_cluster_planarity)) {
         ++statistics.chain_rejected_count;
         rejectFrontier();
         continue;
@@ -945,6 +968,8 @@ struct Clusterizer::Impl
       cluster.member_count = frontier.size();
       const int new_label = static_cast<int>(clusters.size());
       clusters.push_back(cluster);
+      accumulators.push_back(accumulator);
+      plane_fits.push_back(final_fit);
       for (const std::size_t member : frontier) {
         label[member] = new_label;
       }
@@ -1200,20 +1225,9 @@ struct Clusterizer::Impl
       return false;
     }
 
-    // ノード位置からの累積統計。勝者入力の誤差共分散への依存なし。
-    // 統合済み成分の統計と平面を保持し、候補対ごとのメンバー再走査を省略。
-    merge_accumulators.assign(clusters.size(), PlaneAccumulator{});
-    for (std::size_t index = 0U; index < label.size(); ++index) {
-      if (label[index] != kUnassigned) {
-        const auto cluster_index = static_cast<std::size_t>(label[index]);
-        merge_accumulators[cluster_index].add(
-          positions[index], normals[index], spacings[index]);
-      }
-    }
-    merge_fits.resize(clusters.size());
-    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
-      merge_fits[idx] = merge_accumulators[idx].solve();
-    }
+    // 同一フレームの再フィット・生成で得た統計の再利用。全点の再累積・再求解の省略。
+    merge_accumulators = accumulators;
+    merge_fits = plane_fits;
 
     merge_sets.reset(clusters.size());
     for (const auto &[key, pair] : adjacent_pair_counts) {
@@ -1240,49 +1254,54 @@ struct Clusterizer::Impl
       merged_fit.mergeFrom(merge_accumulators[second]);
       const PlaneFit union_fit = merged_fit.solve();
       const double union_spacing = std::max(merged_fit.meanSpacing(), kEpsilon);
+      const double union_residual_ratio = union_fit.residual / effective_spacing(union_spacing);
       if (!union_fit.is_valid) {
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
-      // 連鎖統合による線状化を防ぐ、統合後全体の面内広がり比。
-      if (union_fit.planarity < options.merge_min_planarity) {
+      // 統合後の面幅判定。残差・少数側RMSによる段差の誤吸収防止との併用。
+      if (!has_plane_extent(union_fit, union_spacing, options.merge_min_planarity)) {
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
       }
-      if (union_fit.residual / union_spacing > options.max_normalized_cluster_residual) {
+      if (union_residual_ratio > options.max_normalized_cluster_residual) {
         ++statistics.merge_absolute_residual_rejected_pair_count;
         continue;
       }
       // つないだ結果、元より当てはめが悪くなっていないことも確かめる。
       // 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
       const double first_residual_ratio =
-        first_fit.residual / std::max(first_accumulator.meanSpacing(), kEpsilon);
+        first_fit.residual / effective_spacing(first_accumulator.meanSpacing());
       const double second_residual_ratio =
-        second_fit.residual / std::max(second_accumulator.meanSpacing(), kEpsilon);
+        second_fit.residual / effective_spacing(second_accumulator.meanSpacing());
       const double allowed_residual = std::max(
         options.merge_residual_growth_ratio *
         std::max(first_residual_ratio, second_residual_ratio),
         options.merge_residual_growth_min_th);
-      if (union_fit.residual / union_spacing > allowed_residual) {
+      if (union_residual_ratio > allowed_residual) {
         ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
       }
-      // 大きな平面への小面の誤吸収防止。少数側の位置共分散C・重心muから
-      // RMS^2 = n^T C n + (n・(mu-c))^2 を算出し、全点走査を省略。
-      {
-        const std::size_t smaller = first_accumulator.count <= second_accumulator.count ?
-          first : second;
-        const PlaneFit &smaller_fit = merge_fits[smaller];
-        const double offset = union_fit.normal.dot(smaller_fit.centroid - union_fit.centroid);
-        const double smaller_rms = std::sqrt(std::max(0.0,
-          union_fit.normal.dot(smaller_fit.covariance * union_fit.normal) + offset * offset));
-        const double smaller_spacing = std::min(
-          std::max({merge_accumulators[smaller].meanSpacing(), union_spacing, kEpsilon}),
-          options.max_effective_spacing);
-        if (smaller_rms / smaller_spacing > options.merge_smaller_side_residual_ratio) {
-          ++statistics.merge_smaller_side_rejected_pair_count;
-          continue;
+      // 両側それぞれの局所間隔による、相手平面へのRMS距離比。
+      // 少数側だけの検査や統合後重心への移動による、段差・高密度小物体の吸収防止。
+      bool can_merge_sides = true;
+      for (const auto side : {first, second}) {
+        const auto other = side == first ? second : first;
+        const auto &side_fit = merge_fits[side];
+        const auto &other_fit = merge_fits[other];
+        const double offset = other_fit.normal.dot(side_fit.centroid - other_fit.centroid);
+        const double side_rms = std::sqrt(std::max(0.0,
+          other_fit.normal.dot(side_fit.covariance * other_fit.normal) + offset * offset));
+        if (side_rms / effective_spacing(merge_accumulators[side].meanSpacing()) >
+          options.merge_smaller_side_residual_ratio)
+        {
+          can_merge_sides = false;
+          break;
         }
+      }
+      if (!can_merge_sides) {
+        ++statistics.merge_smaller_side_rejected_pair_count;
+        continue;
       }
       // 統合済み成分のノード数によるID選択。同数時は古いIDを優先。
       merge_sets.unite(first, second, [this](const std::size_t a, const std::size_t b) {
@@ -1564,8 +1583,11 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
   }
   impl_->birthClusters(result.statistics);
   const bool split_changed = impl_->splitClusters(result.statistics);
+  if (split_changed) {
+    impl_->refitClusters();
+  }
   const bool merge_changed = impl_->mergeClusters(result.statistics);
-  if (split_changed || merge_changed) {
+  if (merge_changed) {
     impl_->refitClusters();
   }
   impl_->cullClusters(result.statistics);

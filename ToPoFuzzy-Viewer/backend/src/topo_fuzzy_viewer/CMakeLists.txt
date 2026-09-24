@@ -173,6 +173,9 @@ target_link_libraries(viewer_edit_node ${PCL_LIBRARIES} Threads::Threads)
 ament_target_dependencies(viewer_edit_node ${ROS2_DEPENDENCIES_EDIT})
 
 if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME test_vehicle_registration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_vehicle_registration.py)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_pointcloud_sampling test/test_pointcloud_sampling.cpp src/common/pcl_converter.cpp)
   target_include_directories(test_pointcloud_sampling PRIVATE include)
@@ -199,7 +202,14 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch
+install(PROGRAMS scripts/viewer_vehicle_registration_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(FILES scripts/vehicle_registration.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 

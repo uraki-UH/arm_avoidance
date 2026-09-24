@@ -19,11 +19,14 @@ ClusterOptions declareClusterOptions(
   options.min_cluster_nodes = static_cast<std::size_t>(std::max<std::int64_t>(
       3, node.template declare_parameter<int>(name("min_cluster_nodes"), 10)));
   options.growth_residual_ratio =
-    node.template declare_parameter<double>(name("growth_residual_ratio"), 0.70);
+    node.template declare_parameter<double>(
+    name("growth_residual_ratio"), options.growth_residual_ratio);
   options.retention_residual_ratio =
-    node.template declare_parameter<double>(name("retention_residual_ratio"), 1.40);
+    node.template declare_parameter<double>(
+    name("retention_residual_ratio"), options.retention_residual_ratio);
   options.max_effective_spacing =
-    node.template declare_parameter<double>(name("max_effective_spacing"), 0.02);
+    node.template declare_parameter<double>(
+    name("max_effective_spacing"), options.max_effective_spacing);
   options.normal_filter_alpha =
     node.template declare_parameter<double>(name("normal_filter_alpha"), 0.30);
   options.use_node_rho_for_seed_order = node.template declare_parameter<bool>(
@@ -34,8 +37,13 @@ ClusterOptions declareClusterOptions(
     node.template declare_parameter<double>(name("retention_normal_alignment_deg"), 70.0);
   options.min_cluster_planarity =
     node.template declare_parameter<double>(name("min_cluster_planarity"), 0.45);
+  options.min_plane_width_ratio =
+    node.template declare_parameter<double>(name("min_plane_width_ratio"), 1.0);
   options.max_normalized_cluster_residual =
-    node.template declare_parameter<double>(name("max_normalized_cluster_residual"), 0.70);
+    node.template declare_parameter<double>(
+    name("max_normalized_cluster_residual"), options.max_normalized_cluster_residual);
+  options.merge_smaller_side_residual_ratio = node.template declare_parameter<double>(
+    name("max_merge_side_residual_ratio"), options.merge_smaller_side_residual_ratio);
   options.min_growth_planarity =
     node.template declare_parameter<double>(name("min_growth_planarity"), 0.25);
   options.connection_requirement = static_cast<std::size_t>(std::max<std::int64_t>(

@@ -8,17 +8,17 @@ plane_cluster_incremental_node:
     min_cluster_nodes: 10
 
     # 未所属ノード取り込み用の平面までの正規化距離上限。
-    # score = |平面法線・(ノード位置 - クラスタ重心)| / max(クラスタ間隔, ノード間隔)。
+    # score = |平面法線・(ノード位置 - クラスタ重心)| / 対象ノードの局所エッジ長。
+    # 局所エッジ長は隣接距離の中央値（偶数本は小さい側）。長い橋エッジの影響抑制。
     # score による取り込み判定。共分散固有値比との非対応。
     # 最終確定時の厚み上限との同時調整。取り込みだけを緩めた場合の確定時一括棄却。
-    growth_residual_ratio: 0.70
+    growth_residual_ratio: 0.15
     # 既所属ノード保持用の同じ正規化距離上限。
     # 取り込みより緩い上限によるヒステリシス。境界ノードの所属往復の抑制。
-    retention_residual_ratio: 1.40
+    retention_residual_ratio: 0.30
 
-    # growth/retention_residual_ratioの正規化に使う、実効ノード間隔の上限[m]。
-    # 間隔が粗い領域ほど「同じ比率でも許容される実距離」が際限なく大きくなり、実測(密集領域150フレーム): 局所間隔の中央値2.2cm・
-    max_effective_spacing: 0.02
+    # 距離比の分母への任意の絶対上限[m]。0は上限なしの局所スケール追従。
+    max_effective_spacing: 0.0
 
     # ノード法線に掛けるEMA(指数移動平均)(alpha=0.3でp99.9が約22度)。
     normal_filter_alpha: 0.30
@@ -35,13 +35,14 @@ plane_cluster_incremental_node:
     # 種の判定用より緩くする。
     retention_normal_alignment_deg: 70.0
 
-    # 共分散固有値λに対する平面性 sqrt(λ2 / λ3)。
+    # 共分散固有値λに対する面内縦横比 sqrt(λ2 / λ3)。面幅条件との選択判定。
     min_cluster_planarity: 0.45
-    # 平面からのRMS距離 / クラスタの平均局所ノード間隔 = sqrt(λ1) / mean(spacing)。
-    max_normalized_cluster_residual: 0.70
+    # 面内短軸標準偏差 / 平均局所ノード間隔。長い路面と細い鎖の区別用。
+    min_plane_width_ratio: 1.0
+    # 平面からのRMS距離 / 平均局所ノード間隔。任意の絶対上限付き。
+    max_normalized_cluster_residual: 0.15
 
-    # 成長中の sqrt(λ2 / λ3)。直鎖状の種の成長停止。
-    # 確定条件より緩い判定による、成長途中の面の許容。
+    # 成長中の面内縦横比 sqrt(λ2 / λ3)。面幅条件との選択判定。
     min_growth_planarity: 0.25
 
     # ノード取り込み・移動時の候補クラスタへの隣接エッジ数の要求値。
@@ -63,15 +64,15 @@ plane_cluster_incremental_node:
     # 小さいクラスタの境界からの漸減・消滅の防止。
     donor_protection_buffer: 5
 
-    # true 時の複数接続ノードに対する保持用距離上限への緩和。距離判定の維持。
-    # false 時の取り込み用距離上限への固定。
+    # 取り込み・移動時の複数接続ノードに対する保持用距離への緩和。
+    # 既所属ノードの保持ヒステリシスとは独立。
     enable_multi_edge_dist_relaxation: false
 
     # 1入力フレームあたりの「解放→取り込み・移動→再平面フィット」最大回数。
     # 所属変化ゼロ時の早期終了。
     maintenance_iter: 2
 
-    # 併合を認める結合後の平面性 sqrt(λ2/λ3) の下限。min_cluster_planarity より緩くする。
+    # 併合後の面内縦横比 sqrt(λ2/λ3)。面幅条件との選択判定。
     merge_min_planarity: 0.25
 
     # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
@@ -79,6 +80,8 @@ plane_cluster_incremental_node:
     merge_residual_growth_ratio: 1.1
     # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
     merge_residual_growth_min_th: 0.1
+    # 各側の相手平面へのRMS距離 / 各側の局所間隔平均。粗い側による小物体の吸収防止。
+    max_merge_side_residual_ratio: 0.15
 
     # 新規平面クラスタの確定後、出力前に必要な確認フレーム数。
     # 0 時の即時出力。

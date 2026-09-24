@@ -200,6 +200,7 @@ function App() {
         setParameter,
         getTemplateMatchConfig,
         applyTemplateMatchConfig,
+        register_vehicle,
         inspect_graph,
         inspect_graph_bounds,
     } = useWebSocket(wsUrl);
@@ -568,7 +569,7 @@ function App() {
 
     // 選択時の全受信フレームを送信し、切り出しはバックエンドへ委譲。
     const handle_inspect = useCallback(async (source_id: string, selection: graph_selection) => {
-        if (inspection_sources.current.layerSettings[source_id]?.enable_bounding_box !== true) return;
+        if (source_id === '/topological_map' || inspection_sources.current.layerSettings[source_id]?.enable_bounding_box !== true) return;
         const request_id = ++inspection_request.current;
         const source = inspection_sources.current;
         set_is_inspecting(true);
@@ -596,7 +597,8 @@ function App() {
         if (snapshot) void handle_inspect(snapshot.source_id, snapshot.selection);
     }, [handle_inspect]);
 
-    const get_hover_bounds = useCallback((source_id: string) => {
+    const get_hover_bounds = useCallback(async (source_id: string) => {
+        if (source_id === '/topological_map') return [];
         const source = inspection_sources.current;
         return inspect_graph_bounds(source_id, source.graphData[source_id]);
     }, [inspect_graph_bounds]);
@@ -773,7 +775,7 @@ function App() {
                                 data: markerData, settings: markerSettings, component: (tag: string, d: any, s: any) => (
                                     <MarkerArrayRenderer key={tag} tag={tag} data={d} visible={true} transforms={transforms} manualTransform={s.transform}
                                         max_visible_candidates={s.max_visible_candidates}
-                                        on_inspect={!isEditMode && !zoneMonitor.isDrawing && layerSettings[tag]?.enable_bounding_box === true ? marker => void handle_inspect(tag,
+                                        on_inspect={tag !== '/topological_map' && !isEditMode && !zoneMonitor.isDrawing && layerSettings[tag]?.enable_bounding_box === true ? marker => void handle_inspect(tag,
                                             { kind: 'marker', id: marker.id, ns: marker.ns }) : undefined} />
                                 ), defaultSettings: { visible: true, transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } }
                             },
@@ -801,7 +803,7 @@ function App() {
                                 onClusterSelect={id => id === null ? close_inspection() : void handle_inspect(tag, { kind: 'cluster', id })}
                                 on_node_select={node => void handle_inspect(tag, { kind: 'node', id: node.id! })}
                                 onManipSelect={(node) => handleManipSelect(tag, node)}
-                                enableClusterSelection={!isEditMode && !zoneMonitor.isDrawing && settings.enable_bounding_box === true} />;
+                                enableClusterSelection={tag !== '/topological_map' && !isEditMode && !zoneMonitor.isDrawing && settings.enable_bounding_box === true} />;
                         })}
 
                     <ZoneVisualizer points={zoneMonitor.points} isDrawing={zoneMonitor.isDrawing} zRange={zoneMonitor.zRange} isWarning={(zoneCounts.get('human') || 0) > 0} onAddPoint={zoneMonitor.addPoint} />
@@ -812,7 +814,7 @@ function App() {
                 </Canvas>
                     </WebGLErrorBoundary>
                 {selectedClusterSnapshot && <ClusterDetailPanel snapshot={selectedClusterSnapshot} onClose={close_inspection}
-                    on_refresh={refresh_inspection} is_loading={is_inspecting} error={inspection_error} />}
+                    on_refresh={refresh_inspection} is_loading={is_inspecting} error={inspection_error} register_vehicle={register_vehicle} />}
                 {!selectedClusterSnapshot && (is_inspecting || inspection_error) &&
                     <div role="status" className="surface-panel absolute right-4 top-4 z-50 flex max-w-md items-center gap-3 p-3 text-sm">
                         <span>{is_inspecting ? '候補の形状を取得中...' : inspection_error}</span>

@@ -1,3 +1,4 @@
+import type { register_vehicle, vehicle_registration_result } from '../features/vehicleRegistration/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { deserializePointCloud } from '../utils/protocol';
 import { deserializeTopologicalMap, isTopologicalMapPacket, normalize_environment_cluster_ids } from '../utils/topologicalMapProtocol';
@@ -540,6 +541,7 @@ export interface UseWebSocketReturn {
     getTemplateMatchConfig: (targets: TemplateMatchTargets) => Promise<TemplateMatchConfigResult>;
     applyTemplateMatchConfig: (config: TemplateMatchConfig) => Promise<TemplateMatchConfigResult>;
 
+    register_vehicle: register_vehicle;
     openEditSession: (sourceTopic: string, targetFrame?: string) => Promise<EditSessionInfo>;
     inspect_graph: (source_id: string, selection: graph_selection,
         graph?: GraphData, marker_array?: MarkerArrayData) => Promise<graph_snapshot>;
@@ -650,6 +652,8 @@ function createViewerRpcApi(sendRpc: SendRpc, updateSources: (sources: DataSourc
             matcher: config.matcher,
             validator: config.validator,
         }),
+        register_vehicle: (snapshot: graph_snapshot, dist_th: number, support_dist_th: number) =>
+            sendRpc<vehicle_registration_result>('vehicle.register', { snapshot, dist_th, support_dist_th }, 60000),
         openEditSession: (
             sourceTopic: string,
             targetFrame = 'map'

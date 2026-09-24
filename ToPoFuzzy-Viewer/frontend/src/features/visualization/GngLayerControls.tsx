@@ -77,7 +77,7 @@ export function GngLayerControls({
             {settings.visible && (
                 <div className="mt-1">
                     <div className="-ml-1 grid grid-cols-8 gap-1">
-                        {typeof settings.enable_bounding_box === 'boolean' && <CompactToggle
+                        {tag !== '/topological_map' && typeof settings.enable_bounding_box === 'boolean' && <CompactToggle
                             icon={<Box size={12} />}
                             label="Bounding Box"
                             isOn={settings.enable_bounding_box ?? false}

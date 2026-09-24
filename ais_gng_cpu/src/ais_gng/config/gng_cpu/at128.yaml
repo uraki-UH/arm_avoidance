@@ -1,6 +1,6 @@
 ais_gng_node:
   ros__parameters:
-    plane_clustering: false
+    plane_clustering: true
     curve_clustering: false #平面クラスタリングfalseでは実行できない
 
     node.num_max: 20000

@@ -1,0 +1,7 @@
+# 実行時の観測・プロセス状態・描画確認の生成物
+*.json
+*.png
+*_before.txt
+*_after.txt
+*_pid.txt
+stop_rpc_test

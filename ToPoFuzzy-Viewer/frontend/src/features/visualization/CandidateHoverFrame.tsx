@@ -19,7 +19,8 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
     const [bounds, set_bounds] = useState<graph_bounds | null>(null);
     const settings_ref = useRef({ transforms, layer_settings });
     settings_ref.current = { transforms, layer_settings };
-    const enable_picking = is_enabled && Object.values(layer_settings).some(settings => settings.enable_bounding_box === true);
+    const enable_picking = is_enabled && Object.entries(layer_settings).some(
+        ([source_id, settings]) => source_id !== '/topological_map' && settings.enable_bounding_box === true);
     const geometry = useMemo(() => {
         const box = new THREE.BoxGeometry(1, 1, 1);
         const edges = new THREE.EdgesGeometry(box);
@@ -48,7 +49,7 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         let press: { x: number; y: number; has_dragged: boolean } | null = null;
         let previous_cursor = '', last_hit_ms = 0, next_request_ms = 0, suspend_until_ms = 0;
         const can_pick_source = (source: string) =>
-            settings_ref.current.layer_settings[source]?.enable_bounding_box === true;
+            source !== '/topological_map' && settings_ref.current.layer_settings[source]?.enable_bounding_box === true;
         const pick = (client_x: number, client_y: number) => {
             const rect = canvas.getBoundingClientRect();
             raycaster.setFromCamera(new THREE.Vector2((client_x - rect.left) / rect.width * 2 - 1,
@@ -177,7 +178,8 @@ export function CandidateHoverFrame({ is_enabled, get_bounds, on_inspect, transf
         };
     }, [enable_picking, get_bounds, on_inspect, gl, scene, camera]);
 
-    if (!is_enabled || !bounds || layer_settings[bounds.source_id]?.enable_bounding_box !== true) return null;
+    if (!is_enabled || !bounds || bounds.source_id === '/topological_map' ||
+        layer_settings[bounds.source_id]?.enable_bounding_box !== true) return null;
     const transform = layer_settings[bounds.source_id]?.graphTransform;
     const padding = bounds_padding(bounds, layer_settings);
     const size = bounds.max_position.map((value, idx) => value - bounds.min_position[idx] + padding * 2) as [number, number, number];

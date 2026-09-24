@@ -4,6 +4,23 @@
 時間・依存作業などによる保留作業の状態は [pending.md](pending.md) に分離。
 記録単位は「日付 / 対象 / 実施内容 / 結果・検証範囲 / 根拠へのリンク」。既存履歴の一括転記なし。
 
+## 2026-09-24: topological_mapのBBox機能を撤去
+
+- ユーザー指示により`/topological_map`のBBox GUI・ホバー枠・直接選択・詳細取得を対象外へ変更。旧ON設定も無効化し、不要になった車両用の枠選別処理を削除。[現行仕様](../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#候補の独立表示)。
+- 既存UIテスト7件、lint、Frontend本番ビルド、差分検査が成功。有限の検証コマンドは終了、ROSノード・サーバーの起動停止なし。[変更範囲](releases/2026-09-24_vehicle_registration.md)。
+
+## 2026-09-24: 平面クラスタの生成・保持・面幅判定の整合化と局所スケール追従
+
+- 長い平面の面幅判定、生成・保持の整合化、同一フレームの平面統計再利用を修正。続報で2 cm上限を既定無効とし、対象ノードの局所中央値で距離を正規化。統合には両側それぞれの間隔による相互RMS判定を追加。[仕様・制限](releases/2026-09-24_plane_cluster_consistency.md)。
+- 同じ交差点GNG入力150フレーム・3試行で、2 cm上限版から平面所属37.1→60.5%、未所属12,034→7,561点。CPU時間12.936→13.413 msで微増。先行の面幅・保持修正の比較結果は別保存。実画像の過剰分割全解消・誤統合率は未確認。[条件・結果](../../benchmarks/plane_consistency_20260924/README.md)。
+- Release反映、関連111テスト、分離ROSドメインでの共有設定受付と間隔5 mm・5 cm・2 mの720ノード長平面の各1クラスタ出力が成功。追加6回帰テストは変更前に失敗。全試験プロセスの停止と既存bag・gatewayの同一PID稼働を確認。既存GNG等への停止操作なし。
+
+## 2026-09-24: 交差点クラスタへの車両モデル照合
+
+- 独立した車両照合ノードとViewerの4モデル比較を追加。候補・一致率・未対応率・残差を表示し、観測不足は判定保留。[操作・仕様](../../ToPoFuzzy-Viewer/doc/VEHICLE_REGISTRATION.md)。
+- 位置合わせ等の5ケース、既存UI・路面枠除外の回帰7件、実WebSocket・Chrome描画、Release・lint・Frontend build成功。実交差点33ノードは車両判定保留。試験ノード・Chrome停止済み。[条件・再現手順](../../benchmarks/vehicle_registration_20260924/README.md)。
+- ビルドログ・TypeScript増分生成物をGit対象外とし、既存tsbuildinfoの追跡を解除。路面の巨大な枠による物体選択の遮断を修正。[変更範囲](releases/2026-09-24_vehicle_registration.md)。
+
 ## 2026-09-24: ViewerのTSX側メッシュ直接表示
 
 - `Data → Mesh Models`を追加。OBJ・面付きPLY・STL・GLB/glTF・FBXをローカルファイルから直接表示し、位置・回転・単位・可視性・明るさ補助の編集に対応。[操作と制限](../../ToPoFuzzy-Viewer/doc/MESH_MODELS.md)。
