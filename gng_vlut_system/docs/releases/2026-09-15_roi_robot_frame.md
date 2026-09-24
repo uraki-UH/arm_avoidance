@@ -1,16 +1,12 @@
 # 2026-09-15 - ロボット座標ROIとworld表示の整合
 
-## Summary
+## 1. 要約
 
 入力の短いframe名をロボットframeへ誤って読み替える処理を削除。ロボット座標でのボクセル化とworld表示の位置関係を回帰検証。
-
-## Fixed
 
 `world_index_to_voxel_node::resolveSourceFrameId`の末尾一致処理を削除。
 `base_link`は`ToPoDualArm/base_link`とは別frameであり、入力TFからworldへ変換後、逆ロボットTFでロボット座標へ変換してvoxel化。
 Viewerは既存のframeIdとTFを使用してボクセル格子をworldへ回転・並進。Viewerソースの変更なし。
-
-## Changed
 
 `ToPoDualArm.yaml`の`environment_voxelization.enable_static_tf`をfalseへ変更。
 外部TF運用ではURDFルート`ToPoDualArm/base_footprint`へ姿勢を与え、URDFの固定関節から`base_link`へ接続。
@@ -20,7 +16,7 @@ world -> ToPoDualArm/base_footprint -> ToPoDualArm/base_link
             外部TF                        URDF固定関節
 ```
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 格子軸はロボットに追従し、world表示ではyawに応じて斜めになる。環境点群とセル中心の差は量子化誤差の範囲。
 - 短いframe名からロボットframeへの暗黙の別名解決なし。必要なら入力frame/TFを正しく指定するか、既存の`source_frame_id`を明示設定。
@@ -29,12 +25,8 @@ world -> ToPoDualArm/base_footprint -> ToPoDualArm/base_link
 - 外部TF未起動でロボットへの経路がなければROI出力不可。固定設置運用は外部TFを停止してYAMLの固定TFを有効化。
 - 稼働中プロセスの再起動なし。旧固定TFを含むenvironment launchと旧TF配信はユーザー側で終了・切替が必要。
 
-## Topics / Params / Messages
-
 メッセージ・トピックの追加なし。ROIのframe_idは引き続きロボットのbase_link。
 起動例と座標系の前提は[README](../../README.md#環境点群からvlutへの入力)を参照。
-
-## Verification
 
 修正前の実ノードで`base_link`入力がロボット座標のまま扱われる不具合を再現。修正後、既存単体テスト21件と隔離ROS回帰テストに成功。
 
@@ -59,7 +51,7 @@ docker exec gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && ti
 
 専用ROI・Viewer・Pythonノードは全試行で停止済み。終了後のプロセス一覧で残留なしと既存ROI PID 1251375・GNG PID 1251223・Viewer PID 419809の維持を確認。ユーザー側のロボット表示・TF・bag操作によるプロセス変更を観測したが、本作業から既存プロセスへの停止操作なし。
 
-## Risk / Notes
+**制約**
 
 実ブラウザの目視確認は未実施。過去のTFがViewerに残る場合はTF運用の切替後にブラウザをリロード。
 入力時刻が過去のbagでは既存の最新TFへの代替経路を使用。実際に移動するロボットと時間同期した点群での時刻精度検証は対象外。

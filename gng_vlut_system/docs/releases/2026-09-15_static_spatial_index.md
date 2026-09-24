@@ -1,37 +1,27 @@
 # 2026-09-15 - SpatialTree比較とTmap静的索引
 
-## Summary
+## 1. 要約
 
 通常版とSpatialTree2を実Tmapで比較したうえで、既存の通常版を目標選択へ採用。環境点群の空間ハッシュとGNG学習索引は変更なし。
-
-## Changed
 
 - `topological_map_goal_selector_node`で、map座標系の3D索引を保持。同じ座標の再配信、ラベル・ID・法線・headerの更新、TF移動での再構築なし。
 - 到達セルをmap座標系へ逆変換した外接箱で検索し、従来のセル所属式による厳密な絞り込みを実施。
 - [現行仕様](../TECHNICAL_SPEC.md#32-topological_map_goal_selectorlaunchpy-の引数)を更新。
 
-## Added
-
 - 通常版`SpatialTree`に静止点の閉区間`query_aabb`を追加。有限値・上下限検査と空部分木の省略。
 - 比較用の有限Tmap購読、同一ソースによる両版・両精度ベンチマーク、旧選択結果との回帰検証。
 
-## Fixed
-
 候補・TFの周期更新のたびに、元マップ全ノードを到達座標へ変換してセル表を再構築していた処理。
 
-## Removed
+**削除**
 
 通常の索引有効時の全ノード変換・セル表再構築。互換呼び出しと比較テスト用の従来経路は維持。
 
-## Behavior Impact
+## 2. 条件・検証
 
 同じ到達セル内での距離・姿勢・可操作性による順位付け、衝突ラベルの除外、同点時の配列順、空入力・TF欠損時の失効を維持。近傍N件だけに候補を制限する変更なし。
 
-## Topics / Params / Messages
-
 変更なし。既存launchの次回起動から適用。既存の動作中プロセスの再起動操作なし。新しい常駐ノード・配信トピック・関節指令なし。
-
-## Verification
 
 ### 通常版とSpatialTree2
 
@@ -93,7 +83,7 @@ ros2 run gng_vlut_system safety_monitor_node --ros-args --params-file /ros2_ws/s
 ros2 launch gng_vlut_system grasp_joint_candidates.launch.py params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-## Risk / Notes
+**制約**
 
 - 静的Tmapの目標選択だけへの採用。全点群の毎フレーム構築、把持接触探索、GNG学習をSpatialTreeへ置換した結果ではない。
 - 空間索引は検索候補の削減用。把持成功・衝突安全・到達性の新しい保証なし。

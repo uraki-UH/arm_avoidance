@@ -1,25 +1,19 @@
 # 2026-09-15 - 把持重点入力候補の点群配信
 
-## Summary
+## 1. 要約
 
 把持アテンションの選択点を`/downsampling/grasp`で可視化可能。[現行仕様](../../../ais_gng_cpu/docs/grasp_attention.md#選択点群の可視化)を更新。
 
-## Added
-
 CPUの重点学習ON時のみPointCloud2 Publisherを生成。購読時だけ既存の選択添字とXYZ変換処理を再利用して点群化。追加の検索・点群ボクセル登録・設定項目なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 GNGコア・学習配分・選択条件は変更なし。入力処理ごとの配信で、候補なし・失効・TF失敗・対象点なしは空点群。入力停止時の独立した消去タイマーなし。購読者なしではXYZメッセージ生成・配信なし。
-
-## Topics / Params / Messages
 
 - 新規出力: `/downsampling/grasp`、`sensor_msgs/msg/PointCloud2`、XYZのみ。
 - QoS: best_effort、volatile、depth 1。名前空間内の相対トピック名。
 - 座標系・時刻: `/topological_map`と共通のヘッダ。
 - 有効化: 既存の`enable_grasp_attention: true`とGNG再起動。新パラメータなし。
-
-## Verification
 
 Dockerビルド、AABB単体テスト3件、ROS domain 219の隔離テストに成功。
 
@@ -45,6 +39,6 @@ OFF時のPublisherなし、購読なしの重点学習継続、選択点のXYZ�
 
 検証スクリプトはfinallyで専用CPUを停止し、Python ROSノードも終了。終了後のプロセス一覧で検証ノード・追加ROSデーモンの残留なし、コンテナ起動状態と既存CPU PID 1061427・Viewer PID 419809の維持を確認。既存計画系PID 497596/497597/497599の終了を観測したが、本作業からの停止・再起動操作なし。
 
-## Risk / Notes
+**制約**
 
 配信点はAABB内の重点入力候補であり、GNG内部の入力範囲フィルタ適用後の最終点集合や各反復の抽選履歴ではない。周辺の床等を含む可能性は既存AABB方式と同じ。稼働中GNGへの自動反映なし。

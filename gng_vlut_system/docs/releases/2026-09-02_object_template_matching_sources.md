@@ -1,11 +1,13 @@
 # 2026-09-02 - 物体テンプレート照合対象のYAML選択
 
-## 概要
+## 1. 要約
 
 物体テンプレート照合の読込対象を、単一の`dataset_file`固定から
 `object_template_matching_sources.yaml`で変更できる方式へ拡張した。
 
-## 設定
+## 2. 条件・検証
+
+**設定**
 
 ```yaml
 template_sources:
@@ -26,7 +28,7 @@ template_sources:
 - `exclude_template_ids`は個別指定・フォルダ指定の双方から同じ`template_id`を除外する。
 - 初期YAMLはすべて空であり、フォルダ配下の全テンプレートを暗黙には読込まない。
 
-## 挙動
+**挙動**
 
 - 選択テンプレート群は1つの`object_template_matcher_node`が読込む。
 - matcherは起動時に、template GNG nodeの法線鉛直成分、`rho`、edge次数、隣接法線関係から逆引き索引を構築する。
@@ -39,7 +41,7 @@ template_sources:
 - 同一`template_id`を異なるファイルから二重に選んだ場合は、起動前にエラーとする。
 - `dataset_file`を指定した場合は、YAMLの選択を使わない単一テンプレート互換動作とする。
 
-## 実行
+**実行**
 
 `config/object_template_matching_sources.yaml`を編集してから、追加引数なしで起動する。
 

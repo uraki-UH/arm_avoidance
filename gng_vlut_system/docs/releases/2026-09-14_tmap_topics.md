@@ -1,10 +1,8 @@
 # 2026-09-14 - グラフトピック名の短縮
 
-## Summary
+## 1. 要約
 
 環境入力の`/topological_map`を維持し、関連グラフトピック名の`topological_map`を`Tmap`へ短縮。
-
-## Changed
 
 | 旧名 | 新名 |
 | --- | --- |
@@ -24,27 +22,19 @@
 
 ROSノードの既定値、launch、YAML、エクスポート設定例、現行仕様を更新。名前空間は維持。
 
-## Added
-
 Viewerの新旧経路トピック名の回帰テスト。目標選択の結合テストへ`/selected_Tmap`の受信確認を追加。
-
-## Fixed
 
 Viewerの経路用色設定判定を新旧名へ対応。通常のグラフ認識・バイナリ配信はメッセージ型ベースのため変更不要。
 
-## Removed
+**削除**
 
 旧名への重複配信や変換中継は追加なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 配信側・購読側の同時更新が必要。既存ノードは未再起動なので、稼働中の旧名配信は維持。Viewerの保存済みレイヤー設定はトピック名単位であり、新名のレイヤーは再選択が必要。旧rosbagは旧名のまま閲覧可能。
 
-## Topics / Params / Messages
-
 変更対象は上記トピック名。`ais_gng_msgs/msg/TopologicalMap`、WebSocketプロトコルの型名、launch名、`topological_map_topic`などのパラメータ名は維持。
-
-## Verification
 
 以下は小文字`tmap`時点の検証記録。`Tmap`への表記変更後の確認は末尾に追記。
 
@@ -70,7 +60,7 @@ timeout 60s node --test tests/graph_topic_names.test.mjs
 timeout 120s ./node_modules/.bin/tsc -p tsconfig.app.json --noEmit --incremental false
 ```
 
-## Risk / Notes
+**制約**
 
 実画面でのGPU描画操作は未検証。過去の進捗・リリース記録中の旧トピック名は履歴として維持。C++目標選択移行の結合検証は[別作業の完了記録](2026-09-14_goal_selector_cpu.md)を参照。
 

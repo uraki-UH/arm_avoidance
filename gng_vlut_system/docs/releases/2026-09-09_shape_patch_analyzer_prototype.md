@@ -1,10 +1,8 @@
 # 2026-09-09 - Surfelと局所Quadricの後処理検証プロトタイプ
 
-## Summary
+## 1. 要約
 
 GNGの基幹アルゴリズムやバイナリを変更せず、保存済みGNGテンプレートと元点群から、ノード近傍のSurfel統計と局所Implicit Quadricを計算するC++オフラインツールを追加した。
-
-## Added
 
 - `shape_patch_analyzer`
 - ノード最近傍による元点群の再割当て
@@ -12,11 +10,9 @@ GNGの基幹アルゴリズムやバイナリを変更せず、保存済みGNG�
 - 元点群、1/2間引き、1/4間引きの計算時間と記述子安定性の比較
 - 円筒・球の解析的点群によるQuadric自己検証
 
-## Behavior Impact
+## 2. 条件・検証
 
 既存のGNG学習、保存形式、ROS topic、matcherの実行時挙動は変更しない。保存済みテンプレートにノード所属点や4次モーメントがないため、現段階では元点群を最近傍ノードへ再割当てする近似評価である。
-
-## Verification
 
 ```text
 shape_patch_analyzer --self-test
@@ -39,7 +35,7 @@ shape_patch_analyzer /datasets/basket_gng_template.json.gz --source-dir /dataset
 
 `--output /tmp/basket_surface_components.json` を指定すると、`surface_components_prototype_v1`形式でノードID、隣接平面クラスタID、共分散固有値、局所Quadric係数、残差を保存する。
 
-## Risk / Notes
+**制約**
 
 非平面成分はGNG edgeだけで連結し、平面クラスタへの隣接があれば`surface_extension`、隣接がなくてもQuadricが有効なら`curved_component`、それ以外は`unassigned_nonplane`とする簡易定義である。近傍パッチは物体境界の最終分割やテンプレートmatcherへの統合ではない。次段階で実データの結果を見て、必要なら`support_moment`またはQuadric用累積統計をエクスポート形式へ追加する。
 2 cm入力では点数不足になるため、現状のGNG入力解像度でQuadricを常用するには、ノード統合またはより広い局所パッチが必要である。

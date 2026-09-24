@@ -1,16 +1,14 @@
 # 2026-08-12 - Gripper undersize volume graph
 
-## Summary
+## 1. 要約
 
 ToPoDualArmの左右グリッパーについて、全閉時の左右指に挟まれた内部の非占有領域を
 `TopologicalMap`として配信する処理を追加した。
 
-## Added
-
 - 左右TCPに固定された`undersize`体積graph。
 - rosbag bundle exporterの任意記録topic。
 
-## Behavior Impact
+## 2. 条件・検証
 
 `gng_viewer_bridge.launch.py`を`ToPoDualArm.yaml`で起動すると、既存の最大把持領域2topicに加えて
 `undersize`領域2topicも同じ汎用`gripper_volume_graph_node`から1回ずつpublishされる。
@@ -20,8 +18,6 @@ ToPoDualArmの左右グリッパーについて、全閉時の左右指に挟ま
 両方とも到達する格子だけを残す。さらに左右指とグリッパ基部のSTL占有格子を除外するため、
 最大boxの外側自由空間ではなく、閉じた左右指に挟まれた内部の非占有空間だけを形状として保持する。
 Viewerで元の最大boxが重ならないよう、このgraphの`TopologicalMap.clusters`は空とする。
-
-## Topics / Params / Messages
 
 - `/ToPoDualArm/L_grip_minV_topological_map` (`ToPoDualArm/L_tcp`)
 - `/ToPoDualArm/R_grip_minV_topological_map` (`ToPoDualArm/R_tcp`)
@@ -34,8 +30,6 @@ Viewerで元の最大boxが重ならないよう、このgraphの`TopologicalMap
 - closing axis: TCP座標の`+Y / -Y`
 - internal side: 正側指 / 負側指を設定で明示
 - cluster: 未生成（内部graphのnodes / edgesだけを配信）
-
-## Verification
 
 - 3設定ファイルを`yaml.safe_load`で読み込み、YAML構文を確認した。
 - Docker内で`colcon build --packages-select grasping_system --symlink-install`に成功した。
@@ -50,7 +44,7 @@ Viewerで元の最大boxが重ならないよう、このgraphの`TopologicalMap
 - 検証後、隔離domain 129〜132のlaunch、node、ROS daemonが残っていないことを確認した。検証中に
   domain 25で別途起動された`gng_viewer_bridge.launch.py`と4個のvolume publisherは停止せず維持した。
 
-## Risk / Notes
+**制約**
 
 - 現在は設定に記録した全閉時TCP相対変換を使用する。URDFの指原点やTCP固定変換を変更した場合は、
   `exclude_closed_meshes.position`も同時に更新する必要がある。

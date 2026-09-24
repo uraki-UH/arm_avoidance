@@ -1,12 +1,10 @@
 # 2026-08-12 - Gripper volume topological graph
 
-## Summary
+## 1. 要約
 
 グリッパーの把持可能体積を、既存の
 `ais_gng_msgs/msg/TopologicalMap`として生成・配信する経路を
 `grasping_system`へ追加した。専用messageは追加しない。
-
-## Added
 
 - `box`、`ellipsoid`、`cylinder`の体積を3次元格子graphへ変換するbuilder。
 - graphを`TopologicalMap`へ変換するadapter。
@@ -15,12 +13,12 @@
 - `gng_viewer_bridge.launch.py`から同じ`params_file`設定に従って汎用launchをincludeする統合経路。
 - ToPoDualArmのURDF形状・prismatic上限から求めた最大把持体積設定。
 
-## Removed
+**削除**
 
 - ロボット名を固定した`ToPoDualArm_gripper_volume_graph.launch.py`。同じ設定は
   `gripper_volume_graph.launch.py grippers_file:=...`で起動する。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - `nodes`は体積内部のサンプル中心、`edges`は6近傍接続を表す。
 - `clusters[0]`は体積中心、姿勢、XYZ外形寸法、所属node IDを保持する。
@@ -34,8 +32,6 @@
 - 非box形状でも、現在のViewer上のcluster表示は外接boxになる。形状差は
   `nodes`と`edges`に保持される。
 - ToPoDualArm設定は最大開口時の把持可能領域であり、現在のgripper開度には追従しない。
-
-## Topics / Params / Messages
 
 Message typeは既存の`ais_gng_msgs/msg/TopologicalMap`を変更せず使用する。
 
@@ -75,8 +71,6 @@ ToPoDualArmの既定topic:
 - `/ToPoDualArm/L_grip_V_topological_map` (`ToPoDualArm/L_tcp`)
 - `/ToPoDualArm/R_grip_V_topological_map` (`ToPoDualArm/R_tcp`)
 
-## Verification
-
 - `colcon build --packages-select grasping_system --symlink-install`: 成功。
 - `ctest --test-dir build/grasping_system --output-on-failure`: 1/1成功。
 - 汎用launchへToPoDualArm設定を渡し、各graphで504 nodes、1321 edgesを生成。
@@ -94,7 +88,7 @@ ToPoDualArmの既定topic:
   接続後にもapplication-levelの追加publishが発生しないことを確認。
 - 検証後、launch、左右node、topic echo、ROS daemonが残っていないことを確認。
 
-## Risk / Notes
+**制約**
 
 - `TopologicalMap`の`label`は文字列のハンド種別ではないため、グリッパー識別には
   topic名と`header.frame_id`を使う。

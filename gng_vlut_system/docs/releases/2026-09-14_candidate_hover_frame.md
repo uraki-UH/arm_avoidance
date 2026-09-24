@@ -1,40 +1,26 @@
 # 2026-09-14 - 候補のホバー枠
 
-## Summary
+## 1. 要約
 
 Topo Fuzzy Viewerで、カーソルが重なる候補を薄い黄色の枠線と指カーソルで強調。
 
-## Changed
-
 既存の候補取得RPCに範囲だけの応答を追加。主画面のTF・手動表示変換を枠にも適用。
-
-## Added
 
 - 選択可能なノード・クラスタへのホバー枠。平面・付属非平面の合算範囲は独立ビューと共通。
 - カーソル外れ、ドラッグ、ポップアップ上、編集モード、購読解除時の枠消去。
 - 当たり判定は最大10 Hzで、処理時間に応じて間隔を拡大。範囲取得は同時1件・最大4 Hz。
 
-## Fixed
-
 なし。新機能の追加。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 候補ノードへカーソルを合わせるだけで対象全体の枠を表示。クリック時の独立ビュー操作は維持。
 枠はノード中心群のAABBに表示点半径と3 mmの余白を加えた表示用範囲で、正確な物体表面や接触判定ではない。
 点群全体・ロボットメッシュへのホバー判定はなし。ROSデータ・TFの変更なし。
 
-## Topics / Params / Messages
-
 ROSトピック・launch引数・メッセージ変更なし。
 WS `edit.inspect_graph`に`enable_bounds_only`（既定false）と応答`frame_id`を追加。
 詳細は[API仕様](../../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#候補の独立表示)を参照。
-
-## Verification
 
 - Docker Releaseビルドと`test_graph_inspection`の6件に成功。通常取得とのAABB一致、Marker部品合算・姿勢、graph列の非返送を確認。
 - frontend `npm run lint`と`npm run build -- --configLoader runner --outDir /tmp/codex-hover-dist`に成功。
@@ -42,7 +28,7 @@ WS `edit.inspect_graph`に`enable_bounds_only`（既定false）と応答`frame_i
 - 2.1秒の観測で範囲取得6件。通常のマウス移動ごとの無制限RPCなし。
 - 実環境の大規模入力での負荷計測は未実施。
 
-## Risk / Notes
+**制約**
 
 - 利用には最新backendの起動とブラウザ再読込が必要。
 - 取得時に受信フレーム全体を送るため、大規模グラフでは通信・JSON処理待ちの可能性。

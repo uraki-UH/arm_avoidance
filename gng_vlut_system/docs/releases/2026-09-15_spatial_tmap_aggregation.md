@@ -1,31 +1,25 @@
 # 2026-09-15 - Tmap L0の空間集約修正
 
-## Summary
+## 1. 要約
 
 `Tmap_vis_L0`を元GNGの空間集約として生成。関節状態による所属の偏り、代表姿勢への描画位置の
 置換、FK補間によるedge上書きを解消。10,801元ノードから150ノード・740エッジへ再生成済み。
-
-## Changed
 
 - 既定の`joint_motion_weight`を0へ変更。正値を明示した場合だけ関節移動時間も所属判定へ追加。
 - 描画位置を所属元ノードの手先位置の重心へ変更。実在する代表関節角・元IDとの分離。
 - 元coord-space edgeの所属先間への縮約を維持。自己ループ・重複のみ除外。
 - 共有trainerを使う到達可能ボクセル側にも、元ボクセルの空間隣接edgeを入力。
 
-## Added
-
 - 空間所属の関節角非依存性、重心、元接続の縮約一致、FK補間の非干渉、保存再読込、負の重み拒否のテスト。
-
-## Fixed
 
 - 空間集約edgeがFK補間結果で置き換わり、近傍本数制限で元接続が消失する問題。
 - 空間的に離れた姿勢が同一グループとなり、1個の代表TCPへ表示が偏る既定動作。
 
-## Removed
+**削除**
 
 - 両trainerの`--edge-max-neighbors`と`max_edge_neighbors`。元接続の本数切り捨てを廃止。
 
-## Behavior Impact
+## 2. 条件・検証
 
 launch・トピック名は変更なし。既存binの自動再学習・自動再読込はないため、別環境では
 trainerによる再生成後にbridgeを起動。今回のworkspaceには更新済みbinを配置済み。
@@ -43,14 +37,10 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
   params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-## Topics / Params / Messages
-
 - `/ToPoDualArm/Tmap_static`、`/ToPoDualArm/Tmap_vis_L0`、既存軌道topicは継続。
 - `ais_gng_msgs/msg/TopologicalMap`の変更なし。新しいROSノード・メッセージの追加なし。
 - `transition_paths`は既存軌道表示用の独立メタ情報として継続。空間edgeの構成には不使用。
 - 現行仕様の正本: [TECHNICAL_SPEC.md 13章](../TECHNICAL_SPEC.md#13-可視化専用3次元gng)。
-
-## Verification
 
 Docker Releaseビルド、GTest 5件、同じlaunchによる隔離ROS配信とViewer Gateway受信に成功。
 保存した座標・edgeとROS本文の一致、全元ノードの一意所属、frameの一致を確認。
@@ -110,7 +100,7 @@ launch停止時の一部Python nodeのexit -2は検証後SIGINTによる終了�
 - `gng.bin`: `cd3e45f0ad019110609c804a0d79e8725456d5a5f27622d2b3b87fbf5fedb53b`
 - `vlut.bin`: `35c1c42110301cc1293c124156d92f3ebbc2d31f1895aa3ff8c4c4936dfe3f26`
 
-## Risk / Notes
+**制約**
 
 - 重心は描画用の空間要約であり、代表関節角のFK結果ではない。IK目標・無衝突経路としての利用は別途検証が必要。
 - 空間所属集合の内部連結性は強制しない。集約edgeは元接続の存在を表すが、曲面メッシュの滑らかさは保証しない。

@@ -1,29 +1,19 @@
 # 2026-09-15 - 把持幅・TCP姿勢・関節姿勢の独立した追加評価
 
-## Summary
+## 1. 要約
 
 既存の概略把持候補を入力に、周辺の実点群から接触候補と開口幅を調べ、近傍のアームGNG姿勢を初期値にIK補正する `grasp_candidate_refiner_node` を追加した。既存候補と新しい結果を別トピックで比較できる。
 
-## Changed
-
 - `gng_control_msgs` と `gng_vlut_system` のビルド登録のみ追加。既存候補生成・選定・経路計画・ToPoDualArm設定への変更なし。
-
-## Added
 
 - 独立launch、設定、ノード、幾何処理ヘッダー、専用メッセージ2種、C++テストと有限ROS検証スクリプト。
 - 観測幅、両側接触を確認した把持幅、進入時開口幅、補正目標姿勢、IK関節姿勢、そのFK姿勢、棄却理由の出力。
 - 接触点を結ぶ線と幅ラベルのMarkerArray。未確認の観測幅は灰色の `observed=... (unconfirmed)` 表示。
 
-## Fixed
-
 - 新規処理内で、候補の進入軸と実 `L_tcp` の軸方向の差、幅から対称直動指への換算、IK後の残差を含むグリッパ掃引検査に対応。
 - 点群検索は既存の5 cmボクセル索引を再利用し、全探索姿勢の指・基部・進入掃引を包含するAABBから点を抽出。点の間引きなし。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 既存の `grasp_joint_candidates.launch.py` と並べて、追加ノードだけを起動する。
 
@@ -38,8 +28,6 @@ ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py enable_ik:=fals
 ```
 
 元候補のID・順序を保持し、失敗や予算超過も候補ごとの `reason` として返す。既存出力の置換、経路の再配信、関節指令の発行はない。未起動時は追加の点群購読・計算なし。起動時は別プロセスとしてCPU・点群転送の負荷が増える。
-
-## Topics / Params / Messages
 
 | 方向 | 既定トピック | 型・用途 |
 | --- | --- | --- |
@@ -73,8 +61,6 @@ launch引数は `params_file`、`candidate_topic`、`point_cloud_topic`、`seed_
 `header` は元候補の座標系と使用点群時刻、`source_header` と `cloud_header` は各入力のヘッダー。TF欠損時の座標すり替えなし。候補・点群の時刻差、購読の停止、重複ID、不正姿勢・点群、空配信を検査し、旧結果を無効化する。結果とMarkerはreliable・transient_local・depth 1、点群購読はSensorDataQoS・depth 1。
 
 `update_ms` は点群索引作成・局所評価・IKを含む更新処理の壁時計時間。ROS配信・Marker作成・購読転送・待ち時間を含まない。
-
-## Verification
 
 Releaseビルド・インストール、新規8件と既存16件のC++テスト、隔離ROS結合検証に成功。ROS検証では40 mmの合成側面点群と実ToPoDualArm URDFを使用し、把持幅40 mm、開口46 mm、指関節±23 mm、IK位置残差1.567 mm、姿勢残差0.782度を確認した。両側欠損、観測障害物、TF欠損と復帰、入力失効、重複ID、不正クォータニオン、行末padding、初期関節候補なし、空配信、既存出力への非干渉も確認した。
 
@@ -117,7 +103,7 @@ ROS_DOMAIN_ID=219 ROS_LOCALHOST_ONLY=1 /ros2_ws/build/gng_vlut_system/src/grasp_
 
 起動したdriver・launch・子ノード・有限検証はすべて終了済み。開始前後のプロセス一覧で残留なし、既存プロセスの停止・再起動操作なし。結果と起動ログはワークスペースの `tmp/grasp_refinement_20260915/` 内の `integration_verified.*`、`regression.log`、`real_result.json`、`real_pipeline.log`、`processes_before.log`、`processes_after.log`。実点群検証スクリプトも同ディレクトリに保存。
 
-## Risk / Notes
+**制約**
 
 - 接触帯のPCAで局所法線・面内広がりを検査する方式。全物体への曲面モデル当てはめ、摩擦・力閉包・重心の検証はない。
 - グリッパ検査は保守的な指・基部の直方体と観測点の検査。`has_observed_collision=false` は未観測領域の空間保証ではない。IK後の実TCP姿勢も検査対象。

@@ -1,31 +1,25 @@
 # 2026-09-11 - 上方把持候補の非平面付属部分評価
 
-## Summary
+## 1. 要約
 
 平面クラスタを把持シードとして維持し、局所非平面ノードの開口包含と上方観測障害物で候補を選別。
-
-## Changed
 
 - 法線とup_axisの内積絶対値による傾斜角判定。既定25度、法線符号反転を許容。
 - 同じ平面だけに接続する非平面成分を、距離制限付きDijkstraで探索。
 - 付属ノードの開口外へのはみ出し、全グラフの上方矩形柱内の観測ノードによる棄却。
 
-## Added
-
 - 付属ノード添字・成分数・付属込み局所外形を推定結果へ追加。
 - summaryに`attached_node_num`、`attached_component_num`、`target_extent_x/y`を追加。
 - `rejected_surface_tilt`、`rejected_attached_oversize`、`rejected_approach_obstacle`をsummaryとログへ追加。
 
-## Fixed
-
 - 水平投影が小さい壁面を上方把持面として採用するケース。
 - 接続のない上方障害物を、平面間の隣接判定だけでは見落とすケース。
 
-## Removed
+**削除**
 
 なし。ROSメッセージ、既存トピック、平面OBBの定義は維持。
 
-## Behavior Impact
+## 2. 条件・検証
 
 同日、ユーザー指示により`ToPoDualArm.yaml`を許容角90度・非平面付属判定OFF・上方障害物判定OFFへ変更。
 旧方式に近い構成への復帰であり、ゼロ・不正法線の除外は維持。C++既定値と追加方式の実装は維持し、結合テストでは追加判定を明示的に有効化。
@@ -33,8 +27,6 @@
 平面OBB・TCPを非平面成分へ合わせて拡大・移動する処理はなし。取っ手が上方許容幅を超える場合はそのシードを棄却。
 グリッパ体積graphの`required_occupied`等との接続は未実装。実形状の指・手首衝突ではなく、粗い候補選別。
 到達性状態の共通配信と計画側のno-motion動作は変更なし。
-
-## Topics / Params / Messages
 
 出力は`/grasp_pose_cands`の`GraspCandidateArray`を維持。新しい可視化トピックの追加なし。
 上方推定器と`ToPoDualArm.yaml`に以下を追加。距離はm、角度はdeg。
@@ -51,8 +43,6 @@
 | approach_height | 0.10 | 平面最高位置からの進入領域高さ。正のtcp_standoffを加算 |
 | approach_margin | 0.01 | 開口XY寸法に対する片側外側余白 |
 
-## Verification
-
 Docker `gng_cpu_container`内でビルド・合成入力検証。以下は`source /ros2_ws/install/setup.bash`後のコマンド。
 
 ```bash
@@ -67,7 +57,7 @@ ROS_DOMAIN_ID=217 ROS_LOCALHOST_ONLY=1 timeout --signal=INT --kill-after=15 90 \
 結合テスト: 標準/個別トピックの実launchで、付属数と候補生成、障害物による空配信、除去後の復帰。
 テストは独立ドメインで実行し、起動launchとテストROSノードを停止。既存の実運用ノードの停止・再起動なし。
 
-## Risk / Notes
+**制約**
 
 - 入力は現在の`ais_gng_cpu/src/ais_gng_msgs`の非平面成分・境界フィールドを使用。GNG側のロジック変更なし。
 - 複数平面への接続成分は保守的に付属対象外。同一物体の側面への接続も除外され得る。

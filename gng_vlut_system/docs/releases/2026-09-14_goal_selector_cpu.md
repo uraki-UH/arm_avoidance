@@ -1,44 +1,34 @@
 # 2026-09-14 - 計画目標選択のCPU負荷削減
 
-## Summary
+## 1. 要約
 
 Python目標選択ノードの1コア張り付きを実測し、C++へ置換。実入力6秒のCPU測定は103.27%から12.17%へ低下、最終版の再測定は11.33%。100%は1コア相当。
-
-## Changed
 
 - ROSメッセージの復号・保持をC++へ移管。受信時は最新スナップショットのみ保持し、既存`goal_update_hz`の周期へ計算を集約。
 - 到達セルに属する計画GNGの添字を直接参照。候補ごとの全ノード走査と中間mapのdeepcopyを除去。
 - 座標系ペア単位で最新TFを1回取得し、上位候補だけを部分ソート。選択結果のノードコピーは最後の1回。
 - 可操作性重みが0の場合は特徴量topicの購読なし。
 
-## Added
-
 - `topological_map_goal_selector_node`実行ファイルと、ROS実行に依存しない`goal_node_selection.hpp`。
 - 既存6ケースを移管し、順位・条件数補正・姿勢・無効グリッドを追加したC++回帰テスト9件。
-
-## Fixed
 
 - 約10,000ノードのmap・特徴量配列をPythonオブジェクトへ繰り返し展開する高負荷。修正前のprofileでsubscriptionの取出しが6.32秒中5.16秒、約82%を占有。
 - 入力コールバックとタイマーの重複による目標更新頻度の超過。
 
-## Removed
+**削除**
 
 - Python版選択ノードと直接呼出しテスト。二重実装の保持なし。
 - Pythonファイルを直接起動する旧CLI。直接起動は`ros2 run gng_vlut_system topological_map_goal_selector_node --ros-args -p ...`へ変更。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 評価式、候補ごとの採択数、INSIDEだけの選択、衝突ラベル除外、TF追従、選択IDの重複排除は維持。
 - 受信直後の計算を周期処理へ変更。通常時の反映待ちは既定5Hzの1周期分。空候補・全領域外・TF未取得も次の周期で旧目標を失効。
 - `grasp_joint_candidates.launch.py`からC++版を起動。既存の稼働中Python版は自動停止しないため、反映にはlaunchの再起動が必要。
 
-## Topics / Params / Messages
-
 - ROSメッセージ形式・launch引数の追加削除なし。選定mapのQoSをreliable・transient local・depth 1へ変更し、目標IDと同じ最新スナップショット方式へ統一。
 - 同時進行の[tmap短縮](2026-09-14_tmap_topics.md)を維持。新ノードの既定入力`/ToPoDualArm/tmap_static`、出力`/selected_tmap`。稼働中の旧名topicによる比較では引数で入力名を明示。
 - 現行仕様は[TECHNICAL_SPEC](../TECHNICAL_SPEC.md)を参照。
-
-## Verification
 
 - Docker Releaseビルドに成功。初回の定数所属・整数型不一致を修正後、再ビルド・最終ビルドとも成功。
 - C++選択テスト9件と既存候補評価テストに成功。
@@ -108,7 +98,7 @@ ros2 run gng_vlut_system safety_monitor_node --ros-args --params-file /ros2_ws/s
 ros2 launch gng_vlut_system grasp_joint_candidates.launch.py params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml
 ```
 
-## Risk / Notes
+**制約**
 
 - profile・再計測でFast DDSの既存SHMポートのロック警告を観測。実受信・検証は成功し、共有ポートの削除や既存プロセスの停止なし。
 - ブラウザやデータセット再生のCPU負荷は今回の対象外。実画面・実機把持動作の検証なし。

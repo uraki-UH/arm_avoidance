@@ -1,28 +1,18 @@
 # 2026-09-15 - 把持補正の待機・棄却理由表示
 
-## Summary
+## 1. 要約
 
 補正結果が届いていても、全候補棄却時の理由が通常ログとMarkerから分からない問題を修正。
-
-## Changed
 
 - 入力トピック名と局所点数上限を起動ログへ表示。
 - 候補未受信、候補数・接触対数・IK成立数、理由別件数をINFOへ表示。状態変化時のみ最短5秒間隔で更新し、入力停止後の最終状態も対象。
 - 幅未計算の候補も元位置に理由付きテキストMarkerを表示。不正な非有限位置は描画対象外。
 
-## Added
-
 未受信ログ、点群未受信・局所点数超過の理由Marker、ログ間隔の結合検証。
-
-## Fixed
 
 起動INFO以外はDEBUGのみで、幅未計算候補のMarkerを省略していたための診断情報不足。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 `/grasp_pose_refined/markers`で棄却候補の理由も確認可能。幅・接触線の捏造や、棄却を成立扱いにする変更なし。
 局所点数の既定30,000、接触条件、74 mmの最大開口、IK・衝突判定、候補選択は変更なし。
@@ -32,11 +22,7 @@
 ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py
 ```
 
-## Topics / Params / Messages
-
 追加・形式変更なし。既存`candidate_goal_preview`への補正ロボット表示の統合なし。
-
-## Verification
 
 ### 実行中ノードの調査
 
@@ -86,7 +72,7 @@ ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py params_file:=/t
 既存補正PID 1443642とlaunch PID 1443581、その他既存ROS PID・コンテナの稼働を維持。
 新規ROSデーモン・関節指令なし。結果は`tmp/refinement_visibility_20260915/`へ保存。
 
-## Risk / Notes
+**制約**
 
 - 接触条件の成立を実入力で確認できたわけではない。点数予算を増やすだけでは把持成功にならない。
 - `insufficient_contact_support`は点数だけでなく面内広がり・平面性の不成立も含む。

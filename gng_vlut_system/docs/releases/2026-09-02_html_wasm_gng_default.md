@@ -1,10 +1,8 @@
 # 2026-09-02 - HTML基幹GNG-WASM固定
 
-## 概要
+## 1. 要約
 
 `ToPo-FUZZY_Manipulation_v1.html`の点群GNG学習を、埋込みの`gng_wasm_core`だけで実行する構成へ変更。
-
-## 変更
 
 - GNG algorithm選択を`基幹GNG-WASM`固定へ変更
 - 初期学習、GNG実行、再生成後の学習、GNG再生操作を`gng_wasm_core/dist/gng_wasm_core.js`の自動読込み経路へ統一
@@ -20,7 +18,9 @@
 - 局所相互近傍グラフによる表示・保存用エッジの再構築を追加
 - 初期表示をobject only、法線・クラスタ非表示へ変更
 
-## 挙動
+## 2. 条件・検証
+
+**挙動**
 
 WASMの読込みまたは学習に失敗した場合、学習を停止して画面上に失敗理由を表示する。旧JavaScript GNGは学習・再生の実行経路から呼び出さない。
 
@@ -34,11 +34,9 @@ HTMLはWASM ABI版数`2`を要求する。古い`gng_wasm_core.js`がキャッ�
 
 GNG-WASMの読込みには、HTMLを`http://`または`https://`で配信し、`gng_wasm_core/dist/gng_wasm_core.js`と対応する`.wasm`ファイルへ到達可能なことが必要。
 
-## API影響
+**API影響**
 
 ROS topic、launch引数、message、service、基幹GNGバイナリ形式の変更なし。
-
-## 検証
 
 - `node --check /tmp/topo_fuzzy_first_script.js`
 - Docker内Emscriptenによる`bash scripts/build_wasm.sh dist`
@@ -46,7 +44,7 @@ ROS topic、launch引数、message、service、基幹GNGバイナリ形式の変
 - ヘッドレスChromeの初期描画でobject only、約466点、63 node、124 edgeを確認
 - `git diff --check`
 
-## 注意
+**注意**
 
 旧JavaScript GNGの初期化、逐次更新、再生ループは削除済み。グラフ可視化と読込み済みグラフの整合化に使う共通処理は残す。
 # 2026-09-02: HTML GNG-WASM realtime learning

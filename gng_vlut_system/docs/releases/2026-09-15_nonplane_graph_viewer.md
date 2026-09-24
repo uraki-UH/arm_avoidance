@@ -1,43 +1,33 @@
 # 2026-09-15 - 非平面成分のViewer Graph表示
 
-## Summary
+## 1. 要約
 
 ROS側の所属配列を維持したまま、Viewer向け非平面表示をMarkerからGraphへ変更。
-
-## Changed
 
 - `/topological_map`・`/plane_clusters`・`/nonplane_components`の同一フレーム照合によるバックエンド変換。各入力の到着時に最新データを再照合。
 - 元ノードID、法線、勝者入力共分散、ラベル、境界属性を既存TMG1形式で配信。成分ごとの色はGraph共通実装。
 - 成分内エッジと平面への接続エッジを保持。平面側端点は灰色の未所属ノードとして表示し、非平面成分のBbox・独立ビューには含めない。
 
-## Added
-
 - ユーザー指定により`/nonplane_components`のBounding Box設定は未指定。GUI・独立ビュー選択は対象外、Graph表示・法線・共分散は維持。把持候補Tmapの既定ONは維持。旧設定が残る場合はページ再読み込みが必要。
 - 属性・ID・エッジ・範囲のC++テスト、隔離ROSとWebSocketによる配信テスト。
-
-## Fixed
 
 - 所属配列が先に届いた場合にも、残りの入力到着時に同一フレームを再照合。
 - 共通所属色テストの一時出力を、書込み不可のnode_modules配下からtests配下へ移動。
 
-## Removed
+**削除**
 
 - 非平面専用Marker JSON生成。ROSでのTopologicalMap二重publishは追加なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 通常Graphの描画完了通知による配信制御、法線・共分散・ノード/エッジ表示設定を共用。
 - 空成分は空Graphで表示を消去。全クライアント切断時は購読を解放する既存仕様を維持、再接続後は再購読。
 - 旧Markerとの色・寸法の完全互換なし。独立ビューは所属ノードと内部エッジのみ、主画面は平面接続エッジも表示。
 
-## Topics / Params / Messages
-
 - ROS `/nonplane_components`: `std_msgs/msg/UInt32MultiArray`、変更なし。
 - WSのsource型: `nonplane_component`、tag: `/nonplane_components`、配信: 既存`TMG1`。
 - ROS launch引数・パラメータ・メッセージ定義の変更なし。
 - 詳細仕様: [BACKEND_API.md](../../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#非平面成分のgraph表示)。
-
-## Verification
 
 Dockerでの実行コマンド:
 
@@ -64,7 +54,7 @@ npm run build -- --configLoader runner --outDir /tmp/nonplane-graph-build-0915
 
 backendビルド、CTest 2対象、frontend 5ファイル・lint・本番ビルドに成功。配信テスト初回の端点数期待値、再接続時の再購読漏れ、frontendの旧Bbox期待値を修正後に成功。既存のコンパイル警告とViteのchunkサイズ警告あり。
 
-## Risk / Notes
+**制約**
 
 - 最新入力だけの照合であり、入力の欠落・フレーム跨ぎの到着順によって表示更新を飛ばす場合あり。不一致フレームの合成・全履歴保持なし。
 - 成分IDはフレーム内の所属情報であり、永続物体IDとしての追跡保証なし。

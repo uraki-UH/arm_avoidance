@@ -1,6 +1,6 @@
 # 矢印表示・送信側の共通化
 
-## 変更内容
+## 1. 要約
 
 把持候補、PoseArray、ROS Marker、法線、クラスタ速度、クラスタ詳細の矢印を共通化。
 `arrows.ts`で位置基準・実寸・姿勢・色を解釈し、`ArrowBatch`で円柱と円錐を描画。
@@ -25,7 +25,7 @@ ROS MarkerのROS区間は標準型の都合で色・寸法を含み、WS区間�
 操作・座標規約・ワイヤ形式: [矢印共通仕様](../../../ToPoFuzzy-Viewer/common/arrow_visual_spec.md)。
 既存の状態判定コスト計測タスクは`TASK_LIST.md`の2.3に維持。
 
-## 検証
+## 2. 条件・検証
 
 以下は実装時の実行記録。ユーザー指示により矢印専用テスト6ファイルと登録設定は削除済み。
 記載の削除済みスクリプトは現在の実行手順ではなく、当時の検証記録。
@@ -42,7 +42,7 @@ ROS MarkerのROS区間は標準型の都合で色・寸法を含み、WS区間�
 ビルドには既存のC++未使用引数・PCL/Torch設定警告とViteチャンクサイズ警告あり。
 既存Viewerや既存ROSノードの停止・再起動は未実施。新しいgatewayを通常運用に反映する際は更新後のバイナリで起動が必要。
 
-## CPU描画準備コスト
+**CPU描画準備コスト**
 
 frontendコンテナ、Node.js v20.20.2。8反復の先頭2反復を除いた6回のソート後中央側値。
 `build_arrow_parts`の行列・色生成と配列化を計測。別ビルド等の負荷による変動を含む参考値。
@@ -56,7 +56,7 @@ GPU描画時間、ブラウザ全体のフレーム時間、ROS到達性判定�
 実機GPU計測は`TASK_LIST.md`のFに継続。1バッチは円柱・円錐の2メッシュ、補助2軸付きの場合も同じ構成。
 標準Markerと姿勢配列は座標系・設定ごと、法線はレイヤーごとの一括描画。
 
-## 起動した検証プロセスと停止
+**起動した検証プロセスと停止**
 
 以下の検証用プロセスはすべて終了済み。結合テストのfinallyで子ノードも停止。
 
@@ -82,7 +82,7 @@ ros2 launch grasping_system top_grasp_pose_candidates.launch.py params_file:=/tm
 `candidate_nodes_topic:=/topic_contract/grasp_pose_cands/nodes`、`summary_topic:=/topic_contract/grasp_pose_cands/summary`を追加。
 共通publisherの回帰テストは`/ros2_ws/build/grasping_system/test_grasp_candidate_publisher`から有限時間のノードを起動し、終了済み。
 
-## 起動経路の追加修正
+**起動経路の追加修正**
 
 - Markerブリッジの既定値をノード側へ一本化し、launchに入力型・主軸・向き・矢先長の引数を追加。
 - `input_type=grasp_candidates`で`GraspCandidateArray`を購読し、候補ID・状態・範囲外候補を保持。
@@ -95,7 +95,7 @@ ros2 launch grasping_system top_grasp_pose_candidates.launch.py params_file:=/tm
 追加でlaunchに`primary_axis_idx:=1 primary_axis_sign:=-1.0 anchor:=tip head_length:=0.01 enable_transverse_axes:=false enable_state_colors:=false color_r:=0.3`を指定。
 全プロセスは検証後に停止。常設のテストファイル追加なし。
 
-## QoS・通信型・状態色の追加修正
+**QoS・通信型・状態色の追加修正**
 
 共通`subscription.hpp`で全送信元に接続可能なQoSを選択し、500 msごとに必要な変更だけを反映。
 ブリッジとViewerのMarker・PoseArray・把持候補購読へ適用。省略可能な`scale`・`color`・`points`をTypeScriptにも反映。
@@ -116,7 +116,7 @@ ros2 run gng_vlut_system grasp_pose_marker_bridge_node --ros-args -p input_topic
 一時的なfrontend実行でも、共通色の描画反映、寸法・色・点列の省略、未定義状態、辞書欠落を確認。
 Dockerイメージ自体の再構築は未実施。
 
-## グラフ・楕円体・座標変換の共通化
+**グラフ・楕円体・座標変換の共通化**
 
 グラフ設定の既定値は`graphLayerSettings.ts`へ集約し、Appからは設定オブジェクトを直接受渡し。
 静的・動的描画の薄いラッパーと未使用のクラスタ文字表示設定を削除。法線の未指定時はGUIと同じOFF、静的グラフのクラスタ表示も設定に従う構成。

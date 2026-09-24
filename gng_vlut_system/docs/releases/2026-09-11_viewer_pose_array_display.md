@@ -1,34 +1,28 @@
 # 2026-09-11 - ViewerのPoseArray直接表示
 
-## Summary
+## 1. 要約
 
 `/grasp_pose_cands`を既存Viewerへ直接接続し、候補表示の計画launch依存を解消。
 把持専用のViewer・ROSメッセージ型・GUI分類の追加なし。
-
-## Changed
 
 - `geometry_msgs/msg/PoseArray`をConnection Streamsの表示対象へ追加。既存のMarker描画系を再利用。
 - 各姿勢のローカル+Z軸を0.08 mの水色矢印として描画。
 - 入力publisherのreliability・durabilityに合わせた購読開始時のQoS選択。
 - 再接続後に購読がなくても、明示的なレイヤー削除で保持キャッシュを消去。
 
-## Added
-
 - 既存converter内のPoseArray変換。Marker・PoseArray・非平面クラスタのキャッシュ保存と送信を共通化。
 - React Three Fiberの描画ツリーによるTF・方向・空配列・TF欠落の検査1件。
 - Docker内の入力ノード・gatewayとホスト側WebSocketクライアントによる結合テスト。
 
-## Fixed
-
 - 候補がROSへ出力されていても、計画launchなしではViewerへ表示できなかった経路。
 
-## Removed
+**削除**
 
 - 候補表示における`grasp_joint_candidates.launch.py`への必須依存。
 - 過剰だった到達性評価との照合・色統合、照合用の`header_stamp`、専用テスト。
 - `/grasp_pose_markers`の再生成はなし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - ViewerのConnection Streamsで`/grasp_pose_cands`をONにすると表示。
 - 空候補は旧矢印を消去。非有限位置・無効クォータニオンは除外。
@@ -36,14 +30,10 @@
 - 到達性評価とは独立表示。色付き評価を見る場合は候補PoseをOFF、評価MarkerをON。両方ONの場合は重複表示。
 - 推定・計画アルゴリズム、ROSメッセージ定義は変更なし。
 
-## Topics / Params / Messages
-
 - ROS入力: 汎用`geometry_msgs/msg/PoseArray`。把持候補に限定しない。
 - WS: `stream.marker_array`に`source_type: "pose_array"`を付与。
 - Marker要素: `frameId`と配列添字由来のIDを維持。照合用メタデータの追加なし。
 - `sources.list`の既存型`marker`を使用。新しいGUI種別・ROS Markerトピックは追加なし。
-
-## Verification
 
 - Docker内で`colcon build --packages-select topo_fuzzy_viewer --symlink-install --executor sequential`成功。既存の警告あり。
 - フロントエンドの`npm run lint`成功。
@@ -55,7 +45,7 @@
 - 結合検証はROS_DOMAIN_ID=217、ポート19091のみ。検証gateway・入力ノードは全停止済み。
 - GPUによるブラウザ実画面の確認、稼働中Viewerの再起動は未実施。
 
-## Risk / Notes
+**制約**
 
 - 適用には稼働中`viewer_stack.launch.py`の再起動とブラウザ再読み込みが必要。
 - 候補と到達性評価の自動同期・重複抑制なし。

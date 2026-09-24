@@ -1,6 +1,6 @@
 # 2026-09-09 - Surface Region Models and Patch Curvature
 
-## Summary
+## 1. 要約
 
 既存の平面クラスタと非平面ノードをLocalPatchとして再利用し、上位SurfaceModelへ統合するC++試作。
 平面判定を最終形状とは扱わず、平面パッチも曲面に所属可能。GNG学習コアと既存PlaneClusterメッセージは変更しない。
@@ -8,7 +8,30 @@
 
 局所曲率の現行仕様は [位置偏差による曲率推定](../designs/curved_surface_position_fit.md) を参照。以下の法線変化方式は初期実装の記録。
 
-## 現行の曲面表現：局所高さ関数とimplicit quadric
+- `ais_gng.launch.py` の可視化ノードに上位モデル出力を追加。既定2 Hz。
+- 別起動用 `surface_models.launch.py` は実行中GNGの同一フレームのmapとplane_clustersを購読。
+- 以前の `/nonplane_components/markers` は非平面連結成分の表示のまま。今回の曲面モデルとは別物。
+
+- 平面クラスタ1個を1パッチ、未所属の有限座標ノード1個を1パッチに圧縮。所属添字は保持。
+- 元GNG edgeをパッチ間edgeへ縮約。距離と符号に依存しない法線角で成長候補を限定。
+- plane / sphere / cylinder / elliptic_cylinder / quadric の最小二乗推定と、自由度ペナルティ付き選択。
+- 全所属点と各パッチの残差、法線整合性で採否を判定。係数推定のみ最大256点へ間引く。
+- 平面パッチの対称2x2曲率テンソルK、主曲率2値、UV方向、法線、接平面基底、support_cov、normal_scatter、plane_rms、法線予測残差と品質指標。
+- `r = -K q` の対称3未知数を直接最小二乗推定。符号不定な入力法線はパッチ内でそろえる。
+- 推定Kとモデル微分の差を担当範囲内の法線変化差に換算し、高品質パッチに対して整合判定。
+- 大きな平坦パッチの保護と、平面解が非平面モデルの最小ペナルティより良い場合の早期終了。
+
+- 平面パッチを曲面候補から除外してしまう構造を上位層で解消。
+- 同じSurfaceModelのノード、実GNG edge、任意の上位パッチグラフを同色に統一。別モデルは別色。現在のMarkerではunknownは非表示。
+- Viewer表示は `/curved_surface_clusters/markers` のSPHERE_LISTとLINE_LISTを使用。消えたnamespace/idにはDELETEを送信。
+
+**削除**
+
+なし。保存済みテンプレートの書き換え・再学習は不要。
+
+## 2. 条件・検証
+
+**現行の曲面表現：局所高さ関数とimplicit quadric**
 
 | 対象 | 表現 | 用途 |
 | --- | --- | --- |
@@ -27,7 +50,7 @@ Q(x,y,z) = Ax² + By² + Cz² + Dxy + Exz + Fyz + Gx + Hy + Iz + J = 0
 - 今回の位置ベース化は局所推定と境界接平面の算出が対象。領域全体の円筒軸推定・法線整合判定などにおける入力ノード法線の使用は維持。
 - 比較結果・品質指標・残存課題は [位置偏差による曲率推定](../designs/curved_surface_position_fit.md) に集約。
 
-## 現行改善：境界判定・軽量化・非平面ノード付加
+**現行改善：境界判定・軽量化・非平面ノード付加**
 
 - 平面パッチ間の境界を、滑らか・鋭い・不明の3状態へ分離。低品質な代表法線だけによる鋭い境界判定の廃止。
 - 境界の片側ごとの追加位置フィット、過大な外挿の抑止。不明境界はモデル適合検査の候補、鋭い境界の迂回統合は禁止のまま。
@@ -40,41 +63,10 @@ Q(x,y,z) = Ax² + By² + Cz² + Dxy + Exz + Fyz + Gx + Hy + Iz + J = 0
 - 前回解の初期値再利用は試作比較で効果を確認できず不採用。厳密な増分フィットは未実装。
 - 曲面テスト50件と関連回帰テストの通過。詳細・比較条件・実行コマンドは [位置偏差による曲率推定](../designs/curved_surface_position_fit.md) に集約。
 
-## Changed
-
-- `ais_gng.launch.py` の可視化ノードに上位モデル出力を追加。既定2 Hz。
-- 別起動用 `surface_models.launch.py` は実行中GNGの同一フレームのmapとplane_clustersを購読。
-- 以前の `/nonplane_components/markers` は非平面連結成分の表示のまま。今回の曲面モデルとは別物。
-
-## Added
-
-- 平面クラスタ1個を1パッチ、未所属の有限座標ノード1個を1パッチに圧縮。所属添字は保持。
-- 元GNG edgeをパッチ間edgeへ縮約。距離と符号に依存しない法線角で成長候補を限定。
-- plane / sphere / cylinder / elliptic_cylinder / quadric の最小二乗推定と、自由度ペナルティ付き選択。
-- 全所属点と各パッチの残差、法線整合性で採否を判定。係数推定のみ最大256点へ間引く。
-- 平面パッチの対称2x2曲率テンソルK、主曲率2値、UV方向、法線、接平面基底、support_cov、normal_scatter、plane_rms、法線予測残差と品質指標。
-- `r = -K q` の対称3未知数を直接最小二乗推定。符号不定な入力法線はパッチ内でそろえる。
-- 推定Kとモデル微分の差を担当範囲内の法線変化差に換算し、高品質パッチに対して整合判定。
-- 大きな平坦パッチの保護と、平面解が非平面モデルの最小ペナルティより良い場合の早期終了。
-
-## Fixed
-
-- 平面パッチを曲面候補から除外してしまう構造を上位層で解消。
-- 同じSurfaceModelのノード、実GNG edge、任意の上位パッチグラフを同色に統一。別モデルは別色。現在のMarkerではunknownは非表示。
-- Viewer表示は `/curved_surface_clusters/markers` のSPHERE_LISTとLINE_LISTを使用。消えたnamespace/idにはDELETEを送信。
-
-## Removed
-
-なし。保存済みテンプレートの書き換え・再学習は不要。
-
-## Behavior Impact
-
 - 学習コア内の平面抽出とは別に、可視化側で上位モデルを推定する試作。ROSシリアライズを除いたコア処理時間を計測。
 - 広い平面の保護条件: 曲率品質 >= 0.8、plane_rmsが閾値以内、接平面位置分散のtraceが統合候補全体の位置分散trace以上、推定曲率による法線変化が許容値以内。
 - 物体テンプレートの寸法を使った除外ではなく、現在の統合候補に対する相対的な広さ。大きさだけでは除外しない。
 - パッチは分割しない。適合しない原子パッチはunknownとして残る。全有限ノードを重複なく保持。
-
-## Topics / Params / Messages
 
 ```bash
 # Docker内。既存GNGに後から追加する場合。
@@ -96,8 +88,6 @@ ros2 launch ais_gng surface_models.launch.py
 - 主要設定: `enable`、`hz`、`max_link_length`、`max_link_normal_deg`、`max_patch_rms`、`max_point_residual`、`max_normal_deg`、`max_curvature_normal_error`、`protect_dominant_flat_patches`、`complexity_penalty`、`max_model_fits`。
 - Marker出力有効時は `enable_patch_graph=true` で圧縮パッチグラフを重畳。`enable_labels` は既定false。TEXT_VIEW_FACINGはRViz向けで、現在のViewerには表示されない。
 - 通常のais_gng起動でも有効になるため、同じ出力トピックへstandaloneを重複起動しないこと。
-
-## Verification
 
 Releaseビルド、C++テスト13件、既存ViewerのMarkerArrayテスト1件に成功。
 円柱への平面/非平面の混合統合、回転・並進・密度差を加えた楕円柱、球、直角境界、接する壁の保護、欠損法線、曲率方向・符号、ノード保存、色分け、消去を検証。
@@ -133,7 +123,7 @@ python3 /ros2_ws/src/ais_gng_cpu/src/ais_gng/test/check_surface_models.py \
 画像: `/tmp/surface_model_mug_desktop.png`、`/tmp/surface_model_mug_mobile.png`。
 最終配色版の6秒再送でも同じ所属結果。平均2.440 ms、うち曲率0.0378 ms。
 
-## Risk / Notes
+**制約**
 
 - mugは円柱としては採用されず一般Quadricとなった。胴体/取っ手の正しい意味的分離を保証しない。
 - mugの全10平面パッチで曲率品質が低く、K整合ゲートは適用されなかった。保存ノード法線のばらつきと局所線形近似の適合性に課題が残る。

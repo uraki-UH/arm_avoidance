@@ -1,29 +1,19 @@
 # 2026-09-15 - Viewerの標準文字Marker表示
 
-## Summary
+## 1. 要約
 
 ROSで配信済みの把持補正理由がViewerに出ない原因を修正。標準文字Markerとしての対応で、
 把持専用トピックや新しい評価メッセージの追加なし。
 
-## Changed
-
 Gatewayが`TEXT_VIEW_FACING`の`text`本文をWebSocketへ保持。frontendがCanvasTextureのSpriteとして描画。
 TF・位置・色・透明度・文字高さ・改行と削除を反映し、常にカメラへ正対。外部フォント取得なし。
 
-## Added
-
 ROS→WSの文字保持・配信元再起動テストと、実Chrome/WebGLでの描画・更新・解放のテスト。
-
-## Fixed
 
 Gatewayは型だけ`text`へ変換して本文を落とし、frontendは`text`分岐がなく非表示としていた。
 前回の把持補正変更はROS配信までの確認で、この画面側の未対応を見落としていた。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 反映にはViewer Gatewayの再起動とブラウザ再読み込みが必要。把持補正launchだけの再起動では反映されない。
 
@@ -34,12 +24,8 @@ ros2 launch topo_fuzzy_viewer viewer_stack.launch.py
 `/grasp_pose_refined/markers`を選択すると、未成立候補の理由文字も表示対象となる。
 これは表示経路の修正であり、把持成立・IK成立の条件変更や候補ロボット表示の追加ではない。
 
-## Topics / Params / Messages
-
 ROSトピック・パラメータ・メッセージ追加なし。WSは既存`MarkerMessage.text`へ本文を設定。
 [文字Marker仕様](../../../ToPoFuzzy-Viewer/common/ws_protocol_v2.md#text-marker)を更新。
-
-## Verification
 
 - 実行中の補正結果・Markerを有限購読。調査時6候補の接触対・IK成立は0、理由文字6件を配信済みで、既存Gatewayも購読中と確認。
 - DockerでGatewayのビルドとパッケージ全体のcolcon build成功。既存の未使用引数・インデント警告は残存。
@@ -88,7 +74,7 @@ docker exec -e ROS_LOG_DIR=/tmp/marker_text_20260915_logs gng_cpu_container bash
 本作業からの既存プロセス停止・再起動操作なし。確認時の既存Gateway PID 1759130は修正前の実行ファイルを使用。
 実WS入力・描画画像・Gatewayログは`tmp/marker_text_20260915/`へ保存。
 
-## Risk / Notes
+**制約**
 
 - 接近した候補の文字は重なる場合がある。標準位置への描画で、自動配置変更なし。
 - 把持成立は今回も0件。棄却理由の可視化と把持成功は別。

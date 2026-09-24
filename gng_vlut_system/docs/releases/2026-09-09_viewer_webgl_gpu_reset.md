@@ -1,28 +1,18 @@
 # 2026-09-09 - ViewerのGPUリセット診断とNVIDIA起動方法
 
-## Summary
+## 1. 要約
 
 `/topological_map` 有効化後のWebGLコンテキスト喪失について、Chrome処理に伴うAMD GPUのpage faultとring resetを確認。NVIDIA描画経路による回避手段の追加。
 
-## Changed
-
 - `RUN_GUIDE.md` に専用Chromeの起動方法を追記。
-
-## Added
 
 - `scripts/open_viewer_nvidia.sh`: PRIME render offloadとANGLE EGL (`--use-angle=gl-egl`) によるChrome起動。`__EGL_VENDOR_LIBRARY_FILENAMES` でNVIDIA EGLドライバを明示指定。
 - 既存Chromeへの起動転送を防ぐ専用プロファイル `$XDG_CACHE_HOME/topofuzzy-viewer-nvidia-egl`（未設定時は `~/.cache/topofuzzy-viewer-nvidia-egl`）。
 
-## Fixed
-
 - 通常ウィンドウにおける旧 `--use-angle=gl` の `Invalid visual ID requested` 初期化失敗を、`gl-egl` 経路へ変更。
 - AMD GPU障害そのものの修正ではなく、代替描画経路。
 
-## Removed
-
-- なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 ```bash
 # ホスト側での実行。frontendとgatewayは通常の方法で起動済み。
@@ -31,12 +21,6 @@ bash scripts/open_viewer_nvidia.sh
 
 URL指定時は第1引数を使用。NVIDIA GPUまたはGoogle Chromeがない場合はエラー終了。
 旧プロファイルのブラウザではGPU初期化失敗後に `--use-gl=disabled` へ移行。旧ウィンドウの再読み込みでは新しい起動設定の適用不可。
-
-## Topics / Params / Messages
-
-- 変更なし。
-
-## Verification
 
 - `journalctl -k`: 2026-09-09 17:29:28 JSTに `amdgpu 0000:65:00.0: [gfxhub] page fault`、Chrome PID 3021205を記録。
 - 同17:29:30に `ring gfx_0.0.0 timeout` と `Ring gfx_0.0.0 reset succeeded`。ブラウザ報告の `2026-09-09T08:29:30.953Z` と一致。
@@ -53,7 +37,7 @@ URL指定時は第1引数を使用。NVIDIA GPUまたはGoogle Chromeがない�
 - 通常ウィンドウ検証のChrome PID 3038852、3039934、3040458、3042247、3043738は停止済み。一時プロファイル削除済み。
 - 検証ChromeのPID 3028767、3030026は停止済み。専用一時プロファイル削除済み、子プロセスの残存なし。既存ブラウザ・ROSノードの停止なし。
 
-## Risk / Notes
+**制約**
 
 - AMD側の不正アクセスを誘発する個別の描画命令・ドライバ内部経路は未特定。ノード数やDockerのSIGTERMだけを障害原因とする根拠なし。
 - requestAnimationFrameはGPU完了通知ではないため、従来ACKの待機時間を「GPU実描画時間」とする説明は不正確。

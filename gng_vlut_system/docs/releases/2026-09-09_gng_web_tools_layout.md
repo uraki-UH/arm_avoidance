@@ -1,11 +1,9 @@
 # 2026-09-09 - GNG Web Toolsの配置集約
 
-## Summary
+## 1. 要約
 
 HTML用のWASMアダプタとbag変換CLIを `gng_web_tools/` 配下へ集約。
 ROSパッケージ名・実行コマンド・学習ロジックは維持。
-
-## Changed
 
 - `gng_wasm_core/` → `gng_web_tools/wasm/`。
 - `gng_bundle_exporter/` → `gng_web_tools/exporter/`。
@@ -14,22 +12,18 @@ ROSパッケージ名・実行コマンド・学習ロジックは維持。
 - README・設定ファイル案内・CLIの既定出力先説明を新配置へ更新。
 - 既存のresultsディレクトリ、隠しファイル、配布JS/WASMも一括移動。
 
-## Added
-
 - `gng_web_tools/README.md` に役割・ビルド・既存コマンドを整理。
 - `tests/wasm_load.cjs`: HTML参照先・WASM ABI 3・500回学習・JSON出力の確認。
 - `tests/exporter_load.py`: 新ソース位置・既定出力先・一時PointCloud2 bagのCLI変換確認。
 
-## Fixed
-
 新配置からの基幹ソース参照とHTMLからの配布ファイル参照。
 
-## Removed
+**削除**
 
 旧ルート直下の2ディレクトリ。互換用symlinkは未作成。
 機能・ROSパッケージ・実行ファイルの削除なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 親ディレクトリにpackage.xmlを置かず、colconは配下の2パッケージを個別検出。
 - WASMとROS依存Pythonのビルドは独立。WASM側へのROS依存追加なし。
@@ -41,11 +35,7 @@ ROSパッケージ名・実行コマンド・学習ロジックは維持。
   移動した既存ファイルの内容差分はCMake・ビルドスクリプト・README・CLIヘルプ・gitignoreの6ファイルのみ。
 - 新パスでも空resultsディレクトリの保持ファイルを追跡できるよう、gitignoreに例外を追加。
 
-## Topics / Params / Messages
-
 トピック、ROSパラメータ、メッセージ定義、WASM ABIの変更なし。
-
-## Verification
 
 Docker `gng_cpu_container` 内で実行。各ビルド・テストはtimeout付き。
 
@@ -85,7 +75,7 @@ docker exec gng_cpu_container timeout --kill-after=5s 45s bash -lc '
 - 配布済みと再生成WASMのグラフ同一性を保証するテストではなく、読み込み・実行の確認。
 - 一時再生成物は配布済みファイルへ上書きせず、検証後に削除。
 
-## Risk / Notes
+**制約**
 
 - ブラウザ画面の操作・描画は未検証。HTMLの実参照先を使ったNode.jsでのWASM実体化を確認。
 - colconのexporterパッケージindex markerに関する既存警告、および基幹ソースの既存コンパイル警告は残存。

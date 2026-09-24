@@ -1,42 +1,32 @@
 # 2026-09-23 - GNG launchの入力トピック上書き修正
 
-## Summary
+## 1. 要約
 
 `input_topic:=/lidar_points`指定時に、GNGがYAML既定の`/scan`を待ち続ける問題の修正。
-
-## Changed
 
 - センサーYAMLから読込済みの`ais_gng_node.ros__parameters`と短名変換結果を辞書として受け渡し。
 - 共通設定・センサー設定・上書き辞書のセレクターを揃え、明示launch引数を末尾へ配置。
 - 回帰テストをPythonでの辞書合成から、隔離ドメイン229でのROS自身のパラメータ解決へ変更。
 
-## Added
-
 - CPU・GPU設定での入力トピック上書きと保存ノードへの一致確認。
 - 入力引数省略時に、YAMLの複数入力トピックを維持するテスト。
-
-## Fixed
 
 - 先頭の共通設定`/**`と後続のセンサー設定`ais_gng_node`が混在し、明示した入力先がセンサー既定値へ戻る不具合。
 - 同じ理由で失敗する`use_node_rho_for_seed_order`の明示指定と、旧名より短名設定を優先する処理。
 
-## Removed
+**削除**
 
 機能の削除なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 共通設定よりセンサー設定、対応する明示launch引数を優先。
 入力引数を省略した場合は、従来どおりYAMLの`input.topic_names`を使用。
 YAML値・GNG計算処理・C++・メッセージ定義の変更なし。
 
-## Topics / Params / Messages
-
 - `input_topic`: GNGの`input.topic_names`を単一トピック配列で上書き。
 - `source_point_cloud_topic:=auto`: 同じ明示入力、またはYAMLの先頭入力を保存用ノードへ転送。
 - 新しいトピック・パラメータ・メッセージの追加なし。
-
-## Verification
 
 - 修正前の実ROSテストで、入力トピックCPU／GPU、rho指定、短名優先2条件の計5失敗を再現。
 - 修正後はテスト11件が成功。テスト初回のHumble API差異は`get_parameters_by_prefix`へ修正後に再実施。
@@ -63,7 +53,7 @@ timeout -s INT -k 8 35 ros2 launch ais_gng ais_gng.launch.py \
 最終の読み取りプローブは`timeout -s INT -k 3 12 python3 -`で実施し、購読・Executor・Contextを終了。
 一時ディレクトリ内の検証ログ・launch生成パラメータは削除済み。既存ログへの削除なし。
 
-## Risk / Notes
+**制約**
 
 - GPUはパラメータ解決のみ検証。実点群での実行はCPUのみ。
 - 現在のbagで`map`から`hesai_lidar`へのTF未登録警告あり。GNG入力の停止原因とは別件で、座標変換の修正は今回の対象外。

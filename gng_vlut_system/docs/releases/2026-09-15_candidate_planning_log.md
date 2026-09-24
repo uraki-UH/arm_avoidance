@@ -1,6 +1,6 @@
 # 2026-09-15 - 候補軌道計画の計算時間ログ
 
-## Summary
+## 1. 要約
 
 `grasp_joint_candidates.launch.py`の計画更新ごとに、計算時間と結果を英語のINFOの1行で表示。
 
@@ -8,22 +8,16 @@
 dof=7 Plan: 34.35 ms Count: goal=2 reach=2
 ```
 
-## Changed
-
 - `std::chrono::steady_clock`で目標・開始候補選定から経路探索・選択までを計測。入力待ち・mutex待ち・配信用データ生成・配信は対象外。CPU占有時間ではなく経過時間。
 - `goal`は目標GNGノードの候補数、`reach`は経路の得られた目標数。把持姿勢の入力件数とは別。
 - 起動時の関節一覧・トピック一覧・安全ノード数・準備完了と候補受信ログはDEBUGのみ。共通実装の実行系ノードにも、このログ整理を適用。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 時間ログは計画更新時だけ。入力不変のタイマー周期では出力なし。候補消失によるクリア時は`goal=0 reach=0`。
 - 計画結果・更新条件・警告・エラーへの変更なし。
 
-## Topics / Params / Messages
-
 変更なし。指定済みのlaunchコマンドで表示。
-
-## Verification
 
 - コンテナ内の古いビルド設定を再構成し、Releaseビルド・インストールに成功。
 - 保存済み10,000ノードGNGと`ToPoDualArm.yaml`を使用した既存ROS結合テストに成功。静止入力時の再探索なし、明示要求・関節変更時の再計画、候補消失時のクリアと復帰、関節目標配信なしを確認。
@@ -52,6 +46,6 @@ ros2 launch gng_vlut_system grasp_joint_candidates.launch.py params_file:=/ros2_
 
 検証用launch・子ノードはすべて停止済み。
 
-## Risk / Notes
+**制約**
 
 1回の計画更新に時計参照2回とINFO出力1回を追加。出力自身の時間は計測対象外。

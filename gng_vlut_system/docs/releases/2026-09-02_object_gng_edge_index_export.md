@@ -1,17 +1,15 @@
 # 2026-09-02 - 物体GNG保存時のedge添字修正
 
-## 概要
+## 1. 要約
 
 `object_gng_dataset_exporter_node`が`TopologicalMap.edges`とクラスタ所属nodeを
 永続node IDとして再解決し、別nodeの配列添字へ誤変換する問題を修正した。
-
-## 変更
 
 - edge端点を受信したnode配列添字のまま保存
 - クラスタ所属nodeも配列添字のまま保存
 - 自己edgeと範囲外添字の除外は維持
 
-## 影響
+## 2. 条件・検証
 
 修正前のJSONは永続node IDを保持していないため、元edgeの完全な逆算はできない。
 `repair_object_gng_edges`はGNGを再学習せず、node座標と既存edge数を維持したまま、
@@ -25,8 +23,6 @@
 
 `repair_object_gng_edges`は既存データ移行のための一時ツールとし、通常運用では使用しない。
 旧バックアップを復元しないことを確認した後、通常配布物から削除する予定である。
-
-## 検証
 
 - `ais_gng` Releaseビルド
 - node ID `[3,0,4,1,2]`とedge添字`[0,1,2,3]`を与える衝突回帰試験

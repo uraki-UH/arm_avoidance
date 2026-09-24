@@ -1,12 +1,10 @@
 # 2026-09-02 - TopoFuzzy物体テンプレート照合チューナー
 
-## 概要
+## 1. 要約
 
 TopoFuzzy Viewerの`Analyze`右隣へ`Match`タブを追加し、物体GNGテンプレート照合の
 matcher・validatorパラメータを実行中に調整できるようにした。
 画面本体と型・parameter定義は新規の`features/templateMatching`配下へ分離した。
-
-## 変更内容
 
 - 評価設定を`Roll tolerance`、`Pitch tolerance`、`Shape tolerance`、`Minimum visible ratio`、
   `Scale tolerance`、`Contradiction limit`、`Recognition threshold`、`Confirmation time`の8項目へ整理する。
@@ -28,7 +26,9 @@ matcher・validatorパラメータを実行中に調整できるようにした�
 - `viewer_stack.launch.py`から専用RPCノードを起動する。
 - タブ数に応じてタブ列の幅を自動配分し、5タブを1行に維持する。
 
-## 挙動影響
+## 2. 条件・検証
+
+**挙動影響**
 
 - 照合ノードを再起動せずに形状許容、可視率、scale、反証、認識しきい値、確定時間を調整できる。
 - node次数をshape scoreから外し、法線と`rho`だけを固定比率で合成する。
@@ -41,8 +41,6 @@ matcher・validatorパラメータを実行中に調整できるようにした�
 - topic、message定義の変更はない。内部RPC topicは既存の
   `/viewer/internal/rpc/request`と`/viewer/internal/rpc/response`を使用する。
 
-## 検証
-
 - frontend: `npm run lint`成功。error・warningなし。
 - frontend: `npm run build`成功。2343 modulesをproduction buildした。
 - headless ChromeでMatch dialogに4グループ、number入力8個、slider 8個だけが表示されることを確認した。
@@ -53,7 +51,7 @@ matcher・validatorパラメータを実行中に調整できるようにした�
 - 隔離`ROS_DOMAIN_ID=212`で8 parameterの取得、正常更新、範囲外値の拒否を確認した。
 - 隔離`ROS_DOMAIN_ID=213`で専用RPCを起動し、設定取得応答が新8 parameterだけを含むことを確認した。
 
-## 実行条件
+**実行条件**
 
 既存の`viewer_stack.launch.py`を再起動すると専用RPCノードが含まれる。
 matcherとvalidatorは`object_template_matching.launch.py`などで別途起動しておく。

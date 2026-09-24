@@ -1,11 +1,9 @@
 # 2026-08-31 - ROS物体GNGの圧縮保存と元点群分離
 
-## 概要
+## 1. 要約
 
 ROSで学習した物体GNGをcompact JSONのgzipとして保存し、必要な場合だけ元`PointCloud2`を
 binary-compressed PCDへ分離保存する方式へ変更。
-
-## 変更
 
 - 保存サービス名を`/save_gng_data`へ変更
 - 保存時の指定を物体名だけとし、UTC日時と物体別通し番号を自動付与
@@ -18,7 +16,9 @@ binary-compressed PCDへ分離保存する方式へ変更。
 - 点群の相対ファイル名、topic、frame、stamp、点数、field定義、色情報の有無をテンプレートへ記録
 - 静的マップ配信ノードと単体HTMLへgzip読込対応を追加
 
-## 操作
+## 2. 条件・検証
+
+**操作**
 
 GNGだけを保存:
 

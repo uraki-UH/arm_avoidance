@@ -1,6 +1,6 @@
 # 2026-09-11 - 単独ノードを含む非平面成分の全保持
 
-## Changed
+## 1. 要約
 
 - `extract_components(map, plane_clusters)`で全平面未所属ノードを抽出。平面ノードを経由する成分の統合なし。
 - 孤立点、平面にだけ接続する単独点、接続消失で単独化した点にも成分IDを付与。
@@ -12,14 +12,12 @@
 - 成分IDはフレーム内の識別用。単独成分の追加に伴う既存成分ID・表示色の変化の可能性。時系列の永続IDではない点に注意。
 - Viewerが`/nonplane_components`から生成する表示には単独成分も到達。`surface_component.min_nodes`は独立Marker経路専用であり、Viewer転送経路への新しい表示フィルタの追加なし。
 
-## Topics / Params / Messages
+## 2. 条件・検証
 
 - トピック名とメッセージ形式の変更なし。C++の`extractor_options`は廃止、外部の直接呼出しは修正・再ビルドが必要。
 - 通常YAMLとlaunchの`nonplane_component.min_component_nodes`指定は削除。
 - 旧`nonplane_component.min_component_nodes`はCPUノードで読込互換のため宣言のみ保持。1以外の値は起動時警告、抽出結果への影響なし。
 - `nonplane_component.direct_enabled`と独立Marker表示の`surface_component.min_nodes`は維持。
-
-## Verification
 
 非平面6件、平面・曲面の回帰テストを維持。専用ROSスクリプト129行は削除し、全被覆・重複・属性一致の検査を既存`boundary_candidates_ros_test.py`へ統合。
 以下は既存Docker内。今回の整理では本体変更・再ビルドなし。

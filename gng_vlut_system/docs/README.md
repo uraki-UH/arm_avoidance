@@ -5,7 +5,9 @@
 ## 主な文書
 
 - [CPU版GNGの高速化報告：要約・処理時間・測定条件](./gng_cpu_optimization_summary_20260924.md)
-- [把持推定・ファジィルールの現状と全体フロー](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
+- [把持推定・ファジィ評価の調査要約（2026-09-13）](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
+- [GNG・Viewer・入力経路の作業要約（2026-09-02）](./WORK_LOG_2026-09-02.md)
+- [可視化・把持・実機接続の開発要約（2026-07-29〜08-14）](./RELEASE_SUMMARY.md)
 - [把持ファジールール統合設計書：入力・実装契約・145ルール・拡張指標](./designs/fuzzy_grasp_design.md)
 - [把持ファジィ評価の相談用スライド（PowerPoint・PDF）](./presentations/README.md)
 - [TECHNICAL_SPEC.md](./TECHNICAL_SPEC.md)
@@ -26,7 +28,7 @@
 1. 実際に進める順序がある作業は `TASK_LIST.md` に置く。
 2. まだ決め切っていない候補は `TASK_CANDIDATES.md` に置く。
 3. 仕様として固定した内容は `TECHNICAL_SPEC.md` に置く。
-4. 仕様変更が入ったら、まず `releases/` に 1 件のリリースノートを追加する。
+4. 報告は[短い書式](RELEASE_NOTE_TEMPLATE.md)へ統一。同じ作業の続報は既存ノートへ統合し、独立した変更だけ`releases/`へ追加する。
 5. 仕様書の変数一覧、トピック一覧、フローチャートは実装と一致させる。
 6. 変更の影響が launch 引数、topic、service、message field に及ぶ場合は、必ず仕様書も更新する。
 7. 先行研究を調べたら `RELATED_WORK.md` に「手法 / 本プロジェクトとの差分 / 引用する場面」で追記する。

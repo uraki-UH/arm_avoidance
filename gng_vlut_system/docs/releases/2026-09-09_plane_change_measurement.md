@@ -1,31 +1,21 @@
 # 2026-09-09 - 実GNG入力における差分更新適性の計測
 
-## Summary
+## 1. 要約
 
 稼働中のGNGから300連続フレームを購読し、299組の隣接フレームを比較。
 ノード位置の変更率は平均91.25%、法線は95.07%、エッジ変更率は0.309%。
 今回の入力では、幾何量全体の厳密な差分更新よりも接続構造の差分更新が有望。
 
-## Changed
-
 検出アルゴリズム・GNG学習・設定の変更なし。購読専用計測ツールの追加のみ。
-
-## Added
 
 - `ais_gng_cpu/src/ais_gng/test/measure_plane_change.py`
 - `ais_gng_cpu/src/ais_gng/test/test_measure_plane_change.py`
 - [連続フレームの集計・各フレーム差分JSON](2026-09-09_plane_change_measurement.json)
 
-## Fixed
-
 最初の受信中解析方式ではフレーム飛びが発生したため、CDRバイト列を保持し、購読終了後に解析する方式へ変更。
 最初の飛びありデータは、以下の結果に不使用。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 - グラフ比較は配列添字ではなく永続ノードID基準。
 - 平面の`node_indices`は同じheader stamp・frame_number・frame_idのグラフと対応付け。
@@ -35,12 +25,8 @@
 - クラスタの影響範囲は、所属・内部エッジ・フィット結果の変化と1ホップ入力変化を使用。
 - 受信バッファはグラフ最大300件、平面最大600件が既定。解析前にROSノードを終了。
 
-## Topics / Params / Messages
-
 購読対象は`/topological_map`と`/plane_clusters`。新規データトピックのpublishなし。
 `--map-topic`と`--plane-topic`による変更が可能。既存トピック・パラメータの変更なし。
-
-## Verification
 
 ### 対象と品質
 
@@ -110,7 +96,7 @@ python3 -B -m unittest discover -s ais_gng_cpu/src/ais_gng/test \
 
 計測・確認用プロセスは終了済み。一時JSONは削除済み。ユーザーのGNG・viewer・rosbagに対する起動・停止操作なし。
 
-## Risk / Notes
+**制約**
 
 - 約10秒の一つの実入力区間の結果。他の物体・学習段階・設定へそのまま一般化しない。
 - ノードIDが観測間に再利用された場合、移動との厳密な区別は不可。GNG内部の生成世代情報を取得する計測ではない。

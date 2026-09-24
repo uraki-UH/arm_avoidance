@@ -1,15 +1,11 @@
 # 2026-08-14 - Stable object grasp voxel matching
 
-## Summary
+## 1. 要約
 
 `SAFE_TERRAIN,HUMAN,CAR`を除いた時間的に安定したGNGボクセルを物体候補とし、既存グリッパ体積graphで把持候補TCP Poseを照合できるようにした。
 
-## Changed
-
 - `topological_grid_node`を、現在点群の支持があり、`SAFE_TERRAIN`、`HUMAN`、`CAR`以外のlabelを持つセルの物体候補抽出へ変更した。
 - 把持占有評価のROS候補生成未接続という仕様記述を、実装済みtopic契約へ更新した。
-
-## Added
 
 - 整数量子化済みoffsetとhash占有集合を使う`GraspVoxelMatcher`。
 - `grasp_voxel_matcher_node`と`grasp_voxel_matcher.launch.py`。
@@ -18,15 +14,13 @@
 - 一意なGNG node generationによる非孤立セル保持と、3-edge cycleから三角形面セルを生成する処理。
 - 把持候補から除外した孤立セルの表示・診断専用`isolated_topic`とViewerの赤色初期表示。
 
-## Fixed
-
 - `topological_grid_node`のlaunch、ノード、共通グリッド定義で既定セルサイズを`0.01 m`へ統一した。
 
-## Removed
+**削除**
 
 - `topological_grid_node`の`included_labels`。候補を特定labelだけへ限定できないようにし、`excluded_labels`だけを除外条件とする。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 各セルは直近100同期更新の非除外label出現回数と点群input更新回数を独立に保持する。
 - `DEFAULT`、`WALL`、`UNKNOWN_OBJECT`は同じ物体候補占有として履歴を合算し、相互のlabel変更では確定状態を解除しない。
@@ -44,8 +38,6 @@
 - matcherは既定で500 ms周期、最大500アンカー、12 yaw姿勢、上位50候補に制限する。
 - `environment_voxels_topic`未指定時は、物体候補占有を禁止領域検査にも使用する。
 
-## Topics / Params / Messages
-
 - `topological_grid_node`: `pointcloud_topic`、`pointcloud_timeout_sec`、`excluded_labels`、`require_input_points`、`minimum_input_points_per_voxel`、`neighbor_radius_cells`、`history_window_size`、`maximum_missing_label_updates`と、通常・孤立セル別のlabel・点群履歴最低カウントparameterを追加。
 - edge補間parameter: `edge_inference_enabled`、`edge_max_length`、`edge_inferred_topic`。
 - node identity parameter: `node_identity_retention_enabled`、`node_identity_max_displacement`。
@@ -55,8 +47,6 @@
 - matcher入力: `object_voxels_topic`、`environment_voxels_topic`、`required_graph_topic`、`undersize_graph_topic`、`forbidden_graph_topic`。
 - matcher出力: `geometry_msgs/PoseArray`と`std_msgs/String` JSON summary。
 - 新規messageは追加していない。
-
-## Verification
 
 - Docker内で`voxel_msgs`、`ais_gng`、`grasping_system`を`BUILD_TESTING=ON`でビルド。
 - `grasp_voxel_matcher`、`grasp_pose_occupancy_evaluator`、`gripper_volume_graph`、`test_topological_grid_assignment`が成功。
@@ -73,7 +63,7 @@
 - 実`/topological_map`と`/downsampling/unknown`を同期入力し、1479ノード中311ノードが点群支持条件を満たして216セルだけが出力候補になることを確認。
 - 分離したROS domainの合成edgeで、直接観測2セル、補間3セル、和集合5セルをROS topic本文から確認。
 
-## Risk / Notes
+**制約**
 
 - 現行POCは固定姿勢集合による直接照合であり、局所法線からの3次元姿勢生成と物体ID分離は未実装。
 - 実点群で処理上限を超える場合は、接触posting indexによる逆引きへ置き換える。

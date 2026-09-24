@@ -1,30 +1,24 @@
 # 2026-09-15 - 把持幅と向きの形状Marker
 
-## Summary
+## 1. 要約
 
 把持補正の描画を文字からグリッパの線枠と進入矢印へ変更。同じ`/grasp_pose_refined/markers`を使用。
-
-## Changed
 
 - `refined_gripper`: 左右の指内面の矩形と幅を結ぶLINE_LIST。内面間隔が把持幅、指内面の幅・長さは既存設定値。
 - `refined_approach`: TCPの+Z側から原点へ向かうARROW。把持の進入方向は-Z。
 - 幅計算済みは`refined_pose`の位置・回転を両Markerへ適用。幅未計算は元候補への軸補正後の矢印のみ。
 
-## Added
-
 回転姿勢での40 mmの把持幅、61 mmの指内面幅、88.3 mmの指長、未確定破線、衝突色、
 無効姿勢・幅未計算時の表示、文字なしを検証するROS結合テスト。
 
-## Fixed
-
 文字を読まないと把持幅・向きが分からなかった描画。
 
-## Removed
+**削除**
 
 このトピックのTEXT_VIEW_FACINGと、旧`refined_contacts`・`refined_width`の描画。
 一般の文字Markerに対するViewerの対応は維持。
 
-## Behavior Impact
+## 2. 条件・検証
 
 | 状態 | 描画 |
 | --- | --- |
@@ -43,12 +37,8 @@
 ros2 launch gng_vlut_system grasp_candidate_refinement.launch.py
 ```
 
-## Topics / Params / Messages
-
 トピック追加・メッセージ形式変更・新パラメータなし。`/grasp_pose_refined/markers`は従来どおりMarkerArray。
 IK・接触・衝突判定や計算予算は変更なし。`opening_width`は数値に保持し、描画幅には不使用。
-
-## Verification
 
 - Docker Releaseビルド・幾何8件成功。隔離domain 218のROS結合確認で従来の40/46 mmの把持幅・開口・IK成立と、上記の実寸・姿勢・破線・文字なしを確認。
 - 実点群・候補を別名補正ノードへ入力。WS上で破線枠1件と矢印6件、文字0件を取得。接触対・IK成立は0件のままで、未成立候補の描画確認。
@@ -94,7 +84,7 @@ timeout -s INT -k 5s 120s npm run build -- --configLoader runner --outDir /tmp/g
 専用ポート19095の待受け消滅、一時スクリプト・YAML・ROSログ・Chromeプロファイル・ビルド出力の削除を確認。
 既存ROS・ブラウザの起動停止操作なし。通常の把持補正ノードは検証前後とも未起動。
 
-## Risk / Notes
+**制約**
 
 - 線枠は既存寸法に基づく指内面の概略表現。URDF全メッシュ・指の厚み・掃引占有体積の描画ではない。
 - 観測幅だけの破線は、接触位置の確定や把持成功の表示ではない。IK成立色も腕全体の経路・衝突安全の保証ではない。

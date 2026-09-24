@@ -1,43 +1,29 @@
 # 2026-09-24 - Viewerへの人・車の確定分類表示
 
-## Summary
+## 1. 要約
 
 `/home/uraki/uraki_ws/ToPoFuzzy-Viewer`で環境GNGの確定分類を所属ノードの色へ反映。レイヤー内の件数とクラスタ形状の切替を追加。
-
-## Changed
 
 - 確定クラスタの`label`が4ならHuman、5ならCarとして所属ノードを表示。元のノードの幾何ラベル・座標・エッジは保持。
 - Humanは赤紫`#d946ef`、Carは青紫`#8b5cf6`。分類解除後は従来のノード色へ復帰。
 - Human／Carの表示チェックも所属ノードへ適用。有効な境界・把持属性との既存OR表示と色優先順位は維持。
 
-## Added
-
 - レイヤー欄に確定クラスタ件数`Human: N / Car: N`。
 - `Clusters`切替。ONで既存の人の円柱・車のボックスを表示。
 - 実際のGraphRendererと受信デコーダーを使う回帰テスト`frontend/tests/human_car_display.test.mjs`。
 
-## Fixed
-
 環境GNGの所属配列添字とViewer内のノードIDの取り違え。受信時に`/topological_map`だけ添字からIDへ正規化。元からID方式の非平面・テンプレートGraphは変更対象外。バイナリversion 1/2と互換JSONの両経路へ適用。
 
-## Removed
-
-なし。
-
-## Behavior Impact
+## 2. 条件・検証
 
 - Streamsで`/topological_map`を選択し、受信した確定分類を表示。トピックの自動選択なし。
 - `Clusters`の既定OFFと既存設定を保持。所属ノードの分類色は形状表示のON/OFFとは独立。
 - 単色・目標・境界・把持・非平面成分等の既存色指定を維持。元の`nodes[].label`は分類値で上書きしない。
 - Frontendの更新とブラウザ再読み込みで適用。今回分のROS再ビルド・ノード再起動は不要。
 
-## Topics / Params / Messages
-
 追加・削除なし。ROSメッセージ、WSバージョン、配信バイト列の変更なし。受信後の`GraphData.clusters[].nodeIds`と検査用スナップショットはノードID方式。
 
 [Graph Stream仕様](../../../ToPoFuzzy-Viewer/common/ws_protocol_v2.md#graph-stream)と[Backend API](../../../ToPoFuzzy-Viewer/doc/BACKEND_API.md#streamgraph)を参照。
-
-## Verification
 
 Frontendディレクトリで実行:
 
@@ -66,7 +52,7 @@ docker exec gng_cpu_container bash -lc 'source /opt/ros/humble/setup.bash && sou
 
 ビルド成功、既存ソース・外部依存の警告あり。機能テスト3/3成功。追加の全CTestは5/11成功、未変更Backendのcopyright・cpplint・flake8・lint_cmake・pep257・uncrustifyが失敗。全体チェック成功としては扱わず、今回の変更に無関係な一括整形は未実施。
 
-## Risk / Notes
+**制約**
 
 - 入力済みの確定結果の可視化であり、分類器の精度向上や実データの正解率の検証ではない。実ROSから実ブラウザ画面までの目視確認は未実施。
 - 添字の正規化対象はトピック名が完全一致の`/topological_map`。任意の別名への自動適用なし。IDと添字の数値だけによる推測なし。

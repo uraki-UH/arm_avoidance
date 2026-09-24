@@ -1,38 +1,28 @@
 # 2026-09-16 - 境界ノード周辺への重点学習
 
-## Summary
+## 1. 要約
 
 前フレームの低次数境界ノード周辺へのガウス距離重み付き重点学習を追加。[仕様](../../../ais_gng_cpu/docs/boundary_attention.md)。
-
-## Changed
 
 `graspnet.yaml`で境界重点を有効化。対象半径0.03 m、配分率0.2、有効期間0.5 s。
 既存の把持重点と正規化重みを混合し、通常方式の学習枠を維持。
 ユーザー編集の`node.interval`および作業中の支持統計設定変更を維持。
 
-## Added
-
 重み付き重点入力API、境界最近傍検索、失効条件、配分混合、回帰テスト。
-
-## Fixed
 
 新たな重み付き経路でも、入力範囲フィルタ後の添字と重みの対応を維持。
 
-## Removed
+**削除**
 
 既存機能・設定の削除なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 重点学習は位置・エッジを更新するが観測統計へ非計上。境界候補の数・点群分布により追加処理時間が変化。
 稼働中GNGへの自動反映なし。更新済みバイナリとYAMLを使う再起動が必要。
 
-## Topics / Params / Messages
-
 新トピック・メッセージなし。起動時パラメータ`enable_boundary_attention`、`boundary_attention.radius`、`boundary_attention.ratio`、`boundary_attention.timeout_sec`を追加。
 CPU API `gng_set_weighted_priority_input`を追加。GPU・WASMへの追加なし。
-
-## Verification
 
 既存コンテナ内、`/ros2_ws`で実行:
 
@@ -51,7 +41,7 @@ ctest --test-dir /ros2_ws/build/ais_gng -R 'test_(boundary_attention|grasp_atten
 - インストール済みYAMLの追加4設定と共有ライブラリの公開シンボルを確認。`git diff --check`成功。
 - すべて有限のビルド・テストコマンドは終了済み。ROSノード・再生プロセスの新規起動／既存プロセスの停止なし。
 
-## Risk / Notes
+**制約**
 
 境界候補は物体境界の確定情報ではない。重点によるノイズ強調や前フレーム位置のずれの可能性あり。
 実点群での小物分離改善、最適半径・配分率、全体実行時間は未検証。

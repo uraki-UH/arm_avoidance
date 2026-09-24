@@ -1,11 +1,9 @@
 # 2026-09-09 - 観測APIの3関数への整理
 
-## Summary
+## 1. 要約
 
 観測入力の一括設定、フレーム情報取得、ノード角度範囲取得の3関数へ整理。
 原点と画素参照の個別設定順序への依存を解消。観測支持や境界判定の方式変更なし。
-
-## Changed
 
 - `gng_set_observation_input(const gng_observation_input *input)`：原点と任意の画素ビュー・角度表の一括設定。
 - `gng_get_observation_frame()`：原点・フレーム番号に加え、`pixel_hit_num`・`ray_num` の取得。
@@ -13,17 +11,13 @@
 - ROS側は原点と画素参照を準備後、公開APIを一度だけ呼ぶ方式。
 - 旧画素配列専用の内部ポインタ・個数・学習時分岐を削除。連続配列もpixel形式のビューで入力可能。
 
-## Added
-
 - 一括入力構造体 `gng_observation_input`。
 - 旧設定の残存、原点のみへの置換、無効原点、null入力、無効な表・ビューの回帰検査。
 - 次入力の設定後も直近出力の原点・フレーム番号・参照件数を保持する検査。
 
-## Fixed
-
 原点だけの設定呼び出しによって、先に設定した画素参照が意図せず消える呼び出し順依存。
 
-## Removed
+**削除**
 
 - `gng_set_observation_origin`
 - `gng_set_observation_pixels`
@@ -32,7 +26,7 @@
 
 上記の互換ラッパー・公開シンボルは維持しない方針。利用側は新APIへの移行が必要。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - `gng_setPointCloud` → `gng_set_observation_input` → `gng_exec` の順序。
 - 設定ごとの一括置換。原点のみの設定では以前の画素参照を継承しない挙動。
@@ -43,12 +37,8 @@
 - 次入力・学習完了・支持設定変更で借用は失効。次入力設定による直近出力の変更なし。
 - 追加の全点コピー・全点探索なし。次数による境界候補判定への変更なし。
 
-## Topics / Params / Messages
-
 ROSトピック・パラメータ・メッセージ定義の追加変更なし。
 `node_observation_support` のversion=5、統計トピックの6要素も従来どおり。
-
-## Verification
 
 既存コンテナ `gng_cpu_container` の隔離先 `/tmp/gng-observation-api.GnXKN5` で検証。
 通常の `/ros2_ws/install` への上書きなし。
@@ -98,7 +88,7 @@ timeout --signal=INT --kill-after=10s 65s python3 \
 - 本作業からの既存GNG・Viewer・HTTPサーバー・ROSデーモンの停止や再起動なし。既存4コンテナの稼働維持。
 - 最終確認時に本作業外でのGNG起動条件変更とbag再生追加を観測。その状態は変更せず、検証用プロセスの不在のみ確認。
 
-## Risk / Notes
+**制約**
 
 旧関数削除と `gng_observation_frame` の構造変更を伴うABI非互換。
 ライブラリと利用側の双方の再ビルドが必要。旧バイナリと新ライブラリの混在不可。

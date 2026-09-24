@@ -16,7 +16,7 @@
 | 将来のIF-THEN候補を探す | [第3章：R001〜R145](#rule-catalog) |
 | ルールに必要なtopic・metric・物体仮説 | [第4章：拡張入力カタログ](#topic-metrics) |
 | HTML試作からの改善論点 | [第5章：改善案・相談事項](#open-design) |
-| 現在のROS処理とHTML既定12ルール | [現行実装の調査資料](../FUZZY_GRASP_CURRENT_OVERVIEW.md) |
+| ROS・HTML処理の調査要約と検証 | [実装の調査資料](../FUZZY_GRASP_CURRENT_OVERVIEW.md) |
 | 現行メッセージのfieldと無効値・出力手順 | [評価メッセージ仕様](../../../grasping_system/docs/fuzzy_evaluation_metrics.md) |
 
 前半の第1・2章が初期の設計検討、後半の第3・4章が拡張候補の参照集。145件を一括実装する計画ではない。
@@ -1111,7 +1111,7 @@ rule_update_confidence
 
 ## 5. HTML調査由来の改善案・相談事項
 
-[現行実装調査の第10章](../FUZZY_GRASP_CURRENT_OVERVIEW.md#10-検証結果)に対応する未実装の改善案。数値再現結果は調査資料側に保持し、設計判断は本章で更新。
+[実装調査の条件・検証](../FUZZY_GRASP_CURRENT_OVERVIEW.md#2-条件検証)に対応する未実装の改善案。数値再現結果は調査資料側に保持し、設計判断は本章で更新。
 
 ### 5.1 端点・法線類似度の改善案
 

@@ -1,6 +1,6 @@
 # CPU GNG・平面クラスタ直接接続
 
-## 変更内容
+## 1. 要約
 
 - CPU版`ais_gng`の`gng_exec()`後に、同一プロセス・同一コールバック内で`Clusterizer::update()`を実行する経路を追加した。
 - 平面クラスタ処理のための`/topological_map` publish・DDS serialize・subscribe・deserialize・別executor起床を削除した。`/topological_map`自体は既存利用者向けに従来どおりpublishする。
@@ -13,7 +13,9 @@
 - 平面クラスタの所属変更を追跡し、解放・取り込み・移動・分割・併合のいずれも発生していない定常フレームで、全ノードからの平面再フィットを重複実行しないようにした。判定条件としきい値は変更していない。
 - CPU GNGが計算済みの`rho=acos(mean(abs(n_i・n_j)))`を新規平面クラスタの種順序に再利用し、平面クラスタ側の重複した全edge法線内積走査を削除した。`rho`は所属・保持・分割・併合のハード判定には使わない。
 
-## パラメータ
+## 2. 条件・検証
+
+**パラメータ**
 
 - `plane_cluster.direct_enabled` (CPU版既定: `true`)
 - `plane_cluster.output_topic` (既定: `/topological_planar_clusters_incremental`)
@@ -23,8 +25,6 @@
 - 従来経路へ戻す場合はCPU GNGで`plane_cluster.direct_enabled:=false`とし、`ais_gng.launch.py`で`plane_clusters_input_topic:=''`を指定する。
 - `ais_gng.launch.py`:`start_plane_cluster` (既定: `true`)。平面クラスタの描画が不要な場合は`false`にする。
 - `ais_gng.launch.py`:`plane_clusters_input_topic` (既定: `auto`)。CPU版では内蔵出力を使い、GPU版では空文字として独立計算する。
-
-## 検証
 
 - Releaseビルド: `ais_gng`、`grasping_system`成功。
 - 機能テスト: `test_plane_cluster_incremental` 9件、`grasping_system` 4件を含め成功。

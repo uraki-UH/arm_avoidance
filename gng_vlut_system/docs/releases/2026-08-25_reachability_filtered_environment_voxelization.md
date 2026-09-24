@@ -1,29 +1,23 @@
 # 2026-08-25 - Reachability filtered environment voxelization
 
-## Summary
+## 1. 要約
 
 VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のreachability範囲内だけで構築できるようにした。
-
-## Changed
 
 - `point_to_voxel_node`の全量`PointCloud2`コピーと変換済み点vectorを廃止した。
 - 点をロボット基準座標系へ逐次変換し、範囲内の点だけを直接voxel IDへ集約する構成へ変更した。
 - 非有限値、範囲外点、同一voxelの重複をpublish前に除外する。
 - 範囲内voxelの重複除去を再利用可能なdense bitmapで高速化し、過大領域では再利用hashへfallbackする。
 
-## Added
-
 - TF変換後のreachability AABBと軸別marginによる早期除外。
 - 入力点数、採用点数、範囲外点数、非有限点数、出力voxel数、callback処理時間のthrottleログ。
 - reachability境界と逐次集約処理の単体テスト。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - `point_to_voxel.launch.py`と`point_to_vlut.launch.py`ではreachability filterが既定で有効になる。
 - nodeを`ros2 run`で直接起動した場合は後方互換のためfilterが無効になる。
 - 範囲内に点がない入力でも空の`voxel_msgs/Voxel`をpublishし、下流の占有を消去できる。
-
-## Topics / Params / Messages
 
 - topic名とmessage型の変更なし。
 - `enable_reachability_filter`: reachability filterのON/OFF。
@@ -32,8 +26,6 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 - `min_reachability_z`、`max_reachability_z`: ロボット基準座標系のz範囲、単位m。
 - `reachability_margin_x`、`reachability_margin_y`、`reachability_margin_z`: 把持物の張り出し、位置誤差、移動台車の対象移動範囲を含む軸別margin、単位m、既定値0.2 m。
 - `max_dense_voxel_num`: dense bitmapに割り当てる最大voxel数、既定値8,000,000。超過時は再利用hashへ自動fallback。
-
-## Verification
 
 - 一時Dockerコンテナ内で`colcon build --symlink-install --packages-up-to gng_vlut_system --cmake-args -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release`: 成功。
 - 一時Dockerコンテナ内で`colcon test --packages-select gng_vlut_system`: 11件のgtest成功。
@@ -44,7 +36,7 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 - 同一binaryのhash fallback平均6.67 msに対し、dense bitmap平均6.17 msで約7.5%短縮。
 - 定常RSS瞬間値はhash fallback約42 MiB、dense bitmap約52 MiB。DDS受信bufferを含む参考値。
 
-## Risk / Notes
+**制約**
 
 - 範囲値は`target_frame_id`の座標系で評価する。launchの既定値は`ToPoDualArm.yaml`のTCPサンプリング範囲を各軸0.2 m拡張した領域に対応する。
 - 別ロボットまたは別GNG profileでは、対象configのreachability範囲に合わせてlaunch引数を指定する必要がある。
@@ -52,7 +44,7 @@ VLUTへ入力する環境占有ボクセルを、ロボット基準座標系のr
 - 移動マニピュレータでは点群時刻のTFにより切り出し領域が現在のrobot baseへ追従し、marginが計画上の先読み移動範囲になる。
 - rosbag再生周期は測定中に約6〜16 Hzで変動したため、CPU使用率は実測時の参考値とし、処理比較にはcallback時間を用いる。
 
-## World bucket feasibility benchmark
+**World bucket feasibility benchmark**
 
 複数ロボットで点群索引を共有する方式の成立条件確認用として、固定幅world bucketと
 `world_bucket_benchmark_node`を追加した。各bucketは元点を保持し、world AABBによる粗抽出後に

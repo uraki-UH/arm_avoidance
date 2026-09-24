@@ -1,12 +1,10 @@
 # 2026-09-09 - Curved Surface Marker Reuse
 
-## Summary
+## 1. 要約
 
 曲面クラスタの可視化はMarkerArrayを既定として継続。
 表示名は `/curved_surface_clusters/markers`、ノードは球、実エッジは線分のまま。
 色分けと表示形状を保ち、ViewerでのGPUリソース再生成を抑制。
-
-## Changed
 
 - `surface_model.enable_markers=true`、`surface_model.enable_graph=false` が既定。
 - 追加TopologicalMapのpublisher作成・メッセージ生成・配信を既定では省略。
@@ -15,25 +13,19 @@
 - 材質を使い回し、色・透明度だけ更新。geometryとmaterialを別々の寿命で解放。
 - 実線に不要なcomputeLineDistancesを省略。
 
-## Added
-
 球の直径・位置・色、線分色・要素数、空配列、再増加、GPUオブジェクト同一性、最終解放の回帰テスト。
-
-## Fixed
 
 材質変更に巻き込まれた生存中geometryの破棄、ノード数の揺れによる毎回のInstancedMesh再生成。
 
-## Removed
+**削除**
 
 通常表示でのTopologicalMap重複配信。比較用の実装は `enable_graph=true` の任意機能として維持。
 
-## Behavior Impact
+## 2. 条件・検証
 
 Viewerでは旧 `/surface_models/markers` のレイヤーを外し、`/curved_surface_clusters/markers` を選択。
 ROSノードは次回起動から新しい既定値。Viewerはブラウザ再読み込みで最適化を反映。
 抽出ロジック、モデル所属、Markerの名前空間/id、球・線分サイズ、配色、更新周波数2 Hzは変更なし。
-
-## Topics / Params / Messages
 
 | トピック | 既定状態 |
 | --- | --- |
@@ -48,8 +40,6 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
 ```
 
 別起動: `ros2 launch ais_gng surface_models.launch.py`。通常起動との重複実行は不要。
-
-## Verification
 
 - ais_gng Release build、C++14件、frontend回帰テスト2件、lint/buildに成功。
 - 隔離ROS_DOMAIN_ID=198の通常launchで `[graph, models, markers] = [0,1,1]`。
@@ -68,7 +58,7 @@ desktop/mobileの双方で20更新のGPU buffer生成/破棄0/0、32 draw calls�
 カメラ移動による画素変化も確認。描画単体中央値はdesktop 2.0 ms、mobile 1.5 ms。
 これは保存スナップショットの再送であり、動的な再分割や長時間運転の性能を保証するものではない。
 
-## Risk / Notes
+**制約**
 
 全量Marker転送と描画呼び出し数は削減していない。複数レイヤーの重複表示や高密度ノードの描画負荷は別途残る。
 容量はMarkerの生存中に縮小せず、削除・アンマウント時に解放。最大容量は過去最大要素数の2倍未満が目安。

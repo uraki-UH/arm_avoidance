@@ -1,10 +1,10 @@
 # 2026-07-29 - Remove combined score
 
-## Summary
+## 1. 要約
 
 `min_singular_value * joint_limit_score`だけを表していた旧統合スコアを削除した。
 
-## Removed
+**削除**
 
 - GNGノードの内部状態と計算処理
 - 把持候補の`metric_names/metric_values`
@@ -12,14 +12,14 @@
 - 新規GNGバイナリへの保存
 - 関連スクリプトと評価指標文書
 
-## Compatibility
+## 2. 条件・検証
+
+**互換性**
 
 - GNGバイナリversionを9へ更新する。
 - version 4から8の既存ファイルは旧fieldの4バイトを読み捨てて継続利用できる。
 - version 9は旧fieldを保存しないため、ノードあたり4バイト小さくなる。
 - `/evaluation_metrics`のschema revisionを5へ更新する。
-
-## Verification
 
 - `combined_score`の実コード参照が残っていないことを確認
 - `gng_vlut_system`のビルド成功

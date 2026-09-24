@@ -2,38 +2,30 @@
 
 後続変更: ノード半径方式を[物体候補AABB＋余白方式](2026-09-15_grasp_attention_aabb.md)へ置換。以下の半径・kd-treeの記載は初期実装の記録。
 
-## Summary
+## 1. 要約
 
 把持候補ノード近傍の実測点へ学習回数を配分する、既定OFFのCPUオプションを追加。[現行仕様・設定・起動方法](../../../ais_gng_cpu/docs/grasp_attention.md)を正本とする。
 
-## Changed
-
 総学習回数を固定したまま、通常学習と重点更新を混合。通常枠内の既存混合比、勝者選択、実エッジ更新、学習係数は維持。
-
-## Added
 
 - launch引数`enable_grasp_attention`。`auto`はYAML、`true`/`false`は明示上書き。
 - CPUライブラリの`gng_set_priority_input`。次の学習1回だけの実測点添字指定。
 - 候補中心のkd-treeによる厳密半径検索。点群の追加ボクセル化・ROS再送なし。
 - 候補の空入力・受信停止・時刻不一致・TF失敗・該当点なしの場合の通常学習復帰。
 
-## Fixed
-
 重点再学習を独立観測として数えないよう、重点分を共分散・支持統計・観測方向件数・統計用勝者イベントから除外。通常学習枠の既存統計は維持。
 
-## Removed
+**削除**
 
 既存オプション・APIの削除なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 既定OFFでは候補購読・追加TF購読・近傍検索なし。ON時のみ学習分布と通常統計の更新回数が変化。初期値は半径0.03 m、重点比率0.5、有効期間0.5秒。全項目は起動時設定。
 
-## Topics / Params / Messages
-
 入力は既存`/grasp_pose_cands/Tmap`（`ais_gng_msgs/msg/TopologicalMap`）。新ROSトピック・メッセージなし。新パラメータは仕様書の表を参照。既存ライブラリ構造体の変更なし、新CPU ROSノードには更新したライブラリが必要。
 
-## Verification
+<a id="verification"></a>
 
 Dockerで以下を実行。
 
@@ -66,6 +58,6 @@ launch引数のインストール先での確認（ノード起動なし）:
 docker exec -w /ros2_ws gng_cpu_container bash -lc 'source /ros2_ws/install/setup.bash && timeout -s INT -k 5s 30s ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml enable_grasp_attention:=true --show-args'
 ```
 
-## Risk / Notes
+**制約**
 
 実物の把持成功率・最適パラメータは未検証。近傍検索分の追加コストあり。現在は単一入力点群専用、複数入力は通常学習へ復帰。候補の運動予測・未観測形状生成・ノード密度の強制増加なし。詳細は仕様書を参照。

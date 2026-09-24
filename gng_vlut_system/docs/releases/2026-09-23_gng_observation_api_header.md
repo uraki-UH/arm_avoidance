@@ -1,40 +1,28 @@
 # 2026-09-23 - GNG観測APIのヘッダー分離
 
-## Summary
+## 1. 要約
 
 基本APIから観測用型への依存を分離。観測機能を使うコードだけで`fuzzrobo/libgng/observation_api.h`を指定。
-
-## Changed
 
 - 通常CPU版と実験版`gng_spatial_tree`の観測APIを専用ヘッダーへ移動。
 - API実装、ROSコンポーネントのCPU側、観測・重点入力テストのincludeを更新。
 - 観測APIテストは新ヘッダー単独、重点入力テストは基本・観測両ヘッダーの併用。
 - [観測APIの利用説明](../../../ais_gng_cpu/docs/observation_support.md#ライブラリapi)を更新。
 
-## Added
-
 - `fuzzrobo/libgng/observation_api.h`。基本型の参照用に`api.h`を内包。
-
-## Fixed
 
 - 基本APIしか使わない翻訳単位への、観測角度範囲・画素ビューの推移的なinclude。
 
-## Removed
+**削除**
 
 - `api.h`内の`gng_observation_input`、`gng_observation_frame`、観測用関数3件の宣言。専用ヘッダーへ移動済みで、機能の削除なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 観測APIを利用する外部ソースでは、新ヘッダーの明示的なincludeが必要。
 - 構造体のフィールド・配列・既定値、関数シグネチャ、Cリンケージ、実行処理の変更なし。
 - GPU版の公開ヘッダーは変更なし。ROSコンポーネントの新includeはCPU条件内のみ。
 - 実行時間の改善施策ではなく、公開ヘッダーの依存整理。
-
-## Topics / Params / Messages
-
-変更なし。
-
-## Verification
 
 - 両CPUヘッダー群について、基本ヘッダー単独・観測ヘッダー単独・両方のinclude順2通りの計8コンパイル確認が成功。
 - コンパイラの依存一覧で、`api.h`から観測ヘッダーへの依存がないことを確認。
@@ -79,7 +67,7 @@ timeout -s INT -k 10 60 ctest --test-dir /tmp/gng-observation-api-cPvRHN/ros \
 timeout -s INT -k 10 300 cmake --build /tmp/gng-observation-api-cPvRHN/ros -j 3 --target ais_gng_component_cpu
 ```
 
-## Risk / Notes
+**制約**
 
 - 新ヘッダーは既存の`install(DIRECTORY include/ ...)`対象。通常環境へ反映するビルドでは、利用側より先に`gng_cpu`のビルド・インストールが必要。
 - ROSノード・再生・デーモンの新規起動なし。実点群・Viewerの動作確認とGPUビルドは未実施。

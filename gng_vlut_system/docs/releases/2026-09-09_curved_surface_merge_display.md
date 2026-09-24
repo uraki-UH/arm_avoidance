@@ -1,43 +1,35 @@
 # 2026-09-09 - Curved Surface Merge Display
 
-## Summary
+## 1. 要約
 
 曲面Markerの既定表示を「元平面クラスタを2つ以上統合した非平面モデル」に限定。
 2つの平面パッチから円柱等への統合は許可し、入力パッチ数とモデルの退化判定を区別。
 一般二次曲面が2平面の積だけで低残差を達成するケースを除外。
 後続の境界法線・迂回統合対策は [Curved Surface Sharp Boundaries](2026-09-09_curved_surface_sharp_boundaries.md) を参照。
 
-## Changed
-
 - 平面1パッチと非平面ノードの統合、非平面ノードのみの統合、plane、unknownを曲面Markerの既定表示から除外。
 - 表示対象のノード、実GNG edge、任意のラベル・上位パッチグラフのみ同色で出力。対象外へ変わった既存MarkerにはDELETEを送信。
 - ログに表示対象モデル数 `shown`、表示対象ノード数 `nodes`、推定回数と上限 `fits=N/128` を追加。
-
-## Added
 
 - `surface_model.min_display_plane_patches`、既定2。
 - `/models` JSONの各モデルに `plane_patch_num` と `is_display_candidate`、ルートに `min_display_plane_patches` を追加。
 - 有限時間通信テストに `--params-file` と表示対象の所属・数の検証を追加。
 
-## Fixed
-
 - `F=L1*L2=0` は元の2平面の和集合を表し、滑らかな曲面への統合を示さなくても残差を小さくできた。
 - 正規化座標で一般quadricの対称4x4行列Qを検査。絶対固有値を昇順に並べた2番目が最大値の1e-6倍以内なら、そのquadric候補を除外。
 - 上記は数値的なrank 2以下のモデル除外。入力平面が2パッチという理由で統合を禁止する判定ではない。plane候補は従来どおり別途評価。
 
-## Removed
+**削除**
 
 曲面Markerでの未確定ノードの灰色表示と、単独平面の重複表示。
 元GNG、平面クラスタ、非平面ノード、保存テンプレート自体の削除・変更なし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - フィッティングと表示フィルタは独立。非表示になったモデルの所属や推定結果も `/models` に保持。
 - 任意の `enable_graph=true` によるTopologicalMapは従来の全ノード・モデル所属を保持。今回の表示フィルタはMarkerに適用。
 - `min_display_plane_patches=1` で平面1パッチを含む曲面、0で非平面ノードのみの曲面も表示可能。planeとunknownは値によらず非表示。
 - 学習コアと平面クラスタ抽出は変更なし。許容残差・法線角・推定回数上限の既定値も変更なし。
-
-## Topics / Params / Messages
 
 - 表示: `/curved_surface_clusters/markers`、MarkerArray、既定有効。
 - 診断: `/curved_surface_clusters/models`、std_msgs/String、schema=`surface_region_graph_v1`。追加フィールドのみ。
@@ -45,8 +37,6 @@
 - 既定: `max_patch_rms=0.004` m、`max_point_residual=0.012` m、`max_normal_deg=35`度、`max_model_fits=128`。
 - 通常起動: `ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml`。変更反映には起動し直しが必要。
 - 別起動用のlaunch引数に変更なし。同じ出力トピックへの重複起動は避ける。
-
-## Verification
 
 Releaseビルド成功、`test_surface_model` の19テスト成功。
 30度の折れ目を持つ2平面は修正前の1領域から2平面へ分離。
@@ -84,7 +74,7 @@ mug検証3回と実入力検証1回のlaunch・子ノードはすべてSIGINTで
 実入力検証は7秒間結果を受信できず未完了。終了後のプロセス確認では既存GNGが停止していた。既存GNGへの停止操作なし。
 既存bag再生とViewerは継続。ROSデーモンの新規残存なし。
 
-## Risk / Notes
+**制約**
 
 - 2枚の局所平面を1つの滑らかな曲面で説明することは必要。平面式2個の積だけでは滑らかさや同一物体の証拠にならない、という区別。
 - rank判定は退化モデルの一部への対策。ノイズを含む近退化モデルや一般quadricの過剰な適合を全面的に解決するものではない。

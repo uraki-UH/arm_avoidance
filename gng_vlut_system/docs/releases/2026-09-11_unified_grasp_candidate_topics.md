@@ -1,36 +1,28 @@
 # 2026-09-11 - 上方把持候補トピックの共通化
 
-## Summary
+## 1. 要約
 
 上方把持方式の既定出力をボクセル方式と共通化し、`grasp_joint_candidates.launch.py`の既定入力へ接続。
-
-## Changed
 
 - 上方把持C++ノード、launch、`ToPoDualArm.yaml`の候補・スコア・summary既定出力の統一。
 - 上方把持launchのMarker既定出力を`/grasp_pose_markers`へ変更。
 - 起動ガイド、概要資料、アルゴリズム資料、技術仕様の現行トピック更新。
 
-## Added
-
 - `grasping_system/test/check_top_grasp_topic_integration.py`による合成平面のROS結合確認。
 - 共通出力およびYAML・launch引数を揃えた個別出力の2ケース。
 
-## Fixed
-
 - 上方把持出力と`grasp_joint_candidates.launch.py`既定入力の名称不一致。
 
-## Removed
+**削除**
 
 - 上方方式の旧`/top_grasp_pose_*`既定出力。旧トピックへの互換二重配信はなし。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - 候補推定アルゴリズム、姿勢、スコアの定義、メッセージ型は変更なし。
 - `enable_motion:=false`の意味は変更なし。動作指令は抑制、経路計算は有効。
 - ロボットGNG・TF・候補生成の起動前提は従来どおり。姿勢実現性や計画成功の追加保証はなし。
 - 上方方式とボクセル方式の同時配信は混在の原因。共通出力を使う候補生成は一方式のみ起動。
-
-## Topics / Params / Messages
 
 | 出力 | 既定トピック | 型 |
 | --- | --- | --- |
@@ -41,8 +33,6 @@
 
 既存の`candidate_topic`、`score_topic`、`summary_topic`、`marker_topic`による個別設定は維持。
 名前付きYAMLの出力値がlaunchのパラメータ辞書より優先される既存挙動があるため、比較用の個別出力ではYAMLとlaunch引数の両方を同じ値へ設定。
-
-## Verification
 
 Dockerの`gng_cpu_container`内で、`/ros2_ws/install/setup.bash`の読み込み後に実行。
 
@@ -62,7 +52,7 @@ ROS_DOMAIN_ID=217 ROS_LOCALHOST_ONLY=1 timeout --signal=INT --kill-after=15 90 \
 - 隔離ドメインの検証用launch・子ノードは全停止済み。テスト用一時YAMLは削除済み。
 - 計画ノードを含む実環境のend-to-end動作、実機把持は今回の検証対象外。
 
-## Risk / Notes
+**制約**
 
 - 旧トピックを明示購読するViewer設定・bag設定などは移行が必要。
 - 起動済みノードの既定値は自動更新されないため、切り替え時は候補生成launchの再起動が必要。

@@ -1,31 +1,25 @@
 # 2026-09-15 - Tmap集約L0の配信復旧
 
-## Summary
+## 1. 要約
 
 `/ToPoDualArm/Tmap_static`と同じ元GNGから集約した`/ToPoDualArm/Tmap_vis_L0`を、
 指定の`gng_viewer_bridge.launch.py`だけで配信可能な状態へ復旧。
-
-## Changed
 
 - `ToPoDualArm10000/vis_gng_L0.bin`をVIZGNG4/version 4からVIZGNG5/version 5へ再生成。
 - 同じ生成結果の`vis_gng_static_L0.bin`も更新。既存の150ノード設定を維持。
 - 読込失敗ログへ現在のtrainerでの再生成案内を追加し、成功ログのtopic名を実際の`_L0`表記へ修正。
 - RUN_GUIDEへ元マップ・集約マップの表示先を追記。
 
-## Added
-
 新規ROSノード・launch・トピック・メッセージ・パラメータなし。
-
-## Fixed
 
 `visualization_gng.enabled: true`にもかかわらず、保存データとreaderの形式不一致によって
 集約マップの読み込みがスキップされていた状態。
 
-## Removed
+**削除**
 
 元GNG・VLUT・既存機能の削除なし。旧集約binは`tmp/tmap_l0_20260915/backup/`へ退避済み。
 
-## Behavior Impact
+## 2. 条件・検証
 
 ```bash
 ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
@@ -39,14 +33,10 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 - 起動時は保存済みモデルの読み込みのみ。元マップの再購読・オンライン再学習は追加なし。
 - 既に起動済みのbridgeにはbinの再読込機能がないため、反映には上記launchの再起動が必要。
 
-## Topics / Params / Messages
-
 既存の`visualization_gng.enabled/path_prefix/topic_prefix`を使用。
 両出力とも`ais_gng_msgs/msg/TopologicalMap`、reliable・transient_local。
 `L0`は既存の座標レイヤー0の名称であり、新たな多階層プランナーの導入ではない。
 所属元の安全状態集約・既存軌道変換は従来の実装を継続。
-
-## Verification
 
 - Dockerで現在のbridgeとtrainerをReleaseビルド。
 - オフライン再生成4.24028秒。全10,801ノードの重複なし所属、代表ノード・代表関節角、
@@ -86,7 +76,7 @@ trainer・検証launch PID 1774999と全子ノード・Gateway PID 1775133は終
 検証終了時のSIGINTで初期化中の一部子ノードにexit -2の記録あり。配信検証完了後の意図的停止。
 既存launch PID 1773998と他の既存ROS・コンテナを維持し、停止・再起動操作なし。
 
-## Risk / Notes
+**制約**
 
 - 集約マップは元関節姿勢群の要約。集約ノード間の任意の移動や安全性を保証する経路ではない。
 - binは従来からGit管理外の生成物。今回の更新は作業環境内のファイルに適用。

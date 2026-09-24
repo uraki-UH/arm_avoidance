@@ -1,11 +1,9 @@
 # 2026-09-09 - GNG境界候補のノード属性化
 
-## Summary
+## 1. 要約
 
 CPU版GNGでの低次数境界候補判定と、既存 `/topological_map` 内のノード属性による配信。
 Viewerでは受信属性による既存ノードの色分け。専用トピック、次数再集計、別オーバーレイは不要。
-
-## Changed
 
 - `TopologicalNode.msg` に `bool is_boundary_candidate` を追加。
 - `graspnet.yaml` の `boundary.enable_candidates: true`、`boundary.max_neighbors: 4` による起動時設定。
@@ -14,20 +12,16 @@ Viewerでは受信属性による既存ノードの色分け。専用トピッ�
 - Viewerの専用オーバーレイを撤回し、「Labels → Semantic labels」内の「境界候補」で色分けを切り替え。
   表示UIまで削除した変更の訂正。`BoundaryNodeOverlay.tsx` の再追加なし。
 
-## Added
-
 - `gng_get_node_num_neighbors(node_id)`：内部 `Node::edge_num` の定数時間参照。
   無効ノードの返値は `UINT32_MAX`。
 - ROS属性からWebSocketバイナリへの転送と、フロントエンドでの復元。
 - グラフ差分判定への候補フラグ追加。座標・時刻が同じ場合のフラグ単独更新にも対応。
 - API検査、隔離ROS・WebSocket受信検査、境界属性の復元・更新検査。
 
-## Fixed
-
 GNG内の判定結果をグラフ本体に格納。別トピックとのフレーム対応付けが不要な属性配信。
 並行作業で追加されたグラフバイナリ転送を保持し、その送受信経路にも属性を追加。
 
-## Removed
+**削除**
 
 直前の試作に含まれた以下の専用出力・設定を廃止。
 
@@ -39,7 +33,7 @@ GNG内の判定結果をグラフ本体に格納。別トピックとのフレ�
   表示切り替えはLabels内のSemantic labelsへ統合、HANDLEと同列の複数選択項目。
 - 専用オーバーレイの描画テスト。属性の受信・更新テストは維持。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - GNG学習則、ノード座標、接続、ラベル、平面クラスタ抽出に変更なし。
 - 候補判定は入力点群処理時のみ。入力停止中の追加学習タイマーなし。
@@ -62,8 +56,6 @@ GNG内の判定結果をグラフ本体に格納。別トピックとのフレ�
 - GPU版での候補判定は対象外。未設定のフラグはfalse。
 - 通常の実行先を上書きしない隔離ビルドでの検証。実行中Viewerへの反映は未実施。
 
-## Topics / Params / Messages
-
 追加トピック・追加launch引数なし。既存 `/topological_map` の `nodes[].is_boundary_candidate` を使用。
 
 | YAML設定 | 宣言時既定値 | graspnet.yaml | 用途 |
@@ -80,8 +72,6 @@ WebSocketの `TMG1` バイナリでは、84バイトのノードレコード内�
 ROSメッセージ定義は変更済み。送信側・受信側を同一定義で再ビルドし、再起動が必要。
 `TopologicalMap` 利用パッケージや、そのノードを埋め込んだ別メッセージの利用側も反映対象。
 古いROS定義との混在運用は不可。
-
-## Verification
 
 コンテナ `gng_cpu_container` 内の隔離ビルド先：`/tmp/gng-boundary-field.GoijXn`。
 通常の `/ros2_ws/install` の上書きなし。
@@ -141,7 +131,7 @@ timeout --signal=INT --kill-after=15s 85s python3 \
 - 既存のノード・bag再生・Viewerの停止や再起動なし。
 - 実ブラウザ画面の目視検証は未実施。
 
-## Risk / Notes
+**制約**
 
 - 低次数は境界の証明ではなく一次候補。高次数の境界を見逃す可能性あり。
 - 遮蔽／真の境界／隙間の追加判定は未実装。

@@ -1,11 +1,9 @@
 # 2026-08-03 - ToPoDualArm 10,000-node training controls
 
-## Summary
+## 1. 要約
 
 現行の941元ノード版を維持したまま、同じロボット設定から約10,000元ノード版を
 別実験として学習できるlaunch引数を追加した。
-
-## Added
 
 - `max_node_num`: GNGのノード上限を任意に上書きする。
 - `max_iterations`: 初期探索の反復数を任意に上書きする。
@@ -16,29 +14,7 @@
   可視化trainerとruntime bridgeの両方で読み込めるようにした。
 - load完了後は最大保存ノードIDへ容量を縮め、倍増時の余分なruntime走査を残さない。
 
-## Behavior Impact
-
-追加した3引数を省略した場合はparams YAMLの値をそのまま使用する。
-従来のdual launchは`gng_profile_names=left_arm,right_arm`を常に上書きしていたが、
-空指定時はYAMLの選択を使うように修正した。
-`experiment_id:=ToPoDualArm10000`を指定した場合は既存の`ToPoDualArm3`を上書きしない。
-
-## Recommended Invocation
-
-```bash
-ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
-  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
-  experiment_id:=ToPoDualArm10000 \
-  max_node_num:=11000 max_iterations:=2200000 refine_iterations:=600000
-```
-
-## Notes
-
-学習中の一時上限11,000は、TCP範囲と自己衝突による除去後に約10,000有効ノードを
-残すための余裕である。最終的な有効ノード数は厳密な10,000を保証しない。
-10,000元ノード版の可視化GNGも生成済みである。
-
-## Measured Result
+**測定結果**
 
 - 有効元ノード: 10,801
 - 学習profile: `left_arm`、7 DOF
@@ -50,7 +26,27 @@ ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
 - 可視化GNG: 500ノード、2,504縮約エッジ、1連結成分、孤立0、空割当0
 - `visualization_gng_layer_0.bin`: 71,268 bytes
 
-## Verification
+## 2. 条件・検証
+
+追加した3引数を省略した場合はparams YAMLの値をそのまま使用する。
+従来のdual launchは`gng_profile_names=left_arm,right_arm`を常に上書きしていたが、
+空指定時はYAMLの選択を使うように修正した。
+`experiment_id:=ToPoDualArm10000`を指定した場合は既存の`ToPoDualArm3`を上書きしない。
+
+**起動**
+
+```bash
+ros2 launch gng_vlut_system offline_urdf_trainer_dual.launch.py \
+  params_file:=/ros2_ws/src/gng_vlut_system/config/ToPoDualArm.yaml \
+  experiment_id:=ToPoDualArm10000 \
+  max_node_num:=11000 max_iterations:=2200000 refine_iterations:=600000
+```
+
+**補足**
+
+学習中の一時上限11,000は、TCP範囲と自己衝突による除去後に約10,000有効ノードを
+残すための余裕である。最終的な有効ノード数は厳密な10,000を保証しない。
+10,000元ノード版の可視化GNGも生成済みである。
 
 - Humbleコンテナ内で`gng_vlut_system`全体build成功。
 - `visualization_gng_trainer`が10,801元ノードを重複・欠落なく再読込検証。

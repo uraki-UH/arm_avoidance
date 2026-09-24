@@ -1,14 +1,12 @@
 # 2026-09-09 - Curved Surface Cluster Graph
 
-## Summary
+## 1. 要約
 
 曲面モデルを既存のTopologicalMap形式でも出力可能。
 表示対象は曲面メッシュではなく、モデルごとに色分けした元GNGノードと実エッジ。
 Viewerの既存バイナリ転送・GraphRenderer・ノード/エッジ一括描画を再利用。
 現在の既定表示はMarkerのまま。`surface_model.enable_graph=true` 時のみ追加生成。
 Marker最適化後の仕様・結果は `2026-09-09_curved_surface_marker_reuse.md` を参照。
-
-## Changed
 
 - 任意のグラフ出力トピックは `/curved_surface_clusters`。`/topological_map` 自体は変更なし。
 - モデルごとの所属を `clusters[].nodes` に保持。所属はnode.id、edgesは元のノード配列添字。
@@ -17,22 +15,18 @@ Marker最適化後の仕様・結果は `2026-09-09_curved_surface_marker_reuse.
 - クラスタ色はnode/edgeで共通、未確定ノードは灰色。既存の属性ラベルを書き換えない。
 - `/models` の形状種別、曲率、残差などの詳細JSONと抽出アルゴリズムは維持。
 
-## Added
-
 - `surface_model.enable_graph` (既定false)、`surface_model.enable_markers` (既定true)。通常はMarkerだけを生成。
 - C++のID・属性・エッジ保持テスト、Viewerの所属色・ID参照・通常色復帰テスト。
-
-## Fixed
 
 従来のMarker経路では、受信ごとの材質変更に伴うgeometryの破棄と、球数の変化によるInstancedMesh再生成が発生。
 任意のグラフ表示では既存GraphRendererのバッファ再利用を使用。
 下記の比較結果はMarker最適化前の記録。現在はMarker側もバッファ再利用へ変更済み。
 
-## Removed
+**削除**
 
 標準起動の `/surface_models` と `/surface_models/markers`。同じ情報を複数の可視化経路へ既定で重複配信しない。
 
-## Behavior Impact
+## 2. 条件・検証
 
 - グラフ出力有効時のみViewerで `/curved_surface_clusters` を追加。通常のGNGレイヤーとして扱う。
 - モデルに適合した平面領域も含む上位統合結果。曲面だけの抽出フィルタではない。
@@ -41,8 +35,6 @@ Marker最適化後の仕様・結果は `2026-09-09_curved_surface_marker_reuse.
 - 既定名および名前空間付きの `*/curved_surface_clusters` で自動色分け。別名ではGraphRendererの `enable_cluster_colors` 指定が必要。
 - 新しい出力形式はノード再起動後に適用。フロントエンドは再読み込みで反映。
 - エッジは既存GNGの円柱表示。転送・更新負荷の改善とGPU描画時間の改善は別問題。
-
-## Topics / Params / Messages
 
 | トピック | 型・用途 |
 | --- | --- |
@@ -58,8 +50,6 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml
 
 別起動用は `ros2 launch ais_gng surface_models.launch.py`。同じ処理を通常起動と重複起動しないこと。
 別起動の `enable_graph:=true enable_markers:=false` でグラフ表示へ切替。通常起動の設定は `config/surface_model.yaml`。
-
-## Verification
 
 以下はグラフ有効・Marker無効として比較した際の記録。現在の既定publisher数は `[0,1,1]`。
 - ais_gng Releaseビルド、C++テスト14件に成功。
@@ -94,7 +84,7 @@ GPU描画単体は円柱エッジ化により増加しており、全体FPSの�
 1100x800 / 390x844の双方で非空表示、3更新のGPU buffer生成/破棄0、contextLost=false。
 描画単体中央値はdesktop 1.8 ms、mobile 0.9 ms。少数サンプルかつソフトウェアWebGLであり実機FPSの保証ではない。
 
-## Risk / Notes
+**制約**
 
 全量のグラフを2 Hzで転送する方式。差分配信への変更ではない。
 旧Markerと新グラフを両方有効にすると重複描画になる。通常は新グラフだけを選択。

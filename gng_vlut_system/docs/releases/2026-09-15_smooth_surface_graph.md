@@ -1,12 +1,10 @@
 # 2026-09-15 - モデル当てはめなしの連続面クラスタリング
 
-## Summary
+## 1. 要約
 
 既存GNGの位置・法線・エッジだけで連続面を抽出する `smooth_graph` を比較用に追加。
 実入力21フレームで曲面処理は7.407 msから1.159 msへ短縮した一方、従来別々だった領域の大きな統合を確認。
 既定値は従来の `model` を維持。連続面の抽出であり、物体境界や曲面種別の識別ではない。
-
-## Changed / Added
 
 既存 `surface_model_tracking.cpp` 内に接続判定と差分更新を追加。新規の実装ファイル・ライブラリ・メッセージ定義なし。
 位置差を `delta`、単位法線を `n_a, n_b` として、次の条件を満たす実GNGエッジを採用。
@@ -33,7 +31,7 @@ GNG学習、入力点数、既存の平面クラスタリングには変更な�
 ノード数N・エッジ数Eに対して `O(E log E + N log N)` が上限の目安、保持メモリは `O(N+E)`。
 切断時には旧成分全体の探索が必要な場合があり、変更端点だけで完結する方式ではない。
 
-## Topics / Params / Messages
+## 2. 条件・検証
 
 | 設定 | 既定値 | 用途 |
 | --- | --- | --- |
@@ -62,8 +60,6 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=graspnet.yaml surface_
 ```
 
 従来方式へ戻す場合は `surface_method:=model` を指定。省略時も現行YAMLは `model`。
-
-## Verification
 
 Releaseビルド。保存済みの `/camera/camera/depth/color/points` 由来のGNGと平面入力21フレームを再評価。
 各フレーム1,545ノード・10平面で一致。実行順を入れ替えた5回について、各回21フレーム平均の中央値を比較。
@@ -118,7 +114,7 @@ ROS_DOMAIN_ID=218 ROS_LOCALHOST_ONLY=1 /ros2_ws/build/ais_gng/plane_cluster_incr
 ログ・比較図・検証スクリプトは無視対象 `tmp/surface_graph_20260915/`、入力は `tmp/surface_incremental_20260915/observed.json`。
 比較図の再生成はworkspaceで `python3 tmp/surface_graph_20260915/plot.py`。一時成果物はGit管理外。
 
-## Risk / Notes
+**制約**
 
 - 滑らかな局所接続の連鎖で、遠方の異なる面まで同一成分になる。連続面の定義に一致しても、物体や曲率領域としての適切な分割とは別問題。
 - 欠損で実エッジがなくなると分割。元のGNG法線の誤りは過統合・過分割の原因。長時間・多シーンの分割品質は未評価。

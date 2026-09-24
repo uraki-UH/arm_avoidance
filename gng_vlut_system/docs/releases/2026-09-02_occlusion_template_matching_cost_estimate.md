@@ -1,12 +1,12 @@
 # 2026-09-02 - 遮蔽対応テンプレート照合の計算コスト見積もり
 
-## Summary
+## 1. 要約
 
 遮蔽を含む環境で、平面クラスタ間の大まかな位置関係と非平面成分を使って
 事前登録テンプレートを照合する場合の処理構成と計算コストを整理した。
 既存処理の実測値と、未実装の部分グラフRANSAC照合の推定値は分けて記載する。
 
-## Current Pipeline
+**処理フロー**
 
 1. CPU GNGが入力点群から`TopologicalMap`を生成する。
 2. 同一プロセス内のincremental plane clusterizerが`PlaneClusterArray`を生成する。
@@ -16,7 +16,7 @@
 現行matcherはRANSACを使用していない。既定設定では`-180`度から`180`度まで
 10度刻みの姿勢候補を生成し、各候補で平面、node、edge、反証、scaleを評価する。
 
-## Measured Cost
+**処理時間**
 
 以下は既存のReleaseビルドで取得済みの実測値である。
 
@@ -29,7 +29,9 @@
 平面クラスタ単体値はROS publish、marker生成、DDS配送を含まない。
 全処理値はGNG、ROS message変換、平面クラスタ処理、publishを含む。
 
-## Depth Visibility Check Benchmark
+## 2. 条件・検証
+
+**Depth Visibility Check Benchmark**
 
 深度画像を物体テンプレートの可視性判定へ利用する場合の追加処理を、現在のbagで確認した
 `848x480`、`16UC1`、約30 Hzの深度画像と同じサイズのC++バッファで測定した。
@@ -50,7 +52,7 @@
 測定値からの単純換算で約0.82 ms/frameとなる。yaw候補を無制限に同時評価すると候補数に
 比例して増えるため、可視性判定は粗い照合後の上位候補へ限定する。
 
-## Nonplane Component Cost
+**Nonplane Component Cost**
 
 非平面成分抽出は次の線形処理で構成される。
 
@@ -74,7 +76,7 @@ node数を`N`、edge数を`E`、平面所属node総数を`P`とすると、時�
 
 可視化負荷を評価から分離するには、extract、message、marker、publishを別々に計測する必要がある。
 
-## RANSAC Estimate
+**RANSAC Estimate**
 
 導入候補は、個々の平面OBBを完全一致させる方式ではなく、法線角度、平面間距離、
 隣接関係、anchor関係から2面または3面の対応仮説を作る部分グラフRANSACとする。
@@ -106,7 +108,7 @@ confidence 99%の場合の目安は次のとおり。
 点群ICPはこの見積もりに含めない。ICPを最終検証へ追加する場合は、点数と反復数により
 さらに5-30 ms以上かかる可能性がある。
 
-## End-to-End Estimate
+**End-to-End Estimate**
 
 約1,500 nodes、約4,000 edges、単一テンプレート、RANSAC最大200反復では、
 現在取得済みのGNG・平面クラスタ実測値へ非平面処理と照合推定値を加え、
@@ -116,7 +118,7 @@ confidence 99%の場合の目安は次のとおり。
 照合部分であるため、多数テンプレートでは法線角度signatureによるshortlist、変更frameだけの再評価、
 早期終了が必要となる。
 
-## Timing Contract
+**Timing Contract**
 
 Release実測では、最低限次の値を同一frame番号で記録する。
 
@@ -128,13 +130,11 @@ Match detail: candidate=<ms>, ransac=<ms>, verify=<ms>, templates=<n>, hypothese
 計測はReleaseビルド、warm-up 100 frames以上、連続1,000 frames以上で行い、
 averageだけでなくp50、p95、p99を保存する。非平面markerの有効・無効は別条件で測定する。
 
-## Behavior Impact
-
 このリリースノートは設計と計算予算の記録であり、深度可視性判定を含めて実行時挙動、topic、
 parameter、messageは変更しない。
 RANSACおよび非平面特徴を用いたテンプレート照合は未実装である。
 
-## Risk / Notes
+**制約**
 
 - 非平面成分とRANSACの時間は現時点では推定であり、対象PC上のRelease実測で更新する。
 - 深度可視性判定の実測値はアルゴリズム本体のみであり、実装時にはROS通信、TF変換、候補生成の時間を別途計測する。
