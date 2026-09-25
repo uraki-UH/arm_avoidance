@@ -36,10 +36,14 @@ def main():
     parser.add_argument("--trials", type=int, default=2)
     parser.add_argument("--frames", type=int, default=60)
     parser.add_argument("--validation", action="store_true")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--executable", default="/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu")
+    parser.add_argument("--expected-library", action="append", default=[])
     args = parser.parse_args()
     assert os.environ.get("ROS_DOMAIN_ID") == "179"
     root = Path("/ros2_ws/src")
-    output = root / "artifacts/common_sampling_20260925"
+    output = args.output_dir or root / "artifacts/common_sampling_20260925"
+    output.mkdir(parents=True, exist_ok=True)
     config_dir = root / "ais_gng_cpu/src/ais_gng/config"
     settings = yaml.safe_load((config_dir / "gng_cpu/at128.yaml").read_text())["ais_gng_node"]["ros__parameters"]
     planes = yaml.safe_load((config_dir / "plane_cluster_incremental.yaml").read_text())["plane_cluster_incremental_node"]["ros__parameters"]
@@ -89,7 +93,7 @@ def main():
                         env = os.environ.copy()
                         if version == "before":
                             env["LD_LIBRARY_PATH"] = str(output / "before") + ":" + env.get("LD_LIBRARY_PATH", "")
-                        command = ["/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu", "--ros-args",
+                        command = [args.executable, "--ros-args",
                                    "-r", "__ns:=" + namespace, "--params-file", str(config)]
                         print("start:", version, " ".join(command), flush=True)
                         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -101,6 +105,15 @@ def main():
                                 break
                             rclpy.spin_once(observer, timeout_sec=.05)
                         assert publisher.get_subscription_count()
+                        # 製品試験における、既存開発ライブラリの誤読込の検出。
+                        mapped = Path(f"/proc/{process.pid}/maps").read_text()
+                        if args.expected_library:
+                            print("mapped:", sorted({line.split()[-1] for line in mapped.splitlines()
+                                if "libais_gng_component" in line or "libgng_cpu.so" in line}), flush=True)
+                        for library in args.expected_library:
+                            resolved = str(Path(library).resolve())
+                            assert resolved in mapped, (case, resolved)
+                            print("loaded:", resolved, flush=True)
                         ready_at = time.monotonic() + 1
                         while time.monotonic() < ready_at:
                             rclpy.spin_once(observer, timeout_sec=.05)

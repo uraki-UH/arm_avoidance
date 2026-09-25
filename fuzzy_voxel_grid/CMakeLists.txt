@@ -22,6 +22,7 @@ find_package(visualization_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(gng_cpu REQUIRED)
 
 add_executable(topological_node_marker_node src/topological_node_marker_node.cpp)
 
@@ -39,6 +40,7 @@ ament_target_dependencies(topological_node_marker_node
 )
 
 add_executable(voxel_grid_node src/main.cpp src/voxel_grid_node.cpp)
+target_link_libraries(voxel_grid_node gng_cpu::voxel_framework)
 add_executable(topo_visualizar src/topo_visualizar.cpp)
 add_executable(depth_visibility_benchmark src/depth_visibility_benchmark.cpp)
 

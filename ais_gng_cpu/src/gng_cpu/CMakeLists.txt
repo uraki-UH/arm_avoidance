@@ -25,6 +25,23 @@ option(TARGET_JETSON "build for jetson" OFF)
 option(GNG_ENABLE_AUTHENTICATION "Enable binary signature and YubiKey authentication" OFF)
 option(GNG_ENABLE_FRAME_LOG "Enable per-frame GNG summary logging" ON)
 option(GNG_BUILD_BENCHMARKS "APIテストとベンチマークのビルド" OFF)
+option(allow_external_sampler "社内開発用の外部サンプラーAPIと拡張ヘッダーの公開" ON)
+option(enable_voxel_framework "共有セル属性・評価基盤の有効化" OFF)
+option(enable_voxel_fuzzy "共有基盤のファジィ評価の有効化" OFF)
+option(enable_voxel_history "共有基盤のセル履歴の有効化" OFF)
+if((enable_voxel_fuzzy OR enable_voxel_history) AND NOT enable_voxel_framework)
+  message(FATAL_ERROR "enable_voxel_fuzzy / enable_voxel_history requires enable_voxel_framework")
+endif()
+
+# ROS依存なしの共有ヘッダー。利用先への構成伝播と、実行時ライブラリ依存の分離。
+add_library(voxel_framework INTERFACE)
+target_compile_features(voxel_framework INTERFACE cxx_std_17)
+target_include_directories(voxel_framework INTERFACE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+target_compile_definitions(voxel_framework INTERFACE
+  enable_voxel_framework_build=$<BOOL:${enable_voxel_framework}>
+  enable_voxel_fuzzy_build=$<BOOL:${enable_voxel_fuzzy}>
+  enable_voxel_history_build=$<BOOL:${enable_voxel_history}>)
 
 # --- 警告オプション ---
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -43,6 +60,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 endif()
 
 add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
+target_link_libraries(${PROJECT_NAME} PRIVATE voxel_framework)
+target_compile_definitions(${PROJECT_NAME} PUBLIC allow_external_sampler_build=$<BOOL:${allow_external_sampler}>)
+if(allow_external_sampler)
+  target_link_libraries(${PROJECT_NAME} PUBLIC voxel_framework)
+endif()
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -102,16 +124,41 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 #  C++のランタイムも静的リンクする
 target_link_options(${PROJECT_NAME} PRIVATE -static-libstdc++)
 
-# バージョンファイルへのパス
-set(VERSION_FILE ${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.v)
+# 配布構成ごとの公開シンボル。製品版には外部登録・任意重点入力の入口なし。
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.v" symbol_map)
+if(NOT allow_external_sampler)
+  foreach(symbol gng_set_sampling_rules gng_set_priority_input gng_set_weighted_priority_input)
+    string(REPLACE "    ${symbol};\n" "" symbol_map "${symbol_map}")
+  endforeach()
+endif()
+set(VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.v")
+file(GENERATE OUTPUT "${VERSION_FILE}" CONTENT "${symbol_map}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}.v"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/fuzzrobo/libgng/api.h")
 
 # ターゲットにリンカフラグとしてバージョンファイルを設定
 set_target_properties(${PROJECT_NAME} PROPERTIES
     LINK_FLAGS "-Wl,--version-script=${VERSION_FILE}"
     LINK_DEPENDS "${VERSION_FILE}"
 )
+if(NOT allow_external_sampler)
+  # 開発用ファイルが残る配布先への書込み前の拒否。既存ファイルの自動削除なし。
+  install(CODE [[
+    foreach(header voxel_framework.hpp builtin_sampling.hpp)
+      if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/include/fuzzrobo/libgng/${header}" OR
+          IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/include/fuzzrobo/libgng/${header}")
+        message(FATAL_ERROR "製品版には開発用ヘッダーのない別のinstall先が必要")
+      endif()
+    endforeach()
+  ]])
+endif()
+set(export_targets ${PROJECT_NAME})
+if(allow_external_sampler)
+  list(APPEND export_targets voxel_framework)
+endif()
 install(
-  TARGETS ${PROJECT_NAME}
+  TARGETS ${export_targets}
   EXPORT export_${PROJECT_NAME}
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
@@ -119,10 +166,31 @@ install(
   INCLUDES DESTINATION include
 )
 
-install(
-  DIRECTORY include/
-  DESTINATION include
-)
+if(allow_external_sampler)
+  install(DIRECTORY include/ DESTINATION include)
+else()
+  # API定義の一元管理。製品SDKから拡張用の型・関数宣言も除外。
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/fuzzrobo/libgng/api.h" product_api)
+  set(begin_marker "// external_sampler_begin")
+  set(end_marker "// external_sampler_end")
+  string(LENGTH "${end_marker}" end_length)
+  while(product_api MATCHES "${begin_marker}")
+    string(FIND "${product_api}" "${begin_marker}" begin_pos)
+    string(FIND "${product_api}" "${end_marker}" end_pos)
+    if(end_pos LESS begin_pos)
+      message(FATAL_ERROR "外部サンプラーAPIの区間指定不正")
+    endif()
+    math(EXPR end_pos "${end_pos} + ${end_length}")
+    string(SUBSTRING "${product_api}" 0 ${begin_pos} prefix)
+    string(SUBSTRING "${product_api}" ${end_pos} -1 suffix)
+    set(product_api "${prefix}${suffix}")
+  endwhile()
+  string(REPLACE "#define allow_external_sampler_build 1" "#define allow_external_sampler_build 0" product_api "${product_api}")
+  file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/product_api/api.h" CONTENT "${product_api}")
+  install(DIRECTORY include/ DESTINATION include
+    PATTERN "api.h" EXCLUDE PATTERN "voxel_framework.hpp" EXCLUDE PATTERN "builtin_sampling.hpp" EXCLUDE)
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/product_api/api.h" DESTINATION include/fuzzrobo/libgng)
+endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
@@ -130,6 +198,14 @@ ament_export_dependencies(Boost OpenSSL)
 
 if(GNG_BUILD_BENCHMARKS)
   enable_testing()
+  add_executable(gng_builtin_sampling_api_test test/gng_builtin_sampling_api_test.cpp)
+  target_link_libraries(gng_builtin_sampling_api_test PRIVATE gng_cpu ${CMAKE_DL_LIBS})
+  add_test(NAME gng_builtin_sampling_api_test COMMAND gng_builtin_sampling_api_test)
+  if(allow_external_sampler)
+    add_executable(voxel_framework_test test/voxel_framework_test.cpp)
+    target_link_libraries(voxel_framework_test PRIVATE gng_cpu)
+    add_test(NAME voxel_framework_test COMMAND voxel_framework_test)
+  endif()
   add_executable(gng_static_age_api_test test/gng_static_age_api_test.cpp)
   target_link_libraries(gng_static_age_api_test PRIVATE gng_cpu)
   add_test(NAME gng_static_age_default COMMAND gng_static_age_api_test 100)
@@ -194,12 +270,14 @@ if(GNG_BUILD_BENCHMARKS)
   target_link_libraries(gng_cluster_labels_api_test PRIVATE gng_cpu)
   add_test(NAME gng_cluster_labels_human COMMAND gng_cluster_labels_api_test human)
   add_test(NAME gng_cluster_labels_car COMMAND gng_cluster_labels_api_test car)
-  add_executable(gng_priority_input_api_test test/gng_priority_input_api_test.cpp)
-  target_link_libraries(gng_priority_input_api_test PRIVATE gng_cpu)
-  add_test(NAME gng_priority_input_api_test COMMAND gng_priority_input_api_test)
-  add_executable(gng_sampling_api_test test/gng_sampling_api_test.cpp)
-  target_link_libraries(gng_sampling_api_test PRIVATE gng_cpu)
-  add_test(NAME gng_sampling_api_test COMMAND gng_sampling_api_test)
+  if(allow_external_sampler)
+    add_executable(gng_priority_input_api_test test/gng_priority_input_api_test.cpp)
+    target_link_libraries(gng_priority_input_api_test PRIVATE gng_cpu)
+    add_test(NAME gng_priority_input_api_test COMMAND gng_priority_input_api_test)
+    add_executable(gng_sampling_api_test test/gng_sampling_api_test.cpp)
+    target_link_libraries(gng_sampling_api_test PRIVATE gng_cpu)
+    add_test(NAME gng_sampling_api_test COMMAND gng_sampling_api_test)
+  endif()
   add_executable(sampling_test test/sampling_test.cpp src/cpu/voxel_grid.cpp
     src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
   target_include_directories(sampling_test PRIVATE src include ${Boost_INCLUDE_DIRS})

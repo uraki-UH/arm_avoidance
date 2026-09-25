@@ -75,10 +75,9 @@ class AiSGNGComponent : public rclcpp::Node {
     double boundary_attention_radius_{0.03};
     double boundary_attention_ratio_{0.2};
     double boundary_attention_timeout_sec_{0.5};
-    std::vector<boundary_attention::point> boundary_attention_nodes_;
+    std::vector<Vec3> boundary_attention_nodes_;
     std_msgs::msg::Header boundary_attention_header_;
     std::chrono::steady_clock::time_point boundary_attention_received_{};
-    std::unique_ptr<boundary_attention::sampling_data> boundary_sampling_;
     void prepare_priority_attention(const std_msgs::msg::Header &header, bool has_single_input);
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};

@@ -1,4 +1,5 @@
 #include "fuzzy_voxel_grid/voxel_grid_node.hpp"
+#include <fuzzrobo/libgng/voxel_framework.hpp>
 
 #include <array>
 #include <chrono>
@@ -556,67 +557,27 @@ VoxelLabel VoxelGridNode::assignIntegratedLabel(
     uint32_t node_count,
     fuzzy_voxel_grid::ManagedVoxel &voxel) const noexcept
 {
-    // const uint32_t sx = static_cast<uint32_t>(key.ix * 73856093);
-    // const uint32_t sy = static_cast<uint32_t>(key.iy * 19349663);
-    // const uint32_t sz = static_cast<uint32_t>(key.iz * 83492791);
-
-    // const uint32_t mix = sx ^ sy ^ sz ^
-    //                      (point_count * 2654435761u) ^
-    //                      (node_count * 2246822519u) ^
-    //                      (static_cast<uint32_t>(dominant_topological_label) * 3266489917u);
-
-    // switch (mix & 0x3u) {
-    //     case 0u:
-    //         return VoxelLabel::Normal;
-    //     case 1u:
-    //         return VoxelLabel::AddCandidate;
-    //     case 2u:
-    //         return VoxelLabel::DeleteCandidate;
-    //     default:
-    //         return VoxelLabel::SkipCandidate;
-    // }
-
-    // (void)key;
-    // (void)dominant_topological_label;
-
-    // if (point_count == 0 && node_count == 0) {
-    //     return VoxelLabel::SkipCandidate;
-    // }
-
-    // if (point_count > node_count) {
-    //     return VoxelLabel::Normal;
-    // }
-
-    if (0 < node_count || 0 < point_count) {
-        return VoxelLabel::SkipCandidate;
-    }
-
-    // return VoxelLabel::DeleteCandidate;
-
-    if (0.5 < voxel.topological_match_rate)
-    {
-        return VoxelLabel::SkipCandidate;
-    }
-
-    if (voxel.dominant_topological_label == 1 || voxel.dominant_topological_label == 2)
-    {
-        return VoxelLabel::SkipCandidate;
-    }
-    // else if (node_count > point_count)
-    // {
-    //     return VoxelLabel::AddCandidate;
-    // }
-    // else
-    // {
-    //     return VoxelLabel::Normal;
-    // }
-
-    if (5 < voxel.average_topological_age)
-    {
-        return VoxelLabel::SkipCandidate;
-    }
-
-    return VoxelLabel::AddCandidate;
+    // 既存属性の借用。点群・ノード配列の再集計やコピーなし。
+    struct input_view {
+        uint32_t point_count, node_count;
+        const ManagedVoxel &voxel;
+    };
+    struct label_policy {
+        VoxelLabel baseline(const input_view &input) const {
+            if (input.node_count > 0 || input.point_count > 0 ||
+                input.voxel.topological_match_rate > 0.5 ||
+                input.voxel.dominant_topological_label == 1 ||
+                input.voxel.dominant_topological_label == 2 ||
+                input.voxel.average_topological_age > 5) {return VoxelLabel::SkipCandidate;}
+            return VoxelLabel::AddCandidate;
+        }
+        const input_view &collect(const input_view &input) const {return input;}
+        VoxelLabel evaluate(const input_view &input) const {return baseline(input);}
+    };
+    (void)key;
+    label_policy policy;
+    fuzzrobo::voxel_framework::pipeline<fuzzrobo::voxel_framework::configured_features<>, label_policy> pipeline;
+    return pipeline.evaluate(input_view{point_count, node_count, voxel}, policy);
 }
 
 ColorRGBA VoxelGridNode::colorForLabel(VoxelLabel label) const

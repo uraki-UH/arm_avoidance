@@ -3,6 +3,10 @@
 #include <stdint.h>
 #include <cstddef>
 
+#ifndef allow_external_sampler_build
+#define allow_external_sampler_build 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -158,6 +162,7 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
  */
 void gng_exec();
 
+// external_sampler_begin
 // 現在入力の占有セルと既存照合結果。コールバック内だけの借用参照。
 struct gng_sampling_cell {
     uint32_t idx = 0;
@@ -190,6 +195,27 @@ struct gng_sampling_rule {
     double (*point_score)(const float *, const void *) = nullptr;
     uint8_t enable_node_counts = 0;
 };
+// external_sampler_end
+
+// 組込み把持評価用の領域。GNGの入力と同じ座標系、余白適用済みのAABB。
+struct gng_sampling_box {
+    double min_pos[3]{}, max_pos[3]{};
+};
+
+// 承認済みの把持・境界条件だけを指定するデータ入力。任意関数・元点重みの指定なし。
+struct gng_builtin_sampling_input {
+    const gng_sampling_box *grasp_boxes = nullptr;
+    uint32_t num_grasp_boxes = 0;
+    double grasp_ratio = 0;
+    const Vec3 *boundary_points = nullptr;
+    uint32_t num_boundary_points = 0;
+    double boundary_radius = 0;
+    double boundary_ratio = 0;
+};
+
+// setPointCloud後の一入力分。配列は呼出し中にコピー、nullptrで解除、不正入力で解除して0。
+// 規則IDは把持1・境界2、各件数の上限はnode.num_max。配分合計は旧重点枠も含め1未満。
+uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input);
 
 struct gng_sampling_stats {
     uint32_t num_cells = 0;
@@ -200,13 +226,16 @@ struct gng_sampling_stats {
     uint8_t has_invalid_score = 0;
 };
 
+// external_sampler_begin
 // setPointCloud後の一括置換。最大64規則、ID重複なし、配分合計は既存重点枠と合わせて1未満。
 // 比率0は無効。空指定は解除、不正指定は解除して0。入力置換・実行後の指定失効。
 uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules);
+// external_sampler_end
 gng_sampling_stats gng_get_sampling_stats();
 // 確認用の対象元点番号。購読時だけの展開用、次の入力設定・取得まで有効。
 const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_points);
 
+// external_sampler_begin
 // 次の1回の学習用重点入力。setPointCloud後の元点添字、総学習回数に対する配分率。
 // 空指定で解除。不正指定は解除して0を返却。配列の内部コピー、既存点群の複製なし。
 uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio);
@@ -214,6 +243,7 @@ uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, f
 // 重み付き重点入力。重みは有限な正値、添字は重複なし。失敗時は重点設定を解除。
 uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const float *weights,
     uint32_t num_points, float ratio);
+// external_sampler_end
 
 /**
  * @brief TopologicalMap差分の記録を切り替える

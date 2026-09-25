@@ -1539,11 +1539,13 @@ bool AiSGNGComponent::prepare_grasp_attention(
 
 void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &header,
         bool has_single_input) {
-    gng_set_sampling_rules(nullptr, 0);
+    gng_set_builtin_sampling(nullptr);
     if (!has_single_input) {return;}
-    std::vector<gng_sampling_rule> rules;
+    gng_builtin_sampling_input input;
     if (enable_grasp_attention_ && prepare_grasp_attention(header, has_single_input)) {
-        rules.push_back(grasp_attention::sampling_rule(1, grasp_attention_ratio_, grasp_attention_regions_));
+        const auto &boxes = grasp_attention_regions_.boxes();
+        input.grasp_boxes = boxes.data(); input.num_grasp_boxes = boxes.size();
+        input.grasp_ratio = grasp_attention_ratio_;
     }
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
     const double elapsed_sec = std::chrono::duration<double>(
@@ -1552,10 +1554,12 @@ void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &he
             boundary_attention::can_reuse(boundary_attention_header_.frame_id,
             stamp_sec(boundary_attention_header_.stamp), header.frame_id, stamp_sec(header.stamp),
             elapsed_sec, boundary_attention_timeout_sec_)) {
-        boundary_sampling_ = std::make_unique<boundary_attention::sampling_data>(boundary_attention_nodes_, boundary_attention_radius_);
-        rules.push_back(boundary_attention::sampling_rule(2, boundary_attention_ratio_, *boundary_sampling_));
+        input.boundary_points = boundary_attention_nodes_.data();
+        input.num_boundary_points = boundary_attention_nodes_.size();
+        input.boundary_radius = boundary_attention_radius_;
+        input.boundary_ratio = boundary_attention_ratio_;
     }
-    if (!gng_set_sampling_rules(rules.data(), rules.size())) {
+    if (!gng_set_builtin_sampling(&input)) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点入力設定の失敗、通常学習へ復帰");
     }
 }

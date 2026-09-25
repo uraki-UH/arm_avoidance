@@ -21,16 +21,6 @@ bucket_size=0.2 とGNGの input.voxel_grid_unit=0.02 のように整数倍で揃
 
 
 
-
-
-
-9:32 PM
-
-
-
-
-
-
 使えます。むしろ現在のGNG nodeは、GMMの成分にかなり自然に対応します。
 \[
 p(x)=\sum_i \pi_i \mathcal{N}(x;\mu_i,\Sigma_i)

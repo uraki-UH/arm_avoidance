@@ -1,5 +1,6 @@
 #include <fuzzrobo/libgng/observation_api.h>
 #include "cpu/gng.hpp"
+#include <fuzzrobo/libgng/builtin_sampling.hpp>
 
 #define _GNU_SOURCE // dladdrのために必要
 #include <dlfcn.h>      // dladdr
@@ -25,6 +26,7 @@ void library_init(void) {
 }
 
 GNG gng;
+static fuzzrobo::builtin_sampling::state builtin_sampling;
 
 MY_API int gng_init() {
     // ライブラリのパスを取得
@@ -87,7 +89,7 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
-MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
+static uint8_t set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
     auto &sampling = gng.n1.sampling;
     sampling.reset_input();
     if (num_rules == 0) {return 1;}
@@ -106,6 +108,58 @@ MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t n
     return 1;
 }
 
+MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input) {
+    gng.n1.sampling.reset_input();
+    builtin_sampling.reset();
+    if (!input) {return 1;}
+    if (!gng.initialized) {return 0;}
+    const auto &value = *input;
+    const auto max_items = gng.n1.nodes.size();
+    const auto is_ratio = [](double ratio) {return std::isfinite(ratio) && ratio >= 0 && ratio < 1;};
+    if (!is_ratio(value.grasp_ratio) || !is_ratio(value.boundary_ratio) ||
+        value.grasp_ratio + value.boundary_ratio + gng.n1.priority_ratio >= 1 ||
+        value.num_grasp_boxes > max_items || value.num_boundary_points > max_items ||
+        (value.num_grasp_boxes && !value.grasp_boxes) ||
+        (value.num_boundary_points && !value.boundary_points)) {return 0;}
+    for (uint32_t idx = 0; idx < value.num_grasp_boxes; ++idx) {
+        const auto &box = value.grasp_boxes[idx];
+        for (uint32_t dim = 0; dim < 3; ++dim) {
+            if (!std::isfinite(box.min_pos[dim]) || !std::isfinite(box.max_pos[dim]) ||
+                box.min_pos[dim] > box.max_pos[dim]) {return 0;}
+        }
+    }
+    if (value.num_boundary_points && (!std::isfinite(value.boundary_radius) ||
+        value.boundary_radius <= 0 || !std::isfinite(value.boundary_radius * value.boundary_radius) ||
+        value.boundary_radius * value.boundary_radius == 0)) {return 0;}
+    for (uint32_t idx = 0; idx < value.num_boundary_points; ++idx) {
+        const auto &p = value.boundary_points[idx];
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {return 0;}
+    }
+    try {
+        gng_sampling_rule rules[2];
+        uint32_t num_rules = 0;
+        if (value.num_grasp_boxes && value.grasp_ratio > 0) {
+            builtin_sampling.boxes.assign(value.grasp_boxes, value.grasp_boxes + value.num_grasp_boxes);
+            rules[num_rules++] = builtin_sampling.grasp_rule(value.grasp_ratio);
+        }
+        if (value.num_boundary_points && value.boundary_ratio > 0) {
+            builtin_sampling.boundary = std::make_unique<fuzzrobo::boundary_attention::sampling_data>(
+                value.boundary_points, value.num_boundary_points, value.boundary_radius);
+            rules[num_rules++] = fuzzrobo::boundary_attention::sampling_rule(2, value.boundary_ratio, *builtin_sampling.boundary);
+        }
+        return set_sampling_rules(rules, num_rules);
+    } catch (...) {
+        // C境界への例外伝播と、途中まで登録した条件の持越し防止。
+        gng.n1.sampling.reset_input(); builtin_sampling.reset(); return 0;
+    }
+}
+
+#if allow_external_sampler_build
+MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
+    return set_sampling_rules(rules, num_rules);
+}
+#endif
+
 MY_API gng_sampling_stats gng_get_sampling_stats() {return gng.n1.sampling.stats;}
 
 MY_API const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_points) {
@@ -115,6 +169,7 @@ MY_API const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_p
     return ids.data();
 }
 
+#if allow_external_sampler_build
 MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio) {
     auto &core = gng.n1;
     core.priority_point_ids.clear();
@@ -161,6 +216,8 @@ MY_API uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const 
     core.priority_weights.assign(weights, weights + num_points);
     return 1;
 }
+
+#endif
 
 MY_API uint8_t gng_set_observation_input(const gng_observation_input *input) {
     auto &core = gng.n1;

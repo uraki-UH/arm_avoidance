@@ -100,9 +100,16 @@ def main():
     parser.add_argument('--warmup', type=int, default=50)
     parser.add_argument('--voxel', type=float, required=True)
     parser.add_argument('--features', dest='enable_features', action='store_true')
+    parser.add_argument('--no-legacy-priority', dest='enable_legacy_priority', action='store_false')
+    parser.add_argument('--sampling-provider', help='実GNGへ規則を登録する比較用共有ライブラリ')
     args = parser.parse_args()
     assert args.frames > args.warmup >= 0
     lib = ct.CDLL(args.library)
+    provider = ct.CDLL(args.sampling_provider) if args.sampling_provider else None
+    if provider:
+        provider.verification_set_rules.restype = ct.c_bool
+        lib.gng_get_sampling_points.argtypes = [ct.c_uint32, ct.POINTER(ct.c_uint32)]
+        lib.gng_get_sampling_points.restype = ct.c_void_p
     lib.gng_setParameter.argtypes = [ct.c_char_p, ct.c_uint32, ct.c_float]
     lib.gng_setPointCloud.argtypes = [ct.c_void_p, ct.c_uint32, ct.POINTER(lidar)]
     lib.gng_getTopologicalMap.restype = tmap
@@ -124,8 +131,9 @@ def main():
     lib.gng_get_node_statistics.restype = node_statistics
     lib.gng_get_observation_angle_range.argtypes = [ct.c_uint16]
     lib.gng_get_observation_angle_range.restype = angle_range
-    lib.gng_set_weighted_priority_input.argtypes = [ct.c_void_p, ct.c_void_p, ct.c_uint32, ct.c_float]
-    lib.gng_set_weighted_priority_input.restype = ct.c_uint8
+    if args.enable_legacy_priority:
+        lib.gng_set_weighted_priority_input.argtypes = [ct.c_void_p, ct.c_void_p, ct.c_uint32, ct.c_float]
+        lib.gng_set_weighted_priority_input.restype = ct.c_uint8
     lib.gng_set_observation_input.argtypes = [ct.POINTER(observation_input)]
     lib.gng_set_observation_input.restype = ct.c_uint8
     params = yaml.safe_load(Path(args.config).read_text())['ais_gng_node']['ros__parameters']
@@ -169,13 +177,16 @@ def main():
         lib.gng_setPointCloud(data, num_points, ct.byref(config))
         after_input = time.perf_counter_ns()
         if args.enable_features:
-            point_ids = np.arange(0, num_points, 101, dtype=np.uint32)
-            weights = np.linspace(1, 2, len(point_ids), dtype=np.float32)
-            assert lib.gng_set_weighted_priority_input(point_ids.ctypes.data, weights.ctypes.data, len(point_ids), 0.3)
+            if args.enable_legacy_priority:
+                point_ids = np.arange(0, num_points, 101, dtype=np.uint32)
+                weights = np.linspace(1, 2, len(point_ids), dtype=np.float32)
+                assert lib.gng_set_weighted_priority_input(point_ids.ctypes.data, weights.ctypes.data, len(point_ids), 0.3)
             observation = observation_input()
             observation.has_origin = 1
             assert lib.gng_set_observation_input(ct.byref(observation))
         before_exec = time.perf_counter_ns()
+        if provider:
+            assert provider.verification_set_rules()
         lib.gng_exec()
         after_exec = time.perf_counter_ns()
         result = lib.gng_getTopologicalMap()
@@ -216,6 +227,19 @@ def main():
         if hasattr(lib, 'gng_get_normal_phase_ms'):
             record.update(zip(('normal_ms', 'rho_label_ms'), lib.gng_get_normal_phase_ms()[:2]))
         record['node_members_sha256'] = node_members_digest.hexdigest()
+        if provider:
+            for rule_id in (1, 2):
+                candidate_num = ct.c_uint32()
+                candidates = lib.gng_get_sampling_points(rule_id, ct.byref(candidate_num))
+                record[f'candidate_{rule_id}_num'] = candidate_num.value
+                record[f'candidate_{rule_id}_sha256'] = hashlib.sha256(
+                    ct.string_at(candidates, candidate_num.value * 4)).hexdigest()
+                candidate_ids = np.frombuffer(ct.string_at(candidates, candidate_num.value * 4), dtype=np.uint32)
+                assert not len(candidate_ids) or int(candidate_ids.max()) < num_points
+                positions = np.ndarray((num_points, 3), dtype=np.float32, buffer=data,
+                                       strides=(config.point_step, 4))
+                record[f'candidate_{rule_id}_xyz_sha256'] = hashlib.sha256(
+                    positions[candidate_ids].tobytes()).hexdigest()
         if hasattr(lib, 'gng_get_attention_phase_ms'):
             record.update(zip(('matching_ms', 'candidates_ms', 'mapping_sort_ms'),
                               lib.gng_get_attention_phase_ms()[:3]))
