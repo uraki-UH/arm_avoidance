@@ -83,11 +83,6 @@ int main() {
     require(gng_set_weighted_priority_input(weighted_ids, weights, 2, .7f), "重み付き指定失敗");
     const auto weighted = run();
     require(weighted > 250 && weighted <= 301, "重み付き指定の通常枠不整合");
-    submit();
-    gng_set_unknown_attention_enabled(0);
-    require(gng_set_weighted_priority_input(weighted_ids, weights, 2, .5f), "非平面相当の重点設定失敗");
-    const auto uniform_remainder = run();
-    require(uniform_remainder > 450 && uniform_remainder <= 500, "全体枠への置換で学習配分が変化");
     require(run() > 950, "重み付き指定が次回へ残存");
     submit();
     const float invalid_weights[] = {1, NAN};

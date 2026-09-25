@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         const auto start = std::chrono::steady_clock::now();
         const auto weights = is_reference ? selection_reference::make_weights(points.data(), num_points, anchors, .3) :
             fuzzrobo::boundary_attention::make_weights(points.data(), num_points, anchors, .3);
-        const auto priority = fuzzrobo::boundary_attention::mix({}, 0, {}, 0, weights, .5);
+        const auto priority = fuzzrobo::boundary_attention::mix({}, 0, weights, .5);
         const auto elapsed = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - start).count();
         num_selected = priority.ids.size();

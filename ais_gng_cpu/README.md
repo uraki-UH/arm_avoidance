@@ -53,13 +53,10 @@ YAMLの変更はTF launchとGNGの再起動で反映。固定TFを持つ旧`at12
 
 境界ノード周辺への距離重み付き重点学習は[境界重点学習](docs/boundary_attention.md)を参照。`graspnet.yaml`で有効、把持重点と併用可能。
 
-## 非平面成分の近傍重点学習（CPU）
+CPUの学習配分と追加条件の評価は[共通サンプラー](docs/sampling.md)へ統合。ラベル・平面サイズ・密度条件はセル評価器として追加可能。非平面などの新しい本番条件は未追加。
 
-`at128.yaml`では、5ノード以上の非平面連結成分の近傍0.3 mへ学習の50%を配分。単独・小成分は通常学習に保持。
-ON時は旧unknown重点枠を置換、OFF時は従来動作。動静判定なし。設定変更後はlaunchを再起動。
-重点候補の点群は`/downsampling/nonplane`（PointCloud2、best_effort）で確認可能。`at128.yaml`では出力ON、購読時だけ点群化。
-出力を止める場合は`nonplane_attention.enable_debug_points: false`。表示点は抽選元の候補であり、実際の学習点履歴とは別。
-`enable_nonplane_attention`と`nonplane_attention.*`の設定・条件・検証は[非平面重点サンプリング](../gng_vlut_system/docs/releases/2026-09-25_nonplane_attention.md)を参照。
+追加の非平面重点学習は2026-09-25に撤去。`/downsampling/nonplane`と関連設定は廃止。
+既存unknown重点学習・通常エイジング・非平面成分出力は継続。[変更内容](../gng_vlut_system/docs/releases/2026-09-25_nonplane_attention.md)。
 
 ## CPUのパラメータ反映
 

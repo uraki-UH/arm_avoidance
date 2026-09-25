@@ -87,8 +87,32 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 
 MY_API void gng_exec() { gng.exec(); }
 
-MY_API void gng_set_unknown_attention_enabled(uint8_t enable_unknown_attention) {
-    gng.n1.enable_unknown_attention = enable_unknown_attention != 0;
+MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
+    auto &sampling = gng.n1.sampling;
+    sampling.reset_input();
+    if (num_rules == 0) {return 1;}
+    if (!gng.initialized || !rules || num_rules > 64) {return 0;}
+    double ratio = gng.n1.priority_ratio;
+    for (uint32_t idx = 0; idx < num_rules; ++idx) {
+        const auto &rule = rules[idx];
+        if (!std::isfinite(rule.ratio) || rule.ratio < 0 || rule.ratio >= 1 || !rule.cell_score) {return 0;}
+        for (uint32_t prev = 0; prev < idx; ++prev) {if (rules[prev].id == rule.id) {return 0;}}
+        ratio += rule.ratio;
+    }
+    if (ratio >= 1) {return 0;}
+    for (uint32_t idx = 0; idx < num_rules; ++idx) {
+        if (rules[idx].ratio > 0) {sampling.rules.push_back(rules[idx]);}
+    }
+    return 1;
+}
+
+MY_API gng_sampling_stats gng_get_sampling_stats() {return gng.n1.sampling.stats;}
+
+MY_API const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_points) {
+    if (!num_points) {return nullptr;}
+    const auto &ids = gng.n1.sampling.points_for(rule_id, gng.vg);
+    *num_points = ids.size();
+    return ids.data();
 }
 
 MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio) {
@@ -99,6 +123,9 @@ MY_API uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_po
     if (!num_points) {return 1;}
     if (!gng.initialized || !point_ids || num_points > static_cast<uint32_t>(gng.input_pcl_num) ||
         !std::isfinite(ratio) || ratio <= 0 || ratio >= 1) {return 0;}
+    double total_ratio = ratio;
+    for (const auto &rule : core.sampling.rules) {total_ratio += rule.ratio;}
+    if (total_ratio >= 1) {return 0;}
     for (uint32_t idx = 0; idx < num_points; ++idx) {
         if (point_ids[idx] >= static_cast<uint32_t>(gng.input_pcl_num)) {return 0;}
         const auto &p = gng.map.input_pcl[point_ids[idx]];

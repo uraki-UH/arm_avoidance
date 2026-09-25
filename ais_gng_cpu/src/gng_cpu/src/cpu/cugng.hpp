@@ -4,6 +4,7 @@
 #include "../utils/node.hpp"
 #include "../utils/param.hpp"
 #include "voxel_grid.hpp"
+#include "sampling.hpp"
 
 #include "define.h"
 
@@ -67,7 +68,7 @@ class CUGNG {
     vector<uint32_t> priority_point_ids;
     vector<float> priority_weights;
     float priority_ratio = 0;
-    bool enable_unknown_attention = true;
+    gng_sampling::frame_sampler sampling;
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fuzzrobo/libgng/api.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -95,6 +96,30 @@ class nearest_boundary {
     }
 
 public:
+    // セルAABBと境界点の半径近傍の交差。元点走査前の枝刈り。
+    bool intersects(const double *min_pos, const double *max_pos, double radius_sq, std::size_t idx = 0) const {
+        if (branches.empty()) {return false;}
+        const auto &current = branches[idx];
+        double box_gap_sq = 0;
+        for (uint32_t dim = 0; dim < 3; ++dim) {
+            const double gap = std::max({0.0, current.min_pos[dim] - max_pos[dim], min_pos[dim] - current.max_pos[dim]});
+            box_gap_sq += gap * gap;
+        }
+        if (box_gap_sq > radius_sq) {return false;}
+        if (current.left != 0) {
+            return intersects(min_pos, max_pos, radius_sq, current.left) ||
+                intersects(min_pos, max_pos, radius_sq, current.right);
+        }
+        for (auto pos = current.begin; pos < current.end; ++pos) {
+            double dist_sq = 0;
+            for (uint32_t dim = 0; dim < 3; ++dim) {
+                const double gap = std::max({0.0, nodes[pos][dim] - max_pos[dim], min_pos[dim] - nodes[pos][dim]});
+                dist_sq += gap * gap;
+            }
+            if (dist_sq <= radius_sq) {return true;}
+        }
+        return false;
+    }
     explicit nearest_boundary(const std::vector<point> &anchors) {
         nodes.reserve(anchors.size());
         for (const auto &anchor : anchors) {
@@ -115,6 +140,27 @@ public:
         return has_neighbor ? static_cast<float>(std::exp(-4.5 * min_dist_sq / radius_sq)) : 0;
     }
 };
+
+struct sampling_data {
+    nearest_boundary tree;
+    double radius_sq;
+    sampling_data(const std::vector<point> &points, double radius)
+        : tree(points), radius_sq(radius * radius) {}
+};
+
+inline gng_sampling_rule sampling_rule(uint32_t id, double ratio, const sampling_data &boundary) {
+    gng_sampling_rule rule;
+    rule.id = id; rule.ratio = ratio; rule.data = &boundary;
+    rule.cell_score = [](const gng_sampling_cell &cell, const void *data) {
+        const auto &value = *static_cast<const sampling_data *>(data);
+        return gng_sampling_score{value.tree.intersects(cell.min_pos, cell.max_pos, value.radius_sq) ? 1.0 : 0.0, 1};
+    };
+    rule.point_score = [](const float *point, const void *data) {
+        const auto &value = *static_cast<const sampling_data *>(data);
+        return static_cast<double>(value.tree.weight(point, value.radius_sq));
+    };
+    return rule;
+}
 
 // 最近傍境界から半径内のガウス重み。標準偏差は半径の1/3、境界重複での増幅なし。
 inline std::vector<float> make_weights(const float *points, uint32_t num_points,
@@ -137,30 +183,23 @@ struct mixture {
     float ratio = 0;
 };
 
-// 把持・境界・非平面の重点枠の混合。対象なしの配分は通常学習へ返却。
+// 把持・境界の重点枠の混合。対象なしの配分は通常学習へ返却。
 inline mixture mix(const std::vector<uint32_t> &grasp_ids, double grasp_ratio,
-        const std::vector<float> &boundary_weights, double boundary_ratio,
-        const std::vector<float> &nonplane_weights = {}, double nonplane_ratio = 0) {
+        const std::vector<float> &boundary_weights, double boundary_ratio) {
     mixture result;
     double boundary_sum = 0;
     for (float weight : boundary_weights) {boundary_sum += weight;}
-    double nonplane_sum = 0;
-    for (float weight : nonplane_weights) {nonplane_sum += weight;}
     const double grasp_share = grasp_ids.empty() ? 0 : grasp_ratio;
     const double boundary_share = boundary_sum > 0 ? boundary_ratio : 0;
-    const double nonplane_share = nonplane_sum > 0 ? nonplane_ratio : 0;
-    result.ratio = static_cast<float>(grasp_share + boundary_share + nonplane_share);
+    result.ratio = static_cast<float>(grasp_share + boundary_share);
     if (result.ratio <= 0) {return result;}
-    std::vector<float> weights(std::max(boundary_weights.size(), nonplane_weights.size()), 0);
+    std::vector<float> weights(boundary_weights.size(), 0);
     for (const auto idx : grasp_ids) {
         if (idx < weights.size()) {weights[idx] += static_cast<float>(grasp_share / grasp_ids.size());}
     }
     for (std::size_t idx = 0; idx < weights.size(); ++idx) {
         if (boundary_sum > 0 && idx < boundary_weights.size()) {
             weights[idx] += static_cast<float>(boundary_share * boundary_weights[idx] / boundary_sum);
-        }
-        if (nonplane_sum > 0 && idx < nonplane_weights.size()) {
-            weights[idx] += static_cast<float>(nonplane_share * nonplane_weights[idx] / nonplane_sum);
         }
         if (weights[idx] > 0) {result.ids.push_back(idx); result.weights.push_back(weights[idx]);}
     }

@@ -5,8 +5,8 @@
 #include <set>
 
 namespace {
-// 既存unknown枠を無効にした場合の全体学習と、入力置換・実行後の既定復帰。
-bool check_unknown_attention_switch() {
+// unknown候補あり時の重点学習と、候補なし時の全体学習。
+bool check_unknown_attention() {
     GNG gng;
     gng.param.config.point_cloud_num = 16;
     gng.param.config.node_grid = 1;
@@ -24,25 +24,16 @@ bool check_unknown_attention_switch() {
     const auto second_id = gng.n1.add_node(second);
     gng.n1.add_node(third);
     gng.n1.setTrainingEventCapture(true);
-    for (const bool enable_unknown : {true, false}) {
-        gng.n1.enable_unknown_attention = enable_unknown;
-        gng.n1.learn(input, 1, attention, 1);
+    for (const bool has_candidates : {true, false}) {
+        gng.n1.learn(input, 1, attention, has_candidates ? 1 : 0);
         uint32_t num = 0;
         const auto *events = gng.n1.getTrainingEvents(&num);
         if (num != 4) {return false;}
         for (uint32_t idx = 0; idx < num; ++idx) {
-            if (events[idx].winner_node_id != (enable_unknown ? second_id : first_id)) {return false;}
+            if (events[idx].winner_node_id != (has_candidates ? second_id : first_id)) {return false;}
         }
     }
-    LiDAR_Config config;
-    config.point_step = 12;
-    const float points[] = {0.1f, 0, 0, 2.1f, 0, 0};
-    gng.n1.enable_unknown_attention = false;
-    gng.setPointCloud(reinterpret_cast<const uint8_t *>(points), 2, &config);
-    if (!gng.n1.enable_unknown_attention) {return false;}
-    gng.n1.enable_unknown_attention = false;
-    gng.exec();
-    return gng.n1.enable_unknown_attention;
+    return true;
 }
 
 uint32_t lookup_span_raw_idx(const GNG &gng, uint32_t idx) {
@@ -174,8 +165,8 @@ bool check_case(uint32_t point_num, float voxel_unit, bool has_angle_table, bool
 }
 
 int main() {
-    if (!check_unknown_attention_switch()) {
-        std::cerr << "unknown重点枠の切替・復帰の不整合\n";
+    if (!check_unknown_attention()) {
+        std::cerr << "unknown候補有無による学習配分の不整合\n";
         return 1;
     }
     uint32_t case_num = 0;

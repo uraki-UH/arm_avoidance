@@ -7,6 +7,7 @@ CUGNG::CUGNG(){
 }
 
 bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
+    sampling.reset_input();
     observation_touched_ids.clear();
     observation_pixel_source = {};
     GridConfig c;
@@ -90,6 +91,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
     return true;
 }
 void CUGNG::clear() {
+    sampling.reset_input();
     observation_touched_ids.clear();
     observation_pixel_source = {};
     node_num = 0;
@@ -322,9 +324,12 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
     std::iota(point_order.begin(), point_order.end(), 0U);
     std::mt19937 random(frame_number);
     std::shuffle(point_order.begin(), point_order.end(), random);
+    const bool has_sampling_rules = !sampling.rules.empty();
+    if (has_sampling_rules) {sampling.matches.resize(input_pcl_num);}
     for (const uint32_t point_idx : point_order){
         i = point_idx;
         bool inpcl_is_in_vigilance = getDownSamplingGrid(inpcl[i], labels[i], n);
+        if (has_sampling_rules) {sampling.matches[i] = {n.id1, n.id1_d2};}
         if(!inpcl_is_in_vigilance){
             add_node(inpcl[i]);
         }
@@ -443,24 +448,20 @@ void CUGNG::learn(vector<Vec3f> &inpcl, int input_pcl_num, vector<Vec3f> &attent
         return;
     if (!is_search_batch) {begin_search_batch();}
     uniform_int_distribution<> rA(0, input_pcl_num - 1);  // 一様乱数
-    const bool has_priority = raw_points && !priority_point_ids.empty() && priority_ratio > 0;
-    uniform_int_distribution<> priority_dist(0, std::max(1, static_cast<int>(priority_point_ids.size())) - 1);
-    const bool has_priority_weights = has_priority && priority_weights.size() == priority_point_ids.size();
-    std::discrete_distribution<> weighted_priority_dist(priority_weights.begin(), priority_weights.end());
+    sampling.build(source_voxels, raw_points, nodes, priority_point_ids, priority_weights, priority_ratio);
     {
         uniform_int_distribution<> rA_Attention(0, std::max(1, attention_pcl_num) - 1);
         for(i=j=0; i< gng_config.learning_num; ++i){
-            // 総学習回数を固定した重点配分。残余枠は既存混合または全体学習。
-            if (has_priority && static_cast<int>((i + 1) * static_cast<double>(priority_ratio)) >
-                static_cast<int>(i * static_cast<double>(priority_ratio))) {
-                const auto raw_idx = priority_point_ids[has_priority_weights ? weighted_priority_dist(mt) : priority_dist(mt)];
+            const auto source = gng_sampling::select_source(i, j, sampling.ratio,
+                attention_pcl_num, gng_config.unknown_learning_rate);
+            if (source == gng_sampling::source::priority) {
+                const auto raw_idx = sampling.sample(mt, source_voxels);
                 auto point = (*raw_points)[raw_idx];
                 learn_normal(point, nullptr, raw_idx, false);
                 continue;
             }
-            if(!enable_unknown_attention || attention_pcl_num == 0 || ++j == gng_config.unknown_learning_rate){
+            if(source == gng_sampling::source::regular){
                 learn_input(rA(mt));
-                j = 0; // リセット
             } else {
                 const auto idx = rA_Attention(mt);
                 if (attention_raw_ids && raw_points) {

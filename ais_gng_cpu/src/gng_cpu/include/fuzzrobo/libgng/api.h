@@ -158,6 +158,55 @@ void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num, const
  */
 void gng_exec();
 
+// 現在入力の占有セルと既存照合結果。コールバック内だけの借用参照。
+struct gng_sampling_cell {
+    uint32_t idx = 0;
+    uint32_t num_points = 0;
+    double min_pos[3]{}, max_pos[3]{};
+    uint32_t node_id = UINT32_MAX;
+    uint32_t node_frame = 0;
+    int32_t node_label = -1;
+    double nearest_dist_sq = 0;
+    uint32_t num_nodes = 0;
+    uint8_t has_node_count = 0;
+    uint8_t has_volume = 0;
+};
+
+// セル内全点に共通の重み。元点ごとの追加評価は必要なセルだけ。
+struct gng_sampling_score {
+    double weight = 0;
+    uint8_t enable_point_weights = 0;
+};
+
+// ラベル名に依存しない一入力分の規則。比率は総学習回数に対する配分。
+// weightは元点当たり。セル均等化は評価器内でnum_pointsによる除算。
+// node_id/node_frameは既存近傍探索の結果であり、セマンティックな所属保証ではない。
+// 利用側データはgng_exec完了まで保持。評価器からのGNG変更・API再入は禁止。
+struct gng_sampling_rule {
+    uint32_t id = 0;
+    double ratio = 0;
+    const void *data = nullptr;
+    gng_sampling_score (*cell_score)(const gng_sampling_cell &, const void *) = nullptr;
+    double (*point_score)(const float *, const void *) = nullptr;
+    uint8_t enable_node_counts = 0;
+};
+
+struct gng_sampling_stats {
+    uint32_t num_cells = 0;
+    uint32_t num_cell_evaluations = 0;
+    uint32_t num_point_evaluations = 0;
+    uint32_t num_entries = 0;
+    uint32_t num_priority_samples = 0;
+    uint8_t has_invalid_score = 0;
+};
+
+// setPointCloud後の一括置換。最大64規則、ID重複なし、配分合計は既存重点枠と合わせて1未満。
+// 比率0は無効。空指定は解除、不正指定は解除して0。入力置換・実行後の指定失効。
+uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules);
+gng_sampling_stats gng_get_sampling_stats();
+// 確認用の対象元点番号。購読時だけの展開用、次の入力設定・取得まで有効。
+const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_points);
+
 // 次の1回の学習用重点入力。setPointCloud後の元点添字、総学習回数に対する配分率。
 // 空指定で解除。不正指定は解除して0を返却。配列の内部コピー、既存点群の複製なし。
 uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, float ratio);
@@ -165,10 +214,6 @@ uint8_t gng_set_priority_input(const uint32_t *point_ids, uint32_t num_points, f
 // 重み付き重点入力。重みは有限な正値、添字は重複なし。失敗時は重点設定を解除。
 uint8_t gng_set_weighted_priority_input(const uint32_t *point_ids, const float *weights,
     uint32_t num_points, float ratio);
-
-// 次の実行だけの既存unknown重点枠の切替。無効時の残余枠は全体学習。
-// setPointCloud後に指定。入力置換・実行後は既定の有効状態へ復帰。
-void gng_set_unknown_attention_enabled(uint8_t enable_unknown_attention);
 
 /**
  * @brief TopologicalMap差分の記録を切り替える

@@ -502,39 +502,9 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s margin=%.3f m ratio=%.2f timeout=%.2f s",
             grasp_topic.c_str(), grasp_attention_margin_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
     }
-    // 非平面連結成分の点数による重点選別。動静・履歴判定なし。
-    enable_nonplane_attention_ = declare_parameter("enable_nonplane_attention", false, grasp_descriptor);
-    const auto min_component_nodes = declare_parameter<int64_t>(
-        "nonplane_attention.min_component_nodes", 5, grasp_descriptor);
-    nonplane_attention_radius_ = declare_parameter("nonplane_attention.radius", 0.3, grasp_descriptor);
-    nonplane_attention_ratio_ = declare_parameter("nonplane_attention.ratio", 0.5, grasp_descriptor);
-    nonplane_attention_timeout_sec_ = declare_parameter("nonplane_attention.timeout_sec", 0.5, grasp_descriptor);
-    const bool enable_debug_points = declare_parameter(
-        "nonplane_attention.enable_debug_points", false, grasp_descriptor);
-    if (min_component_nodes < 2 || min_component_nodes > 65534 ||
-        !std::isfinite(nonplane_attention_radius_) || nonplane_attention_radius_ <= 0 ||
-        !std::isfinite(nonplane_attention_ratio_) || nonplane_attention_ratio_ <= 0 || nonplane_attention_ratio_ >= 1 ||
-        !std::isfinite(nonplane_attention_timeout_sec_) || nonplane_attention_timeout_sec_ <= 0) {
-        throw std::invalid_argument("非平面重点学習の設定値が不正");
-    }
-    min_nonplane_component_nodes_ = static_cast<std::size_t>(min_component_nodes);
-    if (enable_nonplane_attention_ && !direct_plane_cluster_enabled_) {
-        RCLCPP_WARN(get_logger(), "非平面重点学習はCPU直結の平面計算が必要。平面OFFのため無効化");
-        enable_nonplane_attention_ = false;
-    }
-    if (enable_nonplane_attention_) {
-        if (enable_debug_points) {
-            nonplane_attention_pub_ = create_publisher<PC2>(
-                "downsampling/nonplane", rclcpp::QoS(1).best_effort().durability_volatile());
-        }
-        RCLCPP_INFO(get_logger(),
-            "非平面重点学習: min_nodes=%zu radius=%.3f m ratio=%.2f（旧unknown枠を置換）",
-            min_nonplane_component_nodes_, nonplane_attention_radius_, nonplane_attention_ratio_);
-    }
     const double total_attention_ratio =
         (enable_grasp_attention_ ? grasp_attention_ratio_ : 0) +
-        (enable_boundary_attention_ ? boundary_attention_ratio_ : 0) +
-        (enable_nonplane_attention_ ? nonplane_attention_ratio_ : 0);
+        (enable_boundary_attention_ ? boundary_attention_ratio_ : 0);
     if (total_attention_ratio >= 1.0) {
         throw std::invalid_argument("重点配分率の合計による通常学習枠の消失");
     }
@@ -747,8 +717,7 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         std::vector<float> flt_array;
         auto name = p.get_name();
         if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
-            name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0 ||
-            name == "enable_nonplane_attention" || name.rfind("nonplane_attention.", 0) == 0) {continue;}
+            name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0) {continue;}
         if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
             name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
             name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
@@ -1065,19 +1034,8 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         : base_frame_id_;
     header.stamp = msg->header.stamp;
 #if defined(AIS_GNG_BACKEND_CPU)
-    std::vector<uint32_t> grasp_ids;
-    if (enable_grasp_attention_) {
-        grasp_ids = prepare_grasp_attention(header, clouds.size() == 1);
-        // 購読時のみ点群化。重点対象の失効時は空点群で表示を解除。
-        if (grasp_attention_pub_->get_subscription_count() > 0 ||
-            grasp_attention_pub_->get_intra_process_subscription_count() > 0) {
-            uint32_t num_points = 0;
-            const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
-            grasp_attention_pub_->publish(makePointCloud2Msg(header, points, num_points, &grasp_ids));
-        }
-    }
-    if (enable_grasp_attention_ || enable_boundary_attention_ || enable_nonplane_attention_) {
-        prepare_priority_attention(header, clouds.size() == 1, grasp_ids);
+    if (enable_grasp_attention_ || enable_boundary_attention_) {
+        prepare_priority_attention(header, clouds.size() == 1);
     }
 #endif
     const auto input_end = std::chrono::steady_clock::now();
@@ -1093,6 +1051,21 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     auto map = gng_getTopologicalMap();// トポロジカルマップ
     auto label = gng_getDownSampling(&label_num); // ダウンサンプリング時のラベル
     auto transformed_pcl = gng_getAffineTransformedInputPointCloud(&transformed_pcl_num); // アフィン変換後の点群
+#if defined(AIS_GNG_BACKEND_CPU)
+    // 共通候補の再利用。購読時だけの展開、候補失効時は空点群。
+    if (grasp_attention_pub_ && (grasp_attention_pub_->get_subscription_count() > 0 ||
+            grasp_attention_pub_->get_intra_process_subscription_count() > 0)) {
+        uint32_t num_ids = 0;
+        const auto *raw_ids = gng_get_sampling_points(1, &num_ids);
+        std::vector<uint32_t> ids;
+        if (num_ids) {ids.assign(raw_ids, raw_ids + num_ids);}
+        grasp_attention_pub_->publish(makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num, &ids));
+    }
+    const auto sampling_stats = gng_get_sampling_stats();
+    if (sampling_stats.has_invalid_score) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点評価の不正値または例外。共通規則を除外");
+    }
+#endif
 
     // トポロジカルマップをROS2メッセージに変換
     auto map_msg = makeTopologicalMapMsg(
@@ -1137,38 +1110,29 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     bool nonplane_component_ran = false;
     double nonplane_component_ms = 0.0;
     std::unique_ptr<std_msgs::msg::UInt32MultiArray> direct_nonplane_components;
-    if (enable_nonplane_attention_) {nonplane_attention_nodes_.clear();}
-    if ((direct_nonplane_component_enabled_ || enable_nonplane_attention_) && direct_plane_clusters) {
+    if (direct_nonplane_component_enabled_ && direct_plane_clusters) {
         const auto nonplane_component_start = std::chrono::steady_clock::now();
         const auto nonplane_components = topological_plane::nonplane::extract_components(
             *map_msg, *direct_plane_clusters);
-        if (enable_nonplane_attention_) {
-            nonplane_attention_nodes_ = nonplane_attention::select_anchors(
-                *map_msg, nonplane_components, min_nonplane_component_nodes_);
-            nonplane_attention_header_ = header;
-            nonplane_attention_received_ = std::chrono::steady_clock::now();
+        direct_nonplane_components = std::make_unique<std_msgs::msg::UInt32MultiArray>();
+        std::size_t output_size = 2U;
+        for (const auto &component : nonplane_components.components) {
+            output_size += 2U + component.node_indices.size();
         }
-        if (direct_nonplane_component_enabled_) {
-            direct_nonplane_components = std::make_unique<std_msgs::msg::UInt32MultiArray>();
-            std::size_t output_size = 2U;
-            for (const auto &component : nonplane_components.components) {
-                output_size += 2U + component.node_indices.size();
-            }
-            direct_nonplane_components->data.reserve(output_size);
-            direct_nonplane_components->data.push_back(map_msg->frame_number);
+        direct_nonplane_components->data.reserve(output_size);
+        direct_nonplane_components->data.push_back(map_msg->frame_number);
+        direct_nonplane_components->data.push_back(
+            static_cast<uint32_t>(nonplane_components.components.size()));
+        for (const auto &component : nonplane_components.components) {
+            direct_nonplane_components->data.push_back(component.id);
             direct_nonplane_components->data.push_back(
-                static_cast<uint32_t>(nonplane_components.components.size()));
-            for (const auto &component : nonplane_components.components) {
-                direct_nonplane_components->data.push_back(component.id);
-                direct_nonplane_components->data.push_back(
-                    static_cast<uint32_t>(component.node_indices.size()));
-                direct_nonplane_components->data.insert(
-                    direct_nonplane_components->data.end(),
-                    component.node_indices.begin(), component.node_indices.end());
-                for (const uint32_t node_index : component.node_indices) {
-                    if (node_index < map_msg->nodes.size()) {
-                        map_msg->nodes[node_index].nonplane_component_id = component.id;
-                    }
+                static_cast<uint32_t>(component.node_indices.size()));
+            direct_nonplane_components->data.insert(
+                direct_nonplane_components->data.end(),
+                component.node_indices.begin(), component.node_indices.end());
+            for (const uint32_t node_index : component.node_indices) {
+                if (node_index < map_msg->nodes.size()) {
+                    map_msg->nodes[node_index].nonplane_component_id = component.id;
                 }
             }
         }
@@ -1530,21 +1494,21 @@ void AiSGNGComponent::publish_node_support(const TopologicalMap &map, const std_
 #endif
 
 #if defined(AIS_GNG_BACKEND_CPU)
-std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
+bool AiSGNGComponent::prepare_grasp_attention(
         const std_msgs::msg::Header &header, bool has_single_input) {
     const auto &candidate = grasp_attention_map_;
     if (!has_single_input) {
         RCLCPP_WARN_ONCE(get_logger(), "Grasp attention requires a single input cloud; using normal learning");
-        return {};
+        return false;
     }
-    if (!candidate || candidate->nodes.empty() || candidate->clusters.empty()) {return {};}
+    if (!candidate || candidate->nodes.empty() || candidate->clusters.empty()) {return false;}
     const double elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - grasp_attention_received_).count();
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
     const double cloud_sec = stamp_sec(header.stamp), candidate_sec = stamp_sec(candidate->header.stamp);
     if (elapsed > grasp_attention_timeout_sec_ || cloud_sec <= 0 || candidate_sec <= 0 ||
         cloud_sec < candidate_sec || cloud_sec - candidate_sec > grasp_attention_timeout_sec_ ||
-        header.frame_id.empty() || candidate->header.frame_id.empty()) {return {};}
+        header.frame_id.empty() || candidate->header.frame_id.empty()) {return false;}
     geometry_msgs::msg::TransformStamped transform;
     const bool has_transform = header.frame_id != candidate->header.frame_id;
     if (has_transform) {
@@ -1554,7 +1518,7 @@ std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
         } catch (const tf2::TransformException &error) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                 "Grasp attention skipped: TF unavailable: %s", error.what());
-            return {};
+            return false;
         }
     }
     std::vector<std::array<float, 3>> positions;
@@ -1570,60 +1534,28 @@ std::vector<uint32_t> AiSGNGComponent::prepare_grasp_attention(
         positions.push_back({static_cast<float>(point.x), static_cast<float>(point.y), static_cast<float>(point.z)});
     }
     grasp_attention_regions_.assign(*candidate, positions, grasp_attention_margin_);
-    uint32_t num_points = 0;
-    const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
-    auto ids = grasp_attention_regions_.select(points, num_points);
-    return ids;
+    return !grasp_attention_regions_.empty();
 }
 
 void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &header,
-        bool has_single_input, const std::vector<uint32_t> &grasp_ids) {
-    gng_set_priority_input(nullptr, 0, 0);
-    // 非平面モードでの二重重点化防止。候補なし・期限切れ時も残余枠は全体学習。
-    gng_set_unknown_attention_enabled(!enable_nonplane_attention_);
+        bool has_single_input) {
+    gng_set_sampling_rules(nullptr, 0);
     if (!has_single_input) {return;}
-    if (!enable_boundary_attention_ && !enable_nonplane_attention_) {
-        if (!grasp_ids.empty()) {
-            gng_set_priority_input(grasp_ids.data(), grasp_ids.size(), grasp_attention_ratio_);
-        }
-        return;
+    std::vector<gng_sampling_rule> rules;
+    if (enable_grasp_attention_ && prepare_grasp_attention(header, has_single_input)) {
+        rules.push_back(grasp_attention::sampling_rule(1, grasp_attention_ratio_, grasp_attention_regions_));
     }
-    uint32_t num_points = 0;
-    const float *points = gng_getAffineTransformedInputPointCloud(&num_points);
     const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
     const double elapsed_sec = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - boundary_attention_received_).count();
-    std::vector<float> weights(num_points, 0);
-    if (enable_boundary_attention_ && boundary_attention::can_reuse(boundary_attention_header_.frame_id,
+    if (enable_boundary_attention_ && !boundary_attention_nodes_.empty() &&
+            boundary_attention::can_reuse(boundary_attention_header_.frame_id,
             stamp_sec(boundary_attention_header_.stamp), header.frame_id, stamp_sec(header.stamp),
             elapsed_sec, boundary_attention_timeout_sec_)) {
-        weights = boundary_attention::make_weights(points, num_points,
-            boundary_attention_nodes_, boundary_attention_radius_);
+        boundary_sampling_ = std::make_unique<boundary_attention::sampling_data>(boundary_attention_nodes_, boundary_attention_radius_);
+        rules.push_back(boundary_attention::sampling_rule(2, boundary_attention_ratio_, *boundary_sampling_));
     }
-    std::vector<float> nonplane_weights;
-    if (enable_nonplane_attention_) {
-        const double nonplane_elapsed_sec = std::chrono::duration<double>(
-            std::chrono::steady_clock::now() - nonplane_attention_received_).count();
-        if (boundary_attention::can_reuse(nonplane_attention_header_.frame_id,
-                stamp_sec(nonplane_attention_header_.stamp), header.frame_id, stamp_sec(header.stamp),
-                nonplane_elapsed_sec, nonplane_attention_timeout_sec_)) {
-            nonplane_weights = boundary_attention::make_weights(points, num_points,
-                nonplane_attention_nodes_, nonplane_attention_radius_);
-        }
-        if (nonplane_attention_pub_ && (nonplane_attention_pub_->get_subscription_count() > 0 ||
-                nonplane_attention_pub_->get_intra_process_subscription_count() > 0)) {
-            std::vector<uint32_t> ids;
-            for (std::size_t idx = 0; idx < nonplane_weights.size(); ++idx) {
-                if (nonplane_weights[idx] > 0) {ids.push_back(static_cast<uint32_t>(idx));}
-            }
-            nonplane_attention_pub_->publish(makePointCloud2Msg(header, points, num_points, &ids));
-        }
-    }
-    const auto priority = boundary_attention::mix(grasp_ids, grasp_attention_ratio_,
-        weights, enable_boundary_attention_ ? boundary_attention_ratio_ : 0,
-        nonplane_weights, enable_nonplane_attention_ ? nonplane_attention_ratio_ : 0);
-    if (!priority.ids.empty() && !gng_set_weighted_priority_input(priority.ids.data(),
-            priority.weights.data(), priority.ids.size(), priority.ratio)) {
+    if (!gng_set_sampling_rules(rules.data(), rules.size())) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点入力設定の失敗、通常学習へ復帰");
     }
 }

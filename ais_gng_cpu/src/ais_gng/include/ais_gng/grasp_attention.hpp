@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ais_gng_msgs/msg/topological_map.hpp>
+#include <fuzzrobo/libgng/api.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -18,6 +19,21 @@ class regions {
     };
     std::vector<bounds> boxes_;
 public:
+    bool empty() const {return boxes_.empty();}
+    // セルと候補領域の関係。0: 非交差、1: 部分交差、2: 単一領域内への包含。
+    int cell_relation(const double *min_pos, const double *max_pos) const {
+        int relation = 0;
+        for (const auto &box : boxes_) {
+            bool has_intersection = true, is_contained = true;
+            for (uint32_t dim = 0; dim < 3; ++dim) {
+                has_intersection &= max_pos[dim] >= box.min_position[dim] && min_pos[dim] <= box.max_position[dim];
+                is_contained &= min_pos[dim] >= box.min_position[dim] && max_pos[dim] <= box.max_position[dim];
+            }
+            if (is_contained) {return 2;}
+            if (has_intersection) {relation = 1;}
+        }
+        return relation;
+    }
     void assign(const ais_gng_msgs::msg::TopologicalMap &map,
         const std::vector<point> &positions, double margin) {
         boxes_.clear();
@@ -72,4 +88,17 @@ public:
         return ids;
     }
 };
+
+inline gng_sampling_rule sampling_rule(uint32_t id, double ratio, const regions &region_set) {
+    gng_sampling_rule rule;
+    rule.id = id; rule.ratio = ratio; rule.data = &region_set;
+    rule.cell_score = [](const gng_sampling_cell &cell, const void *data) {
+        const auto relation = static_cast<const regions *>(data)->cell_relation(cell.min_pos, cell.max_pos);
+        return gng_sampling_score{relation ? 1.0 : 0.0, static_cast<uint8_t>(relation == 1)};
+    };
+    rule.point_score = [](const float *point, const void *data) {
+        return static_cast<const regions *>(data)->is_inside(point) ? 1.0 : 0.0;
+    };
+    return rule;
+}
 }  // 名前空間fuzzrobo::grasp_attention
