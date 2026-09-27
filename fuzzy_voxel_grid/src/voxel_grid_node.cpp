@@ -9,32 +9,27 @@
 
 #include "sensor_msgs/msg/point_field.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
+#include <rclcpp_components/register_node_macro.hpp>
 
 namespace fuzzy_voxel_grid
 {
 
-std::size_t VoxelKeyHash::operator()(const VoxelKey & key) const noexcept
-{
-    std::size_t seed = 0;
-
-    auto combine = [&seed](int32_t value) {
-        const std::size_t h = std::hash<int32_t>{}(value);
-        seed ^= h + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
-    };
-
-    combine(key.ix);
-    combine(key.iy);
-    combine(key.iz);
-    return seed;
-}
-
-VoxelGridNode::VoxelGridNode()
-: Node("voxel_grid_node")
+VoxelGridNode::VoxelGridNode(const rclcpp::NodeOptions &options)
+: Node("voxel_grid_node", options)
 {
     declareParameters();
     loadParameters();
 
-    voxels_.max_load_factor(0.7f);
+    point_spec_.size = {params_.voxel_size_x, params_.voxel_size_y, params_.voxel_size_z};
+    point_spec_.origin = {params_.grid_origin_x, params_.grid_origin_y, params_.grid_origin_z};
+    point_spec_.min_corner = {params_.range_min_x, params_.range_min_y, params_.range_min_z};
+    point_spec_.max_corner = {params_.range_max_x, params_.range_max_y, params_.range_max_z};
+    point_spec_.exclude_min = {params_.exclude_min_x, params_.exclude_min_y, params_.exclude_min_z};
+    point_spec_.exclude_max = {params_.exclude_max_x, params_.exclude_max_y, params_.exclude_max_z};
+    point_spec_.enable_exclusion = params_.use_exclusion_box;
+    const auto max_dense_voxel_num = declare_parameter<int64_t>("max_dense_voxel_num", 8000000);
+    if (max_dense_voxel_num < 0) {throw std::invalid_argument("max_dense_voxel_numの負値");}
+    point_spec_.max_dense_voxel_num = static_cast<std::size_t>(max_dense_voxel_num);
 
     marker_array_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
         params_.marker_array_topic,
@@ -44,10 +39,21 @@ VoxelGridNode::VoxelGridNode()
         params_.voxel_centers_topic,
         rclcpp::QoS(rclcpp::KeepLast(1)).reliable());
 
-    pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-        params_.input_pointcloud_topic,
-        rclcpp::SensorDataQoS(),
-        std::bind(&VoxelGridNode::pointCloudCallback, this, std::placeholders::_1));
+    const auto shared_store = declare_parameter<std::string>("shared_point_store", "");
+    max_tmap_age_sec_ = declare_parameter<double>("max_tmap_age_sec", 1.0);
+    if (!std::isfinite(max_tmap_age_sec_) || max_tmap_age_sec_ < 0) {
+        throw std::invalid_argument("max_tmap_age_secには有限・非負値が必要");
+    }
+    if (shared_store.empty()) {
+        standalone_points_ = std::make_shared<voxel_idx::point_cell_counts>(point_spec_);
+        pointcloud_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
+            params_.input_pointcloud_topic, rclcpp::SensorDataQoS(),
+            std::bind(&VoxelGridNode::pointCloudCallback, this, std::placeholders::_1));
+    } else {
+        shared_points_ = voxel_idx::shared_point_frames(shared_store);
+        point_query_ = shared_points_->cell_query(point_spec_);
+        RCLCPP_INFO(get_logger(), "共有点群を参照: store=%s、点群の独立購読なし", shared_store.c_str());
+    }
 
     topological_map_sub_ = this->create_subscription<ais_gng_msgs::msg::TopologicalMap>(
         params_.input_topological_map_topic,
@@ -277,307 +283,48 @@ bool VoxelGridNode::isInExcludedBox(float x, float y, float z) const noexcept
         static_cast<double>(z) <= params_.exclude_max_z;
 }
 
-int32_t VoxelGridNode::computeVoxelIndex(float value, double origin, double voxel_size) const noexcept
+VoxelKey VoxelGridNode::pointToVoxelKey(float x, float y, float z) const
 {
-    return static_cast<int32_t>(std::floor((static_cast<double>(value) - origin) / voxel_size));
-}
-
-double VoxelGridNode::computeAverageTopologicalAge(
-    const std::vector<TopologicalNodeRecord> & nodes) const noexcept
-{
-    if (nodes.empty()) {
-        return 0.0;
-    }
-
-    uint64_t sum = 0;
-    for (const auto & node : nodes) {
-        sum += static_cast<uint64_t>(node.age);
-    }
-
-    return static_cast<double>(sum) / static_cast<double>(nodes.size());
-}
-
-VoxelKey VoxelGridNode::pointToVoxelKey(float x, float y, float z) const noexcept
-{
-    return VoxelKey{
-        computeVoxelIndex(x, params_.grid_origin_x, params_.voxel_size_x),
-        computeVoxelIndex(y, params_.grid_origin_y, params_.voxel_size_y),
-        computeVoxelIndex(z, params_.grid_origin_z, params_.voxel_size_z)
-    };
+    return point_spec_.key(Eigen::Vector3d(x, y, z));
 }
 
 geometry_msgs::msg::Point VoxelGridNode::voxelCenter(const VoxelKey & key) const
 {
     geometry_msgs::msg::Point p;
-    p.x = params_.grid_origin_x + (static_cast<double>(key.ix) + 0.5) * params_.voxel_size_x;
-    p.y = params_.grid_origin_y + (static_cast<double>(key.iy) + 0.5) * params_.voxel_size_y;
-    p.z = params_.grid_origin_z + (static_cast<double>(key.iz) + 0.5) * params_.voxel_size_z;
+    p.x = params_.grid_origin_x + (static_cast<double>(key.x) + 0.5) * params_.voxel_size_x;
+    p.y = params_.grid_origin_y + (static_cast<double>(key.y) + 0.5) * params_.voxel_size_y;
+    p.z = params_.grid_origin_z + (static_cast<double>(key.z) + 0.5) * params_.voxel_size_z;
     return p;
 }
 
-std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash>
-VoxelGridNode::buildPointCloudVoxelSnapshot(const sensor_msgs::msg::PointCloud2 & msg) const
+void VoxelGridNode::update_point_counts(const sensor_msgs::msg::PointCloud2 &msg)
 {
-    std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> current;
-
-    if (!hasXYZFields(msg)) {
-        return current;
-    }
-
-    const std::size_t point_count =
-        static_cast<std::size_t>(msg.width) * static_cast<std::size_t>(msg.height);
-
-    current.reserve(point_count);
-
-    sensor_msgs::PointCloud2ConstIterator<float> iter_x(msg, "x");
-    sensor_msgs::PointCloud2ConstIterator<float> iter_y(msg, "y");
-    sensor_msgs::PointCloud2ConstIterator<float> iter_z(msg, "z");
-
-    for (std::size_t i = 0; i < point_count; ++i, ++iter_x, ++iter_y, ++iter_z) {
-        const float x = *iter_x;
-        const float y = *iter_y;
-        const float z = *iter_z;
-
-        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-            continue;
+    point_cells_.reset();
+    standalone_points_->begin_frame();
+    if (hasXYZFields(msg)) {
+        sensor_msgs::PointCloud2ConstIterator<float> x(msg, "x"), y(msg, "y"), z(msg, "z");
+        const std::size_t num_points = static_cast<std::size_t>(msg.width) * msg.height;
+        for (std::size_t idx = 0; idx < num_points; ++idx, ++x, ++y, ++z) {
+            standalone_points_->add_point(Eigen::Vector3f(*x, *y, *z));
         }
-
-        if (!isInRange(x, y, z)) {
-            continue;
-        }
-
-        const VoxelKey key = pointToVoxelKey(x, y, z);
-        current[key].points.push_back(PointSample{x, y, z});
     }
-
-    return current;
+    point_cells_ = standalone_points_;
 }
 
-std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash>
-VoxelGridNode::buildTopologicalVoxelSnapshot(const ais_gng_msgs::msg::TopologicalMap & msg) const
+VoxelLabel VoxelGridNode::assignIntegratedLabel(uint32_t point_count, uint32_t node_count) const noexcept
 {
-    std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> current;
-    current.reserve(msg.nodes.size());
-
-    for (std::size_t i = 0; i < msg.nodes.size(); ++i) {
-        const auto & node = msg.nodes[i];
-
-        const float x = node.pos.x;
-        const float y = node.pos.y;
-        const float z = node.pos.z;
-
-        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-            continue;
-        }
-
-        if (!isInRange(x, y, z)) {
-            continue;
-        }
-
-        const VoxelKey key = pointToVoxelKey(x, y, z);
-        auto & voxel = current[key];
-        const uint32_t age = msg.frame_number >= node.frame ? msg.frame_number - node.frame : 0U;
-
-        voxel.nodes.push_back(TopologicalNodeRecord{
-            static_cast<uint32_t>(i),
-            node.label,
-            age,
-            x,
-            y,
-            z
-        });
-        voxel.label_counts[static_cast<std::size_t>(node.label)] += 1U;
-    }
-
-    return current;
-}
-
-std::unordered_map<VoxelKey, PointCloudVoxelDiff, VoxelKeyHash>
-VoxelGridNode::diffPointCloudVoxels(
-    const std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> & prev_map,
-    const std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> & curr_map) const
-{
-    std::unordered_map<VoxelKey, PointCloudVoxelDiff, VoxelKeyHash> diffs;
-
-    for (const auto & entry : prev_map) {
-        const auto & key = entry.first;
-        const auto prev_count = static_cast<int32_t>(entry.second.points.size());
-
-        auto curr_it = curr_map.find(key);
-        if (curr_it == curr_map.end()) {
-            diffs[key] = PointCloudVoxelDiff{
-                true,
-                false,
-                -prev_count
-            };
-        }
-    }
-
-    for (const auto & entry : curr_map) {
-        const auto & key = entry.first;
-        const auto curr_count = static_cast<int32_t>(entry.second.points.size());
-
-        auto prev_it = prev_map.find(key);
-        if (prev_it == prev_map.end()) {
-            diffs[key] = PointCloudVoxelDiff{
-                false,
-                true,
-                curr_count
-            };
-        } else {
-            const auto prev_count = static_cast<int32_t>(prev_it->second.points.size());
-            const int32_t diff = curr_count - prev_count;
-            if (diff != 0) {
-                diffs[key] = PointCloudVoxelDiff{
-                    true,
-                    true,
-                    diff
-                };
-            }
-        }
-    }
-
-    return diffs;
-}
-
-std::unordered_map<VoxelKey, TopologicalVoxelDiff, VoxelKeyHash>
-VoxelGridNode::diffTopologicalVoxels(
-    const std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> & prev_map,
-    const std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> & curr_map) const
-{
-    std::unordered_map<VoxelKey, TopologicalVoxelDiff, VoxelKeyHash> diffs;
-
-    for (const auto & entry : curr_map) {
-        const auto & key = entry.first;
-        const auto curr_count = static_cast<int32_t>(entry.second.nodes.size());
-
-        auto prev_it = prev_map.find(key);
-        if (prev_it == prev_map.end()) {
-            TopologicalVoxelDiff diff;
-            diff.existed_before = false;
-            diff.exists_now = true;
-            diff.node_count_diff = curr_count;
-
-            for (std::size_t i = 0; i < diff.label_count_diff.size(); ++i) {
-                diff.label_count_diff[i] = static_cast<int32_t>(entry.second.label_counts[i]);
-            }
-            diffs[key] = diff;
-        } else {
-            TopologicalVoxelDiff diff;
-            diff.existed_before = true;
-            diff.exists_now = true;
-            diff.node_count_diff =
-                static_cast<int32_t>(entry.second.nodes.size()) -
-                static_cast<int32_t>(prev_it->second.nodes.size());
-
-            bool changed = (diff.node_count_diff != 0);
-
-            for (std::size_t i = 0; i < diff.label_count_diff.size(); ++i) {
-                diff.label_count_diff[i] =
-                    static_cast<int32_t>(entry.second.label_counts[i]) -
-                    static_cast<int32_t>(prev_it->second.label_counts[i]);
-                if (diff.label_count_diff[i] != 0) {
-                    changed = true;
-                }
-            }
-
-            if (changed) {
-                diffs[key] = diff;
-            }
-        }
-    }
-
-    for (const auto & entry : prev_map) {
-        const auto & key = entry.first;
-        if (curr_map.find(key) == curr_map.end()) {
-            TopologicalVoxelDiff diff;
-            diff.existed_before = true;
-            diff.exists_now = false;
-            diff.node_count_diff = -static_cast<int32_t>(entry.second.nodes.size());
-
-            for (std::size_t i = 0; i < diff.label_count_diff.size(); ++i) {
-                diff.label_count_diff[i] = -static_cast<int32_t>(entry.second.label_counts[i]);
-            }
-            diffs[key] = diff;
-        }
-    }
-
-    return diffs;
-}
-
-uint32_t VoxelGridNode::countMatchedNodeIds(
-    const std::vector<TopologicalNodeRecord> & current_nodes,
-    const std::vector<uint32_t> & previous_node_ids) const
-{
-    if (current_nodes.empty() || previous_node_ids.empty()) {
-        return 0U;
-    }
-
-    std::unordered_set<uint32_t> prev_ids(previous_node_ids.begin(), previous_node_ids.end());
-
-    uint32_t matched_count = 0;
-    for (const auto & node : current_nodes) {
-        if (prev_ids.find(node.node_id) != prev_ids.end()) {
-            ++matched_count;
-        }
-    }
-
-    return matched_count;
-}
-
-double VoxelGridNode::computeTopologicalMatchRate(
-    uint32_t matched_count,
-    uint32_t current_count) const noexcept
-{
-    if (current_count == 0U) {
-        return 0.0;
-    }
-
-    return static_cast<double>(matched_count) / static_cast<double>(current_count);
-}
-
-uint8_t VoxelGridNode::dominantTopologicalLabel(const std::array<uint32_t, 256> & counts) const noexcept
-{
-    uint32_t best_count = 0;
-    uint8_t best_label = 0;
-
-    for (std::size_t i = 0; i < counts.size(); ++i) {
-        if (counts[i] > best_count) {
-            best_count = counts[i];
-            best_label = static_cast<uint8_t>(i);
-        }
-    }
-
-    return best_label;
-}
-
-VoxelLabel VoxelGridNode::assignIntegratedLabel(
-    const VoxelKey & key,
-    uint32_t point_count,
-    uint32_t node_count,
-    fuzzy_voxel_grid::ManagedVoxel &voxel) const noexcept
-{
-    // 既存属性の借用。点群・ノード配列の再集計やコピーなし。
-    struct input_view {
-        uint32_t point_count, node_count;
-        const ManagedVoxel &voxel;
-    };
+    // 現行判定に必要な件数だけの属性。評価拡張の差込口は既存pipeline。
+    struct input_view {uint32_t point_count, node_count;};
     struct label_policy {
         VoxelLabel baseline(const input_view &input) const {
-            if (input.node_count > 0 || input.point_count > 0 ||
-                input.voxel.topological_match_rate > 0.5 ||
-                input.voxel.dominant_topological_label == 1 ||
-                input.voxel.dominant_topological_label == 2 ||
-                input.voxel.average_topological_age > 5) {return VoxelLabel::SkipCandidate;}
-            return VoxelLabel::AddCandidate;
+            return input.node_count || input.point_count ? VoxelLabel::SkipCandidate : VoxelLabel::AddCandidate;
         }
         const input_view &collect(const input_view &input) const {return input;}
         VoxelLabel evaluate(const input_view &input) const {return baseline(input);}
     };
-    (void)key;
     label_policy policy;
     fuzzrobo::voxel_framework::pipeline<fuzzrobo::voxel_framework::configured_features<>, label_policy> pipeline;
-    return pipeline.evaluate(input_view{point_count, node_count, voxel}, policy);
+    return pipeline.evaluate(input_view{point_count, node_count}, policy);
 }
 
 ColorRGBA VoxelGridNode::colorForLabel(VoxelLabel label) const
@@ -658,283 +405,87 @@ visualization_msgs::msg::Marker VoxelGridNode::makeCubeListMarker(
 
 void VoxelGridNode::rebuildVoxelsFromLatestMessages()
 {
-    voxels_.clear();
-
-    if (latest_pointcloud_msg_) {
-        const auto & msg = *latest_pointcloud_msg_;
-
-        if (!hasXYZFields(msg)) {
-            RCLCPP_WARN_THROTTLE(
-                this->get_logger(),
-                *this->get_clock(),
-                2000,
-                "Latest PointCloud2 does not have x/y/z fields.");
-        } else {
-            const std::size_t point_count =
-                static_cast<std::size_t>(msg.width) * static_cast<std::size_t>(msg.height);
-
-            std::size_t finite_count = 0;
-            std::size_t in_range_count = 0;
-            std::size_t accepted_count = 0;
-
-            voxels_.reserve(std::max(voxels_.size(), point_count));
-
-            sensor_msgs::PointCloud2ConstIterator<float> iter_x(msg, "x");
-            sensor_msgs::PointCloud2ConstIterator<float> iter_y(msg, "y");
-            sensor_msgs::PointCloud2ConstIterator<float> iter_z(msg, "z");
-
-            for (std::size_t i = 0; i < point_count; ++i, ++iter_x, ++iter_y, ++iter_z) {
-                const float x = *iter_x;
-                const float y = *iter_y;
-                const float z = *iter_z;
-
-                if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-                    continue;
-                }
-                ++finite_count;
-
-                if (!isInRange(x, y, z)) {
-                    continue;
-                }
-
-                if (isInExcludedBox(x, y, z)) {
-                    continue;
-                }
-                ++in_range_count;
-
-                const VoxelKey key = pointToVoxelKey(x, y, z);
-                voxels_[key].pointcloud_points.push_back(PointSample{x, y, z});
-                ++accepted_count;
+    combined_voxels_.clear();
+    if (point_cells_) {
+        combined_voxels_.reserve(point_cells_->cells().size());
+        for (const auto &cell : point_cells_->cells()) {
+            combined_voxels_.push_back({cell.key, cell.num_points, 0U, VoxelLabel::Normal});
+        }
+    }
+    bool has_compatible_map = bool(latest_topological_map_msg_);
+    if (has_compatible_map && shared_points_) {
+        const auto &header = latest_topological_map_msg_->header;
+        const double age_sec = (rclcpp::Time(point_header_.stamp) - rclcpp::Time(header.stamp)).seconds();
+        has_compatible_map = has_point_header_ && header.frame_id == point_header_.frame_id &&
+            age_sec >= 0 && age_sec <= max_tmap_age_sec_;
+    }
+    active_topological_map_msg_ = has_compatible_map ? latest_topological_map_msg_ : nullptr;
+    if (active_topological_map_msg_) {
+        // 点群由来セルは共有索引を参照。Tmapだけのセルに限った補助表。
+        std::unordered_map<VoxelKey, std::size_t, VoxelKeyHash> node_only_cells;
+        for (const auto &node : active_topological_map_msg_->nodes) {
+            const Eigen::Vector3f point(node.pos.x, node.pos.y, node.pos.z);
+            if (!point_spec_.contains(point)) {continue;}
+            const auto key = pointToVoxelKey(point.x(), point.y(), point.z());
+            auto idx = point_cells_ ? point_cells_->find(key) : voxel_idx::point_cell_counts::no_cell;
+            if (idx == voxel_idx::point_cell_counts::no_cell) {
+                const auto inserted = node_only_cells.emplace(key, combined_voxels_.size());
+                idx = inserted.first->second;
+                if (inserted.second) {combined_voxels_.push_back({key, 0U, 0U, VoxelLabel::Normal});}
             }
-
-            // RCLCPP_INFO_THROTTLE(
-            //     this->get_logger(),
-            //     *this->get_clock(),
-            //     2000,
-            //     "PointCloud stats: total=%zu finite=%zu in_range=%zu accepted=%zu voxel_count=%zu frame_id=%s",
-            //     point_count,
-            //     finite_count,
-            //     in_range_count,
-            //     accepted_count,
-            //     voxels_.size(),
-            //     msg.header.frame_id.c_str());
+            ++combined_voxels_[idx].node_count;
         }
     } else {
-        RCLCPP_WARN_THROTTLE(
-            this->get_logger(),
-            *this->get_clock(),
-            2000,
-            "No latest pointcloud message yet.");
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+            "Tmap未到着、または共有点群とのframe・時刻条件の不一致");
     }
-
-    if (latest_topological_map_msg_) {
-        const auto & msg = *latest_topological_map_msg_;
-
-        voxels_.reserve(std::max(voxels_.size(), msg.nodes.size()));
-
-        std::size_t accepted_nodes = 0;
-
-        for (std::size_t i = 0; i < msg.nodes.size(); ++i) {
-            const auto & node = msg.nodes[i];
-
-            const float x = node.pos.x;
-            const float y = node.pos.y;
-            const float z = node.pos.z;
-
-            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-                continue;
-            }
-
-            if (!isInRange(x, y, z)) {
-                continue;
-            }
-
-            if (isInExcludedBox(x, y, z)) {
-                continue;
-            }
-
-            const VoxelKey key = pointToVoxelKey(x, y, z);
-            auto & voxel = voxels_[key];
-            const uint32_t age = msg.frame_number >= node.frame ? msg.frame_number - node.frame : 0U;
-
-            voxel.topological_nodes.push_back(TopologicalNodeRecord{
-                static_cast<uint32_t>(i),
-                node.label,
-                age,
-                x,
-                y,
-                z
-            });
-            voxel.topological_label_counts[static_cast<std::size_t>(node.label)] += 1U;
-        }
-
-        // RCLCPP_INFO_THROTTLE(
-        //     this->get_logger(),
-        //     *this->get_clock(),
-        //     2000,
-        //     "TopologicalMap stats: nodes=%zu accepted=%zu",
-        //     msg.nodes.size(),
-        //     accepted_nodes);
-    } else {
-        RCLCPP_WARN_THROTTLE(
-            this->get_logger(),
-            *this->get_clock(),
-            2000,
-            "No latest topological_map message yet.");
-    }
-
-    if (latest_pointcloud_msg_) {
-        latest_output_header_ = latest_pointcloud_msg_->header;
+    if (has_point_header_) {
+        latest_output_header_ = point_header_;
         have_output_header_ = true;
     } else if (latest_topological_map_msg_) {
         latest_output_header_ = latest_topological_map_msg_->header;
         have_output_header_ = true;
-    } else {
-        have_output_header_ = false;
-    }
+    } else {have_output_header_ = false;}
 }
 
 void VoxelGridNode::rebuildViewsFromManagedVoxels()
 {
-    combined_voxels_.clear();
-    combined_voxels_.reserve(voxels_.size());
-
-    for (auto & entry : voxels_) {
-        const auto & key = entry.first;
-        auto & voxel = entry.second;
-
-        const uint32_t point_count = static_cast<uint32_t>(voxel.pointcloud_points.size());
-        const uint32_t node_count = static_cast<uint32_t>(voxel.topological_nodes.size());
-
-        if (node_count > 0U) {
-            voxel.dominant_topological_label = dominantTopologicalLabel(voxel.topological_label_counts);
-        } else {
-            voxel.dominant_topological_label = 0;
-        }
-
-        voxel.average_topological_age = computeAverageTopologicalAge(voxel.topological_nodes);
-
-        // TODO そのうち追加
-        // voxel.add_degree = computeAddDegree(
-        //     point_count,
-        //     node_count,
-        //     voxel.average_topological_age,
-        //     voxel.topological_label_counts);
-
-        // voxel.del_degree = computeDelDegree(
-        //     point_count,
-        //     node_count,
-        //     voxel.average_topological_age,
-        //     voxel.topological_label_counts);
-
-        // voxel.skip_degree = computeSkipDegree(
-        //     point_count,
-        //     node_count,
-        //     voxel.average_topological_age,
-        //     voxel.topological_label_counts);
-
-        uint32_t matched_count = 0;
-        uint32_t previous_count = 0;
-
-        auto prev_it = prev_topological_voxel_states_.find(key);
-        if (prev_it != prev_topological_voxel_states_.end()) {
-            previous_count = static_cast<uint32_t>(prev_it->second.node_ids.size());
-            matched_count = countMatchedNodeIds(voxel.topological_nodes, prev_it->second.node_ids);
-        }
-
-        voxel.topological_matched_count = matched_count;
-        voxel.previous_topological_node_count = previous_count;
-        voxel.current_topological_node_count = node_count;
-        voxel.topological_match_rate = computeTopologicalMatchRate(matched_count, node_count);
-
-        voxel.display_label = assignIntegratedLabel(
-            key,
-            point_count,
-            node_count,
-            voxel);
-
-        combined_voxels_.push_back(VoxelView{
-            key,
-            point_count,
-            node_count,
-            voxel.display_label,
-            voxel.dominant_topological_label,
-            voxel.add_degree,
-            voxel.del_degree,
-            voxel.skip_degree
-        });
+    for (auto &voxel : combined_voxels_) {
+        voxel.display_label = assignIntegratedLabel(voxel.point_count, voxel.node_count);
+    }
+    if (have_output_header_) {
+        live_markers_ = make_marker_cache(latest_output_header_, combined_voxels_, false);
     }
 }
 
-void VoxelGridNode::updatePreviousTopologicalVoxelStates()
+visualization_msgs::msg::MarkerArray VoxelGridNode::make_marker_cache(
+    const std_msgs::msg::Header &header, const std::vector<VoxelView> &voxels, bool is_frozen) const
 {
-    prev_topological_voxel_states_.clear();
-    prev_topological_voxel_states_.reserve(voxels_.size());
-
-    for (const auto & entry : voxels_) {
-        const auto & key = entry.first;
-        const auto & voxel = entry.second;
-
-        auto & state = prev_topological_voxel_states_[key];
-        state.node_ids.reserve(voxel.topological_nodes.size());
-
-        for (const auto & node : voxel.topological_nodes) {
-            state.node_ids.push_back(node.node_id);
-        }
+    visualization_msgs::msg::MarkerArray result;
+    const std::array<VoxelLabel, 4> labels{VoxelLabel::Normal, VoxelLabel::AddCandidate,
+        is_frozen ? VoxelLabel::SkipCandidate : VoxelLabel::DeleteCandidate,
+        is_frozen ? VoxelLabel::DeleteCandidate : VoxelLabel::SkipCandidate};
+    for (const auto label : labels) {result.markers.push_back(makeCubeListMarker(header, label, {}));}
+    // 中間4配列と全セル4倍の予約領域なし。送信メッセージへ直接格納。
+    for (const auto &voxel : voxels) {
+        auto idx = static_cast<std::size_t>(voxel.display_label);
+        if (is_frozen && idx >= 2) {idx = 5-idx;}
+        result.markers[idx].points.push_back(voxelCenter(voxel.key));
     }
+    return result;
 }
 
 void VoxelGridNode::printDebugVoxelSummary() const
 {
-    bool found_pointcloud = false;
-    bool found_topological = false;
-
-    VoxelKey max_pointcloud_key{0, 0, 0};
-    VoxelKey max_topological_key{0, 0, 0};
-
-    std::size_t max_pointcloud_count = 0;
-    std::size_t max_topological_count = 0;
-
-    for (const auto & entry : voxels_) {
-        const auto & key = entry.first;
-        const auto & voxel = entry.second;
-
-        if (voxel.pointcloud_points.size() > max_pointcloud_count) {
-            max_pointcloud_count = voxel.pointcloud_points.size();
-            max_pointcloud_key = key;
-            found_pointcloud = true;
-        }
-
-        if (voxel.topological_nodes.size() > max_topological_count) {
-            max_topological_count = voxel.topological_nodes.size();
-            max_topological_key = key;
-            found_topological = true;
-        }
+    // 通常ログではデバッグ集計の全セル走査なし。
+    if (!rcutils_logging_logger_is_enabled_for(get_logger().get_name(), RCUTILS_LOG_SEVERITY_DEBUG)) {return;}
+    uint32_t max_points = 0, max_nodes = 0;
+    for (const auto &voxel : combined_voxels_) {
+        max_points = std::max(max_points, voxel.point_count);
+        max_nodes = std::max(max_nodes, voxel.node_count);
     }
-
-    if (found_pointcloud) {
-        RCLCPP_INFO(
-            this->get_logger(),
-            "Max pointcloud voxel: id=(%d, %d, %d), point_count=%zu",
-            max_pointcloud_key.ix,
-            max_pointcloud_key.iy,
-            max_pointcloud_key.iz,
-            max_pointcloud_count);
-    } else {
-        RCLCPP_INFO(this->get_logger(), "Max pointcloud voxel: none");
-    }
-
-    if (found_topological) {
-        RCLCPP_INFO(
-            this->get_logger(),
-            "Max topological voxel: id=(%d, %d, %d), node_count=%zu",
-            max_topological_key.ix,
-            max_topological_key.iy,
-            max_topological_key.iz,
-            max_topological_count);
-    } else {
-        RCLCPP_INFO(this->get_logger(), "Max topological voxel: none");
-    }
+    RCLCPP_DEBUG(get_logger(), "cells=%zu max_points=%u max_nodes=%u",
+        combined_voxels_.size(), max_points, max_nodes);
 }
 
 void VoxelGridNode::printProcessingTime(std::int64_t elapsed_us) const
@@ -953,51 +504,7 @@ void VoxelGridNode::printProcessingTime(std::int64_t elapsed_us) const
 
 void VoxelGridNode::publishCombinedMarkerArray()
 {
-    if (!have_output_header_) {
-        return;
-    }
-
-    const auto & header = latest_output_header_;
-
-    std::vector<geometry_msgs::msg::Point> normal_points;
-    std::vector<geometry_msgs::msg::Point> add_points;
-    std::vector<geometry_msgs::msg::Point> delete_points;
-    std::vector<geometry_msgs::msg::Point> skip_points;
-
-    normal_points.reserve(combined_voxels_.size());
-    add_points.reserve(combined_voxels_.size());
-    delete_points.reserve(combined_voxels_.size());
-    skip_points.reserve(combined_voxels_.size());
-
-    for (const auto & voxel : combined_voxels_) {
-        const auto center = voxelCenter(voxel.key);
-
-        switch (voxel.display_label) {
-            case VoxelLabel::Normal:
-                normal_points.push_back(center);
-                break;
-            case VoxelLabel::AddCandidate:
-                add_points.push_back(center);
-                break;
-            case VoxelLabel::DeleteCandidate:
-                delete_points.push_back(center);
-                break;
-            case VoxelLabel::SkipCandidate:
-            default:
-                skip_points.push_back(center);
-                break;
-        }
-    }
-
-    visualization_msgs::msg::MarkerArray array;
-    array.markers.reserve(4);
-
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::Normal, normal_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::AddCandidate, add_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::DeleteCandidate, delete_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::SkipCandidate, skip_points));
-
-    marker_array_pub_->publish(array);
+    if (have_output_header_) {marker_array_pub_->publish(live_markers_);}
 }
 
 void VoxelGridNode::publishVoxelCenters(
@@ -1051,11 +558,46 @@ void VoxelGridNode::publishVoxelCenters(
     voxel_centers_pub_->publish(out);
 }
 
+void VoxelGridNode::update_shared_points()
+{
+    const auto frame = shared_points_->latest();
+    if (!frame) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "共有点群の待機中。同一プロセスのwriterとshared_point_store名の確認が必要");
+        return;
+    }
+    if (frame->revision == shared_revision_) {return;}
+    shared_revision_ = frame->revision;
+    if (mode_ == UpdateMode::FROZEN) {
+        if (frame->source_type == "sensor_msgs/msg/PointCloud2" && frame->source_owner) {
+            const auto source = std::static_pointer_cast<const sensor_msgs::msg::PointCloud2>(frame->source_owner);
+            // 判定座標だけworldへ変換。出力の元座標系・intensity等の属性は保持。
+            filtered_new_points_pub_->publish(filterIncomingPointCloud(*source, frame->source_to_world));
+        }
+        return;
+    }
+    // 旧集計の保持は不要。ほかの読者がいない場合の同一バッファ再利用。
+    point_cells_.reset();
+    point_cells_ = point_query_->read(frame);
+    point_header_.frame_id = frame->frame_id;
+    point_header_.stamp = rclcpp::Time(frame->stamp_ns);
+    has_point_header_ = true;
+    has_pending_update_ = true;
+    if (latest_topological_map_msg_ && latest_topological_map_msg_->header.frame_id != frame->frame_id) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+            "共有点群とTmapのframe不一致。Tmapの集計を除外: points=%s Tmap=%s",
+            frame->frame_id.c_str(), latest_topological_map_msg_->header.frame_id.c_str());
+    }
+}
+
 void VoxelGridNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
     std::lock_guard<std::mutex> lock(data_mutex_);
     
     latest_pointcloud_msg_ = msg;
+    point_header_ = msg->header;
+    has_point_header_ = true;
+    has_pending_update_ = true;
 
     if (mode_ == UpdateMode::FROZEN) {
         auto filtered = filterIncomingPointCloud(*msg);
@@ -1063,15 +605,8 @@ void VoxelGridNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Shar
     }
     else
     {
-        auto current_voxels = buildPointCloudVoxelSnapshot(*msg);
-        last_pointcloud_diffs_ = diffPointCloudVoxels(prev_pointcloud_voxels_, current_voxels);
-        prev_pointcloud_voxels_ = std::move(current_voxels);
+        update_point_counts(*msg);
     }
-
-    // RCLCPP_INFO(
-    //     this->get_logger(),
-    //     "PointCloud diff: changed_voxels=%zu",
-    //     last_pointcloud_diffs_.size());
 }
 
 void VoxelGridNode::topologicalMapCallback(const ais_gng_msgs::msg::TopologicalMap::SharedPtr msg)
@@ -1079,15 +614,8 @@ void VoxelGridNode::topologicalMapCallback(const ais_gng_msgs::msg::TopologicalM
     std::lock_guard<std::mutex> lock(data_mutex_);
     
     latest_topological_map_msg_ = msg;
+    has_pending_update_ = true;
 
-    auto current_voxels = buildTopologicalVoxelSnapshot(*msg);
-    last_topological_diffs_ = diffTopologicalVoxels(prev_topological_voxels_, current_voxels);
-    prev_topological_voxels_ = std::move(current_voxels);
-
-    // RCLCPP_INFO(
-    //     this->get_logger(),
-    //     "TopologicalMap diff: changed_voxels=%zu",
-    //     last_topological_diffs_.size());
 }
 
 void VoxelGridNode::timerCallback()
@@ -1096,9 +624,13 @@ void VoxelGridNode::timerCallback()
 
     std::lock_guard<std::mutex> lock(data_mutex_);
 
+    if (shared_points_) {update_shared_points();}
     if (mode_ == UpdateMode::LIVE) {
-        rebuildVoxelsFromLatestMessages();
-        rebuildViewsFromManagedVoxels();
+        if (has_pending_update_) {
+            rebuildVoxelsFromLatestMessages();
+            rebuildViewsFromManagedVoxels();
+            has_pending_update_ = false;
+        }
         publishCombinedMarkerArray();
 
         if (have_output_header_) {
@@ -1134,11 +666,25 @@ void VoxelGridNode::handleFreeze(
         return;
     }
 
-    frozen_voxels_ = voxels_;
+    frozen_voxels_.clear();
+    if (active_topological_map_msg_) {
+        for (const auto &node : active_topological_map_msg_->nodes) {
+            if (point_spec_.contains(Eigen::Vector3f(node.pos.x, node.pos.y, node.pos.z))) {
+                frozen_voxels_[pointToVoxelKey(node.pos.x, node.pos.y, node.pos.z)].topological_nodes.push_back(node.pos);
+            }
+        }
+    }
+    for (const auto &voxel : combined_voxels_) {
+        const auto found = frozen_voxels_.find(voxel.key);
+        if (found != frozen_voxels_.end()) {found->second.display_label = voxel.display_label;}
+    }
     frozen_combined_voxels_ = combined_voxels_;
     frozen_topological_map_msg_ = latest_topological_map_msg_;
     frozen_output_header_ = latest_output_header_;
     have_frozen_output_header_ = have_output_header_;
+    if (have_frozen_output_header_) {
+        frozen_markers_ = make_marker_cache(frozen_output_header_, frozen_combined_voxels_, true);
+    }
     mode_ = UpdateMode::FROZEN;
 
     response->success = true;
@@ -1152,57 +698,18 @@ void VoxelGridNode::handleResume(
     std::lock_guard<std::mutex> lock(data_mutex_);
 
     mode_ = UpdateMode::LIVE;
+    shared_revision_ = 0;
+    has_pending_update_ = true;
+    if (!shared_points_ && latest_pointcloud_msg_) {
+        update_point_counts(*latest_pointcloud_msg_);
+    }
     response->success = true;
     response->message = "Voxel update resumed.";
 }
 
 void VoxelGridNode::publishFrozenMarkerArray()
 {
-    if (!have_frozen_output_header_) {
-        return;
-    }
-
-    const auto & header = frozen_output_header_;
-
-    std::vector<geometry_msgs::msg::Point> normal_points;
-    std::vector<geometry_msgs::msg::Point> add_points;
-    std::vector<geometry_msgs::msg::Point> remove_points;
-    std::vector<geometry_msgs::msg::Point> omit_points;
-
-    normal_points.reserve(frozen_combined_voxels_.size());
-    add_points.reserve(frozen_combined_voxels_.size());
-    remove_points.reserve(frozen_combined_voxels_.size());
-    omit_points.reserve(frozen_combined_voxels_.size());
-
-    for (const auto & voxel : frozen_combined_voxels_) {
-        const auto center = voxelCenter(voxel.key);
-
-        switch (voxel.display_label) {
-            case VoxelLabel::Normal:
-                normal_points.push_back(center);
-                break;
-            case VoxelLabel::AddCandidate:
-                add_points.push_back(center);
-                break;
-            case VoxelLabel::SkipCandidate:
-                remove_points.push_back(center);
-                break;
-            case VoxelLabel::DeleteCandidate:
-            default:
-                omit_points.push_back(center);
-                break;
-        }
-    }
-
-    visualization_msgs::msg::MarkerArray array;
-    array.markers.reserve(4);
-
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::Normal, normal_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::AddCandidate, add_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::SkipCandidate, remove_points));
-    array.markers.push_back(makeCubeListMarker(header, VoxelLabel::DeleteCandidate, omit_points));
-
-    marker_array_pub_->publish(array);
+    if (have_frozen_output_header_) {marker_array_pub_->publish(frozen_markers_);}
 }
 
 void VoxelGridNode::publishFrozenTopologicalMap()
@@ -1213,40 +720,6 @@ void VoxelGridNode::publishFrozenTopologicalMap()
     frozen_topological_map_pub_->publish(*frozen_topological_map_msg_);
 }
 
-// bool VoxelGridNode::shouldRemovePointInFrozenMode(float x, float y, float z) const
-// {
-//     if (mode_ != UpdateMode::FROZEN) {
-//         return false;
-//     }
-
-//     const VoxelKey key = pointToVoxelKey(x, y, z);
-
-//     auto it = frozen_voxels_.find(key);
-//     if (it == frozen_voxels_.end()) {
-//         return false;
-//     }
-
-//     const auto & voxel = it->second;
-//     if (static_cast<int>(voxel.display_label) != params_.filter_target_label) {
-//         return false;
-//     }
-
-//     const double th2 =
-//         params_.filter_distance_threshold * params_.filter_distance_threshold;
-
-//     for (const auto & node : voxel.topological_nodes) {
-//         const double dx = static_cast<double>(x) - static_cast<double>(node.x);
-//         const double dy = static_cast<double>(y) - static_cast<double>(node.y);
-//         const double dz = static_cast<double>(z) - static_cast<double>(node.z);
-//         const double d2 = dx * dx + dy * dy + dz * dz;
-
-//         if (d2 <= th2) {
-//             return true;
-//         }
-//     }
-
-//     return false;
-// }
 
 bool VoxelGridNode::shouldRemovePointInFrozenMode(float x, float y, float z) const
 {
@@ -1279,9 +752,9 @@ bool VoxelGridNode::shouldRemovePointInFrozenMode(float x, float y, float z) con
         for (int dy = -search_ry; dy <= search_ry; ++dy) {
             for (int dx = -search_rx; dx <= search_rx; ++dx) {
                 const VoxelKey neighbor_key{
-                    center_key.ix + dx,
-                    center_key.iy + dy,
-                    center_key.iz + dz
+                    center_key.x + dx,
+                    center_key.y + dy,
+                    center_key.z + dz
                 };
 
                 auto it = frozen_voxels_.find(neighbor_key);
@@ -1314,7 +787,7 @@ bool VoxelGridNode::shouldRemovePointInFrozenMode(float x, float y, float z) con
 }
 
 sensor_msgs::msg::PointCloud2 VoxelGridNode::filterIncomingPointCloud(
-    const sensor_msgs::msg::PointCloud2 & msg) const
+    const sensor_msgs::msg::PointCloud2 & msg, const Eigen::Isometry3d &source_to_grid) const
 {
     sensor_msgs::msg::PointCloud2 out = msg;
     out.data.clear();
@@ -1334,10 +807,8 @@ sensor_msgs::msg::PointCloud2 VoxelGridNode::filterIncomingPointCloud(
         static_cast<std::size_t>(msg.width) * static_cast<std::size_t>(msg.height);
 
     for (std::size_t i = 0; i < point_count; ++i, ++iter_x, ++iter_y, ++iter_z) {
-        const float x = *iter_x;
-        const float y = *iter_y;
-        const float z = *iter_z;
-
+        const Eigen::Vector3d point = source_to_grid * Eigen::Vector3d(*iter_x, *iter_y, *iter_z);
+        const float x = point.x(), y = point.y(), z = point.z();
         bool remove = false;
         if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z) && isInRange(x, y, z)) {
             remove = shouldRemovePointInFrozenMode(x, y, z);
@@ -1358,3 +829,5 @@ sensor_msgs::msg::PointCloud2 VoxelGridNode::filterIncomingPointCloud(
 }
 
 }  // namespace fuzzy_voxel_grid
+
+RCLCPP_COMPONENTS_REGISTER_NODE(fuzzy_voxel_grid::VoxelGridNode)

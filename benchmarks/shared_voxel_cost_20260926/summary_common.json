@@ -1,0 +1,1502 @@
+[
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 100000,
+    "mode": "world",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 0,
+    "cpu_ms_per_input": 10.75,
+    "cpu_ms_per_input_range": [
+      10.25,
+      11.25
+    ],
+    "peak_rss_mib_range": [
+      66.90625,
+      66.9453125
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 11.6979778625,
+    "fvg_latency_ms_mean": 0.0,
+    "stages": {
+      "world_build": {
+        "wall_ms_mean": 9.527953125,
+        "cpu_ms_mean": 9.49895725,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          10.779369999999997,
+          13.576494999999992
+        ],
+        "cpu_ms_per_input": 9.49895725
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.000490025,
+        "cpu_ms_mean": 0.000438325,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0005999499999999996,
+          0.0007308499999999985
+        ],
+        "cpu_ms_per_input": 0.000438325
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.2815537,
+        "cpu_ms_mean": 0.281407825,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.29770209999999997,
+          0.3324549
+        ],
+        "cpu_ms_per_input": 0.281407825
+      },
+      "world_total": {
+        "wall_ms_mean": 9.873714125000001,
+        "cpu_ms_mean": 9.8414945,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          11.129659999999998,
+          13.935869999999992
+        ],
+        "cpu_ms_per_input": 9.8414945
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 100000,
+    "mode": "points",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 17.5,
+    "cpu_ms_per_input_range": [
+      16.999999999999996,
+      18.0
+    ],
+    "peak_rss_mib_range": [
+      99.1328125,
+      100.671875
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 11.30831165,
+    "fvg_latency_ms_mean": 76.90721335,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 0.6633519875,
+        "cpu_ms_mean": 0.6631685625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.7648882,
+          0.7663367
+        ],
+        "cpu_ms_per_input": 0.6631685625
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 0.0641946375,
+        "cpu_ms_mean": 0.0641523375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.08326079999999998,
+          0.08421009999999993
+        ],
+        "cpu_ms_per_input": 0.0641523375
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 0.00044355,
+        "cpu_ms_mean": 0.0004057125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0004956999999999999,
+          0.0006188999999999992
+        ],
+        "cpu_ms_per_input": 0.0004057125
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.0014793500000000002,
+        "cpu_ms_mean": 0.0013368750000000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0008015499999999995,
+          0.0009764999999999993
+        ],
+        "cpu_ms_per_input": 0.0013368750000000002
+      },
+      "fvg_points": {
+        "wall_ms_mean": 6.098326125,
+        "cpu_ms_mean": 6.096195,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          6.5962485,
+          7.830355999999995
+        ],
+        "cpu_ms_per_input": 6.096195
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 56878.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 6.846293375,
+        "cpu_ms_mean": 6.841714625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          7.4408674999999995,
+          8.775847999999995
+        ],
+        "cpu_ms_per_input": 6.841714625
+      },
+      "world_build": {
+        "wall_ms_mean": 9.096311250000001,
+        "cpu_ms_mean": 9.090822375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          9.721364,
+          9.989479999999999
+        ],
+        "cpu_ms_per_input": 9.090822375
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.00043914999999999997,
+        "cpu_ms_mean": 0.000387975,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.00048499999999999997,
+          0.0005534
+        ],
+        "cpu_ms_per_input": 0.000387975
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.28284027500000003,
+        "cpu_ms_mean": 0.282792,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.29280945,
+          0.31664534999999994
+        ],
+        "cpu_ms_per_input": 0.282792
+      },
+      "world_total": {
+        "wall_ms_mean": 9.43689725,
+        "cpu_ms_mean": 9.4291775,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          10.08147,
+          10.34126
+        ],
+        "cpu_ms_per_input": 9.4291775
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 100000,
+    "mode": "tmap",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 18.75,
+    "cpu_ms_per_input_range": [
+      18.75,
+      18.75
+    ],
+    "peak_rss_mib_range": [
+      100.26171875,
+      101.6171875
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 11.0387174625,
+    "fvg_latency_ms_mean": 53.53360401249999,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 0.9764319749999999,
+        "cpu_ms_mean": 0.97606215,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.077959,
+          1.092582
+        ],
+        "cpu_ms_per_input": 0.97606215
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 0.07420191250000001,
+        "cpu_ms_mean": 0.07417365000000001,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.08211619999999994,
+          0.08662059999999998
+        ],
+        "cpu_ms_per_input": 0.07417365000000001
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 0.00042207500000000005,
+        "cpu_ms_mean": 0.00038897500000000006,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0004915999999999999,
+          0.00061455
+        ],
+        "cpu_ms_per_input": 0.00038897500000000006
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.0007420875000000001,
+        "cpu_ms_mean": 0.0005789374999999999,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.00088305,
+          0.0010021
+        ],
+        "cpu_ms_per_input": 0.0005789374999999999
+      },
+      "fvg_points": {
+        "wall_ms_mean": 5.892379,
+        "cpu_ms_mean": 5.8878845,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          6.495028499999999,
+          7.1941095
+        ],
+        "cpu_ms_per_input": 5.8878845
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 56878.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 6.964487125,
+        "cpu_ms_mean": 6.957386125000001,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          7.6339215,
+          8.3195575
+        ],
+        "cpu_ms_per_input": 6.957386125000001
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.0031969375,
+        "cpu_ms_mean": 0.0016563250000000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0039134999999999994,
+          0.004690199999999997
+        ],
+        "cpu_ms_per_input": 0.0016563250000000002
+      },
+      "world_build": {
+        "wall_ms_mean": 9.01092225,
+        "cpu_ms_mean": 9.008581249999999,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          9.416857499999999,
+          9.5169985
+        ],
+        "cpu_ms_per_input": 9.008581249999999
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.0005037999999999999,
+        "cpu_ms_mean": 0.00040398750000000003,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0005033999999999999,
+          0.0005933499999999999
+        ],
+        "cpu_ms_per_input": 0.00040398750000000003
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.27348162499999995,
+        "cpu_ms_mean": 0.27319252499999996,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.28588005,
+          0.31585810000000003
+        ],
+        "cpu_ms_per_input": 0.27319252499999996
+      },
+      "world_total": {
+        "wall_ms_mean": 9.340974625000001,
+        "cpu_ms_mean": 9.336339624999999,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          9.734922000000001,
+          9.830043
+        ],
+        "cpu_ms_per_input": 9.336339624999999
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 100000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 25.125000000000004,
+    "cpu_ms_per_input_range": [
+      25.0,
+      25.250000000000007
+    ],
+    "peak_rss_mib_range": [
+      109.078125,
+      109.18359375
+    ],
+    "marker_mib_sec": 12.971713128303914,
+    "bucket_mib_sec": 1.5631084621097373,
+    "roi_latency_ms_mean": 12.321543537499998,
+    "fvg_latency_ms_mean": 56.81760582500001,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 0.978904,
+        "cpu_ms_mean": 0.9787300625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.0932285,
+          1.1323394999999992
+        ],
+        "cpu_ms_per_input": 0.9787300625
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 1.07095795,
+        "cpu_ms_mean": 1.0696636625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.6520240000000002,
+          2.1314959999999994
+        ],
+        "cpu_ms_per_input": 1.0696636625
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 1.354413625,
+        "cpu_ms_mean": 1.3537715,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.4106819999999995,
+          1.9971834999999971
+        ],
+        "cpu_ms_per_input": 1.3537715
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.9866016125000001,
+        "cpu_ms_mean": 0.9857819124999999,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.5778065000000001,
+          2.017372499999999
+        ],
+        "cpu_ms_per_input": 0.9857819124999999
+      },
+      "fvg_points": {
+        "wall_ms_mean": 6.50149325,
+        "cpu_ms_mean": 6.499489,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          9.154605499999999,
+          9.641125999999998
+        ],
+        "cpu_ms_per_input": 6.499489
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 56878.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 9.939277999999998,
+        "cpu_ms_mean": 9.926359125000001,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          13.273184999999996,
+          14.971314999999999
+        ],
+        "cpu_ms_per_input": 9.926359125000001
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.0032380124999999995,
+        "cpu_ms_mean": 0.0016044375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.00406225,
+          0.0064232999999999955
+        ],
+        "cpu_ms_per_input": 0.0016044375
+      },
+      "world_build": {
+        "wall_ms_mean": 9.532235375,
+        "cpu_ms_mean": 9.523891125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          12.896619999999999,
+          13.498024999999998
+        ],
+        "cpu_ms_per_input": 9.523891125
+      },
+      "world_publish": {
+        "wall_ms_mean": 2.111089125,
+        "cpu_ms_mean": 2.1107851250000005,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          2.1611625,
+          2.217937
+        ],
+        "cpu_ms_per_input": 2.1107851250000005
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.27957325,
+        "cpu_ms_mean": 0.27945893749999995,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.2948461,
+          0.30888665
+        ],
+        "cpu_ms_per_input": 0.27945893749999995
+      },
+      "world_total": {
+        "wall_ms_mean": 12.17965,
+        "cpu_ms_mean": 12.16849,
+        "num_values_mean": 100000.0,
+        "wall_ms_p95_range": [
+          15.349824999999997,
+          15.95206
+        ],
+        "cpu_ms_per_input": 12.16849
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "world",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 0,
+    "cpu_ms_per_input": 19.75,
+    "cpu_ms_per_input_range": [
+      19.5,
+      20.0
+    ],
+    "peak_rss_mib_range": [
+      75.75390625,
+      75.7890625
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 21.088071299999996,
+    "fvg_latency_ms_mean": 0.0,
+    "stages": {
+      "world_build": {
+        "wall_ms_mean": 17.865665,
+        "cpu_ms_mean": 17.859227499999996,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          18.078205,
+          20.845399999999998
+        ],
+        "cpu_ms_per_input": 17.859227499999996
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.00046136249999999995,
+        "cpu_ms_mean": 0.00041385,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0005382999999999998,
+          0.0005495
+        ],
+        "cpu_ms_per_input": 0.00041385
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.39836233749999994,
+        "cpu_ms_mean": 0.3983497875,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.41882139999999995,
+          0.43829605
+        ],
+        "cpu_ms_per_input": 0.3983497875
+      },
+      "world_total": {
+        "wall_ms_mean": 18.324976250000002,
+        "cpu_ms_mean": 18.31586375,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          18.547904999999997,
+          21.317994999999996
+        ],
+        "cpu_ms_per_input": 18.31586375
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "points",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 31.875,
+    "cpu_ms_per_input_range": [
+      31.75,
+      32.0
+    ],
+    "peak_rss_mib_range": [
+      112.62109375,
+      112.72265625
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 20.9182055375,
+    "fvg_latency_ms_mean": 77.2151709875,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 1.0013325625,
+        "cpu_ms_mean": 1.0013505,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.07944,
+          1.091633
+        ],
+        "cpu_ms_per_input": 1.0013505
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 0.09723235,
+        "cpu_ms_mean": 0.0972195,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.1076722,
+          0.117253
+        ],
+        "cpu_ms_per_input": 0.0972195
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 0.00042993750000000004,
+        "cpu_ms_mean": 0.00039147499999999996,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0004750999999999999,
+          0.0005430999999999999
+        ],
+        "cpu_ms_per_input": 0.00039147499999999996
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.0008414250000000001,
+        "cpu_ms_mean": 0.0006553,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0009384499999999996,
+          0.0010460999999999992
+        ],
+        "cpu_ms_per_input": 0.0006553
+      },
+      "fvg_points": {
+        "wall_ms_mean": 10.95379025,
+        "cpu_ms_mean": 10.950914875,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          11.314589999999999,
+          14.10295499999999
+        ],
+        "cpu_ms_per_input": 10.950914875
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 80411.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 12.074406250000001,
+        "cpu_ms_mean": 12.069225499999998,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          12.50532,
+          15.28662499999999
+        ],
+        "cpu_ms_per_input": 12.069225499999998
+      },
+      "world_build": {
+        "wall_ms_mean": 17.5971075,
+        "cpu_ms_mean": 17.593042500000003,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          18.125149999999998,
+          18.67368499999999
+        ],
+        "cpu_ms_per_input": 17.593042500000003
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.0004525625,
+        "cpu_ms_mean": 0.0003992125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.00051415,
+          0.0005928999999999999
+        ],
+        "cpu_ms_per_input": 0.0003992125
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.3944932,
+        "cpu_ms_mean": 0.3944935,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.40853904999999996,
+          0.4217534
+        ],
+        "cpu_ms_per_input": 0.3944935
+      },
+      "world_total": {
+        "wall_ms_mean": 18.05473,
+        "cpu_ms_mean": 18.048229999999997,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          18.584709999999998,
+          19.144084999999986
+        ],
+        "cpu_ms_per_input": 18.048229999999997
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "tmap",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 33.875,
+    "cpu_ms_per_input_range": [
+      33.75,
+      34.0
+    ],
+    "peak_rss_mib_range": [
+      114.47265625,
+      117.51953125
+    ],
+    "marker_mib_sec": 0.0,
+    "bucket_mib_sec": 0.0,
+    "roi_latency_ms_mean": 21.192050950000002,
+    "fvg_latency_ms_mean": 66.023041825,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 1.2872493827160494,
+        "cpu_ms_mean": 1.2872454320987654,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.40252,
+          1.4277755
+        ],
+        "cpu_ms_per_input": 1.303336
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 0.10534688888888888,
+        "cpu_ms_mean": 0.10533154320987655,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.110348,
+          0.11586034999999997
+        ],
+        "cpu_ms_per_input": 0.1066481875
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 0.0004319876543209877,
+        "cpu_ms_mean": 0.0003891111111111112,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.000486,
+          0.00048774999999999996
+        ],
+        "cpu_ms_per_input": 0.0003939750000000001
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.0008904814814814815,
+        "cpu_ms_mean": 0.0006511358024691358,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.001048,
+          0.0010779499999999998
+        ],
+        "cpu_ms_per_input": 0.000659275
+      },
+      "fvg_points": {
+        "wall_ms_mean": 11.03289375,
+        "cpu_ms_mean": 11.0286215,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          13.496719999999998,
+          15.437964999999997
+        ],
+        "cpu_ms_per_input": 11.0286215
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 80411.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 12.4480275,
+        "cpu_ms_mean": 12.44139625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          15.05796,
+          16.999024999999996
+        ],
+        "cpu_ms_per_input": 12.44139625
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.00292465,
+        "cpu_ms_mean": 0.00144,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0037672499999999998,
+          0.00393625
+        ],
+        "cpu_ms_per_input": 0.00144
+      },
+      "world_build": {
+        "wall_ms_mean": 18.053357499999997,
+        "cpu_ms_mean": 18.02206125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          21.055819999999997,
+          21.91999
+        ],
+        "cpu_ms_per_input": 18.02206125
+      },
+      "world_publish": {
+        "wall_ms_mean": 0.00047660000000000004,
+        "cpu_ms_mean": 0.0004268625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0005621,
+          0.0006977999999999998
+        ],
+        "cpu_ms_per_input": 0.0004268625
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.39317277500000003,
+        "cpu_ms_mean": 0.39305070000000003,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.42482725,
+          0.42790155
+        ],
+        "cpu_ms_per_input": 0.39305070000000003
+      },
+      "world_total": {
+        "wall_ms_mean": 18.50935875,
+        "cpu_ms_mean": 18.475550000000002,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          21.563625,
+          22.37743
+        ],
+        "cpu_ms_per_input": 18.475550000000002
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 46.25,
+    "cpu_ms_per_input_range": [
+      43.99999999999999,
+      48.5
+    ],
+    "peak_rss_mib_range": [
+      123.33984375,
+      127.29296875
+    ],
+    "marker_mib_sec": 18.329246893020787,
+    "bucket_mib_sec": 2.37422974382587,
+    "roi_latency_ms_mean": 25.8986764375,
+    "fvg_latency_ms_mean": 64.82639485000001,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 1.289498875,
+        "cpu_ms_mean": 1.2894665,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.403337,
+          1.4440054999999998
+        ],
+        "cpu_ms_per_input": 1.2894665
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 2.44560325,
+        "cpu_ms_mean": 2.445467,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          2.54284,
+          2.8275659999999996
+        ],
+        "cpu_ms_per_input": 2.445467
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 1.773361,
+        "cpu_ms_mean": 1.7733630000000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.8917939999999989,
+          2.011298499999999
+        ],
+        "cpu_ms_per_input": 1.7733630000000002
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 2.3302975,
+        "cpu_ms_mean": 2.3303102499999997,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          2.4297105,
+          2.71017
+        ],
+        "cpu_ms_per_input": 2.3303102499999997
+      },
+      "fvg_points": {
+        "wall_ms_mean": 10.878409999999999,
+        "cpu_ms_mean": 10.873859375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          13.431854999999999,
+          16.811705
+        ],
+        "cpu_ms_per_input": 10.873859375
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 80411.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 16.411465,
+        "cpu_ms_mean": 16.40415375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          18.738295,
+          22.582024999999998
+        ],
+        "cpu_ms_per_input": 16.40415375
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.0033423125,
+        "cpu_ms_mean": 0.0017794875000000001,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0038283999999999996,
+          0.004348849999999999
+        ],
+        "cpu_ms_per_input": 0.0017794875000000001
+      },
+      "world_build": {
+        "wall_ms_mean": 20.5410575,
+        "cpu_ms_mean": 20.5287725,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          18.900484999999996,
+          29.913784999999997
+        ],
+        "cpu_ms_per_input": 20.5287725
+      },
+      "world_publish": {
+        "wall_ms_mean": 3.4064625,
+        "cpu_ms_mean": 3.4049115,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          3.4258905,
+          3.5686064999999996
+        ],
+        "cpu_ms_per_input": 3.4049115
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.4132784375,
+        "cpu_ms_mean": 0.41309117500000003,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.44566965000000003,
+          0.45424729999999996
+        ],
+        "cpu_ms_per_input": 0.41309117500000003
+      },
+      "world_total": {
+        "wall_ms_mean": 25.0156,
+        "cpu_ms_mean": 24.998275,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          23.400154999999994,
+          34.33093499999999
+        ],
+        "cpu_ms_per_input": 24.998275
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": true,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 26.499999999999993,
+    "cpu_ms_per_input_range": [
+      26.249999999999993,
+      26.749999999999993
+    ],
+    "peak_rss_mib_range": [
+      89.6953125,
+      92.04296875
+    ],
+    "marker_mib_sec": 0.14916328950290086,
+    "bucket_mib_sec": 2.3744608365675623,
+    "roi_latency_ms_mean": 21.9245095125,
+    "fvg_latency_ms_mean": 47.5979977375,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 0.17530805,
+        "cpu_ms_mean": 0.1751673125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.2201619,
+          0.23885825
+        ],
+        "cpu_ms_per_input": 0.1751673125
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 0.025942787499999998,
+        "cpu_ms_mean": 0.025653562499999998,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.031006099999999988,
+          0.04515934999999993
+        ],
+        "cpu_ms_per_input": 0.025653562499999998
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 0.0857987625,
+        "cpu_ms_mean": 0.0859001125,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.11931854999999998,
+          0.12527799999999997
+        ],
+        "cpu_ms_per_input": 0.0859001125
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 0.0179918875,
+        "cpu_ms_mean": 0.017773325,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.0212974,
+          0.02453984999999997
+        ],
+        "cpu_ms_per_input": 0.017773325
+      },
+      "fvg_points": {
+        "wall_ms_mean": 0.22582528750000003,
+        "cpu_ms_mean": 0.22584264999999998,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.30424699999999993,
+          0.4368399
+        ],
+        "cpu_ms_per_input": 0.22584264999999998
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 612.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 0.5327921624999999,
+        "cpu_ms_mean": 0.5310668749999999,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.73128595,
+          0.7944443999999999
+        ],
+        "cpu_ms_per_input": 0.5310668749999999
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.0033328500000000005,
+        "cpu_ms_mean": 0.001694825,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.004390899999999995,
+          0.0044258
+        ],
+        "cpu_ms_per_input": 0.001694825
+      },
+      "world_build": {
+        "wall_ms_mean": 18.31136625,
+        "cpu_ms_mean": 18.305073750000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          22.196075,
+          22.2608
+        ],
+        "cpu_ms_per_input": 18.305073750000002
+      },
+      "world_publish": {
+        "wall_ms_mean": 3.4241685000000004,
+        "cpu_ms_mean": 3.4226669999999997,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          3.5757739999999996,
+          3.5934589999999993
+        ],
+        "cpu_ms_per_input": 3.4226669999999997
+      },
+      "world_roi": {
+        "wall_ms_mean": 0.4077510375,
+        "cpu_ms_mean": 0.4077070625,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.42777515,
+          0.4611574
+        ],
+        "cpu_ms_per_input": 0.4077070625
+      },
+      "world_total": {
+        "wall_ms_mean": 22.22679875,
+        "cpu_ms_mean": 22.21624875,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          26.078454999999998,
+          27.02025
+        ],
+        "cpu_ms_per_input": 22.21624875
+      }
+    }
+  },
+  {
+    "source": "results.json",
+    "installed": false,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": true,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 109.25,
+    "cpu_ms_per_input_range": [
+      108.99999999999997,
+      109.5
+    ],
+    "peak_rss_mib_range": [
+      147.5625,
+      149.6328125
+    ],
+    "marker_mib_sec": 18.325377831452244,
+    "bucket_mib_sec": 2.373728575332132,
+    "roi_latency_ms_mean": 101.52500540000001,
+    "fvg_latency_ms_mean": 60.00365075,
+    "stages": {
+      "fvg_cells": {
+        "wall_ms_mean": 1.298968,
+        "cpu_ms_mean": 1.299383875,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          1.4130564999999995,
+          1.4288584999999998
+        ],
+        "cpu_ms_per_input": 1.299383875
+      },
+      "fvg_frame": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_labels": {
+        "wall_ms_mean": 1.9790283875,
+        "cpu_ms_mean": 1.9734049375000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          9.096150499999997,
+          10.544399999999998
+        ],
+        "cpu_ms_per_input": 1.9734049375000002
+      },
+      "fvg_marker": {
+        "wall_ms_mean": 1.785976125,
+        "cpu_ms_mean": 1.7840086249999998,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          2.0883855000000002,
+          2.292548999999999
+        ],
+        "cpu_ms_per_input": 1.7840086249999998
+      },
+      "fvg_marker_build": {
+        "wall_ms_mean": 1.8585936625,
+        "cpu_ms_mean": 1.8533169624999999,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          8.988930999999997,
+          10.43043
+        ],
+        "cpu_ms_per_input": 1.8533169624999999
+      },
+      "fvg_points": {
+        "wall_ms_mean": 10.569310875,
+        "cpu_ms_mean": 10.56400075,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          12.53113,
+          13.716014999999997
+        ],
+        "cpu_ms_per_input": 10.56400075
+      },
+      "fvg_state": {
+        "wall_ms_mean": 0.0,
+        "cpu_ms_mean": 0.0,
+        "num_values_mean": 80411.0,
+        "wall_ms_p95_range": [
+          0.0,
+          0.0
+        ],
+        "cpu_ms_per_input": 0.0
+      },
+      "fvg_timer": {
+        "wall_ms_mean": 15.657866249999998,
+        "cpu_ms_mean": 15.642783750000001,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          22.616815,
+          23.899209999999997
+        ],
+        "cpu_ms_per_input": 15.642783750000001
+      },
+      "fvg_tmap": {
+        "wall_ms_mean": 0.0029504875,
+        "cpu_ms_mean": 0.0015992375,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          0.00346265,
+          0.005084499999999999
+        ],
+        "cpu_ms_per_input": 0.0015992375
+      },
+      "world_build": {
+        "wall_ms_mean": 17.79930875,
+        "cpu_ms_mean": 17.796457500000002,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          18.981585000000003,
+          19.832465
+        ],
+        "cpu_ms_per_input": 17.796457500000002
+      },
+      "world_publish": {
+        "wall_ms_mean": 4.1299967901234576,
+        "cpu_ms_mean": 4.129896790123458,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          4.26991,
+          4.344437500000001
+        ],
+        "cpu_ms_per_input": 4.1815205
+      },
+      "world_roi": {
+        "wall_ms_mean": 68.27825625,
+        "cpu_ms_mean": 68.1865275,
+        "num_values_mean": 0.0,
+        "wall_ms_p95_range": [
+          76.428265,
+          77.41061
+        ],
+        "cpu_ms_per_input": 68.1865275
+      },
+      "world_total": {
+        "wall_ms_mean": 90.30907499999999,
+        "cpu_ms_mean": 90.21097625,
+        "num_values_mean": 200000.0,
+        "wall_ms_p95_range": [
+          98.58324,
+          98.837485
+        ],
+        "cpu_ms_per_input": 90.21097625
+      }
+    }
+  },
+  {
+    "source": "installed.json",
+    "installed": true,
+    "points": 100000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 24.749999999999996,
+    "cpu_ms_per_input_range": [
+      24.25,
+      25.249999999999993
+    ],
+    "peak_rss_mib_range": [
+      171.8984375,
+      173.5625
+    ],
+    "marker_mib_sec": 13.1304986239599,
+    "bucket_mib_sec": 1.5627119666340255,
+    "roi_latency_ms_mean": 11.723333700000001,
+    "fvg_latency_ms_mean": 66.9865140375,
+    "stages": {}
+  },
+  {
+    "source": "installed.json",
+    "installed": true,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 41.0,
+    "cpu_ms_per_input_range": [
+      40.5,
+      41.50000000000001
+    ],
+    "peak_rss_mib_range": [
+      225.20703125,
+      233.22265625
+    ],
+    "marker_mib_sec": 18.55746578841896,
+    "bucket_mib_sec": 2.3741179690970258,
+    "roi_latency_ms_mean": 21.716054149999998,
+    "fvg_latency_ms_mean": 69.8376143375,
+    "stages": {}
+  },
+  {
+    "source": "installed.json",
+    "installed": true,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": true,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 80,
+    "cpu_ms_per_input": 26.375,
+    "cpu_ms_per_input_range": [
+      26.249999999999993,
+      26.5
+    ],
+    "peak_rss_mib_range": [
+      172.21484375,
+      174.41015625
+    ],
+    "marker_mib_sec": 0.1491940508357517,
+    "bucket_mib_sec": 2.3749505118782794,
+    "roi_latency_ms_mean": 21.6444097125,
+    "fvg_latency_ms_mean": 52.2141252625,
+    "stages": {}
+  },
+  {
+    "source": "moving_installed.json",
+    "installed": true,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 78,
+    "cpu_ms_per_input": 46.49999999999999,
+    "cpu_ms_per_input_range": [
+      46.49999999999999,
+      46.49999999999999
+    ],
+    "peak_rss_mib_range": [
+      242.16796875,
+      244.21875
+    ],
+    "marker_mib_sec": 14.747633460534537,
+    "bucket_mib_sec": 2.3839694285849946,
+    "roi_latency_ms_mean": 24.8305853125,
+    "fvg_latency_ms_mean": 61.76665949605264,
+    "stages": {}
+  },
+  {
+    "source": "moving_baseline_installed.json",
+    "installed": true,
+    "points": 200000,
+    "mode": "markers",
+    "narrow_fvg": false,
+    "wide_roi": false,
+    "trials": 2,
+    "sent": 80,
+    "roi_received": 80,
+    "fvg_received": 73,
+    "cpu_ms_per_input": 127.625,
+    "cpu_ms_per_input_range": [
+      126.0,
+      129.25
+    ],
+    "peak_rss_mib_range": [
+      1807.5625,
+      2018.609375
+    ],
+    "marker_mib_sec": 14.613264227863699,
+    "bucket_mib_sec": 2.3838078276149552,
+    "roi_latency_ms_mean": 25.3997294125,
+    "fvg_latency_ms_mean": 165.3371579752252,
+    "stages": {}
+  }
+]

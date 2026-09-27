@@ -90,6 +90,7 @@ MY_API void gng_setPointCloud(const uint8_t *inpcl, const uint32_t input_pcl_num
 MY_API void gng_exec() { gng.exec(); }
 
 static uint8_t set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_rules) {
+    gng.vg.tracking = nullptr;
     auto &sampling = gng.n1.sampling;
     sampling.reset_input();
     if (num_rules == 0) {return 1;}
@@ -109,6 +110,7 @@ static uint8_t set_sampling_rules(const gng_sampling_rule *rules, uint32_t num_r
 }
 
 MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input) {
+    gng.vg.tracking = nullptr;
     gng.n1.sampling.reset_input();
     builtin_sampling.reset();
     if (!input) {return 1;}
@@ -117,7 +119,10 @@ MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input)
     const auto max_items = gng.n1.nodes.size();
     const auto is_ratio = [](double ratio) {return std::isfinite(ratio) && ratio >= 0 && ratio < 1;};
     if (!is_ratio(value.grasp_ratio) || !is_ratio(value.boundary_ratio) ||
-        value.grasp_ratio + value.boundary_ratio + gng.n1.priority_ratio >= 1 ||
+        !fuzzrobo::builtin_sampling::tracking_cells::is_valid(value.tracking) ||
+        value.grasp_ratio + value.boundary_ratio + value.tracking.ratio + gng.n1.priority_ratio >= 1 ||
+        value.tracking.num_nonplane_nodes > max_items ||
+        (value.tracking.num_nonplane_nodes && !value.tracking.nonplane_nodes) ||
         value.num_grasp_boxes > max_items || value.num_boundary_points > max_items ||
         (value.num_grasp_boxes && !value.grasp_boxes) ||
         (value.num_boundary_points && !value.boundary_points)) {return 0;}
@@ -136,7 +141,7 @@ MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input)
         if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {return 0;}
     }
     try {
-        gng_sampling_rule rules[2];
+        gng_sampling_rule rules[3];
         uint32_t num_rules = 0;
         if (value.num_grasp_boxes && value.grasp_ratio > 0) {
             builtin_sampling.boxes.assign(value.grasp_boxes, value.grasp_boxes + value.num_grasp_boxes);
@@ -147,7 +152,35 @@ MY_API uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input)
                 value.boundary_points, value.num_boundary_points, value.boundary_radius);
             rules[num_rules++] = fuzzrobo::boundary_attention::sampling_rule(2, value.boundary_ratio, *builtin_sampling.boundary);
         }
-        return set_sampling_rules(rules, num_rules);
+        bool has_tracking = false;
+        auto &tracking = builtin_sampling.tracking;
+        if (value.tracking.ratio > 0 && value.tracking.num_nonplane_nodes) {
+            tracking.reset(value.tracking);
+            tracking.nonplane_generations.assign(max_items, UINT32_MAX);
+            for (uint32_t idx = 0; idx < value.tracking.num_nonplane_nodes; ++idx) {
+                const auto &ref = value.tracking.nonplane_nodes[idx];
+                if (ref.id >= max_items) {return 0;}
+                const auto &node = gng.n1.nodes[ref.id];
+                if (node.id != NODE_NOID && node.frame == ref.frame) {
+                    tracking.nonplane_generations[ref.id] = ref.frame; has_tracking = true;
+                }
+            }
+            if (has_tracking) {
+                if (value.tracking.mode == gng_tracking_sampling_mode::coarse) {
+                    for (const auto &node : gng.n1.nodes) {
+                        if (node.id != NODE_NOID) {
+                            tracking.add_node(node.pos.p, tracking.nonplane_generations[node.id] != UINT32_MAX);
+                        }
+                    }
+                }
+                rules[num_rules++] = tracking.sampling_rule();
+            }
+        }
+        const auto is_registered = set_sampling_rules(rules, num_rules);
+        if (is_registered && has_tracking && value.tracking.mode == gng_tracking_sampling_mode::coarse) {
+            gng.vg.tracking = &tracking;
+        }
+        return is_registered;
     } catch (...) {
         // C境界への例外伝播と、途中まで登録した条件の持越し防止。
         gng.n1.sampling.reset_input(); builtin_sampling.reset(); return 0;

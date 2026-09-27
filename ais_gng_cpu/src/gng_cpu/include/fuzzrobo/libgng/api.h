@@ -194,6 +194,8 @@ struct gng_sampling_rule {
     gng_sampling_score (*cell_score)(const gng_sampling_cell &, const void *) = nullptr;
     double (*point_score)(const float *, const void *) = nullptr;
     uint8_t enable_node_counts = 0;
+    uint8_t enable_cell_bounds = 1;
+    uint8_t enable_nearest = 1;
 };
 // external_sampler_end
 
@@ -202,7 +204,27 @@ struct gng_sampling_box {
     double min_pos[3]{}, max_pos[3]{};
 };
 
-// 承認済みの把持・境界条件だけを指定するデータ入力。任意関数・元点重みの指定なし。
+// 前回の平面クラスタ未所属ノード。ID再利用の識別用生成世代。
+struct gng_sampling_node_ref {uint32_t id = 0, frame = 0;};
+
+// 組込み追従評価の方式。既存C++利用側の省略時は粗いセル方式。
+enum class gng_tracking_sampling_mode : uint32_t {coarse = 0, nearest_nonplane = 1};
+
+// 非平面所属に基づく組込み評価。粗いセル方式の距離比はセル幅基準、ratio=0で無効。
+struct gng_tracking_sampling_input {
+    const gng_sampling_node_ref *nonplane_nodes = nullptr;
+    uint32_t num_nonplane_nodes = 0;
+    double ratio = 0;
+    double cell_size = .5;
+    uint32_t min_points = 20;
+    uint32_t min_nonplane_nodes = 3;
+    double max_points_per_node_th = 50;
+    double min_centroid_dist_ratio_th = .1;
+    double max_centroid_dist_ratio = .5;
+    gng_tracking_sampling_mode mode = gng_tracking_sampling_mode::coarse;
+};
+
+// 承認済みの把持・境界・追従条件のデータ入力。任意関数・元点重みの指定なし。
 struct gng_builtin_sampling_input {
     const gng_sampling_box *grasp_boxes = nullptr;
     uint32_t num_grasp_boxes = 0;
@@ -211,10 +233,11 @@ struct gng_builtin_sampling_input {
     uint32_t num_boundary_points = 0;
     double boundary_radius = 0;
     double boundary_ratio = 0;
+    gng_tracking_sampling_input tracking;
 };
 
 // setPointCloud後の一入力分。配列は呼出し中にコピー、nullptrで解除、不正入力で解除して0。
-// 規則IDは把持1・境界2、各件数の上限はnode.num_max。配分合計は旧重点枠も含め1未満。
+// 規則IDは把持1・境界2・追従3、各件数の上限はnode.num_max。配分合計は旧重点枠も含め1未満。
 uint8_t gng_set_builtin_sampling(const gng_builtin_sampling_input *input);
 
 struct gng_sampling_stats {

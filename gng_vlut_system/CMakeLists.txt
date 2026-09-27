@@ -113,6 +113,7 @@ include_directories(src/core/safety_engine)
 
 # Subdirectories
 add_subdirectory(src)
+rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::bridge::WorldIndexToVoxelNode")
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

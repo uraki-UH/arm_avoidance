@@ -23,6 +23,8 @@ find_package(geometry_msgs REQUIRED)
 find_package(ais_gng_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(gng_cpu REQUIRED)
+find_package(voxel_idx REQUIRED)
+find_package(rclcpp_components REQUIRED)
 
 add_executable(topological_node_marker_node src/topological_node_marker_node.cpp)
 
@@ -39,8 +41,16 @@ ament_target_dependencies(topological_node_marker_node
   std_srvs
 )
 
-add_executable(voxel_grid_node src/main.cpp src/voxel_grid_node.cpp)
-target_link_libraries(voxel_grid_node gng_cpu::voxel_framework)
+add_library(voxel_grid_component SHARED src/voxel_grid_node.cpp)
+target_link_libraries(voxel_grid_component gng_cpu::voxel_framework voxel_idx::point_cloud_store)
+target_include_directories(voxel_grid_component PUBLIC include)
+ament_target_dependencies(voxel_grid_component
+  rclcpp rclcpp_components sensor_msgs visualization_msgs geometry_msgs ais_gng_msgs std_srvs)
+rclcpp_components_register_nodes(voxel_grid_component "fuzzy_voxel_grid::VoxelGridNode")
+install(TARGETS voxel_grid_component LIBRARY DESTINATION lib)
+ament_export_libraries(voxel_grid_component)
+add_executable(voxel_grid_node src/main.cpp)
+target_link_libraries(voxel_grid_node voxel_grid_component)
 add_executable(topo_visualizar src/topo_visualizar.cpp)
 add_executable(depth_visibility_benchmark src/depth_visibility_benchmark.cpp)
 
@@ -83,7 +93,7 @@ ament_target_dependencies(depth_visibility_benchmark
 
 
 # Release系だけ最適化
-target_compile_options(voxel_grid_node PRIVATE
+target_compile_options(voxel_grid_component PRIVATE
   $<$<CONFIG:Release>:-O3 -DNDEBUG>
   $<$<CONFIG:RelWithDebInfo>:-O2 -g -DNDEBUG>
 )
@@ -92,8 +102,8 @@ target_compile_options(voxel_grid_node PRIVATE
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
 if(ipo_supported)
-  set_property(TARGET voxel_grid_node PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-  set_property(TARGET voxel_grid_node PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+  set_property(TARGET voxel_grid_node voxel_grid_component PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+  set_property(TARGET voxel_grid_node voxel_grid_component PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
 else()
   message(STATUS "IPO/LTO not supported: ${ipo_error}")
 endif()

@@ -2,6 +2,12 @@ voxel_grid_node:
   ros__parameters:
     input_pointcloud_topic: /scan
     input_topological_map_topic: /topological_map
+    # 空文字列は独立購読。共有時は同一プロセス内のworld側と同名。
+    shared_point_store: ""
+    # 共有点群を基準としたTmapの許容経過時間[s]。
+    max_tmap_age_sec: 1.0
+    # 連続セル索引の確保上限[セル]。0は疎なhash索引。
+    max_dense_voxel_num: 8000000
     marker_array_topic: /voxel_markers
     voxel_centers_topic: /voxel_centers
     marker_namespace_prefix: voxel_labels

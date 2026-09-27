@@ -47,6 +47,10 @@ public:
         sums.assign(rules.size() + 1, 0);
         scores.resize(rules.size());
         if (!rules.empty() && grid && points) {
+            const bool enable_bounds = std::any_of(rules.begin(), rules.end(),
+                [](const auto &rule) {return rule.enable_cell_bounds;});
+            const bool enable_nearest = std::any_of(rules.begin(), rules.end(),
+                [](const auto &rule) {return rule.enable_nearest;});
             const bool enable_counts = grid->enable_voxel_downsampling &&
                 std::any_of(rules.begin(), rules.end(), [](const auto &rule) {return rule.enable_node_counts;});
             if (enable_counts) {
@@ -69,7 +73,7 @@ public:
                     cell.has_volume = grid->enable_voxel_downsampling;
                     cell.has_node_count = enable_counts;
                     if (enable_counts) {cell.num_nodes = node_counts[idx];}
-                    if (idx < matches.size()) {
+                    if (enable_nearest && idx < matches.size()) {
                         const auto &nearest = matches[idx];
                         cell.nearest_dist_sq = nearest.dist_sq;
                         if (nearest.id < nodes.size() && nodes[nearest.id].id != NODE_NOID) {
@@ -78,7 +82,7 @@ public:
                             cell.node_label = nodes[nearest.id].label;
                         }
                     }
-                    if (grid->enable_voxel_downsampling) {
+                    if (enable_bounds && grid->enable_voxel_downsampling) {
                         const auto &config = *grid->voxel_config;
                         const auto key = grid->voxel_index[range.start].voxel_index;
                         const uint32_t coords[] = {key % config.max[0], key / config.max[0] % config.max[1], key / config.maxXY};
@@ -91,7 +95,7 @@ public:
                                 std::max({1.0, std::abs(origin[dim]), std::abs(min_pos), std::abs(max_pos)});
                             cell.min_pos[dim] = min_pos - slack; cell.max_pos[dim] = max_pos + slack;
                         }
-                    } else {
+                    } else if (enable_bounds) {
                         const auto &point = (*points)[grid->voxel_index[range.start].raw_index];
                         for (uint32_t dim = 0; dim < 3; ++dim) {cell.min_pos[dim] = cell.max_pos[dim] = point.p[dim];}
                     }

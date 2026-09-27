@@ -2,8 +2,8 @@
 
 ## 共通処理と条件別処理
 
-把持・境界の評価器は`libgng_cpu.so`内部へ組込み、1入力単位で既存入力ボクセル上で評価。
-ROS側は`fuzzrobo/libgng/api.h`の`gng_set_builtin_sampling`へ領域・境界位置だけを入力。
+把持・境界・非平面重点の評価器は`libgng_cpu.so`内部へ組込み、共通抽選分布で評価。
+ROS側は`fuzzrobo/libgng/api.h`の`gng_set_builtin_sampling`へ領域・境界位置・前回非平面所属を入力。
 社内開発版では外部の評価器登録・旧添字APIも同じ重点抽選分布へ接続可能。
 通常・unknown・重点の学習配分を共通化し、総学習回数とunknownの周期的な配分順を維持。
 unknownの候補XYZ保持は従来処理を維持。単純な元点参照化は過去の全体時間比較で不利だったため、今回の対象外。
@@ -27,7 +27,7 @@ unknownの候補XYZ保持は従来処理を維持。単純な元点参照化は�
 
 | 構成 | `allow_external_sampler=ON`：開発用・既定値 | `allow_external_sampler=OFF`：製品配布用 |
 | --- | --- | --- |
-| 組込みの把持・境界、候補取得・診断 | 利用可能 | 利用可能 |
+| 組込みの把持・境界・追従、候補取得・診断 | 利用可能 | 利用可能 |
 | 外部の規則・評価コールバック登録 | 利用可能 | 関数宣言と公開シンボルを除外 |
 | 任意の元点番号・重みによる重点指定 | 利用可能 | 旧API2関数も除外 |
 | `voxel_framework.hpp`・`builtin_sampling.hpp`・拡張用CMakeターゲット | 配布 | 配布対象外 |
@@ -39,7 +39,7 @@ unknownの候補XYZ保持は従来処理を維持。単純な元点参照化は�
 
 組込みAPIは`gng_setPointCloud`の後、`gng_exec`の前に呼出し。
 `gng_builtin_sampling_input`の把持AABB列、境界`Vec3`列・半径・各配分を入力し、配列は呼出し中に複製。
-入力はGNGと同じ座標系・長さ単位。把持IDは1、境界IDは2で固定。
+入力はGNGと同じ座標系・長さ単位。把持IDは1、境界IDは2、追従IDは3で固定。
 配分は有限・非負で合計1未満。各配列の件数上限は`node.num_max`、座標は有限、AABBは各軸でmin≦max。
 境界点がある場合は半径とその二乗が有限かつ正。空の条件は通常枠へ返却。
 入力置換・1回の実行後に失効し、`nullptr`で明示解除。不正入力・確保失敗は登録を解除して返値0。
@@ -68,7 +68,7 @@ colcon --log-base log_product build \
 | 評価器で参照可能な情報 | 内容・制限 |
 | --- | --- |
 | `num_points` | 入力上限・範囲フィルタ適用後の同一セル内元点数。センサー全点数ではない |
-| `min_pos` / `max_pos` | GNG入力座標系のセルAABB。float量子化の保守的な余白付き |
+| `min_pos` / `max_pos` | `enable_cell_bounds`要求時のセルAABB。float量子化の保守的な余白付き |
 | `node_id` / `node_frame` | 既存局所探索で得た最近傍ノードと生成世代。未対応は`UINT32_MAX` |
 | `node_label` | 最近傍のGNGラベル。平面所属や意味分類結果そのものではない |
 | `nearest_dist_sq` | 既存探索範囲内の最近傍距離二乗。ノード密度とは異なる指標 |
@@ -92,12 +92,76 @@ ROSの`AiSGNGComponent::prepare_priority_attention`は組込みAPIを使用。
 開発用の規則生成例は`grasp_attention.hpp`の`sampling_rule`と、`boundary_attention.hpp`経由の同名関数。
 2026-09-26の整理で旧`sampling_api.h`は`api.h`へ統合し、接続専用の`spatial_sampling.hpp`を廃止。
 旧ヘッダーのincludeは統合先へ変更。関数・構造体のAPI名と抽選ロジックは変更なし。
-現在の把持IDは1、境界IDは2。追加条件は衝突しないIDを使用。
+現在の把持IDは1、境界IDは2、追従IDは3。追加条件は衝突しないIDを使用。
 新条件はC++評価器と必要な設定読込の追加が必要であり、任意のYAML項目だけで評価式を定義する機能ではない。
 
-非平面・小規模平面・入力密度とノード密度の差による重点化は、今回の本番条件としては未追加。
-拡張用の属性・点数・ノード数を使う試験は`sampling_test.cpp`にあり、実運用の評価式とは区別。
+非平面支持・密度不足・重心ずれの組込み評価は下記の起動時設定で使用可能。
+小規模平面・動静分類による重点化は未追加。
 物体種別や動静分類・局所ノード密度の保証は、このサンプラーの役割ではない。
+
+## 非平面ノードによる軽量重点サンプリング
+
+ノードの宣言既定値はOFF。CPU版のセンサーYAMLで設定。
+`config/gng_cpu/at128.yaml`はON。2026-09-27の本番適用依頼で軽量方式へ切替。
+`tracking_attention.mode`のROS既定値は`nearest_nonplane`。保持フレームの追加なし。
+
+```yaml
+enable_tracking_attention: true
+tracking_attention.mode: nearest_nonplane
+tracking_attention.ratio: 0.5
+tracking_attention.timeout_sec: 0.5
+tracking_attention.enable_pointcloud: true
+```
+
+既存の入力voxel照合で得た最近傍ノードのIDと生成世代を、前回非平面所属と照合。
+一致セルは元点当たり重み1、それ以外は0。セル抽選の質量は点数比例、セル内は元点均等。
+追加の最近傍探索・粗いセル統計・26近傍探索・元点ごとの評価なし。
+入力voxel幅をそのまま利用し、voxel OFF時も既存の点単位照合結果を使用。
+`tracking_attention.cell_size`等の粗い方式専用設定は不使用。点群の複製・過去点群の再学習なし。
+これは非平面の近くを重点化する方式であり、移動先の発見・密度不足・動静の判定ではない。
+最寄りが平面ノードの未追従領域は対象外になり得る。粗い方式の3ノード支持条件も不使用。
+ROS側の非平面成分抽出の条件は維持し、孤立ノード等の所属をサンプラー側で新規生成しない。
+総学習4,000回なら候補がある入力で2,000回を重点化。候補なしでは通常配分へ返却。
+
+比較用の従来方式は`tracking_attention.mode: coarse`と`tracking_attention.ratio: 0.25`を指定。
+以下の密度・重心・近傍支持の設定と計算は`coarse`だけに適用。
+`cell_size`既定0.5 m、`min_points`20、`min_nonplane_nodes`3、`max_points_per_node_th`50、
+`min_centroid_dist_ratio_th`0.1、`max_centroid_dist_ratio`0.5。各キーに`tracking_attention.`を付加。
+`cell_size`は1.0も使用可能。原点はGNG入力座標系の0、各軸`floor(x / cell_size)`。
+入力voxel・world bucket・ROI/VLUTの幅は変更しない。追加FVGノードの起動は不要。
+world用共有ストアの点群を再購読する方式ではなく、GNGが実際に受理した点の集計。
+元点群のXYZ複製なし。既存voxelの元点加算ループへ粗いセルの点数・座標和を併合。
+OFFと軽量方式は`if constexpr`の集計なし経路で、点単位の粗い追従処理・粗いセルの確保なし。
+
+P=入力点数、N=全GNGノード数、H=自セルと26隣接セルの非平面ノード数の最大値とする。
+点が消えたノードだけの隣接セルも保持。散発ノードを近傍全体で合算しない。
+Pが`min_points`、Hが`min_nonplane_nodes`に届かないセルは候補外。
+
+- ノード不足：`max(0, 1 - N * max_points_per_node_th / P)`。
+- 重心ずれ：`d = norm(mean_points - mean_nodes) / cell_size`。
+  `min_centroid_dist_ratio_th`から`max_centroid_dist_ratio`まで線形に0→1、範囲外は飽和。
+  N=0では重心ずれを使わず、ノード不足だけで評価。
+- セル質量：`P/(P+min_points) * H/(H+min_nonplane_nodes) * max(不足, 重心ずれ)`。
+  共通評価器へは質量/Pを渡し、抽選側の点数乗算による二重強調を回避。
+
+非平面は`TopologicalNode.label`ではなく、前回の平面未所属ノードのID＋生成世代を使用。
+`plane_clustering: true`と`nonplane_component.direct_enabled: true`が必要。
+初回・所属なし・複数入力・frame不一致・同一stamp／巻戻し・期限超過は通常配分へ復帰。
+同じIDでも生成世代が異なるノードは除外。新規ノードへ旧非平面所属を流用しない。
+
+総学習回数は維持し、ROSの宣言既定配分は50%。把持・境界との配分合計は1未満。
+候補セルの点数やノード数の上限保証ではなく、点群密度偏りや遮蔽による誤重点化もあり得る。
+`coarse`は粗いセル境界を跨ぐ入力voxelだけ追加の元点評価。それ以外と軽量方式は既存区間からの抽選。
+重点機能ONかつ`enable_pointcloud: true`（出力の既定値）のときだけ`/downsampling/tracking`を作成。
+通常・同一プロセスの購読時だけ候補を展開。型は`PointCloud2`、QoSはBest Effort / Volatile / depth 1。
+ヘッダーとXYZ座標系は同じ処理周期の`/topological_map`と共通。候補失効時は空点群。
+この点群は候補集合であり、抽選頻度・重みや実学習点列の表示ではない。
+
+API利用側も再ビルドが必要。`gng_tracking_sampling_input`末尾の`mode`追加によるABI変更。
+C++ APIでは`gng_tracking_sampling_mode::nearest_nonplane`を明示指定。省略時は既存ソース互換の`coarse`。
+旧バイナリとの混在は不可。ROSのモードと配分は起動時読込で、適用にはGNG再起動が必要。
+製品構成でも組込み評価は利用可能、任意評価器・任意重みの外部登録制限は維持。
+検証結果と性能・品質上の制約：[追従重点の測定](../../benchmarks/tracking_attention_20260926/README.md)。
 
 ## 配分・重み・有効期間
 
@@ -161,7 +225,8 @@ GNG専用の抽選処理ではなく、入力セル→属性集計→任意の�
 GNGで別規則の例外が発生した場合も、利用側で`has_invalid_score`を確認してフレーム履歴を破棄する必要あり。
 
 把持・境界とFVGの現行アダプターは`configured_features<>`を使用し、全機能ビルドでも履歴なし。
-新しい密度差・小規模平面・非平面の評価式やメンバーシップ関数は本番に追加していない。
+共有基盤追加時には本番評価式なし。その後の密度差・重心ずれ評価は上記の組込み追従条件。
+小規模平面の評価式や動静分類のメンバーシップ関数は未追加。
 FVGの既存ラベル判定も維持し、未実装だったdegree計算を完成扱いにしない。
 
 ```bash
@@ -186,6 +251,8 @@ FVGはヘッダー用のbuild依存のみ追加し、`libgng_cpu.so`への実行
 セル属性だけの条件はRを増やさない。元点評価ループには、そのセルで詳細判定が必要な条件だけを渡す。
 重点抽選は1回O(log E)。重なる条件が多い場合はEも増えるため、項目追加が無償になるわけではない。
 無指定時は追加セル走査なし。ノード数は`enable_node_counts`要求時だけO(N log V)で集計し、同じ集計を全条件で共有。
+`enable_cell_bounds`／`enable_nearest`は既定1。全規則で不要ならAABB計算／最近傍結果の保存を省略。
+追従条件は粗いセルの集計済み重みを使うため、この2属性を要求しない。
 この追加集計や利用側の属性表作成・近傍検索のコストも、機能評価の対象。
 
 `gng_get_sampling_stats`でセル／元点評価数・候補数・重点学習回数・不正評価の有無を取得可能。

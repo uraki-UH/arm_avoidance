@@ -1,0 +1,20 @@
+world_index_to_voxel_node:
+  ros__parameters:
+    # 検索用bucketとROI占有の別解像度。fuzzyへの依存なし。
+    bucket_size: 0.2
+    voxel_size: 0.02
+    output_topic: /roi_voxels
+    world_bucket_topic: /world_index/buckets
+    enable_world_bucket_publish: true
+    enable_roi_query: true
+    enable_reachability_filter: true
+    min_reachability_x: -1.8
+    max_reachability_x: 0.8
+    min_reachability_y: -0.455
+    max_reachability_y: 0.355
+    min_reachability_z: 0.0
+    max_reachability_z: 2.95
+    reachability_margin_x: 0.0
+    reachability_margin_y: 0.0
+    reachability_margin_z: 0.0
+    allow_unconnected_source_as_world: false

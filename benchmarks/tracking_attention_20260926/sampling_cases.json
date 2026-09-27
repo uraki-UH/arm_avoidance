@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {"name":"off", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--mode","off","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}},
+    {"name":"tracking", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--cell-size",".5","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}},
+    {"name":"np_points", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--mode","np_points","--sampler-library","/ros2_ws/src/artifacts/tracking_attention_20260926/experiment_sampler.so","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}},
+    {"name":"np_cells", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--mode","np_cells","--sampler-library","/ros2_ws/src/artifacts/tracking_attention_20260926/experiment_sampler.so","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}},
+    {"name":"np_error", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--mode","np_error","--sampler-library","/ros2_ws/src/artifacts/tracking_attention_20260926/experiment_sampler.so","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}},
+    {"name":"all_error", "cwd":"../..", "argv":["taskset","-c","4","python3","benchmarks/tracking_attention_20260926/verify.py","motion","--tag","final_","--mode","all_error","--sampler-library","/ros2_ws/src/artifacts/tracking_attention_20260926/experiment_sampler.so","--seed","@seed@","--output","@case_dir@/result.json"], "metrics":"metrics.json", "env":{"PYTHONDONTWRITEBYTECODE":"1"}}
+  ]
+}

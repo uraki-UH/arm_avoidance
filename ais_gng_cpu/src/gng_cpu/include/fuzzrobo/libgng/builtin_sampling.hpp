@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <unordered_map>
+#include <limits>
 
 namespace fuzzrobo::boundary_attention {
 
@@ -225,8 +227,147 @@ inline mixture mix(const std::vector<uint32_t> &grasp_ids, double grasp_ratio,
 
 namespace fuzzrobo::builtin_sampling {
 
+// 粗いセルの件数・座標和だけの保持。XYZ複製、追加ソート、全点近傍探索なし。
+class tracking_cells {
+public:
+    using key = std::array<int32_t, 3>;
+    struct key_hash {
+        std::size_t operator()(const key &value) const {
+            std::size_t result = 0;
+            for (auto item : value) {result ^= std::hash<int32_t>{}(item) + 0x9e3779b9U + (result << 6U) + (result >> 2U);}
+            return result;
+        }
+    };
+    struct cell {
+        key position;
+        uint32_t num_points = 0, num_nodes = 0, num_nonplane = 0;
+        double point_sum[3]{}, node_sum[3]{};
+        double weight = 0;
+    };
+    static constexpr uint32_t mixed_cell = UINT32_MAX;
+    gng_tracking_sampling_input config;
+    std::vector<cell> cells;
+    std::vector<uint32_t> fine_cells;
+    std::vector<uint32_t> nonplane_generations;
+
+    static bool is_valid(const gng_tracking_sampling_input &value) {
+        if (value.mode == gng_tracking_sampling_mode::nearest_nonplane) {
+            return std::isfinite(value.ratio) && value.ratio >= 0 && value.ratio < 1;
+        }
+        if (value.mode != gng_tracking_sampling_mode::coarse) {return false;}
+        return std::isfinite(value.ratio) && value.ratio >= 0 && value.ratio < 1 &&
+            std::isfinite(value.cell_size) && value.cell_size > 0 &&
+            value.min_points > 0 && value.min_nonplane_nodes > 0 &&
+            std::isfinite(value.max_points_per_node_th) && value.max_points_per_node_th > 0 &&
+            std::isfinite(value.min_centroid_dist_ratio_th) && value.min_centroid_dist_ratio_th >= 0 &&
+            std::isfinite(value.max_centroid_dist_ratio) &&
+            value.max_centroid_dist_ratio > value.min_centroid_dist_ratio_th;
+    }
+    void reset(const gng_tracking_sampling_input &value) {
+        config = value; config.nonplane_nodes = nullptr;
+        lookup.clear(); cells.clear(); fine_cells.clear();
+    }
+    void add_node(const float *point, bool is_nonplane) {
+        const auto idx = locate(point);
+        if (idx == mixed_cell) {return;}
+        auto &value = cells[idx]; ++value.num_nodes;
+        value.num_nonplane += is_nonplane;
+        for (uint32_t dim = 0; dim < 3; ++dim) {value.node_sum[dim] += point[dim];}
+    }
+    uint32_t add_point(const float *point) {
+        const auto idx = locate(point);
+        if (idx == mixed_cell) {return idx;}
+        auto &value = cells[idx]; ++value.num_points;
+        for (uint32_t dim = 0; dim < 3; ++dim) {value.point_sum[dim] += point[dim];}
+        return idx;
+    }
+    void evaluate() {
+        for (auto &value : cells) {
+            if (value.num_points < config.min_points) {continue;}
+            const double deficit = std::max(0., 1. - value.num_nodes *
+                config.max_points_per_node_th / value.num_points);
+            double centroid_score = 0;
+            if (value.num_nodes) {
+                double dist_sq = 0;
+                for (uint32_t dim = 0; dim < 3; ++dim) {
+                    const double delta = (value.point_sum[dim] / value.num_points -
+                        value.node_sum[dim] / value.num_nodes) / config.cell_size;
+                    dist_sq += delta * delta;
+                }
+                centroid_score = std::clamp((std::sqrt(dist_sq) - config.min_centroid_dist_ratio_th) /
+                    (config.max_centroid_dist_ratio - config.min_centroid_dist_ratio_th), 0., 1.);
+            }
+            const double error = std::max(deficit, centroid_score);
+            if (error == 0) {continue;}
+            // 自セルと26隣接セルの最大支持。散発ノードの寄せ集めによる誤重点化の抑制。
+            uint32_t support = 0;
+            for (int z = -1; z <= 1; ++z) for (int y = -1; y <= 1; ++y) for (int x = -1; x <= 1; ++x) {
+                const key neighbor{value.position[0]+x, value.position[1]+y, value.position[2]+z};
+                const auto found = lookup.find(neighbor);
+                if (found != lookup.end()) {support = std::max(support, cells[found->second].num_nonplane);}
+            }
+            if (support < config.min_nonplane_nodes) {continue;}
+            // セル質量は有界。共通抽選側の点数乗算を相殺し、点数の二重強調を回避。
+            const double evidence = double(value.num_points) / (double(value.num_points) + config.min_points);
+            const double nonplane_support = double(support) / (double(support) + config.min_nonplane_nodes);
+            value.weight = evidence * nonplane_support * error / value.num_points;
+        }
+    }
+    gng_sampling_rule sampling_rule() const {
+        gng_sampling_rule result;
+        result.id = 3; result.ratio = config.ratio; result.data = this;
+        result.enable_cell_bounds = 0; result.enable_nearest = 0;
+        if (config.mode == gng_tracking_sampling_mode::nearest_nonplane) {
+            result.enable_nearest = 1;
+            // 既存のセル照合結果と世代付き所属表だけの参照。質量はセル内点数に比例。
+            result.cell_score = [](const gng_sampling_cell &input, const void *data) {
+                const auto &self = *static_cast<const tracking_cells *>(data);
+                const bool is_nonplane = input.node_id < self.nonplane_generations.size() &&
+                    self.nonplane_generations[input.node_id] != UINT32_MAX &&
+                    self.nonplane_generations[input.node_id] == input.node_frame;
+                return gng_sampling_score{input.num_points && is_nonplane ? 1. : 0., 0};
+            };
+            return result;
+        }
+        result.cell_score = [](const gng_sampling_cell &input, const void *data) {
+            const auto &self = *static_cast<const tracking_cells *>(data);
+            if (input.idx >= self.fine_cells.size()) {return gng_sampling_score{};}
+            const auto idx = self.fine_cells[input.idx];
+            // 粗い境界を跨ぐ入力voxelだけ元点評価。それ以外は既存セル区間を直接抽選。
+            return idx == mixed_cell ? gng_sampling_score{1, 1} : gng_sampling_score{self.cells[idx].weight, 0};
+        };
+        result.point_score = [](const float *point, const void *data) {
+            const auto &self = *static_cast<const tracking_cells *>(data);
+            key position;
+            if (!self.to_key(point, position)) {return 0.;}
+            const auto found = self.lookup.find(position);
+            return found == self.lookup.end() ? 0. : self.cells[found->second].weight;
+        };
+        return result;
+    }
+private:
+    std::unordered_map<key, uint32_t, key_hash> lookup;
+    bool to_key(const float *point, key &position) const {
+        for (uint32_t dim = 0; dim < 3; ++dim) {
+            const double value = std::floor(double(point[dim]) / config.cell_size);
+            // 26隣接の加算余白を含む座標範囲。
+            if (!std::isfinite(value) || value <= INT32_MIN || value >= INT32_MAX) {return false;}
+            position[dim] = static_cast<int32_t>(value);
+        }
+        return true;
+    }
+    uint32_t locate(const float *point) {
+        key position;
+        if (!to_key(point, position)) {return mixed_cell;}
+        const auto found = lookup.try_emplace(position, cells.size());
+        if (found.second) {cells.push_back(cell{position});}
+        return found.first->second;
+    }
+};
+
 // 製品ライブラリが所有する、一入力分の組込み評価データ。
 struct state {
+    tracking_cells tracking;
     std::vector<gng_sampling_box> boxes;
     std::unique_ptr<boundary_attention::sampling_data> boundary;
     void reset() {boxes.clear(); boundary.reset();}

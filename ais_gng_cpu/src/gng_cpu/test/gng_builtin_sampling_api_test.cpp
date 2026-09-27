@@ -85,4 +85,47 @@ int main() {
     Vec3 invalid_point{NAN, 0, 0}; invalid = settings;
     invalid.boundary_points = &invalid_point; invalid.num_boundary_points = 1; reject(invalid);
     std::cout << "gng_builtin_sampling_api_test=passed external=" << allow_external_sampler_build << '\n';
+    gng_builtin_sampling_input tracking;
+    tracking.tracking.ratio = .25; tracking.tracking.min_points = 1;
+    tracking.tracking.min_nonplane_nodes = 1; tracking.tracking.max_points_per_node_th = .001;
+    std::vector<gng_sampling_node_ref> refs;
+    auto map = gng_getTopologicalMap();
+    for (uint32_t idx = 0; idx < map.node_num; ++idx) {refs.push_back({map.nodes[idx].id, map.nodes[idx].frame});}
+    tracking.tracking.nonplane_nodes = refs.data(); tracking.tracking.num_nonplane_nodes = refs.size();
+    submit(); require(gng_set_builtin_sampling(&tracking), "追従重点の組込み登録");
+    for (auto &ref : refs) {ref.frame = UINT32_MAX;}
+    gng_exec();
+    require(gng_get_sampling_stats().num_priority_samples == 250, "追従重点の固定総学習枠と入力配列の借用なし");
+    uint32_t num_candidates = 0; gng_get_sampling_points(3, &num_candidates);
+    require(num_candidates > 0, "追従重点の候補公開");
+    submit(); require(gng_set_builtin_sampling(&tracking), "古い世代の登録"); gng_exec();
+    require(gng_get_sampling_stats().num_priority_samples == 0, "ID再利用・古い世代の除外");
+    auto invalid_tracking = tracking; invalid_tracking.tracking.cell_size = NAN;
+    require(!gng_set_builtin_sampling(&invalid_tracking), "粗いセル幅の不正値拒否");
+    invalid_tracking = tracking; invalid_tracking.tracking.nonplane_nodes = nullptr;
+    require(!gng_set_builtin_sampling(&invalid_tracking), "非平面配列のnull拒否");
+    invalid_tracking = tracking; invalid_tracking.tracking.ratio = .8; invalid_tracking.grasp_ratio = .3;
+    require(!gng_set_builtin_sampling(&invalid_tracking), "他の重点条件を含む配分超過の拒否");
+    std::cout << "tracking_builtin_api=passed\n";
+    tracking.tracking.mode = gng_tracking_sampling_mode::nearest_nonplane;
+    tracking.tracking.ratio = .5;
+    for (double voxel_size : {.5, 0.}) {
+        gng_setParameter("input.voxel_grid_unit", 0, voxel_size);
+        refs.clear(); map = gng_getTopologicalMap();
+        for (uint32_t idx = 0; idx < map.node_num; ++idx) {refs.push_back({map.nodes[idx].id, map.nodes[idx].frame});}
+        tracking.tracking.nonplane_nodes = refs.data(); tracking.tracking.num_nonplane_nodes = refs.size();
+        submit(); require(gng_set_builtin_sampling(&tracking), "軽量方式の組込み登録");
+        for (auto &ref : refs) {ref.frame = UINT32_MAX;}
+        gng_exec();
+        const auto stats = gng_get_sampling_stats();
+        require(stats.num_priority_samples == 500 && stats.num_point_evaluations == 0 && !stats.has_invalid_score,
+            "軽量方式の固定学習枠と元点追加評価なし");
+        gng_get_sampling_points(3, &num_candidates); require(num_candidates > 0, "軽量方式の既存候補トピック用出力");
+        submit(); require(gng_set_builtin_sampling(&tracking), "軽量方式の古い世代入力"); gng_exec();
+        require(gng_get_sampling_stats().num_priority_samples == 0, "軽量方式の古い世代除外");
+        gng_get_sampling_points(3, &num_candidates); require(num_candidates == 0, "古い候補の失効");
+    }
+    invalid_tracking = tracking; invalid_tracking.tracking.mode = static_cast<gng_tracking_sampling_mode>(99);
+    require(!gng_set_builtin_sampling(&invalid_tracking), "未知の組込み方式の拒否");
+    std::cout << "nearest_nonplane_builtin_api=passed\n";
 }

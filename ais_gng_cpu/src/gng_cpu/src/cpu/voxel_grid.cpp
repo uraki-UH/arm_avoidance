@@ -23,6 +23,15 @@ void VoxelGrid::init(GridConfig *_grid_config, OtherConfig *_other_config) {
 }
 
 void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
+    if (tracking) {
+        apply_filter<true>(input_pcl, inpcl_num, labels);
+        tracking->evaluate();
+        tracking = nullptr;
+    } else {apply_filter<false>(input_pcl, inpcl_num, labels);}
+}
+
+template<bool enable_tracking>
+void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels){
     filtered_pcl_num = 0;
     voxel_index_num = 0;
     if(inpcl_num == 0){
@@ -39,6 +48,7 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
             voxel_index[point_idx] = Voxel(point_idx, idx);
             voxel_range[point_idx] = VoxelRange(point_idx, point_idx + 1);
             labels[idx] = 0b001;
+            if constexpr (enable_tracking) {tracking->fine_cells.push_back(tracking->add_point(input_pcl[idx].p));}
         }
         voxel_index_num = filtered_pcl_num;
         return;
@@ -68,8 +78,14 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
         const uint32_t cell_idx = voxel_index[begin_idx].voxel_index;
         uint32_t end_idx = begin_idx;
         float x = 0, y = 0, z = 0;
+        uint32_t coarse_idx = 0;
         do {
             const auto &point = input_pcl[voxel_index[end_idx].raw_index];
+            if constexpr (enable_tracking) {
+                const auto idx = tracking->add_point(point.p);
+                if (end_idx == begin_idx) {coarse_idx = idx;}
+                else if (coarse_idx != idx) {coarse_idx = fuzzrobo::builtin_sampling::tracking_cells::mixed_cell;}
+            }
             x += point.p[0];
             y += point.p[1];
             z += point.p[2];
@@ -83,6 +99,7 @@ void VoxelGrid::applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector
         filtered_pcl[output_idx].p[0] = x * num_1;
         filtered_pcl[output_idx].p[1] = y * num_1;
         filtered_pcl[output_idx].p[2] = z * num_1;
+        if constexpr (enable_tracking) {tracking->fine_cells.push_back(coarse_idx);}
         begin_idx = end_idx;
     }
 }

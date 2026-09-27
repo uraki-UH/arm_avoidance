@@ -67,6 +67,7 @@ public:
     world_bucket_codec_(0.2)
   {
     declare_parameter<std::string>("input_topic", "/points");
+    declare_parameter<std::string>("shared_point_store", "");
     declare_parameter<std::string>("output_topic", "/voxel_ids");
     declare_parameter<std::string>("source_frame_id", "");
     declare_parameter<std::string>("world_frame_id", "world");
@@ -131,7 +132,14 @@ public:
     voxel_codec_.setIndexingParams(x_shift, y_shift, z_shift, offset);
     world_bucket_codec_.setVoxelSize(bucket_size);
     world_bucket_codec_.setIndexingParams(x_shift, y_shift, z_shift, offset);
-    world_index_ = std::make_unique<world_point_bucket_index>(bucket_size);
+    world_index_ = std::make_shared<world_point_bucket_index>(bucket_size);
+    const auto shared_store = get_parameter("shared_point_store").as_string();
+    if (!shared_store.empty()) {
+      if (!enable_world_index_) {
+        throw rclcpp::exceptions::InvalidParametersException("共有点群にはworld index構築が必要");
+      }
+      shared_points_ = voxel_idx::shared_point_frames(shared_store);
+    }
 
     reachability_bounds_.enable_filter =
       get_parameter("enable_reachability_filter").as_bool();
@@ -178,6 +186,7 @@ public:
       input_topic_, rclcpp::SensorDataQoS(),
       std::bind(&WorldIndexToVoxelNode::pointCallback, this, std::placeholders::_1));
 
+    if (shared_points_) {shared_points_->claim_writer(this);}
     RCLCPP_INFO(
       get_logger(),
       "WorldIndexToVoxelNode initialized. input=%s output=%s world_index=%s roi_query=%s additional_consumer_num=%zu parallel_thread_num=%d world_bucket=%s world_frame=%s target_frame=%s source_world_fallback=%s bucket_size=%.3f voxel_size=%.4f accumulator=%s",
@@ -193,6 +202,11 @@ public:
       world_index_->bucket_size(),
       voxel_codec_.voxelSize(),
       voxel_accumulator_->uses_dense_bitmap() ? "dense_bitmap" : "hash");
+  }
+
+  ~WorldIndexToVoxelNode() override
+  {
+    if (shared_points_) {shared_points_->release_writer(this);}
   }
 
 private:
@@ -738,6 +752,14 @@ private:
     }
 
     const auto world_index_build_start = std::chrono::steady_clock::now();
+    // 読取中snapshotの変更禁止。解放済みのバッファだけを再利用。
+    if (!world_index_.unique()) {
+      const double bucket_size = world_index_->bucket_size();
+      world_index_.swap(spare_world_idx_);
+      if (!world_index_ || !world_index_.unique()) {
+        world_index_ = std::make_shared<world_point_bucket_index>(bucket_size);
+      }
+    }
     world_index_->begin_frame(input_point_num);
     sensor_msgs::PointCloud2ConstIterator<float> point_x(*msg, "x");
     sensor_msgs::PointCloud2ConstIterator<float> point_y(*msg, "y");
@@ -751,6 +773,16 @@ private:
     }
     const double world_index_build_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - world_index_build_start).count();
+    if (shared_points_) {
+      voxel_idx::point_frame frame;
+      frame.point_idx = world_index_;
+      frame.source_owner = msg;
+      frame.source_type = "sensor_msgs/msg/PointCloud2";
+      frame.source_to_world = source_to_world;
+      frame.frame_id = world_frame_id_;
+      frame.stamp_ns = rclcpp::Time(msg->header.stamp).nanoseconds();
+      shared_points_->publish(this, std::move(frame));
+    }
 
     if (!enable_roi_query_) {
       std_msgs::msg::Header world_header = msg->header;
@@ -855,7 +887,8 @@ private:
   std::unique_ptr<map_bounds_source> map_source_;
   robot_sim::analysis::VoxelIdCodec voxel_codec_;
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;
-  std::unique_ptr<world_point_bucket_index> world_index_;
+  std::shared_ptr<world_point_bucket_index> world_index_, spare_world_idx_;
+  std::shared_ptr<voxel_idx::point_frame_channel> shared_points_;
   std::unique_ptr<reachability_voxel_accumulator> voxel_accumulator_;
   std::vector<additional_consumer> additional_consumers_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

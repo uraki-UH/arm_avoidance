@@ -78,6 +78,13 @@ class AiSGNGComponent : public rclcpp::Node {
     std::vector<Vec3> boundary_attention_nodes_;
     std_msgs::msg::Header boundary_attention_header_;
     std::chrono::steady_clock::time_point boundary_attention_received_{};
+    bool enable_tracking_attention_{false};
+    gng_tracking_sampling_input tracking_attention_;
+    double tracking_attention_timeout_sec_{.5};
+    std::vector<gng_sampling_node_ref> tracking_nonplane_nodes_;
+    std_msgs::msg::Header tracking_attention_header_;
+    std::chrono::steady_clock::time_point tracking_attention_received_{};
+    rclcpp::Publisher<PC2>::SharedPtr tracking_attention_pub_;
     void prepare_priority_attention(const std_msgs::msg::Header &header, bool has_single_input);
     uint32_t max_boundary_neighbors_{4};
     bool enable_boundary_candidates_{false};

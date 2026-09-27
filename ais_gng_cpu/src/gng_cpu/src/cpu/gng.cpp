@@ -116,6 +116,7 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     n1.priority_weights.clear();
     n1.priority_ratio = 0;
     n1.sampling.reset_input();
+    vg.tracking = nullptr;
     // 入力点群の確保
     n1.has_observation_origin = false;
     n1.observation_pixel_source = {};

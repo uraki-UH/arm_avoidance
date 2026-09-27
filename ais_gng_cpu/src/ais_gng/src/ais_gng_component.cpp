@@ -502,9 +502,52 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         RCLCPP_INFO(get_logger(), "Grasp attention: topic=%s margin=%.3f m ratio=%.2f timeout=%.2f s",
             grasp_topic.c_str(), grasp_attention_margin_, grasp_attention_ratio_, grasp_attention_timeout_sec_);
     }
+    // 非平面所属による重点配分。既定は既存最近傍結果の再利用。
+    enable_tracking_attention_ = declare_parameter("enable_tracking_attention", false, grasp_descriptor);
+    const auto tracking_mode = declare_parameter<std::string>("tracking_attention.mode", "nearest_nonplane", grasp_descriptor);
+    if (tracking_mode == "nearest_nonplane") {
+        tracking_attention_.mode = gng_tracking_sampling_mode::nearest_nonplane;
+    } else if (tracking_mode == "coarse") {
+        tracking_attention_.mode = gng_tracking_sampling_mode::coarse;
+    } else {throw std::invalid_argument("tracking_attention.modeはnearest_nonplaneまたはcoarse");}
+    tracking_attention_.ratio = declare_parameter("tracking_attention.ratio", .5, grasp_descriptor);
+    tracking_attention_.cell_size = declare_parameter("tracking_attention.cell_size", .5, grasp_descriptor);
+    tracking_attention_.max_points_per_node_th = declare_parameter("tracking_attention.max_points_per_node_th", 50., grasp_descriptor);
+    tracking_attention_.min_centroid_dist_ratio_th = declare_parameter("tracking_attention.min_centroid_dist_ratio_th", .1, grasp_descriptor);
+    tracking_attention_.max_centroid_dist_ratio = declare_parameter("tracking_attention.max_centroid_dist_ratio", .5, grasp_descriptor);
+    tracking_attention_timeout_sec_ = declare_parameter("tracking_attention.timeout_sec", .5, grasp_descriptor);
+    const auto min_tracking_points = declare_parameter<int64_t>("tracking_attention.min_points", 20, grasp_descriptor);
+    const auto min_tracking_nonplane = declare_parameter<int64_t>("tracking_attention.min_nonplane_nodes", 3, grasp_descriptor);
+    const bool enable_tracking_points = declare_parameter("tracking_attention.enable_pointcloud", true, grasp_descriptor);
+    if (!std::isfinite(tracking_attention_.ratio) || tracking_attention_.ratio <= 0 || tracking_attention_.ratio >= 1 ||
+        (tracking_attention_.mode == gng_tracking_sampling_mode::coarse && (
+        !std::isfinite(tracking_attention_.cell_size) || tracking_attention_.cell_size <= 0 ||
+        !std::isfinite(tracking_attention_.max_points_per_node_th) || tracking_attention_.max_points_per_node_th <= 0 ||
+        !std::isfinite(tracking_attention_.min_centroid_dist_ratio_th) || tracking_attention_.min_centroid_dist_ratio_th < 0 ||
+        !std::isfinite(tracking_attention_.max_centroid_dist_ratio) ||
+        tracking_attention_.max_centroid_dist_ratio <= tracking_attention_.min_centroid_dist_ratio_th ||
+        min_tracking_points <= 0 || min_tracking_points > UINT32_MAX ||
+        min_tracking_nonplane <= 0 || min_tracking_nonplane > UINT32_MAX)) ||
+        !std::isfinite(tracking_attention_timeout_sec_) || tracking_attention_timeout_sec_ <= 0) {
+        throw std::invalid_argument("追従重点サンプリング設定の不正値");
+    }
+    tracking_attention_.min_points = static_cast<uint32_t>(min_tracking_points);
+    tracking_attention_.min_nonplane_nodes = static_cast<uint32_t>(min_tracking_nonplane);
+    if (enable_tracking_attention_) {
+        if (!direct_plane_cluster_enabled_ || !direct_nonplane_component_enabled_) {
+            throw std::invalid_argument("追従重点サンプリングには平面・非平面所属の計算が必要");
+        }
+        if (enable_tracking_points) {
+            tracking_attention_pub_ = create_publisher<PC2>(
+                "downsampling/tracking", rclcpp::QoS(1).best_effort().durability_volatile());
+        }
+        RCLCPP_INFO(get_logger(), "追従重点サンプリング: mode=%s ratio=%.2f",
+            tracking_mode.c_str(), tracking_attention_.ratio);
+    }
     const double total_attention_ratio =
         (enable_grasp_attention_ ? grasp_attention_ratio_ : 0) +
-        (enable_boundary_attention_ ? boundary_attention_ratio_ : 0);
+        (enable_boundary_attention_ ? boundary_attention_ratio_ : 0) +
+        (enable_tracking_attention_ ? tracking_attention_.ratio : 0);
     if (total_attention_ratio >= 1.0) {
         throw std::invalid_argument("重点配分率の合計による通常学習枠の消失");
     }
@@ -717,7 +760,8 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         std::vector<float> flt_array;
         auto name = p.get_name();
         if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
-            name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0) {continue;}
+            name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0 ||
+            name == "enable_tracking_attention" || name.rfind("tracking_attention.", 0) == 0) {continue;}
         if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
             name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
             name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
@@ -1034,7 +1078,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         : base_frame_id_;
     header.stamp = msg->header.stamp;
 #if defined(AIS_GNG_BACKEND_CPU)
-    if (enable_grasp_attention_ || enable_boundary_attention_) {
+    if (enable_grasp_attention_ || enable_boundary_attention_ || enable_tracking_attention_) {
         prepare_priority_attention(header, clouds.size() == 1);
     }
 #endif
@@ -1062,6 +1106,14 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         grasp_attention_pub_->publish(makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num, &ids));
     }
     const auto sampling_stats = gng_get_sampling_stats();
+    if (tracking_attention_pub_ && (tracking_attention_pub_->get_subscription_count() > 0 ||
+            tracking_attention_pub_->get_intra_process_subscription_count() > 0)) {
+        uint32_t num_ids = 0;
+        const auto *raw_ids = gng_get_sampling_points(3, &num_ids);
+        std::vector<uint32_t> ids;
+        if (num_ids) {ids.assign(raw_ids, raw_ids + num_ids);}
+        tracking_attention_pub_->publish(makePointCloud2Msg(header, transformed_pcl, transformed_pcl_num, &ids));
+    }
     if (sampling_stats.has_invalid_score) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点評価の不正値または例外。共通規則を除外");
     }
@@ -1139,6 +1191,16 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         nonplane_component_ms = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - nonplane_component_start).count();
         nonplane_component_ran = true;
+    }
+    if (enable_tracking_attention_) {
+        tracking_nonplane_nodes_.clear();
+        for (const auto &node : map_msg->nodes) {
+            if (node.nonplane_component_id != ais_gng_msgs::msg::TopologicalNode::NONPLANE_COMPONENT_NONE) {
+                tracking_nonplane_nodes_.push_back({node.id, node.frame});
+            }
+        }
+        tracking_attention_header_ = header;
+        tracking_attention_received_ = std::chrono::steady_clock::now();
     }
 #endif
     const double gng_summary_ms = std::chrono::duration<double, std::milli>(
@@ -1558,6 +1620,16 @@ void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &he
         input.num_boundary_points = boundary_attention_nodes_.size();
         input.boundary_radius = boundary_attention_radius_;
         input.boundary_ratio = boundary_attention_ratio_;
+    }
+    const double tracking_elapsed_sec = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - tracking_attention_received_).count();
+    if (enable_tracking_attention_ && !tracking_nonplane_nodes_.empty() &&
+        boundary_attention::can_reuse(tracking_attention_header_.frame_id,
+            stamp_sec(tracking_attention_header_.stamp), header.frame_id, stamp_sec(header.stamp),
+            tracking_elapsed_sec, tracking_attention_timeout_sec_)) {
+        input.tracking = tracking_attention_;
+        input.tracking.nonplane_nodes = tracking_nonplane_nodes_.data();
+        input.tracking.num_nonplane_nodes = tracking_nonplane_nodes_.size();
     }
     if (!gng_set_builtin_sampling(&input)) {
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "重点入力設定の失敗、通常学習へ復帰");

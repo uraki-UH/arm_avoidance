@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <point_cloud_store.hpp>
 
 #include "ais_gng_msgs/msg/topological_map.hpp"
 #include "geometry_msgs/msg/point.hpp"
@@ -41,111 +42,28 @@ struct ColorRGBA
     double a;
 };
 
-struct VoxelKey
-{
-    int32_t ix;
-    int32_t iy;
-    int32_t iz;
+using VoxelKey = voxel_idx::world_bucket_key;
+using VoxelKeyHash = voxel_idx::world_bucket_key_hash;
 
-    bool operator==(const VoxelKey & other) const noexcept
-    {
-        return ix == other.ix && iy == other.iy && iz == other.iz;
-    }
-};
-
-struct VoxelKeyHash
-{
-    std::size_t operator()(const VoxelKey & key) const noexcept;
-};
-
-struct PointSample
-{
-    float x;
-    float y;
-    float z;
-};
-
-struct TopologicalNodeRecord
-{
-    uint32_t node_id;
-    uint8_t label;
-    uint32_t age;
-    float x;
-    float y;
-    float z;
-};
-
+// freezeフィルタに必要なノード座標のみの保持。
 struct ManagedVoxel
 {
-    std::vector<PointSample> pointcloud_points;
-    std::vector<TopologicalNodeRecord> topological_nodes;
-
-    std::array<uint32_t, 256> topological_label_counts{};
-    uint8_t dominant_topological_label{0};
-
-    double average_topological_age{0.0};
-
-    double topological_match_rate{0.0};
-    uint32_t topological_matched_count{0};
-    uint32_t previous_topological_node_count{0};
-    uint32_t current_topological_node_count{0};
-
-    double add_degree{0.0};
-    double del_degree{0.0};
-    double skip_degree{0.0};
-
+    std::vector<geometry_msgs::msg::Point32> topological_nodes;
     VoxelLabel display_label{VoxelLabel::Normal};
-};
-
-struct PointCloudVoxelSnapshot
-{
-    std::vector<PointSample> points;
-};
-
-struct TopologicalVoxelSnapshot
-{
-    std::vector<TopologicalNodeRecord> nodes;
-    std::array<uint32_t, 256> label_counts{};
-};
-
-struct PreviousTopologicalVoxelState
-{
-    std::vector<uint32_t> node_ids;
-};
-
-struct PointCloudVoxelDiff
-{
-    bool existed_before{false};
-    bool exists_now{false};
-    int32_t point_count_diff{0};
-};
-
-struct TopologicalVoxelDiff
-{
-    bool existed_before{false};
-    bool exists_now{false};
-    int32_t node_count_diff{0};
-    std::array<int32_t, 256> label_count_diff{};
 };
 
 struct VoxelView
 {
     VoxelKey key;
-    uint32_t point_count;
-    uint32_t node_count;
-    VoxelLabel display_label;
-    uint8_t dominant_topological_label;
-
-    double average_topological_age;
-    double add_degree{0.0};
-    double del_degree{0.0};
-    double skip_degree{0.0};
+    uint32_t point_count{0};
+    uint32_t node_count{0};
+    VoxelLabel display_label{VoxelLabel::Normal};
 };
 
 class VoxelGridNode : public rclcpp::Node
 {
 public:
-    VoxelGridNode();
+    explicit VoxelGridNode(const rclcpp::NodeOptions &options = rclcpp::NodeOptions());
 
 private:
     struct Parameters
@@ -204,38 +122,14 @@ private:
     bool hasXYZFields(const sensor_msgs::msg::PointCloud2 & msg) const;
     bool isInRange(float x, float y, float z) const noexcept;
     bool isInExcludedBox(float x, float y, float z) const noexcept;
-    int32_t computeVoxelIndex(float value, double origin, double voxel_size) const noexcept;
-    double computeAverageTopologicalAge(const std::vector<TopologicalNodeRecord> & nodes) const noexcept;
-    VoxelKey pointToVoxelKey(float x, float y, float z) const noexcept;
+    VoxelKey pointToVoxelKey(float x, float y, float z) const;
     geometry_msgs::msg::Point voxelCenter(const VoxelKey & key) const;
 
-    std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash>
-    buildPointCloudVoxelSnapshot(const sensor_msgs::msg::PointCloud2 & msg) const;
-    std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash>
-    buildTopologicalVoxelSnapshot(const ais_gng_msgs::msg::TopologicalMap & msg) const;
-    std::unordered_map<VoxelKey, PointCloudVoxelDiff, VoxelKeyHash>
-    diffPointCloudVoxels(
-    const std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> & prev_map,
-    const std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> & curr_map) const;
-    std::unordered_map<VoxelKey, TopologicalVoxelDiff, VoxelKeyHash>
-    diffTopologicalVoxels(
-    const std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> & prev_map,
-    const std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> & curr_map) const;
+    void update_point_counts(const sensor_msgs::msg::PointCloud2 &msg);
 
-    uint32_t countMatchedNodeIds(
-    const std::vector<TopologicalNodeRecord> & current_nodes,
-    const std::vector<uint32_t> & previous_node_ids) const;
-    double computeTopologicalMatchRate(
-    uint32_t matched_count,
-    uint32_t current_count) const noexcept;
-
-    uint8_t dominantTopologicalLabel(const std::array<uint32_t, 256> & counts) const noexcept;
-
-    VoxelLabel assignIntegratedLabel(
-        const VoxelKey & key,
-        uint32_t point_count,
-        uint32_t node_count,
-        fuzzy_voxel_grid::ManagedVoxel &voxel) const noexcept;
+    VoxelLabel assignIntegratedLabel(uint32_t point_count, uint32_t node_count) const noexcept;
+    visualization_msgs::msg::MarkerArray make_marker_cache(
+        const std_msgs::msg::Header &header, const std::vector<VoxelView> &voxels, bool is_frozen) const;
 
     ColorRGBA colorForLabel(VoxelLabel label) const;
     std::string labelName(VoxelLabel label) const;
@@ -249,7 +143,6 @@ private:
 
     void rebuildVoxelsFromLatestMessages();
     void rebuildViewsFromManagedVoxels();
-    void updatePreviousTopologicalVoxelStates();
     void printDebugVoxelSummary() const;
     void printProcessingTime(std::int64_t elapsed_us) const;
 
@@ -275,7 +168,9 @@ private:
 
     bool shouldRemovePointInFrozenMode(float x, float y, float z) const;
     sensor_msgs::msg::PointCloud2 filterIncomingPointCloud(
-    const sensor_msgs::msg::PointCloud2 & msg) const;
+        const sensor_msgs::msg::PointCloud2 & msg,
+        const Eigen::Isometry3d &source_to_grid = Eigen::Isometry3d::Identity()) const;
+    void update_shared_points();
 
     Parameters params_{};
 
@@ -295,20 +190,24 @@ private:
     std::mutex data_mutex_;
 
     sensor_msgs::msg::PointCloud2::SharedPtr latest_pointcloud_msg_;
+    std::shared_ptr<voxel_idx::point_frame_channel> shared_points_;
+    uint64_t shared_revision_{0};
+    std_msgs::msg::Header point_header_;
+    bool has_point_header_{false};
+    bool has_pending_update_{true};
+    double max_tmap_age_sec_{1.0};
     ais_gng_msgs::msg::TopologicalMap::SharedPtr latest_topological_map_msg_;
 
-    std::unordered_map<VoxelKey, ManagedVoxel, VoxelKeyHash> voxels_;
+    voxel_idx::point_cell_spec point_spec_;
+    std::shared_ptr<voxel_idx::point_cell_query> point_query_;
+    std::shared_ptr<voxel_idx::point_cell_counts> standalone_points_;
+    std::shared_ptr<const voxel_idx::point_cell_counts> point_cells_;
+    ais_gng_msgs::msg::TopologicalMap::SharedPtr active_topological_map_msg_;
+    visualization_msgs::msg::MarkerArray live_markers_, frozen_markers_;
     std::vector<VoxelView> combined_voxels_;
 
     std_msgs::msg::Header latest_output_header_;
     bool have_output_header_{false};
-
-    std::unordered_map<VoxelKey, PointCloudVoxelSnapshot, VoxelKeyHash> prev_pointcloud_voxels_;
-    std::unordered_map<VoxelKey, TopologicalVoxelSnapshot, VoxelKeyHash> prev_topological_voxels_;
-    std::unordered_map<VoxelKey, PreviousTopologicalVoxelState, VoxelKeyHash> prev_topological_voxel_states_;
-
-    std::unordered_map<VoxelKey, PointCloudVoxelDiff, VoxelKeyHash> last_pointcloud_diffs_;
-    std::unordered_map<VoxelKey, TopologicalVoxelDiff, VoxelKeyHash> last_topological_diffs_;
 
     UpdateMode mode_{UpdateMode::LIVE};
 

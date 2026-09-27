@@ -7,6 +7,7 @@
 - `preserve-user-edits` - 既存の手編集を壊さず、現在のファイル内容を正として最小差分で編集する
 - `maintain-project-docs` - 実施済み進捗、保留・再開、不採用判断、未完了タスク、現行仕様を分離して記録する
 - `restore-runtime-after-tests` - Docker、ROS 2、サーバー等の実行テスト後に起動前のruntime状態へ戻す
+- `run-benchmark-batch` - 反復回数・所要時間予測・結果保存・完了待ちを備えた汎用テスト実行
 
 ## Additions
 

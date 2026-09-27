@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "name": "off",
+      "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros", "--tracking-mode", "nearest_nonplane", "--cell-size", "0", "--max-points", "200000", "--ratio", ".5", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "coarse",
+      "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros", "--tracking-mode", "coarse", "--cell-size", ".5", "--max-points", "200000", "--ratio", ".25", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "nearest",
+      "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros", "--tracking-mode", "nearest_nonplane", "--cell-size", ".5", "--max-points", "200000", "--ratio", ".5", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "nearest_points",
+      "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros", "--tracking-mode", "nearest_nonplane", "--cell-size", ".5", "--max-points", "200000", "--ratio", ".5", "--publish-candidates", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    }
+  ]
+}

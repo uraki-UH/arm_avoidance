@@ -324,7 +324,8 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
     std::iota(point_order.begin(), point_order.end(), 0U);
     std::mt19937 random(frame_number);
     std::shuffle(point_order.begin(), point_order.end(), random);
-    const bool has_sampling_rules = !sampling.rules.empty();
+    const bool has_sampling_rules = std::any_of(sampling.rules.begin(), sampling.rules.end(),
+        [](const auto &rule) {return rule.enable_nearest;});
     if (has_sampling_rules) {sampling.matches.resize(input_pcl_num);}
     for (const uint32_t point_idx : point_order){
         i = point_idx;
