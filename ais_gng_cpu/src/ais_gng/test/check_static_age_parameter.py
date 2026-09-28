@@ -26,7 +26,7 @@ def main():
            "-p", "input.topic_names:=[/static_age_test/points]",
            "-p", "node.num_max:=128", "-p", "node.grid:=0.5",
            "-p", "classify.human:=false", "-p", "classify.car:=false",
-           "-p", "plane_cluster.direct_enabled:=false",
+           "-p", "plane_clustering:=false",
            "-p", "nonplane_component.direct_enabled:=false",
            "-p", "node.static.s1_age_max:=7"]
     with tempfile.TemporaryDirectory(prefix="gng-static-age-ros-") as log_dir:

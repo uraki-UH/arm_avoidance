@@ -5,6 +5,9 @@
     gng_setPointCloud;
     gng_exec;
     gng_set_builtin_sampling;
+    gng_set_node_insertion;
+    gng_get_node_insertion_stats;
+    gng_get_plane_contact_voxels;
     gng_set_priority_input;
     gng_set_weighted_priority_input;
     gng_set_sampling_rules;

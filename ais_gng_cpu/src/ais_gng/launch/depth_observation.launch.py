@@ -47,7 +47,7 @@ def setup(context):
                  'input.observation_camera_rotation': rotation,
                  'input.observation_camera_info_topic': prefix + '/camera_info',
                  'classify.human': False, 'classify.car': False,
-                 'plane_cluster.direct_enabled': False, 'nonplane_component.direct_enabled': False,
+                 'plane_clustering': False, 'nonplane_component.direct_enabled': False,
              }]),
     ]
 

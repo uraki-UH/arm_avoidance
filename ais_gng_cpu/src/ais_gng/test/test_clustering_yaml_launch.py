@@ -48,7 +48,7 @@ class test_clustering_yaml(unittest.TestCase):
                 'plane_cluster_incremental_node': {'ros__parameters': {
                     'use_node_rho_for_seed_order': False}},
                 'ais_gng_node': {'ros__parameters': {
-                    'plane_cluster.direct_enabled': enable_common,
+                    'plane_clustering': enable_common,
                     'nonplane_component.direct_enabled': True}}},
         }
         original_open = builtins.open
@@ -115,7 +115,8 @@ class test_clustering_yaml(unittest.TestCase):
         for enable_common in (False, True):
             with self.subTest(enable_common=enable_common):
                 params = self.resolve_parameters({}, enable_common=enable_common)
-                self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_common)
+                self.assertEqual(params[0]['plane_clustering'], enable_common)
+                self.assertNotIn('plane_cluster.direct_enabled', params[0])
                 self.assertEqual(len(params), 3 if enable_common else 2)
                 self.assertEqual(params[0]['surface_model.enable'], enable_common)
 
@@ -124,10 +125,10 @@ class test_clustering_yaml(unittest.TestCase):
             for enable_curve in (False, True):
                 with self.subTest(enable_plane=enable_plane, enable_curve=enable_curve):
                     params = self.resolve_parameters({
-                        'plane_cluster.direct_enabled': enable_plane,
+                        'plane_clustering': enable_plane,
                         'surface_model.enable': enable_curve,
                     }, enable_common=not enable_plane)
-                    self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_plane)
+                    self.assertEqual(params[0]['plane_clustering'], enable_plane)
                     self.assertEqual(params[0]['surface_model.enable'], enable_plane and enable_curve)
                     self.assertEqual(len(params), 3 if enable_plane else 2)
                     if enable_plane:
@@ -147,22 +148,21 @@ class test_clustering_yaml(unittest.TestCase):
                         'plane_clustering': enable_plane,
                         'curve_clustering': enable_curve,
                     }, enable_common=not enable_curve)
-                    self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_plane)
+                    self.assertEqual(params[0]['plane_clustering'], enable_plane)
                     self.assertEqual(params[0]['surface_model.enable'], enable_plane and enable_curve)
                     self.assertEqual(len(params), 3 if enable_plane else 2)
                     if enable_plane:
                         self.assertEqual(params[2]['surface_model.enable'], enable_curve)
 
-    def test_short_switches_override_legacy_names(self):
+    def test_curve_switch_overrides_legacy_name(self):
         for enable_clustering in (False, True):
             with self.subTest(enable_clustering=enable_clustering):
                 params = self.resolve_parameters({
                     'plane_clustering': enable_clustering,
                     'curve_clustering': enable_clustering,
-                    'plane_cluster.direct_enabled': not enable_clustering,
                     'surface_model.enable': not enable_clustering,
                 })
-                self.assertEqual(params[0]['plane_cluster.direct_enabled'], enable_clustering)
+                self.assertEqual(params[0]['plane_clustering'], enable_clustering)
                 self.assertEqual(params[0]['surface_model.enable'], enable_clustering)
                 self.assertEqual(len(params), 3 if enable_clustering else 2)
                 if enable_clustering:

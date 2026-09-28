@@ -69,6 +69,12 @@ class CUGNG {
     vector<float> priority_weights;
     float priority_ratio = 0;
     gng_sampling::frame_sampler sampling;
+    bool enable_node_insertion = false;
+    gng_node_insertion_input insertion_config;
+    gng_node_insertion_stats insertion_stats;
+    vector<gng_insertion_plane> insertion_planes;
+    vector<gng_insertion_owner> insertion_owners;
+    void age_unobserved_nodes(const VoxelGrid &voxels);
 
     CUGNG();
     bool init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config);
@@ -96,7 +102,8 @@ class CUGNG {
 
     void getMinAll(Vec3f& p, Node_d& result);
     bool getMinGrid(Vec3f& p, Node_d& result);
-    void getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels);
+    void getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels,
+        const VoxelGrid *source_voxels = nullptr, const vector<Vec3f> *raw_points = nullptr);
     bool getDownSamplingGrid(Vec3f& p, uint8_t &label, Node_d &n);
     void move_node(Node& node, Vec3f& new_pos);
 
@@ -129,6 +136,8 @@ class CUGNG {
     const uint32_t fkey2[4] = {_FILE_KEY2_1, _FILE_KEY2_2, _FILE_KEY2_3, _FILE_KEY2_4};
 
    private:
+    bool is_explained_by_plane(const Vec3f &point, const Node_d &nearest) const;
+    vector<uint32_t> unobserved_frames;
     // 寿命のuint8巻戻りによる重複隣接も含めた、プールIDの参照数。
     vector<uint8_t> edge_reference_num;
     vector<uint32_t> free_edge_ids;

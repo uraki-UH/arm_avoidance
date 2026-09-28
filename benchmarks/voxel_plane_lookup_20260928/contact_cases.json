@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "off", "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros",
+        "--cell-size", ".5", "--tracking-mode", "nearest_nonplane", "--max-points", "200000",
+        "--node-insertion", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "unsubscribed", "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros",
+        "--cell-size", ".5", "--tracking-mode", "nearest_nonplane", "--max-points", "200000",
+        "--node-insertion", "--plane-contact", "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "rate_2hz", "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros",
+        "--cell-size", ".5", "--tracking-mode", "nearest_nonplane", "--max-points", "200000",
+        "--node-insertion", "--plane-contact", "--subscribe-plane-contact",
+        "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "every_frame", "cwd": "/ros2_ws/src",
+      "env": {"ROS_DOMAIN_ID": "183", "ROS_LOCALHOST_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+      "argv": ["taskset", "-c", "4", "python3", "benchmarks/tracking_attention_20260926/verify.py", "ros",
+        "--cell-size", ".5", "--tracking-mode", "nearest_nonplane", "--max-points", "200000",
+        "--node-insertion", "--plane-contact", "--subscribe-plane-contact", "--plane-contact-interval", "0",
+        "--seed", "@seed@", "--output", "@case_dir@/result.json"],
+      "metrics": "metrics.json"
+    }
+  ]
+}

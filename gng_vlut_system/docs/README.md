@@ -4,6 +4,10 @@
 
 ## 主な文書
 
+- [経路GNGから独立した左右到達map](reachability_maps.md)
+- [軌道計画・回避・把持の部品配置](component_layout.md)
+- [経路計画・目標タスクの差し替え](planning_components.md)
+
 - [CPU版GNGの高速化報告：要約・処理時間・測定条件](./gng_cpu_optimization_summary_20260924.md)
 - [把持推定・ファジィ評価の調査要約（2026-09-13）](./FUZZY_GRASP_CURRENT_OVERVIEW.md)
 - [GNG・Viewer・入力経路の作業要約（2026-09-02）](./WORK_LOG_2026-09-02.md)

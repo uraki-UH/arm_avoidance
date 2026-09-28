@@ -1,0 +1,28 @@
+{
+  "format": "topo-motion-studio/1",
+  "robot": "topo_dual_arm_max",
+  "units": "radian",
+  "joint_positions": {
+    "waist_joint": 0.6108652381980153,
+    "neck_pan_joint": 0.6981317007977318,
+    "neck_tilt_joint": 0.4363323129985824,
+    "L_joint1": 0,
+    "L_joint2": -1.5707963267948966,
+    "L_joint3": 0,
+    "L_joint4": 0,
+    "L_joint5": 0,
+    "L_joint6": 0,
+    "L_joint7": 0,
+    "L_gripper_joint": 0,
+    "R_joint1": 0.815290097443349,
+    "R_joint2": 1.5706824367355443,
+    "R_joint3": -0.00006611342468652379,
+    "R_joint4": -0.775622708966494,
+    "R_joint5": -0.000024363685512664,
+    "R_joint6": -0.8186516464144705,
+    "R_joint7": -0.00004028606193969515,
+    "R_gripper_joint": 0
+  },
+  "keyframes": [],
+  "source": "source.urdf"
+}

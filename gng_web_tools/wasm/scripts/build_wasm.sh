@@ -22,6 +22,7 @@ em++ \
   "${ROOT_DIR}/src/gng_kernel.cpp" \
   "${ROOT_DIR}/src/wasm_exports.cpp" \
   "${gng_cpu_dir}/src/cpu/cugng.cpp" \
+  "${gng_cpu_dir}/src/cpu/voxel_grid.cpp" \
   "${gng_cpu_dir}/src/utils/node.cpp" \
   "${gng_cpu_dir}/src/utils/param.cpp" \
   "${gng_cpu_dir}/src/utils/vec3f.cpp" \

@@ -45,7 +45,7 @@ def main():
         f'input.observation_camera_rotation:={rotation}',
         f'input.observation_camera_info_topic:={namespace}/camera_info',
         'classify.human:=false', 'classify.car:=false',
-        'plane_cluster.direct_enabled:=false', 'nonplane_component.direct_enabled:=false',
+        'plane_clustering:=false', 'nonplane_component.direct_enabled:=false',
     ]:
         command.extend(['-p', parameter])
     bridge_args = ['--ros-args', '-r', '__node:=observation_pixel_depth']

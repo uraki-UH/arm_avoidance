@@ -75,5 +75,6 @@
 | `Tmap` | topological map | 環境入力`/topological_map`以外のグラフトピック名 | トピック名内の`topological_map` |
 | `sec` | second | 時刻・時間の秒単位 | `second`（時間単位） |
 | `ms` | millisecond | 実行時間のミリ秒単位 | `millisecond` |
+| `nm` | newton metre | 関節トルクの単位（N m） | `newton_meter` |
 
 - 新しい省略形は、この辞書へ意味と用途を追加してから使用する。

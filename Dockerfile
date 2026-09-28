@@ -38,6 +38,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-robot-state-publisher \
     ros-humble-xacro \
     ros-humble-gazebo-ros-pkgs \
+    ros-humble-gazebo-ros2-control \
+    ros-humble-controller-manager \
+    ros-humble-joint-state-broadcaster \
+    ros-humble-joint-trajectory-controller \
     ros-humble-realsense2-camera \
     ros-humble-realsense2-camera-msgs \
     && rm -rf /var/lib/apt/lists/*

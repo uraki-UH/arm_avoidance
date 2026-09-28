@@ -3,6 +3,7 @@
 #include "core/common/evaluation_metric_serialization.hpp"
 #include "core/planning/topological_map_avoidance_helpers.hpp"
 #include "core/planning/joint_linf_cost.hpp"
+#include "core/planning/gng_dijkstra_planner.hpp"
 
 namespace {
 
@@ -109,3 +110,48 @@ TEST(candidate_metric_availability, provisional_metrics_remain_invalid)
 }
 
 }  // 無名名前空間
+
+namespace {
+class injected_graph_planner final
+    : public robot_sim::planning::topological_map_avoidance::graph_planner_type {
+public:
+  robot_sim::planning::graph_paths plan(
+      const robot_sim::planning::topological_map_avoidance::GNGType &,
+      const robot_sim::planning::graph_plan_request &request) override {
+    EXPECT_EQ(request.start_ids, std::vector<int>({0}));
+    EXPECT_EQ(request.goal_ids, std::vector<int>({1}));
+    if (has_path) return {{0, {{1, {0, 1}}}}};
+    return {};
+  }
+  bool has_path = true;
+};
+
+TEST(graph_planner_components, injected_backend_reaches_candidate_selection) {
+  using namespace robot_sim::planning::topological_map_avoidance;
+  auto graph = std::make_shared<GNGType>(2, 3, nullptr);
+  for (int idx = 0; idx < 2; ++idx) {
+    auto &node = graph->nodeAt(idx);
+    node.id = idx;
+    node.status.active = true;
+    node.status.self_collision_free = true;
+    node.weight_angle = Eigen::VectorXf::Constant(2, idx);
+  }
+  injected_graph_planner planner;
+  int selected_start = -1;
+  std::unordered_map<int, std::vector<int>> by_goal;
+  std::vector<std::vector<int>> paths;
+  const auto current = Eigen::VectorXf::Zero(2).eval();
+  const auto result = planFromStartCandidates(
+      graph, planner, current, {0}, {1}, selected_start, by_goal, paths, false);
+  EXPECT_EQ(result.first, 1);
+  EXPECT_EQ(result.second, std::vector<int>({0, 1}));
+  EXPECT_EQ(selected_start, 0);
+  planner.has_path = false;
+  const auto failure = planFromStartCandidates(
+      graph, planner, current, {0}, {1}, selected_start, by_goal, paths, false);
+  EXPECT_EQ(failure.first, -1);
+  EXPECT_EQ(selected_start, -1);
+  EXPECT_TRUE(paths.empty());
+  EXPECT_TRUE(by_goal.empty());
+}
+}  // 無名名前空間の終端

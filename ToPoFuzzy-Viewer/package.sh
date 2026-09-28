@@ -22,7 +22,7 @@ mkdir -p "$STAGING_DIR/backend"
 # Copy src, but exclude any potential build artifacts if they exist inside src (unlikely but safe)
 cp -r backend/src "$STAGING_DIR/backend/"
 # 単独配布で必要なワークスペース内の依存パッケージ
-for dependency in ../ais_gng_cpu/src/ais_gng_msgs ../MSG/ais_gng_feature_msgs ../MSG/voxel_msgs ../MSG/gng_control_msgs ../pointcloud_sampling ../arrow_visualization; do
+for dependency in ../ais_gng_cpu/src/ais_gng_msgs ../MSG/ais_gng_feature_msgs ../MSG/voxel_msgs ../MSG/gng_control_msgs ../pointcloud_sampling ../libs/arrow_visualization; do
     cp -r "$dependency" "$STAGING_DIR/backend/src/"
 done
 # Copy CMakeLists.txt if it exists in backend root (it usually does for colcon workspace level, but often it's just src)

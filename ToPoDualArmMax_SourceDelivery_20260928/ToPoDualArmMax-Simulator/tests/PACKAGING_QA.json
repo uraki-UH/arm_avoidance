@@ -1,0 +1,75 @@
+{
+  "node": "24.19.0",
+  "relocated_folder_contains_spaces_and_non_ascii": true,
+  "checks": [
+    {
+      "name": "Extracted ZIP file hashes",
+      "passed": true,
+      "output": "PASS: 287 files match SHA-256; both model mesh manifests resolve."
+    },
+    {
+      "name": "HTTP and export tests in relocated folder",
+      "passed": true,
+      "output": "\u2714 Relocatable server, both models, exports, origin and path restrictions (571.5789ms)\n\u2139 tests 1\n\u2139 suites 0\n\u2139 pass 1\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 717.1561"
+    },
+    {
+      "name": "Rebuild from included STL without original ZIP",
+      "passed": true,
+      "output": "long: 37 render meshes rebuilt\nstandard: 37 render meshes rebuilt"
+    },
+    {
+      "name": "long rebuilt cache byte equality",
+      "passed": true,
+      "matched": 37,
+      "total": 37
+    },
+    {
+      "name": "standard rebuilt cache byte equality",
+      "passed": true,
+      "matched": 37,
+      "total": 37
+    },
+    {
+      "name": "Long independent FK reference generation",
+      "passed": true,
+      "output": "Generated 14 independent FK reference cases"
+    },
+    {
+      "name": "Standard independent FK reference generation",
+      "passed": true,
+      "output": "Generated 14 independent FK reference cases"
+    },
+    {
+      "name": "Windows launcher reuses same folder server",
+      "passed": true
+    },
+    {
+      "name": "Relocated Windows launcher chooses separate free port",
+      "passed": true
+    },
+    {
+      "name": "Personal machine path, host and credential-marker scan",
+      "passed": true,
+      "findings": []
+    },
+    {
+      "name": "Browser renders rebuilt standard model from relocated folder",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "name": "Windows launcher stop without CIM/WMI or elevated privileges",
+      "passed": true
+    },
+    {
+      "name": "Final HTTP server regression after health identity change",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "resolved_during_validation": [
+    "CIM/WMI process inspection was unavailable in restricted execution; replaced with local Get-Process and verified process start time.",
+    "PowerShell Stop-Process failed in the test host; use installed Node termination after folder, PID, process name and start time checks.",
+    "Corrected UTC conversion in start-time comparison to DateTimeOffset Unix seconds."
+  ]
+}

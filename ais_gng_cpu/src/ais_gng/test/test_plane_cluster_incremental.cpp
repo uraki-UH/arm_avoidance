@@ -1994,6 +1994,53 @@ TEST(PlaneClusterIncremental, short_neighbour_network_preserves_lower_median)
 }
 
 // 借用配列の再確保・順序変更・欠損法線・不正接続を含むROS入力との完全一致。
+TEST(PlaneClusterIncremental, reused_node_ids_do_not_inherit_plane_history)
+{
+  using namespace fuzzrobo::topological_plane::incremental;
+  for (const bool enable_delta : {false, true}) {
+    for (const bool enable_direct : {false, true}) {
+      ClusterOptions options;
+      options.enable_delta_statistics = enable_delta;
+      Clusterizer reused(options), fresh(options);
+      auto map = makeSinglePlane();
+      for (auto &node : map.nodes) {node.frame = 1U;}
+      const auto update = [&](Clusterizer &engine, const TopologicalMap &input) {
+          return enable_direct ? engine.update(make_graph_view(input.nodes.data(), input.nodes.size(),
+            input.edges.data(), input.edges.size()), input.header, input.frame_number) : engine.update(input);
+        };
+      for (std::uint32_t frame = 1U; frame <= 20U; ++frame) {
+        map.frame_number = frame;
+        expect_equivalent_planes(update(reused, map).clusters, update(fresh, map).clusters);
+      }
+      // 両領域間の接続なし。同一ID・新世代による遠方再生成と、新IDによる対照。
+      std::vector<std::uint16_t> edges;
+      for (std::size_t idx = 0U; idx < map.edges.size(); idx += 2U) {
+        if ((map.edges[idx] % 6U < 3U) == (map.edges[idx + 1U] % 6U < 3U)) {
+          edges.insert(edges.end(), {map.edges[idx], map.edges[idx + 1U]});
+        }
+      }
+      map.edges = edges;
+      for (auto &node : map.nodes) {
+        if (node.id % 6U >= 3U) {node.pos.x += 20.0F; node.frame = 21U;}
+      }
+      auto reference = map;
+      for (auto &node : reference.nodes) {if (node.frame == 21U) {node.id += 100U;}}
+      std::size_t num_clusters = 0U;
+      for (std::uint32_t frame = 21U; frame <= 30U; ++frame) {
+        map.frame_number = reference.frame_number = frame;
+        const auto actual = update(reused, map);
+        const auto expected = update(fresh, reference);
+        expect_equivalent_planes(actual.clusters, expected.clusters);
+        num_clusters = actual.clusters.clusters.size();
+        for (const auto &cluster : actual.clusters.clusters) {
+          EXPECT_LT(std::max(cluster.extent_u, cluster.extent_v), 1.0F);
+        }
+      }
+      EXPECT_EQ(num_clusters, 2U);
+    }
+  }
+}
+
 TEST(PlaneClusterIncremental, borrowed_input_matches_ros_and_survives_buffer_replacement)
 {
   using namespace fuzzrobo::topological_plane::incremental;
@@ -2018,7 +2065,7 @@ TEST(PlaneClusterIncremental, borrowed_input_matches_ros_and_survives_buffer_rep
       std::vector<node_input> raw;
       for (const auto &node : map.nodes) {
         raw.push_back({node.id, node.label, node.rho,
-            {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}});
+            {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}, node.frame});
       }
       const auto actual = direct.update(make_graph_view(raw.data(), raw.size(), map.edges.data(), map.edges.size()),
         map.header, map.frame_number);

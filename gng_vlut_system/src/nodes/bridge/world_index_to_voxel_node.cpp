@@ -27,8 +27,8 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
-#include "nodes/bridge/reachability_voxel_accumulator.hpp"
-#include "nodes/bridge/world_point_bucket_index.hpp"
+#include "core/indexing/reachability_voxel_accumulator.hpp"
+#include <point_cloud_store.hpp>
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
 namespace robot_sim::bridge
@@ -52,11 +52,11 @@ private:
   {
     std::string name;
     std::string target_frame_id;
-    reachability_bounds bounds;
+    robot_sim::indexing::reachability_bounds bounds;
     std::unique_ptr<map_bounds_source> map_source;
     bool has_bounds{true};
     std::unique_ptr<robot_sim::analysis::VoxelIdCodec> voxel_codec;
-    std::unique_ptr<reachability_voxel_accumulator> voxel_accumulator;
+    std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator> voxel_accumulator;
     rclcpp::Publisher<voxel_msgs::msg::Voxel>::SharedPtr roi_publisher;
   };
 
@@ -132,7 +132,7 @@ public:
     voxel_codec_.setIndexingParams(x_shift, y_shift, z_shift, offset);
     world_bucket_codec_.setVoxelSize(bucket_size);
     world_bucket_codec_.setIndexingParams(x_shift, y_shift, z_shift, offset);
-    world_index_ = std::make_shared<world_point_bucket_index>(bucket_size);
+    world_index_ = std::make_shared<voxel_idx::world_point_bucket_index>(bucket_size);
     const auto shared_store = get_parameter("shared_point_store").as_string();
     if (!shared_store.empty()) {
       if (!enable_world_index_) {
@@ -164,7 +164,7 @@ public:
       std::max<std::int64_t>(0, get_parameter("max_dense_voxel_num").as_int()));
     parallel_thread_num_ = static_cast<int>(std::max<std::int64_t>(
       1, get_parameter("parallel_thread_num").as_int()));
-    voxel_accumulator_ = std::make_unique<reachability_voxel_accumulator>(
+    voxel_accumulator_ = std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
       voxel_codec_, reachability_bounds_, max_dense_voxel_num);
     map_source_ = make_map_bounds_source(
       get_parameter("reachability_map_topic").as_string(),
@@ -236,9 +236,9 @@ private:
 
   bool update_map_bounds(
     map_bounds_source *source, const std::string &target_frame,
-    const sensor_msgs::msg::PointCloud2 &cloud, reachability_bounds &bounds,
+    const sensor_msgs::msg::PointCloud2 &cloud, robot_sim::indexing::reachability_bounds &bounds,
     const robot_sim::analysis::VoxelIdCodec &codec,
-    std::unique_ptr<reachability_voxel_accumulator> &accumulator)
+    std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator> &accumulator)
   {
     if (!source) {
       return true;
@@ -261,7 +261,7 @@ private:
       return true;
     }
 
-    reachability_bounds next = bounds;
+    robot_sim::indexing::reachability_bounds next = bounds;
     next.min_corner = Eigen::Vector3d::Constant(std::numeric_limits<double>::infinity());
     next.max_corner = -next.min_corner;
     // ROI座標系へ変換後の全ノードを含む軸平行BBox。マージンは各軸の両側へ適用
@@ -281,7 +281,7 @@ private:
     if (!source->has_bounds || (next.min_corner.array() != bounds.min_corner.array()).any() ||
       (next.max_corner.array() != bounds.max_corner.array()).any())
     {
-      accumulator = std::make_unique<reachability_voxel_accumulator>(
+      accumulator = std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
         codec, next, source->max_dense_voxel_num);
       bounds = next;
       const Eigen::Vector3d min_roi = bounds.min_corner - bounds.margin;
@@ -412,7 +412,7 @@ private:
         "max_dense_voxel_num", static_cast<std::int64_t>(max_dense_voxel_num));
       const std::size_t consumer_max_dense_voxel_num = static_cast<std::size_t>(
         std::max<std::int64_t>(0, configured_max_dense_voxel_num));
-      consumer.voxel_accumulator = std::make_unique<reachability_voxel_accumulator>(
+      consumer.voxel_accumulator = std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
         *consumer.voxel_codec, consumer.bounds, consumer_max_dense_voxel_num);
       consumer.map_source = make_map_bounds_source(
         entry.value("reachability_map_topic", std::string()),
@@ -448,7 +448,7 @@ private:
   }
 
   std::pair<Eigen::Vector3d, Eigen::Vector3d> makeWorldQueryBounds(
-    const reachability_bounds &bounds,
+    const robot_sim::indexing::reachability_bounds &bounds,
     const Eigen::Isometry3d &target_to_world) const
   {
     const Eigen::Vector3d min_target = bounds.min_corner - bounds.margin;
@@ -478,7 +478,7 @@ private:
     std::vector<long> world_bucket_ids;
     world_bucket_ids.reserve(world_index_->bucket_num());
     world_index_->visit_buckets([&world_bucket_ids, this](
-      const world_bucket_key &key,
+      const voxel_idx::world_bucket_key &key,
       std::size_t) {
       world_bucket_ids.push_back(world_bucket_codec_.toFlatId(
         Eigen::Vector3i(key.x, key.y, key.z)));
@@ -498,8 +498,8 @@ private:
       bool has_transform{false};
       bool has_output{false};
       bool is_world_to_target_identity{false};
-      world_bucket_query_stats query_stats;
-      reachability_voxelization_stats voxel_stats;
+      voxel_idx::world_bucket_query_stats query_stats;
+      robot_sim::indexing::reachability_voxelization_stats voxel_stats;
       std::string error;
     };
 
@@ -601,7 +601,7 @@ private:
   void accumulateDirectPoints(
     const sensor_msgs::msg::PointCloud2 &msg,
     const Eigen::Isometry3d &source_to_target,
-    reachability_voxel_accumulator &accumulator) const
+    robot_sim::indexing::reachability_voxel_accumulator &accumulator) const
   {
     const bool is_source_to_target_identity = isIdentityTransform(source_to_target);
     accumulator.begin_frame(static_cast<std::size_t>(msg.width) * msg.height);
@@ -621,7 +621,7 @@ private:
   bool publishPrimaryDirect(
     const sensor_msgs::msg::PointCloud2 &msg,
     const std::string &source_frame,
-    reachability_voxelization_stats &voxel_stats,
+    robot_sim::indexing::reachability_voxelization_stats &voxel_stats,
     std::size_t &roi_voxel_num,
     bool &is_source_to_target_identity)
   {
@@ -666,7 +666,7 @@ private:
         continue;
       }
       accumulateDirectPoints(msg, source_to_target, *consumer.voxel_accumulator);
-      const reachability_voxelization_stats voxel_stats =
+      const robot_sim::indexing::reachability_voxelization_stats voxel_stats =
         consumer.voxel_accumulator->stats();
       const std::vector<long> &voxel_ids =
         consumer.voxel_accumulator->finish_voxel_ids();
@@ -705,7 +705,7 @@ private:
         consumer.map_source.get(), consumer.target_frame_id, *msg, consumer.bounds,
         *consumer.voxel_codec, consumer.voxel_accumulator);
     }
-    reachability_voxelization_stats direct_voxel_stats;
+    robot_sim::indexing::reachability_voxelization_stats direct_voxel_stats;
     std::size_t direct_roi_voxel_num = 0;
     bool has_direct_primary_output = false;
     bool is_direct_primary_identity = false;
@@ -757,7 +757,7 @@ private:
       const double bucket_size = world_index_->bucket_size();
       world_index_.swap(spare_world_idx_);
       if (!world_index_ || !world_index_.unique()) {
-        world_index_ = std::make_shared<world_point_bucket_index>(bucket_size);
+        world_index_ = std::make_shared<voxel_idx::world_point_bucket_index>(bucket_size);
       }
     }
     world_index_->begin_frame(input_point_num);
@@ -804,8 +804,8 @@ private:
     }
 
     const auto primary_query_start = std::chrono::steady_clock::now();
-    world_bucket_query_stats query_stats;
-    reachability_voxelization_stats voxel_stats;
+    voxel_idx::world_bucket_query_stats query_stats;
+    robot_sim::indexing::reachability_voxelization_stats voxel_stats;
     std::size_t roi_voxel_num = 0;
     bool has_primary_output = false;
     bool is_world_to_target_identity = false;
@@ -883,13 +883,13 @@ private:
   bool enable_roi_query_{true};
   bool enable_world_bucket_publish_{true};
   int parallel_thread_num_{1};
-  reachability_bounds reachability_bounds_;
+  robot_sim::indexing::reachability_bounds reachability_bounds_;
   std::unique_ptr<map_bounds_source> map_source_;
   robot_sim::analysis::VoxelIdCodec voxel_codec_;
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;
-  std::shared_ptr<world_point_bucket_index> world_index_, spare_world_idx_;
+  std::shared_ptr<voxel_idx::world_point_bucket_index> world_index_, spare_world_idx_;
   std::shared_ptr<voxel_idx::point_frame_channel> shared_points_;
-  std::unique_ptr<reachability_voxel_accumulator> voxel_accumulator_;
+  std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator> voxel_accumulator_;
   std::vector<additional_consumer> additional_consumers_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

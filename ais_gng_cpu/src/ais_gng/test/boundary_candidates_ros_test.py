@@ -86,7 +86,7 @@ async def check_case(executable, gateway_executable, enable_candidates, max_neig
         'node.num_max:=1024', 'node.learning_num:=4000',
         'input.topic_names:=[/boundary_test_points]', 'input.point_cloud_num:=2000',
         'input.local_coordinates:=true', 'classify.human:=false', 'classify.car:=false',
-        'plane_cluster.direct_enabled:=true', 'nonplane_component.direct_enabled:=true',
+        'plane_clustering:=true', 'nonplane_component.direct_enabled:=true',
         'nonplane_component.min_component_nodes:=100000',  # 旧設定によるデータ欠落なし。
         f'boundary.enable_candidates:={str(enable_candidates).lower()}',
         f'boundary.max_neighbors:={max_neighbors}',

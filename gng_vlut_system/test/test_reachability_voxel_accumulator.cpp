@@ -5,9 +5,9 @@
 
 #include <Eigen/Geometry>
 
-#include "nodes/bridge/reachability_voxel_accumulator.hpp"
+#include "core/indexing/reachability_voxel_accumulator.hpp"
 
-namespace robot_sim::bridge
+namespace robot_sim::indexing
 {
 namespace
 {
@@ -161,4 +161,4 @@ TEST(reachability_voxel_accumulator_test, falls_back_to_reusable_hash)
 }
 
 }  // 無名namespace終端
-}  // robot_sim::bridge namespace終端
+}  // robot_sim::indexing namespace終端

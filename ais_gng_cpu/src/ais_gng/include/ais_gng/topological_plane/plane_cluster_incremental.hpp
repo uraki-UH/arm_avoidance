@@ -254,6 +254,8 @@ struct node_input
   std::uint8_t label;
   float rho;
   coordinate pos, normal;
+  // 同一IDの別ノードを区別するGNG生成フレーム。
+  std::uint32_t frame = 0U;
 };
 
 // update呼出し中だけ有効な借用ビュー。接続値はノード配列添字の対、IDではない。
@@ -275,13 +277,13 @@ graph_view make_graph_view(const node_type *nodes, const std::size_t num_nodes,
     [](const void *data, const std::size_t idx) -> node_input {
       const auto &node = static_cast<const node_type *>(data)[idx];
       return {node.id, node.label, node.rho,
-        {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}};
+        {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}, node.frame};
     }};
 }
 
 // GNGの位相地図から平面クラスタを生成する、増分方式の実装。
 //
-// GNGノードID単位の所属の持ち越し。試作オプションで統計の差分加減算へ切替。
+// GNGノードIDと生成フレームによる所属の持ち越し。試作オプションで統計の差分加減算へ切替。
 // 主走査はノード数Nとエッジ数Eに対してO(N + E)、未所属U点の種順序はO(U log U)。
 // 加えて領域成長・平面の3x3固有値分解。優先度付きキュー・全クラスタ対総当たりなし。
 //

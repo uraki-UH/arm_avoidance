@@ -1,0 +1,127 @@
+{
+  "timestamp": "2026-09-28T03:32:20.853Z",
+  "passed": true,
+  "tests": [
+    {
+      "name": "FOV 360° / −7°..52°",
+      "passed": true,
+      "details": {
+        "minDeg": -6.99999966528656,
+        "maxDeg": 52.000000000000014,
+        "bins": 36
+      }
+    },
+    {
+      "name": "Petal path is continuous and does not repeat each revolution",
+      "passed": true,
+      "details": {
+        "maxAdjacentAngleDeg": 0.06903634971898295,
+        "elevationTurns": 14,
+        "oneRevolutionShiftDeg": 7.199883958286703
+      }
+    },
+    {
+      "name": "Longer integration fills additional angular cells",
+      "passed": true,
+      "details": {
+        "windowsSeconds": [
+          0.025,
+          0.1,
+          0.5,
+          1
+        ],
+        "angularCells2deg": [
+          185,
+          743,
+          2874,
+          4480
+        ]
+      }
+    },
+    {
+      "name": "Waist mount follows yaw and centers the forward field near the horizon",
+      "passed": true,
+      "details": {
+        "forwardCenterDeg": -2.5,
+        "frontVerticalFovDeg": [
+          -32,
+          27
+        ]
+      }
+    },
+    {
+      "name": "Interleaved CAD positions retain geometry without normals as vertices",
+      "passed": true,
+      "details": {
+        "vertices": 2
+      }
+    },
+    {
+      "name": "2 m plane is measured at the actual triangle",
+      "passed": true,
+      "details": {
+        "errorMm": 0.0000014901160305669237
+      }
+    },
+    {
+      "name": "Nearest surface occludes the background",
+      "passed": true,
+      "details": 0.8999999985098839
+    },
+    {
+      "name": "Below-minimum occluder blocks rays",
+      "passed": true,
+      "details": {
+        "nearRejected": 31
+      }
+    },
+    {
+      "name": "Nonuniform size and arbitrary pose use transformed geometry",
+      "passed": true,
+      "details": {
+        "errorMm": 0
+      }
+    },
+    {
+      "name": "20,000 rays versus analytic box surfaces",
+      "passed": true,
+      "details": {
+        "points": 20000,
+        "maxErrorMm": 0.000952283556898692,
+        "ms": 21.696799999999996
+      }
+    },
+    {
+      "name": "Noise mode is seeded and distinct from geometric truth",
+      "passed": true,
+      "details": {
+        "sigmaM": 0.02
+      }
+    },
+    {
+      "name": "Splitting frames preserves petal timing and point geometry",
+      "passed": true,
+      "details": {
+        "maxPositionErrorMm": 0
+      }
+    },
+    {
+      "name": "Legacy scan remains available and old configurations still load",
+      "passed": true,
+      "details": "quasiperiodic-rosette-v1"
+    },
+    {
+      "name": "PLY holds every point, timestamp, object and beam",
+      "passed": true,
+      "details": {
+        "points": 20000,
+        "bytes": 580332
+      }
+    },
+    {
+      "name": "Invalid configuration is rejected",
+      "passed": true,
+      "details": 6
+    }
+  ]
+}

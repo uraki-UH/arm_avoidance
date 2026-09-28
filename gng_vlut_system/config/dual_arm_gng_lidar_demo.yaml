@@ -1,0 +1,38 @@
+dual_arm_avoidance_demo:
+  enable_auto_start: true
+  # 有限トルクでの3秒接近試験に使用するODE直接解法
+  physics_solver: world
+  # 観測点群・VLUT・学習済み姿勢グラフの接続
+  enable_gng_vlut: true
+  enable_local_refinement: true
+  # 非同期経路探索の時間上限 [s]
+  max_plan_sec: 1.5
+  # 観測voxelの危険領域膨張幅 [m]
+  danger_inflation: 0.12
+  # 経路探索開始の観測点群余裕 [m]
+  min_retreat_dist_th: 0.30
+  # 中間姿勢の観測点群余裕 [m]
+  min_cloud_clearance_th: 0.015
+  # 姿勢間の検査刻み [rad]
+  max_bridge_step: 0.08
+  max_entry_candidates: 40
+  # 人の前腕を模したカプセルの接近側
+  sides: [left, right]
+  hand_far_x: 0.45
+  hand_near_x: 0.03
+  hand_y: 0.36
+  hand_z: 0.38
+  arm_length: 0.35
+  arm_radius: 0.045
+  # シミュレーション時刻での接近・保持・後退・復帰待機 [s]
+  approach_sec: 3.0
+  hold_sec: 2.0
+  withdraw_sec: 6.0
+  settle_sec: 20.0
+  # 外接形状間の目標余裕とデモ停止判定距離 [m]
+  target_clearance: 0.12
+  min_clearance_th: 0.035
+  max_state_age_sec: 1.0
+  # 補間指令の関節速度制限 [rad/s]
+  max_joint_velocity: 2.5
+  control_period_sec: 0.15

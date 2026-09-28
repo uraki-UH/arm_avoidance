@@ -204,8 +204,39 @@ struct gng_sampling_box {
     double min_pos[3]{}, max_pos[3]{};
 };
 
-// 前回の平面クラスタ未所属ノード。ID再利用の識別用生成世代。
+// 所属参照ノード。ID再利用の識別用生成世代。
 struct gng_sampling_node_ref {uint32_t id = 0, frame = 0;};
+
+// 平面所属ノードと接する入力占有セル。contactは1:同一セル、2:面共有の6隣接。
+struct gng_plane_contact_voxel {Vec3 center; uint32_t num_points = 0; uint8_t contact = 0;};
+// 現入力の既存セルからの可視化用抽出。平面への点所属・幾何交差の保証なし。
+// 戻り配列は次の呼出しまで有効。入力置換後・未実行・voxel無効時は0、追加の点群コピーなし。
+uint32_t gng_get_plane_contact_voxels(const gng_sampling_node_ref *nodes, uint32_t num_nodes,
+    const gng_plane_contact_voxel **voxels, float *cell_size);
+
+// 直接挿入の除外用有限平面。直交単位基底と重心基準の面内範囲[m]。
+struct gng_insertion_plane {
+    double center[3]{}, normal[3]{}, tangent_u[3]{}, tangent_v[3]{};
+    double min_u = 0, max_u = 0, min_v = 0, max_v = 0;
+};
+struct gng_insertion_owner {uint32_t id = 0, frame = 0, plane_idx = 0;};
+// 次の1入力用の直接挿入。元点・ボクセルの所有権移譲なし。
+struct gng_node_insertion_input {
+    const gng_insertion_plane *planes = nullptr;
+    uint32_t num_planes = 0;
+    const gng_insertion_owner *owners = nullptr;
+    uint32_t num_owners = 0;
+    uint32_t max_unobserved_frames = 3; // 平面説明不能なノードの連続未観測寿命[入力回数]。
+    double max_plane_dist_th = .08, plane_margin = .1;
+};
+struct gng_node_insertion_stats {
+    uint32_t num_checked_cells = 0, num_added_nodes = 0, num_plane_rejected_cells = 0;
+    uint32_t num_capacity_rejected_cells = 0;
+    uint32_t num_aged_nodes = 0, num_removed_nodes = 0;
+};
+// 入力置換・実行ごとに失効。配列のコピー、nullptrで明示解除。不正指定時は解除して0。
+uint8_t gng_set_node_insertion(const gng_node_insertion_input *input);
+gng_node_insertion_stats gng_get_node_insertion_stats();
 
 // 組込み追従評価の方式。既存C++利用側の省略時は粗いセル方式。
 enum class gng_tracking_sampling_mode : uint32_t {coarse = 0, nearest_nonplane = 1};

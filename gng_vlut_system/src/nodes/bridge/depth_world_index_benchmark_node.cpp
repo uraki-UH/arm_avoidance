@@ -21,8 +21,8 @@
 
 #include <Eigen/Geometry>
 
-#include "nodes/bridge/persistent_depth_world_index.hpp"
-#include "nodes/bridge/reachability_voxel_accumulator.hpp"
+#include "core/indexing/persistent_depth_world_index.hpp"
+#include "core/indexing/reachability_voxel_accumulator.hpp"
 #include "safety_engine/indexing/voxel_id_codec.hpp"
 
 namespace robot_sim::bridge
@@ -83,15 +83,15 @@ public:
     const std::size_t query_robot_num =
       enable_comparison_benchmark_ ? max_robot_num : robot_num_;
     for (std::size_t robot_idx = 0U; robot_idx < query_robot_num; ++robot_idx) {
-      persistent_accumulators_.push_back(std::make_unique<reachability_voxel_accumulator>(
+      persistent_accumulators_.push_back(std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
         codec_, bounds_, max_dense_voxel_num));
       if (enable_comparison_benchmark_) {
-        direct_accumulators_.push_back(std::make_unique<reachability_voxel_accumulator>(
+        direct_accumulators_.push_back(std::make_unique<robot_sim::indexing::reachability_voxel_accumulator>(
           codec_, bounds_, max_dense_voxel_num));
       }
     }
 
-    persistent_depth_world_index_config index_config;
+    robot_sim::indexing::persistent_depth_world_index_config index_config;
     index_config.bucket_size = declare_parameter<double>("bucket_size", 0.2);
     index_config.depth_scale = static_cast<float>(
       declare_parameter<double>("depth_scale", 0.001));
@@ -100,7 +100,7 @@ public:
     index_config.free_confirmation_num = static_cast<std::uint16_t>(
       std::clamp<std::int64_t>(
         declare_parameter<int>("free_confirmation_num", 3), 1, 65535));
-    index_ = std::make_unique<persistent_depth_world_index>(index_config);
+    index_ = std::make_unique<robot_sim::indexing::persistent_depth_world_index>(index_config);
     world_bucket_codec_.setVoxelSize(index_->bucket_size());
     world_bucket_codec_.setIndexingParams(
       codec_.xShift(), codec_.yShift(), codec_.zShift(), codec_.offset());
@@ -201,7 +201,7 @@ private:
 
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::SharedPtr msg)
   {
-    depth_camera_intrinsics intrinsics;
+    robot_sim::indexing::depth_camera_intrinsics intrinsics;
     intrinsics.width = msg->width;
     intrinsics.height = msg->height;
     intrinsics.fx = static_cast<float>(msg->k[0]);
@@ -274,7 +274,7 @@ private:
       const bool is_timing_enabled =
         frame_num_ > 0 || enable_comparison_benchmark_ || enable_runtime_log_;
       const auto update_start = is_timing_enabled ? steady_clock::now() : steady_clock::time_point{};
-      const persistent_depth_world_index_update_stats update_stats = index_->update(
+      const robot_sim::indexing::persistent_depth_world_index_update_stats update_stats = index_->update(
         depth_mm, camera_to_world_);
       const double update_ms = is_timing_enabled ? elapsed_ms(update_start) : 0.0;
       const std::size_t changed_point_num =
@@ -330,7 +330,7 @@ private:
         const auto [min_world, max_world] = world_query_bounds(robot_to_world_transform);
         auto &accumulator = *persistent_accumulators_[robot_idx];
         accumulator.begin_frame(index_->point_num());
-        const world_bucket_query_stats query_stats = index_->query_aabb(
+        const voxel_idx::world_bucket_query_stats query_stats = index_->query_aabb(
           min_world, max_world,
           [&accumulator, &world_to_robot](const Eigen::Vector3f &point) {
             accumulator.add_point(point.cast<double>(), world_to_robot);
@@ -414,7 +414,7 @@ private:
 
     std::vector<long> world_bucket_voxel_ids;
     world_bucket_voxel_ids.reserve(index_->bucket_num());
-    index_->visit_buckets([&](const world_bucket_key &key, std::size_t) {
+    index_->visit_buckets([&](const voxel_idx::world_bucket_key &key, std::size_t) {
       world_bucket_voxel_ids.push_back(world_bucket_codec_.toFlatId(
         Eigen::Vector3i(key.x, key.y, key.z)));
     });
@@ -525,13 +525,13 @@ private:
   std::string debug_roi_voxel_topic_;
   std::string debug_world_bucket_voxel_topic_;
   std::string debug_frame_id_;
-  reachability_bounds bounds_;
+  robot_sim::indexing::reachability_bounds bounds_;
   robot_sim::analysis::VoxelIdCodec codec_;
   robot_sim::analysis::VoxelIdCodec world_bucket_codec_;
   Eigen::Isometry3f camera_to_world_{Eigen::Isometry3f::Identity()};
-  std::unique_ptr<persistent_depth_world_index> index_;
-  std::vector<std::unique_ptr<reachability_voxel_accumulator>> direct_accumulators_;
-  std::vector<std::unique_ptr<reachability_voxel_accumulator>> persistent_accumulators_;
+  std::unique_ptr<robot_sim::indexing::persistent_depth_world_index> index_;
+  std::vector<std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator>> direct_accumulators_;
+  std::vector<std::unique_ptr<robot_sim::indexing::reachability_voxel_accumulator>> persistent_accumulators_;
   std::vector<double> update_ms_samples_;
   std::vector<double> query_ms_samples_;
   std::vector<double> total_ms_samples_;

@@ -1,0 +1,16 @@
+{
+  "name": "topo-dualarm-max-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "ToPoDualArm-Max standard and Long portable source delivery",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node app/server.mjs",
+    "verify": "node tools/verify.mjs",
+    "test": "node tests/server.test.mjs"
+  }
+}

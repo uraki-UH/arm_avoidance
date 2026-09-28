@@ -21,7 +21,7 @@ services:
       - /tmp/.X11-unix:/tmp/.X11-unix  # X11ソケットの共有
       - ${HOME}/.Xauthority:/root/.Xauthority:ro # X認証情報（ホストでxhostを実行済みの場合）
       - ./src:/ros2_ws/src/ais_gng
-      - ../arrow_visualization:/ros2_ws/src/arrow_visualization
+      - ../libs/arrow_visualization:/ros2_ws/src/arrow_visualization
       - ../pointcloud_sampling:/ros2_ws/src/pointcloud_sampling
       - ../MSG/voxel_msgs:/ros2_ws/src/voxel_msgs
       - ros_ws_volume:/ros2_ws/install

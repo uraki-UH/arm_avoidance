@@ -23,6 +23,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <ais_gng_msgs/msg/topological_map.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
@@ -42,7 +43,8 @@
 #include "planner/RRT/ik_rrt_planner.hpp"
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
-#include "planning/gng_dijkstra_planner.hpp"
+#include "planning/graph_planner_factory.hpp"
+#include "core/tasks/goal_task.hpp"
 #include "planning/robot_stream_payload.hpp"
 #include "planning/topological_map_avoidance_helpers.hpp"
 #include "planning/joint_linf_cost.hpp"
@@ -166,8 +168,6 @@ namespace robot_sim::planning {
 class TopologicalMapPlanningNode : public rclcpp::Node {
 public:
   using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
-  using PlannerType =
-      ::planning::GngDijkstraPlanner<Eigen::VectorXf, Eigen::Vector3f, GNGType>;
   using CostType = ::planning::JointLInfCost<Eigen::VectorXf, Eigen::Vector3f>;
 
   TopologicalMapPlanningNode(const rclcpp::NodeOptions &options, bool enable_execution)
@@ -194,6 +194,11 @@ public:
     declare_parameter("current_ee_pose_topic", "");
     declare_parameter("goal_candidate_ids_topic", "/selected_goal_candidate_ids");
     declare_parameter("publish_hz", 20.0);
+    rcl_interfaces::msg::ParameterDescriptor component_descriptor;
+    component_descriptor.read_only = true;
+    declare_parameter("graph_planner", "gng_dijkstra", component_descriptor);
+    declare_parameter("goal_task_components",
+                      std::vector<std::string>{"requested_goal", "safe_retreat"}, component_descriptor);
     declare_parameter("avoid_collisions", true);
     declare_parameter("avoid_danger", true);
     declare_parameter("allow_danger_goal", true);
@@ -353,18 +358,19 @@ public:
           cached_safe_goal_ids_.size());
     }
 
-    planner_.setCostEvaluator(
-        std::make_shared<CostType>(1000.0f));
-    planner_.setAvoidCollisions(get_parameter("avoid_collisions").as_bool());
     avoid_danger_ = get_parameter("avoid_danger").as_bool();
     allow_danger_goal_ = get_parameter("allow_danger_goal").as_bool();
-    planner_.setAvoidDanger(avoid_danger_);
-    planner_.set_enable_safety_penalty(enable_execution_);
-    planner_.setStrictGoalCollisionCheck(
-        get_parameter("strict_goal_collision_check").as_bool());
-    if (!enable_execution_ && !planner_.prepare_static_graph(*gng_)) {
-      RCLCPP_WARN(get_logger(), "Static path index unavailable; using regular search");
-    }
+    graph_planner_options planner_options;
+    planner_options.enable_collision_check = get_parameter("avoid_collisions").as_bool();
+    planner_options.enable_danger_check = avoid_danger_;
+    planner_options.enable_safety_penalty = enable_execution_;
+    planner_options.enable_strict_goal_check = get_parameter("strict_goal_collision_check").as_bool();
+    planner_options.enable_static_graph = !enable_execution_;
+    planner_ = make_graph_planner<Eigen::VectorXf, Eigen::Vector3f, GNGType>(
+        get_parameter("graph_planner").as_string(), *gng_, planner_options,
+        std::make_shared<CostType>(1000.0f));
+    goal_tasks_ = tasks::make_goal_task_pipeline(
+        get_parameter("goal_task_components").as_string_array());
     replan_on_path_collision_ = get_parameter("replan_on_path_collision").as_bool();
     allow_zero_initial_joint_state_ =
         get_parameter("allow_zero_initial_joint_state").as_bool();
@@ -921,32 +927,17 @@ private:
         }
       } else {
         const auto goal_candidates = selectedGoalCandidatesLocked(start_id);
-        if (!goal_candidates.empty()) {
-          if (!latchTrajectoryFromCandidatesLocked(
-                  current_q, start_id, goal_candidates, false,
-                  "GoalPlanning", "GoalPlanning")) {
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 5000,
-                "GoalPlanning: planner returned empty path start=%d goal_candidates=%zu",
-                start_id, goal_candidates.size());
-          }
-        } else if (allow_safe_goal_fallback_ &&
-                   (start_node.status.is_colliding ||
-                    (avoid_danger_ && start_node.status.is_danger))) {
-          if (!cached_safe_goal_ids_.empty()) {
-            if (!latchTrajectoryFromCandidatesLocked(
-                    current_q, start_id, cached_safe_goal_ids_, false,
-                    "Avoidance", "Avoidance mode")) {
-              RCLCPP_WARN_THROTTLE(
-                  get_logger(), *get_clock(), 5000,
-                  "Avoidance mode: planner returned empty path start=%d safe_goals=%zu",
-                  start_id, cached_safe_goal_ids_.size());
-            }
-          } else {
-            RCLCPP_WARN_THROTTLE(
-                get_logger(), *get_clock(), 5000,
-                "Avoidance mode: no safe goal candidates available.");
-          }
+        const auto request = goal_tasks_.select({
+            goal_candidates, cached_safe_goal_ids_,
+            start_node.status.is_colliding || (avoid_danger_ && start_node.status.is_danger),
+            allow_safe_goal_fallback_});
+        if (request && !latchTrajectoryFromCandidatesLocked(
+                current_q, start_id, request->goal_ids, false,
+                request->label.c_str(), request->label.c_str())) {
+          RCLCPP_WARN_THROTTLE(
+              get_logger(), *get_clock(), 5000,
+              "%s: planner returned empty path start=%d goal_candidates=%zu",
+              request->label.c_str(), start_id, request->goal_ids.size());
         }
       }
     }
@@ -1002,7 +993,8 @@ private:
   std::vector<std::string> chain_joint_names_;
   std::vector<std::string> controlled_joint_names_;
   std::shared_ptr<GNGType> gng_;
-  PlannerType planner_;
+  std::unique_ptr<graph_planner<GNGType>> planner_;
+  tasks::goal_task_pipeline goal_tasks_{std::vector<std::unique_ptr<tasks::goal_task>>{}};
 
   std::string target_topic_;
   std::string control_claim_topic_;
@@ -1209,7 +1201,7 @@ private:
       std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
       std::vector<std::vector<int>> &candidate_paths) {
     return topological_map_avoidance::planFromStartCandidates(
-        gng_, planner_, current_q, start_candidates, goal_candidates,
+        gng_, *planner_, current_q, start_candidates, goal_candidates,
         selected_start_id, candidate_path_by_goal, candidate_paths,
         allow_danger_goal_,
         goal_rot_manip_weight_, goal_joint_limit_weight_);

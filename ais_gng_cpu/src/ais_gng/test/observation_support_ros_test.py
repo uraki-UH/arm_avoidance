@@ -38,7 +38,7 @@ def main():
         f'input.local_coordinates:={str(not args.transform_cloud).lower()}',
         'input.base_frame_id:=observation_test_base', 'node.enable_observation_support:=true',
         'classify.human:=false', 'classify.car:=false',
-        'plane_cluster.direct_enabled:=false', 'nonplane_component.direct_enabled:=false',
+        'plane_clustering:=false', 'nonplane_component.direct_enabled:=false',
     ]:
         command.extend(['-p', parameter])
     if args.fixed_origin:

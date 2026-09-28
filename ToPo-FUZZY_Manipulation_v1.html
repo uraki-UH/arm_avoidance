@@ -4108,8 +4108,12 @@ function v314CurrentJoints(){
   if(state.ikSolution&&Array.isArray(state.ikSolution.joints))return state.ikSolution.joints.slice();
   return [0,0,0,0,0,0];
 }
+// 単体HTML内の関節・基部・開口補間に共通の3次係数
+function motion_smoothing_cubic_ratio(ratio){
+  return ratio*ratio*(3-2*ratio);
+}
 function v314MakeInterpolatedSolution(m,u){
-  const s=u*u*(3-2*u);
+  const s=motion_smoothing_cubic_ratio(u);
   const joints=m.startJoints.map((v,i)=>v+(m.targetJoints[i]-v)*s);
   const opening=m.startOpening+(m.targetOpening-m.startOpening)*s;
   const base={
@@ -4226,7 +4230,7 @@ function v322InitialJointValuesForTarget(targetSol){
   return [0,0,0,0,0,0];
 }
 function v322InterpolateJointValues(start,target,u){
-  const s=u*u*(3-2*u);
+  const s=motion_smoothing_cubic_ratio(u);
   if(Array.isArray(target)||Array.isArray(start)){
     const n=Math.max((start||[]).length,(target||[]).length,6);
     return Array.from({length:n},(_,i)=>(+(start&&start[i])||0)+((+(target&&target[i])||0)- (+(start&&start[i])||0))*s);
@@ -4245,7 +4249,7 @@ function v322JointDistance(start,target){
 }
 function v322SolutionFromTrajectory(plan,u){
   const joints=v322InterpolateJointValues(plan.startJoints,plan.targetJoints,u);
-  const s=u*u*(3-2*u);
+  const s=motion_smoothing_cubic_ratio(u);
   const base={
     x:plan.startBase.x+(plan.targetBase.x-plan.startBase.x)*s,
     y:plan.startBase.y+(plan.targetBase.y-plan.startBase.y)*s,

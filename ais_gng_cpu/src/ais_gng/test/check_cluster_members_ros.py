@@ -33,7 +33,7 @@ def main():
         'edge.num_max:=5120', 'cluster.node_num_min:=3', 'cluster.plane.volume:=1000.0',
         'label.fuzzy.unknown:=0.05', 'label.fuzzy.lpf_time_constant:=0.0',
         'classify.human:=true', 'classify.car:=true', 'classify.device:=cpu',
-        'plane_cluster.direct_enabled:=false', 'surface_model.enable:=false',
+        'plane_clustering:=false', 'surface_model.enable:=false',
     ]:
         command.extend(['-p', parameter])
     context = Context()

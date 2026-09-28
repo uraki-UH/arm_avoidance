@@ -62,7 +62,7 @@ def main():
     try:
         for executable, name, params in (
             ("ais_gng_cpu", "plane_consistency_smoke_cpu", [
-                "plane_cluster.direct_enabled:=true", "plane_cluster.min_plane_width_ratio:=1.0",
+                "plane_clustering:=true", "plane_cluster.min_plane_width_ratio:=1.0",
                 "node.num_max:=512", "node.learning_num:=1000", "input.local_coordinates:=true",
                 "node.grid:=0.5", "node.interval:=[0.1, 0.1, 0.1, 0.1]", "node.eta_s1:=0.08",
                 "input.topic_names:=[/plane_consistency/unused]"]),

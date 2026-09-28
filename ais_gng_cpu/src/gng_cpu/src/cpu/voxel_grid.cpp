@@ -72,34 +72,34 @@ void VoxelGrid::apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vecto
     // 全32bitセル番号による安定基数ソート。
     radix_sort_voxels(voxel_index.data(), sort_buffer.data(), voxel_index_num);
 
-    // セル範囲の確定と重心計算の単一走査。
+    // セル範囲と代表元点の確定。合成座標・重心計算なし。
     uint32_t begin_idx = 0;
     while (begin_idx < voxel_index_num) {
         const uint32_t cell_idx = voxel_index[begin_idx].voxel_index;
         uint32_t end_idx = begin_idx;
-        float x = 0, y = 0, z = 0;
         uint32_t coarse_idx = 0;
         do {
-            const auto &point = input_pcl[voxel_index[end_idx].raw_index];
             if constexpr (enable_tracking) {
+                const auto &point = input_pcl[voxel_index[end_idx].raw_index];
                 const auto idx = tracking->add_point(point.p);
                 if (end_idx == begin_idx) {coarse_idx = idx;}
                 else if (coarse_idx != idx) {coarse_idx = fuzzrobo::builtin_sampling::tracking_cells::mixed_cell;}
             }
-            x += point.p[0];
-            y += point.p[1];
-            z += point.p[2];
             ++end_idx;
         } while (end_idx < voxel_index_num && voxel_index[end_idx].voxel_index == cell_idx);
-        const uint32_t voxel_num = end_idx - begin_idx;
-        const float num_1 = 1.f / static_cast<float>(voxel_num);
         const uint32_t output_idx = filtered_pcl_num++;
         voxel_range[output_idx].start = begin_idx;
         voxel_range[output_idx].end = end_idx;
-        filtered_pcl[output_idx].p[0] = x * num_1;
-        filtered_pcl[output_idx].p[1] = y * num_1;
-        filtered_pcl[output_idx].p[2] = z * num_1;
+        filtered_pcl[output_idx] = input_pcl[voxel_index[begin_idx].raw_index];
         if constexpr (enable_tracking) {tracking->fine_cells.push_back(coarse_idx);}
         begin_idx = end_idx;
     }
+}
+
+bool VoxelGrid::has_occupied_cell(uint32_t cell_idx) const {
+    // 既存の昇順セル範囲を直接参照。点群コピー・別占有グリッドなし。
+    const auto end = voxel_range.begin() + filtered_pcl_num;
+    const auto found = std::lower_bound(voxel_range.begin(), end, cell_idx,
+        [&](const VoxelRange &range, uint32_t key) {return voxel_index[range.start].voxel_index < key;});
+    return found != end && voxel_index[found->start].voxel_index == cell_idx;
 }

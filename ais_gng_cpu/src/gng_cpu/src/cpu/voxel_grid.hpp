@@ -36,6 +36,7 @@ class VoxelGrid {
 
         void init(GridConfig *_grid_config, OtherConfig *_other_config);
         void applyFilter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels);
+        bool has_occupied_cell(uint32_t cell_idx) const;
         template<bool enable_tracking>
         void apply_filter(vector<Vec3f> &input_pcl, uint32_t inpcl_num, vector<uint8_t> &labels);
 

@@ -1,4 +1,4 @@
-#include "nodes/planning/grasp_candidate_refinement.hpp"
+#include "core/grasping/grasp_candidate_refinement.hpp"
 #include <gtest/gtest.h>
 #include <random>
 

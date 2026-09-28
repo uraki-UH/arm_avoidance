@@ -5,9 +5,9 @@
 
 #include <Eigen/Geometry>
 
-#include "nodes/bridge/persistent_depth_world_index.hpp"
+#include "core/indexing/persistent_depth_world_index.hpp"
 
-namespace robot_sim::bridge
+namespace robot_sim::indexing
 {
 namespace
 {
@@ -130,4 +130,4 @@ TEST(persistent_depth_world_index_test, rebuilds_when_camera_transform_changes)
 }
 
 }  // 無名namespace終端
-}  // robot_sim::bridge namespace終端
+}  // robot_sim::indexing namespace終端

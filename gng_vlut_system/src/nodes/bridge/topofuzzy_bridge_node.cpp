@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/int64_multi_array.hpp>
+#include <std_msgs/msg/u_int16_multi_array.hpp>
 
 #include <Eigen/Geometry>
 
@@ -127,6 +128,7 @@ public:
     declare_parameter("grasp.state_topic", "grasp_state");
     declare_parameter("grasp.applied_state_topic", "grasp_state_applied");
     declare_parameter("node_feature_topic", "topological_node_features");
+    declare_parameter("node_state_topic", "");
     declare_parameter("gng.data_directory", "gng_results");
     declare_parameter("gng.experiment_id", "standard_train");
     declare_parameter("gng.gng_model_filename", "gng.bin");
@@ -266,6 +268,12 @@ public:
     const std::string node_feature_topic = get_parameter("node_feature_topic").as_string();
     node_feature_pub_ = create_publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
         node_feature_topic, rclcpp::QoS(1).reliable().transient_local());
+
+    const std::string node_state_topic = get_parameter("node_state_topic").as_string();
+    if (!node_state_topic.empty()) {
+      node_state_pub_ = create_publisher<std_msgs::msg::UInt16MultiArray>(
+          node_state_topic, rclcpp::QoS(1).reliable().transient_local());
+    }
 
     const int layer_count = context_->gng->getCoordLayerCount();
     if (layer_count > 1) {
@@ -901,10 +909,25 @@ private:
     if (!context_ || !context_->gng || !topological_map_pub_) {
       return;
     }
-    if (force_publish ||
-        hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(
-            topological_map_pub_)) {
-      topological_map_pub_->publish(buildGraphMessage());
+    const bool has_graph_consumer = force_publish ||
+        hasSubscribers<ais_gng_msgs::msg::TopologicalMap>(topological_map_pub_);
+    const bool has_state_consumer = node_state_pub_ && (force_publish ||
+        hasSubscribers<std_msgs::msg::UInt16MultiArray>(node_state_pub_));
+    if (has_graph_consumer || has_state_consumer) {
+      const auto graph = buildGraphMessage();
+      if (has_graph_consumer) {
+        topological_map_pub_->publish(graph);
+      }
+      if (has_state_consumer) {
+        // 固定グラフを取得済みの制御側向け、node_id・labelの交互配列
+        std_msgs::msg::UInt16MultiArray states;
+        states.data.reserve(graph.nodes.size() * 2);
+        for (const auto &node : graph.nodes) {
+          states.data.push_back(node.id);
+          states.data.push_back(node.label);
+        }
+        node_state_pub_->publish(states);
+      }
     }
     if (force_publish ||
         hasSubscribers<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>(
@@ -1041,6 +1064,7 @@ private:
       topological_map_pub_;
   rclcpp::Publisher<ais_gng_feature_msgs::msg::TopologicalNodeFeatureArray>::SharedPtr
       node_feature_pub_;
+  rclcpp::Publisher<std_msgs::msg::UInt16MultiArray>::SharedPtr node_state_pub_;
   std::vector<rclcpp::Publisher<ais_gng_msgs::msg::TopologicalMap>::SharedPtr> layer_pubs_;
   std::vector<VisualizationLayer> visualization_layers_;
   rclcpp::Subscription<ais_gng_msgs::msg::TopologicalMap>::SharedPtr

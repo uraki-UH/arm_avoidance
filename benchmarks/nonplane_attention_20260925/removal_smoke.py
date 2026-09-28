@@ -33,7 +33,7 @@ def main():
     settings.update({"input.local_coordinates": True, "input.point_cloud_num": 100000,
                      "input.sampling_mode": "uniform", "input.visualize": False,
                      "classify.human": False, "classify.car": False,
-                     "curve_clustering": False, "plane_cluster.direct_enabled": True})
+                     "curve_clustering": False, "plane_clustering": True})
     with sqlite3.connect(f"file:{args.bag}?mode=ro", uri=True) as db:
         topic_id = db.execute("select id from topics where name='/lidar_points'").fetchone()[0]
         frames = [data for (data,) in db.execute(
@@ -44,7 +44,7 @@ def main():
     try:
         cases = (("default", {}, True),
                  ("component_off", {"nonplane_component.direct_enabled": False}, False),
-                 ("plane_off", {"plane_cluster.direct_enabled": False, "plane_clustering": False}, False))
+                 ("plane_off", {"plane_clustering": False}, False))
         for case, overrides, has_components in cases:
             namespace = "/nonplane_removal_" + case
             params = dict(settings, **overrides)

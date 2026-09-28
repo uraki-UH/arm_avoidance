@@ -109,6 +109,7 @@ struct TopologicalMapStorage{
 class GNG{
     public:
     bool initialized = false;
+    bool has_voxelized_input = false;
     // output
     int input_pcl_num = 0;  // 入力点群数
     vector<Vec3f> attention_pcl;

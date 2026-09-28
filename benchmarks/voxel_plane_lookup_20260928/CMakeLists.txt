@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.16)
+project(voxel_plane_lookup LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+get_filename_component(workspace "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(core "${workspace}/ais_gng_cpu/src/gng_cpu")
+set(plane "${workspace}/ais_gng_cpu/src/ais_gng")
+file(GLOB_RECURSE core_sources "${core}/src/*.cpp")
+add_executable(compare compare.cpp ${core_sources}
+  "${plane}/src/topological_plane/plane_cluster_incremental.cpp")
+target_include_directories(compare PRIVATE "${core}/src" "${core}/include"
+  "${plane}/include" "${CMAKE_CURRENT_BINARY_DIR}/.." /usr/include/eigen3
+  /ros2_ws/install/ais_gng_msgs/include/ais_gng_msgs)
+foreach(package geometry_msgs std_msgs builtin_interfaces rosidl_runtime_cpp rosidl_runtime_c rosidl_typesupport_interface rcutils)
+  target_include_directories(compare PRIVATE "/opt/ros/humble/include/${package}")
+endforeach()
+target_compile_definitions(compare PRIVATE GNG_VERSION=0)
+option(enable_churn_diagnostics "追加削除のセル再訪計測" OFF)
+if(enable_churn_diagnostics)
+  target_compile_definitions(compare PRIVATE GNG_ENABLE_CHURN_DIAGNOSTICS)
+endif()
+target_compile_options(compare PRIVATE -O3 -Wall -Wextra)
+target_link_libraries(compare PRIVATE ssl crypto ykpiv dl)

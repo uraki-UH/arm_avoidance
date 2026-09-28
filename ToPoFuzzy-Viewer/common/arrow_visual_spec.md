@@ -105,7 +105,7 @@ ROS Marker自体の定義では色・寸法が必須のため、既存ROS Marker
 
 ## ROS送信側の共通実装
 
-`arrow_visualization/include/arrow_visualization/arrow_marker.hpp`の`make_arrow`と`make_pose_arrows`を共用。
+`libs/arrow_visualization/include/arrow_visualization/arrow_marker.hpp`の`make_arrow`と`make_pose_arrows`を共用。
 対象は平面法線、クラスタ速度、PoseArray／把持候補のRViz向けブリッジ。標準Markerの始点終点方式に統一。
 無効方向・寸法・位置・色は同一IDのDELETE。座標基準と寸法は上記と同じ規約。
 姿勢ブリッジは共通`make_pose_arrows`を呼び出すだけ。把持専用の軸生成コードは削除。

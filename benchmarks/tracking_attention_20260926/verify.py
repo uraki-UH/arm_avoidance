@@ -249,6 +249,7 @@ def ros(args):
     from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import PointCloud2
     from ais_gng_msgs.msg import TopologicalMap
+    from visualization_msgs.msg import MarkerArray, Marker
     assert os.environ.get('ROS_DOMAIN_ID') == '183'
     config_dir = root / 'ais_gng_cpu/src/ais_gng/config'
     settings = yaml.safe_load((config_dir / 'gng_cpu/at128.yaml').read_text())['ais_gng_node']['ros__parameters']
@@ -259,6 +260,9 @@ def ros(args):
         'classify.car': False, 'performance.log_interval_ms': 1,
         'tracking_attention.enable_pointcloud': bool(args.cell_size) and (args.validation or args.publish_candidates), 'tracking_attention.timeout_sec': 5.,
         'tracking_attention.mode': args.tracking_mode, 'tracking_attention.ratio': args.ratio,
+        'enable_node_insertion': args.node_insertion,
+        'plane_contact.enable_voxels': args.plane_contact,
+        'plane_contact.interval_sec': args.plane_contact_interval,
         'enable_tracking_attention': bool(args.cell_size), 'tracking_attention.cell_size': args.cell_size or .5})
     if args.validation:
         # 点群出力の宣言既定値も検証対象。
@@ -275,6 +279,18 @@ def ros(args):
     rclpy.init(); observer = rclpy.create_node('tracking_verification'); cache = {}; counts = []
     observer.create_subscription(TopologicalMap, namespace+'/topological_map', lambda msg: cache.__setitem__('map', msg), qos_profile_sensor_data)
     observer.create_subscription(PointCloud2, namespace+'/downsampling/tracking', lambda msg: cache.__setitem__('points', msg), qos_profile_sensor_data)
+    contact_counts = []
+    contact_times = []
+    if args.subscribe_plane_contact:
+        assert args.plane_contact
+        def receive_contacts(msg):
+            cache['contacts'] = msg
+            contact_times.append(time.monotonic())
+            if args.plane_contact_interval > 0:
+                assert len(msg.markers) == 2 and all(m.type == Marker.CUBE_LIST for m in msg.markers)
+                contact_counts.append(sum(len(m.points) for m in msg.markers))
+        observer.create_subscription(MarkerArray, namespace+'/plane_contact_voxels',
+            receive_contacts, 1)
     publisher = observer.create_publisher(PointCloud2, namespace+'/input', 1)
     process = None; log_path = case_dir/(case+'.log')
     try:
@@ -302,6 +318,28 @@ def ros(args):
                 while not all(key in cache and cache[key].header == msg.header for key in required):
                     assert process.poll() is None and time.monotonic()<deadline, (case,idx,cache.keys())
                     rclpy.spin_once(observer, timeout_sec=.02)
+                if args.subscribe_plane_contact and args.plane_contact_interval == 0:
+                    while 'contacts' not in cache or cache['contacts'].markers[0].header != msg.header:
+                        assert process.poll() is None and time.monotonic() < deadline
+                        rclpy.spin_once(observer, timeout_sec=.02)
+                    markers = cache['contacts'].markers
+                    assert len(markers) == 2
+                    assert [m.ns for m in markers] == ['plane_node_cells', 'adjacent_input_cells']
+                    size = settings['input.voxel_grid_unit']
+                    origin = [settings['input.'+dim+'_min'] for dim in ('x','y','z')]
+                    for marker in markers:
+                        assert marker.type == Marker.CUBE_LIST and marker.header == msg.header
+                        assert marker.pose.orientation.w == 1
+                        if marker.points:
+                            assert marker.scale.x == marker.scale.y == marker.scale.z == size
+                        assert marker.action == (Marker.ADD if marker.points else Marker.DELETE)
+                        for point in marker.points:
+                            for pos, start in zip((point.x,point.y,point.z), origin):
+                                cell = (pos-start)/size-.5
+                                assert abs(cell-round(cell)) < 1e-4
+                    assert markers[0].color.g > markers[0].color.r
+                    assert markers[1].color.r > markers[1].color.g
+                    contact_counts.append(sum(len(m.points) for m in markers))
                 assert cache['map'].nodes
                 if args.cell_size and (args.validation or args.publish_candidates):
                     counts.append(cache['points'].width * cache['points'].height)
@@ -309,6 +347,12 @@ def ros(args):
                     if idx == 0 or (args.validation and idx >= 56): assert counts[-1] == 0, (idx, counts[-1])
             if args.cell_size and (args.validation or args.publish_candidates): assert max(counts[1:55]) > 0
             else: assert observer.count_publishers(namespace+'/downsampling/tracking') == 0
+            assert observer.count_publishers(namespace+'/plane_contact_voxels') == int(args.plane_contact)
+            if args.subscribe_plane_contact and args.plane_contact_interval == 0:
+                assert len(contact_counts) == 60 and max(contact_counts) > 0
+            elif args.subscribe_plane_contact:
+                assert len(contact_counts) >= 2 and max(contact_counts) > 0
+                assert all(b-a >= args.plane_contact_interval-.1 for a,b in zip(contact_times, contact_times[1:]))
     finally:
         if process:
             for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
@@ -326,7 +370,19 @@ def ros(args):
     assert len(gng_elapsed) == 60
     if args.cell_size:
         assert f'mode={args.tracking_mode} ratio={args.ratio:.2f}' in log_path.read_text()
+    inserted = [int(v) for v in re.findall(r'Insert: ([0-9]+)', log_path.read_text())]
+    if args.node_insertion:
+        assert len(inserted) == 60 and max(inserted) <= settings['node.num_max']
+        assert inserted[0] == 0
+        if args.validation: assert all(value == 0 for value in inserted[56:])
+        assert max(inserted[1:55]) > 0, '直接挿入の実行なし'
     result = dict(processing_ms=float(np.mean(elapsed[20:55])), gng_ms=float(np.mean(gng_elapsed[20:55])), candidates=counts, frames=60)
+    if contact_counts:
+        result['num_contact_voxels'] = float(np.mean(contact_counts[20:55] if len(contact_counts) == 60 else contact_counts))
+        result['num_contact_messages'] = len(contact_counts)
+    if args.node_insertion:
+        result['inserted_nodes'] = inserted
+        result['num_inserted_nodes'] = sum(inserted)
     result['loaded_libraries'] = loaded_libraries
     (args.output or case_dir/(case+'.json')).write_text(json.dumps(result, indent=2))
     if args.output:
@@ -362,6 +418,10 @@ if __name__ == '__main__':
     parser.add_argument('--tracking-mode', choices=('coarse','nearest_nonplane'), default='coarse')
     parser.add_argument('--max-points', type=int, default=100000)
     parser.add_argument('--publish-candidates', action='store_true')
+    parser.add_argument('--node-insertion', action='store_true')
+    parser.add_argument('--plane-contact', action='store_true')
+    parser.add_argument('--subscribe-plane-contact', action='store_true')
+    parser.add_argument('--plane-contact-interval', type=float, default=.5)
     parser.add_argument('--executable', type=Path, default=Path('/ros2_ws/install/ais_gng/lib/ais_gng/ais_gng_cpu'))
     args = parser.parse_args()
     if args.frames <= args.warmup_frames or args.warmup_frames < 0 or not 0 < args.ratio < 1:

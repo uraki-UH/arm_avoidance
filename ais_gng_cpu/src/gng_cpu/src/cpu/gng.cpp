@@ -9,6 +9,7 @@ GNG::~GNG(){
     n1.clear();
 }
 int GNG::init(const char *binary_path) {
+    has_voxelized_input = false;
     // このプログラムの改ざんチェック
 #ifdef GNG_ENABLE_AUTHENTICATION
     if(!auth.checkFile(binary_path, cl.fkey1, n1.fkey2, fkey3, la.fkey4, vg.fkey5)){
@@ -108,6 +109,7 @@ bool GNG::licenceAuthentication(){
 }
 
 void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDAR_Config *_config) {
+    has_voxelized_input = false;
     static LiDAR_Config prev_config;
     static bool no_prev_config = true;
     if (!initialized) return;
@@ -116,6 +118,7 @@ void GNG::setPointCloud(const uint8_t *inpcl, const uint32_t _in_num, const LiDA
     n1.priority_weights.clear();
     n1.priority_ratio = 0;
     n1.sampling.reset_input();
+    n1.enable_node_insertion = false;
     vg.tracking = nullptr;
     // 入力点群の確保
     n1.has_observation_origin = false;
@@ -203,12 +206,14 @@ void GNG::exec() {
 #endif
 
     auto t0 = std::chrono::system_clock::now();
+    n1.insertion_stats = {};
     if (!n1.enable_observation_support || !n1.has_observation_origin) {
         n1.observation_pixel_source = {};
         n1.observation_angle_table = nullptr;
     }
     // クラスタリング（CPU）
     vg.applyFilter(map.input_pcl, input_pcl_num, map.inpcl_labels);
+    has_voxelized_input = true;
     // 既存入力範囲フィルタの再利用。重点指定による範囲外点の復活防止。
     auto &priority = n1.priority_point_ids;
     const bool has_priority_weights = n1.priority_weights.size() == priority.size();
@@ -225,6 +230,7 @@ void GNG::exec() {
     auto t1 = std::chrono::system_clock::now();
     // ダウンサンプリング
     n1.begin_update_frame(true, true, true);
+    n1.age_unobserved_nodes(vg);
     attention();
     auto t2 = std::chrono::system_clock::now();
     // 学習
@@ -252,6 +258,7 @@ void GNG::exec() {
     n1.check_age();
     // エッジが無いノードの削除と学習係数の減衰
     n1.check_delete_no_edge_and_decay_eta();
+    n1.enable_node_insertion = false;
     // クラスタリングのために，エッジの距離を計算
     n1.calc_edge_distanceXY();
     n1.end_update_frame();
@@ -300,7 +307,7 @@ void GNG::attention(){
     observation_attention_spans.clear();
     observation_attention_blocks.clear();
     if (n1.observation_angle_table && !enable_observation_attention_compact) {observation_attention_raw_ids.resize(input_pcl_num);}
-    n1.getDownSampling(vg.filtered_pcl, vg.filtered_pcl_num, voxel_labels);
+    n1.getDownSampling(vg.filtered_pcl, vg.filtered_pcl_num, voxel_labels, &vg, &map.input_pcl);
     int i, j;
     for (i = attention_pcl_num = 0; i < vg.filtered_pcl_num; ++i){
         if (voxel_labels[i] == 0)

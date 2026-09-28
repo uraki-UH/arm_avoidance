@@ -17,6 +17,7 @@ add_library(gng_wasm_core
   src/gng_kernel.cpp
   src/wasm_exports.cpp
   ${gng_cpu_dir}/src/cpu/cugng.cpp
+  ${gng_cpu_dir}/src/cpu/voxel_grid.cpp
   ${gng_cpu_dir}/src/utils/node.cpp
   ${gng_cpu_dir}/src/utils/param.cpp
   ${gng_cpu_dir}/src/utils/vec3f.cpp
@@ -47,6 +48,7 @@ if(EMSCRIPTEN)
     src/gng_kernel.cpp
     src/wasm_exports.cpp
     ${gng_cpu_dir}/src/cpu/cugng.cpp
+    ${gng_cpu_dir}/src/cpu/voxel_grid.cpp
     ${gng_cpu_dir}/src/utils/node.cpp
     ${gng_cpu_dir}/src/utils/param.cpp
     ${gng_cpu_dir}/src/utils/vec3f.cpp

@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "occupancy",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/churn_build/compare",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "@seed@",
+        "@case_dir@",
+        "occupancy"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "occupancy_supported",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/churn_build/compare",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "@seed@",
+        "@case_dir@",
+        "occupancy_supported"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

@@ -5,9 +5,9 @@
 
 #include <Eigen/Core>
 
-#include "nodes/bridge/world_point_bucket_index.hpp"
+#include <point_cloud_store.hpp>
 
-namespace robot_sim::bridge
+namespace voxel_idx
 {
 namespace
 {
@@ -97,4 +97,4 @@ TEST(world_point_bucket_index_test, visits_only_nonempty_buckets)
 }
 
 }  // 無名namespace終端
-}  // robot_sim::bridge namespace終端
+}  // voxel_idx namespace終端

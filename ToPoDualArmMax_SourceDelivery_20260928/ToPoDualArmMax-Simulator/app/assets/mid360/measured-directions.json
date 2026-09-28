@@ -1,0 +1,23 @@
+{
+  "model": "livox-official-indoor-directions-v1",
+  "source": "https://terra-1-g.djicdn.com/65c028cd298f4669a7f0e40e50ba1131/Mid360/Indoor_sampledata.lvx2",
+  "source_page": "https://www.livoxtech.com/mid-360/downloads",
+  "source_prefix_bytes": 16777216,
+  "source_prefix_sha256": "60c5701430f536ee14d9ca22868309a09b8884978d37589ff30276ce902d8f4f",
+  "asset": "assets/mid360/measured-directions.f32",
+  "sha256": "a2975694554695ad49f0a38fb4fea751eeadd2d7eb14782d1467b2a998dffe37",
+  "slots": 1000000,
+  "known_directions": 647615,
+  "unknown_directions": 352385,
+  "interval_s": 5e-06,
+  "duration_s": 5,
+  "source_first_timestamp_ns": 711620799460,
+  "format": "little-endian float32 xyz unit vectors; 0,0,0 means direction unknown",
+  "order": "original LVX2 packet and point order, no spatial resampling",
+  "loop": "replays same five-second sample; not an infinitely non-repetitive physical scanner",
+  "elevation_observed_deg": [
+    -7.127877235412598,
+    53.924442291259766
+  ],
+  "limitations": "Includes source-recording invalid slots and mm range quantisation; no reconstruction of missing ray angles. New geometry is raycast only along known measured directions. Not individual-device calibration."
+}

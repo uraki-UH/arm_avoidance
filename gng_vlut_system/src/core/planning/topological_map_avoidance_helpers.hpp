@@ -25,7 +25,7 @@
 #include "planner/RRT/ik_rrt_planner.hpp"
 #include "planner/RRT/rrt_params.hpp"
 #include "planner/RRT/state_validity_checker.hpp"
-#include "planning/gng_dijkstra_planner.hpp"
+#include "planning/graph_planner.hpp"
 #include "planning/joint_linf_cost.hpp"
 #include "core/kinematics/kinematic_chain.hpp"
 #include "core/metrics/manipulability.hpp"
@@ -34,8 +34,7 @@
 namespace robot_sim::planning::topological_map_avoidance {
 
 using GNGType = ::GNG::GrowingNeuralGas<Eigen::VectorXf, Eigen::Vector3f>;
-using PlannerType =
-    ::planning::GngDijkstraPlanner<Eigen::VectorXf, Eigen::Vector3f, GNGType>;
+using graph_planner_type = robot_sim::planning::graph_planner<GNGType>;
 
 static inline uint8_t pathLabelFromStatus(const ::GNG::Status &status) {
   if (status.is_colliding) {
@@ -551,7 +550,7 @@ static inline WaypointSafetyLookahead inspectWaypointSafetyLookahead(
 }
 
 static inline std::pair<int, std::vector<int>> planFromStartCandidates(
-    const std::shared_ptr<GNGType> &gng, PlannerType &planner,
+    const std::shared_ptr<GNGType> &gng, graph_planner_type &planner,
     const Eigen::VectorXf &current_q, const std::vector<int> &start_candidates,
     const std::vector<int> &goal_candidates, int &selected_start_id,
     std::unordered_map<int, std::vector<int>> &candidate_path_by_goal,
@@ -589,8 +588,8 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
     if (node.id == -1 || !node.status.active || !node.status.self_collision_free) continue;
     valid_start_ids.push_back(start_id);
   }
-  const auto paths_by_start = planner.plan_from_each_start(
-      valid_start_ids, valid_goal_ids, *gng, allow_danger_goal);
+  const auto paths_by_start = planner.plan(
+      *gng, {valid_start_ids, valid_goal_ids, allow_danger_goal});
 
   for (int goal_id : goal_candidates) {
     if (goal_id < 0 || goal_id >= static_cast<int>(gng->getMaxNodeNum())) {
@@ -616,7 +615,9 @@ static inline std::pair<int, std::vector<int>> planFromStartCandidates(
         continue;
       }
 
-      const auto &paths = paths_by_start.at(start_id);
+      const auto start_it = paths_by_start.find(start_id);
+      if (start_it == paths_by_start.end()) continue;
+      const auto &paths = start_it->second;
       const auto path_it = paths.find(goal_id);
       if (path_it == paths.end() || path_it->second.empty()) {
         continue;

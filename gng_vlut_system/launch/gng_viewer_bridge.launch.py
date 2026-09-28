@@ -5,6 +5,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -321,6 +322,11 @@ def launch_setup(context, *args, **kwargs):
             if isinstance(p, dict) and "stream_topic" in p:
                 p["stream_topic"] = stream_topic
 
+    # 学習前のURDF表示と、学習済みGNG・VLUT配信の分離
+    gng_file = resolve_result_path(gng_model_path, gng_model_filename)
+    missing_result_files = [path for path in (gng_file, vlut_file) if not os.path.isfile(path)]
+    has_learning_data = not missing_result_files
+
     actions = [
         # 0. ロボット本体の起動（TF / robot_state_publisher / 初回姿勢配信）
         IncludeLaunchDescription(
@@ -358,17 +364,18 @@ def launch_setup(context, *args, **kwargs):
             }.items()
         ),
 
-        # 1. GNGブリッジ (Topofuzzy)
+        # 学習済みデータが揃った場合のGNG配信
         Node(
             package="gng_vlut_system",
             executable="topofuzzy_bridge_node",
+            condition=IfCondition(str(has_learning_data).lower()),
             name="topofuzzy_bridge_node",
             namespace=robot_name,
             parameters=[
                 params_file,
                 {
-                    "gng_model_path": resolve_result_path(gng_model_path, gng_model_filename),
-                    "vlut_path": resolve_result_path(vlut_path, vlut_filename),
+                    "gng_model_path": gng_file,
+                    "vlut_path": vlut_file,
                     "gng.data_directory": data_dir,
                     "gng.experiment_id": exp_id,
                     "publish_hz": publish_hz,
@@ -400,6 +407,13 @@ def launch_setup(context, *args, **kwargs):
             parameters=viewer_bridge_params,
         )
     ]
+
+    if not has_learning_data:
+        actions.insert(0, LogInfo(msg=(
+            "GNG・VLUTデータ不足のためGNG配信を省略し、ロボット本体を表示します。"
+            "学習後にこのlaunchを再起動してください。不足ファイル: "
+            + ", ".join(missing_result_files)
+        )))
 
     if enable_joint_state_publisher:
         actions.insert(

@@ -48,7 +48,7 @@ COPY MSG/ais_gng_feature_msgs/ /opt/topofuzzy/backend/src/ais_gng_feature_msgs/
 COPY MSG/voxel_msgs/ /opt/topofuzzy/backend/src/voxel_msgs/
 COPY MSG/gng_control_msgs/ /opt/topofuzzy/backend/src/gng_control_msgs/
 COPY pointcloud_sampling/ /opt/topofuzzy/backend/src/pointcloud_sampling/
-COPY arrow_visualization/ /opt/topofuzzy/backend/src/arrow_visualization/
+COPY libs/arrow_visualization/ /opt/topofuzzy/backend/src/arrow_visualization/
 
 WORKDIR /opt/topofuzzy/backend
 RUN source /opt/ros/humble/setup.bash \

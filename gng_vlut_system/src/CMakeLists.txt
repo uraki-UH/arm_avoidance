@@ -96,7 +96,7 @@ set(LIBS_ALL_CORE common_lib kinematics_lib robot_model_lib safety_engine visual
 # --- 3. ROS 2 Nodes ---
 # Basic Nodes
 add_executable(robot_bridge_node nodes/bridge/robot_bridge_node.cpp)
-add_executable(joint_state_mux_node nodes/bridge/joint_state_mux_node.cpp)
+add_executable(joint_state_mux_node nodes/control/joint_state_mux_node.cpp)
 add_executable(topoarm_udp_bridge nodes/bridge/topoarm_udp_bridge.cpp)
 add_executable(topofuzzy_bridge_node nodes/bridge/topofuzzy_bridge_node.cpp)
 add_executable(world_index_to_voxel_node nodes/bridge/world_index_to_voxel_node.cpp)
@@ -140,19 +140,19 @@ rclcpp_components_register_node(topological_map_planning
 rclcpp_components_register_node(topological_map_planning
   PLUGIN "robot_sim::planning::TopologicalMapPathPlannerNode"
   EXECUTABLE topological_map_path_planner_node)
-add_executable(arm_avoid_node nodes/planning/arm_avoid_node.cpp)
+add_executable(arm_avoid_node nodes/avoidance/arm_avoid_node.cpp)
 add_executable(topological_map_goal_selector_node nodes/planning/topological_map_goal_selector_node.cpp)
 target_include_directories(topological_map_goal_selector_node PRIVATE ${CMAKE_SOURCE_DIR}/../bsp3d/include)
 ament_target_dependencies(topological_map_goal_selector_node
     rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs ais_gng_msgs ais_gng_feature_msgs gng_control_msgs)
 install(TARGETS topological_map_goal_selector_node DESTINATION lib/${PROJECT_NAME})
 # 既存候補を購読する独立した把持幅・姿勢補正
-add_executable(grasp_candidate_refiner_node nodes/planning/grasp_candidate_refiner_node.cpp)
+add_executable(grasp_candidate_refiner_node nodes/grasping/grasp_candidate_refiner_node.cpp)
 target_link_libraries(grasp_candidate_refiner_node robot_model_lib kinematics_lib)
 ament_target_dependencies(grasp_candidate_refiner_node ${DEPS_ROS})
 install(TARGETS grasp_candidate_refiner_node DESTINATION lib/${PROJECT_NAME})
-add_executable(target_joint_state_executor_node nodes/planning/target_joint_state_executor_node.cpp)
-add_executable(virtual_joint_state_driver_node nodes/planning/virtual_joint_state_driver_node.cpp)
+add_executable(target_joint_state_executor_node nodes/control/target_joint_state_executor_node.cpp)
+add_executable(virtual_joint_state_driver_node nodes/control/virtual_joint_state_driver_node.cpp)
 
 # Offline tools
 add_executable(offline_urdf_trainer offline_tools/offline_urdf_trainer.cpp)

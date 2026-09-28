@@ -1,0 +1,5 @@
+<library path="bounded_gazebo_system">
+  <class name="gng_vlut_system/bounded_gazebo_system" type="robot_sim::bounded_gazebo_system" base_class_type="gazebo_ros2_control::GazeboSystemInterface">
+    <description>URDF速度・トルク上限付きODEモータ駆動</description>
+  </class>
+</library>

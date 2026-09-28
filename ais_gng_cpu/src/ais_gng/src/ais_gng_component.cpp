@@ -106,7 +106,7 @@ void replay_gng_summary_with_time(
     bool has_boundary_candidates = false,
     double boundary_ms = 0.0,
     std::size_t num_boundary_candidates = 0,
-    const char *curve_time_text = "off") {
+    const char *curve_time_text = "off", int num_inserted_nodes = -1) {
     std::size_t line_start = 0;
     while (line_start < output.size()) {
         const std::size_t line_end = output.find('\n', line_start);
@@ -168,6 +168,7 @@ void replay_gng_summary_with_time(
                 std::fputs(", Bound: off", stdout);
             }
             std::fprintf(stdout, ", Curve: %s", curve_time_text);
+            if (num_inserted_nodes >= 0) {std::fprintf(stdout, ", Insert: %d", num_inserted_nodes);}
         } else {
             std::fwrite(line.data(), sizeof(char), line.size(), stdout);
         }
@@ -239,7 +240,7 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 
 #if defined(AIS_GNG_BACKEND_CPU)
     direct_plane_cluster_enabled_ =
-        this->declare_parameter<bool>("plane_cluster.direct_enabled", true);
+        this->declare_parameter<bool>("plane_clustering", true);
     if (direct_plane_cluster_enabled_) {
         auto options = topological_plane::incremental::declareClusterOptions(
             *this, "plane_cluster.", true);
@@ -548,6 +549,32 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
         (enable_grasp_attention_ ? grasp_attention_ratio_ : 0) +
         (enable_boundary_attention_ ? boundary_attention_ratio_ : 0) +
         (enable_tracking_attention_ ? tracking_attention_.ratio : 0);
+    enable_node_insertion_ = declare_parameter("enable_node_insertion", false, grasp_descriptor);
+    const auto insertion_count = [&](const char *name, int64_t value) {
+        const auto count = declare_parameter<int64_t>(name, value, grasp_descriptor);
+        if (count <= 0 || count > UINT32_MAX) {throw std::invalid_argument(name);}
+        return static_cast<uint32_t>(count);
+    };
+    node_insertion_.max_unobserved_frames = insertion_count("node_insertion.max_unobserved_frames", 3);
+    node_insertion_.max_plane_dist_th = declare_parameter("node_insertion.max_plane_dist_th", .08, grasp_descriptor);
+    node_insertion_.plane_margin = declare_parameter("node_insertion.plane_margin", .1, grasp_descriptor);
+    insertion_timeout_sec_ = declare_parameter("node_insertion.timeout_sec", .5, grasp_descriptor);
+    if (!std::isfinite(insertion_timeout_sec_) || insertion_timeout_sec_ <= 0 ||
+        !std::isfinite(node_insertion_.max_plane_dist_th) || node_insertion_.max_plane_dist_th < 0 ||
+        !std::isfinite(node_insertion_.plane_margin) || node_insertion_.plane_margin < 0) {
+        throw std::invalid_argument("直接挿入設定の不正値");
+    }
+    if (enable_node_insertion_ && !direct_plane_cluster_enabled_) {
+        throw std::invalid_argument("直接挿入にはCPU直結の平面クラスタ計算が必要");
+    }
+    const bool enable_plane_contact = declare_parameter("plane_contact.enable_voxels", false, grasp_descriptor);
+    plane_contact_interval_sec_ = declare_parameter("plane_contact.interval_sec", .5, grasp_descriptor);
+    if (!std::isfinite(plane_contact_interval_sec_) || plane_contact_interval_sec_ < 0) {
+        throw std::invalid_argument("平面接触セル可視化の更新間隔の不正値");
+    }
+    if (enable_plane_contact && direct_plane_cluster_enabled_) {
+        plane_contact_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>("plane_contact_voxels", rclcpp::QoS(1));
+    }
     if (total_attention_ratio >= 1.0) {
         throw std::invalid_argument("重点配分率の合計による通常学習枠の消失");
     }
@@ -613,6 +640,12 @@ AiSGNGComponent::AiSGNGComponent(const rclcpp::NodeOptions & options) : Node("ai
 #if defined(AIS_GNG_BACKEND_CPU)
             gng_setParameter("node.covariance_enabled", 0, node_covariance_enabled_);
             gng_setParameter("node.covariance_winner_rank_max", 0, node_covariance_winner_rank_max_);
+            if (enable_node_insertion_) {
+                if (!gng_set_node_insertion(&node_insertion_)) {
+                    throw std::invalid_argument("直接挿入のノード上限または探索セル幅との不整合");
+                }
+                gng_set_node_insertion(nullptr);
+            }
 #endif
 
             break;
@@ -761,7 +794,8 @@ rcl_interfaces::msg::SetParametersResult AiSGNGComponent::param_cb(const std::ve
         auto name = p.get_name();
         if (name == "enable_grasp_attention" || name.rfind("grasp_attention.", 0) == 0 ||
             name == "enable_boundary_attention" || name.rfind("boundary_attention.", 0) == 0 ||
-            name == "enable_tracking_attention" || name.rfind("tracking_attention.", 0) == 0) {continue;}
+            name == "enable_tracking_attention" || name.rfind("tracking_attention.", 0) == 0 ||
+            name == "enable_node_insertion" || name.rfind("node_insertion.", 0) == 0) {continue;}
         if (name == "node.enable_support" || name.rfind("node.support.", 0) == 0 ||
             name == "node.enable_observation_support" || name.rfind("node.observation.", 0) == 0 ||
             name.rfind("input.observation_", 0) == 0 || name == "input.enable_observation_organized") {
@@ -1081,6 +1115,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     if (enable_grasp_attention_ || enable_boundary_attention_ || enable_tracking_attention_) {
         prepare_priority_attention(header, clouds.size() == 1);
     }
+    if (enable_node_insertion_) {prepare_node_insertion(header, clouds.size() == 1);}
 #endif
     const auto input_end = std::chrono::steady_clock::now();
 
@@ -1156,6 +1191,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         direct_plane_clusters =
             std::make_unique<ais_gng_msgs::msg::PlaneClusterArray>(std::move(result.clusters));
         plane_cluster_ran = true;
+        if (enable_node_insertion_) {update_insertion_planes(*direct_plane_clusters, map);}
     }
 #else
     constexpr bool plane_cluster_ran = false;
@@ -1253,7 +1289,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
         enable_boundary_candidates_ || enable_boundary_attention_,
         boundary_ms,
         num_boundary_candidates,
-        curve_time_text);
+        curve_time_text, enable_node_insertion_ ? static_cast<int>(gng_get_node_insertion_stats().num_added_nodes) : -1);
 #else
     replay_gng_summary_with_time(
         gng_summary_output,
@@ -1270,6 +1306,7 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     topological_map_pub_->publish(std::move(map_msg));
 #if defined(AIS_GNG_BACKEND_CPU)
     if (direct_plane_clusters) {
+        publish_plane_contact_voxels(*direct_plane_clusters, map);
         direct_plane_cluster_pub_->publish(std::move(direct_plane_clusters));
     }
     if (direct_nonplane_components) {
@@ -1600,6 +1637,96 @@ bool AiSGNGComponent::prepare_grasp_attention(
     }
     grasp_attention_regions_.assign(*candidate, positions, grasp_attention_margin_);
     return !grasp_attention_regions_.empty();
+}
+
+void AiSGNGComponent::prepare_node_insertion(const std_msgs::msg::Header &header, bool has_single_input) {
+    gng_set_node_insertion(nullptr);
+    const auto stamp_sec = [](const auto &stamp) {return static_cast<double>(stamp.sec) + stamp.nanosec * 1e-9;};
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - insertion_received_).count();
+    if (!has_single_input || !has_insertion_planes_ ||
+        !boundary_attention::can_reuse(insertion_header_.frame_id, stamp_sec(insertion_header_.stamp),
+            header.frame_id, stamp_sec(header.stamp), elapsed, insertion_timeout_sec_)) {return;}
+    auto input = node_insertion_;
+    input.planes = insertion_planes_.data(); input.num_planes = insertion_planes_.size();
+    input.owners = insertion_owners_.data(); input.num_owners = insertion_owners_.size();
+    if (!gng_set_node_insertion(&input)) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "直接挿入設定の拒否、通常経路へ復帰");
+    }
+}
+
+void AiSGNGComponent::update_insertion_planes(const ais_gng_msgs::msg::PlaneClusterArray &planes,
+    const TopologicalMap &map) {
+    insertion_planes_.clear(); insertion_owners_.clear();
+    for (const auto &cluster : planes.clusters) {
+        if (cluster.node_indices.empty()) {continue;}
+        gng_insertion_plane plane;
+        const double center[] = {cluster.centroid.x, cluster.centroid.y, cluster.centroid.z};
+        const double normal[] = {cluster.normal.x, cluster.normal.y, cluster.normal.z};
+        const double u[] = {cluster.tangent_u.x, cluster.tangent_u.y, cluster.tangent_u.z};
+        const double v[] = {cluster.tangent_v.x, cluster.tangent_v.y, cluster.tangent_v.z};
+        for (uint32_t dim = 0; dim < 3; ++dim) {
+            plane.center[dim] = center[dim]; plane.normal[dim] = normal[dim];
+            plane.tangent_u[dim] = u[dim]; plane.tangent_v[dim] = v[dim];
+        }
+        plane.min_u = plane.min_v = std::numeric_limits<double>::infinity();
+        plane.max_u = plane.max_v = -std::numeric_limits<double>::infinity();
+        const auto plane_idx = static_cast<uint32_t>(insertion_planes_.size());
+        for (const auto idx : cluster.node_indices) {
+            if (idx >= map.node_num) {continue;}
+            const auto &node = map.nodes[idx];
+            const double delta[] = {node.pos.x - center[0], node.pos.y - center[1], node.pos.z - center[2]};
+            double pos_u = 0, pos_v = 0;
+            for (uint32_t dim = 0; dim < 3; ++dim) {pos_u += delta[dim] * u[dim]; pos_v += delta[dim] * v[dim];}
+            plane.min_u = std::min(plane.min_u, pos_u); plane.max_u = std::max(plane.max_u, pos_u);
+            plane.min_v = std::min(plane.min_v, pos_v); plane.max_v = std::max(plane.max_v, pos_v);
+            insertion_owners_.push_back({node.id, node.frame, plane_idx});
+        }
+        if (std::isfinite(plane.min_u)) {insertion_planes_.push_back(plane);}
+    }
+    insertion_header_ = planes.header;
+    insertion_received_ = std::chrono::steady_clock::now();
+    has_insertion_planes_ = true;
+}
+
+void AiSGNGComponent::publish_plane_contact_voxels(const ais_gng_msgs::msg::PlaneClusterArray &planes,
+    const TopologicalMap &map) {
+    if (!plane_contact_pub_ || plane_contact_pub_->get_subscription_count() == 0) {return;}
+    const auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration<double>(now-plane_contact_published_).count() < plane_contact_interval_sec_) {return;}
+    plane_contact_nodes_.clear();
+    for (const auto &plane : planes.clusters) {
+        for (const auto idx : plane.node_indices) {
+            if (idx < map.node_num) {plane_contact_nodes_.push_back({map.nodes[idx].id, map.nodes[idx].frame});}
+        }
+    }
+    const gng_plane_contact_voxel *voxels = nullptr;
+    float cell_size = 0;
+    const auto num_voxels = gng_get_plane_contact_voxels(plane_contact_nodes_.data(),
+        plane_contact_nodes_.size(), &voxels, &cell_size);
+    visualization_msgs::msg::MarkerArray output;
+    output.markers.resize(2);
+    for (uint32_t idx = 0; idx < 2; ++idx) {
+        auto &marker = output.markers[idx];
+        marker.header = planes.header;
+        marker.ns = idx == 0 ? "plane_node_cells" : "adjacent_input_cells";
+        marker.id = 0; marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+        marker.pose.orientation.w = 1;
+        marker.scale.x = marker.scale.y = marker.scale.z = cell_size > 0 ? cell_size : 1;
+        marker.color.r = idx == 0 ? .1f : 1.f;
+        marker.color.g = idx == 0 ? .9f : .65f;
+        marker.color.b = .1f; marker.color.a = .55f;
+    }
+    for (uint32_t idx = 0; idx < num_voxels; ++idx) {
+        geometry_msgs::msg::Point point;
+        point.x = voxels[idx].center.x; point.y = voxels[idx].center.y; point.z = voxels[idx].center.z;
+        output.markers[voxels[idx].contact-1].points.push_back(point);
+    }
+    for (auto &marker : output.markers) {
+        // 空集合への遷移時も前回の表示を消去。別namespaceのMarkerへの影響なし。
+        marker.action = marker.points.empty() ? visualization_msgs::msg::Marker::DELETE : visualization_msgs::msg::Marker::ADD;
+    }
+    plane_contact_pub_->publish(std::move(output));
+    plane_contact_published_ = now;
 }
 
 void AiSGNGComponent::prepare_priority_attention(const std_msgs::msg::Header &header,

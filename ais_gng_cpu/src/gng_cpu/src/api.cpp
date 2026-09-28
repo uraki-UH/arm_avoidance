@@ -195,6 +195,51 @@ MY_API uint8_t gng_set_sampling_rules(const gng_sampling_rule *rules, uint32_t n
 
 MY_API gng_sampling_stats gng_get_sampling_stats() {return gng.n1.sampling.stats;}
 
+MY_API uint8_t gng_set_node_insertion(const gng_node_insertion_input *input) {
+    auto &core = gng.n1;
+    core.enable_node_insertion = false;
+    if (!input) {return 1;}
+    const auto &value = *input;
+    if (!gng.initialized || value.num_planes > core.nodes.size() || value.num_owners > core.nodes.size() ||
+        (value.num_planes && !value.planes) || (value.num_owners && !value.owners) ||
+        value.max_unobserved_frames == 0 ||
+        !std::isfinite(value.max_plane_dist_th) || value.max_plane_dist_th < 0 ||
+        !std::isfinite(value.plane_margin) || value.plane_margin < 0) {return 0;}
+    for (uint32_t idx = 0; idx < value.num_planes; ++idx) {
+        const auto &plane = value.planes[idx];
+        if (!std::isfinite(plane.min_u) || !std::isfinite(plane.max_u) || plane.min_u > plane.max_u ||
+            !std::isfinite(plane.min_v) || !std::isfinite(plane.max_v) || plane.min_v > plane.max_v) {return 0;}
+        const double *axes[] = {plane.normal, plane.tangent_u, plane.tangent_v};
+        for (uint32_t dim = 0; dim < 3; ++dim) {if (!std::isfinite(plane.center[dim])) {return 0;}}
+        for (uint32_t a = 0; a < 3; ++a) {
+            for (uint32_t b = a; b < 3; ++b) {
+                double dot = 0;
+                for (uint32_t dim = 0; dim < 3; ++dim) {dot += axes[a][dim] * axes[b][dim];}
+                if (!std::isfinite(dot) || std::abs(dot - (a == b ? 1. : 0.)) > 1e-5) {return 0;}
+            }
+        }
+    }
+    for (uint32_t idx = 0; idx < value.num_owners; ++idx) {
+        if (value.owners[idx].id >= core.nodes.size() || value.owners[idx].plane_idx >= value.num_planes) {return 0;}
+    }
+    try {
+        core.insertion_planes.clear();
+        if (value.num_planes) {core.insertion_planes.assign(value.planes, value.planes + value.num_planes);}
+        core.insertion_owners.assign(core.nodes.size(), {UINT32_MAX, UINT32_MAX, UINT32_MAX});
+        for (uint32_t idx = 0; idx < value.num_owners; ++idx) {
+            const auto &owner = value.owners[idx];
+            if (core.insertion_owners[owner.id].id != UINT32_MAX) {return 0;}
+            core.insertion_owners[owner.id] = owner;
+        }
+        core.insertion_config = value;
+        core.insertion_config.planes = nullptr; core.insertion_config.owners = nullptr;
+        core.enable_node_insertion = true;
+        return 1;
+    } catch (...) {return 0;}
+}
+
+MY_API gng_node_insertion_stats gng_get_node_insertion_stats() {return gng.n1.insertion_stats;}
+
 MY_API const uint32_t *gng_get_sampling_points(uint32_t rule_id, uint32_t *num_points) {
     if (!num_points) {return nullptr;}
     const auto &ids = gng.n1.sampling.points_for(rule_id, gng.vg);
@@ -340,6 +385,69 @@ MY_API uint32_t gng_get_node_num_neighbors(uint16_t node_id) {
 
 MY_API TopologicalMap gng_getTopologicalMap(){
     return gng.getTopologicalMap();
+}
+
+MY_API uint32_t gng_get_plane_contact_voxels(const gng_sampling_node_ref *nodes, uint32_t num_nodes,
+    const gng_plane_contact_voxel **voxels, float *cell_size) {
+    if (voxels) {*voxels = nullptr;}
+    if (cell_size) {*cell_size = 0;}
+    if (!voxels || !cell_size || !gng.initialized || !gng.has_voxelized_input ||
+        !gng.vg.enable_voxel_downsampling || !nodes || num_nodes == 0 || num_nodes > gng.n1.nodes.size()) {return 0;}
+    auto &grid = *gng.vg.voxel_config;
+    *cell_size = grid.unit;
+    // 可視化を要求された時だけの索引。既存入力セル番号と配列容量の再利用。
+    static std::vector<uint32_t> keys, touched_words;
+    static std::vector<uint64_t> bits;
+    // 最大8 MiBの直接参照表。広大なグリッドは従来の疎な索引へ退避。
+    const size_t num_words = (uint64_t(grid.maxXYZ) + 63) / 64;
+    const bool has_dense_bits = num_words <= (8 * 1024 * 1024 / sizeof(uint64_t));
+    for (const auto idx : touched_words) {bits[idx] = 0;}
+    touched_words.clear();
+    if (has_dense_bits) {bits.resize(num_words, 0);}
+    static std::vector<gng_plane_contact_voxel> result;
+    size_t capacity = 16;
+    while (capacity < size_t(num_nodes) * 2) {capacity *= 2;}
+    if (!has_dense_bits) {keys.resize(capacity); std::fill(keys.begin(), keys.end(), UINT32_MAX);}
+    result.clear(); result.reserve(gng.vg.filtered_pcl_num);
+    const auto find_slot = [&](uint32_t key) {
+        size_t slot = (uint64_t(key) * 11400714819323198485ULL >> 32) & (capacity-1);
+        while (keys[slot] != UINT32_MAX && keys[slot] != key) {slot = (slot+1) & (capacity-1);}
+        return slot;
+    };
+    for (uint32_t idx = 0; idx < num_nodes; ++idx) {
+        const auto &ref = nodes[idx];
+        if (ref.id >= gng.n1.nodes.size()) {continue;}
+        auto &node = gng.n1.nodes[ref.id];
+        if (node.id == NODE_NOID || node.frame != ref.frame) {continue;}
+        const auto key = grid.getIndex(node.pos);
+        if (key < grid.maxXYZ) {
+            if (has_dense_bits) {
+                auto &word = bits[key / 64];
+                if (!word) {touched_words.push_back(key / 64);}
+                word |= uint64_t{1} << (key % 64);
+            } else {keys[find_slot(key)] = key;}
+        }
+    }
+    const auto has_key = [&](uint32_t key) {
+        return has_dense_bits ? (bits[key / 64] & (uint64_t{1} << (key % 64))) != 0 :
+            keys[find_slot(key)] != UINT32_MAX;
+    };
+    for (uint32_t idx = 0; idx < gng.vg.filtered_pcl_num; ++idx) {
+        const auto &range = gng.vg.voxel_range[idx];
+        const auto key = gng.vg.voxel_index[range.start].voxel_index;
+        if (key >= grid.maxXYZ) {continue;}
+        const auto x = key % grid.max[0], y = key / grid.max[0] % grid.max[1], z = key / grid.maxXY;
+        const uint8_t contact = has_key(key) ? 1 : (
+            (x > 0 && has_key(key-1)) || (x+1 < grid.max[0] && has_key(key+1)) ||
+            (y > 0 && has_key(key-grid.max[0])) || (y+1 < grid.max[1] && has_key(key+grid.max[0])) ||
+            (z > 0 && has_key(key-grid.maxXY)) || (z+1 < grid.max[2] && has_key(key+grid.maxXY)) ? 2 : 0);
+        if (contact) {
+            result.push_back({{grid.x_min+(x+.5f)*grid.unit, grid.y_min+(y+.5f)*grid.unit,
+                grid.z_min+(z+.5f)*grid.unit}, range.end-range.start, contact});
+        }
+    }
+    *voxels = result.data();
+    return result.size();
 }
 
 MY_API uint8_t* gng_getDownSampling(uint32_t *label_num){

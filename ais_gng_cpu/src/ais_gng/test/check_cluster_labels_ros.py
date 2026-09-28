@@ -38,7 +38,7 @@ def main():
                '-r', 'topological_map:=/cluster_labels_test/map']
     for parameter in (
         'input.topic_names:=[/cluster_labels_test/points]', 'input.visualize:=false',
-        'plane_cluster.direct_enabled:=false', 'nonplane_component.direct_enabled:=false',
+        'plane_clustering:=false', 'nonplane_component.direct_enabled:=false',
         'surface_model.enable:=false',
     ):
         command.extend(('-p', parameter))

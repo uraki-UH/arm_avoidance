@@ -373,6 +373,8 @@ struct Clusterizer::Impl
   std::vector<ClusterState> clusters;
   // 前回出力時のクラスタ添字。フレーム末尾の詰め直しまで有効な16bitノードIDの直接表。
   std::vector<int> owner_idx_by_node_id = std::vector<int>(kNodeIdRange, kUnassigned);
+  // 所属・法線・連結履歴の同一性確認用の生成フレーム。
+  std::vector<std::uint32_t> node_frames = std::vector<std::uint32_t>(kNodeIdRange, 0U);
   std::uint32_t next_cluster_id = 1U;
   // ノードIDごとの法線EMA状態。IDをそのまま添字にしたフラット配列で持つ
   // (unordered_mapのハッシュ計算・バケット走査・ヒープ確保を避けるため)。
@@ -614,6 +616,15 @@ struct Clusterizer::Impl
 
     for (std::size_t index = 0U; index < node_count; ++index) {
       const auto node = map.read_node(map.nodes, index);
+      if (node_frames[node.id] != node.frame) {
+        // ID再利用時の旧ノード履歴の失効。旧統計の除去は後段の差分集計で実施。
+        owner_idx_by_node_id[node.id] = kUnassigned;
+        normal_filter_frame[node.id] = 0U;
+        isolated_frames[node.id] = 0U;
+        previous_spacings[node.id] = 0.0;
+        connectivity_frames[node.id] = 0U;
+        node_frames[node.id] = node.frame;
+      }
       node_ids[index] = node.id;
       node_labels[index] = node.label;
       current_idx_by_id[node_ids[index]] = static_cast<std::uint32_t>(index);

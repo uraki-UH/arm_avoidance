@@ -1,0 +1,35 @@
+dual_arm_gazebo_demo:
+  # 実機のトピックと分離したシミュレーション名前空間
+  namespace: "" # 未指定時はsim_と機種名の連結
+  enable_gui: true
+  enable_auto_start: false
+  enable_loop: false
+  enable_viewer: true
+  # 動作区間の時間 [s] と補間軌道の指令速度上限 [rad/s]
+  segment_duration_sec: 4.0
+  pause_duration_sec: 0.5
+  max_joint_velocity: 0.15
+  max_state_age_sec: 1.0
+  goal_position_th: 0.04
+  # 有限トルクモータの位置偏差から目標速度への比例ゲイン [1/s]
+  motor_position_gain: 60.0
+  # 数値積分と反力測定のずれに対する、URDF速度・トルク上限の使用比率
+  motor_limit_scale: 0.95
+  # 各姿勢で未指定の関節はURDFのゼロ姿勢。腰と首は固定姿勢
+  poses:
+    - name: left_arm
+      joints: {L_joint2: 0.15, L_joint4: 0.25}
+    - name: home
+      joints: {}
+    - name: right_arm
+      joints: {R_joint2: -0.15, R_joint4: 0.25}
+    - name: home
+      joints: {}
+    - name: both_arms
+      joints: {L_joint2: 0.15, L_joint4: 0.25, R_joint2: -0.15, R_joint4: 0.25}
+    - name: home
+      joints: {}
+    - name: grippers_open
+      joints: {L_gripper_joint: 0.35, R_gripper_joint: 0.35}
+    - name: home
+      joints: {}

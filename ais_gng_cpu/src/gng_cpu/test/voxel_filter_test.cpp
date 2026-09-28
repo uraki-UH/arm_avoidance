@@ -26,9 +26,9 @@ int main() {
     config.voxel_grid_unit = 1;
     filter.init(&grid, &config);
     filter.applyFilter(points, points.size(), labels);
-    // 有効時の平均化と最後のセルの保持。
+    // 有効時の代表元点と最後のセルの保持。平均座標ではないことの確認。
     if (filter.filtered_pcl_num != 2 ||
-        std::abs(filter.filtered_pcl[0][0] - 0.15f) > 1e-6f ||
+        filter.filtered_pcl[0][0] != points[0][0] ||
         std::abs(filter.filtered_pcl[1][0] - 1.1f) > 1e-6f) {return 4;}
     points = {{3,0,0}};
     filter.applyFilter(points, points.size(), labels);

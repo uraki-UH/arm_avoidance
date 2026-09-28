@@ -15,7 +15,7 @@ def main():
            "-p", "input.topic_names:=[/parameter_test/points]",
            "-p", "input.voxel_grid_unit:=0.0", "-p", "node.grid:=0.5",
            "-p", "node.num_max:=128", "-p", "classify.human:=false",
-           "-p", "classify.car:=false", "-p", "plane_cluster.direct_enabled:=false",
+           "-p", "classify.car:=false", "-p", "plane_clustering:=false",
            "-p", "nonplane_component.direct_enabled:=false"]
     with open("/tmp/gng_parameter_updates_node.log", "w") as log:
         process = subprocess.Popen(cmd, stdout=log, stderr=log, start_new_session=True)
@@ -50,7 +50,7 @@ def main():
             set_values({"node.interval": [0.1]}, False)
             set_values({"input.voxel_grid_unit": 0.2}, False)
             set_values({"node.num_max": 256}, False)
-            set_values({"plane_cluster.direct_enabled": True}, False)
+            set_values({"plane_clustering": True}, False)
             request = GetParameters.Request()
             request.names = ["node.learning_num", "node.interval", "input.voxel_grid_unit", "node.num_max"]
             values = call(getter, request).values

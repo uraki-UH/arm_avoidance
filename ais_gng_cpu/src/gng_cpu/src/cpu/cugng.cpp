@@ -2,11 +2,19 @@
 
 #include <numeric>
 
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+// 専用ベンチマークだけの計測入口。通常ビルドでは宣言・呼出しとも除去。
+void gng_churn_event(uint32_t event, uint32_t id, const Vec3f &point);
+bool gng_churn_support_reset_enabled();
+#endif
+
 CUGNG::CUGNG(){
 
 }
 
 bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig *_other_config) {
+    enable_node_insertion = false;
+    insertion_planes.clear(); insertion_owners.clear(); insertion_stats = {};
     sampling.reset_input();
     observation_touched_ids.clear();
     observation_pixel_source = {};
@@ -54,6 +62,7 @@ bool CUGNG::init(NodeConfig *_gng_config, EdgeConfig *_edge_config, OtherConfig 
 
     // malloc
     nodes.resize(node_num_max);
+    unobserved_frames.assign(node_num_max, 0);
     search_nodes.resize(node_num_max);
     orphan_node_words.assign((node_num_max + 63) / 64, 0);
     end_update_frame();
@@ -97,6 +106,7 @@ void CUGNG::clear() {
     node_num = 0;
     next_free_idx = 0;
     nodes.clear();
+    unobserved_frames.clear();
     search_nodes.clear();
     orphan_node_words.clear();
     end_update_frame();
@@ -315,7 +325,8 @@ void CUGNG::begin_search_batch() {
     is_search_batch = true;
 }
 
-void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels){
+void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector<uint8_t> &labels,
+    const VoxelGrid *, const vector<Vec3f> *){
     uint32_t i;
     static Node_d n;
     // ボクセル番号順による低いZ側へのノード枠の偏在防止。全入力の一度ずつの処理。
@@ -327,18 +338,98 @@ void CUGNG::getDownSampling(vector<Vec3f> &inpcl, uint32_t input_pcl_num, vector
     const bool has_sampling_rules = std::any_of(sampling.rules.begin(), sampling.rules.end(),
         [](const auto &rule) {return rule.enable_nearest;});
     if (has_sampling_rules) {sampling.matches.resize(input_pcl_num);}
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+    const bool enable_support_reset = gng_churn_support_reset_enabled();
+#else
+    constexpr bool enable_support_reset = true;
+#endif
     for (const uint32_t point_idx : point_order){
         i = point_idx;
         bool inpcl_is_in_vigilance = getDownSamplingGrid(inpcl[i], labels[i], n);
-        if (has_sampling_rules) {sampling.matches[i] = {n.id1, n.id1_d2};}
-        if(!inpcl_is_in_vigilance){
-            add_node(inpcl[i]);
+        // 入力を既存警戒領域で受け持つ最近傍だけの寿命更新。同一セル全ノードの保護なし。
+        if (enable_support_reset && enable_node_insertion && n.id1 != NODE_NOID &&
+            n.id1_d2 < gng_config.vigilance2[nodes[n.id1].label]) {
+            nodes[n.id1].age_s1 = 0;
         }
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+        if (n.id1 != NODE_NOID) {gng_churn_event(3, n.id1, inpcl[i]);}
+#endif
+        if (has_sampling_rules) {sampling.matches[i] = {n.id1, n.id1_d2};}
+        if (!inpcl_is_in_vigilance) {
+            if (enable_node_insertion) {++insertion_stats.num_checked_cells;}
+            if (enable_node_insertion && is_explained_by_plane(inpcl[i], n)) {
+                ++insertion_stats.num_plane_rejected_cells;
+            } else {
+                if (enable_node_insertion && node_num >= node_num_max) {++insertion_stats.num_capacity_rejected_cells;}
+                const auto added = add_node(inpcl[i]);
+                if (enable_node_insertion && added != NODE_NOID) {
+                    ++insertion_stats.num_added_nodes;
+                    // 追加前の既存探索結果による最近傍1ノードへの即時接続。
+                    if (n.id1 != NODE_NOID) {connect(added, n.id1);}
+                }
+            }
+        }
+        // 入力照合で選ばれた既存の最近傍対の接続も維持。
         if(n.id1 != NODE_NOID && n.id2 != NODE_NOID){
             connect(n.id1, n.id2);
         }
     }
     is_search_batch = enable_frame_search_reuse;
+}
+
+// 最近傍2ノードとその直接隣接の所属平面だけの照合。全平面・空間近傍の追加探索なし。
+bool CUGNG::is_explained_by_plane(const Vec3f &point, const Node_d &nearest) const {
+    const auto matches_plane = [&](uint32_t id) {
+        if (id >= insertion_owners.size() || id >= nodes.size()) {return false;}
+        const auto &owner = insertion_owners[id];
+        if (nodes[id].id == NODE_NOID || owner.id != id || owner.frame != nodes[id].frame ||
+            owner.plane_idx >= insertion_planes.size()) {return false;}
+        const auto &plane = insertion_planes[owner.plane_idx];
+        double height = 0, u = 0, v = 0;
+        for (uint32_t dim = 0; dim < 3; ++dim) {
+            const double delta = point.p[dim] - plane.center[dim];
+            height += delta * plane.normal[dim];
+            u += delta * plane.tangent_u[dim]; v += delta * plane.tangent_v[dim];
+        }
+        const double margin = insertion_config.plane_margin;
+        return std::abs(height) <= insertion_config.max_plane_dist_th &&
+            u >= plane.min_u - margin && u <= plane.max_u + margin &&
+            v >= plane.min_v - margin && v <= plane.max_v + margin;
+    };
+    for (const auto id : {nearest.id1, nearest.id2}) {
+        if (id >= nodes.size() || nodes[id].id == NODE_NOID) {continue;}
+        if (matches_plane(id)) {return true;}
+        for (uint32_t idx = 0; idx < nodes[id].edge_num; ++idx) {
+            if (matches_plane(nodes[id].edges[idx])) {return true;}
+        }
+    }
+    return false;
+}
+
+// 入力占有による未観測寿命。通常学習の勝者カウンタとは独立。
+void CUGNG::age_unobserved_nodes(const VoxelGrid &voxels) {
+    if (!enable_node_insertion || !voxels.enable_voxel_downsampling) {
+        std::fill(unobserved_frames.begin(), unobserved_frames.end(), 0);
+        return;
+    }
+    for (auto &node : nodes) {
+        if (node.id == NODE_NOID) {continue;}
+        auto &age = unobserved_frames[node.id];
+        const auto cell_idx = voxels.voxel_config->getIndex(node.pos);
+        if (cell_idx >= voxels.voxel_config->maxXYZ || voxels.has_occupied_cell(cell_idx)) {
+            age = 0;
+            continue;
+        }
+        const Node_d nearest{node.id, 0, NODE_NOID, 0};
+        if (is_explained_by_plane(node.pos, nearest)) {age = 0; continue;}
+        ++insertion_stats.num_aged_nodes;
+        if (age < insertion_config.max_unobserved_frames) {++age;}
+        if (age >= insertion_config.max_unobserved_frames) {
+            const auto id = node.id;
+            delete_node(id);
+            insertion_stats.num_removed_nodes += nodes[id].id == NODE_NOID;
+        }
+    }
 }
 void CUGNG::check_edge_distance() {
     static uint32_t disconnect_ids[NODE_MAX_EDGE];
@@ -498,7 +589,7 @@ void CUGNG::learn_normal(Vec3f& p, const Vec3f *observation_point, uint32_t raw_
     // getMinAll(p, n);
 
     // pが警戒領域に無いときに追加
-    if(!p_is_in_vigilance){
+    if (!p_is_in_vigilance && (!enable_node_insertion || !is_explained_by_plane(p, n))) {
         add_node(p);
     }
 
@@ -742,6 +833,9 @@ void CUGNG::delete_node(uint32_t idx) {
     auto& node = nodes[idx];
     if (node.id == NODE_NOID)
         return;
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+    gng_churn_event(1, idx, node.pos);
+#endif
     recordNodeDelta(node, GNG_DELTA_REMOVE);
     // gridから削除
     auto& g1 = grid_cell(node.grid_i);
@@ -831,6 +925,7 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             auto& node = nodes[i];
             node.init(i, gng_config.eta_s1, gng_config.eta_s2, pos);
             node.frame = frame_number;
+            unobserved_frames[i] = 0;
             mark_orphan_node(node);
             if (is_search_batch) {
                 search_nodes[i] = {node.pos, node.label, node.clusted_label};
@@ -840,6 +935,9 @@ uint32_t CUGNG::add_node(Vec3f &pos) {
             node.grid_vec_i = grid_node_num[grid_i]++;
             g1[node.grid_vec_i] = i;
             node_num++;
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+            gng_churn_event(0, i, node.pos);
+#endif
             recordNodeDelta(node, GNG_DELTA_ADD);
             ++next_free_idx;
             return i;
@@ -936,6 +1034,8 @@ void CUGNG::connect(uint32_t idx1, uint32_t idx2) {
 
 void CUGNG::check_delete_no_edge_and_decay_eta() {
     if (enable_frame_orphan_updates && !(gng_config.eta_decay_rate < 1.f)) {
+        // 占有更新時の孤立ノードは未観測寿命で管理。入力のある新規領域の即時消失防止。
+        if (enable_node_insertion) {return;}
         for (size_t word_idx = 0; word_idx < orphan_node_words.size(); ++word_idx) {
             auto word = orphan_node_words[word_idx];
             while (word != 0) {
@@ -951,7 +1051,7 @@ void CUGNG::check_delete_no_edge_and_decay_eta() {
         if (node.id == NODE_NOID) {
             continue;
         }
-        if (node.edge_num == 0) {
+        if (node.edge_num == 0 && !enable_node_insertion) {
             delete_node(node.id);
         } else if (gng_config.eta_decay_rate < 1.f) {
             node.eta_s1 *= gng_config.eta_decay_rate;
@@ -1035,6 +1135,9 @@ void CUGNG::check_age(){
         if (node.static_node) {
             age = gng_config.max_static_s1_age;
             if (node.age_s1 >= age) {
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+                if (node_num > 2) {gng_churn_event(2, node.id, node.pos);}
+#endif
                 delete_node(node.id);
             } else {
                 node.age_s1++;
@@ -1042,6 +1145,9 @@ void CUGNG::check_age(){
             }
         } else {
             if (node.age_s1 >= age) {
+#ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
+                if (node_num > 2) {gng_churn_event(2, node.id, node.pos);}
+#endif
                 delete_node(node.id);
             } else {
                 node.age_s1++;

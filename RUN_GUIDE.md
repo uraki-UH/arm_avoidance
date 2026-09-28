@@ -27,7 +27,35 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 
 元マップは`/ToPoDualArm/Tmap_static`、集約マップは`/ToPoDualArm/Tmap_vis_L0`。ViewerのTopicsで表示を選択。追加launchは不要。[集約データの再生成](gng_vlut_system/docs/releases/2026-09-15_spatial_tmap_aggregation.md)。
 
-新しい双腕モデルは`params_file`を`topo_dual_arm_max.yaml`または`topo_dual_arm_max_long.yaml`へ変更。機種ごとのGNG・VLUT学習が先に必要。[設定・学習手順](gng_vlut_system/docs/releases/2026-09-28_dual_arm_models.md)。
+新しい双腕モデルは`params_file`を`topo_dual_arm_max.yaml`または`topo_dual_arm_max_long.yaml`へ変更。ロボット本体は学習前でも表示可能。GNG・VLUTの表示には機種ごとの学習後にlaunchを再起動。[設定・学習手順](gng_vlut_system/docs/releases/2026-09-28_dual_arm_models.md)。
+
+## 双腕Gazeboデモ
+
+```bash
+ros2 launch gng_vlut_system dual_arm_gazebo_demo.launch.py enable_auto_start:=true
+```
+
+左腕・右腕・両腕・グリッパーを1巡。`gui:=false`で画面なし。停止は`ros2 service call /sim_topo_dual_arm_max/demo/stop std_srvs/srv/Trigger '{}'`。[設定・longへの切替・検証結果](gng_vlut_system/docs/releases/2026-09-28_dual_arm_gazebo_demo.md)。
+
+## 人の前腕接近に対する退避デモ
+
+```bash
+ros2 launch gng_vlut_system dual_arm_avoidance_demo.launch.py
+```
+
+左・右へ前腕カプセルが接近し、距離に応じて退避・復帰。Viewerで`/sim_topo_dual_arm_max/avoidance/markers`をONにすると、前腕・手首軌跡・距離を表示。
+停止は`ros2 service call /sim_topo_dual_arm_max/avoidance/stop std_srvs/srv/Trigger '{}'`。
+[回避設定・検証](gng_vlut_system/docs/releases/2026-09-28_dual_arm_avoidance_demo.md) / [位置制御・物理パラメータ](gng_vlut_system/docs/dual_arm_simulation.md)。
+
+## 点群・GNG・VLUTによる双腕退避
+
+```bash
+ros2 launch gng_vlut_system dual_arm_gng_lidar_demo.launch.py
+```
+
+maxの10,000ノード学習済みデータを利用。LiDAR点群の自己除去、VLUTによる安全状態更新、GNG経路と局所退避を接続。
+Viewerは`/sim_topo_dual_arm_max/lidar_points`、`Tmap_static`、`plan_Tmap`、`avoidance/markers`を表示ON。
+[設定・検証範囲](gng_vlut_system/docs/releases/2026-09-28_dual_arm_gng_lidar.md)。
 
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2

@@ -26,5 +26,11 @@ int main() {
         std::cout << "learning=" << num << " events=" << num_events << '\n';
         if (num_events != static_cast<uint32_t>(num)) {return 4;}
     }
+    const auto map = gng_getTopologicalMap();
+    if (map.node_num == 0) {return 5;}
+    const gng_sampling_node_ref ref{map.nodes[0].id, map.nodes[0].frame};
+    const gng_plane_contact_voxel *voxels = nullptr;
+    float cell_size = 0;
+    if (gng_get_plane_contact_voxels(&ref, 1, &voxels, &cell_size) != 0 || cell_size != 0) {return 6;}
     return 0;
 }

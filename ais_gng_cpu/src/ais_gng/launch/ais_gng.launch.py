@@ -135,17 +135,12 @@ def generate_launch_description():
         with open(gng_config_path, encoding='utf-8') as config_file:
             gng_parameters = yaml.safe_load(config_file).get(
                 'ais_gng_node', {}).get('ros__parameters', {})
-        # センサー別YAMLの短い切替名から内部パラメータへの変換。旧名との併記時は短い名前を優先。
-        clustering_switches = {}
-        for yaml_name, parameter_name in (
-                ('plane_clustering', 'plane_cluster.direct_enabled'),
-                ('curve_clustering', 'surface_model.enable')):
-            if yaml_name in gng_parameters:
-                enable_clustering = gng_parameters[yaml_name]
-                if not isinstance(enable_clustering, bool):
-                    raise RuntimeError(f'{yaml_name} must be a YAML boolean (true/false)')
-                clustering_switches[parameter_name] = enable_clustering
-        gng_parameters.update(clustering_switches)
+        # センサー別YAMLの切替型の検証。曲面のみ内部名への変換。
+        for name in ('plane_clustering', 'curve_clustering'):
+            if name in gng_parameters and not isinstance(gng_parameters[name], bool):
+                raise RuntimeError(f'{name} must be a YAML boolean (true/false)')
+        if 'curve_clustering' in gng_parameters:
+            gng_parameters['surface_model.enable'] = gng_parameters['curve_clustering']
 
         executable_path = os.path.join(
             get_package_prefix("ais_gng"),
@@ -203,11 +198,13 @@ def generate_launch_description():
                 plane_config.get('ais_gng_node', {}).get('ros__parameters', {}))
             plane_parameter_overrides.update({
                 name: value for name, value in gng_parameters.items()
-                if name.startswith(('plane_cluster.', 'nonplane_component.'))
+                if name == 'plane_clustering' or name.startswith(
+                    ('plane_cluster.', 'nonplane_component.'))
             })
             plane_parameter_overrides['plane_cluster.output_topic'] = plane_clusters_topic
-            enable_plane_clustering = bool(plane_parameter_overrides.get(
-                'plane_cluster.direct_enabled', True))
+            enable_plane_clustering = plane_parameter_overrides.get('plane_clustering', True)
+            if not isinstance(enable_plane_clustering, bool):
+                raise RuntimeError('plane_clustering must be a YAML boolean (true/false)')
             enable_nonplane_component = enable_plane_clustering and bool(
                 plane_parameter_overrides.get('nonplane_component.direct_enabled', True))
             plane_parameter_overrides['nonplane_component.direct_enabled'] = enable_nonplane_component

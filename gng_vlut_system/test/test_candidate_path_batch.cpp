@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 #include "core/planning/gng_dijkstra_planner.hpp"
+#include "core/planning/graph_planner_factory.hpp"
 #include "core/planning/joint_linf_cost.hpp"
 
 namespace {
@@ -301,3 +302,37 @@ TEST(candidate_path_batch, actual_robot_graph) {
             << " safety_update_ms=" << std::chrono::duration<double, std::milli>(update_end - update_begin).count() << '\n';
 }
 }  // 無名名前空間
+
+TEST(graph_planner_components, factory_preserves_paths_and_safety) {
+  batch_graph graph(4);
+  graph.neighbors = {{1}, {0, 2}, {1, 3}, {2}};
+  robot_sim::planning::graph_planner_options options;
+  options.enable_safety_penalty = false;
+  options.enable_static_graph = true;
+  auto cost = std::make_shared<planning::JointLInfCost<Eigen::VectorXf, Eigen::Vector3f>>();
+  auto batch = robot_sim::planning::make_graph_planner<Eigen::VectorXf, Eigen::Vector3f>(
+      "gng_dijkstra", graph, options, cost);
+  auto reference = robot_sim::planning::make_graph_planner<Eigen::VectorXf, Eigen::Vector3f>(
+      "gng_dijkstra_reference", graph, options, cost);
+  const std::vector<int> starts{0, 1};
+  const std::vector<int> goals{2, 3};
+  auto compare = [&](bool allow_danger_goal) {
+    auto actual = batch->plan(graph, {starts, goals, allow_danger_goal});
+    auto expected = reference->plan(graph, {starts, goals, allow_danger_goal});
+    for (int start : starts) {
+      for (int goal : goals) EXPECT_EQ(actual[start][goal], expected[start][goal]);
+    }
+  };
+  compare(false);
+  EXPECT_EQ(batch->plan(graph, {starts, goals, false}).at(0).at(3),
+            std::vector<int>({0, 1, 2, 3}));
+  graph.nodes[3].status.is_danger = true;
+  compare(true);
+  compare(false);
+  graph.nodes[2].status.is_colliding = true;
+  compare(false);
+  auto blocked = batch->plan(graph, {starts, goals, false});
+  EXPECT_TRUE(blocked[0][3].empty());
+  EXPECT_THROW((robot_sim::planning::make_graph_planner<Eigen::VectorXf, Eigen::Vector3f>(
+      "unknown", graph, options, cost)), std::invalid_argument);
+}

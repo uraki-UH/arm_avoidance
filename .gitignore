@@ -29,3 +29,6 @@ ToPoDualArm/
 # ビルド・実行ログとTypeScriptの増分ビルド生成物
 *.log
 *.tsbuildinfo
+
+# CMakeインストール時の生成マニフェスト
+/symlink_install_manifest.txt

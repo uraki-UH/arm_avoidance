@@ -198,6 +198,12 @@ ament_export_dependencies(Boost OpenSSL)
 
 if(GNG_BUILD_BENCHMARKS)
   enable_testing()
+  add_executable(node_insertion_test test/node_insertion_test.cpp src/cpu/cugng.cpp src/cpu/voxel_grid.cpp
+    src/utils/node.cpp src/utils/param.cpp src/utils/vec3f.cpp src/utils/utils.cpp)
+  target_include_directories(node_insertion_test PRIVATE src include)
+  target_compile_definitions(node_insertion_test PRIVATE GNG_VERSION=${GNG_VERSION})
+  target_link_libraries(node_insertion_test PRIVATE gng_cpu)
+  add_test(NAME node_insertion_test COMMAND node_insertion_test)
   add_executable(gng_builtin_sampling_api_test test/gng_builtin_sampling_api_test.cpp)
   target_link_libraries(gng_builtin_sampling_api_test PRIVATE gng_cpu ${CMAKE_DL_LIBS})
   add_test(NAME gng_builtin_sampling_api_test COMMAND gng_builtin_sampling_api_test)

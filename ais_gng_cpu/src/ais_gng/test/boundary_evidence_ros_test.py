@@ -30,7 +30,7 @@ def main():
         'node.enable_observation_support:=true', 'input.observation_sensor_frame:=boundary_evidence_sensor',
         'input.observation_camera_info_topic:=/boundary_evidence_camera_info',
         'classify.human:=false', 'classify.car:=false',
-        'plane_cluster.direct_enabled:=false', 'nonplane_component.direct_enabled:=false',
+        'plane_clustering:=false', 'nonplane_component.direct_enabled:=false',
     ]:
         command.extend(['-p', parameter])
     process = node = None

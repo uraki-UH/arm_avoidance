@@ -10,6 +10,17 @@ ais_gng_node:
     tracking_attention.timeout_sec: 2.0 # 前回所属の有効期間[s]
     tracking_attention.enable_pointcloud: true # 重点機能ON時の候補点群。購読時のみ展開。
 
+    # 占有あり・ノード未到達・隣接平面で説明不能なセルの直接挿入。起動時設定。
+    enable_node_insertion:  true
+    node_insertion.max_unobserved_frames: 3 # 平面で説明不能なノードの連続未観測寿命[入力回数]。
+    node_insertion.max_plane_dist_th: 0.08 # 隣接平面で説明可能な厚み[m]。
+    node_insertion.plane_margin: 0.1 # 有限平面の面内範囲への余白[m]。
+    node_insertion.timeout_sec: 0.5 # 前回平面情報の有効期間[s]。
+
+    # 平面所属ノードのセルと6隣接の入力占有セル。購読時のみ生成、所属判定とは独立。
+    plane_contact.enable_voxels: true
+    plane_contact.interval_sec: 0.5 # 可視化出力の更新間隔[s]。
+
     node.num_max: 20000
     node.learning_num: 4000
     node.unknown_learning_rate: 0.3

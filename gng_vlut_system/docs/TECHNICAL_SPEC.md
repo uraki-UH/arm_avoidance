@@ -6,6 +6,9 @@
 
 ## 1. システム概要
 
+実装の配置と各部品の責務は[部品配置](component_layout.md)を参照。
+共有計画ノードの経路探索と通常目標選択の拡張点は[差し替え仕様](planning_components.md)を参照。
+
 `grasp_joint_candidates.launch.py` は次の 2 系統を起動します。
 
 1. `topological_map_goal_selector.launch.py`
@@ -181,6 +184,8 @@ flowchart TD
 ```
 
 ## 7. 実行系との分離
+
+動作補間・速度制限の共通入口と設定の管理場所は[動作スムージング](motion_smoothing.md)を参照。
 
 `grasp_joint_candidates.launch.py` は経路生成専用の `topological_map_path_planner_node` を起動。実行系と共通のモデル読込み・Dijkstra探索・評価出力を使用するが、周期処理は候補経路更新専用。追従、退避、trial、制御パラメータ更新callback、関節指令とcontrol claimのpublisher生成なし。パラメータ変更による実行系への切替不可。
 
@@ -896,7 +901,9 @@ GNG edge、GNG遷移列を含まない。
 軌道計画へ使う場合は、代表関節角間を既存の衝突判定で再検証する。
 
 未登録セルは到達不能の確定ではなく、指定したサンプル数で未確認のセルである。`max_sample_count`を
-増やし、`reachable_cells`が収束したことを確認して利用する。登録済みセルについては偽陽性を出さない。
+増やし、独立検査のセル一致率を確認して利用する。セル内の証拠姿勢の存在を表し、セル全域や中心の到達保証ではない。
+
+max / longの左右map、補完・検査パラメータと衝突条件は[到達map仕様](reachability_maps.md)を参照。
 
 ```bash
 ros2 launch gng_vlut_system reachability_voxel_builder.launch.py \

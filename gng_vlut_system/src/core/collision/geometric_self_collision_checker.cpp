@@ -147,12 +147,6 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
           }
           valid = true;
 
-#ifdef USE_FCL
-          if (use_fcl_backend_) {
-            int fcl_id = fcl_detector_.addRobotMeshLink(col.geometry.mesh_filename, col.geometry.size);
-            object_fcl_ids_.push_back(fcl_id);
-          }
-#endif
         } catch (const std::exception &e) {
           std::cerr << "[GeometricChecker] Error loading mesh " << resolved_mesh
                     << ": " << e.what() << ". Approximating as Sphere."
@@ -161,11 +155,6 @@ GeometricSelfCollisionChecker::GeometricSelfCollisionChecker(
           obj.sphere.radius = 0.05;
           obj.sphere.center = Eigen::Vector3d::Zero();
           valid = true;
-#ifdef USE_FCL
-          if (use_fcl_backend_) {
-            object_fcl_ids_.push_back(-1);
-          }
-#endif
         }
       }
 
@@ -331,7 +320,20 @@ GeometricSelfCollisionChecker::collectSelfCollisionPairs() const {
         continue;
       }
 
-      if (checker_.checkPair(obj_i, obj_j)) {
+      bool is_colliding = checker_.checkPair(obj_i, obj_j);
+#ifdef USE_FCL
+      if (use_fcl_backend_ && strict_mode_) {
+        const auto first = getFCLObject(static_cast<int>(i));
+        const auto second = getFCLObject(static_cast<int>(j));
+        if (first && second) {
+          fcl::CollisionRequest<double> request;
+          fcl::CollisionResult<double> result;
+          fcl::collide(first.get(), second.get(), request, result);
+          is_colliding = result.isCollision();
+        }
+      }
+#endif
+      if (is_colliding) {
         std::string a = link_i;
         std::string b = link_j;
         if (a > b)

@@ -101,7 +101,7 @@ ais_gng_node:
 
 優先順位は共通設定、センサー別YAML、対応するlaunch引数の順。省略時は`config/plane_cluster_incremental.yaml`と`config/surface_model.yaml`の共通設定を使用。`nonplane_component.*`もCPUセンサー別YAMLを優先。[設定経路と検証](../gng_vlut_system/docs/releases/2026-09-23_gng_clustering_yaml.md)。
 
-短い2項目は`ais_gng.launch.py`用の設定。内部では既存の`plane_cluster.direct_enabled`・`surface_model.enable`へ変換。センサー別YAMLに旧名もある場合は短い名前を優先。値は引用符なしの`true`／`false`。
+`plane_clustering`はCPUノードでも直接指定できる平面計算の切替。共通設定よりセンサー別YAMLを優先。`curve_clustering`はlaunch側で`surface_model.enable`へ変換し、併記時は前者を優先。値は引用符なしの`true`／`false`。旧`plane_cluster.direct_enabled`は廃止のため`plane_clustering`へ置換が必要。
 
 `plane_clustering: false`ではCPU直結の平面クラスタ計算と、その結果に依存する非平面成分抽出・Publisherを停止。通常の自動入力構成では平面可視化・曲面ノードも起動せず、保存ノードの平面購読も無効化。GNG学習・`/topological_map`のノード・エッジ出力は継続。GPU構成では独立平面ノードの起動条件へ適用。設定反映にはlaunchの再起動が必要。
 

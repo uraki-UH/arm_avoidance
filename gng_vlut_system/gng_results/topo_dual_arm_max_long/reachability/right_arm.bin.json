@@ -1,0 +1,79 @@
+{
+  "collision_exclusions": [
+    "L_finger_left|L_finger_right",
+    "R_finger_left|R_finger_right"
+  ],
+  "eef_link": "R_tcp",
+  "enable_self_collision": true,
+  "environment_collision_checked": false,
+  "frame_id": "base_link",
+  "joint_limits": [
+    [
+      -3.141592653589793,
+      3.141592653589793
+    ],
+    [
+      -2.00712864,
+      2.00712864
+    ],
+    [
+      -3.141592653589793,
+      3.141592653589793
+    ],
+    [
+      -1.658062789,
+      2.00712864
+    ],
+    [
+      -3.141592653589793,
+      3.141592653589793
+    ],
+    [
+      -2.00712864,
+      2.00712864
+    ],
+    [
+      -1.832595715,
+      1.832595715
+    ]
+  ],
+  "joint_names": [
+    "R_joint1",
+    "R_joint2",
+    "R_joint3",
+    "R_joint4",
+    "R_joint5",
+    "R_joint6",
+    "R_joint7"
+  ],
+  "max_corner": [
+    1.5,
+    1.5,
+    1.5
+  ],
+  "min_corner": [
+    -1.5,
+    -1.5,
+    -1.5
+  ],
+  "num_cells": 10730,
+  "num_initial_cells": 10118,
+  "num_initial_samples": 50000,
+  "num_supplement_samples": 20000,
+  "other_joints": "zero",
+  "profile": "right_arm",
+  "root_link": "R_shoulder_mount",
+  "seed": 20260928,
+  "urdf_path": "/ros2_ws/src/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf",
+  "validation": {
+    "hit_fraction_after": 0.9755473705749949,
+    "hit_fraction_before": 0.9580519746265602,
+    "num_collision_rejected": 226,
+    "num_hit_after": 9535,
+    "num_hit_before": 9364,
+    "num_outside": 0,
+    "num_samples": 10000,
+    "num_valid": 9774
+  },
+  "voxel_size": 0.03
+}

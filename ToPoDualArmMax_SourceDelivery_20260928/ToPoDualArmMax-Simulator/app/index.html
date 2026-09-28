@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ToPoDualArm Max Long · Motion Studio</title><link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="branding.css"><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="models.css">
+<script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+</head><body>
+<header><div class="product-header"><strong>ToPoDualArm-Max Long</strong><span>URDF ロボットシミュレータ</span></div><div class="live"><i></i><span id="load-status">モデルを準備中</span></div><img class="company-logo" src="branding/FuzzRoBo-logo.png" alt="FuzzRoBo"><button id="help-button" class="icon" aria-label="操作ガイド">?</button></header>
+<nav id="model-tabs" role="tablist" aria-label="ロボットモデル"><span class="model-tabs-label">ToPoDualArm-Max</span><button type="button" role="tab" data-model="standard" aria-selected="false" tabindex="-1" aria-controls="viewport">標準（無印）</button><button type="button" role="tab" data-model="long" aria-selected="true" aria-controls="viewport">Long</button><span id="model-status" class="model-status" aria-live="polite">Long · 19 DOF</span></nav>
+<main><section id="viewport" aria-label="3Dロボット シミュレータ">
+<div id="canvas-host"></div>
+<div class="view-top"><div class="eyebrow">INTERACTIVE ROBOT SIMULATION</div><h1>双腕の動作シミュレーション</h1><p>マーカーをドラッグして手先を操作</p></div>
+<div class="camera-bar"><button data-view="perspective" class="active" title="斜めから全体表示">3D</button><button data-view="front">正面</button><button data-view="side">側面</button><button data-view="top">上面</button><span></span><button id="fit-view" title="全体表示 F">⌖</button><button id="photo" title="操作表示を隠す P">撮影</button><button id="screenshot" title="画像を保存">↓ PNG</button></div>
+<div id="labels"><button id="label-L" class="tcp-label left">L <span>左手 TCP</span></button><button id="label-R" class="tcp-label right">R <span>右手 TCP</span></button></div>
+<div class="bottom-info"><div class="axis-legend"><span class="x">X</span> 前 <span class="y">Y</span> 左 <span class="z">Z</span> 上</div><div class="hint"><kbd>左ドラッグ</kbd> 視点回転 <kbd>ホイール</kbd> 拡大縮小 <kbd>右ドラッグ</kbd> 平行移動</div><div id="render-stats">— fps</div></div>
+<div id="loading"><img class="loading-logo" src="branding/FuzzRoBo-logo.png" alt="FuzzRoBo"><div class="loader-symbol">ToPoDualArm<span>MAX LONG</span></div><p id="loading-text">オリジナルCADメッシュを読み込み中</p><div class="load-track"><div id="load-progress"></div></div><small>ローカルで動作 · ファイルの外部送信なし</small></div>
+<div id="toast" role="status"></div>
+</section>
+<aside>
+<nav class="workspace-tabs" aria-label="操作パネル"><button data-panel="robot" class="active">ロボット</button><button data-panel="environment">環境</button><button data-panel="sensor">RGB-D</button><button data-panel="lidar">LiDAR</button><button data-panel="ai">VM・AI</button></nav>
+<div id="robot-panel" class="workspace-panel">
+<div class="panel-heading"><div><span class="eyebrow">INTERACTIVE CONTROL</span><h2>手先を操作</h2></div><span class="chip">7 + 7 DOF</span></div>
+<div class="segmented arm-select"><button data-arm="L" class="active"><i class="left-dot"></i>左アーム</button><button data-arm="R"><i class="right-dot"></i>右アーム</button></div>
+<div class="section-label">操作モード <span>マーカーをドラッグ</span></div>
+<div class="segmented"><button id="translate-mode" class="active">↗ 移動 <kbd>W</kbd></button><button id="rotate-mode">⟳ 回転 <kbd>E</kbd></button></div>
+<div class="option-row"><label><input id="hold-orientation" type="checkbox">手先の姿勢を維持</label><select id="coordinate-space" aria-label="マーカーの座標系"><option value="world">ワールド座標</option><option value="local">手先座標</option></select></div>
+<div class="section-label">目標位置 <span>base_footprint · mm</span></div>
+<div class="coordinate-inputs"><label><b class="x">X</b><input id="target-x" type="number" step="1" aria-label="目標 X mm"></label><label><b class="y">Y</b><input id="target-y" type="number" step="1" aria-label="目標 Y mm"></label><label><b class="z">Z</b><input id="target-z" type="number" step="1" aria-label="目標 Z mm"></label></div>
+<div class="section-label orientation-title">目標姿勢 <span>Roll / Pitch / Yaw · °</span></div><div id="orientation-inputs" class="coordinate-inputs"><label><b>R</b><input id="target-roll" type="number" step="1" aria-label="目標 Roll 度"></label><label><b>P</b><input id="target-pitch" type="number" step="1" aria-label="目標 Pitch 度"></label><label><b>Y</b><input id="target-yaw" type="number" step="1" aria-label="目標 Yaw 度"></label></div>
+<div class="solver-status"><div><i id="ik-dot"></i><span id="ik-state">待機中</span></div><span id="ik-error">— mm</span></div>
+<div class="actual-position" id="actual-position">TCP —</div>
+<div class="section-label">グリッパー <output id="grip-value">0%</output></div><div class="grip-row"><span>閉</span><input id="grip" type="range" min="0" max="100" value="0" aria-label="グリッパー開度"><span>開</span></div>
+<div class="section-label">ポーズ <span>両腕</span></div><div class="preset-row"><button data-pose="home">ホーム</button><button data-pose="ready">作業姿勢</button><button data-pose="spread">展開</button></div>
+<details id="body-panel" open><summary>首・腰の操作 <span>3軸</span></summary><div id="body-controls"></div><button id="reset-body" class="body-reset">首・腰を 0° に戻す</button></details>
+<details id="joints-panel"><summary>腕の関節を個別に調整 <span>14軸</span></summary><div id="joint-controls"></div></details>
+<details><summary>シーンと描画 <span>PBR</span></summary><div class="settings"><label>スタジオ<select id="studio"><option value="light">シルバー</option><option value="dark">ダーク</option></select></label><label>描画品質<select id="quality"><option value="standard">標準</option><option value="high" selected>高精細</option></select></label><label><span>グリッド</span><input id="show-grid" type="checkbox"></label><label><span>手先の軌跡</span><input id="show-trails" type="checkbox"></label><label><span>マーカーを表示</span><input id="show-markers" type="checkbox" checked></label><label>露出<input id="exposure" type="range" min="0.5" max="1.8" value="0.9" step="0.01"></label></div></details>
+<div class="pose-files"><button id="save-pose">↓ ポーズ保存</button><button id="load-pose">↑ 読み込み</button><input id="pose-file" type="file" accept=".json,application/json" hidden></div>
+
+<p class="scope-note">関節可動範囲を反映した運動学シミュレーション。衝突・重力・接触力の計算は含みません。</p>
+</div><div id="environment-panel" class="workspace-panel" hidden></div><div id="sensor-panel" class="workspace-panel" hidden></div><div id="lidar-panel" class="workspace-panel" hidden></div><div id="ai-panel" class="workspace-panel" hidden></div><a id="export-link" class="export-link" hidden target="_blank" rel="noopener"></a></aside></main>
+<footer><div class="timeline-title"><span class="eyebrow">MOTION SEQUENCE</span><strong>ポーズをつなぐ</strong></div><button id="add-keyframe" class="outline">＋ 記録</button><div id="keyframes"><span class="empty-timeline">手先を動かしてポーズを記録</span></div><label class="duration-label"><input id="duration" type="number" value="2" min="0.5" max="15" step="0.5" aria-label="ポーズ間の秒数">秒 / 区間</label><button id="play" class="primary">▶ 再生</button><button id="clear-frames" class="icon" title="シーケンスをクリア">×</button><div class="company-footer">東京都公立大学法人ベンチャー<br>(株)東海林ファジィロボット研究所</div></footer>
+<dialog id="help"><button id="close-help" class="dialog-close">×</button><span class="eyebrow">QUICK GUIDE</span><h2>マーカーで手先を動かす</h2><p>左／右アームを選び、手先に表示された矢印・平面をドラッグします。中央の小さな球は画面に平行な平面内を自由に移動できます。</p><ol><li><b>W：移動</b> — 赤 X・緑 Y・青 Z の矢印で軸方向に移動。</li><li><b>E：回転</b> — リングをドラッグして手先の向きを変更。</li><li><b>L / R：左右切り替え</b> — TCPラベルのクリックでも切り替え。</li><li><b>F：全体表示 / H：ホーム / P：撮影表示</b></li></ol><p>姿勢維持をオフにすると、位置を優先して腕が追従します。目標が届かない場合は黄色表示と位置誤差が残ります。可動範囲内でも、姿勢や初期姿勢によってIKが収束しない場合があります。</p><p>回転表示はURDF基準のRoll・Pitch・Yaw（度）。TCP位置はbase_footprint基準（mm）です。</p><p class="scope-note">URDFの関節制限と指のmimicを使用。continuous関節のスライダーは操作用に±180°を表示します。衝突回避・動力学・実機制御は行いません。</p></dialog>
+<script type="module" src="app.js"></script></body></html>

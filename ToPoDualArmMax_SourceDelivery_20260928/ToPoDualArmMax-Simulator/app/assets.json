@@ -1,0 +1,228 @@
+{
+  "source_sha256": "5cc85a2672417df7fc64d93575d878973f829091c02c379d791641299ca8123e",
+  "library": "three@0.180.0",
+  "meshes": {
+    "meshes/visual/urdf/L_finger_left.stl": {
+      "file": "cache/L_finger_left.bin",
+      "triangles": 121234,
+      "vertices": 132689,
+      "source_sha256": "cab8663290844d8d6b7b872f878e67ef39840d9a1623a1c58fa674b393b0f59f"
+    },
+    "meshes/visual/urdf/L_finger_right.stl": {
+      "file": "cache/L_finger_right.bin",
+      "triangles": 129840,
+      "vertices": 148185,
+      "source_sha256": "95a0f8117a123ad0e60e521418d5f1efd337b127cbb39bbc70161cbffaaa076b"
+    },
+    "meshes/visual/urdf/L_gripper_base_black.stl": {
+      "file": "cache/L_gripper_base_black.bin",
+      "triangles": 11768,
+      "vertices": 12002,
+      "source_sha256": "41e25ca596e97326714a08bc6d8880a88c731267bd8861c397eca7ab0f1f08fb"
+    },
+    "meshes/visual/urdf/L_gripper_base_green.stl": {
+      "file": "cache/L_gripper_base_green.bin",
+      "triangles": 24640,
+      "vertices": 23104,
+      "source_sha256": "7437f6b6054d6fe3ed09afaabd35731407f6c52174508cbb6fae41662c4045d2"
+    },
+    "meshes/visual/urdf/L_gripper_base_silver.stl": {
+      "file": "cache/L_gripper_base_silver.bin",
+      "triangles": 15260,
+      "vertices": 10866,
+      "source_sha256": "f1584922d400d4cc3e545fb0f3ae29a803738577023698bb9268d1a6f85f6883"
+    },
+    "meshes/visual/urdf/L_link1.stl": {
+      "file": "cache/L_link1.bin",
+      "triangles": 36366,
+      "vertices": 34909,
+      "source_sha256": "3f0d012aed9479428ee364c212b1ec3500803a194fbd36359b139e7182b59e43"
+    },
+    "meshes/visual/urdf/L_link2.stl": {
+      "file": "cache/L_link2.bin",
+      "triangles": 8956,
+      "vertices": 10335,
+      "source_sha256": "22b6b5c2c622f607637bb9130fcb81c8b788f32af57af654d8f40982b27c0654"
+    },
+    "meshes/visual/urdf/L_link3.stl": {
+      "file": "cache/L_link3.bin",
+      "triangles": 39340,
+      "vertices": 38184,
+      "source_sha256": "f25144ddd1a9635e14baea7b5f8c072d118ab96aab951858ee365e242d6b326f"
+    },
+    "meshes/visual/urdf/L_link4.stl": {
+      "file": "cache/L_link4.bin",
+      "triangles": 9858,
+      "vertices": 10525,
+      "source_sha256": "1c1f9f50ad0c716489710dca540b3252d33f1bd41406e465f041735d5b59fa01"
+    },
+    "meshes/visual/urdf/L_link5.stl": {
+      "file": "cache/L_link5.bin",
+      "triangles": 39016,
+      "vertices": 37929,
+      "source_sha256": "885bb2139803244dbfb52b11c1e01726e9cabd993697d7b51c144606702a01fe"
+    },
+    "meshes/visual/urdf/L_link6.stl": {
+      "file": "cache/L_link6.bin",
+      "triangles": 44368,
+      "vertices": 43554,
+      "source_sha256": "a92693298b1f866b9f09bc435a8b331a56a95dd835e9fa57245f79c0c4a7ec1f"
+    },
+    "meshes/visual/urdf/L_link7.stl": {
+      "file": "cache/L_link7.bin",
+      "triangles": 4172,
+      "vertices": 5265,
+      "source_sha256": "efbac57bf99efae02bb0fb01e965aeaa81e5b1d9e3f5fed5236367de8256266b"
+    },
+    "meshes/visual/urdf/L_shoulder_cover.stl": {
+      "file": "cache/L_shoulder_cover.bin",
+      "triangles": 3228,
+      "vertices": 2826,
+      "source_sha256": "89aa89911fa4c2b98c6a2582e5e2fd4af553adff60b98e136ce3874de872e729"
+    },
+    "meshes/visual/urdf/R_XM540_cover.stl": {
+      "file": "cache/R_XM540_cover.bin",
+      "triangles": 2138,
+      "vertices": 2004,
+      "source_sha256": "d4b10b9e12786235d42fd8a176d06331dd9971dcf305b05f8cdf87b99c72f5b0"
+    },
+    "meshes/visual/urdf/R_finger_left.stl": {
+      "file": "cache/R_finger_left.bin",
+      "triangles": 129840,
+      "vertices": 148185,
+      "source_sha256": "fb4230e2744b5d62eff8bd10325a7d643d6c3a8dc0e0809ec9c1f9c3725ddf50"
+    },
+    "meshes/visual/urdf/R_finger_right.stl": {
+      "file": "cache/R_finger_right.bin",
+      "triangles": 121234,
+      "vertices": 132689,
+      "source_sha256": "aeb4ff040796cc9ec618cf94cc96232b7175d4a4e0db492bc7499e1a7e0a5bbc"
+    },
+    "meshes/visual/urdf/R_gripper_base_black.stl": {
+      "file": "cache/R_gripper_base_black.bin",
+      "triangles": 11768,
+      "vertices": 12002,
+      "source_sha256": "4f7860724114b205eec3fc0662cd5af40505298ea7e6a3d4342078c7e0173d27"
+    },
+    "meshes/visual/urdf/R_gripper_base_green.stl": {
+      "file": "cache/R_gripper_base_green.bin",
+      "triangles": 24640,
+      "vertices": 23104,
+      "source_sha256": "ef4c6d117f43534c563876f9b8443e0896cbca4777b54a5bbba7cf5d25f1b656"
+    },
+    "meshes/visual/urdf/R_gripper_base_silver.stl": {
+      "file": "cache/R_gripper_base_silver.bin",
+      "triangles": 15260,
+      "vertices": 10866,
+      "source_sha256": "98763c5fd03474521a404fc587fdb0e248a4e24c8302fa9dff5c5c52a97900e4"
+    },
+    "meshes/visual/urdf/R_link1.stl": {
+      "file": "cache/R_link1.bin",
+      "triangles": 36366,
+      "vertices": 34909,
+      "source_sha256": "b964098f58f49525d559cbc95113517a15798fcba499573ba550f6d58534b237"
+    },
+    "meshes/visual/urdf/R_link2.stl": {
+      "file": "cache/R_link2.bin",
+      "triangles": 8956,
+      "vertices": 10335,
+      "source_sha256": "1fc107acf9ad64bf26ef1a06b3e4bc1b91ad562f55a164993d0c453db8d52fa1"
+    },
+    "meshes/visual/urdf/R_link3.stl": {
+      "file": "cache/R_link3.bin",
+      "triangles": 39340,
+      "vertices": 38184,
+      "source_sha256": "1d749bbd61dc0cdb14fca2c2462cfeef33e35810a55a0746155bd38d0c263215"
+    },
+    "meshes/visual/urdf/R_link4.stl": {
+      "file": "cache/R_link4.bin",
+      "triangles": 9858,
+      "vertices": 10525,
+      "source_sha256": "f574c67a153c87336ae359fa571a8368a713ef3ac45e69e80f957ece38d6d59c"
+    },
+    "meshes/visual/urdf/R_link5.stl": {
+      "file": "cache/R_link5.bin",
+      "triangles": 39016,
+      "vertices": 37929,
+      "source_sha256": "a956fd02e4cfd3db6d9d166423812450bbacf6e174ec24e07b49e08f0630ce79"
+    },
+    "meshes/visual/urdf/R_link6.stl": {
+      "file": "cache/R_link6.bin",
+      "triangles": 44368,
+      "vertices": 43554,
+      "source_sha256": "0dff64589328a87055dd3b0eb2e9161036a55578eac90c277acc42cbfc654021"
+    },
+    "meshes/visual/urdf/R_link7.stl": {
+      "file": "cache/R_link7.bin",
+      "triangles": 4172,
+      "vertices": 5265,
+      "source_sha256": "4d09afb7901c7c1612099ab7befbd64f417807399f6d2ded14fefb1a83955081"
+    },
+    "meshes/visual/urdf/XM540_cover.stl": {
+      "file": "cache/XM540_cover.bin",
+      "triangles": 2138,
+      "vertices": 2004,
+      "source_sha256": "c5eeee534d28fc89f39b442e85dd3947941441d6bc35a8af441f4eaf92767b15"
+    },
+    "meshes/visual/urdf/base_link.stl": {
+      "file": "cache/base_link.bin",
+      "triangles": 76612,
+      "vertices": 63477,
+      "source_sha256": "e0b9b87ddefb34ad7d23da012cf137c806e8db50de2fbbeaae3479be63b5df6a"
+    },
+    "meshes/visual/urdf/camera_link.stl": {
+      "file": "cache/camera_link.bin",
+      "triangles": 5836,
+      "vertices": 7653,
+      "source_sha256": "d04cea5637b8026bea62c129198668f0ab8609453ce525050a757326d178737d"
+    },
+    "meshes/visual/urdf/joint_cover.stl": {
+      "file": "cache/joint_cover.bin",
+      "triangles": 3494,
+      "vertices": 3959,
+      "source_sha256": "73d25bf0afdc4e673c57f394222a243e4f284774e08f36d5266c0e823352f2b0"
+    },
+    "meshes/visual/urdf/joint_cover_cut.stl": {
+      "file": "cache/joint_cover_cut.bin",
+      "triangles": 3376,
+      "vertices": 4203,
+      "source_sha256": "8f6ff948863288631d6d06156e23bc46b74b821798eb39898e7de37f46ba21c8"
+    },
+    "meshes/visual/urdf/neck_pan_link.stl": {
+      "file": "cache/neck_pan_link.bin",
+      "triangles": 11162,
+      "vertices": 12083,
+      "source_sha256": "c2a7ce75d8a8bc6641805069dfa1c1ef5ffb5a69451af4415919052e46f19183"
+    },
+    "meshes/visual/urdf/realsense_camera.stl": {
+      "file": "cache/realsense_camera.bin",
+      "triangles": 101969,
+      "vertices": 119401,
+      "source_sha256": "5eb4d379a5c1f43173d31e2d76d66bbd7cccce1723d291ca762b01c442bf66c1"
+    },
+    "meshes/visual/urdf/realsense_mount.stl": {
+      "file": "cache/realsense_mount.bin",
+      "triangles": 3032,
+      "vertices": 3120,
+      "source_sha256": "e684c8926dceea0a53c91a0861880bdcfb9ec8863c4b6d728a4a0074af266b90"
+    },
+    "meshes/visual/urdf/shoulder_cover.stl": {
+      "file": "cache/shoulder_cover.bin",
+      "triangles": 3228,
+      "vertices": 2826,
+      "source_sha256": "5a88f6642653ff1b23d5a1c6e1c1ae64cb25781360c152be383c1c5547b7b77f"
+    },
+    "meshes/visual/urdf/torso_link.stl": {
+      "file": "cache/torso_link.bin",
+      "triangles": 195100,
+      "vertices": 172970,
+      "source_sha256": "67a71e795851057876764ccc86fe44fe4931d17ac11726b93320d98470623bcf"
+    },
+    "meshes/visual/urdf/waist_cover.stl": {
+      "file": "cache/waist_cover.bin",
+      "triangles": 2594,
+      "vertices": 2213,
+      "source_sha256": "954fe6b20e9105c956ee6ee1cd7213c4cb9ccb035d34906b646498442dc00e64"
+    }
+  }
+}

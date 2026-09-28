@@ -22,6 +22,9 @@ include_directories(${arrow_visualization_INCLUDE_DIRS})
 
 message(STATUS "ROS 2 (Humble) environment detected.")
 
+# Gazebo依存のJsonCppをPCL/VTKより先に解決する初期化順序
+find_package(gazebo REQUIRED)
+
 # ROS 2 packages
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -111,6 +114,16 @@ endif()
 include_directories(src)
 include_directories(src/core/safety_engine)
 
+# Gazebo専用の有限トルクモータ
+find_package(gazebo_ros2_control REQUIRED)
+find_package(pluginlib REQUIRED)
+add_library(bounded_gazebo_system SHARED src/simulation/bounded_gazebo_system.cpp)
+target_include_directories(bounded_gazebo_system PRIVATE ${GAZEBO_INCLUDE_DIRS})
+target_link_libraries(bounded_gazebo_system ${GAZEBO_LIBRARIES})
+ament_target_dependencies(bounded_gazebo_system gazebo_ros2_control pluginlib rclcpp)
+pluginlib_export_plugin_description_file(gazebo_ros2_control gazebo_system_plugins.xml)
+install(TARGETS bounded_gazebo_system LIBRARY DESTINATION lib)
+
 # Subdirectories
 add_subdirectory(src)
 rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::bridge::WorldIndexToVoxelNode")
@@ -118,6 +131,26 @@ rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::brid
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+  if(USE_FCL)
+    ament_add_gtest(test_reachability_collision test/test_reachability_collision.cpp)
+    target_include_directories(test_reachability_collision PRIVATE src/core)
+    target_compile_definitions(test_reachability_collision PRIVATE
+      workspace_source_dir="${CMAKE_CURRENT_SOURCE_DIR}/..")
+    target_link_libraries(test_reachability_collision collision_lib robot_model_lib kinematics_lib)
+    ament_target_dependencies(test_reachability_collision Eigen3 rclcpp fcl urdfdom)
+  endif()
+
+  ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
+  ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
+  target_include_directories(test_goal_tasks PRIVATE src)
+  ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
+  target_include_directories(test_joint_state_utils PRIVATE src)
+  ament_target_dependencies(test_joint_state_utils Eigen3 sensor_msgs)
+  ament_add_gtest(test_motion_smoothing_cpp test/test_motion_smoothing.cpp)
+  target_include_directories(test_motion_smoothing_cpp PRIVATE src/core)
+  ament_target_dependencies(test_motion_smoothing_cpp Eigen3)
+  ament_add_pytest_test(test_motion_smoothing test/test_motion_smoothing.py
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/scripts)
   ament_add_gtest(test_grasp_refinement test/test_grasp_refinement.cpp)
   target_include_directories(test_grasp_refinement PRIVATE src)
   ament_target_dependencies(test_grasp_refinement Eigen3)
@@ -157,11 +190,24 @@ if(BUILD_TESTING)
 endif()
 
 # --- 3. Resource Installation ---
-install(DIRECTORY urdf config launch gng_results worlds
+install(DIRECTORY config launch gng_results worlds
   DESTINATION share/${PROJECT_NAME}
 )
 
+# 旧配置のURDFが存在するworkspaceとの互換性
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
+  install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
+endif()
+
+install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(PROGRAMS
+  scripts/start_gazebo_physics.py
+  scripts/dual_arm_gng_lidar_demo.py
+  scripts/dual_arm_avoidance_demo.py
+  scripts/dual_arm_gazebo_demo.py
   scripts/video_file_publisher.py
   scripts/yolo_person_detector.py
   ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py

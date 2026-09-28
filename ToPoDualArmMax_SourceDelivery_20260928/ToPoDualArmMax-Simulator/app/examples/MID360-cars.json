@@ -1,0 +1,145 @@
+{
+  "format": "topo-workspace/2",
+  "table": {
+    "type": "wood",
+    "x": 0.5,
+    "y": 0,
+    "z": 0.12,
+    "yaw": 0,
+    "roll": 0,
+    "pitch": 0,
+    "width": 0.6,
+    "depth": 0.8,
+    "height": 0.26,
+    "color": "#ffffff",
+    "visible": true
+  },
+  "objects": [
+    {
+      "type": "box",
+      "color": "#b68a56",
+      "parent": "table",
+      "position": [
+        -0.1,
+        -0.16,
+        0
+      ],
+      "rpy": [
+        0,
+        0,
+        0
+      ],
+      "scaleXYZ": [
+        1,
+        1,
+        1
+      ],
+      "visible": true
+    },
+    {
+      "type": "bottle",
+      "color": "#257f83",
+      "parent": "table",
+      "position": [
+        0.04,
+        0.02,
+        0
+      ],
+      "rpy": [
+        0,
+        0,
+        0
+      ],
+      "scaleXYZ": [
+        1,
+        1,
+        1
+      ],
+      "visible": true
+    },
+    {
+      "type": "mug",
+      "color": "#d7dfeb",
+      "parent": "table",
+      "position": [
+        -0.07,
+        0.21,
+        0
+      ],
+      "rpy": [
+        0,
+        0,
+        0
+      ],
+      "scaleXYZ": [
+        1,
+        1,
+        1
+      ],
+      "visible": true
+    },
+    {
+      "type": "ferrari",
+      "color": "#bd1726",
+      "parent": "world",
+      "position": [
+        3.1,
+        -1.6,
+        -0.14
+      ],
+      "rpy": [
+        0,
+        0,
+        0
+      ],
+      "scaleXYZ": [
+        1,
+        1,
+        1
+      ],
+      "visible": true
+    },
+    {
+      "type": "concept",
+      "color": "#b9c5d0",
+      "parent": "world",
+      "position": [
+        3.5,
+        1.5,
+        -0.14
+      ],
+      "rpy": [
+        0,
+        0,
+        0
+      ],
+      "scaleXYZ": [
+        1,
+        1,
+        1
+      ],
+      "visible": true
+    }
+  ],
+  "mid360": {
+    "enabled": true,
+    "parent": "neck_tilt_link",
+    "position": [
+      0.015,
+      0,
+      0.05
+    ],
+    "rpy": [
+      0,
+      0,
+      0
+    ],
+    "duration": 0.1,
+    "beams": 20000,
+    "minRange": 0.1,
+    "maxRange": 40,
+    "mode": "ideal",
+    "noiseSigma": 0.02,
+    "seed": 12345
+  }
+}

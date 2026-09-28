@@ -139,11 +139,10 @@ plane_cluster_incremental_node:
 
 ais_gng_node:
   ros__parameters:
-    # CPU直結の平面クラスタ計算。計算負荷抑制のため既定無効。
-    plane_cluster.direct_enabled: false
+    # 平面クラスタ計算の共通既定値。センサー別YAMLのplane_clusteringを優先。
+    plane_clustering: false
 
     # 単独nodeを含む全平面クラスタ未所属nodeへの連結成分ID付与。
     nonplane_component.direct_enabled: true
-
     # 非平面成分のnode所属情報topic。
     nonplane_component.output_topic: /nonplane_components
