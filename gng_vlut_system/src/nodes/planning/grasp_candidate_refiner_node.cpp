@@ -86,7 +86,7 @@ public:
     gripper_mimic_joint_=declare_parameter("gripper_mimic_joint","L_gripper_mimic");
     closed_width_=declare_parameter("closed_width",0.0);
     enable_ik_=declare_parameter("enable_ik",true);
-    const auto urdf_path=declare_parameter("urdf_path","/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf");
+    const auto urdf_path=declare_parameter("urdf_path","/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf");
     config_.min_width=declare_parameter("min_width",config_.min_width);
     config_.max_width=declare_parameter("max_width",config_.max_width);
     config_.finger_span=declare_parameter("finger_span",config_.finger_span);

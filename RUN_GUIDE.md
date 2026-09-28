@@ -27,6 +27,8 @@ ros2 launch gng_vlut_system gng_viewer_bridge.launch.py \
 
 元マップは`/ToPoDualArm/Tmap_static`、集約マップは`/ToPoDualArm/Tmap_vis_L0`。ViewerのTopicsで表示を選択。追加launchは不要。[集約データの再生成](gng_vlut_system/docs/releases/2026-09-15_spatial_tmap_aggregation.md)。
 
+新しい双腕モデルは`params_file`を`topo_dual_arm_max.yaml`または`topo_dual_arm_max_long.yaml`へ変更。機種ごとのGNG・VLUT学習が先に必要。[設定・学習手順](gng_vlut_system/docs/releases/2026-09-28_dual_arm_models.md)。
+
 ## ロボットを座標変換
 python3 test_tf_publisher.py --world-frame world --frame-id ToPoDualArm/base_link --x 0.35 --y 0.15 --z -0.3 --yaw 3.2
 
@@ -91,7 +93,7 @@ ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
   urdf_path:=/ros2_ws/src/<robot_package>/<robot>.urdf
 
 ros2 launch gng_vlut_system dummy_joint_pub.launch.py \
-  urdf_path:=/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
+  urdf_path:=/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf
 
 
 ## GNGの学習の実行

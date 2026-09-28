@@ -849,7 +849,7 @@ textarea{min-height:150px;font-family:Consolas,Menlo,monospace;font-size:11px;re
           <div><label>URDF palm thickness [m]</label><input id="fingerThickness" type="number" min="0.004" max="0.04" step="0.002" value="0.012"></div>
           <div><label>URDF palm length [m]</label><input id="fingerLength" type="number" min="0.025" max="0.18" step="0.005" value="0.090"></div>
           <div><label>URDF palm height [m]</label><input id="fingerHeight" type="number" min="0.015" max="0.12" step="0.005" value="0.045"></div>
-          <div><label>URDF source</label><input id="robotUrdfSource" type="text" value="dual_arm_urdf/dual_arm_robot.urdf" spellcheck="false"></div>
+          <div><label>URDF source</label><input id="robotUrdfSource" type="text" value="urdf/dual_arm_urdf/dual_arm_robot.urdf" spellcheck="false"></div>
           <div><label>Target link hint</label><input id="robotUrdfTargetHint" type="text" placeholder="auto" spellcheck="false"></div>
           <div class="full" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button id="robotUrdfLoadBtn" data-action-kind="load" type="button">Load URDF</button><div id="robotUrdfStatus" class="readout" style="flex:1 1 320px">URDF not loaded</div></div>
           <div><label>Gripper display</label><select id="gripperDisplay"><option value="solid">ToPoArm STL gripper</option><option value="wire">ToPoArm STL wire</option><option value="simple">simple grasp marker</option><option value="off">off</option></select></div>
@@ -5040,7 +5040,7 @@ const TOPOARM_URDF_GRIPPER={
   ee_z:0.1341
 };
 const TOPOARM_GRIPPER_LIFT_Z=0.018;
-const ROBOT_URDF_DEFAULT_SOURCE='dual_arm_urdf/dual_arm_robot.urdf';
+const ROBOT_URDF_DEFAULT_SOURCE='urdf/dual_arm_urdf/dual_arm_robot.urdf';
 function directChildElements(node,tagName){return Array.from(node?.children||[]).filter(el=>el.tagName===tagName)}
 function firstChildElement(node,tagName){return directChildElements(node,tagName)[0]||null}
 function parseUrdfFloat(v,def=0){const n=+v;return Number.isFinite(n)?n:def}

@@ -9,7 +9,7 @@
     max_input_age_sec: 2.0
     max_stamp_diff_sec: 0.5
     # ToPoDualArm左腕の関節鎖。root_frameは実行時のTF座標系
-    urdf_path: /ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf
+    urdf_path: /ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf
     root_link: L_shoulder_mount
     root_frame: ToPoDualArm/L_shoulder_mount
     tcp_frame: L_tcp

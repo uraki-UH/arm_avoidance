@@ -1,26 +1,26 @@
 /**:
   ros__parameters:
-  
+
     voxel_idx_shift:
       x_shift: 42
       y_shift: 21
       z_shift: 0
       offset: 1000000
 
-    robot_name: "ToPoDualArm"
-    urdf_path: "/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf"
-    resource_root_dir: "/ros2_ws/src/urdf/dual_arm_urdf"
-    mesh_root_dir: "/ros2_ws/src/urdf/dual_arm_urdf/meshes"
+    robot_name: "topo_dual_arm_max"
+    urdf_path: "/ros2_ws/src/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf"
+    resource_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max"
+    mesh_root_dir: "/ros2_ws/src/urdf/topo_dual_arm_max/meshes"
     # Viewer起動直後の初回関節姿勢配信
     enable_joint_state_publisher: true
 
-    # --- GNG & Safety Settings ---
+    # GNG学習とVLUT生成
     gng:
-      experiment_id: "ToPoDualArm10000" #実験ID(結果の保存先ディレクトリ名)
+      experiment_id: "topo_dual_arm_max" #実験ID(結果の保存先ディレクトリ名)
       data_directory: "/ros2_ws/src/gng_vlut_system/gng_results" #保存先ディレクトリまでのパス
       gng_model_filename: "gng.bin"
       vlut_filename: "vlut.bin"
-      profile_names: "left_arm"
+      profile_names: "left_arm,right_arm"
       ground_z_threshold: -10.0
       spatial_map_resolution: 0.01
       self_recognition_resolution: 0.01
@@ -28,9 +28,9 @@
       danger_threshold: 0.025
       vlut_resolution: 0.02
       sensing_resolution: 0.01
-      vlut_only: false #gngの結果だけ読み込みvlutの構築だけ実行
+      vlut_only: false # 保存済みGNGからのVLUT単独構築
       use_voxel_collision: true
-      # gng_profiles に列挙した profile は、未指定ならすべて使用
+      # 左右各7自由度の学習プロファイル
       profiles:
         right_arm:
           root: "R_shoulder_mount"
@@ -55,8 +55,8 @@
             - "waist_joint"
             - "L_gripper_joint"
             - "L_gripper_mimic"
-            - "L_gripper_joint"
-            - "L_gripper_mimic"
+            - "R_gripper_joint"
+            - "R_gripper_mimic"
           dof: 7
 
     # シミュレーション点群の基準座標系。入力点群をworld座標で発行する場合はTF変換なし
@@ -64,27 +64,25 @@
       base_frame_id: "world"
       local_coordinates: false
 
-    # --- Robot Settings ---
+    # ロボット形状
     robot:
       eef_link_names: "L_tcp,R_tcp"
       arm_leaf_link_names: "L_tcp,R_tcp"
       voxel_size: 0.01
       inflation: 0.0
 
-    # グリッパ把持体積の確認用トピック発行（launch引数 enable_gripper_volume_graph で上書き）
+    # 回転式グリッパーの専用把持体積は未定義
     gripper_volume_graph:
       enabled: false
-      definitions_file: "package://grasping_system/config/ToPoDualArm_gripper_volumes.yaml"
-      cache_directory: "/ros2_ws/src/gng_vlut_system/gng_results/ToPoDualArm10000/gripper_volume_cache"
-      cache_mode: "use"
 
     # --- 環境点群からVLUTまでの統合起動設定 ---
     environment_voxelization:
       input_topic: "/camera/camera/depth/color/points"
       # 自己ロボット領域除去後の環境ボクセル（VLUT入力への接続先）
-      voxel_topic: "/ToPoDualArm/self_filter_roi_voxels"
+      voxel_topic: "/topo_dual_arm_max/self_filter_roi_voxels"
       source_frame_id: ""
-      allow_unconnected_source_as_world: true
+      # 未接続センサ座標系のworld扱い防止
+      allow_unconnected_source_as_world: false
       base_frame: "base_link"
       # ROI範囲の基準マップ。全ノードのBBoxと各軸の余白。空文字列で従来の固定範囲
       reachability_map_topic: "Tmap_static"
@@ -143,7 +141,7 @@
       self_collision_exclusion_pairs:
         - "L_finger_left|L_finger_right"
         - "R_finger_left|R_finger_right"
-    
+
     gng_params:
       lambda: 200
       max_node_num: 1000
@@ -159,16 +157,16 @@
       ais_threshold: 10.0
       start_node_num: 2
 
-      #tcpの位置のサンプリング範囲と最大試行回数
-      min_x: -0.1
-      max_x: 0.5
-      min_y: -1.0
-      max_y: 1.0
-      min_z: -1.0
-      max_z: 1.0
+      # URDFルート基準のTCPサンプリング範囲 [m] と最大試行回数
+      min_x: -1.5
+      max_x: 1.5
+      min_y: -1.5
+      max_y: 1.5
+      min_z: -1.5
+      max_z: 1.5
       max_attempts: 256
 
-    # --- Bridge & Viewer Settings ---
+    # 状態配信とViewer表示
     joint_state_topic: "joint_states"
     stream_topic: "/viewer/internal/stream/robot"
     frame_id: "base_link"
@@ -183,7 +181,7 @@
       candidate_trajectory_input_topic: "cand_Tmap"
       candidate_trajectory_topic_prefix: "cand_Tmap_vis"
 
-    # --- Self Recognition Settings ---
+    # 自己認識
     self_recognition:
       resolution: 0.02
       inflation: 0.0
@@ -204,78 +202,3 @@
       marker_frame_id: "base_link"
       input_topic: "/camera/transformed_points"
       mask_topic: "self_voxel"
-
-/left_grasp_voxel_matcher:
-  ros__parameters:
-    object_voxels_topic: "/topo_voxel_ids"
-    environment_voxels_topic: ""
-    required_graph_topic: "/ToPoDualArm/L_grip_V_Tmap"
-    undersize_graph_topic: "/ToPoDualArm/L_grip_minV_Tmap"
-    forbidden_graph_topic: "/ToPoDualArm/L_grip_sweptV_Tmap"
-    candidate_topic: "/grasp_pose_cands"
-    candidate_voxels_topic: "/grasp_pose_cand_cells"
-    reachability_map_topic: "/ToPoDualArm/Tmap_static"
-    reachability_voxel_size: 0.05
-    reachability_voxel_origin: [0.0, 0.0, 0.0]
-    reachability_publish_hz: 5.0
-    summary_topic: "/grasp_pose_cands/summary"
-    enable_depth_visibility: false
-    minimum_required_occupancy_ratio: 0.1
-    minimum_required_hits: 3
-    minimum_outside_undersize_hits: 1
-    maximum_forbidden_hits: 0
-    maximum_anchor_voxels: 500
-    maximum_candidates: 50
-    yaw_samples: 12
-    roll: 0.0
-    pitch: 0.0
-    yaw_offset: 0.0
-    update_period_ms: 500
-
-/top_grasp_surface_estimator:
-  ros__parameters:
-    topological_map_topic: "/topological_map"
-    planar_clusters_topic: "/plane_clusters"
-    candidate_topic: "/grasp_pose_cands"
-    candidate_graph_topic: "/grasp_pose_cands/Tmap"
-    # 非平面領域の試験Marker表示直径 [m]。候補Tmapの点サイズはViewer側設定
-    candidate_node_diameter: 0.012
-    # 同一平面クラスタ候補の公開前連続有効更新数
-    candidate_confirm_updates: 5
-    # 確定候補の短期欠測保持更新数
-    candidate_missing_update_allowance: 5
-    # TCP位置・姿勢の指数移動平均係数
-    candidate_position_ema_alpha: 0.35
-    candidate_orientation_ema_alpha: 0.35
-    # 同一候補トラックを再確認扱いへ戻すTCP位置差 [m]
-    candidate_track_reset_dist: 0.10
-    reachability_map_topic: "/ToPoDualArm/Tmap_static"
-    reachability_voxel_size: 0.05
-    reachability_voxel_origin: [0.0, 0.0, 0.0]
-    reachability_publish_hz: 5.0
-    summary_topic: "/grasp_pose_cands/summary"
-    # シミュレーション候補の出力座標系。入力グラフもworldの場合はTF変換なし
-    candidate_frame: "world"
-    # 入力グラフの座標値を候補座標系として扱うモード
-    enable_candidate_frame_passthrough: true
-    # 配列内全候補の目標TCP link
-    tcp_frame: "L_tcp"
-    # 各平面クラスタのXY投影OBBと隣接平面からの突出距離による判定
-    up_axis: [0.0, 0.0, 1.0]
-    # 法線符号に依存しない上方向との傾斜角 [deg]
-    max_surface_tilt_deg: 90.0
-    # 隣接平面の組合せ候補。単独候補も併存
-    enable_plane_combinations: true
-    # 候補内平均エッジ長に対する入口エッジ長の許容倍率
-    max_attachment_edge_length_ratio: 1.2
-    enable_approach_check: false
-    # 簡易進入領域の高さと把持開口外側余白 [m]。実グリッパ形状とは別の近似
-    approach_height: 0.10
-    approach_margin: 0.01
-    minimum_protrusion_distance: 0.005
-    minimum_region_nodes: 4
-    # ToPoDualArmの開口内部寸法。観測外形との直接比較
-    grasp_size_x: 0.13
-    grasp_size_y: 0.13
-    tcp_standoff: 0.0
-    maximum_candidates: 20

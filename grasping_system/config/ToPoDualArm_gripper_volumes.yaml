@@ -14,17 +14,17 @@ grippers:
     include_cluster: false
     # Finger transforms in the TCP frame at the URDF prismatic upper limit (0.037 m).
     exclude_closed_meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_left.stl
         internal_side: positive
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.05536, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_right.stl
         internal_side: negative
         scale: [0.001, 0.001, 0.001]
         position: [0.0, -0.05536, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_gripper_base.stl
         internal_side: body
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
@@ -47,17 +47,17 @@ grippers:
     closing_axis: [0.0, 1.0, 0.0]
     include_cluster: false
     exclude_closed_meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_left.stl
         internal_side: positive
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.01836, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_right.stl
         internal_side: negative
         scale: [0.001, 0.001, 0.001]
         position: [0.0, -0.01836, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_gripper_base.stl
         internal_side: body
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
@@ -78,7 +78,7 @@ grippers:
     retain_occupied_meshes: true
     include_cluster: false
     meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_gripper_base.stl
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
@@ -100,19 +100,19 @@ grippers:
     retain_occupied_meshes: true
     include_cluster: false
     meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_gripper_base.stl
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     swept_meshes:
       # The actual ToPoDualArm fingers are prismatic.  The same schema also
       # supports start/end orientations for a rotating gripper.
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_left.stl
         scale: [0.001, 0.001, 0.001]
         start_position: [0.0, 0.05536, 0.085]
         end_position: [0.0, 0.01836, 0.085]
         samples: 5
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/L_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/L_finger_right.stl
         scale: [0.001, 0.001, 0.001]
         start_position: [0.0, -0.05536, 0.085]
         end_position: [0.0, -0.01836, 0.085]
@@ -133,17 +133,17 @@ grippers:
     closing_axis: [0.0, 1.0, 0.0]
     include_cluster: false
     exclude_closed_meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_left.stl
         internal_side: positive
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.05536, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_right.stl
         internal_side: negative
         scale: [0.001, 0.001, 0.001]
         position: [0.0, -0.05536, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_gripper_base.stl
         internal_side: body
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
@@ -164,17 +164,17 @@ grippers:
     closing_axis: [0.0, 1.0, 0.0]
     include_cluster: false
     exclude_closed_meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_left.stl
         internal_side: positive
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.01836, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_right.stl
         internal_side: negative
         scale: [0.001, 0.001, 0.001]
         position: [0.0, -0.01836, 0.085]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_gripper_base.stl
         internal_side: body
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
@@ -194,7 +194,7 @@ grippers:
     retain_occupied_meshes: true
     include_cluster: false
     meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_gripper_base.stl
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
@@ -213,17 +213,17 @@ grippers:
     retain_occupied_meshes: true
     include_cluster: false
     meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_gripper_base.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_gripper_base.stl
         scale: [0.001, 0.001, 0.001]
         position: [0.0, 0.0, 0.1055]
         orientation_xyzw: [0.0, 0.0, 0.0, 1.0]
     swept_meshes:
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_left.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_left.stl
         scale: [0.001, 0.001, 0.001]
         start_position: [0.0, 0.05536, 0.085]
         end_position: [0.0, 0.01836, 0.085]
         samples: 5
-      - path: /ros2_ws/src/dual_arm_urdf/meshes/R_finger_right.stl
+      - path: /ros2_ws/src/urdf/dual_arm_urdf/meshes/R_finger_right.stl
         scale: [0.001, 0.001, 0.001]
         start_position: [0.0, -0.05536, 0.085]
         end_position: [0.0, -0.01836, 0.085]

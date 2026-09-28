@@ -250,7 +250,7 @@ def main():
     workspace = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gng-file', type=Path, default=workspace/'gng_vlut_system/gng_results/ToPoDualArm10000/gng.bin')
-    parser.add_argument('--urdf', type=Path, default=workspace/'dual_arm_urdf/dual_arm_robot.urdf')
+    parser.add_argument('--urdf', type=Path, default=workspace/'urdf/dual_arm_urdf/dual_arm_robot.urdf')
     parser.add_argument('--node-id', type=int, default=0)
     parser.add_argument('--root-link', default='L_shoulder_mount')
     parser.add_argument('--tcp-link', default='L_tcp')

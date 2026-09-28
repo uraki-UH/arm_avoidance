@@ -35,7 +35,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "urdf_path",
-            default_value="/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf"),
+            default_value="/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf"),
         DeclareLaunchArgument("robot_name", default_value="ToPoDualArm"),
         OpaqueFunction(function=launch_setup),
     ])

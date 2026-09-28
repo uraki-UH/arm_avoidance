@@ -48,7 +48,7 @@ def quaternion(matrix):
 
 
 def fixture():
-    root = xml.parse('/ros2_ws/src/dual_arm_urdf/dual_arm_robot.urdf').getroot()
+    root = xml.parse('/ros2_ws/src/urdf/dual_arm_urdf/dual_arm_robot.urdf').getroot()
     parents = {joint.find('child').attrib['link']: joint for joint in root.findall('joint')}
     path, link = [], 'L_tcp'
     while link != 'L_shoulder_mount':
