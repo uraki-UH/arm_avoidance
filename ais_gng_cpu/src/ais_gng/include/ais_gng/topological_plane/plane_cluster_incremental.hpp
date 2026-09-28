@@ -4,6 +4,7 @@
 #include <ais_gng_msgs/msg/topological_map.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 
 namespace fuzzrobo::topological_plane::incremental
@@ -169,10 +170,20 @@ struct ClusterOptions
   std::size_t max_isolated_frames = 5;
 
   // 条件を満たさないまま許容するフレーム数。超えるとクラスタを破棄する。
-  // 条件を満たさないまま許容するフレーム数。
   // 不健全なクラスタは縮んで持ち直そうとするが、実測ではその収束に数フレーム掛かる。
   // 2 では間に合わず満サイズのまま淘汰されていた(消滅238件 -> 5 で182件)。
   std::size_t weak_frame_allowance = 5;
+
+  // 試作の差分統計。位置・間隔・所属の変化分のみの加減算。
+  bool enable_delta_statistics = true;
+  // 試作の保持証明キャッシュ。入力不変ブロックの安全な保持判定省略。
+  bool enable_block_retention = false;
+  // 平面所属エッジの座標複製。表示・元グラフを受け取らない利用側向けの互換出力。
+  bool enable_support_edges = false;
+  // 比較用の判定平面固定・所属1パス更新。収束処理の次フレームへの継続。
+  bool enable_temporal_update = false;
+  // 移籍・生成の候補分散周期[入力フレーム]。1は毎回、逸脱解放・未所属点の取り込みは毎回。
+  std::size_t num_acquisition_phases = 5U;
 };
 
 // 1フレーム分の処理内訳。定常状態に入れば変化量はすべて0に落ち着く。
@@ -193,6 +204,8 @@ struct ClusterStatistics
   std::size_t split_cluster_count = 0;
   std::size_t removed_cluster_count = 0;
   std::size_t maintenance_iter_num = 0;
+  // 保持証明による個別判定の省略ノード数。
+  std::size_t num_retention_reused_nodes = 0;
 
   // 全域木の維持によって連結探索を省略したクラスタ数。
   std::size_t num_connectivity_reused_clusters = 0;
@@ -233,11 +246,44 @@ struct ClusterResult
   ClusterStatistics statistics;
 };
 
+// 平面計算に必要な属性のみの入力値。ROS・GNGの所有配列から読出し。
+struct node_input
+{
+  struct coordinate {float x, y, z;};
+  std::uint16_t id;
+  std::uint8_t label;
+  float rho;
+  coordinate pos, normal;
+};
+
+// update呼出し中だけ有効な借用ビュー。接続値はノード配列添字の対、IDではない。
+struct graph_view
+{
+  const void *nodes = nullptr;
+  std::size_t num_nodes = 0U;
+  const std::uint16_t *edges = nullptr;
+  std::size_t num_edge_values = 0U;
+  node_input (*read_node)(const void *, std::size_t) = nullptr;
+};
+
+// 元配列の所有権・並び順・精度を維持したアダプター。ノード配列の中間コピーなし。
+template<typename node_type>
+graph_view make_graph_view(const node_type *nodes, const std::size_t num_nodes,
+  const std::uint16_t *edges, const std::size_t num_edge_values)
+{
+  return {nodes, num_nodes, edges, num_edge_values,
+    [](const void *data, const std::size_t idx) -> node_input {
+      const auto &node = static_cast<const node_type *>(data)[idx];
+      return {node.id, node.label, node.rho,
+        {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}};
+    }};
+}
+
 // GNGの位相地図から平面クラスタを生成する、増分方式の実装。
 //
-// フレームごとに全体を作り直さず、GNGノードID単位の所属を持ち越して差分だけ直す。
-// 1フレームの処理はノード数Nとエッジ数Eに対して O(N + E) と、クラスタ数ぶんの
-// 3x3固有値分解で済む。優先度付きキューも、クラスタ同士の総当たりも使わない。
+// GNGノードID単位の所属の持ち越し。試作オプションで統計の差分加減算へ切替。
+// 主走査はノード数Nとエッジ数Eに対してO(N + E)、未所属U点の種順序はO(U log U)。
+// 加えて領域成長・平面の3x3固有値分解。優先度付きキュー・全クラスタ対総当たりなし。
 //
 // 所属が動くのは次の場合だけで、それ以外のノードは前フレームの所属を保つ。
 //   - 所属クラスタの平面から離れすぎた                             -> 解放
@@ -254,6 +300,9 @@ public:
 
   // 1フレーム分の地図を取り込み、更新後の平面クラスタを返す。
   ClusterResult update(const ais_gng_msgs::msg::TopologicalMap &map);
+  // 内部グラフの直接入力。ビューと元配列の寿命は呼出し終了まで、結果は自己所有。
+  ClusterResult update(const graph_view &map, const std_msgs::msg::Header &header,
+    std::uint32_t frame_number);
 
   // 保持している所属をすべて捨てる。地図の系列が切り替わったときに使う。
   void reset();

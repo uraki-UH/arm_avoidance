@@ -7,8 +7,34 @@
 #include <cstdint>
 #include <limits>
 #include <set>
+#include <stdexcept>
 #include <utility>
 #include <vector>
+
+// 試作経路と従来経路の所属・幾何の比較。加減算順序差のみの許容。
+void expect_equivalent_planes(
+  const ais_gng_msgs::msg::PlaneClusterArray &actual,
+  const ais_gng_msgs::msg::PlaneClusterArray &expected)
+{
+  ASSERT_EQ(actual.clusters.size(), expected.clusters.size());
+  for (std::size_t idx = 0U; idx < actual.clusters.size(); ++idx) {
+    const auto &a = actual.clusters[idx];
+    const auto &b = expected.clusters[idx];
+    EXPECT_EQ(a.id, b.id);
+    EXPECT_EQ(a.node_indices, b.node_indices);
+    EXPECT_EQ(a.source_label, b.source_label);
+    EXPECT_NEAR(a.centroid.x, b.centroid.x, 1.e-5);
+    EXPECT_NEAR(a.centroid.y, b.centroid.y, 1.e-5);
+    EXPECT_NEAR(a.centroid.z, b.centroid.z, 1.e-5);
+    EXPECT_NEAR(a.normal.x, b.normal.x, 1.e-6);
+    EXPECT_NEAR(a.normal.y, b.normal.y, 1.e-6);
+    EXPECT_NEAR(a.normal.z, b.normal.z, 1.e-6);
+    EXPECT_NEAR(a.local_spacing, b.local_spacing, 1.e-6);
+    for (std::size_t entry = 0U; entry < a.position_covariance.size(); ++entry) {
+      EXPECT_NEAR(a.position_covariance[entry], b.position_covariance[entry], 1.e-5);
+    }
+  }
+}
 
 namespace
 {
@@ -82,6 +108,265 @@ TopologicalMap makeSinglePlane()
   const double axis_v[3] = {0.0, 1.0, 0.0};
   appendGrid(map, 6U, 6U, 0.05, origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
   return map;
+}
+
+TEST(PlaneOutput, OptionalEdgesPreserveMembershipAndGeometry)
+{
+  EXPECT_FALSE(ClusterOptions{}.enable_support_edges);
+  for (const std::size_t num_phases : {1U, 4U, 10U}) {
+    ClusterOptions options;
+    options.num_acquisition_phases = num_phases;
+    Clusterizer compact(options);
+    options.enable_support_edges = true;
+    Clusterizer full(options);
+    auto map = makeSinglePlane();
+    bool has_edges = false;
+    for (std::size_t frame = 0U; frame < 40U; ++frame) {
+      for (auto &node : map.nodes) {node.pos.z = 0.01F * std::sin(frame * 0.1) * node.pos.x;}
+      if (frame == 20U) {
+        std::reverse(map.nodes.begin(), map.nodes.end());
+        for (auto &edge : map.edges) {edge = map.nodes.size() - 1U - edge;}
+      }
+      const auto actual = compact.update(map);
+      auto expected = full.update(map);
+      for (const auto &cluster : actual.clusters.clusters) {EXPECT_TRUE(cluster.support_edges.empty());}
+      for (auto &cluster : expected.clusters.clusters) {
+        has_edges = has_edges || !cluster.support_edges.empty();
+        cluster.support_edges.clear();
+      }
+      EXPECT_EQ(actual.clusters, expected.clusters);
+      EXPECT_EQ(actual.statistics.clustered_node_count, expected.statistics.clustered_node_count);
+    }
+    EXPECT_TRUE(has_edges);
+    compact.reset();
+    EXPECT_TRUE(compact.update(TopologicalMap{}).clusters.clusters.empty());
+  }
+}
+
+TEST(PlaneInput, MedianSpacingWithMixedDegreesAndInvalidEdges)
+{
+  for (std::size_t num_extra = 0U; num_extra < 12U; ++num_extra) {
+    auto map = makeSinglePlane();
+    map.nodes[35].pos.x = std::numeric_limits<float>::quiet_NaN();
+    map.nodes[34].pos = map.nodes[33].pos;
+    for (std::size_t idx = 0U; idx < num_extra; ++idx) {
+      map.edges.insert(map.edges.end(), {0U, static_cast<std::uint16_t>(idx + 2U)});
+    }
+    map.edges.insert(map.edges.end(), {0U, 0U, 65535U, 1U, 0U, 1U});
+    // 独立した全エッジ走査・全ソートによる局所間隔の参照値。
+    double spacing_sum = 0.0;
+    for (std::size_t idx = 0U; idx < 35U; ++idx) {
+      std::vector<double> lengths;
+      for (std::size_t edge = 0U; edge + 1U < map.edges.size(); edge += 2U) {
+        const auto first = map.edges[edge];
+        const auto second = map.edges[edge + 1U];
+        if (first >= 35U || second >= 35U || first == second || (first != idx && second != idx)) {continue;}
+        const auto &a = map.nodes[first].pos;
+        const auto &b = map.nodes[second].pos;
+        const double dx = static_cast<double>(a.x) - b.x;
+        const double dy = static_cast<double>(a.y) - b.y;
+        const double squared_dist = dx * dx + dy * dy;
+        if (squared_dist > 1.e-18) {lengths.push_back(squared_dist);}
+      }
+      ASSERT_FALSE(lengths.empty());
+      std::sort(lengths.begin(), lengths.end());
+      spacing_sum += std::sqrt(lengths[(lengths.size() - 1U) / 2U]);
+    }
+    ClusterOptions options;
+    options.num_acquisition_phases = 1U;
+    Clusterizer clusterizer(options);
+    for (std::size_t frame = 0U; frame < 8U; ++frame) {
+      if (frame == 4U) {std::reverse(map.edges.begin(), map.edges.end());}
+      const auto result = clusterizer.update(map);
+      if (frame < options.birth_confirm_frames) {continue;}
+      ASSERT_EQ(result.clusters.clusters.size(), 1U);
+      EXPECT_EQ(result.clusters.clusters.front().node_indices.size(), 35U);
+      EXPECT_NEAR(result.clusters.clusters.front().local_spacing, spacing_sum / 35.0, 1.e-7);
+    }
+  }
+}
+
+TEST(PlaneDeltaPrototype, MotionRemovalReorderingAndReset)
+{
+  for (const bool enable_delta : {false, true}) {
+    for (const bool enable_blocks : {false, true}) {
+      ClusterOptions options;
+      options.enable_delta_statistics = enable_delta;
+      options.enable_block_retention = enable_blocks;
+      Clusterizer actual(options);
+      Clusterizer expected;
+      const auto original = makeSinglePlane();
+      for (std::size_t frame = 0U; frame < 180U; ++frame) {
+        auto map = original;
+        for (auto &node : map.nodes) {
+          node.pos.z = static_cast<float>(0.001 * std::sin(frame * 0.02) * node.pos.x);
+          node.pos.x += 10000.0F;
+          node.pos.y -= 10000.0F;
+        }
+        if (frame >= 30U && frame < 60U) {
+          map.nodes[10].pos.z += 0.1F;
+          map.nodes[15].normal.x = 1.0;
+          map.nodes[15].normal.z = 0.0;
+        }
+        if (frame >= 60U && frame < 90U) {
+          map.nodes.pop_back();
+          std::vector<std::uint16_t> edges;
+          for (std::size_t idx = 0U; idx + 1U < map.edges.size(); idx += 2U) {
+            if (map.edges[idx] < map.nodes.size() && map.edges[idx + 1U] < map.nodes.size()) {
+              edges.push_back(map.edges[idx]); edges.push_back(map.edges[idx + 1U]);
+            }
+          }
+          map.edges.swap(edges);
+        }
+        if (frame % 2U != 0U) {
+          std::reverse(map.nodes.begin(), map.nodes.end());
+          for (auto &edge : map.edges) {edge = map.nodes.size() - 1U - edge;}
+        }
+        if (frame == 110U) {actual.reset(); expected.reset();}
+        if (frame == 140U) {map.nodes.clear(); map.edges.clear();}
+        SCOPED_TRACE(frame);
+        expect_equivalent_planes(actual.update(map).clusters, expected.update(map).clusters);
+      }
+    }
+  }
+}
+
+TEST(PlaneDeltaPrototype, RetentionCertificateAndInputChanges)
+{
+  ClusterOptions options;
+  options.enable_block_retention = true;
+  options.enable_delta_statistics = true;
+  options.normal_filter_alpha = 1.0;
+  Clusterizer actual(options);
+  options.enable_block_retention = false;
+  options.enable_delta_statistics = false;
+  Clusterizer expected(options);
+  auto map = makeSinglePlane();
+  ClusterResult result;
+  for (int frame = 0; frame < 10; ++frame) {
+    result = actual.update(map);
+    expect_equivalent_planes(result.clusters, expected.update(map).clusters);
+  }
+  EXPECT_EQ(result.statistics.num_retention_reused_nodes, map.nodes.size());
+  map.nodes[12].pos.z += 0.2F;
+  map.nodes[13].normal.x = 1.0;
+  map.nodes[13].normal.z = 0.0;
+  result = actual.update(map);
+  EXPECT_EQ(result.statistics.num_retention_reused_nodes, 0U);
+  EXPECT_GE(result.statistics.released_node_count, 2U);
+  expect_equivalent_planes(result.clusters, expected.update(map).clusters);
+}
+
+TEST(PlaneDeltaPrototype, LongTranslationAndSlowPlaneChanges)
+{
+  ClusterOptions options;
+  options.enable_delta_statistics = true;
+  options.enable_block_retention = true;
+  options.normal_filter_alpha = 1.0;
+  Clusterizer actual(options);
+  options.enable_delta_statistics = false;
+  options.enable_block_retention = false;
+  Clusterizer expected(options);
+  TopologicalMap original;
+  const double origin[3] = {1000.0, -1000.0, 0.0};
+  const double axis_u[3] = {1.0, 0.0, 0.0};
+  const double axis_v[3] = {0.0, 1.0, 0.0};
+  appendGrid(original, 16U, 16U, 0.05, origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
+  for (std::size_t frame = 0U; frame < 1000U; ++frame) {
+    auto map = original;
+    for (std::size_t idx = 0U; idx < map.nodes.size(); ++idx) {
+      auto &node = map.nodes[idx];
+      if (frame < 500U) {
+        node.pos.x += static_cast<float>(frame * 0.5);
+        node.pos.z += static_cast<float>(frame * 0.1);
+      } else if (idx >= 64U) {
+        node.pos.z = static_cast<float>((frame - 500U) * 0.0002);
+      }
+    }
+    SCOPED_TRACE(frame);
+    expect_equivalent_planes(actual.update(map).clusters, expected.update(map).clusters);
+  }
+}
+
+TEST(PlaneAcquisitionPhases, ConvergenceAndImmediateRelease)
+{
+  for (const std::size_t num_phases : {1U, 4U, 8U}) {
+    for (const bool enable_delta : {false, true}) {
+      ClusterOptions options;
+      options.enable_delta_statistics = enable_delta;
+      options.num_acquisition_phases = num_phases;
+      options.normal_filter_alpha = 1.0;
+      options.birth_confirm_frames = 0U;
+      for (std::size_t offset = 0U; offset < num_phases; ++offset) {
+        for (const bool has_position_change : {false, true}) {
+          Clusterizer clusterizer(options);
+          auto map = makeSinglePlane();
+          ClusterResult result;
+          for (std::size_t frame = 0U; frame < num_phases + 4U + offset; ++frame) {
+            result = clusterizer.update(map);
+          }
+          ASSERT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+          // 定常入力で2周期を経過した後も、所属と平面IDの安定性を確認。
+          const auto stable_clusters = result.clusters.clusters;
+          for (std::size_t frame = 0U; frame < 2U * num_phases; ++frame) {
+            result = clusterizer.update(map);
+            ASSERT_EQ(result.clusters.clusters.size(), stable_clusters.size());
+            for (std::size_t idx = 0U; idx < stable_clusters.size(); ++idx) {
+              EXPECT_EQ(result.clusters.clusters[idx].id, stable_clusters[idx].id);
+              EXPECT_EQ(result.clusters.clusters[idx].node_indices, stable_clusters[idx].node_indices);
+            }
+          }
+          // 同時の面傾斜と混同しない、位置・法線の独立した逸脱条件。
+          const std::uint32_t changed_idx = has_position_change ? 10U : 15U;
+          if (has_position_change) {
+            map.nodes[changed_idx].pos.z += 0.3F;
+          } else {
+            map.nodes[changed_idx].normal.x = 1.0;
+            map.nodes[changed_idx].normal.z = 0.0;
+          }
+          result = clusterizer.update(map);
+          EXPECT_GE(result.statistics.released_node_count, 1U);
+          for (const auto &cluster : result.clusters.clusters) {
+            EXPECT_EQ(std::count(cluster.node_indices.begin(), cluster.node_indices.end(), changed_idx), 0);
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST(PlaneAcquisitionPhases, BoundedAbsorptionDespiteNodeReordering)
+{
+  for (const std::size_t num_phases : {1U, 4U, 8U}) {
+    ClusterOptions options;
+    options.num_acquisition_phases = num_phases;
+    options.birth_confirm_frames = 0U;
+    Clusterizer clusterizer(options);
+    auto map = makeSinglePlane();
+    for (std::size_t frame = 0U; frame < num_phases + 4U; ++frame) {
+      clusterizer.update(map);
+    }
+    TopologicalNode added = map.nodes[10];
+    added.id = 60000U;
+    added.pos.x += 0.01F;
+    added.pos.y += 0.01F;
+    const auto added_idx = static_cast<std::uint16_t>(map.nodes.size());
+    map.nodes.push_back(added);
+    map.edges.insert(map.edges.end(), {added_idx, 10U, added_idx, 11U});
+    for (std::size_t frame = 0U; frame < num_phases; ++frame) {
+      bool has_absorbed = false;
+      std::reverse(map.nodes.begin(), map.nodes.end());
+      for (auto &edge : map.edges) {edge = map.nodes.size() - 1U - edge;}
+      const auto result = clusterizer.update(map);
+      for (const auto &cluster : result.clusters.clusters) {
+        for (const auto idx : cluster.node_indices) {
+          has_absorbed = has_absorbed || map.nodes[idx].id == added.id;
+        }
+      }
+      // 安価な既存面への取り込みは生成周期と独立した毎入力処理。
+      EXPECT_TRUE(has_absorbed);
+    }
+  }
 }
 
 // 既定では新しいクラスタが出力に載るまで birth_confirm_frames ぶん掛かる。
@@ -358,22 +643,29 @@ TEST(PlaneClusterIncremental, ChainRejectionIsStableAcrossFrames)
   const double axis_v[3] = {0.0, 1.0, 0.0};
   appendGrid(map, 6U, 6U, 0.05, plane_origin, axis_u, axis_v, TopologicalMap::SAFE_TERRAIN);
 
-  // 平面から離れた位置に、独立した鎖を置く。
+  // 平面から離れた位置の独立した鎖。
   const double chain_origin[3] = {0.0, 0.0, 1.0};
   appendGrid(map, 20U, 1U, 0.05, chain_origin, axis_u, axis_v, TopologicalMap::UNKNOWN_OBJECT);
 
-  Clusterizer clusterizer{ClusterOptions{}};
-  const ClusterResult first = warmUp(clusterizer, map);
-  ASSERT_EQ(first.clusters.clusters.size(), 1U);
-
-  for (int iteration = 0; iteration < 4; ++iteration) {
-    const ClusterResult repeated = clusterizer.update(map);
-    EXPECT_EQ(repeated.clusters.clusters.size(), 1U) << "iteration " << iteration;
-    EXPECT_EQ(totalChanges(repeated), 0U) << "iteration " << iteration;
-    EXPECT_EQ(repeated.statistics.born_cluster_count, 0U) << "iteration " << iteration;
-    EXPECT_EQ(
-      repeated.statistics.chain_rejected_count,
-      first.statistics.chain_rejected_count) << "iteration " << iteration;
+  for (const std::size_t num_phases : {1U, 4U, 10U}) {
+    ClusterOptions options;
+    options.num_acquisition_phases = num_phases;
+    Clusterizer clusterizer{options};
+    const ClusterResult first = warmUp(clusterizer, map);
+    ASSERT_EQ(first.clusters.clusters.size(), 1U);
+    std::size_t num_rejected = 0U;
+    for (std::size_t iter = 0U; iter < 2U * num_phases; ++iter) {
+      const ClusterResult repeated = clusterizer.update(map);
+      EXPECT_EQ(repeated.clusters, first.clusters);
+      EXPECT_EQ(totalChanges(repeated), 0U);
+      EXPECT_EQ(repeated.statistics.born_cluster_count, 0U);
+      num_rejected += repeated.statistics.chain_rejected_count;
+      // 分散時の候補数は位相依存。毎回更新の場合だけ棄却回数も一致。
+      if (num_phases == 1U) {
+        EXPECT_EQ(repeated.statistics.chain_rejected_count, first.statistics.chain_rejected_count);
+      }
+    }
+    EXPECT_GT(num_rejected, 0U);
   }
 }
 
@@ -1522,8 +1814,8 @@ TEST(PlaneClusterIncremental, ConnectivityTreeDeletionOnlyRechecksAffectedCluste
   EXPECT_EQ(repeated.statistics.num_connectivity_scanned_nodes, 0U);
 }
 
-// 入力ノード再配置時の親添字無効化と、ID・所属の維持。
-TEST(PlaneClusterIncremental, ConnectivityTreeInvalidatesReorderedNodes)
+// 入力ノード再配置後も、ノードID単位の連結証明を維持。
+TEST(PlaneClusterIncremental, ConnectivityTreeReusesReorderedNodes)
 {
   Clusterizer clusterizer{ClusterOptions{}};
   auto map = makeSinglePlane();
@@ -1534,9 +1826,36 @@ TEST(PlaneClusterIncremental, ConnectivityTreeInvalidatesReorderedNodes)
   }
   const auto changed = clusterizer.update(map);
   EXPECT_EQ(clusterIds(changed), clusterIds(original));
-  EXPECT_EQ(changed.statistics.num_connectivity_reused_clusters, 0U);
-  EXPECT_EQ(changed.statistics.num_connectivity_scanned_nodes, map.nodes.size());
+  EXPECT_EQ(changed.statistics.num_connectivity_reused_clusters, 1U);
+  EXPECT_EQ(changed.statistics.num_connectivity_scanned_nodes, 0U);
   EXPECT_EQ(clusterizer.update(map).statistics.num_connectivity_reused_clusters, 1U);
+}
+
+// 別領域の追加・削除による全ノード添字変更でも、無関係な平面は探索省略。
+TEST(PlaneClusterIncremental, ConnectivityTreeSurvivesUnrelatedNodeChanges)
+{
+  Clusterizer clusterizer{ClusterOptions{}};
+  auto map = make_plane_patches(2U, 1U);
+  const auto original = warmUp(clusterizer, map);
+  ASSERT_EQ(original.clusters.clusters.size(), 2U);
+  TopologicalNode added;
+  added.id = 60000U;
+  added.pos.z = 10.0F;
+  map.nodes.insert(map.nodes.begin(), added);
+  for (auto &edge : map.edges) {++edge;}
+  auto result = clusterizer.update(map);
+  EXPECT_EQ(clusterIds(result), clusterIds(original));
+  EXPECT_EQ(result.statistics.num_connectivity_reused_clusters, 2U);
+  EXPECT_EQ(result.statistics.num_connectivity_scanned_nodes, 0U);
+  map.nodes.erase(map.nodes.begin());
+  for (auto &edge : map.edges) {--edge;}
+  result = clusterizer.update(map);
+  EXPECT_EQ(result.statistics.num_connectivity_reused_clusters, 2U);
+  EXPECT_EQ(result.statistics.num_connectivity_scanned_nodes, 0U);
+  map.nodes.back().id = 60001U;
+  result = clusterizer.update(map);
+  EXPECT_EQ(result.statistics.num_connectivity_reused_clusters, 1U);
+  EXPECT_EQ(result.statistics.num_connectivity_scanned_nodes, 36U);
 }
 
 // CSR内の親位置が変わっても、同じ木エッジが残る場合の探索省略。
@@ -1564,4 +1883,185 @@ TEST(PlaneClusterIncremental, ConnectivityTreeInvalidatesReplacedNode)
   EXPECT_EQ(changed.statistics.num_connectivity_reused_clusters, 0U);
   EXPECT_EQ(changed.statistics.num_connectivity_scanned_nodes, map.nodes.size());
   EXPECT_EQ(clusterizer.update(map).statistics.num_connectivity_reused_clusters, 1U);
+}
+
+// 固定モデル1パスの定常収束・同フレーム解放・幾何更新。統計の両経路が対象。
+TEST(PlaneClusterIncremental, temporal_update_keeps_tracking_and_immediate_release)
+{
+  for (const bool enable_delta : {false, true}) {
+    for (const bool has_normal_change : {false, true}) {
+      ClusterOptions options;
+      options.enable_temporal_update = true;
+      options.enable_delta_statistics = enable_delta;
+      options.normal_filter_alpha = 1.0;
+      options.maintenance_iter = 5U;
+      Clusterizer actual{options};
+      auto map = makeSinglePlane();
+      const auto original = warmUp(actual, map);
+      ASSERT_EQ(original.clusters.clusters.size(), 1U);
+      for (auto &node : map.nodes) {node.pos.z += 0.2F;}
+      const auto moved = actual.update(map);
+      EXPECT_EQ(clusterIds(moved), clusterIds(original));
+      EXPECT_EQ(moved.statistics.maintenance_iter_num, 1U);
+      EXPECT_NEAR(moved.clusters.clusters.front().centroid.z, 0.2, 1.e-6);
+      if (has_normal_change) {
+        map.nodes.front().normal.z = 0.0;
+        map.nodes.front().normal.x = 1.0;
+      } else {
+        map.nodes.front().pos.z += 0.5F;
+      }
+      const auto released = actual.update(map);
+      EXPECT_GT(released.statistics.released_node_count, 0U);
+      for (const auto &cluster : released.clusters.clusters) {
+        EXPECT_EQ(std::count(cluster.node_indices.begin(), cluster.node_indices.end(), 0U), 0);
+      }
+    }
+  }
+}
+
+// 所属不変でもフレーム先頭で幾何を再集計。別平面の解放による部分再集計との併用。
+TEST(PlaneClusterIncremental, partial_refit_keeps_frame_geometry_fresh)
+{
+  ClusterOptions options;
+  options.normal_filter_alpha = 1.0;
+  Clusterizer clusterizer{options};
+  auto map = make_plane_patches(2U, 1U);
+  const auto before = warmUp(clusterizer, map);
+  ASSERT_EQ(before.clusters.clusters.size(), 2U);
+  const auto unchanged_id = before.clusters.clusters[1].id;
+  for (std::size_t idx = 36U; idx < map.nodes.size(); ++idx) {
+    map.nodes[idx].pos.z += 1.0F;
+  }
+  map.nodes[0].normal.x = 1.0;
+  map.nodes[0].normal.z = 0.0;
+  const auto result = clusterizer.update(map);
+  EXPECT_GT(result.statistics.released_node_count, 0U);
+  const auto found = std::find_if(result.clusters.clusters.begin(), result.clusters.clusters.end(),
+    [unchanged_id](const auto &cluster) {return cluster.id == unchanged_id;});
+  ASSERT_NE(found, result.clusters.clusters.end());
+  EXPECT_EQ(found->node_indices.size(), 36U);
+  EXPECT_FLOAT_EQ(found->centroid.z, 1.0F);
+  EXPECT_FLOAT_EQ(found->position_covariance[8], 0.0F);
+}
+
+// 次数5〜8の下側中央値。距離の重複・スケール・入力順の組合せ。
+TEST(PlaneClusterIncremental, short_neighbour_network_preserves_lower_median)
+{
+  for (std::size_t degree = 5U; degree <= 8U; ++degree) {
+    for (const float scale : {0.005F, 0.5F, 5.0F}) {
+      for (const bool has_equal_lengths : {false, true}) {
+        TopologicalMap map;
+        TopologicalNode center;
+        center.normal.z = 1.0F;
+        map.nodes.push_back(center);
+        for (std::size_t idx = 1U; idx <= degree; ++idx) {
+          TopologicalNode node = center;
+          node.id = static_cast<std::uint16_t>(idx);
+          const double angle = 6.283185307179586 * static_cast<double>(idx) / degree;
+          const float radius = scale * (has_equal_lengths ? 1.0F : 1.0F + 0.125F * idx);
+          node.pos.x = static_cast<float>(radius * std::cos(angle));
+          node.pos.y = static_cast<float>(radius * std::sin(angle));
+          map.nodes.push_back(node);
+          map.edges.insert(map.edges.end(), {0U, static_cast<std::uint16_t>(idx)});
+        }
+        double expected_spacing = 0.0;
+        std::vector<double> lengths;
+        for (std::size_t idx = 1U; idx <= degree; ++idx) {
+          const auto &pos = map.nodes[idx].pos;
+          const double squared_dist = static_cast<double>(pos.x) * pos.x +
+            static_cast<double>(pos.y) * pos.y;
+          lengths.push_back(squared_dist);
+          expected_spacing += std::sqrt(squared_dist);
+        }
+        std::sort(lengths.begin(), lengths.end());
+        expected_spacing = (expected_spacing + std::sqrt(lengths[(degree - 1U) / 2U])) / (degree + 1U);
+        for (std::size_t order = 0U; order < degree * 2U; ++order) {
+          ClusterOptions options;
+          options.min_cluster_nodes = 3U;
+          options.num_acquisition_phases = 1U;
+          Clusterizer actual{options};
+          const auto result = warmUp(actual, map);
+          ASSERT_EQ(result.clusters.clusters.size(), 1U);
+          EXPECT_EQ(result.statistics.clustered_node_count, degree + 1U);
+          EXPECT_NEAR(result.clusters.clusters.front().local_spacing, expected_spacing,
+            expected_spacing * 1.e-6);
+          std::rotate(map.edges.begin(), map.edges.begin() + 2, map.edges.end());
+          if (order == degree - 1U) {std::reverse(map.edges.begin(), map.edges.end());}
+        }
+      }
+    }
+  }
+}
+
+// 借用配列の再確保・順序変更・欠損法線・不正接続を含むROS入力との完全一致。
+TEST(PlaneClusterIncremental, borrowed_input_matches_ros_and_survives_buffer_replacement)
+{
+  using namespace fuzzrobo::topological_plane::incremental;
+  for (const bool enable_delta : {false, true}) {
+    ClusterOptions options;
+    options.enable_delta_statistics = enable_delta;
+    options.enable_support_edges = true;
+    Clusterizer direct{options}, ros{options};
+    auto map = makeSinglePlane();
+    for (std::size_t frame = 0U; frame < 20U; ++frame) {
+      map.header.frame_id = "borrowed_world";
+      map.header.stamp.sec = static_cast<std::int32_t>(frame);
+      map.frame_number = static_cast<std::uint32_t>(frame);
+      if (frame == 6U) {
+        std::reverse(map.nodes.begin(), map.nodes.end());
+        for (auto &idx : map.edges) {idx = static_cast<std::uint16_t>(map.nodes.size() - 1U - idx);}
+        map.edges.insert(map.edges.end(), {0U, 0U, 0U, 65535U, 1U});
+      }
+      for (auto &node : map.nodes) {node.pos.z += 0.001F;}
+      if (frame == 9U) {map.nodes[0].normal = geometry_msgs::msg::Point32{};}
+      if (frame == 12U) {map.nodes[1].pos.x = std::numeric_limits<float>::quiet_NaN();}
+      std::vector<node_input> raw;
+      for (const auto &node : map.nodes) {
+        raw.push_back({node.id, node.label, node.rho,
+            {node.pos.x, node.pos.y, node.pos.z}, {node.normal.x, node.normal.y, node.normal.z}});
+      }
+      const auto actual = direct.update(make_graph_view(raw.data(), raw.size(), map.edges.data(), map.edges.size()),
+        map.header, map.frame_number);
+      EXPECT_EQ(actual.clusters, ros.update(map).clusters);
+      if (frame == 14U) {direct.reset(); ros.reset();}
+    }
+    EXPECT_EQ(direct.update(graph_view{}, map.header, 21U).clusters.clusters.size(), 0U);
+    ros.update(TopologicalMap{});
+    EXPECT_EQ(direct.update(map).clusters, ros.update(map).clusters);
+  }
+}
+
+// 不正ビューの拒否による既存追跡状態の維持。
+TEST(PlaneClusterIncremental, borrowed_input_rejects_null_arrays)
+{
+  using namespace fuzzrobo::topological_plane::incremental;
+  Clusterizer direct{ClusterOptions{}};
+  const auto map = makeSinglePlane();
+  warmUp(direct, map);
+  EXPECT_THROW(direct.update(graph_view{nullptr, 1U, nullptr, 0U, nullptr}, map.header, 0U),
+    std::invalid_argument);
+  EXPECT_THROW(direct.update(graph_view{nullptr, 0U, nullptr, 2U, nullptr}, map.header, 0U),
+    std::invalid_argument);
+  EXPECT_EQ(direct.update(map).statistics.clustered_node_count, map.nodes.size());
+}
+
+// ID上端・0を含む再初期化と、空入力後の古い所属の失効。
+TEST(PlaneClusterIncremental, direct_owner_table_handles_id_range_and_reset)
+{
+  Clusterizer clusterizer{ClusterOptions{}};
+  auto map = makeSinglePlane();
+  for (std::size_t idx = 0U; idx < map.nodes.size(); ++idx) {
+    map.nodes[idx].id = static_cast<std::uint16_t>(65535U - idx);
+  }
+  map.nodes.back().id = 0U;
+  auto previous = warmUp(clusterizer, map);
+  ASSERT_EQ(previous.clusters.clusters.size(), 1U);
+  for (const bool enable_reset : {true, false}) {
+    if (enable_reset) {clusterizer.reset();} else {clusterizer.update(TopologicalMap{});}
+    const auto result = warmUp(clusterizer, map);
+    ASSERT_EQ(result.clusters.clusters.size(), 1U);
+    EXPECT_NE(result.clusters.clusters[0].id, previous.clusters.clusters[0].id);
+    EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+    previous = result;
+  }
 }

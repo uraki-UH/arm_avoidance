@@ -15,6 +15,18 @@ ClusterOptions declareClusterOptions(
 {
   ClusterOptions options;
   const auto name = [&prefix](const char *suffix) {return prefix + suffix;};
+  options.enable_support_edges = node.template declare_parameter<bool>(
+    name("enable_support_edges"), options.enable_support_edges);
+  options.enable_temporal_update = node.template declare_parameter<bool>(
+    name("enable_temporal_update"), options.enable_temporal_update);
+
+  options.enable_delta_statistics = node.template declare_parameter<bool>(
+    name("enable_delta_statistics"), options.enable_delta_statistics);
+  options.enable_block_retention = node.template declare_parameter<bool>(
+    name("enable_block_retention"), options.enable_block_retention);
+  options.num_acquisition_phases = static_cast<std::size_t>(std::max<std::int64_t>(1,
+      node.template declare_parameter<int>(name("num_acquisition_phases"),
+      static_cast<int>(options.num_acquisition_phases))));
 
   options.min_cluster_nodes = static_cast<std::size_t>(std::max<std::int64_t>(
       3, node.template declare_parameter<int>(name("min_cluster_nodes"), 10)));

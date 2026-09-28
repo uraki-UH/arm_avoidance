@@ -7,7 +7,7 @@ ais_gng_node:
     enable_tracking_attention: true
     tracking_attention.mode: nearest_nonplane # coarseは従来の粗いセル集計
     tracking_attention.ratio: 0.5 # 総学習回数からの重点配分
-    tracking_attention.timeout_sec: 0.5 # 前回所属の有効期間[s]
+    tracking_attention.timeout_sec: 2.0 # 前回所属の有効期間[s]
     tracking_attention.enable_pointcloud: true # 重点機能ON時の候補点群。購読時のみ展開。
 
     node.num_max: 20000
@@ -26,8 +26,8 @@ ais_gng_node:
 
     ds.transformed: true
     ds.range_max: 0.2
-    ds.all.num_max: 4000
-    ds.unknown.num_max: 2000
+    ds.all.num_max: 10000
+    ds.unknown.num_max: 5000
     ds.human.num_max: 3000
 
     label.fuzzy.unknown: 0.6

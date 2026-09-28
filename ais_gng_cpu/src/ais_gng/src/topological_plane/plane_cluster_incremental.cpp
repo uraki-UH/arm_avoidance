@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -29,7 +30,8 @@ constexpr int kUnassigned = -1;
 // この幅のフラット配列で直接インデックスするために使う。
 constexpr std::size_t kNodeIdRange = 65536U;
 
-Eigen::Vector3d pointOf(const geometry_msgs::msg::Point32 &point)
+template<typename point_type>
+Eigen::Vector3d pointOf(const point_type &point)
 {
   return Eigen::Vector3d(point.x, point.y, point.z);
 }
@@ -123,6 +125,20 @@ struct PlaneAccumulator
     normal_sum += oriented;
     spacing_sum += spacing;
     ++count;
+  }
+
+  // 旧寄与の除去。法線和は平面法線の符号参照のみのため、差分経路では前回法線を使用。
+  void remove(const Eigen::Vector3d &position, const double spacing)
+  {
+    if (count <= 1U) {
+      clear();
+      return;
+    }
+    const Eigen::Vector3d delta = position - anchor;
+    sum -= delta;
+    moment.noalias() -= delta * delta.transpose();
+    spacing_sum -= spacing;
+    --count;
   }
 
   // 別の累積量をこの累積量へ合成する。両者の原点が異なっても、二次モーメントを
@@ -267,6 +283,7 @@ struct Clusterizer::Impl
   explicit Impl(ClusterOptions input_options)
   : options(std::move(input_options))
   {
+    options.num_acquisition_phases = std::max<std::size_t>(1U, options.num_acquisition_phases);
     options.min_cluster_nodes = std::max<std::size_t>(3U, options.min_cluster_nodes);
     options.growth_residual_ratio = std::max(0.0, options.growth_residual_ratio);
     options.retention_residual_ratio = std::max(
@@ -320,7 +337,7 @@ struct Clusterizer::Impl
       std::max<std::size_t>(1U, options.birth_neighbor_requirement);
   }
 
-  // クラスタの永続状態。添字は1フレーム内でのみ有効で、同一性は id が担う。
+  // クラスタの永続状態。同一性はid、添字は削除時の詰め直しで更新。
   struct ClusterState
   {
     std::uint32_t id = 0U;
@@ -339,6 +356,8 @@ struct Clusterizer::Impl
     std::size_t disconnected_frames = 0U;
     std::size_t confirmed_frames = 0U;
     bool is_healthy = false;
+    // フレーム内の所属変更による再集計要求。新規クラスタも再集計対象。
+    bool has_fit_changes = true;
     // 前回確認した全域木の有効性と、その時点の所属数。
     bool has_connectivity_tree = false;
     std::size_t connectivity_member_count = 0U;
@@ -352,7 +371,8 @@ struct Clusterizer::Impl
 
   // --- フレームをまたいで保持する状態 ---
   std::vector<ClusterState> clusters;
-  std::unordered_map<std::uint16_t, std::uint32_t> owner_by_node_id;
+  // 前回出力時のクラスタ添字。フレーム末尾の詰め直しまで有効な16bitノードIDの直接表。
+  std::vector<int> owner_idx_by_node_id = std::vector<int>(kNodeIdRange, kUnassigned);
   std::uint32_t next_cluster_id = 1U;
   // ノードIDごとの法線EMA状態。IDをそのまま添字にしたフラット配列で持つ
   // (unordered_mapのハッシュ計算・バケット走査・ヒープ確保を避けるため)。
@@ -372,15 +392,19 @@ struct Clusterizer::Impl
   std::vector<Eigen::Vector3d> positions;
   std::vector<Eigen::Vector3d> normals;
   std::vector<double> spacings;
-  std::vector<double> local_edge_lengths;
+  std::vector<double> local_squared_lengths;
   std::vector<double> seed_scores;
   std::vector<std::uint8_t> usable;
   std::vector<std::uint16_t> node_ids;
+  std::vector<std::uint8_t> node_labels;
   std::vector<std::uint32_t> adjacency_offsets;
   std::vector<std::uint32_t> adjacency_values;
   std::vector<std::uint32_t> adjacency_cursor;
   std::vector<int> label;
   std::vector<int> next_label;
+  // 所属保守の候補集合。フレーム内では変更点の近傍のみ追加。
+  std::vector<std::uint8_t> is_maintenance_candidate;
+  bool has_maintenance_candidates = false;
   std::vector<PlaneAccumulator> accumulators;
   std::vector<PlaneFit> plane_fits;
   std::vector<std::size_t> neighbour_counts;
@@ -418,44 +442,196 @@ struct Clusterizer::Impl
   std::vector<std::vector<std::uint32_t>> member_lists;
   std::vector<PlaneAccumulator> merge_accumulators;
   std::vector<PlaneFit> merge_fits;
-  std::vector<std::uint16_t> previous_node_ids;
-  std::vector<std::uint32_t> connectivity_parent;
-  std::vector<std::uint32_t> connectivity_owner_ids;
-  std::vector<std::size_t> connectivity_parent_slots;
+  // 配列再配置と独立したノードID単位の連結証明。欠落後のID再出現はフレーム番号で失効。
+  std::vector<std::uint16_t> connectivity_parent = std::vector<std::uint16_t>(kNodeIdRange);
+  std::vector<std::uint32_t> connectivity_owner_ids = std::vector<std::uint32_t>(kNodeIdRange, 0U);
+  std::vector<std::uint32_t> connectivity_frames = std::vector<std::uint32_t>(kNodeIdRange, 0U);
+  std::vector<std::size_t> connectivity_parent_slots = std::vector<std::size_t>(kNodeIdRange, 0U);
+  std::vector<std::uint32_t> current_idx_by_id = std::vector<std::uint32_t>(kNodeIdRange);
   std::vector<std::uint8_t> can_reuse_connectivity;
   std::vector<std::size_t> connectivity_member_counts;
-  bool has_same_node_order = false;
 
-  // 隣接リスト(CSR)と局所量を作る。ここが唯一の O(N + E) 主走査になる。
-  void prepareFrame(const ais_gng_msgs::msg::TopologicalMap &map, ClusterStatistics &statistics)
+  // 差分集計の比較元。所属添字は前回末尾のクラスタ詰め直し後の値。
+  std::vector<Eigen::Vector3d> stats_positions;
+  std::vector<double> stats_spacings;
+  std::vector<int> stats_labels;
+  std::vector<std::uint16_t> stats_node_ids;
+  std::vector<int> stats_idx_by_id;
+  std::vector<std::uint8_t> stats_seen;
+  bool has_stats_cache = false;
+
+  // IDを分散した巡回候補。独立な乱数抽選による長期未選択の回避、ノード順序への非依存。
+  bool is_acquisition_due(const std::size_t node_idx) const
   {
-    const std::size_t node_count = map.nodes.size();
+    if (options.num_acquisition_phases == 1U) {return true;}
+    std::uint32_t key = node_ids[node_idx];
+    key = (key ^ (key >> 16U)) * 0x7feb352dU;
+    key = (key ^ (key >> 15U)) * 0x846ca68bU;
+    key ^= key >> 16U;
+    return key % options.num_acquisition_phases ==
+           (normal_filter_current_frame - 1U) % options.num_acquisition_phases;
+  }
+
+  // 連続ノードの内部ブロック。外部のクラスタID・所属・形状への影響なし。
+  static constexpr std::size_t num_retention_block_nodes = 64U;
+  struct retention_block
+  {
+    Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
+    Eigen::Vector3d normal = Eigen::Vector3d::UnitZ();
+    double radius = 0.0;
+    double max_residual = 0.0;
+    double min_spacing = 0.0;
+    double min_alignment = 0.0;
+    std::uint32_t cluster_id = 0U;
+    bool is_valid = false;
+  };
+  struct retention_input
+  {
+    Eigen::Vector3d position = Eigen::Vector3d::Zero();
+    Eigen::Vector3d normal = Eigen::Vector3d::Zero();
+    double spacing = 0.0;
+  };
+  std::vector<retention_block> retention_blocks;
+  std::vector<retention_input> retention_inputs;
+  std::vector<std::uint8_t> can_retain_node;
+
+  // 前回の全入力との厳密比較と、参照平面からの変化上限による保持証明。
+  // 証明不能の場合は従来どおりの個別判定。前フレームごとの誤差の累積なし。
+  void prepare_retention_blocks(ClusterStatistics &statistics)
+  {
+    can_retain_node.assign(label.size(), 0U);
+    retention_inputs.resize(label.size());
+    retention_blocks.resize((label.size() + num_retention_block_nodes - 1U) /
+      num_retention_block_nodes);
+    for (std::size_t begin = 0U; begin < label.size(); begin += num_retention_block_nodes) {
+      const std::size_t end = std::min(label.size(), begin + num_retention_block_nodes);
+      auto &block = retention_blocks[begin / num_retention_block_nodes];
+      const int owner = label[begin];
+      bool has_same_owner = owner != kUnassigned;
+      bool has_same_input = block.is_valid;
+      for (std::size_t idx = begin; idx < end; ++idx) {
+        has_same_owner = has_same_owner && label[idx] == owner;
+        auto &input = retention_inputs[idx];
+        has_same_input = has_same_input && input.position == positions[idx] &&
+          input.normal == normals[idx] && input.spacing == spacings[idx];
+        input = {positions[idx], normals[idx], spacings[idx]};
+      }
+      if (!has_same_owner || clusters[owner].member_count < 3U) {
+        block.is_valid = false;
+        continue;
+      }
+      const auto &cluster = clusters[owner];
+      if (has_same_input && block.cluster_id == cluster.id) {
+        const double normal_change = (cluster.normal - block.normal).norm();
+        const double dist_change = block.radius * normal_change +
+          std::abs(cluster.normal.dot(block.centroid - cluster.centroid));
+        if (block.max_residual + dist_change + kEpsilon <=
+          options.retention_residual_ratio * block.min_spacing &&
+          block.min_alignment - normal_change - kEpsilon >= retention_normal_alignment_cos)
+        {
+          std::fill(can_retain_node.begin() + begin, can_retain_node.begin() + end, 1U);
+          statistics.num_retention_reused_nodes += end - begin;
+          continue;
+        }
+      }
+      block = retention_block{};
+      block.centroid = cluster.centroid;
+      block.normal = cluster.normal;
+      block.cluster_id = cluster.id;
+      block.min_spacing = std::numeric_limits<double>::infinity();
+      block.min_alignment = 1.0;
+      for (std::size_t idx = begin; idx < end; ++idx) {
+        const Eigen::Vector3d delta = positions[idx] - cluster.centroid;
+        block.radius = std::max(block.radius, delta.norm());
+        block.max_residual = std::max(block.max_residual, std::abs(cluster.normal.dot(delta)));
+        block.min_alignment = std::min(block.min_alignment, std::abs(cluster.normal.dot(normals[idx])));
+        block.min_spacing = std::min(block.min_spacing, effective_spacing(spacings[idx]));
+      }
+      block.is_valid = true;
+    }
+  }
+
+  // 所属変更の加減算。判定中のクラスタモデル・メンバー数への変更なし。
+  void update_membership_statistics(const std::size_t node_idx, const int old_label,
+    const int new_label)
+  {
+    if (!options.enable_delta_statistics) {return;}
+    if (old_label != kUnassigned) {
+      accumulators[old_label].remove(positions[node_idx], spacings[node_idx]);
+    }
+    if (new_label != kUnassigned) {
+      accumulators[new_label].add(positions[node_idx], normals[node_idx], spacings[node_idx]);
+    }
+  }
+
+  // ノードIDによる位置・局所間隔・所属の差分。並び替え・追加・削除への対応。
+  void update_frame_statistics()
+  {
+    stats_idx_by_id.assign(kNodeIdRange, kUnassigned);
+    stats_seen.assign(stats_node_ids.size(), 0U);
+    for (std::size_t idx = 0U; idx < stats_node_ids.size(); ++idx) {
+      stats_idx_by_id[stats_node_ids[idx]] = static_cast<int>(idx);
+    }
+    for (std::size_t idx = 0U; idx < node_ids.size(); ++idx) {
+      const int old_idx = stats_idx_by_id[node_ids[idx]];
+      const int old_label = old_idx == kUnassigned ? kUnassigned : stats_labels[old_idx];
+      if (old_idx != kUnassigned) {
+        stats_seen[old_idx] = 1U;
+        if (old_label == label[idx] && stats_positions[old_idx] == positions[idx] &&
+          stats_spacings[old_idx] == spacings[idx]) {continue;}
+      }
+      if (old_label != kUnassigned) {
+        accumulators[old_label].remove(stats_positions[old_idx], stats_spacings[old_idx]);
+        clusters[old_label].has_fit_changes = true;
+      }
+      if (label[idx] != kUnassigned) {
+        accumulators[label[idx]].add(positions[idx], normals[idx], spacings[idx]);
+        clusters[label[idx]].has_fit_changes = true;
+      }
+    }
+    for (std::size_t idx = 0U; idx < stats_seen.size(); ++idx) {
+      if (stats_seen[idx] == 0U && stats_labels[idx] != kUnassigned) {
+        const int old_label = stats_labels[idx];
+        accumulators[old_label].remove(stats_positions[idx], stats_spacings[idx]);
+        clusters[old_label].has_fit_changes = true;
+      }
+    }
+  }
+
+  // 隣接リスト(CSR)と局所量の構築。ノード・エッジ数に比例する前処理。
+  void prepareFrame(const graph_view &map, ClusterStatistics &statistics)
+  {
+    has_maintenance_candidates = false;
+    const std::size_t node_count = map.num_nodes;
     positions.assign(node_count, Eigen::Vector3d::Zero());
     normals.assign(node_count, Eigen::Vector3d::UnitZ());
     spacings.assign(node_count, 0.0);
     seed_scores.assign(node_count, 0.0);
     usable.assign(node_count, 0U);
-    node_ids.swap(previous_node_ids);
-    node_ids.assign(node_count, 0U);
+    node_ids.resize(node_count);
+    node_labels.resize(node_count);
+    std::fill(current_idx_by_id.begin(), current_idx_by_id.end(), std::numeric_limits<std::uint32_t>::max());
 
     for (std::size_t index = 0U; index < node_count; ++index) {
-      node_ids[index] = map.nodes[index].id;
-      const Eigen::Vector3d position = pointOf(map.nodes[index].pos);
+      const auto node = map.read_node(map.nodes, index);
+      node_ids[index] = node.id;
+      node_labels[index] = node.label;
+      current_idx_by_id[node_ids[index]] = static_cast<std::uint32_t>(index);
+      const Eigen::Vector3d position = pointOf(node.pos);
       if (!position.allFinite()) {
         continue;
       }
       positions[index] = position;
+      // 入力ノード列の一回読出し。以降の局所量計算は密な作業配列のみ参照。
+      normals[index] = pointOf(node.normal);
+      seed_scores[index] = static_cast<double>(node.rho);
       usable[index] = 1U;
       ++statistics.valid_node_count;
     }
 
-    // 添字変更時は証明木を無効化。ノードID再配置を古い親添字として扱わないための条件。
-    has_same_node_order = node_ids == previous_node_ids &&
-      connectivity_parent.size() == node_count && connectivity_owner_ids.size() == node_count;
-
     // 次数を数えてから CSR を確定する。vector<vector> を毎フレーム作らない。
     adjacency_offsets.assign(node_count + 1U, 0U);
-    const std::size_t edge_count = map.edges.size() / 2U;
+    const std::size_t edge_count = map.num_edge_values / 2U;
     for (std::size_t edge_index = 0U; edge_index < edge_count; ++edge_index) {
       const std::size_t first = map.edges[edge_index * 2U];
       const std::size_t second = map.edges[edge_index * 2U + 1U];
@@ -470,7 +646,7 @@ struct Clusterizer::Impl
     for (std::size_t index = 0U; index < node_count; ++index) {
       adjacency_offsets[index + 1U] += adjacency_offsets[index];
     }
-    adjacency_values.assign(adjacency_offsets[node_count], 0U);
+    adjacency_values.resize(adjacency_offsets[node_count]);
     adjacency_cursor.assign(adjacency_offsets.begin(), adjacency_offsets.end() - 1);
     for (std::size_t edge_index = 0U; edge_index < edge_count; ++edge_index) {
       const std::size_t first = map.edges[edge_index * 2U];
@@ -491,21 +667,24 @@ struct Clusterizer::Impl
       if (usable[index] == 0U) {
         continue;
       }
-      local_edge_lengths.clear();
+      const Eigen::Vector3d supplied = normals[index];
+      // 孤立・補完失敗時にも従来と同じ初期法線の維持。
+      normals[index] = Eigen::Vector3d::UnitZ();
+      local_squared_lengths.clear();
       for (std::size_t cursor = adjacency_offsets[index];
         cursor < adjacency_offsets[index + 1U]; ++cursor)
       {
-        const double dist = (positions[index] - positions[adjacency_values[cursor]]).norm();
-        if (std::isfinite(dist) && dist > kEpsilon) {
-          local_edge_lengths.push_back(dist);
+        const double squared_dist = (positions[index] - positions[adjacency_values[cursor]]).squaredNorm();
+        if (std::isfinite(squared_dist) && squared_dist > kEpsilon * kEpsilon) {
+          local_squared_lengths.push_back(squared_dist);
         }
       }
       const auto id = node_ids[index];
-      const bool is_isolated = local_edge_lengths.empty();
+      const bool is_isolated = local_squared_lengths.empty();
       if (is_isolated) {
         if (!options.enable_directional_split || normal_filter_current_frame == 0U ||
           normal_filter_frame[id] != normal_filter_current_frame ||
-          owner_by_node_id.count(id) == 0U || isolated_frames[id] >= options.max_isolated_frames)
+          owner_idx_by_node_id[id] == kUnassigned || isolated_frames[id] >= options.max_isolated_frames)
         {
           usable[index] = 0U;
           continue;
@@ -515,12 +694,53 @@ struct Clusterizer::Impl
         ++statistics.num_isolated_retained_nodes;
       } else {
         isolated_frames[id] = 0U;
-        const auto middle = local_edge_lengths.begin() + (local_edge_lengths.size() - 1U) / 2U;
-        std::nth_element(local_edge_lengths.begin(), middle, local_edge_lengths.end());
-        spacings[index] = *middle;
+        // GNGの短い隣接列は固定比較で下側中央値を選択。高次数のみ汎用選択。
+        auto &lengths = local_squared_lengths;
+        double median;
+        switch (lengths.size()) {
+          case 1U: median = lengths[0]; break;
+          case 2U: median = std::min(lengths[0], lengths[1]); break;
+          case 3U:
+            median = std::max(std::min(lengths[0], lengths[1]),
+                std::min(std::max(lengths[0], lengths[1]), lengths[2]));
+            break;
+          case 4U: {
+            const auto first = std::minmax(lengths[0], lengths[1]);
+            const auto second = std::minmax(lengths[2], lengths[3]);
+            median = first.first < second.first ? std::min(first.second, second.first) :
+              std::min(second.second, first.first);
+            break;
+          }
+          default: {
+            if (lengths.size() <= 8U) {
+              // 5〜8近傍の固定比較網。番兵は実距離の後方への配置。
+              double values[8];
+              std::fill(std::begin(values), std::end(values), std::numeric_limits<double>::infinity());
+              std::copy(lengths.begin(), lengths.end(), values);
+              const auto order = [&values](const std::size_t first, const std::size_t second) {
+                  const double low = std::min(values[first], values[second]);
+                  const double high = std::max(values[first], values[second]);
+                  values[first] = low;
+                  values[second] = high;
+                };
+              order(0, 1); order(2, 3); order(4, 5); order(6, 7);
+              order(0, 2); order(1, 3); order(4, 6); order(5, 7);
+              order(1, 2); order(5, 6); order(0, 4); order(3, 7);
+              order(1, 5); order(2, 6);
+              order(1, 4); order(3, 6);
+              order(2, 4); order(3, 5);
+              order(3, 4);
+              median = values[(lengths.size() - 1U) / 2U];
+            } else {
+              const auto middle = lengths.begin() + (lengths.size() - 1U) / 2U;
+              std::nth_element(lengths.begin(), middle, lengths.end());
+              median = *middle;
+            }
+          }
+        }
+        spacings[index] = std::sqrt(median);
       }
 
-      const Eigen::Vector3d supplied = pointOf(map.nodes[index].normal);
       if (supplied.allFinite() && supplied.squaredNorm() > kEpsilon) {
         normals[index] = supplied.normalized();
         continue;
@@ -588,7 +808,7 @@ struct Clusterizer::Impl
       }
       ++statistics.usable_node_count;
       if (options.use_node_rho_for_seed_order) {
-        const double rho = static_cast<double>(map.nodes[index].rho);
+        const double rho = seed_scores[index];
         if (std::isfinite(rho) && rho >= 0.0 && rho <= kHalfPi + kEpsilon) {
           seed_scores[index] = -rho;
           continue;
@@ -614,41 +834,40 @@ struct Clusterizer::Impl
   }
 
   // 前フレームの所属をGNGノードIDで引き継ぐ。
-  void carryOverLabels(const ais_gng_msgs::msg::TopologicalMap &map)
+  void carryOverLabels(const graph_view &map)
   {
-    const std::size_t node_count = map.nodes.size();
+    const std::size_t node_count = map.num_nodes;
     label.assign(node_count, kUnassigned);
-    if (owner_by_node_id.empty() || clusters.empty()) {
+    if (clusters.empty()) {
       return;
-    }
-    std::unordered_map<std::uint32_t, int> index_by_cluster_id;
-    index_by_cluster_id.reserve(clusters.size() * 2U + 1U);
-    for (std::size_t index = 0U; index < clusters.size(); ++index) {
-      index_by_cluster_id.emplace(clusters[index].id, static_cast<int>(index));
     }
     for (std::size_t index = 0U; index < node_count; ++index) {
       if (usable[index] == 0U) {
         continue;
       }
-      const auto owner_it = owner_by_node_id.find(map.nodes[index].id);
-      if (owner_it == owner_by_node_id.end()) {
-        continue;
-      }
-      const auto cluster_it = index_by_cluster_id.find(owner_it->second);
-      if (cluster_it != index_by_cluster_id.end()) {
-        label[index] = cluster_it->second;
-      }
+      label[index] = owner_idx_by_node_id[node_ids[index]];
     }
   }
 
-  // 現在の所属から各クラスタの平面を解き直す。
-  void refitClusters()
+  // 従来経路は初回全平面・以降変更平面の再累積。試作経路は差分済み統計からの求解。
+  void refitClusters(const bool enable_full_refit = false)
   {
-    accumulators.assign(clusters.size(), PlaneAccumulator{});
-    plane_fits.assign(clusters.size(), PlaneFit{});
-    for (std::size_t index = 0U; index < label.size(); ++index) {
+    accumulators.resize(clusters.size());
+    plane_fits.resize(clusters.size());
+    const bool enable_rebuild = !options.enable_delta_statistics ||
+      (enable_full_refit && !has_stats_cache);
+    if (enable_full_refit && !enable_rebuild) {update_frame_statistics();}
+    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+      auto &cluster = clusters[idx];
+      cluster.has_fit_changes = cluster.has_fit_changes || (enable_full_refit && enable_rebuild);
+      if (cluster.has_fit_changes) {
+        if (enable_rebuild) {accumulators[idx].clear();}
+        plane_fits[idx] = PlaneFit{};
+      }
+    }
+    for (std::size_t index = 0U; enable_rebuild && index < label.size(); ++index) {
       const int cluster_index = label[index];
-      if (cluster_index == kUnassigned) {
+      if (cluster_index == kUnassigned || !clusters[cluster_index].has_fit_changes) {
         continue;
       }
       accumulators[static_cast<std::size_t>(cluster_index)].add(
@@ -656,7 +875,12 @@ struct Clusterizer::Impl
     }
     for (std::size_t index = 0U; index < clusters.size(); ++index) {
       ClusterState &cluster = clusters[index];
-      const PlaneAccumulator &accumulator = accumulators[index];
+      if (!cluster.has_fit_changes) {
+        continue;
+      }
+      cluster.has_fit_changes = false;
+      PlaneAccumulator &accumulator = accumulators[index];
+      if (options.enable_delta_statistics) {accumulator.normal_sum = cluster.normal;}
       cluster.member_count = accumulator.count;
       if (accumulator.count < 3U) {
         continue;
@@ -665,6 +889,12 @@ struct Clusterizer::Impl
       plane_fits[index] = fit;
       if (!fit.is_valid) {
         continue;
+      }
+      if (options.enable_delta_statistics) {
+        // 解いた重心への原点移動。長時間の並進に伴う二次モーメントの肥大化防止。
+        accumulator.anchor = fit.centroid;
+        accumulator.sum.setZero();
+        accumulator.moment = fit.covariance * static_cast<double>(accumulator.count);
       }
       // 前フレームの法線へそろえ、向きの反転で追従が切れないようにする。
       orientNormal(fit.normal, cluster.normal);
@@ -712,7 +942,9 @@ struct Clusterizer::Impl
   std::size_t releaseOutliers(ClusterStatistics &statistics)
   {
     std::size_t released = 0U;
+    if (options.enable_block_retention) {prepare_retention_blocks(statistics);}
     for (std::size_t index = 0U; index < label.size(); ++index) {
+      if (options.enable_block_retention && can_retain_node[index] != 0U) {continue;}
       const int cluster_index = label[index];
       if (cluster_index == kUnassigned) {
         continue;
@@ -722,6 +954,8 @@ struct Clusterizer::Impl
         continue;
       }
       if (!is_normal_aligned(cluster, index)) {
+        update_membership_statistics(index, cluster_index, kUnassigned);
+        clusters[cluster].has_fit_changes = true;
         label[index] = kUnassigned;
         ++statistics.released_node_count;
         ++released;
@@ -731,7 +965,9 @@ struct Clusterizer::Impl
       if (fitScore(cluster, index) <= options.retention_residual_ratio) {
         continue;
       }
+      update_membership_statistics(index, cluster_index, kUnassigned);
       label[index] = kUnassigned;
+      clusters[cluster].has_fit_changes = true;
       ++statistics.released_node_count;
       ++released;
     }
@@ -778,22 +1014,40 @@ struct Clusterizer::Impl
   //
   // 判定は前フレームの label を読み、結果は next_label へ書く。同じパス内で
   // 走査順に影響されないため、結果が決定的になる。
-  std::size_t maintenancePass(ClusterStatistics &statistics)
+  std::size_t maintenancePass(ClusterStatistics &statistics, const graph_view &map)
   {
+    if (!has_maintenance_candidates) {
+      is_maintenance_candidate.assign(label.size(), 0U);
+      // 無向エッジの一回走査による境界候補。自己平面内・両端未所属は対象外。
+      for (std::size_t idx = 0U; idx + 1U < map.num_edge_values; idx += 2U) {
+        const auto first = map.edges[idx];
+        const auto second = map.edges[idx + 1U];
+        if (first >= label.size() || second >= label.size() || label[first] == label[second]) {
+          continue;
+        }
+        if (label[second] != kUnassigned) {is_maintenance_candidate[first] = 1U;}
+        if (label[first] != kUnassigned) {is_maintenance_candidate[second] = 1U;}
+      }
+      has_maintenance_candidates = true;
+    }
     next_label = label;
     neighbour_counts.assign(clusters.size(), 0U);
     std::size_t changed = 0U;
 
     for (std::size_t index = 0U; index < label.size(); ++index) {
-      if (usable[index] == 0U) {
+      if (usable[index] == 0U || is_maintenance_candidate[index] == 0U ||
+        (label[index] != kUnassigned && !is_acquisition_due(index)))
+      {
         continue;
       }
       touched_clusters.clear();
+      const int current_label = label[index];
       for (std::size_t cursor = adjacency_offsets[index];
         cursor < adjacency_offsets[index + 1U]; ++cursor)
       {
         const int neighbour_label = label[adjacency_values[cursor]];
-        if (neighbour_label == kUnassigned) {
+        // 自平面への移籍候補は不要。未所属点の救済条件は従来どおり。
+        if (neighbour_label == kUnassigned || neighbour_label == current_label) {
           continue;
         }
         const std::size_t cluster = static_cast<std::size_t>(neighbour_label);
@@ -806,8 +1060,6 @@ struct Clusterizer::Impl
         continue;
       }
 
-      const int current_label = label[index];
-
       int best_label = kUnassigned;
       double best_score = std::numeric_limits<double>::infinity();
       bool is_best_coplanar_absorption = false;
@@ -815,9 +1067,6 @@ struct Clusterizer::Impl
       const bool can_rescue_absorption = options.enable_coplanar_absorption &&
         current_label == kUnassigned && touched_clusters.size() == 1U;
       for (const int candidate_label : touched_clusters) {
-        if (candidate_label == current_label) {
-          continue;
-        }
         const std::size_t cluster = static_cast<std::size_t>(candidate_label);
         const bool has_req_connections = neighbour_counts[cluster] >= options.connection_requirement;
         if (clusters[cluster].member_count < 3U ||
@@ -858,7 +1107,9 @@ struct Clusterizer::Impl
 
       if (best_label != kUnassigned) {
         if (current_label == kUnassigned) {
+          update_membership_statistics(index, current_label, best_label);
           next_label[index] = best_label;
+          clusters[best_label].has_fit_changes = true;
           ++statistics.absorbed_node_count;
           statistics.num_coplanar_absorbed_nodes += is_best_coplanar_absorption ? 1U : 0U;
           ++changed;
@@ -875,7 +1126,10 @@ struct Clusterizer::Impl
             const bool is_migration_accepted =
               best_score < current_score - options.migration_improvement_margin;
             if (is_migration_accepted) {
+              update_membership_statistics(index, current_label, best_label);
               next_label[index] = best_label;
+              clusters[best_label].has_fit_changes = true;
+              clusters[current_cluster].has_fit_changes = true;
               ++statistics.migrated_node_count;
               ++changed;
             }
@@ -885,6 +1139,12 @@ struct Clusterizer::Impl
 
       for (const int candidate_label : touched_clusters) {
         neighbour_counts[static_cast<std::size_t>(candidate_label)] = 0U;
+      }
+      if (next_label[index] != current_label) {
+        // 次の同期パスで新しく候補になり得る接続端点。旧候補の保持による保守的な集合。
+        for (auto cursor = adjacency_offsets[index]; cursor < adjacency_offsets[index + 1U]; ++cursor) {
+          is_maintenance_candidate[adjacency_values[cursor]] = 1U;
+        }
       }
     }
 
@@ -897,7 +1157,13 @@ struct Clusterizer::Impl
   {
     birth_order.clear();
     for (std::size_t index = 0U; index < label.size(); ++index) {
-      if (usable[index] != 0U && label[index] == kUnassigned) {
+      if (usable[index] != 0U && label[index] == kUnassigned && is_acquisition_due(index)) {
+        // 種自身と隣接2点が揃わない候補の除外。成長先としての使用は従来どおり。
+        std::size_t num_support = 0U;
+        for (auto cursor = adjacency_offsets[index]; cursor < adjacency_offsets[index + 1U]; ++cursor) {
+          if (label[adjacency_values[cursor]] == kUnassigned && ++num_support == 2U) {break;}
+        }
+        if (num_support < 2U) {continue;}
         birth_order.push_back(index);
       }
     }
@@ -1092,50 +1358,58 @@ struct Clusterizer::Impl
     bool changed = false;
     connectivity_member_counts.assign(clusters.size(), 0U);
     can_reuse_connectivity.resize(clusters.size());
-    connectivity_parent.resize(label.size());
-    connectivity_parent_slots.resize(label.size(), 0U);
-    connectivity_owner_ids.resize(label.size(), 0U);
     for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
-      can_reuse_connectivity[idx] = has_same_node_order && clusters[idx].has_connectivity_tree;
+      can_reuse_connectivity[idx] = clusters[idx].has_connectivity_tree;
     }
     for (std::size_t idx = 0U; idx < label.size(); ++idx) {
+      const auto id = node_ids[idx];
       if (label[idx] == kUnassigned) {
-        connectivity_owner_ids[idx] = 0U;
+        connectivity_owner_ids[id] = 0U;
         continue;
       }
       const auto cluster_idx = static_cast<std::size_t>(label[idx]);
       ++connectivity_member_counts[cluster_idx];
-      if (connectivity_owner_ids[idx] != clusters[cluster_idx].id) {
-        can_reuse_connectivity[cluster_idx] = 0U;
-      }
-      connectivity_owner_ids[idx] = clusters[cluster_idx].id;
-      if (can_reuse_connectivity[cluster_idx] == 0U || connectivity_parent[idx] == idx) {
-        continue;
-      }
-      // 前回のCSR位置を優先し、位置変更時だけ親エッジを行内探索。
-      auto &parent_slot = connectivity_parent_slots[idx];
-      const auto begin = adjacency_offsets[idx];
-      const auto end = adjacency_offsets[idx + 1U];
-      if (parent_slot >= begin && parent_slot < end &&
-        adjacency_values[parent_slot] == connectivity_parent[idx])
+      if (connectivity_owner_ids[id] != clusters[cluster_idx].id ||
+        connectivity_frames[id] + 1U != normal_filter_current_frame)
       {
-        continue;
-      }
-      parent_slot = begin;
-      while (parent_slot < end && adjacency_values[parent_slot] != connectivity_parent[idx]) {
-        ++parent_slot;
-      }
-      if (parent_slot == end) {
         can_reuse_connectivity[cluster_idx] = 0U;
       }
+      connectivity_owner_ids[id] = clusters[cluster_idx].id;
+      connectivity_frames[id] = normal_filter_current_frame;
     }
     bool can_reuse_all_connectivity = true;
     for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
-      // 全メンバーの旧所属一致と個数一致による、所属集合の厳密な同一性確認。
+      // 所属集合の同一性確認を先行。所属変更面の木エッジ確認の省略。
       if (connectivity_member_counts[idx] != clusters[idx].connectivity_member_count) {
         can_reuse_connectivity[idx] = 0U;
       }
       if (connectivity_member_counts[idx] != 0U && can_reuse_connectivity[idx] == 0U) {
+        can_reuse_all_connectivity = false;
+      }
+    }
+    for (std::size_t idx = 0U; idx < label.size(); ++idx) {
+      if (label[idx] == kUnassigned) {continue;}
+      const auto id = node_ids[idx];
+      const auto cluster_idx = static_cast<std::size_t>(label[idx]);
+      if (can_reuse_connectivity[cluster_idx] == 0U || connectivity_parent[id] == id) {
+        continue;
+      }
+      // 前回のCSR位置を優先し、位置変更時だけ親エッジを行内探索。
+      auto &parent_slot = connectivity_parent_slots[id];
+      const auto parent_idx = current_idx_by_id[connectivity_parent[id]];
+      const auto begin = adjacency_offsets[idx];
+      const auto end = adjacency_offsets[idx + 1U];
+      if (parent_slot >= begin && parent_slot < end &&
+        adjacency_values[parent_slot] == parent_idx)
+      {
+        continue;
+      }
+      parent_slot = begin;
+      while (parent_slot < end && adjacency_values[parent_slot] != parent_idx) {
+        ++parent_slot;
+      }
+      if (parent_slot == end) {
+        can_reuse_connectivity[cluster_idx] = 0U;
         can_reuse_all_connectivity = false;
       }
     }
@@ -1187,7 +1461,7 @@ struct Clusterizer::Impl
       const auto begin_node = frontier.size();
       frontier.push_back(index);
       component_of[index] = component_index;
-      connectivity_parent[index] = static_cast<std::uint32_t>(index);
+      connectivity_parent[node_ids[index]] = node_ids[index];
       auto min_node_id = node_ids[index];
       for (std::size_t frontier_index = begin_node; frontier_index < frontier.size(); ++frontier_index) {
         const std::size_t current = frontier[frontier_index];
@@ -1200,7 +1474,7 @@ struct Clusterizer::Impl
             continue;
           }
           component_of[neighbour] = component_index;
-          connectivity_parent[neighbour] = static_cast<std::uint32_t>(current);
+          connectivity_parent[node_ids[neighbour]] = node_ids[current];
           frontier.push_back(neighbour);
         }
       }
@@ -1293,16 +1567,14 @@ struct Clusterizer::Impl
     // 分かれた成分が前フレームに持っていたIDを多数決で調べる。分裂と再結合を
     // 繰り返す領域へ毎回新しいIDを振ると、そのたび別クラスタが生まれたように見える。
     std::unordered_map<std::size_t, std::unordered_map<std::uint32_t, std::size_t>> votes;
-    if (!owner_by_node_id.empty()) {
-      for (std::size_t index = 0U; index < label.size(); ++index) {
-        const int component_index = component_of[index];
-        if (component_index == kUnassigned) {
-          continue;
-        }
-        const auto owner_it = owner_by_node_id.find(node_ids[index]);
-        if (owner_it != owner_by_node_id.end()) {
-          ++votes[static_cast<std::size_t>(component_index)][owner_it->second];
-        }
+    for (std::size_t index = 0U; index < label.size(); ++index) {
+      const int component_index = component_of[index];
+      if (component_index == kUnassigned) {
+        continue;
+      }
+      const auto owner_idx = owner_idx_by_node_id[node_ids[index]];
+      if (owner_idx != kUnassigned) {
+        ++votes[static_cast<std::size_t>(component_index)][clusters[owner_idx].id];
       }
     }
     std::unordered_set<std::uint32_t> ids_in_use;
@@ -1332,6 +1604,7 @@ struct Clusterizer::Impl
         continue;
       }
       ClusterState cluster_state = clusters[cluster];
+      cluster_state.has_fit_changes = true;
       // 前フレームの所属で最も多かったIDが空いていれば、それを引き継ぐ。
       std::uint32_t reclaimed = 0U;
       std::size_t best_votes = 0U;
@@ -1353,11 +1626,18 @@ struct Clusterizer::Impl
       component_new_label[component_index] = static_cast<int>(clusters.size());
       clusters.push_back(cluster_state);
     }
+    if (options.enable_delta_statistics) {accumulators.resize(clusters.size());}
     for (std::size_t index = 0U; index < label.size(); ++index) {
       if (component_of[index] == kUnassigned) {
         continue;
       }
-      label[index] = component_new_label[static_cast<std::size_t>(component_of[index])];
+      const int new_label = component_new_label[static_cast<std::size_t>(component_of[index])];
+      if (new_label != label[index]) {
+        update_membership_statistics(index, label[index], new_label);
+        clusters[label[index]].has_fit_changes = true;
+        if (new_label != kUnassigned) {clusters[new_label].has_fit_changes = true;}
+        label[index] = new_label;
+      }
     }
     return changed;
   }
@@ -1520,6 +1800,8 @@ struct Clusterizer::Impl
     std::size_t absorbed = 0U;
     for (std::size_t index = 0U; index < clusters.size(); ++index) {
       if (merge_sets.find(index) != index) {
+        clusters[index].has_fit_changes = true;
+        clusters[merge_sets.find(index)].has_fit_changes = true;
         ++absorbed;
       }
     }
@@ -1527,6 +1809,12 @@ struct Clusterizer::Impl
       return false;
     }
     statistics.merged_cluster_count += absorbed;
+    if (options.enable_delta_statistics) {
+      accumulators = merge_accumulators;
+      for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+        if (merge_sets.find(idx) != idx) {accumulators[idx].clear();}
+      }
+    }
     for (std::size_t index = 0U; index < label.size(); ++index) {
       if (label[index] == kUnassigned) {
         continue;
@@ -1573,6 +1861,10 @@ struct Clusterizer::Impl
         continue;
       }
       remap[index] = static_cast<int>(kept_clusters.size());
+      if (options.enable_delta_statistics) {
+        accumulators[kept_clusters.size()] = accumulators[index];
+        plane_fits[kept_clusters.size()] = plane_fits[index];
+      }
       kept_clusters.push_back(cluster);
     }
     for (std::size_t index = 0U; index < label.size(); ++index) {
@@ -1582,15 +1874,22 @@ struct Clusterizer::Impl
       label[index] = remap[static_cast<std::size_t>(label[index])];
     }
     clusters.swap(kept_clusters);
+    if (options.enable_delta_statistics) {
+      accumulators.resize(clusters.size());
+      plane_fits.resize(clusters.size());
+    }
   }
 
   // 出力メッセージを作り、同時に所属表を書き戻す。
-  void buildOutput(const ais_gng_msgs::msg::TopologicalMap &map, ClusterResult &result)
+  void buildOutput(const graph_view &, ClusterResult &result)
   {
-    owner_by_node_id.clear();
-    owner_by_node_id.reserve(label.size());
+    std::fill(owner_idx_by_node_id.begin(), owner_idx_by_node_id.end(), kUnassigned);
 
-    member_lists.assign(clusters.size(), std::vector<std::uint32_t>{});
+    member_lists.resize(clusters.size());
+    for (std::size_t idx = 0U; idx < clusters.size(); ++idx) {
+      member_lists[idx].clear();
+      member_lists[idx].reserve(clusters[idx].member_count);
+    }
     for (std::size_t index = 0U; index < label.size(); ++index) {
       const int cluster_index = label[index];
       if (cluster_index == kUnassigned) {
@@ -1598,7 +1897,7 @@ struct Clusterizer::Impl
       }
       const std::size_t cluster = static_cast<std::size_t>(cluster_index);
       member_lists[cluster].push_back(static_cast<std::uint32_t>(index));
-      owner_by_node_id[map.nodes[index].id] = clusters[cluster].id;
+      owner_idx_by_node_id[node_ids[index]] = cluster_index;
     }
 
     for (std::size_t cluster_index = 0U; cluster_index < clusters.size(); ++cluster_index) {
@@ -1646,7 +1945,11 @@ struct Clusterizer::Impl
       ais_gng_msgs::msg::PlaneCluster cluster;
       cluster.id = state.id;
       cluster.node_indices.reserve(members.size());
+      std::size_t num_support_points = 0U;
       for (const std::uint32_t member : members) {
+        if (options.enable_support_edges) {
+          num_support_points += adjacency_offsets[member + 1U] - adjacency_offsets[member];
+        }
         const Eigen::Vector3d delta = positions[member] - state.centroid;
         const double u = delta.dot(tangent_u);
         const double v = delta.dot(tangent_v);
@@ -1655,7 +1958,7 @@ struct Clusterizer::Impl
         min_v = std::min(min_v, v);
         max_v = std::max(max_v, v);
 
-        switch (map.nodes[member].label) {
+        switch (node_labels[member]) {
           case ais_gng_msgs::msg::TopologicalMap::DEFAULT:
             ++result.statistics.clustered_default_node_count;
             break;
@@ -1683,17 +1986,20 @@ struct Clusterizer::Impl
         cluster.node_indices.push_back(member);
       }
 
-      // 実際に観測されたGNGエッジだけを残す。凸包は推定しない。
-      for (const std::uint32_t member : members) {
-        for (std::size_t cursor = adjacency_offsets[member];
-          cursor < adjacency_offsets[member + 1U]; ++cursor)
-        {
-          const std::uint32_t neighbour = adjacency_values[cursor];
-          if (neighbour <= member || label[neighbour] != static_cast<int>(cluster_index)) {
-            continue;
+      // 任意の互換出力。無効時は隣接走査・座標複製・出力配列の確保を省略。
+      if (options.enable_support_edges) {
+        cluster.support_edges.reserve(num_support_points);
+        for (const std::uint32_t member : members) {
+          for (std::size_t cursor = adjacency_offsets[member];
+            cursor < adjacency_offsets[member + 1U]; ++cursor)
+          {
+            const std::uint32_t neighbour = adjacency_values[cursor];
+            if (neighbour <= member || label[neighbour] != static_cast<int>(cluster_index)) {
+              continue;
+            }
+            cluster.support_edges.push_back(pointMessage(positions[member]));
+            cluster.support_edges.push_back(pointMessage(positions[neighbour]));
           }
-          cluster.support_edges.push_back(pointMessage(positions[member]));
-          cluster.support_edges.push_back(pointMessage(positions[neighbour]));
         }
       }
 
@@ -1735,10 +2041,12 @@ Clusterizer::~Clusterizer() = default;
 
 void Clusterizer::reset()
 {
+  impl_->has_stats_cache = false;
+  impl_->retention_blocks.clear();
   // 採番は巻き戻さない。同じIDが別のクラスタを指すと、過去のIDを覚えている
   // 利用側が取り違えるため。
   impl_->clusters.clear();
-  impl_->owner_by_node_id.clear();
+  std::fill(impl_->owner_idx_by_node_id.begin(), impl_->owner_idx_by_node_id.end(), kUnassigned);
   impl_->fragment_merge_evidence.clear();
   impl_->split_evidence.clear();
   // フレーム番号の一致で「直前フレームの値か」を判定しているため、frame配列を
@@ -1754,12 +2062,26 @@ void Clusterizer::setUseNodeRhoForSeedOrder(const bool enabled)
 
 ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
 {
+  return update(make_graph_view(map.nodes.data(), map.nodes.size(), map.edges.data(), map.edges.size()),
+    map.header, map.frame_number);
+}
+
+ClusterResult Clusterizer::update(const graph_view &map, const std_msgs::msg::Header &header,
+  const std::uint32_t frame_number)
+{
+  if ((map.num_nodes != 0U && (!map.nodes || !map.read_node)) ||
+    (map.num_edge_values != 0U && !map.edges))
+  {
+    throw std::invalid_argument("graph_view has a null data pointer");
+  }
   ClusterResult result;
-  result.clusters.header = map.header;
-  result.clusters.frame_number = map.frame_number;
-  if (map.nodes.empty()) {
+  result.clusters.header = header;
+  result.clusters.frame_number = frame_number;
+  if (map.num_nodes == 0U) {
+    impl_->has_stats_cache = false;
+    impl_->retention_blocks.clear();
     impl_->clusters.clear();
-    impl_->owner_by_node_id.clear();
+    std::fill(impl_->owner_idx_by_node_id.begin(), impl_->owner_idx_by_node_id.end(), kUnassigned);
     impl_->fragment_merge_evidence.clear();
     impl_->split_evidence.clear();
     return result;
@@ -1767,18 +2089,18 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
 
   impl_->prepareFrame(map, result.statistics);
   impl_->carryOverLabels(map);
-  impl_->refitClusters();
+  impl_->refitClusters(true);
   bool labels_changed = impl_->releaseOutliers(result.statistics) != 0U;
 
-  // 解放と取り込みで平面が動くため、再フィットを挟みながら数回だけ回す。
-  // 変化が止まった時点で抜けるので、定常状態では1回で終わる。
-  for (std::size_t iter = 0U; iter < impl_->options.maintenance_iter; ++iter) {
-    if (labels_changed) {
+  // 時系列方式はフレーム先頭の判定平面を固定した1パス。従来方式は反復間の再推定。
+  const auto num_passes = impl_->options.enable_temporal_update ? 1U : impl_->options.maintenance_iter;
+  for (std::size_t iter = 0U; iter < num_passes; ++iter) {
+    if (labels_changed && !impl_->options.enable_temporal_update) {
       impl_->refitClusters();
       labels_changed = false;
     }
     ++result.statistics.maintenance_iter_num;
-    if (impl_->maintenancePass(result.statistics) == 0U) {
+    if (impl_->maintenancePass(result.statistics, map) == 0U) {
       break;
     }
     labels_changed = true;
@@ -1786,6 +2108,10 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
 
   if (labels_changed) {
     impl_->refitClusters();
+    // 固定モデルでの一括取り込み後の逸脱確認。再獲得反復なしの安全側解放。
+    if (impl_->options.enable_temporal_update && impl_->releaseOutliers(result.statistics) != 0U) {
+      impl_->refitClusters();
+    }
   }
   impl_->birthClusters(result.statistics);
   const bool split_changed = impl_->splitClusters(result.statistics);
@@ -1798,6 +2124,14 @@ ClusterResult Clusterizer::update(const ais_gng_msgs::msg::TopologicalMap &map)
   }
   impl_->cullClusters(result.statistics);
   impl_->buildOutput(map, result);
+  if (impl_->options.enable_delta_statistics) {
+    // 次入力で再初期化する作業配列と履歴の交換。全ノードの履歴コピーの省略。
+    impl_->stats_positions.swap(impl_->positions);
+    impl_->stats_spacings.swap(impl_->spacings);
+    impl_->stats_labels.swap(impl_->label);
+    impl_->stats_node_ids.swap(impl_->node_ids);
+    impl_->has_stats_cache = true;
+  }
   return result;
 }
 

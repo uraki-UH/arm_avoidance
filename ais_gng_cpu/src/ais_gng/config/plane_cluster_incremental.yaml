@@ -90,6 +90,8 @@ plane_cluster_incremental_node:
     # 1入力フレームあたりの「解放→取り込み・移動→再平面フィット」最大回数。
     # 所属変化ゼロ時の早期終了。
     maintenance_iter: 2
+    # 比較用の所属1パス更新。ON時はmaintenance_iter不使用、取り込み後の逸脱再確認付き。
+    enable_temporal_update: false
 
     # 併合後の面内縦横比 sqrt(λ2/λ3)。面幅条件との選択判定。
     merge_min_planarity: 0.25
@@ -125,6 +127,10 @@ plane_cluster_incremental_node:
 
     # true 時のOBBマーカーへのクラスタID・ノード数文字列の重畳表示。
     enable_text_marker: false
+    # 平面の輪郭・法線・所属ノードMarkerArray。計算結果の平面所属情報とは独立。
+    enable_plane_markers: true
+    # 平面内エッジの座標複製。元TopologicalMap非購読の利用側ではtrueが必要。
+    enable_support_edges: false
 
     # 非平面成分のMarkerArray。CPU直結の/nonplane_components利用時はlaunch側で無効化。
     surface_marker_topic: /nonplane_components/markers

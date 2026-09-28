@@ -3,6 +3,7 @@
 import os
 import math
 import signal
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -12,11 +13,15 @@ import yaml
 from ais_gng_msgs.msg import PlaneClusterArray, TopologicalMap, TopologicalNode
 from rcl_interfaces.srv import GetParameters
 from rclpy.qos import DurabilityPolicy, QoSProfile
+from sensor_msgs.msg import PointCloud2, PointField
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 def main():
     assert os.environ.get("ROS_DOMAIN_ID") == "173"
-    output_dir = Path("/ros2_ws/src/artifacts/plane_consistency_20260924")
+    output_dir = Path(os.environ.get(
+        "PLANE_SMOKE_OUTPUT_DIR", "/ros2_ws/src/artifacts/plane_consistency_20260924"))
+    output_dir.mkdir(parents=True, exist_ok=True)
     executable_dir = Path("/ros2_ws/install/ais_gng/lib/ais_gng")
     processes, logs = [], []
     rclpy.init()
@@ -25,10 +30,41 @@ def main():
     settings = yaml.safe_load(Path(
         "/ros2_ws/src/ais_gng_cpu/src/ais_gng/config/plane_cluster_incremental.yaml"
     ).read_text())["plane_cluster_incremental_node"]["ros__parameters"]
+    settings["enable_delta_statistics"] = os.environ.get("PLANE_SMOKE_DELTA") == "1"
+    settings["enable_block_retention"] = os.environ.get("PLANE_SMOKE_BLOCK") == "1"
+    settings["num_acquisition_phases"] = int(os.environ.get("PLANE_SMOKE_PHASES", "1"))
+    settings["enable_support_edges"] = os.environ.get("PLANE_SMOKE_SUPPORT_EDGES") == "1"
+    settings["enable_temporal_update"] = os.environ.get("PLANE_SMOKE_TEMPORAL") == "1"
+    enable_markers = os.environ.get("PLANE_SMOKE_MARKERS", "1") == "1"
+    is_markers_only = os.environ.get("PLANE_SMOKE_MARKERS_ONLY") == "1"
+    marker_received = {}
+
+    def observe_markers(topic):
+        observer.create_subscription(MarkerArray, topic,
+            lambda msg: marker_received.__setitem__(topic, msg),
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+
+    def check_markers(prefix):
+        topics = [f"{prefix}/markers/{suffix}" for suffix in ("hull", "normal", "nodes")]
+        if enable_markers:
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline and not all(
+                    topic in marker_received and any(marker.action == Marker.ADD and marker.points
+                        for marker in marker_received[topic].markers) for topic in topics):
+                rclpy.spin_once(observer, timeout_sec=0.05)
+            for topic in topics:
+                assert observer.get_publishers_info_by_topic(topic), topic
+                assert topic in marker_received and any(marker.action == Marker.ADD and marker.points
+                    for marker in marker_received[topic].markers), topic
+        else:
+            for topic in topics:
+                assert not observer.get_publishers_info_by_topic(topic), topic
     try:
         for executable, name, params in (
             ("ais_gng_cpu", "plane_consistency_smoke_cpu", [
                 "plane_cluster.direct_enabled:=true", "plane_cluster.min_plane_width_ratio:=1.0",
+                "node.num_max:=512", "node.learning_num:=1000", "input.local_coordinates:=true",
+                "node.grid:=0.5", "node.interval:=[0.1, 0.1, 0.1, 0.1]", "node.eta_s1:=0.08",
                 "input.topic_names:=[/plane_consistency/unused]"]),
             ("plane_cluster_incremental_node", "plane_consistency_smoke_plane", [
                 "min_plane_width_ratio:=1.0", "input_topic:=/plane_consistency/map",
@@ -38,6 +74,11 @@ def main():
             log = (output_dir / f"{name}.log").open("w")
             logs.append(log)
             command = [str(executable_dir / executable), "--ros-args", "-r", f"__node:={name}"]
+            prefix = "plane_cluster." if executable == "ais_gng_cpu" else ""
+            if executable != "ais_gng_cpu" and not enable_markers:
+                params.append("enable_plane_markers:=false")
+            for key in ("enable_delta_statistics", "enable_block_retention", "num_acquisition_phases", "enable_support_edges", "enable_temporal_update"):
+                params.append(f"{prefix}{key}:={str(settings[key]).lower()}")
             for param in params:
                 command.extend(["-p", param])
             print("start:", " ".join(command), flush=True)
@@ -52,8 +93,8 @@ def main():
                      "max_fragment_residual_ratio_th", "min_fragment_merge_frames", "enable_directional_split",
                      "min_split_edge_angle_deg_th", "min_split_conflict_nodes", "min_split_conflict_ratio_th",
                      "max_isolated_frames", "enable_coplanar_absorption",
-                     "max_absorption_edge_angle_deg_th", "max_absorption_edge_ratio_th"]
-            prefix = "plane_cluster." if executable == "ais_gng_cpu" else ""
+                     "max_absorption_edge_angle_deg_th", "max_absorption_edge_ratio_th",
+                     "enable_delta_statistics", "enable_block_retention", "num_acquisition_phases", "enable_support_edges", "enable_temporal_update"]
             req.names = [prefix + key for key in names]
             future = client.call_async(req)
             rclpy.spin_until_future_complete(observer, future, timeout_sec=5.0)
@@ -65,6 +106,8 @@ def main():
                 assert actual == expected, (key, actual, expected)
             observer.destroy_client(client)
         observer.create_subscription(PlaneClusterArray, "/plane_consistency/planes", received.append, 10)
+        for suffix in ("hull", "normal", "nodes"):
+            observe_markers(f"/plane_consistency/planes/markers/{suffix}")
         qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         publisher = observer.create_publisher(TopologicalMap, "/plane_consistency/map", qos)
         graph = TopologicalMap()
@@ -286,6 +329,82 @@ def main():
                 expect_frame(expected, 1269)
             expect_clusters(1 if offset == 0.0 else 2)
             print(f"PASS: single-edge merge, 1170+99 nodes, offset={offset} m", flush=True)
+        if not settings["enable_support_edges"]:
+            assert received and all(not cluster.support_edges for message in received for cluster in message.clusters)
+        else:
+            assert any(cluster.support_edges for message in received for cluster in message.clusters)
+        check_markers("/plane_consistency/planes")
+        print(f"PASS: configured support edges and plane markers={enable_markers}", flush=True)
+
+        # 同じCPU出力グラフを単独ノードへ入力し、借用経路との全出力照合。
+        name = "plane_consistency_smoke_reference"
+        command = [str(executable_dir / "plane_cluster_incremental_node"), "--ros-args",
+                   "-r", f"__node:={name}"]
+        params = ["input_topic:=/topological_map", "output_topic:=/plane_consistency/reference",
+                  "min_plane_width_ratio:=1.0", "use_node_rho_for_seed_order:=true",
+                  "enable_nonplane_markers:=false", "surface_model.enable:=false"]
+        if not enable_markers:
+            params.append("enable_plane_markers:=false")
+        if is_markers_only:
+            params.append("clusters_input_topic:=/plane_clusters")
+        for suffix in ("hull", "normal", "nodes"):
+            observe_markers(f"/plane_consistency/reference/markers/{suffix}")
+        for key in ("enable_delta_statistics", "enable_block_retention", "num_acquisition_phases",
+                    "enable_support_edges", "enable_temporal_update"):
+            params.append(f"{key}:={str(settings[key]).lower()}")
+        for param in params:
+            command.extend(["-p", param])
+        log = (output_dir / f"{name}.log").open("w")
+        logs.append(log)
+        print("start:", " ".join(command), flush=True)
+        process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        processes.append(process)
+        native, reference = {}, {}
+        observer.create_subscription(PlaneClusterArray, "/plane_clusters",
+                                     lambda msg: native.__setitem__(msg.frame_number, msg), qos)
+        observer.create_subscription(PlaneClusterArray, "/plane_consistency/reference",
+                                     lambda msg: reference.__setitem__(msg.frame_number, msg), qos)
+        cloud_pub = observer.create_publisher(PointCloud2, "/plane_consistency/unused", 10)
+        cloud = PointCloud2()
+        cloud.header.frame_id = "map"
+        cloud.height, cloud.width = 1, 1600
+        cloud.point_step, cloud.row_step, cloud.is_dense = 12, 1600 * 12, True
+        cloud.fields = [PointField(name=axis, offset=idx * 4, datatype=PointField.FLOAT32, count=1)
+                        for idx, axis in enumerate(("x", "y", "z"))]
+        cloud.data = b"".join(struct.pack("<fff", (idx % 40) * 0.05, (idx // 40) * 0.05, 0.8)
+                              for idx in range(1600))
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline and (
+                not cloud_pub.get_subscription_count() or
+                name not in observer.get_node_names() or
+                not observer.get_subscriptions_info_by_topic("/topological_map")):
+            rclpy.spin_once(observer, timeout_sec=0.05)
+        num_nonempty = 0
+        for frame in range(30):
+            cloud.header.stamp = observer.get_clock().now().to_msg()
+            cloud_pub.publish(cloud)
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                rclpy.spin_once(observer, timeout_sec=0.02)
+                common = set(native) if is_markers_only else native.keys() & reference.keys()
+                if common:
+                    break
+            else:
+                raise AssertionError(f"native/reference output missing at input {frame}")
+            for idx in sorted(common):
+                if not is_markers_only:
+                    assert native[idx] == reference[idx], f"native/reference mismatch at graph {idx}"
+                num_nonempty += bool(native[idx].clusters)
+                del native[idx]
+                if not is_markers_only:
+                    del reference[idx]
+        assert num_nonempty >= 10, num_nonempty
+        check_markers("/plane_consistency/reference")
+        if is_markers_only:
+            assert not observer.get_publishers_info_by_topic("/plane_consistency/reference")
+            assert len(observer.get_publishers_info_by_topic("/plane_clusters")) == 1
+        print(f"PASS: 30 CPU inputs, markers_only={is_markers_only}, nonempty={num_nonempty}, "
+              f"exact_comparison={not is_markers_only}", flush=True)
         assert all(process.poll() is None for process in processes)
     finally:
         for process in reversed(processes):

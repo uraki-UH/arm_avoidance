@@ -1149,7 +1149,10 @@ void AiSGNGComponent::process_clouds(const std::vector<PC2::ConstSharedPtr>& clo
     std::unique_ptr<ais_gng_msgs::msg::PlaneClusterArray> direct_plane_clusters;
     bool plane_cluster_ran = false;
     if (direct_plane_clusterizer_) {
-        auto result = direct_plane_clusterizer_->update(*map_msg);
+        // ROSメッセージを経由しない内部グラフの借用入力。出力添字は元配列と同一。
+        auto result = direct_plane_clusterizer_->update(
+            topological_plane::incremental::make_graph_view(
+                map.nodes, map.node_num, map.edges, map.edge_num), header, map.frame_number);
         direct_plane_clusters =
             std::make_unique<ais_gng_msgs::msg::PlaneClusterArray>(std::move(result.clusters));
         plane_cluster_ran = true;
