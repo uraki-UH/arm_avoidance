@@ -1,7 +1,9 @@
 ais_gng_node:
   ros__parameters:
     plane_clustering: true
-    curve_clustering: false #平面クラスタリングfalseでは実行できない
+    curve_clustering: true #平面クラスタリングfalseでは実行できない
+    # 元平面に接続する候補への曲面探索限定。
+    surface_model.enable_plane_local_search: true
 
     # 既存最近傍ノードの非平面所属による重点学習。総学習回数は維持、フレーム保持なし。
     enable_tracking_attention: true

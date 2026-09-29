@@ -80,25 +80,15 @@ struct ClusterOptions
   bool enable_coplanar_absorption = true;
   // 候補から伸びる全エッジと平面との角度[deg]。面外形状の誤吸収防止用。
   double max_absorption_edge_angle_deg_th = 20.0;
-  // 平面への接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
-  double max_absorption_edge_ratio_th = 2.5;
+  // 接続長 / 両端の局所間隔の小さい側。取り込み・断片統合共通の橋エッジ除外用。
+  double max_connection_edge_ratio_th = 2.5;
 
-  // クラスタ併合の候補と認めるために要求する、クラスタ間の直接GNGエッジ本数。
-  //
-  // 併合は数百点対数百点の結合フィット(min_plane_aspect_ratio・
-  // merge_residual_growth_ratio等)で最終判定するため、統計的に頑健で、1本の
-  // 偶然のエッジが混ざっても弾かれやすい。実測(同一フレーム列150枚、
-  // merge_residual_growth_ratio=1.1固定): connection_requirementを2→1相当に
-  // 下げると併合成立+22%(81→99件)。一方、この値を併合専用に分離せず
-  // connection_requirementそのものを1に下げた場合はノード単体の取り込みが+55%
-  // (2014→3115件)・移動が+107%(208→430件)と、狙いより副作用の方が大きく出た。
-  // そのため併合だけを独立して緩める専用値として分離してある。
+  // クラスタ併合候補の直接GNGエッジ要求本数。単一点の取り込み条件から独立。
+  // 統合後の面幅・厚みと各側の残差による最終判定。
   std::size_t merge_connection_requirement = 1;
 
   // 通常2本接続を要求する設定での、短い1本接続の連続適合による救済。
   bool enable_fragment_merge = true;
-  // 接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
-  double max_fragment_edge_ratio_th = 2.5;
   // 各側・接触部・統合後平面の正規化RMS。通常併合より強い適合条件。
   double max_fragment_residual_ratio_th = 0.10;
   // 同じ永続クラスタ対で幾何条件を満たした連続入力フレーム数。
@@ -127,16 +117,6 @@ struct ClusterOptions
 
   // 保守点検(移動・取り込み)を1フレームで回す上限回数。
   std::size_t maintenance_iter = 2;
-
-  // 併合を認めるために、結合後の残差が元のクラスタから悪化してよい倍率。
-  //
-  // 残差の絶対値だけで見ると、小さなクラスタ同士は何をつないでも通ってしまう。
-  // 「つないでも当てはめが悪くならない」ことを併せて要求する。
-  double merge_residual_growth_ratio = 1.3;
-
-  // 上の倍率を適用する下限。元の当てはめが十分よい場合に、僅かな悪化まで
-  // 拒否しないための余裕。
-  double merge_residual_growth_min_th = 0.15;
 
   // 各側全体から統合平面、および接続端点から相手平面へのRMS距離比。
   // 分母は各評価点群の局所間隔平均。小面の法線誤差の遠方外挿の回避。
@@ -216,7 +196,6 @@ struct ClusterStatistics
   std::size_t merge_invalid_fit_pair_count = 0;
   std::size_t merge_planarity_rejected_pair_count = 0;
   std::size_t merge_absolute_residual_rejected_pair_count = 0;
-  std::size_t merge_residual_growth_rejected_pair_count = 0;
   std::size_t merge_smaller_side_rejected_pair_count = 0;
   // 1本接続の小断片救済による統合数と連続確認待ち対数。
   std::size_t num_fragment_merged_clusters = 0;

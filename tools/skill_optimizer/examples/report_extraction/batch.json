@@ -1,0 +1,14 @@
+{
+  "cases": [
+    {
+      "name": "skill_optimizer",
+      "cwd": "../../../..",
+      "argv": [
+        "python3", "-m", "tools.skill_optimizer.optimizer",
+        "tools/skill_optimizer/examples/report_extraction/experiment.json",
+        "--output", "@case_dir@/optimization"
+      ],
+      "metrics": "optimization/metrics.json"
+    }
+  ]
+}

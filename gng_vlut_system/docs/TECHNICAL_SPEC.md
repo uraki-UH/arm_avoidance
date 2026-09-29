@@ -8,6 +8,7 @@
 
 実装の配置と各部品の責務は[部品配置](component_layout.md)を参照。
 共有計画ノードの経路探索と通常目標選択の拡張点は[差し替え仕様](planning_components.md)を参照。
+入力環境の曲面抽出は、`surface_model.enable_plane_local_search`で平面接続候補に限定可能（既定OFF、model方式）。設定・出力範囲・計測上の制限は[曲面探索の仕様](releases/2026-09-29_surface_local_search.md)を参照。
 
 `grasp_joint_candidates.launch.py` は次の 2 系統を起動します。
 

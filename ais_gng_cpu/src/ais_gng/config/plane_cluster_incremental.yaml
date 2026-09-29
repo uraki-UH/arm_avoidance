@@ -52,8 +52,8 @@ plane_cluster_incremental_node:
     enable_coplanar_absorption: true
     # 候補から伸びる全エッジと平面との角度[deg]。面外形状の誤吸収防止用。
     max_absorption_edge_angle_deg_th: 20.0
-    # 平面への接続長 / 両端の局所間隔の小さい側。短い接続の確認用。
-    max_absorption_edge_ratio_th: 2.5
+    # 接続長 / 両端の局所間隔の小さい側。取り込み・断片統合共通の橋エッジ除外用。
+    max_connection_edge_ratio_th: 2.5
 
     # クラスタ併合の候補と認めるための、クラスタ間直接エッジ数の要求値。
     merge_connection_requirement: 2
@@ -61,8 +61,6 @@ plane_cluster_incremental_node:
     # 通常2本接続を要求する設定での、短い1本接続の連続適合による救済。
     # 点数による対象制限なし。両側・接触部・統合後の平面残差による適合判定。
     enable_fragment_merge: true
-    # 接続長 / 両端の局所間隔の小さい側。長い橋エッジの除外用。
-    max_fragment_edge_ratio_th: 2.5
     # 各側・接触部・統合後平面の正規化RMS。通常併合より強い適合条件。
     max_fragment_residual_ratio_th: 0.10
     # 同じ永続クラスタ対で幾何条件を満たした連続入力フレーム数。
@@ -90,11 +88,6 @@ plane_cluster_incremental_node:
     # 比較用の所属1パス更新。ON時はmaintenance_iter不使用、取り込み後の逸脱再確認付き。
     enable_temporal_update: false
 
-    # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
-    # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。
-    merge_residual_growth_ratio: 1.1
-    # 上式の下限値。個別クラスタの厚み比が極小の場合の許容値縮小の防止。
-    merge_residual_growth_min_th: 0.1
     # 各側全体から統合平面、および接続端点から相手平面へのRMS距離比。
     # 分母は各評価点群の局所間隔平均。小面の法線誤差の遠方外挿と段差吸収の防止。
     max_merge_side_residual_ratio: 0.15

@@ -1,0 +1,18 @@
+{
+  "name": "report_extraction",
+  "policy": "policy.md",
+  "skill": "SKILL.md",
+  "dataset": "dataset.json",
+  "grader": "exact_json",
+  "worker_model": "gpt-6-astra",
+  "teacher_model": "gpt-6-astra",
+  "max_rounds": 1,
+  "repeats": 2,
+  "timeout_sec": 120,
+  "max_calls": 50,
+  "max_total_sec": 1200,
+  "max_total_tokens": 450000,
+  "min_quality": 1.0,
+  "min_token_improvement_ratio": 0.02,
+  "prices": null
+}

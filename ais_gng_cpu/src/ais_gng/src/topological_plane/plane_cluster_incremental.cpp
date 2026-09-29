@@ -292,7 +292,7 @@ struct Clusterizer::Impl
     options.max_effective_spacing = std::max(0.0, options.max_effective_spacing);
     options.merge_smaller_side_residual_ratio =
       std::max(0.0, options.merge_smaller_side_residual_ratio);
-    options.max_fragment_edge_ratio_th = std::max(0.0, options.max_fragment_edge_ratio_th);
+    options.max_connection_edge_ratio_th = std::max(0.0, options.max_connection_edge_ratio_th);
     options.max_fragment_residual_ratio_th = std::max(0.0, options.max_fragment_residual_ratio_th);
     options.min_fragment_merge_frames = std::max<std::size_t>(1U, options.min_fragment_merge_frames);
     options.min_split_edge_angle_deg_th = std::clamp(options.min_split_edge_angle_deg_th, 0.0, 90.0);
@@ -302,7 +302,6 @@ struct Clusterizer::Impl
       options.max_absorption_edge_angle_deg_th, 0.0, 90.0);
     const double absorption_sin = std::sin(options.max_absorption_edge_angle_deg_th * kRadiansPerDeg);
     absorption_edge_sin_squared = absorption_sin * absorption_sin;
-    options.max_absorption_edge_ratio_th = std::max(0.0, options.max_absorption_edge_ratio_th);
     options.min_split_conflict_nodes = std::max<std::size_t>(1U, options.min_split_conflict_nodes);
     options.min_split_conflict_ratio_th = std::clamp(options.min_split_conflict_ratio_th, 0.0, 1.0);
     options.normal_filter_alpha = std::clamp(options.normal_filter_alpha, 0.01, 1.0);
@@ -1050,7 +1049,7 @@ struct Clusterizer::Impl
         return false;
       }
       if (label[neighbour_idx] == static_cast<int>(cluster_idx)) {
-        const double max_contact = options.max_absorption_edge_ratio_th *
+        const double max_contact = options.max_connection_edge_ratio_th *
           std::min(effective_spacing(spacings[node_idx]), effective_spacing(spacings[neighbour_idx]));
         has_short_contact = has_short_contact || edge_squared <= max_contact * max_contact;
       }
@@ -1801,7 +1800,7 @@ struct Clusterizer::Impl
       const bool is_fragment_merge = !is_overlap && pair.edges < options.merge_connection_requirement;
       // 接続が弱い場合だけ、短い1本接続としての救済可否を確認。
       if (is_fragment_merge && !(can_merge_single_edge && pair.edges == 1U &&
-        pair.single_edge_ratio <= options.max_fragment_edge_ratio_th))
+        pair.single_edge_ratio <= options.max_connection_edge_ratio_th))
       {
         ++statistics.merge_insufficient_edge_pair_count;
         continue;
@@ -1833,20 +1832,6 @@ struct Clusterizer::Impl
       const double max_cluster_ratio_th = std::min(options.max_normalized_cluster_residual, max_pair_ratio_th);
       if (union_residual_ratio > max_cluster_ratio_th) {
         ++statistics.merge_absolute_residual_rejected_pair_count;
-        continue;
-      }
-      // つないだ結果、元より当てはめが悪くなっていないことも確かめる。
-      // 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
-      const double first_residual_ratio =
-        normalized_plane_residual(first_fit, first_accumulator.meanSpacing());
-      const double second_residual_ratio =
-        normalized_plane_residual(second_fit, second_accumulator.meanSpacing());
-      const double allowed_residual = std::max(
-        options.merge_residual_growth_ratio *
-        std::max(first_residual_ratio, second_residual_ratio),
-        options.merge_residual_growth_min_th);
-      if (union_residual_ratio > allowed_residual) {
-        ++statistics.merge_residual_growth_rejected_pair_count;
         continue;
       }
       // 各側全体から統合後平面への適合判定。大面の点数・間隔による小面の誤吸収防止。

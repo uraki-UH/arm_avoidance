@@ -1,0 +1,5 @@
+{
+  "cases": [
+    {"name": "noisy_floor", "cwd": "/ros2_ws/src", "argv": ["taskset", "-c", "4", "python3", "benchmarks/plane_ground_truth_20260929/run_case.py", "--scene", "noisy_floor", "--seed", "@seed@", "--output", "@case_dir@"], "metrics": "metrics.json", "env": {"PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1"}}
+  ]
+}

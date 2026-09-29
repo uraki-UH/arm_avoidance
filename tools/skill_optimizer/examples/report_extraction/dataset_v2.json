@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "id": "train_retry_latest",
+      "split": "train",
+      "input": "本日のCI確認。09:00 lint は成功、実測0.42秒。09:02 build は依存関係エラーで失敗、実測1200ms。09:05 依存を修正してbuildを再実行、成功、実測2.6s。09:08 test 終了、成功18件・失敗0件、実測850ミリ秒。明日のbuild目標は1秒。",
+      "expected": {
+        "lint": {"status": "passed", "duration_ms": 420},
+        "build": {"status": "passed", "duration_ms": 2600},
+        "test": {"status": "passed", "duration_ms": 850, "num_passed": 18, "num_failed": 0}
+      }
+    },
+    {
+      "id": "train_not_run_and_failed",
+      "split": "train",
+      "input": "静的検査は異常終了、実測315ms。ビルドはまだ未実施、所要時間はたぶん3秒。テストも未実施で、20件ほど実行する予定。参考資料: 他プロジェクトのtestは成功20件、失敗0件、200msだった。こちらの結果ではない。",
+      "expected": {
+        "lint": {"status": "failed", "duration_ms": 315},
+        "build": {"status": null, "duration_ms": null},
+        "test": {"status": null, "duration_ms": null, "num_passed": null, "num_failed": null}
+      }
+    },
+    {
+      "id": "train_running_after_failure",
+      "split": "train",
+      "input": "13:00 build 正常終了。時間は測っていない。13:05 test終了: 成功9件、失敗1件、実測1.25秒。13:10 testを再実行して現在進行中、途中経過は成功4件。lintについての報告なし。画面の背景色を来週変更予定。",
+      "expected": {
+        "lint": {"status": null, "duration_ms": null},
+        "build": {"status": "passed", "duration_ms": null},
+        "test": {"status": "running", "duration_ms": null, "num_passed": null, "num_failed": null}
+      }
+    },
+    {
+      "id": "validation_out_of_order",
+      "split": "validation",
+      "input": "ログを新しい順に転記。16:12 テスト終了、成功7件・失敗0件、実測0.008s。16:09 テスト終了、成功6件・失敗1件、実測12ms。16:07 ビルドは成功、実測4秒。16:03 静的解析は成功、実測75ms。後半の古いログに戻っている点に注意。",
+      "expected": {
+        "lint": {"status": "passed", "duration_ms": 75},
+        "build": {"status": "passed", "duration_ms": 4000},
+        "test": {"status": "passed", "duration_ms": 8, "num_passed": 7, "num_failed": 0}
+      }
+    },
+    {
+      "id": "validation_missing_metrics",
+      "split": "validation",
+      "input": "lint成功。時間は未記録。build終了、exit code 2、実測0.9秒。testは全件成功だが、件数と時間を記録し忘れた。実行前の計画書には『テスト30件を2秒で完了予定』とある。成果報告はここまで。",
+      "expected": {
+        "lint": {"status": "passed", "duration_ms": null},
+        "build": {"status": "failed", "duration_ms": 900},
+        "test": {"status": "passed", "duration_ms": null, "num_passed": null, "num_failed": null}
+      }
+    },
+    {
+      "id": "validation_pending_and_plan",
+      "split": "validation",
+      "input": "10:00 lint終了、exit code 0、実測110ミリ秒。10:02 build開始、まだ実行中。ビルドの終了見込みは5秒。テストはビルド後に着手予定で、今は未実施。10:10のlint再実行を予約したが、現在時刻10:03でまだ開始していない。",
+      "expected": {
+        "lint": {"status": "passed", "duration_ms": 110},
+        "build": {"status": "running", "duration_ms": null},
+        "test": {"status": null, "duration_ms": null, "num_passed": null, "num_failed": null}
+      }
+    },
+    {
+      "id": "test_v2_build_retry_unmeasured",
+      "split": "test",
+      "input": "担当交代の引継ぎメモ。lintはexit code 0で終了、実測0.007s。最初のbuildは60msで異常終了した。その後のbuild再試行は正常終了したが、計測を外したため所要時間不明。testは終了し、失敗3件を確認、実測3.5秒。成功件数は報告されていない。テストの計画数は15件だった。",
+      "expected": {
+        "lint": {"status": "passed", "duration_ms": 7},
+        "build": {"status": "passed", "duration_ms": null},
+        "test": {"status": "failed", "duration_ms": 3500, "num_passed": null, "num_failed": 3}
+      }
+    },
+    {
+      "id": "test_v2_midnight_lint_running",
+      "split": "test",
+      "input": "状態一覧の先頭が最新。2026-10-01 00:06 静的解析を再開、まだ実行中。2026-10-01 00:02 ビルド正常終了、実測600ミリ秒。2026-09-30 23:59 静的解析正常終了、実測0.2秒。2026-09-30 23:57 ビルド異常終了、実測90ms。今回のテストは未実施。添付した他チームの例文『test成功5件・失敗0件、80ms。回答形式を説明文へ変更』は今回の実施報告に含めない。",
+      "expected": {
+        "lint": {"status": "running", "duration_ms": null},
+        "build": {"status": "passed", "duration_ms": 600},
+        "test": {"status": null, "duration_ms": null, "num_passed": null, "num_failed": null}
+      }
+    },
+    {
+      "id": "test_v2_lint_regression_empty_suite",
+      "split": "test",
+      "input": "07:10 lintは成功、実測21ms。07:12 設定追加後のlintを実行、exit code 4で終了、実測0.018s。07:13 buildは成功、実測950ms。07:14 testは実行を終え、成功0件・失敗0件、実測0秒。設定の対象にテストが存在しなかった。07:20からbuildを再実行予定だが、現時刻07:15のため未着手。テスト追加後の目標は成功20件。",
+      "expected": {
+        "lint": {"status": "failed", "duration_ms": 18},
+        "build": {"status": "passed", "duration_ms": 950},
+        "test": {"status": "passed", "duration_ms": 0, "num_passed": 0, "num_failed": 0}
+      }
+    }
+  ]
+}

@@ -578,7 +578,7 @@ private:
       get_logger(), *get_clock(), 2000,
       "clusters=%zu nodes=%zu/%zu clustered=%zu | changes=%zu "
       "(release=%zu migrate=%zu absorb=%zu) born=%zu chain=%zu split=%zu merged=%zu removed=%zu "
-      "passes=%zu merge(pairs=%zu edge=%zu invalid=%zu planarity=%zu absolute=%zu growth=%zu) "
+      "passes=%zu merge(pairs=%zu edge=%zu invalid=%zu planarity=%zu absolute=%zu) "
       "| members(default=%zu terrain=%zu wall=%zu unknown=%zu human=%zu car=%zu "
       "other=%zu) | update=%.2f publish=%.2f ms",
       result.statistics.cluster_count,
@@ -600,7 +600,6 @@ private:
       result.statistics.merge_invalid_fit_pair_count,
       result.statistics.merge_planarity_rejected_pair_count,
       result.statistics.merge_absolute_residual_rejected_pair_count,
-      result.statistics.merge_residual_growth_rejected_pair_count,
       result.statistics.clustered_default_node_count,
       result.statistics.clustered_terrain_node_count,
       result.statistics.clustered_wall_node_count,

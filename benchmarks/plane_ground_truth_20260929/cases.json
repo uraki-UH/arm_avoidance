@@ -1,0 +1,7 @@
+{
+  "cases": [
+    {"name": "coplanar_gap", "cwd": "/ros2_ws/src", "argv": ["taskset", "-c", "4", "python3", "benchmarks/plane_ground_truth_20260929/run_case.py", "--scene", "coplanar_gap", "--seed", "@seed@", "--output", "@case_dir@"], "metrics": "metrics.json", "env": {"PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1"}},
+    {"name": "step_and_wall", "cwd": "/ros2_ws/src", "argv": ["taskset", "-c", "4", "python3", "benchmarks/plane_ground_truth_20260929/run_case.py", "--scene", "step_and_wall", "--seed", "@seed@", "--output", "@case_dir@"], "metrics": "metrics.json", "env": {"PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1"}},
+    {"name": "curved_object", "cwd": "/ros2_ws/src", "argv": ["taskset", "-c", "4", "python3", "benchmarks/plane_ground_truth_20260929/run_case.py", "--scene", "curved_object", "--seed", "@seed@", "--output", "@case_dir@"], "metrics": "metrics.json", "env": {"PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1"}}
+  ]
+}

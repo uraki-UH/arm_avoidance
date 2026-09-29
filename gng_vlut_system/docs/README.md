@@ -24,7 +24,7 @@
 - [IDEA_NOTES.md](./IDEA_NOTES.md)
 - [RELEASE_NOTE_TEMPLATE.md](./RELEASE_NOTE_TEMPLATE.md)
 - [releases/2026-07-29_documentation_workflow.md](./releases/2026-07-29_documentation_workflow.md)
-- [designs/2026-08-03_graph_coarsening_visualization.md](./designs/2026-08-03_graph_coarsening_visualization.md)
+- [旧グラフ縮約案（置換済み）](./releases/2026-08-03_graph_coarsening_visualization.md)
 - [designs/2026-08-14_grasp_contact_activation_lookup.md](./designs/2026-08-14_grasp_contact_activation_lookup.md)
 
 ## 運用ルール
@@ -32,7 +32,7 @@
 1. 実際に進める順序がある作業は `TASK_LIST.md` に置く。
 2. まだ決め切っていない候補は `TASK_CANDIDATES.md` に置く。
 3. 仕様として固定した内容は `TECHNICAL_SPEC.md` に置く。
-4. 報告は[短い書式](RELEASE_NOTE_TEMPLATE.md)へ統一。同じ作業の続報は既存ノートへ統合し、独立した変更だけ`releases/`へ追加する。
+4. 報告は[短い書式](RELEASE_NOTE_TEMPLATE.md)で結論から記載。節・表は必要時のみ。同じ作業の続報は既存ノートへ統合する。
 5. 仕様書の変数一覧、トピック一覧、フローチャートは実装と一致させる。
 6. 変更の影響が launch 引数、topic、service、message field に及ぶ場合は、必ず仕様書も更新する。
 7. 先行研究を調べたら `RELATED_WORK.md` に「手法 / 本プロジェクトとの差分 / 引用する場面」で追記する。

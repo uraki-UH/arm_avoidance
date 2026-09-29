@@ -1073,7 +1073,7 @@ TEST(PlaneClusterIncremental, coplanar_absorption_preserves_safety_gates)
     if (case_idx == 1U) {options.connection_requirement = 3U;}
     if (case_idx == 6U) {options.max_absorption_edge_angle_deg_th = 0.0;}
     if (case_idx == 7U) {options.max_effective_spacing = 0.005;}
-    if (case_idx == 10U) {options.max_absorption_edge_ratio_th = 0.5;}
+    if (case_idx == 10U) {options.max_connection_edge_ratio_th = 0.5;}
     Clusterizer clusterizer{options};
     ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 1U);
     TopologicalNode candidate = map.nodes.front();
@@ -1527,6 +1527,49 @@ TEST(PlaneClusterIncremental, fragment_merge_options_and_regular_merge)
   EXPECT_EQ(result.statistics.num_fragment_merged_clusters, 0U);
 }
 
+// 未所属点の吸収と1本接続の断片統合に対する、共通接続長設定の反映。
+TEST(PlaneClusterIncremental, connection_edge_ratio_controls_absorption_and_fragment_merge)
+{
+  for (const double max_connection_edge_ratio_th : {0.5, 1.5}) {
+    SCOPED_TRACE(max_connection_edge_ratio_th);
+    const bool can_connect = max_connection_edge_ratio_th == 1.5;
+    ClusterOptions options;
+    options.max_connection_edge_ratio_th = max_connection_edge_ratio_th;
+    options.enable_multi_edge_dist_relaxation = false;
+    options.merge_connection_requirement = 2U;
+
+    auto absorption_map = makeSinglePlane();
+    Clusterizer absorption_clusterizer{options};
+    const auto initial = warmUp(absorption_clusterizer, absorption_map);
+    ASSERT_EQ(initial.clusters.clusters.size(), 1U);
+    auto candidate = absorption_map.nodes.front();
+    candidate.id = 36U;
+    candidate.pos.x = 0.30F;
+    candidate.pos.y = 0.10F;
+    candidate.pos.z = 0.005F;
+    absorption_map.nodes.push_back(candidate);
+    absorption_map.edges.insert(absorption_map.edges.end(), {17U, 36U});
+    const auto absorbed = absorption_clusterizer.update(absorption_map);
+    EXPECT_EQ(absorbed.statistics.num_coplanar_absorbed_nodes, can_connect ? 1U : 0U);
+    EXPECT_EQ(absorbed.statistics.clustered_node_count, can_connect ? 37U : 36U);
+    EXPECT_EQ(clusterIds(absorbed), clusterIds(initial));
+
+    TopologicalMap fragment_map;
+    append_fragment_pair(fragment_map);
+    Clusterizer fragment_clusterizer{options};
+    ASSERT_EQ(warmUp(fragment_clusterizer, fragment_map).clusters.clusters.size(), 2U);
+    fragment_map.edges.insert(fragment_map.edges.end(), {11U, 144U});
+    for (std::size_t frame = 1U; frame <= options.min_fragment_merge_frames; ++frame) {
+      const auto result = fragment_clusterizer.update(fragment_map);
+      const bool has_merged = can_connect && frame == options.min_fragment_merge_frames;
+      EXPECT_EQ(result.clusters.clusters.size(), has_merged ? 1U : 2U);
+      EXPECT_EQ(result.statistics.num_fragment_merged_clusters, has_merged ? 1U : 0U);
+      EXPECT_EQ(result.statistics.num_fragment_pending_pairs, can_connect && !has_merged ? 1U : 0U);
+      EXPECT_EQ(result.statistics.clustered_node_count, fragment_map.nodes.size());
+    }
+  }
+}
+
 // 線状でない2x2パッチの連鎖統合と、統合済み同士の二重計上防止。
 TEST(PlaneClusterIncremental, CompactPatchesMergeWithoutNodeCovariance)
 {
@@ -1582,7 +1625,6 @@ TEST(PlaneClusterIncremental, SmallerSideResidualUsesPositionStatistics)
   for (const double offset : {0.001, 0.03}) {
     SCOPED_TRACE(offset);
     ClusterOptions options;
-    options.merge_residual_growth_min_th = 1.0;
     options.max_normalized_cluster_residual = 1.0;
     options.merge_smaller_side_residual_ratio = 0.10;
     Clusterizer clusterizer{options};
@@ -1610,6 +1652,69 @@ TEST(PlaneClusterIncremental, SmallerSideResidualUsesPositionStatistics)
       EXPECT_EQ(result.statistics.merge_smaller_side_rejected_pair_count, 1U);
     }
     EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+  }
+}
+
+// 400点対25点の隣接面。微小ノイズの許容と、全体RMSに埋もれる段差・傾斜の拒否。
+TEST(PlaneClusterIncremental, unequal_patches_preserve_side_residual_without_growth_limit)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    for (const bool is_small_first : {false, true}) {
+      for (std::size_t case_idx = 0U; case_idx < 4U; ++case_idx) {
+        SCOPED_TRACE(scale);
+        SCOPED_TRACE(is_small_first);
+        SCOPED_TRACE(case_idx);
+        TopologicalMap map;
+        const double spacing = 0.05 * scale;
+        const double large_origin[3] = {0.0, 0.0, 0.0};
+        const double small_origin[3] = {1.0 * scale, 0.0, case_idx == 2U ? 0.02 * scale : 0.0};
+        const double axis_u[3] = {1.0, 0.0, 0.0};
+        const double axis_v[3] = {0.0, 1.0, 0.0};
+        const double tilted_u[3] = {std::sqrt(0.96), 0.0, 0.2};
+        std::size_t large_idx = 0U, small_idx = 0U;
+        for (const bool is_small : {is_small_first, !is_small_first}) {
+          if (is_small) {
+            small_idx = appendGrid(map, 5U, 5U, spacing, small_origin,
+              case_idx == 3U ? tilted_u : axis_u, axis_v, TopologicalMap::WALL);
+          } else {
+            large_idx = appendGrid(map, 20U, 20U, spacing, large_origin,
+              axis_u, axis_v, TopologicalMap::WALL);
+          }
+        }
+        if (case_idx == 1U) {
+          for (std::size_t idx = 0U; idx < map.nodes.size(); ++idx) {
+            map.nodes[idx].pos.z += static_cast<float>((idx % 2U == 0U ? 0.001 : -0.001) * scale);
+          }
+        }
+        Clusterizer clusterizer{ClusterOptions{}};
+        const auto initial = warmUp(clusterizer, map);
+        ASSERT_EQ(initial.clusters.clusters.size(), 2U);
+        ASSERT_EQ(initial.statistics.clustered_node_count, map.nodes.size());
+        std::uint32_t large_id = 0U;
+        for (const auto &cluster : initial.clusters.clusters) {
+          if (cluster.node_indices.size() == 400U) {large_id = cluster.id;}
+        }
+        ASSERT_NE(large_id, 0U);
+        for (std::size_t row = 0U; row < 5U; ++row) {
+          map.edges.push_back(static_cast<std::uint16_t>(large_idx + row * 20U + 19U));
+          map.edges.push_back(static_cast<std::uint16_t>(small_idx + row * 5U));
+        }
+        const bool can_merge = case_idx < 2U;
+        for (std::size_t frame = 0U; frame < 8U; ++frame) {
+          const auto result = clusterizer.update(map);
+          ASSERT_EQ(result.clusters.clusters.size(), can_merge ? 1U : 2U);
+          EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+          EXPECT_EQ(result.statistics.merged_cluster_count, can_merge && frame == 0U ? 1U : 0U);
+          EXPECT_EQ(result.statistics.merge_absolute_residual_rejected_pair_count, 0U);
+          if (can_merge) {
+            EXPECT_EQ(result.clusters.clusters.front().id, large_id);
+          } else {
+            EXPECT_GT(result.statistics.merge_smaller_side_rejected_pair_count, 0U);
+            EXPECT_EQ(clusterIds(result), clusterIds(initial));
+          }
+        }
+      }
+    }
   }
 }
 

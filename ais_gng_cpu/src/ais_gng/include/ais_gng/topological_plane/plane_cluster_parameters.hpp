@@ -62,14 +62,12 @@ ClusterOptions declareClusterOptions(
     name("enable_coplanar_absorption"), options.enable_coplanar_absorption);
   options.max_absorption_edge_angle_deg_th = node.template declare_parameter<double>(
     name("max_absorption_edge_angle_deg_th"), options.max_absorption_edge_angle_deg_th);
-  options.max_absorption_edge_ratio_th = node.template declare_parameter<double>(
-    name("max_absorption_edge_ratio_th"), options.max_absorption_edge_ratio_th);
+  options.max_connection_edge_ratio_th = node.template declare_parameter<double>(
+    name("max_connection_edge_ratio_th"), options.max_connection_edge_ratio_th);
   options.merge_connection_requirement = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("merge_connection_requirement"), 2)));
   options.enable_fragment_merge = node.template declare_parameter<bool>(
     name("enable_fragment_merge"), options.enable_fragment_merge);
-  options.max_fragment_edge_ratio_th = node.template declare_parameter<double>(
-    name("max_fragment_edge_ratio_th"), options.max_fragment_edge_ratio_th);
   options.max_fragment_residual_ratio_th = node.template declare_parameter<double>(
     name("max_fragment_residual_ratio_th"), options.max_fragment_residual_ratio_th);
   options.min_fragment_merge_frames = static_cast<std::size_t>(std::max<std::int64_t>(1,
@@ -84,10 +82,6 @@ ClusterOptions declareClusterOptions(
     node.template declare_parameter<bool>(name("enable_multi_edge_dist_relaxation"), false);
   options.maintenance_iter = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("maintenance_iter"), 2)));
-  options.merge_residual_growth_ratio =
-    node.template declare_parameter<double>(name("merge_residual_growth_ratio"), 1.1);
-  options.merge_residual_growth_min_th =
-    node.template declare_parameter<double>(name("merge_residual_growth_min_th"), 0.1);
   options.birth_confirm_frames = static_cast<std::size_t>(std::max<std::int64_t>(
       0, node.template declare_parameter<int>(name("birth_confirm_frames"), 3)));
   options.split_confirm_frames = static_cast<std::size_t>(std::max<std::int64_t>(

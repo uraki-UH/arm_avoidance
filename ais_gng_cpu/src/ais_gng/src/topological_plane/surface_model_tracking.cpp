@@ -39,10 +39,14 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
   }
   const std::int64_t stamp=static_cast<std::int64_t>(map.header.stamp.sec)*1000000000+map.header.stamp.nanosec;
   if (map.nodes.empty() || map.header.frame_id!=frame_id_ || map.frame_number<frame_number_ || stamp<stamp_) clear();
-  std::unordered_map<std::uint16_t,std::size_t> indices;
+  // uint16のノードIDを直接添字化した対応表。ノードごとのハッシュ要素確保の省略。
+  const auto invalid_idx=map.nodes.size();
+  std::vector<std::size_t> indices(65536U,invalid_idx);
   bool has_duplicate_id=false;
   for (std::size_t i=0; i<map.nodes.size(); ++i) {
-    if (!indices.emplace(map.nodes[i].id,i).second) has_duplicate_id=true;
+    auto &idx=indices[map.nodes[i].id];
+    if (idx!=invalid_idx) has_duplicate_id=true;
+    else idx=i;
   }
   // 重複IDでは対応付けを中止。現在フレームの新規抽出だけを出力。
   if (has_duplicate_id) { clear(); return extract(map,planes,config); }
@@ -58,14 +62,14 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
     candidate.is_retained=true;
     double error_sum=0;
     for (const auto &reference:previous.reference) {
-      const auto found=indices.find(reference.id);
-      if (found==indices.end() || claimed.count(found->second)) continue;
-      const auto &node=map.nodes[found->second];
+      const auto idx=indices[reference.id];
+      if (idx==invalid_idx || claimed.count(idx)) continue;
+      const auto &node=map.nodes[idx];
       const Eigen::Vector3d p(node.pos.x,node.pos.y,node.pos.z);
       if (!p.allFinite() || (p-reference.position).norm()>retention.max_node_displacement) continue;
       const auto error=model_dev(candidate.shape,node);
       if (error.dist>retention.max_point_residual || error.normal_cos<min_cos) continue;
-      candidate.node_indices.push_back(found->second);
+      candidate.node_indices.push_back(idx);
       error_sum+=error.dist*error.dist;
     }
     candidate.rejected_node_num=previous.reference.size()-candidate.node_indices.size();
@@ -81,8 +85,8 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
   if (!proposals.empty()) {
     std::vector<bool> is_blocked(map.nodes.size(),false);
     for (const auto &previous:tracks_) for (const auto &reference:previous.reference) {
-      const auto found=indices.find(reference.id);
-      if (found!=indices.end()) is_blocked[found->second]=true;
+      const auto idx=indices[reference.id];
+      if (idx!=invalid_idx) is_blocked[idx]=true;
     }
     for (const auto &plane:planes.clusters) for (auto idx:plane.node_indices) {
       if (idx<map.nodes.size()) is_blocked[idx]=true;
@@ -154,7 +158,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
       for (auto idx:surface.node_indices) accepted.insert(map.nodes[idx].id);
       // 外れたノードの再検証候補を保持。表示する座標・所属は当該フレームの適合点だけ。
       for (auto &reference:entry.reference) if (accepted.count(reference.id)) {
-        const auto &p=map.nodes[indices.at(reference.id)].pos;
+        const auto &p=map.nodes[indices[reference.id]].pos;
         reference.position=Eigen::Vector3d(p.x,p.y,p.z);
       }
     } else {

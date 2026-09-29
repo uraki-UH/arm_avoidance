@@ -1939,6 +1939,9 @@ TEST(surface_local_search, retained_curve_bypasses_new_plane_count_and_keeps_col
   auto retained=*found;
   retained.id=0;
   retained.is_retained=true;
+  auto whole=shifted.planes.clusters[1];
+  whole.node_indices=retained.node_indices;
+  shifted.planes.clusters={shifted.planes.clusters.front(),whole};
   options config;
   config.enable_plane_local_search=true;
   config.min_candidate_plane_patches=99;
@@ -1946,6 +1949,7 @@ TEST(surface_local_search, retained_curve_bypasses_new_plane_count_and_keeps_col
   ASSERT_EQ(selected.regions.size(),1U);
   EXPECT_TRUE(selected.regions.front().is_retained);
   EXPECT_EQ(selected.regions.front().id,0U);
+  EXPECT_EQ(plane_patch_num(selected,selected.regions.front()),1U);
   EXPECT_EQ(selected.num_candidate_nodes,shifted.map.nodes.size()-2);
   EXPECT_EQ(*std::min_element(selected.regions.front().node_indices.begin(),selected.regions.front().node_indices.end()),2U);
 }
