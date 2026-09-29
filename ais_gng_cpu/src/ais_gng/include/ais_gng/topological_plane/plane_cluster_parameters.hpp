@@ -47,8 +47,8 @@ ClusterOptions declareClusterOptions(
     node.template declare_parameter<double>(name("normal_alignment_deg"), 30.0);
   options.retention_normal_alignment_deg =
     node.template declare_parameter<double>(name("retention_normal_alignment_deg"), 70.0);
-  options.min_cluster_planarity =
-    node.template declare_parameter<double>(name("min_cluster_planarity"), 0.45);
+  options.min_plane_aspect_ratio =
+    node.template declare_parameter<double>(name("min_plane_aspect_ratio"), options.min_plane_aspect_ratio);
   options.min_plane_width_ratio =
     node.template declare_parameter<double>(name("min_plane_width_ratio"), 1.0);
   options.max_normalized_cluster_residual =
@@ -56,8 +56,6 @@ ClusterOptions declareClusterOptions(
     name("max_normalized_cluster_residual"), options.max_normalized_cluster_residual);
   options.merge_smaller_side_residual_ratio = node.template declare_parameter<double>(
     name("max_merge_side_residual_ratio"), options.merge_smaller_side_residual_ratio);
-  options.min_growth_planarity =
-    node.template declare_parameter<double>(name("min_growth_planarity"), 0.25);
   options.connection_requirement = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("connection_requirement"), 2)));
   options.enable_coplanar_absorption = node.template declare_parameter<bool>(
@@ -86,8 +84,6 @@ ClusterOptions declareClusterOptions(
     node.template declare_parameter<bool>(name("enable_multi_edge_dist_relaxation"), false);
   options.maintenance_iter = static_cast<std::size_t>(std::max<std::int64_t>(
       1, node.template declare_parameter<int>(name("maintenance_iter"), 2)));
-  options.merge_min_planarity =
-    node.template declare_parameter<double>(name("merge_min_planarity"), 0.25);
   options.merge_residual_growth_ratio =
     node.template declare_parameter<double>(name("merge_residual_growth_ratio"), 1.1);
   options.merge_residual_growth_min_th =

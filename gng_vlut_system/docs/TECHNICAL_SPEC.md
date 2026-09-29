@@ -1328,3 +1328,8 @@ ROI座標の範囲で厳密に点を選別する。直接方式でも同じ範�
 `reachability_map_topic: ""`または項目なしの場合は従来の`min/max_reachability_*`と余白を使用する。
 `enable_reachability_filter: false`の場合はマップ購読・待機を行わず、従来の経路を維持する。
 実行中ノードへのYAML自動再読込はなく、設定・実行ファイルの反映には環境ボクセル化launchの再起動が必要。
+
+## 共通関節指令と部分関節操作
+
+`joint_control.launch.py`で関節単位の仲裁とViewer・Gazebo・Dynamixel出力を統合。
+部分指令、優先度、失効、mimicと実機校正の契約は[joint_control.md](joint_control.md)を正本とする。

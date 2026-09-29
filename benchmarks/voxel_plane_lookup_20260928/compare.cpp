@@ -312,6 +312,8 @@ struct totals {
         file << "\n}\n";
     }
 };
+#include "../plane_consistency_20260924/output_fingerprint.hpp"
+
 int main(int argc, char **argv) {
     try {
         require(argc == 4 || argc == 5, "入力ディレクトリ・種・出力ディレクトリ・省略可能な比較方式");
@@ -338,6 +340,9 @@ int main(int argc, char **argv) {
         detail << "frame,cell_size,nodes,planes,queries,node_ms,build_ms,cell_query_ms,node_only,cell_only,both,neither,bytes\n";
         totals results; uint32_t frame = 0; uint64_t checksum = 0;
         std::ofstream occupancy_detail;
+        std::ofstream plane_fingerprints(output+"/plane_fingerprints.csv");
+        std::ofstream graph_capture;
+        if (std::getenv("GNG_CAPTURE_PLANES")) {graph_capture.open(output+"/graphs.bin", std::ios::binary);}
 #ifdef GNG_ENABLE_CHURN_DIAGNOSTICS
         std::ofstream churn_detail(output+"/churn_frames.csv");
         churn_detail << "frame";
@@ -461,6 +466,18 @@ int main(int argc, char **argv) {
             const std_msgs::msg::Header header;
             const auto result = clusters.update(plane_core::make_graph_view(map.nodes, map.node_num, map.edges, map.edge_num), header, frame);
             const double plane_ms = elapsed_ms(plane_start);
+            if (graph_capture.is_open()) {
+                const auto view = plane_core::make_graph_view(map.nodes, map.node_num, map.edges, map.edge_num);
+                const uint32_t counts[] = {uint32_t(view.num_nodes), uint32_t(view.num_edge_values)};
+                graph_capture.write(reinterpret_cast<const char *>(counts), sizeof(counts));
+                for (std::size_t idx = 0; idx < view.num_nodes; ++idx) {
+                    const auto node = view.read_node(view.nodes, idx);
+                    graph_capture.write(reinterpret_cast<const char *>(&node), sizeof(node));
+                }
+                graph_capture.write(reinterpret_cast<const char *>(view.edges),
+                    view.num_edge_values * sizeof(uint16_t));
+            }
+            plane_fingerprints << frame << ',' << output_fingerprint(result.clusters) << '\n';
             const auto model_start = clock_type::now(); update_planes(result.clusters, map);
             const double model_ms = elapsed_ms(model_start);
             if (enable_occupancy_test) {

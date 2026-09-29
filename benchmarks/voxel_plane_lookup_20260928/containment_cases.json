@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "name": "before",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/replay_pre_containment",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/capture/graphs.bin",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "after",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/replay_after",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/capture/graphs.bin",
+        "@case_dir@"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}

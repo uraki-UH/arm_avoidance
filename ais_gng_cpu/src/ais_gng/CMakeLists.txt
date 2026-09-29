@@ -116,6 +116,7 @@ target_link_libraries(plane_cluster_incremental_node nonplane_component_extracto
 ament_auto_add_library(surface_model SHARED
   src/topological_plane/patch_curvature.cpp
   src/topological_plane/surface_model.cpp
+  src/topological_plane/surface_model_local.cpp
   src/topological_plane/surface_model_support.cpp
   src/topological_plane/surface_model_tracking.cpp
   src/topological_plane/surface_model_visualization.cpp)

@@ -1,4 +1,5 @@
 #include "ais_gng/topological_plane/surface_model_tracking.hpp"
+#include "ais_gng/topological_plane/surface_model_local.hpp"
 #include "ais_gng/topological_plane/convex_hull.hpp"
 
 #include <Eigen/Eigenvalues>
@@ -344,8 +345,11 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     !(config.max_normal_deg > 0 && config.max_normal_deg < 90)) {
     throw std::invalid_argument("invalid surface model options");
   }
+  if (config.enable_plane_local_search) return extract_plane_local(map,planes,config,retained);
   const auto begin = std::chrono::steady_clock::now();
   result output;
+  output.num_input_nodes=map.nodes.size();
+  output.num_candidate_nodes=map.nodes.size();
   std::vector<vec> points, normals;
   for (const auto &node : map.nodes) {
     points.push_back(position(node.pos));

@@ -1,3 +1,4 @@
+import {RosPointsPanel} from './ros-points.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
@@ -13,7 +14,7 @@ import {LidarWorkspace} from './lidar-ui.js';
 import {RGBDWorkspace} from './rgbd-ui.js';
 import {VMAIWorkspace} from './vm-ai.js';
 import {ROBOT_MODELS,initialModel} from './models.js';
-let workspace, rgbd, lidar, ai, demoMotion=null;
+let workspace, rgbd, lidar, ai, ros_points, demoMotion=null;
 let model=initialModel(),switchingModel=false;
 const modelCache=new Map(),modelStates=new Map();
 
@@ -33,12 +34,12 @@ function toast(text){$('toast').textContent=text;$('toast').classList.add('visib
 
 let renderer;
 try {
-  renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
 } catch(e) {
   $('loading-text').textContent='WebGL 2を利用できません。ハードウェアアクセラレーションを有効にしたEdge / Chromeで開いてください。';
   throw e;
 }
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+renderer.setPixelRatio(1);
 renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.toneMapping=THREE.NeutralToneMapping;renderer.toneMappingExposure=.9;
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -47,7 +48,8 @@ renderer.domElement.setAttribute('aria-label','3Dロボットと手先マーカ�
 const scene=new THREE.Scene(), overlay=new THREE.Scene();
 scene.background=new THREE.Color('#edf0ed');scene.fog=new THREE.Fog('#edf0ed',18,65);
 const camera=new THREE.PerspectiveCamera(34,1,.01,200);camera.up.set(0,0,1);
-const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=true;orbit.dampingFactor=.09;
+// 視点操作の慣性遅れを抑制し、ドラッグ量を即時反映
+const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=false;
 orbit.minDistance=.25;orbit.maxDistance=100;orbit.maxPolarAngle=Math.PI*.52;orbit.target.set(0,0,.21);
 camera.position.set(1.45,-1.15,1.0);orbit.target.set(.28,0,.22);orbit.update();
 
@@ -69,7 +71,7 @@ for(const x of [-.063,.063])for(const y of [-.063,.063]){const bolt=new THREE.Me
 const grid=new THREE.GridHelper(4,80,0x637d64,0x8a9e88);grid.rotation.x=Math.PI/2;grid.position.z=-.139;grid.material.transparent=true;grid.material.opacity=.18;grid.visible=false;scene.add(grid);
 
 const composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));
-const ao=new SSAOPass(scene,camera,512,512,12);ao.kernelRadius=.035;ao.minDistance=.0006;ao.maxDistance=.018;composer.addPass(ao);composer.addPass(new OutputPass());
+const ao=new SSAOPass(scene,camera,512,512,12);ao.enabled=false;ao.kernelRadius=.035;ao.minDistance=.0006;ao.maxDistance=.018;composer.addPass(ao);composer.addPass(new OutputPass());
 
 const gizmo=new TransformControls(camera,renderer.domElement);gizmo.setSize(.68);gizmo.setSpace('world');overlay.add(gizmo.getHelper());
 gizmo.addEventListener('dragging-changed',event=>{orbit.enabled=!event.value;if(event.value){stopPlayback();activeTarget=true;solveFrames=0;}});
@@ -218,8 +220,9 @@ function updateLabels(){for(const side of ['L','R']){const tcp=robot.tcp(side),p
  if($('show-trails').checked){const t=trails[side];if(!t.points.length||t.points.at(-1).distanceTo(tcp.position)>.002){t.points.push(tcp.position.clone());if(t.points.length>1500)t.points.shift();t.line.geometry.dispose();t.line.geometry=new THREE.BufferGeometry().setFromPoints(t.points);}}}
 }
 function updateUI(){const tcp=robot.tcp(activeSide),error=tcp.position.distanceTo(targets[activeSide].position)*1000,angle=orientationError(targets[activeSide].quaternion,tcp.quaternion).length()*DEG,hold=$('hold-orientation').checked,ok=error<1&&(!hold||angle<1);$('ik-state').textContent=playing?'ポーズを再生中':ok?'目標に到達':activeTarget&&solveFrames<40?'手先が追従中':'目標未到達';$('ik-error').textContent=error.toFixed(1)+' mm'+(hold?' / '+angle.toFixed(1)+'°':'');$('ik-dot').style.background=ok?'var(--green)':'var(--amber)';$('ik-state').style.color=ok?'#007700':'var(--amber)';$('actual-position').textContent='TCP '+tcp.position.toArray().map(v=>(v*1000).toFixed(1).padStart(6)).join(' / ')+' mm';syncControls();if(!gizmo.dragging)syncTargetInputs();if(window.simulator)document.documentElement.dataset.simState=JSON.stringify(window.simulator.getState());}
-function draw(){composer.render();renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;rgbd?.tick(now);lidar?.tick(now);ai?.tick(now);updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}draw();diagnostics.frames++;frameCount++;if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
+// 標準品質では中間バッファと画面全体の後処理を省略
+function draw(){if(ao.enabled)composer.render();else renderer.render(scene,camera);renderer.autoClear=false;renderer.clearDepth();renderer.render(overlay,camera);renderer.autoClear=true;}
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.035,Math.max(.001,(now-last)/1000));last=now;orbit.update();if(!ready){draw();return;}const moving=updateDemoMotion(now)||updatePlayback(now)||updateIK(dt);if(moving)renderer.shadowMap.needsUpdate=true;rgbd?.tick(now);lidar?.tick(now);ai?.tick(now);ros_points?.tick(now);updateLabels();if(now-uiTick>90){updateUI();uiTick=now;}draw();diagnostics.frames++;frameCount++;if(now-lastStats>1000){diagnostics.fps=frameCount*1000/(now-lastStats);$('render-stats').textContent=diagnostics.fps.toFixed(0)+' fps · '+(robot.triangles/1e6).toFixed(2)+'M tris';frameCount=0;lastStats=now;}}
 
 function updateModelUI(){
  document.querySelector('.product-header strong').textContent=model.title;document.title=model.title+' · Motion Studio';
@@ -273,7 +276,7 @@ async function init(){
   renderer.shadowMap.needsUpdate=true;await renderer.compileAsync(scene,camera);draw();
   $('load-progress').style.width='100%';$('loading').classList.add('done');$('loading').setAttribute('aria-hidden','true');$('load-status').textContent='LOCAL · READY';
   ready=true;diagnostics.ready=true;toast('手先の矢印をドラッグして操作できます');
-  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,diagnostics,keyframes,setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
+  window.simulator={get robot(){return robot;},get model(){return model;},targets,camera,scene,renderer,gizmo,workspace,rgbd,lidar,ai,ros_points,diagnostics,keyframes,setSide,setMode,solveIK,homePose,presetPose,animatePose,syncTargets,validatePose,switchModel,
    getState:()=>({ready,model:model.id,modelTitle:model.title,source:model.urdf,switchingModel,activeSide,mode,workspace:workspace?.getState(),rgbd:rgbd?.lastSummary,dragging:gizmo.dragging,playing:!!playing,quality:$('quality').value,holdOrientation:$('hold-orientation').checked,appearance:{greenBaseHex:'#'+materials.green.color.getHexString(),toneMapping:'Neutral, chroma preserved',logo:'branding/FuzzRoBo-logo.png'},joints:robot.getPose(),tcp:Object.fromEntries(['L','R'].map(s=>{const p=robot.tcp(s);return[s,{position:p.position.toArray(),quaternion:p.quaternion.toArray(),target:targets[s].position.toArray(),errorMm:p.position.distanceTo(targets[s].position)*1000,errorDeg:orientationError(targets[s].quaternion,p.quaternion).length()*DEG}]})),diagnostics:{...diagnostics},triangles:robot.triangles}),
    setTarget:(side,xyz,rpy)=>{setSide(side);targets[side].position.fromArray(xyz);if(rpy){targets[side].quaternion.setFromEuler(new THREE.Euler(...rpy,'ZYX'));$('hold-orientation').checked=true;}targetDirty[side]=true;activeTarget=true;solveFrames=0;syncTargetInputs();},
    reset:()=>{stopPlayback();robot.setPose(homePose());syncTargets();syncControls();renderer.shadowMap.needsUpdate=true;}
@@ -302,7 +305,8 @@ function initWorkspace(){
  catch(e){$('sensor-panel').textContent='RGB-Dを初期化できません：'+e.message;diagnostics.errors.push(String(e));}
  lidar=new LidarWorkspace({scene,overlay,robot,renderer,camera,environment:workspace,toast,download,onLayers:()=>updateCloudLayers()});
  ai=new VMAIWorkspace({scene,camera,robot,lidar,rgbd,environment:workspace,toast,motion:{toggle:toggleDemoMotion,active:()=>!!demoMotion}});
- document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','lidar','ai'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
+ ros_points=new RosPointsPanel({environment:workspace,rgbd,toast});
+ document.querySelectorAll('[data-panel]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-panel]').forEach(x=>x.classList.toggle('active',x===b));for(const name of ['robot','environment','sensor','lidar','ai','ros'])$(name+'-panel').hidden=name!==b.dataset.panel;if(b.dataset.panel!=='environment')workspace.setEditing(false);workspace.selection.visible=b.dataset.panel==='environment'&&!!workspace.selected;document.querySelector('aside').scrollTop=0;updateMarkerVisibility();});
  $('scene-save').onclick=()=>download('ToPo-workspace.json',JSON.stringify(workspace.getState(),null,2),'application/json');
  $('scene-load').onclick=()=>$('scene-file').click();$('scene-file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{if(f.size>1e6)throw Error('ファイルが大きすぎます');await workspace.load(JSON.parse(await f.text()));toast('シーンを読み込みました');}catch(error){toast('シーン読込エラー：'+error.message);}};
 }

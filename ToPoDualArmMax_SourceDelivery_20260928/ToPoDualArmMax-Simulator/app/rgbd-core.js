@@ -41,29 +41,58 @@ export class RGBDSensor {
     this.depthMaterial=new THREE.ShaderMaterial({vertexShader:'varying float metricZ; void main(){vec4 p=modelViewMatrix*vec4(position,1.0);metricZ=-p.z;gl_Position=projectionMatrix*p;}',fragmentShader:'varying float metricZ; void main(){gl_FragColor=vec4(metricZ,0.0,0.0,1.0);}',side:THREE.DoubleSide,toneMapped:false});
   }
   configure(c){this.calibration=validateCalibration(c);}
-  target(name,k,depth){let t=this.targets[name];if(t&&(t.width!==k.width||t.height!==k.height)){t.dispose();t=null;}if(!t){t=new THREE.WebGLRenderTarget(k.width,k.height,{type:depth?THREE.FloatType:THREE.UnsignedByteType,format:THREE.RGBAFormat,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:true,stencilBuffer:false});t.texture.colorSpace=depth?THREE.NoColorSpace:THREE.SRGBColorSpace;this.targets[name]=t;}return t;}
-  render(k,world,name,depth){
+  target(name,k,depth){
+    let t=this.targets[name];
+    if(t&&(t.width!==k.width||t.height!==k.height)){t.dispose();t=null;}
+    if(!t){
+      t=new THREE.WebGLRenderTarget(k.width,k.height,{type:depth?THREE.FloatType:THREE.UnsignedByteType,format:depth?THREE.RedFormat:THREE.RGBAFormat,minFilter:THREE.NearestFilter,magFilter:THREE.NearestFilter,depthBuffer:true,stencilBuffer:false});
+      t.texture.colorSpace=depth?THREE.NoColorSpace:THREE.SRGBColorSpace;
+      if(depth){
+        // 単一成分読み出し非対応GPUでは従来のRGBA形式を使用
+        const previous_target=this.renderer.getRenderTarget(),gl=this.renderer.getContext();
+        try{this.renderer.setRenderTarget(t);if(gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT)!==gl.RED){t.dispose();t.texture.format=THREE.RGBAFormat;}}
+        finally{this.renderer.setRenderTarget(previous_target);}
+      }
+      this.targets[name]=t;
+    }
+    return t;
+  }
+  render(k,world,name,depth,enable_async_read=false){
     const r=this.renderer,s=this.scene,target=this.target(name,k,depth),camera=calibratedCamera(k,world,.005,Math.max(20,this.calibration.max_depth_m+.1));
     const state={target:r.getRenderTarget(),override:s.overrideMaterial,background:s.background,fog:s.fog,clear:r.getClearColor(new THREE.Color()),alpha:r.getClearAlpha(),tone:r.toneMapping,auto:r.autoClear,shadows:r.shadowMap.enabled};
-    const raw=depth?new Float32Array(k.width*k.height*4):new Uint8Array(k.width*k.height*4);
-    try {s.overrideMaterial=depth?this.depthMaterial:null;if(depth){s.background=null;s.fog=null;r.toneMapping=THREE.NoToneMapping;r.shadowMap.enabled=false;}r.autoClear=true;r.setClearColor(0,0);r.setRenderTarget(target);r.clear();r.render(s,camera);r.readRenderTargetPixels(target,0,0,k.width,k.height,raw);}
-    finally {r.setRenderTarget(state.target);s.overrideMaterial=state.override;s.background=state.background;s.fog=state.fog;r.setClearColor(state.clear,state.alpha);r.toneMapping=state.tone;r.autoClear=state.auto;r.shadowMap.enabled=state.shadows;}
+    const num_channels=depth&&target.texture.format===THREE.RedFormat?1:4;
+    const raw=depth?new Float32Array(k.width*k.height*num_channels):new Uint8Array(k.width*k.height*4);
+    let read_result;
+    try {s.overrideMaterial=depth?this.depthMaterial:null;if(depth){s.background=null;s.fog=null;r.toneMapping=THREE.NoToneMapping;r.shadowMap.enabled=false;}r.autoClear=true;r.setClearColor(0,0);r.setRenderTarget(target);r.clear();r.render(s,camera);read_result=enable_async_read?r.readRenderTargetPixelsAsync(target,0,0,k.width,k.height,raw):r.readRenderTargetPixels(target,0,0,k.width,k.height,raw);}
+    finally {const gl=r.getContext();gl.bindBuffer(gl.PIXEL_PACK_BUFFER,null);r.setRenderTarget(state.target);s.overrideMaterial=state.override;s.background=state.background;s.fog=state.fog;r.setClearColor(state.clear,state.alpha);r.toneMapping=state.tone;r.autoClear=state.auto;r.shadowMap.enabled=state.shadows;}
+    const finish_read=()=>{
     const out=depth?new Float32Array(k.width*k.height):new Uint8ClampedArray(raw.length);
-    for(let v=0;v<k.height;v++){const from=(k.height-1-v)*k.width;if(depth){for(let u=0;u<k.width;u++)out[v*k.width+u]=raw[(from+u)*4];}else out.set(raw.subarray(from*4,(from+k.width)*4),v*k.width*4);}
+    for(let v=0;v<k.height;v++){const from=(k.height-1-v)*k.width;if(depth){for(let u=0;u<k.width;u++)out[v*k.width+u]=raw[(from+u)*num_channels];}else out.set(raw.subarray(from*4,(from+k.width)*4),v*k.width*4);}
     return out;
+    };
+    return enable_async_read?read_result.then(finish_read):finish_read();
   }
   opticalToWorld(urdfOpticalWorld){const c=this.calibration,mount=new THREE.Matrix4().compose(new THREE.Vector3(...c.mount.translation),new THREE.Quaternion().setFromEuler(new THREE.Euler(...c.mount.rpy,'ZYX')),new THREE.Vector3(1,1,1));return urdfOpticalWorld.clone().multiply(mount);}
-  capture(urdfOpticalWorld,{mode='ideal',exclude=[]}={}){
+  capture(urdfOpticalWorld,{mode='ideal',exclude=[],enable_async_read=false,target_group=null}={}){
     const start=performance.now(),c=structuredClone(this.calibration),k=c.depth,kc=c.color;
     const depthWorld=this.opticalToWorld(urdfOpticalWorld),depthToColor=extrinsicMatrix(c.depth_to_color),colorWorld=depthWorld.clone().multiply(depthToColor.clone().invert());
     const rightWorld=depthWorld.clone().multiply(new THREE.Matrix4().makeTranslation(c.baseline_m,0,0));
-    const visible=exclude.map(x=>x.visible);let raw,colorZ,rgba,rightZ;
-    try{exclude.forEach(x=>x.visible=false);raw=this.render(k,depthWorld,'depth',true);colorZ=this.render(kc,colorWorld,'colorDepth',true);rgba=this.render(kc,colorWorld,'color',false);if(mode==='stereo')rightZ=this.render(k,rightWorld,'rightDepth',true);}
+    const visible=exclude.map(x=>x.visible);let raw,colorZ,rgba,rightZ,target_depth;
+    try{exclude.forEach(x=>x.visible=false);raw=this.render(k,depthWorld,'depth',true,enable_async_read);colorZ=this.render(kc,colorWorld,'colorDepth',true,enable_async_read);rgba=this.render(kc,colorWorld,'color',false,enable_async_read);if(mode==='stereo')rightZ=this.render(k,rightWorld,'rightDepth',true,enable_async_read);
+      if(target_group){
+        // 同じ姿勢の対象のみの深度とシーン全体の最前面深度を照合
+        const members=new Set(),hidden=[];target_group.traverse(o=>members.add(o));
+        this.scene.traverse(o=>{if(o.isMesh&&!members.has(o)){hidden.push([o,o.visible]);o.visible=false;}});
+        try{target_depth=this.render(k,depthWorld,'targetDepth',true,enable_async_read);}
+        finally{for(const [o,visible] of hidden)o.visible=visible;}
+      }
+}
     finally{exclude.forEach((x,i)=>x.visible=visible[i]);}
+    const finish_capture=([raw,colorZ,rgba,rightZ,target_depth])=>{
     const count=k.width*k.height,depth=new Float32Array(count),z16=new Uint16Array(count),xyz=new Float32Array(count*3),colors=new Uint8Array(count*3),colorValid=new Uint8Array(count),pixels=new Uint32Array(count);
     const renderMs=performance.now()-start,em=depthToColor.elements,colorTolerance=.75/Math.min(kc.fx,kc.fy);let valid=0,colored=0,min=Infinity,max=0,stereoRejected=0;
     for(let v=0;v<k.height;v++)for(let u=0;u<k.width;u++){
-      const i=v*k.width+u;let z=raw[i];if(!Number.isFinite(z)||z<c.min_depth_m||z>c.max_depth_m)continue;
+      const i=v*k.width+u;let z=raw[i];if(target_depth&&target_depth[i]!==z)continue;if(!Number.isFinite(z)||z<c.min_depth_m||z>c.max_depth_m)continue;
       if(rightZ){const ur=Math.round(u-k.fx*c.baseline_m/z),zr=ur>=0&&ur<k.width?rightZ[v*k.width+ur]:0;if(!zr||Math.abs(zr-z)>Math.max(.002,z/k.fx)){stereoRejected++;continue;}z=Math.round(z/c.depth_scale)*c.depth_scale;if(z<c.min_depth_m||z>c.max_depth_m)continue;}
       depth[i]=z;z16[i]=Math.min(65535,Math.max(1,Math.round(z/c.depth_scale)));const x=(u-k.ppx)*z/k.fx,y=(v-k.ppy)*z/k.fy,j=valid*3;xyz[j]=x;xyz[j+1]=y;xyz[j+2]=z;pixels[valid]=i;
       const rx=em[0]*x+em[4]*y+em[8]*z+em[12],ry=em[1]*x+em[5]*y+em[9]*z+em[13],rz=em[2]*x+em[6]*y+em[10]*z+em[14],cu=Math.round(kc.fx*rx/rz+kc.ppx),cv=Math.round(kc.fy*ry/rz+kc.ppy);let hasColor=false;
@@ -72,7 +101,11 @@ export class RGBDSensor {
       min=Math.min(min,z);max=Math.max(max,z);valid++;
     }
     const frame={id:++this.frameNumber,timestamp:new Date().toISOString(),calibration:c,mode,depth,z16,rgba,xyz:xyz.slice(0,valid*3),colors:colors.slice(0,valid*3),colorValid:colorValid.slice(0,valid),pixels:pixels.slice(0,valid),depthWorld:depthWorld.toArray(),colorWorld:colorWorld.toArray(),valid,colored,stereoRejected,min:valid?min:0,max:valid?max:0,renderMs,ms:performance.now()-start};
-    this.lastFrame=frame;return frame;
+    if(!enable_async_read)this.lastFrame=frame;return frame;
+    };
+    // 同一姿勢の描画を発行後、GPU完了待ち中にブラウザへ制御を返却
+    const reads=[raw,colorZ,rgba,rightZ,target_depth];
+    return enable_async_read?Promise.all(reads).then(finish_capture):finish_capture(reads);
   }
   dispose(){Object.values(this.targets).forEach(x=>x.dispose());this.depthMaterial.dispose();}
 }

@@ -1,3 +1,4 @@
+import {install_object_actions} from './object-actions.js';
 import * as THREE from 'three';
 import {WorkEnvironment,OBJECTS,TABLES} from './environment.js';
 import {VEHICLES,createVehicle} from './vehicles.js';
@@ -37,6 +38,7 @@ export class SceneEnvironment extends WorkEnvironment{
   this.gizmo.addEventListener('objectChange',()=>{if(this.selected&&!this.editTable){for(const k of ['x','y','z']){this.selected.group.position[k]=THREE.MathUtils.clamp(this.selected.group.position[k],-100,100);this.selected.group.scale[k]=THREE.MathUtils.clamp(this.selected.group.scale[k],.001,1000);}this.syncObject();this.changed();}});
   $('scene-load').parentElement.insertAdjacentHTML('afterend','<details><summary>配置設定の検証</summary><button id="environment-verify" class="wide-button">保存・座標変換を検証</button><output id="environment-qa"></output></details>');
   $('environment-verify').onclick=async()=>{const b=$('environment-verify');b.disabled=true;try{const {runEnvironmentQA}=await import('./environment-qa.js'),r=await runEnvironmentQA(this);$('environment-qa').textContent=(r.passed?'PASS':'FAIL')+' · '+r.tests.filter(t=>t.passed).length+'/'+r.tests.length;document.documentElement.dataset.environmentQa=JSON.stringify(r);}catch(e){$('environment-qa').textContent=e.message;}finally{b.disabled=false;}};
+  install_object_actions(this);
  }
  syncTable(){for(const k of ['x','y','z','roll','pitch','yaw','width','depth','height']){const el=$('table-'+k);if(el&&document.activeElement!==el)el.value=(this.state[k]*(['roll','pitch','yaw'].includes(k)?1/rad:1000)).toFixed(1);}}
  buildTable(){super.buildTable();this.syncTable();if($('table-color')){$('table-color').value=this.state.color||'#ffffff';$('table-visible').checked=this.state.visible!==false;}if(this.state.type==='steel')this.table.traverse(o=>{if(o.isMesh&&o.geometry.type==='BoxGeometry'&&o.position.z===-.016)o.material.color.set(this.state.color||'#abb6ba');});}

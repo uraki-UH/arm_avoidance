@@ -126,7 +126,13 @@ def main():
             assert all(a not in patches or b not in patches for a, b in latest['sharp_edges']), \
                 'A surface crosses a sharp plane boundary'
         if args.template:
-            assert set(members) == set(range(len(msg.nodes))), 'Missing node membership'
+            if latest.get('has_candidate_filter', False):
+                # 候補限定時の入力添字・候補数の整合。対象外ノードは曲面出力対象外。
+                assert latest['num_input_nodes'] == len(msg.nodes), 'Input node count mismatch'
+                assert len(members) == latest['num_candidate_nodes'], 'Candidate membership mismatch'
+                assert all(0 <= idx < len(msg.nodes) for idx in members), 'Invalid original node index'
+            else:
+                assert set(members) == set(range(len(msg.nodes))), 'Missing node membership'
         if args.graph:
             assert graph, 'No graph matches the model frame'
             expected = {m['id']: [graph.nodes[i].id for i in m['node_indices']]

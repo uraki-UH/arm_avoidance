@@ -61,7 +61,7 @@ struct ClusterOptions
   double retention_normal_alignment_deg = 85.0;
 
   // 面内縦横比 sqrt(第2固有値 / 第3固有値)。面幅条件との選択判定。
-  double min_cluster_planarity = 0.45;
+  double min_plane_aspect_ratio = 0.45;
 
   // 面内短軸の標準偏差 / 平均局所ノード間隔。縦横比に代わる面幅の判定値。
   // 十分な幅のある長い路面の許容と、一本鎖や幅の乏しい帯の除外用。
@@ -69,9 +69,6 @@ struct ClusterOptions
 
   // 生成・統合時のRMS残差比。分母は所属ノードの局所間隔平均（任意の絶対上限付き）。
   double max_normalized_cluster_residual = 0.15;
-
-  // 成長中の面内縦横比。min_plane_width_ratioによる面幅条件との選択判定。
-  double min_growth_planarity = 0.25;
 
   // ノードの取り込み・移動で要求するGNG接続証拠の本数。
   // 1本だけの偶然の接続による所属の漏れ出しを防ぐ。ノード1個の判定はその1点が
@@ -88,7 +85,7 @@ struct ClusterOptions
 
   // クラスタ併合の候補と認めるために要求する、クラスタ間の直接GNGエッジ本数。
   //
-  // 併合は数百点対数百点の結合フィット(merge_min_planarity・
+  // 併合は数百点対数百点の結合フィット(min_plane_aspect_ratio・
   // merge_residual_growth_ratio等)で最終判定するため、統計的に頑健で、1本の
   // 偶然のエッジが混ざっても弾かれやすい。実測(同一フレーム列150枚、
   // merge_residual_growth_ratio=1.1固定): connection_requirementを2→1相当に
@@ -130,9 +127,6 @@ struct ClusterOptions
 
   // 保守点検(移動・取り込み)を1フレームで回す上限回数。
   std::size_t maintenance_iter = 2;
-
-  // 統合後全体の面内縦横比。min_plane_width_ratioによる面幅条件との選択判定。
-  double merge_min_planarity = 0.25;
 
   // 併合を認めるために、結合後の残差が元のクラスタから悪化してよい倍率。
   //

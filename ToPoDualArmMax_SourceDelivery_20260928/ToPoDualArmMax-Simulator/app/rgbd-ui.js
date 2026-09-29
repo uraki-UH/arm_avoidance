@@ -6,7 +6,7 @@ const $=id=>document.getElementById(id);
 const colorLUT=Float32Array.from({length:256},(_,i)=>{const x=i/255;return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);});
 export class RGBDWorkspace {
  constructor({scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly}){
-  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;
+  Object.assign(this,{scene,overlay,renderer,camera,robot,environment,exclude,toast,download,aim,onCloudOnly});this.sensor=new RGBDSensor(renderer,scene);this.live=false;this.lastTime=0;this.rate=0;this.cloudOnly=false;this.last_capture_end_ms=0;this.last_capture_ms=0;this.is_capture_pending=false;this.capture_generation=0;
   this.cloud=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({size:2,sizeAttenuation:false,vertexColors:true,toneMapped:false}));this.cloud.frustumCulled=false;this.cloud.layers.set(1);this.cloud.visible=false;scene.add(this.cloud);
   this.frustum=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xb553bb,transparent:true,opacity:.55}));overlay.add(this.frustum);this.frustum.visible=false;
   this.ui();this.lastSummary={ready:true,live:false,frame:null};
@@ -15,7 +15,7 @@ export class RGBDWorkspace {
   $('sensor-panel').innerHTML=`<div class="panel-heading"><div><span class="eyebrow">HEAD CAMERA</span><h2>RealSense D435i</h2></div><span class="chip">RGB-D</span></div>
   <div class="row-actions"><button id="sensor-aim">テーブルを見る</button><button id="sensor-live">▶ RGB-D開始</button><button id="sensor-once">1回取得</button></div>
   <label class="field-label">深度プロファイル<select id="sensor-profile"><option value="848">848 × 480 · 公称HD画角</option><option value="1280">1280 × 720 · 高密度</option><option value="424">424 × 240 · 軽量縮小</option><option value="custom" disabled>カスタム校正</option></select></label>
-  <div class="row-actions"><select id="sensor-mode" aria-label="深度モード"><option value="ideal">幾何真値（float32 m）</option><option value="stereo" selected>ステレオ可視性 + Z16近似</option></select><select id="sensor-fps" aria-label="取得頻度"><option>5</option><option selected>10</option><option>15</option><option>30</option></select><span>Hz</span></div>
+  <div class="row-actions"><select id="sensor-mode" aria-label="深度モード"><option value="ideal">幾何真値（float32 m）</option><option value="stereo" selected>ステレオ可視性 + Z16近似</option></select><select id="sensor-fps" aria-label="取得頻度"><option>5</option><option selected>10</option><option>15</option><option>30</option></select><span>Hz（上限）</span></div><p class="sub-note">連続取得は操作性を保つため処理負荷に応じて頻度を制限。1フレームの解像度・点数は維持。</p>
   <p class="sub-note">首2軸・腰Yawに追従。基線50 mmのステレオ可視性とZ16。各深度画素から1点、間引きなし。最短距離は848×480で195 mm、1280×720で280 mm、424×240で105 mm。実機個体の校正・IR照射・露光・欠損率は未再現。</p>
   <div class="sensor-images"><figure><figcaption>RGB <span>1280 × 720</span></figcaption><canvas id="rgb-preview" width="1280" height="720" aria-label="D435i RGB画像"></canvas></figure><figure><figcaption>Depth <span>Z [m] · クリックで計測</span></figcaption><canvas id="depth-preview" width="848" height="480" aria-label="D435i 深度画像"></canvas><div class="depth-scale"><span id="depth-near">0.195 m</span><span id="depth-far">3 m</span></div></figure></div>
   <div id="sensor-stats" class="sensor-stats" role="status">取得待ち</div>
@@ -33,8 +33,9 @@ export class RGBDWorkspace {
   $('pixel-read').onclick=()=>this.readPixel(+$('pixel-u').value,+$('pixel-v').value);$('depth-preview').onclick=e=>{const r=e.currentTarget.getBoundingClientRect(),k=this.sensor.lastFrame?.calibration.depth;if(k)this.readPixel(Math.floor((e.clientX-r.left)*k.width/r.width),Math.floor((e.clientY-r.top)*k.height/r.height));};
   $('sensor-export').onclick=()=>this.exportFrame();$('sensor-verify').onclick=()=>this.verify();
  }
- configure(c){this.sensor.configure(c);$('calibration-json').value=JSON.stringify(c,null,2);this.lastTime=0;$('sensor-stats').textContent='校正更新済み。次の取得で反映されます。';}
+ configure(c){this.capture_generation++;this.sensor.configure(c);$('calibration-json').value=JSON.stringify(c,null,2);this.lastTime=0;$('sensor-stats').textContent='校正更新済み。次の取得で反映されます。';}
  resetForRobot(robot){
+  this.capture_generation++;
   this.exclude=this.exclude.map(o=>o===this.robot.links.camera_link?robot.links.camera_link:o);this.robot=robot;this.live=false;this.lastTime=0;this.sensor.lastFrame=null;this.lastSummary={ready:false,model:robot.modelId,frame:null};
   this.cloud.geometry.dispose();this.cloud.geometry=new THREE.BufferGeometry();this.cloud.visible=false;
   for(const id of ['rgb-preview','depth-preview']){const c=$(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
@@ -45,17 +46,25 @@ export class RGBDWorkspace {
  opticalWorld(){const link=this.robot.links.camera_optical_frame;link.updateWorldMatrix(true,false);return link.matrixWorld.clone();}
  tick(now){
   if(this.frustum.visible)this.updateFrustum();
-  if(this.live&&now-this.lastTime>=1000/+$('sensor-fps').value)this.capture();
+  // 取得負荷と同じ長さの休止による、連続取得中の描画・入力処理時間の確保
+  if(this.live&&now-this.lastTime>=1000/+$('sensor-fps').value&&now-this.last_capture_end_ms>=this.last_capture_ms)this.capture();
  }
- capture(){
+ async capture({target_group=null}={}){
+  if(this.is_capture_pending)return null;
+  this.is_capture_pending=true;const generation=this.capture_generation;
   try{
    const start=performance.now(),elapsed=start-this.lastTime;this.lastTime=start;
-   const frame=this.sensor.capture(this.opticalWorld(),{mode:$('sensor-mode').value,exclude:[...this.exclude,this.cloud]});frame.robotPose=this.robot.getPose();frame.robotModel=this.robot.modelId;frame.workspace=this.environment.getState();this.rate=elapsed>0?1000/elapsed:0;
-   this.paint(frame);this.updateCloud(frame);$('sensor-export').disabled=false;
+   const robot_pose=this.robot.getPose(),robot_model=this.robot.modelId,workspace_state=this.environment.getState();
+   const frame=await this.sensor.capture(this.opticalWorld(),{mode:$('sensor-mode').value,exclude:[...this.exclude,this.cloud],enable_async_read:true,target_group});
+   if(generation!==this.capture_generation)return null;
+   this.sensor.lastFrame=frame;frame.robotPose=robot_pose;frame.robotModel=robot_model;frame.workspace=workspace_state;this.rate=elapsed>0?1000/elapsed:0;
+   this.paint(frame);if(this.cloud.visible)this.updateCloud(frame);$('sensor-export').disabled=false;
    $('sensor-stats').textContent=`${frame.valid.toLocaleString()} 点 / ${(frame.calibration.depth.width*frame.calibration.depth.height).toLocaleString()}画素（1フレーム） · 着色 ${frame.colored.toLocaleString()}点\nステレオ除外 ${frame.stereoRejected.toLocaleString()}点 · Min-Z ${frame.calibration.min_depth_m} m\nZ ${frame.min.toFixed(3)}–${frame.max.toFixed(3)} m · ${frame.ms.toFixed(1)} ms / 取得${this.live?' · 実測 '+this.rate.toFixed(1)+' Hz':''}`;
    this.lastSummary={ready:true,model:this.robot.modelId,live:this.live,frame:{id:frame.id,timestamp:frame.timestamp,width:frame.calibration.depth.width,height:frame.calibration.depth.height,valid:frame.valid,colored:frame.colored,stereoRejected:frame.stereoRejected,min:frame.min,max:frame.max,ms:frame.ms,renderMs:frame.renderMs,hz:this.rate,mode:frame.mode,depthWorld:frame.depthWorld},workspace:frame.workspace};
+   this.last_capture_end_ms=performance.now();this.last_capture_ms=this.last_capture_end_ms-start;
    document.documentElement.dataset.rgbdState=JSON.stringify(this.lastSummary);return frame;
-  }catch(e){this.live=false;$('sensor-live').textContent='▶ RGB-D開始';$('sensor-stats').textContent='RGB-D取得エラー：'+e.message;console.error(e);this.toast(e.message);return null;}
+  }catch(e){if(generation!==this.capture_generation)return null;this.live=false;$('sensor-live').textContent='▶ RGB-D開始';$('sensor-stats').textContent='RGB-D取得エラー：'+e.message;console.error(e);this.toast(e.message);return null;}
+  finally{this.is_capture_pending=false;}
  }
  paint(f){
   const rgb=$('rgb-preview'),d=$('depth-preview'),kc=f.calibration.color,k=f.calibration.depth;rgb.width=kc.width;rgb.height=kc.height;rgb.previousElementSibling.querySelector('span').textContent=`${kc.width} × ${kc.height}`;rgb.getContext('2d').putImageData(new ImageData(f.rgba,kc.width,kc.height),0,0);d.width=k.width;d.height=k.height;

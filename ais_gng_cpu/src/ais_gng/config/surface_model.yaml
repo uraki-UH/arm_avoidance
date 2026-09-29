@@ -4,6 +4,9 @@
     surface_model.enable: false
     # modelは従来の形状推定、smooth_graphはモデル当てはめなしの連続面抽出。
     surface_model.method: model
+    # 複数の元平面または保持曲面を含む到達成分への探索限定。対象外ノードの曲面出力省略。
+    # 必要平面数はmin_display_plane_patchesと共通。model方式専用の起動時設定。
+    surface_model.enable_plane_local_search: false
     # 一行ログのCurveは別ノードの直近計算時間。軽量通知は出力先の/update_ms。
     surface_model.output_topic: /curved_surface_clusters
     surface_model.hz: 2.0

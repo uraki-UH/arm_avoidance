@@ -14,6 +14,10 @@ namespace fuzzrobo::surface_model
 struct options
 {
   std::string method = "model";
+  // 平面核を持つ到達成分だけの新規探索。対象外ノードは出力対象外。
+  bool enable_plane_local_search = false;
+  // 新規探索候補の異なる元平面数。0は枚数による候補除外なし。保持曲面は枚数から独立。
+  std::size_t min_candidate_plane_patches = 2;
   double max_link_length = 0.08;
   double max_link_normal_deg = 45.0;
   // smooth_graphのエッジと接平面の角度[deg]。
@@ -111,6 +115,10 @@ struct region
 
 struct result
 {
+  // 平面核に基づく対象限定の適用状態と入力・候補ノード数。
+  bool has_candidate_filter = false;
+  std::size_t num_input_nodes = 0;
+  std::size_t num_candidate_nodes = 0;
   std::string method = "model";
   std::vector<local_patch> patches;
   // 元GNGの接続に由来するパッチ間edge。smooth_edgesは法線・距離ゲート通過分。

@@ -14,6 +14,9 @@ def generate_launch_description():
         'demo_config': str(share/'config/dual_arm_gazebo_demo.yaml'),
         'avoidance_config': str(share/'config/dual_arm_gng_lidar_demo.yaml'),
         'gui': '',
+        'enable_external_control': 'false',
+        'enable_dynamixel_leader': 'false',
+        'dynamixel_input_topic': '/dynamixel/state/present',
         'enable_auto_start': '',
         'gazebo_master_uri': 'http://127.0.0.1:11355',
     }

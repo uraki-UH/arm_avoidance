@@ -230,6 +230,9 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     {"min_display_plane_patches",min_display_plane_patches},
     {"patches",json::array()},{"models",json::array()}};
   out["method"]=surfaces.method;
+  out["has_candidate_filter"]=surfaces.has_candidate_filter;
+  out["num_input_nodes"]=map.nodes.size();
+  out["num_candidate_nodes"]=surfaces.has_candidate_filter ? surfaces.num_candidate_nodes:map.nodes.size();
   if (surfaces.method=="smooth_graph") {
     out["link_check_num"]=surfaces.link_check_num;
     out["connectivity_node_num"]=surfaces.connectivity_node_num;
@@ -296,6 +299,10 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   if (!std::isfinite(hz) || hz<=0) throw std::invalid_argument("surface_model.hz must be finite and positive");
   period_=1.0/hz;
   config_.method=node.declare_parameter("surface_model.method",config_.method);
+  config_.enable_plane_local_search=node.declare_parameter(
+    "surface_model.enable_plane_local_search",config_.enable_plane_local_search);
+  // 新規探索と表示・追跡資格の平面枚数の統一。0は枚数による候補除外なし。
+  config_.min_candidate_plane_patches=min_display_plane_patches_;
   if (config_.method!="model" && config_.method!="smooth_graph")
     throw std::invalid_argument("surface_model.method must be model or smooth_graph");
   config_.max_link_length=node.declare_parameter("surface_model.max_link_length",config_.max_link_length);

@@ -2,6 +2,24 @@
 
 ## 要約
 
+所属継承の費用調査：重複履歴64 KiBと新規フラグの初期化を削減。
+固定60入力×10試行で出力一致。CPU時間7.149→7.094 msはばらつき内で、大幅改善・実行中の増加原因は未確認。
+[試験条件・採否・起動コマンド](../../../benchmarks/voxel_plane_lookup_20260928/inheritance_perf.md)。
+
+続報：生成世代付きの追加ノードについて、最近傍接続先の平面への所属継承を実装。
+既存growth_residual_ratioによる法線方向距離判定で、接続1本・法線未推定でも取り込み。
+詳細は下記のCPUサンプリング仕様を参照。追加条件そのものは変更なし。
+床・壁、距離内外、翌フレーム保持・逸脱、差分統計ON/OFFを含む平面テスト69件成功。
+初回試験は生成世代なしの入力にも適用して既存5件が失敗し、対象識別の修正後に全件成功。
+実bagの見え方・性能差は未測定。ライブラリのビルド・install反映済み、既存ROSの再起動なし。
+起動したビルド・テストは終了済み。既存gng_cpu_container内でROS環境読込み後の実行コマンド：
+
+```bash
+timeout 180 cmake --build /ros2_ws/build/ais_gng --target test_plane_cluster_incremental -j2
+timeout 60 /ros2_ws/build/ais_gng/test_plane_cluster_incremental
+timeout 60 cmake --install /ros2_ws/build/ais_gng
+```
+
 続報：入力を既存警戒領域で受け持つ最近傍の通常寿命を更新し、追加削除の往復を抑制。
 通常gng_cpuへ反映、既存ROS再起動なし。診断は通常ビルドから除外。
 [比較条件・結果・全起動コマンド](../../../benchmarks/voxel_plane_lookup_20260928/churn.md)。

@@ -77,6 +77,9 @@ def safe_bool(value, default):
 
 def launch_setup(context, *args, **kwargs):
     pkg_share = get_package_share_directory("gng_vlut_system")
+    joint_control_backend = LaunchConfiguration("joint_control_backend").perform(context)
+    if joint_control_backend not in ("viewer", "dynamixel", "external"):
+        raise ValueError("joint_control_backendはviewer・dynamixel・externalのいずれかが必要です")
     params_file = LaunchConfiguration("params_file").perform(context)
     data_dir = LaunchConfiguration("dir").perform(context)
     exp_id = LaunchConfiguration("id").perform(context)
@@ -344,23 +347,22 @@ def launch_setup(context, *args, **kwargs):
             }.items()
         ),
 
-        # 0.5 source claim / command を統合する mux
+        # 関節単位の指令統合と選択した出力先への接続
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "joint_state_mux.launch.py")),
+            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "joint_control.launch.py")),
+            condition=IfCondition(str(joint_control_backend != "external").lower()),
             launch_arguments={
+                "params_file": params_file,
+                "urdf_path": urdf_path,
                 "robot_name": robot_name,
-            }.items()
-        ),
-
-        # 0.6 仮想的な関節追従ドライバ（mux の target_joint_states -> joint_states）
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_share, "launch", "virtual_joint_state_driver.launch.py")),
-            launch_arguments={
-                "robot_name": robot_name,
-                "target_topic": f"/{robot_name}/target_joint_states",
-                "state_topic": viewer_joint_state_topic,
-                "output_topic": viewer_joint_state_topic,
-                "direct_tracking": direct_joint_tracking,
+                "backend": joint_control_backend,
+                "state_topic": (viewer_joint_state_topic if joint_control_backend == "viewer"
+                                else f"/{robot_name}/joint_states"),
+                "mapping_file": LaunchConfiguration("dynamixel_mapping_file"),
+                "enable_dynamixel_input": LaunchConfiguration("enable_dynamixel_input"),
+                "dynamixel_input_topic": LaunchConfiguration("dynamixel_input_topic"),
+                "viewer_topic": viewer_joint_state_topic,
+                "enable_direct_tracking": direct_joint_tracking,
             }.items()
         ),
 
@@ -537,6 +539,11 @@ def generate_launch_description():
             default_value="",
             description="初回姿勢配信の上書き。未指定時はparams_fileを使用。",
         ),
+        DeclareLaunchArgument("joint_control_backend", default_value="viewer",
+                              description="関節出力先。viewer・dynamixel・external"),
+        DeclareLaunchArgument("dynamixel_mapping_file", default_value=""),
+        DeclareLaunchArgument("enable_dynamixel_input", default_value=""),
+        DeclareLaunchArgument("dynamixel_input_topic", default_value="/dynamixel/state/present"),
         DeclareLaunchArgument(
             "direct_joint_tracking",
             default_value="true",

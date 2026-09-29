@@ -13,7 +13,7 @@ ros2 launch gng_vlut_system dual_arm_gng_lidar_demo.launch.py
 
 maxが既定。`gui:=false`で画面なし、`enable_auto_start:=false`で手動開始。
 開始・停止は`/sim_topo_dual_arm_max/avoidance/{start,stop}`のTrigger。通常・幾何退避デモとは別に起動。
-longは専用YAMLと学習済みGNG/VLUTが必要。今回の有限トルクでの実行検証はmaxのみ。
+max / longのGNG＋VLUTは[再生成済み](2026-09-28_effectivity_map_refresh.md)。有限トルクでの実行検証はmaxのみ。
 Viewerでは`sim_topo_dual_arm_max`、同名前空間の`lidar_points`・`Tmap_static`・`plan_Tmap`・`avoidance/markers`を表示。
 
 観測点群との腕別余裕から対象腕を選択。片側接近では非対象腕・胴体・指を実測姿勢に固定し、
@@ -34,7 +34,7 @@ GNG目標・局所補完・復帰に適用。両側接近では両腕を対象�
 
 | 項目 | 内容 |
 | --- | --- |
-| 学習 | max / longとも上限10,000、初期240万回・衝突考慮10万回・座標エッジ各10万回。maxは実数10,000ノード・左右2層、VLUTまで1,719.646 s。longは設定変更のみ |
+| 学習 | max / longとも上限10,000、初期240万回・衝突考慮10万回・座標エッジ各10万回。初回maxは実数10,000ノード・左右2層、VLUTまで1,719.646 s。最新の両モデル再生成結果は[更新記録](2026-09-28_effectivity_map_refresh.md) |
 | LiDAR | CPU ray、180×72、10 Hz、距離0.07～2.5 m、world位置(0.85,0,0.75)、pitch=0.4 rad、yaw=π |
 | 点群 | base_link座標、2 cm voxel、自己除去、危険領域12 cm膨張 |
 | 経路・配信 | VLUT安全ノード・関節角エッジ、最大0.08 rad刻みの中間確認。形状・角度は初回取得、`gng_node_states`はID・labelの交互配列 |
@@ -86,8 +86,8 @@ Viewerの全配信は移行前にWebSocketで確認済み（`artifacts/dual_arm_
 今回起動した全試験launch・探索子プロセス・開始補助ノードを終了。既存プロセス・コンテナへの停止操作なし。
 終了時に別作業の`/tmp/ode_probe_20260928/`を使用するGazeboを観測したが、操作なし。
 
-腕別選択・協調再探索の変更後は次の単体試験18件に成功。左右選択・両側接近・非対象関節の保持・
-復帰・古い探索の破棄・自己干渉棄却・協調成功と失敗・拡張不要条件・次周期の対象維持を含む。変更後のGazebo動作は未検証で、上表は変更前の結果。
+腕別選択・協調再探索の変更後は次の単体試験19件に成功。左右選択・両側接近・非対象関節の保持・
+復帰・古い探索の破棄・自己干渉棄却・協調成功と失敗・拡張不要条件・次周期の対象維持を含む。上表は腕別選択変更前の結果。変更後の結果は以下。
 
 ```bash
 docker exec gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source /ros2_ws/install/local_setup.bash; python3 /ros2_ws/src/gng_vlut_system/test/test_gng_lidar_path.py'
@@ -95,3 +95,11 @@ docker exec gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash; source
 
 この追加試験と探索子プロセスは終了済み。新規ROSノード起動なし。
 SciPyのNumPyバージョン警告あり、試験は成功。
+
+新max mapと腕別選択のGazebo試験は左右退避・復帰を完了し、最小推定余裕0.05199 m。
+診断653件中、左のみ117件・右のみ122件・選択なし414件、両腕協調0件。
+経路採用13回・GNG指令選択35回。協調分岐自体は単体試験で検証し、このシナリオでは未発生。
+ただし試験全体は起動直後の速度上限超過で失敗。L_joint2はJointState最大8.974 rad/s、上限3 rad/s。
+記録した超過7件は時刻0.730～0.733 s、回避状態の初回受信前。原因の確定・物理系の修正は未実施。
+後続の欠測停止検査へは未到達。試験launch・Gazebo・探索子プロセスは終了済み。
+詳細・実行コマンドは[再生成資料](../../../artifacts/effectivity_refresh_20260928/README.md)。

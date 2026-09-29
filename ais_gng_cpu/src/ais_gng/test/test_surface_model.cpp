@@ -1819,3 +1819,176 @@ TEST(SmoothSurfaceGraph, rejected_shortcut_inside_connected_surface_is_not_publi
     EXPECT_EQ(patch["curvature"]["valid"],false);
   }
 }
+
+namespace
+{
+scene local_search_shifted_cylinder()
+{
+  auto original=cylinder(0.1,0.1);
+  scene shifted;
+  shifted.map.header=original.map.header;
+  shifted.planes.header=original.planes.header;
+  add_node(shifted.map,vec(100,0,0),vec::UnitZ());
+  add_node(shifted.map,vec(200,0,0),vec::UnitZ());
+  shifted.map.nodes.insert(shifted.map.nodes.end(),original.map.nodes.begin(),original.map.nodes.end());
+  for (auto idx:original.map.edges) shifted.map.edges.push_back(idx+2);
+  ais_gng_msgs::msg::PlaneCluster unrelated;
+  unrelated.node_indices={0};
+  shifted.planes.clusters.push_back(unrelated);
+  for (auto plane:original.planes.clusters) {
+    for (auto &idx:plane.node_indices) idx+=2;
+    shifted.planes.clusters.push_back(std::move(plane));
+  }
+  return shifted;
+}
+}
+
+TEST(surface_local_search, empty_input_and_default_are_observable)
+{
+  scene empty;
+  options config;
+  const auto baseline=extract(empty.map,empty.planes,config);
+  EXPECT_FALSE(baseline.has_candidate_filter);
+  EXPECT_EQ(baseline.num_input_nodes,0U);
+  EXPECT_EQ(baseline.num_candidate_nodes,0U);
+  config.enable_plane_local_search=true;
+  const auto selected=extract(empty.map,empty.planes,config);
+  EXPECT_TRUE(selected.has_candidate_filter);
+  EXPECT_TRUE(selected.regions.empty());
+  EXPECT_EQ(selected.num_candidate_nodes,0U);
+  EXPECT_GE(selected.update_ms,0);
+}
+
+TEST(surface_local_search, duplicate_plane_ownership_does_not_create_second_core)
+{
+  auto data=cylinder(0.1,0.1);
+  ais_gng_msgs::msg::PlaneCluster plane;
+  for (std::size_t idx=0;idx<data.map.nodes.size();++idx) plane.node_indices.push_back(idx);
+  plane.node_indices.push_back(0);
+  plane.node_indices.push_back(999999);
+  data.planes.clusters={plane,plane};
+  options config;
+  config.enable_plane_local_search=true;
+  const auto selected=extract(data.map,data.planes,config);
+  EXPECT_EQ(selected.num_input_nodes,data.map.nodes.size());
+  EXPECT_EQ(selected.num_candidate_nodes,0U);
+  EXPECT_TRUE(selected.patches.empty());
+  EXPECT_TRUE(selected.regions.empty());
+  config.min_candidate_plane_patches=1;
+  EXPECT_EQ(extract(data.map,data.planes,config).num_candidate_nodes,data.map.nodes.size());
+}
+
+TEST(surface_local_search, all_plane_members_share_reachability_without_internal_edges)
+{
+  scene data;
+  for (int plane_idx=0;plane_idx<2;++plane_idx) {
+    ais_gng_msgs::msg::PlaneCluster plane;
+    for (int idx=0;idx<12;++idx) {
+      plane.node_indices.push_back(data.map.nodes.size());
+      add_node(data.map,vec(0.02*idx,0.02*plane_idx,0),vec::UnitZ());
+    }
+    data.planes.clusters.push_back(std::move(plane));
+  }
+  options config;
+  config.enable_plane_local_search=true;
+  EXPECT_EQ(extract(data.map,data.planes,config).num_candidate_nodes,0U);
+  edge(data.map,0,12);
+  EXPECT_EQ(extract(data.map,data.planes,config).num_candidate_nodes,24U);
+}
+
+TEST(surface_local_search, compact_result_restores_original_nodes_planes_and_ids)
+{
+  const auto original=cylinder(0.1,0.1);
+  const auto baseline=extract(original.map,original.planes);
+  auto shifted=local_search_shifted_cylinder();
+  shifted.map.nodes[1].pos.x=std::numeric_limits<float>::quiet_NaN();
+  edge(shifted.map,65535,0);
+  shifted.map.edges.push_back(1);
+  options config;
+  config.enable_plane_local_search=true;
+  const auto selected=extract(shifted.map,shifted.planes,config);
+  ASSERT_EQ(selected.regions.size(),baseline.regions.size());
+  ASSERT_EQ(selected.patches.size(),baseline.patches.size());
+  EXPECT_EQ(selected.num_input_nodes,original.map.nodes.size()+2);
+  EXPECT_EQ(selected.num_candidate_nodes,original.map.nodes.size());
+  EXPECT_EQ(selected.patch_edges,baseline.patch_edges);
+  EXPECT_EQ(selected.smooth_edges,baseline.smooth_edges);
+  for (std::size_t idx=0;idx<baseline.patches.size();++idx) {
+    const auto &expected=baseline.patches[idx];
+    const auto &actual=selected.patches[idx];
+    EXPECT_EQ(actual.plane_cluster_idx,expected.plane_cluster_idx<0 ? -1:expected.plane_cluster_idx+1);
+    ASSERT_EQ(actual.node_indices.size(),expected.node_indices.size());
+    for (std::size_t node_idx=0;node_idx<expected.node_indices.size();++node_idx)
+      EXPECT_EQ(actual.node_indices[node_idx],expected.node_indices[node_idx]+2);
+  }
+  for (std::size_t idx=0;idx<baseline.regions.size();++idx) {
+    EXPECT_EQ(selected.regions[idx].shape.type,baseline.regions[idx].shape.type);
+    EXPECT_TRUE(selected.regions[idx].shape.q.isApprox(baseline.regions[idx].shape.q,1e-12));
+    EXPECT_EQ(selected.regions[idx].id,baseline.regions[idx].id+2);
+  }
+}
+
+TEST(surface_local_search, retained_curve_bypasses_new_plane_count_and_keeps_colliding_id)
+{
+  auto shifted=local_search_shifted_cylinder();
+  const auto baseline=extract(shifted.map,shifted.planes);
+  const auto found=std::find_if(baseline.regions.begin(),baseline.regions.end(),[](const auto &surface) {
+    return surface.shape.type=="cylinder";
+  });
+  ASSERT_NE(found,baseline.regions.end());
+  auto retained=*found;
+  retained.id=0;
+  retained.is_retained=true;
+  options config;
+  config.enable_plane_local_search=true;
+  config.min_candidate_plane_patches=99;
+  const auto selected=extract(shifted.map,shifted.planes,config,{retained});
+  ASSERT_EQ(selected.regions.size(),1U);
+  EXPECT_TRUE(selected.regions.front().is_retained);
+  EXPECT_EQ(selected.regions.front().id,0U);
+  EXPECT_EQ(selected.num_candidate_nodes,shifted.map.nodes.size()-2);
+  EXPECT_EQ(*std::min_element(selected.regions.front().node_indices.begin(),selected.regions.front().node_indices.end()),2U);
+}
+
+TEST(surface_local_search, support_split_parent_restores_retained_id)
+{
+  auto shifted=local_search_shifted_cylinder();
+  const auto baseline=extract(shifted.map,shifted.planes);
+  const auto found=std::find_if(baseline.regions.begin(),baseline.regions.end(),[](const auto &surface) {
+    return surface.shape.type=="cylinder";
+  });
+  ASSERT_NE(found,baseline.regions.end());
+  auto retained=*found;
+  retained.id=0;
+  retained.is_retained=true;
+  shifted.map.edges.clear();
+  options config;
+  config.enable_plane_local_search=true;
+  config.min_candidate_plane_patches=99;
+  config.min_plane_usage_ratio=0;
+  const auto selected=extract(shifted.map,shifted.planes,config,{retained});
+  ASSERT_GT(selected.regions.size(),1U);
+  EXPECT_TRUE(std::any_of(selected.regions.begin(),selected.regions.end(),[](const auto &surface) {
+    return surface.is_retained && surface.id==0;
+  }));
+  for (const auto &surface:selected.regions) {
+    EXPECT_EQ(surface.support_parent_id,0U);
+    if (!surface.is_retained)
+      EXPECT_EQ(surface.id,*std::min_element(surface.node_indices.begin(),surface.node_indices.end()));
+  }
+}
+
+TEST(surface_local_search, zero_plane_count_keeps_nonplane_only_mode)
+{
+  const auto data=cylinder(0.1,0.1,48,false);
+  options config;
+  config.min_plane_usage_ratio=0;
+  const auto baseline=extract(data.map,data.planes,config);
+  config.enable_plane_local_search=true;
+  config.min_candidate_plane_patches=0;
+  const auto selected=extract(data.map,data.planes,config);
+  ASSERT_EQ(selected.regions.size(),baseline.regions.size());
+  EXPECT_EQ(selected.num_candidate_nodes,data.map.nodes.size());
+  EXPECT_EQ(selected.regions.front().shape.type,baseline.regions.front().shape.type);
+  EXPECT_TRUE(selected.regions.front().shape.q.isApprox(baseline.regions.front().shape.q,1e-12));
+}

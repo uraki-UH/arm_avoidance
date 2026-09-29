@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 from types import SimpleNamespace
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
@@ -134,6 +135,19 @@ class test_gng_lidar_path(unittest.TestCase):
         search = self.make_paired_search()
         search.config['max_plan_sec'] = -1.
         result = search.plan_with_coordination(.9)
+        self.assertTrue(search.has_timed_out)
+        np.testing.assert_array_equal(result['active_angle_indices'], [0])
+
+    def test_timeout_during_last_collision_check_does_not_expand(self):
+        search = self.make_paired_search()
+        elapsed = [0.]
+        def reject_after_deadline(*_):
+            elapsed[0] = 2.
+            search.has_inter_arm_rejection = True
+            return False
+        search.can_bridge = reject_after_deadline
+        with patch('dual_arm_gng_lidar_demo.time.monotonic', side_effect=lambda: elapsed[0]):
+            result = search.plan_with_coordination(.9)
         self.assertTrue(search.has_timed_out)
         np.testing.assert_array_equal(result['active_angle_indices'], [0])
 

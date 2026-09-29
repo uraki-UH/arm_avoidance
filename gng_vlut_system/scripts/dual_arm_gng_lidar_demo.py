@@ -129,6 +129,7 @@ class gng_path_search:
                 if next_cost < costs.get(adjacent, float('inf')):
                     costs[adjacent], previous[adjacent] = next_cost, idx
                     heapq.heappush(queue, (next_cost, adjacent))
+        self.has_timed_out = time.monotonic() > deadline
         return []
 
 

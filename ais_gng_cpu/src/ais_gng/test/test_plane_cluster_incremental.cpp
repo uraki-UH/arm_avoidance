@@ -110,6 +110,119 @@ TopologicalMap makeSinglePlane()
   return map;
 }
 
+TEST(PlaneInsertion, SingleEdgeInheritsPlaneOnlyOnFirstObservation)
+{
+  for (const bool enable_delta : {false, true}) {
+    for (const bool is_wall : {false, true}) {
+      for (const bool is_outside : {false, true}) {
+        ClusterOptions options;
+        options.enable_delta_statistics = enable_delta;
+        options.enable_coplanar_absorption = false;
+        Clusterizer clusterizer(options);
+        auto map = makeSinglePlane();
+        if (is_wall) {
+          for (auto &node : map.nodes) {
+            std::swap(node.pos.x, node.pos.z);
+            std::swap(node.normal.x, node.normal.z);
+          }
+        }
+        ClusterResult before;
+        for (int iter = 0; iter < 8; ++iter) {before = clusterizer.update(map);}
+        ASSERT_EQ(before.clusters.clusters.size(), 1U);
+        const auto plane_id = before.clusters.clusters.front().id;
+        auto node = map.nodes[35];
+        node.id = 36U;
+        node.frame = 1U;
+        node.pos.y += 0.05F;
+        const float height = is_outside ? 0.03F : 0.002F;
+        if (is_wall) {node.pos.x += height;} else {node.pos.z += height;}
+        // 新規ノードの法線未推定と接続1本の再現。
+        node.normal.x = node.normal.y = node.normal.z = 0.0F;
+        map.nodes.push_back(node);
+        map.edges.insert(map.edges.end(), {35U, 36U});
+        const auto actual = clusterizer.update(map);
+        const auto has_member = [](const ClusterResult &result, std::uint32_t id) {
+            for (const auto &plane : result.clusters.clusters) {
+              if (plane.id == id && std::find(plane.node_indices.begin(),
+                  plane.node_indices.end(), 36U) != plane.node_indices.end()) {return true;}
+            }
+            return false;
+          };
+        EXPECT_EQ(has_member(actual, plane_id), !is_outside);
+        EXPECT_EQ(has_member(clusterizer.update(map), plane_id), !is_outside);
+        // 翌フレームの明確な面外移動は通常の解放対象。
+        if (is_wall) {map.nodes.back().pos.x += 0.5F;}
+        else {map.nodes.back().pos.z += 0.5F;}
+        EXPECT_FALSE(has_member(clusterizer.update(map), plane_id));
+      }
+    }
+  }
+}
+
+TEST(PlaneMerge, CovarianceOverlapWithoutConnectingEdges)
+{
+  for (const bool is_wall : {false, true}) {
+    for (const int scenario : {0, 1, 2, 3}) {
+      ClusterOptions options;
+      Clusterizer clusterizer(options);
+      TopologicalMap map;
+      const double origin[3] = {0, 0, 0};
+      const double inner_origin[3] = {0.8, 0.8, 0.4};
+      const double u[3] = {1, 0, 0}, v[3] = {0, 1, 0};
+      appendGrid(map, 10, 10, 0.2, origin, u, v, TopologicalMap::SAFE_TERRAIN);
+      appendGrid(map, 3, 3, 0.1, inner_origin, u, v, TopologicalMap::SAFE_TERRAIN);
+      if (is_wall) {
+        for (auto &node : map.nodes) {
+          std::swap(node.pos.x, node.pos.z);
+          std::swap(node.normal.x, node.normal.z);
+        }
+      }
+      ClusterResult result;
+      for (int iter = 0; iter < 8; ++iter) {result = clusterizer.update(map);}
+      ASSERT_EQ(result.clusters.clusters.size(), 2U);
+      std::uint32_t outer_id = 0;
+      for (const auto &plane : result.clusters.clusters) {
+        if (plane.node_indices.size() == 100) {outer_id = plane.id;}
+      }
+      ASSERT_NE(outer_id, 0U);
+      for (std::size_t idx = 100; idx < map.nodes.size(); ++idx) {
+        auto &node = map.nodes[idx];
+        // 内側・平行段差・遠方・標準偏差範囲からのはみ出し。接続エッジなし。
+        const float height = scenario == 1 ? 0.2F : 0.0F;
+        if (is_wall) {node.pos.x = height;} else {node.pos.z = height;}
+        if (scenario == 2) {node.pos.y += 5.0F;}
+        if (scenario == 3) {node.pos.y += 0.5F;}
+      }
+      for (int iter = 0; iter < 12; ++iter) {result = clusterizer.update(map);}
+      if (scenario == 0 || scenario == 3) {
+        ASSERT_EQ(result.clusters.clusters.size(), 1U);
+        EXPECT_EQ(result.clusters.clusters.front().id, outer_id);
+        EXPECT_EQ(result.clusters.clusters.front().node_indices.size(), 109U);
+      } else {
+        EXPECT_EQ(result.clusters.clusters.size(), 2U);
+      }
+    }
+  }
+}
+
+TEST(PlaneMerge, EqualSizedOverlappingPlanesWithoutEdges)
+{
+  for (const double shift : {0.15, 0.8}) {
+    auto map = makeSinglePlane();
+    const double origin[3] = {shift, 0.0, 0.2};
+    const double u[3] = {1, 0, 0}, v[3] = {0, 1, 0};
+    appendGrid(map, 6, 6, 0.05, origin, u, v, TopologicalMap::SAFE_TERRAIN);
+    Clusterizer clusterizer{ClusterOptions{}};
+    ClusterResult result;
+    for (int iter = 0; iter < 8; ++iter) {result = clusterizer.update(map);}
+    ASSERT_EQ(result.clusters.clusters.size(), 2U);
+    for (std::size_t idx = 36; idx < map.nodes.size(); ++idx) {map.nodes[idx].pos.z = 0;}
+    for (int iter = 0; iter < 12; ++iter) {result = clusterizer.update(map);}
+    EXPECT_EQ(result.clusters.clusters.size(), shift < 0.2 ? 1U : 2U);
+    EXPECT_EQ(result.statistics.clustered_node_count, 72U);
+  }
+}
+
 TEST(PlaneOutput, OptionalEdgesPreserveMembershipAndGeometry)
 {
   EXPECT_FALSE(ClusterOptions{}.enable_support_edges);
@@ -684,7 +797,7 @@ TEST(PlaneClusterIncremental, WidePlaneChainMergesDespiteAspectRatio)
     const ClusterResult result = clusterizer.update(map);
     ASSERT_EQ(result.clusters.clusters.size(), 1U);
     EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
-    EXPECT_LT(result.clusters.clusters.front().planarity, options.merge_min_planarity);
+    EXPECT_LT(result.clusters.clusters.front().planarity, options.min_plane_aspect_ratio);
   }
 }
 
@@ -700,6 +813,26 @@ TEST(PlaneClusterIncremental, LongWidePlaneIsNotRejectedAsChain)
   const auto result = warmUp(clusterizer, map);
   ASSERT_EQ(result.clusters.clusters.size(), 1U);
   EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+}
+
+// 共通の面形状設定による長方形の生成と一様スケールへの追従。
+TEST(PlaneClusterIncremental, SharedPlaneExtentAcrossScales)
+{
+  for (const double scale : {0.1, 1.0, 10.0}) {
+    TopologicalMap map;
+    const double origin[3] = {0.0, 0.0, 0.0};
+    const double axis_u[3] = {1.0, 0.0, 0.0};
+    const double axis_v[3] = {0.0, 1.0, 0.0};
+    appendGrid(map, 12U, 4U, 0.05 * scale, origin, axis_u, axis_v,
+      TopologicalMap::SAFE_TERRAIN);
+    ClusterOptions options;
+    options.min_plane_width_ratio = 100.0;
+    options.min_plane_aspect_ratio = 0.25;
+    Clusterizer clusterizer{options};
+    const auto result = warmUp(clusterizer, map);
+    ASSERT_EQ(result.clusters.clusters.size(), 1U);
+    EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
+  }
 }
 
 // 取り込み緩和のOFF時にも有効な保持ヒステリシスと、明確な逸脱の解放。
@@ -1073,7 +1206,7 @@ TEST(PlaneClusterIncremental, ExplicitSpacingCapRemainsAvailable)
 }
 
 // 大平面内の別成分が接続された場合の一括統合。凸包包含だけによる誤吸収の防止。
-TEST(PlaneClusterIncremental, InteriorPatchMergesOnlyWhenCoplanarAndConnected)
+TEST(PlaneClusterIncremental, InteriorPatchMergesWhenCoplanarWithoutConnection)
 {
   for (const double offset : {0.0, 0.08}) {
     SCOPED_TRACE(offset);
@@ -1088,7 +1221,7 @@ TEST(PlaneClusterIncremental, InteriorPatchMergesOnlyWhenCoplanarAndConnected)
       connect_plane_patches(map, pair.first, pair.second, false);
     }
     Clusterizer clusterizer{ClusterOptions{}};
-    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), 2U);
+    ASSERT_EQ(warmUp(clusterizer, map).clusters.clusters.size(), offset == 0.0 ? 1U : 2U);
     connect_plane_patches(map, 3U, 4U, true);
     connect_plane_patches(map, 4U, 5U, true);
     const auto result = clusterizer.update(map);
@@ -1128,7 +1261,7 @@ TEST(PlaneClusterIncremental, interior_patch_merge_uses_contact_region)
         options.merge_connection_requirement = 2U;
         Clusterizer clusterizer{options};
         const auto disconnected = warmUp(clusterizer, map);
-        ASSERT_EQ(disconnected.clusters.clusters.size(), 2U);
+        ASSERT_EQ(disconnected.clusters.clusters.size(), offset == 0.0 ? 1U : 2U);
         for (std::size_t row = 0U; row < 5U; ++row) {
           for (const bool is_right : {false, true}) {
             map.edges.push_back(static_cast<std::uint16_t>(
@@ -1140,7 +1273,7 @@ TEST(PlaneClusterIncremental, interior_patch_merge_uses_contact_region)
         const auto result = clusterizer.update(map);
         const auto num_clusters = offset == 0.0 ? 1U : 2U;
         EXPECT_EQ(result.clusters.clusters.size(), num_clusters);
-        EXPECT_EQ(result.statistics.merged_cluster_count, offset == 0.0 ? 1U : 0U);
+        EXPECT_EQ(result.statistics.merged_cluster_count, 0U);
         EXPECT_EQ(result.statistics.clustered_node_count, map.nodes.size());
         for (std::size_t iter = 0U; iter < 6U; ++iter) {
           const auto repeated = clusterizer.update(map);
@@ -1607,7 +1740,8 @@ TEST(PlaneClusterIncremental, directional_split_keeps_component_evidence_indepen
     }
     const auto split = clusterizer.update(conflict);
     EXPECT_EQ(split.statistics.split_cluster_count, 1U);
-    EXPECT_EQ(split.clusters.clusters.size(), base == 36U ? 2U : 3U);
+    // 前段の面外根拠が消えた内部パッチは再統合。現在の分断対象は独立に維持。
+    EXPECT_EQ(split.clusters.clusters.size(), 2U);
     EXPECT_EQ(split.statistics.clustered_node_count, 108U);
   }
 }

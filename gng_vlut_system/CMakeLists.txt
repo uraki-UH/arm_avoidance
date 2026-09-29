@@ -143,6 +143,9 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
   ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
   target_include_directories(test_goal_tasks PRIVATE src)
+  ament_add_gtest(test_joint_command_mux test/test_joint_command_mux.cpp)
+  target_include_directories(test_joint_command_mux PRIVATE src)
+  ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
   ament_target_dependencies(test_joint_state_utils Eigen3 sensor_msgs)
@@ -200,6 +203,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/urdf")
 endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
+  scripts/joint_command_model.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -207,6 +211,7 @@ install(PROGRAMS
   scripts/start_gazebo_physics.py
   scripts/dual_arm_gng_lidar_demo.py
   scripts/dual_arm_avoidance_demo.py
+  scripts/joint_command_output.py
   scripts/dual_arm_gazebo_demo.py
   scripts/video_file_publisher.py
   scripts/yolo_person_detector.py

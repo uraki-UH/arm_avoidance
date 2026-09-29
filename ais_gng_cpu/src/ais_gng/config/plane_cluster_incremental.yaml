@@ -36,14 +36,11 @@ plane_cluster_incremental_node:
     retention_normal_alignment_deg: 70.0
 
     # 共分散固有値λに対する面内縦横比 sqrt(λ2 / λ3)。面幅条件との選択判定。
-    min_cluster_planarity: 0.45
+    min_plane_aspect_ratio: 0.45
     # 面内短軸標準偏差 / 平均局所ノード間隔。長い路面と細い鎖の区別用。
     min_plane_width_ratio: 1.0
     # 平面からのRMS距離 / 平均局所ノード間隔。任意の絶対上限付き。
     max_normalized_cluster_residual: 0.15
-
-    # 成長中の面内縦横比 sqrt(λ2 / λ3)。面幅条件との選択判定。
-    min_growth_planarity: 0.25
 
     # ノード取り込み・移動時の候補クラスタへの隣接エッジ数の要求値。
     # ノード1個の判定は偶然の接続で誤って移りやすい。
@@ -92,9 +89,6 @@ plane_cluster_incremental_node:
     maintenance_iter: 2
     # 比較用の所属1パス更新。ON時はmaintenance_iter不使用、取り込み後の逸脱再確認付き。
     enable_temporal_update: false
-
-    # 併合後の面内縦横比 sqrt(λ2/λ3)。面幅条件との選択判定。
-    merge_min_planarity: 0.25
 
     # 併合後厚み比の許容上限: max(倍率 * max(r_A, r_B), 下限)。
     # r = sqrt(λ1) / mean(spacing)。併合による厚み比の過度な悪化の防止。

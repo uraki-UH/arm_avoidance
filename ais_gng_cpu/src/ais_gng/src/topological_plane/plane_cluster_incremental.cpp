@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -315,7 +316,7 @@ struct Clusterizer::Impl
       options.retention_normal_alignment_deg, options.normal_alignment_deg);
     retention_normal_alignment_cos =
       std::cos(options.retention_normal_alignment_deg * kRadiansPerDeg);
-    options.min_cluster_planarity = std::clamp(options.min_cluster_planarity, 0.0, 1.0);
+    options.min_plane_aspect_ratio = std::clamp(options.min_plane_aspect_ratio, 0.0, 1.0);
     options.min_plane_width_ratio = std::max(kEpsilon, options.min_plane_width_ratio);
     options.max_normalized_cluster_residual =
       std::max(0.0, options.max_normalized_cluster_residual);
@@ -323,11 +324,6 @@ struct Clusterizer::Impl
     // 実測では被覆が 67% から 31% まで落ちたため、ここで上限を揃える。
     options.growth_residual_ratio = std::min(
       options.growth_residual_ratio, options.max_normalized_cluster_residual);
-    // 成長中のしきい値が確定時より厳しいと、育つ前に必ず止まってしまう。
-    options.min_growth_planarity = std::clamp(
-      options.min_growth_planarity, 0.0, options.min_cluster_planarity);
-    options.merge_min_planarity = std::clamp(
-      options.merge_min_planarity, 0.0, options.min_cluster_planarity);
     options.maintenance_iter = std::max<std::size_t>(1U, options.maintenance_iter);
     options.connection_requirement =
       std::max<std::size_t>(1U, options.connection_requirement);
@@ -375,6 +371,8 @@ struct Clusterizer::Impl
   std::vector<int> owner_idx_by_node_id = std::vector<int>(kNodeIdRange, kUnassigned);
   // 所属・法線・連結履歴の同一性確認用の生成フレーム。
   std::vector<std::uint32_t> node_frames = std::vector<std::uint32_t>(kNodeIdRange, 0U);
+  // 生成世代の変化による初回観測・ID再利用の判別。法線推定の成否とは独立。
+  std::vector<std::uint8_t> is_new_node;
   std::uint32_t next_cluster_id = 1U;
   // ノードIDごとの法線EMA状態。IDをそのまま添字にしたフラット配列で持つ
   // (unordered_mapのハッシュ計算・バケット走査・ヒープ確保を避けるため)。
@@ -425,11 +423,14 @@ struct Clusterizer::Impl
   struct AdjacentPair
   {
     std::size_t edges = 0U;
+    bool is_overlap = false;
     double single_edge_ratio = 0.0;
     PlaneAccumulator first_contact;
     PlaneAccumulator second_contact;
   };
   std::unordered_map<std::uint64_t, AdjacentPair> adjacent_pair_counts;
+  std::vector<std::size_t> overlap_order;
+  std::vector<std::size_t> overlap_conflict_nodes;
   // 配列の詰め直しに依存しない永続クラスタID対による、1本接続の連続確認。
   struct consecutive_frame_state
   {
@@ -610,12 +611,15 @@ struct Clusterizer::Impl
     spacings.assign(node_count, 0.0);
     seed_scores.assign(node_count, 0.0);
     usable.assign(node_count, 0U);
+    is_new_node.resize(node_count);
     node_ids.resize(node_count);
     node_labels.resize(node_count);
     std::fill(current_idx_by_id.begin(), current_idx_by_id.end(), std::numeric_limits<std::uint32_t>::max());
 
     for (std::size_t index = 0U; index < node_count; ++index) {
       const auto node = map.read_node(map.nodes, index);
+      // 生成世代のない入力は従来の取り込み対象。生成世代付きの追加・再利用だけの継承。
+      is_new_node[index] = node.frame != 0U && node_frames[node.id] != node.frame;
       if (node_frames[node.id] != node.frame) {
         // ID再利用時の旧ノード履歴の失効。旧統計の除去は後段の差分集計で実施。
         owner_idx_by_node_id[node.id] = kUnassigned;
@@ -752,6 +756,30 @@ struct Clusterizer::Impl
         spacings[index] = std::sqrt(median);
       }
 
+      // 追加初回だけの最近傍接続先からの平面所属継承。通常取り込みの距離許容を再利用。
+      if (is_new_node[index] != 0U && !clusters.empty()) {
+        int adjacent_plane = kUnassigned;
+        double min_dist_squared = std::numeric_limits<double>::infinity();
+        for (std::size_t cursor = adjacency_offsets[index];
+          cursor < adjacency_offsets[index + 1U]; ++cursor)
+        {
+          const auto neighbour = adjacency_values[cursor];
+          const double dist_squared = (positions[index] - positions[neighbour]).squaredNorm();
+          if (dist_squared < min_dist_squared) {
+            min_dist_squared = dist_squared;
+            adjacent_plane = is_new_node[neighbour] != 0U ?
+              kUnassigned : owner_idx_by_node_id[node_ids[neighbour]];
+          }
+        }
+        if (adjacent_plane != kUnassigned &&
+          fitScore(adjacent_plane, index) <= options.growth_residual_ratio)
+        {
+          owner_idx_by_node_id[id] = adjacent_plane;
+          normals[index] = clusters[adjacent_plane].normal;
+          ++statistics.absorbed_node_count;
+          continue;
+        }
+      }
       if (supplied.allFinite() && supplied.squaredNorm() > kEpsilon) {
         normals[index] = supplied.normalized();
         continue;
@@ -770,6 +798,12 @@ struct Clusterizer::Impl
       }
       const PlaneFit fit = local.solve();
       if (!fit.is_valid) {
+        // 接続不足で法線未推定の既所属点は所属面で補完。面外距離は通常の保持判定対象。
+        const int owner = owner_idx_by_node_id[id];
+        if (owner != kUnassigned) {
+          normals[index] = clusters[owner].normal;
+          continue;
+        }
         usable[index] = 0U;
         continue;
       }
@@ -920,9 +954,9 @@ struct Clusterizer::Impl
 
   // 縦横比または局所間隔に対する面幅による線状領域の除外。長さへの非依存。
   bool has_plane_extent(
-    const PlaneFit &fit, const double spacing, const double min_planarity) const
+    const PlaneFit &fit, const double spacing) const
   {
-    return fit.planarity >= min_planarity ||
+    return fit.planarity >= options.min_plane_aspect_ratio ||
            fit.plane_width_std >= options.min_plane_width_ratio * std::max(spacing, kEpsilon);
   }
 
@@ -934,7 +968,13 @@ struct Clusterizer::Impl
            std::max(spacing, kEpsilon);
   }
 
-  // 対象ノード自身の局所間隔による平面距離比。粗いクラスタ平均による許容幅の膨張防止。
+  // 生成・統合に共通のRMS残差比。局所間隔の平均による正規化。
+  double normalized_plane_residual(const PlaneFit &fit, const double spacing) const
+  {
+    return fit.residual / effective_spacing(spacing);
+  }
+
+  // 対象ノード自身の局所間隔による平面距離比。
   double fitScore(const std::size_t cluster_index, const std::size_t node_index) const
   {
     const ClusterState &cluster = clusters[cluster_index];
@@ -1245,19 +1285,11 @@ struct Clusterizer::Impl
         // ここで却下マークを付けると、隣の種から育てば使えるノードまで潰れる。
         continue;
       }
-      // 種の時点で線分状なら、そこから育てても鎖にしかならない。
-      if (!has_plane_extent(fit, accumulator.meanSpacing(), options.min_growth_planarity)) {
-        ++statistics.chain_rejected_count;
-        rejectFrontier();
-        continue;
-      }
-
       // 育てながら平面を更新する。サイズが倍になるたびに解き直すことで、
       // 再フィット回数を log に抑えつつドリフトを止める。
       std::size_t refit_th = frontier.size() * 2U;
-      bool is_chain_like = false;
       for (std::size_t frontier_index = 0U;
-        frontier_index < frontier.size() && !is_chain_like; ++frontier_index)
+        frontier_index < frontier.size(); ++frontier_index)
       {
         const std::size_t current = frontier[frontier_index];
         for (std::size_t cursor = adjacency_offsets[current];
@@ -1302,39 +1334,27 @@ struct Clusterizer::Impl
             const PlaneFit updated = accumulator.solve();
             if (updated.is_valid) {
               fit = updated;
-              // サイズ倍化時の線状化判定。十分な幅を保った長い平面の許容。
-              if (!has_plane_extent(
-                  updated, accumulator.meanSpacing(), options.min_growth_planarity))
-              {
-                is_chain_like = true;
-                break;
-              }
             }
             refit_th = frontier.size() * 2U;
           }
         }
       }
 
-      if (is_chain_like) {
-        ++statistics.chain_rejected_count;
-        rejectFrontier();
-        continue;
-      }
-      if (frontier.size() < options.min_cluster_nodes) {
-        rejectFrontier();
-        continue;
-      }
       const PlaneFit final_fit = accumulator.solve();
       const double spacing = std::max(accumulator.meanSpacing(), kEpsilon);
       if (!final_fit.is_valid ||
-        final_fit.residual / effective_spacing(spacing) >
+        normalized_plane_residual(final_fit, spacing) >
         options.max_normalized_cluster_residual)
       {
         rejectFrontier();
         continue;
       }
-      if (!has_plane_extent(final_fit, spacing, options.min_cluster_planarity)) {
+      if (!has_plane_extent(final_fit, spacing)) {
         ++statistics.chain_rejected_count;
+        rejectFrontier();
+        continue;
+      }
+      if (frontier.size() < options.min_cluster_nodes) {
         rejectFrontier();
         continue;
       }
@@ -1653,7 +1673,23 @@ struct Clusterizer::Impl
     return changed;
   }
 
-  // 同じ平面に乗っていて、実際にエッジでつながっているクラスタ同士を併合する。
+  // 面内の重心差と双方の標準偏差による接触・重なり候補。厳密な外形接触とは独立の近似。
+  bool can_overlap_planes(const PlaneFit &outer, const PlaneFit &inner) const
+  {
+    if (!outer.is_valid || !inner.is_valid ||
+      std::abs(outer.normal.dot(inner.normal)) < normal_alignment_cos) {return false;}
+    const Eigen::Vector3d delta = inner.centroid - outer.centroid;
+    const Eigen::Vector3d u = outer.normal.unitOrthogonal();
+    const Eigen::Vector3d v = outer.normal.cross(u);
+    for (const auto &axis : {u, v}) {
+      const double outer_std = std::sqrt(std::max(0.0, axis.dot(outer.covariance * axis)));
+      const double inner_std = std::sqrt(std::max(0.0, axis.dot(inner.covariance * axis)));
+      if (std::abs(axis.dot(delta)) > outer_std + inner_std + kEpsilon) {return false;}
+    }
+    return true;
+  }
+
+  // エッジ接続と、共分散による近接候補の併合。
   bool mergeClusters(ClusterStatistics &statistics)
   {
     if (clusters.size() < 2U) {
@@ -1661,15 +1697,24 @@ struct Clusterizer::Impl
       return false;
     }
     adjacent_pair_counts.clear();
+    overlap_conflict_nodes.assign(clusters.size(), 0U);
     for (std::size_t index = 0U; index < label.size(); ++index) {
       const int first_label = label[index];
       if (first_label == kUnassigned) {
         continue;
       }
+      bool has_conflict = false;
       for (std::size_t cursor = adjacency_offsets[index];
         cursor < adjacency_offsets[index + 1U]; ++cursor)
       {
         const std::size_t neighbour = adjacency_values[cursor];
+        // 既存分断条件の面外接続数。近接統合による意図的分断の即時取り消しの防止。
+        if (options.enable_directional_split && !has_conflict && label[neighbour] != first_label) {
+          const auto edge = positions[neighbour] - positions[index];
+          const double height = clusters[first_label].normal.dot(edge);
+          has_conflict = height * height > split_edge_sin_squared * edge.squaredNorm();
+          if (has_conflict) {++overlap_conflict_nodes[first_label];}
+        }
         if (neighbour <= index) {
           continue;
         }
@@ -1687,6 +1732,41 @@ struct Clusterizer::Impl
         const auto second_idx = first_label < second_label ? neighbour : index;
         pair.first_contact.add(positions[first_idx], Eigen::Vector3d::Zero(), spacings[first_idx]);
         pair.second_contact.add(positions[second_idx], Eigen::Vector3d::Zero(), spacings[second_idx]);
+      }
+    }
+    // 重心X順の区間探索。遠方クラスタとの総当たりと所属ノードの再走査の回避。
+    overlap_order.resize(clusters.size());
+    double max_candidate_radius = 0.0;
+    for (std::size_t idx = 0U; idx < plane_fits.size(); ++idx) {
+      if (!plane_fits[idx].is_valid) {continue;}
+      max_candidate_radius = std::max(max_candidate_radius,
+        std::sqrt(std::max(0.0, plane_fits[idx].covariance.trace())) +
+        options.merge_smaller_side_residual_ratio * effective_spacing(accumulators[idx].meanSpacing()));
+    }
+    std::iota(overlap_order.begin(), overlap_order.end(), 0U);
+    std::sort(overlap_order.begin(), overlap_order.end(), [this](auto a, auto b) {
+        return plane_fits[a].centroid.x() < plane_fits[b].centroid.x();
+      });
+    for (std::size_t outer = 0; outer < clusters.size(); ++outer) {
+      const auto &fit = plane_fits[outer];
+      if (!fit.is_valid) {continue;}
+      const double height = options.merge_smaller_side_residual_ratio *
+        effective_spacing(accumulators[outer].meanSpacing());
+      const double radius = std::sqrt(std::max(0.0, fit.covariance.trace())) + height + max_candidate_radius;
+      auto it = std::lower_bound(overlap_order.begin(), overlap_order.end(),
+        fit.centroid.x() - radius, [this](auto idx, double x) {return plane_fits[idx].centroid.x() < x;});
+      for (; it != overlap_order.end() && plane_fits[*it].centroid.x() <= fit.centroid.x() + radius; ++it) {
+        const auto inner = *it;
+        const double min_conflicts = std::max(static_cast<double>(options.min_split_conflict_nodes),
+          options.min_split_conflict_ratio_th * accumulators[inner].count);
+        if (overlap_conflict_nodes[inner] >= min_conflicts) {continue;}
+        if (inner == outer || accumulators[inner].count > accumulators[outer].count ||
+          (accumulators[inner].count == accumulators[outer].count && inner < outer) ||
+          !can_overlap_planes(fit, plane_fits[inner])) {continue;}
+        const double residual = accumulators[inner].rms_to_plane(fit) /
+          effective_spacing(accumulators[inner].meanSpacing());
+        if (residual > options.merge_smaller_side_residual_ratio) {continue;}
+        adjacent_pair_counts[clusterPairKey(outer, inner)].is_overlap = true;
       }
     }
     if (adjacent_pair_counts.empty()) {
@@ -1714,7 +1794,11 @@ struct Clusterizer::Impl
       }
       const PlaneAccumulator &first_accumulator = merge_accumulators[first];
       const PlaneAccumulator &second_accumulator = merge_accumulators[second];
-      const bool is_fragment_merge = pair.edges < options.merge_connection_requirement;
+      const bool is_overlap = pair.is_overlap &&
+        (first_accumulator.count > second_accumulator.count ?
+        can_overlap_planes(merge_fits[first], merge_fits[second]) :
+        can_overlap_planes(merge_fits[second], merge_fits[first]));
+      const bool is_fragment_merge = !is_overlap && pair.edges < options.merge_connection_requirement;
       // 接続が弱い場合だけ、短い1本接続としての救済可否を確認。
       if (is_fragment_merge && !(can_merge_single_edge && pair.edges == 1U &&
         pair.single_edge_ratio <= options.max_fragment_edge_ratio_th))
@@ -1733,13 +1817,13 @@ struct Clusterizer::Impl
       merged_fit.mergeFrom(merge_accumulators[second]);
       const PlaneFit union_fit = merged_fit.solve();
       const double union_spacing = std::max(merged_fit.meanSpacing(), kEpsilon);
-      const double union_residual_ratio = union_fit.residual / effective_spacing(union_spacing);
+      const double union_residual_ratio = normalized_plane_residual(union_fit, union_spacing);
       if (!union_fit.is_valid) {
         ++statistics.merge_invalid_fit_pair_count;
         continue;
       }
       // 統合後の面幅判定。各側の残差と接触部の整合性による誤吸収防止との併用。
-      if (!has_plane_extent(union_fit, union_spacing, options.merge_min_planarity)) {
+      if (!has_plane_extent(union_fit, union_spacing)) {
         ++statistics.merge_planarity_rejected_pair_count;
         continue;
       }
@@ -1754,9 +1838,9 @@ struct Clusterizer::Impl
       // つないだ結果、元より当てはめが悪くなっていないことも確かめる。
       // 残差の絶対値だけだと、小さなクラスタ同士は何をつないでも通ってしまう。
       const double first_residual_ratio =
-        first_fit.residual / effective_spacing(first_accumulator.meanSpacing());
+        normalized_plane_residual(first_fit, first_accumulator.meanSpacing());
       const double second_residual_ratio =
-        second_fit.residual / effective_spacing(second_accumulator.meanSpacing());
+        normalized_plane_residual(second_fit, second_accumulator.meanSpacing());
       const double allowed_residual = std::max(
         options.merge_residual_growth_ratio *
         std::max(first_residual_ratio, second_residual_ratio),
@@ -1771,8 +1855,11 @@ struct Clusterizer::Impl
       const double max_side_ratio_th = std::min(options.merge_smaller_side_residual_ratio, max_pair_ratio_th);
       if (!can_fit_plane(first_accumulator, union_fit, max_side_ratio_th) ||
         !can_fit_plane(second_accumulator, union_fit, max_side_ratio_th) ||
-        !can_fit_plane(pair.first_contact, second_fit, max_side_ratio_th) ||
-        !can_fit_plane(pair.second_contact, first_fit, max_side_ratio_th))
+        (pair.edges > 0U && (!can_fit_plane(pair.first_contact, second_fit, max_side_ratio_th) ||
+        !can_fit_plane(pair.second_contact, first_fit, max_side_ratio_th))) ||
+        (is_overlap && !(first_accumulator.count > second_accumulator.count ?
+        can_fit_plane(second_accumulator, first_fit, max_side_ratio_th) :
+        can_fit_plane(first_accumulator, second_fit, max_side_ratio_th))))
       {
         ++statistics.merge_smaller_side_rejected_pair_count;
         continue;
@@ -2057,6 +2144,7 @@ void Clusterizer::reset()
   // 採番は巻き戻さない。同じIDが別のクラスタを指すと、過去のIDを覚えている
   // 利用側が取り違えるため。
   impl_->clusters.clear();
+  std::fill(impl_->node_frames.begin(), impl_->node_frames.end(), 0U);
   std::fill(impl_->owner_idx_by_node_id.begin(), impl_->owner_idx_by_node_id.end(), kUnassigned);
   impl_->fragment_merge_evidence.clear();
   impl_->split_evidence.clear();

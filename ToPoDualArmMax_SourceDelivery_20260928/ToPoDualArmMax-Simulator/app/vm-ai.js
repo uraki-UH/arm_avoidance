@@ -68,7 +68,7 @@ export class VMAIWorkspace{
     f=this.lidar.last;
     if(!f||f.id===this.lastSensorId){if(!this.lidar.busy)await this.lidar.capture();return;}
     if(!this.lidar.busy)this.lidar.capture();
-   }else f=this.rgbd.capture();
+   }else f=await this.rgbd.capture();
    if(generation!==this.generation||!f||!f.xyz.length)return;
    this.lastSensorId=f.id;
    const points=worldPoints(f.xyz,this.source==='mid360'?f.pose:f.depthWorld);

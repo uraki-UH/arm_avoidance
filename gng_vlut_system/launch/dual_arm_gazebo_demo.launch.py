@@ -31,6 +31,7 @@ def launch_setup(context):
     avoidance_path = LaunchConfiguration('avoidance_config').perform(context)
     avoidance_config = (yaml.safe_load(Path(avoidance_path).read_text())['dual_arm_avoidance_demo']
                         if avoidance_path else None)
+    enable_external_control = LaunchConfiguration('enable_external_control').perform(context).lower() == 'true'
     namespace = config.get('namespace') or 'sim_' + params['robot_name']
     if not namespace.startswith('sim_') or '/' in namespace:
         raise ValueError('デモの名前空間はsim_で始まる単一名が必要です')
@@ -172,7 +173,7 @@ def launch_setup(context):
     def after_controllers(event, _context):
         if event.returncode != 0:
             return [EmitEvent(event=Shutdown(reason='関節コントローラ起動失敗'))]
-        return [demo]
+        return [] if enable_external_control else [demo]
 
     def cleanup(_context):
         shutil.rmtree(run_dir, ignore_errors=True)
@@ -196,6 +197,15 @@ def launch_setup(context):
         RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)])),
         spawn,
     ]
+    if enable_external_control:
+        actions.append(IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(str(package_share/'launch/joint_control.launch.py')),
+            launch_arguments={
+                'params_file': str(params_path), 'urdf_path': str(urdf_path),
+                'robot_name': namespace, 'backend': 'gazebo', 'use_sim_time': 'true',
+                'enable_dynamixel_input': LaunchConfiguration('enable_dynamixel_leader'),
+                'dynamixel_input_topic': LaunchConfiguration('dynamixel_input_topic'),
+            }.items()))
     if config.get('enable_viewer', True):
         actions.append(Node(package='gng_vlut_system', executable='robot_viewer_bridge_node',
             name='robot_viewer_bridge_node', namespace=namespace, parameters=[str(params_path), {
@@ -213,6 +223,9 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file', default_value=str(package_share/'config/topo_dual_arm_max.yaml')),
         DeclareLaunchArgument('demo_config', default_value=str(package_share/'config/dual_arm_gazebo_demo.yaml')),
         DeclareLaunchArgument('avoidance_config', default_value=''),
+        DeclareLaunchArgument('enable_external_control', default_value='false'),
+        DeclareLaunchArgument('enable_dynamixel_leader', default_value='false'),
+        DeclareLaunchArgument('dynamixel_input_topic', default_value='/dynamixel/state/present'),
         DeclareLaunchArgument('gui', default_value=''),
         DeclareLaunchArgument('enable_auto_start', default_value=''),
         DeclareLaunchArgument('gazebo_master_uri', default_value='http://127.0.0.1:11355'),

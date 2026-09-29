@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "name": "before",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/before",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "@seed@",
+        "@case_dir@",
+        "occupancy"
+      ],
+      "metrics": "metrics.json"
+    },
+    {
+      "name": "after",
+      "cwd": "/ros2_ws/src",
+      "argv": [
+        "taskset",
+        "-c",
+        "4",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928/inheritance_perf/after",
+        "/ros2_ws/src/artifacts/voxel_plane_lookup_20260928",
+        "@seed@",
+        "@case_dir@",
+        "occupancy"
+      ],
+      "metrics": "metrics.json"
+    }
+  ]
+}
