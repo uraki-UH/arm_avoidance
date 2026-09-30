@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "started_at": "2026-09-29T21:01:01.332389+00:00",
+  "total": 2,
+  "completed": 2,
+  "manifest": "/tmp/spatialtree_occupancy_probe_20260930/cases.json",
+  "repeats": 1,
+  "records": [
+    {
+      "name": "rules",
+      "trial": 1,
+      "seed": 1,
+      "argv": [
+        "/tmp/spatialtree_occupancy_probe_20260930/occ_rules",
+        "0.08",
+        "1000"
+      ],
+      "cwd": "/tmp/spatialtree_occupancy_probe_20260930",
+      "log": "/tmp/spatialtree_occupancy_probe_20260930/batch/001_rules/output.log",
+      "status": "completed",
+      "pid": 756158,
+      "cleanup_ok": true,
+      "returncode": 0,
+      "elapsed_sec": 2.1150814249995165
+    },
+    {
+      "name": "edges",
+      "trial": 1,
+      "seed": 1,
+      "argv": [
+        "/tmp/spatialtree_occupancy_probe_20260930/occ_edges",
+        "0.08",
+        "1",
+        "1000"
+      ],
+      "cwd": "/tmp/spatialtree_occupancy_probe_20260930",
+      "log": "/tmp/spatialtree_occupancy_probe_20260930/batch/001_edges/output.log",
+      "status": "completed",
+      "pid": 756292,
+      "cleanup_ok": true,
+      "returncode": 0,
+      "elapsed_sec": 0.5156356960069388
+    }
+  ],
+  "elapsed_sec": 2.6327467400114983,
+  "estimated_remaining_sec": 0,
+  "finished_at": "2026-09-29T21:01:03.965142+00:00"
+}

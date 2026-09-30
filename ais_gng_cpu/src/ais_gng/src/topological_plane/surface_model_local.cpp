@@ -18,7 +18,7 @@ Eigen::Vector3d position(const geometry_msgs::msg::Point32 &point)
 // 平面核を持つ到達成分だけのモデル探索。対象外ノードは出力対象外。
 result extract_plane_local(const ais_gng_msgs::msg::TopologicalMap &map,
   const ais_gng_msgs::msg::PlaneClusterArray &planes, const options &config,
-  const std::vector<region> &retained)
+  const std::vector<region> &retained, patch_history *history)
 {
   const auto begin=std::chrono::steady_clock::now();
   const auto num=map.nodes.size();
@@ -86,11 +86,12 @@ result extract_plane_local(const ais_gng_msgs::msg::TopologicalMap &map,
     value.update_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
   };
   if (original_nodes.empty()) {
+    if (history) history->clear();
     finish(out);
     return out;
   }
   if (original_nodes.size()==num) {
-    out=extract(map,planes,local_config,retained);
+    out=extract(map,planes,local_config,retained,history);
     finish(out);
     return out;
   }
@@ -142,7 +143,7 @@ result extract_plane_local(const ais_gng_msgs::msg::TopologicalMap &map,
     candidate.id=found->second;
     local_retained.push_back(std::move(candidate));
   }
-  out=extract(local_map,local_planes,local_config,local_retained);
+  out=extract(local_map,local_planes,local_config,local_retained,history);
   for (auto &patch:out.patches) {
     if (patch.plane_cluster_idx>=0)
       patch.plane_cluster_idx=static_cast<int>(original_planes.at(patch.plane_cluster_idx));

@@ -326,7 +326,7 @@ std::size_t plane_patch_num(const result &surfaces, const region &surface)
 
 result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   const ais_gng_msgs::msg::PlaneClusterArray &planes, const options &config,
-  const std::vector<region> &retained)
+  const std::vector<region> &retained, patch_history *history)
 {
   if (config.method=="smooth_graph") return tracker{}.update(map,planes,config);
   if (config.method!="model")
@@ -345,7 +345,8 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     !(config.max_normal_deg > 0 && config.max_normal_deg < 90)) {
     throw std::invalid_argument("invalid surface model options");
   }
-  if (config.enable_plane_local_search) return extract_plane_local(map,planes,config,retained);
+  if (config.enable_plane_local_search) return extract_plane_local(map,planes,config,retained,history);
+  const bool has_patch_history=history && config.enable_patch_history;
   const auto begin = std::chrono::steady_clock::now();
   result output;
   output.num_input_nodes=map.nodes.size();
@@ -425,6 +426,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   }
   const auto add_patch = [&](local_patch patch) {
     if (patch.node_indices.empty()) return;
+    patch.has_retained_support=retained_owner[patch.node_indices.front()]>=0;
     for (auto idx : patch.node_indices) {
       owner[idx]=static_cast<int>(output.patches.size());
       patch.center += points[idx];
@@ -454,13 +456,6 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     }
   }
   std::set<std::array<std::uint32_t,2>> edges, smooth, sharp, uncertain;
-  const auto curvature_begin = std::chrono::steady_clock::now();
-  for (auto &patch : output.patches) {
-    if (patch.node_indices.size()<8 || patch.plane_cluster_idx<0) continue;
-    patch.curvature=estimate_curvature(patch,map);
-  }
-  output.curvature_ms = std::chrono::duration<double, std::milli>(
-    std::chrono::steady_clock::now() - curvature_begin).count();
   const auto boundary_begin=std::chrono::steady_clock::now();
   struct boundary_support {
     vec center=vec::Zero();
@@ -477,6 +472,17 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     const auto left=output.patches[owner[a]].plane_cluster_idx;
     const auto right=output.patches[owner[b]].plane_cluster_idx;
     const double dist=(points[a]-points[b]).norm();
+    if (has_patch_history && dist<=config.max_link_length) {
+      // 接続済み境界の優先付け。法線差は採否判定ではなく探索順の根拠。
+      auto &pa=output.patches[owner[a]],&pb=output.patches[owner[b]];
+      if (normals[a].squaredNorm()>0.5 && normals[b].squaredNorm()>0.5) {
+        const double change=1.0-std::clamp(std::abs(normals[a].dot(normals[b])),0.0,1.0);
+        pa.normal_change_hint=std::max(pa.normal_change_hint,change);
+        pb.normal_change_hint=std::max(pb.normal_change_hint,change);
+      }
+      pa.has_retained_support=pa.has_retained_support || retained_owner[b]>=0;
+      pb.has_retained_support=pb.has_retained_support || retained_owner[a]>=0;
+    }
     if (left<0 || right<0 || left==right || dist>config.max_link_length) continue;
     auto &support=boundaries[{static_cast<std::uint32_t>(std::min(owner[a],owner[b])),
       static_cast<std::uint32_t>(std::max(owner[a],owner[b]))}];
@@ -484,13 +490,30 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     support.link_length+=dist;
     ++support.num;
   }
+  const auto curvature_begin=std::chrono::steady_clock::now();
+  update_patch_curvatures(output,map,planes,config,history);
+  output.curvature_ms=std::chrono::duration<double,std::milli>(
+    std::chrono::steady_clock::now()-curvature_begin).count();
+  std::vector<decltype(boundaries)::iterator> boundary_order;
+  boundary_order.reserve(boundaries.size());
+  for (auto it=boundaries.begin();it!=boundaries.end();++it) boundary_order.push_back(it);
+  if (has_patch_history) std::stable_sort(boundary_order.begin(),boundary_order.end(),[&](auto a,auto b) {
+    const auto priority=[&](const auto &pair) {
+      return std::min(output.patches[pair[0]].eval_priority,output.patches[pair[1]].eval_priority);
+    };
+    const auto pa=priority(a->first),pb=priority(b->first);
+    if (pa!=pb) return pa<pb;
+    return a->second.num>b->second.num;
+  });
   constexpr double min_boundary_confidence=0.5;
-  for (auto &[pair,support]:boundaries) {
+  for (auto it:boundary_order) {
+    auto &[pair,support]=*it;
     support.center/=static_cast<double>(support.num);
     support.link_length/=static_cast<double>(support.num);
     for (std::size_t side=0; side<2; ++side) {
       const auto &patch=output.patches[pair[side]];
       const auto &c=patch.curvature;
+      if (patch.is_curvature_deferred) continue;
       if (c.valid && c.confidence>=min_boundary_confidence) {
         support.selected[side]=&c;
         continue;
@@ -560,7 +583,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     return std::abs(normals[a].dot(normals[b]))>=min_link_cos ? link_kind::smooth:link_kind::none;
   });
   output.boundary_ms=std::chrono::duration<double,std::milli>(
-    std::chrono::steady_clock::now()-boundary_begin).count();
+    std::chrono::steady_clock::now()-boundary_begin).count()-output.curvature_ms;
   std::vector<std::vector<std::uint32_t>> adjacency(output.patches.size());
   std::vector<std::vector<std::uint32_t>> conflicts(output.patches.size());
   const auto append_neighbors = [](auto &neighbors,const auto &links) {
@@ -581,9 +604,16 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     for (auto idx:ids) is_proposed[idx]=false;
     return has_sharp_edge;
   };
+  const auto has_deferred_curvature = [&](const std::vector<std::uint32_t> &ids) {
+    return std::any_of(ids.begin(),ids.end(),[&](auto idx) {
+      return output.patches[idx].is_curvature_deferred;
+    });
+  };
   const auto fit = [&](const std::vector<std::uint32_t> &ids) {
     // 新規・保持曲面に共通の鋭い境界の保護。迂回接続による境界横断の禁止。
-    if (output.model_fits>=config.max_model_fits || has_conflict(ids)) return model{};
+    // 予算待ちを低品質な曲率と混同せず、未評価の保護条件を伴う新規統合の延期。
+    if (output.model_fits>=config.max_model_fits || has_conflict(ids) || has_deferred_curvature(ids))
+      return model{};
     ++output.model_fits;
     auto shape = fit_best(ids, output.patches, points, normals, config);
     if (shape.type == "unknown" || shape.type == "plane") return shape;
@@ -718,7 +748,8 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     std::uint32_t next,const model &current) -> std::pair<std::uint32_t,model> {
     const auto rejected=std::make_pair(next,model{});
     if (current.type=="plane" || current.type=="unknown" ||
-      output.patches[next].plane_cluster_idx<0 || output.model_fits>=config.max_model_fits) return rejected;
+      output.patches[next].plane_cluster_idx<0 || output.model_fits>=config.max_model_fits ||
+      output.patches[next].is_curvature_deferred || has_deferred_curvature(members)) return rejected;
     for (auto idx:output.patches[next].node_indices) {
       can_join[idx]=can_attach_node(current,idx); is_reached[idx]=false;
     }
@@ -740,10 +771,15 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     constexpr std::size_t min_partial_nodes=3;
     if (selected.node_indices.size()<min_partial_nodes || remaining.node_indices.empty()) return rejected;
     if (!has_plane_outer_boundary_support(reached)) return rejected;
+    const std::size_t num_partial_fits=(selected.node_indices.size()>=8 ? 1U:0U)+
+      (remaining.node_indices.size()>=8 ? 1U:0U);
+    if (has_patch_history && output.num_curvature_fits+num_partial_fits>config.max_patch_fits)
+      return rejected;
     const auto update_patch = [&](local_patch &patch) {
       for (auto idx:patch.node_indices) patch.center+=points[idx];
       patch.center/=static_cast<double>(patch.node_indices.size());
       patch.curvature=estimate_curvature(patch,map);
+      if (patch.node_indices.size()>=8) ++output.num_curvature_fits;
     };
     const auto partial_curvature_begin=std::chrono::steady_clock::now();
     update_patch(selected); update_patch(remaining);
@@ -793,7 +829,12 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
     return {selected_idx,std::move(shape)};
   };
 
-  for (std::size_t start = 0; start < output.patches.size(); ++start) {
+  std::vector<std::uint32_t> seed_order(output.patches.size());
+  for (std::size_t idx=0;idx<seed_order.size();++idx) seed_order[idx]=idx;
+  if (has_patch_history) std::stable_sort(seed_order.begin(),seed_order.end(),[&](auto a,auto b) {
+    return output.patches[a].eval_priority<output.patches[b].eval_priority;
+  });
+  for (auto start:seed_order) {
     if (has_visited[start] || has_owner[start]) continue;
     std::vector<std::uint32_t> connected{static_cast<std::uint32_t>(start)};
     has_visited[start] = true;
@@ -808,6 +849,8 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
 
     // 全体不適合時の局所成長。平面パッチと未所属ノードに共通の追加・再推定判定。
     std::stable_sort(connected.begin(),connected.end(),[&](auto a, auto b) {
+      if (has_patch_history && output.patches[a].eval_priority!=output.patches[b].eval_priority)
+        return output.patches[a].eval_priority<output.patches[b].eval_priority;
       // 混入で大きくなった低品質パッチより、位置支持の確かな核を優先。
       const auto &ca=output.patches[a].curvature,&cb=output.patches[b].curvature;
       const bool has_quality_a=ca.valid && ca.confidence>=0.5;
@@ -886,7 +929,7 @@ result extract(const ais_gng_msgs::msg::TopologicalMap &map,
   output.smooth_edges.assign(smooth.begin(),smooth.end());
   output.sharp_edges.assign(sharp.begin(),sharp.end());
   output.uncertain_edges.assign(uncertain.begin(),uncertain.end());
-  split_support_regions(output,map,config);
+  split_support_regions(output,map,config,has_patch_history);
   for (auto &surface:output.regions) {
     if (surface.shape.type=="unknown" || surface.shape.type=="plane") continue;
     bool has_plane_core=config.min_plane_usage_ratio<=0;

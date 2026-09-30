@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "id": "wasm_link_fix",
+      "source_path": "gng_vlut_system/docs/releases/2026-09-28_wasm_link_fix.md",
+      "source_sha256": "94987f83d4bf220ea76ec29c716dad3765170b8b11f7cfb34bcb68e825f69593",
+      "input": "# 2026-09-28 - 共有CPUコード変更後のWASMリンク修正\n\n## 1. 要約\n\n全体Releaseビルドが`gng_wasm_core_cpu_kernel_test`のリンクで停止する原因を修正。\n共有`cugng.cpp`から追加された`VoxelGrid::has_occupied_cell(unsigned int) const`の呼出しに対し、\nWASM側のソース一覧に実装元`voxel_grid.cpp`が含まれていなかった。\n\n`gng_web_tools/wasm/CMakeLists.txt`の通常ライブラリ・Emscripten実行対象と、\n`gng_web_tools/wasm/scripts/build_wasm.sh`へ同ファイルを追加。\n計算処理・共有CPUコードの変更なし。\n\n## 2. 条件・検証\n\n- 失敗根拠：コンテナ内`/ros2_ws/log/build_2026-09-28_18-45-14/gng_wasm_core/stderr.log`。\n- 前回の計画部品整理の検証は`gng_vlut_system`単体。全体ビルド成功の証拠ではない。\n- 修正後の`gng_wasm_core`ビルド・既存CTest 1件成功。\n- EmscriptenによるWASM生成と既存Nodeロード試験成功。500反復、9ノード・7エッジ。\n- WASM生成時は既存のCリンケージ戻り値警告あり。ブラウザ実画面は未検証。\n- 生成先は一時ディレクトリ。配布済み`dist`成果物の更新なし。\n- 全体検証の初回は並行ビルド中に`ais_gng`で`file truncated`。同一出力先の競合が疑われるため、他方の終了後に再実行。\n- 最終Release全体ビルドは29パッケージ成功。起動したビルド・試験は全終了。\n- ROSノードの起動・既存プロセスへの停止操作なし。\n\nコマンドは`gng_cpu_container`内、`/ros2_ws`でROS Humbleとinstall環境を読込み後に実行。\n\n```bash\ncolcon build --packages-select gng_wasm_core --symlink-install --parallel-workers 1 --cmake-args -DBUILD_TESTING=ON\nctest --test-dir /ros2_ws/build/gng_wasm_core --output-on-failure\ncolcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release\nbash /ros2_ws/src/gng_web_tools/wasm/scripts/build_wasm.sh /tmp/wasm_link_fix_artifacts\nnode /ros2_ws/src/gng_web_tools/tests/wasm_load.cjs /tmp/wasm_link_fix_artifacts/gng_wasm_core.js\n```\n",
+      "criteria": [
+        {
+          "id": "link_failure_cause",
+          "requirement": "全体Releaseビルドの停止箇所がgng_wasm_core_cpu_kernel_testのリンクであり、共有cugng.cppのVoxelGrid::has_occupied_cell(unsigned int) const呼出しに対してWASMソース一覧へvoxel_grid.cppが未登録だった原因の保持。"
+        },
+        {
+          "id": "changed_targets",
+          "requirement": "gng_web_tools/wasm/CMakeLists.txtの通常ライブラリとEmscripten実行対象、およびgng_web_tools/wasm/scripts/build_wasm.shへのvoxel_grid.cpp追加と、計算処理・共有CPUコードの変更なしの保持。"
+        },
+        {
+          "id": "failure_evidence_scope",
+          "requirement": "失敗根拠/ros2_ws/log/build_2026-09-28_18-45-14/gng_wasm_core/stderr.logの参照先と、前回の検証がgng_vlut_system単体で全体ビルド成功の証拠ではない区別の保持。"
+        },
+        {
+          "id": "package_test_result",
+          "requirement": "修正後のgng_wasm_coreビルド成功、既存CTest 1件成功という対象と件数の保持。"
+        },
+        {
+          "id": "wasm_node_metrics",
+          "requirement": "EmscriptenによるWASM生成・既存Nodeロード試験成功と、500反復で9ノード・7エッジの条件付き数値の保持。"
+        },
+        {
+          "id": "warning_and_unverified",
+          "requirement": "WASM生成時の既存Cリンケージ戻り値警告と、ブラウザ実画面は未検証という状態の保持。"
+        },
+        {
+          "id": "artifact_distribution",
+          "requirement": "生成先が一時ディレクトリであり、配布済みdist成果物は未更新という配布範囲の保持。"
+        },
+        {
+          "id": "parallel_build_failure",
+          "requirement": "全体検証の初回に並行ビルド中のais_gngでfile truncatedが発生し、同一出力先の競合を疑って他方の終了後に再実行した事実の保持。競合原因を確定済みに変更しないこと。"
+        },
+        {
+          "id": "full_release_result",
+          "requirement": "最終Release全体ビルドが29パッケージ成功という結果・条件・単位の保持。"
+        },
+        {
+          "id": "process_status",
+          "requirement": "起動したビルド・試験の全終了、ROSノードの起動なし、既存プロセスへの停止操作なしの保持。"
+        },
+        {
+          "id": "reproduction_environment",
+          "requirement": "再現環境がgng_cpu_container内の/ros2_wsで、ROS Humbleとinstall環境の読込後という条件の保持。"
+        },
+        {
+          "id": "reproduction_paths",
+          "requirement": "ビルド・CTestの再現対象gng_wasm_coreとRelease条件、およびWASM生成スクリプト/ros2_ws/src/gng_web_tools/wasm/scripts/build_wasm.sh、Node試験/ros2_ws/src/gng_web_tools/tests/wasm_load.cjsと入力/tmp/wasm_link_fix_artifacts/gng_wasm_core.jsの再現先の保持。全コマンドの逐語複製は不要。"
+        }
+      ]
+    },
+    {
+      "id": "reachability_maps",
+      "source_path": "gng_vlut_system/docs/releases/2026-09-28_reachability_maps.md",
+      "source_sha256": "574f46310682ac1bb165d79453d4be2eb734d5449be6148403ba2f83390d8d76",
+      "input": "# 2026-09-28 - 独立した左右到達mapの生成\n\n## 1. 要約\n\n経路GNGとは別に、max / longの左右到達mapをURDFから生成。\n代表姿勢を平均化せず保持し、独立サンプルによる未登録セル補完と検査を追加。\n生成時の関節制限・肩原点・接頭辞・FCLメッシュ登録と衝突診断を修正。\n\n## 2. 条件・検証\n\n- 各腕以外はゼロ姿勢。セル幅3 cm、FCL自己衝突判定、環境障害物なし。\n- max / longの計4ファイルを生成し、全代表姿勢のURDF制限・独立FK・ROS配信を確認。\n- Release全体28パッケージ・CTest 3対象成功。Viewer実画面は未検証。\n- 到達セルは代表姿勢の存在を示し、セル全域・無衝突軌道・未登録セルの到達不能を保証しない。\n- 元のGNG・VLUTは保持。計画入力への自動接続なし。\n- 初期検証失敗と既存依存警告を含む条件、数値、表示方法は[現行仕様](../reachability_maps.md)。\n- [生成・解析・配信検査の起動コマンド](../../../artifacts/max_reachability_generation_20260928/README.md)。全処理終了、試験配信ノード停止済み。\n",
+      "criteria": [
+        {
+          "id": "independent_generation",
+          "requirement": "経路GNGとは別に、max / longそれぞれの左右到達mapをURDFから生成した対象・独立性の保持。"
+        },
+        {
+          "id": "representative_sampling",
+          "requirement": "代表姿勢を平均化せず保持し、独立サンプルによる未登録セル補完と検査を追加した処理の保持。"
+        },
+        {
+          "id": "generation_fixes",
+          "requirement": "生成時の関節制限・肩原点・接頭辞・FCLメッシュ登録と衝突診断の修正範囲の保持。"
+        },
+        {
+          "id": "measurement_conditions",
+          "requirement": "対象の腕以外はゼロ姿勢、セル幅3 cm、FCL自己衝突判定、環境障害物なしという全条件と単位の保持。"
+        },
+        {
+          "id": "files_and_validation",
+          "requirement": "max / longで計4ファイルを生成し、全代表姿勢についてURDF制限・独立FK・ROS配信を確認した数量と検証範囲の保持。"
+        },
+        {
+          "id": "build_and_viewer_status",
+          "requirement": "Release全体28パッケージとCTest 3対象の成功、およびViewer実画面は未検証の保持。"
+        },
+        {
+          "id": "guarantee_limits",
+          "requirement": "到達セルが代表姿勢の存在を示すだけで、セル全域の到達、無衝突軌道、未登録セルの到達不能を保証しない3つの制限の保持。"
+        },
+        {
+          "id": "integration_scope",
+          "requirement": "元のGNG・VLUTを保持し、計画入力への自動接続はないという既存資産・統合範囲の保持。"
+        },
+        {
+          "id": "specification_and_failures",
+          "requirement": "初期検証失敗と既存依存警告の存在、および条件・数値・表示方法の参照先../reachability_maps.mdへの既存リンクの保持。"
+        },
+        {
+          "id": "reproduction_and_cleanup",
+          "requirement": "生成・解析・配信検査の起動コマンドへの既存リンク../../../artifacts/max_reachability_generation_20260928/README.mdと、全処理終了・試験配信ノード停止済みの保持。"
+        }
+      ]
+    },
+    {
+      "id": "local_fk_motion_experiment",
+      "source_path": "gng_vlut_system/docs/releases/2026-09-16_local_fk_motion_experiment.md",
+      "source_sha256": "cfc29fce0b41fddd25382c030e0468a5299979f416e949aff5132a8cea870081",
+      "input": "# 2026-09-16 - 微小関節変化による局所並進・回転のFK可視化\n\n保存済みGNGの1ノード周辺をFKで評価し、並進グラフと回転点群を表示する独立Python試験。当日の最終版（2分類）の記録で、ROS・シミュレーション・refineへの統合なし。\n\n<a id=\"並進成分と回転成分による2分類への修正\"></a>\n\n## 結果と条件\n\nToPoDualArm10000（10,801ノード）のactiveなノード0を使用。各関節±2度・0.5度刻み・関節差L2上限4度の4,169,977通りを直接FK評価し、全件が関節限界内。IK・ヤコビアン補正・ランダム抽出・限界値への切り詰めなし。\n\n| 分類 | 許容条件 | 点数（原点を含む） | 表示 | サンプル内の最大変化 |\n| --- | --- | ---: | --- | --- |\n| 並進的 | 相対回転角0.25度以内 | 2,102 | 9,976辺、連結成分1 | 並進9.645 mm |\n| 回転的 | 並進量0.5 mm以内 | 566 | 点群のみ | 相対回転角5.531度 |\n\n重複は4件。両条件を超える混合4,167,313件は件数のみ記録し、全保存・描画は未実施。旧3分類の軸平行判定は、その軸まわりの回転を区別できないため削除。\n\n- 座標：元姿勢のFKを基準に並進 `R0ᵀ(p-p0)` [mm]、回転 `R0ᵀR=Rz(yaw)Ry(pitch)Rx(roll)` の相対RPY [deg]。並進量と相対回転角は座標基底によらず、並進点と回転点の独立合成を保証するものではない。\n- 辺：表示点の関節空間8近傍から、関節差L2 1.5度・位置差5 mmで選択し、内部7点のFKで姿勢条件を確認。表示上限3,000点を超えて間引く場合も、採用数・最大値・CSV/NPZは全採用サンプルで集計。サンプルIDで対応付け。\n- 時間：FK・残差計算10.650秒、画像生成前までの解析12.320秒。この環境での単発の壁時計実測で、一般的な処理性能ではない。\n\n## 検証・制限\n\n- 旧結果の「向き全体維持」「位置維持」と全サンプルID・数値が一致。解析解、逐次FK、軸まわりの回転の計上、座標基底不変性、格子順序・関節限界を検査。\n- 辺の17点再補間で最大回転量0.249967度。Plotlyの2分類・全採用点数・回転側の辺なし・視点操作・実描画を確認。\n- 未検証：自己衝突・環境衝突・速度・加速度・未探索領域・大域的到達性。有限補間は連続区間全体の保証ではなく、元ノードの自己衝突なしフラグも周辺へ継承しない。\n- 読込対象：version 9・little-endian・64 bit Eigen::Index・float配列の一座標層GNGと独立回転関節鎖。汎用インポーターではない。XYZ/RPY投影で座標が重なっても元サンプルは保持。\n- 形式：`format_version=2`、CSV分類列は `is_translation_like` / `is_rotation_like`。旧3分類の結果・スクリプトは `tmp/local_fk_motion_20260916/before_motion_separation/` に退避。\n- 当日のPython・検証Chromeは終了、残存なし、専用profile削除済み。入力GNG・URDF・通常ブラウザー設定の変更や、既存プロセスの停止なし。\n\n<a id=\"plotlyによる3dグラフ表示の追加\"></a>\n\n## 表示・再現\n\n[計算](../../scripts/inspect_local_fk_motion.py)と[表示](../../scripts/view_local_fk_motion.py)を分離。既定入力は `gng_results/ToPoDualArm10000/gng.bin`（パッケージ内）と `dual_arm_urdf/dual_arm_robot.urdf`、リンクは `L_shoulder_mount` → `L_tcp`。引数の詳細は各スクリプトの `--help`。\n\n`index.html` は単独表示、`plotly.html` は保存済みgraph/CSVから再計算なしで生成。Plotly 4.0.0本体とデータを埋め込み、表示時はサーバー・ネット接続不要（WebGL必須）。視点・投影・2分類・全採用点の切替、L2スライダーと約16秒の順次追加、残差・関節差・ID表示、PNG保存に対応。全点表示でも辺の再構築なし。\n\n<details>\n<summary>当時の生成・検証コマンド（ワークスペース直下）</summary>\n\nNumPy・SciPy・Matplotlibを使用。既存結果を残す再実行では出力先を変更。初回生成時のみPlotly本体の取得が必要。\n\n```bash\ntimeout -s INT -k 5s 120s python3 gng_vlut_system/scripts/inspect_local_fk_motion.py --output-dir tmp/local_fk_motion_20260916\ncurl -fSL --connect-timeout 10 --max-time 40 https://cdn.plot.ly/plotly-4.0.0.min.js -o tmp/local_fk_motion_20260916/plotly-4.0.0.min.js\npython3 gng_vlut_system/scripts/view_local_fk_motion.py tmp/local_fk_motion_20260916\ntimeout -s INT -k 5s 40s python3 tmp/local_fk_motion_20260916/verify.py\nnode --check tmp/local_fk_motion_20260916/index_motion_viewer.js\nnode --check tmp/local_fk_motion_20260916/plotly_motion_viewer.js\ntimeout -s INT -k 5s 50s google-chrome --headless --no-sandbox \\\n  --no-first-run --no-default-browser-check --disable-background-networking \\\n  --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader \\\n  --user-data-dir=/tmp/local_fk_motion_components_chrome_20260916 \\\n  --window-size=1500,1100 --hide-scrollbars --virtual-time-budget=15000 \\\n  --screenshot=/home/uraki/uraki_ws/tmp/local_fk_motion_20260916/motion_plotly_browser.png \\\n  --dump-dom file:///home/uraki/uraki_ws/tmp/local_fk_motion_20260916/plotly.html#selftest\n```\n\n`verify.py` は当時の結果ディレクトリに保存した検証補助。Chromeはsandbox内で起動失敗後、承認された外側実行で確認。ソフトウェア描画・sandbox無効化は当時の検証用で、通常利用への推奨設定ではない。\n\n</details>\n\n成果物：`tmp/local_fk_motion_20260916/` の `samples.csv/npz`・`graphs.json`・`overview.png`。入力SHA-256・計算条件は `summary.json`、数値検証は `motion_separation_verification.json`、描画確認は `motion_plotly_browser.png` / `motion_plotly_browser_dom.html`。一時領域の記録のため、主要結果は上表にも保持。\n",
+      "criteria": [
+        {
+          "id": "experiment_scope",
+          "requirement": "2026-09-16当日の最終2分類版の独立Python試験で、保存済みToPoDualArm10000の10,801ノード中activeなノード0周辺をFK評価した対象と、ROS・シミュレーション・refine統合なしの保持。"
+        },
+        {
+          "id": "sampling_conditions",
+          "requirement": "各関節±2度・0.5度刻み・関節差L2上限4度で4,169,977通りを直接FK評価し全件関節限界内、IK・ヤコビアン補正・ランダム抽出・限界値への切り詰めなしという条件の保持。"
+        },
+        {
+          "id": "translation_metrics",
+          "requirement": "並進的分類が相対回転角0.25度以内、原点込み2,102点、9,976辺、連結成分1、サンプル内最大並進9.645 mmという定義・数値・単位の保持。"
+        },
+        {
+          "id": "rotation_metrics",
+          "requirement": "回転的分類が並進量0.5 mm以内、原点込み566点、辺なしの点群のみ、サンプル内最大相対回転角5.531度という定義・数値・単位の保持。"
+        },
+        {
+          "id": "mixed_and_removed_classification",
+          "requirement": "2分類の重複4件、両条件を超える混合4,167,313件は件数のみで全保存・描画未実施、旧3分類の軸平行判定はその軸まわりの回転を区別できないため削除という結果と理由の保持。"
+        },
+        {
+          "id": "coordinate_definitions",
+          "requirement": "元姿勢FK基準の並進R0ᵀ(p-p0) [mm]、回転R0ᵀR=Rz(yaw)Ry(pitch)Rx(roll)の相対RPY [deg]という定義と、並進量・相対回転角は座標基底によらず、並進点と回転点の独立合成を保証しない制限の保持。"
+        },
+        {
+          "id": "edge_and_display_sampling",
+          "requirement": "辺が表示点の関節空間8近傍から関節差L2 1.5度・位置差5 mmで選択され、内部7点のFKで姿勢条件を確認する条件の保持。表示上限3,000点の間引きでも採用数・最大値・CSV/NPZは全採用サンプルで集計し、サンプルIDで対応する区別の保持。"
+        },
+        {
+          "id": "timing_scope",
+          "requirement": "FK・残差計算10.650秒、画像生成前までの解析12.320秒という区間別数値と、この環境での単発壁時計実測で一般的な処理性能ではない条件の保持。"
+        },
+        {
+          "id": "verification_results",
+          "requirement": "旧結果の向き全体維持・位置維持と全サンプルID・数値が一致した検証、解析解・逐次FK・軸まわりの回転・座標基底不変性・格子順序・関節限界の検査、辺の17点再補間で最大回転量0.249967度という結果の保持。"
+        },
+        {
+          "id": "unverified_and_continuity",
+          "requirement": "自己衝突・環境衝突・速度・加速度・未探索領域・大域的到達性が未検証で、有限補間は連続区間全体の保証ではなく元ノードの自己衝突なしフラグも周辺へ継承しない制限の保持。"
+        },
+        {
+          "id": "format_import_and_migration",
+          "requirement": "読込対象がversion 9・little-endian・64 bit Eigen::Index・float配列の一座標層GNGと独立回転関節鎖で汎用インポーターではないこと、XYZ/RPY投影で重なっても元サンプル保持という制約の保持。出力format_version=2、CSV分類列is_translation_like / is_rotation_like、旧3分類結果・スクリプト退避先tmp/local_fk_motion_20260916/before_motion_separation/という移行情報の保持。"
+        },
+        {
+          "id": "viewer_behavior",
+          "requirement": "index.htmlの単独表示、plotly.htmlの保存済みgraph/CSVから再計算なし生成、Plotly 4.0.0本体・データ埋込による表示時サーバー・ネット不要/WebGL必須の条件の保持。視点・投影・2分類・全採用点切替、L2スライダー、約16秒の順次追加、残差・関節差・ID表示、PNG保存と全点表示でも辺再構築なしの挙動の保持。2分類・全採用点数・回転側辺なし・視点操作・実描画を確認した実績の保持。"
+        },
+        {
+          "id": "reproduction_links_and_artifacts",
+          "requirement": "計算../../scripts/inspect_local_fk_motion.pyと表示../../scripts/view_local_fk_motion.pyへの既存リンク、既定入力gng_results/ToPoDualArm10000/gng.binとdual_arm_urdf/dual_arm_robot.urdf、リンクL_shoulder_mount → L_tcp、引数--helpという再現先の保持。既存アンカー「並進成分と回転成分による2分類への修正」「plotlyによる3dグラフ表示の追加」の保持。成果物tmp/local_fk_motion_20260916/のsamples.csv/npz・graphs.json・overview.png、入力SHA-256と条件のsummary.json、motion_separation_verification.json、motion_plotly_browser.png / motion_plotly_browser_dom.htmlの所在と一時領域という条件の保持。"
+        },
+        {
+          "id": "reproduction_prerequisites_and_processes",
+          "requirement": "NumPy・SciPy・Matplotlib、初回生成時のみPlotly本体取得、既存結果を残す再実行では出力先変更という再現条件の保持。verify.pyは当時の結果ディレクトリの補助、Chromeのsandbox内起動失敗後に承認済み外側実行で確認した経緯と、ソフトウェア描画・sandbox無効化は通常利用の推奨設定ではない制限の保持。当日のPython・検証Chrome終了/残存なし/専用profile削除済み、入力GNG・URDF・通常ブラウザー設定の変更および既存プロセス停止なしの保持。"
+        }
+      ]
+    }
+  ]
+}

@@ -11,10 +11,10 @@ from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from gazebo_msgs.msg import ModelStates
 from gazebo_msgs.srv import SetEntityState
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from geometry_msgs.msg import Point
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 from trajectory_msgs.msg import JointTrajectory
 from motion_smoothing import make_rest_to_rest_trajectory, quintic_max_step
@@ -33,6 +33,10 @@ class avoidance_demo(Node):
             raise ValueError('Gazeboのsim_名前空間とuse_sim_timeが必要です')
         self.config = yaml.safe_load(Path(self.get_parameter('avoidance_config').value).read_text())['dual_arm_avoidance_demo']
         self.declare_parameter('enable_auto_start', self.config['enable_auto_start'])
+        self.enable_auto_start = bool(self.get_parameter('enable_auto_start').value)
+        self.enable_stamped_commands = bool(self.declare_parameter('enable_stamped_commands', False).value)
+        self.has_safety_state = False
+        self.is_stop_latched = False
         for key in ('arm_length', 'arm_radius', 'approach_sec', 'hold_sec', 'withdraw_sec', 'settle_sec',
                     'target_clearance', 'min_clearance_th', 'max_state_age_sec', 'max_joint_velocity', 'control_period_sec'):
             if not np.isfinite(self.config[key]) or self.config[key] <= 0:
@@ -63,6 +67,8 @@ class avoidance_demo(Node):
         self.phase = 'waiting'
         self.side_idx = 0
         self.start_sec = 0.0
+        self.run_generation = 0
+        self.run_start_stamp_sec = 0.0
         self.next_control_sec = 0.0
         self.min_observed_clearance = float('inf')
         self.min_home_clearance = float('inf')
@@ -76,6 +82,8 @@ class avoidance_demo(Node):
         self.markers = self.create_publisher(MarkerArray, 'avoidance/markers', 1)
         self.create_subscription(JointState, 'joint_states', self.on_joints, 1)
         self.create_subscription(ModelStates, '/avoidance_demo/model_states', self.on_obstacle, qos_profile_sensor_data)
+        self.create_subscription(Bool, 'safety/is_stop_latched', self.on_safety_stop,
+                                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.set_state = self.create_client(SetEntityState, '/avoidance_demo/set_entity_state')
         self.create_service(Trigger, 'avoidance/start', self.on_start)
         self.create_service(Trigger, 'avoidance/stop', self.on_stop)
@@ -122,6 +130,10 @@ class avoidance_demo(Node):
                 self.command.get_subscription_count() > 0)
 
     def on_start(self, _request, response):
+        if not self.has_safety_state or self.is_stop_latched:
+            response.success = False
+            response.message = 'Gazebo停止状態の確認・ラッチ解除が必要です'
+            return response
         if self.state == 'running':
             response.success = False
             response.message = '実行中です'
@@ -138,6 +150,8 @@ class avoidance_demo(Node):
             return response
         self.home = self.positions.copy()
         self.state, self.error, self.side_idx = 'running', '', 0
+        self.run_generation += 1
+        self.run_start_stamp_sec = self.last_ros_time * 1e-9
         self.start_sec = self.get_clock().now().nanoseconds*1e-9
         self.min_observed_clearance = float('inf')
         self.min_home_clearance = float('inf')
@@ -152,7 +166,18 @@ class avoidance_demo(Node):
             self.publish_target(self.positions)
             self.has_sent_hold = True
 
+    def on_safety_stop(self, message):
+        self.has_safety_state = True
+        self.is_stop_latched = bool(message.data)
+        if self.is_stop_latched:
+            # 駆動側保持への委任。解除後も明示開始までのデモ停止維持
+            self.enable_auto_start = False
+            self.state, self.phase, self.error = 'stopped', 'software_stop', ''
+
     def on_stop(self, _request, response):
+        if self.is_stop_latched:
+            response.success, response.message = True, 'Gazebo停止ラッチを維持しています'
+            return response
         self.state, self.phase = 'idle', 'stopped'
         self.hold()
         response.success, response.message = True, '関節目標と障害物移動を停止'
@@ -165,8 +190,12 @@ class avoidance_demo(Node):
         self.hold()
 
     def publish_target(self, target):
+        if self.is_stop_latched:
+            return
         message = make_rest_to_rest_trajectory(
             self.geometry.joint_names, self.positions.tolist(), target.tolist(), self.config['control_period_sec'])
+        if self.enable_stamped_commands:
+            message.header.stamp.sec, message.header.stamp.nanosec = divmod(self.last_ros_time, 1_000_000_000)
         self.command.publish(message)
 
     def update_obstacle(self, desired):
@@ -220,9 +249,9 @@ class avoidance_demo(Node):
     def tick(self):
         began = time.monotonic()
         self.update_obstacle(None)
-        if self.state == 'waiting' and self.is_fresh():
+        if self.state == 'waiting' and self.has_safety_state and self.is_fresh():
             self.state = 'idle'
-            if self.get_parameter('enable_auto_start').value:
+            if self.enable_auto_start:
                 self.on_start(None, Trigger.Response())
         gap = None
         if self.state == 'running' and not self.is_fresh():
@@ -267,6 +296,8 @@ class avoidance_demo(Node):
             return float(value) if np.isfinite(value) else None
         self.status.publish(String(data=json.dumps({
             'state': self.state, 'phase': self.phase, 'error': self.error,
+            'run_generation': self.run_generation, 'run_start_stamp_sec': self.run_start_stamp_sec,
+            'is_stop_latched': self.is_stop_latched,
             'side': self.config['sides'][min(self.side_idx, len(self.config['sides'])-1)],
             'clearance_m': gap, 'min_clearance_m': finite(self.min_observed_clearance),
             'min_home_clearance_m': finite(self.min_home_clearance), 'max_excursion_rad': self.max_excursion,

@@ -1,0 +1,9 @@
+{
+  "argv": [
+    "/tmp/spatialtree_occupancy_probe_20260930/rigidity_probe"
+  ],
+  "pid": 759639,
+  "returncode": 0,
+  "elapsed_sec": 0.4938404469867237,
+  "timeout_sec": 15
+}

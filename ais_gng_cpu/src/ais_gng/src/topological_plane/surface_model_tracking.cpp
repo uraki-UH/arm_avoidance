@@ -13,6 +13,7 @@ namespace fuzzrobo::surface_model
 void tracker::clear()
 {
   tracks_.clear();
+  patch_history_.clear();
   smooth_nodes_.clear();
   smooth_links_.clear();
   frame_id_.clear();
@@ -65,6 +66,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
       const auto idx=indices[reference.id];
       if (idx==invalid_idx || claimed.count(idx)) continue;
       const auto &node=map.nodes[idx];
+      if (node.frame!=reference.frame) continue;
       const Eigen::Vector3d p(node.pos.x,node.pos.y,node.pos.z);
       if (!p.allFinite() || (p-reference.position).norm()>retention.max_node_displacement) continue;
       const auto error=model_dev(candidate.shape,node);
@@ -86,7 +88,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
     std::vector<bool> is_blocked(map.nodes.size(),false);
     for (const auto &previous:tracks_) for (const auto &reference:previous.reference) {
       const auto idx=indices[reference.id];
-      if (idx!=invalid_idx) is_blocked[idx]=true;
+      if (idx!=invalid_idx && map.nodes[idx].frame==reference.frame) is_blocked[idx]=true;
     }
     for (const auto &plane:planes.clusters) for (auto idx:plane.node_indices) {
       if (idx<map.nodes.size()) is_blocked[idx]=true;
@@ -128,7 +130,9 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
   }
   const double retention_ms=std::chrono::duration<double,std::milli>(
     std::chrono::steady_clock::now()-begin).count();
-  auto out=extract(map,planes,config,proposals);
+  if (!config.enable_patch_history) patch_history_.clear();
+  auto out=extract(map,planes,config,proposals,
+    config.enable_patch_history ? &patch_history_:nullptr);
   std::vector<track> next;
   for (auto &surface:out.regions) {
     if (surface.shape.type=="unknown" || surface.shape.type=="plane") continue;
@@ -145,7 +149,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
         entry.reference.clear();
         for (auto idx:surface.node_indices) {
           const auto &node=map.nodes[idx];
-          entry.reference.push_back({node.id,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});
+          entry.reference.push_back({node.id,node.frame,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});
         }
         surface.rejected_node_num=0;
         if (surface.id!=previous->surface.id) {
@@ -158,7 +162,9 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
       for (auto idx:surface.node_indices) accepted.insert(map.nodes[idx].id);
       // 外れたノードの再検証候補を保持。表示する座標・所属は当該フレームの適合点だけ。
       for (auto &reference:entry.reference) if (accepted.count(reference.id)) {
-        const auto &p=map.nodes[indices[reference.id]].pos;
+        const auto &node=map.nodes[indices[reference.id]];
+        if (node.frame!=reference.frame) continue;
+        const auto &p=node.pos;
         reference.position=Eigen::Vector3d(p.x,p.y,p.z);
       }
     } else {
@@ -175,7 +181,7 @@ result tracker::update(const ais_gng_msgs::msg::TopologicalMap &map,
       surface.is_retained=has_retained_seed;
       for (auto idx:surface.node_indices) {
         const auto &node=map.nodes[idx];
-        entry.reference.push_back({node.id,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});
+        entry.reference.push_back({node.id,node.frame,Eigen::Vector3d(node.pos.x,node.pos.y,node.pos.z)});
       }
     }
     entry.surface=surface;

@@ -1,0 +1,115 @@
+{
+  "own_pids": [
+    756158,
+    756292,
+    759639
+  ],
+  "alive_own_pids": [],
+  "containers_before": [
+    [
+      "7102fe2384ff",
+      "gng_cpu_container"
+    ],
+    [
+      "9c0f90f93761",
+      "rosbridge_container"
+    ],
+    [
+      "894873a52e3d",
+      "frontend"
+    ]
+  ],
+  "containers_after": [
+    [
+      "7102fe2384ff",
+      "gng_cpu_container"
+    ],
+    [
+      "9c0f90f93761",
+      "rosbridge_container"
+    ],
+    [
+      "894873a52e3d",
+      "frontend"
+    ]
+  ],
+  "container_identity_matches": true,
+  "related_baseline_processes": [
+    {
+      "pid": 683553,
+      "comm": "ros2",
+      "exists_after": true
+    },
+    {
+      "pid": 683566,
+      "comm": "viewer_ws_gatew",
+      "exists_after": true
+    },
+    {
+      "pid": 683568,
+      "comm": "viewer_source_n",
+      "exists_after": true
+    },
+    {
+      "pid": 683570,
+      "comm": "viewer_rosbag_n",
+      "exists_after": true
+    },
+    {
+      "pid": 683572,
+      "comm": "viewer_gng_node",
+      "exists_after": true
+    },
+    {
+      "pid": 683574,
+      "comm": "viewer_param_no",
+      "exists_after": true
+    },
+    {
+      "pid": 683576,
+      "comm": "viewer_template",
+      "exists_after": true
+    },
+    {
+      "pid": 683578,
+      "comm": "viewer_edit_nod",
+      "exists_after": true
+    },
+    {
+      "pid": 1022809,
+      "comm": "ros2",
+      "exists_after": true
+    },
+    {
+      "pid": 1023797,
+      "comm": "python3",
+      "exists_after": true
+    },
+    {
+      "pid": 1023801,
+      "comm": "python3",
+      "exists_after": true
+    },
+    {
+      "pid": 2885583,
+      "comm": "ros2",
+      "exists_after": true
+    },
+    {
+      "pid": 2885597,
+      "comm": "static_transfor",
+      "exists_after": true
+    },
+    {
+      "pid": 2885599,
+      "comm": "static_transfor",
+      "exists_after": true
+    },
+    {
+      "pid": 4171603,
+      "comm": "ros2",
+      "exists_after": true
+    }
+  ],
+  "existing_processes_stopped_by_probe": false
+}

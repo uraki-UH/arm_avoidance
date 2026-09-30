@@ -2014,7 +2014,8 @@ LiDAR_Config AiSGNGComponent::getBase2LidarFrame(const PC2::ConstSharedPtr msg) 
 #if defined(AIS_GNG_BACKEND_CPU)
         has_observation_cloud_transform_ = false;
 #endif
-        RCLCPP_WARN_THROTTLE(
+        // TF未到着による通常表示への割り込み抑止。詳細はDEBUGログ。
+        RCLCPP_DEBUG_THROTTLE(
             this->get_logger(), *this->get_clock(), 5000,
             "Could not transform %s to %s: %s",
             base_frame_id_.c_str(), msg->header.frame_id.c_str(), ex.what());

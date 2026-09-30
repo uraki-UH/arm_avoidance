@@ -14,6 +14,10 @@ GNG・FVGの結果待ちから独立し、送信中の取得・通信は1件に�
 [起動・トピック・制限の正本](../../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md#独立した点群送信)。
 [物体操作](../../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/README.md#ros-2への点群送信物体編集)。
 
+2026-10-01追加: 深度画素位置を維持した画像・CameraInfo・PointCloud2の同時出力。
+共通stamp・カメラ光学座標、32FC1［m］、無効深度0／XYZはNaN。既存XYZ送信は維持。
+詳細・再起動手順は上記の正本に集約。
+
 ## 2. 条件・検証
 
 | 項目 | 条件・結果 |
@@ -31,7 +35,8 @@ GNG・FVGの結果待ちから独立し、送信中の取得・通信は1件に�
 
 可視対象が画角外の条件では0点のROS受信も確認。
 完全表面には裏面・内部面を含み、複数メッシュの外皮を取り出す集合演算は未実装。
-XYZのみを送信。RGB画像・色フィールド、時計同期、TF配信は対象外。
+2026-10-01追記: RGB-D全体で深度画像・CameraInfo・画素対応XYZを同時送信可能。
+RGB画像・色フィールド、時計同期、TF配信は対象外。
 GNG学習との統合運転、Longモデルの実送信、大規模車両メッシュの性能、実機動作は未検証。
 
 試験起動コマンド（いずれも終了済み）：
@@ -46,3 +51,11 @@ docker exec gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && pyth
 一時試験スクリプトは独立Chromeを起動し、終了時に自身のプロセス群だけ停止。
 ROS試験は `pointcloud_bridge.py --port 18879` と購読ノードを起動し、終了時に停止。
 試験ChromeとROS試験プロセスの残存なしを確認。既存サーバー・ユーザーのブラウザ・既存ROSは維持。
+
+2026-10-01検証: 標準モデル、Humble、ROS_DOMAIN_ID=178、HTTP 18879。
+848×480全画素の深度・XYZ対応、共通時刻、既存点群の有効点数一致を確認。
+有効124,002画素／無効283,038画素。形式・メッセージ回帰9件成功。
+試験起動: `node /tmp/topo_depth_browser_test.mjs`、
+`docker exec gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && python3 /tmp/topo_depth_ros_test.py'`。
+自身のChrome・購読ノード・18879ブリッジは停止済み。既存プロセスは維持。
+持続送信レート・Longモデル・実RealSense購読アプリとの互換性は未検証。

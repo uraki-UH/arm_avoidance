@@ -1,0 +1,24 @@
+[
+  [
+    "g++",
+    "-std=c++17",
+    "-O3",
+    "-march=native",
+    "-I/home/uraki/SpatialTree/include",
+    "-I/home/uraki/SpatialTree/experiments/occupancy",
+    "/home/uraki/SpatialTree/experiments/occupancy/rules.cpp",
+    "-o",
+    "/tmp/spatialtree_occupancy_probe_20260930/occ_rules"
+  ],
+  [
+    "g++",
+    "-std=c++17",
+    "-O3",
+    "-march=native",
+    "-I/home/uraki/SpatialTree/include",
+    "-I/home/uraki/SpatialTree/experiments/occupancy",
+    "/home/uraki/SpatialTree/experiments/occupancy/edges.cpp",
+    "-o",
+    "/tmp/spatialtree_occupancy_probe_20260930/occ_edges"
+  ]
+]

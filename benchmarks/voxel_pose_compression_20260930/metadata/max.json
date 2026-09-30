@@ -1,0 +1,292 @@
+{
+  "model": "topo_dual_arm_max",
+  "output": "/tmp/voxel_pose_compression_20260930/data/max.voxpose",
+  "format": "VOXPOSE1",
+  "num_nodes": 10000,
+  "num_links": 22,
+  "angle_dim": 14,
+  "num_coord_layers": 2,
+  "resolution_m": 0.019999999552965164,
+  "voxel_idx_shift": {
+    "x_shift": 42,
+    "y_shift": 21,
+    "z_shift": 0,
+    "offset": 1000000
+  },
+  "num_relations": 5348369,
+  "num_duplicate_node_link_cells": 0,
+  "num_unique_world_cells": 20022,
+  "num_edges": [
+    452987,
+    8499,
+    6097
+  ],
+  "min_cell_xyz": [
+    -19,
+    -26,
+    1
+  ],
+  "max_cell_xyz": [
+    18,
+    25,
+    36
+  ],
+  "vlut_bounds_m": [
+    [
+      -0.4353538155555725,
+      -0.622819185256958,
+      -0.045489970594644547
+    ],
+    [
+      0.43511155247688293,
+      0.6228917837142944,
+      0.8071584105491638
+    ]
+  ],
+  "node_cell_counts": {
+    "min": 491,
+    "max": 583,
+    "mean": 534.8369,
+    "median": 534.0
+  },
+  "active_link_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    20,
+    21
+  ],
+  "num_nodes_missing_any_active_link": 0,
+  "link_counts": [
+    {
+      "link_id": 0,
+      "name": "L_shoulder_mount",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 1,
+      "name": "L_link2",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 40,
+      "mean": 36.5251,
+      "median": 36.0
+    },
+    {
+      "link_id": 2,
+      "name": "L_link3",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 28.979,
+      "median": 29.0
+    },
+    {
+      "link_id": 3,
+      "name": "L_link4",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 38,
+      "mean": 34.4324,
+      "median": 34.0
+    },
+    {
+      "link_id": 4,
+      "name": "L_link5",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 28.9321,
+      "median": 29.0
+    },
+    {
+      "link_id": 5,
+      "name": "L_link6",
+      "num_empty_nodes": 0,
+      "min": 16,
+      "max": 24,
+      "mean": 21.5406,
+      "median": 22.0
+    },
+    {
+      "link_id": 6,
+      "name": "L_link7",
+      "num_empty_nodes": 0,
+      "min": 11,
+      "max": 16,
+      "mean": 14.4898,
+      "median": 15.0
+    },
+    {
+      "link_id": 7,
+      "name": "L_gripper_base",
+      "num_empty_nodes": 0,
+      "min": 30,
+      "max": 44,
+      "mean": 39.0727,
+      "median": 39.0
+    },
+    {
+      "link_id": 8,
+      "name": "L_tcp",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 9,
+      "name": "L_finger_left",
+      "num_empty_nodes": 0,
+      "min": 26,
+      "max": 36,
+      "mean": 32.1746,
+      "median": 32.0
+    },
+    {
+      "link_id": 10,
+      "name": "L_finger_right",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 28.7905,
+      "median": 29.0
+    },
+    {
+      "link_id": 11,
+      "name": "R_shoulder_mount",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 12,
+      "name": "R_link2",
+      "num_empty_nodes": 0,
+      "min": 31,
+      "max": 40,
+      "mean": 37.6413,
+      "median": 38.0
+    },
+    {
+      "link_id": 13,
+      "name": "R_link3",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 29.7395,
+      "median": 30.0
+    },
+    {
+      "link_id": 14,
+      "name": "R_link4",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 38,
+      "mean": 35.0997,
+      "median": 35.0
+    },
+    {
+      "link_id": 15,
+      "name": "R_link5",
+      "num_empty_nodes": 0,
+      "min": 22,
+      "max": 32,
+      "mean": 29.5297,
+      "median": 30.0
+    },
+    {
+      "link_id": 16,
+      "name": "R_link6",
+      "num_empty_nodes": 0,
+      "min": 16,
+      "max": 24,
+      "mean": 21.8572,
+      "median": 22.0
+    },
+    {
+      "link_id": 17,
+      "name": "R_link7",
+      "num_empty_nodes": 0,
+      "min": 11,
+      "max": 16,
+      "mean": 14.6625,
+      "median": 15.0
+    },
+    {
+      "link_id": 18,
+      "name": "R_gripper_base",
+      "num_empty_nodes": 0,
+      "min": 32,
+      "max": 44,
+      "mean": 39.5791,
+      "median": 40.0
+    },
+    {
+      "link_id": 19,
+      "name": "R_tcp",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 20,
+      "name": "R_finger_left",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 29.1759,
+      "median": 29.0
+    },
+    {
+      "link_id": 21,
+      "name": "R_finger_right",
+      "num_empty_nodes": 0,
+      "min": 25,
+      "max": 36,
+      "mean": 32.6152,
+      "median": 33.0
+    }
+  ],
+  "relation_dist_min_m": 0.0,
+  "relation_dist_max_m": 0.0,
+  "input_sha256": {
+    "/home/uraki/uraki_ws/gng_vlut_system/gng_results/topo_dual_arm_max/gng.bin": "677954906ef7c5ca7b9092b9dba57a1abb0430f8407565f1011cef68b69a34e9",
+    "/home/uraki/uraki_ws/gng_vlut_system/gng_results/topo_dual_arm_max/vlut.bin": "b4b9ef20933e459f21346580cd17e7d776f9f46fefc610b6b0c4382c58729f13",
+    "/home/uraki/uraki_ws/gng_vlut_system/config/topo_dual_arm_max.yaml": "47ff0e5c43b4a2194af8892f70acd3ca01ad067c2e97bae4c3861ce8f24ab935",
+    "/home/uraki/uraki_ws/urdf/topo_dual_arm_max/topo_dual_arm_max.urdf": "b8f8769bea8937e92577509352df02b82fd46052106409092f4ccf2e9f247a40"
+  },
+  "output_sha256": "28781fc2a0e6c855ab0de7dee8bbedd2507cc8a3e930287e841fe237e280cb04",
+  "num_output_bytes": 65900456,
+  "elapsed_sec": 4.826884025009349,
+  "checks": [
+    "GNG v9全レコード・辺の参照検査",
+    "VLUT v2ノード参照・距離有限性・整列検査",
+    "URDFとtrainer順序に基づくリンクID再現",
+    "ボクセルIDの復号・再符号化一致",
+    "全ノード・全リンク・全セルの出力再読込一致"
+  ],
+  "limitation": "保存済VLUTの表面占有。姿勢ごとの再ボクセル化時間を含まない。"
+}

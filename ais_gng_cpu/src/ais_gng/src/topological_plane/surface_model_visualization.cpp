@@ -220,6 +220,9 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
     {"frame_number",map.frame_number},{"stamp",{{"sec",map.header.stamp.sec},{"nanosec",map.header.stamp.nanosec}}},
     {"sample_source","gng_node_positions_and_normals"},{"update_ms",surfaces.update_ms},
     {"model_fits",surfaces.model_fits},{"curvature_ms",surfaces.curvature_ms},
+    {"num_curvature_fits",surfaces.num_curvature_fits},
+    {"num_curvature_reused",surfaces.num_curvature_reused},
+    {"num_curvature_deferred",surfaces.num_curvature_deferred},
     {"boundary_ms",surfaces.boundary_ms},{"boundary_fit_num",surfaces.boundary_fit_num},
     {"retention_ms",surfaces.retention_ms},
     {"support_ms",surfaces.support_ms},{"support_split_num",surfaces.support_split_num},
@@ -243,7 +246,7 @@ std::string serialize(const result &surfaces,const ais_gng_msgs::msg::Topologica
       {"node_indices",p.node_indices},{"center",vector_json(p.center)}};
     if (p.plane_cluster_idx>=0) patch["plane_cluster_id"]=planes.clusters[p.plane_cluster_idx].id;
     const auto &c = p.curvature;
-    patch["curvature"] = {{"valid",c.valid},{"sample_num",c.sample_num},
+    patch["curvature"] = {{"valid",c.valid},{"is_deferred",p.is_curvature_deferred},{"sample_num",c.sample_num},
       {"method",surfaces.method=="smooth_graph" ? "none":"position_quadratic"}};
     patch["curvature"].update({{"fit_iter",c.fit_iter},
       {"has_svd_fallback",c.has_svd_fallback}});
@@ -301,6 +304,12 @@ publisher::publisher(rclcpp::Node &node):node_(node)
   config_.method=node.declare_parameter("surface_model.method",config_.method);
   config_.enable_plane_local_search=node.declare_parameter(
     "surface_model.enable_plane_local_search",config_.enable_plane_local_search);
+  config_.enable_patch_history=node.declare_parameter(
+    "surface_model.enable_patch_history",config_.enable_patch_history);
+  config_.max_patch_fits=std::max<std::int64_t>(0,node.declare_parameter<std::int64_t>(
+    "surface_model.max_patch_fits",config_.max_patch_fits));
+  config_.max_patch_refresh_frames=std::max<std::int64_t>(1,node.declare_parameter<std::int64_t>(
+    "surface_model.max_patch_refresh_frames",config_.max_patch_refresh_frames));
   // 新規探索と表示・追跡資格の平面枚数の統一。0は枚数による候補除外なし。
   config_.min_candidate_plane_patches=min_display_plane_patches_;
   if (config_.method!="model" && config_.method!="smooth_graph")

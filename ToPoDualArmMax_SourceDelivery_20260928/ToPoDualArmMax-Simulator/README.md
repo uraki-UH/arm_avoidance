@@ -74,6 +74,7 @@ GBMの `Permission denied` は、この環境ではNVIDIA描画が正常な場�
 ## ROS 2への点群送信・物体編集
 
 再読み込み後の「ROS 2送信」タブで、RGB-D全体／対象物体の完全表面／対象物体の遮蔽付きRGB-Dを選択できます。
+RGB-D全体では、深度画像・CameraInfo・画素対応PointCloud2も同時送信可能（既定ON）。更新後はブリッジも再起動してください。
 送信には独立ブリッジ `integrations/ros2/pointcloud_bridge.py` を起動し、送信先を指定してください。
 [起動・トピック・制限](integrations/ros2/README.md#独立した点群送信) を参照。GNG・FVGの処理結果を待たずに送信できます。
 

@@ -1,0 +1,4 @@
+{"event": "started", "time": "2026-09-29T21:01:01.332493+00:00", "total": 2, "estimated_remaining_sec": null, "report": "/tmp/spatialtree_occupancy_probe_20260930/batch/report.json"}
+{"event": "case_finished", "time": "2026-09-29T21:01:03.448452+00:00", "name": "rules", "trial": 1, "status": "completed", "finished": 1, "total": 2, "elapsed_sec": 2.12, "estimated_remaining_sec": 2.1150814249995165}
+{"event": "case_finished", "time": "2026-09-29T21:01:03.965029+00:00", "name": "edges", "trial": 1, "status": "completed", "finished": 2, "total": 2, "elapsed_sec": 2.63, "estimated_remaining_sec": 0}
+{"event": "finished", "time": "2026-09-29T21:01:03.967905+00:00", "status": "completed", "completed": 2, "total": 2, "elapsed_sec": 2.63, "report": "/tmp/spatialtree_occupancy_probe_20260930/batch/report.json"}

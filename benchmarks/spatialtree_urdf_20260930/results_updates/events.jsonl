@@ -1,0 +1,5 @@
+{"event": "started", "time": "2026-09-29T20:48:17.519415+00:00", "total": 3, "estimated_remaining_sec": 6.0, "report": "/tmp/spatialtree_urdf_audit_20260930/results_updates/report.json"}
+{"event": "case_finished", "time": "2026-09-29T20:48:17.635784+00:00", "name": "saved_joint_updates", "trial": 1, "status": "completed", "finished": 1, "total": 3, "elapsed_sec": 0.12, "estimated_remaining_sec": 0.2297929759370163}
+{"event": "case_finished", "time": "2026-09-29T20:48:17.752459+00:00", "name": "saved_joint_updates", "trial": 2, "status": "completed", "finished": 2, "total": 3, "elapsed_sec": 0.23, "estimated_remaining_sec": 0.11500179948052391}
+{"event": "case_finished", "time": "2026-09-29T20:48:17.868812+00:00", "name": "saved_joint_updates", "trial": 3, "status": "completed", "finished": 3, "total": 3, "elapsed_sec": 0.35, "estimated_remaining_sec": 0}
+{"event": "finished", "time": "2026-09-29T20:48:17.870625+00:00", "status": "completed", "completed": 3, "total": 3, "elapsed_sec": 0.35, "report": "/tmp/spatialtree_urdf_audit_20260930/results_updates/report.json"}

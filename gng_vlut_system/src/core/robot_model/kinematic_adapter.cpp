@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <utility>
 
@@ -213,16 +214,19 @@ createMultiArmKinematicChain(
   for (const auto &cfg : arm_configs) {
     MultiArmKinematicAdapter::ArmEntry arm_entry;
     arm_entry.chain = createKinematicChainFromModel(
-        model, cfg.leaf_link, base_position, cfg.root_link);
+        model, cfg.leaf_link, Eigen::Vector3d::Zero(), cfg.root_link);
     arm_entry.prefix = cfg.prefix;
-    // Store the calculated base as relative offset
+    arm_entry.root_link_name =
+        cfg.root_link.empty() ? model.getRootLinkName() : cfg.root_link;
+    // URDF原点基準の腕オフセット。global baseの二重適用防止
     arm_entry.relative_base_pos = arm_entry.chain.getBasePosition();
     arm_entry.relative_base_ori = arm_entry.chain.getBaseOrientation();
     arms.push_back(std::move(arm_entry));
   }
 
   auto adapter =
-      std::make_unique<MultiArmKinematicAdapter>(std::move(arms), 0);
+      std::make_unique<MultiArmKinematicAdapter>(
+          std::move(arms), 0, model.getRootLinkName());
   adapter->setBase(base_position, Eigen::Quaterniond::Identity());
   return adapter;
 }
@@ -255,8 +259,9 @@ createMultiArmKinematicChainFromModels(
 
 MultiArmKinematicAdapter::MultiArmKinematicAdapter(
     std::vector<ArmEntry, Eigen::aligned_allocator<ArmEntry>> arms,
-    std::size_t primary_arm_index)
-    : arms_(std::move(arms)) {
+    std::size_t primary_arm_index, std::string model_root_link_name)
+    : arms_(std::move(arms)),
+      model_root_link_name_(std::move(model_root_link_name)) {
   if (arms_.empty()) {
     throw std::runtime_error("MultiArmKinematicAdapter requires at least one arm.");
   }
@@ -706,53 +711,81 @@ void MultiArmKinematicAdapter::buildAllLinkTransforms(
     std::map<std::string, Eigen::Isometry3d> &link_transforms) const {
   link_transforms.clear();
 
+  std::string model_root = model_root_link_name_;
+  if (model_root.empty()) {
+    // factory以外から組み立てたadapter向けの従来のルート推定
+    model_root = "base_link";
+    std::set<std::string> children;
+    for (const auto &entry : fixed_link_info) children.insert(entry.first);
+    for (const auto &entry : fixed_link_info) {
+      if (children.count(entry.second.first) == 0) {
+        model_root = entry.second.first;
+        break;
+      }
+    }
+  }
+  Eigen::Isometry3d global_base = Eigen::Isometry3d::Identity();
+  global_base.translate(base_position_);
+  global_base.rotate(base_orientation_);
+  std::set<std::string> prefixes;
+  for (const auto &arm : arms_) {
+    prefixes.insert(arm.prefix);
+    link_transforms.emplace(arm.prefix + model_root, global_base);
+  }
+
+  // 各腕の実FKを先行登録。他腕のゼロ姿勢補完による上書き防止
   std::size_t offset = 0;
-  auto process_arm = [&](const ArmEntry &arm, std::size_t arm_offset) {
+  for (const auto &arm : arms_) {
     const auto &default_positions = arm.chain.getLinkPositions();
     const auto &default_orientations = arm.chain.getLinkOrientations();
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
-        arm_positions;
-    std::vector<Eigen::Quaterniond,
-                Eigen::aligned_allocator<Eigen::Quaterniond>>
-        arm_orientations;
-
     const std::size_t block_size = default_positions.size();
-    if (positions.size() >= arm_offset + block_size &&
-        orientations.size() >= arm_offset + block_size && block_size > 0) {
-      arm_positions.assign(positions.begin() + arm_offset,
-                           positions.begin() + arm_offset + block_size);
-      arm_orientations.assign(orientations.begin() + arm_offset,
-                              orientations.begin() + arm_offset + block_size);
-    } else {
-      arm_positions = default_positions;
-      arm_orientations = default_orientations;
-    }
-
-    std::map<std::string, Eigen::Isometry3d> arm_map;
-    arm.chain.buildAllLinkTransforms(arm_positions, arm_orientations,
-                                     fixed_link_info, arm_map);
-    auto is_identity = [](const Eigen::Isometry3d &tf) {
-      return tf.matrix().isApprox(Eigen::Isometry3d::Identity().matrix(), 1e-9);
+    const bool has_input_block = block_size > 0 &&
+        positions.size() >= offset + block_size &&
+        orientations.size() >= offset + block_size;
+    const auto &arm_positions = has_input_block ? positions : default_positions;
+    const auto &arm_orientations = has_input_block ? orientations : default_orientations;
+    const std::size_t first_idx = has_input_block ? offset : 0;
+    const auto link_transform = [&](std::size_t local_idx) {
+      Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
+      transform.translate(arm_positions[first_idx + local_idx]);
+      transform.rotate(arm_orientations[first_idx + local_idx]);
+      return transform;
     };
-    for (const auto &[name, tf] : arm_map) {
-      const std::string key = arm.prefix + name;
-      auto it = link_transforms.find(key);
-      if (it == link_transforms.end()) {
-        link_transforms.emplace(key, tf);
-        continue;
+    if (block_size > 0 && arm_orientations.size() >= first_idx + block_size) {
+      std::string arm_root = arm.root_link_name;
+      if (arm_root.empty() && arm.chain.getNumJoints() > 0) {
+        const auto parent = fixed_link_info.find(arm.chain.getLinkName(0));
+        if (parent != fixed_link_info.end()) arm_root = parent->second.first;
       }
-      if (is_identity(tf) && !is_identity(it->second)) {
-        continue;
+      if (!arm_root.empty()) {
+        link_transforms.emplace(arm.prefix + arm_root, link_transform(0));
       }
-      if (!is_identity(tf) || is_identity(it->second)) {
-        it->second = tf;
+      for (int link_idx = 0; link_idx < arm.chain.getNumJoints(); ++link_idx) {
+        const std::size_t position_idx = static_cast<std::size_t>(link_idx) + 1;
+        if (position_idx < block_size) {
+          link_transforms[arm.prefix + arm.chain.getLinkName(link_idx)] =
+              link_transform(position_idx);
+        }
       }
     }
-  };
+    offset += block_size;
+  }
 
-  for (const auto &arm : arms_) {
-    process_arm(arm, offset);
-    offset += arm.chain.getLinkPositions().size();
+  // 全腕の実FKを保持した、不足する固定枝・ゼロ関節枝の補完
+  bool has_change = true;
+  for (std::size_t iter = 0; has_change && iter <= fixed_link_info.size(); ++iter) {
+    has_change = false;
+    for (const auto &prefix : prefixes) {
+      for (const auto &entry : fixed_link_info) {
+        const std::string child = prefix + entry.first;
+        if (link_transforms.count(child) > 0) continue;
+        const auto parent = link_transforms.find(prefix + entry.second.first);
+        if (parent != link_transforms.end()) {
+          link_transforms.emplace(child, parent->second * entry.second.second);
+          has_change = true;
+        }
+      }
+    }
   }
 }
 

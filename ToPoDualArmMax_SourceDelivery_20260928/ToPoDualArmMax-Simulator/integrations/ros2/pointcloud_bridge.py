@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 root = Path(__file__).resolve().parents[2] / 'app'
 topics = {'rgbd': '/sim/rgbd/points', 'object_full': '/sim/object/full_points',
           'object_visible': '/sim/object/visible_points'}
-max_body_bytes = 13064008
+max_body_bytes = 50000000
 
 
 def parse_packet(raw):
@@ -25,12 +25,29 @@ def parse_packet(raw):
         raise ValueError('メタデータはオブジェクト形式です')
     count = meta.get('count')
     offset = 8 + (size + 3) // 4 * 4
-    if type(count) is not int or not 0 <= count <= 1000000 or len(raw) != offset + count * 12:
+    if type(count) is not int or not 0 <= count <= 2073600:
         raise ValueError('点数・データ長が不正です')
     if meta.get('source') not in topics or meta.get('frame_id') != 'base_footprint':
         raise ValueError('点群種別・座標系が不正です')
+    depth = meta.get('depth_image')
+    num_pixels = 0
+    if depth is not None:
+        if meta['source'] != 'rgbd' or not isinstance(depth, dict):
+            raise ValueError('深度画像はRGB-D全体のみ対応です')
+        width, height = depth.get('width'), depth.get('height')
+        if type(width) is not int or type(height) is not int or not 16 <= width <= 1920 or not 16 <= height <= 1080:
+            raise ValueError('深度画像の寸法が不正です')
+        if any(type(depth.get(k)) not in (float, int) or not math.isfinite(depth[k]) for k in ('fx', 'fy', 'ppx', 'ppy')) or depth['fx'] <= 0 or depth['fy'] <= 0:
+            raise ValueError('内部パラメータが不正です')
+        if depth.get('model') != 'none' or depth.get('coeffs') != [0, 0, 0, 0, 0]:
+            raise ValueError('歪み補正済みの深度画像が必要です')
+        num_pixels = width * height
+    if len(raw) != offset + count * 12 + num_pixels * 4:
+        raise ValueError('点群・深度画像のデータ長が不正です')
+    if num_pixels and any(not math.isfinite(v[0]) or v[0] < 0 for v in struct.iter_unpack('<f', raw[offset + count * 12:])):
+        raise ValueError('深度値が不正です')
     data = raw[offset:]
-    if any(not math.isfinite(v[0]) for v in struct.iter_unpack('<f', data)):
+    if any(not math.isfinite(v[0]) for v in struct.iter_unpack('<f', data[:count * 12])):
         raise ValueError('座標に非有限値があります')
     pose = meta.get('robot_pose', {})
     if not isinstance(pose, dict) or len(pose) > 64 or any(
@@ -117,6 +134,10 @@ def main():
     publishers = {key: node.create_publisher(PointCloud2, topic, 2) for key, topic in topics.items()}
     joints = node.create_publisher(JointState, '/sim/joint_states', 2)
     info = node.create_publisher(String, '/sim/points/info', 2)
+    from depth_output import create_depth_messages, depth_topics
+    from sensor_msgs.msg import Image, CameraInfo
+    depth_publishers = [node.create_publisher(kind, topic, 2) for kind, topic in
+                        zip((Image, CameraInfo, PointCloud2), depth_topics)]
     lock = threading.Lock()
 
     def publish(meta, data):
@@ -131,17 +152,20 @@ def main():
                           for i, name in enumerate(('x', 'y', 'z'))]
             msg.is_bigendian = False
             msg.point_step = 12
-            msg.row_step = len(data)
+            msg.row_step = meta['count'] * 12
             msg.is_dense = True
-            msg.data = data
+            msg.data = data[:msg.row_step]
             publishers[meta['source']].publish(msg)
+            if meta.get('depth_image') is not None:
+                for publisher, message in zip(depth_publishers, create_depth_messages(meta['depth_image'], data[msg.row_step:], stamp)):
+                    publisher.publish(message)
             pose = JointState()
             pose.header = msg.header
             pose.name = list(meta.get('robot_pose', {}))
             pose.position = [float(v) for v in meta.get('robot_pose', {}).values()]
             joints.publish(pose)
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
-            return {'topic': topics[meta['source']], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
+            return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
     server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed))
     server.daemon_threads = True

@@ -32,6 +32,9 @@ def launch_setup(context):
     avoidance_config = (yaml.safe_load(Path(avoidance_path).read_text())['dual_arm_avoidance_demo']
                         if avoidance_path else None)
     enable_external_control = LaunchConfiguration('enable_external_control').perform(context).lower() == 'true'
+    enable_integrated_control = LaunchConfiguration('enable_integrated_control').perform(context).lower() == 'true'
+    if enable_integrated_control and (enable_external_control or avoidance_config is None):
+        raise ValueError('統合操作には回避設定と単一の指令出力経路が必要です')
     namespace = config.get('namespace') or 'sim_' + params['robot_name']
     if not namespace.startswith('sim_') or '/' in namespace:
         raise ValueError('デモの名前空間はsim_で始まる単一名が必要です')
@@ -154,7 +157,11 @@ def launch_setup(context):
                                                else 'dual_arm_avoidance_demo.py'),
                     namespace=namespace, output='screen', parameters=[{
                         'use_sim_time': True, 'avoidance_config': avoidance_path,
-                        'urdf_path': str(urdf_path), 'enable_auto_start': enable_auto_start}])
+                        'urdf_path': str(urdf_path),
+                        'enable_auto_start': False if enable_integrated_control else enable_auto_start,
+                        'enable_stamped_commands': enable_integrated_control}],
+                    remappings=([('dual_arm_controller/joint_trajectory', 'control/avoidance_trajectory')]
+                                if enable_integrated_control else []))
 
     physics_start = Node(package='gng_vlut_system', executable='start_gazebo_physics.py',
                          parameters=[{'controller_manager': f'/{namespace}/controller_manager'}],
@@ -206,6 +213,13 @@ def launch_setup(context):
                 'enable_dynamixel_input': LaunchConfiguration('enable_dynamixel_leader'),
                 'dynamixel_input_topic': LaunchConfiguration('dynamixel_input_topic'),
             }.items()))
+    if enable_integrated_control:
+        control = Node(package='gng_vlut_system', executable='dual_arm_control.py',
+                       namespace=namespace, output='log', parameters=[{
+                           'use_sim_time': True, 'urdf_path': str(urdf_path)}],
+                       remappings=[('leader_joint_states', LaunchConfiguration('leader_joint_state_topic'))])
+        actions.extend([control, RegisterEventHandler(OnProcessExit(
+            target_action=control, on_exit=[EmitEvent(event=Shutdown(reason='統合制御の終了'))]))])
     if config.get('enable_viewer', True):
         actions.append(Node(package='gng_vlut_system', executable='robot_viewer_bridge_node',
             name='robot_viewer_bridge_node', namespace=namespace, parameters=[str(params_path), {
@@ -224,6 +238,8 @@ def generate_launch_description():
         DeclareLaunchArgument('demo_config', default_value=str(package_share/'config/dual_arm_gazebo_demo.yaml')),
         DeclareLaunchArgument('avoidance_config', default_value=''),
         DeclareLaunchArgument('enable_external_control', default_value='false'),
+        DeclareLaunchArgument('enable_integrated_control', default_value='false'),
+        DeclareLaunchArgument('leader_joint_state_topic', default_value='/leader/joint_states'),
         DeclareLaunchArgument('enable_dynamixel_leader', default_value='false'),
         DeclareLaunchArgument('dynamixel_input_topic', default_value='/dynamixel/state/present'),
         DeclareLaunchArgument('gui', default_value=''),

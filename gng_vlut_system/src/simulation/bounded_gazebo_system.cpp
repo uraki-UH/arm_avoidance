@@ -1,11 +1,19 @@
 // ODEの有限トルクモータによる位置追従。速度・トルク上限の正本はURDF
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <gazebo_ros2_control/gazebo_system_interface.hpp>
+#include <nlohmann/json.hpp>
 #include <pluginlib/class_list_macros.hpp>
+#include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+#include "gazebo_stop_latch.hpp"
 
 namespace robot_sim {
 class bounded_gazebo_system : public gazebo_ros2_control::GazeboSystemInterface {
@@ -15,9 +23,66 @@ class bounded_gazebo_system : public gazebo_ros2_control::GazeboSystemInterface 
     double position = 0, velocity = 0, effort = 0, command = 0;
     double max_effort = 0, max_velocity = 0, min_position = 0, max_position = 0;
     double position_gain = 20, multiplier = 1;
+    double hold_position = 0;
+    bool is_command_active = false;
+    bool has_pending_hold_capture = false;
     int mimic_idx = -1;
   };
   std::vector<joint_data> joints_;
+  std::mutex stop_mutex_;
+  gazebo_stop_latch stop_latch_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stop_latch_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr stop_status_pub_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr stop_service_, reset_service_;
+  rclcpp::TimerBase::SharedPtr stop_status_timer_;
+
+  static double wall_sec() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+
+  bool has_active_commands() const {
+    return std::any_of(joints_.begin(), joints_.end(), [](const auto & data) {
+      return data.mimic_idx < 0 && data.is_command_active;
+    });
+  }
+
+  bool has_start_commands(const std::vector<std::string> & start_interfaces) const {
+    return std::any_of(joints_.begin(), joints_.end(), [&](const auto & data) {
+      return data.mimic_idx < 0 && std::find(start_interfaces.begin(), start_interfaces.end(),
+        data.name + "/position") != start_interfaces.end();
+    });
+  }
+
+  void publish_stop_status() {
+    std_msgs::msg::Bool latch_message;
+    std_msgs::msg::String status_message;
+    std::string state;
+    bool is_stop_applied, is_stopped, has_active;
+    double age_sec, max_velocity_rad_sec;
+    {
+      std::lock_guard<std::mutex> lock(stop_mutex_);
+      const double now_wall_sec = wall_sec();
+      age_sec = stop_latch_.state_age_sec(now_wall_sec);
+      max_velocity_rad_sec = stop_latch_.max_velocity_rad_sec();
+      latch_message.data = stop_latch_.is_stop_latched();
+      state = stop_latch_.state(now_wall_sec);
+      is_stop_applied = stop_latch_.is_stop_applied();
+      is_stopped = stop_latch_.is_stopped(now_wall_sec);
+      has_active = has_active_commands();
+    }
+    // 物理更新の排他区間外での診断文字列生成
+    nlohmann::json status = {
+      {"state", state}, {"is_stop_latched", latch_message.data},
+      {"is_stop_applied", is_stop_applied}, {"is_stopped", is_stopped},
+      {"has_active_commands", has_active},
+      {"max_velocity_rad_sec", std::isfinite(max_velocity_rad_sec)
+        ? nlohmann::json(max_velocity_rad_sec) : nlohmann::json(nullptr)},
+      {"state_age_sec", std::isfinite(age_sec) ? nlohmann::json(age_sec) : nlohmann::json(nullptr)}
+    };
+    status_message.data = status.dump();
+    stop_latch_pub_->publish(latch_message);
+    stop_status_pub_->publish(status_message);
+  }
 
 public:
   bool initSim(rclcpp::Node::SharedPtr & node, gazebo::physics::ModelPtr model,
@@ -49,7 +114,7 @@ public:
         return false;
       }
       // 一時停止中の生成姿勢を初期目標とする、位置・速度の直接設定なし
-      data.position = data.command = data.joint->Position(0);
+      data.position = data.command = data.hold_position = data.joint->Position(0);
       data.joint->SetProvideFeedback(true);
       // 関節ストッパ離脱時の過大なモータ力を防ぐODE係数
       data.joint->SetParam("fudge_factor", 0, 0.0);
@@ -71,6 +136,35 @@ public:
       joints_[idx].mimic_idx = std::distance(joints_.begin(), parent);
       if (params.count("multiplier")) joints_[idx].multiplier = std::stod(params.at("multiplier"));
     }
+    const auto stop_qos = rclcpp::QoS(1).reliable().transient_local();
+    stop_latch_pub_ = nh_->create_publisher<std_msgs::msg::Bool>("safety/is_stop_latched", stop_qos);
+    stop_status_pub_ = nh_->create_publisher<std_msgs::msg::String>("safety/status", stop_qos);
+    stop_service_ = nh_->create_service<std_srvs::srv::Trigger>("safety/stop",
+      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        {
+          std::lock_guard<std::mutex> lock(stop_mutex_);
+          stop_latch_.request_stop();
+        }
+        response->success = true;
+        response->message = "停止要求の受付。実測確認はsafety/status";
+        publish_stop_status();
+      });
+    reset_service_ = nh_->create_service<std_srvs::srv::Trigger>("safety/reset",
+      [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        {
+          std::lock_guard<std::mutex> lock(stop_mutex_);
+          response->success = stop_latch_.reset(wall_sec(), has_active_commands());
+        }
+        response->message = response->success
+          ? "停止ラッチの解除。再開にはcontrollerの明示的なactivateが必要"
+          : "解除拒否。全位置controllerのdeactivateと新鮮な停止実測が必要";
+        publish_stop_status();
+      });
+    stop_status_timer_ = nh_->create_wall_timer(std::chrono::milliseconds(50),
+      [this]() { publish_stop_status(); });
+    publish_stop_status();
     RCLCPP_INFO(nh_->get_logger(), "ODE有限トルクモータ: %zu関節、URDF速度・トルク上限", joints_.size());
     return true;
   }
@@ -92,30 +186,113 @@ public:
     return interfaces;
   }
 
-  hardware_interface::return_type read(const rclcpp::Time &, const rclcpp::Duration &) override {
+  hardware_interface::return_type prepare_command_mode_switch(
+      const std::vector<std::string> & start_interfaces,
+      const std::vector<std::string> &) override {
+    std::lock_guard<std::mutex> lock(stop_mutex_);
+    if (stop_latch_.is_stop_latched() && has_start_commands(start_interfaces)) {
+      RCLCPP_WARN(nh_->get_logger(), "停止ラッチ中のcontroller activateを拒否");
+      return hardware_interface::return_type::ERROR;
+    }
+    return hardware_interface::return_type::OK;
+  }
+
+  hardware_interface::return_type perform_command_mode_switch(
+      const std::vector<std::string> & start_interfaces,
+      const std::vector<std::string> & stop_interfaces) override {
+    std::lock_guard<std::mutex> lock(stop_mutex_);
+    const bool has_rejected_start = stop_latch_.is_stop_latched() && has_start_commands(start_interfaces);
+    for (auto & data : joints_) {
+      if (data.mimic_idx >= 0) continue;
+      const std::string command_name = data.name + "/position";
+      const bool has_stop_interface =
+        std::find(stop_interfaces.begin(), stop_interfaces.end(), command_name) != stop_interfaces.end();
+      const bool has_start_interface =
+        std::find(start_interfaces.begin(), start_interfaces.end(), command_name) != start_interfaces.end();
+      // prepare後の停止競合でも、manager側のactivation継続を想定した解除禁止
+      data.is_command_active = is_command_active_after_switch(
+        data.is_command_active, has_start_interface, has_stop_interface);
+      if (has_stop_interface) {
+        data.has_pending_hold_capture = true;
+        for (auto & child : joints_) {
+          if (child.mimic_idx >= 0 && joints_[child.mimic_idx].name == data.name)
+            child.has_pending_hold_capture = true;
+        }
+      }
+      if (has_start_interface && !has_rejected_start) {
+        // 再activation時の旧目標破棄。実測姿勢からの明示再開
+        data.command = data.hold_position = data.position;
+        data.has_pending_hold_capture = false;
+      }
+    }
+    return has_rejected_start ? hardware_interface::return_type::ERROR : hardware_interface::return_type::OK;
+  }
+
+  hardware_interface::return_type read(const rclcpp::Time & time, const rclcpp::Duration &) override {
+    std::lock_guard<std::mutex> lock(stop_mutex_);
+    double max_velocity_rad_sec = 0;
+    bool has_finite_state = !joints_.empty();
     for (auto & data : joints_) {
       data.position = data.joint->Position(0);
       data.velocity = data.joint->GetVelocity(0);
       // 子リンク座標系の関節反力トルクを回転軸へ射影。ストッパ反力を含む測定値
       const auto axis = data.joint->GetChild()->WorldPose().Rot().RotateVectorReverse(data.joint->GlobalAxis(0));
       data.effort = -data.joint->GetForceTorque(0).body2Torque.Dot(axis);
+      has_finite_state = has_finite_state && std::isfinite(data.position) && std::isfinite(data.velocity);
+      max_velocity_rad_sec = std::max(max_velocity_rad_sec, std::abs(data.velocity));
     }
+    stop_latch_.observe(time.seconds(), wall_sec(), max_velocity_rad_sec, has_finite_state);
     return hardware_interface::return_type::OK;
   }
 
   hardware_interface::return_type write(const rclcpp::Time &, const rclcpp::Duration &) override {
+    std::lock_guard<std::mutex> lock(stop_mutex_);
+    bool can_apply_stop = false;
+    if (stop_latch_.is_stop_latched() && !stop_latch_.is_stop_applied()) {
+      // 全関節の停止位置取得。ROS callbackからのGazebo API操作なし
+      std::vector<double> stop_positions;
+      bool has_finite_positions = true;
+      for (const auto & data : joints_) {
+        stop_positions.push_back(data.joint->Position(0));
+        has_finite_positions = has_finite_positions && std::isfinite(stop_positions.back());
+      }
+      if (has_finite_positions) {
+        for (std::size_t idx = 0; idx < joints_.size(); ++idx)
+          joints_[idx].hold_position = stop_positions[idx];
+        can_apply_stop = true;
+      }
+    }
+    bool has_output_success = true;
     for (auto & data : joints_) {
-      double target = data.mimic_idx < 0 ? data.command :
-        joints_[data.mimic_idx].command * data.multiplier;
+      const bool is_active = data.mimic_idx < 0 ? data.is_command_active :
+        joints_[data.mimic_idx].is_command_active;
+      if (!stop_latch_.is_stop_latched() && !is_active && data.has_pending_hold_capture) {
+        data.hold_position = data.joint->Position(0);
+        data.has_pending_hold_capture = false;
+      }
+      // ラッチ中・controller非active中の指令遮断。mimic関節も個別停止位置で保持
+      double target = data.hold_position;
+      if (!stop_latch_.is_stop_latched() && is_active) {
+        target = data.mimic_idx < 0 ? data.command : joints_[data.mimic_idx].command * data.multiplier;
+      } else if (stop_latch_.is_stop_latched() && !stop_latch_.is_stop_applied() && !can_apply_stop) {
+        target = std::numeric_limits<double>::quiet_NaN();
+      }
       double velocity = 0;
-      if (std::isfinite(target)) {
+      const double current_position = data.joint->Position(0);
+      if (std::isfinite(target) && std::isfinite(current_position)) {
         target = std::clamp(target, data.min_position, data.max_position);
-        velocity = std::clamp(data.position_gain * (target - data.joint->Position(0)),
+        velocity = std::clamp(data.position_gain * (target - current_position),
                               -data.max_velocity, data.max_velocity);
       }
-      data.joint->SetParam("fmax", 0, data.max_effort);
-      data.joint->SetParam("vel", 0, velocity);
+      const bool has_effort_output = data.joint->SetParam("fmax", 0, data.max_effort);
+      const bool has_velocity_output = data.joint->SetParam("vel", 0, velocity);
+      has_output_success = has_output_success && has_effort_output && has_velocity_output;
     }
+    if (!has_output_success) {
+      stop_latch_.mark_stop_unapplied();
+      return hardware_interface::return_type::ERROR;
+    }
+    if (can_apply_stop) stop_latch_.mark_stop_applied();
     return hardware_interface::return_type::OK;
   }
 };

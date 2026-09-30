@@ -1,0 +1,466 @@
+[
+  {
+    "name": "max_radius_0",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5348369,
+      "input_sha256": "28781fc2a0e6c855ab0de7dee8bbedd2507cc8a3e930287e841fe237e280cb04",
+      "is_valid": true,
+      "radius_cells": 0.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 10000,
+      "num_singleton_groups": 10000,
+      "num_merged_groups": 0,
+      "num_checked_non_representative_pairs": 0,
+      "max_hausdorff_cells": 0.0,
+      "max_hausdorff_m": 0.0,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 0,
+      "representative_only_missing_cell_ref_ratio": 0.0,
+      "representative_only_missing_merged_cell_ref_ratio": 0.0,
+      "num_union_dictionary_cell_refs": 5348369,
+      "num_union_member_cell_refs": 5348369,
+      "union_dictionary_cell_ref_ratio": 1.0,
+      "union_additional_member_cell_ref_ratio": 0.0,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 2.821026489022188
+    }
+  },
+  {
+    "name": "max_radius_1",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5348369,
+      "input_sha256": "28781fc2a0e6c855ab0de7dee8bbedd2507cc8a3e930287e841fe237e280cb04",
+      "is_valid": true,
+      "radius_cells": 1.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 10000,
+      "num_singleton_groups": 10000,
+      "num_merged_groups": 0,
+      "num_checked_non_representative_pairs": 0,
+      "max_hausdorff_cells": 0.0,
+      "max_hausdorff_m": 0.0,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 0,
+      "representative_only_missing_cell_ref_ratio": 0.0,
+      "representative_only_missing_merged_cell_ref_ratio": 0.0,
+      "num_union_dictionary_cell_refs": 5348369,
+      "num_union_member_cell_refs": 5348369,
+      "union_dictionary_cell_ref_ratio": 1.0,
+      "union_additional_member_cell_ref_ratio": 0.0,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 2.8416454100515693
+    }
+  },
+  {
+    "name": "max_radius_2",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5348369,
+      "input_sha256": "28781fc2a0e6c855ab0de7dee8bbedd2507cc8a3e930287e841fe237e280cb04",
+      "is_valid": true,
+      "radius_cells": 2.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 9893,
+      "num_singleton_groups": 9787,
+      "num_merged_groups": 106,
+      "num_checked_non_representative_pairs": 107,
+      "max_hausdorff_cells": 2.0,
+      "max_hausdorff_m": 0.03999999910593033,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 22088,
+      "representative_only_missing_cell_ref_ratio": 0.004129857158322472,
+      "representative_only_missing_merged_cell_ref_ratio": 0.1899928606449504,
+      "num_union_dictionary_cell_refs": 5311985,
+      "num_union_member_cell_refs": 5392746,
+      "union_dictionary_cell_ref_ratio": 0.9931971784295361,
+      "union_additional_member_cell_ref_ratio": 0.008297295867207368,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.008140573466953979,
+        "p95": 0.0,
+        "max": 0.6978967495219885
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.3821865477443184,
+        "p95": 0.4705270521772414,
+        "max": 0.6978967495219885
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.02852770140208304,
+        "p95": 0.0,
+        "max": 3.7109017372131348
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.04334370274394607,
+        "p95": 0.0,
+        "max": 6.971415342976145
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.00024251102516219803,
+        "p95": 0.0,
+        "max": 0.03862382812209086
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 3.124187815003097
+    }
+  },
+  {
+    "name": "max_radius_4",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5348369,
+      "input_sha256": "28781fc2a0e6c855ab0de7dee8bbedd2507cc8a3e930287e841fe237e280cb04",
+      "is_valid": true,
+      "radius_cells": 4.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 1596,
+      "num_singleton_groups": 605,
+      "num_merged_groups": 991,
+      "num_checked_non_representative_pairs": 8404,
+      "max_hausdorff_cells": 4.0,
+      "max_hausdorff_m": 0.07999999821186066,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 2759967,
+      "representative_only_missing_cell_ref_ratio": 0.5160390017966224,
+      "representative_only_missing_merged_cell_ref_ratio": 0.5485431731495242,
+      "num_union_dictionary_cell_refs": 1856152,
+      "num_union_member_cell_refs": 24117246,
+      "union_dictionary_cell_ref_ratio": 0.347050100694249,
+      "union_additional_member_cell_ref_ratio": 3.509271144156284,
+      "union_additional_pose_cell_ratio": {
+        "mean": 3.487403774698582,
+        "p95": 6.035185185185185,
+        "max": 6.972972972972973
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 3.7119784722709768,
+        "p95": 6.0544861466188244,
+        "max": 6.972972972972973
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 2.6159643013186753,
+        "p95": 3.6183982670307158,
+        "max": 4.133893251419067
+      },
+      "joint_l2_diff_rad": {
+        "mean": 4.328268134394609,
+        "p95": 7.053905164118913,
+        "max": 9.024531623533601
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.040884956711556376,
+        "p95": 0.06980236684643021,
+        "max": 0.09094093341644992
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 19.731558827043045
+    }
+  },
+  {
+    "name": "long_radius_0",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5889880,
+      "input_sha256": "dd6b7b7a1ac2d409a59a23230e598692000449eb42be0cf904940b787b2d55b7",
+      "is_valid": true,
+      "radius_cells": 0.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 10000,
+      "num_singleton_groups": 10000,
+      "num_merged_groups": 0,
+      "num_checked_non_representative_pairs": 0,
+      "max_hausdorff_cells": 0.0,
+      "max_hausdorff_m": 0.0,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 0,
+      "representative_only_missing_cell_ref_ratio": 0.0,
+      "representative_only_missing_merged_cell_ref_ratio": 0.0,
+      "num_union_dictionary_cell_refs": 5889880,
+      "num_union_member_cell_refs": 5889880,
+      "union_dictionary_cell_ref_ratio": 1.0,
+      "union_additional_member_cell_ref_ratio": 0.0,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 2.832339266955387
+    }
+  },
+  {
+    "name": "long_radius_1",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5889880,
+      "input_sha256": "dd6b7b7a1ac2d409a59a23230e598692000449eb42be0cf904940b787b2d55b7",
+      "is_valid": true,
+      "radius_cells": 1.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 10000,
+      "num_singleton_groups": 10000,
+      "num_merged_groups": 0,
+      "num_checked_non_representative_pairs": 0,
+      "max_hausdorff_cells": 0.0,
+      "max_hausdorff_m": 0.0,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 0,
+      "representative_only_missing_cell_ref_ratio": 0.0,
+      "representative_only_missing_merged_cell_ref_ratio": 0.0,
+      "num_union_dictionary_cell_refs": 5889880,
+      "num_union_member_cell_refs": 5889880,
+      "union_dictionary_cell_ref_ratio": 1.0,
+      "union_additional_member_cell_ref_ratio": 0.0,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 2.8339963950566016
+    }
+  },
+  {
+    "name": "long_radius_2",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5889880,
+      "input_sha256": "dd6b7b7a1ac2d409a59a23230e598692000449eb42be0cf904940b787b2d55b7",
+      "is_valid": true,
+      "radius_cells": 2.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 9996,
+      "num_singleton_groups": 9992,
+      "num_merged_groups": 4,
+      "num_checked_non_representative_pairs": 4,
+      "max_hausdorff_cells": 2.0,
+      "max_hausdorff_m": 0.03999999910593033,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 966,
+      "representative_only_missing_cell_ref_ratio": 0.00016401013263428119,
+      "representative_only_missing_merged_cell_ref_ratio": 0.20213433772755807,
+      "num_union_dictionary_cell_refs": 5888482,
+      "num_union_member_cell_refs": 5891863,
+      "union_dictionary_cell_ref_ratio": 0.9997626437210945,
+      "union_additional_member_cell_ref_ratio": 0.0003366791853144716,
+      "union_additional_pose_cell_ratio": {
+        "mean": 0.0003325908172245354,
+        "p95": 0.0,
+        "max": 0.5
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 0.41573852153066926,
+        "p95": 0.48331889081455803,
+        "max": 0.5
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 0.0010917279601097107,
+        "p95": 0.0,
+        "max": 3.5484174489974976
+      },
+      "joint_l2_diff_rad": {
+        "mean": 0.0014506352838344863,
+        "p95": 0.0,
+        "max": 4.785918046495399
+      },
+      "max_tcp_diff_m": {
+        "mean": 9.320729145486204e-06,
+        "p95": 0.0,
+        "max": 0.03202116994006398
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 2.8410153629956767
+    }
+  },
+  {
+    "name": "long_radius_4",
+    "verification": {
+      "num_nodes": 10000,
+      "num_links": 22,
+      "angle_dim": 14,
+      "num_coord_layers": 2,
+      "voxel_res_m": 0.019999999552965164,
+      "num_original_cell_refs": 5889880,
+      "input_sha256": "dd6b7b7a1ac2d409a59a23230e598692000449eb42be0cf904940b787b2d55b7",
+      "is_valid": true,
+      "radius_cells": 4.0,
+      "metric": "リンク別双方向ユークリッド距離（格子セル中心）",
+      "guarantee_scope": "保存済入力格子占有のみ。URDF連続実形状・辺の補間経路は未保証。",
+      "representative_pose_storage": "原入力のnode_id参照。角度・TCPは原入力float32値。",
+      "num_representatives": 4849,
+      "num_singleton_groups": 2874,
+      "num_merged_groups": 1975,
+      "num_checked_non_representative_pairs": 5151,
+      "max_hausdorff_cells": 4.0,
+      "max_hausdorff_m": 0.07999999821186066,
+      "num_union_missing_member_cell_refs": 0,
+      "num_representative_only_missing_cell_refs": 1998226,
+      "representative_only_missing_cell_ref_ratio": 0.3392642974050405,
+      "representative_only_missing_merged_cell_ref_ratio": 0.4747573143084414,
+      "num_union_dictionary_cell_refs": 4337617,
+      "num_union_member_cell_refs": 13737617,
+      "union_dictionary_cell_ref_ratio": 0.736452525348564,
+      "union_additional_member_cell_ref_ratio": 1.3324103377318384,
+      "union_additional_pose_cell_ratio": {
+        "mean": 1.3248606996664636,
+        "p95": 3.735922450571396,
+        "max": 5.890034364261169
+      },
+      "union_additional_merged_pose_cell_ratio": {
+        "mean": 1.8591926742442653,
+        "p95": 3.950883897511373,
+        "max": 5.890034364261169
+      },
+      "joint_max_abs_diff_rad": {
+        "mean": 1.5839454623577185,
+        "p95": 3.582218426465988,
+        "max": 4.078517198562622
+      },
+      "joint_l2_diff_rad": {
+        "mean": 2.4846298453765274,
+        "p95": 6.410393212535323,
+        "max": 8.548075064684946
+      },
+      "max_tcp_diff_m": {
+        "mean": 0.028157782072930827,
+        "p95": 0.0721354457248511,
+        "max": 0.10086373252242344
+      },
+      "joint_diff_note": "周期補正なしの原入力関節差。",
+      "elapsed_sec": 15.588160522980615
+    }
+  }
+]

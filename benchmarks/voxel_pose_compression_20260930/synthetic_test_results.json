@@ -1,0 +1,74 @@
+[
+  {
+    "radius_cells": 0,
+    "seed": 0,
+    "num_representatives": 75,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 0,
+    "seed": 17,
+    "num_representatives": 75,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 0,
+    "seed": 991,
+    "num_representatives": 75,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 1,
+    "seed": 0,
+    "num_representatives": 41,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 1,
+    "seed": 17,
+    "num_representatives": 41,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 1,
+    "seed": 991,
+    "num_representatives": 43,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 2,
+    "seed": 0,
+    "num_representatives": 22,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 2,
+    "seed": 17,
+    "num_representatives": 22,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 2,
+    "seed": 991,
+    "num_representatives": 22,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 4,
+    "seed": 0,
+    "num_representatives": 11,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 4,
+    "seed": 17,
+    "num_representatives": 11,
+    "is_passed": true
+  },
+  {
+    "radius_cells": 4,
+    "seed": 991,
+    "num_representatives": 11,
+    "is_passed": true
+  }
+]

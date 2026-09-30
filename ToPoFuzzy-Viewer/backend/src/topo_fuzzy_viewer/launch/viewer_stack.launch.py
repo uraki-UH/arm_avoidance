@@ -72,12 +72,6 @@ def generate_launch_description():
         ),
         Node(
             package='topo_fuzzy_viewer',
-            executable='viewer_vehicle_registration_node.py',
-            name='viewer_vehicle_registration_node',
-            output='screen'
-        ),
-        Node(
-            package='topo_fuzzy_viewer',
             executable='viewer_edit_node',
             name='viewer_edit_node',
             output='screen'

@@ -1,0 +1,11 @@
+{
+  "commit": "92e7322a8b7dbdb50be812d0b092d90aec982414",
+  "gxx": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "flags": [
+    "-std=c++17",
+    "-O3",
+    "-march=native"
+  ],
+  "ffast_math": false,
+  "reason": "finite smoke: no speedup inference; 1000 nodes; 50000 learning steps per rule; 20000 evaluation samples"
+}

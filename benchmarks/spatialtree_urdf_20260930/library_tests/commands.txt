@@ -1,0 +1,4 @@
+g++ -std=c++17 -O3 -march=native -I/home/uraki/SpatialTree/include /home/uraki/SpatialTree/examples/moving_bsp_test.cpp -o /tmp/spatialtree_library_test_20260930/moving_bsp_test
+timeout 120s /tmp/spatialtree_library_test_20260930/moving_bsp_test
+g++ -std=c++17 -O3 -march=native -ffast-math -I/home/uraki/SpatialTree/include /home/uraki/SpatialTree/examples/moving_bsp_test.cpp -o /tmp/spatialtree_library_test_20260930/moving_bsp_test_fast_math
+timeout 120s /tmp/spatialtree_library_test_20260930/moving_bsp_test_fast_math

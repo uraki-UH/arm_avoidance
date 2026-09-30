@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {
+      "name": "document_comparison",
+      "cwd": "../../../..",
+      "argv": [
+        "python3", "-m", "tools.skill_optimizer.compare_documents",
+        "tools/skill_optimizer/examples/document_cleanup/cases.json",
+        "--baseline-ref", "00fb5ddf",
+        "--output", "@case_dir@/comparison",
+        "--repeats", "2",
+        "--timeout-sec", "120",
+        "--max-total-tokens", "250000"
+      ],
+      "metrics": "comparison/metrics.json"
+    }
+  ]
+}

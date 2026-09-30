@@ -73,12 +73,15 @@ public:
     std::string prefix;
     Eigen::Vector3d relative_base_pos = Eigen::Vector3d::Zero();
     Eigen::Quaterniond relative_base_ori = Eigen::Quaterniond::Identity();
+    // 腕チェーンの基底リンク名
+    std::string root_link_name;
   };
 
   MultiArmKinematicAdapter() = default;
   explicit MultiArmKinematicAdapter(
       std::vector<ArmEntry, Eigen::aligned_allocator<ArmEntry>> arms,
-      std::size_t primary_arm_index = 0);
+      std::size_t primary_arm_index = 0,
+      std::string model_root_link_name = "");
 
   void setBase(const Eigen::Vector3d &position,
                const Eigen::Quaterniond &orientation =
@@ -155,6 +158,7 @@ private:
 
   std::vector<ArmEntry, Eigen::aligned_allocator<ArmEntry>> arms_;
   std::size_t primary_arm_index_ = 0;
+  std::string model_root_link_name_;
   Eigen::Vector3d base_position_ = Eigen::Vector3d::Zero();
   Eigen::Quaterniond base_orientation_ = Eigen::Quaterniond::Identity();
 

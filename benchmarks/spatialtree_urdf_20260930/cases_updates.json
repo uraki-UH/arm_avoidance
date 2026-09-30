@@ -1,0 +1,1 @@
+{"cases":[{"name":"saved_joint_updates","argv":["/tmp/spatialtree_urdf_audit_20260930/measure","@seed@","@trial@","@case_dir@/metrics.json","updates"],"metrics":"metrics.json"}]}

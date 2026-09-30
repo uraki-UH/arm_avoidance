@@ -15,7 +15,7 @@ from action_msgs.msg import GoalStatus
 from control_msgs.action import FollowJointTrajectory
 from control_msgs.msg import JointTolerance
 from sensor_msgs.msg import JointState
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 from motion_smoothing import make_rest_to_rest_trajectory, quintic_duration
 import yaml
@@ -58,6 +58,8 @@ class DualArmGazeboDemo(Node):
         config = yaml.safe_load(Path(config_path).read_text())['dual_arm_gazebo_demo']
         self.joint_names, self.poses = load_motion(urdf_path, config)
         self.enable_auto_start = self.declare_parameter('enable_auto_start', bool(config['enable_auto_start'])).value
+        self.has_safety_state = False
+        self.is_stop_latched = False
         self.enable_loop = bool(config['enable_loop'])
         self.segment_duration_sec = float(config['segment_duration_sec'])
         self.pause_duration_sec = float(config['pause_duration_sec'])
@@ -71,6 +73,8 @@ class DualArmGazeboDemo(Node):
             raise ValueError('待機時間は非負の有限値が必要です')
         self.client = ActionClient(self, FollowJointTrajectory, 'dual_arm_controller/follow_joint_trajectory')
         self.state_sub = self.create_subscription(JointState, 'joint_states', self.on_state, 10)
+        self.create_subscription(Bool, 'safety/is_stop_latched', self.on_safety_stop,
+                                 QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.status_pub = self.create_publisher(String, 'demo/status', QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.start_service = self.create_service(Trigger, 'demo/start', self.start)
         self.stop_service = self.create_service(Trigger, 'demo/stop', self.stop)
@@ -96,11 +100,23 @@ class DualArmGazeboDemo(Node):
         self.last_state_sec = time.monotonic()
 
     def is_ready(self):
-        return bool(self.positions) and time.monotonic() - self.last_state_sec <= self.max_state_age_sec and self.client.server_is_ready()
+        return (self.has_safety_state and not self.is_stop_latched and bool(self.positions)
+                and time.monotonic() - self.last_state_sec <= self.max_state_age_sec
+                and self.client.server_is_ready())
+
+    def on_safety_stop(self, message):
+        self.has_safety_state = True
+        self.is_stop_latched = bool(message.data)
+        if self.is_stop_latched:
+            # 未受付のactionも停止状態で取消。解除のみでの再開なし
+            self.stop(None, Trigger.Response())
+            self.state = 'stopped'
+            self.publish_status()
 
     def publish_status(self):
         self.status_pub.publish(String(data=json.dumps({
             'state': self.state, 'pose_idx': self.pose_idx,
+            'is_stop_latched': self.is_stop_latched,
             'pose': self.poses[self.pose_idx % len(self.poses)][0],
             'error': self.last_error}, ensure_ascii=False)))
 
@@ -191,7 +207,7 @@ class DualArmGazeboDemo(Node):
             response = future.result()
             result = response.result
             if not self.is_running:
-                if self.state != 'fault':
+                if self.state not in ('fault', 'stopped'):
                     self.state = 'idle'
             elif response.status != GoalStatus.STATUS_SUCCEEDED or result.error_code != FollowJointTrajectory.Result.SUCCESSFUL:
                 self.is_running = False

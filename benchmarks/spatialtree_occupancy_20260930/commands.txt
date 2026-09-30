@@ -1,0 +1,5 @@
+g++ -std=c++17 -O3 -march=native -I/home/uraki/SpatialTree/include -I/home/uraki/SpatialTree/experiments/occupancy /home/uraki/SpatialTree/experiments/occupancy/rules.cpp -o /tmp/spatialtree_occupancy_probe_20260930/occ_rules
+g++ -std=c++17 -O3 -march=native -I/home/uraki/SpatialTree/include -I/home/uraki/SpatialTree/experiments/occupancy /home/uraki/SpatialTree/experiments/occupancy/edges.cpp -o /tmp/spatialtree_occupancy_probe_20260930/occ_edges
+g++ -std=c++17 -O3 -march=native -I/home/uraki/SpatialTree/include -I/home/uraki/SpatialTree/experiments/occupancy /tmp/spatialtree_occupancy_probe_20260930/rigidity_probe.cpp -o /tmp/spatialtree_occupancy_probe_20260930/rigidity_probe
+python3 /home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py /tmp/spatialtree_occupancy_probe_20260930/cases.json --output /tmp/spatialtree_occupancy_probe_20260930/batch --repeats 1 --timeout-sec 60 --max-total-sec 120
+timeout --signal=INT --kill-after=2s 15s /tmp/spatialtree_occupancy_probe_20260930/rigidity_probe

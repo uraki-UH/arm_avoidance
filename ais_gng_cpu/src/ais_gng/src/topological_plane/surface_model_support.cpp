@@ -44,7 +44,7 @@ vec model_normal(const model &shape,const vec &point)
 }
 
 void split_support_regions(result &surfaces,
-  const ais_gng_msgs::msg::TopologicalMap &map,const options &config)
+  const ais_gng_msgs::msg::TopologicalMap &map,const options &config,bool has_patch_budget)
 {
   if (!config.enable_support_regions) return;
   const auto begin=std::chrono::steady_clock::now();
@@ -170,10 +170,29 @@ void split_support_regions(result &surfaces,
         local_patch patch=previous;
         patch.node_indices=std::move(nodes);
         if (groups.size()>1) {
+          // 元全体の統計・曲率の部分領域への誤流用防止。
+          patch.has_plane_features=false;
+          patch.position_cov.setZero(); patch.normal.setZero();
+          patch.local_spacing=0; patch.plane_residual_ratio=0;
+          patch.curvature={}; patch.is_curvature_deferred=false;
           patch.center=vec::Zero();
           for (auto node_idx:patch.node_indices) patch.center+=position(map.nodes[node_idx].pos);
           patch.center/=patch.node_indices.size();
-          patch.curvature=estimate_curvature(patch,map);
+          if (has_patch_budget) for (auto node_idx:patch.node_indices) {
+            const vec delta=position(map.nodes[node_idx].pos)-patch.center;
+            patch.position_cov.noalias()+=delta*delta.transpose()/patch.node_indices.size();
+          }
+          if (patch.node_indices.size()>=8) {
+            if (has_patch_budget && surfaces.num_curvature_fits>=config.max_patch_fits) {
+              patch.is_curvature_deferred=true;
+              ++surfaces.num_curvature_deferred;
+            } else {
+              patch.curvature=estimate_curvature(patch,map);
+              ++surfaces.num_curvature_fits;
+            }
+          } else {
+            patch.curvature=estimate_curvature(patch,map);
+          }
         }
         regions.at(region_idx).patch_indices.push_back(patches.size());
         for (auto node_idx:patch.node_indices) patch_owner[node_idx]=patches.size();

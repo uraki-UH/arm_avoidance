@@ -16,10 +16,17 @@
 | 表示 | 観測一致率、モデル支持率、未対応率、一致点RMS。緑・黄・赤の対応表示 |
 | 検証 | 欠損姿勢復元・トラック・平面保留・外れ値・入力検証、実WSとChrome、Release・lint・Frontend build成功 |
 | 実bag | 33ノードの観測で一致100%・モデル支持13.6%、車両判定保留。車種の正解精度は未評価 |
-| 起動 | 次回のviewer_stack起動に自動追加。起動済み旧Viewerには追加ノードの起動が必要 |
+| 起動 | 2026-09-24時点はviewer_stackに同梱。2026-09-30から単独起動のみ（下記） |
 | Git | `*.log`と`*.tsbuildinfo`を除外。既存tsbuildinfo 2件は実ファイルを保持して追跡解除 |
 
 [仕様・起動](../../../ToPoFuzzy-Viewer/doc/VEHICLE_REGISTRATION.md)、[条件・結果・再現・停止記録](../../../benchmarks/vehicle_registration_20260924/README.md)。
 
 BBox撤去後もUI回帰7件、lint、Frontend本番ビルド成功。実ブラウザの再試験は未実施。
 検証コマンド: frontend内で`npm run lint`、`node --test tests/inspection_bbox_gate.test.mjs tests/candidate_hover_frame.test.mjs tests/cluster_detail_panel.test.mjs`、`frontend`コンテナ内で`npm run build`。全コマンド終了、ROS起動停止なし。
+
+## 2026-09-30: 通常起動からの除外
+
+- 変更: `viewer_stack.launch.py`の車両照合ノード自動起動を削除。単独実行・照合API・モデルは保持。[現行の起動方法](../../../ToPoFuzzy-Viewer/doc/VEHICLE_REGISTRATION.md)。
+- 検証: Docker内のソース・インストール先双方で構文検査とlaunch構成検査に成功。残存7ノードの一致、照合ノードの不在、インストール先のシンボリックリンクを確認。
+- 検証方法: `gng_cpu_container`内の`python3 -B`で`generate_launch_description()`を呼び出し、Nodeの実行ファイル名を比較。初回検査は検査側の型の想定違いで失敗、文字列対応後の再検査に成功。
+- 実行状態: 検査プロセス終了、既存ROSプロセス・コンテナ状態維持。Viewer実起動は未実施。現環境の反映条件はViewer再起動、再ビルド不要。

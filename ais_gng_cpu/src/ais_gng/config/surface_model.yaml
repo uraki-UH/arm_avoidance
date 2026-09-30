@@ -7,6 +7,12 @@
     # 複数の元平面または保持曲面を含む到達成分への探索限定。対象外ノードの曲面出力省略。
     # 必要平面数はmin_display_plane_patchesと共通。model方式専用の起動時設定。
     surface_model.enable_plane_local_search: false
+    # model追跡時の曲率特徴保持。現入力の支持範囲・残差確認付き、OFFは毎回再推定。
+    surface_model.enable_patch_history: true
+    # 曲面更新1回あたりのパッチ曲率推定回数。部分取得・支持分割を含み、境界推定は別予算。
+    surface_model.max_patch_fits: 32
+    # 曲率特徴の再評価間隔[曲面更新回数]。期限超過・逸脱後の待機特徴は無効扱い。
+    surface_model.max_patch_refresh_frames: 5
     # 一行ログのCurveは別ノードの直近計算時間。軽量通知は出力先の/update_ms。
     surface_model.output_topic: /curved_surface_clusters
     surface_model.hz: 2.0

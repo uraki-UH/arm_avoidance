@@ -1,0 +1,370 @@
+[
+  {
+    "name": "max_radius_0",
+    "num_trials": 3,
+    "radius_m": 0,
+    "num_representatives": {
+      "min": 10000,
+      "median": 10000,
+      "max": 10000
+    },
+    "cluster_ms": {
+      "min": 105.663288,
+      "median": 106.152154,
+      "max": 106.589987
+    },
+    "load_ms": {
+      "min": 429.269871,
+      "median": 431.768683,
+      "max": 436.66922
+    },
+    "union_ms": {
+      "min": 1122.375358,
+      "median": 1134.636429,
+      "max": 1138.255564
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "max_tcp_dist_m": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "max_radius_1",
+    "num_trials": 3,
+    "radius_m": 0.019999999552965164,
+    "num_representatives": {
+      "min": 10000,
+      "median": 10000,
+      "max": 10000
+    },
+    "cluster_ms": {
+      "min": 396.67438,
+      "median": 402.569222,
+      "max": 407.766412
+    },
+    "load_ms": {
+      "min": 431.013296,
+      "median": 433.439796,
+      "max": 444.16171
+    },
+    "union_ms": {
+      "min": 1117.166528,
+      "median": 1120.445741,
+      "max": 1135.504275
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "max_tcp_dist_m": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "max_radius_2",
+    "num_trials": 3,
+    "radius_m": 0.03999999910593033,
+    "num_representatives": {
+      "min": 9892,
+      "median": 9893,
+      "max": 9893
+    },
+    "cluster_ms": {
+      "min": 1487.292649,
+      "median": 1488.746864,
+      "max": 1489.648516
+    },
+    "load_ms": {
+      "min": 433.364246,
+      "median": 436.293699,
+      "max": 436.797201
+    },
+    "union_ms": {
+      "min": 1131.659187,
+      "median": 1134.893196,
+      "max": 1135.828243
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 3.7109017372131348,
+      "median": 3.7109017372131348,
+      "max": 3.7109017372131348
+    },
+    "max_tcp_dist_m": {
+      "min": 0.03862382812209086,
+      "median": 0.03862382812209086,
+      "max": 0.03862382812209086
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 0.993122389274188,
+      "median": 0.9931969914566479,
+      "max": 0.9931971784295361
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 0.9889934669803074,
+      "median": 0.98906545154233,
+      "max": 0.9890776047800741
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "max_radius_4",
+    "num_trials": 3,
+    "radius_m": 0.07999999821186066,
+    "num_representatives": {
+      "min": 1592,
+      "median": 1593,
+      "max": 1596
+    },
+    "cluster_ms": {
+      "min": 2816.327064,
+      "median": 2829.969349,
+      "max": 2871.451305
+    },
+    "load_ms": {
+      "min": 431.282478,
+      "median": 432.039414,
+      "max": 432.513519
+    },
+    "union_ms": {
+      "min": 964.037905,
+      "median": 964.3326,
+      "max": 966.323358
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 4.05151093006134,
+      "median": 4.05704402923584,
+      "max": 4.133893251419067
+    },
+    "max_tcp_dist_m": {
+      "min": 0.08758100712705007,
+      "median": 0.08758100712705007,
+      "max": 0.09094093341644992
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 0.347050100694249,
+      "median": 0.3472725984314097,
+      "max": 0.3508981897097975
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 0.15692559731761216,
+      "median": 0.15706133963456897,
+      "max": 0.15727635845619478
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "long_radius_0",
+    "num_trials": 3,
+    "radius_m": 0,
+    "num_representatives": {
+      "min": 10000,
+      "median": 10000,
+      "max": 10000
+    },
+    "cluster_ms": {
+      "min": 116.058484,
+      "median": 116.548718,
+      "max": 116.778642
+    },
+    "load_ms": {
+      "min": 472.935029,
+      "median": 483.573285,
+      "max": 485.819364
+    },
+    "union_ms": {
+      "min": 1227.297524,
+      "median": 1230.596326,
+      "max": 1238.970078
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "max_tcp_dist_m": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "long_radius_1",
+    "num_trials": 3,
+    "radius_m": 0.019999999552965164,
+    "num_representatives": {
+      "min": 10000,
+      "median": 10000,
+      "max": 10000
+    },
+    "cluster_ms": {
+      "min": 290.657105,
+      "median": 295.743478,
+      "max": 299.122293
+    },
+    "load_ms": {
+      "min": 477.54599,
+      "median": 488.030098,
+      "max": 505.784159
+    },
+    "union_ms": {
+      "min": 1232.96758,
+      "median": 1236.817317,
+      "max": 1239.968318
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "max_tcp_dist_m": {
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 1.0,
+      "median": 1.0,
+      "max": 1.0
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "long_radius_2",
+    "num_trials": 3,
+    "radius_m": 0.03999999910593033,
+    "num_representatives": {
+      "min": 9996,
+      "median": 9996,
+      "max": 9996
+    },
+    "cluster_ms": {
+      "min": 705.359685,
+      "median": 720.133398,
+      "max": 725.930081
+    },
+    "load_ms": {
+      "min": 474.310146,
+      "median": 475.973639,
+      "max": 488.130209
+    },
+    "union_ms": {
+      "min": 1236.838954,
+      "median": 1236.848168,
+      "max": 1246.077315
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 3.5484174489974976,
+      "median": 3.5484174489974976,
+      "max": 3.5484174489974976
+    },
+    "max_tcp_dist_m": {
+      "min": 0.03202116994006398,
+      "median": 0.03202116994006398,
+      "max": 0.03202116994006398
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 0.9997626437210945,
+      "median": 0.9997626437210945,
+      "max": 0.9997626437210945
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 0.9995909933648903,
+      "median": 0.9995957472817782,
+      "max": 0.9995986335884602
+    },
+    "num_union_false_negative_refs": 0
+  },
+  {
+    "name": "long_radius_4",
+    "num_trials": 3,
+    "radius_m": 0.07999999821186066,
+    "num_representatives": {
+      "min": 4822,
+      "median": 4831,
+      "max": 4849
+    },
+    "cluster_ms": {
+      "min": 4145.629824,
+      "median": 4173.603139,
+      "max": 4212.382132
+    },
+    "load_ms": {
+      "min": 473.198623,
+      "median": 476.568706,
+      "max": 490.106149
+    },
+    "union_ms": {
+      "min": 1313.765399,
+      "median": 1315.616811,
+      "max": 1322.996135
+    },
+    "max_joint_abs_diff_rad": {
+      "min": 4.078517198562622,
+      "median": 4.078517198562622,
+      "max": 4.1131486892700195
+    },
+    "max_tcp_dist_m": {
+      "min": 0.09265258979417063,
+      "median": 0.0963448585526163,
+      "max": 0.10086373252242344
+    },
+    "num_group_union_link_voxel_refs_ratio": {
+      "min": 0.7357735641473171,
+      "median": 0.736452525348564,
+      "max": 0.7367487962403308
+    },
+    "num_representative_link_voxel_refs_ratio": {
+      "min": 0.48021470726058935,
+      "median": 0.4810773733930063,
+      "max": 0.4827745217220045
+    },
+    "num_union_false_negative_refs": 0
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {
+      "name": "rules",
+      "argv": [
+        "/tmp/spatialtree_occupancy_probe_20260930/occ_rules",
+        "0.08",
+        "1000"
+      ],
+      "cwd": "/tmp/spatialtree_occupancy_probe_20260930"
+    },
+    {
+      "name": "edges",
+      "argv": [
+        "/tmp/spatialtree_occupancy_probe_20260930/occ_edges",
+        "0.08",
+        "1",
+        "1000"
+      ],
+      "cwd": "/tmp/spatialtree_occupancy_probe_20260930"
+    }
+  ]
+}

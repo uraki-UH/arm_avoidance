@@ -1,0 +1,3 @@
+g++ -O3 -march=native -DNDEBUG -std=c++17 -I/home/uraki/SpatialTree/include -I/usr/include/eigen3 /tmp/spatialtree_urdf_audit_20260930/measure.cpp -o /tmp/spatialtree_urdf_audit_20260930/measure
+python3 /home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py /tmp/spatialtree_urdf_audit_20260930/cases.json --output /tmp/spatialtree_urdf_audit_20260930/results_static --repeats 3 --timeout-sec 60 --max-total-sec 180 --start-seed 20260930 --estimate-sec 5
+python3 /home/uraki/.codex/skills/run-benchmark-batch/scripts/run_batch.py /tmp/spatialtree_urdf_audit_20260930/cases_updates.json --output /tmp/spatialtree_urdf_audit_20260930/results_updates --repeats 3 --timeout-sec 60 --max-total-sec 180 --start-seed 20260930 --estimate-sec 2

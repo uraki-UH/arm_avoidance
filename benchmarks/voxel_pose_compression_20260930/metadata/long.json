@@ -1,0 +1,292 @@
+{
+  "model": "topo_dual_arm_max_long",
+  "output": "/tmp/voxel_pose_compression_20260930/data/long.voxpose",
+  "format": "VOXPOSE1",
+  "num_nodes": 10000,
+  "num_links": 22,
+  "angle_dim": 14,
+  "num_coord_layers": 2,
+  "resolution_m": 0.019999999552965164,
+  "voxel_idx_shift": {
+    "x_shift": 42,
+    "y_shift": 21,
+    "z_shift": 0,
+    "offset": 1000000
+  },
+  "num_relations": 5889880,
+  "num_duplicate_node_link_cells": 0,
+  "num_unique_world_cells": 34507,
+  "num_edges": [
+    543098,
+    7480,
+    6390
+  ],
+  "min_cell_xyz": [
+    -22,
+    -30,
+    -3
+  ],
+  "max_cell_xyz": [
+    21,
+    29,
+    39
+  ],
+  "vlut_bounds_m": [
+    [
+      -0.5060068964958191,
+      -0.7145012021064758,
+      -0.12543833255767822
+    ],
+    [
+      0.5096226930618286,
+      0.7144868969917297,
+      0.8788102269172668
+    ]
+  ],
+  "node_cell_counts": {
+    "min": 551,
+    "max": 645,
+    "mean": 588.988,
+    "median": 588.0
+  },
+  "active_link_ids": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    9,
+    10,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    20,
+    21
+  ],
+  "num_nodes_missing_any_active_link": 0,
+  "link_counts": [
+    {
+      "link_id": 0,
+      "name": "L_shoulder_mount",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 1,
+      "name": "L_link2",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 40,
+      "mean": 36.6226,
+      "median": 36.0
+    },
+    {
+      "link_id": 2,
+      "name": "L_link3",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 40,
+      "mean": 36.3594,
+      "median": 36.0
+    },
+    {
+      "link_id": 3,
+      "name": "L_link4",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 38,
+      "mean": 34.4572,
+      "median": 34.0
+    },
+    {
+      "link_id": 4,
+      "name": "L_link5",
+      "num_empty_nodes": 0,
+      "min": 25,
+      "max": 34,
+      "mean": 30.8802,
+      "median": 31.0
+    },
+    {
+      "link_id": 5,
+      "name": "L_link6",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 36,
+      "mean": 31.9445,
+      "median": 32.0
+    },
+    {
+      "link_id": 6,
+      "name": "L_link7",
+      "num_empty_nodes": 0,
+      "min": 19,
+      "max": 28,
+      "mean": 24.9478,
+      "median": 25.0
+    },
+    {
+      "link_id": 7,
+      "name": "L_gripper_base",
+      "num_empty_nodes": 0,
+      "min": 31,
+      "max": 44,
+      "mean": 38.6896,
+      "median": 39.0
+    },
+    {
+      "link_id": 8,
+      "name": "L_tcp",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 9,
+      "name": "L_finger_left",
+      "num_empty_nodes": 0,
+      "min": 26,
+      "max": 36,
+      "mean": 31.8145,
+      "median": 32.0
+    },
+    {
+      "link_id": 10,
+      "name": "L_finger_right",
+      "num_empty_nodes": 0,
+      "min": 23,
+      "max": 32,
+      "mean": 28.5107,
+      "median": 28.0
+    },
+    {
+      "link_id": 11,
+      "name": "R_shoulder_mount",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 12,
+      "name": "R_link2",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 40,
+      "mean": 36.6643,
+      "median": 36.0
+    },
+    {
+      "link_id": 13,
+      "name": "R_link3",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 40,
+      "mean": 36.3613,
+      "median": 36.0
+    },
+    {
+      "link_id": 14,
+      "name": "R_link4",
+      "num_empty_nodes": 0,
+      "min": 28,
+      "max": 38,
+      "mean": 34.4489,
+      "median": 34.0
+    },
+    {
+      "link_id": 15,
+      "name": "R_link5",
+      "num_empty_nodes": 0,
+      "min": 24,
+      "max": 34,
+      "mean": 30.8837,
+      "median": 31.0
+    },
+    {
+      "link_id": 16,
+      "name": "R_link6",
+      "num_empty_nodes": 0,
+      "min": 26,
+      "max": 36,
+      "mean": 32.0372,
+      "median": 32.0
+    },
+    {
+      "link_id": 17,
+      "name": "R_link7",
+      "num_empty_nodes": 0,
+      "min": 19,
+      "max": 28,
+      "mean": 25.0568,
+      "median": 25.0
+    },
+    {
+      "link_id": 18,
+      "name": "R_gripper_base",
+      "num_empty_nodes": 0,
+      "min": 29,
+      "max": 44,
+      "mean": 38.7558,
+      "median": 39.0
+    },
+    {
+      "link_id": 19,
+      "name": "R_tcp",
+      "num_empty_nodes": 10000,
+      "min": 0,
+      "max": 0,
+      "mean": 0.0,
+      "median": 0.0
+    },
+    {
+      "link_id": 20,
+      "name": "R_finger_left",
+      "num_empty_nodes": 0,
+      "min": 22,
+      "max": 32,
+      "mean": 28.6243,
+      "median": 29.0
+    },
+    {
+      "link_id": 21,
+      "name": "R_finger_right",
+      "num_empty_nodes": 0,
+      "min": 25,
+      "max": 36,
+      "mean": 31.9292,
+      "median": 32.0
+    }
+  ],
+  "relation_dist_min_m": 0.0,
+  "relation_dist_max_m": 0.0,
+  "input_sha256": {
+    "/home/uraki/uraki_ws/gng_vlut_system/gng_results/topo_dual_arm_max_long/gng.bin": "995db431b2c4383642ad5ae128459c38cc379f96f7b7d1b151b797d94e1ed4f7",
+    "/home/uraki/uraki_ws/gng_vlut_system/gng_results/topo_dual_arm_max_long/vlut.bin": "af2613ca1e2516e7fadf61b9b5fe93b2c6aa6c2064218de1e01b7dac349ad8a5",
+    "/home/uraki/uraki_ws/gng_vlut_system/config/topo_dual_arm_max_long.yaml": "d0515a7a40f5d232d519d2feb7d263c8d116a85a3a4e2aef751adc3e0f1d1107",
+    "/home/uraki/uraki_ws/urdf/topo_dual_arm_max_long/topo_dual_arm_max.urdf": "facf9b8b2ca345017eb95523d90a4b321ca54662619d32bd92c271a15e7b512f"
+  },
+  "output_sha256": "dd6b7b7a1ac2d409a59a23230e598692000449eb42be0cf904940b787b2d55b7",
+  "num_output_bytes": 72398588,
+  "elapsed_sec": 5.246065555023961,
+  "checks": [
+    "GNG v9全レコード・辺の参照検査",
+    "VLUT v2ノード参照・距離有限性・整列検査",
+    "URDFとtrainer順序に基づくリンクID再現",
+    "ボクセルIDの復号・再符号化一致",
+    "全ノード・全リンク・全セルの出力再読込一致"
+  ],
+  "limitation": "保存済VLUTの表面占有。姿勢ごとの再ボクセル化時間を含まない。"
+}

@@ -29,7 +29,7 @@ docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && 
 | 対象の完全表面 | `/sim/object/full_points` | メッシュ面積に比例する指定点数のサンプル |
 | 対象の遮蔽付きRGB-D | `/sim/object/visible_points` | シーン全体と対象単体の深度が一致する有効点 |
 
-全て `sensor_msgs/PointCloud2`、XYZのfloat32、メートル、`base_footprint` 座標です。RGB画像・色フィールドの転送はありません。
+上表は全て `sensor_msgs/PointCloud2`、XYZのfloat32、メートル、`base_footprint` 座標です。RGB画像・色フィールドの転送はありません。
 完全表面は非表示メッシュ・裏面・内部面も含み、外皮の集合演算ではありません。同一形状・姿勢・点数では結果を再利用します。
 遮蔽付きではロボット・他物体も遮蔽物です。視野外や全面遮蔽では0点を送信し、古い点群の再送はしません。
 透明材質も幾何深度として扱い、完全に同一深度で重なる面の物体識別はできません。
@@ -45,6 +45,33 @@ GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジ�
 
 形式の回帰試験は `python3 -m unittest discover -s integrations/ros2 -p test_pointcloud_bridge.py` で実行できます。
 2026-09-29にHumbleでブラウザ→HTTP→3種類のROS点群の受信を確認。GNG学習・実機接続はこの試験の対象外です。
+
+### 深度画像と画素対応点群（2026-10-01追加）
+
+ブリッジを再起動し、ブラウザを再読み込みしてください。
+「RGB-D：シーン全体」で「深度画像・CameraInfo・画素対応点群も送信」（既定ON）を選ぶと、既存点群と同じ取得フレームから次の3トピックも配信します。
+対象物体モードには適用しません。チェックを外すと従来のXYZのみの送信形式に戻ります。
+
+| トピック | メッセージ・内容 |
+| --- | --- |
+| `/sim/camera/depth/image_rect_raw` | `sensor_msgs/Image`、32FC1、光軸方向の深度［m］、無効画素0 |
+| `/sim/camera/depth/camera_info` | `sensor_msgs/CameraInfo`、取得に使用した内部パラメータ、歪みなし |
+| `/sim/camera/depth/points` | `sensor_msgs/PointCloud2`、XYZ、画像と同じwidth・height、無効画素XYZは全成分NaN |
+
+3トピックは共通header、frame_idは `sim_camera_depth_optical_frame`（X右・Y下・Z前方）。
+画像の `(u,v)` に対応する点群のバイト位置は `v * row_step + u * point_step`、point_stepは12です。
+点群は `is_dense=false`。深度0の画素を除去せず位置を保持し、全画素無効でも画像寸法を維持します。
+内部パラメータはK/P、Rは単位行列、Dは0。RGB画像への位置合わせは行いません。
+既存 `/sim/rgbd/points` はbase_footprint座標の有効点のみで、header stampは追加3トピックと共通です。
+カメラからbase_footprintへの列優先4×4変換は `/sim/points/info` の `depth_image.optical_to_world` に収録。TFの自動配信はありません。
+
+ブラウザでは追加描画なし。深度float32をHTTPで追加転送し、ブリッジで逆投影して画素対応XYZを生成します。
+848×480の場合、HTTP追加量は約1.63 MB／フレーム、ROSの画像＋画素対応XYZは約6.51 MB／フレーム（メタデータ除外）。
+通信量・CPU処理は増えます。指定Hzは上限であり、負荷に応じて低下します。
+RealSenseの16UC1深度を前提とする購読側では、32FC1［m］への対応が必要です。
+
+ROS環境での回帰試験：`python3 -m unittest discover -s integrations/ros2 -p test_depth_output.py`。
+Humble実受信で848×480全画素の対応・無効値・共通時刻・既存点群との有効点数一致を確認済み。
 
 ## 含めたもの / 別途必要なもの
 

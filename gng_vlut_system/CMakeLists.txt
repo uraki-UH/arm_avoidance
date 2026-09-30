@@ -119,8 +119,8 @@ find_package(gazebo_ros2_control REQUIRED)
 find_package(pluginlib REQUIRED)
 add_library(bounded_gazebo_system SHARED src/simulation/bounded_gazebo_system.cpp)
 target_include_directories(bounded_gazebo_system PRIVATE ${GAZEBO_INCLUDE_DIRS})
-target_link_libraries(bounded_gazebo_system ${GAZEBO_LIBRARIES})
-ament_target_dependencies(bounded_gazebo_system gazebo_ros2_control pluginlib rclcpp)
+target_link_libraries(bounded_gazebo_system ${GAZEBO_LIBRARIES} nlohmann_json::nlohmann_json)
+ament_target_dependencies(bounded_gazebo_system gazebo_ros2_control pluginlib rclcpp std_msgs std_srvs)
 pluginlib_export_plugin_description_file(gazebo_ros2_control gazebo_system_plugins.xml)
 install(TARGETS bounded_gazebo_system LIBRARY DESTINATION lib)
 
@@ -141,10 +141,16 @@ if(BUILD_TESTING)
   endif()
 
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
+  ament_add_pytest_test(test_gazebo_stop_keyboard test/test_gazebo_stop_keyboard.py)
+  ament_add_pytest_test(test_dual_arm_mode_model test/test_dual_arm_mode_model.py)
+  ament_add_pytest_test(test_dual_arm_control test/test_dual_arm_control.py)
+  ament_add_pytest_test(test_dual_arm_control_keyboard test/test_dual_arm_control_keyboard.py)
   ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
   target_include_directories(test_goal_tasks PRIVATE src)
   ament_add_gtest(test_joint_command_mux test/test_joint_command_mux.cpp)
   target_include_directories(test_joint_command_mux PRIVATE src)
+  ament_add_gtest(test_gazebo_stop_latch test/test_gazebo_stop_latch.cpp)
+  target_include_directories(test_gazebo_stop_latch PRIVATE src)
   ament_add_pytest_test(test_joint_command_model test/test_joint_command_model.py)
   ament_add_gtest(test_joint_state_utils test/test_joint_state_utils.cpp)
   target_include_directories(test_joint_state_utils PRIVATE src)
@@ -204,6 +210,7 @@ endif()
 
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/joint_command_model.py
+  scripts/dual_arm_mode_model.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -213,6 +220,9 @@ install(PROGRAMS
   scripts/dual_arm_avoidance_demo.py
   scripts/joint_command_output.py
   scripts/dual_arm_gazebo_demo.py
+  scripts/gazebo_stop_keyboard.py
+  scripts/dual_arm_control.py
+  scripts/dual_arm_control_keyboard.py
   scripts/video_file_publisher.py
   scripts/yolo_person_detector.py
   ${CMAKE_CURRENT_SOURCE_DIR}/../dummy_joint_pub.py

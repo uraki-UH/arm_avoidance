@@ -32,6 +32,8 @@ ros2 launch ais_gng ais_gng.launch.py backend:=cpu lidar:=at128.yaml input_topic
 省略時はYAMLのトピック配列をそのまま使用。保存用元点群の`source_point_cloud_topic:=auto`も同じ指定に追従。
 [パラメータ適用順の修正と起動検証](../gng_vlut_system/docs/releases/2026-09-23_gng_input_topic_override.md)。
 
+getBase2LidarFrameのTF取得失敗メッセージ`Could not transform ...`はDEBUGログ。通常起動での警告行の割込みなし。ノード直接起動時の`--ros-args --log-level ais_gng_node:=debug`で診断可能。[表示変更・検証](../gng_vlut_system/docs/releases/2026-09-30_gng_tf_log.md)。
+
 ## 交差点bagの位置・姿勢をYAMLで補正
 
 [intersection_tf.yaml](src/ais_gng/config/intersection_tf.yaml)の`pos`（m）と`rot_deg`（度）を編集。

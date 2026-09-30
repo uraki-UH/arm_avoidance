@@ -7,10 +7,11 @@ export class RosPointsPanel{
   $('ros-panel').innerHTML=`<h2>ROS 2へ点群を送信</h2>
   <label class="field-label">送信先ブリッジ<input id="ros-endpoint" value="http://127.0.0.1:8879" type="url"></label>
   <label class="field-label">点群の種類<select id="ros-source"><option value="rgbd">RGB-D：シーン全体</option><option value="object_full">対象物体：完全表面</option><option value="object_visible">対象物体：遮蔽付きRGB-D</option></select></label>
+  <label><input id="ros-depth" type="checkbox" checked> RGB-D全体の深度画像・CameraInfo・画素対応点群も送信</label>
   <label class="field-label">対象物体<select id="ros-object"></select></label><button id="ros-use-selected">環境で選択中の物体を使用</button>
   <div class="field-grid"><label>完全表面の点数<input id="ros-count" type="number" min="1" max="200000" value="10000"></label><label>送信上限 Hz<input id="ros-hz" type="number" min="0.1" max="10" step="0.1" value="2"></label></div>
   <div class="row-actions"><button id="ros-once">1回送信</button><button id="ros-start">連続送信</button></div><pre id="ros-status">取得待ち</pre>
-  <p class="sub-note">XYZ・メートル・base_footprint座標。RGB-Dは現在のカメラ校正・姿勢・深度モードを使用。完全表面は裏面を含むメッシュ面のサンプル。遮蔽付きはロボットや他の物体を含むシーン全体との深度照合。FVGやGNGの結果待ちは不要。</p>`;
+  <p class="sub-note">XYZ・メートル・base_footprint座標。RGB-Dは現在のカメラ校正・姿勢・深度モードを使用。完全表面は裏面を含むメッシュ面のサンプル。遮蔽付きはロボットや他の物体を含むシーン全体との深度照合。追加の画素対応出力はカメラ光学座標系・深度32FC1。FVGやGNGの結果待ちは不要。</p>`;
   if(location.port==='8879')$('ros-endpoint').value=location.origin;
   $('ros-once').onclick=()=>this.send();$('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();};
   $('ros-use-selected').onclick=()=>{this.refresh_objects();if(environment.selected)$('ros-object').value=environment.selected.id;};
@@ -36,7 +37,7 @@ export class RosPointsPanel{
    const endpoint=new URL($('ros-endpoint').value);if(!['http:','https:'].includes(endpoint.protocol))throw Error('送信先はHTTPのURLを指定してください');
    const source=$('ros-source').value,item=this.environment.items.find(x=>String(x.id)===$('ros-object').value);
    if(source!=='rgbd'&&!item)throw Error('対象物体を選択してください');
-   let points,robot_pose,robot_model,object_pose;
+   let points,robot_pose,robot_model,object_pose,depth_frame;
    const captured_at_ms=Date.now();
    if(item){item.group.updateWorldMatrix(true,true);object_pose=item.group.matrixWorld.toArray();}
    if(source==='object_full'){
@@ -46,13 +47,19 @@ export class RosPointsPanel{
    }else{
     const frame=await this.rgbd.capture({target_group:source==='object_visible'?item.group:null});
     if(!frame){$('ros-status').textContent='RGB-D取得中またはモデル変更中。次の送信で再試行';return null;}
+    if(source==='rgbd'&&$('ros-depth').checked)depth_frame=frame;
     points=worldPoints(frame.xyz,frame.depthWorld);robot_pose=frame.robotPose;robot_model=frame.robotModel;
    }
    if(generation!==this.generation||(source!=='rgbd'&&!this.environment.items.includes(item)))return null;
    const meta={source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:source==='rgbd'?null:item.id,object_to_world:source==='rgbd'?null:object_pose};
-   const response=await fetch(new URL('/api/points',endpoint),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-Points':'1'},body:encodeInput(meta,points),signal:AbortSignal.timeout(10000)});
+   let body;
+   if(depth_frame){
+    meta.depth_image={...depth_frame.calibration.depth,optical_to_world:depth_frame.depthWorld};
+    const packed=encodeInput(meta,points);body=new Blob([packed,depth_frame.depth]);
+   }else body=encodeInput(meta,points);
+   const response=await fetch(new URL('/api/points',endpoint),{method:'POST',headers:{'Content-Type':'application/octet-stream','X-ToPo-Points':'1'},body,signal:AbortSignal.timeout(10000)});
    if(!response.ok)throw Error(await response.text());const result=await response.json();
-   if(generation===this.generation)$('ros-status').textContent=`${result.topic}\n${meta.count.toLocaleString()} 点送信済み\nframe: ${meta.frame_id}`;
+   if(generation===this.generation)$('ros-status').textContent=`${result.topic}${result.depth_topics?'\n'+result.depth_topics.join('\n'):''}\n${meta.count.toLocaleString()} 点送信済み\nframe: ${meta.frame_id}`;
    return result;
   }catch(error){this.is_running=false;this.update_button();$('ros-status').textContent='送信エラー：'+error.message+'\npointcloud_bridge.py の起動と送信先を確認してください';return null;}
   finally{this.is_busy=false;}

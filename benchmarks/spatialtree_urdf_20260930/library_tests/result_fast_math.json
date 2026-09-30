@@ -1,0 +1,11 @@
+{
+  "command": [
+    "timeout",
+    "120s",
+    "/tmp/spatialtree_library_test_20260930/moving_bsp_test_fast_math"
+  ],
+  "returncode": 1,
+  "elapsed_sec": 26.165560007095337,
+  "process_before": "",
+  "process_after": ""
+}

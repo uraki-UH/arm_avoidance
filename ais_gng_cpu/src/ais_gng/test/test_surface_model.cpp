@@ -1977,8 +1977,9 @@ TEST(surface_local_search, support_split_parent_restores_retained_id)
   }));
   for (const auto &surface:selected.regions) {
     EXPECT_EQ(surface.support_parent_id,0U);
-    if (!surface.is_retained)
+    if (!surface.is_retained) {
       EXPECT_EQ(surface.id,*std::min_element(surface.node_indices.begin(),surface.node_indices.end()));
+    }
   }
 }
 
@@ -1995,4 +1996,539 @@ TEST(surface_local_search, zero_plane_count_keeps_nonplane_only_mode)
   EXPECT_EQ(selected.num_candidate_nodes,data.map.nodes.size());
   EXPECT_EQ(selected.regions.front().shape.type,baseline.regions.front().shape.type);
   EXPECT_TRUE(selected.regions.front().shape.q.isApprox(baseline.regions.front().shape.q,1e-12));
+}
+
+namespace
+{
+// 互いに離れた二次曲面パッチ。履歴と計算予算だけの有限入力。
+scene patch_history_scene(const std::size_t num_patches)
+{
+  scene data;
+  data.map.header.frame_id=data.planes.header.frame_id="map";
+  for (std::size_t patch_idx=0;patch_idx<num_patches;++patch_idx) {
+    ais_gng_msgs::msg::PlaneCluster plane;
+    plane.id=static_cast<std::uint32_t>(200+patch_idx);
+    plane.normal.z=1;
+    plane.local_spacing=0.02F;
+    plane.residual_ratio=0.025F;
+    vec center=vec::Zero();
+    for (int row=-2;row<=2;++row) for (int column=-2;column<=2;++column) {
+      const double x=0.02*row,y=0.02*column;
+      const vec point(x+patch_idx,y,0.2*x*x+0.1*y*y);
+      plane.node_indices.push_back(data.map.nodes.size());
+      add_node(data.map,point,vec(-0.4*x,-0.2*y,1).normalized());
+      center+=point;
+    }
+    center/=static_cast<double>(plane.node_indices.size());
+    plane.centroid.x=center.x(); plane.centroid.y=center.y(); plane.centroid.z=center.z();
+    Eigen::Matrix3d covariance=Eigen::Matrix3d::Zero();
+    for (auto idx:plane.node_indices) {
+      const auto &point=data.map.nodes[idx].pos;
+      const vec delta=vec(point.x,point.y,point.z)-center;
+      covariance.noalias()+=delta*delta.transpose();
+    }
+    covariance/=static_cast<double>(plane.node_indices.size());
+    for (int row=0;row<3;++row) for (int column=0;column<3;++column)
+      plane.position_covariance[row*3+column]=covariance(row,column);
+    data.planes.clusters.push_back(std::move(plane));
+  }
+  return data;
+}
+
+result patch_history_input(const scene &data)
+{
+  result surfaces;
+  for (std::size_t plane_idx=0;plane_idx<data.planes.clusters.size();++plane_idx) {
+    local_patch patch;
+    patch.plane_cluster_idx=static_cast<int>(plane_idx);
+    patch.node_indices=data.planes.clusters[plane_idx].node_indices;
+    for (auto idx:patch.node_indices) {
+      const auto &point=data.map.nodes[idx].pos;
+      patch.center+=vec(point.x,point.y,point.z);
+    }
+    patch.center/=static_cast<double>(patch.node_indices.size());
+    surfaces.patches.push_back(std::move(patch));
+  }
+  return surfaces;
+}
+
+void advance_patch_frame(scene &data)
+{
+  ++data.map.frame_number;
+  data.planes.frame_number=data.map.frame_number;
+}
+}
+
+TEST(patch_history, small_cylinder_motion_reuses_curvature_and_keeps_surface)
+{
+  auto data=cylinder(0.1,0.1);
+  tracker tracking;
+  const auto first=tracking.update(data.map,data.planes);
+  ASSERT_EQ(first.regions.size(),1U);
+  ASSERT_EQ(first.regions.front().shape.type,"cylinder");
+  ASSERT_GT(first.num_curvature_fits,0U);
+  for (auto &node:data.map.nodes) node.pos.z+=0.00001F;
+  advance_patch_frame(data);
+  const auto current=tracking.update(data.map,data.planes);
+  ASSERT_EQ(current.regions.size(),1U);
+  EXPECT_EQ(current.regions.front().shape.type,"cylinder");
+  EXPECT_EQ(current.regions.front().id,first.regions.front().id);
+  EXPECT_GT(current.num_curvature_reused,0U);
+  EXPECT_LT(current.num_curvature_fits,first.num_curvature_fits);
+  EXPECT_EQ(current.num_curvature_deferred,0U);
+  for (const auto &patch:current.patches) if (patch.plane_cluster_idx>=0) {
+    EXPECT_TRUE(patch.curvature.valid);
+    EXPECT_FALSE(patch.has_plane_features);
+  }
+  coverage(current,data.map.nodes.size());
+}
+
+TEST(patch_history, disabled_history_and_stateless_calls_keep_full_fits)
+{
+  auto data=cylinder(0.1,0.1);
+  options config;
+  config.enable_patch_history=false;
+  config.max_patch_fits=0;
+  tracker tracking;
+  for (int iter=0;iter<2;++iter) {
+    const auto current=tracking.update(data.map,data.planes,config);
+    EXPECT_EQ(current.num_curvature_fits,data.planes.clusters.size());
+    EXPECT_EQ(current.num_curvature_reused,0U);
+    EXPECT_EQ(current.num_curvature_deferred,0U);
+    ASSERT_EQ(current.regions.size(),1U);
+    EXPECT_EQ(current.regions.front().shape.type,"cylinder");
+    advance_patch_frame(data);
+  }
+  config.enable_patch_history=true;
+  const auto stateless=extract(data.map,data.planes,config);
+  EXPECT_EQ(stateless.num_curvature_fits,data.planes.clusters.size());
+  EXPECT_EQ(stateless.num_curvature_reused,0U);
+  EXPECT_EQ(stateless.num_curvature_deferred,0U);
+}
+
+TEST(patch_history, frame_changes_rewind_clear_and_empty_input_expire_cache)
+{
+  for (int case_idx=0;case_idx<5;++case_idx) {
+    SCOPED_TRACE(case_idx);
+    auto data=cylinder(0.1,0.1);
+    data.map.frame_number=data.planes.frame_number=10;
+    data.map.header.stamp.sec=10;
+    tracker tracking;
+    const auto first=tracking.update(data.map,data.planes);
+    ASSERT_GT(first.num_curvature_fits,0U);
+    advance_patch_frame(data);
+    ASSERT_GT(tracking.update(data.map,data.planes).num_curvature_reused,0U);
+    if (case_idx==0) data.map.header.frame_id=data.planes.header.frame_id="other";
+    if (case_idx==1) data.map.frame_number=data.planes.frame_number=1;
+    if (case_idx==2) data.map.header.stamp.sec=1;
+    if (case_idx==3) tracking.clear();
+    if (case_idx==4) { EXPECT_TRUE(tracking.update(map_type{},planes_type{}).patches.empty()); }
+    const auto current=tracking.update(data.map,data.planes);
+    EXPECT_EQ(current.num_curvature_reused,0U);
+    EXPECT_EQ(current.num_curvature_fits,first.num_curvature_fits);
+  }
+}
+
+TEST(patch_history, local_compaction_and_reordering_keep_member_identity)
+{
+  auto data=local_search_shifted_cylinder();
+  // 局所探索対象外の2点にも、一意な永続IDの割当。
+  data.map.nodes[0].id=60000;
+  data.map.nodes[1].id=60001;
+  options config;
+  config.enable_plane_local_search=true;
+  tracker tracking;
+  const auto first=tracking.update(data.map,data.planes,config);
+  ASSERT_EQ(first.regions.size(),1U);
+  std::reverse(data.map.nodes.begin(),data.map.nodes.end());
+  for (auto &idx:data.map.edges) idx=data.map.nodes.size()-1-idx;
+  for (auto &plane:data.planes.clusters) {
+    for (auto &idx:plane.node_indices) idx=data.map.nodes.size()-1-idx;
+    std::reverse(plane.node_indices.begin(),plane.node_indices.end());
+  }
+  std::reverse(data.planes.clusters.begin(),data.planes.clusters.end());
+  advance_patch_frame(data);
+  const auto current=tracking.update(data.map,data.planes,config);
+  ASSERT_EQ(current.regions.size(),1U);
+  EXPECT_EQ(current.regions.front().id,first.regions.front().id);
+  EXPECT_EQ(current.regions.front().shape.type,"cylinder");
+  EXPECT_GT(current.num_curvature_reused,0U);
+  EXPECT_EQ(current.num_curvature_fits,0U);
+  EXPECT_EQ(current.num_candidate_nodes,data.map.nodes.size()-2);
+  for (const auto &patch:current.patches) {
+    if (patch.plane_cluster_idx<0) continue;
+    ASSERT_LT(static_cast<std::size_t>(patch.plane_cluster_idx),data.planes.clusters.size());
+    const auto &members=data.planes.clusters[patch.plane_cluster_idx].node_indices;
+    EXPECT_EQ(std::set<std::uint32_t>(patch.node_indices.begin(),patch.node_indices.end()),
+      std::set<std::uint32_t>(members.begin(),members.end()));
+    EXPECT_TRUE(patch.curvature.valid);
+  }
+}
+
+TEST(patch_history, node_generation_change_refits_only_affected_patch)
+{
+  auto data=patch_history_scene(2);
+  patch_history history;
+  auto first=patch_history_input(data);
+  update_patch_curvatures(first,data.map,data.planes,{},&history);
+  ASSERT_EQ(first.num_curvature_fits,2U);
+  // 最小ID以外の生成世代変更。代表ノードだけの照合では検出不能な置換。
+  ++data.map.nodes[12].frame;
+  auto current=patch_history_input(data);
+  update_patch_curvatures(current,data.map,data.planes,{},&history);
+  EXPECT_EQ(current.num_curvature_fits,1U);
+  EXPECT_EQ(current.num_curvature_reused,1U);
+  for (const auto &patch:current.patches) EXPECT_TRUE(patch.curvature.valid);
+}
+
+TEST(patch_history, whole_plane_features_do_not_leak_into_partial_fragment)
+{
+  auto data=patch_history_scene(1);
+  patch_history history;
+  auto first=patch_history_input(data);
+  update_patch_curvatures(first,data.map,data.planes,{},&history);
+  ASSERT_TRUE(first.patches.front().has_plane_features);
+  EXPECT_NEAR(first.patches.front().local_spacing,0.02,1e-8);
+  EXPECT_NEAR(first.patches.front().plane_residual_ratio,0.025,1e-8);
+  auto current=patch_history_input(data);
+  current.patches.front().node_indices.resize(15);
+  update_patch_curvatures(current,data.map,data.planes,{},&history);
+  const auto &fragment=current.patches.front();
+  EXPECT_FALSE(fragment.has_plane_features);
+  EXPECT_EQ(current.num_curvature_reused,0U);
+  EXPECT_EQ(current.num_curvature_fits,1U);
+  ASSERT_TRUE(fragment.curvature.valid);
+  EXPECT_EQ(fragment.curvature.sample_num,15U);
+  EXPECT_NEAR(fragment.center.x(),-0.02,1e-7);
+  EXPECT_LT(fragment.position_cov(0,0),first.patches.front().position_cov(0,0));
+}
+
+TEST(patch_history, exhausted_budget_does_not_publish_expired_valid_curvature)
+{
+  const auto data=patch_history_scene(2);
+  patch_history history;
+  options config;
+  auto first=patch_history_input(data);
+  update_patch_curvatures(first,data.map,data.planes,config,&history);
+  for (const auto &patch:first.patches) ASSERT_TRUE(patch.curvature.valid);
+  config.max_patch_refresh_frames=1;
+  config.max_patch_fits=0;
+  // 出力オブジェクト自体を再使用した場合にも、前回のvalid値の持越しなし。
+  auto current=first;
+  current.num_curvature_fits=current.num_curvature_reused=current.num_curvature_deferred=0;
+  update_patch_curvatures(current,data.map,data.planes,config,&history);
+  EXPECT_EQ(current.num_curvature_fits,0U);
+  EXPECT_EQ(current.num_curvature_reused,0U);
+  EXPECT_EQ(current.num_curvature_deferred,2U);
+  for (const auto &patch:current.patches) EXPECT_FALSE(patch.curvature.valid);
+}
+
+TEST(patch_history, waiting_patches_receive_budget_despite_retained_priority)
+{
+  const auto data=patch_history_scene(6);
+  patch_history history;
+  options config;
+  config.max_patch_fits=1;
+  config.max_patch_refresh_frames=3;
+  std::set<int> evaluated;
+  for (int iter=0;iter<18;++iter) {
+    auto current=patch_history_input(data);
+    current.patches.front().has_retained_support=true;
+    update_patch_curvatures(current,data.map,data.planes,config,&history);
+    EXPECT_EQ(current.num_curvature_fits,1U);
+    for (const auto &patch:current.patches)
+      if (patch.curvature.valid) evaluated.insert(patch.plane_cluster_idx);
+  }
+  EXPECT_EQ(evaluated.size(),data.planes.clusters.size());
+}
+
+TEST(patch_history, retained_support_receives_first_fit_when_budget_is_small)
+{
+  const auto data=patch_history_scene(3);
+  patch_history history;
+  options config;
+  config.max_patch_fits=1;
+  auto current=patch_history_input(data);
+  current.patches.back().has_retained_support=true;
+  update_patch_curvatures(current,data.map,data.planes,config,&history);
+  EXPECT_EQ(current.num_curvature_fits,1U);
+  EXPECT_EQ(current.num_curvature_deferred,2U);
+  EXPECT_TRUE(current.patches.back().curvature.valid);
+  EXPECT_FALSE(current.patches.front().curvature.valid);
+}
+
+TEST(patch_history, abrupt_geometry_change_cannot_reuse_previous_fit)
+{
+  auto data=patch_history_scene(1);
+  patch_history history;
+  auto first=patch_history_input(data);
+  update_patch_curvatures(first,data.map,data.planes,{},&history);
+  ASSERT_TRUE(first.patches.front().curvature.valid);
+  for (std::size_t idx=0;idx<data.map.nodes.size();++idx)
+    data.map.nodes[idx].pos.z+=(idx%2 ? 0.03F : -0.03F);
+  auto current=patch_history_input(data);
+  update_patch_curvatures(current,data.map,data.planes,{},&history);
+  EXPECT_EQ(current.num_curvature_reused,0U);
+  EXPECT_EQ(current.num_curvature_fits,1U);
+}
+
+TEST(patch_history, exact_flat_residual_does_not_allow_outside_support_reuse)
+{
+  auto data=patch_history_scene(1);
+  for (auto &node:data.map.nodes) { node.pos.z=0; node.normal.x=0; node.normal.y=0; }
+  // 現在ノードからの特徴計算経路。平行移動でも高さ残差は常に0。
+  data.planes.clusters.front().position_covariance.fill(0);
+  patch_history history;
+  auto first=patch_history_input(data);
+  update_patch_curvatures(first,data.map,data.planes,{},&history);
+  ASSERT_TRUE(first.patches.front().curvature.valid);
+  ASSERT_NEAR(first.patches.front().curvature.position_rms,0,1e-10);
+  for (auto &node:data.map.nodes) node.pos.x+=0.5F;
+  options config;
+  config.max_patch_fits=0;
+  auto current=patch_history_input(data);
+  update_patch_curvatures(current,data.map,data.planes,config,&history);
+  EXPECT_EQ(current.num_curvature_reused,0U);
+  EXPECT_EQ(current.num_curvature_deferred,1U);
+  EXPECT_FALSE(current.patches.front().curvature.valid);
+}
+
+TEST(patch_history, short_and_nonplane_patches_do_not_consume_fit_budget)
+{
+  const auto data=patch_history_scene(3);
+  patch_history history;
+  options config;
+  config.max_patch_fits=1;
+  auto current=patch_history_input(data);
+  current.patches[0].node_indices.resize(7);
+  current.patches[1].plane_cluster_idx=-1;
+  update_patch_curvatures(current,data.map,data.planes,config,&history);
+  EXPECT_EQ(current.num_curvature_fits,1U);
+  EXPECT_EQ(current.num_curvature_deferred,0U);
+  EXPECT_FALSE(current.patches[0].curvature.valid);
+  EXPECT_FALSE(current.patches[1].curvature.valid);
+  EXPECT_TRUE(current.patches[2].curvature.valid);
+}
+
+TEST(patch_history, deferred_curvature_does_not_merge_sharp_planes_or_shallow_crease)
+{
+  for (const bool is_shallow : {false,true}) for (std::size_t num_fits : {0U,1U})
+    for (std::size_t num_boundary_fits : {0U,32U}) {
+      SCOPED_TRACE(::testing::Message() << is_shallow << " " << num_fits << " " << num_boundary_fits);
+      scene data;
+      for (int side=0;side<2;++side) {
+        ais_gng_msgs::msg::PlaneCluster plane;
+        plane.id=side+1;
+        const vec normal=side ? vec::UnitX():vec::UnitZ();
+        const auto rotation=Eigen::AngleAxisd(side*pi/6,vec::UnitY()).toRotationMatrix();
+        for (int x=0;x<10;++x) for (int y=0;y<8;++y) {
+          plane.node_indices.push_back(data.map.nodes.size());
+          if (is_shallow) {
+            add_node(data.map,rotation*vec((side ? -1:1)*(0.01+0.04*x),0.04*y-0.14,0),
+              rotation*vec::UnitZ());
+          } else {
+            const double along=0.01+0.006*x;
+            const double noise=2e-6/along+1e-5*std::sin(3*x+y);
+            add_node(data.map,side ? vec(noise,0.006*y,along):vec(along,0.006*y,noise),
+              x==0 && y==0 ? vec(1,0,1).normalized():normal);
+          }
+        }
+        data.planes.clusters.push_back(std::move(plane));
+      }
+      edge(data.map,0,80);
+      if (!is_shallow) {
+        // 法線連続な非平面2点を介した迂回路。直接境界の未評価による誤統合の検査。
+        add_node(data.map,vec(0.006,0,0.005),vec(0.5,0,std::sqrt(0.75)));
+        add_node(data.map,vec(0.005,0,0.006),vec(std::sqrt(0.75),0,0.5));
+        edge(data.map,0,160); edge(data.map,160,161); edge(data.map,161,80);
+      }
+      options config;
+      config.max_patch_fits=num_fits;
+      config.max_boundary_fits=num_boundary_fits;
+      tracker tracking;
+      for (int iter=0;iter<3;++iter) {
+        const auto current=tracking.update(data.map,data.planes,config);
+        EXPECT_LE(current.num_curvature_fits,num_fits);
+        for (const auto &surface:current.regions) {
+          bool has_first_plane=false,has_second_plane=false;
+          for (auto idx:surface.node_indices) {
+            has_first_plane=has_first_plane || idx<80;
+            has_second_plane=has_second_plane || (idx>=80 && idx<160);
+          }
+          EXPECT_FALSE(has_first_plane && has_second_plane) << surface.shape.type;
+        }
+        coverage(current,data.map.nodes.size());
+        advance_patch_frame(data);
+      }
+    }
+}
+
+TEST(patch_history, deferred_wall_curvature_does_not_absorb_wall_into_cylinder)
+{
+  for (std::size_t num_fits : {0U,1U}) for (const bool has_history : {false,true}) {
+    SCOPED_TRACE(::testing::Message() << num_fits << " " << has_history);
+    auto data=cylinder(0.1,0.1);
+    const std::size_t wall_begin=data.map.nodes.size();
+    ais_gng_msgs::msg::PlaneCluster wall;
+    wall.id=999;
+    for (int y=0;y<15;++y) for (int z=0;z<8;++z) {
+      wall.node_indices.push_back(data.map.nodes.size());
+      add_node(data.map,vec(0.1,0.02*y-0.14,0.04*z-0.14),vec::UnitX());
+    }
+    data.planes.clusters.push_back(std::move(wall));
+    edge(data.map,3,wall_begin+7*8+4);
+    options config;
+    config.max_model_fits=256;
+    tracker tracking;
+    if (has_history) {
+      tracking.update(data.map,data.planes,config);
+      advance_patch_frame(data);
+    }
+    config.max_patch_fits=num_fits;
+    config.max_patch_refresh_frames=1;
+    for (int iter=0;iter<2;++iter) {
+      const auto current=tracking.update(data.map,data.planes,config);
+      EXPECT_LE(current.num_curvature_fits,num_fits);
+      bool has_wall=false;
+      for (const auto &surface:current.regions) {
+        if (std::find(surface.node_indices.begin(),surface.node_indices.end(),wall_begin)==
+          surface.node_indices.end()) continue;
+        has_wall=true;
+        EXPECT_TRUE(surface.shape.type=="plane" || surface.shape.type=="unknown") << surface.shape.type;
+      }
+      EXPECT_TRUE(has_wall);
+      coverage(current,data.map.nodes.size());
+      advance_patch_frame(data);
+    }
+  }
+}
+
+namespace
+{
+// 同じ円筒上で軸方向に離れた2帯。元平面1枚から各25点の支持領域への分割入力。
+scene support_split_history_scene()
+{
+  scene data;
+  ais_gng_msgs::msg::PlaneCluster plane;
+  plane.id=700;
+  for (int side=0;side<2;++side) for (int along=0;along<5;++along) for (int row=0;row<5;++row) {
+    const double angle=0.05*along;
+    const vec normal(std::cos(angle),std::sin(angle),0);
+    const auto idx=data.map.nodes.size();
+    add_node(data.map,0.1*normal+vec(0,0,0.3*side+0.02*row),normal);
+    plane.node_indices.push_back(idx);
+    if (row) edge(data.map,idx,idx-1);
+    if (along) edge(data.map,idx,idx-5);
+  }
+  data.planes.clusters.push_back(std::move(plane));
+  return data;
+}
+
+result support_split_history_input(const scene &data)
+{
+  auto surfaces=patch_history_input(data);
+  auto &patch=surfaces.patches.front();
+  patch.has_plane_features=true;
+  patch.position_cov=9*Eigen::Matrix3d::Identity();
+  patch.normal=vec::UnitY();
+  patch.local_spacing=0.9;
+  patch.plane_residual_ratio=0.6;
+  patch.curvature=estimate_curvature(patch,data.map);
+  region surface;
+  surface.id=800;
+  surface.is_retained=true;
+  surface.shape.type="cylinder";
+  surface.shape.q<<1,1,0,0,0,0,0,0,0,-0.01;
+  surface.shape.score=0;
+  surface.node_indices=patch.node_indices;
+  surface.patch_indices={0};
+  surfaces.regions.push_back(std::move(surface));
+  return surfaces;
+}
+}
+
+TEST(patch_history, support_split_respects_remaining_budget_and_rebuilds_fragment_features)
+{
+  const auto data=support_split_history_scene();
+  // 分割前の消費分を含む共通予算と、各断片の位置統計[m, m^2]の検査。
+  for (std::size_t num_remaining_fits : {0U,1U,2U}) for (std::size_t num_previous_fits : {0U,1U}) {
+    SCOPED_TRACE(::testing::Message() << num_remaining_fits << " " << num_previous_fits);
+    auto current=support_split_history_input(data);
+    ASSERT_TRUE(current.patches.front().curvature.valid);
+    current.num_curvature_fits=num_previous_fits;
+    options config;
+    config.max_patch_fits=num_previous_fits+num_remaining_fits;
+    config.max_support_gap=0;
+    split_support_regions(current,data.map,config,true);
+    ASSERT_EQ(current.regions.size(),2U);
+    ASSERT_EQ(current.patches.size(),2U);
+    EXPECT_EQ(current.support_split_num,1U);
+    EXPECT_EQ(current.num_curvature_fits,num_previous_fits+num_remaining_fits);
+    EXPECT_LE(current.num_curvature_fits,config.max_patch_fits);
+    EXPECT_EQ(current.num_curvature_deferred,2U-num_remaining_fits);
+    std::size_t num_valid=0,num_deferred=0;
+    for (const auto &patch:current.patches) {
+      EXPECT_EQ(patch.plane_cluster_idx,0);
+      ASSERT_EQ(patch.node_indices.size(),25U);
+      EXPECT_FALSE(patch.has_plane_features);
+      EXPECT_TRUE(patch.normal.isZero());
+      EXPECT_EQ(patch.local_spacing,0);
+      EXPECT_EQ(patch.plane_residual_ratio,0);
+      vec center=vec::Zero();
+      for (auto idx:patch.node_indices) {
+        const auto &point=data.map.nodes[idx].pos;
+        center+=vec(point.x,point.y,point.z);
+      }
+      center/=static_cast<double>(patch.node_indices.size());
+      Eigen::Matrix3d covariance=Eigen::Matrix3d::Zero();
+      for (auto idx:patch.node_indices) {
+        const auto &point=data.map.nodes[idx].pos;
+        const vec delta=vec(point.x,point.y,point.z)-center;
+        covariance.noalias()+=delta*delta.transpose();
+      }
+      covariance/=static_cast<double>(patch.node_indices.size());
+      EXPECT_TRUE(patch.center.isApprox(center,1e-12));
+      EXPECT_TRUE(patch.position_cov.isApprox(covariance,1e-12));
+      EXPECT_NEAR(patch.position_cov(2,2),0.0008,1e-8);
+      if (patch.is_curvature_deferred) {
+        ++num_deferred;
+        EXPECT_FALSE(patch.curvature.valid);
+      } else {
+        ++num_valid;
+        EXPECT_TRUE(patch.curvature.valid);
+        EXPECT_EQ(patch.curvature.sample_num,25U);
+      }
+    }
+    EXPECT_EQ(num_valid,num_remaining_fits);
+    EXPECT_EQ(num_deferred,2U-num_remaining_fits);
+    for (const auto &surface:current.regions) {
+      EXPECT_EQ(surface.shape.type,"cylinder");
+      EXPECT_TRUE(surface.is_retained);
+      EXPECT_EQ(surface.support_parent_id,800U);
+      EXPECT_EQ(surface.node_indices.size(),25U);
+      ASSERT_EQ(surface.patch_indices.size(),1U);
+      EXPECT_EQ(surface.node_indices,current.patches[surface.patch_indices.front()].node_indices);
+    }
+    coverage(current,data.map.nodes.size());
+  }
+}
+
+TEST(patch_history, support_split_without_history_keeps_unlimited_fitting)
+{
+  const auto data=support_split_history_scene();
+  auto current=support_split_history_input(data);
+  options config;
+  config.max_patch_fits=0;
+  config.max_support_gap=0;
+  split_support_regions(current,data.map,config);
+  ASSERT_EQ(current.patches.size(),2U);
+  EXPECT_EQ(current.num_curvature_fits,2U);
+  EXPECT_EQ(current.num_curvature_deferred,0U);
+  for (const auto &patch:current.patches) {
+    EXPECT_TRUE(patch.curvature.valid);
+    EXPECT_FALSE(patch.is_curvature_deferred);
+    EXPECT_FALSE(patch.has_plane_features);
+    EXPECT_EQ(patch.curvature.sample_num,25U);
+  }
+  coverage(current,data.map.nodes.size());
 }

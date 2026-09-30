@@ -34,9 +34,10 @@ private:
   std::unordered_map<std::uint32_t, smooth_node> smooth_nodes_;
   std::vector<std::pair<std::uint64_t, bool>> smooth_links_;
   std::array<double, 3> smooth_limits_{};
-  struct reference_node { std::uint16_t id; Eigen::Vector3d position; };
+  struct reference_node { std::uint16_t id; std::uint32_t frame; Eigen::Vector3d position; };
   struct track { region surface; std::vector<reference_node> reference; };
   std::vector<track> tracks_;
+  patch_history patch_history_;
   std::string frame_id_;
   std::uint32_t frame_number_ = 0;
   std::int64_t stamp_ = 0;

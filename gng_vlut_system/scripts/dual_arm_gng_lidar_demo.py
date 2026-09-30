@@ -186,6 +186,16 @@ class gng_lidar_demo(avoidance_demo, gng_path_search):
             self.next_plan_sec = 0.0
         return response
 
+    def on_safety_stop(self, message):
+        super().on_safety_stop(message)
+        if self.is_stop_latched:
+            self.path = []
+            if self.plan_future is not None:
+                self.plan_future.cancel()
+                self.plan_future = None
+            self.next_plan_sec = 0.0
+            self.coordination_source_indices = np.array([], dtype=int)
+
     def on_cloud(self, message):
         stamp = message.header.stamp.sec*1000000000+message.header.stamp.nanosec
         if stamp <= self.last_cloud_stamp:

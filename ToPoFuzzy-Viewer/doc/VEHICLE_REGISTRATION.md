@@ -10,14 +10,16 @@
 旧ON設定でも表示・選択を無効化。現在、このトピックから独立ビューを開く操作導線はない。
 照合RPCと、他の選択可能なcluster/component独立ビューの「車モデルを比較」は保持。
 
-起動済みの旧Viewerには、同じDocker内で追加ノードを起動:
+通常起動: `ros2 launch topo_fuzzy_viewer viewer_stack.launch.py` に車両照合ノードは含まれない。
+車両照合を使う場合のみ、Viewerと同じDocker内で追加ノードを起動:
 
 ```bash
 source /ros2_ws/install/setup.bash
 ros2 run topo_fuzzy_viewer viewer_vehicle_registration_node.py
 ```
 
-次回から `ros2 launch topo_fuzzy_viewer viewer_stack.launch.py` に含まれるため、追加起動は不要。
+「車モデルを比較」の利用条件: 上記ノードの単独起動。未起動時は照合不可。
+既存のViewerへの起動構成変更の反映: `viewer_stack.launch.py` の再起動。
 同じROSドメインでの照合ノードの重複起動は不可。
 
 | 候補 | モデル |
