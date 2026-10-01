@@ -24,6 +24,8 @@ class ISelfCollisionChecker;
 
 namespace GNG {
 
+class nearest_node_index;
+
 /**
  * @brief 自己干渉回避を強化したGNGクラス
  * GrowingNeuralGas.hpp のコードをベースにしたスタンドアロン版
@@ -39,6 +41,9 @@ public:
   struct IStatusProvider {
     virtual ~IStatusProvider() = default;
     virtual std::vector<UpdateTrigger> getTriggers() const = 0;
+    // 保持参照を含む、近傍対象ノードの関節角・座標・構成への書込みの可能性。
+    // status専用providerでのfalse指定による増分索引の維持。
+    virtual bool can_modify_node_positions() const { return true; }
     virtual void update(NeuronNode<T_angle, T_coord> &node,
                         UpdateTrigger trigger) = 0;
     virtual bool
@@ -129,12 +134,16 @@ public:
     return nodes;
   }
 
-  NeuronNode<T_angle, T_coord> &nodeAt(int idx) { return nodes[idx]; }
+  NeuronNode<T_angle, T_coord> &nodeAt(int idx) {
+    invalidate_nearest_indexes();
+    return nodes[idx];
+  }
 
   const std::vector<int>& getActiveIndices() const { return active_indices_; }
 
 
   template <typename Fn> void forEachActive(Fn &&fn) {
+    invalidate_nearest_indexes();
     for (int i : active_indices_) {
       fn(i, nodes[i]);
     }
@@ -149,6 +158,7 @@ public:
 
 
   template <typename Fn> void forEachActiveValid(Fn &&fn) {
+    invalidate_nearest_indexes();
     for (int i : active_indices_) {
       auto &n = nodes[i];
       if (n.status.self_collision_free)
@@ -166,7 +176,10 @@ public:
   }
 
 
-  std::vector<NeuronNode<T_angle, T_coord>> &getNodes() { return nodes; }
+  std::vector<NeuronNode<T_angle, T_coord>> &getNodes() {
+    invalidate_nearest_indexes();
+    return nodes;
+  }
 
   const std::vector<NeuronNode<T_angle, T_coord>> &getNodes() const {
     return nodes;
@@ -214,6 +227,16 @@ private:
   void one_train_update(const T_angle &sample_angle,
                         const T_coord &sample_coord, int mode);
   void one_train_update(const T_angle &sample_angle);
+
+  void invalidate_nearest_indexes();
+  void sync_nearest_node(int node_id);
+  void find_nearest_angle(const T_angle &sample_angle, int num_candidates);
+  void find_nearest_coord(const T_coord &sample_coord, int coord_layer_idx);
+  const T_coord &node_coord(int node_id, int coord_layer_idx) const;
+
+  // GNGノード配列の再配置から独立した座標索引。
+  std::unique_ptr<nearest_node_index> angle_nearest_index_;
+  std::vector<std::unique_ptr<nearest_node_index>> coord_nearest_indexes_;
 
   int add_node(const T_angle &w_angle);
   int add_node(const T_angle &w_angle, const T_coord &w_coord);

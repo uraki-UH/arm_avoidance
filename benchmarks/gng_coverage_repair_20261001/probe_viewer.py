@@ -105,7 +105,15 @@ def main():
                 if 'edge_counts' in expected:
                     assert len(msg.edges) // 2 == expected['edge_counts'][layer + 1], topic
                 assert msg.header.frame_id == expected.get('frame_id', 'world'), msg.header.frame_id
-                assert all(idx < len(msg.nodes) for idx in msg.edges)
+                assert all(0 <= idx < len(msg.nodes) for idx in msg.edges)
+                if 'edge_pairs' in expected:
+                    # 配列内添字から保存ノードIDへ戻した、無向辺集合の照合
+                    edge_pairs = [tuple(sorted((msg.nodes[msg.edges[idx]].id,
+                                                msg.nodes[msg.edges[idx + 1]].id)))
+                                  for idx in range(0, len(msg.edges), 2)]
+                    expected_pairs = [tuple(pair) for pair in expected['edge_pairs'][layer + 1]]
+                    assert len(set(edge_pairs)) == len(edge_pairs), (topic, 'duplicate edges')
+                    assert sorted(edge_pairs) == sorted(expected_pairs), (topic, 'edge mismatch')
                 result['topics'][topic] = {'num_nodes': len(msg.nodes), 'num_edges': len(msg.edges)//2,
                                            'max_coord_error_m': max_error, 'frame_id': msg.header.frame_id}
             features = received['topological_node_features'].features

@@ -1,5 +1,7 @@
 # SpatialTreeのURDF高次元学習への適用調査
 
+> 2026-10-01追記: 通常GNGの関節角学習と左右TCP辺生成へ厳密近傍索引を組込み。[実装・検証記録](../../gng_vlut_system/docs/releases/2026-10-01_gng_nearest_index.md)。以下は2026-09-30時点の試作結果。
+
 - 結論: `MovingBSPTree`の厳密k近傍探索が導入候補。実データによる探索・位置更新APIの単体比較まで完了、本体への組込みなし。
 - 対象版: `~/SpatialTree`、commit `964aab43d7f8681d76cdded385624e1623feb9fd`。
 - 保存物: [全比較結果・条件](SUMMARY.md)、[入力ハッシュ・実行環境](metadata.json)、[比較コード](measure.cpp)。学習済みモデル・ライブラリ・実装設定への変更なし。

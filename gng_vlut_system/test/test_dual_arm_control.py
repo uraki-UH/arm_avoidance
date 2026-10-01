@@ -20,6 +20,7 @@ def control(monkeypatch):
     monkeypatch.setattr(control_module, 'time', SimpleNamespace(monotonic=lambda: 100.0))
     node = control_module.dual_arm_control.__new__(control_module.dual_arm_control)
     node.model = Mock()
+    node.udp = None
     node.model.mode = 'hold'
     node.model.is_fresh.return_value = True
     node.model.is_stationary.return_value = True
@@ -363,3 +364,209 @@ def test_reset_active_status_timeout_keeps_output_stopped(control):
     assert control.model.mode == 'stopped'
     control.model.enter.assert_not_called()
     control.command.publish.assert_not_called()
+
+
+def test_leader_on_from_stopped_requests_guarded_reset(control):
+    stopped_safety(control)
+    control.model.has_fresh_leader.return_value = False
+    response = control.on_leader_mode(SetBool.Request(data=True), SetBool.Response())
+    assert response.success
+    assert control.phase == 'reset_stop_demo'
+    control.model.enter.assert_not_called()
+    control.command.publish.assert_not_called()
+
+
+def test_leader_key_reset_returns_hold_before_second_explicit_start(control):
+    """停止解除・ホールド確認・別の開始操作という二段階の検証。"""
+    stopped_safety(control)
+    for client in control.service_clients.values():
+        client.call_async.side_effect = lambda _request: Future()
+    response = control.on_leader_mode(SetBool.Request(data=True), SetBool.Response())
+    assert response.success
+    control.future.set_result(Trigger.Response(success=True))
+    control.advance(100.0)
+    assert control.phase == 'reset_deactivate'
+    control.future.set_result(SimpleNamespace(ok=True))
+    control.advance(100.0)
+    assert control.phase == 'reset_wait_stopped'
+    control.model.enter.assert_not_called()
+    control.safety['has_active_commands'] = False
+    control.advance(100.0)
+    assert control.phase == 'reset_clear'
+    control.future.set_result(Trigger.Response(success=True))
+    control.advance(100.0)
+    assert control.phase == 'reset_wait_clear'
+    control.safety['is_stop_latched'] = False
+    control.advance(100.0)
+    assert control.phase == 'reset_activate'
+    control.future.set_result(SimpleNamespace(ok=True))
+    control.advance(100.0)
+    assert control.phase == 'reset_wait_active'
+    control.model.enter.assert_not_called()
+    control.safety['has_active_commands'] = True
+    control.advance(100.0)
+    control.model.enter.assert_called_once_with('hold', 100.0)
+    assert control.phase == 'idle'
+    control.service_clients['avoidance/start'].call_async.assert_not_called()
+    control.tick()
+    assert control.model.mode == 'hold'
+    response = control.on_leader_mode(SetBool.Request(data=True), SetBool.Response())
+    assert response.success
+    assert control.model.mode == 'hold'
+    control.future.set_result(Trigger.Response(success=True))
+    control.joint_stamp += .3
+    control.advance(100.0)
+    assert control.model.mode == 'leader'
+
+
+@pytest.mark.parametrize('condition', ['stationary', 'safety', 'heartbeat',
+                                     'future', 'stop_future', 'unconfirmed'])
+def test_leader_key_never_bypasses_reset_conditions(control, condition):
+    stopped_safety(control)
+    if condition == 'stationary':
+        control.model.is_stationary.return_value = False
+    elif condition == 'safety':
+        control.safety_sec = 99.0
+    elif condition == 'heartbeat':
+        control.heartbeat_sec = 99.0
+    elif condition == 'future':
+        control.future = Future()
+    elif condition == 'stop_future':
+        control.stop_future = Future()
+    else:
+        control.has_unconfirmed_operation = True
+    response = control.on_leader_mode(SetBool.Request(data=True), SetBool.Response())
+    assert not response.success
+    control.service_clients['avoidance/stop'].call_async.assert_not_called()
+    control.model.enter.assert_not_called()
+
+
+def test_reset_waits_for_active_state_before_entering_hold(control):
+    control.phase, control.model.mode = 'reset_wait_active', 'stopped'
+    control.safety['has_active_commands'] = False
+    control.advance(100.0)
+    control.model.enter.assert_not_called()
+    control.safety['has_active_commands'] = True
+    control.advance(100.0)
+    assert control.phase == 'idle'
+    assert control.has_initialized_mode
+    control.model.enter.assert_called_once_with('hold', 100.0)
+    control.service_clients['avoidance/start'].call_async.assert_not_called()
+
+
+@pytest.mark.parametrize('phase', ['reset_stop_demo', 'reset_deactivate', 'reset_wait_stopped',
+                                  'reset_clear', 'reset_wait_clear', 'reset_activate', 'reset_wait_active'])
+@pytest.mark.parametrize('field', ['heartbeat_sec', 'safety_sec'])
+def test_state_loss_during_reset_cancels_request(control, phase, field):
+    control.phase, control.model.mode = phase, 'stopped'
+    setattr(control, field, 99.0)
+    control.tick()
+    assert control.phase == 'stopped'
+    control.model.enter.assert_not_called()
+
+
+@pytest.mark.parametrize('enable_off_request', [False, True])
+def test_stop_or_leader_off_cancels_reset_and_late_response(control, enable_off_request):
+    control.phase = 'reset_activate'
+    control.future = Future()
+    if enable_off_request:
+        response = control.on_leader_mode(SetBool.Request(data=False), SetBool.Response())
+        assert response.success
+    else:
+        control.on_stop(None, Trigger.Response())
+    control.future.set_result(Trigger.Response(success=True))
+    control.advance(100.0)
+    assert control.phase == 'stopped'
+    control.model.enter.assert_not_called()
+
+
+def test_leader_off_captures_measured_hold_without_leader_input(control):
+    control.model.mode = 'leader'
+    control.model.has_fresh_leader.return_value = False
+    response = control.on_leader_mode(SetBool.Request(data=False), SetBool.Response())
+    assert response.success
+    assert control.target_mode == 'hold'
+    control.model.enter.assert_called_once_with('hold', 100.0)
+
+
+def test_reset_never_starts_leader_on_next_tick(control):
+    control.has_initialized_mode = False
+    control.phase, control.model.mode = 'reset_wait_active', 'stopped'
+    control.advance(100.0)
+    control.tick()
+    control.model.enter.assert_called_once_with('hold', 100.0)
+
+
+@pytest.mark.parametrize('mode,name', [('leader', 'avoidance'), ('avoidance', 'leader')])
+@pytest.mark.parametrize('enable_mode', [False, True])
+def test_cross_mode_request_rejected_without_hold_or_stop_side_effect(control, mode, name, enable_mode):
+    control.model.mode = mode
+    request = SetBool.Request(data=enable_mode)
+    response = getattr(control, 'on_' + name + '_mode')(request, SetBool.Response())
+    assert not response.success
+    assert control.model.mode == mode
+    assert control.phase == 'idle'
+    assert control.future is None
+    control.model.enter.assert_not_called()
+    control.model.stop.assert_not_called()
+    control.command.publish.assert_not_called()
+    control.service_clients['avoidance/stop'].call_async.assert_not_called()
+    control.service_clients['avoidance/start'].call_async.assert_not_called()
+
+
+@pytest.mark.parametrize('mode', ['leader', 'avoidance'])
+def test_same_mode_off_requests_measured_hold(control, mode):
+    control.model.mode = mode
+    response = getattr(control, 'on_' + mode + '_mode')(SetBool.Request(data=False), SetBool.Response())
+    assert response.success
+    assert control.target_mode == 'hold'
+    assert control.phase == 'switch_stop_demo'
+    control.model.enter.assert_called_once_with('hold', 100.0)
+
+
+@pytest.mark.parametrize('mode', ['leader', 'avoidance'])
+def test_same_mode_on_cannot_restart_without_hold(control, mode):
+    control.model.mode = mode
+    response = getattr(control, 'on_' + mode + '_mode')(SetBool.Request(data=True), SetBool.Response())
+    assert not response.success
+    control.model.enter.assert_not_called()
+
+
+@pytest.mark.parametrize('mode', ['leader', 'avoidance'])
+def test_mode_off_while_already_holding_is_idempotent(control, mode):
+    response = getattr(control, 'on_' + mode + '_mode')(SetBool.Request(data=False), SetBool.Response())
+    assert response.success
+    assert control.phase == 'idle'
+    control.model.enter.assert_not_called()
+    control.service_clients['avoidance/stop'].call_async.assert_not_called()
+
+
+def test_reset_needs_stationary_hold_before_accepting_start(control):
+    control.phase, control.model.mode = 'reset_wait_active', 'stopped'
+    control.model.is_stationary.return_value = False
+    control.advance(100.0)
+    assert control.phase == 'reset_wait_active'
+    control.model.enter.assert_not_called()
+    response = control.on_leader_mode(SetBool.Request(data=True), SetBool.Response())
+    assert not response.success
+    control.model.is_stationary.return_value = True
+    control.advance(100.0)
+    control.model.enter.assert_called_once_with('hold', 100.0)
+
+
+@pytest.mark.parametrize('mode,other', [('leader', 'avoidance'), ('avoidance', 'leader')])
+def test_start_rejected_until_off_transition_is_complete(control, mode, other):
+    control.model.mode = mode
+    assert getattr(control, 'on_' + mode + '_mode')(SetBool.Request(data=False), SetBool.Response()).success
+    control.model.enter.reset_mock()
+    response = getattr(control, 'on_' + other + '_mode')(SetBool.Request(data=True), SetBool.Response())
+    assert not response.success
+    assert control.target_mode == 'hold'
+    control.model.enter.assert_not_called()
+    control.future.set_result(Trigger.Response(success=True))
+    control.joint_stamp += .3
+    control.advance(100.0)
+    control.tick()
+    assert control.phase == 'idle'
+    assert control.model.mode == 'hold'
+    control.service_clients['avoidance/start'].call_async.assert_not_called()

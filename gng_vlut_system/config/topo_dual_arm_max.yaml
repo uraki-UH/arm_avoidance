@@ -126,15 +126,8 @@
       enable_self_collision: true
       apply_environment_ignore_links: true
       apply_self_collision_exclusion_pairs: true
-      voxel_ball:
-        voxel_size: 0.0025
-        voxel_padding: 0.0
-        max_spheres: 8
-        min_points_per_sphere: 5
-        min_gain_ratio: 0.15
-        refine_iterations: 2
-        containment_margin: 0.5
-        verbose: false
+      # 全身メッシュの内部充填ボクセル解像度 [m]。プリミティブは元形状での判定。
+      voxel_size: 0.001
       environment_ignore_links:
         - "base_footprint"
       #(隣接リンク同士は自動で衝突判定をしないように設定)
@@ -153,6 +146,8 @@
       max_edge_age: 2000
       alpha: 0.5
       beta: 0.0005
+      # 関節角・TCPの厳密近傍索引
+      enable_nearest_index: true
       n_best_candidates: 4
       ais_threshold: 10.0
       start_node_num: 2

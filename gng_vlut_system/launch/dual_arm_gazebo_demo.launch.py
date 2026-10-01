@@ -13,6 +13,7 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def load_module(path):
@@ -84,13 +85,17 @@ def launch_setup(context):
         f'/{namespace}/dual_arm_controller': {'ros__parameters': {
             'joints': joint_names, 'command_interfaces': ['position'],
             'state_interfaces': ['position', 'velocity'],
-            'state_publish_rate': 50.0, 'action_monitor_rate': 20.0,
+            'state_publish_rate': 100.0 if enable_integrated_control else 50.0,
+            'action_monitor_rate': 20.0,
             'allow_partial_joints_goal': False, 'open_loop_control': False,
             'constraints': {'goal_time': 2.0, 'stopped_velocity_tolerance': 0.05},
         }},
     }
     controllers_path = run_dir/'controllers.yaml'
     controllers_path.write_text(yaml.safe_dump(controllers, sort_keys=False))
+    gazebo_clock_path = run_dir/'gazebo_clock.yaml'
+    # 低速シミュレーション時の重複時刻・UDP目標失効の抑制。壁時計の失効期限は変更なし
+    gazebo_clock_path.write_text(yaml.safe_dump({'gazebo': {'ros__parameters': {'publish_rate': 100.0}}}))
     gazebo = ET.SubElement(root, 'gazebo')
     plugin = ET.SubElement(gazebo, 'plugin', name='gazebo_ros2_control', filename='libgazebo_ros2_control.so')
     ros = ET.SubElement(plugin, 'ros')
@@ -187,11 +192,14 @@ def launch_setup(context):
         return []
 
     gazebo_share = Path(get_package_share_directory('gazebo_ros'))
+    gazebo_arguments = {'world': str(world_path), 'gui': gui, 'pause': 'true'}
+    if enable_integrated_control:
+        gazebo_arguments['params_file'] = str(gazebo_clock_path)
     actions = [
         SetEnvironmentVariable('GAZEBO_MODEL_DATABASE_URI', ''),
         SetEnvironmentVariable('GAZEBO_MASTER_URI', LaunchConfiguration('gazebo_master_uri')),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(gazebo_share/'launch/gazebo.launch.py')),
-            launch_arguments={'world': str(world_path), 'gui': gui, 'pause': 'true'}.items()),
+            launch_arguments=gazebo_arguments.items()),
         Node(package='robot_state_publisher', executable='robot_state_publisher', namespace=namespace,
              parameters=[{'robot_description': robot_description, 'frame_prefix': namespace+'/', 'use_sim_time': True}],
              output='screen'),
@@ -216,7 +224,9 @@ def launch_setup(context):
     if enable_integrated_control:
         control = Node(package='gng_vlut_system', executable='dual_arm_control.py',
                        namespace=namespace, output='log', parameters=[{
-                           'use_sim_time': True, 'urdf_path': str(urdf_path)}],
+                           'use_sim_time': True, 'urdf_path': str(urdf_path),
+                           'udp_config': ParameterValue(LaunchConfiguration('udp_config'), value_type=str),
+                           'allow_remote_udp': ParameterValue(LaunchConfiguration('allow_remote_udp'), value_type=bool)}],
                        remappings=[('leader_joint_states', LaunchConfiguration('leader_joint_state_topic'))])
         actions.extend([control, RegisterEventHandler(OnProcessExit(
             target_action=control, on_exit=[EmitEvent(event=Shutdown(reason='統合制御の終了'))]))])
@@ -240,6 +250,8 @@ def generate_launch_description():
         DeclareLaunchArgument('enable_external_control', default_value='false'),
         DeclareLaunchArgument('enable_integrated_control', default_value='false'),
         DeclareLaunchArgument('leader_joint_state_topic', default_value='/leader/joint_states'),
+        DeclareLaunchArgument('udp_config', default_value=''),
+        DeclareLaunchArgument('allow_remote_udp', default_value='false'),
         DeclareLaunchArgument('enable_dynamixel_leader', default_value='false'),
         DeclareLaunchArgument('dynamixel_input_topic', default_value='/dynamixel/state/present'),
         DeclareLaunchArgument('gui', default_value=''),

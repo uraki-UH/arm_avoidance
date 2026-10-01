@@ -10,15 +10,16 @@ import signal
 import sys
 import time
 
-from gazebo_stop_keyboard import is_fresh_age, key_action, status_label, stop_request, terminal_input
+from gazebo_stop_keyboard import is_fresh_age, status_label, stop_request, terminal_input
 
 
 def control_key_action(key):
-    """停止キー共通化と、モード選択・明示解除キーの分類。"""
-    action = key_action(key)
-    if action is not None:
-        return action
-    return {b'a': 'avoidance', b'l': 'leader', b'h': 'hardware', b'r': 'reset'}.get(key.lower())
+    """通常操作3キーと、UDP許可・端末終了の分類。"""
+    if key == b' ':
+        return 'stop'
+    if key in (b'\x03', b'\x04', b''):
+        return 'quit'
+    return {b'a': 'avoidance', b'l': 'leader', b'h': 'hardware'}.get(key.lower())
 
 
 class terminal_key_decoder:
@@ -30,8 +31,8 @@ class terminal_key_decoder:
         self.paste_tail = b''
 
     def read_action(self, key):
-        action = key_action(key)
-        if action is not None:
+        action = control_key_action(key)
+        if action in ('stop', 'quit'):
             return action
         if self.is_paste:
             self.paste_tail = (self.paste_tail + key)[-6:]
@@ -153,7 +154,7 @@ def main(argv=None):
     from std_srvs.srv import SetBool, Trigger
 
     ros_arguments = list(sys.argv if argv is None else ['dual_arm_control_keyboard.py', *argv])
-    parser = argparse.ArgumentParser(description='統合操作: A 回避 / L リーダー / H 実機 / R 解除 / Space・S 停止 / Q 終了')
+    parser = argparse.ArgumentParser(description='統合操作: A 回避・保持 / L 追従・保持・停止解除 / Space 停止 / Ctrl-C 終了 / H UDP')
     parser.add_argument('--namespace', required=True,
                         choices=('sim_topo_dual_arm_max', 'sim_topo_dual_arm_max_long'))
     parser.add_argument('--tty-path', required=True, help='親launch端末のTTYパス')
@@ -202,7 +203,6 @@ def main(argv=None):
         prefix = '/' + args.namespace
         clients = {name: node.create_client(SetBool, prefix + '/control/' + name)
                    for name in ('avoidance', 'leader', 'hardware')}
-        clients['reset'] = node.create_client(Trigger, prefix + '/control/reset')
         stop_client = node.create_client(Trigger, prefix + '/control/stop')
         live_qos = QoSProfile(depth=1, durability=DurabilityPolicy.VOLATILE)
         node.create_subscription(String, prefix + '/control/status',
@@ -215,9 +215,11 @@ def main(argv=None):
         for item in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             handlers[item] = signal.signal(item, request_exit)
         emit('対象: ' + prefix + ' / 操作: この端末を前面にしてキー入力（Enter不要）')
-        emit('A: 回避ON/OFF / L: リーダーフォロワーON/OFF / H: 実機出力ON/OFF')
-        emit('Space・S: ソフト停止 / R: 明示解除のみ / Q・Ctrl-C・Ctrl-D: 停止要求後に終了')
-        emit('実機出力ON: サーバーの許可条件により拒否。ソフト停止は物理非常停止の代替ではありません')
+        emit('A: 回避・ホールド / L: 追従・ホールド / Space: ソフト停止')
+        emit('開始はホールドからのみ。停止中のLは解除のみ、ホールド確認後にAまたはLで開始')
+        emit('Ctrl-C: 停止要求後に終了 / H: UDP出力ON/OFF')
+        emit('H: UDP設定・実測・開始姿勢の確認後のみ許可。表示する実測停止はGazeboのみ、実機停止は未確認')
+        emit('ソフト停止は物理非常停止の代替ではありません')
         previous_labels = (None, None)
         next_heartbeat_sec = time.monotonic()
         is_exiting = False
@@ -244,8 +246,6 @@ def main(argv=None):
                 elif action is not None and not is_exiting:
                     if request.is_pending:
                         emit('操作: 停止要求を優先中')
-                    elif action == 'reset':
-                        operation.begin(clients['reset'], Trigger.Request(), '停止解除（自動再開なし）')
                     else:
                         enable_mode = toggle_value(action, control['status'],
                                                    time.monotonic() - control['received_sec'])
@@ -253,8 +253,10 @@ def main(argv=None):
                             emit('操作: 制御状態が未受信・失効のためON/OFF変更不可。停止キーは有効')
                         else:
                             label = {'avoidance': '回避', 'leader': 'リーダーフォロワー', 'hardware': '実機出力'}[action]
+                            label = ('停止解除→ホールド' if action == 'leader' and control['status']['mode'] == 'stopped'
+                                     else label + ('ON' if enable_mode else 'OFF'))
                             operation.begin(clients[action], SetBool.Request(data=enable_mode),
-                                            label + ('ON' if enable_mode else 'OFF'))
+                                            label)
                 request.poll()
                 operation.poll()
                 now_sec = time.monotonic()
@@ -263,7 +265,7 @@ def main(argv=None):
                     next_heartbeat_sec = now_sec + 0.1
                 rclpy.spin_once(node, timeout_sec=0.02)
                 labels = (control_status_label(control['status'], time.monotonic() - control['received_sec']),
-                          status_label(safety['status'], time.monotonic() - safety['received_sec']))
+                          'Gazebo / ' + status_label(safety['status'], time.monotonic() - safety['received_sec']))
                 for label, previous_label in zip(labels, previous_labels):
                     if label != previous_label:
                         emit(label)

@@ -1,3 +1,4 @@
+import {robot_snapshot} from './robot-ros-state.js';
 import {CloudColorControls,displayPLY} from './pointcloud-colors.js';
 import * as THREE from 'three';
 import {RGBDSensor,nominalCalibration,validateCalibration,deproject,binaryPLY} from './rgbd-core.js';
@@ -54,10 +55,10 @@ export class RGBDWorkspace {
   this.is_capture_pending=true;const generation=this.capture_generation;
   try{
    const start=performance.now(),elapsed=start-this.lastTime;this.lastTime=start;
-   const robot_pose=this.robot.getPose(),robot_model=this.robot.modelId,workspace_state=this.environment.getState();
+   const robot_state=robot_snapshot(this.robot),robot_pose=robot_state.robot_pose,robot_model=this.robot.modelId,workspace_state=this.environment.getState();
    const frame=await this.sensor.capture(this.opticalWorld(),{mode:$('sensor-mode').value,exclude:[...this.exclude,this.cloud],enable_async_read:true,target_group});
    if(generation!==this.capture_generation)return null;
-   this.sensor.lastFrame=frame;frame.robotPose=robot_pose;frame.robotModel=robot_model;frame.workspace=workspace_state;this.rate=elapsed>0?1000/elapsed:0;
+   this.sensor.lastFrame=frame;frame.robot_state=robot_state;frame.robotPose=robot_pose;frame.robotModel=robot_model;frame.workspace=workspace_state;this.rate=elapsed>0?1000/elapsed:0;
    this.paint(frame);if(this.cloud.visible)this.updateCloud(frame);$('sensor-export').disabled=false;
    $('sensor-stats').textContent=`${frame.valid.toLocaleString()} 点 / ${(frame.calibration.depth.width*frame.calibration.depth.height).toLocaleString()}画素（1フレーム） · 着色 ${frame.colored.toLocaleString()}点\nステレオ除外 ${frame.stereoRejected.toLocaleString()}点 · Min-Z ${frame.calibration.min_depth_m} m\nZ ${frame.min.toFixed(3)}–${frame.max.toFixed(3)} m · ${frame.ms.toFixed(1)} ms / 取得${this.live?' · 実測 '+this.rate.toFixed(1)+' Hz':''}`;
    this.lastSummary={ready:true,model:this.robot.modelId,live:this.live,frame:{id:frame.id,timestamp:frame.timestamp,width:frame.calibration.depth.width,height:frame.calibration.depth.height,valid:frame.valid,colored:frame.colored,stereoRejected:frame.stereoRejected,min:frame.min,max:frame.max,ms:frame.ms,renderMs:frame.renderMs,hz:this.rate,mode:frame.mode,depthWorld:frame.depthWorld},workspace:frame.workspace};

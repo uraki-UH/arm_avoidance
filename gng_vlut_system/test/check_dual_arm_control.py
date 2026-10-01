@@ -66,6 +66,19 @@ class pty_launch(owned_launch):
     def is_terminal_restored(self):
         return self.slave is not None and termios.tcgetattr(self.slave) == self.original_terminal
 
+    def cleanup(self):
+        # 端末所有keyboard経由の正常終了を優先。SIGINT/TERMによるDDS後始末中断の抑制
+        if self.process is not None and self.process.poll() is None and self.master is not None:
+            try:
+                self.send_key(b'\x03')
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline and self.process.poll() is None:
+                    self.read_terminal()
+                    time.sleep(0.05)
+            except OSError:
+                pass
+        return super().cleanup()
+
     def close_terminal(self):
         self.read_terminal()
         if self.terminal_log is not None:
@@ -247,6 +260,53 @@ class control_trial:
         self.report['checks'][name] = {'duration_sim_sec': self.joint_stamp - started,
             'max_drift_rad': max_drift, 'max_velocity_rad_sec': max_velocity}
 
+    def check_leader_resume(self):
+        """廃止キー無効・停止解除後保持・再度Lでの追従開始の実端末検証。"""
+        self.set_stage('removed_keys')
+        for key in (b'r', b'q', b's'):
+            self.key(key)
+        self.observe_hold('removed_keys_keep_stop', True)
+        self.set_stage('reset_to_hold_without_leader')
+        self.leader_target = None
+        self.wait(lambda: self.control.get('has_fresh_leader') is False, 5)
+        self.key(b'l')
+        self.wait(self.is_hold_ready, 30)
+        self.observe_hold('reset_to_hold_without_input', False)
+        self.set_stage('leader_without_input')
+        transcript_start = len(self.launch.transcript)
+        self.key(b'l')
+        self.wait(lambda: 'リーダーフォロワーON: 拒否・応答不正'
+                  in self.launch.transcript[transcript_start:], 5)
+        if not self.is_hold_ready():
+            raise AssertionError('入力なしの追従拒否後にホールドが解除')
+        self.report['checks']['leader_without_input_keeps_hold'] = True
+        self.set_stage('leader_resume')
+        initial = self.positions['L_joint2']
+        self.leader_target = initial + 0.04
+        self.wait(lambda: self.control.get('has_fresh_leader') is True, 5)
+        self.key(b'l')
+        self.wait(lambda: self.control.get('mode') == 'leader'
+                  and self.control.get('phase') == 'idle'
+                  and self.positions['L_joint2'] - initial > 0.005, 30)
+        if self.control.get('enable_hardware_output') is not False:
+            raise AssertionError('L再開によるUDP自動再送')
+        self.report['checks']['leader_resume_without_udp_restart'] = dict(self.control)
+        self.check_cross_mode_rejection('leader', b'a', '回避ON')
+        self.set_stage('leader_off_hold')
+        self.key(b'l')
+        self.wait(self.is_hold_ready, 30)
+        self.observe_hold('leader_off_hold_with_input', False)
+
+    def check_cross_mode_rejection(self, mode, key, label):
+        """動作中の別モードキーによる暗黙ホールド・自動開始の拒否。"""
+        self.set_stage('cross_mode_rejection_from_' + mode)
+        transcript_start = len(self.launch.transcript)
+        self.key(key)
+        self.wait(lambda: label + ': 拒否・応答不正' in self.launch.transcript[transcript_start:], 5)
+        if self.control.get('mode') != mode or self.control.get('phase') != 'idle':
+            raise AssertionError('別モードキー拒否時の現在モード変更')
+        self.report['checks']['cross_mode_rejected_from_' + mode] = dict(self.control)
+
     def execute(self):
         self.set_stage('startup')
         self.wait(lambda: self.is_hold_ready() and 'Enter不要' in self.launch.transcript
@@ -276,11 +336,7 @@ class control_trial:
         self.wait(lambda: self.is_stopped() and self.joint_stamp - stop_stamp >= 0.25, 30)
         self.report['checks']['space_physical_stop'] = dict(self.safety)
         self.observe_hold('stop_hold_with_leader_input', True)
-        self.set_stage('reset_key')
-        self.key(b'r')
-        self.wait(self.is_hold_ready, 30)
-        self.report['checks']['reset_without_restart'] = dict(self.control)
-        self.observe_hold('reset_hold_with_leader_input', False)
+        self.check_leader_resume()
         self.set_stage('hardware_key')
         transcript_start = len(self.launch.transcript)
         self.key(b'h')
@@ -299,6 +355,7 @@ class control_trial:
                     'result': 'on_confirmed' if is_mode_on else 'stopped_before_on',
                     'on_control': dict(self.control), 'on_demo': dict(self.demo)}
                 if is_mode_on:
+                    self.check_cross_mode_rejection('avoidance', b'l', 'リーダーフォロワーON')
                     self.key(b'a')
                     self.wait(lambda: self.is_hold_ready() or self.control.get('mode') == 'stopped', 12)
                     self.report['optional_avoidance'].update(
@@ -307,15 +364,15 @@ class control_trial:
             except (AssertionError, RuntimeError, TimeoutError) as error:
                 self.report.setdefault('optional_avoidance', {}).update(
                     result='not_confirmed', error=str(error), control=dict(self.control), demo=dict(self.demo))
-        self.set_stage('quit_key')
-        self.key(b'q')
+        self.set_stage('ctrl_c_exit')
+        self.key(b'\x03')
         self.wait(lambda: self.launch.process.poll() is not None, 20, allow_launch_exit=True)
         self.wait(lambda: not self.launch.track(), 12, allow_launch_exit=True)
         if self.launch.process.returncode != 0:
-            raise AssertionError('Q終了後のlaunch終了コード: ' + str(self.launch.process.returncode))
+            raise AssertionError('Ctrl+C終了後のlaunch終了コード: ' + str(self.launch.process.returncode))
         if not self.launch.is_terminal_restored():
-            raise AssertionError('Q終了後のtermios復元不一致')
-        self.report['checks']['quit_and_terminal_restored'] = True
+            raise AssertionError('Ctrl+C終了後のtermios復元不一致')
+        self.report['checks']['ctrl_c_and_terminal_restored'] = True
         self.set_stage('completed')
 
     def close(self):
@@ -324,7 +381,7 @@ class control_trial:
         self.node.destroy_node()
 
 
-def run(args):
+def run(args, trial_factory=control_trial):
     args.output.mkdir(parents=True, exist_ok=True)
     if any((args.output / name).exists() for name in ('report.json', 'ownership.json', 'command.json')):
         raise FileExistsError('既存試験結果への上書き禁止')
@@ -369,7 +426,7 @@ def run(args):
         save_json(args.output / 'baseline_processes.json', [row for row in baseline.values()
                   if any(word in row['command'] for word in ('ros2', 'gzserver', 'gzclient', 'gazebo', '_ros2_daemon'))])
         rclpy.init(args=[], signal_handler_options=SignalHandlerOptions.NO)
-        trial = control_trial(args, report, launch, begin, cancel_state, joints)
+        trial = trial_factory(args, report, launch, begin, cancel_state, joints)
         discovery_deadline = time.monotonic() + 1.5
         while time.monotonic() < discovery_deadline:
             trial.spin()
@@ -380,6 +437,8 @@ def run(args):
                    'robot:=' + args.robot, 'params_file:=' + str(params_file.resolve()), 'gui:=false',
                    'demo_config:=' + str(demo_path.resolve()), 'enable_keyboard:=true',
                    'gazebo_master_uri:=http://127.0.0.1:11369']
+        if hasattr(trial, 'prepare_command'):
+            command = trial.prepare_command(command)
         report['command'] = command
         launch.start(command)
         trial.execute()

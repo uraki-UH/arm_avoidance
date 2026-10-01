@@ -1,6 +1,11 @@
 #ifdef USE_FCL
 
 #include "collision/fcl/fcl_collision_detector.hpp"
+#include "collision/fcl/solid_voxel_geometry.hpp"
+
+#include <iomanip>
+#include <sstream>
+#include <fcl/math/bv/OBB.h>
 
 // FCL collision and distance request/result objects
 #include <fcl/narrowphase/collision.h>
@@ -12,6 +17,68 @@
 #include <iostream>
 
 namespace collision {
+namespace {
+
+// 内部の木座標を維持したまま broadphase の包絡だけを占有範囲へ限定
+class solid_voxel_octree final : public fcl::OcTree<double> {
+ public:
+  explicit solid_voxel_octree(const std::shared_ptr<octomap::OcTree>& tree)
+      : fcl::OcTree<double>(tree) {
+    tree->getMetricMin(min_point_.x(), min_point_.y(), min_point_.z());
+    tree->getMetricMax(max_point_.x(), max_point_.y(), max_point_.z());
+    if (!min_point_.allFinite() || !max_point_.allFinite() ||
+        (min_point_.array() > max_point_.array()).any()) {
+      throw std::runtime_error("Invalid solid voxel occupied bounds");
+    }
+  }
+
+  void computeLocalAABB() override {
+    aabb_local = fcl::AABB<double>(min_point_, max_point_);
+    aabb_center = aabb_local.center();
+    aabb_radius = (aabb_local.max_ - aabb_center).norm();
+  }
+
+ private:
+  fcl::Vector3d min_point_;
+  fcl::Vector3d max_point_;
+};
+
+// 丸め誤差を含むローカル包絡のワールド OBB
+fcl::OBB<double> get_collision_object_obb(
+    const fcl::CollisionObject<double>& object) {
+  const auto& geometry = *object.collisionGeometry();
+  constexpr double bounds_padding = 1e-9;
+  const fcl::Vector3d half_extent =
+      (geometry.aabb_local.max_ - geometry.aabb_local.min_) * 0.5 +
+      fcl::Vector3d::Constant(bounds_padding);
+  return fcl::OBB<double>(object.getRotation(),
+                         object.getTransform() * geometry.aabb_local.center(),
+                         half_extent);
+}
+
+fcl::AABB<double> get_world_aabb_from_obb(const fcl::OBB<double>& bounds) {
+  const fcl::Vector3d extent = bounds.axis.cwiseAbs() * bounds.extent;
+  return fcl::AABB<double>(bounds.To - extent, bounds.To + extent);
+}
+
+}  // 無名名前空間
+
+fcl::AABB<double> get_tight_world_aabb(
+    const fcl::CollisionObject<double>& object) {
+  return get_world_aabb_from_obb(get_collision_object_obb(object));
+}
+
+bool has_collision_bounds_overlap(
+    const fcl::CollisionObject<double>& first,
+    const fcl::CollisionObject<double>& second) {
+  const auto first_bounds = get_collision_object_obb(first);
+  const auto second_bounds = get_collision_object_obb(second);
+  if (!get_world_aabb_from_obb(first_bounds).overlap(
+          get_world_aabb_from_obb(second_bounds))) {
+    return false;
+  }
+  return first_bounds.overlap(second_bounds);
+}
 
 FCLCollisionDetector::FCLCollisionDetector() {}
 
@@ -22,6 +89,7 @@ void FCLCollisionDetector::clearObstacles() {
   obstacle_manager_.clear();
   obstacles_.clear();
   robot_links_.clear();
+  self_collision_pose_cache_.clear();
   robot_manager_dirty_ = true;
   obstacle_manager_dirty_ = true;
   // We keep the geometry_cache_ for possible reuse
@@ -69,23 +137,24 @@ void FCLCollisionDetector::addMeshObstacle(const std::string &stl_path,
 FCLCollisionDetector::BVHModelPtr
 FCLCollisionDetector::getOrLoadMesh(const std::string &stl_path,
                                     const Eigen::Vector3d &scale) {
-  std::string key = stl_path + "_" + std::to_string(scale.x()) + "_" +
-                    std::to_string(scale.y()) + "_" + std::to_string(scale.z());
+  // 近いスケール値を別形状として維持する、復元可能な精度のキー
+  const std::string resolved_path = robot_sim::common::resolvePath(stl_path);
+  std::ostringstream key_stream;
+  key_stream << resolved_path << std::setprecision(
+      std::numeric_limits<double>::max_digits10) << '|' << scale.x() << '|'
+      << scale.y() << '|' << scale.z();
+  const std::string key = key_stream.str();
 
   auto it = geometry_cache_.find(key);
   if (it != geometry_cache_.end()) {
     return it->second;
   }
 
-  // Resolve path
-  std::string resolved_path = robot_sim::common::resolvePath(stl_path);
-
-  // Load using StlLoader
+  // 頂点統合前の有限値検査を含むメッシュ読込み
   using ::simulation::MeshData;
-  using ::simulation::StlLoader;
   MeshData mesh_data;
   try {
-    mesh_data = StlLoader::loadBinaryStl(resolved_path, scale);
+    mesh_data = load_solid_voxel_stl(resolved_path, scale);
   } catch (const std::exception &e) {
     std::cerr << "[FCLDetector] Error loading STL " << stl_path << ": "
               << e.what() << std::endl;
@@ -163,6 +232,45 @@ int FCLCollisionDetector::addRobotMeshLink(const std::string &stl_path,
   robot_manager_.registerObject(obj.get());
   robot_manager_dirty_ = true;
   return index;
+}
+
+int FCLCollisionDetector::addRobotVoxelMeshLink(
+    const std::string &stl_path, const Eigen::Vector3d &scale,
+    double voxel_size) {
+  if (!std::isfinite(voxel_size) || voxel_size <= 0.0 ||
+      !scale.allFinite() || (scale.array() == 0.0).any()) {
+    throw std::invalid_argument("Invalid solid voxel mesh scale or resolution");
+  }
+  const std::string resolved_path = robot_sim::common::resolvePath(stl_path);
+  std::ostringstream key_stream;
+  key_stream << resolved_path << std::setprecision(
+      std::numeric_limits<double>::max_digits10) << '|' << scale.x() << '|'
+      << scale.y() << '|' << scale.z() << '|' << voxel_size;
+  const std::string key = key_stream.str();
+  auto cached = voxel_geometry_cache_.find(key);
+  if (cached == voxel_geometry_cache_.end()) {
+    try {
+      const auto mesh = load_solid_voxel_stl(resolved_path, scale);
+      const auto geometry = build_solid_voxel_geometry(mesh, voxel_size);
+      auto fcl_geometry = std::make_shared<solid_voxel_octree>(geometry.tree);
+      cached = voxel_geometry_cache_.emplace(key, std::move(fcl_geometry)).first;
+      std::cout << "[FCLDetector] Solid voxel mesh: " << resolved_path
+                << " resolution=" << voxel_size
+                << " surface=" << geometry.num_surface_cells
+                << " interior=" << geometry.num_interior_cells << std::endl;
+    } catch (const std::exception &error) {
+      throw std::runtime_error("Solid voxel mesh initialization failed for " +
+                               resolved_path + ": " + error.what());
+    }
+  }
+  auto object = std::make_shared<fcl::CollisionObject<double>>(
+      cached->second, fcl::Transform3d::Identity());
+  const int link_idx = static_cast<int>(robot_links_.size());
+  object->setUserData(reinterpret_cast<void*>(static_cast<intptr_t>(link_idx)));
+  robot_links_.push_back(object);
+  robot_manager_.registerObject(object.get());
+  robot_manager_dirty_ = true;
+  return link_idx;
 }
 
 void FCLCollisionDetector::updateRobotLinkPose(int index,
@@ -258,7 +366,8 @@ FCLCollisionDetector::createFCLCollisionObject(const Capsule &capsule) const {
 std::shared_ptr<fcl::CollisionObject<double>>
 FCLCollisionDetector::createFCLCollisionObject(const Sphere &sphere) const {
   auto fcl_sphere = std::make_shared<fcl::Sphere<double>>(sphere.radius);
-  fcl::Transform3d tf;
+  // 球の登録直後にも有効な剛体変換
+  fcl::Transform3d tf = fcl::Transform3d::Identity();
   tf.translation() = toFCL(sphere.center);
   return std::make_shared<fcl::CollisionObject<double>>(fcl_sphere, tf);
 }
@@ -324,11 +433,13 @@ struct SelfCollisionData {
   const std::vector<std::pair<int, int>> &ignore_pairs;
   const std::vector<std::shared_ptr<fcl::CollisionObject<double>>> &links;
   bool is_collision = false;
+  detail::self_collision_pose_cache *pose_cache = nullptr;
 
   SelfCollisionData(
       const std::vector<std::pair<int, int>> &ignores,
-      const std::vector<std::shared_ptr<fcl::CollisionObject<double>>> &l)
-      : ignore_pairs(ignores), links(l) {}
+      const std::vector<std::shared_ptr<fcl::CollisionObject<double>>> &l,
+      detail::self_collision_pose_cache *cache)
+      : ignore_pairs(ignores), links(l), pose_cache(cache) {}
 };
 
 bool FCLSelfCollisionCallback(fcl::CollisionObject<double> *o1,
@@ -358,9 +469,44 @@ bool FCLSelfCollisionCallback(fcl::CollisionObject<double> *o1,
     }
   }
 
+  if (!has_collision_bounds_overlap(*o1, *o2)) {
+    return false;
+  }
+
+  // 除外規則と包絡を通過したペアだけの、近似を伴わない姿勢照合
+  const bool can_use_pose_cache = col_data->pose_cache && idx1 >= 0 && idx2 >= 0;
+  const auto *first = idx1 <= idx2 ? o1 : o2;
+  const auto *second = idx1 <= idx2 ? o2 : o1;
+  std::uint64_t pair_key = 0;
+  if (can_use_pose_cache) {
+    pair_key = (static_cast<std::uint64_t>(std::min(idx1, idx2)) << 32) |
+        static_cast<std::uint32_t>(std::max(idx1, idx2));
+    const auto found = col_data->pose_cache->find(pair_key);
+    if (found != col_data->pose_cache->end()) {
+      const auto &entry = found->second;
+      if (entry.first_geometry == first->collisionGeometry() &&
+          entry.second_geometry == second->collisionGeometry() &&
+          (entry.first_pose.matrix().array() == first->getTransform().matrix().array()).all() &&
+          (entry.second_pose.matrix().array() == second->getTransform().matrix().array()).all()) {
+        col_data->is_collision = entry.is_collision;
+        return entry.is_collision;
+      }
+    }
+  }
+
   fcl::CollisionRequest<double> request;
   fcl::CollisionResult<double> result;
   fcl::collide(o1, o2, request, result);
+
+  if (can_use_pose_cache) {
+    detail::self_collision_pose_cache_entry entry;
+    entry.first_geometry = first->collisionGeometry();
+    entry.second_geometry = second->collisionGeometry();
+    entry.first_pose = first->getTransform();
+    entry.second_pose = second->getTransform();
+    entry.is_collision = result.isCollision();
+    (*col_data->pose_cache)[pair_key] = std::move(entry);
+  }
 
   if (result.isCollision()) {
     col_data->is_collision = true;
@@ -402,7 +548,8 @@ bool FCLCollisionDetector::checkRobotCollision() const {
 }
 
 bool FCLCollisionDetector::checkSelfCollision(
-    const std::vector<std::pair<int, int>> &ignore_pairs) const {
+    const std::vector<std::pair<int, int>> &ignore_pairs,
+    bool enable_pose_cache) const {
   if (robot_links_.size() < 2)
     return false;
 
@@ -411,7 +558,8 @@ bool FCLCollisionDetector::checkSelfCollision(
     robot_manager_dirty_ = false;
   }
 
-  SelfCollisionData col_data(ignore_pairs, robot_links_);
+  SelfCollisionData col_data(ignore_pairs, robot_links_,
+      enable_pose_cache ? &self_collision_pose_cache_ : nullptr);
   robot_manager_.collide(&col_data, FCLSelfCollisionCallback);
 
   return col_data.is_collision;

@@ -1449,19 +1449,13 @@ public:
         this->declare_parameter<double>("gng.spatial_map.inflation", 0.0);
     self_recognition_inflation_ =
         this->declare_parameter<double>("gng.self_recognition.inflation", 0.02);
-    collision_voxel_ball_config_ = simulation::declareVoxelBallCollisionConfig(
-        *this, spatial_map_resolution_, spatial_map_inflation_);
-    RCLCPP_INFO(
-        this->get_logger(),
-        "[Collision] voxel_ball config: voxel_size=%.6f voxel_padding=%.6f max_spheres=%zu min_points_per_sphere=%zu min_gain_ratio=%.3f refine_iterations=%zu containment_margin=%.3f verbose=%s",
-        collision_voxel_ball_config_.voxel_size,
-        collision_voxel_ball_config_.voxel_padding,
-        collision_voxel_ball_config_.fit_options.max_spheres,
-        collision_voxel_ball_config_.fit_options.min_points_per_sphere,
-        collision_voxel_ball_config_.fit_options.min_gain_ratio,
-        collision_voxel_ball_config_.fit_options.refine_iterations,
-        collision_voxel_ball_config_.fit_options.containment_margin,
-        collision_voxel_ball_config_.fit_options.verbose ? "true" : "false");
+    const double legacy_collision_voxel_size = this->declare_parameter<double>(
+        "collision.voxel_ball.voxel_size", 0.001);
+    collision_voxel_size_ = this->declare_parameter<double>(
+        "collision.voxel_size", legacy_collision_voxel_size);
+    if (!std::isfinite(collision_voxel_size_) || collision_voxel_size_ <= 0.0) {
+      throw std::invalid_argument("collision.voxel_size must be positive and finite");
+    }
 
     if (skip_collision_checks_) {
       enable_ground_collision_ = false;
@@ -1565,6 +1559,8 @@ public:
         this->declare_parameter<double>("gng_params.alpha", 0.5);
     gng_params_.beta =
         this->declare_parameter<double>("gng_params.beta", 0.0005);
+    gng_params_.enable_nearest_index = this->declare_parameter<bool>(
+        "gng_params.enable_nearest_index", true);
     gng_params_.n_best_candidates =
         this->declare_parameter<int>("gng_params.n_best_candidates", 4);
     gng_params_.ais_threshold =
@@ -1856,7 +1852,6 @@ public:
     // 2. Setup Checkers
     std::shared_ptr<simulation::GeometricSelfCollisionChecker> self_checker;
     std::shared_ptr<simulation::EnvironmentCollisionChecker> env_checker;
-    simulation::RobotModel voxel_ball_model = base_model_obj;
     if (!skip_collision_checks_) {
       env_checker =
           std::make_shared<simulation::EnvironmentCollisionChecker>();
@@ -1867,12 +1862,7 @@ public:
       }
     }
 
-#ifdef USE_FCL
-    if (self_checker) {
-      self_checker->setStrictMode(true);
-    }
-#endif
-    // 3. GNG Setup
+    // 全身衝突形状による学習用チェッカーの構成
     std::shared_ptr<simulation::ISelfCollisionChecker> final_checker;
     if (skip_collision_checks_) {
       RCLCPP_WARN(this->get_logger(),
@@ -1880,16 +1870,10 @@ public:
       final_checker.reset();
     } else if (use_voxel_collision_) {
       RCLCPP_INFO(this->get_logger(),
-                  "[Collision] Using voxel-ballified GeometricSelfCollisionChecker "
-                  "(res: %f, pad: %f, fit_voxel: %f, fit_pad: %f)",
-                  spatial_map_resolution_, spatial_map_inflation_,
-                  collision_voxel_ball_config_.voxel_size,
-                  collision_voxel_ball_config_.voxel_padding);
-      voxel_ball_model = simulation::buildVoxelBallCollisionModel(
-          base_model_obj, combined_voxel_link_names,
-          collision_voxel_ball_config_);
+                  "[Collision] Using all-link mesh surfaces and solid voxel containment (resolution: %.6f m)",
+                  collision_voxel_size_);
       self_checker = std::make_shared<simulation::GeometricSelfCollisionChecker>(
-          voxel_ball_model, *arm, false);
+          base_model_obj, *arm, true, collision_voxel_size_);
       auto composite_checker =
           std::make_shared<simulation::CompositeCollisionChecker>();
       composite_checker->setSelfCollisionChecker(self_checker);
@@ -1918,6 +1902,10 @@ public:
       final_checker = composite_checker;
     }
 
+#ifdef USE_FCL
+    if (self_checker) self_checker->setStrictMode(true);
+#endif
+
     std::vector<std::pair<std::string, std::string>> initial_collisions;
     if (!skip_collision_checks_) {
       // 初期姿勢での自己衝突候補を評価する。
@@ -1933,8 +1921,7 @@ public:
       if (validate_voxel_link_masks_) {
         RCLCPP_WARN(this->get_logger(),
                     "[Collision][Validation] Requested voxel validation, "
-                    "but voxel-mask checker is no longer used in the "
-                    "ballified collision path.");
+                    "but solid occupancy collision does not use voxel link masks.");
       }
 
       if (enable_self_collision_) {
@@ -2018,17 +2005,10 @@ public:
       }
     }
 
-    // 承認済みの初期衝突候補は、そのまま除外ペアとして採用。承認制OFFの場合は、初期候補を自動採用。
-    const bool auto_accept_initial_collisions =
-        !require_initial_collision_approval_ ||
-        !apply_self_collision_exclusion_pairs_ || !enable_self_collision_;
+    // 明示されたペアだけを除外。初期姿勢の接触からの全姿勢除外は禁止。
     if (!skip_collision_checks_ && apply_self_collision_exclusion_pairs_ && enable_self_collision_) {
-      for (const auto &pair : filtered_initial_collisions) {
-        const std::string key = makePairKey(pair.first, pair.second);
-        if (auto_accept_initial_collisions ||
-            approved_initial_pairs.count(key) > 0) {
-          manual_exclusion_pairs.insert(key);
-        }
+      for (const auto &key : approved_initial_pairs) {
+        manual_exclusion_pairs.insert(key);
       }
     }
 
@@ -2051,6 +2031,8 @@ public:
 
     // Initialize GNG parameters from ROS 2 parameters
     gng.setParams(gng_params_);
+    RCLCPP_INFO(this->get_logger(), "[NearestSearch] enable_nearest_index=%s (3/7/14 dimensions)",
+                gng_params_.enable_nearest_index ? "true" : "false");
 
     gng.setSelfCollisionChecker(final_checker.get());
     // Initialize Status Providers
@@ -2137,7 +2119,8 @@ public:
         gng.trainCoordEdgesOnTheFly(gng_params_.coord_edge_iterations, layer);
       }
 
-      // Metadata update for finale
+      // TCP層で追加された辺を含む、保存前の全層自己干渉検査。
+      if (!skip_collision_checks_) gng.strictFilter();
       gng.triggerBatchUpdates();
     }
 
@@ -2156,8 +2139,7 @@ public:
 
     RCLCPP_INFO(this->get_logger(), "[Step 6] Pre-voxelizing Robot Links...");
 
-    // VLUT generation always uses the original robot geometry, not the
-    // spherized training model. This keeps the arm voxelization consistent.
+    // VLUT占有は元URDFの形状から生成。自己干渉検査の近似形状との分離。
     struct LocalVoxelCloud {
       std::vector<fcl::Vector3d> centers;
     };
@@ -2391,7 +2373,7 @@ private:
   bool vlut_only_ = false;
   bool use_voxel_collision_ = false;
   TcpThresholdConfig tcp_threshold_;
-  simulation::VoxelBallCollisionConfig collision_voxel_ball_config_;
+  double collision_voxel_size_ = 0.001;
 
   GNG::GngParameters gng_params_;
 };

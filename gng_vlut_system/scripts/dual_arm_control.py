@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Gazebo回避・リーダー追従の排他出力と停止ラッチの操作窓口。実機送信なし。"""
+"""Gazebo回避・追従と、明示許可時のUDP目標出力。"""
 
 import json
 import math
+from pathlib import Path
 import time
 
 import rclpy
@@ -11,12 +12,15 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, qos_profile_sensor_data
 from builtin_interfaces.msg import Time
 from controller_manager_msgs.srv import SwitchController
+from control_msgs.msg import JointTrajectoryControllerState
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Empty, String
 from std_srvs.srv import SetBool, Trigger
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+import yaml
 
 from dual_arm_mode_model import mode_model
+from dual_arm_udp_output import udp_output
 from gazebo_stop_keyboard import status_label
 
 
@@ -30,6 +34,12 @@ class dual_arm_control(Node):
         urdf_path = self.declare_parameter('urdf_path', '').value
         max_velocity = self.declare_parameter('max_leader_velocity', 0.3).value
         self.model = mode_model(urdf_path, max_joint_velocity=max_velocity)
+        udp_config = self.declare_parameter('udp_config', '').value
+        allow_remote_udp = self.declare_parameter('allow_remote_udp', False).value
+        self.udp = None
+        if udp_config:
+            config = yaml.safe_load(Path(udp_config).read_text())
+            self.udp = udp_output(urdf_path, config['dual_arm_udp'], allow_remote_udp=allow_remote_udp)
         self.phase, self.detail = 'idle', '保持。A:回避 / L:追従 / Space:停止'
         self.target_mode = 'hold'
         self.safety, self.demo = {}, {}
@@ -52,6 +62,9 @@ class dual_arm_control(Node):
         self.create_subscription(String, 'safety/status', self.on_safety, QoSProfile(depth=1))
         self.create_subscription(String, 'avoidance/status', self.on_demo, 1)
         self.create_subscription(Empty, 'control/heartbeat', self.on_heartbeat, 1)
+        if self.udp is not None:
+            self.create_subscription(JointTrajectoryControllerState, 'dual_arm_controller/state',
+                                     self.on_controller_state, qos_profile_sensor_data)
         self.service_clients = {name: self.create_client(Trigger, name) for name in
                         ('avoidance/start', 'avoidance/stop', 'safety/stop', 'safety/reset')}
         self.service_clients['switch'] = self.create_client(SwitchController, 'controller_manager/switch_controller')
@@ -73,8 +86,8 @@ class dual_arm_control(Node):
     def on_safety(self, message):
         self.safety, self.safety_sec = self.decode(message), time.monotonic()
         if self.safety.get('is_stop_latched') is True and not self.phase.startswith('reset_'):
-            self.model.stop()
-            self.phase = 'stopped'
+            if self.phase != 'stopped':
+                self.stop('Gazebo停止ラッチ。UDP出力も無効化')
 
     def on_demo(self, message):
         value = self.decode(message)
@@ -91,6 +104,25 @@ class dual_arm_control(Node):
 
     def on_heartbeat(self, _message):
         self.heartbeat_sec = time.monotonic()
+
+    def on_controller_state(self, message):
+        # Gazebo controllerの補間済み目標。実測角の転送や終点への即時ジャンプなし
+        if self.udp is None:
+            return
+        is_enabled = self.udp.is_enabled
+        stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
+        try:
+            if not -0.1 <= self.joint_stamp - stamp <= 0.5:
+                raise ValueError('UDP元のcontroller目標時刻が失効しています')
+            self.udp.update_target(message.joint_names, message.desired.positions, stamp, time.monotonic())
+        except (ValueError, OSError) as error:
+            if is_enabled:
+                self.stop('UDP目標異常: ' + str(error))
+            else:
+                try:
+                    self.udp.disable(str(error))
+                except (ValueError, OSError):
+                    pass
 
     def on_state(self, message):
         stamp = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
@@ -119,12 +151,18 @@ class dual_arm_control(Node):
     def request_mode(self, name, enable_mode, response):
         target = name if enable_mode else 'hold'
         now = time.monotonic()
-        if self.future is not None or self.phase not in ('idle',):
+        if self.future is not None or self.phase != 'idle' or self.has_unconfirmed_operation:
             response.success, response.message = False, '処理中または停止ラッチ中です。状態を確認してください'
         elif not self.is_ready(now):
             response.success, response.message = False, 'Gazebo実測・停止状態・端末の新鮮な更新が必要です'
+        elif enable_mode and self.model.mode != 'hold':
+            response.success, response.message = False, '開始はホールドからのみ可能です。現在のモードをOFFにしてください'
+        elif not enable_mode and self.model.mode not in ('hold', name):
+            response.success, response.message = False, '別モードからの切替はできません。現在のモードをOFFにしてください'
         elif enable_mode and name == 'leader' and not self.model.has_fresh_leader(now):
             response.success, response.message = False, 'リーダーの新鮮な関節入力が必要です'
+        elif not enable_mode and self.model.mode == 'hold':
+            response.success, response.message = True, 'ホールドを継続しています'
         else:
             try:
                 self.model.enter('hold', now)
@@ -141,17 +179,49 @@ class dual_arm_control(Node):
         return self.request_mode('avoidance', request.data, response)
 
     def on_leader_mode(self, request, response):
+        if request.data and self.phase == 'stopped':
+            response = self.on_reset(None, response)
+            if response.success:
+                self.detail = 'Lによる停止解除の確認中。解除後はホールド、UDP出力OFF'
+                response.message = '停止解除要求の受付。ホールド確認後、もう一度Lで追従開始'
+            return response
+        if not request.data and self.phase.startswith('reset_'):
+            self.stop('追従OFFによる解除取消。停止ラッチの保持')
+            response.success, response.message = True, self.detail
+            return response
         return self.request_mode('leader', request.data, response)
 
     def on_hardware(self, request, response):
-        response.success = not request.data
-        response.message = ('実機送信は無効です。機種別校正・実測鮮度・実機停止adapterが未確認のためON拒否'
-                            if request.data else '実機送信: OFF')
+        if self.udp is None:
+            response.success = not request.data
+            response.message = ('実機送信は無効です。UDP設定未指定のためON拒否'
+                                if request.data else '実機送信: OFF')
+            return response
+        now = time.monotonic()
+        try:
+            if not request.data:
+                self.udp.disable('HによるUDP出力OFF。実機停止完了は未確認')
+            else:
+                if (self.phase != 'idle' or self.future is not None or self.has_unconfirmed_operation
+                        or self.model.mode != 'hold'
+                        or not self.is_ready(now) or not self.model.is_stationary(now)):
+                    raise ValueError('UDP出力ONには保持モードと新鮮な静止確認が必要です')
+                self.udp.poll(now)
+                self.udp.enable(now)
+            response.success = True
+            response.message = 'UDP出力: ' + ('ON' if request.data else 'OFF。実機停止完了は未確認')
+        except (ValueError, OSError) as error:
+            response.success, response.message = False, str(error)
         return response
 
     def stop(self, detail):
         self.model.stop()
         self.phase, self.detail, self.is_stop_required = 'stopped', detail, True
+        if self.udp is not None:
+            try:
+                self.udp.disable(detail)
+            except (ValueError, OSError) as error:
+                self.detail += ' / UDP停止送信の失敗: ' + str(error)
         # 送信済み非同期要求は完了まで追跡。停止後の遅延応答によるモード復帰なし
 
     def on_stop(self, _request, response):
@@ -252,11 +322,12 @@ class dual_arm_control(Node):
             elif now > self.deadline:
                 raise RuntimeError('停止ラッチ解除の状態未確認')
         elif self.phase == 'reset_wait_active':
-            if self.is_ready(now):
+            if self.is_ready(now) and self.model.is_stationary(now):
                 self.model.enter('hold', now)
-                self.phase, self.detail = 'idle', '解除済み・保持。AまたはLで明示開始'
+                self.has_initialized_mode = True
+                self.phase, self.detail = 'idle', '解除済み・ホールド。Aで回避、Lで追従。UDP出力OFF'
             elif now > self.deadline:
-                raise RuntimeError('controller再activationの状態未確認')
+                raise RuntimeError('controller再activationまたは実測静止の状態未確認')
 
     def on_avoidance(self, message):
         now = time.monotonic()
@@ -303,6 +374,8 @@ class dual_arm_control(Node):
     def tick(self):
         now = time.monotonic()
         try:
+            if self.udp is not None:
+                self.udp.poll(now)
             if math.isfinite(self.heartbeat_sec) and now - self.heartbeat_sec > 0.5:
                 self.stop('操作端末の接続失効')
             if (self.has_initialized_mode and (self.phase == 'idle' or self.phase.startswith('switch_'))
@@ -327,6 +400,8 @@ class dual_arm_control(Node):
                 values = self.model.command(now, self.get_clock().now().nanoseconds * 1e-9)
                 if values is not None:
                     self.publish_positions(values)
+            if self.udp is not None:
+                self.udp.tick(now)
         except Exception as error:
             self.stop(str(error))
         if self.stop_future is not None and (self.stop_future.done() or now > self.stop_deadline):
@@ -339,8 +414,10 @@ class dual_arm_control(Node):
             self.stop_future = self.service_clients['safety/stop'].call_async(Trigger.Request())
             self.stop_deadline = now + 2
         if now - self.last_status_sec >= 0.1:
+            udp_status = self.udp.status(now) if self.udp is not None else None
             value = {'mode': self.model.mode if self.phase in ('idle', 'stopped') else 'switching',
-                     'phase': self.phase, 'enable_hardware_output': False,
+                     'phase': self.phase, 'enable_hardware_output': self.udp is not None and self.udp.is_enabled,
+                     'udp': udp_status,
                      'detail': self.detail, 'has_fresh_leader': self.model.has_fresh_leader(now),
                      'is_ready': self.is_ready(now)}
             self.status.publish(String(data=json.dumps(value, ensure_ascii=False)))
@@ -357,7 +434,13 @@ def main():
         pass
     finally:
         if node is not None:
-            node.destroy_node()
+            try:
+                if node.udp is not None:
+                    node.udp.close()
+            except (ValueError, OSError) as error:
+                node.get_logger().error('UDP終了時の停止パケット送信未確認: ' + str(error))
+            finally:
+                node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
 

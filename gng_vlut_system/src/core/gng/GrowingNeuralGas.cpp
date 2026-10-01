@@ -1,4 +1,7 @@
 #include "GrowingNeuralGas.hpp"
+#include "nearest_node_index.hpp"
+#include "collision/joint_segment_collision.hpp"
+#include <map>
 #include "collision/geometric_self_collision_checker.hpp"
 #include "collision/voxel_collision_checker.hpp"
 #include "safety_engine/vlut/iself_collision_checker.hpp"
@@ -138,6 +141,7 @@ GrowingNeuralGas<T_angle, T_coord>::~GrowingNeuralGas() {}
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::setCoordLayerCount(int layer_count) {
+  coord_nearest_indexes_.clear();
   coord_layer_count_ = std::max(1, layer_count);
   edges_coord_per_layer_.assign(
       coord_layer_count_,
@@ -201,15 +205,20 @@ void GrowingNeuralGas<T_angle, T_coord>::runStatusProviders(
   if (node_id < 0 || (size_t)node_id >= nodes.size() || nodes[node_id].id == -1)
     return;
   auto &node = nodes[node_id];
+  bool has_position_writer = false;
   for (auto &provider : providers_) {
     auto triggers = provider->getTriggers();
     if (std::find(triggers.begin(), triggers.end(), trigger) !=
         triggers.end()) {
       if (provider->shouldUpdate(node, trigger)) {
+        has_position_writer = has_position_writer || provider->can_modify_node_positions();
         provider->update(node, trigger);
       }
     }
   }
+  // callbackが保持する別ノード参照への変更も含む索引の無効化。
+  if (has_position_writer) invalidate_nearest_indexes();
+  else sync_nearest_node(node_id);
 }
 
 template <typename T_angle, typename T_coord>
@@ -246,6 +255,11 @@ template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::remove_node(int node) {
   if (node < 0 || (size_t)node >= nodes.size() || nodes[node].id == -1)
     return;
+
+  if (angle_nearest_index_) angle_nearest_index_->remove_point(node);
+  for (auto &index : coord_nearest_indexes_) {
+    if (index) index->remove_point(node);
+  }
 
   if (!edges_coord_per_node[node].empty()) {
     std::vector<int> coord_neighbors(edges_coord_per_node[node].begin(),
@@ -396,8 +410,10 @@ void GrowingNeuralGas<T_angle, T_coord>::update_node_weights(
   nodes[node_id].weight_angle +=
       step * (sample_angle - nodes[node_id].weight_angle);
 
-  // NOTE: skip weight_coord update (FK) during training for efficiency.
-  // It should be refreshed by calling refresh_coord_weights() before saving.
+  if (angle_nearest_index_) {
+    angle_nearest_index_->set_point(node_id, nodes[node_id].weight_angle.data());
+  }
+  // 学習中のFK省略。保存前のrefresh_coord_weightsによる座標更新。
 }
 
 template <typename T_angle, typename T_coord>
@@ -412,6 +428,7 @@ void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights() {
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
     int coord_layer_index) {
+  coord_nearest_indexes_.clear();
   if (!kinematic_chain_)
     return;
   if (coord_layer_index < 0 ||
@@ -449,6 +466,117 @@ void GrowingNeuralGas<T_angle, T_coord>::refresh_coord_weights(
 }
 
 template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::invalidate_nearest_indexes() {
+  angle_nearest_index_.reset();
+  coord_nearest_indexes_.clear();
+}
+
+template <typename T_angle, typename T_coord>
+const T_coord &GrowingNeuralGas<T_angle, T_coord>::node_coord(
+    int node_id, int coord_layer_idx) const {
+  const auto &node = nodes[node_id];
+  return coord_layer_idx == 0 ||
+                 node.weight_coords.size() <= static_cast<std::size_t>(coord_layer_idx)
+             ? node.weight_coord : node.weight_coords[coord_layer_idx];
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::sync_nearest_node(int node_id) {
+  if (angle_nearest_index_) {
+    if (nodes[node_id].weight_angle.size() != angle_dimension) {
+      angle_nearest_index_.reset();
+    } else {
+      angle_nearest_index_->set_point(node_id, nodes[node_id].weight_angle.data());
+    }
+  }
+  for (std::size_t layer_idx = 0; layer_idx < coord_nearest_indexes_.size(); ++layer_idx) {
+    auto &index = coord_nearest_indexes_[layer_idx];
+    if (!index) continue;
+    const auto &coord = node_coord(node_id, static_cast<int>(layer_idx));
+    if (coord.size() != coord_dimension) index.reset();
+    else index->set_point(node_id, coord.data());
+  }
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::find_nearest_angle(
+    const T_angle &sample_angle, int num_candidates) {
+  if (params_.enable_nearest_index && sample_angle.size() == angle_dimension) {
+    if (!angle_nearest_index_) {
+      angle_nearest_index_ = std::make_unique<nearest_node_index>(angle_dimension);
+      if (angle_nearest_index_->is_supported()) {
+        for (int node_idx = 0; node_idx < static_cast<int>(nodes.size()); ++node_idx) {
+          if (nodes[node_idx].id == -1) continue;
+          angle_nearest_index_->set_point(node_idx,
+              nodes[node_idx].weight_angle.size() == angle_dimension
+                  ? nodes[node_idx].weight_angle.data() : nullptr);
+        }
+      }
+    }
+    if (angle_nearest_index_->query(sample_angle.data(), num_candidates,
+            [&](int node_idx) { return calc_squaredNorm_angle(sample_angle, nodes[node_idx].weight_angle); },
+            candidates_buffer_)) return;
+  }
+  candidates_buffer_.clear();
+  candidates_buffer_.reserve(nodes.size());
+  for (int node_idx = 0; node_idx < static_cast<int>(nodes.size()); ++node_idx) {
+    if (nodes[node_idx].id != -1) candidates_buffer_.emplace_back(
+        calc_squaredNorm_angle(sample_angle, nodes[node_idx].weight_angle), node_idx);
+  }
+  const auto num_found = std::min(candidates_buffer_.size(), static_cast<std::size_t>(num_candidates));
+  std::partial_sort(candidates_buffer_.begin(), candidates_buffer_.begin() + num_found,
+                    candidates_buffer_.end());
+  candidates_buffer_.resize(num_found);
+}
+
+template <typename T_angle, typename T_coord>
+void GrowingNeuralGas<T_angle, T_coord>::find_nearest_coord(
+    const T_coord &sample_coord, int coord_layer_idx) {
+  if (params_.enable_nearest_index && sample_coord.size() == coord_dimension) {
+    if (coord_nearest_indexes_.size() != static_cast<std::size_t>(coord_layer_count_)) {
+      coord_nearest_indexes_.resize(coord_layer_count_);
+    }
+    auto &index = coord_nearest_indexes_[coord_layer_idx];
+    if (!index) {
+      index = std::make_unique<nearest_node_index>(coord_dimension);
+      if (index->is_supported()) {
+        for (int node_idx = 0; node_idx < static_cast<int>(nodes.size()); ++node_idx) {
+          if (nodes[node_idx].id == -1) continue;
+          const auto &coord = node_coord(node_idx, coord_layer_idx);
+          index->set_point(node_idx, coord.size() == coord_dimension ? coord.data() : nullptr);
+        }
+      }
+    }
+    if (index->query(sample_coord.data(), 2,
+            [&](int node_idx) { return calc_squaredNorm_coord(sample_coord, node_coord(node_idx, coord_layer_idx)); },
+            candidates_buffer_)) {
+      // 従来のTCP走査で候補外となる最大float距離の除外。
+      candidates_buffer_.erase(std::remove_if(candidates_buffer_.begin(), candidates_buffer_.end(),
+          [](const auto &candidate) { return !(candidate.first < std::numeric_limits<float>::max()); }),
+          candidates_buffer_.end());
+      return;
+    }
+  }
+  // 従来の走査順と同距離時の小さいID優先を保持した2近傍。
+  int first_idx = -1, second_idx = -1;
+  float first_dist = std::numeric_limits<float>::max();
+  float second_dist = first_dist;
+  for (int node_idx = 0; node_idx < static_cast<int>(nodes.size()); ++node_idx) {
+    if (nodes[node_idx].id == -1) continue;
+    const float dist = calc_squaredNorm_coord(sample_coord, node_coord(node_idx, coord_layer_idx));
+    if (dist < first_dist) {
+      second_dist = first_dist; second_idx = first_idx;
+      first_dist = dist; first_idx = node_idx;
+    } else if (dist < second_dist) {
+      second_dist = dist; second_idx = node_idx;
+    }
+  }
+  candidates_buffer_.clear();
+  if (first_idx != -1) candidates_buffer_.emplace_back(first_dist, first_idx);
+  if (second_idx != -1) candidates_buffer_.emplace_back(second_dist, second_idx);
+}
+
+template <typename T_angle, typename T_coord>
 bool GrowingNeuralGas<T_angle, T_coord>::internalCheckColliding(
     const T_angle &angles) {
   if (!collision_checker_ || !kinematic_chain_)
@@ -464,70 +592,32 @@ template <typename T_angle, typename T_coord>
 bool GrowingNeuralGas<T_angle, T_coord>::internalCheckPathColliding(
     const T_angle &q1, const T_angle &q2, int /*steps*/) {
 
-  // 1. リプシッツ性に基づいた早期スキップ検討
-  // $\|q2 - q1\|$ が極めて小さければ、ノードの安全マージンの範囲内に収まるため
-  // 再帰を回さずに通過させて良い（ノード自体の安全は前提）。
-  float dist_q = (q1 - q2).norm();
-  if (dist_q < 0.001f)
-    return false; // 約0.05度以下の微小区間はスキップ
-
-  // 2. 再帰的な二分探索 (Bisection) 実行用のラムダ
-  // Reduced depth from 6 (64 segments) to 3 (8 segments) for massive speedup in Step 3
-  std::function<bool(const T_angle &, const T_angle &, int)> check_recursive;
-  check_recursive = [&](const T_angle &a, const T_angle &b, int depth) -> bool {
-    if (depth >= 3)
-      return false;
-
-    T_angle mid = (a + b) * 0.5f;
-    if (internalCheckColliding(mid))
-      return true; // 発見次第、即座に早期リターン
-
-    // 左右の区間を再帰的にチェック
-    return check_recursive(a, mid, depth + 1) ||
-           check_recursive(mid, b, depth + 1);
-  };
-
-  return check_recursive(q1, q2, 0);
+  // 端点と全関節の補間刻みに基づく検査。微小区間の無条件通過なし。
+  return simulation::has_joint_segment_collision(
+      q1, q2, 0.025, [this](const T_angle &angles) {
+        return internalCheckColliding(angles);
+      });
 }
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
     const T_angle &sample_angle) {
-  // 1. Find N-best candidates
-  candidates_buffer_.clear();
-  candidates_buffer_.reserve(nodes.size());
-
-  // 定期的な一括誤差減衰に切り替え (O(I*N) から O(I*N/freq) に削減)
-  const int DECAY_FREQ = 100;
+  // 従来と同じ100反復ごとの誤差減衰。近傍探索から独立した全ノード更新。
+  constexpr int num_decay_steps = 100;
   accumulated_decay_factor_ *= (1.0f - params_.beta);
-  decay_step_count_++;
-
-  bool should_apply_global_decay = (decay_step_count_ >= DECAY_FREQ);
-
-  for (int i = 0; i < (int)nodes.size(); ++i) {
-    if (nodes[i].id == -1)
-      continue;
-    
-    // 周期的な減衰の適用
-    if (should_apply_global_decay) {
-      nodes[i].error_angle *= accumulated_decay_factor_;
+  ++decay_step_count_;
+  if (decay_step_count_ >= num_decay_steps) {
+    for (auto &node : nodes) {
+      if (node.id != -1) node.error_angle *= accumulated_decay_factor_;
     }
-
-    float d2 = calc_squaredNorm_angle(sample_angle, nodes[i].weight_angle);
-    candidates_buffer_.push_back({d2, i});
-  }
-
-  if (should_apply_global_decay) {
     accumulated_decay_factor_ = 1.0f;
     decay_step_count_ = 0;
   }
 
-  if (candidates_buffer_.size() < 2)
-    return;
-
-  int n_search = std::min((int)candidates_buffer_.size(), params_.n_best_candidates);
-  std::partial_sort(candidates_buffer_.begin(), candidates_buffer_.begin() + n_search,
-                    candidates_buffer_.end());
+  find_nearest_angle(sample_angle, std::max(2, params_.n_best_candidates));
+  if (candidates_buffer_.size() < 2) return;
+  const int n_search = std::max(0, std::min(
+      static_cast<int>(candidates_buffer_.size()), params_.n_best_candidates));
 
   std::deque<int> candidate_ids;
   for (int i = 0; i < n_search; ++i)
@@ -736,6 +826,8 @@ void GrowingNeuralGas<T_angle, T_coord>::one_train_update(
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::gngTrain(
     const std::vector<T_angle> &samples, int max_iter) {
+  // 保持された外部参照による呼出し間の座標変更の反映。
+  invalidate_nearest_indexes();
   if (samples.empty())
     return;
   int iters = (max_iter == -1) ? (int)samples.size() : max_iter;
@@ -746,6 +838,7 @@ void GrowingNeuralGas<T_angle, T_coord>::gngTrain(
 
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::gngTrainOnTheFly(int max_iter) {
+  invalidate_nearest_indexes();
   if (!kinematic_chain_)
     return;
   
@@ -783,6 +876,7 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(int max_iter) {
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
     int max_iter, int coord_layer_index) {
+  coord_nearest_indexes_.clear();
   if (!kinematic_chain_)
     return;
   if (coord_layer_index < 0 ||
@@ -802,29 +896,9 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
     }
     T_coord s_coord = calculateFK(q_truncated, coord_layer_index);
 
-    int s1 = -1, s2 = -1;
-    float d1 = std::numeric_limits<float>::max();
-    float d2 = std::numeric_limits<float>::max();
-
-    for (int n = 0; n < (int)nodes.size(); ++n) {
-      if (nodes[n].id != -1) {
-        const T_coord &target_coord =
-            (coord_layer_index == 0 ||
-             nodes[n].weight_coords.size() <= static_cast<std::size_t>(coord_layer_index))
-                ? nodes[n].weight_coord
-                : nodes[n].weight_coords[coord_layer_index];
-        float d = calc_squaredNorm_coord(s_coord, target_coord);
-        if (d < d1) {
-          d2 = d1;
-          s2 = s1;
-          d1 = d;
-          s1 = n;
-        } else if (d < d2) {
-          d2 = d;
-          s2 = n;
-        }
-      }
-    }
+    find_nearest_coord(s_coord, coord_layer_index);
+    const int s1 = candidates_buffer_.empty() ? -1 : candidates_buffer_[0].second;
+    const int s2 = candidates_buffer_.size() < 2 ? -1 : candidates_buffer_[1].second;
 
     if (s1 == -1)
       continue;
@@ -868,6 +942,7 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdgesOnTheFly(
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdges(
     const std::vector<T_angle> &angle_samples, int max_iter) {
+  coord_nearest_indexes_.clear();
   if (angle_samples.empty())
     return;
 
@@ -880,25 +955,10 @@ void GrowingNeuralGas<T_angle, T_coord>::trainCoordEdges(
     const T_angle &s_angle = angle_samples[rand() % angle_samples.size()];
     T_coord s_coord = calculateFK(s_angle);
 
-    // 2. Find 2 nearest nodes in COORD space
-    int s1 = -1, s2 = -1;
-    float d1 = std::numeric_limits<float>::max();
-    float d2 = std::numeric_limits<float>::max();
-
-    for (int n = 0; n < (int)nodes.size(); ++n) {
-      if (nodes[n].id != -1) {
-        float d = calc_squaredNorm_coord(s_coord, nodes[n].weight_coord);
-        if (d < d1) {
-          d2 = d1;
-          s2 = s1;
-          d1 = d;
-          s1 = n;
-        } else if (d < d2) {
-          d2 = d;
-          s2 = n;
-        }
-      }
-    }
+    // TCP座標の厳密2近傍。
+    find_nearest_coord(s_coord, 0);
+    const int s1 = candidates_buffer_.empty() ? -1 : candidates_buffer_[0].second;
+    const int s2 = candidates_buffer_.size() < 2 ? -1 : candidates_buffer_[1].second;
 
     if (s1 == -1)
       continue;
@@ -967,20 +1027,34 @@ void GrowingNeuralGas<T_angle, T_coord>::strictFilter() {
 
   printTopCollisionPairs(collision_pair_counts);
 
-  // 2. Remove colliding edges among the remaining valid nodes
+  // 全層の辺を関節角で検査。同じ端点ペアの結果を層間で共有。
   int removed_edges = 0;
-  for (int i = 0; i < (int)nodes.size(); ++i) {
-    if (nodes[i].id == -1)
-      continue;
-
-    // Neighbors are already a vector
-    std::vector<int> neighbors_copy = edges_angle_per_node[i];
-    for (int n : neighbors_copy) {
-      if (i < n) { // Check each edge only once
-        if (internalCheckPathColliding(nodes[i].weight_angle,
-                                       nodes[n].weight_angle, 50)) {
-          remove_edge_angle(i, n);
-          removed_edges++;
+  std::map<std::pair<int, int>, bool> edge_collisions;
+  const auto is_edge_colliding = [&](int first, int second) {
+    const auto key = std::minmax(first, second);
+    const std::pair<int, int> ids{key.first, key.second};
+    const auto found = edge_collisions.find(ids);
+    if (found != edge_collisions.end()) return found->second;
+    const bool is_colliding = internalCheckPathColliding(
+        nodes[first].weight_angle, nodes[second].weight_angle);
+    edge_collisions.emplace(ids, is_colliding);
+    return is_colliding;
+  };
+  for (int idx = 0; idx < static_cast<int>(nodes.size()); ++idx) {
+    if (nodes[idx].id == -1) continue;
+    const auto angle_neighbors = edges_angle_per_node[idx];
+    for (int other : angle_neighbors) {
+      if (idx < other && is_edge_colliding(idx, other)) {
+        remove_edge_angle(idx, other);
+        ++removed_edges;
+      }
+    }
+    for (int layer_idx = 0; layer_idx < coord_layer_count_; ++layer_idx) {
+      const auto coord_neighbors = getNeighborsCoord(idx, layer_idx);
+      for (int other : coord_neighbors) {
+        if (idx < other && is_edge_colliding(idx, other)) {
+          remove_edge_coord(layer_idx, idx, other);
+          ++removed_edges;
         }
       }
     }
@@ -1288,7 +1362,8 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
   if (!ifs)
     return false;
 
-  // Clear existing
+  // 既存ノードと索引の破棄。
+  invalidate_nearest_indexes();
   for (int i = 0; i < (int)nodes.size(); ++i) {
     nodes[i] = NeuronNode<T_angle, T_coord>();
     nodes[i].id = -1;
@@ -1552,6 +1627,7 @@ bool GrowingNeuralGas<T_angle, T_coord>::load(const std::string &filename) {
 template <typename T_angle, typename T_coord>
 void GrowingNeuralGas<T_angle, T_coord>::setParams(
     const GngParameters &params) {
+  invalidate_nearest_indexes();
   bool resize_needed = (params.max_node_num != params_.max_node_num);
   params_ = params;
 

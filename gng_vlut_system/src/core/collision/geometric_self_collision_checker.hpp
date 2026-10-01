@@ -9,10 +9,12 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <stdexcept>
 #include <vector>
 
 #ifdef USE_FCL
 #include "collision/fcl/fcl_collision_detector.hpp"
+namespace collision { struct solid_voxel_geometry; }
 #endif
 
 namespace simulation {
@@ -25,7 +27,8 @@ class GeometricSelfCollisionChecker : public ISelfCollisionChecker {
 public:
   GeometricSelfCollisionChecker(const RobotModel &model,
                                 const kinematics::KinematicChain &chain,
-                                bool enable_fcl_backend = true);
+                                bool enable_fcl_backend = true,
+                                double voxel_size = 0.0);
   ~GeometricSelfCollisionChecker() override = default;
 
   void updateBodyPoses(
@@ -51,8 +54,21 @@ public:
                            const std::string &link2) const;
 
 #ifdef USE_FCL
-  void setStrictMode(bool strict) { strict_mode_ = strict; }
-  void setUseFCLBackend(bool enable) { use_fcl_backend_ = enable; }
+  void setStrictMode(bool enable_strict_mode) {
+    if (!enable_strict_mode && has_mesh_geometry_) {
+      throw std::invalid_argument("Mesh collision requires strict geometry checks");
+    }
+    strict_mode_ = enable_strict_mode;
+  }
+  void setUseFCLBackend(bool enable_fcl_backend) {
+    if (enable_fcl_backend && object_fcl_ids_.size() != collision_objects_.size()) {
+      throw std::invalid_argument("Cannot enable an unregistered geometry backend");
+    }
+    if (!enable_fcl_backend && has_mesh_geometry_) {
+      throw std::invalid_argument("Mesh collision requires the geometry backend");
+    }
+    use_fcl_backend_ = enable_fcl_backend;
+  }
   collision::FCLCollisionDetector &getFCLDetector() { return fcl_detector_; }
   std::shared_ptr<fcl::CollisionObject<double>> getFCLObject(int index) const {
     if (index >= 0 && index < (int)object_fcl_ids_.size()) {
@@ -84,9 +100,15 @@ private:
       collision_objects_;
 
 #ifdef USE_FCL
-  bool strict_mode_ = false;
+  bool strict_mode_ = true;
   bool use_fcl_backend_ = true;
   collision::FCLCollisionDetector fcl_detector_;
+  // 表面交差と完全内包の併用。占有木はリンクローカル座標で共有
+  bool enable_solid_containment_ = false;
+  bool has_mesh_geometry_ = false;
+  std::vector<std::shared_ptr<const collision::solid_voxel_geometry>> solid_geometries_;
+  bool has_point_inside(std::size_t obj_idx, const Eigen::Vector3d &point) const;
+  bool has_solid_containment(std::size_t first_idx, std::size_t second_idx) const;
   std::vector<int> object_fcl_ids_; // Mapping from collision_objects_ index to FCL ID
   std::vector<std::pair<int, int>> fcl_ignore_pairs_; // Pairs of FCL IDs to ignore
 #endif

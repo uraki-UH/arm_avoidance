@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """URDF外接球と接近カプセルによる局所退避の幾何計算。"""
 from pathlib import Path
+from itertools import product
 import struct
 import xml.etree.ElementTree as ET
 
@@ -70,10 +71,18 @@ class robot_geometry:
             shapes = link.findall('collision') or link.findall('visual')
             for shape in shapes:
                 mesh = shape.find('geometry/mesh')
-                if mesh is None:
+                box = shape.find('geometry/box')
+                if mesh is not None:
+                    vertices = mesh_vertices(path.parent/mesh.get('filename'))
+                    vertices *= np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
+                elif box is not None:
+                    size = np.fromstring(box.get('size', ''), sep=' ')
+                    if size.shape != (3,) or not np.all(np.isfinite(size)) or np.any(size <= 0):
+                        raise ValueError(f'直方体寸法の不正: {name}')
+                    # 回転・平行移動後の直方体全体を覆うAABB球列への入力
+                    vertices = np.asarray(list(product((-1, 1), repeat=3))) * size / 2
+                else:
                     raise ValueError(f'未対応の形状: {name}')
-                vertices = mesh_vertices(path.parent/mesh.get('filename'))
-                vertices *= np.fromstring(mesh.get('scale', '1 1 1'), sep=' ')
                 transform = origin(shape.find('origin'))
                 vertices = vertices@transform[:3, :3].T + transform[:3, 3]
                 lower, upper = vertices.min(axis=0), vertices.max(axis=0)

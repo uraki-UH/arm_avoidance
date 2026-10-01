@@ -1,0 +1,26 @@
+# 模擬受信機専用の順序・校正例。実機のパケット仕様・モータ順序の確認値ではない
+dual_arm_udp:
+  robot_ip: "127.0.0.1"
+  robot_port: 18888
+  listen_ip: "127.0.0.1"
+  listen_port: 18886
+  feedback_source_port: 18888
+  # 模擬受信機のみの有効化・停止文字列。実機向けの流用禁止
+  enable_packet: "ENABLE\n"
+  stop_packet: "STOP\n"
+  joint_names: [waist_joint, neck_pan_joint, neck_tilt_joint,
+                L_joint1, L_joint2, L_joint3, L_joint4, L_joint5, L_joint6, L_joint7, L_gripper_joint,
+                R_joint1, R_joint2, R_joint3, R_joint4, R_joint5, R_joint6, R_joint7, R_gripper_joint]
+  joint_scales: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+  joint_offsets_deg: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  update_hz: 50.0
+  max_command_age_sec: 0.5
+  max_feedback_age_sec: 0.5
+  max_joint_velocity: 0.3
+  max_start_dev_rad: 0.05
+  max_tracking_dev_rad: 0.2
+  # 実機利用前の利用者確認項目。フラグ変更だけでの安全性の保証なし
+  is_mapping_verified: false
+  is_receiver_stop_verified: false
+  is_receiver_watchdog_verified: false
+  receiver_watchdog_sec: 0.2

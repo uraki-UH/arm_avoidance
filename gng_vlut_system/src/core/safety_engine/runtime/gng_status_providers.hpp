@@ -26,6 +26,9 @@ class EEDirectionProvider
 public:
   EEDirectionProvider(kinematics::KinematicChain *chain) : chain_(chain) {}
 
+  // ノード位置・ID を変更しないステータス更新専用。
+  bool can_modify_node_positions() const override { return false; }
+
   std::vector<typename GrowingNeuralGas<T_angle, T_coord>::UpdateTrigger>
   getTriggers() const override {
     return {GrowingNeuralGas<T_angle, T_coord>::UpdateTrigger::BATCH_UPDATE};
@@ -65,6 +68,9 @@ class ManipulabilityProvider
 
 public:
   ManipulabilityProvider(kinematics::KinematicChain *chain) : chain_(chain) {}
+
+  // ノード位置・ID を変更しないステータス更新専用。
+  bool can_modify_node_positions() const override { return false; }
 
   std::vector<typename GrowingNeuralGas<T_angle, T_coord>::UpdateTrigger>
   getTriggers() const override {
@@ -112,6 +118,9 @@ public:
   DynamicManipulabilityProvider(kinematics::KinematicChain *chain,
                                 simulation::RobotModel *model)
       : chain_(chain), model_(model) {}
+
+  // ノード位置・ID を変更しないステータス更新専用。
+  bool can_modify_node_positions() const override { return false; }
 
   std::vector<typename GrowingNeuralGas<T_angle, T_coord>::UpdateTrigger>
   getTriggers() const override {

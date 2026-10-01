@@ -1,4 +1,4 @@
-"""単一端末でのGazebo回避・追従・ソフト停止。USBドライバと実機送信の起動なし。"""
+"""単一端末でのGazebo操作と、設定指定時のみのUDP出力窓口。"""
 import os
 from pathlib import Path
 import sys
@@ -34,6 +34,8 @@ def launch_setup(context):
     if not leader_topic.startswith('/') or leader_topic in ('/joint_states', '/' + namespace + '/joint_states'):
         raise ValueError('フォロワー実測とは別の絶対leader_topicが必要です')
     enable_keyboard = value('enable_keyboard').lower() == 'true'
+    if value('udp_config') and not Path(value('udp_config')).is_file():
+        raise ValueError('udp_configが見つかりません')
     if enable_keyboard and not sys.stdin.isatty():
         raise ValueError('同じ端末でのキー操作には対話TTYが必要です。Dockerではexec -itを使用してください')
     actions = [IncludeLaunchDescription(
@@ -45,6 +47,7 @@ def launch_setup(context):
             'enable_external_control': 'false', 'enable_dynamixel_leader': 'false',
             'enable_integrated_control': 'true', 'leader_joint_state_topic': leader_topic,
             'gazebo_master_uri': value('gazebo_master_uri'),
+            'udp_config': value('udp_config'), 'allow_remote_udp': value('allow_remote_udp'),
         }.items())]
     if value('leader_mapping_file'):
         if not Path(value('leader_mapping_file')).is_file():
@@ -69,6 +72,7 @@ def generate_launch_description():
                 'demo_config': str(share / 'config/dual_arm_gazebo_demo.yaml'),
                 'leader_topic': '/leader/joint_states', 'leader_mapping_file': '',
                 'leader_input_topic': '/leader/dynamixel/state/present',
+                'udp_config': '', 'allow_remote_udp': 'false',
                 'gazebo_master_uri': 'http://127.0.0.1:11355'}
     return LaunchDescription([
         *[DeclareLaunchArgument(name, default_value=default) for name, default in defaults.items()],

@@ -20,19 +20,19 @@ import dual_arm_control_keyboard as keyboard
 
 class test_keys(unittest.TestCase):
     def test_stop_and_exit_keys(self):
-        for key in (b' ', b's', b'S'):
+        for key in (b' ',):
             with self.subTest(key=key):
                 self.assertEqual(keyboard.control_key_action(key), 'stop')
-        for key in (b'q', b'Q', b'\x03', b'\x04', b''):
+        for key in (b'\x03', b'\x04', b''):
             with self.subTest(key=key):
                 self.assertEqual(keyboard.control_key_action(key), 'quit')
 
     def test_mode_keys_and_ignored_keys(self):
-        for key, action in ((b'a', 'avoidance'), (b'l', 'leader'), (b'h', 'hardware'), (b'r', 'reset')):
+        for key, action in ((b'a', 'avoidance'), (b'l', 'leader'), (b'h', 'hardware')):
             for variant in (key, key.upper()):
                 with self.subTest(key=variant):
                     self.assertEqual(keyboard.control_key_action(variant), action)
-        for key in (b'z', b'\n', b'\r', b'\x1b'):
+        for key in (b'z', b'\n', b'\r', b'\x1b', b'r', b'R', b'q', b'Q', b's', b'S'):
             self.assertIsNone(keyboard.control_key_action(key))
 
     def test_escape_sequences_never_enable_modes(self):
@@ -52,7 +52,7 @@ class test_keys(unittest.TestCase):
 
     def test_stop_and_exit_override_escape_or_paste(self):
         for prefix in (b'\x1b', b'\x1b[', b'\x1b[200~'):
-            for key, action in ((b' ', 'stop'), (b'S', 'stop'), (b'\x03', 'quit'), (b'', 'quit')):
+            for key, action in ((b' ', 'stop'), (b'\x03', 'quit'), (b'', 'quit')):
                 with self.subTest(prefix=prefix, key=key):
                     decoder = keyboard.terminal_key_decoder()
                     for value in prefix:
@@ -221,9 +221,10 @@ class console_fixture:
     """実ROS・子プロセスなしのmain試験用サービス、時計、PTY。"""
 
     def __init__(self, keys, *, has_control_status=True, is_stop_ready=True, stop_delay_sec=.08,
-                 signal_after_spin=None, has_read_error=False):
+                 signal_after_spin=None, has_read_error=False, control_mode='hold'):
         self.keys = list(keys)
         self.has_control_status = has_control_status
+        self.control_mode = control_mode
         self.is_stop_ready = is_stop_ready
         self.stop_delay_sec = stop_delay_sec
         self.signal_after_spin = signal_after_spin
@@ -267,7 +268,7 @@ class console_fixture:
     def create_subscription(self, message_type, topic, callback, qos):
         self.subscriptions[topic] = (callback, qos)
         if topic.endswith('/control/status') and self.has_control_status:
-            callback(SimpleNamespace(data=json.dumps({'mode': 'hold', 'enable_hardware_output': False, 'detail': ''})))
+            callback(SimpleNamespace(data=json.dumps({'mode': self.control_mode, 'enable_hardware_output': False, 'detail': ''})))
         return Mock()
 
     def spin_once(self, node, timeout_sec):
@@ -327,6 +328,15 @@ class console_fixture:
 
 
 class test_console_main(unittest.TestCase):
+    def test_stopped_leader_key_is_labelled_hold_reset_not_following(self):
+        fixture = console_fixture([b'l', b'\x03'], control_mode='stopped')
+        self.assertEqual(fixture.run(), 0)
+        fixture.clients['leader'].call_async.assert_called_once()
+        self.assertTrue(fixture.clients['leader'].call_async.call_args.args[0].data)
+        self.assertIn('停止解除→ホールド: 送信待ち', ''.join(fixture.messages))
+        self.assertNotIn('リーダーフォロワーON: 送信待ち', ''.join(fixture.messages))
+        self.assert_clean_exit(fixture)
+
     def assert_clean_exit(self, fixture):
         self.assertTrue(fixture.has_restored_terminal)
         fixture.node.destroy_node.assert_called_once()
@@ -334,7 +344,7 @@ class test_console_main(unittest.TestCase):
         self.assertTrue(all(handler is None for handler in fixture.handlers.values()))
 
     def test_exit_keys_request_stop_and_restore_terminal(self):
-        for key in (b'q', b'Q', b'\x03', b'\x04', b''):
+        for key in (b'\x03', b'\x04', b''):
             with self.subTest(key=key):
                 fixture = console_fixture([key])
                 self.assertEqual(fixture.run(), 0)
@@ -342,7 +352,7 @@ class test_console_main(unittest.TestCase):
                 self.assert_clean_exit(fixture)
 
     def test_stop_preempts_pending_mode_change(self):
-        fixture = console_fixture([b'a', b's', b'q'])
+        fixture = console_fixture([b'a', b' ', b'\x03'])
         self.assertEqual(fixture.run(), 0)
         fixture.clients['avoidance'].call_async.assert_called_once()
         self.assertTrue(fixture.pending[0][0].cancelled())
@@ -351,35 +361,36 @@ class test_console_main(unittest.TestCase):
         self.assert_clean_exit(fixture)
 
     def test_busy_mode_change_never_sends_second_operation(self):
-        fixture = console_fixture([b'a', b'l', b'q'])
+        fixture = console_fixture([b'a', b'l', b'\x03'])
         self.assertEqual(fixture.run(), 0)
         fixture.clients['avoidance'].call_async.assert_called_once()
         fixture.clients['leader'].call_async.assert_not_called()
         self.assertIn('前の要求を処理中', ''.join(fixture.messages))
 
     def test_pending_stop_rejects_mode_change(self):
-        fixture = console_fixture([b's', b'a', b'q'])
+        fixture = console_fixture([b' ', b'a', b'\x03'])
         self.assertEqual(fixture.run(), 0)
         fixture.clients['avoidance'].call_async.assert_not_called()
         self.assertIn('停止要求を優先中', ''.join(fixture.messages))
 
     def test_unknown_status_rejects_toggle_but_allows_stop(self):
-        fixture = console_fixture([b'a', b'l', b'h', b'q'], has_control_status=False)
+        fixture = console_fixture([b'a', b'l', b'h', b'\x03'], has_control_status=False)
         self.assertEqual(fixture.run(), 0)
         for name in ('avoidance', 'leader', 'hardware'):
             fixture.clients[name].call_async.assert_not_called()
         fixture.clients['stop'].call_async.assert_called_once()
 
-    def test_reset_never_sends_mode_enable(self):
-        fixture = console_fixture([b'r', b'q'])
+    def test_removed_keys_never_send_operations_or_exit(self):
+        fixture = console_fixture([b'r', b'R', b'q', b'Q', b's', b'S', b'\x03'])
         self.assertEqual(fixture.run(), 0)
-        fixture.clients['reset'].call_async.assert_called_once()
+        self.assertNotIn('reset', fixture.clients)
         for name in ('avoidance', 'leader', 'hardware'):
             fixture.clients[name].call_async.assert_not_called()
-        self.assertIn('自動再開なし', ''.join(fixture.messages))
+        self.assertEqual(fixture.keys, [])
+        fixture.clients['stop'].call_async.assert_called_once()
 
     def test_missing_stop_service_times_out_with_failure(self):
-        fixture = console_fixture([b'q'], is_stop_ready=False)
+        fixture = console_fixture([b'\x03'], is_stop_ready=False)
         self.assertEqual(fixture.run(), 2)
         fixture.clients['stop'].call_async.assert_not_called()
         self.assertGreaterEqual(fixture.now_sec, 2.0)
@@ -387,7 +398,7 @@ class test_console_main(unittest.TestCase):
         self.assert_clean_exit(fixture)
 
     def test_unanswered_stop_times_out_and_cancels_future(self):
-        fixture = console_fixture([b'q'], stop_delay_sec=math.inf)
+        fixture = console_fixture([b'\x03'], stop_delay_sec=math.inf)
         self.assertEqual(fixture.run(), 2)
         self.assertTrue(fixture.pending[0][0].cancelled())
         self.assertLess(fixture.now_sec, 2.1)
@@ -408,7 +419,7 @@ class test_console_main(unittest.TestCase):
         self.assert_clean_exit(fixture)
 
     def test_heartbeat_uses_wall_clock_during_wait(self):
-        fixture = console_fixture([b'q'], stop_delay_sec=.36)
+        fixture = console_fixture([b'\x03'], stop_delay_sec=.36)
         self.assertEqual(fixture.run(), 0)
         self.assertGreaterEqual(len(fixture.heartbeat_times), 3)
         for previous, current in zip(fixture.heartbeat_times, fixture.heartbeat_times[1:]):
@@ -416,7 +427,7 @@ class test_console_main(unittest.TestCase):
             self.assertLessEqual(current - previous, .12 + 1e-8)
 
     def test_ros_remapping_arguments_reach_rclpy_only(self):
-        fixture = console_fixture([b'q'])
+        fixture = console_fixture([b'\x03'])
         self.assertEqual(fixture.run(['--ros-args', '-r', '__node:=console_test']), 0)
         self.assertEqual(fixture.rclpy.init.call_args.kwargs['args'][-3:], ['--ros-args', '-r', '__node:=console_test'])
         self.assertEqual(fixture.rclpy.init.call_args.kwargs['signal_handler_options'], 'no_signals')

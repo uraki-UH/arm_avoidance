@@ -1,5 +1,104 @@
 # 双腕シミュレーションの制御・物理設定
 
+## 2026-10-01: max実機追従・Viewer・回避の作業計画
+
+- 対象: `topo_dual_arm_max`、別実機のリーダー、UDP接続のフォロワー
+- 到達点: リーダー実測値による直接描画、実機追従＋フォロワー実測姿勢による描画、Gazebo追従・回避試験
+- 操作窓口: `dual_arm_control.launch.py`へ集約。回避と追従は排他、開始元はホールドのみ
+- 状態: 計画・手順の文書化。今回の実機送信・Gazebo追加試験なし
+- 実装順: [当日タスク](TASK_LIST.md#max-operation-20261001)。以下の未実装項目は現在の起動だけでは利用不可
+
+### 現在の接続と不足部分
+
+| 機能 | 現状 | 追加・確認対象 |
+| --- | --- | --- |
+| リーダー → Gazebo | `/leader/joint_states`の購読あり | maxの実機入力元・関節校正。USBドライバの自動起動なし |
+| リーダー → Viewer | 統合launchの直接表示経路なし | リーダー実測による描画。フォロワー・Gazebo物理実行への依存なし |
+| Gazebo → 実機 | 補間済み目標のUDP送信あり、既定OFF | 受信機仕様、独立19関節の順序・符号・原点、停止・watchdog |
+| Gazebo → Viewer | `/sim_topo_dual_arm_max/joint_states`の表示あり | 現行URDFでの追従・更新の通し確認 |
+| 実機 → Viewer | UDP応答の内部保持のみ、ROS配信なし | 実測JointState配信、表示元の分離、未受信・失効表示 |
+| 回避 | Gazebo LiDAR・GNG/VLUTの接続あり | 現行URDFでの回避・停止試験。実センサーによる実機回避は未統合 |
+
+### 必須の描画経路
+
+- リーダー直接表示: リーダー実測 → Viewer。表示だけの利用では追従・実機送信OFF、フォロワー未接続でも利用可能な構成
+- 実機追従表示: リーダー実測 → 統合制御・Gazebo補間目標 → UDP → フォロワー駆動 → フォロワー実測 → Viewer
+
+表示元の選択: `リーダー実測` / `フォロワー実測` / 既存の`Gazebo実測`。選択機能は新設予定、現在のlaunch引数ではない。
+表示元と制御モードは独立。表示切替によるLの追従開始、Hの送信許可、停止解除はなし。既存のホールド経由条件を維持。
+画面には選択元と受信状態を明示。フォロワー実測表示へのリーダー値・指令値の代入、失効時の別ソースへの自動切替なし。
+追従OFF・ホールド・停止中も、選択元の新鮮な実測受信が続く間は描画更新を継続。
+
+Viewerの主対象: 統合launchの`robot_viewer_bridge_node`から配信する[ToPoFuzzy-Viewer](../../ToPoFuzzy-Viewer/README.md)。
+HTMLシミュレータの[ROS軌道再生](../../ToPoDualArmMax_SourceDelivery_20260928/ToPoDualArmMax-Simulator/integrations/ros2/README.md)は別経路。
+HTML側への実測追従表示も未接続で、指令軌道の再生を実機姿勢の代用としない方針。
+
+### 実装方針
+
+1. 入出力の確定: リーダーの機種・デバイス・実測topic、フォロワーの受信firmware・IP/port・関節対応表の確認。旧14関節設定・模擬`ENABLE`/`STOP`の流用なし。
+2. 実測表示の先行: `/leader/joint_states`からの直接描画と、指令送信OFFでのフォロワー受信・描画経路の追加。UDP実測を校正後のradへ変換し、独立19関節の`JointState`として配信。受信機側の送信開始に駆動許可が必要な場合は、読取り専用経路の確保が先決。
+3. 表示元の分離: リーダーは`/leader/joint_states`、Gazeboは`/sim_topo_dual_arm_max/joint_states`、フォロワーは`/follower/joint_states`を予定。フォロワーtopicと実機表示名`hw_topo_dual_arm_max`は新設予定。リーダー直接表示には別の表示名を使用。実機表示への別ソース・初期ゼロ姿勢の混入、リーダー入力への折返しを禁止。
+4. 受信健全性: 全関節・有限値・可動域・受信元の検査と、実時間による鮮度監視。実測経路は`use_sim_time=false`相当、Gazeboのpauseから独立。機器時刻なしの場合は受信時刻と明示し、失効中の姿勢を「現在の実機姿勢」として再配信しない設計。
+5. 統合起動: リーダー直接表示と実機追従表示を同じlaunchの選択肢として整備。表示だけの構成ではGazebo物理実行・実機出力を起動条件から分離。送信は引き続きHの明示許可。リーダードライバは機種別設定と起動時書込みの確認後に統合。既存Viewerサーバーの重複起動なし。
+
+実機への送信元: Gazebo JTCの`desired.positions`。フォロワー実測表示の入力: フォロワーのエンコーダ実測。
+両者の別記録が必要。Gazeboの実測角・送信した角度・受信機による目標値の返信は、実機エンコーダ値とは別物。
+
+### 現時点の起動方法（実機送信なし）
+
+前提: 元ワークスペース`/home/uraki/uraki_ws`を`/ros2_ws/src`へマウント済みの`gng_cpu_container`、ビルド済みROS環境、max用`gng.bin`・`vlut.bin`。
+GNG/VLUTと使用URDFの整合確認が必要。既存の同名Gazebo・制御ノードとの重複起動不可。
+
+```bash
+docker exec -it gng_cpu_container bash
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max \
+  leader_topic:=/leader/joint_states
+```
+
+- UDP: `udp_config`未指定、ソケット生成・実機送信なし
+- リーダー: 別途、新鮮な実測`JointState`の配信が必要。入力なしではLによる追従開始不可
+- Dynamixel変換: 必要時のみ`leader_mapping_file:=<校正済みYAML>`を追加。変換元は`leader_input_topic`、USBドライバ起動とは別
+- Viewer: 既存サーバー・ブラウザへ接続し、`sim_topo_dual_arm_max`の表示を確認。リーダー直接表示・フォロワー実測表示の選択は上記追加実装後
+- キー入力: 起動端末を前面、Enter不要。[状態別のキー一覧](#1つのlaunchでの統合操作)を使用
+
+確認用の別端末（同じコンテナ・ROS環境・`ROS_DOMAIN_ID`）:
+
+```bash
+ros2 topic info -v /leader/joint_states
+ros2 topic echo --once /sim_topo_dual_arm_max/control/status
+ros2 topic echo --once /sim_topo_dual_arm_max/safety/status
+ros2 topic echo --once /sim_topo_dual_arm_max/avoidance/status
+```
+
+実機用起動設定: 未確定。[UDPの必須条件](#gazebo目標のudp出力)と受信機の実仕様を照合後に設定作成。
+`allow_remote_udp:=true`だけでの有効化、模擬YAMLのIPだけを変えた運用は不可。
+
+### 運用テストと完了条件
+
+1. 表示経路の独立確認:
+
+   - リーダー直接表示: フォロワー未接続・実機送信OFF・Gazebo物理実行なしで、リーダー実測と描画の全関節を照合。
+   - フォロワー実測表示: 指令送信OFFで受信データと描画を照合。駆動無効・機械支持などの確認後に、リーダー／Gazeboと独立したフォロワー姿勢変化を確認。
+   - 表示切替: 模擬入力でリーダーとフォロワーに異なる姿勢を入力し、選択元だけへの描画追従を確認。L/H/停止状態は不変、受信停止時は失効表示、自動代替なし。
+
+2. Gazebo追従: ホールド→L→追従→L→ホールド。追従中Aは拒否、切替中の連打も拒否。ViewerはGazebo実測へ追従。Space後は実測停止を確認し、Lで解除→ホールド、もう一度Lで追従。UDPの自動再開なし。
+3. 模擬UDP: [切替単体試験](#切替条件の単体試験)と[localhost通し試験](#gazebo目標のudp出力)。H前の無送信、送信目標との照合、Space・入力失効時の遮断、再許可条件の確認。出力先は未使用のディレクトリ。
+4. 実機追従: 受信側停止・watchdogと、PC/ROS/通信に依存しない停止手段の動作確認後。人のいない可動範囲・支持条件・実機に適した速度制限で小範囲から確認。ホールド・静止・初期姿勢差の確認→H→L。描画元はフォロワー実測を選択し、受信実測との一致を確認。リーダーとの追従遅れ・姿勢差を隠す補完なし。実測と指令の偏差、Lでの保持、停止後の非再開を別々に判定。
+5. Gazebo回避: 実機UDP OFF。ホールド→Aで左右の模擬前腕接近→退避、Aでホールド。回避中Lの拒否、点群更新、自己除去、GNG/VLUT入力、最小距離、探索失敗時停止を確認。見た目の移動だけでは合格判定なし。
+6. 実機回避への移行: 実センサーのtopic・TF・時刻、フォロワー実測に基づく自己除去・衝突判定の接続後。最初は人腕ではなく試験物体。Gazebo内の模擬前腕への回避指令転送と、実機周辺の障害物への回避を別試験として記録。
+
+回避指令速度の既定値: 2.5 rad/s。UDP指令速度の既定上限: 0.3 rad/s。
+実機回避前に両経路の速度設定の整合が必要。監視の無効化や閾値の緩和だけによる通過判定は不可。
+人腕接近試験: 独立した停止手段・受信側停止の確認前は未実施。Spaceはソフト停止要求であり、実機の停止完了保証ではない。
+
+既知の阻害要因: 現行URDFのmaxで状態更新失効、max_longでSpace後の実測停止未確認。
+[前回のGazebo通し試験](releases/2026-10-01_gazebo_software_stop.md)は0/2回成功。最新の切替条件は単体試験のみで、実機追従前に通し再検証が必要。
+
+記録項目: 使用URDF・GNG/VLUT・設定、実行コマンド、入力/実測topic、指令角・実測角・受信時刻、姿勢偏差［rad］、表示遅延［ms、測定可能範囲のみ］、最小距離［m］、停止要求・停止確認の時刻、成功/失敗/未検証、起動プロセスの終了確認。
+合格基準未定の項目は測定結果のみ。パケット送信成功と実機停止成功の混同なし。
+
 ## 1. 要約
 
 2026-09-28更新：`JointTrajectoryController → 位置目標 → 有限トルクODEモータ`へ変更。
@@ -20,7 +119,7 @@ URDF上限×`motor_limit_scale`（既定0.95）で速度を制限。ODEの`fmax`
 | 重力 | `(0, 0, -9.81)` m/s² | 同上 |
 | 物理刻み / 更新目標 | 0.001 s / 1000 Hz。実時間速度は計算負荷に依存 | 同上 |
 | 制御周期 | controller_manager 1000 Hz | [Gazebo launch](../launch/dual_arm_gazebo_demo.launch.py) |
-| controller状態 / action監視 | 50 Hz / 20 Hz。JointStateは物理周期 | 同上 |
+| controller状態 / action監視 | 50 Hz（統合操作100 Hz） / 20 Hz。JointStateは物理周期 | 同上 |
 | 制御関節 | 腕14 + 腰1 + 首2 + グリッパー2 = 19、指2関節はmimic | 同上 |
 | 指令 / 状態 | position目標 / position, velocity, effort。指mimicも独立した有限トルク駆動 | 同上 |
 | 固定基部 | worldへ固定。浮遊・転倒の評価対象外 | [URDF生成](../launch/robot_gazebo_spawn.launch.py) |
@@ -87,24 +186,28 @@ ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long
 
 maxは`robot:=max`。起動した端末を前面にして操作、Enter不要。Docker内は`docker exec -it`の対話端末が必要。
 
-| キー | 操作 |
-| --- | --- |
-| A | 回避デモON/OFF |
-| L | リーダー追従ON/OFF |
-| Space / S | ソフト停止 |
-| R | 停止解除、保持の継続 |
-| H | 実機出力ON要求。現状は拒否 |
-| Q / Ctrl-C | 停止要求後のlaunch全体終了 |
+| 現在の状態 | A | L |
+| --- | --- | --- |
+| ホールド | 回避開始 | リーダー追従開始 |
+| 回避 | ホールドへ | 拒否、回避継続 |
+| リーダー追従 | 拒否、追従継続 | ホールドへ |
+| ソフト停止 | 拒否 | 停止解除→ホールド |
+| 切替・解除処理中 | 拒否 | 拒否 |
 
-初期状態: 保持。回避と追従は排他選択、追従中の回避なし。切替時は保持・実測静止確認後に旧指令を破棄。
-解除後の自動再開なし。実測・操作端末・追従入力の更新失効時は停止要求。要求受付と実測停止は別表示。
+共通: Spaceでソフト停止・追従/UDP OFF、Ctrl-Cで停止要求後のlaunch全体終了。HはUDP出力ON/OFF（ONは設定指定・保持・静止確認後のみ）。
+初期状態: ホールド。回避と追従の直接切替・同時実行なし。現在のモードを同じキーでOFF→ホールド確認→別の開始キー。拒否した操作の後追い実行なし。
+停止後のL: 新鮮な実測停止・端末接続・未完了要求なしを確認後、controller停止→ラッチ解除→再activation・実測静止確認→ホールド。
+解除中のSpace・実測/端末失効で解除取消。解除だけではリーダー入力不要、追従開始には新鮮な入力と再度のLが必要。
+UDP出力の自動再開なし。旧R・Q・Sキーは無効、終了はCtrl-C。ROSサービスからの直接切替も同条件で拒否。
+`control/reset` APIは解除後保持の互換用途として維持。実測・操作端末・追従入力の更新失効時は停止要求。要求受付と実測停止は別表示。
+現行URDFでの通し確認: 未完了。max_longはSpace後の実測停止未確認、maxは起動中の状態更新失効。[条件・記録](releases/2026-10-01_gazebo_software_stop.md)。
 
 リーダー入力: `leader_topic:=/leader/joint_states`、関節名・rad単位の`JointState`、進行する実測時刻が必要。
 追従指令速度上限: 0.3 rad/s。実機からの既存入力を使用し、このlaunchからUSBドライバの起動なし。
 必要時のみ`leader_mapping_file:=<校正済みYAML>`でDynamixel状態→JointStateの変換を追加。
 入力元: `leader_input_topic:=/leader/dynamixel/state/present`。旧機種の対応表の無条件流用は不可。
 
-実機出力: 無効固定。機種別校正・実測鮮度・実機専用停止処理の未確認による制限。
+UDP出力: 既定OFF。`udp_config`未指定時はソケット生成なし、HのON要求を拒否。
 既存Dynamixelドライバは読取り目的でも設定書込みがあり、送信停止だけでは既存の位置目標を取り消せないため統合起動対象外。
 人の腕を接近させる実機試験の準備完了を意味しない。Gazebo側の未解決点は上記のまま。
 
@@ -121,6 +224,68 @@ python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/
 ```
 
 再実行時は未使用の出力先が必要。`command.json`はlaunch引数、`report.json`は実測判定・終了確認。
+
+### Gazebo目標のUDP出力
+
+入力: `dual_arm_controller/state`の`desired.positions`。Gazeboコントローラの補間済み目標であり、実測角や軌道終点の直接転送ではない。
+指定順の独立19関節をCSV化し、各値は`round((rad × 180 / π × scale + offset_deg) × 10)`の整数、末尾カンマ付き。
+旧UDP実装の整数切捨てとは最大1カウントの差。関節不足・未知名・mimic・非有限値・URDF範囲外は拒否、ゼロ補完なし。
+
+模擬宛先の設定例: [dual_arm_udp_loopback.yaml](../config/dual_arm_udp_loopback.yaml)。次の起動だけでは送信なし。
+模擬受信機からの実測受信後、保持状態でHによる明示ONが必要。
+
+```bash
+ros2 launch gng_vlut_system dual_arm_control.launch.py robot:=max_long \
+  udp_config:=/ros2_ws/src/gng_vlut_system/config/dual_arm_udp_loopback.yaml
+```
+
+- 実測形式: `agl,整数,...`の19角度。設定したIP・送信元portとの一致が必要
+- 指令更新上限: 50 Hz、指令・実測の受信有効期間: 各0.5 s
+- 指令速度上限: 0.3 rad/sとURDF値の小さい方。量子化許容差: 0.001 rad
+- 開始時姿勢差: 0.05 rad、追従偏差: 0.2 rad。超過時の自動姿勢合わせなし
+- OFF・Space・異常・終了: 設定済み停止パケットの送信と、角度送信の遮断。Lで追従再開後もUDPはOFF
+
+統合操作時の`/clock`・controller状態配信: 各100 Hz（シミュレーション時間基準）。低速実行時の時刻粒度対策で、UDPの0.5 s監視期限は維持。
+
+実機宛先には`allow_remote_udp:=true`に加え、確認済みの19関節順・符号・offset、`enable_packet`・`stop_packet`、
+`is_mapping_verified`・`is_receiver_stop_verified`・`is_receiver_watchdog_verified`と`receiver_watchdog_sec`の明示が必要。
+フラグは利用者による確認宣言であり、実装による安全認証ではない。停止仕様は受信側の旧目標破棄・再許可前の指令拒否を含む確認が必要。
+設定例の`ENABLE`・`STOP`は模擬受信機専用。旧14項目の`slave/master`設定や実機firmwareへの流用は不可。
+
+受信CSVには機器時刻・連番・停止ACKがないため、受信時刻による鮮度のみの確認。UDP到達・順序・物理停止の保証なし。
+`control/status.udp.is_physical_stop_confirmed`は常にfalse、端末の実測停止表示はGazeboのみ。
+実機送信・機種別校正・受信側停止は未検証。旧`topoarm_hardware.launch.py`の無条件ゼロ送信・再送実装は不使用、既存ファイルの変更なし。
+
+UDP再現試験: 上記バッチ実行の一覧を`gng_vlut_system/test/dual_arm_udp_cases.json`、出力先を`artifacts/dual_arm_udp_20261001/clock_retry`へ変更。
+localhost模擬受信機を試験内で起動・終了。H前の無送信、補間目標との全CSV照合、Space遮断、L再開後のUDP OFF、実測途絶を対象とする有限試験。
+
+キー削減後の試験コマンド（再実行時は未使用の出力先へ変更）:
+
+```bash
+docker exec -e ROS_DOMAIN_ID=96 -e ROS_LOCALHOST_ONLY=1 gng_cpu_container bash -lc '
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+cd /ros2_ws/src
+python3 -B skills/run-benchmark-batch/scripts/run_batch.py gng_vlut_system/test/dual_arm_udp_cases.json --output artifacts/dual_arm_keys_20261001/udp_box_retry --repeats 1 --timeout-sec 210 --max-total-sec 450 --estimate-sec 90 --continue-on-error
+'
+```
+
+### 切替条件の単体試験
+
+ROS通信・Gazebo・実機接続なし。停止解除・ホールド経由・相互切替拒否・UDP許可条件の回帰。
+
+```bash
+docker exec gng_cpu_container bash -lc '
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/local_setup.bash
+cd /ros2_ws/src/gng_vlut_system
+PYTHONDONTWRITEBYTECODE=1 timeout 120s python3 -B -m pytest -q -p no:cacheprovider \
+  test/test_dual_arm_udp_output.py test/test_dual_arm_control_udp.py \
+  test/test_dual_arm_control.py test/test_dual_arm_control_keyboard.py \
+  test/test_dual_arm_mode_model.py test/test_joint_command_model.py \
+  test/test_gazebo_stop_keyboard.py test/test_dual_arm_limits.py
+'
+```
 
 ### キーボード停止
 

@@ -131,7 +131,23 @@ rclcpp_components_register_nodes(world_index_to_voxel_component "robot_sim::brid
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+  foreach(test_name test_gng_nearest_index test_gng_nearest_training)
+    ament_add_gtest(${test_name} test/${test_name}.cpp)
+    target_include_directories(${test_name} PRIVATE src/core)
+    target_link_libraries(${test_name} safety_engine collision_lib kinematics_lib)
+    ament_target_dependencies(${test_name} Eigen3 rclcpp urdfdom)
+  endforeach()
   if(USE_FCL)
+    foreach(test_name test_self_collision_policy test_solid_voxel_geometry test_geometric_solid_containment)
+      ament_add_gtest(${test_name} test/${test_name}.cpp)
+      target_include_directories(${test_name} PRIVATE src/core)
+      target_link_libraries(${test_name} collision_lib robot_model_lib kinematics_lib)
+      ament_target_dependencies(${test_name} Eigen3 rclcpp fcl urdfdom)
+    endforeach()
+    ament_add_gtest(test_gng_collision_filter test/test_gng_collision_filter.cpp)
+    target_include_directories(test_gng_collision_filter PRIVATE src/core)
+    target_link_libraries(test_gng_collision_filter safety_engine collision_lib kinematics_lib)
+    ament_target_dependencies(test_gng_collision_filter Eigen3 rclcpp fcl urdfdom)
     ament_add_gtest(test_reachability_collision test/test_reachability_collision.cpp)
     target_include_directories(test_reachability_collision PRIVATE src/core)
     target_compile_definitions(test_reachability_collision PRIVATE
@@ -140,11 +156,22 @@ if(BUILD_TESTING)
     ament_target_dependencies(test_reachability_collision Eigen3 rclcpp fcl urdfdom)
   endif()
 
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../benchmarks/gng_nearest_index_20261001/gng_nearest_index_benchmark.cpp")
+    add_executable(gng_nearest_index_benchmark
+      ../benchmarks/gng_nearest_index_20261001/gng_nearest_index_benchmark.cpp)
+    target_include_directories(gng_nearest_index_benchmark PRIVATE src/core)
+    target_link_libraries(gng_nearest_index_benchmark safety_engine collision_lib robot_model_lib kinematics_lib)
+    ament_target_dependencies(gng_nearest_index_benchmark Eigen3 rclcpp urdfdom)
+  endif()
+
+  ament_add_pytest_test(test_dual_arm_collision_geometry test/test_dual_arm_collision_geometry.py)
   ament_add_pytest_test(test_dual_arm_limits test/test_dual_arm_limits.py)
   ament_add_pytest_test(test_gazebo_stop_keyboard test/test_gazebo_stop_keyboard.py)
   ament_add_pytest_test(test_dual_arm_mode_model test/test_dual_arm_mode_model.py)
   ament_add_pytest_test(test_dual_arm_control test/test_dual_arm_control.py)
   ament_add_pytest_test(test_dual_arm_control_keyboard test/test_dual_arm_control_keyboard.py)
+  ament_add_pytest_test(test_dual_arm_udp_output test/test_dual_arm_udp_output.py)
+  ament_add_pytest_test(test_dual_arm_control_udp test/test_dual_arm_control_udp.py)
   ament_add_gtest(test_goal_tasks test/test_goal_tasks.cpp)
   target_include_directories(test_goal_tasks PRIVATE src)
   ament_add_gtest(test_joint_command_mux test/test_joint_command_mux.cpp)
@@ -211,6 +238,7 @@ endif()
 install(FILES scripts/dual_arm_avoidance_geometry.py scripts/motion_smoothing.py
   scripts/joint_command_model.py
   scripts/dual_arm_mode_model.py
+  scripts/dual_arm_udp_output.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

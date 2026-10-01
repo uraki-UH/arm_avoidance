@@ -31,6 +31,8 @@
   <depend>urdfdom_headers</depend>
   <depend>tinyxml2_vendor</depend>
   <depend>eigen</depend>
+  <depend>libfcl-dev</depend>
+  <depend>octomap</depend>
   <depend>nlohmann_json</depend>
   <depend>zlib</depend>
   <depend>ament_index_cpp</depend>

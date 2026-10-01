@@ -25,6 +25,7 @@ def launch_setup(context, *args, **kwargs):
     validation_dump_path = LaunchConfiguration("validation_dump_path").perform(context)
     gng_profile_names = LaunchConfiguration("gng_profile_names").perform(context)
     use_task_density_bias = LaunchConfiguration("use_task_density_bias").perform(context)
+    enable_nearest_index = LaunchConfiguration("enable_nearest_index").perform(context)
     max_node_num = LaunchConfiguration("max_node_num").perform(context)
     max_iterations = LaunchConfiguration("max_iterations").perform(context)
     refine_iterations = LaunchConfiguration("refine_iterations").perform(context)
@@ -68,6 +69,10 @@ def launch_setup(context, *args, **kwargs):
         overrides["gng.profile_names"] = gng_profile_names
     use_task_density_bias_value = (use_task_density_bias.lower() == "true")
     overrides["gng_params.use_task_density_bias"] = use_task_density_bias_value
+    if enable_nearest_index:
+        if enable_nearest_index.lower() not in ("true", "false"):
+            raise ValueError("enable_nearest_index must be true or false")
+        overrides["gng_params.enable_nearest_index"] = (enable_nearest_index.lower() == "true")
     if max_node_num:
         overrides["gng_params.max_node_num"] = int(max_node_num)
     if max_iterations:
@@ -153,6 +158,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "use_task_density_bias",
             default_value="false",
+        ),
+        DeclareLaunchArgument(
+            "enable_nearest_index",
+            default_value="",
+            description="厳密近傍索引の切替え。空指定時は設定ファイルの値を使用。",
         ),
         DeclareLaunchArgument(
             "max_node_num",

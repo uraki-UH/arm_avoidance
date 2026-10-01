@@ -1,4 +1,5 @@
 """ブラウザの点群をROS 2へ配信する独立HTTPブリッジ。GNG・FVGへの依存なし。"""
+from array import array
 import argparse
 import json
 import math
@@ -6,7 +7,8 @@ import struct
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
+from robot_exchange import validate_state, RobotExchange
 
 root = Path(__file__).resolve().parents[2] / 'app'
 topics = {'rgbd': '/sim/rgbd/points', 'object_full': '/sim/object/full_points',
@@ -59,10 +61,12 @@ def parse_packet(raw):
         if type(meta.get('object_id')) is not int or not isinstance(matrix, list) or len(matrix) != 16 or any(
                 type(v) not in (int, float) or not math.isfinite(v) for v in matrix):
             raise ValueError('対象物体の姿勢が不正です')
+    if meta.get('robot_state') is not None:
+        validate_state(meta['robot_state'])
     return meta, data
 
 
-def make_handler(publish, allowed_origins):
+def make_handler(publish, allowed_origins, publish_state=None, latest_trajectory=None):
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(root), **kwargs)
@@ -81,7 +85,10 @@ def make_handler(publish, allowed_origins):
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
 
         def do_OPTIONS(self):
             if self.headers.get('Origin') not in allowed_origins:
@@ -92,12 +99,18 @@ def make_handler(publish, allowed_origins):
             self.end_headers()
 
         def do_GET(self):
+            if urlsplit(self.path).path == '/api/trajectory' and latest_trajectory:
+                try:
+                    model = parse_qs(urlsplit(self.path).query).get('model', [''])[0]
+                    return self.respond(200, latest_trajectory(model))
+                except ValueError as error:
+                    return self.respond(400, {'error': str(error)})
             if urlsplit(self.path).path == '/api/points/status':
                 return self.respond(200, {'service': 'topo-pointcloud-bridge', 'topics': topics})
             super().do_GET()
 
         def do_POST(self):
-            if urlsplit(self.path).path != '/api/points':
+            if urlsplit(self.path).path not in ('/api/points', '/api/state'):
                 return self.respond(404, {'error': 'APIが見つかりません'})
             if self.headers.get('Origin') not in allowed_origins or self.headers.get('X-ToPo-Points') != '1':
                 self.close_connection = True
@@ -107,8 +120,13 @@ def make_handler(publish, allowed_origins):
                 if not 8 <= length <= max_body_bytes:
                     raise ValueError('データ長が不正です')
                 self.connection.settimeout(10)
-                meta, data = parse_packet(self.rfile.read(length))
-                result = publish(meta, data)
+                if urlsplit(self.path).path == '/api/state':
+                    if length > 64000 or publish_state is None:
+                        raise ValueError('状態データ長が不正です')
+                    result = publish_state(json.loads(self.rfile.read(length)))
+                else:
+                    meta, data = parse_packet(self.rfile.read(length))
+                    result = publish(meta, data)
             except (ValueError, TypeError, OverflowError, TimeoutError) as error:
                 self.close_connection = True
                 return self.respond(400, {'error': str(error)})
@@ -139,35 +157,47 @@ def main():
     depth_publishers = [node.create_publisher(kind, topic, 2) for kind, topic in
                         zip((Image, CameraInfo, PointCloud2), depth_topics)]
     lock = threading.Lock()
+    exchange = RobotExchange(node, joints)
+
+    def publish_state(state):
+        with lock:
+            return exchange.publish(state)
+
 
     def publish(meta, data):
+        if meta.get('robot_state') is not None:
+            exchange.validate(meta['robot_state'])
+        stamp = node.get_clock().now().to_msg()
+        msg = PointCloud2()
+        msg.header.stamp = stamp
+        msg.header.frame_id = meta['frame_id']
+        msg.height = 1
+        msg.width = meta['count']
+        msg.fields = [PointField(name=name, offset=i * 4, datatype=PointField.FLOAT32, count=1)
+                      for i, name in enumerate(('x', 'y', 'z'))]
+        msg.is_bigendian = False
+        msg.point_step = 12
+        msg.row_step = meta['count'] * 12
+        msg.is_dense = True
+        msg.data = array('B', data[:msg.row_step])
+        # 深度の逆投影・配列構築中も姿勢送信が可能なロック範囲
+        depth_messages = create_depth_messages(meta['depth_image'], data[msg.row_step:], stamp) if meta.get('depth_image') is not None else []
         with lock:
-            stamp = node.get_clock().now().to_msg()
-            msg = PointCloud2()
-            msg.header.stamp = stamp
-            msg.header.frame_id = meta['frame_id']
-            msg.height = 1
-            msg.width = meta['count']
-            msg.fields = [PointField(name=name, offset=i * 4, datatype=PointField.FLOAT32, count=1)
-                          for i, name in enumerate(('x', 'y', 'z'))]
-            msg.is_bigendian = False
-            msg.point_step = 12
-            msg.row_step = meta['count'] * 12
-            msg.is_dense = True
-            msg.data = data[:msg.row_step]
             publishers[meta['source']].publish(msg)
-            if meta.get('depth_image') is not None:
-                for publisher, message in zip(depth_publishers, create_depth_messages(meta['depth_image'], data[msg.row_step:], stamp)):
-                    publisher.publish(message)
-            pose = JointState()
-            pose.header = msg.header
-            pose.name = list(meta.get('robot_pose', {}))
-            pose.position = [float(v) for v in meta.get('robot_pose', {}).values()]
-            joints.publish(pose)
+            for publisher, message in zip(depth_publishers, depth_messages):
+                publisher.publish(message)
+            if meta.get('robot_state') is not None:
+                exchange.publish(meta['robot_state'], stamp)
+            else:
+                pose = JointState()
+                pose.header = msg.header
+                pose.name = list(meta.get('robot_pose', {}))
+                pose.position = [float(v) for v in meta.get('robot_pose', {}).values()]
+                joints.publish(pose)
             info.publish(String(data=json.dumps(dict(meta, stamp_sec=stamp.sec, stamp_nanosec=stamp.nanosec))))
-            return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
+        return {'topic': topics[meta['source']], 'depth_topics': depth_topics if meta.get('depth_image') else [], 'count': msg.width, 'stamp_sec': stamp.sec, 'stamp_nanosec': stamp.nanosec}
 
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(publish, allowed, publish_state, exchange.latest))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

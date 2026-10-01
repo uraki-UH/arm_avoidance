@@ -5,7 +5,7 @@
 ## 独立した点群送信
 
 ブラウザの「ROS 2送信」タブ専用。GNG・FVG・NumPy・独自メッセージへの依存はありません。
-ROS 2環境に `rclpy`、`sensor_msgs`、`std_msgs` が必要です。送付アプリのルートで実行します。
+ROS 2環境に `rclpy`、`sensor_msgs`、`std_msgs`、`geometry_msgs`、`tf2_msgs`、`trajectory_msgs` が必要です。送付アプリのルートで実行します。
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -35,7 +35,7 @@ docker exec -it gng_cpu_container bash -c 'source /opt/ros/humble/setup.bash && 
 透明材質も幾何深度として扱い、完全に同一深度で重なる面の物体識別はできません。
 
 `/sim/joint_states` は取得時の関節角、`/sim/points/info` は取得時刻・物体ID・姿勢等のJSONです。
-ROSのheader stampは受信時のROS時計で、関節角と共通。ブラウザ取得時刻は `captured_at_ms` に別記録し、時計同期・TF配信は行いません。
+ROSのheader stampは受信時のROS時計で、関節角と共通。ブラウザ取得時刻は `captured_at_ms` に別記録し、時計同期は行いません。取得時のロボット状態を含む入力ではTFも共通stampで配信します。
 物体IDは現在のブラウザ内のIDです。対象削除時は対象物体の送信を停止します。
 GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジと揃えてください。GNGの範囲設定・入力座標系も別途整合が必要です。
 実機への関節指令・衝突回避制御は行いません。
@@ -63,7 +63,7 @@ GNGの入力トピックを上表に合わせ、`ROS_DOMAIN_ID` をブリッジ�
 点群は `is_dense=false`。深度0の画素を除去せず位置を保持し、全画素無効でも画像寸法を維持します。
 内部パラメータはK/P、Rは単位行列、Dは0。RGB画像への位置合わせは行いません。
 既存 `/sim/rgbd/points` はbase_footprint座標の有効点のみで、header stampは追加3トピックと共通です。
-カメラからbase_footprintへの列優先4×4変換は `/sim/points/info` の `depth_image.optical_to_world` に収録。TFの自動配信はありません。
+カメラからworldへの列優先4×4変換は `/sim/points/info` の `depth_image.optical_to_world` に収録。ロボット配置は `robot_state.base_to_world`、カメラからbase_footprintへの変換は `/sim/tf` に配信します。
 
 ブラウザでは追加描画なし。深度float32をHTTPで追加転送し、ブリッジで逆投影して画素対応XYZを生成します。
 848×480の場合、HTTP追加量は約1.63 MB／フレーム、ROSの画像＋画素対応XYZは約6.51 MB／フレーム（メタデータ除外）。
@@ -72,6 +72,49 @@ RealSenseの16UC1深度を前提とする購読側では、32FC1［m］への対
 
 ROS環境での回帰試験：`python3 -m unittest discover -s integrations/ros2 -p test_depth_output.py`。
 Humble実受信で848×480全画素の対応・無効値・共通時刻・既存点群との有効点数一致を確認済み。
+
+### ロボット配置・TF・ROS軌道の往復（2026-10-01追加）
+
+ブリッジ再起動・ページ再読み込み後、「ROS 2送信」内の「ロボットとROS」を使用します。
+配置はworld基準のXYZ［m］とroll/pitch/yaw［deg］。回転順はURDFと同じZYXです。
+「配置を適用」でロボット全体を移動し、環境の物体はその場に残ります。
+配置はモデル別の現在のブラウザ内だけに保持し、再読み込み・ポーズJSONには保存しません。
+
+| トピック | 型・用途 |
+| --- | --- |
+| `/sim/base_pose` | `geometry_msgs/PoseStamped`、world内のbase_footprint配置 |
+| `/sim/joint_states` | `sensor_msgs/JointState`、関節角 |
+| `/sim/tf` | `tf2_msgs/TFMessage`、world→base_footprint→URDF各リンク、および校正後カメラ |
+| `/sim/robot_description` | `std_msgs/String`、選択モデルのURDF、transient local |
+| `/sim/command/standard/joint_trajectory` | `trajectory_msgs/JointTrajectory`、標準モデルへの再生指令 |
+| `/sim/command/long/joint_trajectory` | 同上、Longモデルへの再生指令 |
+
+点群送信時は取得開始時の配置・関節角・各リンクTFを保持し、点群と共通stampで配信します。
+有効XYZの点群は配置の逆変換を適用したbase_footprint座標、画素対応点群はカメラ光学座標です。
+「姿勢・TFを定期送信」をONにすると、点群なしでも上限10 Hzで現在姿勢を送ります。
+受信時のROS時計を使用するため、実センサーとの取得時刻同期を保証する仕組みではありません。
+
+TFは `/sim/tf` のみへ配信。利用ノードで `/tf:=/sim/tf` をremapしてください。
+URDFのメッシュ参照先は元のままです。RViz等で形状も表示する場合は参照先のメッシュ配置が別途必要です。
+同じモデルのTFをrobot_state_publisherから重複配信しないでください。状態・指令は1つのブラウザタブで使用します。
+
+軌道再生は明示的にONにした場合のみ有効。ON以前の最新指令は再生せず、その後に受信した指令を対象とします。
+ROS側から、現在表示中モデルのトピックへ送ってください。例は首Yawの目標0.1 rad、到達時間2秒です。
+
+```bash
+ros2 topic pub --once /sim/command/standard/joint_trajectory trajectory_msgs/msg/JointTrajectory '{joint_names: [neck_pan_joint], points: [{positions: [0.1], time_from_start: {sec: 2, nanosec: 0}}]}'
+```
+
+header stampは0、positionsのみ、time_from_startは正の厳密増加、最終時刻120秒以内、最大1,000点に対応します。
+開始姿勢は受信時のブラウザ姿勢。指定関節だけを線形補間し、URDFの可動域・区間速度上限を検査します。
+加速度・トルク・接触・衝突の保証はありません。velocities・accelerations・effort付き軌道は拒否します。
+通信時の最新指令保持は5秒。連続した指令は最新を優先し、再生中に新しい有効軌道を受けた場合は現在姿勢から置換します。
+「軌道停止・受信OFF」、Escape、タブ非表示、モデル切替で停止。通常の手動関節操作も現在の軌道再生を停止します。
+通信エラーでは軌道受信・姿勢定期送信を停止します。再開はチェックを入れ直してください。
+
+実機への指令はありません。自己点群除去・回避経路生成・GNG/VLUTへの自動接続は別処理です。
+移動配置を使った従来VM・AIタブとの統合は未検証です。この座標整合の検証対象は独立ROS 2送信タブです。
+回帰試験：ROS環境で `python3 -m unittest discover -s integrations/ros2 -p test_robot_exchange.py`。
 
 ## 含めたもの / 別途必要なもの
 

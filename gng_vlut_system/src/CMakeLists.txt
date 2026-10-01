@@ -36,7 +36,11 @@ target_link_libraries(robot_model_lib common_lib kinematics_lib)
 ament_target_dependencies(robot_model_lib urdf urdfdom urdfdom_headers Eigen3)
 
 # Safety Engine (Old: safety_engine)
-add_library(safety_engine STATIC core/gng/GrowingNeuralGas.cpp)
+add_library(safety_engine STATIC
+    core/gng/GrowingNeuralGas.cpp
+    core/gng/nearest_node_index.cpp
+)
+target_include_directories(safety_engine PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/spatialtree/include)
 target_link_libraries(safety_engine common_lib kinematics_lib)
 ament_target_dependencies(safety_engine Eigen3)
 
@@ -73,7 +77,7 @@ endif()
 target_link_libraries(collision_lib common_lib kinematics_lib robot_model_lib ${EXTRA_LIBS})
 ament_target_dependencies(collision_lib Eigen3 urdfdom)
 if(USE_FCL)
-    target_link_libraries(collision_lib fcl)
+    target_link_libraries(collision_lib fcl octomap octomath)
     ament_target_dependencies(collision_lib fcl)
 endif()
 

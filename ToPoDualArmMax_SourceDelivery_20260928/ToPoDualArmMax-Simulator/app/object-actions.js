@@ -2,7 +2,7 @@ import * as THREE from 'three';
 const $=id=>document.getElementById(id);
 
 export function install_object_actions(environment){
- const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><label>座標系<select id="spawn-parent"><option value="table">テーブル基準</option><option value="world">base_footprint基準</option></select></label><div class="field-grid">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">物体・車両の追加位置。追加後は下の位置欄で移動可能。3D上の物体を右クリックすると削除メニューを表示。</p>`;
+ const panel=document.createElement('div');panel.innerHTML=`<div class="section-label">追加位置</div><label>座標系<select id="spawn-parent"><option value="table">テーブル基準</option><option value="world">world基準</option></select></label><div class="field-grid">${['x','y','z'].map(k=>`<label>${k.toUpperCase()} mm<input id="spawn-${k}" type="number" value="0" step="10"></label>`).join('')}</div><p class="sub-note">物体・車両の追加位置。追加後は下の位置欄で移動可能。3D上の物体を右クリックすると削除メニューを表示。</p>`;
  $('object-add').parentElement.insertAdjacentElement('beforebegin',panel);
  const read_position=()=>{
   const position=['x','y','z'].map(k=>$('spawn-'+k).valueAsNumber/1000);

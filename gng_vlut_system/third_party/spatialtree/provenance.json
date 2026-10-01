@@ -1,0 +1,32 @@
+{
+  "repository": "https://github.com/urakiharuto/SpatialTree.git",
+  "revision": "92e7322a8b7dbdb50be812d0b092d90aec982414",
+  "source_path": "/home/uraki/SpatialTree",
+  "is_modified": false,
+  "files": {
+    "include/SpatialTree/MovingBSPTree.hpp": {
+      "sha256": "fd596d100996a1b08976eda206fb75a9a20875d24ef5e1aeaefbdb0fb2f27f96",
+      "num_bytes": 44854
+    },
+    "include/SpatialTree/SpatialTree.hpp": {
+      "sha256": "fa0609a7d7bd111d0ea8943378423a3a932e27650a3ff248ab5f903649ac02ea",
+      "num_bytes": 18596
+    },
+    "include/SpatialTree/Policy.hpp": {
+      "sha256": "7c24003ac5e40cee0adea1ed57dff6005f0668be161d3b5ff702e60775bfb20b",
+      "num_bytes": 764
+    },
+    "include/SpatialTree/Traits.hpp": {
+      "sha256": "d3b222607769119e88ed7d98a589ffebcf3723957c396503a67e47fde03eff71",
+      "num_bytes": 921
+    },
+    "include/SpatialTree/Point.hpp": {
+      "sha256": "7a9cda400faaa3739441962ee1d34cd68f6effe6e2c702a5f88060b8d4be6170",
+      "num_bytes": 3327
+    },
+    "include/SpatialTree/Config.hpp": {
+      "sha256": "f57a52dfc3fb3c62c77aa390ed940f9b2be8dbe8d9d9dc2de07eee74e62b4843",
+      "num_bytes": 285
+    }
+  }
+}

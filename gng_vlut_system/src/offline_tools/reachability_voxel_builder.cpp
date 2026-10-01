@@ -79,6 +79,14 @@ class ReachabilityVoxelBuilderNode : public rclcpp::Node {
     const int seed = declare_parameter<int>("reachability_voxel.seed", 20260928);
     const bool enable_self_collision = declare_parameter<bool>(
         "reachability_voxel.enable_self_collision", true);
+    const bool enable_voxel_collision = declare_parameter<bool>("gng.use_voxel_collision", true);
+    const double legacy_collision_voxel_size = declare_parameter<double>(
+        "collision.voxel_ball.voxel_size", 0.001);
+    const double collision_voxel_size = declare_parameter<double>(
+        "collision.voxel_size", legacy_collision_voxel_size);
+    if (!std::isfinite(collision_voxel_size) || collision_voxel_size <= 0.0) {
+      throw std::invalid_argument("collision.voxel_size must be positive and finite");
+    }
     const auto collision_exclusions =
         declare_parameter<std::vector<std::string>>(
             "collision.self_collision_exclusion_pairs", std::vector<std::string>{});
@@ -122,7 +130,8 @@ class ReachabilityVoxelBuilderNode : public rclcpp::Node {
     std::unique_ptr<simulation::GeometricSelfCollisionChecker> self_collision_checker;
     if (enable_self_collision) {
       self_collision_checker =
-          std::make_unique<simulation::GeometricSelfCollisionChecker>(model, *collision_chain);
+          std::make_unique<simulation::GeometricSelfCollisionChecker>(
+              model, *collision_chain, true, enable_voxel_collision ? collision_voxel_size : 0.0);
 #ifdef USE_FCL
       self_collision_checker->setStrictMode(true);
 #else
@@ -270,6 +279,7 @@ class ReachabilityVoxelBuilderNode : public rclcpp::Node {
         {"num_initial_cells", initial_cells.size()}, {"num_cells", reachable_nodes.size()},
         {"num_supplement_samples", num_supplement_samples},
         {"enable_self_collision", enable_self_collision}, {"collision_exclusions", collision_exclusions},
+        {"enable_voxel_collision", enable_voxel_collision}, {"collision_voxel_size", collision_voxel_size},
         {"other_joints", "zero"}, {"environment_collision_checked", false},
         {"validation", {{"num_samples", num_validation_samples}, {"num_valid", num_valid},
           {"num_collision_rejected", collision_reject_count - num_collision_before},

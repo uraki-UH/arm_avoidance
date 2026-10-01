@@ -16,6 +16,7 @@
 #include <fcl/narrowphase/collision.h>
 #include <fcl/narrowphase/collision_object.h>
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -55,6 +56,28 @@ inline Eigen::Vector3d toEigen(const fcl::Vector3d &v) {
   return Eigen::Vector3d(v[0], v[1], v[2]);
 }
 
+// ローカル包絡の剛体変換による保守的なワールド AABB
+fcl::AABB<double> get_tight_world_aabb(const fcl::CollisionObject<double>& object);
+
+// ワールド AABB と OBB による narrowphase 前の保守的な棄却
+bool has_collision_bounds_overlap(const fcl::CollisionObject<double>& first,
+                                  const fcl::CollisionObject<double>& second);
+
+namespace detail {
+
+// 幾何不変な自己判定に限る、ペアごとの直近姿勢と結果
+struct self_collision_pose_cache_entry {
+  std::shared_ptr<const fcl::CollisionGeometry<double>> first_geometry;
+  std::shared_ptr<const fcl::CollisionGeometry<double>> second_geometry;
+  fcl::Transform3d first_pose = fcl::Transform3d::Identity();
+  fcl::Transform3d second_pose = fcl::Transform3d::Identity();
+  bool is_collision = false;
+};
+using self_collision_pose_cache =
+    std::unordered_map<std::uint64_t, self_collision_pose_cache_entry>;
+
+}  // 詳細実装の名前空間
+
 struct FCLContactData {
   std::vector<Contact> contacts;
 };
@@ -86,6 +109,10 @@ public:
   int addRobotLink(const Box &box);
   int addRobotMeshLink(const std::string &stl_path, const Eigen::Vector3d &scale);
 
+  // 閉メッシュの表面と内部を占有した剛体ボクセル形状の登録
+  int addRobotVoxelMeshLink(const std::string &stl_path,
+                           const Eigen::Vector3d &scale, double voxel_size);
+
   // Update robot link pose (should be called before checkRobotCollision)
   void updateRobotLinkPose(int index, const Eigen::Vector3d &pos, const Eigen::Matrix3d &rot);
   void updateRobotLinkPose(int index, const Eigen::Isometry3d &tf);
@@ -98,8 +125,9 @@ public:
   // Check collision between robot links and obstacles
   bool checkRobotCollision() const;
 
-  // Check self-collision among robot links
-  bool checkSelfCollision(const std::vector<std::pair<int, int>> &ignore_pairs = {}) const;
+  // ロボット内部の自己干渉判定。姿勢キャッシュ有効時は初期化後の幾何不変が前提
+  bool checkSelfCollision(const std::vector<std::pair<int, int>> &ignore_pairs = {},
+                          bool enable_pose_cache = false) const;
 
   // Check collision between specific capsules and obstacles (Legacy support)
   bool checkRobotCollision(const std::vector<Capsule> &robot_links) const;
@@ -133,6 +161,13 @@ private:
   // Geometry Cache: Avoid rebuilding BVH for the same mesh
   using BVHModelPtr = std::shared_ptr<fcl::BVHModel<fcl::OBBRSS<double>>>;
   std::unordered_map<std::string, BVHModelPtr> geometry_cache_;
+
+  // 解像度と縮尺を含む体積ボクセル形状の共有
+  std::unordered_map<std::string, std::shared_ptr<fcl::OcTree<double>>>
+      voxel_geometry_cache_;
+
+  // 正規化したペアIDごとの直近判定。両幾何と絶対姿勢の完全一致だけを対象
+  mutable detail::self_collision_pose_cache self_collision_pose_cache_;
 
   // Helper to load or get mesh from cache
   BVHModelPtr getOrLoadMesh(const std::string &stl_path, const Eigen::Vector3d &scale);

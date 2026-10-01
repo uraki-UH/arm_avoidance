@@ -1,3 +1,5 @@
+import {robot_snapshot,attach_camera,points_to_base} from './robot-ros-state.js';
+import {RosRobotPanel} from './ros-robot.js';
 import {sample_object_surface} from './object-points.js';
 import {encodeInput,worldPoints} from './vm-ai.js';
 const $=id=>document.getElementById(id);
@@ -16,7 +18,7 @@ export class RosPointsPanel{
   $('ros-once').onclick=()=>this.send();$('ros-start').onclick=()=>{this.is_running=!this.is_running;this.generation++;this.update_button();};
   $('ros-use-selected').onclick=()=>{this.refresh_objects();if(environment.selected)$('ros-object').value=environment.selected.id;};
   for(const id of ['ros-source','ros-object','ros-endpoint'])$(id).onchange=()=>{this.generation++;};
-  this.refresh_objects();
+  this.refresh_objects();this.robot_panel=new RosRobotPanel({rgbd,toast});
  }
  update_button(){$('ros-start').textContent=this.is_running?'送信を停止':'連続送信';}
  refresh_objects(){
@@ -26,6 +28,7 @@ export class RosPointsPanel{
   if(items.some(x=>String(x.id)===old))list.value=old;else if(old){list.selectedIndex=-1;this.is_running=false;this.generation++;this.update_button();$('ros-status').textContent='対象物体が削除されました。対象を選び直してください';}
  }
  tick(now){
+  this.robot_panel.tick(now);
   if(now-this.last_list_ms>300){this.last_list_ms=now;this.refresh_objects();}
   const hz=Number($('ros-hz').value);
   if(this.is_running&&!this.is_busy&&now-this.last_send_ms>=1000/hz)this.send();
@@ -37,21 +40,23 @@ export class RosPointsPanel{
    const endpoint=new URL($('ros-endpoint').value);if(!['http:','https:'].includes(endpoint.protocol))throw Error('送信先はHTTPのURLを指定してください');
    const source=$('ros-source').value,item=this.environment.items.find(x=>String(x.id)===$('ros-object').value);
    if(source!=='rgbd'&&!item)throw Error('対象物体を選択してください');
-   let points,robot_pose,robot_model,object_pose,depth_frame;
+   let points,robot_pose,robot_model,object_pose,depth_frame,robot_state;
    const captured_at_ms=Date.now();
    if(item){item.group.updateWorldMatrix(true,true);object_pose=item.group.matrixWorld.toArray();}
    if(source==='object_full'){
-    robot_pose=this.rgbd.robot.getPose();robot_model=this.rgbd.robot.modelId;
-    points=await sample_object_surface(item.group,Number($('ros-count').value));
+    robot_state=robot_snapshot(this.rgbd.robot);robot_pose=robot_state.robot_pose;robot_model=this.rgbd.robot.modelId;
+    points=(await sample_object_surface(item.group,Number($('ros-count').value))).slice();
     item.group.updateWorldMatrix(true,true);if(object_pose.some((v,i)=>v!==item.group.matrixWorld.elements[i]))throw Error('取得中に対象が移動しました。再送してください');
    }else{
     const frame=await this.rgbd.capture({target_group:source==='object_visible'?item.group:null});
     if(!frame){$('ros-status').textContent='RGB-D取得中またはモデル変更中。次の送信で再試行';return null;}
     if(source==='rgbd'&&$('ros-depth').checked)depth_frame=frame;
+    robot_state=frame.robot_state;attach_camera(robot_state,frame.depthWorld);
     points=worldPoints(frame.xyz,frame.depthWorld);robot_pose=frame.robotPose;robot_model=frame.robotModel;
    }
    if(generation!==this.generation||(source!=='rgbd'&&!this.environment.items.includes(item)))return null;
-   const meta={source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:source==='rgbd'?null:item.id,object_to_world:source==='rgbd'?null:object_pose};
+   points_to_base(points,robot_state);
+   const meta={robot_state,source,frame_id:'base_footprint',count:points.length/3,captured_at_ms,robot_pose,robot_model,object_id:source==='rgbd'?null:item.id,object_to_world:source==='rgbd'?null:object_pose};
    let body;
    if(depth_frame){
     meta.depth_image={...depth_frame.calibration.depth,optical_to_world:depth_frame.depthWorld};

@@ -19,6 +19,9 @@ public:
                         kinematics::KinematicChain *chain)
       : checker_(checker), chain_(chain) {}
 
+  // ノード位置・ID を変更しないステータス更新専用。
+  bool can_modify_node_positions() const override { return false; }
+
   std::vector<typename GrowingNeuralGas<T_angle, T_coord>::UpdateTrigger>
   getTriggers() const override {
     // ノードが追加された時、または重み（関節角）が更新された時にチェック

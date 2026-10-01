@@ -39,6 +39,10 @@
       <geometry><mesh filename="meshes/visual/urdf/waist_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/waist_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="waist_cover_fixed" type="fixed">
     <parent link="base_link"/>
@@ -52,6 +56,10 @@
       <geometry><mesh filename="meshes/visual/urdf/L_shoulder_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/L_shoulder_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="L_shoulder_cover_fixed" type="fixed">
     <parent link="torso_link"/>
@@ -65,6 +73,10 @@
       <geometry><mesh filename="meshes/visual/urdf/shoulder_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/shoulder_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="R_shoulder_cover_fixed" type="fixed">
     <parent link="torso_link"/>
@@ -149,6 +161,10 @@
       <geometry><mesh filename="meshes/visual/urdf/joint_cover_cut.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/joint_cover_cut.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="neck_tilt_cover_fixed" type="fixed">
     <parent link="neck_pan_link"/>
@@ -162,9 +178,10 @@
       <geometry><mesh filename="meshes/visual/urdf/realsense_camera.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="silver"><color rgba="0.72 0.74 0.75 1.0"/></material>
     </visual>
+    <!-- 開いたカメラ表面メッシュ全体を含む保守的な衝突用直方体 -->
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="meshes/visual/urdf/realsense_camera.stl" scale="0.001 0.001 0.001"/></geometry>
+      <origin xyz="-0.0082262434959411625 4.2556762695312306e-05 -4.2438507080050369e-08" rpy="0 0 0"/>
+      <geometry><box size="0.025052487373352052 0.089856307983398442 0.025000000953674318"/></geometry>
     </collision>
     <inertial>
       <mass value="0.05"/>
@@ -184,6 +201,10 @@
       <geometry><mesh filename="meshes/visual/urdf/realsense_mount.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/realsense_mount.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="realsense_mount_fixed" type="fixed">
     <parent link="neck_tilt_link"/>
@@ -234,6 +255,10 @@
       <geometry><mesh filename="meshes/visual/urdf/XM540_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/XM540_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="L_XM540_cover_fixed" type="fixed">
     <parent link="L_link1"/>
@@ -293,6 +318,10 @@
       <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="L_link4_cover_fixed" type="fixed">
     <parent link="L_link3"/>
@@ -353,6 +382,10 @@
       <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="L_link6_cover_fixed" type="fixed">
     <parent link="L_link5"/>
@@ -530,6 +563,10 @@
       <geometry><mesh filename="meshes/visual/urdf/R_XM540_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/R_XM540_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="R_XM540_cover_fixed" type="fixed">
     <parent link="R_link1"/>
@@ -589,6 +626,10 @@
       <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="R_link4_cover_fixed" type="fixed">
     <parent link="R_link3"/>
@@ -649,6 +690,10 @@
       <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
       <material name="green"><color rgba="0.01 0.88 0.05 1.0"/></material>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/visual/urdf/joint_cover.stl" scale="0.001 0.001 0.001"/></geometry>
+    </collision>
   </link>
   <joint name="R_link6_cover_fixed" type="fixed">
     <parent link="R_link5"/>

@@ -51,3 +51,9 @@
 - 同試験のRGB-D最終取得頻度3.99→2.60 Hz。取得速度の改善を示す結果ではない。ユーザーが感じる遅れの解消は未確認。
 - PNGボタンの出力1031×649、194,616 byte、非空画素を確認。試験保存はHTTP手前で捕捉しexportsへ書き込みなし。
 - 実行：`node /tmp/topo_render_check.mjs`、`node /tmp/topo_render_png_check.mjs`。[検査ログ](../../../artifacts/topo_render_check_20260928/)。試験Chrome停止。ユーザー操作用Chromeは維持。
+
+- 2026-10-01追記: RGB-Dカラー描画による共有シャドウマップの更新を抑止。センサー用に非表示化した状態での影更新を回避し、autoUpdate・needsUpdateを復元。
+- 原因候補の確認: 修正前はセンサー描画直後に保留中の影更新が消費、修正後は保持。通常描画後には消費されるため、非同期取得完了後のフラグ確認だけでは判定不可。
+- 修正後検証: 標準モデル・静止画面・4回取得の全てで画素差0、GLエラー0、ページエラー0。修正前試験は取得なしの画面にも差があり、画素差の改善率は算出せず。
+- 制限: ユーザー画面のちらつきとの同一原因確認は未完了。面の重なり・点群重ね表示等の別原因は未切り分け。
+- 試験起動: `node /tmp/topo_flicker_probe.mjs`、`node /tmp/topo_flicker_fixed_test.mjs`、`node /tmp/topo_flicker_baseline_test.mjs`。各試験Chromeは終了済み、既存画面は維持。
