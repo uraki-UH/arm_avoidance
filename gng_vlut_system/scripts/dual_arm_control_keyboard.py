@@ -60,6 +60,22 @@ class terminal_key_decoder:
         return self.key_actions.get(key.lower()) if self.key_actions is not None else control_key_action(key)
 
 
+def read_terminal_action(descriptor, decoder, is_exit_requested, is_exiting):
+    """終了要求を優先した非ブロッキング入力。端末切断時の停止・終了への集約。"""
+    if is_exiting:
+        return None
+    if is_exit_requested:
+        return 'quit'
+    try:
+        if select.select([descriptor], [], [], 0)[0]:
+            return decoder.read_action(os.read(descriptor, 1))
+    except BlockingIOError:
+        pass
+    except (OSError, ValueError):
+        return 'quit'
+    return None
+
+
 def control_status_label(status, receive_age_sec):
     """ライブ制御状態の表示。サービス受付と実測停止の区別。"""
     if not isinstance(status, dict) or not is_fresh_age(receive_age_sec):
@@ -87,6 +103,19 @@ def toggle_value(action, status, receive_age_sec):
     if action == 'hardware':
         return not status['enable_hardware_output']
     return None
+
+
+def control_operation(action, status, receive_age_sec, is_stop_pending):
+    """通信なしの操作判定。戻り値: ON/OFF値と操作名、または拒否理由。"""
+    if is_stop_pending:
+        return None, '操作: 停止要求を優先中'
+    enable_mode = toggle_value(action, status, receive_age_sec)
+    if enable_mode is None:
+        return None, '操作: 制御状態が未受信・失効のためON/OFF変更不可。停止キーは有効'
+    if action == 'leader' and status['mode'] == 'stopped':
+        return enable_mode, '停止解除→ホールド'
+    label = {'avoidance': '回避', 'leader': 'リーダーフォロワー', 'hardware': '実機出力'}[action]
+    return enable_mode, label + ('ON' if enable_mode else 'OFF')
 
 
 class control_request:
@@ -196,6 +225,23 @@ def main(argv=None):
             latest['status'] = None
         latest['received_sec'] = time.monotonic()
 
+    def handle_action(action, is_exiting):
+        """停止優先の要求送信。操作拒否時も周期処理へ復帰。"""
+        if action in ('stop', 'quit'):
+            operation.cancel()
+            if action == 'stop' or not is_exiting:
+                request.begin()
+            return is_exiting or action == 'quit'
+        if action is None or is_exiting:
+            return is_exiting
+        enable_mode, label = control_operation(
+            action, control['status'], time.monotonic() - control['received_sec'], request.is_pending)
+        if enable_mode is None:
+            emit(label)
+            return is_exiting
+        operation.begin(clients[action], SetBool.Request(data=enable_mode), label)
+        return is_exiting
+
     try:
         rclpy.init(args=ros_arguments, signal_handler_options=SignalHandlerOptions.NO)
         is_initialized = True
@@ -226,37 +272,8 @@ def main(argv=None):
         decoder = terminal_key_decoder()
         with terminal_input(stream) as terminal_descriptor:
             while rclpy.ok():
-                action = None
-                if exit_state['is_requested']:
-                    action = 'quit'
-                elif not is_exiting:
-                    try:
-                        if select.select([terminal_descriptor], [], [], 0)[0]:
-                            action = decoder.read_action(os.read(terminal_descriptor, 1))
-                    except BlockingIOError:
-                        pass
-                    except (OSError, ValueError):
-                        action = 'quit'
-                if action in ('stop', 'quit'):
-                    operation.cancel()
-                    if action == 'stop' or not is_exiting:
-                        request.begin()
-                    if action == 'quit':
-                        is_exiting = True
-                elif action is not None and not is_exiting:
-                    if request.is_pending:
-                        emit('操作: 停止要求を優先中')
-                    else:
-                        enable_mode = toggle_value(action, control['status'],
-                                                   time.monotonic() - control['received_sec'])
-                        if enable_mode is None:
-                            emit('操作: 制御状態が未受信・失効のためON/OFF変更不可。停止キーは有効')
-                        else:
-                            label = {'avoidance': '回避', 'leader': 'リーダーフォロワー', 'hardware': '実機出力'}[action]
-                            label = ('停止解除→ホールド' if action == 'leader' and control['status']['mode'] == 'stopped'
-                                     else label + ('ON' if enable_mode else 'OFF'))
-                            operation.begin(clients[action], SetBool.Request(data=enable_mode),
-                                            label)
+                action = read_terminal_action(terminal_descriptor, decoder, exit_state['is_requested'], is_exiting)
+                is_exiting = handle_action(action, is_exiting)
                 request.poll()
                 operation.poll()
                 now_sec = time.monotonic()

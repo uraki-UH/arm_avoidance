@@ -58,6 +58,111 @@ def initial_joint_positions(root, configured):
     return positions
 
 
+def build_ros2_control(root, config, initial_positions):
+    """入力URDFを変更しない制御要素と独立関節一覧の生成。"""
+    control = ET.Element('ros2_control', name='GazeboSystem', type='system')
+    hardware = ET.SubElement(control, 'hardware')
+    ET.SubElement(hardware, 'plugin').text = 'gng_vlut_system/bounded_gazebo_system'
+    joint_names = []
+    for joint in root.findall('joint'):
+        if joint.get('type') == 'fixed':
+            continue
+        name = joint.get('name')
+        mimic = joint.find('mimic')
+        if mimic is None:
+            joint_names.append(name)
+        item = ET.SubElement(control, 'joint', name=name)
+        # 物理開始後の有限トルクモータへの位置目標
+        ET.SubElement(item, 'command_interface', name='position')
+        ET.SubElement(item, 'param', name='position_gain').text = str(config.get('motor_position_gain', 60.0))
+        ET.SubElement(item, 'param', name='motor_limit_scale').text = str(config.get('motor_limit_scale', 0.95))
+        state = ET.SubElement(item, 'state_interface', name='position')
+        ET.SubElement(state, 'param', name='initial_value').text = str(initial_positions[name])
+        ET.SubElement(item, 'state_interface', name='velocity')
+        ET.SubElement(item, 'state_interface', name='effort')
+        if mimic is not None:
+            ET.SubElement(item, 'param', name='mimic').text = mimic.get('joint')
+            ET.SubElement(item, 'param', name='multiplier').text = mimic.get('multiplier', '1')
+    return control, joint_names
+
+
+def build_controllers(namespace, joint_names, enable_integrated_control):
+    """指令経路に応じたコントローラ設定の生成。"""
+    return {
+        f'/{namespace}/controller_manager': {'ros__parameters': {
+            'update_rate': 1000, 'use_sim_time': True,
+            'joint_state_broadcaster': {'type': 'joint_state_broadcaster/JointStateBroadcaster'},
+            'dual_arm_controller': {'type': 'joint_trajectory_controller/JointTrajectoryController'},
+        }},
+        f'/{namespace}/dual_arm_controller': {'ros__parameters': {
+            'joints': list(joint_names), 'command_interfaces': ['position'],
+            'state_interfaces': ['position', 'velocity'],
+            'state_publish_rate': 100.0 if enable_integrated_control else 50.0,
+            'action_monitor_rate': 20.0,
+            'allow_partial_joints_goal': False, 'open_loop_control': False,
+            'constraints': {'goal_time': 2.0, 'stopped_velocity_tolerance': 0.05},
+        }},
+    }
+
+
+def build_control_plugin(namespace, controllers_path):
+    """名前空間と設定ファイルを結ぶGazebo制御プラグインの生成。"""
+    gazebo = ET.Element('gazebo')
+    plugin = ET.SubElement(gazebo, 'plugin', name='gazebo_ros2_control', filename='libgazebo_ros2_control.so')
+    ros = ET.SubElement(plugin, 'ros')
+    ET.SubElement(ros, 'namespace').text = '/' + namespace
+    ET.SubElement(ros, 'remapping').text = '/joint_states:=/' + namespace + '/joint_states'
+    ET.SubElement(plugin, 'robot_param_node').text = '/' + namespace + '/robot_state_publisher'
+    ET.SubElement(plugin, 'robot_param').text = 'robot_description'
+    ET.SubElement(plugin, 'parameters').text = str(controllers_path)
+    return gazebo
+
+
+def build_forearm(config):
+    """接近デモ用カプセルの衝突形状と描画形状の生成。"""
+    human = ET.Element('model', name='human_forearm')
+    ET.SubElement(human, 'static').text = 'true'
+    sign = 1 if config['sides'][0] == 'left' else -1
+    ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
+        config['hand_far_x'], sign*config['hand_y'], config['hand_z'])
+    human_link = ET.SubElement(human, 'link', name='forearm')
+    length, radius = config['arm_length'], config['arm_radius']
+    for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
+                              ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
+                              ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
+        for kind in ('collision', 'visual'):
+            item = ET.SubElement(human_link, kind, name=name)
+            ET.SubElement(item, 'pose').text = pose
+            geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
+            ET.SubElement(geometry, 'radius').text = str(radius)
+            if shape == 'cylinder':
+                ET.SubElement(geometry, 'length').text = str(length)
+            if kind == 'visual':
+                material = ET.SubElement(item, 'material')
+                ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
+                ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
+    return human
+
+
+def build_avoidance_world(world_xml, config, namespace, add_lidar=None):
+    """回避用worldの生成。センサー追加処理だけを差し替える構成。"""
+    physics_solver = config.get('physics_solver', 'quick')
+    if physics_solver not in ('quick', 'world'):
+        raise ValueError('physics_solverはquickまたはworldが必要です')
+    root = ET.fromstring(world_xml)
+    world = root.find('world')
+    world.find('physics/ode/solver/type').text = physics_solver
+    state_plugin = ET.SubElement(world, 'plugin', name='avoidance_state', filename='libgazebo_ros_state.so')
+    state_ros = ET.SubElement(state_plugin, 'ros')
+    ET.SubElement(state_ros, 'namespace').text = '/avoidance_demo'
+    ET.SubElement(state_plugin, 'update_rate').text = '30.0'
+    if not config.get('enable_live_obstacles', False):
+        world.append(build_forearm(config))
+    if config.get('enable_gng_vlut', False) and add_lidar is not None:
+        add_lidar(world, namespace, config)
+    return root
+
+
 def launch_setup(context):
     package_share = Path(get_package_share_directory('gng_vlut_system'))
     params_path = Path(LaunchConfiguration('params_file').perform(context))
@@ -99,97 +204,23 @@ def launch_setup(context):
     initial_positions = initial_joint_positions(root, config.get('initial_joint_positions', {}))
     if depth_helper is not None:
         depth_helper.add_depth_camera(root, namespace, depth_config)
-    control = ET.SubElement(root, 'ros2_control', name='GazeboSystem', type='system')
-    hardware = ET.SubElement(control, 'hardware')
-    ET.SubElement(hardware, 'plugin').text = 'gng_vlut_system/bounded_gazebo_system'
-    joint_names = []
-    for joint in root.findall('joint'):
-        if joint.get('type') == 'fixed':
-            continue
-        name = joint.get('name')
-        mimic = joint.find('mimic')
-        if mimic is None:
-            joint_names.append(name)
-        item = ET.SubElement(control, 'joint', name=name)
-        # 物理開始後の有限トルクモータへの位置目標
-        ET.SubElement(item, 'command_interface', name='position')
-        ET.SubElement(item, 'param', name='position_gain').text = str(config.get('motor_position_gain', 60.0))
-        ET.SubElement(item, 'param', name='motor_limit_scale').text = str(config.get('motor_limit_scale', 0.95))
-        state = ET.SubElement(item, 'state_interface', name='position')
-        ET.SubElement(state, 'param', name='initial_value').text = str(initial_positions[name])
-        ET.SubElement(item, 'state_interface', name='velocity')
-        ET.SubElement(item, 'state_interface', name='effort')
-        if mimic is not None:
-            ET.SubElement(item, 'param', name='mimic').text = mimic.get('joint')
-            ET.SubElement(item, 'param', name='multiplier').text = mimic.get('multiplier', '1')
-    controllers = {
-        f'/{namespace}/controller_manager': {'ros__parameters': {
-            'update_rate': 1000, 'use_sim_time': True,
-            'joint_state_broadcaster': {'type': 'joint_state_broadcaster/JointStateBroadcaster'},
-            'dual_arm_controller': {'type': 'joint_trajectory_controller/JointTrajectoryController'},
-        }},
-        f'/{namespace}/dual_arm_controller': {'ros__parameters': {
-            'joints': joint_names, 'command_interfaces': ['position'],
-            'state_interfaces': ['position', 'velocity'],
-            'state_publish_rate': 100.0 if enable_integrated_control else 50.0,
-            'action_monitor_rate': 20.0,
-            'allow_partial_joints_goal': False, 'open_loop_control': False,
-            'constraints': {'goal_time': 2.0, 'stopped_velocity_tolerance': 0.05},
-        }},
-    }
+    control, joint_names = build_ros2_control(root, config, initial_positions)
+    root.append(control)
+    controllers = build_controllers(namespace, joint_names, enable_integrated_control)
     controllers_path = run_dir/'controllers.yaml'
     controllers_path.write_text(yaml.safe_dump(controllers, sort_keys=False))
     gazebo_clock_path = run_dir/'gazebo_clock.yaml'
     # 低速シミュレーション時の重複時刻・UDP目標失効の抑制。壁時計の失効期限は変更なし
     gazebo_clock_path.write_text(yaml.safe_dump({'gazebo': {'ros__parameters': {'publish_rate': 100.0}}}))
-    gazebo = ET.SubElement(root, 'gazebo')
-    plugin = ET.SubElement(gazebo, 'plugin', name='gazebo_ros2_control', filename='libgazebo_ros2_control.so')
-    ros = ET.SubElement(plugin, 'ros')
-    ET.SubElement(ros, 'namespace').text = '/' + namespace
-    ET.SubElement(ros, 'remapping').text = '/joint_states:=/' + namespace + '/joint_states'
-    ET.SubElement(plugin, 'robot_param_node').text = '/' + namespace + '/robot_state_publisher'
-    ET.SubElement(plugin, 'robot_param').text = 'robot_description'
-    ET.SubElement(plugin, 'parameters').text = str(controllers_path)
+    root.append(build_control_plugin(namespace, controllers_path))
     robot_description = ET.tostring(root, encoding='unicode')
     gazebo_urdf = run_dir/'robot.urdf'
     gazebo_urdf.write_text(robot_description)
     world_path = package_share/'worlds/dual_arm_demo.world'
     if avoidance_config is not None:
-        world_root = ET.parse(world_path).getroot()
-        world = world_root.find('world')
-        physics_solver = avoidance_config.get('physics_solver', 'quick')
-        if physics_solver not in ('quick', 'world'):
-            raise ValueError('physics_solverはquickまたはworldが必要です')
-        world.find('physics/ode/solver/type').text = physics_solver
-        state_plugin = ET.SubElement(world, 'plugin', name='avoidance_state', filename='libgazebo_ros_state.so')
-        state_ros = ET.SubElement(state_plugin, 'ros')
-        ET.SubElement(state_ros, 'namespace').text = '/avoidance_demo'
-        ET.SubElement(state_plugin, 'update_rate').text = '30.0'
-        if not avoidance_config.get('enable_live_obstacles', False):
-            human = ET.SubElement(world, 'model', name='human_forearm')
-            ET.SubElement(human, 'static').text = 'true'
-            sign = 1 if avoidance_config['sides'][0] == 'left' else -1
-            ET.SubElement(human, 'pose').text = '{} {} {} 0 0 0'.format(
-                avoidance_config['hand_far_x'], sign*avoidance_config['hand_y'], avoidance_config['hand_z'])
-            human_link = ET.SubElement(human, 'link', name='forearm')
-            length, radius = avoidance_config['arm_length'], avoidance_config['arm_radius']
-            for name, shape, pose in [('hand', 'sphere', '0 0 0 0 0 0'),
-                                      ('elbow', 'sphere', f'{length} 0 0 0 0 0'),
-                                      ('arm', 'cylinder', f'{length/2} 0 0 0 1.5707963267948966 0')]:
-                for kind in ('collision', 'visual'):
-                    item = ET.SubElement(human_link, kind, name=name)
-                    ET.SubElement(item, 'pose').text = pose
-                    geometry = ET.SubElement(ET.SubElement(item, 'geometry'), shape)
-                    ET.SubElement(geometry, 'radius').text = str(radius)
-                    if shape == 'cylinder':
-                        ET.SubElement(geometry, 'length').text = str(length)
-                    if kind == 'visual':
-                        material = ET.SubElement(item, 'material')
-                        ET.SubElement(material, 'ambient').text = '1 0.5 0.1 1'
-                        ET.SubElement(material, 'diffuse').text = '1 0.5 0.1 1'
-        if avoidance_config.get('enable_gng_vlut', False):
-            if point_cloud_source == 'external_lidar':
-                sensor_helper.add_lidar(world, namespace, avoidance_config)
+        world_root = build_avoidance_world(
+            world_path.read_text(), avoidance_config, namespace,
+            sensor_helper.add_lidar if point_cloud_source == 'external_lidar' else None)
         world_path = run_dir/'avoidance.world'
         ET.ElementTree(world_root).write(world_path, encoding='unicode')
 

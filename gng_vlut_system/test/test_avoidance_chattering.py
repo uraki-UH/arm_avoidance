@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'launch'))
 import dual_arm_gng_lidar_demo as ros_module
 import gng_avoidance_planner as module
-from avoidance_motion import motion_components
+from avoidance_motion import motion_components, motion_result
 from pointcloud_avoidance_config import load_config
 from test_pointcloud_avoidance import robot_config
 
@@ -33,7 +33,7 @@ def retreat(monkeypatch):
         cloud_clearance=lambda _: (observed['gap'], None),
         can_bridge=lambda *args: observed['can_bridge'],
         refine_target=lambda step: (np.array([.3+step]), True))
-    state.motion_components = motion_components(retreat=lambda state, home, step: (np.array([.8]), True, True))
+    state.motion_components = motion_components(retreat=lambda request: motion_result(np.array([.8]), True, True))
     return state, observed, clock
 
 

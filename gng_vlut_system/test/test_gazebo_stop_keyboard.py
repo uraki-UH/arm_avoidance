@@ -14,7 +14,7 @@ import unittest
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from gazebo_stop_keyboard import is_fresh_age, key_action, status_label, stop_request, terminal_input
+from gazebo_stop_keyboard import is_fresh_age, is_measured_stop_confirmed, key_action, status_label, stop_request, terminal_input
 
 
 class test_key_action(unittest.TestCase):
@@ -40,10 +40,12 @@ class test_status_label(unittest.TestCase):
                        'is_stop_applied': True, 'is_stopped': True, 'state_age_sec': 0.1}
 
     def test_fresh_complete_state_confirms_measured_stop(self):
+        self.assertTrue(is_measured_stop_confirmed(self.status, 0.1))
         self.assertEqual(status_label(self.status, 0.1), '実測停止: 確認済み')
 
     def test_age_boundary_includes_half_second(self):
         self.status['state_age_sec'] = 0.5
+        self.assertTrue(is_measured_stop_confirmed(self.status, 0.5))
         self.assertEqual(status_label(self.status, 0.5), '実測停止: 確認済み')
         self.assertTrue(is_fresh_age(0))
         self.assertFalse(is_fresh_age(0.500001))
@@ -51,18 +53,22 @@ class test_status_label(unittest.TestCase):
     def test_local_receive_expiry_invalidates_old_confirmation(self):
         for value in (0.500001, -0.001, None, True, '0', float('nan'), float('inf')):
             with self.subTest(value=value):
+                self.assertFalse(is_measured_stop_confirmed(self.status, value))
                 self.assertEqual(status_label(self.status, value), '停止状態: 未受信・失効')
 
     def test_remote_state_expiry_keeps_latch_unconfirmed(self):
         for value in (0.500001, -0.001, None, True, '0', float('nan'), float('inf'), {}, []):
             with self.subTest(value=value):
                 self.status['state_age_sec'] = value
+                self.assertFalse(is_measured_stop_confirmed(self.status, 0.1))
                 self.assertEqual(status_label(self.status, 0.1), '停止ラッチ: ON / 実測停止: 未確認')
 
     def test_huge_json_integer_is_not_a_fresh_age(self):
         value = json.loads('1' + '0' * 1000)
         self.assertFalse(is_fresh_age(value))
         self.status['state_age_sec'] = value
+        self.assertFalse(is_measured_stop_confirmed(self.status, 0.1))
+        self.assertFalse(is_measured_stop_confirmed(self.status, value))
         self.assertEqual(status_label(self.status, 0.1), '停止ラッチ: ON / 実測停止: 未確認')
         self.assertEqual(status_label(self.status, value), '停止状態: 未受信・失効')
 
@@ -71,20 +77,24 @@ class test_status_label(unittest.TestCase):
             for value in (None, False, 1, 'true'):
                 with self.subTest(name=name, value=value):
                     status = dict(self.status, **{name: value})
+                    self.assertFalse(is_measured_stop_confirmed(status, 0.1))
                     self.assertNotEqual(status_label(status, 0.1), '実測停止: 確認済み')
             status = self.status.copy()
             del status[name]
+            self.assertFalse(is_measured_stop_confirmed(status, 0.1))
             self.assertNotEqual(status_label(status, 0.1), '実測停止: 確認済み')
 
     def test_nonstopped_state_never_confirms_stop(self):
         for state in ('running', 'stop_requested', 'stop_unconfirmed', None):
             with self.subTest(state=state):
                 self.status['state'] = state
+                self.assertFalse(is_measured_stop_confirmed(self.status, 0.1))
                 self.assertEqual(status_label(self.status, 0.1), '停止ラッチ: ON / 実測停止: 未確認')
 
     def test_malformed_json_structures_and_off_state(self):
         for status in (None, [], 'stopped', 1, False):
             with self.subTest(status=status):
+                self.assertFalse(is_measured_stop_confirmed(status, 0.1))
                 self.assertEqual(status_label(status, 0.1), '停止状態: 未受信・失効')
         self.assertEqual(status_label({}, 0.1), '停止状態: 診断形式不正')
         self.assertEqual(status_label({'is_stop_latched': False}, 0.1), '停止ラッチ: OFF')

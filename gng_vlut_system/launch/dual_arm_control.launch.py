@@ -76,6 +76,7 @@ def launch_setup(context):
 
 
 def generate_launch_description():
+    share = Path(get_package_share_directory('gng_vlut_system'))
     defaults = {'robot': 'max', 'params_file': '', 'gui': 'true', 'enable_keyboard': 'true',
                 'demo_config': '', 'avoidance_config': '',
                 'leader_topic': '/leader/joint_states', 'leader_mapping_file': '',

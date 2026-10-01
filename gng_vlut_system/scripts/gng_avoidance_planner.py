@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 
-from avoidance_motion import motion_flags, motion_components, select_motion
+from avoidance_motion import motion_flags, motion_input, motion_result, motion_components, select_motion
 
 
 def has_safe_node_neighbors(labels, adjacency, node_id):
@@ -174,7 +174,18 @@ class gng_path_search:
 
 
 class gng_avoidance_policy(gng_path_search):
-    motion_components = motion_components()
+    motion_components = None
+
+    def execute_motion(self, action, home, step):
+        """計画器の依存注入と、部品専用の姿勢コピーによる呼出し。"""
+        if self.motion_components is None:
+            self.motion_components = motion_components(retreat=self.retreat_motion)
+        request = motion_input(self.positions.copy(), home.copy(), step)
+        return self.motion_components.execute(action, request)
+
+    def retreat_motion(self, request: motion_input) -> motion_result:
+        """既定のグラフ計画器と動作部品規約の接続。"""
+        return motion_result(*self.retreat_target(request.step))
 
     def clear_plan(self):
         """旧経路と未採用探索結果の失効。"""
@@ -263,9 +274,8 @@ class gng_avoidance_policy(gng_path_search):
             self.clear_plan()
             self.motion_phase = 'stopped'
             self.motion_flags = motion_flags(is_stop_requested=True)
-            target, has_candidate, _ = self.motion_components.execute(
-                select_motion(self.motion_flags), self, self.positions, step)
-            return target, has_candidate
+            result = self.execute_motion(select_motion(self.motion_flags), self.positions, step)
+            return result.target, result.has_candidate
         self.cloud_gap, _ = self.cloud_clearance(self.positions)
         if self.cloud_gap < self.config['min_cloud_clearance_th']:
             has_stable_return_clearance(self, False)
@@ -287,8 +297,8 @@ class gng_avoidance_policy(gng_path_search):
             has_stable_return_clearance(self, False)
             self.motion_flags = motion_flags()
             self.phase = self.motion_phase = select_motion(self.motion_flags)
-            target, has_candidate, _ = self.motion_components.execute(self.phase, self, self.positions, step)
-            return target, has_candidate
+            result = self.execute_motion(self.phase, self.positions, step)
+            return result.target, result.has_candidate
         # 非対象腕・胴体・指は実測姿勢に固定
         home_target = self.positions.copy()
         active_joint_indices = np.asarray(self.arm_indices)[self.active_angle_indices]
@@ -303,15 +313,18 @@ class gng_avoidance_policy(gng_path_search):
         self.motion_flags = motion_flags(
             has_active_joints=True, has_safe_neighbors=has_safe_neighbors,
             can_finish_retreat=can_finish_retreat, can_return=can_return,
-            is_home=np.max(np.abs(home_target-self.positions)) <= self.max_home_error_th)
+            is_home=bool(np.max(np.abs(home_target-self.positions)) <= self.max_home_error_th))
         self.phase = self.motion_phase = select_motion(self.motion_flags)
         if self.phase != 'avoiding':
             self.clear_plan()
-        target, has_candidate, is_gng_target = self.motion_components.execute(
-            self.phase, self, home_target, step)
-        if not has_candidate:
-            return target, has_candidate
-        target = np.asarray(target, dtype=float)
+        result = self.execute_motion(self.phase, home_target, step)
+        return self.constrain_motion(result, step, has_safe_neighbors, can_return)
+
+    def constrain_motion(self, result: motion_result, step, has_safe_neighbors, can_return):
+        """生成部品によらない対象関節・速度・衝突の共通制約。"""
+        if not result.has_candidate:
+            return result.target, False
+        target = np.asarray(result.target, dtype=float)
         if target.shape != self.positions.shape or not np.all(np.isfinite(target)):
             return self.positions.copy(), False
         # 差替え部品にも共通の非対象関節固定。協調探索で拡張された対象を使用
@@ -327,6 +340,6 @@ class gng_avoidance_policy(gng_path_search):
                 or not self.can_bridge(self.positions, target, self.config['min_cloud_clearance_th'])):
             self.path = []
             return self.refine_target(step)
-        if is_gng_target and np.max(np.abs(target-self.positions)) > 1e-5:
+        if result.is_gng_target and np.max(np.abs(target-self.positions)) > 1e-5:
             self.num_selected_gng += 1
         return target, True

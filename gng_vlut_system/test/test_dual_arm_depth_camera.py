@@ -24,6 +24,21 @@ def load(name):
 depth = load('dual_arm_depth_camera_setup')
 
 
+@pytest.mark.parametrize('name', ['dual_arm_control.launch', 'dual_arm_gazebo_demo.launch'])
+def test_launch_description_without_process_start(name):
+    """ノード未起動での引数宣言と深度設定パスの検査。"""
+    from launch import LaunchContext
+    from launch.actions import DeclareLaunchArgument
+
+    launch = load(name)
+    with patch.object(launch, 'get_package_share_directory', return_value=str(package)):
+        description = launch.generate_launch_description()
+    context = LaunchContext()
+    declarations = {item.name: item for item in description.entities if isinstance(item, DeclareLaunchArgument)}
+    assert context.perform_substitution(declarations['point_cloud_source'].default_value[0]) == 'external_lidar'
+    assert context.perform_substitution(declarations['depth_camera_config'].default_value[0]) == str(package/'config/dual_arm_depth_camera.yaml')
+
+
 @pytest.fixture
 def config():
     return depth.load_config(package/'config/dual_arm_depth_camera.yaml')

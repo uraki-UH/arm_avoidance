@@ -95,20 +95,28 @@ overrides:
 `select_motion`は停止要求 → 入力不成立 → 対象関節なしの保持 → 退避 → 復帰待ち → 復帰／初期姿勢保持の順で選択。
 `motion_phase`は障害物シナリオの表示状態とは独立。診断トピック`avoidance/gng_status`に動作と判定フラグを出力。
 
-動作差替えはPythonコード上で`motion_components`へ関数を渡して構成。関数の引数は状態・対象関節だけを初期姿勢に戻した目標・最大関節ステップ、戻り値は目標姿勢・候補有無・GNG経路使用の3値。
+動作差替え: `Callable[[motion_input], motion_result]`。入力は実測姿勢のコピー`positions`・対象関節だけを初期姿勢に戻した目標`home`・最大関節ステップ`step`。出力は目標姿勢`target`・候補有無`has_candidate`・GNG経路使用`is_gng_target`。ROSノード全体の受け渡しなし。
+
+初期構成例（既定の退避計算を維持し、復帰関数だけを指定）:
 
 ```python
-from dataclasses import replace
+from avoidance_motion import motion_components, motion_input, motion_result
 
-controller.motion_components = replace(controller.motion_components, returning=my_return_target)
+def my_return_target(request: motion_input) -> motion_result:
+    return motion_result(request.home.copy(), has_candidate=True)
+
+controller.motion_components = motion_components(
+    retreat=controller.retreat_motion, returning=my_return_target)
 ```
 
-差替え口: `retreat`（退避）、`returning`（復帰）、`hold`（監視・復帰待ち）、`stop`（方策への停止要求）。部品は対象関節以外を実測姿勢に固定した目標を返す契約。目標生成後の形状・有限値検査、非対象関節固定、速度制限・経路安全検査は共通段。
+旧部品からの移行: `(state, home, step)`の引数を`motion_input`へ、3値タプルの戻り値を`motion_result`へ変更。`retreat`は構成時に明示。
+
+差替え口: `retreat`（退避）、`returning`（復帰）、`hold`（監視・復帰待ち）、`stop`（方策への停止要求）。部品は対象関節以外を実測姿勢に固定した目標を返す契約。通常候補の形状・有限値検査、非対象関節固定、速度制限・経路安全検査は共通段。停止中・対象関節なしの早期復帰経路は共通段の対象外で、部品の実測姿勢保持が前提。
 実行側のソフト停止ラッチは駆動側保持に委任し、目標生成部品から解除不可。入力失効・自己干渉の異常停止と`obstacle_wait`も実行監視側が優先。停止・復帰待ちへの移行時に旧経路と未採用探索結果を破棄。
 
 旧`topological_map_avoidance_node`・`topological_map_avoidance.launch.py`・`enable_native_planner`は廃止。Gazebo回避は共通Python方策へ統一。把持候補用`topological_map_path_planner_node`は計画専用として継続。既存installに残る旧ノードのリンクは、増分ビルドでは自動削除されないため注意。
 
-検証: パッケージビルド、動作選択・部品差替え・安全継続・停止復帰・環境入力の単体試験。変更後のGazebo通し動作は未検証。
+検証: パッケージビルド、動作選択・部品差替え・安全継続・停止復帰・環境入力の単体試験。GazeboはToPoDualArm・合成点群・`quick`で、障害物保持、手動／自動復帰、Space停止、点群失効停止の2ケース成功。実機動作・他機種の通し動作・`world`の再検証は今回の対象外。
 
 ## 局所QPによる出力補正（試験機能）
 

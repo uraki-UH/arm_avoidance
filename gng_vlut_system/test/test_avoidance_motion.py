@@ -1,5 +1,6 @@
 """動作優先順位と差替え部品に対する共通安全制約の検証。"""
-from dataclasses import replace
+from dataclasses import asdict, replace
+import json
 from pathlib import Path
 import sys
 from unittest.mock import Mock
@@ -8,7 +9,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'scripts'))
-from avoidance_motion import motion_flags, motion_components, select_motion
+from avoidance_motion import motion_flags, motion_input, motion_result, motion_components, select_motion
 from gng_avoidance_planner import gng_avoidance_policy
 
 
@@ -24,6 +25,33 @@ from gng_avoidance_planner import gng_avoidance_policy
 ])
 def test_motion_priority(flags, expected):
     assert select_motion(flags) == expected
+
+
+@pytest.mark.parametrize('action, source, has_candidate', [
+    ('returning', 'home', True),
+    ('waiting_for_clearance', 'positions', True),
+    ('monitoring', 'positions', True),
+    ('stopped', 'positions', True),
+    ('fault', 'positions', False),
+])
+def test_default_components_need_only_pose_input(action, source, has_candidate):
+    request = motion_input(np.array([.3, .2]), np.zeros(2), .032)
+    retreat = Mock(side_effect=AssertionError('退避以外の計画器呼出し'))
+    result = motion_components(retreat=retreat).execute(action, request)
+    assert isinstance(result, motion_result)
+    assert result.has_candidate is has_candidate and not result.is_gng_target
+    expected = getattr(request, source)
+    np.testing.assert_array_equal(result.target, expected)
+    assert not np.shares_memory(result.target, expected)
+    retreat.assert_not_called()
+
+
+def test_retreat_component_receives_explicit_input():
+    request = motion_input(np.array([.3]), np.zeros(1), .032)
+    expected = motion_result(np.array([.8]), True, True)
+    retreat = Mock(return_value=expected)
+    assert motion_components(retreat=retreat).execute('avoiding', request) is expected
+    retreat.assert_called_once_with(request)
 
 
 @pytest.fixture
@@ -45,7 +73,7 @@ def policy():
     state.can_bridge = lambda *args: True
     state.refine_target = lambda step: (state.positions.copy(), True)
     state.motion_components = motion_components(
-        retreat=lambda state, home, step: (np.array([.8, .7, .1]), True, True))
+        retreat=lambda request: motion_result(np.array([.8, .7, .1]), True, True))
     return state
 
 
@@ -56,6 +84,45 @@ def test_replaced_retreat_keeps_speed_limit_and_collision_check(policy):
     policy.can_bridge = lambda *args: False
     value, _ = policy.select_target(None, None, .032)
     np.testing.assert_allclose(value, policy.positions)
+
+
+@pytest.mark.parametrize('position, is_home', [(.3, False), (0., True)])
+def test_policy_flags_keep_boolean_type_in_json_diagnostics(policy, position, is_home):
+    """NumPy比較結果の真偽値統一と、診断JSONの直列化。"""
+    policy.positions[0] = position
+    policy.has_safe_measured_neighbors = lambda: True
+    policy.cloud_clearance = lambda _: (.12, None)
+    policy.select_target(None, None, .032)
+    flags = asdict(policy.motion_flags)
+    assert flags['is_home'] is is_home
+    assert all(type(value) is bool for value in flags.values())
+    assert json.loads(json.dumps({'motion_flags': flags})) == {'motion_flags': flags}
+
+
+def test_default_retreat_adapter_keeps_planner_and_common_constraints(policy):
+    policy.motion_components = None
+    policy.retreat_target = Mock(return_value=(np.array([.8, .7, .1]), True, True))
+    value, is_valid = policy.select_target(None, None, .032)
+    policy.retreat_target.assert_called_once_with(.032)
+    assert is_valid and policy.num_selected_gng == 1
+    np.testing.assert_allclose(value, [.332, .232, .1])
+
+
+def test_component_input_mutation_does_not_change_policy_state(policy):
+    positions, home = policy.positions.copy(), policy.home.copy()
+
+    def retreat(request):
+        assert isinstance(request, motion_input)
+        request.positions[:] = 9.
+        request.home[:] = 9.
+        return motion_result(np.array([.8, .7, .1]), True)
+
+    policy.motion_components = motion_components(retreat=retreat)
+    value, is_valid = policy.select_target(None, None, .032)
+    assert is_valid
+    np.testing.assert_array_equal(policy.positions, positions)
+    np.testing.assert_array_equal(policy.home, home)
+    np.testing.assert_allclose(value, [.332, .232, .1])
 
 
 def test_neighbor_risk_uses_all_planned_joints_even_at_large_gap(policy):
@@ -70,7 +137,7 @@ def test_stop_cancels_pending_plan_before_reading_environment(policy):
     future = policy.plan_future = Mock()
     policy.is_stop_latched = True
     policy.cloud_clearance = Mock(side_effect=AssertionError('停止中の環境探索'))
-    stop = Mock(return_value=(policy.positions.copy(), True, False))
+    stop = Mock(return_value=motion_result(policy.positions.copy(), True))
     policy.motion_components = replace(policy.motion_components, stop=stop)
     value, is_valid = policy.select_target(None, None, .032)
     assert is_valid and policy.plan_future is None
@@ -82,7 +149,7 @@ def test_stop_cancels_pending_plan_before_reading_environment(policy):
 def test_return_component_holds_inactive_joints_and_obeys_speed_limit(policy):
     policy.has_safe_measured_neighbors = lambda: True
     policy.cloud_clearance = lambda _: (.12, None)
-    returning = Mock(side_effect=lambda state, home, step: (home.copy(), True, False))
+    returning = Mock(side_effect=lambda request: motion_result(request.home.copy(), True))
     policy.motion_components = replace(policy.motion_components, returning=returning)
     value, _ = policy.select_target(None, None, .032)
     assert policy.phase == 'returning'
@@ -103,13 +170,13 @@ def test_monitoring_and_new_obstacle_cycle(policy):
 
 @pytest.mark.parametrize('candidate', [np.array([float('nan'), .2, .1]), np.array([.8])])
 def test_invalid_component_output_is_rejected(policy, candidate):
-    policy.motion_components = motion_components(retreat=lambda *args: (candidate, True, False))
+    policy.motion_components = motion_components(retreat=lambda request: motion_result(candidate, True))
     value, is_valid = policy.select_target(None, None, .032)
     assert not is_valid
     np.testing.assert_array_equal(value, policy.positions)
 
 
 def test_component_cannot_move_unplanned_joints(policy):
-    policy.motion_components = motion_components(retreat=lambda *args: (np.array([.8, .7, 9.]), True, False))
+    policy.motion_components = motion_components(retreat=lambda request: motion_result(np.array([.8, .7, 9.]), True))
     value, _ = policy.select_target(None, None, .032)
     assert value[2] == policy.positions[2]

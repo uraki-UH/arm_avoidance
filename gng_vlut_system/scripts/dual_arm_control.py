@@ -21,7 +21,7 @@ import yaml
 
 from dual_arm_mode_model import mode_model
 from dual_arm_udp_output import udp_output
-from gazebo_stop_keyboard import status_label
+from gazebo_stop_keyboard import is_measured_stop_confirmed
 
 
 class dual_arm_control(Node):
@@ -244,7 +244,7 @@ class dual_arm_control(Node):
             reason = '停止・切替要求の応答待ち'
         elif now - self.heartbeat_sec > 0.5:
             reason = '操作端末の更新失効'
-        elif status_label(self.safety, now - self.safety_sec) != '実測停止: 確認済み':
+        elif not is_measured_stop_confirmed(self.safety, now - self.safety_sec):
             reason = 'Gazeboの実測停止未確認。全関節の静止継続または状態更新を待っています'
         elif not self.model.is_stationary(now):
             reason = '制御側の関節静止・更新を未確認'
@@ -328,7 +328,7 @@ class dual_arm_control(Node):
                 raise RuntimeError('新しい回避開始世代の状態未確認')
         elif self.phase == 'reset_wait_stopped':
             if (self.safety.get('has_active_commands') is False
-                    and status_label(self.safety, now - self.safety_sec) == '実測停止: 確認済み'):
+                    and is_measured_stop_confirmed(self.safety, now - self.safety_sec)):
                 self.call('safety/reset', 'reset_clear')
             elif now > self.deadline:
                 raise RuntimeError('controller停止後の実測停止未確認')

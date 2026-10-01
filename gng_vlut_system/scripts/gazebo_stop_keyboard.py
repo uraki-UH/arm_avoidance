@@ -57,13 +57,19 @@ def is_fresh_age(value):
         return False
 
 
+def is_measured_stop_confirmed(status, receive_age_sec):
+    """表示文言に依存しない実測停止判定。受信・実測鮮度と全停止条件の確認。"""
+    return (isinstance(status, dict) and is_fresh_age(receive_age_sec)
+            and status.get('state') == 'stopped' and status.get('is_stop_latched') is True
+            and status.get('is_stop_applied') is True and status.get('is_stopped') is True
+            and is_fresh_age(status.get('state_age_sec')))
+
+
 def status_label(status, receive_age_sec):
-    """サービス受付とは独立した実測停止の表示判定。"""
+    """実測停止判定からの表示文言生成。"""
     if not isinstance(status, dict) or not is_fresh_age(receive_age_sec):
         return '停止状態: 未受信・失効'
-    if (status.get('state') == 'stopped' and status.get('is_stop_latched') is True
-            and status.get('is_stop_applied') is True and status.get('is_stopped') is True
-            and is_fresh_age(status.get('state_age_sec'))):
+    if is_measured_stop_confirmed(status, receive_age_sec):
         return '実測停止: 確認済み'
     if status.get('is_stop_latched') is True:
         return '停止ラッチ: ON / 実測停止: 未確認'
